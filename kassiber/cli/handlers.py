@@ -98,6 +98,11 @@ from ..tax_policy import (
     require_tax_country_supported_for_profile_mutation,
     require_tax_processing_supported,
 )
+from ..sync_btcpay import (
+    DEFAULT_PAGE_SIZE as BTCPAY_DEFAULT_PAGE_SIZE,
+    DEFAULT_PAYMENT_METHOD_ID as BTCPAY_DEFAULT_PAYMENT_METHOD_ID,
+    fetch_btcpay_records,
+)
 from ..wallet_descriptors import (
     DEFAULT_DESCRIPTOR_GAP_LIMIT,
     default_policy_asset_id,
@@ -721,6 +726,48 @@ def sync_wallet(conn, runtime_config, workspace_ref, profile_ref, wallet_ref=Non
         wallets,
         _wallet_sync_hooks(),
     )
+
+
+def sync_btcpay_into_wallet(
+    conn,
+    runtime_config,
+    workspace_ref,
+    profile_ref,
+    wallet_ref,
+    backend_name,
+    store_id,
+    payment_method_id,
+    page_size,
+):
+    _, profile = resolve_scope(conn, workspace_ref, profile_ref)
+    wallet = resolve_wallet(conn, profile["id"], wallet_ref)
+    backend = resolve_backend(runtime_config, backend_name)
+    kind = core_sync.normalize_backend_kind(backend["kind"])
+    if kind != "btcpay":
+        raise AppError(
+            f"Backend '{backend['name']}' has kind '{backend['kind']}', expected 'btcpay'",
+            code="validation",
+            hint="Create a btcpay backend with `kassiber backends create --kind btcpay --url <server> --token <apikey>`.",
+        )
+    records = fetch_btcpay_records(
+        backend,
+        store_id=store_id,
+        payment_method_id=payment_method_id,
+        page_size=page_size,
+    )
+    hooks = _import_coordinator_hooks()
+    outcome = core_imports.insert_wallet_records(
+        conn, profile, wallet, records, f"btcpay:{backend['name']}:{store_id}", hooks
+    )
+    outcome.update(core_imports.apply_btcpay_metadata(conn, profile, wallet, records, hooks))
+    outcome["backend"] = backend["name"]
+    outcome["backend_kind"] = kind
+    outcome["backend_url"] = backend["url"]
+    outcome["store_id"] = store_id
+    outcome["payment_method_id"] = payment_method_id
+    outcome["page_size"] = page_size
+    outcome["fetched"] = len(records)
+    return outcome
 
 
 def resolve_descriptor_branch_index(plan, branch):

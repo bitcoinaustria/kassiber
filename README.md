@@ -10,7 +10,7 @@ Before pointing Kassiber at real wallets, read [SECURITY.md](SECURITY.md). It co
 
 - keeps a local SQLite system of record
 - supports multiple workspaces, profiles, accounts, and wallets
-- syncs from `esplora` and `electrum`, plus `bitcoinrpc` for address-based Bitcoin wallets
+- syncs from `esplora` and `electrum`, plus `bitcoinrpc` for address-based Bitcoin wallets, and pulls on-chain transactions from a BTCPay server via the Greenfield API
 - imports generic CSV/JSON, BTCPay exports, Phoenix exports, and BIP329 labels
 - stores notes, tags, exclusions, transfer pairs, and attachments
 - processes journals explicitly before reports are trusted

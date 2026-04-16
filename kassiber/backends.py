@@ -72,7 +72,7 @@ DEFAULT_BACKENDS = {
     },
 }
 
-BACKEND_KINDS = {"esplora", "mempool", "electrum", "liquid-esplora", "custom"}
+BACKEND_KINDS = {"esplora", "mempool", "electrum", "liquid-esplora", "btcpay", "custom"}
 DEFAULT_ENV_FILENAME = "backends.env"
 
 

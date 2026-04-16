@@ -24,6 +24,7 @@
   - [kassiber/core/reports.py](kassiber/core/reports.py) — extracted report builders, balance-history calculations, and PDF export assembly behind hookable journal/runtime dependencies.
   - [kassiber/tax_policy.py](kassiber/tax_policy.py) — profile tax-policy layer.
   - [kassiber/wallet_descriptors.py](kassiber/wallet_descriptors.py) — descriptor normalization, chain/network validation.
+  - [kassiber/sync_btcpay.py](kassiber/sync_btcpay.py) — BTCPay Greenfield API fetcher used by `wallets sync-btcpay`; returns records in the same shape `importers.normalize_btcpay_record` produces so the CSV-import pipeline can reuse notes/tags handling.
 - Packaging is defined in [pyproject.toml](pyproject.toml).
 - User-facing behavior is documented in [README.md](README.md).
 - Third-party dependency and license notes are tracked in [THIRD_PARTY_LICENSES.md](THIRD_PARTY_LICENSES.md).
@@ -57,10 +58,11 @@ Kassiber is currently in **dev mode**: renaming commands, breaking flags, and re
   - ui (PySide6 + QML Phase 1 app shell over the local store)
 - Every command accepts `--format {table,plain,json,csv}`, `--output <path>`, `--machine` (= `--format json`), and `--debug`.
 - Successful responses use `{kind, schema_version, data}`. Errors use `{kind: "error", schema_version, error: {code, message, hint, details, retryable, debug}}`.
-- Live sync kinds implemented: `esplora`, `electrum`, `bitcoinrpc`.
+- Live sync kinds implemented: `esplora`, `electrum`, `bitcoinrpc`, `btcpay` (Greenfield API).
 - BIP329 records are stored in SQLite and transaction labels are bridged into Kassiber tags.
 - BTCPay CSV/JSON imports become transactions, with comments mapped to notes and labels mapped to tags.
 - Transaction attachments are stored in a managed `attachments/` state sibling; file attachments are copied locally and URL attachments remain literal strings with no fetching or indexing.
+- `wallets sync-btcpay` pulls the same data directly from a BTCPay server via the Greenfield API and reuses the BTCPay import pipeline for notes/tags (see [kassiber/sync_btcpay.py](kassiber/sync_btcpay.py)).
 - Profile-level tax defaults are stored on `profiles` as `fiat_currency`, `tax_country`, `tax_long_term_days`, and `gains_algorithm`.
 
 ## Command surface
@@ -69,7 +71,7 @@ Kassiber is currently in **dev mode**: renaming commands, breaking flags, and re
 - `workspaces {list,create}`
 - `profiles {list,create,get,set}`
 - `accounts {list,create}`
-- `wallets {kinds,list,create,get,update,delete,sync,derive,import-json,import-csv,import-btcpay,import-phoenix}`
+- `wallets {kinds,list,create,get,update,delete,sync,sync-btcpay,derive,import-json,import-csv,import-btcpay,import-phoenix}`
 - `backends {kinds,list,get,create,update,delete,set-default,clear-default}`
 - `transactions {list}`
 - `attachments {add,list,remove,verify,gc}`
@@ -192,7 +194,6 @@ uv run python -m kassiber ui --help
 - No per-profile Tor proxy configuration yet.
 - No descriptor/xpub-native live sync through `bitcoinrpc` yet.
 - No self-hosted Liquid `elements_rpc` backend yet.
-- No BTCPay Greenfield API yet.
 - No Lightning node adapters yet (`coreln`, `lnd`, `nwc` kinds are declared but do not sync).
 - No REST/server mode or multi-user auth yet.
 - Generic cross-asset carrying-value is still unsupported: outside Austrian profiles, BTC ↔ LBTC peg-ins/peg-outs and submarine swaps remain audit-linked SELL + BUY pairs rather than a cost-basis-carry primitive.

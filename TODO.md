@@ -189,6 +189,8 @@ over the shared core after the extraction work is done.
 - [ ] Split commercial annotations from RP2-facing tax primitives during journal preparation
 - [ ] Accountant-facing export of matched BTC subledger rows with document references
 - [ ] Opt-in local AI extraction and tie-breaking only after deterministic matching is solid
+- [ ] Attach optional BTCPay `InvoiceId` metadata to on-chain addresses
+  synced via `wallets sync-btcpay` (follow-up to the Greenfield API sync)
 - [ ] Richer transfer pairing for multi-leg self-transfers
 - [ ] Better cross-asset transfer accounting beyond audit metadata
 - [ ] Revisit per-wallet basis attribution if a jurisdiction ever needs

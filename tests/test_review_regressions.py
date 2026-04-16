@@ -4,10 +4,13 @@ import sqlite3
 import subprocess
 import sys
 import tempfile
+import threading
 import unittest
 from argparse import Namespace
 from decimal import Decimal
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+from urllib.parse import parse_qs, urlparse
 
 from kassiber.cli.main import command_needs_db
 from kassiber.core.engines import TaxEngineLedgerInputs, build_tax_engine
@@ -2805,6 +2808,133 @@ class ReviewRegressionTest(unittest.TestCase):
         self.assertNotEqual(result.returncode, 0)
         self.assertEqual(payload["kind"], "error")
         self.assertEqual(payload["error"]["code"], "validation")
+
+
+    def test_btcpay_sync_greenfield_api_pages_and_sets_metadata(self):
+        page_one = [
+            {
+                "transactionHash": "tx-remote-1",
+                "comment": "remote deposit",
+                "amount": "0.001",
+                "timestamp": 1704067200,
+                "status": "Confirmed",
+                "labels": [{"type": "invoice", "text": "merchant"}],
+            },
+            {
+                "transactionHash": "tx-remote-2",
+                "comment": "",
+                "amount": "-0.0005",
+                "timestamp": 1704153600,
+                "status": "Confirmed",
+                "labels": [],
+            },
+        ]
+        page_two = []
+        received = {"paths": [], "auth": []}
+
+        class Handler(BaseHTTPRequestHandler):
+            def do_GET(self):
+                received["paths"].append(self.path)
+                received["auth"].append(self.headers.get("Authorization"))
+                parsed = urlparse(self.path)
+                if self.headers.get("Authorization") != "token testkey":
+                    self.send_error(401, "unauthorized")
+                    return
+                expected = "/api/v1/stores/STORE1/payment-methods/BTC-CHAIN/wallet/transactions"
+                if parsed.path != expected:
+                    self.send_error(404, "not found")
+                    return
+                skip = int(parse_qs(parsed.query).get("skip", ["0"])[0])
+                body = json.dumps(page_one if skip == 0 else page_two).encode("utf-8")
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+
+            def log_message(self, *_args):
+                return
+
+        server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+        port = server.server_address[1]
+        server_thread = threading.Thread(target=server.serve_forever, daemon=True)
+        server_thread.start()
+        try:
+            self._bootstrap_wallet(label="BTCPayRemote")
+            payload, result = self._run_json(
+                "backends", "create",
+                "btcpay1",
+                "--kind", "btcpay",
+                "--url", f"http://127.0.0.1:{port}",
+                "--token", "testkey",
+            )
+            self._assert_ok(payload, result, "backends.create")
+            payload, result = self._run_json(
+                "wallets", "sync-btcpay",
+                "--workspace", "Main",
+                "--profile", "Default",
+                "--wallet", "BTCPayRemote",
+                "--backend", "btcpay1",
+                "--store-id", "STORE1",
+                "--page-size", "2",
+            )
+            self._assert_ok(payload, result, "wallets.sync-btcpay")
+            data = payload["data"]
+            self.assertEqual(data["imported"], 2)
+            self.assertEqual(data["fetched"], 2)
+            self.assertEqual(data["store_id"], "STORE1")
+            self.assertEqual(data["payment_method_id"], "BTC-CHAIN")
+            self.assertEqual(data["backend"], "btcpay1")
+            self.assertEqual(data["backend_kind"], "btcpay")
+            self.assertEqual(data["btcpay_notes_set"], 1)
+            self.assertEqual(data["btcpay_tags_added"], 1)
+            self.assertEqual(data["btcpay_tags_created"], 1)
+            self.assertTrue(any("skip=0" in p and "limit=2" in p for p in received["paths"]))
+            self.assertTrue(any("skip=2" in p for p in received["paths"]))
+            for auth in received["auth"]:
+                self.assertEqual(auth, "token testkey")
+        finally:
+            server.shutdown()
+            server.server_close()
+            server_thread.join(timeout=5)
+
+    def test_btcpay_sync_surfaces_auth_failure_envelope(self):
+        class Handler(BaseHTTPRequestHandler):
+            def do_GET(self):
+                self.send_error(403, "forbidden")
+
+            def log_message(self, *_args):
+                return
+
+        server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+        port = server.server_address[1]
+        server_thread = threading.Thread(target=server.serve_forever, daemon=True)
+        server_thread.start()
+        try:
+            self._bootstrap_wallet(label="BTCPayDenied")
+            payload, result = self._run_json(
+                "backends", "create",
+                "btcpay2",
+                "--kind", "btcpay",
+                "--url", f"http://127.0.0.1:{port}",
+                "--token", "stale",
+            )
+            self._assert_ok(payload, result, "backends.create")
+            payload, result = self._run_json(
+                "wallets", "sync-btcpay",
+                "--workspace", "Main",
+                "--profile", "Default",
+                "--wallet", "BTCPayDenied",
+                "--backend", "btcpay2",
+                "--store-id", "STORE1",
+            )
+            self.assertNotEqual(result.returncode, 0)
+            self.assertEqual(payload["kind"], "error")
+            self.assertEqual(payload["error"]["code"], "auth_error")
+        finally:
+            server.shutdown()
+            server.server_close()
+            server_thread.join(timeout=5)
 
 
 if __name__ == "__main__":
