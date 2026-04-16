@@ -404,6 +404,31 @@ python3 -m kassiber journals events get --event-id <EVENT_ID>
 python3 -m kassiber journals quarantined
 ```
 
+### Resolving quarantines
+
+Each quarantined transaction is one of `missing_spot_price`, `missing_cost_basis`, or `insufficient_lots`. The `journals quarantine` subcommands are the typed resolution paths:
+
+```bash
+# Inspect a single quarantined entry (merges quarantine row + transaction state)
+python3 -m kassiber journals quarantine show --transaction <TRANSACTION_ID>
+
+# Supply missing price data (rate and value are cross-computed from amount)
+python3 -m kassiber journals quarantine resolve price-override \
+  --transaction <TRANSACTION_ID> --fiat-rate 50000
+python3 -m kassiber journals quarantine resolve price-override \
+  --transaction <TRANSACTION_ID> --fiat-value 5000
+
+# Exclude the transaction from reporting entirely
+python3 -m kassiber journals quarantine resolve exclude --transaction <TRANSACTION_ID>
+
+# Clear the quarantine flag without changing the underlying data
+# (use when you fixed the upstream row directly; the next `journals process` will
+# re-quarantine if the problem persists)
+python3 -m kassiber journals quarantine clear --transaction <TRANSACTION_ID>
+```
+
+All three resolution paths automatically invalidate processed journals; run `journals process` afterwards to regenerate entries.
+
 Journals must be reprocessed after any metadata, exclusion, or transaction change before reports are trusted:
 
 ```bash
@@ -451,7 +476,6 @@ Wallet-level `Altbestand` stays separate from the profile policy because it is p
 ## What is not implemented yet
 
 - amount storage in msat (INTEGER) — currently floats, migration pending
-- quarantine resolution subcommands (collaborative send/transfer, missing-address)
 - exchange-rate subsystem (`rates sync/latest/range/pairs`)
 - Phoenix / River Lightning CSV importers
 - `custom` wallet kind DSL for mapping arbitrary CSV schemas
