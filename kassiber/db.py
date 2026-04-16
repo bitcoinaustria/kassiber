@@ -247,6 +247,24 @@ def open_db(data_root):
     return conn
 
 
+def set_setting(conn, key, value):
+    """Upsert a single row into the `settings` key/value table."""
+    conn.execute(
+        """
+        INSERT INTO settings(key, value)
+        VALUES(?, ?)
+        ON CONFLICT(key) DO UPDATE SET value = excluded.value
+        """,
+        (key, value),
+    )
+
+
+def get_setting(conn, key):
+    """Return the value for `key` in the `settings` table, or `None` if absent."""
+    row = conn.execute("SELECT value FROM settings WHERE key = ?", (key,)).fetchone()
+    return row["value"] if row else None
+
+
 def ensure_column(conn, table_name, column_name, definition):
     """Idempotent `ALTER TABLE ... ADD COLUMN` — no-op when the column exists."""
     columns = {row["name"] for row in conn.execute(f"PRAGMA table_info({table_name})").fetchall()}
