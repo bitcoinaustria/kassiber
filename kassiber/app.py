@@ -1,5 +1,6 @@
 import argparse
 import base64
+import binascii
 import csv
 import hashlib
 import json
@@ -11,8 +12,8 @@ import sys
 import tempfile
 import uuid
 from collections import defaultdict
-from datetime import datetime, timezone
-from decimal import Decimal, InvalidOperation
+from datetime import datetime, timedelta, timezone
+from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 from importlib import import_module
 from pathlib import Path
 from urllib import error as urlerror
@@ -20,6 +21,78 @@ from urllib import parse as urlparse
 from urllib import request as urlrequest
 
 from . import __version__
+from .backends import (
+    BACKEND_KINDS,
+    DEFAULT_BACKENDS,
+    _backend_row_to_dict,
+    _validate_backend_kind,
+    backend_timeout,
+    backend_value,
+    clear_default_backend,
+    create_db_backend,
+    delete_db_backend,
+    get_db_backend,
+    list_backends,
+    list_db_backends,
+    load_dotenv_file,
+    load_runtime_config,
+    merge_db_backends,
+    resolve_backend,
+    set_default_backend,
+    update_db_backend,
+)
+from .db import (
+    APP_NAME,
+    DEFAULT_DATA_ROOT,
+    DEFAULT_DB_FILENAME,
+    LEGACY_APP_NAME,
+    LEGACY_DATA_ROOT,
+    LEGACY_DB_FILENAME,
+    SCHEMA,
+    ensure_column,
+    ensure_data_root,
+    ensure_schema_compat,
+    get_setting,
+    open_db,
+    resolve_database_path,
+    resolve_effective_data_root,
+    set_setting,
+)
+from .envelope import (
+    OUTPUT_FORMATS,
+    SCHEMA_VERSION,
+    _write_text,
+    build_envelope,
+    build_error_envelope,
+    derive_kind,
+    emit,
+    format_table_value,
+    json_ready,
+    print_table,
+)
+from .errors import AppError
+from .msat import (
+    MSAT_PER_BTC,
+    SATS_PER_BTC,
+    btc_to_msat,
+    dec,
+    msat_to_btc,
+)
+from .time_utils import (
+    UNKNOWN_OCCURRED_AT,
+    _iso_z,
+    _parse_iso_datetime,
+    now_iso,
+    parse_timestamp,
+    timestamp_to_iso,
+)
+from .util import (
+    normalize_chain_value,
+    normalize_network_value,
+    parse_bool,
+    parse_int,
+    str_or_none,
+)
 from .tax_policy import (
     DEFAULT_LONG_TERM_DAYS,
     DEFAULT_TAX_COUNTRY,
@@ -43,15 +116,7 @@ from .wallet_descriptors import (
 )
 
 
-APP_NAME = "kassiber"
-LEGACY_APP_NAME = "satbooks"
-DEFAULT_DATA_ROOT = os.path.expanduser(f"~/.local/share/{APP_NAME}")
-LEGACY_DATA_ROOT = os.path.expanduser(f"~/.local/share/{LEGACY_APP_NAME}")
-DEFAULT_DB_FILENAME = f"{APP_NAME}.sqlite3"
-LEGACY_DB_FILENAME = f"{LEGACY_APP_NAME}.sqlite3"
 DEFAULT_ENV_FILE = ".env"
-SATS_PER_BTC = Decimal("100000000")
-UNKNOWN_OCCURRED_AT = "1970-01-01T00:00:00Z"
 ACCOUNT_TYPES = {"asset", "liability", "equity", "income", "expense"}
 RP2_ACCOUNTING_METHODS = ("FIFO", "LIFO", "HIFO", "LOFO")
 WALLET_KINDS = [
@@ -67,316 +132,10 @@ WALLET_KINDS = [
 ]
 INBOUND_DIRECTIONS = {"in", "inbound", "receive", "received", "deposit", "credit", "buy"}
 OUTBOUND_DIRECTIONS = {"out", "outbound", "send", "sent", "withdrawal", "withdraw", "debit", "sell"}
-DEFAULT_BACKENDS = {
-    "mempool": {
-        "name": "mempool",
-        "kind": "esplora",
-        "chain": "bitcoin",
-        "network": "main",
-        "url": "https://mempool.space/api",
-        "source": "built-in default",
-    }
-}
 B58_ALPHABET = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz"
 B58_INDEX = {char: index for index, char in enumerate(B58_ALPHABET)}
 BECH32_CHARSET = "qpzry9x8gf2tvdw0s3jn54khce6mua7l"
 BECH32_INDEX = {char: index for index, char in enumerate(BECH32_CHARSET)}
-
-SCHEMA = """
-PRAGMA foreign_keys = ON;
-
-CREATE TABLE IF NOT EXISTS settings (
-    key TEXT PRIMARY KEY,
-    value TEXT NOT NULL
-);
-
-CREATE TABLE IF NOT EXISTS workspaces (
-    id TEXT PRIMARY KEY,
-    label TEXT NOT NULL UNIQUE,
-    created_at TEXT NOT NULL
-);
-
-CREATE TABLE IF NOT EXISTS profiles (
-    id TEXT PRIMARY KEY,
-    workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
-    label TEXT NOT NULL,
-    fiat_currency TEXT NOT NULL DEFAULT 'USD',
-    tax_country TEXT NOT NULL DEFAULT 'generic',
-    tax_long_term_days INTEGER NOT NULL DEFAULT 365,
-    gains_algorithm TEXT NOT NULL DEFAULT 'FIFO',
-    last_processed_at TEXT,
-    last_processed_tx_count INTEGER NOT NULL DEFAULT 0,
-    created_at TEXT NOT NULL,
-    UNIQUE (workspace_id, label)
-);
-
-CREATE TABLE IF NOT EXISTS accounts (
-    id TEXT PRIMARY KEY,
-    workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
-    profile_id TEXT NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
-    code TEXT NOT NULL,
-    label TEXT NOT NULL,
-    account_type TEXT NOT NULL,
-    asset TEXT,
-    created_at TEXT NOT NULL,
-    UNIQUE (profile_id, code)
-);
-
-CREATE TABLE IF NOT EXISTS wallets (
-    id TEXT PRIMARY KEY,
-    workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
-    profile_id TEXT NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
-    account_id TEXT REFERENCES accounts(id) ON DELETE SET NULL,
-    label TEXT NOT NULL,
-    kind TEXT NOT NULL,
-    config_json TEXT NOT NULL DEFAULT '{}',
-    created_at TEXT NOT NULL,
-    UNIQUE (profile_id, label)
-);
-
-CREATE TABLE IF NOT EXISTS transactions (
-    id TEXT PRIMARY KEY,
-    workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
-    profile_id TEXT NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
-    wallet_id TEXT NOT NULL REFERENCES wallets(id) ON DELETE CASCADE,
-    external_id TEXT,
-    fingerprint TEXT NOT NULL UNIQUE,
-    occurred_at TEXT NOT NULL,
-    direction TEXT NOT NULL,
-    asset TEXT NOT NULL,
-    amount REAL NOT NULL,
-    fee REAL NOT NULL DEFAULT 0,
-    fiat_currency TEXT,
-    fiat_rate REAL,
-    fiat_value REAL,
-    kind TEXT,
-    description TEXT,
-    counterparty TEXT,
-    note TEXT,
-    excluded INTEGER NOT NULL DEFAULT 0,
-    raw_json TEXT NOT NULL DEFAULT '{}',
-    created_at TEXT NOT NULL
-);
-
-CREATE TABLE IF NOT EXISTS tags (
-    id TEXT PRIMARY KEY,
-    workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
-    profile_id TEXT NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
-    code TEXT NOT NULL,
-    label TEXT NOT NULL,
-    created_at TEXT NOT NULL,
-    UNIQUE (profile_id, code)
-);
-
-CREATE TABLE IF NOT EXISTS transaction_tags (
-    transaction_id TEXT NOT NULL REFERENCES transactions(id) ON DELETE CASCADE,
-    tag_id TEXT NOT NULL REFERENCES tags(id) ON DELETE CASCADE,
-    PRIMARY KEY (transaction_id, tag_id)
-);
-
-CREATE TABLE IF NOT EXISTS journal_entries (
-    id TEXT PRIMARY KEY,
-    workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
-    profile_id TEXT NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
-    transaction_id TEXT NOT NULL REFERENCES transactions(id) ON DELETE CASCADE,
-    wallet_id TEXT NOT NULL REFERENCES wallets(id) ON DELETE CASCADE,
-    account_id TEXT REFERENCES accounts(id) ON DELETE SET NULL,
-    occurred_at TEXT NOT NULL,
-    entry_type TEXT NOT NULL,
-    asset TEXT NOT NULL,
-    quantity REAL NOT NULL,
-    fiat_value REAL NOT NULL DEFAULT 0,
-    unit_cost REAL NOT NULL DEFAULT 0,
-    cost_basis REAL,
-    proceeds REAL,
-    gain_loss REAL,
-    description TEXT,
-    created_at TEXT NOT NULL
-);
-
-CREATE TABLE IF NOT EXISTS journal_quarantines (
-    transaction_id TEXT PRIMARY KEY REFERENCES transactions(id) ON DELETE CASCADE,
-    workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
-    profile_id TEXT NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
-    reason TEXT NOT NULL,
-    detail_json TEXT NOT NULL DEFAULT '{}',
-    created_at TEXT NOT NULL
-);
-
-CREATE TABLE IF NOT EXISTS bip329_labels (
-    id TEXT PRIMARY KEY,
-    workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
-    profile_id TEXT NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
-    wallet_id TEXT REFERENCES wallets(id) ON DELETE SET NULL,
-    record_type TEXT NOT NULL,
-    ref TEXT NOT NULL,
-    label TEXT,
-    origin TEXT,
-    spendable INTEGER,
-    data_json TEXT NOT NULL DEFAULT '{}',
-    created_at TEXT NOT NULL
-);
-"""
-
-
-class AppError(Exception):
-    pass
-
-
-def load_dotenv_file(path):
-    values = {}
-    if not path.exists():
-        return values
-    for raw_line in path.read_text(encoding="utf-8").splitlines():
-        line = raw_line.strip()
-        if not line or line.startswith("#") or "=" not in line:
-            continue
-        key, value = line.split("=", 1)
-        key = key.strip()
-        value = value.strip()
-        if value.startswith(("'", '"')) and value.endswith(("'", '"')) and len(value) >= 2:
-            value = value[1:-1]
-        values[key] = value
-    return values
-
-
-def load_runtime_config(env_file):
-    env_path = Path(env_file).expanduser()
-    file_env = load_dotenv_file(env_path)
-    merged_env = {**file_env, **os.environ}
-    backends = {name: dict(config) for name, config in DEFAULT_BACKENDS.items()}
-    for prefix in ("SATBOOKS_BACKEND_", "KASSIBER_BACKEND_"):
-        for key, value in merged_env.items():
-            if not key.startswith(prefix):
-                continue
-            suffix = key[len(prefix):]
-            if "_" not in suffix:
-                continue
-            backend_name, field_name = suffix.split("_", 1)
-            backend_name = backend_name.lower()
-            field_name = field_name.lower()
-            if not backend_name or not field_name:
-                continue
-            backends.setdefault(
-                backend_name,
-                {
-                    "name": backend_name,
-                    "kind": "",
-                    "url": "",
-                    "source": f"{env_path}" if key in file_env else "environment",
-                },
-            )
-            backends[backend_name][field_name] = value.strip()
-            backends[backend_name]["source"] = f"{env_path}" if key in file_env else "environment"
-    default_backend = (
-        merged_env.get("KASSIBER_DEFAULT_BACKEND")
-        or merged_env.get("SATBOOKS_DEFAULT_BACKEND")
-        or "mempool"
-    ).strip().lower() or "mempool"
-    if default_backend not in backends:
-        raise AppError(
-            f"Default backend '{default_backend}' is not defined. Add KASSIBER_BACKEND_{default_backend.upper()}_KIND and _URL to {env_path}."
-        )
-    for name, backend in backends.items():
-        if not backend.get("kind") or not backend.get("url"):
-            raise AppError(f"Backend '{name}' is missing kind or url configuration")
-    return {
-        "env_file": str(env_path),
-        "env_file_exists": env_path.exists(),
-        "default_backend": default_backend,
-        "backends": backends,
-    }
-
-
-def dec(value, default="0"):
-    if value is None:
-        return Decimal(default)
-    if isinstance(value, str) and value == "":
-        return Decimal(default)
-    try:
-        return Decimal(str(value))
-    except InvalidOperation as exc:
-        raise AppError(f"Invalid decimal value: {value}") from exc
-
-
-def str_or_none(value):
-    if value is None:
-        return None
-    text = str(value).strip()
-    return text or None
-
-
-def backend_value(backend, *keys):
-    for key in keys:
-        value = str_or_none(backend.get(key))
-        if value is not None:
-            return value
-    return None
-
-
-def parse_bool(value, default=False):
-    if value is None:
-        return default
-    text = str(value).strip().lower()
-    if text in {"1", "true", "yes", "on"}:
-        return True
-    if text in {"0", "false", "no", "off"}:
-        return False
-    raise AppError(f"Invalid boolean value: {value}")
-
-
-def parse_int(value, default):
-    if value is None or value == "":
-        return default
-    try:
-        return int(str(value).strip())
-    except ValueError as exc:
-        raise AppError(f"Invalid integer value: {value}") from exc
-
-
-def backend_timeout(backend, default=30):
-    return parse_int(backend_value(backend, "timeout"), default)
-
-
-def normalize_chain_value(value):
-    try:
-        return normalize_chain(value)
-    except ValueError as exc:
-        raise AppError(str(exc)) from exc
-
-
-def normalize_network_value(chain, value):
-    try:
-        return normalize_network(chain, value)
-    except ValueError as exc:
-        raise AppError(str(exc)) from exc
-
-
-def now_iso():
-    return datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
-
-
-def parse_timestamp(value):
-    if not value:
-        raise AppError("Missing occurred_at/date value")
-    raw = str(value).strip()
-    if len(raw) == 10:
-        raw = f"{raw}T00:00:00+00:00"
-    elif raw.endswith("Z"):
-        raw = raw[:-1] + "+00:00"
-    dt = datetime.fromisoformat(raw)
-    if dt.tzinfo is None:
-        dt = dt.replace(tzinfo=timezone.utc)
-    else:
-        dt = dt.astimezone(timezone.utc)
-    return dt.replace(microsecond=0).isoformat().replace("+00:00", "Z")
-
-
-def timestamp_to_iso(value, default=UNKNOWN_OCCURRED_AT):
-    if value in (None, "", 0, "0"):
-        return default
-    return datetime.fromtimestamp(int(value), tz=timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
-
 
 def normalize_code(value):
     code = str(value).strip().lower().replace(" ", "-")
@@ -417,38 +176,6 @@ def normalize_direction(direction, amount):
             return "outbound"
         raise AppError(f"Unsupported direction '{direction}'")
     return "outbound" if dec(amount) < 0 else "inbound"
-
-
-def ensure_data_root(data_root):
-    path = Path(data_root).expanduser()
-    path.mkdir(parents=True, exist_ok=True)
-    return path
-
-
-def resolve_effective_data_root(data_root):
-    requested = Path(data_root).expanduser()
-    if requested == Path(DEFAULT_DATA_ROOT).expanduser():
-        legacy = Path(LEGACY_DATA_ROOT).expanduser()
-        if not requested.exists() and legacy.exists():
-            return legacy
-    return requested
-
-
-def resolve_database_path(data_root):
-    root = Path(data_root).expanduser()
-    current = root / DEFAULT_DB_FILENAME
-    legacy = root / LEGACY_DB_FILENAME
-    if current.exists() or not legacy.exists():
-        return current
-    return legacy
-
-
-def resolve_backend(runtime_config, name=None):
-    backend_name = (name or runtime_config["default_backend"]).strip().lower()
-    backend = runtime_config["backends"].get(backend_name)
-    if not backend:
-        raise AppError(f"Backend '{backend_name}' is not configured in {runtime_config['env_file']}")
-    return backend
 
 
 def http_get_json(url, timeout=30):
@@ -741,30 +468,7 @@ class ElectrumClient:
             return message.get("result")
 
 
-def open_db(data_root):
-    root = ensure_data_root(resolve_effective_data_root(data_root))
-    conn = sqlite3.connect(resolve_database_path(root))
-    conn.row_factory = sqlite3.Row
-    conn.executescript(SCHEMA)
-    ensure_schema_compat(conn)
-    conn.execute("PRAGMA foreign_keys = ON")
-    return conn
-
-
 _RP2_MODULES = None
-
-
-def ensure_column(conn, table_name, column_name, definition):
-    columns = {row["name"] for row in conn.execute(f"PRAGMA table_info({table_name})").fetchall()}
-    if column_name in columns:
-        return
-    conn.execute(f"ALTER TABLE {table_name} ADD COLUMN {column_name} {definition}")
-    conn.commit()
-
-
-def ensure_schema_compat(conn):
-    ensure_column(conn, "profiles", "tax_country", f"TEXT NOT NULL DEFAULT '{DEFAULT_TAX_COUNTRY}'")
-    ensure_column(conn, "profiles", "tax_long_term_days", f"INTEGER NOT NULL DEFAULT {DEFAULT_LONG_TERM_DAYS}")
 
 
 def get_rp2_modules():
@@ -935,73 +639,6 @@ def rp2_quarantine(profile, row, reason, detail):
 
 def wallet_is_altbestand(wallet):
     return parse_bool(wallet.get("altbestand"), default=False)
-
-
-def json_ready(value):
-    if isinstance(value, sqlite3.Row):
-        return {k: json_ready(value[k]) for k in value.keys()}
-    if isinstance(value, dict):
-        return {k: json_ready(v) for k, v in value.items()}
-    if isinstance(value, list):
-        return [json_ready(v) for v in value]
-    if isinstance(value, Decimal):
-        return float(value)
-    return value
-
-
-def emit(args, payload):
-    if args.format == "json":
-        print(json.dumps(json_ready(payload), indent=2, sort_keys=False))
-        return
-    if isinstance(payload, list):
-        print_table(payload)
-    elif isinstance(payload, dict):
-        rows = [{"field": key, "value": value} for key, value in payload.items()]
-        print_table(rows)
-    else:
-        print(payload)
-
-
-def print_table(rows):
-    if not rows:
-        print("(no rows)")
-        return
-    normalized = [{key: format_table_value(value) for key, value in row.items()} for row in rows]
-    headers = list(normalized[0].keys())
-    widths = {header: len(header) for header in headers}
-    for row in normalized:
-        for header in headers:
-            widths[header] = max(widths[header], len(row.get(header, "")))
-    header_line = "  ".join(header.ljust(widths[header]) for header in headers)
-    separator = "  ".join("-" * widths[header] for header in headers)
-    print(header_line)
-    print(separator)
-    for row in normalized:
-        print("  ".join(row.get(header, "").ljust(widths[header]) for header in headers))
-
-
-def format_table_value(value):
-    if value is None:
-        return ""
-    if isinstance(value, float):
-        return f"{value:.8f}".rstrip("0").rstrip(".")
-    return str(value)
-
-
-def set_setting(conn, key, value):
-    conn.execute(
-        """
-        INSERT INTO settings(key, value)
-        VALUES(?, ?)
-        ON CONFLICT(key) DO UPDATE SET value = excluded.value
-        """,
-        (key, value),
-    )
-
-
-def get_setting(conn, key):
-    row = conn.execute("SELECT value FROM settings WHERE key = ?", (key,)).fetchone()
-    return row["value"] if row else None
 
 
 def resolve_workspace(conn, ref=None):
@@ -1479,6 +1116,207 @@ def set_wallet_altbestand(conn, workspace_ref, profile_ref, wallet_ref, enabled)
     }
 
 
+WALLET_KIND_CATALOG = {
+    "descriptor": {
+        "summary": "Output-descriptor wallet with optional change branch; supports on-chain sync via mempool/esplora.",
+        "config_fields": ["descriptor", "change_descriptor", "gap_limit", "backend", "chain", "network", "policy_asset"],
+        "requires": ["descriptor"],
+    },
+    "xpub": {
+        "summary": "Extended-public-key wallet derived to address set; supports on-chain sync via mempool/esplora.",
+        "config_fields": ["descriptor", "gap_limit", "backend", "chain", "network"],
+        "requires": ["descriptor"],
+    },
+    "address": {
+        "summary": "Bare-address list wallet; useful for receive-only tracking or imports.",
+        "config_fields": ["addresses", "backend", "chain", "network", "source_file", "source_format"],
+        "requires": ["addresses|source_file"],
+    },
+    "coreln": {
+        "summary": "Core Lightning CSV-derived wallet (deposits/withdrawals from node exports).",
+        "config_fields": ["source_file", "source_format"],
+        "requires": [],
+    },
+    "lnd": {
+        "summary": "LND CSV-derived wallet (deposits/withdrawals from node exports).",
+        "config_fields": ["source_file", "source_format"],
+        "requires": [],
+    },
+    "nwc": {
+        "summary": "Nostr Wallet Connect wallet fed by CSV exports.",
+        "config_fields": ["source_file", "source_format"],
+        "requires": [],
+    },
+    "phoenix": {
+        "summary": "Phoenix Wallet CSV importer.",
+        "config_fields": ["source_file", "source_format"],
+        "requires": [],
+    },
+    "river": {
+        "summary": "River Financial CSV importer.",
+        "config_fields": ["source_file", "source_format"],
+        "requires": [],
+    },
+    "custom": {
+        "summary": "Custom CSV/JSON source; use with --config/--config-file to describe field mapping.",
+        "config_fields": ["source_file", "source_format", "config"],
+        "requires": ["source_file"],
+    },
+}
+
+
+def list_wallet_kinds():
+    rows = []
+    for kind in WALLET_KINDS:
+        entry = WALLET_KIND_CATALOG.get(kind, {"summary": "", "config_fields": [], "requires": []})
+        rows.append(
+            {
+                "kind": kind,
+                "summary": entry["summary"],
+                "requires": ", ".join(entry["requires"]),
+                "config_fields": ", ".join(entry["config_fields"]),
+            }
+        )
+    return rows
+
+
+def _wallet_row_to_dict(row):
+    config = json.loads(row["config_json"] or "{}")
+    descriptor_state = ""
+    chain, network = wallet_live_chain_config(config)
+    if config.get("descriptor"):
+        try:
+            descriptor_plan = load_descriptor_plan(config)
+            descriptor_state = f"{descriptor_plan.chain}:{descriptor_plan.network}"
+            chain = descriptor_plan.chain
+            network = descriptor_plan.network
+        except ValueError:
+            descriptor_state = "invalid"
+    return {
+        "id": row["id"],
+        "workspace_id": row["workspace_id"],
+        "profile_id": row["profile_id"],
+        "account_id": row["account_id"],
+        "account_code": row["account_code"] if "account_code" in row.keys() else None,
+        "account_label": row["account_label"] if "account_label" in row.keys() else None,
+        "label": row["label"],
+        "kind": row["kind"],
+        "chain": chain or "",
+        "network": network or "",
+        "backend": config.get("backend", ""),
+        "addresses": normalize_addresses(config.get("addresses")),
+        "descriptor": bool(config.get("descriptor")),
+        "descriptor_state": descriptor_state,
+        "change_descriptor": bool(config.get("change_descriptor")),
+        "gap_limit": config.get("gap_limit"),
+        "policy_asset": config.get("policy_asset"),
+        "altbestand": parse_bool(config.get("altbestand"), default=False),
+        "source_file": config.get("source_file", ""),
+        "source_format": config.get("source_format", ""),
+        "config": config,
+        "created_at": row["created_at"],
+    }
+
+
+def get_wallet_details(conn, workspace_ref, profile_ref, wallet_ref):
+    _, profile = resolve_scope(conn, workspace_ref, profile_ref)
+    wallet = resolve_wallet(conn, profile["id"], wallet_ref)
+    return _wallet_row_to_dict(wallet)
+
+
+def update_wallet(conn, workspace_ref, profile_ref, wallet_ref, updates):
+    _, profile = resolve_scope(conn, workspace_ref, profile_ref)
+    wallet = resolve_wallet(conn, profile["id"], wallet_ref)
+    new_label = updates.get("label")
+    new_account = updates.get("account")
+    new_altbestand = updates.get("altbestand")
+    config_updates = updates.get("config") or {}
+    clear_fields = updates.get("clear") or []
+
+    if (
+        new_label is None
+        and new_account is None
+        and new_altbestand is None
+        and not config_updates
+        and not clear_fields
+    ):
+        raise AppError(
+            "wallets update requires at least one field to change",
+            code="validation",
+            hint="Pass --label, --account, --set-altbestand/--clear-altbestand, --config/--config-file, or --clear <field>",
+        )
+
+    label_value = new_label if new_label is not None else wallet["label"]
+    account_id = wallet["account_id"]
+    if new_account is not None:
+        account = resolve_account(conn, profile["id"], new_account)
+        account_id = account["id"]
+
+    config = json.loads(wallet["config_json"] or "{}")
+    for field in clear_fields:
+        config.pop(field, None)
+    for key, value in config_updates.items():
+        if value is None:
+            config.pop(key, None)
+        else:
+            config[key] = value
+    if new_altbestand is True:
+        config["altbestand"] = True
+    elif new_altbestand is False:
+        config.pop("altbestand", None)
+
+    chain, network = wallet_live_chain_config(config)
+    if chain:
+        config["chain"] = chain
+        config["network"] = network
+
+    conn.execute(
+        """
+        UPDATE wallets
+        SET label = ?, account_id = ?, config_json = ?
+        WHERE id = ?
+        """,
+        (label_value, account_id, json.dumps(config, sort_keys=True), wallet["id"]),
+    )
+    invalidate_journals(conn, profile["id"])
+    conn.commit()
+    updated = conn.execute(
+        """
+        SELECT w.*, a.code AS account_code, a.label AS account_label
+        FROM wallets w
+        LEFT JOIN accounts a ON a.id = w.account_id
+        WHERE w.id = ?
+        """,
+        (wallet["id"],),
+    ).fetchone()
+    return _wallet_row_to_dict(updated)
+
+
+def delete_wallet(conn, workspace_ref, profile_ref, wallet_ref, cascade=False):
+    _, profile = resolve_scope(conn, workspace_ref, profile_ref)
+    wallet = resolve_wallet(conn, profile["id"], wallet_ref)
+    tx_count = conn.execute(
+        "SELECT COUNT(*) AS n FROM transactions WHERE wallet_id = ?",
+        (wallet["id"],),
+    ).fetchone()["n"]
+    if tx_count and not cascade:
+        raise AppError(
+            f"Wallet '{wallet['label']}' has {tx_count} transaction(s); pass --cascade to delete them too",
+            code="conflict",
+            hint="Use --cascade to remove the wallet and all associated transactions/journal entries.",
+            details={"transactions": tx_count},
+        )
+    conn.execute("DELETE FROM wallets WHERE id = ?", (wallet["id"],))
+    invalidate_journals(conn, profile["id"])
+    conn.commit()
+    return {
+        "id": wallet["id"],
+        "label": wallet["label"],
+        "deleted": True,
+        "cascaded_transactions": tx_count if cascade else 0,
+    }
+
+
 def load_import_records(file_path, input_format):
     if input_format == "json":
         with open(file_path, "r", encoding="utf-8") as handle:
@@ -1495,6 +1333,8 @@ def load_import_records(file_path, input_format):
         return load_btcpay_export_records(file_path, "json")
     if input_format == "btcpay_csv":
         return load_btcpay_export_records(file_path, "csv")
+    if input_format == "phoenix_csv":
+        return load_phoenix_csv_records(file_path)
     raise AppError(f"Unsupported input format '{input_format}'")
 
 
@@ -1562,6 +1402,172 @@ def load_btcpay_export_records(file_path, input_format):
 
 def is_btcpay_format(input_format):
     return input_format in {"btcpay_json", "btcpay_csv"}
+
+
+_PHOENIX_REQUIRED_COLUMNS = (
+    "date",
+    "id",
+    "type",
+    "amount_msat",
+)
+
+_PHOENIX_OUTBOUND_TYPES = {
+    "lightning_sent",
+    "swap_out",
+    "legacy_swap_out",
+    "channel_close",
+    "liquidity_purchase",
+    "fee_bumping",
+}
+
+_PHOENIX_INBOUND_TYPES = {
+    "lightning_received",
+    "swap_in",
+    "legacy_swap_in",
+    "legacy_pay_to_open",
+}
+
+
+def parse_phoenix_fiat_amount(amount_text):
+    """Parse a Phoenix amount_fiat cell like "22.9998 USD" into (Decimal, currency)."""
+    if amount_text is None:
+        return None, None
+    text = str(amount_text).strip()
+    if not text:
+        return None, None
+    parts = text.split()
+    if len(parts) == 1:
+        return dec(parts[0]), None
+    value = dec(parts[0])
+    currency = normalize_asset_code(parts[1])
+    return value, currency
+
+
+def normalize_phoenix_record(record):
+    sanitized = {str(key): value for key, value in record.items() if key is not None}
+    for column in _PHOENIX_REQUIRED_COLUMNS:
+        if column not in sanitized:
+            raise AppError(f"Phoenix CSV is missing required column '{column}'")
+    phoenix_type = str(sanitized.get("type") or "").strip() or "unknown"
+    amount_msat_raw = str(sanitized.get("amount_msat") or "0").strip() or "0"
+    try:
+        amount_msat_signed = int(amount_msat_raw)
+    except ValueError as exc:
+        raise AppError(f"Invalid Phoenix amount_msat '{amount_msat_raw}'") from exc
+    if amount_msat_signed < 0:
+        direction = "outbound"
+    elif amount_msat_signed > 0:
+        direction = "inbound"
+    elif phoenix_type in _PHOENIX_OUTBOUND_TYPES:
+        direction = "outbound"
+    elif phoenix_type in _PHOENIX_INBOUND_TYPES:
+        direction = "inbound"
+    else:
+        direction = "outbound"
+    amount_btc = msat_to_btc(abs(amount_msat_signed))
+    mining_fee_sat_raw = str(sanitized.get("mining_fee_sat") or "0").strip() or "0"
+    service_fee_msat_raw = str(sanitized.get("service_fee_msat") or "0").strip() or "0"
+    try:
+        mining_fee_msat = int(mining_fee_sat_raw) * 1000
+    except ValueError as exc:
+        raise AppError(f"Invalid Phoenix mining_fee_sat '{mining_fee_sat_raw}'") from exc
+    try:
+        service_fee_msat = int(service_fee_msat_raw)
+    except ValueError as exc:
+        raise AppError(f"Invalid Phoenix service_fee_msat '{service_fee_msat_raw}'") from exc
+    fee_btc = msat_to_btc(mining_fee_msat + service_fee_msat)
+    fiat_value_signed, _ = parse_phoenix_fiat_amount(sanitized.get("amount_fiat"))
+    fiat_value = abs(fiat_value_signed) if fiat_value_signed is not None else None
+    fiat_rate = None
+    if fiat_value is not None and amount_btc > 0:
+        fiat_rate = fiat_value / amount_btc
+    description = str_or_none(sanitized.get("description"))
+    counterparty = str_or_none(sanitized.get("destination"))
+    txid = str_or_none(sanitized.get("tx_id")) or str_or_none(sanitized.get("payment_hash"))
+    return {
+        "txid": sanitized.get("id"),
+        "occurred_at": sanitized.get("date"),
+        "direction": direction,
+        "asset": "BTC",
+        "amount": amount_btc,
+        "fee": fee_btc,
+        "fiat_rate": fiat_rate,
+        "fiat_value": fiat_value,
+        "kind": phoenix_type,
+        "description": description,
+        "counterparty": counterparty,
+        "_phoenix_type": phoenix_type,
+        "_phoenix_description": description,
+        "_phoenix_onchain_txid": txid,
+        "raw_json": json.dumps(json_ready(sanitized), sort_keys=True),
+    }
+
+
+def load_phoenix_csv_records(file_path):
+    with open(file_path, "r", encoding="utf-8", newline="") as handle:
+        rows = list(csv.DictReader(handle))
+    if not rows:
+        return []
+    header = rows[0].keys()
+    missing = [column for column in _PHOENIX_REQUIRED_COLUMNS if column not in header]
+    if missing:
+        raise AppError(
+            "Phoenix CSV is missing required columns: " + ", ".join(missing)
+        )
+    return [normalize_phoenix_record(row) for row in rows]
+
+
+def is_phoenix_format(input_format):
+    return input_format == "phoenix_csv"
+
+
+def apply_phoenix_metadata(conn, profile, wallet, records):
+    notes_set = 0
+    tags_added = 0
+    tags_created = 0
+    for record in records:
+        txid = record.get("txid")
+        if not txid:
+            continue
+        tx = conn.execute(
+            """
+            SELECT id, note
+            FROM transactions
+            WHERE profile_id = ? AND wallet_id = ? AND external_id = ?
+            ORDER BY created_at DESC
+            LIMIT 1
+            """,
+            (profile["id"], wallet["id"], txid),
+        ).fetchone()
+        if not tx:
+            continue
+        description = str_or_none(record.get("_phoenix_description"))
+        if description and not tx["note"]:
+            conn.execute(
+                "UPDATE transactions SET note = ? WHERE id = ?",
+                (description, tx["id"]),
+            )
+            notes_set += 1
+        phoenix_type = str_or_none(record.get("_phoenix_type"))
+        if phoenix_type:
+            tag, created = ensure_tag_row(
+                conn, profile["workspace_id"], profile["id"], phoenix_type, phoenix_type
+            )
+            if created:
+                tags_created += 1
+            before = conn.total_changes
+            conn.execute(
+                "INSERT OR IGNORE INTO transaction_tags(transaction_id, tag_id) VALUES(?, ?)",
+                (tx["id"], tag["id"]),
+            )
+            if conn.total_changes > before:
+                tags_added += 1
+    conn.commit()
+    return {
+        "phoenix_notes_set": notes_set,
+        "phoenix_tags_added": tags_added,
+        "phoenix_tags_created": tags_created,
+    }
 
 
 def make_transaction_fingerprint(wallet_id, external_id, occurred_at, direction, asset, amount, fee):
@@ -1652,8 +1658,8 @@ def insert_wallet_records(conn, profile, wallet, records, source_label):
                 normalized["occurred_at"],
                 normalized["direction"],
                 normalized["asset"],
-                float(normalized["amount"]),
-                float(normalized["fee"]),
+                btc_to_msat(normalized["amount"]),
+                btc_to_msat(normalized["fee"]),
                 profile["fiat_currency"],
                 float(normalized["fiat_rate"]) if normalized["fiat_rate"] is not None else None,
                 float(normalized["fiat_value"]) if normalized["fiat_value"] is not None else None,
@@ -1682,6 +1688,8 @@ def import_into_wallet(conn, workspace_ref, profile_ref, wallet_ref, file_path, 
     outcome = insert_wallet_records(conn, profile, wallet, records, f"file:{input_format}")
     if is_btcpay_format(input_format):
         outcome.update(apply_btcpay_metadata(conn, profile, wallet, records))
+    if is_phoenix_format(input_format):
+        outcome.update(apply_phoenix_metadata(conn, profile, wallet, records))
     outcome["input_format"] = input_format
     outcome["file"] = os.path.abspath(file_path)
     return outcome
@@ -2698,7 +2706,15 @@ def list_transactions(conn, workspace_ref, profile_ref, wallet_ref=None, limit=1
         """,
         params,
     ).fetchall()
-    return [dict(row) for row in rows]
+    results = []
+    for row in rows:
+        record = dict(row)
+        record["amount_msat"] = int(record["amount"])
+        record["amount"] = float(msat_to_btc(record["amount"]))
+        record["fee_msat"] = int(record["fee"])
+        record["fee"] = float(msat_to_btc(record["fee"]))
+        results.append(record)
+    return results
 
 
 def set_transaction_note(conn, workspace_ref, profile_ref, tx_ref, note):
@@ -2767,6 +2783,171 @@ def remove_tag_from_transaction(conn, workspace_ref, profile_ref, tx_ref, tag_re
     )
     conn.commit()
     return {"transaction_id": tx["id"], "tag": tag["code"], "status": "removed"}
+
+
+def _tags_for_transaction(conn, tx_id):
+    rows = conn.execute(
+        """
+        SELECT t.code, t.label
+        FROM transaction_tags tt
+        JOIN tags t ON t.id = tt.tag_id
+        WHERE tt.transaction_id = ?
+        ORDER BY t.code ASC
+        """,
+        (tx_id,),
+    ).fetchall()
+    return [{"code": row["code"], "label": row["label"]} for row in rows]
+
+
+def get_transaction_record(conn, workspace_ref, profile_ref, tx_ref):
+    _, profile = resolve_scope(conn, workspace_ref, profile_ref)
+    tx = resolve_transaction(conn, profile["id"], tx_ref)
+    wallet = conn.execute(
+        "SELECT id, label FROM wallets WHERE id = ?",
+        (tx["wallet_id"],),
+    ).fetchone()
+    return {
+        "transaction_id": tx["id"],
+        "external_id": tx["external_id"] or "",
+        "occurred_at": tx["occurred_at"],
+        "direction": tx["direction"],
+        "asset": tx["asset"],
+        "amount": float(msat_to_btc(tx["amount"])),
+        "amount_msat": int(tx["amount"]),
+        "fee": float(msat_to_btc(tx["fee"])),
+        "fee_msat": int(tx["fee"]),
+        "counterparty": tx["counterparty"] or "",
+        "wallet_id": wallet["id"] if wallet else "",
+        "wallet_label": wallet["label"] if wallet else "",
+        "note": tx["note"] or "",
+        "excluded": bool(tx["excluded"]),
+        "tags": _tags_for_transaction(conn, tx["id"]),
+    }
+
+
+def list_transaction_records(
+    conn,
+    workspace_ref,
+    profile_ref,
+    wallet=None,
+    tag=None,
+    has_note=None,
+    excluded=None,
+    start=None,
+    end=None,
+    cursor=None,
+    limit=None,
+):
+    _, profile = resolve_scope(conn, workspace_ref, profile_ref)
+    effective_limit = limit if limit is not None else DEFAULT_EVENTS_LIMIT
+    if effective_limit <= 0:
+        raise AppError("--limit must be positive", code="validation")
+    if effective_limit > MAX_EVENTS_LIMIT:
+        raise AppError(
+            f"--limit cannot exceed {MAX_EVENTS_LIMIT}",
+            code="validation",
+        )
+
+    where = ["t.profile_id = ?"]
+    params = [profile["id"]]
+    start_ts = _iso_z(_parse_iso_datetime(start, "start")) if start else None
+    end_ts = _iso_z(_parse_iso_datetime(end, "end")) if end else None
+
+    if wallet:
+        wallet_row = resolve_wallet(conn, profile["id"], wallet)
+        where.append("t.wallet_id = ?")
+        params.append(wallet_row["id"])
+    if tag:
+        tag_row = resolve_tag(conn, profile["id"], tag)
+        where.append("EXISTS (SELECT 1 FROM transaction_tags tt WHERE tt.transaction_id = t.id AND tt.tag_id = ?)")
+        params.append(tag_row["id"])
+    if has_note is True:
+        where.append("t.note IS NOT NULL AND t.note != ''")
+    elif has_note is False:
+        where.append("(t.note IS NULL OR t.note = '')")
+    if excluded is True:
+        where.append("t.excluded = 1")
+    elif excluded is False:
+        where.append("t.excluded = 0")
+    if start_ts:
+        where.append("t.occurred_at >= ?")
+        params.append(start_ts)
+    if end_ts:
+        where.append("t.occurred_at <= ?")
+        params.append(end_ts)
+
+    cursor_data = _decode_event_cursor(cursor)
+    if cursor_data:
+        where.append(
+            "(t.occurred_at < ? OR "
+            "(t.occurred_at = ? AND t.created_at < ?) OR "
+            "(t.occurred_at = ? AND t.created_at = ? AND t.id < ?))"
+        )
+        params.extend(
+            [
+                cursor_data["occurred_at"],
+                cursor_data["occurred_at"],
+                cursor_data["created_at"],
+                cursor_data["occurred_at"],
+                cursor_data["created_at"],
+                cursor_data["id"],
+            ]
+        )
+
+    query = f"""
+        SELECT
+            t.id,
+            t.occurred_at,
+            t.created_at,
+            t.external_id,
+            t.direction,
+            t.asset,
+            t.amount,
+            t.fee,
+            t.counterparty,
+            t.note,
+            t.excluded,
+            w.id AS wallet_id,
+            w.label AS wallet_label
+        FROM transactions t
+        LEFT JOIN wallets w ON w.id = t.wallet_id
+        WHERE {' AND '.join(where)}
+        ORDER BY t.occurred_at DESC, t.created_at DESC, t.id DESC
+        LIMIT ?
+    """
+    params.append(effective_limit + 1)
+    rows = conn.execute(query, params).fetchall()
+
+    has_more = len(rows) > effective_limit
+    page = rows[:effective_limit]
+    records = []
+    for row in page:
+        records.append(
+            {
+                "transaction_id": row["id"],
+                "external_id": row["external_id"] or "",
+                "occurred_at": row["occurred_at"],
+                "direction": row["direction"],
+                "asset": row["asset"],
+                "amount": float(msat_to_btc(row["amount"])),
+                "amount_msat": int(row["amount"]),
+                "fee": float(msat_to_btc(row["fee"])),
+                "fee_msat": int(row["fee"]),
+                "counterparty": row["counterparty"] or "",
+                "wallet_id": row["wallet_id"] or "",
+                "wallet_label": row["wallet_label"] or "",
+                "note": row["note"] or "",
+                "excluded": bool(row["excluded"]),
+                "tags": _tags_for_transaction(conn, row["id"]),
+            }
+        )
+    next_cursor = _encode_event_cursor(page[-1]) if has_more and page else None
+    return {
+        "records": records,
+        "next_cursor": next_cursor,
+        "has_more": has_more,
+        "limit": effective_limit,
+    }
 
 
 def normalize_bip329_record(record):
@@ -3027,8 +3208,265 @@ def latest_rates_for_profile(conn, profile_id):
         if row["fiat_rate"] is not None:
             rates[asset] = dec(row["fiat_rate"])
         elif row["fiat_value"] is not None and row["amount"]:
-            rates[asset] = dec(row["fiat_value"]) / dec(row["amount"])
+            rates[asset] = dec(row["fiat_value"]) / msat_to_btc(row["amount"])
     return rates
+
+
+# -- rates cache -------------------------------------------------------------
+
+SUPPORTED_RATE_PAIRS = ("BTC-USD", "BTC-EUR")
+_COINGECKO_VS = {"USD": "usd", "EUR": "eur"}
+_COINGECKO_COIN = {"BTC": "bitcoin"}
+
+
+def _normalize_rate_pair(pair):
+    if not pair:
+        raise AppError("Pair is required", code="validation")
+    raw = pair.strip().upper().replace("/", "-")
+    if "-" not in raw:
+        raise AppError(
+            f"Invalid pair '{pair}'",
+            code="validation",
+            hint="Use <ASSET>-<FIAT>, e.g. BTC-USD",
+        )
+    asset, _, fiat = raw.partition("-")
+    if not asset or not fiat:
+        raise AppError(f"Invalid pair '{pair}'", code="validation")
+    return f"{asset}-{fiat}"
+
+
+def _require_supported_pair(pair):
+    normalized = _normalize_rate_pair(pair)
+    if normalized not in SUPPORTED_RATE_PAIRS:
+        raise AppError(
+            f"Pair '{normalized}' is not supported",
+            code="validation",
+            hint=f"Supported pairs: {', '.join(SUPPORTED_RATE_PAIRS)}",
+        )
+    return normalized
+
+
+def _rate_pair_parts(pair):
+    asset, _, fiat = pair.partition("-")
+    return asset, fiat
+
+
+def upsert_rate(conn, pair, timestamp, rate, source, fetched_at=None):
+    normalized = _normalize_rate_pair(pair)
+    ts = _iso_z(_parse_iso_datetime(timestamp, "rate_timestamp"))
+    fetched = fetched_at or _iso_z(datetime.now(timezone.utc))
+    conn.execute(
+        """
+        INSERT INTO rates_cache(pair, timestamp, rate, source, fetched_at)
+        VALUES (?, ?, ?, ?, ?)
+        ON CONFLICT(pair, timestamp, source) DO UPDATE SET
+            rate = excluded.rate,
+            fetched_at = excluded.fetched_at
+        """,
+        (normalized, ts, float(rate), source, fetched),
+    )
+    return {
+        "pair": normalized,
+        "timestamp": ts,
+        "rate": float(rate),
+        "source": source,
+        "fetched_at": fetched,
+    }
+
+
+def get_latest_rate(conn, pair):
+    normalized = _normalize_rate_pair(pair)
+    row = conn.execute(
+        """
+        SELECT pair, timestamp, rate, source, fetched_at
+        FROM rates_cache
+        WHERE pair = ?
+        ORDER BY timestamp DESC,
+                 CASE WHEN source = 'manual' THEN 0 ELSE 1 END ASC,
+                 fetched_at DESC
+        LIMIT 1
+        """,
+        (normalized,),
+    ).fetchone()
+    if not row:
+        raise AppError(
+            f"No cached rate for pair '{normalized}'",
+            code="not_found",
+            hint="Run `kassiber rates sync` first",
+        )
+    return {
+        "pair": row["pair"],
+        "timestamp": row["timestamp"],
+        "rate": row["rate"],
+        "source": row["source"],
+        "fetched_at": row["fetched_at"],
+    }
+
+
+def get_rate_range(conn, pair, start=None, end=None, limit=None):
+    normalized = _normalize_rate_pair(pair)
+    sql = "SELECT pair, timestamp, rate, source, fetched_at FROM rates_cache WHERE pair = ?"
+    params = [normalized]
+    if start:
+        start_dt = _parse_iso_datetime(start, "start")
+        sql += " AND timestamp >= ?"
+        params.append(_iso_z(start_dt))
+    if end:
+        end_dt = _parse_iso_datetime(end, "end")
+        sql += " AND timestamp <= ?"
+        params.append(_iso_z(end_dt))
+    sql += " ORDER BY timestamp ASC"
+    if limit:
+        sql += " LIMIT ?"
+        params.append(int(limit))
+    rows = conn.execute(sql, params).fetchall()
+    return [
+        {
+            "pair": r["pair"],
+            "timestamp": r["timestamp"],
+            "rate": r["rate"],
+            "source": r["source"],
+            "fetched_at": r["fetched_at"],
+        }
+        for r in rows
+    ]
+
+
+def list_cached_pairs(conn):
+    rows = conn.execute(
+        """
+        SELECT pair,
+               COUNT(*) AS sample_count,
+               MIN(timestamp) AS first_timestamp,
+               MAX(timestamp) AS last_timestamp
+        FROM rates_cache
+        GROUP BY pair
+        ORDER BY pair ASC
+        """
+    ).fetchall()
+    known = {p: None for p in SUPPORTED_RATE_PAIRS}
+    for row in rows:
+        known[row["pair"]] = {
+            "sample_count": int(row["sample_count"]),
+            "first_timestamp": row["first_timestamp"],
+            "last_timestamp": row["last_timestamp"],
+        }
+    result = []
+    for pair in SUPPORTED_RATE_PAIRS:
+        detail = known.get(pair)
+        result.append(
+            {
+                "pair": pair,
+                "supported": True,
+                "cached": detail is not None,
+                "sample_count": detail["sample_count"] if detail else 0,
+                "first_timestamp": detail["first_timestamp"] if detail else None,
+                "last_timestamp": detail["last_timestamp"] if detail else None,
+            }
+        )
+    # Report any non-canonical pairs cached from manual `rates set`.
+    for pair, detail in known.items():
+        if pair in SUPPORTED_RATE_PAIRS:
+            continue
+        if detail is None:
+            continue
+        result.append(
+            {
+                "pair": pair,
+                "supported": False,
+                "cached": True,
+                "sample_count": detail["sample_count"],
+                "first_timestamp": detail["first_timestamp"],
+                "last_timestamp": detail["last_timestamp"],
+            }
+        )
+    return result
+
+
+def _coingecko_market_chart(coin_id, vs, days):
+    url = (
+        "https://api.coingecko.com/api/v3/coins/"
+        f"{coin_id}/market_chart?vs_currency={vs}&days={int(days)}"
+    )
+    payload = http_get_json(url, timeout=30)
+    prices = payload.get("prices") if isinstance(payload, dict) else None
+    if not isinstance(prices, list):
+        raise AppError(
+            "CoinGecko response did not contain a prices array",
+            code="upstream_error",
+            retryable=True,
+        )
+    out = []
+    for entry in prices:
+        if not isinstance(entry, list) or len(entry) < 2:
+            continue
+        ms, value = entry[0], entry[1]
+        try:
+            ts = datetime.fromtimestamp(float(ms) / 1000.0, tz=timezone.utc)
+            rate = float(value)
+        except (TypeError, ValueError):
+            continue
+        out.append((_iso_z(ts.replace(microsecond=0)), rate))
+    return out
+
+
+def fetch_rates_coingecko(pair, days=30):
+    normalized = _require_supported_pair(pair)
+    asset, fiat = _rate_pair_parts(normalized)
+    coin_id = _COINGECKO_COIN.get(asset)
+    vs = _COINGECKO_VS.get(fiat)
+    if not coin_id or not vs:
+        raise AppError(
+            f"Pair '{normalized}' has no CoinGecko mapping",
+            code="validation",
+            hint=f"Supported pairs: {', '.join(SUPPORTED_RATE_PAIRS)}",
+        )
+    return _coingecko_market_chart(coin_id, vs, days)
+
+
+def sync_rates(conn, pair=None, days=30, source="coingecko"):
+    if source != "coingecko":
+        raise AppError(
+            f"Unknown rate source '{source}'",
+            code="validation",
+            hint="Supported sources: coingecko",
+        )
+    if pair:
+        pairs = [_require_supported_pair(pair)]
+    else:
+        pairs = list(SUPPORTED_RATE_PAIRS)
+    fetched_at = _iso_z(datetime.now(timezone.utc))
+    summary = []
+    for p in pairs:
+        samples = fetch_rates_coingecko(p, days=days)
+        inserted = 0
+        for ts, rate in samples:
+            upsert_rate(conn, p, ts, rate, source, fetched_at=fetched_at)
+            inserted += 1
+        conn.commit()
+        summary.append(
+            {
+                "pair": p,
+                "source": source,
+                "samples": inserted,
+                "days": int(days),
+                "fetched_at": fetched_at,
+            }
+        )
+    return summary
+
+
+def set_manual_rate(conn, pair, timestamp, rate, source="manual"):
+    normalized = _normalize_rate_pair(pair)
+    try:
+        value = float(rate)
+    except (TypeError, ValueError) as exc:
+        raise AppError(f"Invalid rate '{rate}'", code="validation") from exc
+    if value <= 0:
+        raise AppError("Rate must be positive", code="validation")
+    row = upsert_rate(conn, normalized, timestamp, value, source)
+    conn.commit()
+    return row
 
 
 def rp2_wallet_state(profile, wallet, asset, rows, configuration):
@@ -3048,8 +3486,8 @@ def rp2_wallet_state(profile, wallet, asset, rows, configuration):
     row_index = 1
     row_by_id = {row["id"]: row for row in rows}
     for row in rows:
-        amount = dec(row["amount"])
-        fee = dec(row["fee"])
+        amount = msat_to_btc(row["amount"])
+        fee = msat_to_btc(row["fee"])
         description = row["note"] or row["description"] or row["kind"] or row["id"]
         if row["direction"] == "inbound":
             total_available += amount
@@ -3389,7 +3827,7 @@ def process_journals(conn, workspace_ref, profile_ref):
                 entry["occurred_at"],
                 entry["entry_type"],
                 entry["asset"],
-                float(entry["quantity"]),
+                btc_to_msat(entry["quantity"]),
                 float(entry["fiat_value"]),
                 float(entry["unit_cost"]),
                 float(entry["cost_basis"]) if entry["cost_basis"] is not None else None,
@@ -3433,6 +3871,180 @@ def process_journals(conn, workspace_ref, profile_ref):
     }
 
 
+DEFAULT_EVENTS_LIMIT = 100
+MAX_EVENTS_LIMIT = 1000
+
+
+def _encode_event_cursor(row):
+    token = f"{row['occurred_at']}|{row['created_at']}|{row['id']}"
+    return base64.urlsafe_b64encode(token.encode("utf-8")).decode("ascii").rstrip("=")
+
+
+def _decode_event_cursor(cursor):
+    if not cursor:
+        return None
+    try:
+        padding = "=" * (-len(cursor) % 4)
+        decoded = base64.urlsafe_b64decode(cursor + padding).decode("utf-8")
+        occurred_at, created_at, event_id = decoded.split("|", 2)
+        return {"occurred_at": occurred_at, "created_at": created_at, "id": event_id}
+    except (ValueError, UnicodeDecodeError, binascii.Error) as exc:
+        raise AppError(
+            f"Invalid cursor: {cursor}",
+            code="validation",
+            hint="Pass the exact next_cursor value from the previous response; do not modify it.",
+        ) from exc
+
+
+def list_journal_events(
+    conn,
+    workspace_ref,
+    profile_ref,
+    wallet=None,
+    account=None,
+    asset=None,
+    entry_type=None,
+    start=None,
+    end=None,
+    cursor=None,
+    limit=None,
+):
+    _, profile = resolve_scope(conn, workspace_ref, profile_ref)
+    effective_limit = limit if limit is not None else DEFAULT_EVENTS_LIMIT
+    if effective_limit <= 0:
+        raise AppError("--limit must be positive", code="validation")
+    if effective_limit > MAX_EVENTS_LIMIT:
+        raise AppError(
+            f"--limit cannot exceed {MAX_EVENTS_LIMIT}",
+            code="validation",
+            hint=f"Use cursor-based pagination instead of larger limits; max page size is {MAX_EVENTS_LIMIT}.",
+        )
+
+    where = ["je.profile_id = ?"]
+    params = [profile["id"]]
+    start_ts = _iso_z(_parse_iso_datetime(start, "start")) if start else None
+    end_ts = _iso_z(_parse_iso_datetime(end, "end")) if end else None
+
+    if wallet:
+        wallet_row = resolve_wallet(conn, profile["id"], wallet)
+        where.append("je.wallet_id = ?")
+        params.append(wallet_row["id"])
+    if account:
+        account_row = resolve_account(conn, profile["id"], account)
+        where.append("je.account_id = ?")
+        params.append(account_row["id"])
+    if asset:
+        where.append("upper(je.asset) = ?")
+        params.append(asset.upper())
+    if entry_type:
+        where.append("lower(je.entry_type) = ?")
+        params.append(entry_type.lower())
+    if start_ts:
+        where.append("je.occurred_at >= ?")
+        params.append(start_ts)
+    if end_ts:
+        where.append("je.occurred_at <= ?")
+        params.append(end_ts)
+
+    cursor_data = _decode_event_cursor(cursor)
+    if cursor_data:
+        where.append(
+            "(je.occurred_at < ? OR "
+            "(je.occurred_at = ? AND je.created_at < ?) OR "
+            "(je.occurred_at = ? AND je.created_at = ? AND je.id < ?))"
+        )
+        params.extend(
+            [
+                cursor_data["occurred_at"],
+                cursor_data["occurred_at"],
+                cursor_data["created_at"],
+                cursor_data["occurred_at"],
+                cursor_data["created_at"],
+                cursor_data["id"],
+            ]
+        )
+
+    query = f"""
+        SELECT
+            je.id,
+            je.occurred_at,
+            je.created_at,
+            je.transaction_id,
+            je.wallet_id,
+            w.label AS wallet,
+            je.account_id,
+            COALESCE(a.code, '') AS account,
+            COALESCE(a.label, '') AS account_label,
+            je.entry_type,
+            je.asset,
+            je.quantity,
+            je.fiat_value,
+            je.unit_cost,
+            COALESCE(je.cost_basis, 0) AS cost_basis,
+            COALESCE(je.proceeds, 0) AS proceeds,
+            COALESCE(je.gain_loss, 0) AS gain_loss,
+            COALESCE(je.description, '') AS description
+        FROM journal_entries je
+        JOIN wallets w ON w.id = je.wallet_id
+        LEFT JOIN accounts a ON a.id = je.account_id
+        WHERE {' AND '.join(where)}
+        ORDER BY je.occurred_at DESC, je.created_at DESC, je.id DESC
+        LIMIT ?
+    """
+    params.append(effective_limit + 1)
+    rows = conn.execute(query, params).fetchall()
+
+    has_more = len(rows) > effective_limit
+    page = rows[:effective_limit]
+    events = []
+    for row in page:
+        event = dict(row)
+        event["quantity_msat"] = int(event["quantity"])
+        event["quantity"] = float(msat_to_btc(event["quantity"]))
+        events.append(event)
+    next_cursor = _encode_event_cursor(page[-1]) if has_more and page else None
+
+    return {
+        "events": events,
+        "next_cursor": next_cursor,
+        "has_more": has_more,
+        "limit": effective_limit,
+    }
+
+
+def get_journal_event(conn, workspace_ref, profile_ref, event_id):
+    _, profile = resolve_scope(conn, workspace_ref, profile_ref)
+    row = conn.execute(
+        """
+        SELECT
+            je.*,
+            w.label AS wallet,
+            COALESCE(a.code, '') AS account,
+            COALESCE(a.label, '') AS account_label,
+            t.external_id AS transaction_external_id,
+            t.direction AS transaction_direction,
+            t.counterparty AS transaction_counterparty,
+            t.note AS transaction_note
+        FROM journal_entries je
+        JOIN wallets w ON w.id = je.wallet_id
+        LEFT JOIN accounts a ON a.id = je.account_id
+        LEFT JOIN transactions t ON t.id = je.transaction_id
+        WHERE je.profile_id = ? AND je.id = ?
+        """,
+        (profile["id"], event_id),
+    ).fetchone()
+    if not row:
+        raise AppError(
+            f"Journal event '{event_id}' not found",
+            code="not_found",
+            hint="Run `kassiber journals events list` to find valid event ids.",
+        )
+    event = dict(row)
+    event["quantity_msat"] = int(event["quantity"])
+    event["quantity"] = float(msat_to_btc(event["quantity"]))
+    return event
+
+
 def list_journal_entries(conn, workspace_ref, profile_ref, limit=200):
     _, profile = resolve_scope(conn, workspace_ref, profile_ref)
     rows = conn.execute(
@@ -3459,7 +4071,13 @@ def list_journal_entries(conn, workspace_ref, profile_ref, limit=200):
         """,
         (profile["id"], limit),
     ).fetchall()
-    return [dict(row) for row in rows]
+    results = []
+    for row in rows:
+        entry = dict(row)
+        entry["quantity_msat"] = int(entry["quantity"])
+        entry["quantity"] = float(msat_to_btc(entry["quantity"]))
+        results.append(entry)
+    return results
 
 
 def list_quarantines(conn, workspace_ref, profile_ref):
@@ -3494,13 +4112,154 @@ def list_quarantines(conn, workspace_ref, profile_ref):
                 "occurred_at": row["occurred_at"],
                 "wallet": row["wallet"],
                 "asset": row["asset"],
-                "amount": row["amount"],
-                "fee": row["fee"],
+                "amount": float(msat_to_btc(row["amount"])),
+                "amount_msat": int(row["amount"]),
+                "fee": float(msat_to_btc(row["fee"])),
+                "fee_msat": int(row["fee"]),
                 "reason": row["reason"],
-                "detail": json.dumps(detail, sort_keys=True),
+                "detail": detail,
             }
         )
     return output
+
+
+def show_quarantine(conn, workspace_ref, profile_ref, tx_ref):
+    _, profile = resolve_scope(conn, workspace_ref, profile_ref)
+    tx = resolve_transaction(conn, profile["id"], tx_ref)
+    row = conn.execute(
+        """
+        SELECT q.transaction_id, q.reason, q.detail_json, q.created_at,
+               w.label AS wallet, t.external_id, t.occurred_at, t.asset,
+               t.amount, t.fee, t.fiat_rate, t.fiat_value, t.direction, t.excluded
+        FROM journal_quarantines q
+        JOIN transactions t ON t.id = q.transaction_id
+        JOIN wallets w ON w.id = t.wallet_id
+        WHERE q.profile_id = ? AND q.transaction_id = ?
+        """,
+        (profile["id"], tx["id"]),
+    ).fetchone()
+    if not row:
+        raise AppError(
+            f"Transaction '{tx_ref}' has no active quarantine",
+            code="not_found",
+            hint="Only transactions flagged during `journals process` appear here.",
+        )
+    return {
+        "transaction_id": row["transaction_id"],
+        "external_id": row["external_id"] or "",
+        "wallet": row["wallet"],
+        "occurred_at": row["occurred_at"],
+        "direction": row["direction"],
+        "asset": row["asset"],
+        "amount": float(msat_to_btc(row["amount"])),
+        "amount_msat": int(row["amount"]),
+        "fee": float(msat_to_btc(row["fee"])),
+        "fee_msat": int(row["fee"]),
+        "fiat_rate": row["fiat_rate"],
+        "fiat_value": row["fiat_value"],
+        "excluded": bool(row["excluded"]),
+        "reason": row["reason"],
+        "detail": json.loads(row["detail_json"] or "{}"),
+        "quarantined_at": row["created_at"],
+    }
+
+
+def _ensure_quarantined(conn, profile_id, transaction_id):
+    row = conn.execute(
+        "SELECT reason FROM journal_quarantines WHERE profile_id = ? AND transaction_id = ?",
+        (profile_id, transaction_id),
+    ).fetchone()
+    if not row:
+        raise AppError(
+            "Transaction is not quarantined",
+            code="not_found",
+            hint="Run `kassiber journals quarantined` to see active entries.",
+        )
+    return row["reason"]
+
+
+def resolve_quarantine_price_override(
+    conn, workspace_ref, profile_ref, tx_ref, fiat_rate=None, fiat_value=None
+):
+    if fiat_rate is None and fiat_value is None:
+        raise AppError(
+            "Provide at least one of --fiat-rate or --fiat-value",
+            code="validation",
+        )
+    _, profile = resolve_scope(conn, workspace_ref, profile_ref)
+    tx = resolve_transaction(conn, profile["id"], tx_ref)
+    _ensure_quarantined(conn, profile["id"], tx["id"])
+    new_rate = dec(fiat_rate) if fiat_rate is not None else None
+    new_value = dec(fiat_value) if fiat_value is not None else None
+    amount = abs(msat_to_btc(tx["amount"]))
+    if new_rate is None and new_value is not None and amount > 0:
+        new_rate = new_value / amount
+    if new_value is None and new_rate is not None and amount > 0:
+        new_value = new_rate * amount
+    if new_rate is not None and new_rate <= 0:
+        raise AppError("--fiat-rate must be positive", code="validation")
+    if new_value is not None and new_value < 0:
+        raise AppError("--fiat-value must not be negative", code="validation")
+    conn.execute(
+        "UPDATE transactions SET fiat_rate = ?, fiat_value = ? WHERE id = ?",
+        (
+            float(new_rate) if new_rate is not None else None,
+            float(new_value) if new_value is not None else None,
+            tx["id"],
+        ),
+    )
+    conn.execute(
+        "DELETE FROM journal_quarantines WHERE profile_id = ? AND transaction_id = ?",
+        (profile["id"], tx["id"]),
+    )
+    invalidate_journals(conn, profile["id"])
+    conn.commit()
+    return {
+        "transaction_id": tx["id"],
+        "resolution": "price-override",
+        "fiat_rate": float(new_rate) if new_rate is not None else None,
+        "fiat_value": float(new_value) if new_value is not None else None,
+        "note": "Run `kassiber journals process` to regenerate entries.",
+    }
+
+
+def resolve_quarantine_exclude(conn, workspace_ref, profile_ref, tx_ref):
+    _, profile = resolve_scope(conn, workspace_ref, profile_ref)
+    tx = resolve_transaction(conn, profile["id"], tx_ref)
+    _ensure_quarantined(conn, profile["id"], tx["id"])
+    conn.execute(
+        "UPDATE transactions SET excluded = 1 WHERE id = ?",
+        (tx["id"],),
+    )
+    conn.execute(
+        "DELETE FROM journal_quarantines WHERE profile_id = ? AND transaction_id = ?",
+        (profile["id"], tx["id"]),
+    )
+    invalidate_journals(conn, profile["id"])
+    conn.commit()
+    return {
+        "transaction_id": tx["id"],
+        "resolution": "exclude",
+        "excluded": True,
+        "note": "Run `kassiber journals process` to regenerate entries.",
+    }
+
+
+def clear_quarantine(conn, workspace_ref, profile_ref, tx_ref):
+    _, profile = resolve_scope(conn, workspace_ref, profile_ref)
+    tx = resolve_transaction(conn, profile["id"], tx_ref)
+    _ensure_quarantined(conn, profile["id"], tx["id"])
+    conn.execute(
+        "DELETE FROM journal_quarantines WHERE profile_id = ? AND transaction_id = ?",
+        (profile["id"], tx["id"]),
+    )
+    invalidate_journals(conn, profile["id"])
+    conn.commit()
+    return {
+        "transaction_id": tx["id"],
+        "resolution": "clear",
+        "note": "Run `kassiber journals process` to re-evaluate.",
+    }
 
 
 def require_processed_journals(conn, profile):
@@ -3594,13 +4353,183 @@ def report_capital_gains(conn, workspace_ref, profile_ref):
         """,
         (profile["id"],),
     ).fetchall()
-    return [dict(row) for row in rows]
+    results = []
+    for row in rows:
+        entry = dict(row)
+        entry["quantity_msat"] = int(entry["quantity"])
+        entry["quantity"] = float(msat_to_btc(entry["quantity"]))
+        results.append(entry)
+    return results
 
 
 def report_journal_entries(conn, workspace_ref, profile_ref):
     _, profile = resolve_scope(conn, workspace_ref, profile_ref)
     require_processed_journals(conn, profile)
     return list_journal_entries(conn, profile["workspace_id"], profile["id"], limit=1000)
+
+
+INTERVAL_CHOICES = ("hour", "day", "week", "month")
+
+
+def _floor_to_interval(dt, interval):
+    if interval == "hour":
+        return dt.replace(minute=0, second=0, microsecond=0)
+    if interval == "day":
+        return dt.replace(hour=0, minute=0, second=0, microsecond=0)
+    if interval == "week":
+        floored = dt.replace(hour=0, minute=0, second=0, microsecond=0)
+        return floored - timedelta(days=floored.weekday())
+    if interval == "month":
+        return dt.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    raise AppError(f"Unknown interval '{interval}'", code="validation")
+
+
+def _next_interval(dt, interval):
+    if interval == "hour":
+        return dt + timedelta(hours=1)
+    if interval == "day":
+        return dt + timedelta(days=1)
+    if interval == "week":
+        return dt + timedelta(days=7)
+    if interval == "month":
+        if dt.month == 12:
+            return dt.replace(year=dt.year + 1, month=1)
+        return dt.replace(month=dt.month + 1)
+    raise AppError(f"Unknown interval '{interval}'", code="validation")
+
+
+def report_balance_history(
+    conn,
+    workspace_ref,
+    profile_ref,
+    interval="day",
+    start=None,
+    end=None,
+    wallet_ref=None,
+    account_ref=None,
+    asset=None,
+):
+    if interval not in INTERVAL_CHOICES:
+        raise AppError(
+            f"Unsupported interval '{interval}'",
+            code="validation",
+            hint=f"Choose one of: {', '.join(INTERVAL_CHOICES)}",
+        )
+    _, profile = resolve_scope(conn, workspace_ref, profile_ref)
+    require_processed_journals(conn, profile)
+    start_dt = _parse_iso_datetime(start, "start")
+    end_dt = _parse_iso_datetime(end, "end")
+    if start_dt and end_dt and start_dt > end_dt:
+        raise AppError("--start must not be after --end", code="validation")
+
+    sql = """
+        SELECT
+            je.occurred_at,
+            je.asset,
+            je.quantity,
+            je.fiat_value,
+            COALESCE(je.cost_basis, 0) AS cost_basis
+        FROM journal_entries je
+        LEFT JOIN accounts a ON a.id = je.account_id
+        WHERE je.profile_id = ?
+    """
+    params = [profile["id"]]
+    if wallet_ref:
+        wallet = resolve_wallet(conn, profile["id"], wallet_ref)
+        sql += " AND je.wallet_id = ?"
+        params.append(wallet["id"])
+    if account_ref:
+        sql += " AND (a.code = ? OR a.label = ? OR a.id = ?)"
+        params.extend([account_ref, account_ref, account_ref])
+    if asset:
+        sql += " AND je.asset = ?"
+        params.append(asset)
+    sql += " ORDER BY je.occurred_at ASC, je.created_at ASC, je.id ASC"
+    rows = conn.execute(sql, params).fetchall()
+    rate_rows = conn.execute(
+        """
+        SELECT occurred_at, asset, amount, fiat_rate, fiat_value
+        FROM transactions
+        WHERE profile_id = ? AND excluded = 0
+          AND (fiat_rate IS NOT NULL OR fiat_value IS NOT NULL)
+        ORDER BY occurred_at ASC, created_at ASC, id ASC
+        """,
+        (profile["id"],),
+    ).fetchall()
+
+    if not rows and not (start_dt and end_dt):
+        return []
+
+    events = []
+    for row in rows:
+        row_dt = _parse_iso_datetime(row["occurred_at"], "occurred_at")
+        events.append(
+            (
+                row_dt,
+                row["asset"],
+                msat_to_btc(row["quantity"]),
+                dec(row["fiat_value"]),
+                dec(row["cost_basis"]),
+            )
+        )
+    rate_events = []
+    for row in rate_rows:
+        rate = None
+        if row["fiat_rate"] is not None:
+            rate = dec(row["fiat_rate"])
+        elif row["fiat_value"] is not None and row["amount"]:
+            rate = dec(row["fiat_value"]) / msat_to_btc(row["amount"])
+        if rate is None:
+            continue
+        rate_events.append((_parse_iso_datetime(row["occurred_at"], "occurred_at"), row["asset"], rate))
+
+    first_event_dt = events[0][0] if events else None
+    range_start = start_dt or first_event_dt or datetime.now(timezone.utc)
+    range_end = end_dt or datetime.now(timezone.utc)
+    if range_start > range_end:
+        return []
+
+    cumulative = defaultdict(lambda: Decimal("0"))
+    cumulative_fiat = defaultdict(lambda: Decimal("0"))
+    event_idx = 0
+    rate_idx = 0
+    current_rates = {}
+    bucket_start = _floor_to_interval(range_start, interval)
+    end_cap = _floor_to_interval(range_end, interval)
+
+    results = []
+    while bucket_start <= end_cap:
+        bucket_end = _next_interval(bucket_start, interval)
+        while event_idx < len(events) and events[event_idx][0] < bucket_end:
+            _, ev_asset, ev_qty, ev_fiat, ev_cost_basis = events[event_idx]
+            cumulative[ev_asset] += ev_qty
+            if ev_qty >= 0:
+                cumulative_fiat[ev_asset] += ev_fiat
+            else:
+                cumulative_fiat[ev_asset] -= ev_cost_basis
+            event_idx += 1
+        while rate_idx < len(rate_events) and rate_events[rate_idx][0] < bucket_end:
+            _, rate_asset, rate = rate_events[rate_idx]
+            current_rates[rate_asset] = rate
+            rate_idx += 1
+        emitted_assets = set(cumulative.keys()) if asset is None else {asset}
+        for ev_asset in sorted(emitted_assets):
+            qty = cumulative.get(ev_asset, Decimal("0"))
+            if qty == 0 and asset is None:
+                continue
+            rate = current_rates.get(ev_asset, Decimal("0"))
+            results.append(
+                {
+                    "period_start": _iso_z(bucket_start),
+                    "period_end": _iso_z(bucket_end - timedelta(seconds=1)),
+                    "asset": ev_asset,
+                    "quantity": float(qty),
+                    "cumulative_cost_basis": float(cumulative_fiat.get(ev_asset, Decimal("0"))),
+                    "market_value": float(qty * rate),
+                }
+            )
+        bucket_start = bucket_end
+    return results
 
 
 def show_status(conn, data_root):
@@ -3619,6 +4548,8 @@ def show_status(conn, data_root):
     }
     return {
         "version": __version__,
+        "schema_version": SCHEMA_VERSION,
+        "auth": {"mode": "local", "authenticated": True},
         "data_root": str(resolve_effective_data_root(data_root)),
         "current_workspace": workspace["label"] if workspace else "",
         "current_profile": profile["label"] if profile else "",
@@ -3626,21 +4557,89 @@ def show_status(conn, data_root):
     }
 
 
-def list_backends(runtime_config):
-    rows = []
-    for name, backend in sorted(runtime_config["backends"].items()):
-        rows.append(
+def get_profile_details(conn, workspace_ref=None, profile_ref=None):
+    workspace = resolve_workspace(conn, workspace_ref)
+    profile = resolve_profile(conn, workspace["id"], profile_ref)
+    current_profile_id = get_setting(conn, "context_profile")
+    current_workspace_id = get_setting(conn, "context_workspace")
+    return {
+        "id": profile["id"],
+        "workspace_id": profile["workspace_id"],
+        "workspace_label": workspace["label"],
+        "label": profile["label"],
+        "fiat_currency": profile["fiat_currency"],
+        "tax_country": profile["tax_country"],
+        "tax_long_term_days": profile["tax_long_term_days"],
+        "gains_algorithm": profile["gains_algorithm"],
+        "last_processed_at": profile["last_processed_at"],
+        "last_processed_tx_count": profile["last_processed_tx_count"],
+        "created_at": profile["created_at"],
+        "is_current": profile["id"] == current_profile_id and profile["workspace_id"] == current_workspace_id,
+    }
+
+
+def update_profile(conn, workspace_ref, profile_ref, updates):
+    workspace = resolve_workspace(conn, workspace_ref)
+    profile = resolve_profile(conn, workspace["id"], profile_ref)
+
+    new_label = updates.get("label")
+    new_fiat = updates.get("fiat_currency")
+    new_country = updates.get("tax_country")
+    new_long_term = updates.get("tax_long_term_days")
+    new_algo = updates.get("gains_algorithm")
+
+    merged_fiat = new_fiat if new_fiat is not None else profile["fiat_currency"]
+    merged_country = new_country if new_country is not None else profile["tax_country"]
+    merged_long_term = new_long_term if new_long_term is not None else profile["tax_long_term_days"]
+    merged_algo = new_algo if new_algo is not None else profile["gains_algorithm"]
+    merged_label = new_label if new_label is not None else profile["label"]
+
+    if new_long_term is not None and new_long_term < 0:
+        raise AppError(
+            "Tax long-term days cannot be negative",
+            code="validation",
+            hint="Use a non-negative integer; pass 0 to treat every disposal as short-term.",
+        )
+    if new_algo is not None and new_algo.upper() not in RP2_ACCOUNTING_METHODS:
+        raise AppError(
+            f"Unsupported gains algorithm '{new_algo}'",
+            code="validation",
+            hint=f"Choose one of: {', '.join(RP2_ACCOUNTING_METHODS)}",
+        )
+    if new_country is not None and new_country not in supported_tax_countries():
+        raise AppError(
+            f"Unsupported tax country '{new_country}'",
+            code="validation",
+            hint=f"Choose one of: {', '.join(sorted(supported_tax_countries()))}",
+        )
+    try:
+        build_tax_policy(
             {
-                "name": name,
-                "kind": backend["kind"],
-                "chain": backend.get("chain", ""),
-                "network": backend.get("network", ""),
-                "url": backend["url"],
-                "default": "yes" if name == runtime_config["default_backend"] else "",
-                "source": backend["source"],
+                "fiat_currency": merged_fiat,
+                "tax_country": merged_country,
+                "tax_long_term_days": merged_long_term,
             }
         )
-    return rows
+    except ValueError as exc:
+        raise AppError(str(exc), code="validation") from exc
+
+    conn.execute(
+        """
+        UPDATE profiles
+        SET label = ?, fiat_currency = ?, tax_country = ?, tax_long_term_days = ?, gains_algorithm = ?
+        WHERE id = ?
+        """,
+        (
+            merged_label,
+            merged_fiat,
+            merged_country,
+            merged_long_term,
+            merged_algo.upper(),
+            profile["id"],
+        ),
+    )
+    conn.commit()
+    return get_profile_details(conn, workspace["label"], profile["id"])
 
 
 def cmd_init(conn, args):
@@ -3703,7 +4702,27 @@ def build_parser():
     )
     parser.add_argument("--data-root", default=DEFAULT_DATA_ROOT, help="Data directory for the local SQLite store")
     parser.add_argument("--env-file", default=DEFAULT_ENV_FILE, help="Path to a .env file that defines named sync backends")
-    parser.add_argument("--format", choices=["table", "json"], default="table", help="Output format")
+    parser.add_argument(
+        "--format",
+        choices=list(OUTPUT_FORMATS),
+        default=None,
+        help="Output format: table (default interactive), json (envelope), plain (text), csv (tabular)",
+    )
+    parser.add_argument(
+        "--machine",
+        action="store_true",
+        help="Machine-readable mode: implies --format json, writes a structured envelope",
+    )
+    parser.add_argument(
+        "--output",
+        default=None,
+        help="Write output to this file path instead of stdout (use '-' for stdout)",
+    )
+    parser.add_argument(
+        "--debug",
+        action="store_true",
+        help="Print a full traceback on error for diagnostics",
+    )
     sub = parser.add_subparsers(dest="command", required=True)
 
     sub.add_parser("init")
@@ -3712,10 +4731,47 @@ def build_parser():
     backends = sub.add_parser("backends")
     backends_sub = backends.add_subparsers(dest="backends_command", required=True)
     backends_sub.add_parser("list")
+    backends_sub.add_parser("kinds")
+
+    backends_get = backends_sub.add_parser("get")
+    backends_get.add_argument("name")
+
+    backends_create = backends_sub.add_parser("create")
+    backends_create.add_argument("name")
+    backends_create.add_argument("--kind", required=True, choices=sorted(BACKEND_KINDS))
+    backends_create.add_argument("--url", required=True)
+    backends_create.add_argument("--chain", choices=["bitcoin", "liquid"])
+    backends_create.add_argument("--network")
+    backends_create.add_argument("--auth-header")
+    backends_create.add_argument("--token")
+    backends_create.add_argument("--timeout", type=int)
+    backends_create.add_argument("--tor-proxy")
+    backends_create.add_argument("--notes")
+
+    backends_update = backends_sub.add_parser("update")
+    backends_update.add_argument("name")
+    backends_update.add_argument("--kind", choices=sorted(BACKEND_KINDS))
+    backends_update.add_argument("--url")
+    backends_update.add_argument("--chain", choices=["bitcoin", "liquid"])
+    backends_update.add_argument("--network")
+    backends_update.add_argument("--auth-header")
+    backends_update.add_argument("--token")
+    backends_update.add_argument("--timeout", type=int)
+    backends_update.add_argument("--tor-proxy")
+    backends_update.add_argument("--notes")
+
+    backends_delete = backends_sub.add_parser("delete")
+    backends_delete.add_argument("name")
+
+    backends_set_default = backends_sub.add_parser("set-default")
+    backends_set_default.add_argument("name")
+
+    backends_sub.add_parser("clear-default")
 
     context = sub.add_parser("context")
     context_sub = context.add_subparsers(dest="context_command", required=True)
     context_sub.add_parser("show")
+    context_sub.add_parser("current")
     context_set = context_sub.add_parser("set")
     context_set.add_argument("--workspace")
     context_set.add_argument("--profile")
@@ -3737,6 +4793,19 @@ def build_parser():
     profiles_create.add_argument("--tax-country", choices=list(supported_tax_countries()), default=DEFAULT_TAX_COUNTRY)
     profiles_create.add_argument("--tax-long-term-days", type=int, default=DEFAULT_LONG_TERM_DAYS)
     profiles_create.add_argument("--gains-algorithm", choices=list(RP2_ACCOUNTING_METHODS), default="FIFO")
+
+    profiles_get = profiles_sub.add_parser("get")
+    profiles_get.add_argument("--workspace")
+    profiles_get.add_argument("--profile")
+
+    profiles_set = profiles_sub.add_parser("set")
+    profiles_set.add_argument("--workspace")
+    profiles_set.add_argument("--profile")
+    profiles_set.add_argument("--label")
+    profiles_set.add_argument("--fiat-currency")
+    profiles_set.add_argument("--tax-country", choices=list(supported_tax_countries()))
+    profiles_set.add_argument("--tax-long-term-days", type=int)
+    profiles_set.add_argument("--gains-algorithm", choices=list(RP2_ACCOUNTING_METHODS))
 
     accounts = sub.add_parser("accounts")
     accounts_sub = accounts.add_subparsers(dest="accounts_command", required=True)
@@ -3776,7 +4845,7 @@ def build_parser():
     wallets_create.add_argument("--config")
     wallets_create.add_argument("--config-file")
     wallets_create.add_argument("--source-file")
-    wallets_create.add_argument("--source-format", choices=["json", "csv", "btcpay_json", "btcpay_csv"])
+    wallets_create.add_argument("--source-format", choices=["json", "csv", "btcpay_json", "btcpay_csv", "phoenix_csv"])
     wallets_altbestand = wallets_sub.add_parser("set-altbestand")
     wallets_altbestand.add_argument("--workspace")
     wallets_altbestand.add_argument("--profile")
@@ -3785,6 +4854,36 @@ def build_parser():
     wallets_neubestand.add_argument("--workspace")
     wallets_neubestand.add_argument("--profile")
     wallets_neubestand.add_argument("--wallet", required=True)
+
+    wallets_sub.add_parser("kinds")
+
+    wallets_get = wallets_sub.add_parser("get")
+    wallets_get.add_argument("--workspace")
+    wallets_get.add_argument("--profile")
+    wallets_get.add_argument("--wallet", required=True)
+
+    wallets_update = wallets_sub.add_parser("update")
+    wallets_update.add_argument("--workspace")
+    wallets_update.add_argument("--profile")
+    wallets_update.add_argument("--wallet", required=True)
+    wallets_update.add_argument("--label")
+    wallets_update.add_argument("--account")
+    wallets_update.add_argument("--backend")
+    wallets_update.add_argument("--chain", choices=["bitcoin", "liquid"])
+    wallets_update.add_argument("--network")
+    wallets_update.add_argument("--gap-limit", type=int)
+    wallets_update.add_argument("--policy-asset")
+    wallets_update.add_argument("--config")
+    wallets_update.add_argument("--config-file")
+    wallets_update.add_argument("--set-altbestand", action="store_true")
+    wallets_update.add_argument("--clear-altbestand", action="store_true")
+    wallets_update.add_argument("--clear", action="append", default=[], metavar="FIELD", help="Clear a config field (repeatable)")
+
+    wallets_delete = wallets_sub.add_parser("delete")
+    wallets_delete.add_argument("--workspace")
+    wallets_delete.add_argument("--profile")
+    wallets_delete.add_argument("--wallet", required=True)
+    wallets_delete.add_argument("--cascade", action="store_true", help="Also delete transactions and journal entries belonging to this wallet")
     wallets_import_json = wallets_sub.add_parser("import-json")
     wallets_import_json.add_argument("--workspace")
     wallets_import_json.add_argument("--profile")
@@ -3800,7 +4899,12 @@ def build_parser():
     wallets_import_btcpay.add_argument("--profile")
     wallets_import_btcpay.add_argument("--wallet", required=True)
     wallets_import_btcpay.add_argument("--file", required=True)
-    wallets_import_btcpay.add_argument("--format", choices=["json", "csv"], default="csv")
+    wallets_import_btcpay.add_argument("--input-format", "--format", dest="input_format", choices=["json", "csv"], default="csv")
+    wallets_import_phoenix = wallets_sub.add_parser("import-phoenix")
+    wallets_import_phoenix.add_argument("--workspace")
+    wallets_import_phoenix.add_argument("--profile")
+    wallets_import_phoenix.add_argument("--wallet", required=True)
+    wallets_import_phoenix.add_argument("--file", required=True)
     wallets_sync = wallets_sub.add_parser("sync")
     wallets_sync.add_argument("--workspace")
     wallets_sync.add_argument("--profile")
@@ -3881,6 +4985,64 @@ def build_parser():
     include.add_argument("--profile")
     include.add_argument("--transaction", required=True)
 
+    records = meta_sub.add_parser("records")
+    records_sub = records.add_subparsers(dest="records_command", required=True)
+
+    records_list = records_sub.add_parser("list")
+    records_list.add_argument("--workspace")
+    records_list.add_argument("--profile")
+    records_list.add_argument("--wallet")
+    records_list.add_argument("--tag")
+    records_list.add_argument("--has-note", dest="has_note", action="store_true")
+    records_list.add_argument("--no-note", dest="no_note", action="store_true")
+    records_list.add_argument("--excluded", action="store_true")
+    records_list.add_argument("--included", action="store_true")
+    records_list.add_argument("--start")
+    records_list.add_argument("--end")
+    records_list.add_argument("--cursor")
+    records_list.add_argument("--limit", type=int, default=DEFAULT_EVENTS_LIMIT)
+
+    records_get = records_sub.add_parser("get")
+    records_get.add_argument("--workspace")
+    records_get.add_argument("--profile")
+    records_get.add_argument("--transaction", required=True)
+
+    records_note = records_sub.add_parser("note")
+    records_note_sub = records_note.add_subparsers(dest="records_note_command", required=True)
+    rn_set = records_note_sub.add_parser("set")
+    rn_set.add_argument("--workspace")
+    rn_set.add_argument("--profile")
+    rn_set.add_argument("--transaction", required=True)
+    rn_set.add_argument("--note", required=True)
+    rn_clear = records_note_sub.add_parser("clear")
+    rn_clear.add_argument("--workspace")
+    rn_clear.add_argument("--profile")
+    rn_clear.add_argument("--transaction", required=True)
+
+    records_tag = records_sub.add_parser("tag")
+    records_tag_sub = records_tag.add_subparsers(dest="records_tag_command", required=True)
+    rt_add = records_tag_sub.add_parser("add")
+    rt_add.add_argument("--workspace")
+    rt_add.add_argument("--profile")
+    rt_add.add_argument("--transaction", required=True)
+    rt_add.add_argument("--tag", required=True)
+    rt_remove = records_tag_sub.add_parser("remove")
+    rt_remove.add_argument("--workspace")
+    rt_remove.add_argument("--profile")
+    rt_remove.add_argument("--transaction", required=True)
+    rt_remove.add_argument("--tag", required=True)
+
+    records_excluded = records_sub.add_parser("excluded")
+    records_excluded_sub = records_excluded.add_subparsers(dest="records_excluded_command", required=True)
+    re_set = records_excluded_sub.add_parser("set")
+    re_set.add_argument("--workspace")
+    re_set.add_argument("--profile")
+    re_set.add_argument("--transaction", required=True)
+    re_clear = records_excluded_sub.add_parser("clear")
+    re_clear.add_argument("--workspace")
+    re_clear.add_argument("--profile")
+    re_clear.add_argument("--transaction", required=True)
+
     journals = sub.add_parser("journals")
     journals_sub = journals.add_subparsers(dest="journals_command", required=True)
     journals_process = journals_sub.add_parser("process")
@@ -3894,12 +5056,95 @@ def build_parser():
     journals_quarantined.add_argument("--workspace")
     journals_quarantined.add_argument("--profile")
 
+    journals_events = journals_sub.add_parser("events")
+    events_sub = journals_events.add_subparsers(dest="events_command", required=True)
+    events_list = events_sub.add_parser("list")
+    events_list.add_argument("--workspace")
+    events_list.add_argument("--profile")
+    events_list.add_argument("--wallet")
+    events_list.add_argument("--account")
+    events_list.add_argument("--asset")
+    events_list.add_argument("--entry-type", help="Filter by entry type (debit, credit, etc.)")
+    events_list.add_argument("--start", help="RFC3339 lower bound (inclusive) on occurred_at")
+    events_list.add_argument("--end", help="RFC3339 upper bound (inclusive) on occurred_at")
+    events_list.add_argument("--cursor", help="Opaque pagination cursor from a previous response")
+    events_list.add_argument("--limit", type=int, default=DEFAULT_EVENTS_LIMIT)
+    events_get = events_sub.add_parser("get")
+    events_get.add_argument("--workspace")
+    events_get.add_argument("--profile")
+    events_get.add_argument("--event-id", required=True)
+
+    journals_quarantine = journals_sub.add_parser("quarantine")
+    qsub = journals_quarantine.add_subparsers(dest="quarantine_command", required=True)
+
+    q_show = qsub.add_parser("show")
+    q_show.add_argument("--workspace")
+    q_show.add_argument("--profile")
+    q_show.add_argument("--transaction", required=True)
+
+    q_clear = qsub.add_parser("clear")
+    q_clear.add_argument("--workspace")
+    q_clear.add_argument("--profile")
+    q_clear.add_argument("--transaction", required=True)
+
+    q_resolve = qsub.add_parser("resolve")
+    qrsub = q_resolve.add_subparsers(dest="quarantine_resolve_command", required=True)
+
+    q_price = qrsub.add_parser("price-override")
+    q_price.add_argument("--workspace")
+    q_price.add_argument("--profile")
+    q_price.add_argument("--transaction", required=True)
+    q_price.add_argument("--fiat-rate")
+    q_price.add_argument("--fiat-value")
+
+    q_exclude = qrsub.add_parser("exclude")
+    q_exclude.add_argument("--workspace")
+    q_exclude.add_argument("--profile")
+    q_exclude.add_argument("--transaction", required=True)
+
     reports = sub.add_parser("reports")
     reports_sub = reports.add_subparsers(dest="reports_command", required=True)
     for report_name in ["balance-sheet", "portfolio-summary", "capital-gains", "journal-entries"]:
         report = reports_sub.add_parser(report_name)
         report.add_argument("--workspace")
         report.add_argument("--profile")
+
+    balance_history = reports_sub.add_parser("balance-history")
+    balance_history.add_argument("--workspace")
+    balance_history.add_argument("--profile")
+    balance_history.add_argument("--interval", choices=list(INTERVAL_CHOICES), default="day")
+    balance_history.add_argument("--start")
+    balance_history.add_argument("--end")
+    balance_history.add_argument("--wallet")
+    balance_history.add_argument("--account")
+    balance_history.add_argument("--asset")
+
+    rates = sub.add_parser("rates")
+    rates_sub = rates.add_subparsers(dest="rates_command", required=True)
+
+    rates_pairs = rates_sub.add_parser("pairs")
+    rates_pairs.set_defaults(rates_command="pairs")
+    _ = rates_pairs
+
+    rates_sync = rates_sub.add_parser("sync")
+    rates_sync.add_argument("--pair")
+    rates_sync.add_argument("--days", type=int, default=30)
+    rates_sync.add_argument("--source", default="coingecko")
+
+    rates_latest = rates_sub.add_parser("latest")
+    rates_latest.add_argument("pair")
+
+    rates_range = rates_sub.add_parser("range")
+    rates_range.add_argument("pair")
+    rates_range.add_argument("--start")
+    rates_range.add_argument("--end")
+    rates_range.add_argument("--limit", type=int)
+
+    rates_set = rates_sub.add_parser("set")
+    rates_set.add_argument("pair")
+    rates_set.add_argument("timestamp")
+    rates_set.add_argument("rate")
+    rates_set.add_argument("--source", default="manual")
 
     return parser
 
@@ -3912,8 +5157,76 @@ def dispatch(conn, args):
     if args.command == "backends":
         if args.backends_command == "list":
             return emit(args, list_backends(args.runtime_config))
+        if args.backends_command == "kinds":
+            return emit(args, [{"kind": k} for k in sorted(BACKEND_KINDS)])
+        if args.backends_command == "get":
+            # Prefer DB row; fall back to runtime_config view if env/built-in only
+            try:
+                return emit(args, get_db_backend(conn, args.name))
+            except AppError as exc:
+                if exc.code != "not_found":
+                    raise
+                name = args.name.strip().lower()
+                backend = args.runtime_config["backends"].get(name)
+                if not backend:
+                    raise
+                return emit(
+                    args,
+                    {
+                        "name": name,
+                        "kind": backend.get("kind", ""),
+                        "chain": backend.get("chain", ""),
+                        "network": backend.get("network", ""),
+                        "url": backend.get("url", ""),
+                        "auth_header": backend.get("auth_header", ""),
+                        "token": backend.get("token", ""),
+                        "timeout": backend.get("timeout"),
+                        "tor_proxy": backend.get("tor_proxy", ""),
+                        "notes": "",
+                        "source": backend.get("source", ""),
+                        "is_default": name == args.runtime_config["default_backend"],
+                    },
+                )
+        if args.backends_command == "create":
+            return emit(
+                args,
+                create_db_backend(
+                    conn,
+                    args.name,
+                    args.kind,
+                    args.url,
+                    chain=args.chain,
+                    network=args.network,
+                    auth_header=args.auth_header,
+                    token=args.token,
+                    timeout=args.timeout,
+                    tor_proxy=args.tor_proxy,
+                    notes=args.notes,
+                ),
+            )
+        if args.backends_command == "update":
+            updates = {
+                "kind": args.kind,
+                "url": args.url,
+                "chain": args.chain,
+                "network": args.network,
+                "auth_header": args.auth_header,
+                "token": args.token,
+                "timeout": args.timeout,
+                "tor_proxy": args.tor_proxy,
+                "notes": args.notes,
+            }
+            return emit(args, update_db_backend(conn, args.name, updates))
+        if args.backends_command == "delete":
+            return emit(args, delete_db_backend(conn, args.name))
+        if args.backends_command == "set-default":
+            return emit(args, set_default_backend(conn, args.runtime_config, args.name))
+        if args.backends_command == "clear-default":
+            return emit(args, clear_default_backend(conn, args.runtime_config))
     if args.command == "context":
         if args.context_command == "show":
+            return cmd_context_show(conn, args)
+        if args.context_command == "current":
             return cmd_context_show(conn, args)
         if args.context_command == "set":
             return cmd_context_set(conn, args)
@@ -3940,6 +5253,23 @@ def dispatch(conn, args):
                     )
                 ),
             )
+        if args.profiles_command == "get":
+            return emit(args, get_profile_details(conn, args.workspace, args.profile))
+        if args.profiles_command == "set":
+            updates = {
+                "label": args.label,
+                "fiat_currency": args.fiat_currency,
+                "tax_country": args.tax_country,
+                "tax_long_term_days": args.tax_long_term_days,
+                "gains_algorithm": args.gains_algorithm,
+            }
+            if all(v is None for v in updates.values()):
+                raise AppError(
+                    "profiles set requires at least one field to update",
+                    code="validation",
+                    hint="Pass one or more of --label, --fiat-currency, --tax-country, --tax-long-term-days, --gains-algorithm",
+                )
+            return emit(args, update_profile(conn, args.workspace, args.profile, updates))
     if args.command == "accounts":
         if args.accounts_command == "list":
             return emit(args, list_accounts(conn, args.workspace, args.profile))
@@ -3980,6 +5310,50 @@ def dispatch(conn, args):
             return emit(args, set_wallet_altbestand(conn, args.workspace, args.profile, args.wallet, True))
         if args.wallets_command == "set-neubestand":
             return emit(args, set_wallet_altbestand(conn, args.workspace, args.profile, args.wallet, False))
+        if args.wallets_command == "kinds":
+            return emit(args, list_wallet_kinds())
+        if args.wallets_command == "get":
+            return emit(args, get_wallet_details(conn, args.workspace, args.profile, args.wallet))
+        if args.wallets_command == "update":
+            if args.set_altbestand and args.clear_altbestand:
+                raise AppError(
+                    "--set-altbestand and --clear-altbestand are mutually exclusive",
+                    code="validation",
+                )
+            altbestand = None
+            if args.set_altbestand:
+                altbestand = True
+            elif args.clear_altbestand:
+                altbestand = False
+            config_updates = {}
+            if args.config:
+                config_updates.update(json.loads(args.config))
+            if args.config_file:
+                with open(args.config_file, "r", encoding="utf-8") as handle:
+                    config_updates.update(json.load(handle))
+            if args.backend:
+                config_updates["backend"] = args.backend.strip().lower()
+            if args.chain:
+                config_updates["chain"] = normalize_chain_value(args.chain)
+            if args.network:
+                chain_for_net = normalize_chain_value(config_updates.get("chain") or args.chain)
+                config_updates["network"] = normalize_network_value(chain_for_net, args.network)
+            if args.gap_limit is not None:
+                if args.gap_limit <= 0:
+                    raise AppError("Descriptor gap limit must be positive", code="validation")
+                config_updates["gap_limit"] = args.gap_limit
+            if args.policy_asset:
+                config_updates["policy_asset"] = normalize_asset_code(args.policy_asset)
+            updates = {
+                "label": args.label,
+                "account": args.account,
+                "altbestand": altbestand,
+                "config": config_updates,
+                "clear": args.clear,
+            }
+            return emit(args, update_wallet(conn, args.workspace, args.profile, args.wallet, updates))
+        if args.wallets_command == "delete":
+            return emit(args, delete_wallet(conn, args.workspace, args.profile, args.wallet, cascade=args.cascade))
         if args.wallets_command == "import-json":
             return emit(args, import_into_wallet(conn, args.workspace, args.profile, args.wallet, args.file, "json"))
         if args.wallets_command == "import-csv":
@@ -3993,7 +5367,19 @@ def dispatch(conn, args):
                     args.profile,
                     args.wallet,
                     args.file,
-                    f"btcpay_{args.format}",
+                    f"btcpay_{args.input_format}",
+                ),
+            )
+        if args.wallets_command == "import-phoenix":
+            return emit(
+                args,
+                import_into_wallet(
+                    conn,
+                    args.workspace,
+                    args.profile,
+                    args.wallet,
+                    args.file,
+                    "phoenix_csv",
                 ),
             )
         if args.wallets_command == "sync":
@@ -4040,13 +5426,99 @@ def dispatch(conn, args):
             return emit(args, set_transaction_excluded(conn, args.workspace, args.profile, args.transaction, True))
         if args.metadata_command == "include":
             return emit(args, set_transaction_excluded(conn, args.workspace, args.profile, args.transaction, False))
+        if args.metadata_command == "records":
+            if args.records_command == "list":
+                if args.has_note and args.no_note:
+                    raise AppError("--has-note and --no-note are mutually exclusive", code="validation")
+                if args.excluded and args.included:
+                    raise AppError("--excluded and --included are mutually exclusive", code="validation")
+                has_note = True if args.has_note else (False if args.no_note else None)
+                excluded = True if args.excluded else (False if args.included else None)
+                return emit(
+                    args,
+                    list_transaction_records(
+                        conn,
+                        args.workspace,
+                        args.profile,
+                        wallet=args.wallet,
+                        tag=args.tag,
+                        has_note=has_note,
+                        excluded=excluded,
+                        start=args.start,
+                        end=args.end,
+                        cursor=args.cursor,
+                        limit=args.limit,
+                    ),
+                )
+            if args.records_command == "get":
+                return emit(args, get_transaction_record(conn, args.workspace, args.profile, args.transaction))
+            if args.records_command == "note":
+                if args.records_note_command == "set":
+                    return emit(args, set_transaction_note(conn, args.workspace, args.profile, args.transaction, args.note))
+                if args.records_note_command == "clear":
+                    return emit(args, clear_transaction_note(conn, args.workspace, args.profile, args.transaction))
+            if args.records_command == "tag":
+                if args.records_tag_command == "add":
+                    return emit(args, add_tag_to_transaction(conn, args.workspace, args.profile, args.transaction, args.tag))
+                if args.records_tag_command == "remove":
+                    return emit(args, remove_tag_from_transaction(conn, args.workspace, args.profile, args.transaction, args.tag))
+            if args.records_command == "excluded":
+                if args.records_excluded_command == "set":
+                    return emit(args, set_transaction_excluded(conn, args.workspace, args.profile, args.transaction, True))
+                if args.records_excluded_command == "clear":
+                    return emit(args, set_transaction_excluded(conn, args.workspace, args.profile, args.transaction, False))
     if args.command == "journals":
         if args.journals_command == "process":
             return emit(args, process_journals(conn, args.workspace, args.profile))
         if args.journals_command == "list":
             return emit(args, list_journal_entries(conn, args.workspace, args.profile, args.limit))
+        if args.journals_command == "events":
+            if args.events_command == "list":
+                return emit(
+                    args,
+                    list_journal_events(
+                        conn,
+                        args.workspace,
+                        args.profile,
+                        wallet=args.wallet,
+                        account=args.account,
+                        asset=args.asset,
+                        entry_type=args.entry_type,
+                        start=args.start,
+                        end=args.end,
+                        cursor=args.cursor,
+                        limit=args.limit,
+                    ),
+                )
+            if args.events_command == "get":
+                return emit(args, get_journal_event(conn, args.workspace, args.profile, args.event_id))
         if args.journals_command == "quarantined":
             return emit(args, list_quarantines(conn, args.workspace, args.profile))
+        if args.journals_command == "quarantine":
+            if args.quarantine_command == "show":
+                return emit(args, show_quarantine(conn, args.workspace, args.profile, args.transaction))
+            if args.quarantine_command == "clear":
+                return emit(args, clear_quarantine(conn, args.workspace, args.profile, args.transaction))
+            if args.quarantine_command == "resolve":
+                if args.quarantine_resolve_command == "price-override":
+                    return emit(
+                        args,
+                        resolve_quarantine_price_override(
+                            conn,
+                            args.workspace,
+                            args.profile,
+                            args.transaction,
+                            fiat_rate=args.fiat_rate,
+                            fiat_value=args.fiat_value,
+                        ),
+                    )
+                if args.quarantine_resolve_command == "exclude":
+                    return emit(
+                        args,
+                        resolve_quarantine_exclude(
+                            conn, args.workspace, args.profile, args.transaction
+                        ),
+                    )
     if args.command == "reports":
         if args.reports_command == "balance-sheet":
             return emit(args, report_balance_sheet(conn, args.workspace, args.profile))
@@ -4056,23 +5528,135 @@ def dispatch(conn, args):
             return emit(args, report_capital_gains(conn, args.workspace, args.profile))
         if args.reports_command == "journal-entries":
             return emit(args, report_journal_entries(conn, args.workspace, args.profile))
+        if args.reports_command == "balance-history":
+            return emit(
+                args,
+                report_balance_history(
+                    conn,
+                    args.workspace,
+                    args.profile,
+                    interval=args.interval,
+                    start=args.start,
+                    end=args.end,
+                    wallet_ref=args.wallet,
+                    account_ref=args.account,
+                    asset=args.asset,
+                ),
+            )
+    if args.command == "rates":
+        if args.rates_command == "pairs":
+            return emit(args, list_cached_pairs(conn))
+        if args.rates_command == "sync":
+            return emit(
+                args,
+                sync_rates(conn, pair=args.pair, days=args.days, source=args.source),
+            )
+        if args.rates_command == "latest":
+            return emit(args, get_latest_rate(conn, args.pair))
+        if args.rates_command == "range":
+            return emit(
+                args,
+                get_rate_range(
+                    conn,
+                    args.pair,
+                    start=args.start,
+                    end=args.end,
+                    limit=args.limit,
+                ),
+            )
+        if args.rates_command == "set":
+            return emit(
+                args,
+                set_manual_rate(conn, args.pair, args.timestamp, args.rate, source=args.source),
+            )
     raise AppError("Unknown command")
 
 
 def command_needs_db(args):
-    return args.command not in {"backends"}
+    return True
+
+
+def _resolve_output_format(args):
+    if args.machine:
+        if args.format is not None and args.format != "json":
+            raise AppError(
+                f"--machine requires --format json, got --format {args.format}",
+                code="invalid_flag_combination",
+            )
+        return "json"
+    return args.format or "table"
+
+
+def _emit_error(args, exc, debug_text=None):
+    code = getattr(exc, "code", "app_error") or "app_error"
+    message = str(exc)
+    details = getattr(exc, "details", None)
+    hint = getattr(exc, "hint", None)
+    retryable = getattr(exc, "retryable", False)
+    fmt = getattr(args, "format", None) or "table"
+    if fmt == "json":
+        envelope = build_error_envelope(
+            code,
+            message,
+            details=details,
+            hint=hint,
+            retryable=retryable,
+            debug=debug_text,
+        )
+        try:
+            _write_text(args, json.dumps(envelope, indent=2, sort_keys=False))
+        except Exception:
+            print(json.dumps(envelope, indent=2, sort_keys=False), file=sys.stderr)
+    else:
+        print(f"error: {message}", file=sys.stderr)
+        if hint:
+            print(f"hint: {hint}", file=sys.stderr)
 
 
 def main(argv=None):
     parser = build_parser()
-    args = parser.parse_args(argv)
+    try:
+        args = parser.parse_args(argv)
+    except SystemExit:
+        raise
+    try:
+        args.format = _resolve_output_format(args)
+    except AppError as exc:
+        args.format = "table"
+        _emit_error(args, exc)
+        return 1
     args.runtime_config = load_runtime_config(args.env_file)
     conn = open_db(args.data_root) if command_needs_db(args) else None
+    if conn is not None:
+        try:
+            merge_db_backends(conn, args.runtime_config)
+        except AppError as exc:
+            debug_text = None
+            if args.debug:
+                import traceback
+                debug_text = traceback.format_exc()
+                sys.stderr.write(debug_text)
+            _emit_error(args, exc, debug_text=debug_text)
+            conn.close()
+            return 1
     try:
         dispatch(conn, args)
         return 0
     except AppError as exc:
-        print(f"error: {exc}", file=sys.stderr)
+        debug_text = None
+        if args.debug:
+            import traceback
+            debug_text = traceback.format_exc()
+            sys.stderr.write(debug_text)
+        _emit_error(args, exc, debug_text=debug_text)
+        return 1
+    except Exception as exc:
+        import traceback
+        debug_text = traceback.format_exc()
+        if args.debug:
+            sys.stderr.write(debug_text)
+        wrapped = AppError(str(exc) or exc.__class__.__name__, code="internal_error")
+        _emit_error(args, wrapped, debug_text=debug_text if args.debug else None)
         return 1
     finally:
         if conn is not None:
