@@ -1,0 +1,38 @@
+[
+  {
+    "txid": "funding-001",
+    "occurred_at": "2026-01-03T10:00:00Z",
+    "direction": "inbound",
+    "asset": "BTC",
+    "amount": 0.5,
+    "fee": 0,
+    "fiat_rate": 44000,
+    "description": "Initial treasury funding",
+    "counterparty": "Owner contribution",
+    "kind": "deposit"
+  },
+  {
+    "txid": "payment-001",
+    "occurred_at": "2026-02-10T14:30:00Z",
+    "direction": "outbound",
+    "asset": "BTC",
+    "amount": 0.1,
+    "fee": 0.0002,
+    "fiat_rate": 51000,
+    "description": "Vendor payment",
+    "counterparty": "Hardware vendor",
+    "kind": "withdrawal"
+  },
+  {
+    "txid": "receipt-001",
+    "occurred_at": "2026-03-01T09:15:00Z",
+    "direction": "inbound",
+    "asset": "BTC",
+    "amount": 0.08,
+    "fee": 0,
+    "fiat_rate": 62000,
+    "description": "Client settlement",
+    "counterparty": "Client A",
+    "kind": "deposit"
+  }
+]

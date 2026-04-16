@@ -1,0 +1,12 @@
+.DS_Store
+.env
+.env.local
+.pycache/
+__pycache__/
+*.egg-info/
+build/
+dist/
+*.sqlite3
+.demo-data/
+.live-data/
+.live-data2/
