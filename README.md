@@ -73,7 +73,7 @@ It is designed around:
 - `reports capital-gains` — per-disposal realized gains/losses for tax reporting
 - `reports journal-entries` — raw double-entry ledger export
 - `reports balance-history --interval {hour,day,week,month}` with `--start` / `--end` and `--wallet / --account / --asset` filters
-- `reports export-pdf --file report.pdf [--wallet <wallet>]` — comprehensive landscape PDF summary with holdings, flows, capital gains, history, and data-quality metrics
+- `reports export-pdf --file report.pdf [--wallet <wallet>]` — comprehensive landscape PDF summary with complete holdings, flows, capital gains, history, transactions, and data-quality metrics
 
 ### Rates
 - `rates pairs` — list supported pairs and per-pair cache coverage
