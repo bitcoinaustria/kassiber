@@ -234,6 +234,18 @@ CREATE TABLE IF NOT EXISTS backends (
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS rates_cache (
+    pair TEXT NOT NULL,
+    timestamp TEXT NOT NULL,
+    rate REAL NOT NULL,
+    source TEXT NOT NULL,
+    fetched_at TEXT NOT NULL,
+    PRIMARY KEY (pair, timestamp, source)
+);
+
+CREATE INDEX IF NOT EXISTS idx_rates_cache_pair_ts
+    ON rates_cache(pair, timestamp DESC);
 """
 
 
@@ -991,6 +1003,7 @@ _KIND_SUBCOMMAND_ATTRS = (
     "records_command",
     "records_note_command",
     "reports_command",
+    "rates_command",
 )
 
 
@@ -3553,6 +3566,261 @@ def latest_rates_for_profile(conn, profile_id):
     return rates
 
 
+# -- rates cache -------------------------------------------------------------
+
+SUPPORTED_RATE_PAIRS = ("BTC-USD", "BTC-EUR")
+_COINGECKO_VS = {"USD": "usd", "EUR": "eur"}
+_COINGECKO_COIN = {"BTC": "bitcoin"}
+
+
+def _normalize_rate_pair(pair):
+    if not pair:
+        raise AppError("Pair is required", code="validation")
+    raw = pair.strip().upper().replace("/", "-")
+    if "-" not in raw:
+        raise AppError(
+            f"Invalid pair '{pair}'",
+            code="validation",
+            hint="Use <ASSET>-<FIAT>, e.g. BTC-USD",
+        )
+    asset, _, fiat = raw.partition("-")
+    if not asset or not fiat:
+        raise AppError(f"Invalid pair '{pair}'", code="validation")
+    return f"{asset}-{fiat}"
+
+
+def _require_supported_pair(pair):
+    normalized = _normalize_rate_pair(pair)
+    if normalized not in SUPPORTED_RATE_PAIRS:
+        raise AppError(
+            f"Pair '{normalized}' is not supported",
+            code="validation",
+            hint=f"Supported pairs: {', '.join(SUPPORTED_RATE_PAIRS)}",
+        )
+    return normalized
+
+
+def _rate_pair_parts(pair):
+    asset, _, fiat = pair.partition("-")
+    return asset, fiat
+
+
+def upsert_rate(conn, pair, timestamp, rate, source, fetched_at=None):
+    normalized = _normalize_rate_pair(pair)
+    ts = _iso_z(_parse_iso_datetime(timestamp, "rate_timestamp"))
+    fetched = fetched_at or _iso_z(datetime.now(timezone.utc))
+    conn.execute(
+        """
+        INSERT INTO rates_cache(pair, timestamp, rate, source, fetched_at)
+        VALUES (?, ?, ?, ?, ?)
+        ON CONFLICT(pair, timestamp, source) DO UPDATE SET
+            rate = excluded.rate,
+            fetched_at = excluded.fetched_at
+        """,
+        (normalized, ts, float(rate), source, fetched),
+    )
+    return {
+        "pair": normalized,
+        "timestamp": ts,
+        "rate": float(rate),
+        "source": source,
+        "fetched_at": fetched,
+    }
+
+
+def get_latest_rate(conn, pair):
+    normalized = _normalize_rate_pair(pair)
+    row = conn.execute(
+        """
+        SELECT pair, timestamp, rate, source, fetched_at
+        FROM rates_cache
+        WHERE pair = ?
+        ORDER BY timestamp DESC
+        LIMIT 1
+        """,
+        (normalized,),
+    ).fetchone()
+    if not row:
+        raise AppError(
+            f"No cached rate for pair '{normalized}'",
+            code="not_found",
+            hint="Run `kassiber rates sync` first",
+        )
+    return {
+        "pair": row["pair"],
+        "timestamp": row["timestamp"],
+        "rate": row["rate"],
+        "source": row["source"],
+        "fetched_at": row["fetched_at"],
+    }
+
+
+def get_rate_range(conn, pair, start=None, end=None, limit=None):
+    normalized = _normalize_rate_pair(pair)
+    sql = "SELECT pair, timestamp, rate, source, fetched_at FROM rates_cache WHERE pair = ?"
+    params = [normalized]
+    if start:
+        start_dt = _parse_iso_datetime(start, "start")
+        sql += " AND timestamp >= ?"
+        params.append(_iso_z(start_dt))
+    if end:
+        end_dt = _parse_iso_datetime(end, "end")
+        sql += " AND timestamp <= ?"
+        params.append(_iso_z(end_dt))
+    sql += " ORDER BY timestamp ASC"
+    if limit:
+        sql += " LIMIT ?"
+        params.append(int(limit))
+    rows = conn.execute(sql, params).fetchall()
+    return [
+        {
+            "pair": r["pair"],
+            "timestamp": r["timestamp"],
+            "rate": r["rate"],
+            "source": r["source"],
+            "fetched_at": r["fetched_at"],
+        }
+        for r in rows
+    ]
+
+
+def list_cached_pairs(conn):
+    rows = conn.execute(
+        """
+        SELECT pair,
+               COUNT(*) AS sample_count,
+               MIN(timestamp) AS first_timestamp,
+               MAX(timestamp) AS last_timestamp
+        FROM rates_cache
+        GROUP BY pair
+        ORDER BY pair ASC
+        """
+    ).fetchall()
+    known = {p: None for p in SUPPORTED_RATE_PAIRS}
+    for row in rows:
+        known[row["pair"]] = {
+            "sample_count": int(row["sample_count"]),
+            "first_timestamp": row["first_timestamp"],
+            "last_timestamp": row["last_timestamp"],
+        }
+    result = []
+    for pair in SUPPORTED_RATE_PAIRS:
+        detail = known.get(pair)
+        result.append(
+            {
+                "pair": pair,
+                "supported": True,
+                "cached": detail is not None,
+                "sample_count": detail["sample_count"] if detail else 0,
+                "first_timestamp": detail["first_timestamp"] if detail else None,
+                "last_timestamp": detail["last_timestamp"] if detail else None,
+            }
+        )
+    # Report any non-canonical pairs cached from manual `rates set`.
+    for pair, detail in known.items():
+        if pair in SUPPORTED_RATE_PAIRS:
+            continue
+        if detail is None:
+            continue
+        result.append(
+            {
+                "pair": pair,
+                "supported": False,
+                "cached": True,
+                "sample_count": detail["sample_count"],
+                "first_timestamp": detail["first_timestamp"],
+                "last_timestamp": detail["last_timestamp"],
+            }
+        )
+    return result
+
+
+def _coingecko_market_chart(coin_id, vs, days):
+    url = (
+        "https://api.coingecko.com/api/v3/coins/"
+        f"{coin_id}/market_chart?vs_currency={vs}&days={int(days)}"
+    )
+    payload = http_get_json(url, timeout=30)
+    prices = payload.get("prices") if isinstance(payload, dict) else None
+    if not isinstance(prices, list):
+        raise AppError(
+            "CoinGecko response did not contain a prices array",
+            code="upstream_error",
+            retryable=True,
+        )
+    out = []
+    for entry in prices:
+        if not isinstance(entry, list) or len(entry) < 2:
+            continue
+        ms, value = entry[0], entry[1]
+        try:
+            ts = datetime.fromtimestamp(float(ms) / 1000.0, tz=timezone.utc)
+            rate = float(value)
+        except (TypeError, ValueError):
+            continue
+        out.append((_iso_z(ts.replace(microsecond=0)), rate))
+    return out
+
+
+def fetch_rates_coingecko(pair, days=30):
+    normalized = _require_supported_pair(pair)
+    asset, fiat = _rate_pair_parts(normalized)
+    coin_id = _COINGECKO_COIN.get(asset)
+    vs = _COINGECKO_VS.get(fiat)
+    if not coin_id or not vs:
+        raise AppError(
+            f"Pair '{normalized}' has no CoinGecko mapping",
+            code="validation",
+            hint=f"Supported pairs: {', '.join(SUPPORTED_RATE_PAIRS)}",
+        )
+    return _coingecko_market_chart(coin_id, vs, days)
+
+
+def sync_rates(conn, pair=None, days=30, source="coingecko"):
+    if source != "coingecko":
+        raise AppError(
+            f"Unknown rate source '{source}'",
+            code="validation",
+            hint="Supported sources: coingecko",
+        )
+    if pair:
+        pairs = [_require_supported_pair(pair)]
+    else:
+        pairs = list(SUPPORTED_RATE_PAIRS)
+    fetched_at = _iso_z(datetime.now(timezone.utc))
+    summary = []
+    for p in pairs:
+        samples = fetch_rates_coingecko(p, days=days)
+        inserted = 0
+        for ts, rate in samples:
+            upsert_rate(conn, p, ts, rate, source, fetched_at=fetched_at)
+            inserted += 1
+        conn.commit()
+        summary.append(
+            {
+                "pair": p,
+                "source": source,
+                "samples": inserted,
+                "days": int(days),
+                "fetched_at": fetched_at,
+            }
+        )
+    return summary
+
+
+def set_manual_rate(conn, pair, timestamp, rate, source="manual"):
+    normalized = _normalize_rate_pair(pair)
+    try:
+        value = float(rate)
+    except (TypeError, ValueError) as exc:
+        raise AppError(f"Invalid rate '{rate}'", code="validation") from exc
+    if value <= 0:
+        raise AppError("Rate must be positive", code="validation")
+    row = upsert_rate(conn, normalized, timestamp, value, source)
+    conn.commit()
+    return row
+
+
 def rp2_wallet_state(profile, wallet, asset, rows, configuration):
     modules = get_rp2_modules()
     TransactionSet = modules["TransactionSet"]
@@ -5406,6 +5674,33 @@ def build_parser():
     balance_history.add_argument("--account")
     balance_history.add_argument("--asset")
 
+    rates = sub.add_parser("rates")
+    rates_sub = rates.add_subparsers(dest="rates_command", required=True)
+
+    rates_pairs = rates_sub.add_parser("pairs")
+    rates_pairs.set_defaults(rates_command="pairs")
+    _ = rates_pairs
+
+    rates_sync = rates_sub.add_parser("sync")
+    rates_sync.add_argument("--pair")
+    rates_sync.add_argument("--days", type=int, default=30)
+    rates_sync.add_argument("--source", default="coingecko")
+
+    rates_latest = rates_sub.add_parser("latest")
+    rates_latest.add_argument("pair")
+
+    rates_range = rates_sub.add_parser("range")
+    rates_range.add_argument("pair")
+    rates_range.add_argument("--start")
+    rates_range.add_argument("--end")
+    rates_range.add_argument("--limit", type=int)
+
+    rates_set = rates_sub.add_parser("set")
+    rates_set.add_argument("pair")
+    rates_set.add_argument("timestamp")
+    rates_set.add_argument("rate")
+    rates_set.add_argument("--source", default="manual")
+
     return parser
 
 
@@ -5790,6 +6085,32 @@ def dispatch(conn, args):
                     account_ref=args.account,
                     asset=args.asset,
                 ),
+            )
+    if args.command == "rates":
+        if args.rates_command == "pairs":
+            return emit(args, list_cached_pairs(conn))
+        if args.rates_command == "sync":
+            return emit(
+                args,
+                sync_rates(conn, pair=args.pair, days=args.days, source=args.source),
+            )
+        if args.rates_command == "latest":
+            return emit(args, get_latest_rate(conn, args.pair))
+        if args.rates_command == "range":
+            return emit(
+                args,
+                get_rate_range(
+                    conn,
+                    args.pair,
+                    start=args.start,
+                    end=args.end,
+                    limit=args.limit,
+                ),
+            )
+        if args.rates_command == "set":
+            return emit(
+                args,
+                set_manual_rate(conn, args.pair, args.timestamp, args.rate, source=args.source),
             )
     raise AppError("Unknown command")
 

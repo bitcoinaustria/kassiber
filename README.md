@@ -14,6 +14,7 @@ It is designed around:
 - `.env`-driven and DB-backed named sync backends
 - explicit journal processing before reporting
 - capital gains, balance sheet, portfolio, and balance-history reporting
+- a cached exchange-rate table with manual override and CoinGecko sync
 - a machine-readable JSON envelope for every command
 
 ## What is implemented
@@ -67,6 +68,15 @@ It is designed around:
 - `reports capital-gains` — per-disposal realized gains/losses for tax reporting
 - `reports journal-entries` — raw double-entry ledger export
 - `reports balance-history --interval {hour,day,week,month}` with `--start` / `--end` and `--wallet / --account / --asset` filters
+
+### Rates
+- `rates pairs` — list supported pairs and per-pair cache coverage
+- `rates sync [--pair BTC-USD] [--days N] [--source coingecko]` — pull historical spot prices from CoinGecko into the local cache
+- `rates latest <PAIR>` — most recent cached sample for a pair
+- `rates range <PAIR> [--start X] [--end Y] [--limit N]` — cached samples in a window, CSV-exportable
+- `rates set <PAIR> <TIMESTAMP> <RATE> [--source manual]` — upsert a manual rate without hitting the network
+
+Supported pairs today: `BTC-USD`, `BTC-EUR`. The cache is additive: a manual override and a synced rate can coexist at the same timestamp under different `source` values. The rates cache is an external data store; tax-aware reports still derive their fiat rates from priced transactions.
 
 For the current build, cost basis is tracked per wallet, which keeps multi-wallet balances and gains isolated and predictable. RP2 drives wallet-level lot matching and cost-basis computation; SQLite remains the system of record.
 
@@ -476,7 +486,7 @@ Wallet-level `Altbestand` stays separate from the profile policy because it is p
 ## What is not implemented yet
 
 - amount storage in msat (INTEGER) — currently floats, migration pending
-- exchange-rate subsystem (`rates sync/latest/range/pairs`)
+- wiring the rates cache into journal processing (tax-aware reports still derive rates from priced transactions)
 - Phoenix / River Lightning CSV importers
 - `custom` wallet kind DSL for mapping arbitrary CSV schemas
 - account adjustments and per-event rate overrides
