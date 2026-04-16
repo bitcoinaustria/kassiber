@@ -13,7 +13,7 @@ import tempfile
 import uuid
 from collections import defaultdict
 from datetime import datetime, timedelta, timezone
-from decimal import Decimal, InvalidOperation
+from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 from importlib import import_module
 from pathlib import Path
 from urllib import error as urlerror
@@ -147,8 +147,8 @@ CREATE TABLE IF NOT EXISTS transactions (
     occurred_at TEXT NOT NULL,
     direction TEXT NOT NULL,
     asset TEXT NOT NULL,
-    amount REAL NOT NULL,
-    fee REAL NOT NULL DEFAULT 0,
+    amount INTEGER NOT NULL,
+    fee INTEGER NOT NULL DEFAULT 0,
     fiat_currency TEXT,
     fiat_rate REAL,
     fiat_value REAL,
@@ -187,7 +187,7 @@ CREATE TABLE IF NOT EXISTS journal_entries (
     occurred_at TEXT NOT NULL,
     entry_type TEXT NOT NULL,
     asset TEXT NOT NULL,
-    quantity REAL NOT NULL,
+    quantity INTEGER NOT NULL,
     fiat_value REAL NOT NULL DEFAULT 0,
     unit_cost REAL NOT NULL DEFAULT 0,
     cost_basis REAL,
@@ -332,6 +332,31 @@ def dec(value, default="0"):
         return Decimal(str(value))
     except InvalidOperation as exc:
         raise AppError(f"Invalid decimal value: {value}") from exc
+
+
+# -- msat conversion ---------------------------------------------------------
+#
+# Kassiber stores BTC-denominated amounts as INTEGER msat on disk (the Lightning
+# convention: 1 BTC = 100_000_000_000 msat). Python-side accounting math still
+# flows as Decimal BTC so we keep the engine expressive. These two helpers are
+# the adapter that sits at every DB read/write for amount / fee / quantity.
+
+MSAT_PER_BTC = Decimal("100000000000")
+
+
+def btc_to_msat(value):
+    """Accept Decimal/float/str BTC and return integer msat (None -> None)."""
+    if value is None:
+        return None
+    amount = dec(value) * MSAT_PER_BTC
+    return int(amount.to_integral_value(rounding=ROUND_HALF_UP))
+
+
+def msat_to_btc(value):
+    """Accept integer msat (or any DB row value) and return Decimal BTC (None -> None)."""
+    if value is None:
+        return None
+    return (Decimal(int(value)) / MSAT_PER_BTC)
 
 
 def str_or_none(value):
@@ -800,6 +825,95 @@ def ensure_column(conn, table_name, column_name, definition):
 def ensure_schema_compat(conn):
     ensure_column(conn, "profiles", "tax_country", f"TEXT NOT NULL DEFAULT '{DEFAULT_TAX_COUNTRY}'")
     ensure_column(conn, "profiles", "tax_long_term_days", f"INTEGER NOT NULL DEFAULT {DEFAULT_LONG_TERM_DAYS}")
+    _migrate_msat_columns(conn)
+
+
+def _column_is_real(conn, table_name, column_name):
+    for row in conn.execute(f"PRAGMA table_info({table_name})").fetchall():
+        if row["name"] == column_name:
+            return (row["type"] or "").upper() == "REAL"
+    return False
+
+
+def _migrate_msat_columns(conn):
+    """Rebuild transactions / journal_entries tables to store amounts as INTEGER msat.
+
+    Safe on fresh databases (columns are already INTEGER -> no-op) and on
+    pre-migration databases created with REAL amount/fee/quantity columns.
+    Existing float BTC values are multiplied into msat with ROUND_HALF_UP.
+    """
+    if _column_is_real(conn, "transactions", "amount") or _column_is_real(conn, "transactions", "fee"):
+        conn.executescript(
+            """
+            CREATE TABLE transactions__msat_new (
+                id TEXT PRIMARY KEY,
+                workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+                profile_id TEXT NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+                wallet_id TEXT NOT NULL REFERENCES wallets(id) ON DELETE CASCADE,
+                external_id TEXT,
+                fingerprint TEXT NOT NULL UNIQUE,
+                occurred_at TEXT NOT NULL,
+                direction TEXT NOT NULL,
+                asset TEXT NOT NULL,
+                amount INTEGER NOT NULL,
+                fee INTEGER NOT NULL DEFAULT 0,
+                fiat_currency TEXT,
+                fiat_rate REAL,
+                fiat_value REAL,
+                kind TEXT,
+                description TEXT,
+                counterparty TEXT,
+                note TEXT,
+                excluded INTEGER NOT NULL DEFAULT 0,
+                raw_json TEXT NOT NULL DEFAULT '{}',
+                created_at TEXT NOT NULL
+            );
+            INSERT INTO transactions__msat_new SELECT
+                id, workspace_id, profile_id, wallet_id, external_id, fingerprint,
+                occurred_at, direction, asset,
+                CAST(ROUND(amount * 100000000000.0) AS INTEGER),
+                CAST(ROUND(fee * 100000000000.0) AS INTEGER),
+                fiat_currency, fiat_rate, fiat_value,
+                kind, description, counterparty, note, excluded, raw_json, created_at
+            FROM transactions;
+            DROP TABLE transactions;
+            ALTER TABLE transactions__msat_new RENAME TO transactions;
+            """
+        )
+        conn.commit()
+    if _column_is_real(conn, "journal_entries", "quantity"):
+        conn.executescript(
+            """
+            CREATE TABLE journal_entries__msat_new (
+                id TEXT PRIMARY KEY,
+                workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+                profile_id TEXT NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+                transaction_id TEXT NOT NULL REFERENCES transactions(id) ON DELETE CASCADE,
+                wallet_id TEXT NOT NULL REFERENCES wallets(id) ON DELETE CASCADE,
+                account_id TEXT REFERENCES accounts(id) ON DELETE SET NULL,
+                occurred_at TEXT NOT NULL,
+                entry_type TEXT NOT NULL,
+                asset TEXT NOT NULL,
+                quantity INTEGER NOT NULL,
+                fiat_value REAL NOT NULL DEFAULT 0,
+                unit_cost REAL NOT NULL DEFAULT 0,
+                cost_basis REAL,
+                proceeds REAL,
+                gain_loss REAL,
+                description TEXT,
+                created_at TEXT NOT NULL
+            );
+            INSERT INTO journal_entries__msat_new SELECT
+                id, workspace_id, profile_id, transaction_id, wallet_id, account_id,
+                occurred_at, entry_type, asset,
+                CAST(ROUND(quantity * 100000000000.0) AS INTEGER),
+                fiat_value, unit_cost, cost_basis, proceeds, gain_loss, description, created_at
+            FROM journal_entries;
+            DROP TABLE journal_entries;
+            ALTER TABLE journal_entries__msat_new RENAME TO journal_entries;
+            """
+        )
+        conn.commit()
 
 
 def get_rp2_modules():
@@ -2028,8 +2142,8 @@ def insert_wallet_records(conn, profile, wallet, records, source_label):
                 normalized["occurred_at"],
                 normalized["direction"],
                 normalized["asset"],
-                float(normalized["amount"]),
-                float(normalized["fee"]),
+                btc_to_msat(normalized["amount"]),
+                btc_to_msat(normalized["fee"]),
                 profile["fiat_currency"],
                 float(normalized["fiat_rate"]) if normalized["fiat_rate"] is not None else None,
                 float(normalized["fiat_value"]) if normalized["fiat_value"] is not None else None,
@@ -3172,8 +3286,10 @@ def get_transaction_record(conn, workspace_ref, profile_ref, tx_ref):
         "occurred_at": tx["occurred_at"],
         "direction": tx["direction"],
         "asset": tx["asset"],
-        "amount": tx["amount"],
-        "fee": tx["fee"],
+        "amount": float(msat_to_btc(tx["amount"])),
+        "amount_msat": int(tx["amount"]),
+        "fee": float(msat_to_btc(tx["fee"])),
+        "fee_msat": int(tx["fee"]),
         "counterparty": tx["counterparty"] or "",
         "wallet_id": wallet["id"] if wallet else "",
         "wallet_label": wallet["label"] if wallet else "",
@@ -3285,8 +3401,10 @@ def list_transaction_records(
                 "occurred_at": row["occurred_at"],
                 "direction": row["direction"],
                 "asset": row["asset"],
-                "amount": row["amount"],
-                "fee": row["fee"],
+                "amount": float(msat_to_btc(row["amount"])),
+                "amount_msat": int(row["amount"]),
+                "fee": float(msat_to_btc(row["fee"])),
+                "fee_msat": int(row["fee"]),
                 "counterparty": row["counterparty"] or "",
                 "wallet_id": row["wallet_id"] or "",
                 "wallet_label": row["wallet_label"] or "",
@@ -3562,7 +3680,7 @@ def latest_rates_for_profile(conn, profile_id):
         if row["fiat_rate"] is not None:
             rates[asset] = dec(row["fiat_rate"])
         elif row["fiat_value"] is not None and row["amount"]:
-            rates[asset] = dec(row["fiat_value"]) / dec(row["amount"])
+            rates[asset] = dec(row["fiat_value"]) / msat_to_btc(row["amount"])
     return rates
 
 
@@ -3838,8 +3956,8 @@ def rp2_wallet_state(profile, wallet, asset, rows, configuration):
     row_index = 1
     row_by_id = {row["id"]: row for row in rows}
     for row in rows:
-        amount = dec(row["amount"])
-        fee = dec(row["fee"])
+        amount = msat_to_btc(row["amount"])
+        fee = msat_to_btc(row["fee"])
         description = row["note"] or row["description"] or row["kind"] or row["id"]
         if row["direction"] == "inbound":
             total_available += amount
@@ -4179,7 +4297,7 @@ def process_journals(conn, workspace_ref, profile_ref):
                 entry["occurred_at"],
                 entry["entry_type"],
                 entry["asset"],
-                float(entry["quantity"]),
+                btc_to_msat(entry["quantity"]),
                 float(entry["fiat_value"]),
                 float(entry["unit_cost"]),
                 float(entry["cost_basis"]) if entry["cost_basis"] is not None else None,
@@ -4346,7 +4464,12 @@ def list_journal_events(
 
     has_more = len(rows) > effective_limit
     page = rows[:effective_limit]
-    events = [dict(row) for row in page]
+    events = []
+    for row in page:
+        event = dict(row)
+        event["quantity_msat"] = int(event["quantity"])
+        event["quantity"] = float(msat_to_btc(event["quantity"]))
+        events.append(event)
     next_cursor = _encode_event_cursor(page[-1]) if has_more and page else None
 
     return {
@@ -4384,7 +4507,10 @@ def get_journal_event(conn, workspace_ref, profile_ref, event_id):
             code="not_found",
             hint="Run `kassiber journals events list` to find valid event ids.",
         )
-    return dict(row)
+    event = dict(row)
+    event["quantity_msat"] = int(event["quantity"])
+    event["quantity"] = float(msat_to_btc(event["quantity"]))
+    return event
 
 
 def list_journal_entries(conn, workspace_ref, profile_ref, limit=200):
@@ -4413,7 +4539,13 @@ def list_journal_entries(conn, workspace_ref, profile_ref, limit=200):
         """,
         (profile["id"], limit),
     ).fetchall()
-    return [dict(row) for row in rows]
+    results = []
+    for row in rows:
+        entry = dict(row)
+        entry["quantity_msat"] = int(entry["quantity"])
+        entry["quantity"] = float(msat_to_btc(entry["quantity"]))
+        results.append(entry)
+    return results
 
 
 def list_quarantines(conn, workspace_ref, profile_ref):
@@ -4448,8 +4580,10 @@ def list_quarantines(conn, workspace_ref, profile_ref):
                 "occurred_at": row["occurred_at"],
                 "wallet": row["wallet"],
                 "asset": row["asset"],
-                "amount": row["amount"],
-                "fee": row["fee"],
+                "amount": float(msat_to_btc(row["amount"])),
+                "amount_msat": int(row["amount"]),
+                "fee": float(msat_to_btc(row["fee"])),
+                "fee_msat": int(row["fee"]),
                 "reason": row["reason"],
                 "detail": detail,
             }
@@ -4485,8 +4619,10 @@ def show_quarantine(conn, workspace_ref, profile_ref, tx_ref):
         "occurred_at": row["occurred_at"],
         "direction": row["direction"],
         "asset": row["asset"],
-        "amount": row["amount"],
-        "fee": row["fee"],
+        "amount": float(msat_to_btc(row["amount"])),
+        "amount_msat": int(row["amount"]),
+        "fee": float(msat_to_btc(row["fee"])),
+        "fee_msat": int(row["fee"]),
         "fiat_rate": row["fiat_rate"],
         "fiat_value": row["fiat_value"],
         "excluded": bool(row["excluded"]),
@@ -4523,7 +4659,7 @@ def resolve_quarantine_price_override(
     _ensure_quarantined(conn, profile["id"], tx["id"])
     new_rate = dec(fiat_rate) if fiat_rate is not None else None
     new_value = dec(fiat_value) if fiat_value is not None else None
-    amount = abs(dec(tx["amount"]))
+    amount = abs(msat_to_btc(tx["amount"]))
     if new_rate is None and new_value is not None and amount > 0:
         new_rate = new_value / amount
     if new_value is None and new_rate is not None and amount > 0:
@@ -4685,7 +4821,13 @@ def report_capital_gains(conn, workspace_ref, profile_ref):
         """,
         (profile["id"],),
     ).fetchall()
-    return [dict(row) for row in rows]
+    results = []
+    for row in rows:
+        entry = dict(row)
+        entry["quantity_msat"] = int(entry["quantity"])
+        entry["quantity"] = float(msat_to_btc(entry["quantity"]))
+        results.append(entry)
+    return results
 
 
 def report_journal_entries(conn, workspace_ref, profile_ref):
@@ -4799,7 +4941,7 @@ def report_balance_history(
     events = []
     for row in rows:
         row_dt = _parse_iso_datetime(row["occurred_at"], "occurred_at")
-        events.append((row_dt, row["asset"], dec(row["quantity"]), dec(row["fiat_value"])))
+        events.append((row_dt, row["asset"], msat_to_btc(row["quantity"]), dec(row["fiat_value"])))
 
     first_event_dt = events[0][0] if events else None
     range_start = start_dt or first_event_dt or datetime.now(timezone.utc)
