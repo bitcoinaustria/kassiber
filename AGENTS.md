@@ -86,6 +86,14 @@ List endpoints with `--limit` also accept `--cursor`. The cursor is an opaque ba
 PYTHONPYCACHEPREFIX=/tmp/kassiber-pyc python3 -m py_compile kassiber/*.py
 ```
 
+- End-to-end CLI smoke test (stdlib `unittest`, no pytest dep, ~1s):
+
+```bash
+python3 -m unittest tests.test_cli_smoke -v
+```
+
+  This is the behavior pin. If you refactor internals (e.g. split `kassiber/app.py` into modules) the suite MUST still pass unchanged — it asserts envelope `kind` + `schema_version`, msat fields, Phoenix import counts, balance-sheet totals, and error-envelope shape. Prefer extending this suite to adding new test files.
+
 - CLI smoke checks:
 
 ```bash
