@@ -55,6 +55,14 @@ Keep the smoke suite green after every step.
   sync/import flow. Follow-up once that lands: attach optional BTCPay
   `InvoiceId` metadata to imported on-chain wallet addresses instead of
   trying to infer invoice/address matches from CSV exports.
+- **3h** — At-rest encryption for sensitive fields. Nothing on disk is
+  encrypted today (SQLite DB, `.env`, exports). Target seamless OS
+  keychain integration — macOS Keychain, Linux freedesktop
+  secret-service / libsecret, Windows DPAPI / Credential Manager — so
+  SLIP77 blinding keys, backend tokens, auth headers, and RPC
+  credentials are sealed by default and unlocked on demand without a
+  separate passphrase. Call it out prominently in
+  [SECURITY.md](SECURITY.md) until it lands.
 
 ## Phase 4 — Skills bundle
 

@@ -4,6 +4,10 @@ Kassiber is an open-source, local-first Bitcoin accounting CLI.
 
 The name means "notes smuggled past prison censors." The cloud-SaaS tool is the censor: the middleman reading everything before it reaches the state. Kassiber slips past.
 
+Before pointing Kassiber at real wallets, read [SECURITY.md](SECURITY.md) — it
+covers what each built-in backend sees, the full external-request inventory,
+and caveats like at-rest encryption and `tor_proxy` not being wired up yet.
+
 It is designed around:
 
 - multiple workspaces
