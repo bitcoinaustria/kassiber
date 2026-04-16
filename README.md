@@ -340,7 +340,7 @@ Import a BTCPay export:
 python3 -m kassiber wallets import-btcpay \
   --wallet btcpay \
   --file /path/to/btcpay-transactions.csv \
-  --format csv
+  --input-format csv
 ```
 
 - transaction rows become Kassiber transactions
