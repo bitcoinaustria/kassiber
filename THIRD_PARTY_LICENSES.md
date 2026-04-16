@@ -6,11 +6,12 @@ It is not meant to be a hand-maintained inventory of every transitive package in
 
 ## Core dependency credit
 
-Kassiber currently depends directly on [RP2](https://github.com/eprbell/rp2) as its tax engine.
+Kassiber currently depends directly on [RP2](https://github.com/eprbell/rp2) as its tax engine and [embit](https://github.com/diybitcoinhardware/embit) for descriptor derivation and Liquid support.
 
 | Package | Version policy | Role | License |
 | --- | --- | --- | --- |
 | `rp2` | `>=1.7.2` | Tax engine used by journal processing and tax-aware reports | Apache-2.0 |
+| `embit` | `>=0.8.0` | Bitcoin/Liquid descriptor parsing, script derivation, Liquid confidential output handling | MIT |
 
 ## Notable downstream license note
 
