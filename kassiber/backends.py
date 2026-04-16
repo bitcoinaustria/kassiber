@@ -1,0 +1,421 @@
+"""Backend (chain-indexer endpoint) discovery, storage, and merging.
+
+A "backend" in kassiber is a pointer to an external blockchain indexer
+(esplora, mempool.space, an Electrum server, a liquid-esplora instance,
+etc.) that wallets use to sync transactions. Backends live in two
+places, and this module reconciles them:
+
+1. **Environment / `.env`** — the built-in `mempool` default plus any
+   `KASSIBER_BACKEND_<NAME>_<FIELD>` variables. Loaded by
+   `load_runtime_config`.
+2. **Database** — user-created rows in the `backends` table, plus an
+   optional stored `default_backend` setting override. Merged on top of
+   env by `merge_db_backends` so DB CRUD wins.
+
+`resolve_backend(runtime_config, name)` is the single entry point used
+by sync code to fetch the selected backend dict. CRUD helpers
+(`create_db_backend`, `update_db_backend`, `delete_db_backend`,
+`set_default_backend`, `clear_default_backend`) are exposed for the
+`kassiber backends ...` CLI surface.
+
+Call sites should treat backend dicts as opaque — read values with
+`backend_value(backend, "field", "alt_field")` rather than subscripting
+directly, since env-sourced and DB-sourced dicts differ slightly.
+"""
+
+import os
+from pathlib import Path
+
+from .db import get_setting, set_setting
+from .errors import AppError
+from .time_utils import now_iso
+from .util import (
+    normalize_chain_value,
+    normalize_network_value,
+    parse_int,
+    str_or_none,
+)
+
+
+DEFAULT_BACKENDS = {
+    "mempool": {
+        "name": "mempool",
+        "kind": "esplora",
+        "chain": "bitcoin",
+        "network": "main",
+        "url": "https://mempool.space/api",
+        "source": "built-in default",
+    }
+}
+
+BACKEND_KINDS = {"esplora", "mempool", "electrum", "liquid-esplora", "custom"}
+
+
+def load_dotenv_file(path):
+    """Read a `.env` file into a flat `{key: value}` dict.
+
+    Tolerates comments, blanks, and quoted values. Missing file -> `{}`.
+    Silently ignores malformed lines (no `=`) rather than raising.
+    """
+    values = {}
+    if not path.exists():
+        return values
+    for raw_line in path.read_text(encoding="utf-8").splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, value = line.split("=", 1)
+        key = key.strip()
+        value = value.strip()
+        if value.startswith(("'", '"')) and value.endswith(("'", '"')) and len(value) >= 2:
+            value = value[1:-1]
+        values[key] = value
+    return values
+
+
+def load_runtime_config(env_file):
+    """Build the runtime backend config from env / .env only (no DB).
+
+    Returns a dict with `env_file`, `env_file_exists`, `default_backend`,
+    and `backends` (a name->config dict). Call `merge_db_backends` on
+    top to pull in DB-sourced overrides.
+
+    Supports both `KASSIBER_BACKEND_*` and the legacy `SATBOOKS_BACKEND_*`
+    prefixes so pre-rename configs keep working.
+    """
+    env_path = Path(env_file).expanduser()
+    file_env = load_dotenv_file(env_path)
+    merged_env = {**file_env, **os.environ}
+    backends = {name: dict(config) for name, config in DEFAULT_BACKENDS.items()}
+    for prefix in ("SATBOOKS_BACKEND_", "KASSIBER_BACKEND_"):
+        for key, value in merged_env.items():
+            if not key.startswith(prefix):
+                continue
+            suffix = key[len(prefix):]
+            if "_" not in suffix:
+                continue
+            backend_name, field_name = suffix.split("_", 1)
+            backend_name = backend_name.lower()
+            field_name = field_name.lower()
+            if not backend_name or not field_name:
+                continue
+            backends.setdefault(
+                backend_name,
+                {
+                    "name": backend_name,
+                    "kind": "",
+                    "url": "",
+                    "source": f"{env_path}" if key in file_env else "environment",
+                },
+            )
+            backends[backend_name][field_name] = value.strip()
+            backends[backend_name]["source"] = f"{env_path}" if key in file_env else "environment"
+    default_backend = (
+        merged_env.get("KASSIBER_DEFAULT_BACKEND")
+        or merged_env.get("SATBOOKS_DEFAULT_BACKEND")
+        or "mempool"
+    ).strip().lower() or "mempool"
+    if default_backend not in backends:
+        raise AppError(
+            f"Default backend '{default_backend}' is not defined. Add KASSIBER_BACKEND_{default_backend.upper()}_KIND and _URL to {env_path}."
+        )
+    for name, backend in backends.items():
+        if not backend.get("kind") or not backend.get("url"):
+            raise AppError(f"Backend '{name}' is missing kind or url configuration")
+    return {
+        "env_file": str(env_path),
+        "env_file_exists": env_path.exists(),
+        "default_backend": default_backend,
+        "backends": backends,
+    }
+
+
+def backend_value(backend, *keys):
+    """First non-empty value across `keys`, or `None` if all are absent/blank."""
+    for key in keys:
+        value = str_or_none(backend.get(key))
+        if value is not None:
+            return value
+    return None
+
+
+def backend_timeout(backend, default=30):
+    """Read `timeout` off a backend dict, coerced to int with a fallback."""
+    return parse_int(backend_value(backend, "timeout"), default)
+
+
+def resolve_backend(runtime_config, name=None):
+    """Look up a backend by name in `runtime_config`, defaulting to the active one."""
+    backend_name = (name or runtime_config["default_backend"]).strip().lower()
+    backend = runtime_config["backends"].get(backend_name)
+    if not backend:
+        raise AppError(f"Backend '{backend_name}' is not configured in {runtime_config['env_file']}")
+    return backend
+
+
+def list_backends(runtime_config):
+    """Flatten `runtime_config["backends"]` into display rows for the CLI."""
+    rows = []
+    for name, backend in sorted(runtime_config["backends"].items()):
+        rows.append(
+            {
+                "name": name,
+                "kind": backend["kind"],
+                "chain": backend.get("chain", ""),
+                "network": backend.get("network", ""),
+                "url": backend["url"],
+                "default": "yes" if name == runtime_config["default_backend"] else "",
+                "source": backend["source"],
+            }
+        )
+    return rows
+
+
+def _backend_row_to_dict(row):
+    return {
+        "name": row["name"],
+        "kind": row["kind"],
+        "chain": row["chain"] or "",
+        "network": row["network"] or "",
+        "url": row["url"],
+        "auth_header": row["auth_header"] or "",
+        "token": row["token"] or "",
+        "timeout": row["timeout"],
+        "tor_proxy": row["tor_proxy"] or "",
+        "notes": row["notes"] or "",
+        "source": "database",
+        "created_at": row["created_at"],
+        "updated_at": row["updated_at"],
+    }
+
+
+def list_db_backends(conn):
+    """Return all rows from the `backends` table, sorted by name."""
+    rows = conn.execute("SELECT * FROM backends ORDER BY name ASC").fetchall()
+    return [_backend_row_to_dict(row) for row in rows]
+
+
+def get_db_backend(conn, name):
+    """Fetch a single backend row by name, or raise `AppError(not_found)`."""
+    row = conn.execute("SELECT * FROM backends WHERE name = ?", (name.lower(),)).fetchone()
+    if not row:
+        raise AppError(
+            f"Backend '{name}' not found in the database",
+            code="not_found",
+            hint="Use `kassiber backends list` to see configured backends, or `kassiber backends create` to add one.",
+        )
+    return _backend_row_to_dict(row)
+
+
+def merge_db_backends(conn, runtime_config):
+    """Overlay DB-backed backends and the stored default on an env-only config.
+
+    Mutates and returns `runtime_config`. DB rows overwrite any env-named
+    backend with the same name. A `default_backend` setting in the
+    `settings` table, if present, also overrides the env default — and
+    raises if it names a backend that isn't configured anywhere.
+    """
+    rows = conn.execute("SELECT * FROM backends").fetchall()
+    for row in rows:
+        name = row["name"].lower()
+        runtime_config["backends"][name] = {
+            "name": name,
+            "kind": row["kind"],
+            "chain": row["chain"] or "",
+            "network": row["network"] or "",
+            "url": row["url"],
+            "auth_header": row["auth_header"] or "",
+            "token": row["token"] or "",
+            "timeout": str(row["timeout"]) if row["timeout"] is not None else "",
+            "tor_proxy": row["tor_proxy"] or "",
+            "source": "database",
+        }
+    override = get_setting(conn, "default_backend")
+    if override:
+        if override not in runtime_config["backends"]:
+            raise AppError(
+                f"Stored default backend '{override}' is not configured",
+                code="config_error",
+                hint="Run `kassiber backends set-default <name>` with a valid backend, or `backends clear-default` to fall back to the env default.",
+            )
+        runtime_config["default_backend"] = override
+    return runtime_config
+
+
+def _validate_backend_kind(kind):
+    if kind.lower() not in BACKEND_KINDS:
+        raise AppError(
+            f"Unsupported backend kind '{kind}'",
+            code="validation",
+            hint=f"Choose one of: {', '.join(sorted(BACKEND_KINDS))}",
+        )
+    return kind.lower()
+
+
+def create_db_backend(
+    conn,
+    name,
+    kind,
+    url,
+    chain=None,
+    network=None,
+    auth_header=None,
+    token=None,
+    timeout=None,
+    tor_proxy=None,
+    notes=None,
+):
+    """Insert a new backend row. Raises on name conflict or invalid kind/url."""
+    name = name.strip().lower()
+    if not name:
+        raise AppError("Backend name is required", code="validation")
+    kind = _validate_backend_kind(kind)
+    if not url or not url.strip():
+        raise AppError("Backend url is required", code="validation")
+    if chain:
+        chain = normalize_chain_value(chain)
+    if network:
+        network = normalize_network_value(chain, network)
+    if timeout is not None and timeout <= 0:
+        raise AppError("Backend timeout must be positive", code="validation")
+    existing = conn.execute("SELECT 1 FROM backends WHERE name = ?", (name,)).fetchone()
+    if existing:
+        raise AppError(
+            f"Backend '{name}' already exists",
+            code="conflict",
+            hint="Use `kassiber backends update` to change an existing backend.",
+        )
+    ts = now_iso()
+    conn.execute(
+        """
+        INSERT INTO backends(name, kind, chain, network, url, auth_header, token, timeout, tor_proxy, notes, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        (name, kind, chain, network, url.strip(), auth_header, token, timeout, tor_proxy, notes, ts, ts),
+    )
+    conn.commit()
+    return get_db_backend(conn, name)
+
+
+def update_db_backend(conn, name, updates):
+    """Apply a partial update to a backend row.
+
+    `updates` is a dict where `None` values mean "leave alone" — so the
+    caller can pass every field unconditionally. Raises if every field is
+    `None` (nothing to update) or if the backend does not exist.
+    """
+    name = name.strip().lower()
+    row = conn.execute("SELECT * FROM backends WHERE name = ?", (name,)).fetchone()
+    if not row:
+        raise AppError(
+            f"Backend '{name}' not found in the database",
+            code="not_found",
+            hint="Only DB-backed backends can be updated. Use `kassiber backends create` first.",
+        )
+    if all(v is None for v in updates.values()):
+        raise AppError(
+            "backends update requires at least one field to change",
+            code="validation",
+            hint="Pass one or more of --kind, --url, --chain, --network, --auth-header, --token, --timeout, --tor-proxy, --notes",
+        )
+
+    new_kind = updates.get("kind")
+    if new_kind is not None:
+        new_kind = _validate_backend_kind(new_kind)
+    new_url = updates.get("url")
+    if new_url is not None:
+        if not new_url.strip():
+            raise AppError("Backend url cannot be empty", code="validation")
+        new_url = new_url.strip()
+    new_chain = updates.get("chain")
+    if new_chain is not None:
+        new_chain = normalize_chain_value(new_chain)
+    new_network = updates.get("network")
+    if new_network is not None:
+        chain_for_net = new_chain or row["chain"]
+        new_network = normalize_network_value(chain_for_net, new_network)
+    new_timeout = updates.get("timeout")
+    if new_timeout is not None and new_timeout <= 0:
+        raise AppError("Backend timeout must be positive", code="validation")
+
+    merged = {
+        "kind": new_kind if new_kind is not None else row["kind"],
+        "url": new_url if new_url is not None else row["url"],
+        "chain": new_chain if new_chain is not None else row["chain"],
+        "network": new_network if new_network is not None else row["network"],
+        "auth_header": updates.get("auth_header") if updates.get("auth_header") is not None else row["auth_header"],
+        "token": updates.get("token") if updates.get("token") is not None else row["token"],
+        "timeout": new_timeout if new_timeout is not None else row["timeout"],
+        "tor_proxy": updates.get("tor_proxy") if updates.get("tor_proxy") is not None else row["tor_proxy"],
+        "notes": updates.get("notes") if updates.get("notes") is not None else row["notes"],
+    }
+
+    conn.execute(
+        """
+        UPDATE backends
+        SET kind = ?, url = ?, chain = ?, network = ?, auth_header = ?, token = ?, timeout = ?, tor_proxy = ?, notes = ?, updated_at = ?
+        WHERE name = ?
+        """,
+        (
+            merged["kind"],
+            merged["url"],
+            merged["chain"],
+            merged["network"],
+            merged["auth_header"],
+            merged["token"],
+            merged["timeout"],
+            merged["tor_proxy"],
+            merged["notes"],
+            now_iso(),
+            name,
+        ),
+    )
+    conn.commit()
+    return get_db_backend(conn, name)
+
+
+def delete_db_backend(conn, name):
+    """Delete a DB-backed backend, refusing if it is the active stored default."""
+    name = name.strip().lower()
+    row = conn.execute("SELECT name FROM backends WHERE name = ?", (name,)).fetchone()
+    if not row:
+        raise AppError(
+            f"Backend '{name}' not found in the database",
+            code="not_found",
+            hint="Only DB-backed backends can be deleted; env-sourced backends are removed from your .env file instead.",
+        )
+    if get_setting(conn, "default_backend") == name:
+        raise AppError(
+            f"Backend '{name}' is the stored default; clear it with `kassiber backends clear-default` first",
+            code="conflict",
+        )
+    conn.execute("DELETE FROM backends WHERE name = ?", (name,))
+    conn.commit()
+    return {"name": name, "deleted": True}
+
+
+def set_default_backend(conn, runtime_config, name):
+    """Persist `default_backend=<name>` in `settings`; mutate runtime_config to match."""
+    name = name.strip().lower()
+    if name not in runtime_config["backends"]:
+        raise AppError(
+            f"Backend '{name}' is not configured",
+            code="not_found",
+            hint="Use `kassiber backends list` to see available backends.",
+        )
+    set_setting(conn, "default_backend", name)
+    conn.commit()
+    runtime_config["default_backend"] = name
+    return {"default_backend": name}
+
+
+def clear_default_backend(conn, runtime_config):
+    """Remove the stored `default_backend` override; revert to env default."""
+    row = conn.execute("SELECT value FROM settings WHERE key = 'default_backend'").fetchone()
+    if row:
+        conn.execute("DELETE FROM settings WHERE key = 'default_backend'")
+        conn.commit()
+    # Reload runtime default from env
+    env_default = load_runtime_config(runtime_config["env_file"])["default_backend"]
+    runtime_config["default_backend"] = env_default
+    return {"default_backend": env_default, "cleared": True}
