@@ -40,7 +40,7 @@ Kassiber is currently in **dev mode**: renaming commands, breaking flags, and re
 - `workspaces {list,create}`
 - `profiles {list,create,get,set}`
 - `accounts {list,create}`
-- `wallets {kinds,list,create,get,update,delete,sync,derive,set-altbestand,set-neubestand,import-json,import-csv,import-btcpay}`
+- `wallets {kinds,list,create,get,update,delete,sync,derive,set-altbestand,set-neubestand,import-json,import-csv,import-btcpay,import-phoenix}`
 - `backends {kinds,list,get,create,update,delete,set-default,clear-default}`
 - `transactions {list}`
 - `metadata records {list,get,note {set,clear},tag {add,remove},excluded {set,clear}}`
@@ -105,7 +105,7 @@ python3 -m kassiber rates --help
   - `init`, then create workspace/profile/wallet and seed transactions
   - verify `profiles list` shows `tax_country` and `tax_long_term_days`
   - optionally mark a wallet as `Altbestand`
-  - import priced CSV or BTCPay CSV
+  - import priced CSV, BTCPay CSV, or Phoenix CSV
   - import BIP329 JSONL
   - process journals
   - run each report, including `reports balance-history --interval month`
@@ -116,7 +116,7 @@ python3 -m kassiber rates --help
 
 - BTC-denominated amounts are stored as INTEGER msat in SQLite. Machine envelopes expose both `amount` (BTC float) and `amount_msat` (integer), and the same for `fee` / `quantity`. Fiat columns (`fiat_value`, `fiat_rate`, etc.) are still REAL.
 - Rates cache (`rates pairs/sync/latest/range/set`) stores BTC-USD / BTC-EUR samples from CoinGecko or manual upsert, but journal processing still derives fiat rates from priced transactions rather than the cache.
-- No Phoenix / River Lightning CSV importers yet.
+- Phoenix Lightning wallet CSV import is implemented (`wallets import-phoenix`). River CSV importer is not implemented yet.
 - No `custom` wallet kind CSV mapping DSL yet.
 - No account adjustments / per-event rate overrides yet.
 - No per-profile Tor proxy configuration yet.
