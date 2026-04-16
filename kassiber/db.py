@@ -178,6 +178,7 @@ CREATE TABLE IF NOT EXISTS backends (
     url TEXT NOT NULL,
     auth_header TEXT,
     token TEXT,
+    batch_size INTEGER,
     timeout INTEGER,
     tor_proxy TEXT,
     notes TEXT,
@@ -282,6 +283,7 @@ def ensure_schema_compat(conn):
     """
     ensure_column(conn, "profiles", "tax_country", f"TEXT NOT NULL DEFAULT '{DEFAULT_TAX_COUNTRY}'")
     ensure_column(conn, "profiles", "tax_long_term_days", f"INTEGER NOT NULL DEFAULT {DEFAULT_LONG_TERM_DAYS}")
+    ensure_column(conn, "backends", "batch_size", "INTEGER")
     _migrate_msat_columns(conn)
 
 
