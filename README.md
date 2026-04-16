@@ -73,6 +73,7 @@ It is designed around:
 - `reports capital-gains` — per-disposal realized gains/losses for tax reporting
 - `reports journal-entries` — raw double-entry ledger export
 - `reports balance-history --interval {hour,day,week,month}` with `--start` / `--end` and `--wallet / --account / --asset` filters
+- `reports export-pdf --file report.pdf [--wallet <wallet>]` — comprehensive landscape PDF summary with holdings, flows, capital gains, history, and data-quality metrics
 
 ### Rates
 - `rates pairs` — list supported pairs and per-pair cache coverage
@@ -170,6 +171,7 @@ python3 -m kassiber journals process
 python3 -m kassiber reports balance-sheet
 python3 -m kassiber reports balance-history --interval month \
   --start 2025-01-01T00:00:00Z --end 2025-12-31T23:59:59Z
+python3 -m kassiber reports export-pdf --file report.pdf
 ```
 
 ## Backends via `.env`
