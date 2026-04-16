@@ -24,7 +24,16 @@ It is designed around:
 - file imports from:
   - generic JSON / CSV transaction files
   - BTCPay CSV / JSON wallet exports
-- live address-based sync from:
+- live sync from named backends for:
+  - address wallets on Bitcoin
+  - descriptor-backed Bitcoin wallets on `esplora` and `electrum`
+  - descriptor-backed Liquid wallets on `esplora`
+- descriptor derivation via `wallets derive` for receive/change address and script export
+- full Liquid watch-only normalization for descriptor wallets:
+  - confidential receive/change detection
+  - explicit fee extraction
+  - local unblinding of wallet-owned outputs
+- backend adapters for:
   - `esplora`
   - `electrum`
   - `bitcoinrpc`
@@ -48,9 +57,10 @@ Wallets can also be marked manually as `Altbestand`. Disposals from an Altbestan
 ## Requirements
 
 - Python `>=3.10`
+- `embit>=0.8.0`
 - `rp2>=1.7.2`
 
-The Python floor is set by the current RP2 dependency. RP2 is not an optional add-on in the current architecture: Kassiber uses it as the tax engine for journal processing and tax-aware reports.
+The Python floor is set by the current RP2 and `embit` dependencies. RP2 is not an optional add-on in the current architecture: Kassiber uses it as the tax engine for journal processing and tax-aware reports.
 
 ## Installation
 
@@ -64,7 +74,7 @@ python3 -m pip install --upgrade pip
 python3 -m pip install -e .
 ```
 
-This installs Kassiber together with RP2 and its runtime dependencies.
+This installs Kassiber together with RP2, `embit`, and the rest of the supported runtime dependencies.
 
 If you are packaging Kassiber for broader internal use, treat RP2 as part of Kassiber's supported runtime stack rather than as an optional plugin users must discover and install separately.
 
@@ -80,6 +90,7 @@ If you are packaging Kassiber for broader internal use, treat RP2 as part of Kas
 
 Kassiber is intended to become a real accounting tool, so core accounting and tax dependencies should be included intentionally when they are part of the supported runtime behavior.
 
+- `embit` is a required dependency because descriptor derivation and Liquid wallet support depend on it.
 - RP2 is a required dependency because it is the current tax engine.
 - Future accounting-critical dependencies should be added openly rather than hidden behind optional extras if Kassiber cannot perform its core workflow without them.
 - Third-party runtime dependencies and their licenses should be tracked in the repository so packaging and internal distribution stay auditable.
@@ -88,7 +99,9 @@ Current third-party license notes are tracked in [THIRD_PARTY_LICENSES.md](/User
 
 ## What is not implemented yet
 
-- descriptor/xpub derivation-backed live sync
+- xpub-native live sync without an explicit descriptor
+- descriptor-backed `bitcoinrpc` live sync
+- self-hosted Liquid `elements_rpc` backend support
 - BTCPay Greenfield API integration
 - Lightning node adapters
 - remote server mode
@@ -122,7 +135,9 @@ Kassiber loads named sync backends from `.env`. If you do nothing, it already in
 
 - `mempool` -> `esplora` -> `https://mempool.space/api`
 
-Address-based wallets can use the default backend with no extra setup:
+That built-in default is Bitcoin-only. Liquid wallets should always point at an explicitly named backend.
+
+Address-based Bitcoin wallets can use the default backend with no extra setup:
 
 ```bash
 python3 -m kassiber wallets create \
@@ -170,6 +185,10 @@ Legacy `SATBOOKS_*` env vars are still accepted for compatibility during the ren
 - `KIND`
 - `URL`
 - `TIMEOUT`
+- `CHAIN`
+  Optional. Helps catch Bitcoin/Liquid backend mixups early.
+- `NETWORK`
+  Optional. Helps catch mainnet/testnet/regtest mismatches early.
 
 ### Electrum backend fields
 
@@ -194,22 +213,79 @@ Kassiber uses Electrum's scripthash API and falls back to raw transaction decodi
 
 For `bitcoinrpc`, Kassiber creates or loads a dedicated watch-only Bitcoin Core wallet per Kassiber wallet by default. That keeps multi-wallet sync isolated instead of mixing unrelated addresses together in one Core wallet.
 
+## Descriptor wallets
+
+Descriptor-backed wallets derive receive and change scripts locally, then sync through named backends without hardcoding a specific wallet provider.
+
+Bitcoin example:
+
+```bash
+python3 -m kassiber wallets create \
+  --label vault \
+  --kind descriptor \
+  --backend mempool \
+  --descriptor 'wpkh([fingerprint/84h/0h/0h]xpub.../0/*)' \
+  --change-descriptor 'wpkh([fingerprint/84h/0h/0h]xpub.../1/*)' \
+  --gap-limit 20
+
+python3 -m kassiber wallets derive --wallet vault --count 5
+python3 -m kassiber wallets sync --wallet vault
+```
+
+Liquid example:
+
+```bash
+python3 -m kassiber wallets create \
+  --label event-liquid \
+  --kind descriptor \
+  --backend liquid \
+  --chain liquid \
+  --network liquidv1 \
+  --descriptor 'ct(slip77(...),elwpkh(.../0/*))' \
+  --change-descriptor 'ct(slip77(...),elwpkh(.../1/*))' \
+  --gap-limit 20
+```
+
+For Liquid:
+
+- Kassiber does not ship a built-in public Liquid backend default.
+- Point the wallet at an explicitly named backend in `.env`.
+- Private blinding keys are required for full sync, balances, and fee accounting.
+- Kassiber accepts modern `ct(...)` / `elwpkh(...)` Liquid descriptor syntax and normalizes it internally for the current descriptor library.
+
+`wallets derive` is useful for:
+
+- matching exports against your wallet scripts
+- checking receive/change branches locally
+- feeding custom dashboards or audit tooling
+
 ### Example `.env`
 
 ```dotenv
 KASSIBER_DEFAULT_BACKEND=mempool
 
 KASSIBER_BACKEND_MEMPOOL_KIND=esplora
+KASSIBER_BACKEND_MEMPOOL_CHAIN=bitcoin
+KASSIBER_BACKEND_MEMPOOL_NETWORK=main
 KASSIBER_BACKEND_MEMPOOL_URL=https://mempool.space/api
 
 KASSIBER_BACKEND_BLOCKSTREAM_KIND=electrum
+KASSIBER_BACKEND_BLOCKSTREAM_CHAIN=bitcoin
+KASSIBER_BACKEND_BLOCKSTREAM_NETWORK=main
 KASSIBER_BACKEND_BLOCKSTREAM_URL=ssl://electrum.blockstream.info:50002
 KASSIBER_BACKEND_BLOCKSTREAM_TIMEOUT=30
 
 KASSIBER_BACKEND_CORE_KIND=bitcoinrpc
+KASSIBER_BACKEND_CORE_CHAIN=bitcoin
+KASSIBER_BACKEND_CORE_NETWORK=main
 KASSIBER_BACKEND_CORE_URL=http://127.0.0.1:8332
 KASSIBER_BACKEND_CORE_COOKIEFILE=~/.bitcoin/.cookie
 KASSIBER_BACKEND_CORE_WALLETPREFIX=kassiber
+
+KASSIBER_BACKEND_LIQUID_KIND=esplora
+KASSIBER_BACKEND_LIQUID_CHAIN=liquid
+KASSIBER_BACKEND_LIQUID_NETWORK=liquidv1
+KASSIBER_BACKEND_LIQUID_URL=https://your-liquid-esplora.example/api
 ```
 
 Wallets can point at a named backend with `--backend <name>`. If omitted, the default backend is used.
