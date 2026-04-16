@@ -1,0 +1,3 @@
+Transaction Id,Timestamp,Amount,Currency,Is Confirmed,Comment,Labels
+abc123,2026-04-16T10:00:00Z,0.015,BTC,true,Customer payout,"merchant, revenue"
+fee999,2026-04-16T11:00:00Z,-0.001,BTC,true,Withdrawal fee,ops

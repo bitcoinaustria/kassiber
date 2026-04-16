@@ -1,0 +1,2 @@
+{"type":"tx","ref":"abc123","label":"vip-customer","origin":"wpkh([d34db33f/84'/0'/0'])"}
+{"type":"output","ref":"abc123:0","label":"reserve","spendable":false,"value":1500000}
