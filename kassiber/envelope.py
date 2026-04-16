@@ -219,18 +219,21 @@ def emit(args, payload, kind=None):
         return
     # Default table format
     if isinstance(payload, list):
-        print_table(payload)
+        _write_text(args, _table_text(payload))
     elif isinstance(payload, dict):
         rows = [{"field": key, "value": value} for key, value in payload.items()]
-        print_table(rows)
+        _write_text(args, _table_text(rows))
     else:
-        print(payload)
+        _write_text(args, str(payload) if payload is not None else "")
 
 
 def print_table(rows):
+    print(_table_text(rows))
+
+
+def _table_text(rows):
     if not rows:
-        print("(no rows)")
-        return
+        return "(no rows)"
     normalized = [{key: format_table_value(value) for key, value in row.items()} for row in rows]
     headers = list(normalized[0].keys())
     widths = {header: len(header) for header in headers}
@@ -239,10 +242,10 @@ def print_table(rows):
             widths[header] = max(widths[header], len(row.get(header, "")))
     header_line = "  ".join(header.ljust(widths[header]) for header in headers)
     separator = "  ".join("-" * widths[header] for header in headers)
-    print(header_line)
-    print(separator)
+    lines = [header_line, separator]
     for row in normalized:
-        print("  ".join(row.get(header, "").ljust(widths[header]) for header in headers))
+        lines.append("  ".join(row.get(header, "").ljust(widths[header]) for header in headers))
+    return "\n".join(lines)
 
 
 def format_table_value(value):

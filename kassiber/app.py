@@ -2706,7 +2706,15 @@ def list_transactions(conn, workspace_ref, profile_ref, wallet_ref=None, limit=1
         """,
         params,
     ).fetchall()
-    return [dict(row) for row in rows]
+    results = []
+    for row in rows:
+        record = dict(row)
+        record["amount_msat"] = int(record["amount"])
+        record["amount"] = float(msat_to_btc(record["amount"]))
+        record["fee_msat"] = int(record["fee"])
+        record["fee"] = float(msat_to_btc(record["fee"]))
+        results.append(record)
+    return results
 
 
 def set_transaction_note(conn, workspace_ref, profile_ref, tx_ref, note):
@@ -2842,6 +2850,8 @@ def list_transaction_records(
 
     where = ["t.profile_id = ?"]
     params = [profile["id"]]
+    start_ts = _iso_z(_parse_iso_datetime(start, "start")) if start else None
+    end_ts = _iso_z(_parse_iso_datetime(end, "end")) if end else None
 
     if wallet:
         wallet_row = resolve_wallet(conn, profile["id"], wallet)
@@ -2859,12 +2869,12 @@ def list_transaction_records(
         where.append("t.excluded = 1")
     elif excluded is False:
         where.append("t.excluded = 0")
-    if start:
+    if start_ts:
         where.append("t.occurred_at >= ?")
-        params.append(start)
-    if end:
+        params.append(start_ts)
+    if end_ts:
         where.append("t.occurred_at <= ?")
-        params.append(end)
+        params.append(end_ts)
 
     cursor_data = _decode_event_cursor(cursor)
     if cursor_data:
@@ -3271,7 +3281,9 @@ def get_latest_rate(conn, pair):
         SELECT pair, timestamp, rate, source, fetched_at
         FROM rates_cache
         WHERE pair = ?
-        ORDER BY timestamp DESC
+        ORDER BY timestamp DESC,
+                 CASE WHEN source = 'manual' THEN 0 ELSE 1 END ASC,
+                 fetched_at DESC
         LIMIT 1
         """,
         (normalized,),
@@ -3910,6 +3922,8 @@ def list_journal_events(
 
     where = ["je.profile_id = ?"]
     params = [profile["id"]]
+    start_ts = _iso_z(_parse_iso_datetime(start, "start")) if start else None
+    end_ts = _iso_z(_parse_iso_datetime(end, "end")) if end else None
 
     if wallet:
         wallet_row = resolve_wallet(conn, profile["id"], wallet)
@@ -3925,12 +3939,12 @@ def list_journal_events(
     if entry_type:
         where.append("lower(je.entry_type) = ?")
         params.append(entry_type.lower())
-    if start:
+    if start_ts:
         where.append("je.occurred_at >= ?")
-        params.append(start)
-    if end:
+        params.append(start_ts)
+    if end_ts:
         where.append("je.occurred_at <= ?")
-        params.append(end)
+        params.append(end_ts)
 
     cursor_data = _decode_event_cursor(cursor)
     if cursor_data:
@@ -4409,7 +4423,12 @@ def report_balance_history(
         raise AppError("--start must not be after --end", code="validation")
 
     sql = """
-        SELECT je.occurred_at, je.entry_type, je.asset, je.quantity, je.fiat_value
+        SELECT
+            je.occurred_at,
+            je.asset,
+            je.quantity,
+            je.fiat_value,
+            COALESCE(je.cost_basis, 0) AS cost_basis
         FROM journal_entries je
         LEFT JOIN accounts a ON a.id = je.account_id
         WHERE je.profile_id = ?
@@ -4427,8 +4446,16 @@ def report_balance_history(
         params.append(asset)
     sql += " ORDER BY je.occurred_at ASC, je.created_at ASC, je.id ASC"
     rows = conn.execute(sql, params).fetchall()
-
-    latest_rates = latest_rates_for_profile(conn, profile["id"])
+    rate_rows = conn.execute(
+        """
+        SELECT occurred_at, asset, amount, fiat_rate, fiat_value
+        FROM transactions
+        WHERE profile_id = ? AND excluded = 0
+          AND (fiat_rate IS NOT NULL OR fiat_value IS NOT NULL)
+        ORDER BY occurred_at ASC, created_at ASC, id ASC
+        """,
+        (profile["id"],),
+    ).fetchall()
 
     if not rows and not (start_dt and end_dt):
         return []
@@ -4436,7 +4463,25 @@ def report_balance_history(
     events = []
     for row in rows:
         row_dt = _parse_iso_datetime(row["occurred_at"], "occurred_at")
-        events.append((row_dt, row["asset"], msat_to_btc(row["quantity"]), dec(row["fiat_value"])))
+        events.append(
+            (
+                row_dt,
+                row["asset"],
+                msat_to_btc(row["quantity"]),
+                dec(row["fiat_value"]),
+                dec(row["cost_basis"]),
+            )
+        )
+    rate_events = []
+    for row in rate_rows:
+        rate = None
+        if row["fiat_rate"] is not None:
+            rate = dec(row["fiat_rate"])
+        elif row["fiat_value"] is not None and row["amount"]:
+            rate = dec(row["fiat_value"]) / msat_to_btc(row["amount"])
+        if rate is None:
+            continue
+        rate_events.append((_parse_iso_datetime(row["occurred_at"], "occurred_at"), row["asset"], rate))
 
     first_event_dt = events[0][0] if events else None
     range_start = start_dt or first_event_dt or datetime.now(timezone.utc)
@@ -4447,6 +4492,8 @@ def report_balance_history(
     cumulative = defaultdict(lambda: Decimal("0"))
     cumulative_fiat = defaultdict(lambda: Decimal("0"))
     event_idx = 0
+    rate_idx = 0
+    current_rates = {}
     bucket_start = _floor_to_interval(range_start, interval)
     end_cap = _floor_to_interval(range_end, interval)
 
@@ -4454,16 +4501,23 @@ def report_balance_history(
     while bucket_start <= end_cap:
         bucket_end = _next_interval(bucket_start, interval)
         while event_idx < len(events) and events[event_idx][0] < bucket_end:
-            _, ev_asset, ev_qty, ev_fiat = events[event_idx]
+            _, ev_asset, ev_qty, ev_fiat, ev_cost_basis = events[event_idx]
             cumulative[ev_asset] += ev_qty
-            cumulative_fiat[ev_asset] += ev_fiat if ev_qty >= 0 else -ev_fiat
+            if ev_qty >= 0:
+                cumulative_fiat[ev_asset] += ev_fiat
+            else:
+                cumulative_fiat[ev_asset] -= ev_cost_basis
             event_idx += 1
+        while rate_idx < len(rate_events) and rate_events[rate_idx][0] < bucket_end:
+            _, rate_asset, rate = rate_events[rate_idx]
+            current_rates[rate_asset] = rate
+            rate_idx += 1
         emitted_assets = set(cumulative.keys()) if asset is None else {asset}
         for ev_asset in sorted(emitted_assets):
             qty = cumulative.get(ev_asset, Decimal("0"))
             if qty == 0 and asset is None:
                 continue
-            rate = latest_rates.get(ev_asset, Decimal("0"))
+            rate = current_rates.get(ev_asset, Decimal("0"))
             results.append(
                 {
                     "period_start": _iso_z(bucket_start),
@@ -4845,7 +4899,7 @@ def build_parser():
     wallets_import_btcpay.add_argument("--profile")
     wallets_import_btcpay.add_argument("--wallet", required=True)
     wallets_import_btcpay.add_argument("--file", required=True)
-    wallets_import_btcpay.add_argument("--format", choices=["json", "csv"], default="csv")
+    wallets_import_btcpay.add_argument("--input-format", "--format", dest="input_format", choices=["json", "csv"], default="csv")
     wallets_import_phoenix = wallets_sub.add_parser("import-phoenix")
     wallets_import_phoenix.add_argument("--workspace")
     wallets_import_phoenix.add_argument("--profile")
@@ -5313,7 +5367,7 @@ def dispatch(conn, args):
                     args.profile,
                     args.wallet,
                     args.file,
-                    f"btcpay_{args.format}",
+                    f"btcpay_{args.input_format}",
                 ),
             )
         if args.wallets_command == "import-phoenix":

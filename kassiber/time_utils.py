@@ -44,7 +44,14 @@ def parse_timestamp(value):
         raw = f"{raw}T00:00:00+00:00"
     elif raw.endswith("Z"):
         raw = raw[:-1] + "+00:00"
-    dt = datetime.fromisoformat(raw)
+    try:
+        dt = datetime.fromisoformat(raw)
+    except ValueError as exc:
+        raise AppError(
+            f"Invalid occurred_at/date value '{value}'",
+            code="validation",
+            hint="Use RFC3339 UTC like 2025-01-01T00:00:00Z",
+        ) from exc
     if dt.tzinfo is None:
         dt = dt.replace(tzinfo=timezone.utc)
     else:

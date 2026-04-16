@@ -299,75 +299,91 @@ def _migrate_msat_columns(conn):
     pre-migration databases created with REAL amount/fee/quantity columns.
     Existing float BTC values are multiplied into msat with ROUND_HALF_UP.
     """
-    if _column_is_real(conn, "transactions", "amount") or _column_is_real(conn, "transactions", "fee"):
-        conn.executescript(
-            """
-            CREATE TABLE transactions__msat_new (
-                id TEXT PRIMARY KEY,
-                workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
-                profile_id TEXT NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
-                wallet_id TEXT NOT NULL REFERENCES wallets(id) ON DELETE CASCADE,
-                external_id TEXT,
-                fingerprint TEXT NOT NULL UNIQUE,
-                occurred_at TEXT NOT NULL,
-                direction TEXT NOT NULL,
-                asset TEXT NOT NULL,
-                amount INTEGER NOT NULL,
-                fee INTEGER NOT NULL DEFAULT 0,
-                fiat_currency TEXT,
-                fiat_rate REAL,
-                fiat_value REAL,
-                kind TEXT,
-                description TEXT,
-                counterparty TEXT,
-                note TEXT,
-                excluded INTEGER NOT NULL DEFAULT 0,
-                raw_json TEXT NOT NULL DEFAULT '{}',
-                created_at TEXT NOT NULL
-            );
-            INSERT INTO transactions__msat_new SELECT
-                id, workspace_id, profile_id, wallet_id, external_id, fingerprint,
-                occurred_at, direction, asset,
-                CAST(ROUND(amount * 100000000000.0) AS INTEGER),
-                CAST(ROUND(fee * 100000000000.0) AS INTEGER),
-                fiat_currency, fiat_rate, fiat_value,
-                kind, description, counterparty, note, excluded, raw_json, created_at
-            FROM transactions;
-            DROP TABLE transactions;
-            ALTER TABLE transactions__msat_new RENAME TO transactions;
-            """
-        )
-        conn.commit()
-    if _column_is_real(conn, "journal_entries", "quantity"):
-        conn.executescript(
-            """
-            CREATE TABLE journal_entries__msat_new (
-                id TEXT PRIMARY KEY,
-                workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
-                profile_id TEXT NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
-                transaction_id TEXT NOT NULL REFERENCES transactions(id) ON DELETE CASCADE,
-                wallet_id TEXT NOT NULL REFERENCES wallets(id) ON DELETE CASCADE,
-                account_id TEXT REFERENCES accounts(id) ON DELETE SET NULL,
-                occurred_at TEXT NOT NULL,
-                entry_type TEXT NOT NULL,
-                asset TEXT NOT NULL,
-                quantity INTEGER NOT NULL,
-                fiat_value REAL NOT NULL DEFAULT 0,
-                unit_cost REAL NOT NULL DEFAULT 0,
-                cost_basis REAL,
-                proceeds REAL,
-                gain_loss REAL,
-                description TEXT,
-                created_at TEXT NOT NULL
-            );
-            INSERT INTO journal_entries__msat_new SELECT
-                id, workspace_id, profile_id, transaction_id, wallet_id, account_id,
-                occurred_at, entry_type, asset,
-                CAST(ROUND(quantity * 100000000000.0) AS INTEGER),
-                fiat_value, unit_cost, cost_basis, proceeds, gain_loss, description, created_at
-            FROM journal_entries;
-            DROP TABLE journal_entries;
-            ALTER TABLE journal_entries__msat_new RENAME TO journal_entries;
-            """
-        )
-        conn.commit()
+    migrate_transactions = _column_is_real(conn, "transactions", "amount") or _column_is_real(conn, "transactions", "fee")
+    migrate_journal_entries = _column_is_real(conn, "journal_entries", "quantity")
+    if not migrate_transactions and not migrate_journal_entries:
+        return
+
+    conn.commit()
+    previous_fk_state = conn.execute("PRAGMA foreign_keys").fetchone()[0]
+    conn.execute("PRAGMA foreign_keys = OFF")
+    try:
+        if migrate_transactions:
+            conn.executescript(
+                """
+                BEGIN;
+                CREATE TABLE transactions__msat_new (
+                    id TEXT PRIMARY KEY,
+                    workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+                    profile_id TEXT NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+                    wallet_id TEXT NOT NULL REFERENCES wallets(id) ON DELETE CASCADE,
+                    external_id TEXT,
+                    fingerprint TEXT NOT NULL UNIQUE,
+                    occurred_at TEXT NOT NULL,
+                    direction TEXT NOT NULL,
+                    asset TEXT NOT NULL,
+                    amount INTEGER NOT NULL,
+                    fee INTEGER NOT NULL DEFAULT 0,
+                    fiat_currency TEXT,
+                    fiat_rate REAL,
+                    fiat_value REAL,
+                    kind TEXT,
+                    description TEXT,
+                    counterparty TEXT,
+                    note TEXT,
+                    excluded INTEGER NOT NULL DEFAULT 0,
+                    raw_json TEXT NOT NULL DEFAULT '{}',
+                    created_at TEXT NOT NULL
+                );
+                INSERT INTO transactions__msat_new SELECT
+                    id, workspace_id, profile_id, wallet_id, external_id, fingerprint,
+                    occurred_at, direction, asset,
+                    CAST(ROUND(amount * 100000000000.0) AS INTEGER),
+                    CAST(ROUND(fee * 100000000000.0) AS INTEGER),
+                    fiat_currency, fiat_rate, fiat_value,
+                    kind, description, counterparty, note, excluded, raw_json, created_at
+                FROM transactions;
+                DROP TABLE transactions;
+                ALTER TABLE transactions__msat_new RENAME TO transactions;
+                COMMIT;
+                """
+            )
+        if migrate_journal_entries:
+            conn.executescript(
+                """
+                BEGIN;
+                CREATE TABLE journal_entries__msat_new (
+                    id TEXT PRIMARY KEY,
+                    workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+                    profile_id TEXT NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+                    transaction_id TEXT NOT NULL REFERENCES transactions(id) ON DELETE CASCADE,
+                    wallet_id TEXT NOT NULL REFERENCES wallets(id) ON DELETE CASCADE,
+                    account_id TEXT REFERENCES accounts(id) ON DELETE SET NULL,
+                    occurred_at TEXT NOT NULL,
+                    entry_type TEXT NOT NULL,
+                    asset TEXT NOT NULL,
+                    quantity INTEGER NOT NULL,
+                    fiat_value REAL NOT NULL DEFAULT 0,
+                    unit_cost REAL NOT NULL DEFAULT 0,
+                    cost_basis REAL,
+                    proceeds REAL,
+                    gain_loss REAL,
+                    description TEXT,
+                    created_at TEXT NOT NULL
+                );
+                INSERT INTO journal_entries__msat_new SELECT
+                    id, workspace_id, profile_id, transaction_id, wallet_id, account_id,
+                    occurred_at, entry_type, asset,
+                    CAST(ROUND(quantity * 100000000000.0) AS INTEGER),
+                    fiat_value, unit_cost, cost_basis, proceeds, gain_loss, description, created_at
+                FROM journal_entries;
+                DROP TABLE journal_entries;
+                ALTER TABLE journal_entries__msat_new RENAME TO journal_entries;
+                COMMIT;
+                """
+            )
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.execute(f"PRAGMA foreign_keys = {'ON' if previous_fk_state else 'OFF'}")
