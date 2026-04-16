@@ -1,7 +1,7 @@
 """Backend (chain-indexer endpoint) discovery, storage, and merging.
 
 A "backend" in kassiber is a pointer to an external blockchain indexer
-(esplora, mempool.space, an Electrum server, a liquid-esplora instance,
+(esplora, a mempool-compatible API, an Electrum server, a liquid-esplora instance,
 etc.) that wallets use to sync transactions. Backends live in two
 places, and this module reconciles them:
 
@@ -43,9 +43,27 @@ DEFAULT_BACKENDS = {
         "kind": "esplora",
         "chain": "bitcoin",
         "network": "main",
-        "url": "https://mempool.space/api",
+        "url": "https://mempool.bitcoin-austria.at/api",
         "source": "built-in default",
-    }
+    },
+    "fulcrum": {
+        "name": "fulcrum",
+        "kind": "electrum",
+        "chain": "bitcoin",
+        "network": "main",
+        "url": "ssl://index.bitcoin-austria.at:50002",
+        "batch_size": 100,
+        "source": "built-in default",
+    },
+    "liquid": {
+        "name": "liquid",
+        "kind": "electrum",
+        "chain": "liquid",
+        "network": "liquidv1",
+        "url": "ssl://les.bullbitcoin.com:995",
+        "batch_size": 100,
+        "source": "built-in default",
+    },
 }
 
 BACKEND_KINDS = {"esplora", "mempool", "electrum", "liquid-esplora", "custom"}
@@ -144,6 +162,14 @@ def backend_timeout(backend, default=30):
     return parse_int(backend_value(backend, "timeout"), default)
 
 
+def backend_batch_size(backend, default=100):
+    """Read `batch_size` off a backend dict, coerced to a positive int."""
+    value = parse_int(backend_value(backend, "batch_size"), default)
+    if value <= 0:
+        raise AppError("Backend batch_size must be positive")
+    return value
+
+
 def resolve_backend(runtime_config, name=None):
     """Look up a backend by name in `runtime_config`, defaulting to the active one."""
     backend_name = (name or runtime_config["default_backend"]).strip().lower()
@@ -164,6 +190,7 @@ def list_backends(runtime_config):
                 "chain": backend.get("chain", ""),
                 "network": backend.get("network", ""),
                 "url": backend["url"],
+                "batch_size": backend.get("batch_size", ""),
                 "default": "yes" if name == runtime_config["default_backend"] else "",
                 "source": backend["source"],
             }
@@ -178,6 +205,7 @@ def _backend_row_to_dict(row):
         "chain": row["chain"] or "",
         "network": row["network"] or "",
         "url": row["url"],
+        "batch_size": row["batch_size"],
         "auth_header": row["auth_header"] or "",
         "token": row["token"] or "",
         "timeout": row["timeout"],
@@ -224,6 +252,7 @@ def merge_db_backends(conn, runtime_config):
             "chain": row["chain"] or "",
             "network": row["network"] or "",
             "url": row["url"],
+            "batch_size": row["batch_size"],
             "auth_header": row["auth_header"] or "",
             "token": row["token"] or "",
             "timeout": str(row["timeout"]) if row["timeout"] is not None else "",
@@ -261,6 +290,7 @@ def create_db_backend(
     network=None,
     auth_header=None,
     token=None,
+    batch_size=None,
     timeout=None,
     tor_proxy=None,
     notes=None,
@@ -276,6 +306,8 @@ def create_db_backend(
         chain = normalize_chain_value(chain)
     if network:
         network = normalize_network_value(chain, network)
+    if batch_size is not None and batch_size <= 0:
+        raise AppError("Backend batch size must be positive", code="validation")
     if timeout is not None and timeout <= 0:
         raise AppError("Backend timeout must be positive", code="validation")
     existing = conn.execute("SELECT 1 FROM backends WHERE name = ?", (name,)).fetchone()
@@ -288,10 +320,10 @@ def create_db_backend(
     ts = now_iso()
     conn.execute(
         """
-        INSERT INTO backends(name, kind, chain, network, url, auth_header, token, timeout, tor_proxy, notes, created_at, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO backends(name, kind, chain, network, url, auth_header, token, batch_size, timeout, tor_proxy, notes, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
-        (name, kind, chain, network, url.strip(), auth_header, token, timeout, tor_proxy, notes, ts, ts),
+        (name, kind, chain, network, url.strip(), auth_header, token, batch_size, timeout, tor_proxy, notes, ts, ts),
     )
     conn.commit()
     return get_db_backend(conn, name)
@@ -316,7 +348,7 @@ def update_db_backend(conn, name, updates):
         raise AppError(
             "backends update requires at least one field to change",
             code="validation",
-            hint="Pass one or more of --kind, --url, --chain, --network, --auth-header, --token, --timeout, --tor-proxy, --notes",
+            hint="Pass one or more of --kind, --url, --chain, --network, --auth-header, --token, --batch-size, --timeout, --tor-proxy, --notes",
         )
 
     new_kind = updates.get("kind")
@@ -334,6 +366,9 @@ def update_db_backend(conn, name, updates):
     if new_network is not None:
         chain_for_net = new_chain or row["chain"]
         new_network = normalize_network_value(chain_for_net, new_network)
+    new_batch_size = updates.get("batch_size")
+    if new_batch_size is not None and new_batch_size <= 0:
+        raise AppError("Backend batch size must be positive", code="validation")
     new_timeout = updates.get("timeout")
     if new_timeout is not None and new_timeout <= 0:
         raise AppError("Backend timeout must be positive", code="validation")
@@ -345,6 +380,7 @@ def update_db_backend(conn, name, updates):
         "network": new_network if new_network is not None else row["network"],
         "auth_header": updates.get("auth_header") if updates.get("auth_header") is not None else row["auth_header"],
         "token": updates.get("token") if updates.get("token") is not None else row["token"],
+        "batch_size": new_batch_size if new_batch_size is not None else row["batch_size"],
         "timeout": new_timeout if new_timeout is not None else row["timeout"],
         "tor_proxy": updates.get("tor_proxy") if updates.get("tor_proxy") is not None else row["tor_proxy"],
         "notes": updates.get("notes") if updates.get("notes") is not None else row["notes"],
@@ -353,7 +389,7 @@ def update_db_backend(conn, name, updates):
     conn.execute(
         """
         UPDATE backends
-        SET kind = ?, url = ?, chain = ?, network = ?, auth_header = ?, token = ?, timeout = ?, tor_proxy = ?, notes = ?, updated_at = ?
+        SET kind = ?, url = ?, chain = ?, network = ?, auth_header = ?, token = ?, batch_size = ?, timeout = ?, tor_proxy = ?, notes = ?, updated_at = ?
         WHERE name = ?
         """,
         (
@@ -363,6 +399,7 @@ def update_db_backend(conn, name, updates):
             merged["network"],
             merged["auth_header"],
             merged["token"],
+            merged["batch_size"],
             merged["timeout"],
             merged["tor_proxy"],
             merged["notes"],

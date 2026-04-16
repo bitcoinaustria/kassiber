@@ -51,6 +51,10 @@ Keep the smoke suite green after every step.
 - **3e** — Add account adjustments and rate overrides surface.
 - **3f** — Per-profile Tor proxy configuration (the backends table
   already supports per-backend timeout; extend to SOCKS proxy).
+- **3g** — Replace BTCPay file-based imports with Greenfield API-backed
+  sync/import flow. Follow-up once that lands: attach optional BTCPay
+  `InvoiceId` metadata to imported on-chain wallet addresses instead of
+  trying to infer invoice/address matches from CSV exports.
 
 ## Phase 4 — Skills bundle
 
