@@ -252,6 +252,26 @@ class CliSmokeTest(unittest.TestCase):
         )
         self._assert_kind(payload, "reports.balance-history")
 
+    def test_07a_export_pdf_report(self):
+        pdf_path = Path(self._tmp.name) / "kassiber-report.pdf"
+        if pdf_path.exists():
+            pdf_path.unlink()
+        payload = self._cli(
+            "reports", "export-pdf",
+            "--workspace", "Main",
+            "--profile", "Default",
+            "--file", str(pdf_path),
+        )
+        self._assert_kind(payload, "reports.export-pdf")
+        data = payload["data"]
+        self.assertEqual(Path(data["file"]), pdf_path.resolve())
+        self.assertTrue(pdf_path.exists())
+        self.assertGreater(pdf_path.stat().st_size, 1000)
+        payload_bytes = pdf_path.read_bytes()
+        header = payload_bytes[:8]
+        self.assertTrue(header.startswith(b"%PDF-1.4"))
+        self.assertIn(b"/MediaBox [0 0 842 595]", payload_bytes)
+
     def test_08_capital_gains_msat_and_counts(self):
         payload = self._cli(
             "reports", "capital-gains",
