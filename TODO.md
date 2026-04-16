@@ -51,6 +51,14 @@ Keep the smoke suite green after every step.
 - **3e** — Add account adjustments and rate overrides surface.
 - **3f** — Per-profile Tor proxy configuration (the backends table
   already supports per-backend timeout; extend to SOCKS proxy).
+- **3g** — At-rest encryption for sensitive fields. Nothing on disk is
+  encrypted today (SQLite DB, `.env`, exports). Target seamless OS
+  keychain integration — macOS Keychain, Linux freedesktop
+  secret-service / libsecret, Windows DPAPI / Credential Manager — so
+  SLIP77 blinding keys, backend tokens, auth headers, and RPC
+  credentials are sealed by default and unlocked on demand without a
+  separate passphrase. Call it out prominently in
+  [SECURITY.md](SECURITY.md) until it lands.
 
 ## Phase 4 — Skills bundle
 
