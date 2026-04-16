@@ -25,6 +25,7 @@ Kassiber is currently in **dev mode**: renaming commands, breaking flags, and re
   - metadata (notes, tags, inclusion)
   - journals (RP2 processing + quarantine)
   - reports (balance-sheet, portfolio-summary, capital-gains, journal-entries, balance-history)
+  - rates (local cache + CoinGecko sync + manual override)
 - Every command accepts `--format {table,plain,json,csv}`, `--output <path>`, `--machine` (= `--format json`), and `--debug`.
 - Successful responses use `{kind, schema_version, data}`. Errors use `{kind: "error", schema_version, error: {code, message, hint, details, retryable, debug}}`.
 - Live sync kinds implemented: `esplora`, `electrum`, `bitcoinrpc`.
@@ -46,6 +47,7 @@ Kassiber is currently in **dev mode**: renaming commands, breaking flags, and re
 - `metadata bip329 {import,list,export}`
 - `journals {process,list,quarantined,events {list,get},quarantine {show,clear,resolve {price-override,exclude}}}`
 - `reports {balance-sheet,portfolio-summary,capital-gains,journal-entries,balance-history}`
+- `rates {pairs,sync,latest,range,set}`
 
 ## Pagination
 
@@ -95,6 +97,7 @@ python3 -m kassiber profiles create --help
 python3 -m kassiber metadata records --help
 python3 -m kassiber journals events --help
 python3 -m kassiber reports balance-history --help
+python3 -m kassiber rates --help
 ```
 
 - Safe local workflow:
@@ -107,11 +110,12 @@ python3 -m kassiber reports balance-history --help
   - process journals
   - run each report, including `reports balance-history --interval month`
   - if testing `Altbestand`, verify capital gains are zeroed for that wallet and return after `set-neubestand`
+  - exercise the rates cache: `rates pairs`, `rates set BTC-USD <ts> <rate>`, `rates latest BTC-USD`, `rates range BTC-USD --start <ts>`; optionally `rates sync --pair BTC-USD --days 7` when network access is acceptable
 
 ## Known gaps
 
 - Amount storage is still float BTC — migration to INTEGER msat is pending.
-- No exchange-rate subsystem (`rates sync/latest/range/pairs`) yet.
+- Rates cache (`rates pairs/sync/latest/range/set`) stores BTC-USD / BTC-EUR samples from CoinGecko or manual upsert, but journal processing still derives fiat rates from priced transactions rather than the cache.
 - No Phoenix / River Lightning CSV importers yet.
 - No `custom` wallet kind CSV mapping DSL yet.
 - No account adjustments / per-event rate overrides yet.
