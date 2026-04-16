@@ -21,6 +21,7 @@ from urllib import parse as urlparse
 from urllib import request as urlrequest
 
 from . import __version__
+from .errors import AppError
 from .tax_policy import (
     DEFAULT_LONG_TERM_DAYS,
     DEFAULT_TAX_COUNTRY,
@@ -247,15 +248,6 @@ CREATE TABLE IF NOT EXISTS rates_cache (
 CREATE INDEX IF NOT EXISTS idx_rates_cache_pair_ts
     ON rates_cache(pair, timestamp DESC);
 """
-
-
-class AppError(Exception):
-    def __init__(self, message, code="app_error", details=None, hint=None, retryable=False):
-        super().__init__(message)
-        self.code = code
-        self.details = details
-        self.hint = hint
-        self.retryable = retryable
 
 
 def load_dotenv_file(path):
