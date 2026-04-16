@@ -55,6 +55,7 @@
 - Prefer additive schema changes that work with `CREATE TABLE IF NOT EXISTS`.
 - Prefer lightweight compatibility migrations for existing SQLite databases when adding profile fields.
 - When adding a new runtime dependency, update both the README dependency story and `THIRD_PARTY_LICENSES.md`.
+- Keep `THIRD_PARTY_LICENSES.md` concise: direct dependencies and notable license constraints matter more than a hand-maintained transitive dump.
 
 ## Verification
 

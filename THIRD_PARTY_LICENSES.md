@@ -1,47 +1,28 @@
 # Third-Party Licenses
 
-This file tracks the current Kassiber runtime dependency stack at an engineering level.
-It is meant to keep packaging and internal distribution auditable, not to replace legal review.
+This file is intentionally short. It records the core external projects Kassiber depends on directly and any notable license constraints worth calling out during packaging or redistribution.
 
-## Kassiber direct runtime dependency
+It is not meant to be a hand-maintained inventory of every transitive package in every environment.
 
-Kassiber currently declares one direct runtime dependency in [pyproject.toml](/Users/dev/Github/kassiber/pyproject.toml):
+## Core dependency credit
+
+Kassiber currently depends directly on [RP2](https://github.com/eprbell/rp2) as its tax engine.
 
 | Package | Version policy | Role | License |
 | --- | --- | --- | --- |
 | `rp2` | `>=1.7.2` | Tax engine used by journal processing and tax-aware reports | Apache-2.0 |
 
-## RP2 direct runtime dependencies
+## Notable downstream license note
 
-The entries below are based on the installed metadata from a reference test environment using `rp2==1.7.2`.
+In the current tested RP2 install path, one runtime dependency worth calling out explicitly is:
 
-| Package | Observed version | License |
+| Package | Why it matters | License |
 | --- | --- | --- |
-| `Babel` | `2.18.0` | BSD-3-Clause |
-| `jsonschema` | `4.26.0` | MIT |
-| `prezzemolo` | `0.0.4` | Apache-2.0 |
-| `python-dateutil` | `2.9.0.post0` | Dual BSD / Apache-2.0 |
-| `pycountry` | `26.2.16` | LGPL-2.1-only |
-| `pyexcel-ezodf` | `0.3.4` | MIT |
+| `pycountry` | More restrictive than the surrounding MIT/BSD/Apache-style deps in the observed RP2 stack | LGPL-2.1-only |
 
-## Reference transitive dependencies
+## Practical notes
 
-The following packages were resolved transitively in the same reference install:
-
-| Package | Observed version | License |
-| --- | --- | --- |
-| `attrs` | `26.1.0` | MIT |
-| `jsonschema-specifications` | `2025.9.1` | MIT |
-| `lxml` | `6.0.4` | BSD-3-Clause |
-| `referencing` | `0.37.0` | MIT |
-| `rpds-py` | `0.30.0` | MIT |
-| `six` | `1.17.0` | MIT |
-
-These versions are a snapshot of the tested install, not a promise that every environment resolves the exact same build. If Kassiber adopts a lockfile or packaged release process, this file should be refreshed from that release artifact.
-
-## Practical compliance notes
-
-- Kassiber is AGPL-3.0-only, but it currently ships with runtime dependencies under Apache-2.0, BSD-style, MIT, and LGPL-2.1-only licenses.
-- Preserve upstream license texts and notices when redistributing Kassiber together with vendored or bundled third-party packages.
-- `pycountry` is currently the most restrictive runtime dependency in the observed stack because it is LGPL-2.1-only. If Kassiber is distributed beyond local source installs, that dependency should stay part of the release compliance review.
-- Update this file whenever a new runtime dependency is added or the RP2 stack changes materially.
+- Preserve upstream notices and license texts when redistributing Kassiber with bundled third-party code.
+- If Kassiber adds another direct runtime dependency, add it here with short credit and license info.
+- If a dependency introduces a notable licensing constraint, call that out here too.
+- For a full release-time dependency inventory, prefer generated tooling or release artifacts over expanding this file by hand.
