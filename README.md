@@ -485,8 +485,8 @@ Wallet-level `Altbestand` stays separate from the profile policy because it is p
 
 ## What is not implemented yet
 
-- amount storage in msat (INTEGER) — currently floats, migration pending
 - wiring the rates cache into journal processing (tax-aware reports still derive rates from priced transactions)
+- fiat amounts stored as REAL (cents migration pending)
 - Phoenix / River Lightning CSV importers
 - `custom` wallet kind DSL for mapping arbitrary CSV schemas
 - account adjustments and per-event rate overrides
@@ -505,7 +505,7 @@ Wallet-level `Altbestand` stays separate from the profile policy because it is p
 - The CLI entrypoint and journal/report orchestration live in [kassiber/app.py](kassiber/app.py).
 - The profile tax-policy layer lives in [kassiber/tax_policy.py](kassiber/tax_policy.py).
 - Descriptor handling lives in [kassiber/wallet_descriptors.py](kassiber/wallet_descriptors.py).
-- SQLite remains the system of record. Float amounts will be migrated to msat (INTEGER) in a dedicated change.
+- SQLite remains the system of record. BTC-denominated amounts (`transactions.amount`, `transactions.fee`, `journal_entries.quantity`) are stored as INTEGER msat — the Lightning convention. Machine envelopes expose both the human-friendly BTC decimal and an exact `_msat` integer for every amount.
 - RP2 is used as the wallet-scoped lot engine.
 - Wallet-level `Altbestand` remains manual provenance metadata; it is not part of the profile country policy.
 

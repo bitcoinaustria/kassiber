@@ -114,7 +114,7 @@ python3 -m kassiber rates --help
 
 ## Known gaps
 
-- Amount storage is still float BTC — migration to INTEGER msat is pending.
+- BTC-denominated amounts are stored as INTEGER msat in SQLite. Machine envelopes expose both `amount` (BTC float) and `amount_msat` (integer), and the same for `fee` / `quantity`. Fiat columns (`fiat_value`, `fiat_rate`, etc.) are still REAL.
 - Rates cache (`rates pairs/sync/latest/range/set`) stores BTC-USD / BTC-EUR samples from CoinGecko or manual upsert, but journal processing still derives fiat rates from priced transactions rather than the cache.
 - No Phoenix / River Lightning CSV importers yet.
 - No `custom` wallet kind CSV mapping DSL yet.
