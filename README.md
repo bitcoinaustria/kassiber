@@ -253,4 +253,4 @@ If you already have local data under the old Satbooks path, Kassiber will fall b
 
 ## License
 
-MIT
+GNU Affero General Public License v3.0 only (`AGPL-3.0-only`)

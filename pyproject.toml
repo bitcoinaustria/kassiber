@@ -8,7 +8,7 @@ version = "0.1.0"
 description = "Open-source, local-first Bitcoin accounting CLI with multi-account and multi-wallet support."
 readme = "README.md"
 requires-python = ">=3.9"
-license = { text = "MIT" }
+license = { text = "AGPL-3.0-only" }
 authors = [
   { name = "OpenAI Codex" }
 ]
