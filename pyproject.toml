@@ -7,12 +7,14 @@ name = "kassiber"
 version = "0.1.0"
 description = "Open-source, local-first Bitcoin accounting CLI with multi-account and multi-wallet support."
 readme = "README.md"
-requires-python = ">=3.9"
+requires-python = ">=3.10"
 license = { text = "AGPL-3.0-only" }
 authors = [
   { name = "OpenAI Codex" }
 ]
-dependencies = []
+dependencies = [
+  "rp2>=1.7.2",
+]
 
 [project.scripts]
 kassiber = "kassiber.app:main"
