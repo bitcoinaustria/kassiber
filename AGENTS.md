@@ -44,7 +44,7 @@ Kassiber is currently in **dev mode**: renaming commands, breaking flags, and re
 - `transactions {list}`
 - `metadata records {list,get,note {set,clear},tag {add,remove},excluded {set,clear}}`
 - `metadata bip329 {import,list,export}`
-- `journals {process,list,quarantined,events {list,get}}`
+- `journals {process,list,quarantined,events {list,get},quarantine {show,clear,resolve {price-override,exclude}}}`
 - `reports {balance-sheet,portfolio-summary,capital-gains,journal-entries,balance-history}`
 
 ## Pagination
@@ -111,7 +111,6 @@ python3 -m kassiber reports balance-history --help
 ## Known gaps
 
 - Amount storage is still float BTC — migration to INTEGER msat is pending.
-- Quarantine resolution subcommands are not implemented yet.
 - No exchange-rate subsystem (`rates sync/latest/range/pairs`) yet.
 - No Phoenix / River Lightning CSV importers yet.
 - No `custom` wallet kind CSV mapping DSL yet.

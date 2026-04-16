@@ -985,6 +985,11 @@ _KIND_SUBCOMMAND_ATTRS = (
     "tags_command",
     "bip329_command",
     "journals_command",
+    "events_command",
+    "quarantine_command",
+    "quarantine_resolve_command",
+    "records_command",
+    "records_note_command",
     "reports_command",
 )
 
@@ -4178,10 +4183,147 @@ def list_quarantines(conn, workspace_ref, profile_ref):
                 "amount": row["amount"],
                 "fee": row["fee"],
                 "reason": row["reason"],
-                "detail": json.dumps(detail, sort_keys=True),
+                "detail": detail,
             }
         )
     return output
+
+
+def show_quarantine(conn, workspace_ref, profile_ref, tx_ref):
+    _, profile = resolve_scope(conn, workspace_ref, profile_ref)
+    tx = resolve_transaction(conn, profile["id"], tx_ref)
+    row = conn.execute(
+        """
+        SELECT q.transaction_id, q.reason, q.detail_json, q.created_at,
+               w.label AS wallet, t.external_id, t.occurred_at, t.asset,
+               t.amount, t.fee, t.fiat_rate, t.fiat_value, t.direction, t.excluded
+        FROM journal_quarantines q
+        JOIN transactions t ON t.id = q.transaction_id
+        JOIN wallets w ON w.id = t.wallet_id
+        WHERE q.profile_id = ? AND q.transaction_id = ?
+        """,
+        (profile["id"], tx["id"]),
+    ).fetchone()
+    if not row:
+        raise AppError(
+            f"Transaction '{tx_ref}' has no active quarantine",
+            code="not_found",
+            hint="Only transactions flagged during `journals process` appear here.",
+        )
+    return {
+        "transaction_id": row["transaction_id"],
+        "external_id": row["external_id"] or "",
+        "wallet": row["wallet"],
+        "occurred_at": row["occurred_at"],
+        "direction": row["direction"],
+        "asset": row["asset"],
+        "amount": row["amount"],
+        "fee": row["fee"],
+        "fiat_rate": row["fiat_rate"],
+        "fiat_value": row["fiat_value"],
+        "excluded": bool(row["excluded"]),
+        "reason": row["reason"],
+        "detail": json.loads(row["detail_json"] or "{}"),
+        "quarantined_at": row["created_at"],
+    }
+
+
+def _ensure_quarantined(conn, profile_id, transaction_id):
+    row = conn.execute(
+        "SELECT reason FROM journal_quarantines WHERE profile_id = ? AND transaction_id = ?",
+        (profile_id, transaction_id),
+    ).fetchone()
+    if not row:
+        raise AppError(
+            "Transaction is not quarantined",
+            code="not_found",
+            hint="Run `kassiber journals quarantined` to see active entries.",
+        )
+    return row["reason"]
+
+
+def resolve_quarantine_price_override(
+    conn, workspace_ref, profile_ref, tx_ref, fiat_rate=None, fiat_value=None
+):
+    if fiat_rate is None and fiat_value is None:
+        raise AppError(
+            "Provide at least one of --fiat-rate or --fiat-value",
+            code="validation",
+        )
+    _, profile = resolve_scope(conn, workspace_ref, profile_ref)
+    tx = resolve_transaction(conn, profile["id"], tx_ref)
+    _ensure_quarantined(conn, profile["id"], tx["id"])
+    new_rate = dec(fiat_rate) if fiat_rate is not None else None
+    new_value = dec(fiat_value) if fiat_value is not None else None
+    amount = abs(dec(tx["amount"]))
+    if new_rate is None and new_value is not None and amount > 0:
+        new_rate = new_value / amount
+    if new_value is None and new_rate is not None and amount > 0:
+        new_value = new_rate * amount
+    if new_rate is not None and new_rate <= 0:
+        raise AppError("--fiat-rate must be positive", code="validation")
+    if new_value is not None and new_value < 0:
+        raise AppError("--fiat-value must not be negative", code="validation")
+    conn.execute(
+        "UPDATE transactions SET fiat_rate = ?, fiat_value = ? WHERE id = ?",
+        (
+            float(new_rate) if new_rate is not None else None,
+            float(new_value) if new_value is not None else None,
+            tx["id"],
+        ),
+    )
+    conn.execute(
+        "DELETE FROM journal_quarantines WHERE profile_id = ? AND transaction_id = ?",
+        (profile["id"], tx["id"]),
+    )
+    invalidate_journals(conn, profile["id"])
+    conn.commit()
+    return {
+        "transaction_id": tx["id"],
+        "resolution": "price-override",
+        "fiat_rate": float(new_rate) if new_rate is not None else None,
+        "fiat_value": float(new_value) if new_value is not None else None,
+        "note": "Run `kassiber journals process` to regenerate entries.",
+    }
+
+
+def resolve_quarantine_exclude(conn, workspace_ref, profile_ref, tx_ref):
+    _, profile = resolve_scope(conn, workspace_ref, profile_ref)
+    tx = resolve_transaction(conn, profile["id"], tx_ref)
+    _ensure_quarantined(conn, profile["id"], tx["id"])
+    conn.execute(
+        "UPDATE transactions SET excluded = 1 WHERE id = ?",
+        (tx["id"],),
+    )
+    conn.execute(
+        "DELETE FROM journal_quarantines WHERE profile_id = ? AND transaction_id = ?",
+        (profile["id"], tx["id"]),
+    )
+    invalidate_journals(conn, profile["id"])
+    conn.commit()
+    return {
+        "transaction_id": tx["id"],
+        "resolution": "exclude",
+        "excluded": True,
+        "note": "Run `kassiber journals process` to regenerate entries.",
+    }
+
+
+def clear_quarantine(conn, workspace_ref, profile_ref, tx_ref):
+    _, profile = resolve_scope(conn, workspace_ref, profile_ref)
+    tx = resolve_transaction(conn, profile["id"], tx_ref)
+    _ensure_quarantined(conn, profile["id"], tx["id"])
+    conn.execute(
+        "DELETE FROM journal_quarantines WHERE profile_id = ? AND transaction_id = ?",
+        (profile["id"], tx["id"]),
+    )
+    invalidate_journals(conn, profile["id"])
+    conn.commit()
+    return {
+        "transaction_id": tx["id"],
+        "resolution": "clear",
+        "note": "Run `kassiber journals process` to re-evaluate.",
+    }
 
 
 def require_processed_journals(conn, profile):
@@ -5219,6 +5361,34 @@ def build_parser():
     events_get.add_argument("--profile")
     events_get.add_argument("--event-id", required=True)
 
+    journals_quarantine = journals_sub.add_parser("quarantine")
+    qsub = journals_quarantine.add_subparsers(dest="quarantine_command", required=True)
+
+    q_show = qsub.add_parser("show")
+    q_show.add_argument("--workspace")
+    q_show.add_argument("--profile")
+    q_show.add_argument("--transaction", required=True)
+
+    q_clear = qsub.add_parser("clear")
+    q_clear.add_argument("--workspace")
+    q_clear.add_argument("--profile")
+    q_clear.add_argument("--transaction", required=True)
+
+    q_resolve = qsub.add_parser("resolve")
+    qrsub = q_resolve.add_subparsers(dest="quarantine_resolve_command", required=True)
+
+    q_price = qrsub.add_parser("price-override")
+    q_price.add_argument("--workspace")
+    q_price.add_argument("--profile")
+    q_price.add_argument("--transaction", required=True)
+    q_price.add_argument("--fiat-rate")
+    q_price.add_argument("--fiat-value")
+
+    q_exclude = qrsub.add_parser("exclude")
+    q_exclude.add_argument("--workspace")
+    q_exclude.add_argument("--profile")
+    q_exclude.add_argument("--transaction", required=True)
+
     reports = sub.add_parser("reports")
     reports_sub = reports.add_subparsers(dest="reports_command", required=True)
     for report_name in ["balance-sheet", "portfolio-summary", "capital-gains", "journal-entries"]:
@@ -5572,6 +5742,31 @@ def dispatch(conn, args):
                 return emit(args, get_journal_event(conn, args.workspace, args.profile, args.event_id))
         if args.journals_command == "quarantined":
             return emit(args, list_quarantines(conn, args.workspace, args.profile))
+        if args.journals_command == "quarantine":
+            if args.quarantine_command == "show":
+                return emit(args, show_quarantine(conn, args.workspace, args.profile, args.transaction))
+            if args.quarantine_command == "clear":
+                return emit(args, clear_quarantine(conn, args.workspace, args.profile, args.transaction))
+            if args.quarantine_command == "resolve":
+                if args.quarantine_resolve_command == "price-override":
+                    return emit(
+                        args,
+                        resolve_quarantine_price_override(
+                            conn,
+                            args.workspace,
+                            args.profile,
+                            args.transaction,
+                            fiat_rate=args.fiat_rate,
+                            fiat_value=args.fiat_value,
+                        ),
+                    )
+                if args.quarantine_resolve_command == "exclude":
+                    return emit(
+                        args,
+                        resolve_quarantine_exclude(
+                            conn, args.workspace, args.profile, args.transaction
+                        ),
+                    )
     if args.command == "reports":
         if args.reports_command == "balance-sheet":
             return emit(args, report_balance_sheet(conn, args.workspace, args.profile))
