@@ -12,7 +12,7 @@ import sys
 import tempfile
 import uuid
 from collections import defaultdict
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal, InvalidOperation
 from importlib import import_module
 from pathlib import Path
@@ -4284,6 +4284,153 @@ def report_journal_entries(conn, workspace_ref, profile_ref):
     return list_journal_entries(conn, profile["workspace_id"], profile["id"], limit=1000)
 
 
+INTERVAL_CHOICES = ("hour", "day", "week", "month")
+
+
+def _parse_iso_datetime(value, field_name):
+    if value in (None, ""):
+        return None
+    raw = value.strip()
+    if raw.endswith("Z"):
+        raw = raw[:-1] + "+00:00"
+    try:
+        parsed = datetime.fromisoformat(raw)
+    except ValueError as exc:
+        raise AppError(
+            f"Invalid {field_name} timestamp '{value}'",
+            code="validation",
+            hint="Use RFC3339 UTC like 2025-01-01T00:00:00Z",
+        ) from exc
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
+
+
+def _floor_to_interval(dt, interval):
+    if interval == "hour":
+        return dt.replace(minute=0, second=0, microsecond=0)
+    if interval == "day":
+        return dt.replace(hour=0, minute=0, second=0, microsecond=0)
+    if interval == "week":
+        floored = dt.replace(hour=0, minute=0, second=0, microsecond=0)
+        return floored - timedelta(days=floored.weekday())
+    if interval == "month":
+        return dt.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    raise AppError(f"Unknown interval '{interval}'", code="validation")
+
+
+def _next_interval(dt, interval):
+    if interval == "hour":
+        return dt + timedelta(hours=1)
+    if interval == "day":
+        return dt + timedelta(days=1)
+    if interval == "week":
+        return dt + timedelta(days=7)
+    if interval == "month":
+        if dt.month == 12:
+            return dt.replace(year=dt.year + 1, month=1)
+        return dt.replace(month=dt.month + 1)
+    raise AppError(f"Unknown interval '{interval}'", code="validation")
+
+
+def _iso_z(dt):
+    return dt.isoformat().replace("+00:00", "Z")
+
+
+def report_balance_history(
+    conn,
+    workspace_ref,
+    profile_ref,
+    interval="day",
+    start=None,
+    end=None,
+    wallet_ref=None,
+    account_ref=None,
+    asset=None,
+):
+    if interval not in INTERVAL_CHOICES:
+        raise AppError(
+            f"Unsupported interval '{interval}'",
+            code="validation",
+            hint=f"Choose one of: {', '.join(INTERVAL_CHOICES)}",
+        )
+    _, profile = resolve_scope(conn, workspace_ref, profile_ref)
+    require_processed_journals(conn, profile)
+    start_dt = _parse_iso_datetime(start, "start")
+    end_dt = _parse_iso_datetime(end, "end")
+    if start_dt and end_dt and start_dt > end_dt:
+        raise AppError("--start must not be after --end", code="validation")
+
+    sql = """
+        SELECT je.occurred_at, je.entry_type, je.asset, je.quantity, je.fiat_value
+        FROM journal_entries je
+        LEFT JOIN accounts a ON a.id = je.account_id
+        WHERE je.profile_id = ?
+    """
+    params = [profile["id"]]
+    if wallet_ref:
+        wallet = resolve_wallet(conn, profile["id"], wallet_ref)
+        sql += " AND je.wallet_id = ?"
+        params.append(wallet["id"])
+    if account_ref:
+        sql += " AND (a.code = ? OR a.label = ? OR a.id = ?)"
+        params.extend([account_ref, account_ref, account_ref])
+    if asset:
+        sql += " AND je.asset = ?"
+        params.append(asset)
+    sql += " ORDER BY je.occurred_at ASC, je.created_at ASC, je.id ASC"
+    rows = conn.execute(sql, params).fetchall()
+
+    latest_rates = latest_rates_for_profile(conn, profile["id"])
+
+    if not rows and not (start_dt and end_dt):
+        return []
+
+    events = []
+    for row in rows:
+        row_dt = _parse_iso_datetime(row["occurred_at"], "occurred_at")
+        events.append((row_dt, row["asset"], dec(row["quantity"]), dec(row["fiat_value"])))
+
+    first_event_dt = events[0][0] if events else None
+    range_start = start_dt or first_event_dt or datetime.now(timezone.utc)
+    range_end = end_dt or datetime.now(timezone.utc)
+    if range_start > range_end:
+        return []
+
+    cumulative = defaultdict(lambda: Decimal("0"))
+    cumulative_fiat = defaultdict(lambda: Decimal("0"))
+    event_idx = 0
+    bucket_start = _floor_to_interval(range_start, interval)
+    end_cap = _floor_to_interval(range_end, interval)
+
+    results = []
+    while bucket_start <= end_cap:
+        bucket_end = _next_interval(bucket_start, interval)
+        while event_idx < len(events) and events[event_idx][0] < bucket_end:
+            _, ev_asset, ev_qty, ev_fiat = events[event_idx]
+            cumulative[ev_asset] += ev_qty
+            cumulative_fiat[ev_asset] += ev_fiat if ev_qty >= 0 else -ev_fiat
+            event_idx += 1
+        emitted_assets = set(cumulative.keys()) if asset is None else {asset}
+        for ev_asset in sorted(emitted_assets):
+            qty = cumulative.get(ev_asset, Decimal("0"))
+            if qty == 0 and asset is None:
+                continue
+            rate = latest_rates.get(ev_asset, Decimal("0"))
+            results.append(
+                {
+                    "period_start": _iso_z(bucket_start),
+                    "period_end": _iso_z(bucket_end - timedelta(seconds=1)),
+                    "asset": ev_asset,
+                    "quantity": float(qty),
+                    "cumulative_cost_basis": float(cumulative_fiat.get(ev_asset, Decimal("0"))),
+                    "market_value": float(qty * rate),
+                }
+            )
+        bucket_start = bucket_end
+    return results
+
+
 def show_status(conn, data_root):
     workspace_id = get_setting(conn, "context_workspace")
     profile_id = get_setting(conn, "context_profile")
@@ -5079,6 +5226,16 @@ def build_parser():
         report.add_argument("--workspace")
         report.add_argument("--profile")
 
+    balance_history = reports_sub.add_parser("balance-history")
+    balance_history.add_argument("--workspace")
+    balance_history.add_argument("--profile")
+    balance_history.add_argument("--interval", choices=list(INTERVAL_CHOICES), default="day")
+    balance_history.add_argument("--start")
+    balance_history.add_argument("--end")
+    balance_history.add_argument("--wallet")
+    balance_history.add_argument("--account")
+    balance_history.add_argument("--asset")
+
     return parser
 
 
@@ -5424,6 +5581,21 @@ def dispatch(conn, args):
             return emit(args, report_capital_gains(conn, args.workspace, args.profile))
         if args.reports_command == "journal-entries":
             return emit(args, report_journal_entries(conn, args.workspace, args.profile))
+        if args.reports_command == "balance-history":
+            return emit(
+                args,
+                report_balance_history(
+                    conn,
+                    args.workspace,
+                    args.profile,
+                    interval=args.interval,
+                    start=args.start,
+                    end=args.end,
+                    wallet_ref=args.wallet,
+                    account_ref=args.account,
+                    asset=args.asset,
+                ),
+            )
     raise AppError("Unknown command")
 
 
