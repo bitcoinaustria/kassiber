@@ -4988,7 +4988,7 @@ def _pdf_report_query_rows(conn, profile, wallet=None):
         tx_params,
     ).fetchall()
 
-    recent_transactions = conn.execute(
+    transactions = conn.execute(
         f"""
         SELECT
             t.occurred_at,
@@ -5001,8 +5001,7 @@ def _pdf_report_query_rows(conn, profile, wallet=None):
         FROM transactions t
         JOIN wallets w ON w.id = t.wallet_id
         WHERE {tx_where} AND t.excluded = 0
-        ORDER BY t.occurred_at DESC, t.created_at DESC, t.id DESC
-        LIMIT 15
+        ORDER BY t.occurred_at ASC, t.created_at ASC, t.id ASC
         """,
         tx_params,
     ).fetchall()
@@ -5015,11 +5014,11 @@ def _pdf_report_query_rows(conn, profile, wallet=None):
         "flow_by_asset": flow_by_asset,
         "flow_by_wallet": flow_by_wallet,
         "quarantine_rows": quarantine_rows,
-        "recent_transactions": recent_transactions,
+        "transactions": transactions,
     }
 
 
-def build_pdf_report_lines(conn, workspace_ref, profile_ref, wallet_ref=None, history_limit=12):
+def build_pdf_report_lines(conn, workspace_ref, profile_ref, wallet_ref=None, history_limit=None):
     workspace, profile = resolve_scope(conn, workspace_ref, profile_ref)
     wallet = resolve_wallet(conn, profile["id"], wallet_ref) if wallet_ref else None
     require_processed_journals(conn, profile)
@@ -5040,7 +5039,8 @@ def build_pdf_report_lines(conn, workspace_ref, profile_ref, wallet_ref=None, hi
         interval="month",
         wallet_ref=wallet["id"] if wallet else None,
     )
-    history_rows = history_rows[-max(1, int(history_limit)) :]
+    if history_limit is not None and int(history_limit) > 0:
+        history_rows = history_rows[-int(history_limit) :]
 
     query_rows = _pdf_report_query_rows(conn, profile, wallet=wallet)
     summary = query_rows["summary"]
@@ -5274,7 +5274,7 @@ def build_pdf_report_lines(conn, workspace_ref, profile_ref, wallet_ref=None, hi
                 _report_fiat(row["cost_basis"]),
                 _report_fiat(row["gain_loss"]),
             ]
-            for row in capital_rows[:40]
+            for row in capital_rows
         ]
         lines.extend(
             format_table(
@@ -5284,12 +5284,10 @@ def build_pdf_report_lines(conn, workspace_ref, profile_ref, wallet_ref=None, hi
                 align_right={3, 4, 5, 6},
             )
         )
-        if len(capital_rows) > 40:
-            lines.append(f"... truncated {len(capital_rows) - 40} additional capital gains rows")
     else:
         lines.append("No realized disposals in scope.")
 
-    lines.extend(["", "Recent Balance History", "----------------------"])
+    lines.extend(["", "Balance History", "---------------"])
     if history_rows:
         lines.extend(
             format_table(
@@ -5324,8 +5322,8 @@ def build_pdf_report_lines(conn, workspace_ref, profile_ref, wallet_ref=None, hi
     else:
         lines.append("No quarantined transactions.")
 
-    lines.extend(["", "Recent Transactions", "-------------------"])
-    if query_rows["recent_transactions"]:
+    lines.extend(["", "Transactions", "------------"])
+    if query_rows["transactions"]:
         lines.extend(
             format_table(
                 ["Date", "Wallet", "Dir", "Asset", "Amount", "Fee", "Description"],
@@ -5339,19 +5337,19 @@ def build_pdf_report_lines(conn, workspace_ref, profile_ref, wallet_ref=None, hi
                         _report_btc(msat_to_btc(row["fee"] or 0)),
                         row["description"],
                     ]
-                    for row in query_rows["recent_transactions"]
+                    for row in query_rows["transactions"]
                 ],
                 [10, 14, 3, 6, 12, 12, 28],
                 align_right={4, 5},
             )
         )
     else:
-        lines.append("No recent transactions in scope.")
+        lines.append("No transactions in scope.")
 
     return title, lines
 
 
-def export_pdf_report(conn, workspace_ref, profile_ref, file_path, wallet_ref=None, history_limit=12):
+def export_pdf_report(conn, workspace_ref, profile_ref, file_path, wallet_ref=None, history_limit=None):
     title, lines = build_pdf_report_lines(
         conn,
         workspace_ref,
@@ -5958,7 +5956,7 @@ def build_parser():
     export_pdf.add_argument("--profile")
     export_pdf.add_argument("--wallet")
     export_pdf.add_argument("--file", required=True)
-    export_pdf.add_argument("--history-limit", type=int, default=12)
+    export_pdf.add_argument("--history-limit", type=int, default=0)
 
     rates = sub.add_parser("rates")
     rates_sub = rates.add_subparsers(dest="rates_command", required=True)
