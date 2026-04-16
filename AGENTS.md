@@ -3,12 +3,21 @@
 ## Project shape
 
 - Kassiber is a local-first Bitcoin accounting CLI.
-- The main entrypoint is [kassiber/app.py](kassiber/app.py).
-- Tax policy definitions live in [kassiber/tax_policy.py](kassiber/tax_policy.py).
-- Descriptor handling lives in [kassiber/wallet_descriptors.py](kassiber/wallet_descriptors.py).
+- The CLI entrypoint and the not-yet-extracted command implementations (importers, rates, wallets, sync adapters, journals, metadata, reports, argparse tree) live in [kassiber/app.py](kassiber/app.py).
+- Supporting modules (bottom-up — no back-edges into `app.py`):
+  - [kassiber/errors.py](kassiber/errors.py) — `AppError` typed exception carrying `code`, `hint`, `details`, `retryable`.
+  - [kassiber/time_utils.py](kassiber/time_utils.py) — timestamp parsing + RFC3339 formatting and `UNKNOWN_OCCURRED_AT`.
+  - [kassiber/msat.py](kassiber/msat.py) — `SATS_PER_BTC`, `MSAT_PER_BTC`, `dec`, `btc_to_msat`, `msat_to_btc`.
+  - [kassiber/util.py](kassiber/util.py) — tiny type-coercion helpers (`str_or_none`, `parse_bool`, `parse_int`, chain/network normalizers).
+  - [kassiber/envelope.py](kassiber/envelope.py) — JSON envelope contract, `emit`, table/plain/csv output writers, and the `_KIND_SUBCOMMAND_ATTRS` kind map.
+  - [kassiber/db.py](kassiber/db.py) — SQLite schema, `open_db`, data-root resolution, settings helpers, and msat column migrations.
+  - [kassiber/backends.py](kassiber/backends.py) — `.env` seed + DB overlay for named sync backends, plus CRUD helpers.
+  - [kassiber/tax_policy.py](kassiber/tax_policy.py) — profile tax-policy layer.
+  - [kassiber/wallet_descriptors.py](kassiber/wallet_descriptors.py) — descriptor normalization, chain/network validation.
 - Packaging is defined in [pyproject.toml](pyproject.toml).
 - User-facing behavior is documented in [README.md](README.md).
 - Third-party dependency and license notes are tracked in [THIRD_PARTY_LICENSES.md](THIRD_PARTY_LICENSES.md).
+- In-flight and deferred work is tracked in [TODO.md](TODO.md) — the remaining `app.py` extraction steps live there.
 
 Kassiber is currently in **dev mode**: renaming commands, breaking flags, and reshaping subcommand trees is acceptable as long as docs in the tree are updated in the same change. There is no deprecation-alias layer.
 
@@ -80,16 +89,18 @@ List endpoints with `--limit` also accept `--cursor`. The cursor is an opaque ba
 
 ## Verification
 
+All commands below assume project dependencies are installed — either via `uv sync` (then prefix with `uv run`) or via `pip install -e .` inside an activated venv (then use `python3` directly). The examples use `uv run python` because it works without pre-activation; swap in `python3` when working inside an activated venv.
+
 - Compile check:
 
 ```bash
-PYTHONPYCACHEPREFIX=/tmp/kassiber-pyc python3 -m py_compile kassiber/*.py
+PYTHONPYCACHEPREFIX=/tmp/kassiber-pyc uv run python -m py_compile kassiber/*.py
 ```
 
 - End-to-end CLI smoke test (stdlib `unittest`, no pytest dep, ~1s):
 
 ```bash
-python3 -m unittest tests.test_cli_smoke -v
+uv run python -m unittest tests.test_cli_smoke -v
 ```
 
   This is the behavior pin. If you refactor internals (e.g. split `kassiber/app.py` into modules) the suite MUST still pass unchanged — it asserts envelope `kind` + `schema_version`, msat fields, Phoenix import counts, balance-sheet totals, and error-envelope shape. Prefer extending this suite to adding new test files.
@@ -97,15 +108,15 @@ python3 -m unittest tests.test_cli_smoke -v
 - CLI smoke checks:
 
 ```bash
-python3 -m kassiber --help
-python3 -m kassiber --machine status
-python3 -m kassiber backends list
-python3 -m kassiber wallets kinds
-python3 -m kassiber profiles create --help
-python3 -m kassiber metadata records --help
-python3 -m kassiber journals events --help
-python3 -m kassiber reports balance-history --help
-python3 -m kassiber rates --help
+uv run python -m kassiber --help
+uv run python -m kassiber --machine status
+uv run python -m kassiber backends list
+uv run python -m kassiber wallets kinds
+uv run python -m kassiber profiles create --help
+uv run python -m kassiber metadata records --help
+uv run python -m kassiber journals events --help
+uv run python -m kassiber reports balance-history --help
+uv run python -m kassiber rates --help
 ```
 
 - Safe local workflow:

@@ -529,9 +529,17 @@ Wallet-level `Altbestand` stays separate from the profile policy because it is p
 
 ## Architecture notes
 
-- The CLI entrypoint and journal/report orchestration live in [kassiber/app.py](kassiber/app.py).
-- The profile tax-policy layer lives in [kassiber/tax_policy.py](kassiber/tax_policy.py).
-- Descriptor handling lives in [kassiber/wallet_descriptors.py](kassiber/wallet_descriptors.py).
+- The CLI entrypoint and the command implementations (importers, rates, wallets, sync adapters, journals, metadata, reports, argparse tree) live in [kassiber/app.py](kassiber/app.py). An incremental bottom-up extraction is in progress.
+- Supporting modules currently extracted from `app.py`:
+  - [kassiber/errors.py](kassiber/errors.py) — `AppError` typed exception.
+  - [kassiber/time_utils.py](kassiber/time_utils.py) — timestamp parsing + RFC3339 formatting.
+  - [kassiber/msat.py](kassiber/msat.py) — BTC ↔ msat conversion helpers.
+  - [kassiber/util.py](kassiber/util.py) — tiny type-coercion helpers.
+  - [kassiber/envelope.py](kassiber/envelope.py) — JSON envelope contract and output writers.
+  - [kassiber/db.py](kassiber/db.py) — SQLite schema, data-root resolution, settings helpers.
+  - [kassiber/backends.py](kassiber/backends.py) — `.env` seed + DB overlay for named sync backends.
+  - [kassiber/tax_policy.py](kassiber/tax_policy.py) — profile tax-policy layer.
+  - [kassiber/wallet_descriptors.py](kassiber/wallet_descriptors.py) — descriptor handling.
 - SQLite remains the system of record. BTC-denominated amounts (`transactions.amount`, `transactions.fee`, `journal_entries.quantity`) are stored as INTEGER msat — the Lightning convention. Machine envelopes expose both the human-friendly BTC decimal and an exact `_msat` integer for every amount.
 - RP2 is used as the wallet-scoped lot engine.
 - Wallet-level `Altbestand` remains manual provenance metadata; it is not part of the profile country policy.
