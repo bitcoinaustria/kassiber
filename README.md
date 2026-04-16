@@ -10,6 +10,7 @@ It is designed around:
 - multiple profiles per workspace
 - multiple accounts per profile
 - multiple wallets per profile
+- explicit profile tax policy defaults
 - `.env`-driven named backends
 - explicit journal processing before reporting
 - capital gains and balance-sheet style reporting
@@ -19,10 +20,20 @@ It is designed around:
 - local SQLite-backed storage
 - `init`, `status`, and `context` commands
 - `workspaces`, `profiles`, `accounts`, and `wallets`
+- explicit profile tax-policy defaults via `tax_country` and `tax_long_term_days`
 - file imports from:
   - generic JSON / CSV transaction files
   - BTCPay CSV / JSON wallet exports
-- live address-based sync from:
+- live sync from named backends for:
+  - address wallets on Bitcoin
+  - descriptor-backed Bitcoin wallets on `esplora` and `electrum`
+  - descriptor-backed Liquid wallets on `esplora`
+- descriptor derivation via `wallets derive` for receive/change address and script export
+- full Liquid watch-only normalization for descriptor wallets:
+  - confidential receive/change detection
+  - explicit fee extraction
+  - local unblinding of wallet-owned outputs
+- backend adapters for:
   - `esplora`
   - `electrum`
   - `bitcoinrpc`
@@ -31,7 +42,7 @@ It is designed around:
 - BTCPay label/comment bridging into Kassiber tags and notes
 - transaction listing
 - metadata notes, tags, include/exclude
-- journal processing with FIFO/LIFO cost basis
+- journal processing with RP2-backed FIFO/LIFO/HIFO/LOFO cost basis
 - quarantine of outbound transactions with insufficient lots
 - reports:
   - balance sheet
@@ -39,11 +50,58 @@ It is designed around:
   - capital gains
   - journal entries
 
-For the current MVP, cost basis is tracked per wallet, which keeps multi-wallet balances and gains isolated and predictable.
+For the current MVP, cost basis is tracked per wallet, which keeps multi-wallet balances and gains isolated and predictable. Kassiber now uses RP2 for wallet-level lot matching and cost-basis computation, while keeping SQLite as the system of record.
+
+Wallets can also be marked manually as `Altbestand`. Disposals from an Altbestand wallet are treated as tax-free, while Neubestand wallets use normal tax treatment.
+
+## Requirements
+
+- Python `>=3.10`
+- `embit>=0.8.0`
+- `rp2>=1.7.2`
+
+The Python floor is set by the current RP2 and `embit` dependencies. RP2 is not an optional add-on in the current architecture: Kassiber uses it as the tax engine for journal processing and tax-aware reports.
+
+## Installation
+
+The recommended install path is a virtual environment:
+
+```bash
+cd /Users/dev/Github/kassiber
+python3 -m venv .venv
+source .venv/bin/activate
+python3 -m pip install --upgrade pip
+python3 -m pip install -e .
+```
+
+This installs Kassiber together with RP2, `embit`, and the rest of the supported runtime dependencies.
+
+If you are packaging Kassiber for broader internal use, treat RP2 as part of Kassiber's supported runtime stack rather than as an optional plugin users must discover and install separately.
+
+## Architecture notes
+
+- The CLI entrypoint and journal/report orchestration live in `kassiber/app.py`.
+- The profile tax-policy layer lives in `kassiber/tax_policy.py`.
+- SQLite remains the system of record.
+- RP2 is used as the wallet-scoped lot engine.
+- Wallet-level `Altbestand` remains manual provenance metadata and is not part of the profile country policy.
+
+## Dependency policy
+
+Kassiber is intended to become a real accounting tool, so core accounting and tax dependencies should be included intentionally when they are part of the supported runtime behavior.
+
+- `embit` is a required dependency because descriptor derivation and Liquid wallet support depend on it.
+- RP2 is a required dependency because it is the current tax engine.
+- Future accounting-critical dependencies should be added openly rather than hidden behind optional extras if Kassiber cannot perform its core workflow without them.
+- Third-party runtime dependencies and their licenses should be tracked in the repository so packaging and internal distribution stay auditable.
+
+Current third-party license notes are tracked in [THIRD_PARTY_LICENSES.md](/Users/dev/Github/kassiber/THIRD_PARTY_LICENSES.md).
 
 ## What is not implemented yet
 
-- descriptor/xpub derivation-backed live sync
+- xpub-native live sync without an explicit descriptor
+- descriptor-backed `bitcoinrpc` live sync
+- self-hosted Liquid `elements_rpc` backend support
 - BTCPay Greenfield API integration
 - Lightning node adapters
 - remote server mode
@@ -57,7 +115,10 @@ For the current MVP, cost basis is tracked per wallet, which keeps multi-wallet 
 cd /Users/dev/Github/kassiber
 python3 -m kassiber init
 python3 -m kassiber workspaces create personal
-python3 -m kassiber profiles create main
+python3 -m kassiber profiles create main \
+  --tax-country generic \
+  --tax-long-term-days 365 \
+  --gains-algorithm FIFO
 python3 -m kassiber wallets create \
   --label coldcard \
   --kind descriptor \
@@ -74,7 +135,9 @@ Kassiber loads named sync backends from `.env`. If you do nothing, it already in
 
 - `mempool` -> `esplora` -> `https://mempool.space/api`
 
-Address-based wallets can use the default backend with no extra setup:
+That built-in default is Bitcoin-only. Liquid wallets should always point at an explicitly named backend.
+
+Address-based Bitcoin wallets can use the default backend with no extra setup:
 
 ```bash
 python3 -m kassiber wallets create \
@@ -83,6 +146,19 @@ python3 -m kassiber wallets create \
   --address bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq
 
 python3 -m kassiber wallets sync --wallet donations
+```
+
+Mark a wallet manually as tax-free Altbestand:
+
+```bash
+python3 -m kassiber wallets set-altbestand --wallet donations
+python3 -m kassiber wallets list
+```
+
+Switch it back to normal Neubestand treatment:
+
+```bash
+python3 -m kassiber wallets set-neubestand --wallet donations
 ```
 
 Inspect loaded backends with:
@@ -109,6 +185,10 @@ Legacy `SATBOOKS_*` env vars are still accepted for compatibility during the ren
 - `KIND`
 - `URL`
 - `TIMEOUT`
+- `CHAIN`
+  Optional. Helps catch Bitcoin/Liquid backend mixups early.
+- `NETWORK`
+  Optional. Helps catch mainnet/testnet/regtest mismatches early.
 
 ### Electrum backend fields
 
@@ -133,22 +213,79 @@ Kassiber uses Electrum's scripthash API and falls back to raw transaction decodi
 
 For `bitcoinrpc`, Kassiber creates or loads a dedicated watch-only Bitcoin Core wallet per Kassiber wallet by default. That keeps multi-wallet sync isolated instead of mixing unrelated addresses together in one Core wallet.
 
+## Descriptor wallets
+
+Descriptor-backed wallets derive receive and change scripts locally, then sync through named backends without hardcoding a specific wallet provider.
+
+Bitcoin example:
+
+```bash
+python3 -m kassiber wallets create \
+  --label vault \
+  --kind descriptor \
+  --backend mempool \
+  --descriptor 'wpkh([fingerprint/84h/0h/0h]xpub.../0/*)' \
+  --change-descriptor 'wpkh([fingerprint/84h/0h/0h]xpub.../1/*)' \
+  --gap-limit 20
+
+python3 -m kassiber wallets derive --wallet vault --count 5
+python3 -m kassiber wallets sync --wallet vault
+```
+
+Liquid example:
+
+```bash
+python3 -m kassiber wallets create \
+  --label event-liquid \
+  --kind descriptor \
+  --backend liquid \
+  --chain liquid \
+  --network liquidv1 \
+  --descriptor 'ct(slip77(...),elwpkh(.../0/*))' \
+  --change-descriptor 'ct(slip77(...),elwpkh(.../1/*))' \
+  --gap-limit 20
+```
+
+For Liquid:
+
+- Kassiber does not ship a built-in public Liquid backend default.
+- Point the wallet at an explicitly named backend in `.env`.
+- Private blinding keys are required for full sync, balances, and fee accounting.
+- Kassiber accepts modern `ct(...)` / `elwpkh(...)` Liquid descriptor syntax and normalizes it internally for the current descriptor library.
+
+`wallets derive` is useful for:
+
+- matching exports against your wallet scripts
+- checking receive/change branches locally
+- feeding custom dashboards or audit tooling
+
 ### Example `.env`
 
 ```dotenv
 KASSIBER_DEFAULT_BACKEND=mempool
 
 KASSIBER_BACKEND_MEMPOOL_KIND=esplora
+KASSIBER_BACKEND_MEMPOOL_CHAIN=bitcoin
+KASSIBER_BACKEND_MEMPOOL_NETWORK=main
 KASSIBER_BACKEND_MEMPOOL_URL=https://mempool.space/api
 
 KASSIBER_BACKEND_BLOCKSTREAM_KIND=electrum
+KASSIBER_BACKEND_BLOCKSTREAM_CHAIN=bitcoin
+KASSIBER_BACKEND_BLOCKSTREAM_NETWORK=main
 KASSIBER_BACKEND_BLOCKSTREAM_URL=ssl://electrum.blockstream.info:50002
 KASSIBER_BACKEND_BLOCKSTREAM_TIMEOUT=30
 
 KASSIBER_BACKEND_CORE_KIND=bitcoinrpc
+KASSIBER_BACKEND_CORE_CHAIN=bitcoin
+KASSIBER_BACKEND_CORE_NETWORK=main
 KASSIBER_BACKEND_CORE_URL=http://127.0.0.1:8332
 KASSIBER_BACKEND_CORE_COOKIEFILE=~/.bitcoin/.cookie
 KASSIBER_BACKEND_CORE_WALLETPREFIX=kassiber
+
+KASSIBER_BACKEND_LIQUID_KIND=esplora
+KASSIBER_BACKEND_LIQUID_CHAIN=liquid
+KASSIBER_BACKEND_LIQUID_NETWORK=liquidv1
+KASSIBER_BACKEND_LIQUID_URL=https://your-liquid-esplora.example/api
 ```
 
 Wallets can point at a named backend with `--backend <name>`. If omitted, the default backend is used.
@@ -178,6 +315,7 @@ You can also use BTCPay files as a wallet sync source:
 python3 -m kassiber wallets create \
   --label btcpay \
   --kind address \
+  --altbestand \
   --address bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq \
   --source-file /path/to/btcpay-transactions.csv \
   --source-format btcpay_csv
@@ -229,6 +367,26 @@ Generic wallet imports accept JSON arrays or CSV files with these fields:
 
 `amount` should be positive. If you provide a negative amount, Kassiber will normalize it and infer direction if possible.
 
+RP2 needs fiat pricing to compute tax lots. If imported or synced transactions do not include `fiat_rate` / `fiat_value`, Kassiber will quarantine them during `journals process` instead of silently assigning zero-basis tax results.
+
+## Tax policy
+
+Profiles carry their own tax policy defaults. Today Kassiber exposes the RP2-backed `generic` policy and stores it explicitly on the profile, so adding a future country-specific RP2 policy is a small policy-layer change instead of another app-wide refactor.
+
+```bash
+python3 -m kassiber profiles create austrian \
+  --fiat-currency EUR \
+  --tax-country generic \
+  --tax-long-term-days 365 \
+  --gains-algorithm FIFO
+
+python3 -m kassiber profiles list
+```
+
+Wallet-level `Altbestand` stays separate from the profile policy because it is provenance metadata about specific holdings, not a country-wide rule.
+
+Existing databases are upgraded lazily on open: if an older `profiles` table is missing `tax_country` or `tax_long_term_days`, Kassiber adds them automatically with the current defaults.
+
 ## Example commands
 
 ```bash
@@ -236,6 +394,7 @@ python3 -m kassiber backends list
 python3 -m kassiber accounts create --code ops --label "Ops Treasury" --type asset
 python3 -m kassiber wallets create --label phoenix --kind phoenix --account ops --source-file examples/sample-wallet.json --source-format json
 python3 -m kassiber wallets create --label donations --kind address --backend mempool --address bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq
+python3 -m kassiber wallets set-altbestand --wallet donations
 python3 -m kassiber wallets sync --wallet donations
 python3 -m kassiber transactions list
 python3 -m kassiber metadata tags create --code tax-lot --label "Tax Lot"
