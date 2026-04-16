@@ -8,16 +8,39 @@ import socket
 import sqlite3
 import ssl
 import sys
+import tempfile
 import uuid
 from collections import defaultdict
 from datetime import datetime, timezone
 from decimal import Decimal, InvalidOperation
+from importlib import import_module
 from pathlib import Path
 from urllib import error as urlerror
 from urllib import parse as urlparse
 from urllib import request as urlrequest
 
 from . import __version__
+from .tax_policy import (
+    DEFAULT_LONG_TERM_DAYS,
+    DEFAULT_TAX_COUNTRY,
+    build_tax_policy,
+    supported_tax_countries,
+)
+from .wallet_descriptors import (
+    DEFAULT_DESCRIPTOR_GAP_LIMIT,
+    branch_limits,
+    decode_liquid_transaction,
+    default_policy_asset_id,
+    derive_descriptor_target,
+    derive_descriptor_targets,
+    liquid_asset_code,
+    liquid_blinding_secret,
+    liquid_plan_can_unblind,
+    load_descriptor_plan,
+    normalize_asset_code,
+    normalize_chain,
+    normalize_network,
+)
 
 
 APP_NAME = "kassiber"
@@ -30,6 +53,7 @@ DEFAULT_ENV_FILE = ".env"
 SATS_PER_BTC = Decimal("100000000")
 UNKNOWN_OCCURRED_AT = "1970-01-01T00:00:00Z"
 ACCOUNT_TYPES = {"asset", "liability", "equity", "income", "expense"}
+RP2_ACCOUNTING_METHODS = ("FIFO", "LIFO", "HIFO", "LOFO")
 WALLET_KINDS = [
     "descriptor",
     "xpub",
@@ -47,6 +71,8 @@ DEFAULT_BACKENDS = {
     "mempool": {
         "name": "mempool",
         "kind": "esplora",
+        "chain": "bitcoin",
+        "network": "main",
         "url": "https://mempool.space/api",
         "source": "built-in default",
     }
@@ -75,6 +101,8 @@ CREATE TABLE IF NOT EXISTS profiles (
     workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
     label TEXT NOT NULL,
     fiat_currency TEXT NOT NULL DEFAULT 'USD',
+    tax_country TEXT NOT NULL DEFAULT 'generic',
+    tax_long_term_days INTEGER NOT NULL DEFAULT 365,
     gains_algorithm TEXT NOT NULL DEFAULT 'FIFO',
     last_processed_at TEXT,
     last_processed_tx_count INTEGER NOT NULL DEFAULT 0,
@@ -261,7 +289,9 @@ def load_runtime_config(env_file):
 
 
 def dec(value, default="0"):
-    if value is None or value == "":
+    if value is None:
+        return Decimal(default)
+    if isinstance(value, str) and value == "":
         return Decimal(default)
     try:
         return Decimal(str(value))
@@ -306,6 +336,20 @@ def parse_int(value, default):
 
 def backend_timeout(backend, default=30):
     return parse_int(backend_value(backend, "timeout"), default)
+
+
+def normalize_chain_value(value):
+    try:
+        return normalize_chain(value)
+    except ValueError as exc:
+        raise AppError(str(exc)) from exc
+
+
+def normalize_network_value(chain, value):
+    try:
+        return normalize_network(chain, value)
+    except ValueError as exc:
+        raise AppError(str(exc)) from exc
 
 
 def now_iso():
@@ -418,6 +462,24 @@ def http_get_json(url, timeout=30):
     try:
         with urlrequest.urlopen(request, timeout=timeout) as response:
             return json.loads(response.read().decode("utf-8"))
+    except urlerror.HTTPError as exc:
+        detail = exc.read().decode("utf-8", errors="replace")
+        raise AppError(f"HTTP {exc.code} from backend for {url}: {detail[:200]}") from exc
+    except urlerror.URLError as exc:
+        raise AppError(f"Failed to reach backend {url}: {exc.reason}") from exc
+
+
+def http_get_text(url, timeout=30, accept="text/plain"):
+    request = urlrequest.Request(
+        url,
+        headers={
+            "Accept": accept,
+            "User-Agent": f"{APP_NAME}/{__version__}",
+        },
+    )
+    try:
+        with urlrequest.urlopen(request, timeout=timeout) as response:
+            return response.read().decode("utf-8")
     except urlerror.HTTPError as exc:
         detail = exc.read().decode("utf-8", errors="replace")
         raise AppError(f"HTTP {exc.code} from backend for {url}: {detail[:200]}") from exc
@@ -684,8 +746,195 @@ def open_db(data_root):
     conn = sqlite3.connect(resolve_database_path(root))
     conn.row_factory = sqlite3.Row
     conn.executescript(SCHEMA)
+    ensure_schema_compat(conn)
     conn.execute("PRAGMA foreign_keys = ON")
     return conn
+
+
+_RP2_MODULES = None
+
+
+def ensure_column(conn, table_name, column_name, definition):
+    columns = {row["name"] for row in conn.execute(f"PRAGMA table_info({table_name})").fetchall()}
+    if column_name in columns:
+        return
+    conn.execute(f"ALTER TABLE {table_name} ADD COLUMN {column_name} {definition}")
+    conn.commit()
+
+
+def ensure_schema_compat(conn):
+    ensure_column(conn, "profiles", "tax_country", f"TEXT NOT NULL DEFAULT '{DEFAULT_TAX_COUNTRY}'")
+    ensure_column(conn, "profiles", "tax_long_term_days", f"INTEGER NOT NULL DEFAULT {DEFAULT_LONG_TERM_DAYS}")
+
+
+def get_rp2_modules():
+    global _RP2_MODULES
+    if _RP2_MODULES is not None:
+        return _RP2_MODULES
+    try:
+        _RP2_MODULES = {
+            "AVLTree": import_module("prezzemolo.avl_tree").AVLTree,
+            "AbstractCountry": import_module("rp2.abstract_country").AbstractCountry,
+            "AccountingEngine": import_module("rp2.accounting_engine").AccountingEngine,
+            "Configuration": import_module("rp2.configuration").Configuration,
+            "InputData": import_module("rp2.input_data").InputData,
+            "InTransaction": import_module("rp2.in_transaction").InTransaction,
+            "OutTransaction": import_module("rp2.out_transaction").OutTransaction,
+            "TransactionSet": import_module("rp2.transaction_set").TransactionSet,
+            "compute_tax": import_module("rp2.tax_engine").compute_tax,
+            "RP2Decimal": import_module("rp2.rp2_decimal").RP2Decimal,
+        }
+    except ModuleNotFoundError as exc:
+        raise AppError(
+            "RP2 integration requires the 'rp2' package. Reinstall Kassiber in a Python >= 3.10 environment."
+        ) from exc
+    return _RP2_MODULES
+
+
+def rp2_decimal(value):
+    modules = get_rp2_modules()
+    return modules["RP2Decimal"](str(value))
+
+
+def make_rp2_country(profile):
+    AbstractCountry = get_rp2_modules()["AbstractCountry"]
+    try:
+        policy = build_tax_policy(profile)
+    except ValueError as exc:
+        raise AppError(str(exc)) from exc
+    currency_code = policy.fiat_currency
+
+    class KassiberCountry(AbstractCountry):
+        def __init__(self):
+            super().__init__(policy.tax_country, currency_code)
+
+        def get_long_term_capital_gain_period(self):
+            return policy.long_term_days
+
+        def get_default_accounting_method(self):
+            return policy.default_accounting_method
+
+        def get_accounting_methods(self):
+            return set(policy.accounting_methods)
+
+        def get_report_generators(self):
+            return set(policy.report_generators)
+
+        def get_default_generation_language(self):
+            return policy.generation_language
+
+    return KassiberCountry()
+
+
+def make_rp2_configuration(profile, wallet_labels, assets):
+    Configuration = get_rp2_modules()["Configuration"]
+    if not wallet_labels:
+        raise AppError("RP2 configuration requires at least one wallet")
+    if not assets:
+        raise AppError("RP2 configuration requires at least one asset")
+    content = "\n".join(
+        [
+            "[general]",
+            f"assets = {', '.join(sorted(assets))}",
+            f"exchanges = {', '.join(sorted(wallet_labels))}",
+            f"holders = {profile['label']}",
+            "",
+            "[in_header]",
+            "timestamp = 0",
+            "asset = 1",
+            "exchange = 2",
+            "holder = 3",
+            "transaction_type = 4",
+            "spot_price = 5",
+            "crypto_in = 6",
+            "crypto_fee = 7",
+            "fiat_in_no_fee = 8",
+            "fiat_in_with_fee = 9",
+            "fiat_fee = 10",
+            "unique_id = 11",
+            "notes = 12",
+            "",
+            "[out_header]",
+            "timestamp = 0",
+            "asset = 1",
+            "exchange = 2",
+            "holder = 3",
+            "transaction_type = 4",
+            "spot_price = 5",
+            "crypto_out_no_fee = 6",
+            "crypto_fee = 7",
+            "crypto_out_with_fee = 8",
+            "fiat_out_no_fee = 9",
+            "fiat_fee = 10",
+            "unique_id = 11",
+            "notes = 12",
+            "",
+            "[intra_header]",
+            "timestamp = 0",
+            "asset = 1",
+            "from_exchange = 2",
+            "from_holder = 3",
+            "to_exchange = 4",
+            "to_holder = 5",
+            "spot_price = 6",
+            "crypto_sent = 7",
+            "crypto_received = 8",
+            "unique_id = 9",
+            "notes = 10",
+            "",
+        ]
+    )
+    handle = tempfile.NamedTemporaryFile("w", encoding="utf-8", suffix=".ini", delete=False)
+    try:
+        handle.write(content)
+        handle.flush()
+    finally:
+        handle.close()
+    return Configuration(handle.name, make_rp2_country(profile)), handle.name
+
+
+def build_rp2_accounting_engine(profile):
+    modules = get_rp2_modules()
+    method_name = str(profile["gains_algorithm"]).strip().lower()
+    try:
+        policy = build_tax_policy(profile)
+    except ValueError as exc:
+        raise AppError(str(exc)) from exc
+    if method_name not in set(policy.accounting_methods):
+        raise AppError(f"Unsupported RP2 accounting method '{profile['gains_algorithm']}'")
+    try:
+        method_module = import_module(f"rp2.plugin.accounting_method.{method_name}")
+    except ModuleNotFoundError as exc:
+        raise AppError(f"RP2 accounting method '{profile['gains_algorithm']}' is not available") from exc
+    years_to_methods = modules["AVLTree"]()
+    years_to_methods.insert_node(1970, method_module.AccountingMethod())
+    return modules["AccountingEngine"](years_2_methods=years_to_methods)
+
+
+def rp2_spot_price(row, quantity):
+    if row["fiat_rate"] is not None:
+        rate = dec(row["fiat_rate"])
+        if rate > 0:
+            return rate
+    if row["fiat_value"] is not None and quantity > 0:
+        value = dec(row["fiat_value"])
+        if value > 0:
+            return value / quantity
+    return None
+
+
+def rp2_quarantine(profile, row, reason, detail):
+    return {
+        "transaction_id": row["id"],
+        "workspace_id": profile["workspace_id"],
+        "profile_id": profile["id"],
+        "reason": reason,
+        "detail_json": json.dumps(detail, sort_keys=True),
+    }
+
+
+def wallet_is_altbestand(wallet):
+    return parse_bool(wallet.get("altbestand"), default=False)
 
 
 def json_ready(value):
@@ -911,16 +1160,37 @@ def ensure_default_accounts(conn, workspace_id, profile_id):
         )
 
 
-def create_profile(conn, workspace_ref, label, fiat_currency, gains_algorithm):
+def create_profile(conn, workspace_ref, label, fiat_currency, gains_algorithm, tax_country, tax_long_term_days):
     workspace = resolve_workspace(conn, workspace_ref)
+    if tax_long_term_days < 0:
+        raise AppError("Tax long-term days cannot be negative")
+    try:
+        policy = build_tax_policy(
+            {
+                "fiat_currency": fiat_currency,
+                "tax_country": tax_country,
+                "tax_long_term_days": tax_long_term_days,
+            }
+        )
+    except ValueError as exc:
+        raise AppError(str(exc)) from exc
     profile_id = str(uuid.uuid4())
     conn.execute(
         """
         INSERT INTO profiles(
-            id, workspace_id, label, fiat_currency, gains_algorithm, created_at
-        ) VALUES(?, ?, ?, ?, ?, ?)
+            id, workspace_id, label, fiat_currency, tax_country, tax_long_term_days, gains_algorithm, created_at
+        ) VALUES(?, ?, ?, ?, ?, ?, ?, ?)
         """,
-        (profile_id, workspace["id"], label, fiat_currency.upper(), gains_algorithm.upper(), now_iso()),
+        (
+            profile_id,
+            workspace["id"],
+            label,
+            policy.fiat_currency,
+            policy.tax_country,
+            policy.long_term_days,
+            gains_algorithm.upper(),
+            now_iso(),
+        ),
     )
     ensure_default_accounts(conn, workspace["id"], profile_id)
     set_setting(conn, "context_workspace", workspace["id"])
@@ -934,7 +1204,7 @@ def list_profiles(conn, workspace_ref=None):
     current = get_setting(conn, "context_profile")
     rows = conn.execute(
         """
-        SELECT id, label, fiat_currency, gains_algorithm, created_at
+        SELECT id, label, fiat_currency, tax_country, tax_long_term_days, gains_algorithm, created_at
         FROM profiles
         WHERE workspace_id = ?
         ORDER BY created_at ASC
@@ -946,6 +1216,8 @@ def list_profiles(conn, workspace_ref=None):
             "id": row["id"],
             "label": row["label"],
             "fiat_currency": row["fiat_currency"],
+            "tax_country": row["tax_country"],
+            "tax_long_term_days": row["tax_long_term_days"],
             "gains_algorithm": row["gains_algorithm"],
             "current": "yes" if row["id"] == current else "",
             "created_at": row["created_at"],
@@ -966,7 +1238,16 @@ def create_account(conn, workspace_ref, profile_ref, code, label, account_type, 
         INSERT INTO accounts(id, workspace_id, profile_id, code, label, account_type, asset, created_at)
         VALUES(?, ?, ?, ?, ?, ?, ?, ?)
         """,
-        (account_id, workspace["id"], profile["id"], code, label, account_type, asset.upper() if asset else None, now_iso()),
+        (
+            account_id,
+            workspace["id"],
+            profile["id"],
+            code,
+            label,
+            account_type,
+            normalize_asset_code(asset) if asset else None,
+            now_iso(),
+        ),
     )
     conn.commit()
     return conn.execute("SELECT * FROM accounts WHERE id = ?", (account_id,)).fetchone()
@@ -986,6 +1267,49 @@ def list_accounts(conn, workspace_ref, profile_ref):
     return [dict(row) for row in rows]
 
 
+def read_text_argument(value, file_path, label):
+    if value not in (None, ""):
+        return str(value).strip()
+    if not file_path:
+        return None
+    text = Path(file_path).expanduser().read_text(encoding="utf-8").strip()
+    if not text:
+        raise AppError(f"{label} file '{file_path}' is empty")
+    return text
+
+
+def wallet_live_chain_config(config):
+    if not any(
+        [
+            config.get("descriptor"),
+            config.get("change_descriptor"),
+            config.get("addresses"),
+            config.get("chain"),
+            config.get("network"),
+        ]
+    ):
+        return None, None
+    chain = normalize_chain_value(config.get("chain"))
+    network = normalize_network_value(chain, config.get("network"))
+    return chain, network
+
+
+def load_wallet_descriptor_plan_from_config(config):
+    try:
+        return load_descriptor_plan(config)
+    except ValueError as exc:
+        raise AppError(str(exc)) from exc
+
+
+def wallet_policy_asset_id(config, chain, network):
+    explicit = str_or_none(config.get("policy_asset"))
+    if explicit:
+        return normalize_asset_code(explicit)
+    if chain == "liquid":
+        return normalize_asset_code(default_policy_asset_id(network))
+    return ""
+
+
 def parse_wallet_config(args):
     config = {}
     if getattr(args, "config", None):
@@ -995,14 +1319,45 @@ def parse_wallet_config(args):
             config.update(json.load(handle))
     if getattr(args, "backend", None):
         config["backend"] = args.backend.strip().lower()
+    descriptor_text = read_text_argument(
+        getattr(args, "descriptor", None),
+        getattr(args, "descriptor_file", None),
+        "Descriptor",
+    )
+    if descriptor_text:
+        config["descriptor"] = descriptor_text
+    change_descriptor_text = read_text_argument(
+        getattr(args, "change_descriptor", None),
+        getattr(args, "change_descriptor_file", None),
+        "Change descriptor",
+    )
+    if change_descriptor_text:
+        config["change_descriptor"] = change_descriptor_text
     addresses = normalize_addresses(getattr(args, "address", None))
     existing_addresses = normalize_addresses(config.get("addresses"))
     if addresses or existing_addresses:
         config["addresses"] = normalize_addresses(existing_addresses + addresses)
+    if getattr(args, "chain", None):
+        config["chain"] = normalize_chain_value(args.chain)
+    if getattr(args, "network", None):
+        chain = normalize_chain_value(config.get("chain"))
+        config["network"] = normalize_network_value(chain, args.network)
+    if getattr(args, "gap_limit", None) is not None:
+        if args.gap_limit <= 0:
+            raise AppError("Descriptor gap limit must be positive")
+        config["gap_limit"] = args.gap_limit
+    if getattr(args, "policy_asset", None):
+        config["policy_asset"] = normalize_asset_code(args.policy_asset)
     if getattr(args, "source_file", None):
         config["source_file"] = os.path.abspath(args.source_file)
     if getattr(args, "source_format", None):
         config["source_format"] = args.source_format
+    if getattr(args, "altbestand", False):
+        config["altbestand"] = True
+    chain, network = wallet_live_chain_config(config)
+    if chain:
+        config["chain"] = chain
+        config["network"] = network
     return config
 
 
@@ -1014,8 +1369,25 @@ def create_wallet(conn, workspace_ref, profile_ref, label, kind, account_ref=Non
         account = resolve_account(conn, profile["id"], "treasury")
     normalized_kind = normalize_wallet_kind(kind)
     config = config or {}
+    descriptor_plan = load_wallet_descriptor_plan_from_config(config) if config.get("descriptor") else None
+    chain, network = wallet_live_chain_config(config)
     if normalized_kind == "address" and not config.get("addresses") and not config.get("source_file"):
         raise AppError("Address wallets require at least one --address or a file-based source")
+    if normalized_kind == "descriptor" and descriptor_plan is None and not config.get("source_file"):
+        raise AppError("Descriptor wallets require --descriptor/--descriptor-file or a file-based source")
+    if chain == "liquid" and descriptor_plan is None and not config.get("source_file"):
+        raise AppError("Liquid live sync currently requires a descriptor with private blinding keys")
+    if descriptor_plan and descriptor_plan.chain == "liquid":
+        if not liquid_plan_can_unblind(descriptor_plan):
+            raise AppError("Liquid descriptor wallets require private blinding keys for full sync and fee accounting")
+        if not config.get("backend") and not config.get("source_file"):
+            raise AppError("Liquid descriptor wallets require an explicit --backend; no public Liquid default is built in")
+        config["policy_asset"] = wallet_policy_asset_id(config, descriptor_plan.chain, descriptor_plan.network)
+    elif chain == "liquid" and not config.get("backend") and not config.get("source_file"):
+        raise AppError("Liquid wallets require an explicit --backend; no public Liquid default is built in")
+    if chain and network:
+        config["chain"] = chain
+        config["network"] = network
     wallet_id = str(uuid.uuid4())
     conn.execute(
         """
@@ -1059,20 +1431,52 @@ def list_wallets(conn, workspace_ref, profile_ref):
     output = []
     for row in rows:
         config = json.loads(row["config_json"] or "{}")
+        descriptor_state = ""
+        chain, network = wallet_live_chain_config(config)
+        if config.get("descriptor"):
+            try:
+                descriptor_plan = load_descriptor_plan(config)
+                descriptor_state = f"{descriptor_plan.chain}:{descriptor_plan.network}"
+                chain = descriptor_plan.chain
+                network = descriptor_plan.network
+            except ValueError:
+                descriptor_state = "invalid"
         output.append(
             {
                 "id": row["id"],
                 "label": row["label"],
                 "kind": row["kind"],
                 "account": row["account_code"] or row["account_label"],
+                "chain": chain or "",
+                "network": network or "",
                 "backend": config.get("backend", ""),
                 "addresses": ",".join(normalize_addresses(config.get("addresses"))),
+                "descriptor": descriptor_state,
+                "gap_limit": config.get("gap_limit", DEFAULT_DESCRIPTOR_GAP_LIMIT if descriptor_state else ""),
+                "altbestand": "yes" if parse_bool(config.get("altbestand"), default=False) else "",
                 "source_format": config.get("source_format", ""),
                 "source_file": config.get("source_file", ""),
                 "created_at": row["created_at"],
             }
         )
     return output
+
+
+def set_wallet_altbestand(conn, workspace_ref, profile_ref, wallet_ref, enabled):
+    _, profile = resolve_scope(conn, workspace_ref, profile_ref)
+    wallet = resolve_wallet(conn, profile["id"], wallet_ref)
+    config = json.loads(wallet["config_json"] or "{}")
+    if enabled:
+        config["altbestand"] = True
+    else:
+        config.pop("altbestand", None)
+    conn.execute("UPDATE wallets SET config_json = ? WHERE id = ?", (json.dumps(config, sort_keys=True), wallet["id"]))
+    invalidate_journals(conn, profile["id"])
+    conn.commit()
+    return {
+        "wallet": wallet["label"],
+        "altbestand": bool(enabled),
+    }
 
 
 def load_import_records(file_path, input_format):
@@ -1119,7 +1523,7 @@ def normalize_btcpay_record(record):
     sanitized_record = {str(key): value for key, value in record.items() if key is not None}
     txid = sanitized_record.get("TransactionId") or sanitized_record.get("Transaction Id")
     timestamp = sanitized_record.get("Timestamp")
-    currency = str(sanitized_record.get("Currency") or "BTC").strip().upper()
+    currency = normalize_asset_code(sanitized_record.get("Currency") or "BTC")
     amount = parse_btcpay_amount(sanitized_record.get("Amount"), currency=currency)
     comment = sanitized_record.get("Comment")
     labels = parse_btcpay_labels(sanitized_record.get("Labels"))
@@ -1196,7 +1600,7 @@ def normalize_import_record(record):
         "external_id": str(record.get("txid") or record.get("id") or ""),
         "occurred_at": parse_timestamp(record.get("occurred_at") or record.get("timestamp") or record.get("date")),
         "direction": direction,
-        "asset": str(record.get("asset") or "BTC").upper(),
+        "asset": normalize_asset_code(record.get("asset") or "BTC"),
         "amount": amount,
         "fee": fee,
         "fiat_rate": rate,
@@ -1345,8 +1749,155 @@ def apply_btcpay_metadata(conn, profile, wallet, records):
     }
 
 
-def fetch_esplora_transactions(base_url, address, max_pages=None):
-    encoded = urlparse.quote(address, safe="")
+def sync_target_from_address(address, chain, network, address_index):
+    return {
+        "chain": chain,
+        "network": network,
+        "branch_index": 0,
+        "branch_label": "address",
+        "address_index": address_index,
+        "address": address,
+        "unconfidential_address": None,
+        "script_pubkey": address_to_scriptpubkey(address).hex(),
+    }
+
+
+def sync_target_from_derived(target):
+    return {
+        "chain": target.chain,
+        "network": target.network,
+        "branch_index": target.branch_index,
+        "branch_label": target.branch_label,
+        "address_index": target.address_index,
+        "address": target.address,
+        "unconfidential_address": target.unconfidential_address,
+        "script_pubkey": target.script_pubkey,
+    }
+
+
+def scriptpubkey_scripthash(script_pubkey_hex):
+    return hashlib.sha256(bytes.fromhex(script_pubkey_hex)).digest()[::-1].hex()
+
+
+def validate_backend_for_wallet(backend, chain, network, has_descriptor=False):
+    kind = normalize_backend_kind(backend["kind"])
+    backend_chain = backend_value(backend, "chain")
+    if backend_chain:
+        expected_chain = normalize_chain_value(backend_chain)
+        if expected_chain != chain:
+            raise AppError(
+                f"Backend '{backend['name']}' is configured for {expected_chain}, but wallet sync requires {chain}"
+            )
+    backend_network = backend_value(backend, "network")
+    if backend_network:
+        expected_network = normalize_network_value(chain, backend_network)
+        if expected_network != network:
+            raise AppError(
+                f"Backend '{backend['name']}' is configured for {expected_network}, but wallet sync requires {network}"
+            )
+    if chain == "liquid" and kind != "esplora":
+        raise AppError("Liquid live sync currently requires an Esplora-compatible backend")
+    if has_descriptor and kind == "bitcoinrpc":
+        raise AppError("Descriptor-backed live sync is not implemented for bitcoinrpc yet; use Esplora or Electrum")
+    if chain != "bitcoin" and kind in {"electrum", "bitcoinrpc"}:
+        raise AppError(f"Backend kind '{kind}' does not support {chain} wallets")
+    return kind
+
+
+def scan_descriptor_targets(plan, target_used):
+    limits = branch_limits(plan)
+    targets = []
+    for branch in plan.branches:
+        if limits.get(branch.branch_index, plan.gap_limit) <= 1:
+            targets.append(sync_target_from_derived(derive_descriptor_target(plan, branch.branch_index, 0)))
+            continue
+        consecutive_unused = 0
+        address_index = 0
+        while consecutive_unused < plan.gap_limit:
+            target = sync_target_from_derived(derive_descriptor_target(plan, branch.branch_index, address_index))
+            targets.append(target)
+            if target_used(target):
+                consecutive_unused = 0
+            else:
+                consecutive_unused += 1
+            address_index += 1
+    return targets
+
+
+def esplora_scripthash_has_history(base_url, script_pubkey_hex, timeout=30):
+    resource = append_url_path(base_url, f"scripthash/{scriptpubkey_scripthash(script_pubkey_hex)}")
+    payload = http_get_json(resource, timeout=timeout)
+    chain_stats = payload.get("chain_stats") or {}
+    mempool_stats = payload.get("mempool_stats") or {}
+    return int(chain_stats.get("tx_count") or 0) + int(mempool_stats.get("tx_count") or 0) > 0
+
+
+def discover_descriptor_targets(backend, plan, kind):
+    timeout = backend_timeout(backend)
+    if kind == "esplora":
+        return scan_descriptor_targets(
+            plan,
+            lambda target: esplora_scripthash_has_history(
+                backend["url"],
+                target["script_pubkey"],
+                timeout=timeout,
+            ),
+        )
+    if kind == "electrum":
+        with ElectrumClient(backend) as client:
+            return scan_descriptor_targets(
+                plan,
+                lambda target: bool(
+                    client.call(
+                        "blockchain.scripthash.get_history",
+                        [scriptpubkey_scripthash(target["script_pubkey"])],
+                    )
+                ),
+            )
+    raise AppError(f"Descriptor-backed sync is not implemented for backend kind '{kind}'")
+
+
+def resolve_wallet_sync_targets(backend, wallet):
+    config = json.loads(wallet["config_json"] or "{}")
+    descriptor_plan = load_wallet_descriptor_plan_from_config(config) if config.get("descriptor") else None
+    if descriptor_plan:
+        chain = descriptor_plan.chain
+        network = descriptor_plan.network
+        if chain == "liquid" and not liquid_plan_can_unblind(descriptor_plan):
+            raise AppError("Liquid descriptor wallets require private blinding keys for full sync and fee accounting")
+        if chain == "liquid" and not config.get("backend"):
+            raise AppError("Liquid wallets must name a backend explicitly; no public Liquid default is built in")
+        kind = validate_backend_for_wallet(backend, chain, network, has_descriptor=True)
+        targets = discover_descriptor_targets(backend, descriptor_plan, kind)
+    else:
+        addresses = normalize_addresses(config.get("addresses"))
+        if not addresses:
+            return {
+                "chain": "",
+                "network": "",
+                "descriptor_plan": None,
+                "policy_asset_id": "",
+                "targets": [],
+                "tracked_scripts": {},
+            }
+        chain = normalize_chain_value(config.get("chain"))
+        network = normalize_network_value(chain, config.get("network"))
+        if chain == "liquid":
+            raise AppError("Liquid live sync currently requires descriptor-backed wallets so outputs can be unblinded locally")
+        validate_backend_for_wallet(backend, chain, network, has_descriptor=False)
+        targets = [sync_target_from_address(address, chain, network, index) for index, address in enumerate(addresses)]
+    tracked_scripts = {target["script_pubkey"]: target for target in targets}
+    return {
+        "chain": chain,
+        "network": network,
+        "descriptor_plan": descriptor_plan,
+        "policy_asset_id": wallet_policy_asset_id(config, chain, network),
+        "targets": targets,
+        "tracked_scripts": tracked_scripts,
+    }
+
+
+def fetch_esplora_history(base_url, resource_path, max_pages=None):
     transactions = []
     seen_txids = set()
     last_seen = None
@@ -1355,9 +1906,9 @@ def fetch_esplora_transactions(base_url, address, max_pages=None):
         if max_pages is not None and page_count >= max_pages:
             break
         chain_url = (
-            f"{base_url.rstrip('/')}/address/{encoded}/txs/chain/{last_seen}"
+            append_url_path(base_url, f"{resource_path}/txs/chain/{last_seen}")
             if last_seen
-            else f"{base_url.rstrip('/')}/address/{encoded}/txs/chain"
+            else append_url_path(base_url, f"{resource_path}/txs/chain")
         )
         page = http_get_json(chain_url)
         if not page:
@@ -1371,7 +1922,7 @@ def fetch_esplora_transactions(base_url, address, max_pages=None):
         page_count += 1
         if len(page) < 25:
             break
-    mempool_url = f"{base_url.rstrip('/')}/address/{encoded}/txs/mempool"
+    mempool_url = append_url_path(base_url, f"{resource_path}/txs/mempool")
     for tx in http_get_json(mempool_url):
         txid = tx.get("txid")
         if txid and txid not in seen_txids:
@@ -1380,21 +1931,28 @@ def fetch_esplora_transactions(base_url, address, max_pages=None):
     return transactions
 
 
+def fetch_esplora_scripthash_transactions(base_url, script_pubkey_hex, max_pages=None):
+    return fetch_esplora_history(
+        base_url,
+        f"scripthash/{scriptpubkey_scripthash(script_pubkey_hex)}",
+        max_pages=max_pages,
+    )
+
+
 def sats_to_btc(value):
     return dec(value) / SATS_PER_BTC
 
 
-def record_from_esplora_tx(tx, tracked_addresses, backend_name):
-    tracked = set(tracked_addresses)
+def record_from_bitcoin_esplora_tx(tx, tracked_scripts, backend_name):
     received_sats = sum(
         dec(vout.get("value", 0))
         for vout in tx.get("vout", [])
-        if vout.get("scriptpubkey_address") in tracked
+        if vout.get("scriptpubkey") in tracked_scripts
     )
     sent_sats = Decimal("0")
     for vin in tx.get("vin", []):
         prevout = vin.get("prevout") or {}
-        if prevout.get("scriptpubkey_address") in tracked:
+        if prevout.get("scriptpubkey") in tracked_scripts:
             sent_sats += dec(prevout.get("value", 0))
     if received_sats == 0 and sent_sats == 0:
         return None
@@ -1431,20 +1989,163 @@ def record_from_esplora_tx(tx, tracked_addresses, backend_name):
     }
 
 
-def esplora_records_for_wallet(backend, addresses):
+def liquid_asset_id_from_bytes(asset_bytes):
+    if not isinstance(asset_bytes, (bytes, bytearray)) or len(asset_bytes) != 32:
+        raise AppError("Unsupported Liquid asset encoding while decoding transaction")
+    return bytes(reversed(bytes(asset_bytes))).hex()
+
+
+def liquid_output_amount_asset_id(output, plan, target=None):
+    try:
+        if getattr(output, "is_blinded", False):
+            if target is None:
+                raise AppError("Unable to unblind Liquid output without wallet descriptor context")
+            secret, _ = liquid_blinding_secret(plan, target["branch_index"], target["address_index"])
+            value, asset_bytes, *_ = output.unblind(secret)
+        else:
+            value = output.value
+            asset_bytes = output.asset
+    except AppError:
+        raise
+    except Exception as exc:
+        label = target["address"] if target and target.get("address") else target["script_pubkey"] if target else "fee output"
+        raise AppError(f"Failed to decode Liquid output for {label}") from exc
+    if not isinstance(value, int):
+        raise AppError("Unsupported confidential Liquid value encoding while decoding transaction")
+    return value, liquid_asset_id_from_bytes(asset_bytes)
+
+
+def record_components_from_liquid_tx(tx_json, raw_hex, descriptor_plan, tracked_scripts, backend_name, policy_asset_id, prev_tx_lookup):
+    tx = decode_liquid_transaction(raw_hex)
+    net_sats = defaultdict(int)
+    fee_sats = defaultdict(int)
+    outputs = tx_json.get("vout") or []
+    if len(outputs) != len(tx.vout):
+        raise AppError(f"Liquid transaction {tx_json.get('txid')} changed shape between JSON and raw decoding")
+    for index, vout in enumerate(outputs):
+        script_hex = vout.get("scriptpubkey") or tx.vout[index].script_pubkey.data.hex()
+        if script_hex == "":
+            value_sats, asset_id = liquid_output_amount_asset_id(tx.vout[index], descriptor_plan, target=None)
+            fee_sats[asset_id] += value_sats
+            continue
+        target = tracked_scripts.get(script_hex)
+        if not target:
+            continue
+        value_sats, asset_id = liquid_output_amount_asset_id(tx.vout[index], descriptor_plan, target=target)
+        net_sats[asset_id] += value_sats
+    for vin in tx_json.get("vin") or []:
+        prevout = vin.get("prevout") or {}
+        script_hex = prevout.get("scriptpubkey")
+        target = tracked_scripts.get(script_hex)
+        if not target:
+            continue
+        prev_txid = vin.get("txid")
+        prev_vout = vin.get("vout")
+        if prev_txid is None or prev_vout is None:
+            continue
+        prev_tx = prev_tx_lookup(prev_txid)
+        if prev_vout >= len(prev_tx.vout):
+            raise AppError(f"Liquid prevout index {prev_vout} is out of range for transaction {prev_txid}")
+        value_sats, asset_id = liquid_output_amount_asset_id(prev_tx.vout[prev_vout], descriptor_plan, target=target)
+        net_sats[asset_id] -= value_sats
+    occurred_at = timestamp_to_iso((tx_json.get("status") or {}).get("block_time"))
+    records = []
+    all_assets = sorted(set(net_sats) | set(fee_sats))
+    for asset_id in all_assets:
+        asset_code = liquid_asset_code(asset_id, policy_asset_id)
+        net_value = dec(net_sats.get(asset_id, 0), default="0")
+        fee_value = dec(fee_sats.get(asset_id, 0), default="0")
+        if net_value == 0 and fee_value == 0:
+            continue
+        if net_value > 0:
+            direction = "inbound"
+            amount = sats_to_btc(net_value)
+            fee = Decimal("0")
+            kind = "deposit"
+        else:
+            direction = "outbound"
+            gross_out_sats = abs(net_value)
+            amount_sats = gross_out_sats - fee_value
+            if amount_sats < 0:
+                amount_sats = Decimal("0")
+            amount = sats_to_btc(amount_sats)
+            fee = sats_to_btc(fee_value)
+            kind = "withdrawal" if amount > 0 else "fee"
+        records.append(
+            {
+                "txid": tx_json.get("txid"),
+                "occurred_at": occurred_at,
+                "direction": direction,
+                "asset": asset_code,
+                "amount": amount,
+                "fee": fee,
+                "fiat_rate": None,
+                "fiat_value": None,
+                "kind": kind,
+                "description": f"Synced from {backend_name}",
+                "counterparty": None,
+                "raw_json": json.dumps(
+                    json_ready(
+                        {
+                            "tx": tx_json,
+                            "component": {
+                                "asset_id": asset_id,
+                                "asset": asset_code,
+                                "net_sats": int(net_value),
+                                "fee_sats": int(fee_value),
+                            },
+                        }
+                    ),
+                    sort_keys=True,
+                ),
+            }
+        )
+    return records
+
+
+def esplora_records_for_wallet(backend, sync_state):
     max_pages = parse_int(backend_value(backend, "maxpages"), default=0) or None
     transactions_by_txid = {}
-    for address in addresses:
-        for tx in fetch_esplora_transactions(backend["url"], address, max_pages=max_pages):
+    for target in sync_state["targets"]:
+        for tx in fetch_esplora_scripthash_transactions(backend["url"], target["script_pubkey"], max_pages=max_pages):
             transactions_by_txid[tx["txid"]] = tx
     records = []
+    raw_tx_cache = {}
+
+    def liquid_tx_lookup(txid):
+        if txid not in raw_tx_cache:
+            raw_tx_cache[txid] = decode_liquid_transaction(
+                http_get_text(
+                    append_url_path(backend["url"], f"tx/{txid}/hex"),
+                    timeout=backend_timeout(backend),
+                ).strip()
+            )
+        return raw_tx_cache[txid]
+
     for tx in sorted(
         transactions_by_txid.values(),
         key=lambda item: (((item.get("status") or {}).get("block_time") or 0), item.get("txid", "")),
     ):
-        normalized = record_from_esplora_tx(tx, addresses, backend["name"])
-        if normalized:
-            records.append(normalized)
+        if sync_state["chain"] == "liquid":
+            raw_hex = http_get_text(
+                append_url_path(backend["url"], f"tx/{tx['txid']}/hex"),
+                timeout=backend_timeout(backend),
+            ).strip()
+            records.extend(
+                record_components_from_liquid_tx(
+                    tx,
+                    raw_hex,
+                    sync_state["descriptor_plan"],
+                    sync_state["tracked_scripts"],
+                    backend["name"],
+                    sync_state["policy_asset_id"],
+                    liquid_tx_lookup,
+                )
+            )
+        else:
+            normalized = record_from_bitcoin_esplora_tx(tx, sync_state["tracked_scripts"], backend["name"])
+            if normalized:
+                records.append(normalized)
     return records
 
 
@@ -1777,16 +2478,22 @@ def record_from_electrum_tx(txid, tx, height, tracked_scripts, backend_name, tx_
     }
 
 
-def electrum_records_for_wallet(backend, addresses):
+def electrum_records_for_wallet(backend, sync_state):
+    if sync_state["chain"] != "bitcoin":
+        raise AppError("Electrum sync currently supports Bitcoin wallets only")
     transactions = {}
     header_timestamps = {}
     records = []
-    tracked_scripts = {address_to_scriptpubkey(address).hex() for address in addresses}
+    tracked_scripts = set(sync_state["tracked_scripts"])
     with ElectrumClient(backend) as client:
         histories = []
-        for address in addresses:
-            script_hash = electrum_scripthash(address)
-            histories.extend(client.call("blockchain.scripthash.get_history", [script_hash]))
+        for target in sync_state["targets"]:
+            histories.extend(
+                client.call(
+                    "blockchain.scripthash.get_history",
+                    [scriptpubkey_scripthash(target["script_pubkey"])],
+                )
+            )
 
         def lookup(txid):
             if txid not in transactions:
@@ -1825,21 +2532,25 @@ def sync_wallet_from_backend(conn, runtime_config, workspace_ref, profile_ref, w
     _, profile = resolve_scope(conn, workspace_ref, profile_ref)
     config = json.loads(wallet["config_json"] or "{}")
     backend = resolve_backend(runtime_config, config.get("backend"))
-    addresses = normalize_addresses(config.get("addresses"))
-    if not addresses:
+    sync_state = resolve_wallet_sync_targets(backend, wallet)
+    if not sync_state["targets"]:
         return {
             "wallet": wallet["label"],
             "status": "skipped",
-            "reason": "no addresses configured for backend sync",
+            "reason": "no addresses or descriptors configured for backend sync",
         }
     kind = normalize_backend_kind(backend["kind"])
     adapter_meta = {}
     if kind == "esplora":
-        normalized_records = esplora_records_for_wallet(backend, addresses)
+        normalized_records = esplora_records_for_wallet(backend, sync_state)
     elif kind == "electrum":
-        normalized_records = electrum_records_for_wallet(backend, addresses)
+        normalized_records = electrum_records_for_wallet(backend, sync_state)
     elif kind == "bitcoinrpc":
-        normalized_records, adapter_meta = bitcoinrpc_records_for_wallet(backend, wallet, addresses)
+        normalized_records, adapter_meta = bitcoinrpc_records_for_wallet(
+            backend,
+            wallet,
+            [target["address"] for target in sync_state["targets"] if target.get("address")],
+        )
     else:
         return {
             "wallet": wallet["label"],
@@ -1850,7 +2561,16 @@ def sync_wallet_from_backend(conn, runtime_config, workspace_ref, profile_ref, w
     outcome["backend"] = backend["name"]
     outcome["backend_kind"] = kind
     outcome["backend_url"] = backend["url"]
-    outcome["addresses"] = ",".join(addresses)
+    outcome["chain"] = sync_state["chain"]
+    outcome["network"] = sync_state["network"]
+    outcome["sync_mode"] = "descriptor" if sync_state["descriptor_plan"] else "addresses"
+    outcome["target_count"] = len(sync_state["targets"])
+    if sync_state["descriptor_plan"]:
+        outcome["gap_limit"] = sync_state["descriptor_plan"].gap_limit
+    else:
+        outcome["addresses"] = ",".join(target["address"] for target in sync_state["targets"] if target.get("address"))
+    if sync_state["policy_asset_id"]:
+        outcome["policy_asset"] = sync_state["policy_asset_id"]
     outcome.update(adapter_meta)
     return outcome
 
@@ -1869,6 +2589,7 @@ def sync_wallet(conn, runtime_config, workspace_ref, profile_ref, wallet_ref=Non
         source_file = config.get("source_file")
         source_format = config.get("source_format")
         addresses = normalize_addresses(config.get("addresses"))
+        has_descriptor = bool(str_or_none(config.get("descriptor")))
         if source_file and source_format:
             outcome = import_into_wallet(
                 conn,
@@ -1887,14 +2608,56 @@ def sync_wallet(conn, runtime_config, workspace_ref, profile_ref, wallet_ref=Non
             else:
                 results.append({"wallet": wallet["label"], "status": "synced", **outcome})
             continue
+        if has_descriptor:
+            outcome = sync_wallet_from_backend(conn, runtime_config, profile["workspace_id"], profile["id"], wallet)
+            if outcome.get("status") == "skipped":
+                results.append(outcome)
+            else:
+                results.append({"wallet": wallet["label"], "status": "synced", **outcome})
+            continue
         results.append(
             {
                 "wallet": wallet["label"],
                 "status": "skipped",
-                "reason": "no file source or backend addresses configured",
+                "reason": "no file source, descriptor, or backend addresses configured",
             }
         )
     return results
+
+
+def resolve_descriptor_branch_index(plan, branch):
+    if branch in (None, "", "all"):
+        return None
+    normalized = str(branch).strip().lower()
+    if normalized in {"0", "receive", "external"}:
+        return 0
+    if normalized in {"1", "change", "internal"}:
+        return 1
+    raise AppError("Descriptor branch must be one of: all, receive, change, 0, 1")
+
+
+def derive_wallet_targets(conn, workspace_ref, profile_ref, wallet_ref, branch=None, start=0, count=None):
+    _, profile = resolve_scope(conn, workspace_ref, profile_ref)
+    wallet = resolve_wallet(conn, profile["id"], wallet_ref)
+    config = json.loads(wallet["config_json"] or "{}")
+    plan = load_wallet_descriptor_plan_from_config(config) if config.get("descriptor") else None
+    if plan is None:
+        raise AppError(f"Wallet '{wallet['label']}' does not have a descriptor configured")
+    if start < 0:
+        raise AppError("Descriptor derivation start must be non-negative")
+    count = count if count is not None else plan.gap_limit
+    if count <= 0:
+        raise AppError("Descriptor derivation count must be positive")
+    branch_index = resolve_descriptor_branch_index(plan, branch)
+    return [
+        sync_target_from_derived(target)
+        for target in derive_descriptor_targets(
+            plan,
+            branch_index=branch_index,
+            start=start,
+            end=start + count,
+        )
+    ]
 
 
 def list_transactions(conn, workspace_ref, profile_ref, wallet_ref=None, limit=100):
@@ -2268,6 +3031,263 @@ def latest_rates_for_profile(conn, profile_id):
     return rates
 
 
+def rp2_wallet_state(profile, wallet, asset, rows, configuration):
+    modules = get_rp2_modules()
+    TransactionSet = modules["TransactionSet"]
+    InTransaction = modules["InTransaction"]
+    OutTransaction = modules["OutTransaction"]
+    InputData = modules["InputData"]
+    compute_tax = modules["compute_tax"]
+    in_transactions = TransactionSet(configuration, "IN", asset)
+    out_transactions = TransactionSet(configuration, "OUT", asset)
+    intra_transactions = TransactionSet(configuration, "INTRA", asset)
+    holder = profile["label"]
+    total_available = Decimal("0")
+    priced_available = Decimal("0")
+    quarantines = []
+    row_index = 1
+    row_by_id = {row["id"]: row for row in rows}
+    for row in rows:
+        amount = dec(row["amount"])
+        fee = dec(row["fee"])
+        description = row["note"] or row["description"] or row["kind"] or row["id"]
+        if row["direction"] == "inbound":
+            total_available += amount
+            spot_price = rp2_spot_price(row, amount)
+            if spot_price is None:
+                quarantines.append(
+                    rp2_quarantine(
+                        profile,
+                        row,
+                        "missing_spot_price",
+                        {
+                            "wallet": wallet["label"],
+                            "asset": asset,
+                            "direction": row["direction"],
+                            "required_for": "acquisition",
+                        },
+                    )
+                )
+                continue
+            fiat_value = dec(row["fiat_value"]) if row["fiat_value"] is not None else amount * spot_price
+            in_transactions.add_entry(
+                InTransaction(
+                    configuration=configuration,
+                    timestamp=row["occurred_at"],
+                    asset=asset,
+                    exchange=wallet["label"],
+                    holder=holder,
+                    transaction_type="BUY",
+                    spot_price=rp2_decimal(spot_price),
+                    crypto_in=rp2_decimal(amount),
+                    fiat_in_no_fee=rp2_decimal(fiat_value),
+                    fiat_in_with_fee=rp2_decimal(fiat_value),
+                    fiat_fee=rp2_decimal(0),
+                    row=row_index,
+                    unique_id=row["id"],
+                    notes=description,
+                )
+            )
+            priced_available += amount
+            row_index += 1
+            continue
+        needed = amount + fee
+        if needed <= 0:
+            continue
+        if total_available < needed:
+            quarantines.append(
+                rp2_quarantine(
+                    profile,
+                    row,
+                    "insufficient_lots",
+                    {
+                        "wallet": wallet["label"],
+                        "asset": asset,
+                        "required": float(needed),
+                        "available": float(total_available),
+                    },
+                )
+            )
+            continue
+        if priced_available < needed:
+            quarantines.append(
+                rp2_quarantine(
+                    profile,
+                    row,
+                    "missing_cost_basis",
+                    {
+                        "wallet": wallet["label"],
+                        "asset": asset,
+                        "required": float(needed),
+                        "priced_available": float(priced_available),
+                    },
+                )
+            )
+            continue
+        spot_price = rp2_spot_price(row, amount if amount > 0 else fee)
+        if spot_price is None:
+            quarantines.append(
+                rp2_quarantine(
+                    profile,
+                    row,
+                    "missing_spot_price",
+                    {
+                        "wallet": wallet["label"],
+                        "asset": asset,
+                        "direction": row["direction"],
+                        "required_for": "disposal",
+                    },
+                )
+            )
+            continue
+        fiat_out_no_fee = dec(row["fiat_value"]) if row["fiat_value"] is not None else amount * spot_price
+        out_transactions.add_entry(
+            OutTransaction(
+                configuration=configuration,
+                timestamp=row["occurred_at"],
+                asset=asset,
+                exchange=wallet["label"],
+                holder=holder,
+                transaction_type="SELL" if amount > 0 else "FEE",
+                spot_price=rp2_decimal(spot_price),
+                crypto_out_no_fee=rp2_decimal(amount),
+                crypto_fee=rp2_decimal(fee),
+                fiat_out_no_fee=rp2_decimal(fiat_out_no_fee) if amount > 0 else None,
+                fiat_fee=rp2_decimal(fee * spot_price),
+                row=row_index,
+                unique_id=row["id"],
+                notes=description,
+            )
+        )
+        total_available -= needed
+        priced_available -= needed
+        row_index += 1
+    if in_transactions.count == 0:
+        return None, quarantines, row_by_id
+    input_data = InputData(
+        asset=asset,
+        unfiltered_in_transaction_set=in_transactions,
+        unfiltered_out_transaction_set=out_transactions,
+        unfiltered_intra_transaction_set=intra_transactions,
+    )
+    try:
+        computed_data = compute_tax(configuration, build_rp2_accounting_engine(profile), input_data)
+    except Exception as exc:
+        raise AppError(f"RP2 tax calculation failed for wallet '{wallet['label']}' asset '{asset}': {exc}") from exc
+    return computed_data, quarantines, row_by_id
+
+
+def append_rp2_journal_entries(entries, computed_data, wallet, profile, row_by_id):
+    altbestand = wallet_is_altbestand(wallet)
+    for transaction in computed_data.in_transaction_set:
+        source_row = row_by_id.get(transaction.unique_id)
+        entries.append(
+            {
+                "id": str(uuid.uuid4()),
+                "workspace_id": profile["workspace_id"],
+                "profile_id": profile["id"],
+                "transaction_id": transaction.unique_id,
+                "wallet_id": wallet["id"],
+                "account_id": wallet["wallet_account_id"],
+                "occurred_at": source_row["occurred_at"] if source_row else transaction.timestamp.isoformat(),
+                "entry_type": "acquisition",
+                "asset": transaction.asset,
+                "quantity": dec(transaction.crypto_in),
+                "fiat_value": dec(transaction.fiat_in_with_fee),
+                "unit_cost": dec(transaction.fiat_in_with_fee) / dec(transaction.crypto_in),
+                "cost_basis": None,
+                "proceeds": None,
+                "gain_loss": None,
+                "description": transaction.notes or (source_row["description"] if source_row else "Inbound transaction"),
+            }
+        )
+    realized_by_event = {}
+    for gain_loss in computed_data.gain_loss_set:
+        taxable_event = gain_loss.taxable_event
+        event = realized_by_event.setdefault(
+            taxable_event.internal_id,
+            {
+                "transaction_id": taxable_event.unique_id,
+                "occurred_at": row_by_id[taxable_event.unique_id]["occurred_at"] if taxable_event.unique_id in row_by_id else taxable_event.timestamp.isoformat(),
+                "entry_type": "fee" if taxable_event.transaction_type.value == "FEE" else "disposal",
+                "asset": taxable_event.asset,
+                "quantity": Decimal("0"),
+                "fiat_value": Decimal("0"),
+                "cost_basis": Decimal("0"),
+                "proceeds": Decimal("0"),
+                "gain_loss": Decimal("0"),
+                "description": taxable_event.notes or (
+                    row_by_id[taxable_event.unique_id]["description"] if taxable_event.unique_id in row_by_id else "Outbound transaction"
+                ),
+            },
+        )
+        event["quantity"] += dec(gain_loss.crypto_amount)
+        event["cost_basis"] += dec(gain_loss.fiat_cost_basis)
+        event["proceeds"] += dec(gain_loss.taxable_event_fiat_amount_with_fee_fraction)
+        event["gain_loss"] += dec(gain_loss.fiat_gain)
+    for event in realized_by_event.values():
+        description = event["description"]
+        proceeds = event["proceeds"]
+        cost_basis = event["cost_basis"]
+        gain_loss = event["gain_loss"]
+        if altbestand:
+            description = f"{description} [Altbestand tax-free]"
+            if event["entry_type"] == "fee":
+                proceeds = Decimal("0")
+                cost_basis = Decimal("0")
+            else:
+                cost_basis = proceeds
+            gain_loss = Decimal("0")
+        entries.append(
+            {
+                "id": str(uuid.uuid4()),
+                "workspace_id": profile["workspace_id"],
+                "profile_id": profile["id"],
+                "transaction_id": event["transaction_id"],
+                "wallet_id": wallet["id"],
+                "account_id": wallet["wallet_account_id"],
+                "occurred_at": event["occurred_at"],
+                "entry_type": event["entry_type"],
+                "asset": event["asset"],
+                "quantity": -event["quantity"],
+                "fiat_value": proceeds,
+                "unit_cost": Decimal("0"),
+                "cost_basis": cost_basis,
+                "proceeds": proceeds,
+                "gain_loss": gain_loss,
+                "description": description,
+            }
+        )
+
+
+def accumulate_rp2_holdings(account_holdings, wallet_holdings, computed_data, wallet):
+    for transaction in computed_data.in_transaction_set:
+        sold_percent = dec(computed_data.get_in_lot_sold_percentage(transaction))
+        remaining_ratio = Decimal("1") - sold_percent
+        if remaining_ratio <= 0:
+            continue
+        quantity = dec(transaction.crypto_in) * remaining_ratio
+        if quantity <= 0:
+            continue
+        cost_basis = dec(transaction.fiat_in_with_fee) * remaining_ratio
+        account_key = (
+            wallet["wallet_account_id"],
+            wallet["account_code"],
+            wallet["account_label"],
+            transaction.asset,
+        )
+        wallet_key = (
+            wallet["id"],
+            wallet["label"],
+            wallet["account_code"],
+            transaction.asset,
+        )
+        account_holdings[account_key]["quantity"] += quantity
+        account_holdings[account_key]["cost_basis"] += cost_basis
+        wallet_holdings[wallet_key]["quantity"] += quantity
+        wallet_holdings[wallet_key]["cost_basis"] += cost_basis
+
+
 def build_ledger_state(conn, profile):
     rows = conn.execute(
         """
@@ -2276,6 +3296,7 @@ def build_ledger_state(conn, profile):
             w.label AS wallet_label,
             w.kind AS wallet_kind,
             w.account_id AS wallet_account_id,
+            w.config_json AS config_json,
             COALESCE(a.code, 'treasury') AS account_code,
             COALESCE(a.label, 'Treasury') AS account_label
         FROM transactions t
@@ -2286,142 +3307,54 @@ def build_ledger_state(conn, profile):
         """,
         (profile["id"],),
     ).fetchall()
-    algorithm = str(profile["gains_algorithm"]).upper()
-    lots_by_wallet_asset = defaultdict(list)
+    wallet_labels = {row["wallet_label"] for row in rows}
+    assets = {row["asset"] for row in rows}
+    if not rows:
+        return {
+            "entries": [],
+            "quarantines": [],
+            "account_holdings": defaultdict(lambda: {"quantity": Decimal("0"), "cost_basis": Decimal("0")}),
+            "wallet_holdings": defaultdict(lambda: {"quantity": Decimal("0"), "cost_basis": Decimal("0")}),
+            "latest_rates": latest_rates_for_profile(conn, profile["id"]),
+        }
+    configuration, configuration_path = make_rp2_configuration(profile, wallet_labels, assets)
     entries = []
     quarantines = []
-    rates = latest_rates_for_profile(conn, profile["id"])
-    for row in rows:
-        amount = dec(row["amount"])
-        fee = dec(row["fee"])
-        fiat_value = dec(row["fiat_value"]) if row["fiat_value"] is not None else Decimal("0")
-        fiat_rate = dec(row["fiat_rate"]) if row["fiat_rate"] is not None else None
-        if fiat_value == 0 and fiat_rate is not None:
-            fiat_value = amount * fiat_rate
-        asset = row["asset"]
-        wallet_ref = {
-            "wallet_id": row["wallet_id"],
-            "wallet_label": row["wallet_label"],
-            "account_id": row["wallet_account_id"],
-            "account_code": row["account_code"],
-            "account_label": row["account_label"],
-        }
-        wallet_asset_key = (row["wallet_id"], asset)
-        if row["direction"] == "inbound":
-            unit_cost = (fiat_value / amount) if amount > 0 else Decimal("0")
-            lots_by_wallet_asset[wallet_asset_key].append(
-                {
-                    **wallet_ref,
-                    "quantity": amount,
-                    "unit_cost": unit_cost,
-                    "asset": asset,
-                }
-            )
-            entries.append(
-                {
-                    "id": str(uuid.uuid4()),
-                    "workspace_id": profile["workspace_id"],
-                    "profile_id": profile["id"],
-                    "transaction_id": row["id"],
-                    "wallet_id": row["wallet_id"],
-                    "account_id": row["wallet_account_id"],
-                    "occurred_at": row["occurred_at"],
-                    "entry_type": "acquisition",
-                    "asset": asset,
-                    "quantity": amount,
-                    "fiat_value": fiat_value,
-                    "unit_cost": unit_cost,
-                    "cost_basis": None,
-                    "proceeds": None,
-                    "gain_loss": None,
-                    "description": row["description"] or row["kind"] or "Inbound transaction",
-                }
-            )
-            continue
-        needed = amount + fee
-        if available_quantity(lots_by_wallet_asset[wallet_asset_key]) < needed:
-            quarantines.append(
-                {
-                    "transaction_id": row["id"],
-                    "workspace_id": profile["workspace_id"],
-                    "profile_id": profile["id"],
-                    "reason": "insufficient_lots",
-                    "detail_json": json.dumps(
-                        {
-                            "wallet": row["wallet_label"],
-                            "asset": asset,
-                            "required": float(needed),
-                            "available": float(available_quantity(lots_by_wallet_asset[wallet_asset_key])),
-                        },
-                        sort_keys=True,
-                    ),
-                }
-            )
-            continue
-        cost_basis = consume_lots(lots_by_wallet_asset[wallet_asset_key], amount, algorithm)
-        gain_loss = fiat_value - cost_basis
-        entries.append(
-            {
-                "id": str(uuid.uuid4()),
-                "workspace_id": profile["workspace_id"],
-                "profile_id": profile["id"],
-                "transaction_id": row["id"],
-                "wallet_id": row["wallet_id"],
-                "account_id": row["wallet_account_id"],
-                "occurred_at": row["occurred_at"],
-                "entry_type": "disposal",
-                "asset": asset,
-                "quantity": -amount,
-                "fiat_value": fiat_value,
-                "unit_cost": Decimal("0"),
-                "cost_basis": cost_basis,
-                "proceeds": fiat_value,
-                "gain_loss": gain_loss,
-                "description": row["description"] or row["kind"] or "Outbound transaction",
-            }
-        )
-        if fee > 0:
-            fee_basis = consume_lots(lots_by_wallet_asset[wallet_asset_key], fee, algorithm)
-            entries.append(
-                {
-                    "id": str(uuid.uuid4()),
-                    "workspace_id": profile["workspace_id"],
-                    "profile_id": profile["id"],
-                    "transaction_id": row["id"],
-                    "wallet_id": row["wallet_id"],
-                    "account_id": row["wallet_account_id"],
-                    "occurred_at": row["occurred_at"],
-                    "entry_type": "fee",
-                    "asset": asset,
-                    "quantity": -fee,
-                    "fiat_value": Decimal("0"),
-                    "unit_cost": Decimal("0"),
-                    "cost_basis": fee_basis,
-                    "proceeds": Decimal("0"),
-                    "gain_loss": -fee_basis,
-                    "description": f"Network fee for {row['description'] or row['external_id'] or row['id']}",
-                }
-            )
     account_holdings = defaultdict(lambda: {"quantity": Decimal("0"), "cost_basis": Decimal("0")})
     wallet_holdings = defaultdict(lambda: {"quantity": Decimal("0"), "cost_basis": Decimal("0")})
-    for (wallet_id, asset), lots in lots_by_wallet_asset.items():
-        for lot in lots:
-            account_key = (
-                lot["account_id"],
-                lot["account_code"],
-                lot["account_label"],
+    rates = latest_rates_for_profile(conn, profile["id"])
+    try:
+        grouped_rows = defaultdict(list)
+        wallet_refs = {}
+        for row in rows:
+            grouped_rows[(row["wallet_id"], row["asset"])].append(row)
+            wallet_config = json.loads(row["config_json"] or "{}")
+            wallet_refs[row["wallet_id"]] = {
+                "id": row["wallet_id"],
+                "label": row["wallet_label"],
+                "wallet_account_id": row["wallet_account_id"],
+                "account_code": row["account_code"],
+                "account_label": row["account_label"],
+                "altbestand": wallet_config.get("altbestand", False),
+            }
+        for (wallet_id, asset), wallet_rows in grouped_rows.items():
+            computed_data, wallet_quarantines, row_by_id = rp2_wallet_state(
+                profile,
+                wallet_refs[wallet_id],
                 asset,
+                wallet_rows,
+                configuration,
             )
-            wallet_key = (
-                wallet_id,
-                lot["wallet_label"],
-                lot["account_code"],
-                asset,
-            )
-            account_holdings[account_key]["quantity"] += lot["quantity"]
-            account_holdings[account_key]["cost_basis"] += lot["quantity"] * lot["unit_cost"]
-            wallet_holdings[wallet_key]["quantity"] += lot["quantity"]
-            wallet_holdings[wallet_key]["cost_basis"] += lot["quantity"] * lot["unit_cost"]
+            quarantines.extend(wallet_quarantines)
+            if computed_data is None:
+                continue
+            append_rp2_journal_entries(entries, computed_data, wallet_refs[wallet_id], profile, row_by_id)
+            accumulate_rp2_holdings(account_holdings, wallet_holdings, computed_data, wallet_refs[wallet_id])
+    finally:
+        try:
+            os.unlink(configuration_path)
+        except OSError:
+            pass
     return {
         "entries": entries,
         "quarantines": quarantines,
@@ -2700,6 +3633,8 @@ def list_backends(runtime_config):
             {
                 "name": name,
                 "kind": backend["kind"],
+                "chain": backend.get("chain", ""),
+                "network": backend.get("network", ""),
                 "url": backend["url"],
                 "default": "yes" if name == runtime_config["default_backend"] else "",
                 "source": backend["source"],
@@ -2799,7 +3734,9 @@ def build_parser():
     profiles_create.add_argument("label")
     profiles_create.add_argument("--workspace")
     profiles_create.add_argument("--fiat-currency", default="USD")
-    profiles_create.add_argument("--gains-algorithm", choices=["FIFO", "LIFO"], default="FIFO")
+    profiles_create.add_argument("--tax-country", choices=list(supported_tax_countries()), default=DEFAULT_TAX_COUNTRY)
+    profiles_create.add_argument("--tax-long-term-days", type=int, default=DEFAULT_LONG_TERM_DAYS)
+    profiles_create.add_argument("--gains-algorithm", choices=list(RP2_ACCOUNTING_METHODS), default="FIFO")
 
     accounts = sub.add_parser("accounts")
     accounts_sub = accounts.add_subparsers(dest="accounts_command", required=True)
@@ -2826,11 +3763,28 @@ def build_parser():
     wallets_create.add_argument("--kind", required=True)
     wallets_create.add_argument("--account")
     wallets_create.add_argument("--backend")
+    wallets_create.add_argument("--chain", choices=["bitcoin", "liquid"])
+    wallets_create.add_argument("--network")
     wallets_create.add_argument("--address", action="append")
+    wallets_create.add_argument("--descriptor")
+    wallets_create.add_argument("--descriptor-file")
+    wallets_create.add_argument("--change-descriptor")
+    wallets_create.add_argument("--change-descriptor-file")
+    wallets_create.add_argument("--gap-limit", type=int)
+    wallets_create.add_argument("--policy-asset")
+    wallets_create.add_argument("--altbestand", action="store_true")
     wallets_create.add_argument("--config")
     wallets_create.add_argument("--config-file")
     wallets_create.add_argument("--source-file")
     wallets_create.add_argument("--source-format", choices=["json", "csv", "btcpay_json", "btcpay_csv"])
+    wallets_altbestand = wallets_sub.add_parser("set-altbestand")
+    wallets_altbestand.add_argument("--workspace")
+    wallets_altbestand.add_argument("--profile")
+    wallets_altbestand.add_argument("--wallet", required=True)
+    wallets_neubestand = wallets_sub.add_parser("set-neubestand")
+    wallets_neubestand.add_argument("--workspace")
+    wallets_neubestand.add_argument("--profile")
+    wallets_neubestand.add_argument("--wallet", required=True)
     wallets_import_json = wallets_sub.add_parser("import-json")
     wallets_import_json.add_argument("--workspace")
     wallets_import_json.add_argument("--profile")
@@ -2852,6 +3806,13 @@ def build_parser():
     wallets_sync.add_argument("--profile")
     wallets_sync.add_argument("--wallet")
     wallets_sync.add_argument("--all", action="store_true")
+    wallets_derive = wallets_sub.add_parser("derive")
+    wallets_derive.add_argument("--workspace")
+    wallets_derive.add_argument("--profile")
+    wallets_derive.add_argument("--wallet", required=True)
+    wallets_derive.add_argument("--branch", default="all")
+    wallets_derive.add_argument("--start", type=int, default=0)
+    wallets_derive.add_argument("--count", type=int)
 
     transactions = sub.add_parser("transactions")
     tx_sub = transactions.add_subparsers(dest="transactions_command", required=True)
@@ -2974,6 +3935,8 @@ def dispatch(conn, args):
                         args.label,
                         args.fiat_currency,
                         args.gains_algorithm,
+                        args.tax_country,
+                        args.tax_long_term_days,
                     )
                 ),
             )
@@ -3013,6 +3976,10 @@ def dispatch(conn, args):
                     )
                 ),
             )
+        if args.wallets_command == "set-altbestand":
+            return emit(args, set_wallet_altbestand(conn, args.workspace, args.profile, args.wallet, True))
+        if args.wallets_command == "set-neubestand":
+            return emit(args, set_wallet_altbestand(conn, args.workspace, args.profile, args.wallet, False))
         if args.wallets_command == "import-json":
             return emit(args, import_into_wallet(conn, args.workspace, args.profile, args.wallet, args.file, "json"))
         if args.wallets_command == "import-csv":
@@ -3031,6 +3998,19 @@ def dispatch(conn, args):
             )
         if args.wallets_command == "sync":
             return emit(args, sync_wallet(conn, args.runtime_config, args.workspace, args.profile, args.wallet, args.all))
+        if args.wallets_command == "derive":
+            return emit(
+                args,
+                derive_wallet_targets(
+                    conn,
+                    args.workspace,
+                    args.profile,
+                    args.wallet,
+                    branch=args.branch,
+                    start=args.start,
+                    count=args.count,
+                ),
+            )
     if args.command == "transactions":
         if args.transactions_command == "list":
             return emit(args, list_transactions(conn, args.workspace, args.profile, args.wallet, args.limit))
