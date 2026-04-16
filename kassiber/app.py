@@ -32,9 +32,11 @@ from .db import (
     ensure_column,
     ensure_data_root,
     ensure_schema_compat,
+    get_setting,
     open_db,
     resolve_database_path,
     resolve_effective_data_root,
+    set_setting,
 )
 from .envelope import (
     OUTPUT_FORMATS,
@@ -64,6 +66,7 @@ from .time_utils import (
     parse_timestamp,
     timestamp_to_iso,
 )
+from .util import parse_bool, parse_int, str_or_none
 from .tax_policy import (
     DEFAULT_LONG_TERM_DAYS,
     DEFAULT_TAX_COUNTRY,
@@ -183,39 +186,12 @@ def load_runtime_config(env_file):
     }
 
 
-def str_or_none(value):
-    if value is None:
-        return None
-    text = str(value).strip()
-    return text or None
-
-
 def backend_value(backend, *keys):
     for key in keys:
         value = str_or_none(backend.get(key))
         if value is not None:
             return value
     return None
-
-
-def parse_bool(value, default=False):
-    if value is None:
-        return default
-    text = str(value).strip().lower()
-    if text in {"1", "true", "yes", "on"}:
-        return True
-    if text in {"0", "false", "no", "off"}:
-        return False
-    raise AppError(f"Invalid boolean value: {value}")
-
-
-def parse_int(value, default):
-    if value is None or value == "":
-        return default
-    try:
-        return int(str(value).strip())
-    except ValueError as exc:
-        raise AppError(f"Invalid integer value: {value}") from exc
 
 
 def backend_timeout(backend, default=30):
@@ -746,22 +722,6 @@ def rp2_quarantine(profile, row, reason, detail):
 
 def wallet_is_altbestand(wallet):
     return parse_bool(wallet.get("altbestand"), default=False)
-
-
-def set_setting(conn, key, value):
-    conn.execute(
-        """
-        INSERT INTO settings(key, value)
-        VALUES(?, ?)
-        ON CONFLICT(key) DO UPDATE SET value = excluded.value
-        """,
-        (key, value),
-    )
-
-
-def get_setting(conn, key):
-    row = conn.execute("SELECT value FROM settings WHERE key = ?", (key,)).fetchone()
-    return row["value"] if row else None
 
 
 def resolve_workspace(conn, ref=None):
