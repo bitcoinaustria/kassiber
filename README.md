@@ -50,7 +50,23 @@ Wallets can also be marked manually as `Altbestand`. Disposals from an Altbestan
 - Python `>=3.10`
 - `rp2>=1.7.2`
 
-The Python floor is set by the current RP2 dependency.
+The Python floor is set by the current RP2 dependency. RP2 is not an optional add-on in the current architecture: Kassiber uses it as the tax engine for journal processing and tax-aware reports.
+
+## Installation
+
+The recommended install path is a virtual environment:
+
+```bash
+cd /Users/dev/Github/kassiber
+python3 -m venv .venv
+source .venv/bin/activate
+python3 -m pip install --upgrade pip
+python3 -m pip install -e .
+```
+
+This installs Kassiber together with RP2 and its runtime dependencies.
+
+If you are packaging Kassiber for broader internal use, treat RP2 as part of Kassiber's supported runtime stack rather than as an optional plugin users must discover and install separately.
 
 ## Architecture notes
 
@@ -59,6 +75,16 @@ The Python floor is set by the current RP2 dependency.
 - SQLite remains the system of record.
 - RP2 is used as the wallet-scoped lot engine.
 - Wallet-level `Altbestand` remains manual provenance metadata and is not part of the profile country policy.
+
+## Dependency policy
+
+Kassiber is intended to become a real accounting tool, so core accounting and tax dependencies should be included intentionally when they are part of the supported runtime behavior.
+
+- RP2 is a required dependency because it is the current tax engine.
+- Future accounting-critical dependencies should be added openly rather than hidden behind optional extras if Kassiber cannot perform its core workflow without them.
+- Third-party runtime dependencies and their licenses should be tracked in the repository so packaging and internal distribution stay auditable.
+
+Current third-party license notes are tracked in [THIRD_PARTY_LICENSES.md](/Users/dev/Github/kassiber/THIRD_PARTY_LICENSES.md).
 
 ## What is not implemented yet
 

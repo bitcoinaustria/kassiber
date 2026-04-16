@@ -7,6 +7,7 @@
 - Tax policy definitions live in [kassiber/tax_policy.py](/Users/dev/Github/kassiber/kassiber/tax_policy.py).
 - Packaging is defined in [pyproject.toml](/Users/dev/Github/kassiber/pyproject.toml).
 - Examples and user-facing behavior are documented in [README.md](/Users/dev/Github/kassiber/README.md).
+- Third-party dependency and license notes are tracked in [THIRD_PARTY_LICENSES.md](/Users/dev/Github/kassiber/THIRD_PARTY_LICENSES.md).
 
 ## Current architecture
 
@@ -53,6 +54,7 @@
 - Preserve the default `mempool.space` Esplora backend unless there is a strong reason to change it.
 - Prefer additive schema changes that work with `CREATE TABLE IF NOT EXISTS`.
 - Prefer lightweight compatibility migrations for existing SQLite databases when adding profile fields.
+- When adding a new runtime dependency, update both the README dependency story and `THIRD_PARTY_LICENSES.md`.
 
 ## Verification
 
