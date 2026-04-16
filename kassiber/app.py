@@ -26,6 +26,21 @@ from .tax_policy import (
     build_tax_policy,
     supported_tax_countries,
 )
+from .wallet_descriptors import (
+    DEFAULT_DESCRIPTOR_GAP_LIMIT,
+    branch_limits,
+    decode_liquid_transaction,
+    default_policy_asset_id,
+    derive_descriptor_target,
+    derive_descriptor_targets,
+    liquid_asset_code,
+    liquid_blinding_secret,
+    liquid_plan_can_unblind,
+    load_descriptor_plan,
+    normalize_asset_code,
+    normalize_chain,
+    normalize_network,
+)
 
 
 APP_NAME = "kassiber"
@@ -56,6 +71,8 @@ DEFAULT_BACKENDS = {
     "mempool": {
         "name": "mempool",
         "kind": "esplora",
+        "chain": "bitcoin",
+        "network": "main",
         "url": "https://mempool.space/api",
         "source": "built-in default",
     }
@@ -321,6 +338,20 @@ def backend_timeout(backend, default=30):
     return parse_int(backend_value(backend, "timeout"), default)
 
 
+def normalize_chain_value(value):
+    try:
+        return normalize_chain(value)
+    except ValueError as exc:
+        raise AppError(str(exc)) from exc
+
+
+def normalize_network_value(chain, value):
+    try:
+        return normalize_network(chain, value)
+    except ValueError as exc:
+        raise AppError(str(exc)) from exc
+
+
 def now_iso():
     return datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
 
@@ -431,6 +462,24 @@ def http_get_json(url, timeout=30):
     try:
         with urlrequest.urlopen(request, timeout=timeout) as response:
             return json.loads(response.read().decode("utf-8"))
+    except urlerror.HTTPError as exc:
+        detail = exc.read().decode("utf-8", errors="replace")
+        raise AppError(f"HTTP {exc.code} from backend for {url}: {detail[:200]}") from exc
+    except urlerror.URLError as exc:
+        raise AppError(f"Failed to reach backend {url}: {exc.reason}") from exc
+
+
+def http_get_text(url, timeout=30, accept="text/plain"):
+    request = urlrequest.Request(
+        url,
+        headers={
+            "Accept": accept,
+            "User-Agent": f"{APP_NAME}/{__version__}",
+        },
+    )
+    try:
+        with urlrequest.urlopen(request, timeout=timeout) as response:
+            return response.read().decode("utf-8")
     except urlerror.HTTPError as exc:
         detail = exc.read().decode("utf-8", errors="replace")
         raise AppError(f"HTTP {exc.code} from backend for {url}: {detail[:200]}") from exc
@@ -1189,7 +1238,16 @@ def create_account(conn, workspace_ref, profile_ref, code, label, account_type, 
         INSERT INTO accounts(id, workspace_id, profile_id, code, label, account_type, asset, created_at)
         VALUES(?, ?, ?, ?, ?, ?, ?, ?)
         """,
-        (account_id, workspace["id"], profile["id"], code, label, account_type, asset.upper() if asset else None, now_iso()),
+        (
+            account_id,
+            workspace["id"],
+            profile["id"],
+            code,
+            label,
+            account_type,
+            normalize_asset_code(asset) if asset else None,
+            now_iso(),
+        ),
     )
     conn.commit()
     return conn.execute("SELECT * FROM accounts WHERE id = ?", (account_id,)).fetchone()
@@ -1209,6 +1267,49 @@ def list_accounts(conn, workspace_ref, profile_ref):
     return [dict(row) for row in rows]
 
 
+def read_text_argument(value, file_path, label):
+    if value not in (None, ""):
+        return str(value).strip()
+    if not file_path:
+        return None
+    text = Path(file_path).expanduser().read_text(encoding="utf-8").strip()
+    if not text:
+        raise AppError(f"{label} file '{file_path}' is empty")
+    return text
+
+
+def wallet_live_chain_config(config):
+    if not any(
+        [
+            config.get("descriptor"),
+            config.get("change_descriptor"),
+            config.get("addresses"),
+            config.get("chain"),
+            config.get("network"),
+        ]
+    ):
+        return None, None
+    chain = normalize_chain_value(config.get("chain"))
+    network = normalize_network_value(chain, config.get("network"))
+    return chain, network
+
+
+def load_wallet_descriptor_plan_from_config(config):
+    try:
+        return load_descriptor_plan(config)
+    except ValueError as exc:
+        raise AppError(str(exc)) from exc
+
+
+def wallet_policy_asset_id(config, chain, network):
+    explicit = str_or_none(config.get("policy_asset"))
+    if explicit:
+        return normalize_asset_code(explicit)
+    if chain == "liquid":
+        return normalize_asset_code(default_policy_asset_id(network))
+    return ""
+
+
 def parse_wallet_config(args):
     config = {}
     if getattr(args, "config", None):
@@ -1218,16 +1319,45 @@ def parse_wallet_config(args):
             config.update(json.load(handle))
     if getattr(args, "backend", None):
         config["backend"] = args.backend.strip().lower()
+    descriptor_text = read_text_argument(
+        getattr(args, "descriptor", None),
+        getattr(args, "descriptor_file", None),
+        "Descriptor",
+    )
+    if descriptor_text:
+        config["descriptor"] = descriptor_text
+    change_descriptor_text = read_text_argument(
+        getattr(args, "change_descriptor", None),
+        getattr(args, "change_descriptor_file", None),
+        "Change descriptor",
+    )
+    if change_descriptor_text:
+        config["change_descriptor"] = change_descriptor_text
     addresses = normalize_addresses(getattr(args, "address", None))
     existing_addresses = normalize_addresses(config.get("addresses"))
     if addresses or existing_addresses:
         config["addresses"] = normalize_addresses(existing_addresses + addresses)
+    if getattr(args, "chain", None):
+        config["chain"] = normalize_chain_value(args.chain)
+    if getattr(args, "network", None):
+        chain = normalize_chain_value(config.get("chain"))
+        config["network"] = normalize_network_value(chain, args.network)
+    if getattr(args, "gap_limit", None) is not None:
+        if args.gap_limit <= 0:
+            raise AppError("Descriptor gap limit must be positive")
+        config["gap_limit"] = args.gap_limit
+    if getattr(args, "policy_asset", None):
+        config["policy_asset"] = normalize_asset_code(args.policy_asset)
     if getattr(args, "source_file", None):
         config["source_file"] = os.path.abspath(args.source_file)
     if getattr(args, "source_format", None):
         config["source_format"] = args.source_format
     if getattr(args, "altbestand", False):
         config["altbestand"] = True
+    chain, network = wallet_live_chain_config(config)
+    if chain:
+        config["chain"] = chain
+        config["network"] = network
     return config
 
 
@@ -1239,8 +1369,25 @@ def create_wallet(conn, workspace_ref, profile_ref, label, kind, account_ref=Non
         account = resolve_account(conn, profile["id"], "treasury")
     normalized_kind = normalize_wallet_kind(kind)
     config = config or {}
+    descriptor_plan = load_wallet_descriptor_plan_from_config(config) if config.get("descriptor") else None
+    chain, network = wallet_live_chain_config(config)
     if normalized_kind == "address" and not config.get("addresses") and not config.get("source_file"):
         raise AppError("Address wallets require at least one --address or a file-based source")
+    if normalized_kind == "descriptor" and descriptor_plan is None and not config.get("source_file"):
+        raise AppError("Descriptor wallets require --descriptor/--descriptor-file or a file-based source")
+    if chain == "liquid" and descriptor_plan is None and not config.get("source_file"):
+        raise AppError("Liquid live sync currently requires a descriptor with private blinding keys")
+    if descriptor_plan and descriptor_plan.chain == "liquid":
+        if not liquid_plan_can_unblind(descriptor_plan):
+            raise AppError("Liquid descriptor wallets require private blinding keys for full sync and fee accounting")
+        if not config.get("backend") and not config.get("source_file"):
+            raise AppError("Liquid descriptor wallets require an explicit --backend; no public Liquid default is built in")
+        config["policy_asset"] = wallet_policy_asset_id(config, descriptor_plan.chain, descriptor_plan.network)
+    elif chain == "liquid" and not config.get("backend") and not config.get("source_file"):
+        raise AppError("Liquid wallets require an explicit --backend; no public Liquid default is built in")
+    if chain and network:
+        config["chain"] = chain
+        config["network"] = network
     wallet_id = str(uuid.uuid4())
     conn.execute(
         """
@@ -1284,14 +1431,28 @@ def list_wallets(conn, workspace_ref, profile_ref):
     output = []
     for row in rows:
         config = json.loads(row["config_json"] or "{}")
+        descriptor_state = ""
+        chain, network = wallet_live_chain_config(config)
+        if config.get("descriptor"):
+            try:
+                descriptor_plan = load_descriptor_plan(config)
+                descriptor_state = f"{descriptor_plan.chain}:{descriptor_plan.network}"
+                chain = descriptor_plan.chain
+                network = descriptor_plan.network
+            except ValueError:
+                descriptor_state = "invalid"
         output.append(
             {
                 "id": row["id"],
                 "label": row["label"],
                 "kind": row["kind"],
                 "account": row["account_code"] or row["account_label"],
+                "chain": chain or "",
+                "network": network or "",
                 "backend": config.get("backend", ""),
                 "addresses": ",".join(normalize_addresses(config.get("addresses"))),
+                "descriptor": descriptor_state,
+                "gap_limit": config.get("gap_limit", DEFAULT_DESCRIPTOR_GAP_LIMIT if descriptor_state else ""),
                 "altbestand": "yes" if parse_bool(config.get("altbestand"), default=False) else "",
                 "source_format": config.get("source_format", ""),
                 "source_file": config.get("source_file", ""),
@@ -1362,7 +1523,7 @@ def normalize_btcpay_record(record):
     sanitized_record = {str(key): value for key, value in record.items() if key is not None}
     txid = sanitized_record.get("TransactionId") or sanitized_record.get("Transaction Id")
     timestamp = sanitized_record.get("Timestamp")
-    currency = str(sanitized_record.get("Currency") or "BTC").strip().upper()
+    currency = normalize_asset_code(sanitized_record.get("Currency") or "BTC")
     amount = parse_btcpay_amount(sanitized_record.get("Amount"), currency=currency)
     comment = sanitized_record.get("Comment")
     labels = parse_btcpay_labels(sanitized_record.get("Labels"))
@@ -1439,7 +1600,7 @@ def normalize_import_record(record):
         "external_id": str(record.get("txid") or record.get("id") or ""),
         "occurred_at": parse_timestamp(record.get("occurred_at") or record.get("timestamp") or record.get("date")),
         "direction": direction,
-        "asset": str(record.get("asset") or "BTC").upper(),
+        "asset": normalize_asset_code(record.get("asset") or "BTC"),
         "amount": amount,
         "fee": fee,
         "fiat_rate": rate,
@@ -1588,8 +1749,155 @@ def apply_btcpay_metadata(conn, profile, wallet, records):
     }
 
 
-def fetch_esplora_transactions(base_url, address, max_pages=None):
-    encoded = urlparse.quote(address, safe="")
+def sync_target_from_address(address, chain, network, address_index):
+    return {
+        "chain": chain,
+        "network": network,
+        "branch_index": 0,
+        "branch_label": "address",
+        "address_index": address_index,
+        "address": address,
+        "unconfidential_address": None,
+        "script_pubkey": address_to_scriptpubkey(address).hex(),
+    }
+
+
+def sync_target_from_derived(target):
+    return {
+        "chain": target.chain,
+        "network": target.network,
+        "branch_index": target.branch_index,
+        "branch_label": target.branch_label,
+        "address_index": target.address_index,
+        "address": target.address,
+        "unconfidential_address": target.unconfidential_address,
+        "script_pubkey": target.script_pubkey,
+    }
+
+
+def scriptpubkey_scripthash(script_pubkey_hex):
+    return hashlib.sha256(bytes.fromhex(script_pubkey_hex)).digest()[::-1].hex()
+
+
+def validate_backend_for_wallet(backend, chain, network, has_descriptor=False):
+    kind = normalize_backend_kind(backend["kind"])
+    backend_chain = backend_value(backend, "chain")
+    if backend_chain:
+        expected_chain = normalize_chain_value(backend_chain)
+        if expected_chain != chain:
+            raise AppError(
+                f"Backend '{backend['name']}' is configured for {expected_chain}, but wallet sync requires {chain}"
+            )
+    backend_network = backend_value(backend, "network")
+    if backend_network:
+        expected_network = normalize_network_value(chain, backend_network)
+        if expected_network != network:
+            raise AppError(
+                f"Backend '{backend['name']}' is configured for {expected_network}, but wallet sync requires {network}"
+            )
+    if chain == "liquid" and kind != "esplora":
+        raise AppError("Liquid live sync currently requires an Esplora-compatible backend")
+    if has_descriptor and kind == "bitcoinrpc":
+        raise AppError("Descriptor-backed live sync is not implemented for bitcoinrpc yet; use Esplora or Electrum")
+    if chain != "bitcoin" and kind in {"electrum", "bitcoinrpc"}:
+        raise AppError(f"Backend kind '{kind}' does not support {chain} wallets")
+    return kind
+
+
+def scan_descriptor_targets(plan, target_used):
+    limits = branch_limits(plan)
+    targets = []
+    for branch in plan.branches:
+        if limits.get(branch.branch_index, plan.gap_limit) <= 1:
+            targets.append(sync_target_from_derived(derive_descriptor_target(plan, branch.branch_index, 0)))
+            continue
+        consecutive_unused = 0
+        address_index = 0
+        while consecutive_unused < plan.gap_limit:
+            target = sync_target_from_derived(derive_descriptor_target(plan, branch.branch_index, address_index))
+            targets.append(target)
+            if target_used(target):
+                consecutive_unused = 0
+            else:
+                consecutive_unused += 1
+            address_index += 1
+    return targets
+
+
+def esplora_scripthash_has_history(base_url, script_pubkey_hex, timeout=30):
+    resource = append_url_path(base_url, f"scripthash/{scriptpubkey_scripthash(script_pubkey_hex)}")
+    payload = http_get_json(resource, timeout=timeout)
+    chain_stats = payload.get("chain_stats") or {}
+    mempool_stats = payload.get("mempool_stats") or {}
+    return int(chain_stats.get("tx_count") or 0) + int(mempool_stats.get("tx_count") or 0) > 0
+
+
+def discover_descriptor_targets(backend, plan, kind):
+    timeout = backend_timeout(backend)
+    if kind == "esplora":
+        return scan_descriptor_targets(
+            plan,
+            lambda target: esplora_scripthash_has_history(
+                backend["url"],
+                target["script_pubkey"],
+                timeout=timeout,
+            ),
+        )
+    if kind == "electrum":
+        with ElectrumClient(backend) as client:
+            return scan_descriptor_targets(
+                plan,
+                lambda target: bool(
+                    client.call(
+                        "blockchain.scripthash.get_history",
+                        [scriptpubkey_scripthash(target["script_pubkey"])],
+                    )
+                ),
+            )
+    raise AppError(f"Descriptor-backed sync is not implemented for backend kind '{kind}'")
+
+
+def resolve_wallet_sync_targets(backend, wallet):
+    config = json.loads(wallet["config_json"] or "{}")
+    descriptor_plan = load_wallet_descriptor_plan_from_config(config) if config.get("descriptor") else None
+    if descriptor_plan:
+        chain = descriptor_plan.chain
+        network = descriptor_plan.network
+        if chain == "liquid" and not liquid_plan_can_unblind(descriptor_plan):
+            raise AppError("Liquid descriptor wallets require private blinding keys for full sync and fee accounting")
+        if chain == "liquid" and not config.get("backend"):
+            raise AppError("Liquid wallets must name a backend explicitly; no public Liquid default is built in")
+        kind = validate_backend_for_wallet(backend, chain, network, has_descriptor=True)
+        targets = discover_descriptor_targets(backend, descriptor_plan, kind)
+    else:
+        addresses = normalize_addresses(config.get("addresses"))
+        if not addresses:
+            return {
+                "chain": "",
+                "network": "",
+                "descriptor_plan": None,
+                "policy_asset_id": "",
+                "targets": [],
+                "tracked_scripts": {},
+            }
+        chain = normalize_chain_value(config.get("chain"))
+        network = normalize_network_value(chain, config.get("network"))
+        if chain == "liquid":
+            raise AppError("Liquid live sync currently requires descriptor-backed wallets so outputs can be unblinded locally")
+        validate_backend_for_wallet(backend, chain, network, has_descriptor=False)
+        targets = [sync_target_from_address(address, chain, network, index) for index, address in enumerate(addresses)]
+    tracked_scripts = {target["script_pubkey"]: target for target in targets}
+    return {
+        "chain": chain,
+        "network": network,
+        "descriptor_plan": descriptor_plan,
+        "policy_asset_id": wallet_policy_asset_id(config, chain, network),
+        "targets": targets,
+        "tracked_scripts": tracked_scripts,
+    }
+
+
+def fetch_esplora_history(base_url, resource_path, max_pages=None):
     transactions = []
     seen_txids = set()
     last_seen = None
@@ -1598,9 +1906,9 @@ def fetch_esplora_transactions(base_url, address, max_pages=None):
         if max_pages is not None and page_count >= max_pages:
             break
         chain_url = (
-            f"{base_url.rstrip('/')}/address/{encoded}/txs/chain/{last_seen}"
+            append_url_path(base_url, f"{resource_path}/txs/chain/{last_seen}")
             if last_seen
-            else f"{base_url.rstrip('/')}/address/{encoded}/txs/chain"
+            else append_url_path(base_url, f"{resource_path}/txs/chain")
         )
         page = http_get_json(chain_url)
         if not page:
@@ -1614,7 +1922,7 @@ def fetch_esplora_transactions(base_url, address, max_pages=None):
         page_count += 1
         if len(page) < 25:
             break
-    mempool_url = f"{base_url.rstrip('/')}/address/{encoded}/txs/mempool"
+    mempool_url = append_url_path(base_url, f"{resource_path}/txs/mempool")
     for tx in http_get_json(mempool_url):
         txid = tx.get("txid")
         if txid and txid not in seen_txids:
@@ -1623,21 +1931,28 @@ def fetch_esplora_transactions(base_url, address, max_pages=None):
     return transactions
 
 
+def fetch_esplora_scripthash_transactions(base_url, script_pubkey_hex, max_pages=None):
+    return fetch_esplora_history(
+        base_url,
+        f"scripthash/{scriptpubkey_scripthash(script_pubkey_hex)}",
+        max_pages=max_pages,
+    )
+
+
 def sats_to_btc(value):
     return dec(value) / SATS_PER_BTC
 
 
-def record_from_esplora_tx(tx, tracked_addresses, backend_name):
-    tracked = set(tracked_addresses)
+def record_from_bitcoin_esplora_tx(tx, tracked_scripts, backend_name):
     received_sats = sum(
         dec(vout.get("value", 0))
         for vout in tx.get("vout", [])
-        if vout.get("scriptpubkey_address") in tracked
+        if vout.get("scriptpubkey") in tracked_scripts
     )
     sent_sats = Decimal("0")
     for vin in tx.get("vin", []):
         prevout = vin.get("prevout") or {}
-        if prevout.get("scriptpubkey_address") in tracked:
+        if prevout.get("scriptpubkey") in tracked_scripts:
             sent_sats += dec(prevout.get("value", 0))
     if received_sats == 0 and sent_sats == 0:
         return None
@@ -1674,20 +1989,163 @@ def record_from_esplora_tx(tx, tracked_addresses, backend_name):
     }
 
 
-def esplora_records_for_wallet(backend, addresses):
+def liquid_asset_id_from_bytes(asset_bytes):
+    if not isinstance(asset_bytes, (bytes, bytearray)) or len(asset_bytes) != 32:
+        raise AppError("Unsupported Liquid asset encoding while decoding transaction")
+    return bytes(reversed(bytes(asset_bytes))).hex()
+
+
+def liquid_output_amount_asset_id(output, plan, target=None):
+    try:
+        if getattr(output, "is_blinded", False):
+            if target is None:
+                raise AppError("Unable to unblind Liquid output without wallet descriptor context")
+            secret, _ = liquid_blinding_secret(plan, target["branch_index"], target["address_index"])
+            value, asset_bytes, *_ = output.unblind(secret)
+        else:
+            value = output.value
+            asset_bytes = output.asset
+    except AppError:
+        raise
+    except Exception as exc:
+        label = target["address"] if target and target.get("address") else target["script_pubkey"] if target else "fee output"
+        raise AppError(f"Failed to decode Liquid output for {label}") from exc
+    if not isinstance(value, int):
+        raise AppError("Unsupported confidential Liquid value encoding while decoding transaction")
+    return value, liquid_asset_id_from_bytes(asset_bytes)
+
+
+def record_components_from_liquid_tx(tx_json, raw_hex, descriptor_plan, tracked_scripts, backend_name, policy_asset_id, prev_tx_lookup):
+    tx = decode_liquid_transaction(raw_hex)
+    net_sats = defaultdict(int)
+    fee_sats = defaultdict(int)
+    outputs = tx_json.get("vout") or []
+    if len(outputs) != len(tx.vout):
+        raise AppError(f"Liquid transaction {tx_json.get('txid')} changed shape between JSON and raw decoding")
+    for index, vout in enumerate(outputs):
+        script_hex = vout.get("scriptpubkey") or tx.vout[index].script_pubkey.data.hex()
+        if script_hex == "":
+            value_sats, asset_id = liquid_output_amount_asset_id(tx.vout[index], descriptor_plan, target=None)
+            fee_sats[asset_id] += value_sats
+            continue
+        target = tracked_scripts.get(script_hex)
+        if not target:
+            continue
+        value_sats, asset_id = liquid_output_amount_asset_id(tx.vout[index], descriptor_plan, target=target)
+        net_sats[asset_id] += value_sats
+    for vin in tx_json.get("vin") or []:
+        prevout = vin.get("prevout") or {}
+        script_hex = prevout.get("scriptpubkey")
+        target = tracked_scripts.get(script_hex)
+        if not target:
+            continue
+        prev_txid = vin.get("txid")
+        prev_vout = vin.get("vout")
+        if prev_txid is None or prev_vout is None:
+            continue
+        prev_tx = prev_tx_lookup(prev_txid)
+        if prev_vout >= len(prev_tx.vout):
+            raise AppError(f"Liquid prevout index {prev_vout} is out of range for transaction {prev_txid}")
+        value_sats, asset_id = liquid_output_amount_asset_id(prev_tx.vout[prev_vout], descriptor_plan, target=target)
+        net_sats[asset_id] -= value_sats
+    occurred_at = timestamp_to_iso((tx_json.get("status") or {}).get("block_time"))
+    records = []
+    all_assets = sorted(set(net_sats) | set(fee_sats))
+    for asset_id in all_assets:
+        asset_code = liquid_asset_code(asset_id, policy_asset_id)
+        net_value = dec(net_sats.get(asset_id, 0), default="0")
+        fee_value = dec(fee_sats.get(asset_id, 0), default="0")
+        if net_value == 0 and fee_value == 0:
+            continue
+        if net_value > 0:
+            direction = "inbound"
+            amount = sats_to_btc(net_value)
+            fee = Decimal("0")
+            kind = "deposit"
+        else:
+            direction = "outbound"
+            gross_out_sats = abs(net_value)
+            amount_sats = gross_out_sats - fee_value
+            if amount_sats < 0:
+                amount_sats = Decimal("0")
+            amount = sats_to_btc(amount_sats)
+            fee = sats_to_btc(fee_value)
+            kind = "withdrawal" if amount > 0 else "fee"
+        records.append(
+            {
+                "txid": tx_json.get("txid"),
+                "occurred_at": occurred_at,
+                "direction": direction,
+                "asset": asset_code,
+                "amount": amount,
+                "fee": fee,
+                "fiat_rate": None,
+                "fiat_value": None,
+                "kind": kind,
+                "description": f"Synced from {backend_name}",
+                "counterparty": None,
+                "raw_json": json.dumps(
+                    json_ready(
+                        {
+                            "tx": tx_json,
+                            "component": {
+                                "asset_id": asset_id,
+                                "asset": asset_code,
+                                "net_sats": int(net_value),
+                                "fee_sats": int(fee_value),
+                            },
+                        }
+                    ),
+                    sort_keys=True,
+                ),
+            }
+        )
+    return records
+
+
+def esplora_records_for_wallet(backend, sync_state):
     max_pages = parse_int(backend_value(backend, "maxpages"), default=0) or None
     transactions_by_txid = {}
-    for address in addresses:
-        for tx in fetch_esplora_transactions(backend["url"], address, max_pages=max_pages):
+    for target in sync_state["targets"]:
+        for tx in fetch_esplora_scripthash_transactions(backend["url"], target["script_pubkey"], max_pages=max_pages):
             transactions_by_txid[tx["txid"]] = tx
     records = []
+    raw_tx_cache = {}
+
+    def liquid_tx_lookup(txid):
+        if txid not in raw_tx_cache:
+            raw_tx_cache[txid] = decode_liquid_transaction(
+                http_get_text(
+                    append_url_path(backend["url"], f"tx/{txid}/hex"),
+                    timeout=backend_timeout(backend),
+                ).strip()
+            )
+        return raw_tx_cache[txid]
+
     for tx in sorted(
         transactions_by_txid.values(),
         key=lambda item: (((item.get("status") or {}).get("block_time") or 0), item.get("txid", "")),
     ):
-        normalized = record_from_esplora_tx(tx, addresses, backend["name"])
-        if normalized:
-            records.append(normalized)
+        if sync_state["chain"] == "liquid":
+            raw_hex = http_get_text(
+                append_url_path(backend["url"], f"tx/{tx['txid']}/hex"),
+                timeout=backend_timeout(backend),
+            ).strip()
+            records.extend(
+                record_components_from_liquid_tx(
+                    tx,
+                    raw_hex,
+                    sync_state["descriptor_plan"],
+                    sync_state["tracked_scripts"],
+                    backend["name"],
+                    sync_state["policy_asset_id"],
+                    liquid_tx_lookup,
+                )
+            )
+        else:
+            normalized = record_from_bitcoin_esplora_tx(tx, sync_state["tracked_scripts"], backend["name"])
+            if normalized:
+                records.append(normalized)
     return records
 
 
@@ -2020,16 +2478,22 @@ def record_from_electrum_tx(txid, tx, height, tracked_scripts, backend_name, tx_
     }
 
 
-def electrum_records_for_wallet(backend, addresses):
+def electrum_records_for_wallet(backend, sync_state):
+    if sync_state["chain"] != "bitcoin":
+        raise AppError("Electrum sync currently supports Bitcoin wallets only")
     transactions = {}
     header_timestamps = {}
     records = []
-    tracked_scripts = {address_to_scriptpubkey(address).hex() for address in addresses}
+    tracked_scripts = set(sync_state["tracked_scripts"])
     with ElectrumClient(backend) as client:
         histories = []
-        for address in addresses:
-            script_hash = electrum_scripthash(address)
-            histories.extend(client.call("blockchain.scripthash.get_history", [script_hash]))
+        for target in sync_state["targets"]:
+            histories.extend(
+                client.call(
+                    "blockchain.scripthash.get_history",
+                    [scriptpubkey_scripthash(target["script_pubkey"])],
+                )
+            )
 
         def lookup(txid):
             if txid not in transactions:
@@ -2068,21 +2532,25 @@ def sync_wallet_from_backend(conn, runtime_config, workspace_ref, profile_ref, w
     _, profile = resolve_scope(conn, workspace_ref, profile_ref)
     config = json.loads(wallet["config_json"] or "{}")
     backend = resolve_backend(runtime_config, config.get("backend"))
-    addresses = normalize_addresses(config.get("addresses"))
-    if not addresses:
+    sync_state = resolve_wallet_sync_targets(backend, wallet)
+    if not sync_state["targets"]:
         return {
             "wallet": wallet["label"],
             "status": "skipped",
-            "reason": "no addresses configured for backend sync",
+            "reason": "no addresses or descriptors configured for backend sync",
         }
     kind = normalize_backend_kind(backend["kind"])
     adapter_meta = {}
     if kind == "esplora":
-        normalized_records = esplora_records_for_wallet(backend, addresses)
+        normalized_records = esplora_records_for_wallet(backend, sync_state)
     elif kind == "electrum":
-        normalized_records = electrum_records_for_wallet(backend, addresses)
+        normalized_records = electrum_records_for_wallet(backend, sync_state)
     elif kind == "bitcoinrpc":
-        normalized_records, adapter_meta = bitcoinrpc_records_for_wallet(backend, wallet, addresses)
+        normalized_records, adapter_meta = bitcoinrpc_records_for_wallet(
+            backend,
+            wallet,
+            [target["address"] for target in sync_state["targets"] if target.get("address")],
+        )
     else:
         return {
             "wallet": wallet["label"],
@@ -2093,7 +2561,16 @@ def sync_wallet_from_backend(conn, runtime_config, workspace_ref, profile_ref, w
     outcome["backend"] = backend["name"]
     outcome["backend_kind"] = kind
     outcome["backend_url"] = backend["url"]
-    outcome["addresses"] = ",".join(addresses)
+    outcome["chain"] = sync_state["chain"]
+    outcome["network"] = sync_state["network"]
+    outcome["sync_mode"] = "descriptor" if sync_state["descriptor_plan"] else "addresses"
+    outcome["target_count"] = len(sync_state["targets"])
+    if sync_state["descriptor_plan"]:
+        outcome["gap_limit"] = sync_state["descriptor_plan"].gap_limit
+    else:
+        outcome["addresses"] = ",".join(target["address"] for target in sync_state["targets"] if target.get("address"))
+    if sync_state["policy_asset_id"]:
+        outcome["policy_asset"] = sync_state["policy_asset_id"]
     outcome.update(adapter_meta)
     return outcome
 
@@ -2112,6 +2589,7 @@ def sync_wallet(conn, runtime_config, workspace_ref, profile_ref, wallet_ref=Non
         source_file = config.get("source_file")
         source_format = config.get("source_format")
         addresses = normalize_addresses(config.get("addresses"))
+        has_descriptor = bool(str_or_none(config.get("descriptor")))
         if source_file and source_format:
             outcome = import_into_wallet(
                 conn,
@@ -2130,14 +2608,56 @@ def sync_wallet(conn, runtime_config, workspace_ref, profile_ref, wallet_ref=Non
             else:
                 results.append({"wallet": wallet["label"], "status": "synced", **outcome})
             continue
+        if has_descriptor:
+            outcome = sync_wallet_from_backend(conn, runtime_config, profile["workspace_id"], profile["id"], wallet)
+            if outcome.get("status") == "skipped":
+                results.append(outcome)
+            else:
+                results.append({"wallet": wallet["label"], "status": "synced", **outcome})
+            continue
         results.append(
             {
                 "wallet": wallet["label"],
                 "status": "skipped",
-                "reason": "no file source or backend addresses configured",
+                "reason": "no file source, descriptor, or backend addresses configured",
             }
         )
     return results
+
+
+def resolve_descriptor_branch_index(plan, branch):
+    if branch in (None, "", "all"):
+        return None
+    normalized = str(branch).strip().lower()
+    if normalized in {"0", "receive", "external"}:
+        return 0
+    if normalized in {"1", "change", "internal"}:
+        return 1
+    raise AppError("Descriptor branch must be one of: all, receive, change, 0, 1")
+
+
+def derive_wallet_targets(conn, workspace_ref, profile_ref, wallet_ref, branch=None, start=0, count=None):
+    _, profile = resolve_scope(conn, workspace_ref, profile_ref)
+    wallet = resolve_wallet(conn, profile["id"], wallet_ref)
+    config = json.loads(wallet["config_json"] or "{}")
+    plan = load_wallet_descriptor_plan_from_config(config) if config.get("descriptor") else None
+    if plan is None:
+        raise AppError(f"Wallet '{wallet['label']}' does not have a descriptor configured")
+    if start < 0:
+        raise AppError("Descriptor derivation start must be non-negative")
+    count = count if count is not None else plan.gap_limit
+    if count <= 0:
+        raise AppError("Descriptor derivation count must be positive")
+    branch_index = resolve_descriptor_branch_index(plan, branch)
+    return [
+        sync_target_from_derived(target)
+        for target in derive_descriptor_targets(
+            plan,
+            branch_index=branch_index,
+            start=start,
+            end=start + count,
+        )
+    ]
 
 
 def list_transactions(conn, workspace_ref, profile_ref, wallet_ref=None, limit=100):
@@ -3113,6 +3633,8 @@ def list_backends(runtime_config):
             {
                 "name": name,
                 "kind": backend["kind"],
+                "chain": backend.get("chain", ""),
+                "network": backend.get("network", ""),
                 "url": backend["url"],
                 "default": "yes" if name == runtime_config["default_backend"] else "",
                 "source": backend["source"],
@@ -3241,7 +3763,15 @@ def build_parser():
     wallets_create.add_argument("--kind", required=True)
     wallets_create.add_argument("--account")
     wallets_create.add_argument("--backend")
+    wallets_create.add_argument("--chain", choices=["bitcoin", "liquid"])
+    wallets_create.add_argument("--network")
     wallets_create.add_argument("--address", action="append")
+    wallets_create.add_argument("--descriptor")
+    wallets_create.add_argument("--descriptor-file")
+    wallets_create.add_argument("--change-descriptor")
+    wallets_create.add_argument("--change-descriptor-file")
+    wallets_create.add_argument("--gap-limit", type=int)
+    wallets_create.add_argument("--policy-asset")
     wallets_create.add_argument("--altbestand", action="store_true")
     wallets_create.add_argument("--config")
     wallets_create.add_argument("--config-file")
@@ -3276,6 +3806,13 @@ def build_parser():
     wallets_sync.add_argument("--profile")
     wallets_sync.add_argument("--wallet")
     wallets_sync.add_argument("--all", action="store_true")
+    wallets_derive = wallets_sub.add_parser("derive")
+    wallets_derive.add_argument("--workspace")
+    wallets_derive.add_argument("--profile")
+    wallets_derive.add_argument("--wallet", required=True)
+    wallets_derive.add_argument("--branch", default="all")
+    wallets_derive.add_argument("--start", type=int, default=0)
+    wallets_derive.add_argument("--count", type=int)
 
     transactions = sub.add_parser("transactions")
     tx_sub = transactions.add_subparsers(dest="transactions_command", required=True)
@@ -3461,6 +3998,19 @@ def dispatch(conn, args):
             )
         if args.wallets_command == "sync":
             return emit(args, sync_wallet(conn, args.runtime_config, args.workspace, args.profile, args.wallet, args.all))
+        if args.wallets_command == "derive":
+            return emit(
+                args,
+                derive_wallet_targets(
+                    conn,
+                    args.workspace,
+                    args.profile,
+                    args.wallet,
+                    branch=args.branch,
+                    start=args.start,
+                    count=args.count,
+                ),
+            )
     if args.command == "transactions":
         if args.transactions_command == "list":
             return emit(args, list_transactions(conn, args.workspace, args.profile, args.wallet, args.limit))

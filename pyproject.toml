@@ -13,6 +13,7 @@ authors = [
   { name = "OpenAI Codex" }
 ]
 dependencies = [
+  "embit>=0.8.0",
   "rp2>=1.7.2",
 ]
 
