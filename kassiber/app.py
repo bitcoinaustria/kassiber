@@ -22,6 +22,13 @@ from urllib import request as urlrequest
 
 from . import __version__
 from .errors import AppError
+from .msat import (
+    MSAT_PER_BTC,
+    SATS_PER_BTC,
+    btc_to_msat,
+    dec,
+    msat_to_btc,
+)
 from .time_utils import (
     UNKNOWN_OCCURRED_AT,
     _iso_z,
@@ -60,7 +67,6 @@ LEGACY_DATA_ROOT = os.path.expanduser(f"~/.local/share/{LEGACY_APP_NAME}")
 DEFAULT_DB_FILENAME = f"{APP_NAME}.sqlite3"
 LEGACY_DB_FILENAME = f"{LEGACY_APP_NAME}.sqlite3"
 DEFAULT_ENV_FILE = ".env"
-SATS_PER_BTC = Decimal("100000000")
 SCHEMA_VERSION = 1
 OUTPUT_FORMATS = ("table", "json", "plain", "csv")
 ACCOUNT_TYPES = {"asset", "liability", "equity", "income", "expense"}
@@ -320,42 +326,6 @@ def load_runtime_config(env_file):
         "default_backend": default_backend,
         "backends": backends,
     }
-
-
-def dec(value, default="0"):
-    if value is None:
-        return Decimal(default)
-    if isinstance(value, str) and value == "":
-        return Decimal(default)
-    try:
-        return Decimal(str(value))
-    except InvalidOperation as exc:
-        raise AppError(f"Invalid decimal value: {value}") from exc
-
-
-# -- msat conversion ---------------------------------------------------------
-#
-# Kassiber stores BTC-denominated amounts as INTEGER msat on disk (the Lightning
-# convention: 1 BTC = 100_000_000_000 msat). Python-side accounting math still
-# flows as Decimal BTC so we keep the engine expressive. These two helpers are
-# the adapter that sits at every DB read/write for amount / fee / quantity.
-
-MSAT_PER_BTC = Decimal("100000000000")
-
-
-def btc_to_msat(value):
-    """Accept Decimal/float/str BTC and return integer msat (None -> None)."""
-    if value is None:
-        return None
-    amount = dec(value) * MSAT_PER_BTC
-    return int(amount.to_integral_value(rounding=ROUND_HALF_UP))
-
-
-def msat_to_btc(value):
-    """Accept integer msat (or any DB row value) and return Decimal BTC (None -> None)."""
-    if value is None:
-        return None
-    return (Decimal(int(value)) / MSAT_PER_BTC)
 
 
 def str_or_none(value):
