@@ -17,6 +17,7 @@ Prefer these over the raw builtins at I/O boundaries.
 """
 
 from .errors import AppError
+from .wallet_descriptors import normalize_chain, normalize_network
 
 
 def str_or_none(value):
@@ -47,3 +48,19 @@ def parse_int(value, default):
         return int(str(value).strip())
     except ValueError as exc:
         raise AppError(f"Invalid integer value: {value}") from exc
+
+
+def normalize_chain_value(value):
+    """Wrap `wallet_descriptors.normalize_chain` to re-raise `ValueError` as `AppError`."""
+    try:
+        return normalize_chain(value)
+    except ValueError as exc:
+        raise AppError(str(exc)) from exc
+
+
+def normalize_network_value(chain, value):
+    """Wrap `wallet_descriptors.normalize_network` to re-raise `ValueError` as `AppError`."""
+    try:
+        return normalize_network(chain, value)
+    except ValueError as exc:
+        raise AppError(str(exc)) from exc
