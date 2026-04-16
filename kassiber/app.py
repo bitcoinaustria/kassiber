@@ -8,16 +8,24 @@ import socket
 import sqlite3
 import ssl
 import sys
+import tempfile
 import uuid
 from collections import defaultdict
 from datetime import datetime, timezone
 from decimal import Decimal, InvalidOperation
+from importlib import import_module
 from pathlib import Path
 from urllib import error as urlerror
 from urllib import parse as urlparse
 from urllib import request as urlrequest
 
 from . import __version__
+from .tax_policy import (
+    DEFAULT_LONG_TERM_DAYS,
+    DEFAULT_TAX_COUNTRY,
+    build_tax_policy,
+    supported_tax_countries,
+)
 
 
 APP_NAME = "kassiber"
@@ -30,6 +38,7 @@ DEFAULT_ENV_FILE = ".env"
 SATS_PER_BTC = Decimal("100000000")
 UNKNOWN_OCCURRED_AT = "1970-01-01T00:00:00Z"
 ACCOUNT_TYPES = {"asset", "liability", "equity", "income", "expense"}
+RP2_ACCOUNTING_METHODS = ("FIFO", "LIFO", "HIFO", "LOFO")
 WALLET_KINDS = [
     "descriptor",
     "xpub",
@@ -75,6 +84,8 @@ CREATE TABLE IF NOT EXISTS profiles (
     workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
     label TEXT NOT NULL,
     fiat_currency TEXT NOT NULL DEFAULT 'USD',
+    tax_country TEXT NOT NULL DEFAULT 'generic',
+    tax_long_term_days INTEGER NOT NULL DEFAULT 365,
     gains_algorithm TEXT NOT NULL DEFAULT 'FIFO',
     last_processed_at TEXT,
     last_processed_tx_count INTEGER NOT NULL DEFAULT 0,
@@ -261,7 +272,9 @@ def load_runtime_config(env_file):
 
 
 def dec(value, default="0"):
-    if value is None or value == "":
+    if value is None:
+        return Decimal(default)
+    if isinstance(value, str) and value == "":
         return Decimal(default)
     try:
         return Decimal(str(value))
@@ -684,8 +697,195 @@ def open_db(data_root):
     conn = sqlite3.connect(resolve_database_path(root))
     conn.row_factory = sqlite3.Row
     conn.executescript(SCHEMA)
+    ensure_schema_compat(conn)
     conn.execute("PRAGMA foreign_keys = ON")
     return conn
+
+
+_RP2_MODULES = None
+
+
+def ensure_column(conn, table_name, column_name, definition):
+    columns = {row["name"] for row in conn.execute(f"PRAGMA table_info({table_name})").fetchall()}
+    if column_name in columns:
+        return
+    conn.execute(f"ALTER TABLE {table_name} ADD COLUMN {column_name} {definition}")
+    conn.commit()
+
+
+def ensure_schema_compat(conn):
+    ensure_column(conn, "profiles", "tax_country", f"TEXT NOT NULL DEFAULT '{DEFAULT_TAX_COUNTRY}'")
+    ensure_column(conn, "profiles", "tax_long_term_days", f"INTEGER NOT NULL DEFAULT {DEFAULT_LONG_TERM_DAYS}")
+
+
+def get_rp2_modules():
+    global _RP2_MODULES
+    if _RP2_MODULES is not None:
+        return _RP2_MODULES
+    try:
+        _RP2_MODULES = {
+            "AVLTree": import_module("prezzemolo.avl_tree").AVLTree,
+            "AbstractCountry": import_module("rp2.abstract_country").AbstractCountry,
+            "AccountingEngine": import_module("rp2.accounting_engine").AccountingEngine,
+            "Configuration": import_module("rp2.configuration").Configuration,
+            "InputData": import_module("rp2.input_data").InputData,
+            "InTransaction": import_module("rp2.in_transaction").InTransaction,
+            "OutTransaction": import_module("rp2.out_transaction").OutTransaction,
+            "TransactionSet": import_module("rp2.transaction_set").TransactionSet,
+            "compute_tax": import_module("rp2.tax_engine").compute_tax,
+            "RP2Decimal": import_module("rp2.rp2_decimal").RP2Decimal,
+        }
+    except ModuleNotFoundError as exc:
+        raise AppError(
+            "RP2 integration requires the 'rp2' package. Reinstall Kassiber in a Python >= 3.10 environment."
+        ) from exc
+    return _RP2_MODULES
+
+
+def rp2_decimal(value):
+    modules = get_rp2_modules()
+    return modules["RP2Decimal"](str(value))
+
+
+def make_rp2_country(profile):
+    AbstractCountry = get_rp2_modules()["AbstractCountry"]
+    try:
+        policy = build_tax_policy(profile)
+    except ValueError as exc:
+        raise AppError(str(exc)) from exc
+    currency_code = policy.fiat_currency
+
+    class KassiberCountry(AbstractCountry):
+        def __init__(self):
+            super().__init__(policy.tax_country, currency_code)
+
+        def get_long_term_capital_gain_period(self):
+            return policy.long_term_days
+
+        def get_default_accounting_method(self):
+            return policy.default_accounting_method
+
+        def get_accounting_methods(self):
+            return set(policy.accounting_methods)
+
+        def get_report_generators(self):
+            return set(policy.report_generators)
+
+        def get_default_generation_language(self):
+            return policy.generation_language
+
+    return KassiberCountry()
+
+
+def make_rp2_configuration(profile, wallet_labels, assets):
+    Configuration = get_rp2_modules()["Configuration"]
+    if not wallet_labels:
+        raise AppError("RP2 configuration requires at least one wallet")
+    if not assets:
+        raise AppError("RP2 configuration requires at least one asset")
+    content = "\n".join(
+        [
+            "[general]",
+            f"assets = {', '.join(sorted(assets))}",
+            f"exchanges = {', '.join(sorted(wallet_labels))}",
+            f"holders = {profile['label']}",
+            "",
+            "[in_header]",
+            "timestamp = 0",
+            "asset = 1",
+            "exchange = 2",
+            "holder = 3",
+            "transaction_type = 4",
+            "spot_price = 5",
+            "crypto_in = 6",
+            "crypto_fee = 7",
+            "fiat_in_no_fee = 8",
+            "fiat_in_with_fee = 9",
+            "fiat_fee = 10",
+            "unique_id = 11",
+            "notes = 12",
+            "",
+            "[out_header]",
+            "timestamp = 0",
+            "asset = 1",
+            "exchange = 2",
+            "holder = 3",
+            "transaction_type = 4",
+            "spot_price = 5",
+            "crypto_out_no_fee = 6",
+            "crypto_fee = 7",
+            "crypto_out_with_fee = 8",
+            "fiat_out_no_fee = 9",
+            "fiat_fee = 10",
+            "unique_id = 11",
+            "notes = 12",
+            "",
+            "[intra_header]",
+            "timestamp = 0",
+            "asset = 1",
+            "from_exchange = 2",
+            "from_holder = 3",
+            "to_exchange = 4",
+            "to_holder = 5",
+            "spot_price = 6",
+            "crypto_sent = 7",
+            "crypto_received = 8",
+            "unique_id = 9",
+            "notes = 10",
+            "",
+        ]
+    )
+    handle = tempfile.NamedTemporaryFile("w", encoding="utf-8", suffix=".ini", delete=False)
+    try:
+        handle.write(content)
+        handle.flush()
+    finally:
+        handle.close()
+    return Configuration(handle.name, make_rp2_country(profile)), handle.name
+
+
+def build_rp2_accounting_engine(profile):
+    modules = get_rp2_modules()
+    method_name = str(profile["gains_algorithm"]).strip().lower()
+    try:
+        policy = build_tax_policy(profile)
+    except ValueError as exc:
+        raise AppError(str(exc)) from exc
+    if method_name not in set(policy.accounting_methods):
+        raise AppError(f"Unsupported RP2 accounting method '{profile['gains_algorithm']}'")
+    try:
+        method_module = import_module(f"rp2.plugin.accounting_method.{method_name}")
+    except ModuleNotFoundError as exc:
+        raise AppError(f"RP2 accounting method '{profile['gains_algorithm']}' is not available") from exc
+    years_to_methods = modules["AVLTree"]()
+    years_to_methods.insert_node(1970, method_module.AccountingMethod())
+    return modules["AccountingEngine"](years_2_methods=years_to_methods)
+
+
+def rp2_spot_price(row, quantity):
+    if row["fiat_rate"] is not None:
+        rate = dec(row["fiat_rate"])
+        if rate > 0:
+            return rate
+    if row["fiat_value"] is not None and quantity > 0:
+        value = dec(row["fiat_value"])
+        if value > 0:
+            return value / quantity
+    return None
+
+
+def rp2_quarantine(profile, row, reason, detail):
+    return {
+        "transaction_id": row["id"],
+        "workspace_id": profile["workspace_id"],
+        "profile_id": profile["id"],
+        "reason": reason,
+        "detail_json": json.dumps(detail, sort_keys=True),
+    }
+
+
+def wallet_is_altbestand(wallet):
+    return parse_bool(wallet.get("altbestand"), default=False)
 
 
 def json_ready(value):
@@ -911,16 +1111,37 @@ def ensure_default_accounts(conn, workspace_id, profile_id):
         )
 
 
-def create_profile(conn, workspace_ref, label, fiat_currency, gains_algorithm):
+def create_profile(conn, workspace_ref, label, fiat_currency, gains_algorithm, tax_country, tax_long_term_days):
     workspace = resolve_workspace(conn, workspace_ref)
+    if tax_long_term_days < 0:
+        raise AppError("Tax long-term days cannot be negative")
+    try:
+        policy = build_tax_policy(
+            {
+                "fiat_currency": fiat_currency,
+                "tax_country": tax_country,
+                "tax_long_term_days": tax_long_term_days,
+            }
+        )
+    except ValueError as exc:
+        raise AppError(str(exc)) from exc
     profile_id = str(uuid.uuid4())
     conn.execute(
         """
         INSERT INTO profiles(
-            id, workspace_id, label, fiat_currency, gains_algorithm, created_at
-        ) VALUES(?, ?, ?, ?, ?, ?)
+            id, workspace_id, label, fiat_currency, tax_country, tax_long_term_days, gains_algorithm, created_at
+        ) VALUES(?, ?, ?, ?, ?, ?, ?, ?)
         """,
-        (profile_id, workspace["id"], label, fiat_currency.upper(), gains_algorithm.upper(), now_iso()),
+        (
+            profile_id,
+            workspace["id"],
+            label,
+            policy.fiat_currency,
+            policy.tax_country,
+            policy.long_term_days,
+            gains_algorithm.upper(),
+            now_iso(),
+        ),
     )
     ensure_default_accounts(conn, workspace["id"], profile_id)
     set_setting(conn, "context_workspace", workspace["id"])
@@ -934,7 +1155,7 @@ def list_profiles(conn, workspace_ref=None):
     current = get_setting(conn, "context_profile")
     rows = conn.execute(
         """
-        SELECT id, label, fiat_currency, gains_algorithm, created_at
+        SELECT id, label, fiat_currency, tax_country, tax_long_term_days, gains_algorithm, created_at
         FROM profiles
         WHERE workspace_id = ?
         ORDER BY created_at ASC
@@ -946,6 +1167,8 @@ def list_profiles(conn, workspace_ref=None):
             "id": row["id"],
             "label": row["label"],
             "fiat_currency": row["fiat_currency"],
+            "tax_country": row["tax_country"],
+            "tax_long_term_days": row["tax_long_term_days"],
             "gains_algorithm": row["gains_algorithm"],
             "current": "yes" if row["id"] == current else "",
             "created_at": row["created_at"],
@@ -1003,6 +1226,8 @@ def parse_wallet_config(args):
         config["source_file"] = os.path.abspath(args.source_file)
     if getattr(args, "source_format", None):
         config["source_format"] = args.source_format
+    if getattr(args, "altbestand", False):
+        config["altbestand"] = True
     return config
 
 
@@ -1067,12 +1292,30 @@ def list_wallets(conn, workspace_ref, profile_ref):
                 "account": row["account_code"] or row["account_label"],
                 "backend": config.get("backend", ""),
                 "addresses": ",".join(normalize_addresses(config.get("addresses"))),
+                "altbestand": "yes" if parse_bool(config.get("altbestand"), default=False) else "",
                 "source_format": config.get("source_format", ""),
                 "source_file": config.get("source_file", ""),
                 "created_at": row["created_at"],
             }
         )
     return output
+
+
+def set_wallet_altbestand(conn, workspace_ref, profile_ref, wallet_ref, enabled):
+    _, profile = resolve_scope(conn, workspace_ref, profile_ref)
+    wallet = resolve_wallet(conn, profile["id"], wallet_ref)
+    config = json.loads(wallet["config_json"] or "{}")
+    if enabled:
+        config["altbestand"] = True
+    else:
+        config.pop("altbestand", None)
+    conn.execute("UPDATE wallets SET config_json = ? WHERE id = ?", (json.dumps(config, sort_keys=True), wallet["id"]))
+    invalidate_journals(conn, profile["id"])
+    conn.commit()
+    return {
+        "wallet": wallet["label"],
+        "altbestand": bool(enabled),
+    }
 
 
 def load_import_records(file_path, input_format):
@@ -2268,6 +2511,263 @@ def latest_rates_for_profile(conn, profile_id):
     return rates
 
 
+def rp2_wallet_state(profile, wallet, asset, rows, configuration):
+    modules = get_rp2_modules()
+    TransactionSet = modules["TransactionSet"]
+    InTransaction = modules["InTransaction"]
+    OutTransaction = modules["OutTransaction"]
+    InputData = modules["InputData"]
+    compute_tax = modules["compute_tax"]
+    in_transactions = TransactionSet(configuration, "IN", asset)
+    out_transactions = TransactionSet(configuration, "OUT", asset)
+    intra_transactions = TransactionSet(configuration, "INTRA", asset)
+    holder = profile["label"]
+    total_available = Decimal("0")
+    priced_available = Decimal("0")
+    quarantines = []
+    row_index = 1
+    row_by_id = {row["id"]: row for row in rows}
+    for row in rows:
+        amount = dec(row["amount"])
+        fee = dec(row["fee"])
+        description = row["note"] or row["description"] or row["kind"] or row["id"]
+        if row["direction"] == "inbound":
+            total_available += amount
+            spot_price = rp2_spot_price(row, amount)
+            if spot_price is None:
+                quarantines.append(
+                    rp2_quarantine(
+                        profile,
+                        row,
+                        "missing_spot_price",
+                        {
+                            "wallet": wallet["label"],
+                            "asset": asset,
+                            "direction": row["direction"],
+                            "required_for": "acquisition",
+                        },
+                    )
+                )
+                continue
+            fiat_value = dec(row["fiat_value"]) if row["fiat_value"] is not None else amount * spot_price
+            in_transactions.add_entry(
+                InTransaction(
+                    configuration=configuration,
+                    timestamp=row["occurred_at"],
+                    asset=asset,
+                    exchange=wallet["label"],
+                    holder=holder,
+                    transaction_type="BUY",
+                    spot_price=rp2_decimal(spot_price),
+                    crypto_in=rp2_decimal(amount),
+                    fiat_in_no_fee=rp2_decimal(fiat_value),
+                    fiat_in_with_fee=rp2_decimal(fiat_value),
+                    fiat_fee=rp2_decimal(0),
+                    row=row_index,
+                    unique_id=row["id"],
+                    notes=description,
+                )
+            )
+            priced_available += amount
+            row_index += 1
+            continue
+        needed = amount + fee
+        if needed <= 0:
+            continue
+        if total_available < needed:
+            quarantines.append(
+                rp2_quarantine(
+                    profile,
+                    row,
+                    "insufficient_lots",
+                    {
+                        "wallet": wallet["label"],
+                        "asset": asset,
+                        "required": float(needed),
+                        "available": float(total_available),
+                    },
+                )
+            )
+            continue
+        if priced_available < needed:
+            quarantines.append(
+                rp2_quarantine(
+                    profile,
+                    row,
+                    "missing_cost_basis",
+                    {
+                        "wallet": wallet["label"],
+                        "asset": asset,
+                        "required": float(needed),
+                        "priced_available": float(priced_available),
+                    },
+                )
+            )
+            continue
+        spot_price = rp2_spot_price(row, amount if amount > 0 else fee)
+        if spot_price is None:
+            quarantines.append(
+                rp2_quarantine(
+                    profile,
+                    row,
+                    "missing_spot_price",
+                    {
+                        "wallet": wallet["label"],
+                        "asset": asset,
+                        "direction": row["direction"],
+                        "required_for": "disposal",
+                    },
+                )
+            )
+            continue
+        fiat_out_no_fee = dec(row["fiat_value"]) if row["fiat_value"] is not None else amount * spot_price
+        out_transactions.add_entry(
+            OutTransaction(
+                configuration=configuration,
+                timestamp=row["occurred_at"],
+                asset=asset,
+                exchange=wallet["label"],
+                holder=holder,
+                transaction_type="SELL" if amount > 0 else "FEE",
+                spot_price=rp2_decimal(spot_price),
+                crypto_out_no_fee=rp2_decimal(amount),
+                crypto_fee=rp2_decimal(fee),
+                fiat_out_no_fee=rp2_decimal(fiat_out_no_fee) if amount > 0 else None,
+                fiat_fee=rp2_decimal(fee * spot_price),
+                row=row_index,
+                unique_id=row["id"],
+                notes=description,
+            )
+        )
+        total_available -= needed
+        priced_available -= needed
+        row_index += 1
+    if in_transactions.count == 0:
+        return None, quarantines, row_by_id
+    input_data = InputData(
+        asset=asset,
+        unfiltered_in_transaction_set=in_transactions,
+        unfiltered_out_transaction_set=out_transactions,
+        unfiltered_intra_transaction_set=intra_transactions,
+    )
+    try:
+        computed_data = compute_tax(configuration, build_rp2_accounting_engine(profile), input_data)
+    except Exception as exc:
+        raise AppError(f"RP2 tax calculation failed for wallet '{wallet['label']}' asset '{asset}': {exc}") from exc
+    return computed_data, quarantines, row_by_id
+
+
+def append_rp2_journal_entries(entries, computed_data, wallet, profile, row_by_id):
+    altbestand = wallet_is_altbestand(wallet)
+    for transaction in computed_data.in_transaction_set:
+        source_row = row_by_id.get(transaction.unique_id)
+        entries.append(
+            {
+                "id": str(uuid.uuid4()),
+                "workspace_id": profile["workspace_id"],
+                "profile_id": profile["id"],
+                "transaction_id": transaction.unique_id,
+                "wallet_id": wallet["id"],
+                "account_id": wallet["wallet_account_id"],
+                "occurred_at": source_row["occurred_at"] if source_row else transaction.timestamp.isoformat(),
+                "entry_type": "acquisition",
+                "asset": transaction.asset,
+                "quantity": dec(transaction.crypto_in),
+                "fiat_value": dec(transaction.fiat_in_with_fee),
+                "unit_cost": dec(transaction.fiat_in_with_fee) / dec(transaction.crypto_in),
+                "cost_basis": None,
+                "proceeds": None,
+                "gain_loss": None,
+                "description": transaction.notes or (source_row["description"] if source_row else "Inbound transaction"),
+            }
+        )
+    realized_by_event = {}
+    for gain_loss in computed_data.gain_loss_set:
+        taxable_event = gain_loss.taxable_event
+        event = realized_by_event.setdefault(
+            taxable_event.internal_id,
+            {
+                "transaction_id": taxable_event.unique_id,
+                "occurred_at": row_by_id[taxable_event.unique_id]["occurred_at"] if taxable_event.unique_id in row_by_id else taxable_event.timestamp.isoformat(),
+                "entry_type": "fee" if taxable_event.transaction_type.value == "FEE" else "disposal",
+                "asset": taxable_event.asset,
+                "quantity": Decimal("0"),
+                "fiat_value": Decimal("0"),
+                "cost_basis": Decimal("0"),
+                "proceeds": Decimal("0"),
+                "gain_loss": Decimal("0"),
+                "description": taxable_event.notes or (
+                    row_by_id[taxable_event.unique_id]["description"] if taxable_event.unique_id in row_by_id else "Outbound transaction"
+                ),
+            },
+        )
+        event["quantity"] += dec(gain_loss.crypto_amount)
+        event["cost_basis"] += dec(gain_loss.fiat_cost_basis)
+        event["proceeds"] += dec(gain_loss.taxable_event_fiat_amount_with_fee_fraction)
+        event["gain_loss"] += dec(gain_loss.fiat_gain)
+    for event in realized_by_event.values():
+        description = event["description"]
+        proceeds = event["proceeds"]
+        cost_basis = event["cost_basis"]
+        gain_loss = event["gain_loss"]
+        if altbestand:
+            description = f"{description} [Altbestand tax-free]"
+            if event["entry_type"] == "fee":
+                proceeds = Decimal("0")
+                cost_basis = Decimal("0")
+            else:
+                cost_basis = proceeds
+            gain_loss = Decimal("0")
+        entries.append(
+            {
+                "id": str(uuid.uuid4()),
+                "workspace_id": profile["workspace_id"],
+                "profile_id": profile["id"],
+                "transaction_id": event["transaction_id"],
+                "wallet_id": wallet["id"],
+                "account_id": wallet["wallet_account_id"],
+                "occurred_at": event["occurred_at"],
+                "entry_type": event["entry_type"],
+                "asset": event["asset"],
+                "quantity": -event["quantity"],
+                "fiat_value": proceeds,
+                "unit_cost": Decimal("0"),
+                "cost_basis": cost_basis,
+                "proceeds": proceeds,
+                "gain_loss": gain_loss,
+                "description": description,
+            }
+        )
+
+
+def accumulate_rp2_holdings(account_holdings, wallet_holdings, computed_data, wallet):
+    for transaction in computed_data.in_transaction_set:
+        sold_percent = dec(computed_data.get_in_lot_sold_percentage(transaction))
+        remaining_ratio = Decimal("1") - sold_percent
+        if remaining_ratio <= 0:
+            continue
+        quantity = dec(transaction.crypto_in) * remaining_ratio
+        if quantity <= 0:
+            continue
+        cost_basis = dec(transaction.fiat_in_with_fee) * remaining_ratio
+        account_key = (
+            wallet["wallet_account_id"],
+            wallet["account_code"],
+            wallet["account_label"],
+            transaction.asset,
+        )
+        wallet_key = (
+            wallet["id"],
+            wallet["label"],
+            wallet["account_code"],
+            transaction.asset,
+        )
+        account_holdings[account_key]["quantity"] += quantity
+        account_holdings[account_key]["cost_basis"] += cost_basis
+        wallet_holdings[wallet_key]["quantity"] += quantity
+        wallet_holdings[wallet_key]["cost_basis"] += cost_basis
+
+
 def build_ledger_state(conn, profile):
     rows = conn.execute(
         """
@@ -2276,6 +2776,7 @@ def build_ledger_state(conn, profile):
             w.label AS wallet_label,
             w.kind AS wallet_kind,
             w.account_id AS wallet_account_id,
+            w.config_json AS config_json,
             COALESCE(a.code, 'treasury') AS account_code,
             COALESCE(a.label, 'Treasury') AS account_label
         FROM transactions t
@@ -2286,142 +2787,54 @@ def build_ledger_state(conn, profile):
         """,
         (profile["id"],),
     ).fetchall()
-    algorithm = str(profile["gains_algorithm"]).upper()
-    lots_by_wallet_asset = defaultdict(list)
+    wallet_labels = {row["wallet_label"] for row in rows}
+    assets = {row["asset"] for row in rows}
+    if not rows:
+        return {
+            "entries": [],
+            "quarantines": [],
+            "account_holdings": defaultdict(lambda: {"quantity": Decimal("0"), "cost_basis": Decimal("0")}),
+            "wallet_holdings": defaultdict(lambda: {"quantity": Decimal("0"), "cost_basis": Decimal("0")}),
+            "latest_rates": latest_rates_for_profile(conn, profile["id"]),
+        }
+    configuration, configuration_path = make_rp2_configuration(profile, wallet_labels, assets)
     entries = []
     quarantines = []
-    rates = latest_rates_for_profile(conn, profile["id"])
-    for row in rows:
-        amount = dec(row["amount"])
-        fee = dec(row["fee"])
-        fiat_value = dec(row["fiat_value"]) if row["fiat_value"] is not None else Decimal("0")
-        fiat_rate = dec(row["fiat_rate"]) if row["fiat_rate"] is not None else None
-        if fiat_value == 0 and fiat_rate is not None:
-            fiat_value = amount * fiat_rate
-        asset = row["asset"]
-        wallet_ref = {
-            "wallet_id": row["wallet_id"],
-            "wallet_label": row["wallet_label"],
-            "account_id": row["wallet_account_id"],
-            "account_code": row["account_code"],
-            "account_label": row["account_label"],
-        }
-        wallet_asset_key = (row["wallet_id"], asset)
-        if row["direction"] == "inbound":
-            unit_cost = (fiat_value / amount) if amount > 0 else Decimal("0")
-            lots_by_wallet_asset[wallet_asset_key].append(
-                {
-                    **wallet_ref,
-                    "quantity": amount,
-                    "unit_cost": unit_cost,
-                    "asset": asset,
-                }
-            )
-            entries.append(
-                {
-                    "id": str(uuid.uuid4()),
-                    "workspace_id": profile["workspace_id"],
-                    "profile_id": profile["id"],
-                    "transaction_id": row["id"],
-                    "wallet_id": row["wallet_id"],
-                    "account_id": row["wallet_account_id"],
-                    "occurred_at": row["occurred_at"],
-                    "entry_type": "acquisition",
-                    "asset": asset,
-                    "quantity": amount,
-                    "fiat_value": fiat_value,
-                    "unit_cost": unit_cost,
-                    "cost_basis": None,
-                    "proceeds": None,
-                    "gain_loss": None,
-                    "description": row["description"] or row["kind"] or "Inbound transaction",
-                }
-            )
-            continue
-        needed = amount + fee
-        if available_quantity(lots_by_wallet_asset[wallet_asset_key]) < needed:
-            quarantines.append(
-                {
-                    "transaction_id": row["id"],
-                    "workspace_id": profile["workspace_id"],
-                    "profile_id": profile["id"],
-                    "reason": "insufficient_lots",
-                    "detail_json": json.dumps(
-                        {
-                            "wallet": row["wallet_label"],
-                            "asset": asset,
-                            "required": float(needed),
-                            "available": float(available_quantity(lots_by_wallet_asset[wallet_asset_key])),
-                        },
-                        sort_keys=True,
-                    ),
-                }
-            )
-            continue
-        cost_basis = consume_lots(lots_by_wallet_asset[wallet_asset_key], amount, algorithm)
-        gain_loss = fiat_value - cost_basis
-        entries.append(
-            {
-                "id": str(uuid.uuid4()),
-                "workspace_id": profile["workspace_id"],
-                "profile_id": profile["id"],
-                "transaction_id": row["id"],
-                "wallet_id": row["wallet_id"],
-                "account_id": row["wallet_account_id"],
-                "occurred_at": row["occurred_at"],
-                "entry_type": "disposal",
-                "asset": asset,
-                "quantity": -amount,
-                "fiat_value": fiat_value,
-                "unit_cost": Decimal("0"),
-                "cost_basis": cost_basis,
-                "proceeds": fiat_value,
-                "gain_loss": gain_loss,
-                "description": row["description"] or row["kind"] or "Outbound transaction",
-            }
-        )
-        if fee > 0:
-            fee_basis = consume_lots(lots_by_wallet_asset[wallet_asset_key], fee, algorithm)
-            entries.append(
-                {
-                    "id": str(uuid.uuid4()),
-                    "workspace_id": profile["workspace_id"],
-                    "profile_id": profile["id"],
-                    "transaction_id": row["id"],
-                    "wallet_id": row["wallet_id"],
-                    "account_id": row["wallet_account_id"],
-                    "occurred_at": row["occurred_at"],
-                    "entry_type": "fee",
-                    "asset": asset,
-                    "quantity": -fee,
-                    "fiat_value": Decimal("0"),
-                    "unit_cost": Decimal("0"),
-                    "cost_basis": fee_basis,
-                    "proceeds": Decimal("0"),
-                    "gain_loss": -fee_basis,
-                    "description": f"Network fee for {row['description'] or row['external_id'] or row['id']}",
-                }
-            )
     account_holdings = defaultdict(lambda: {"quantity": Decimal("0"), "cost_basis": Decimal("0")})
     wallet_holdings = defaultdict(lambda: {"quantity": Decimal("0"), "cost_basis": Decimal("0")})
-    for (wallet_id, asset), lots in lots_by_wallet_asset.items():
-        for lot in lots:
-            account_key = (
-                lot["account_id"],
-                lot["account_code"],
-                lot["account_label"],
+    rates = latest_rates_for_profile(conn, profile["id"])
+    try:
+        grouped_rows = defaultdict(list)
+        wallet_refs = {}
+        for row in rows:
+            grouped_rows[(row["wallet_id"], row["asset"])].append(row)
+            wallet_config = json.loads(row["config_json"] or "{}")
+            wallet_refs[row["wallet_id"]] = {
+                "id": row["wallet_id"],
+                "label": row["wallet_label"],
+                "wallet_account_id": row["wallet_account_id"],
+                "account_code": row["account_code"],
+                "account_label": row["account_label"],
+                "altbestand": wallet_config.get("altbestand", False),
+            }
+        for (wallet_id, asset), wallet_rows in grouped_rows.items():
+            computed_data, wallet_quarantines, row_by_id = rp2_wallet_state(
+                profile,
+                wallet_refs[wallet_id],
                 asset,
+                wallet_rows,
+                configuration,
             )
-            wallet_key = (
-                wallet_id,
-                lot["wallet_label"],
-                lot["account_code"],
-                asset,
-            )
-            account_holdings[account_key]["quantity"] += lot["quantity"]
-            account_holdings[account_key]["cost_basis"] += lot["quantity"] * lot["unit_cost"]
-            wallet_holdings[wallet_key]["quantity"] += lot["quantity"]
-            wallet_holdings[wallet_key]["cost_basis"] += lot["quantity"] * lot["unit_cost"]
+            quarantines.extend(wallet_quarantines)
+            if computed_data is None:
+                continue
+            append_rp2_journal_entries(entries, computed_data, wallet_refs[wallet_id], profile, row_by_id)
+            accumulate_rp2_holdings(account_holdings, wallet_holdings, computed_data, wallet_refs[wallet_id])
+    finally:
+        try:
+            os.unlink(configuration_path)
+        except OSError:
+            pass
     return {
         "entries": entries,
         "quarantines": quarantines,
@@ -2799,7 +3212,9 @@ def build_parser():
     profiles_create.add_argument("label")
     profiles_create.add_argument("--workspace")
     profiles_create.add_argument("--fiat-currency", default="USD")
-    profiles_create.add_argument("--gains-algorithm", choices=["FIFO", "LIFO"], default="FIFO")
+    profiles_create.add_argument("--tax-country", choices=list(supported_tax_countries()), default=DEFAULT_TAX_COUNTRY)
+    profiles_create.add_argument("--tax-long-term-days", type=int, default=DEFAULT_LONG_TERM_DAYS)
+    profiles_create.add_argument("--gains-algorithm", choices=list(RP2_ACCOUNTING_METHODS), default="FIFO")
 
     accounts = sub.add_parser("accounts")
     accounts_sub = accounts.add_subparsers(dest="accounts_command", required=True)
@@ -2827,10 +3242,19 @@ def build_parser():
     wallets_create.add_argument("--account")
     wallets_create.add_argument("--backend")
     wallets_create.add_argument("--address", action="append")
+    wallets_create.add_argument("--altbestand", action="store_true")
     wallets_create.add_argument("--config")
     wallets_create.add_argument("--config-file")
     wallets_create.add_argument("--source-file")
     wallets_create.add_argument("--source-format", choices=["json", "csv", "btcpay_json", "btcpay_csv"])
+    wallets_altbestand = wallets_sub.add_parser("set-altbestand")
+    wallets_altbestand.add_argument("--workspace")
+    wallets_altbestand.add_argument("--profile")
+    wallets_altbestand.add_argument("--wallet", required=True)
+    wallets_neubestand = wallets_sub.add_parser("set-neubestand")
+    wallets_neubestand.add_argument("--workspace")
+    wallets_neubestand.add_argument("--profile")
+    wallets_neubestand.add_argument("--wallet", required=True)
     wallets_import_json = wallets_sub.add_parser("import-json")
     wallets_import_json.add_argument("--workspace")
     wallets_import_json.add_argument("--profile")
@@ -2974,6 +3398,8 @@ def dispatch(conn, args):
                         args.label,
                         args.fiat_currency,
                         args.gains_algorithm,
+                        args.tax_country,
+                        args.tax_long_term_days,
                     )
                 ),
             )
@@ -3013,6 +3439,10 @@ def dispatch(conn, args):
                     )
                 ),
             )
+        if args.wallets_command == "set-altbestand":
+            return emit(args, set_wallet_altbestand(conn, args.workspace, args.profile, args.wallet, True))
+        if args.wallets_command == "set-neubestand":
+            return emit(args, set_wallet_altbestand(conn, args.workspace, args.profile, args.wallet, False))
         if args.wallets_command == "import-json":
             return emit(args, import_into_wallet(conn, args.workspace, args.profile, args.wallet, args.file, "json"))
         if args.wallets_command == "import-csv":
