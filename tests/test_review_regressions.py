@@ -2818,7 +2818,9 @@ class ReviewRegressionTest(unittest.TestCase):
                 "amount": "0.001",
                 "timestamp": 1704067200,
                 "status": "Confirmed",
-                "labels": [{"type": "invoice", "text": "merchant"}],
+                "labels": {
+                    "label-1": {"type": "invoice", "text": "merchant"},
+                },
             },
             {
                 "transactionHash": "tx-remote-2",

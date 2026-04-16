@@ -139,10 +139,10 @@ def _to_record(tx, payment_method_id):
     the normalized import record.
 
     The asset is derived from the `paymentMethodId` prefix (e.g.
-    `BTC-CHAIN` -> `BTC`). The `labels` array is `{type, text}` objects
-    in the Greenfield schema — we keep the `text` values since the CSV
-    export flattens to names, and `parse_btcpay_labels` already accepts
-    a list.
+    `BTC-CHAIN` -> `BTC`). Greenfield has exposed labels both as an
+    object map (`{id: {type, text}}`) and as a list of objects, so we
+    normalize either shape down to the list of label texts the CSV path
+    already uses.
     """
     if not isinstance(tx, dict):
         raise AppError("BTCPay transaction record was not a JSON object", code="protocol_error")
@@ -153,7 +153,14 @@ def _to_record(tx, payment_method_id):
     occurred_at = _unix_to_iso(timestamp)
     labels_raw = tx.get("labels")
     label_names = []
-    if isinstance(labels_raw, list):
+    if isinstance(labels_raw, dict):
+        for key, item in labels_raw.items():
+            text = item.get("text") if isinstance(item, dict) else item
+            if text is None and key:
+                text = key
+            if text:
+                label_names.append(str(text))
+    elif isinstance(labels_raw, list):
         for item in labels_raw:
             if isinstance(item, dict):
                 text = item.get("text")
