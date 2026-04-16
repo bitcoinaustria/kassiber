@@ -29,6 +29,10 @@ _PHOENIX_CSV = """date,id,type,amount_msat,amount_fiat,fee_credit_msat,mining_fe
 2024-05-04T09:00:00Z,44444444-aaaa-bbbb-cccc-000000000004,channel_close,-500000000,-200 USD,0,1500,0.60 USD,0,0 USD,,fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210,bc1qexamplefakechannelclose0000000000000000,Channel close to self
 """
 
+_CACHE_PRICING_CSV = """date,txid,direction,asset,amount,fee,description
+2024-05-10T09:00:00Z,cache-price-1,inbound,BTC,0.01000000,0,Cached price sample
+"""
+
 
 def _run(data_root, *args):
     """Invoke `python -m kassiber --data-root DATA --machine ARGS...`.
@@ -80,6 +84,8 @@ class CliSmokeTest(unittest.TestCase):
         cls.data_root = Path(cls._tmp.name) / "data"
         cls.phoenix_csv = Path(cls._tmp.name) / "phoenix.csv"
         cls.phoenix_csv.write_text(_PHOENIX_CSV, encoding="utf-8")
+        cls.cache_pricing_csv = Path(cls._tmp.name) / "cache-pricing.csv"
+        cls.cache_pricing_csv.write_text(_CACHE_PRICING_CSV, encoding="utf-8")
 
     @classmethod
     def tearDownClass(cls):
@@ -109,6 +115,34 @@ class CliSmokeTest(unittest.TestCase):
         auth = payload["data"].get("auth", {})
         self.assertEqual(auth.get("mode"), "local")
         self.assertTrue(auth.get("authenticated"))
+
+    def test_01a_backends_batch_size_roundtrip(self):
+        payload = self._cli(
+            "backends", "create", "bench",
+            "--kind", "electrum",
+            "--url", "ssl://electrum.example:50002",
+            "--batch-size", "25",
+        )
+        self._assert_kind(payload, "backends.create")
+        self.assertEqual(payload["data"]["batch_size"], 25)
+
+        payload = self._cli(
+            "backends", "update", "bench",
+            "--batch-size", "40",
+        )
+        self._assert_kind(payload, "backends.update")
+        self.assertEqual(payload["data"]["batch_size"], 40)
+
+        payload = self._cli("backends", "get", "bench")
+        self._assert_kind(payload, "backends.get")
+        self.assertEqual(payload["data"]["batch_size"], 40)
+
+        payload = self._cli("backends", "list")
+        self._assert_kind(payload, "backends.list")
+        rows = {row["name"]: row for row in payload["data"]}
+        self.assertEqual(rows["bench"]["batch_size"], 40)
+        self.assertEqual(rows["fulcrum"]["batch_size"], 100)
+        self.assertEqual(rows["liquid"]["batch_size"], 100)
 
     def test_02_workspace_profile(self):
         payload = self._cli("workspaces", "create", "Main")
@@ -274,7 +308,54 @@ class CliSmokeTest(unittest.TestCase):
         self.assertEqual(len(samples), 1)
         self.assertEqual(samples[0]["source"], "manual")
 
-    def test_11_error_envelope_shape(self):
+    def test_11_rates_cache_autopricing(self):
+        payload = self._cli(
+            "wallets", "create",
+            "--workspace", "Main",
+            "--profile", "Default",
+            "--label", "CachePriced",
+            "--kind", "custom",
+        )
+        self._assert_kind(payload, "wallets.create")
+
+        payload = self._cli(
+            "wallets", "import-csv",
+            "--workspace", "Main",
+            "--profile", "Default",
+            "--wallet", "CachePriced",
+            "--file", str(self.cache_pricing_csv),
+        )
+        self._assert_kind(payload, "wallets.import-csv")
+        self.assertEqual(payload["data"]["imported"], 1)
+
+        payload = self._cli(
+            "rates", "set", "BTC-USD", "2024-05-09T00:00:00Z", "61000",
+        )
+        self._assert_kind(payload, "rates.set")
+
+        payload = self._cli(
+            "journals", "process",
+            "--workspace", "Main",
+            "--profile", "Default",
+        )
+        self._assert_kind(payload, "journals.process")
+        data = payload["data"]
+        self.assertEqual(data["entries_created"], 5)
+        self.assertEqual(data["quarantined"], 0)
+        self.assertEqual(data["auto_priced"], 1)
+
+        payload = self._cli(
+            "transactions", "list",
+            "--workspace", "Main",
+            "--profile", "Default",
+            "--wallet", "CachePriced",
+        )
+        self._assert_kind(payload, "transactions.list")
+        record = payload["data"][0]
+        self.assertAlmostEqual(float(record["fiat_rate"]), 61000.0, places=4)
+        self.assertAlmostEqual(float(record["fiat_value"]), 610.0, places=4)
+
+    def test_12_error_envelope_shape(self):
         # bad pair syntax (no hyphen) → validation error envelope
         payload, code = _run(
             self.data_root,

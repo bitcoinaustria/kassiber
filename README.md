@@ -43,8 +43,8 @@ It is designed around:
 - `.env` seed + DB-backed overlay (`backends` table)
 - `backends kinds / list / get / create / update / delete / set-default / clear-default`
 - backend kinds: `esplora`, `electrum`, `bitcoinrpc`
-- built-in default `mempool.space` Esplora backend
-- named backends for on-chain sync (address-based Bitcoin, descriptor-backed Bitcoin on `esplora` / `electrum`, descriptor-backed Liquid on `esplora`)
+- built-in Bitcoin Austria `mempool` + `fulcrum` backends, plus a bundled `liquid` Electrum endpoint
+- named backends for on-chain sync (address-based Bitcoin, descriptor-backed Bitcoin on `esplora` / `electrum`, descriptor-backed Liquid on `esplora` / `electrum`)
 
 ### Imports
 - generic JSON / CSV transaction files
@@ -172,9 +172,12 @@ python3 -m kassiber reports balance-history --interval month \
 
 Kassiber loads named sync backends from `.env`. Without any user config it already includes:
 
-- `mempool` → `esplora` → `https://mempool.space/api`
+- `mempool` → `esplora` → `https://mempool.bitcoin-austria.at/api`
+- `fulcrum` → `electrum` → `ssl://index.bitcoin-austria.at:50002`
+- `liquid` → `electrum` → `ssl://les.bullbitcoin.com:995`
 
-That built-in default is Bitcoin-only. Liquid wallets should always point at an explicitly named backend.
+`mempool` remains the built-in default backend, and the bundled `liquid`
+endpoint is ready for Liquid descriptor sync over Electrum.
 
 Address-based Bitcoin wallets can use the default backend with no extra setup:
 
@@ -216,12 +219,12 @@ Env key pattern:
 Backends defined in `.env` are read-only. For interactive workflows, Kassiber also keeps a `backends` SQLite table that overlays the `.env` seed:
 
 ```bash
-python3 -m kassiber backends create --name blockstream --kind electrum \
-  --url ssl://electrum.blockstream.info:50002 --timeout 30
-python3 -m kassiber backends update --name blockstream --timeout 60
-python3 -m kassiber backends set-default --name blockstream
+python3 -m kassiber backends create fulcrum --kind electrum \
+  --url ssl://index.bitcoin-austria.at:50002 --batch-size 100 --timeout 30
+python3 -m kassiber backends update fulcrum --batch-size 50 --timeout 60
+python3 -m kassiber backends set-default fulcrum
 python3 -m kassiber backends clear-default
-python3 -m kassiber backends delete --name blockstream
+python3 -m kassiber backends delete fulcrum
 ```
 
 `backends set-default` stores the choice in the `settings` table and overrides whatever `KASSIBER_DEFAULT_BACKEND` was loaded from `.env`.
@@ -242,7 +245,8 @@ python3 -m kassiber backends delete --name blockstream
 
 ### Electrum backend fields
 
-- `URL` — example: `ssl://electrum.blockstream.info:50002`
+- `URL` — example: `ssl://index.bitcoin-austria.at:50002`
+- `BATCH_SIZE` — optional. Number of Electrum RPC calls Kassiber pipelines per batch. Defaults to `100`.
 - `TIMEOUT`
 - `INSECURE` — optional. Disables TLS certificate verification for `ssl://` backends.
 
@@ -266,13 +270,14 @@ KASSIBER_DEFAULT_BACKEND=mempool
 KASSIBER_BACKEND_MEMPOOL_KIND=esplora
 KASSIBER_BACKEND_MEMPOOL_CHAIN=bitcoin
 KASSIBER_BACKEND_MEMPOOL_NETWORK=main
-KASSIBER_BACKEND_MEMPOOL_URL=https://mempool.space/api
+KASSIBER_BACKEND_MEMPOOL_URL=https://mempool.bitcoin-austria.at/api
 
-KASSIBER_BACKEND_BLOCKSTREAM_KIND=electrum
-KASSIBER_BACKEND_BLOCKSTREAM_CHAIN=bitcoin
-KASSIBER_BACKEND_BLOCKSTREAM_NETWORK=main
-KASSIBER_BACKEND_BLOCKSTREAM_URL=ssl://electrum.blockstream.info:50002
-KASSIBER_BACKEND_BLOCKSTREAM_TIMEOUT=30
+KASSIBER_BACKEND_FULCRUM_KIND=electrum
+KASSIBER_BACKEND_FULCRUM_CHAIN=bitcoin
+KASSIBER_BACKEND_FULCRUM_NETWORK=main
+KASSIBER_BACKEND_FULCRUM_URL=ssl://index.bitcoin-austria.at:50002
+KASSIBER_BACKEND_FULCRUM_BATCH_SIZE=100
+KASSIBER_BACKEND_FULCRUM_TIMEOUT=30
 
 KASSIBER_BACKEND_CORE_KIND=bitcoinrpc
 KASSIBER_BACKEND_CORE_CHAIN=bitcoin
@@ -281,10 +286,11 @@ KASSIBER_BACKEND_CORE_URL=http://127.0.0.1:8332
 KASSIBER_BACKEND_CORE_COOKIEFILE=~/.bitcoin/.cookie
 KASSIBER_BACKEND_CORE_WALLETPREFIX=kassiber
 
-KASSIBER_BACKEND_LIQUID_KIND=esplora
+KASSIBER_BACKEND_LIQUID_KIND=electrum
 KASSIBER_BACKEND_LIQUID_CHAIN=liquid
 KASSIBER_BACKEND_LIQUID_NETWORK=liquidv1
-KASSIBER_BACKEND_LIQUID_URL=https://your-liquid-esplora.example/api
+KASSIBER_BACKEND_LIQUID_URL=ssl://les.bullbitcoin.com:995
+KASSIBER_BACKEND_LIQUID_BATCH_SIZE=100
 ```
 
 Wallets can point at a named backend with `--backend <name>`. If omitted, the current default is used.

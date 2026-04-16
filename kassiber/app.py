@@ -24,6 +24,7 @@ from . import __version__
 from .backends import (
     BACKEND_KINDS,
     DEFAULT_BACKENDS,
+    backend_batch_size,
     _backend_row_to_dict,
     _validate_backend_kind,
     backend_timeout,
@@ -242,6 +243,7 @@ def normalize_backend_kind(kind):
         "bitcoin-core": "bitcoinrpc",
         "bitcoincore": "bitcoinrpc",
         "core": "bitcoinrpc",
+        "liquid-esplora": "esplora",
     }
     return aliases.get(value, value)
 
@@ -466,6 +468,69 @@ class ElectrumClient:
                     f"Electrum call {method} failed {detail}"
                 )
             return message.get("result")
+
+    def batch_call(self, requests):
+        if self.socket is None or self.reader is None:
+            raise AppError("Electrum client is not connected")
+        if not requests:
+            return []
+        payload_lines = []
+        pending = {}
+        for index, (method, params) in enumerate(requests):
+            self.request_id += 1
+            pending[self.request_id] = (index, method)
+            payload_lines.append(
+                json.dumps(
+                    {
+                        "jsonrpc": "2.0",
+                        "id": self.request_id,
+                        "method": method,
+                        "params": params or [],
+                    }
+                )
+            )
+        self.socket.sendall(("\n".join(payload_lines) + "\n").encode("utf-8"))
+        results = [None] * len(requests)
+        remaining = len(requests)
+        while remaining:
+            line = self.reader.readline()
+            if not line:
+                raise AppError(f"Electrum backend '{self.backend['name']}' closed the connection")
+            message = json.loads(line)
+            response_id = message.get("id")
+            if response_id not in pending:
+                continue
+            index, method = pending.pop(response_id)
+            if message.get("error"):
+                error = message["error"]
+                if isinstance(error, dict):
+                    detail = f"({error.get('code', 'unknown')}): {error.get('message', error)}"
+                else:
+                    detail = str(error)
+                raise AppError(f"Electrum call {method} failed {detail}")
+            results[index] = message.get("result")
+            remaining -= 1
+        return results
+
+
+def batched(items, batch_size):
+    for start in range(0, len(items), batch_size):
+        yield items[start : start + batch_size]
+
+
+def electrum_call_many(client, requests, batch_size):
+    if not requests:
+        return []
+    normalized_batch_size = max(1, int(batch_size))
+    batch_call = getattr(client, "batch_call", None)
+    results = []
+    for chunk in batched(requests, normalized_batch_size):
+        if callable(batch_call):
+            results.extend(batch_call(chunk))
+            continue
+        for method, params in chunk:
+            results.append(client.call(method, params))
+    return results
 
 
 _RP2_MODULES = None
@@ -1803,28 +1868,54 @@ def validate_backend_for_wallet(backend, chain, network, has_descriptor=False):
             raise AppError(
                 f"Backend '{backend['name']}' is configured for {expected_network}, but wallet sync requires {network}"
             )
-    if chain == "liquid" and kind != "esplora":
-        raise AppError("Liquid live sync currently requires an Esplora-compatible backend")
+    if chain == "liquid" and kind not in {"esplora", "electrum"}:
+        raise AppError("Liquid live sync currently requires an Esplora-compatible or Electrum backend")
     if has_descriptor and kind == "bitcoinrpc":
         raise AppError("Descriptor-backed live sync is not implemented for bitcoinrpc yet; use Esplora or Electrum")
-    if chain != "bitcoin" and kind in {"electrum", "bitcoinrpc"}:
+    if chain != "bitcoin" and kind == "bitcoinrpc":
         raise AppError(f"Backend kind '{kind}' does not support {chain} wallets")
     return kind
 
 
-def scan_descriptor_targets(plan, target_used):
+def scan_descriptor_targets(plan, target_used=None, target_used_batch=None, scan_batch_size=100):
     limits = branch_limits(plan)
     targets = []
     for branch in plan.branches:
-        if limits.get(branch.branch_index, plan.gap_limit) <= 1:
+        branch_gap_limit = limits.get(branch.branch_index, plan.gap_limit)
+        if branch_gap_limit <= 1:
             targets.append(sync_target_from_derived(derive_descriptor_target(plan, branch.branch_index, 0)))
             continue
         consecutive_unused = 0
         address_index = 0
-        while consecutive_unused < plan.gap_limit:
+        while consecutive_unused < branch_gap_limit:
+            if target_used_batch is not None:
+                batch_targets = [
+                    sync_target_from_derived(target)
+                    for target in derive_descriptor_targets(
+                        plan,
+                        branch_index=branch.branch_index,
+                        start=address_index,
+                        end=address_index + scan_batch_size,
+                    )
+                ]
+                if not batch_targets:
+                    break
+                used_batch = list(target_used_batch(batch_targets))
+                if len(used_batch) != len(batch_targets):
+                    raise AppError("Descriptor discovery returned an unexpected number of usage checks")
+                for target, is_used in zip(batch_targets, used_batch):
+                    targets.append(target)
+                    if is_used:
+                        consecutive_unused = 0
+                    else:
+                        consecutive_unused += 1
+                    address_index += 1
+                    if consecutive_unused >= branch_gap_limit:
+                        break
+                continue
             target = sync_target_from_derived(derive_descriptor_target(plan, branch.branch_index, address_index))
             targets.append(target)
-            if target_used(target):
+            if target_used and target_used(target):
                 consecutive_unused = 0
             else:
                 consecutive_unused += 1
@@ -1843,31 +1934,48 @@ def esplora_scripthash_has_history(base_url, script_pubkey_hex, timeout=30):
 def discover_descriptor_targets(backend, plan, kind):
     timeout = backend_timeout(backend)
     if kind == "esplora":
-        return scan_descriptor_targets(
-            plan,
-            lambda target: esplora_scripthash_has_history(
-                backend["url"],
-                target["script_pubkey"],
-                timeout=timeout,
-            ),
-        )
-    if kind == "electrum":
-        with ElectrumClient(backend) as client:
-            return scan_descriptor_targets(
+        return {
+            "targets": scan_descriptor_targets(
                 plan,
-                lambda target: bool(
-                    client.call(
-                        "blockchain.scripthash.get_history",
-                        [scriptpubkey_scripthash(target["script_pubkey"])],
-                    )
+                lambda target: esplora_scripthash_has_history(
+                    backend["url"],
+                    target["script_pubkey"],
+                    timeout=timeout,
                 ),
-            )
+            ),
+            "history_cache": {},
+        }
+    if kind == "electrum":
+        electrum_batch_size = backend_batch_size(backend)
+        with ElectrumClient(backend) as client:
+            history_cache = {}
+
+            def target_used_batch(targets):
+                scripthashes = [scriptpubkey_scripthash(target["script_pubkey"]) for target in targets]
+                histories = electrum_call_many(
+                    client,
+                    [("blockchain.scripthash.get_history", [scripthash]) for scripthash in scripthashes],
+                    batch_size=electrum_batch_size,
+                )
+                for scripthash, history in zip(scripthashes, histories):
+                    history_cache[scripthash] = history or []
+                return [bool(history) for history in histories]
+
+            return {
+                "targets": scan_descriptor_targets(
+                    plan,
+                    target_used_batch=target_used_batch,
+                    scan_batch_size=electrum_batch_size,
+                ),
+                "history_cache": history_cache,
+            }
     raise AppError(f"Descriptor-backed sync is not implemented for backend kind '{kind}'")
 
 
 def resolve_wallet_sync_targets(backend, wallet):
     config = json.loads(wallet["config_json"] or "{}")
     descriptor_plan = load_wallet_descriptor_plan_from_config(config) if config.get("descriptor") else None
+    history_cache = {}
     if descriptor_plan:
         chain = descriptor_plan.chain
         network = descriptor_plan.network
@@ -1876,7 +1984,9 @@ def resolve_wallet_sync_targets(backend, wallet):
         if chain == "liquid" and not config.get("backend"):
             raise AppError("Liquid wallets must name a backend explicitly; no public Liquid default is built in")
         kind = validate_backend_for_wallet(backend, chain, network, has_descriptor=True)
-        targets = discover_descriptor_targets(backend, descriptor_plan, kind)
+        discovery = discover_descriptor_targets(backend, descriptor_plan, kind)
+        targets = discovery["targets"]
+        history_cache = discovery.get("history_cache") or {}
     else:
         addresses = normalize_addresses(config.get("addresses"))
         if not addresses:
@@ -1887,6 +1997,7 @@ def resolve_wallet_sync_targets(backend, wallet):
                 "policy_asset_id": "",
                 "targets": [],
                 "tracked_scripts": {},
+                "history_cache": {},
             }
         chain = normalize_chain_value(config.get("chain"))
         network = normalize_network_value(chain, config.get("network"))
@@ -1902,6 +2013,7 @@ def resolve_wallet_sync_targets(backend, wallet):
         "policy_asset_id": wallet_policy_asset_id(config, chain, network),
         "targets": targets,
         "tracked_scripts": tracked_scripts,
+        "history_cache": history_cache,
     }
 
 
@@ -2023,40 +2135,54 @@ def liquid_output_amount_asset_id(output, plan, target=None):
     return value, liquid_asset_id_from_bytes(asset_bytes)
 
 
-def record_components_from_liquid_tx(tx_json, raw_hex, descriptor_plan, tracked_scripts, backend_name, policy_asset_id, prev_tx_lookup):
-    tx = decode_liquid_transaction(raw_hex)
+def liquid_input_txid(vin):
+    txid = getattr(vin, "txid", None)
+    if isinstance(txid, str):
+        return txid.lower()
+    if isinstance(txid, (bytes, bytearray)):
+        return bytes(txid).hex()
+    raise AppError("Unsupported Liquid input txid encoding while decoding transaction")
+
+
+def record_components_from_liquid_tx(
+    txid,
+    occurred_at,
+    tx,
+    descriptor_plan,
+    tracked_scripts,
+    backend_name,
+    policy_asset_id,
+    prev_tx_lookup,
+    raw_json_context=None,
+):
     net_sats = defaultdict(int)
     fee_sats = defaultdict(int)
-    outputs = tx_json.get("vout") or []
-    if len(outputs) != len(tx.vout):
-        raise AppError(f"Liquid transaction {tx_json.get('txid')} changed shape between JSON and raw decoding")
-    for index, vout in enumerate(outputs):
-        script_hex = vout.get("scriptpubkey") or tx.vout[index].script_pubkey.data.hex()
+    for index, output in enumerate(tx.vout):
+        script_hex = output.script_pubkey.data.hex()
         if script_hex == "":
-            value_sats, asset_id = liquid_output_amount_asset_id(tx.vout[index], descriptor_plan, target=None)
+            value_sats, asset_id = liquid_output_amount_asset_id(output, descriptor_plan, target=None)
             fee_sats[asset_id] += value_sats
             continue
         target = tracked_scripts.get(script_hex)
         if not target:
             continue
-        value_sats, asset_id = liquid_output_amount_asset_id(tx.vout[index], descriptor_plan, target=target)
+        value_sats, asset_id = liquid_output_amount_asset_id(output, descriptor_plan, target=target)
         net_sats[asset_id] += value_sats
-    for vin in tx_json.get("vin") or []:
-        prevout = vin.get("prevout") or {}
-        script_hex = prevout.get("scriptpubkey")
-        target = tracked_scripts.get(script_hex)
-        if not target:
-            continue
-        prev_txid = vin.get("txid")
-        prev_vout = vin.get("vout")
-        if prev_txid is None or prev_vout is None:
+    for vin in tx.vin:
+        prev_txid = liquid_input_txid(vin)
+        prev_vout = getattr(vin, "vout", None)
+        if prev_vout is None:
             continue
         prev_tx = prev_tx_lookup(prev_txid)
         if prev_vout >= len(prev_tx.vout):
             raise AppError(f"Liquid prevout index {prev_vout} is out of range for transaction {prev_txid}")
-        value_sats, asset_id = liquid_output_amount_asset_id(prev_tx.vout[prev_vout], descriptor_plan, target=target)
+        prev_output = prev_tx.vout[prev_vout]
+        script_hex = prev_output.script_pubkey.data.hex()
+        target = tracked_scripts.get(script_hex)
+        if not target:
+            continue
+        value_sats, asset_id = liquid_output_amount_asset_id(prev_output, descriptor_plan, target=target)
         net_sats[asset_id] -= value_sats
-    occurred_at = timestamp_to_iso((tx_json.get("status") or {}).get("block_time"))
     records = []
     all_assets = sorted(set(net_sats) | set(fee_sats))
     for asset_id in all_assets:
@@ -2081,7 +2207,7 @@ def record_components_from_liquid_tx(tx_json, raw_hex, descriptor_plan, tracked_
             kind = "withdrawal" if amount > 0 else "fee"
         records.append(
             {
-                "txid": tx_json.get("txid"),
+                "txid": txid,
                 "occurred_at": occurred_at,
                 "direction": direction,
                 "asset": asset_code,
@@ -2095,7 +2221,8 @@ def record_components_from_liquid_tx(tx_json, raw_hex, descriptor_plan, tracked_
                 "raw_json": json.dumps(
                     json_ready(
                         {
-                            "tx": tx_json,
+                            **(raw_json_context or {}),
+                            "txid": txid,
                             "component": {
                                 "asset_id": asset_id,
                                 "asset": asset_code,
@@ -2122,13 +2249,15 @@ def esplora_records_for_wallet(backend, sync_state):
 
     def liquid_tx_lookup(txid):
         if txid not in raw_tx_cache:
-            raw_tx_cache[txid] = decode_liquid_transaction(
-                http_get_text(
-                    append_url_path(backend["url"], f"tx/{txid}/hex"),
-                    timeout=backend_timeout(backend),
-                ).strip()
-            )
-        return raw_tx_cache[txid]
+            raw_hex = http_get_text(
+                append_url_path(backend["url"], f"tx/{txid}/hex"),
+                timeout=backend_timeout(backend),
+            ).strip()
+            raw_tx_cache[txid] = {
+                "raw_hex": raw_hex,
+                "decoded": decode_liquid_transaction(raw_hex),
+            }
+        return raw_tx_cache[txid]["decoded"]
 
     for tx in sorted(
         transactions_by_txid.values(),
@@ -2139,15 +2268,18 @@ def esplora_records_for_wallet(backend, sync_state):
                 append_url_path(backend["url"], f"tx/{tx['txid']}/hex"),
                 timeout=backend_timeout(backend),
             ).strip()
+            decoded_tx = decode_liquid_transaction(raw_hex)
             records.extend(
                 record_components_from_liquid_tx(
-                    tx,
-                    raw_hex,
+                    tx["txid"],
+                    timestamp_to_iso((tx.get("status") or {}).get("block_time")),
+                    decoded_tx,
                     sync_state["descriptor_plan"],
                     sync_state["tracked_scripts"],
                     backend["name"],
                     sync_state["policy_asset_id"],
                     liquid_tx_lookup,
+                    {"tx": tx, "raw_hex": raw_hex},
                 )
             )
         else:
@@ -2487,26 +2619,47 @@ def record_from_electrum_tx(txid, tx, height, tracked_scripts, backend_name, tx_
 
 
 def electrum_records_for_wallet(backend, sync_state):
-    if sync_state["chain"] != "bitcoin":
-        raise AppError("Electrum sync currently supports Bitcoin wallets only")
     transactions = {}
     header_timestamps = {}
     records = []
-    tracked_scripts = set(sync_state["tracked_scripts"])
+    batch_size = backend_batch_size(backend)
+    tracked_scripts = (
+        set(sync_state["tracked_scripts"])
+        if sync_state["chain"] == "bitcoin"
+        else sync_state["tracked_scripts"]
+    )
     with ElectrumClient(backend) as client:
         histories = []
+        history_cache = sync_state.get("history_cache") or {}
+        uncached_scripthashes = []
         for target in sync_state["targets"]:
-            histories.extend(
-                client.call(
-                    "blockchain.scripthash.get_history",
-                    [scriptpubkey_scripthash(target["script_pubkey"])],
-                )
+            scripthash = scriptpubkey_scripthash(target["script_pubkey"])
+            cached_history = history_cache.get(scripthash)
+            if cached_history is not None:
+                histories.extend(cached_history)
+                continue
+            uncached_scripthashes.append(scripthash)
+        if uncached_scripthashes:
+            uncached_histories = electrum_call_many(
+                client,
+                [("blockchain.scripthash.get_history", [scripthash]) for scripthash in uncached_scripthashes],
+                batch_size=batch_size,
             )
+            for scripthash, history in zip(uncached_scripthashes, uncached_histories):
+                normalized_history = history or []
+                history_cache[scripthash] = normalized_history
+                histories.extend(normalized_history)
 
         def lookup(txid):
             if txid not in transactions:
                 raw_tx = client.call("blockchain.transaction.get", [txid])
-                transactions[txid] = decode_raw_transaction(raw_tx)
+                if sync_state["chain"] == "liquid":
+                    transactions[txid] = {
+                        "raw_hex": raw_tx,
+                        "decoded": decode_liquid_transaction(raw_tx),
+                    }
+                else:
+                    transactions[txid] = decode_raw_transaction(raw_tx)
             return transactions[txid]
 
         def height_to_timestamp(height):
@@ -2521,7 +2674,80 @@ def electrum_records_for_wallet(backend, sync_state):
         txids = {}
         for history in histories:
             txids[history["tx_hash"]] = history
-        for txid, history in sorted(txids.items(), key=lambda item: (item[1].get("height", 0), item[0])):
+        ordered_histories = sorted(txids.items(), key=lambda item: (item[1].get("height", 0), item[0]))
+        ordered_txids = [txid for txid, _ in ordered_histories]
+        if ordered_txids:
+            raw_transactions = electrum_call_many(
+                client,
+                [("blockchain.transaction.get", [txid]) for txid in ordered_txids],
+                batch_size=batch_size,
+            )
+            for txid, raw_tx in zip(ordered_txids, raw_transactions):
+                if sync_state["chain"] == "liquid":
+                    transactions[txid] = {
+                        "raw_hex": raw_tx,
+                        "decoded": decode_liquid_transaction(raw_tx),
+                    }
+                else:
+                    transactions[txid] = decode_raw_transaction(raw_tx)
+        seen_txids = set(transactions)
+        prev_txids = []
+        for txid in ordered_txids:
+            current_tx = transactions[txid]["decoded"] if sync_state["chain"] == "liquid" else transactions[txid]
+            vins = current_tx.vin if sync_state["chain"] == "liquid" else current_tx.get("vin", [])
+            for vin in vins:
+                prev_txid = liquid_input_txid(vin) if sync_state["chain"] == "liquid" else vin.get("txid")
+                if not prev_txid or prev_txid in seen_txids:
+                    continue
+                seen_txids.add(prev_txid)
+                prev_txids.append(prev_txid)
+        if prev_txids:
+            raw_prev_transactions = electrum_call_many(
+                client,
+                [("blockchain.transaction.get", [txid]) for txid in prev_txids],
+                batch_size=batch_size,
+            )
+            for txid, raw_tx in zip(prev_txids, raw_prev_transactions):
+                if sync_state["chain"] == "liquid":
+                    transactions[txid] = {
+                        "raw_hex": raw_tx,
+                        "decoded": decode_liquid_transaction(raw_tx),
+                    }
+                else:
+                    transactions[txid] = decode_raw_transaction(raw_tx)
+        heights = sorted(
+            {
+                int(history.get("height"))
+                for history in txids.values()
+                if history.get("height") is not None and int(history.get("height")) > 0
+            }
+        )
+        if heights:
+            header_hexes = electrum_call_many(
+                client,
+                [("blockchain.block.header", [height]) for height in heights],
+                batch_size=batch_size,
+            )
+            for height, header_hex in zip(heights, header_hexes):
+                header_timestamps[height] = block_header_timestamp(header_hex)
+        for txid, history in ordered_histories:
+            occurred_at = timestamp_to_iso(height_to_timestamp(history.get("height")))
+            if sync_state["chain"] == "liquid":
+                current_tx = lookup(txid)
+                records.extend(
+                    record_components_from_liquid_tx(
+                        txid,
+                        occurred_at,
+                        current_tx["decoded"],
+                        sync_state["descriptor_plan"],
+                        tracked_scripts,
+                        backend["name"],
+                        sync_state["policy_asset_id"],
+                        lambda prev_txid: lookup(prev_txid)["decoded"],
+                        {"history": history, "raw_hex": current_tx["raw_hex"]},
+                    )
+                )
+                continue
             tx = lookup(txid)
             normalized = record_from_electrum_tx(
                 txid,
@@ -3251,6 +3477,21 @@ def _rate_pair_parts(pair):
     return asset, fiat
 
 
+def _transaction_rate_pair(asset, fiat_currency):
+    asset_code = str(asset or "").strip().upper()
+    fiat_code = str(fiat_currency or "").strip().upper()
+    if not asset_code or not fiat_code:
+        return None
+    asset_aliases = {
+        "LBTC": "BTC",
+    }
+    asset_code = asset_aliases.get(asset_code, asset_code)
+    pair = f"{asset_code}-{fiat_code}"
+    if pair not in SUPPORTED_RATE_PAIRS:
+        return None
+    return pair
+
+
 def upsert_rate(conn, pair, timestamp, rate, source, fetched_at=None):
     normalized = _normalize_rate_pair(pair)
     ts = _iso_z(_parse_iso_datetime(timestamp, "rate_timestamp"))
@@ -3330,6 +3571,32 @@ def get_rate_range(conn, pair, start=None, end=None, limit=None):
         }
         for r in rows
     ]
+
+
+def get_cached_rate_at_or_before(conn, pair, occurred_at):
+    normalized = _require_supported_pair(pair)
+    occurred_ts = _iso_z(_parse_iso_datetime(occurred_at, "occurred_at"))
+    row = conn.execute(
+        """
+        SELECT pair, timestamp, rate, source, fetched_at
+        FROM rates_cache
+        WHERE pair = ? AND timestamp <= ?
+        ORDER BY timestamp DESC,
+                 CASE WHEN source = 'manual' THEN 0 ELSE 1 END ASC,
+                 fetched_at DESC
+        LIMIT 1
+        """,
+        (normalized, occurred_ts),
+    ).fetchone()
+    if not row:
+        return None
+    return {
+        "pair": row["pair"],
+        "timestamp": row["timestamp"],
+        "rate": row["rate"],
+        "source": row["source"],
+        "fetched_at": row["fetched_at"],
+    }
 
 
 def list_cached_pairs(conn):
@@ -3467,6 +3734,34 @@ def set_manual_rate(conn, pair, timestamp, rate, source="manual"):
     row = upsert_rate(conn, normalized, timestamp, value, source)
     conn.commit()
     return row
+
+
+def auto_price_transactions_from_rates_cache(conn, profile):
+    tx_rows = conn.execute(
+        """
+        SELECT id, occurred_at, asset, amount, fiat_currency, fiat_rate, fiat_value
+        FROM transactions
+        WHERE profile_id = ? AND excluded = 0 AND fiat_rate IS NULL AND fiat_value IS NULL
+        ORDER BY occurred_at ASC, created_at ASC, id ASC
+        """,
+        (profile["id"],),
+    ).fetchall()
+    auto_priced = 0
+    for row in tx_rows:
+        pair = _transaction_rate_pair(row["asset"], row["fiat_currency"] or profile["fiat_currency"])
+        if pair is None:
+            continue
+        cached_rate = get_cached_rate_at_or_before(conn, pair, row["occurred_at"])
+        if cached_rate is None:
+            continue
+        rate = dec(cached_rate["rate"])
+        fiat_value = rate * msat_to_btc(row["amount"]) if row["amount"] > 0 else None
+        conn.execute(
+            "UPDATE transactions SET fiat_rate = ?, fiat_value = ? WHERE id = ?",
+            (float(rate), float(fiat_value) if fiat_value is not None else None, row["id"]),
+        )
+        auto_priced += 1
+    return auto_priced
 
 
 def rp2_wallet_state(profile, wallet, asset, rows, configuration):
@@ -3804,6 +4099,7 @@ def build_ledger_state(conn, profile):
 
 def process_journals(conn, workspace_ref, profile_ref):
     _, profile = resolve_scope(conn, workspace_ref, profile_ref)
+    auto_priced = auto_price_transactions_from_rates_cache(conn, profile)
     state = build_ledger_state(conn, profile)
     conn.execute("DELETE FROM journal_entries WHERE profile_id = ?", (profile["id"],))
     conn.execute("DELETE FROM journal_quarantines WHERE profile_id = ?", (profile["id"],))
@@ -3866,6 +4162,7 @@ def process_journals(conn, workspace_ref, profile_ref):
         "profile": profile["label"],
         "entries_created": len(state["entries"]),
         "quarantined": len(state["quarantines"]),
+        "auto_priced": auto_priced,
         "processed_transactions": tx_count,
         "processed_at": created_at,
     }
@@ -4744,6 +5041,7 @@ def build_parser():
     backends_create.add_argument("--network")
     backends_create.add_argument("--auth-header")
     backends_create.add_argument("--token")
+    backends_create.add_argument("--batch-size", type=int)
     backends_create.add_argument("--timeout", type=int)
     backends_create.add_argument("--tor-proxy")
     backends_create.add_argument("--notes")
@@ -4756,6 +5054,7 @@ def build_parser():
     backends_update.add_argument("--network")
     backends_update.add_argument("--auth-header")
     backends_update.add_argument("--token")
+    backends_update.add_argument("--batch-size", type=int)
     backends_update.add_argument("--timeout", type=int)
     backends_update.add_argument("--tor-proxy")
     backends_update.add_argument("--notes")
@@ -5178,6 +5477,7 @@ def dispatch(conn, args):
                         "chain": backend.get("chain", ""),
                         "network": backend.get("network", ""),
                         "url": backend.get("url", ""),
+                        "batch_size": backend.get("batch_size"),
                         "auth_header": backend.get("auth_header", ""),
                         "token": backend.get("token", ""),
                         "timeout": backend.get("timeout"),
@@ -5199,6 +5499,7 @@ def dispatch(conn, args):
                     network=args.network,
                     auth_header=args.auth_header,
                     token=args.token,
+                    batch_size=args.batch_size,
                     timeout=args.timeout,
                     tor_proxy=args.tor_proxy,
                     notes=args.notes,
@@ -5212,6 +5513,7 @@ def dispatch(conn, args):
                 "network": args.network,
                 "auth_header": args.auth_header,
                 "token": args.token,
+                "batch_size": args.batch_size,
                 "timeout": args.timeout,
                 "tor_proxy": args.tor_proxy,
                 "notes": args.notes,

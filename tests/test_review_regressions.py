@@ -208,6 +208,53 @@ class ReviewRegressionTest(unittest.TestCase):
         )
         self._assert_ok(payload, result, "wallets.create")
 
+    def _insert_transaction(self, *, wallet_label, tx_id, occurred_at, amount_msat, direction="inbound", asset="BTC"):
+        db_path = self.data_root / "kassiber.sqlite3"
+        conn = sqlite3.connect(db_path)
+        conn.row_factory = sqlite3.Row
+        profile = conn.execute(
+            "SELECT id, workspace_id, fiat_currency FROM profiles WHERE label = 'Default'"
+        ).fetchone()
+        wallet = conn.execute(
+            "SELECT id FROM wallets WHERE label = ?",
+            (wallet_label,),
+        ).fetchone()
+        conn.execute(
+            """
+            INSERT INTO transactions(
+                id, workspace_id, profile_id, wallet_id, external_id, fingerprint,
+                occurred_at, direction, asset, amount, fee, fiat_currency,
+                fiat_rate, fiat_value, kind, description, counterparty, note,
+                excluded, raw_json, created_at
+            ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                tx_id,
+                profile["workspace_id"],
+                profile["id"],
+                wallet["id"],
+                tx_id,
+                f"fp-{tx_id}",
+                occurred_at,
+                direction,
+                asset,
+                amount_msat,
+                0,
+                profile["fiat_currency"],
+                None,
+                None,
+                "deposit",
+                tx_id,
+                None,
+                None,
+                0,
+                "{}",
+                occurred_at,
+            ),
+        )
+        conn.commit()
+        conn.close()
+
     def test_btcpay_import_machine_mode_keeps_json_envelope(self):
         self._bootstrap_wallet(label="BTCPay")
         btcpay_csv = self.case_dir / "btcpay.csv"
@@ -279,6 +326,139 @@ class ReviewRegressionTest(unittest.TestCase):
         self._assert_ok(payload, result, "rates.latest")
         self.assertEqual(payload["data"]["source"], "manual")
         self.assertAlmostEqual(payload["data"]["rate"], 65000.0, places=4)
+
+    def test_journals_process_autopriced_from_cached_rate(self):
+        self._bootstrap_wallet(label="CacheA")
+        payload, result = self._run_json(
+            "rates", "set", "BTC-USD", "2024-05-01T00:00:00Z", "60000"
+        )
+        self._assert_ok(payload, result, "rates.set")
+        self._insert_transaction(
+            wallet_label="CacheA",
+            tx_id="cache-a",
+            occurred_at="2024-05-01T12:00:00Z",
+            amount_msat=1_000_000_000,
+        )
+        payload, result = self._run_json(
+            "journals", "process",
+            "--workspace", "Main",
+            "--profile", "Default",
+        )
+        self._assert_ok(payload, result, "journals.process")
+        self.assertEqual(payload["data"]["entries_created"], 1)
+        self.assertEqual(payload["data"]["quarantined"], 0)
+        self.assertEqual(payload["data"]["auto_priced"], 1)
+
+        conn = sqlite3.connect(self.data_root / "kassiber.sqlite3")
+        conn.row_factory = sqlite3.Row
+        tx = conn.execute(
+            "SELECT fiat_rate, fiat_value FROM transactions WHERE external_id = 'cache-a'"
+        ).fetchone()
+        conn.close()
+        self.assertAlmostEqual(tx["fiat_rate"], 60000.0, places=4)
+        self.assertAlmostEqual(tx["fiat_value"], 600.0, places=4)
+
+    def test_journals_process_misses_future_only_rate(self):
+        self._bootstrap_wallet(label="CacheFuture")
+        payload, result = self._run_json(
+            "rates", "set", "BTC-USD", "2024-05-02T00:00:00Z", "70000"
+        )
+        self._assert_ok(payload, result, "rates.set")
+        self._insert_transaction(
+            wallet_label="CacheFuture",
+            tx_id="cache-future",
+            occurred_at="2024-05-01T12:00:00Z",
+            amount_msat=1_000_000_000,
+        )
+        payload, result = self._run_json(
+            "journals", "process",
+            "--workspace", "Main",
+            "--profile", "Default",
+        )
+        self._assert_ok(payload, result, "journals.process")
+        self.assertEqual(payload["data"]["entries_created"], 0)
+        self.assertEqual(payload["data"]["quarantined"], 1)
+        self.assertEqual(payload["data"]["auto_priced"], 0)
+
+        conn = sqlite3.connect(self.data_root / "kassiber.sqlite3")
+        conn.row_factory = sqlite3.Row
+        tx = conn.execute(
+            "SELECT fiat_rate, fiat_value FROM transactions WHERE external_id = 'cache-future'"
+        ).fetchone()
+        quarantine = conn.execute(
+            "SELECT reason FROM journal_quarantines WHERE transaction_id = (SELECT id FROM transactions WHERE external_id = 'cache-future')"
+        ).fetchone()
+        conn.close()
+        self.assertIsNone(tx["fiat_rate"])
+        self.assertIsNone(tx["fiat_value"])
+        self.assertEqual(quarantine["reason"], "missing_spot_price")
+
+    def test_journals_process_prefers_manual_rate_same_timestamp(self):
+        self._bootstrap_wallet(label="CacheManual")
+        payload, result = self._run_json(
+            "rates", "set", "BTC-USD", "2024-05-01T00:00:00Z", "60000", "--source", "coingecko"
+        )
+        self._assert_ok(payload, result, "rates.set")
+        payload, result = self._run_json(
+            "rates", "set", "BTC-USD", "2024-05-01T00:00:00Z", "65000", "--source", "manual"
+        )
+        self._assert_ok(payload, result, "rates.set")
+        self._insert_transaction(
+            wallet_label="CacheManual",
+            tx_id="cache-manual",
+            occurred_at="2024-05-01T00:00:00Z",
+            amount_msat=1_000_000_000,
+        )
+        payload, result = self._run_json(
+            "journals", "process",
+            "--workspace", "Main",
+            "--profile", "Default",
+        )
+        self._assert_ok(payload, result, "journals.process")
+        self.assertEqual(payload["data"]["entries_created"], 1)
+        self.assertEqual(payload["data"]["quarantined"], 0)
+        self.assertEqual(payload["data"]["auto_priced"], 1)
+
+        conn = sqlite3.connect(self.data_root / "kassiber.sqlite3")
+        conn.row_factory = sqlite3.Row
+        tx = conn.execute(
+            "SELECT fiat_rate, fiat_value FROM transactions WHERE external_id = 'cache-manual'"
+        ).fetchone()
+        conn.close()
+        self.assertAlmostEqual(tx["fiat_rate"], 65000.0, places=4)
+        self.assertAlmostEqual(tx["fiat_value"], 650.0, places=4)
+
+    def test_journals_process_autoprices_lbtc_from_btc_rate(self):
+        self._bootstrap_wallet(label="LiquidLike")
+        payload, result = self._run_json(
+            "rates", "set", "BTC-USD", "2024-05-01T00:00:00Z", "60000"
+        )
+        self._assert_ok(payload, result, "rates.set")
+        self._insert_transaction(
+            wallet_label="LiquidLike",
+            tx_id="cache-lbtc",
+            occurred_at="2024-05-01T12:00:00Z",
+            amount_msat=1_000_000_000,
+            asset="LBTC",
+        )
+        payload, result = self._run_json(
+            "journals", "process",
+            "--workspace", "Main",
+            "--profile", "Default",
+        )
+        self._assert_ok(payload, result, "journals.process")
+        self.assertEqual(payload["data"]["entries_created"], 1)
+        self.assertEqual(payload["data"]["quarantined"], 0)
+        self.assertEqual(payload["data"]["auto_priced"], 1)
+
+        conn = sqlite3.connect(self.data_root / "kassiber.sqlite3")
+        conn.row_factory = sqlite3.Row
+        tx = conn.execute(
+            "SELECT fiat_rate, fiat_value FROM transactions WHERE external_id = 'cache-lbtc'"
+        ).fetchone()
+        conn.close()
+        self.assertAlmostEqual(tx["fiat_rate"], 60000.0, places=4)
+        self.assertAlmostEqual(tx["fiat_value"], 600.0, places=4)
 
     def test_balance_history_uses_historical_rate_and_remaining_basis(self):
         self._bootstrap_wallet(label="W")
