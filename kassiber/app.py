@@ -22,6 +22,14 @@ from urllib import request as urlrequest
 
 from . import __version__
 from .errors import AppError
+from .time_utils import (
+    UNKNOWN_OCCURRED_AT,
+    _iso_z,
+    _parse_iso_datetime,
+    now_iso,
+    parse_timestamp,
+    timestamp_to_iso,
+)
 from .tax_policy import (
     DEFAULT_LONG_TERM_DAYS,
     DEFAULT_TAX_COUNTRY,
@@ -55,7 +63,6 @@ DEFAULT_ENV_FILE = ".env"
 SATS_PER_BTC = Decimal("100000000")
 SCHEMA_VERSION = 1
 OUTPUT_FORMATS = ("table", "json", "plain", "csv")
-UNKNOWN_OCCURRED_AT = "1970-01-01T00:00:00Z"
 ACCOUNT_TYPES = {"asset", "liability", "equity", "income", "expense"}
 RP2_ACCOUNTING_METHODS = ("FIFO", "LIFO", "HIFO", "LOFO")
 WALLET_KINDS = [
@@ -402,32 +409,6 @@ def normalize_network_value(chain, value):
         return normalize_network(chain, value)
     except ValueError as exc:
         raise AppError(str(exc)) from exc
-
-
-def now_iso():
-    return datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
-
-
-def parse_timestamp(value):
-    if not value:
-        raise AppError("Missing occurred_at/date value")
-    raw = str(value).strip()
-    if len(raw) == 10:
-        raw = f"{raw}T00:00:00+00:00"
-    elif raw.endswith("Z"):
-        raw = raw[:-1] + "+00:00"
-    dt = datetime.fromisoformat(raw)
-    if dt.tzinfo is None:
-        dt = dt.replace(tzinfo=timezone.utc)
-    else:
-        dt = dt.astimezone(timezone.utc)
-    return dt.replace(microsecond=0).isoformat().replace("+00:00", "Z")
-
-
-def timestamp_to_iso(value, default=UNKNOWN_OCCURRED_AT):
-    if value in (None, "", 0, "0"):
-        return default
-    return datetime.fromtimestamp(int(value), tz=timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
 
 
 def normalize_code(value):
@@ -5001,25 +4982,6 @@ def report_journal_entries(conn, workspace_ref, profile_ref):
 INTERVAL_CHOICES = ("hour", "day", "week", "month")
 
 
-def _parse_iso_datetime(value, field_name):
-    if value in (None, ""):
-        return None
-    raw = value.strip()
-    if raw.endswith("Z"):
-        raw = raw[:-1] + "+00:00"
-    try:
-        parsed = datetime.fromisoformat(raw)
-    except ValueError as exc:
-        raise AppError(
-            f"Invalid {field_name} timestamp '{value}'",
-            code="validation",
-            hint="Use RFC3339 UTC like 2025-01-01T00:00:00Z",
-        ) from exc
-    if parsed.tzinfo is None:
-        parsed = parsed.replace(tzinfo=timezone.utc)
-    return parsed.astimezone(timezone.utc)
-
-
 def _floor_to_interval(dt, interval):
     if interval == "hour":
         return dt.replace(minute=0, second=0, microsecond=0)
@@ -5045,10 +5007,6 @@ def _next_interval(dt, interval):
             return dt.replace(year=dt.year + 1, month=1)
         return dt.replace(month=dt.month + 1)
     raise AppError(f"Unknown interval '{interval}'", code="validation")
-
-
-def _iso_z(dt):
-    return dt.isoformat().replace("+00:00", "Z")
 
 
 def report_balance_history(
