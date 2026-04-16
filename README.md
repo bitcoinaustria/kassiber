@@ -49,6 +49,7 @@ It is designed around:
 ### Imports
 - generic JSON / CSV transaction files
 - BTCPay CSV / JSON wallet exports (comment → note, labels → tags)
+- Phoenix CSV wallet exports (description → note, payment type → tag, signed `amount_msat` → direction)
 - BIP329 JSONL metadata import, listing, and export
 
 ### Journals & processing
@@ -358,6 +359,32 @@ python3 -m kassiber wallets create \
   --source-format btcpay_csv
 ```
 
+## Phoenix imports
+
+Kassiber reads [Phoenix](https://phoenix.acinq.co/) wallet exports in CSV form.
+
+```bash
+python3 -m kassiber wallets import-phoenix \
+  --wallet phoenix \
+  --file /path/to/phoenix-export.csv
+```
+
+- Phoenix's signed `amount_msat` column drives the direction (negative → outbound)
+- `mining_fee_sat * 1000 + service_fee_msat` becomes the Kassiber `fee`
+- `amount_fiat` (`"22.9998 USD"`) becomes `fiat_value`; `fiat_rate` is derived from value ÷ amount
+- Phoenix `description` becomes the transaction note if the note is empty
+- Phoenix payment `type` (`lightning_received`, `lightning_sent`, `swap_in`, `swap_out`, `channel_close`, `liquidity_purchase`, `fee_bumping`, `legacy_swap_in`, `legacy_swap_out`, `legacy_pay_to_open`) becomes a Kassiber tag
+
+Or use a Phoenix export as a wallet sync source:
+
+```bash
+python3 -m kassiber wallets create \
+  --label phoenix \
+  --kind phoenix \
+  --source-file /path/to/phoenix-export.csv \
+  --source-format phoenix_csv
+```
+
 ## BIP329
 
 Kassiber stores imported BIP329 records in SQLite and bridges transaction labels into Kassiber tags.
@@ -487,7 +514,7 @@ Wallet-level `Altbestand` stays separate from the profile policy because it is p
 
 - wiring the rates cache into journal processing (tax-aware reports still derive rates from priced transactions)
 - fiat amounts stored as REAL (cents migration pending)
-- Phoenix / River Lightning CSV importers
+- River Lightning CSV importer (Phoenix CSV is supported — see above)
 - `custom` wallet kind DSL for mapping arbitrary CSV schemas
 - account adjustments and per-event rate overrides
 - per-profile Tor proxy configuration

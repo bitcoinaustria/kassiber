@@ -1985,6 +1985,8 @@ def load_import_records(file_path, input_format):
         return load_btcpay_export_records(file_path, "json")
     if input_format == "btcpay_csv":
         return load_btcpay_export_records(file_path, "csv")
+    if input_format == "phoenix_csv":
+        return load_phoenix_csv_records(file_path)
     raise AppError(f"Unsupported input format '{input_format}'")
 
 
@@ -2052,6 +2054,172 @@ def load_btcpay_export_records(file_path, input_format):
 
 def is_btcpay_format(input_format):
     return input_format in {"btcpay_json", "btcpay_csv"}
+
+
+_PHOENIX_REQUIRED_COLUMNS = (
+    "date",
+    "id",
+    "type",
+    "amount_msat",
+)
+
+_PHOENIX_OUTBOUND_TYPES = {
+    "lightning_sent",
+    "swap_out",
+    "legacy_swap_out",
+    "channel_close",
+    "liquidity_purchase",
+    "fee_bumping",
+}
+
+_PHOENIX_INBOUND_TYPES = {
+    "lightning_received",
+    "swap_in",
+    "legacy_swap_in",
+    "legacy_pay_to_open",
+}
+
+
+def parse_phoenix_fiat_amount(amount_text):
+    """Parse a Phoenix amount_fiat cell like "22.9998 USD" into (Decimal, currency)."""
+    if amount_text is None:
+        return None, None
+    text = str(amount_text).strip()
+    if not text:
+        return None, None
+    parts = text.split()
+    if len(parts) == 1:
+        return dec(parts[0]), None
+    value = dec(parts[0])
+    currency = normalize_asset_code(parts[1])
+    return value, currency
+
+
+def normalize_phoenix_record(record):
+    sanitized = {str(key): value for key, value in record.items() if key is not None}
+    for column in _PHOENIX_REQUIRED_COLUMNS:
+        if column not in sanitized:
+            raise AppError(f"Phoenix CSV is missing required column '{column}'")
+    phoenix_type = str(sanitized.get("type") or "").strip() or "unknown"
+    amount_msat_raw = str(sanitized.get("amount_msat") or "0").strip() or "0"
+    try:
+        amount_msat_signed = int(amount_msat_raw)
+    except ValueError as exc:
+        raise AppError(f"Invalid Phoenix amount_msat '{amount_msat_raw}'") from exc
+    if amount_msat_signed < 0:
+        direction = "outbound"
+    elif amount_msat_signed > 0:
+        direction = "inbound"
+    elif phoenix_type in _PHOENIX_OUTBOUND_TYPES:
+        direction = "outbound"
+    elif phoenix_type in _PHOENIX_INBOUND_TYPES:
+        direction = "inbound"
+    else:
+        direction = "outbound"
+    amount_btc = msat_to_btc(abs(amount_msat_signed))
+    mining_fee_sat_raw = str(sanitized.get("mining_fee_sat") or "0").strip() or "0"
+    service_fee_msat_raw = str(sanitized.get("service_fee_msat") or "0").strip() or "0"
+    try:
+        mining_fee_msat = int(mining_fee_sat_raw) * 1000
+    except ValueError as exc:
+        raise AppError(f"Invalid Phoenix mining_fee_sat '{mining_fee_sat_raw}'") from exc
+    try:
+        service_fee_msat = int(service_fee_msat_raw)
+    except ValueError as exc:
+        raise AppError(f"Invalid Phoenix service_fee_msat '{service_fee_msat_raw}'") from exc
+    fee_btc = msat_to_btc(mining_fee_msat + service_fee_msat)
+    fiat_value_signed, _ = parse_phoenix_fiat_amount(sanitized.get("amount_fiat"))
+    fiat_value = abs(fiat_value_signed) if fiat_value_signed is not None else None
+    fiat_rate = None
+    if fiat_value is not None and amount_btc > 0:
+        fiat_rate = fiat_value / amount_btc
+    description = str_or_none(sanitized.get("description"))
+    counterparty = str_or_none(sanitized.get("destination"))
+    txid = str_or_none(sanitized.get("tx_id")) or str_or_none(sanitized.get("payment_hash"))
+    return {
+        "txid": sanitized.get("id"),
+        "occurred_at": sanitized.get("date"),
+        "direction": direction,
+        "asset": "BTC",
+        "amount": amount_btc,
+        "fee": fee_btc,
+        "fiat_rate": fiat_rate,
+        "fiat_value": fiat_value,
+        "kind": phoenix_type,
+        "description": description,
+        "counterparty": counterparty,
+        "_phoenix_type": phoenix_type,
+        "_phoenix_description": description,
+        "_phoenix_onchain_txid": txid,
+        "raw_json": json.dumps(json_ready(sanitized), sort_keys=True),
+    }
+
+
+def load_phoenix_csv_records(file_path):
+    with open(file_path, "r", encoding="utf-8", newline="") as handle:
+        rows = list(csv.DictReader(handle))
+    if not rows:
+        return []
+    header = rows[0].keys()
+    missing = [column for column in _PHOENIX_REQUIRED_COLUMNS if column not in header]
+    if missing:
+        raise AppError(
+            "Phoenix CSV is missing required columns: " + ", ".join(missing)
+        )
+    return [normalize_phoenix_record(row) for row in rows]
+
+
+def is_phoenix_format(input_format):
+    return input_format == "phoenix_csv"
+
+
+def apply_phoenix_metadata(conn, profile, wallet, records):
+    notes_set = 0
+    tags_added = 0
+    tags_created = 0
+    for record in records:
+        txid = record.get("txid")
+        if not txid:
+            continue
+        tx = conn.execute(
+            """
+            SELECT id, note
+            FROM transactions
+            WHERE profile_id = ? AND wallet_id = ? AND external_id = ?
+            ORDER BY created_at DESC
+            LIMIT 1
+            """,
+            (profile["id"], wallet["id"], txid),
+        ).fetchone()
+        if not tx:
+            continue
+        description = str_or_none(record.get("_phoenix_description"))
+        if description and not tx["note"]:
+            conn.execute(
+                "UPDATE transactions SET note = ? WHERE id = ?",
+                (description, tx["id"]),
+            )
+            notes_set += 1
+        phoenix_type = str_or_none(record.get("_phoenix_type"))
+        if phoenix_type:
+            tag, created = ensure_tag_row(
+                conn, profile["workspace_id"], profile["id"], phoenix_type, phoenix_type
+            )
+            if created:
+                tags_created += 1
+            before = conn.total_changes
+            conn.execute(
+                "INSERT OR IGNORE INTO transaction_tags(transaction_id, tag_id) VALUES(?, ?)",
+                (tx["id"], tag["id"]),
+            )
+            if conn.total_changes > before:
+                tags_added += 1
+    conn.commit()
+    return {
+        "phoenix_notes_set": notes_set,
+        "phoenix_tags_added": tags_added,
+        "phoenix_tags_created": tags_created,
+    }
 
 
 def make_transaction_fingerprint(wallet_id, external_id, occurred_at, direction, asset, amount, fee):
@@ -2172,6 +2340,8 @@ def import_into_wallet(conn, workspace_ref, profile_ref, wallet_ref, file_path, 
     outcome = insert_wallet_records(conn, profile, wallet, records, f"file:{input_format}")
     if is_btcpay_format(input_format):
         outcome.update(apply_btcpay_metadata(conn, profile, wallet, records))
+    if is_phoenix_format(input_format):
+        outcome.update(apply_phoenix_metadata(conn, profile, wallet, records))
     outcome["input_format"] = input_format
     outcome["file"] = os.path.abspath(file_path)
     return outcome
@@ -5547,7 +5717,7 @@ def build_parser():
     wallets_create.add_argument("--config")
     wallets_create.add_argument("--config-file")
     wallets_create.add_argument("--source-file")
-    wallets_create.add_argument("--source-format", choices=["json", "csv", "btcpay_json", "btcpay_csv"])
+    wallets_create.add_argument("--source-format", choices=["json", "csv", "btcpay_json", "btcpay_csv", "phoenix_csv"])
     wallets_altbestand = wallets_sub.add_parser("set-altbestand")
     wallets_altbestand.add_argument("--workspace")
     wallets_altbestand.add_argument("--profile")
@@ -5602,6 +5772,11 @@ def build_parser():
     wallets_import_btcpay.add_argument("--wallet", required=True)
     wallets_import_btcpay.add_argument("--file", required=True)
     wallets_import_btcpay.add_argument("--format", choices=["json", "csv"], default="csv")
+    wallets_import_phoenix = wallets_sub.add_parser("import-phoenix")
+    wallets_import_phoenix.add_argument("--workspace")
+    wallets_import_phoenix.add_argument("--profile")
+    wallets_import_phoenix.add_argument("--wallet", required=True)
+    wallets_import_phoenix.add_argument("--file", required=True)
     wallets_sync = wallets_sub.add_parser("sync")
     wallets_sync.add_argument("--workspace")
     wallets_sync.add_argument("--profile")
@@ -6065,6 +6240,18 @@ def dispatch(conn, args):
                     args.wallet,
                     args.file,
                     f"btcpay_{args.format}",
+                ),
+            )
+        if args.wallets_command == "import-phoenix":
+            return emit(
+                args,
+                import_into_wallet(
+                    conn,
+                    args.workspace,
+                    args.profile,
+                    args.wallet,
+                    args.file,
+                    "phoenix_csv",
                 ),
             )
         if args.wallets_command == "sync":
