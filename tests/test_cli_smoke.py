@@ -109,12 +109,22 @@ class CliSmokeTest(unittest.TestCase):
     def test_01_init_status(self):
         payload = self._cli("init")
         self._assert_kind(payload, "init")
+        self.assertEqual(payload["data"]["state_root"], str(self.data_root.parent))
+        self.assertEqual(payload["data"]["config_root"], str(self.data_root.parent / "config"))
+        self.assertEqual(payload["data"]["settings_file"], str(self.data_root.parent / "config" / "settings.json"))
+        self.assertEqual(payload["data"]["exports_root"], str(self.data_root.parent / "exports"))
+        self.assertEqual(payload["data"]["env_file"], str(self.data_root.parent / "config" / "backends.env"))
 
         payload = self._cli("status")
         self._assert_kind(payload, "status")
         auth = payload["data"].get("auth", {})
         self.assertEqual(auth.get("mode"), "local")
         self.assertTrue(auth.get("authenticated"))
+        self.assertEqual(payload["data"]["state_root"], str(self.data_root.parent))
+        self.assertEqual(payload["data"]["config_root"], str(self.data_root.parent / "config"))
+        self.assertEqual(payload["data"]["settings_file"], str(self.data_root.parent / "config" / "settings.json"))
+        self.assertEqual(payload["data"]["exports_root"], str(self.data_root.parent / "exports"))
+        self.assertEqual(payload["data"]["env_file"], str(self.data_root.parent / "config" / "backends.env"))
 
     def test_01a_backends_batch_size_roundtrip(self):
         payload = self._cli(

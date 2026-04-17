@@ -56,7 +56,7 @@ Keep the smoke suite green after every step.
   `InvoiceId` metadata to imported on-chain wallet addresses instead of
   trying to infer invoice/address matches from CSV exports.
 - **3h** — At-rest encryption for sensitive fields. Nothing on disk is
-  encrypted today (SQLite DB, `.env`, exports). Target seamless OS
+  encrypted today (SQLite DB, `config/backends.env` / legacy `.env`, exports). Target seamless OS
   keychain integration — macOS Keychain, Linux freedesktop
   secret-service / libsecret, Windows DPAPI / Credential Manager — so
   SLIP77 blinding keys, backend tokens, auth headers, and RPC

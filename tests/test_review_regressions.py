@@ -1,4 +1,5 @@
 import json
+import os
 import sqlite3
 import subprocess
 import sys
@@ -162,8 +163,10 @@ class ReviewRegressionTest(unittest.TestCase):
         self.case_dir.mkdir(parents=True, exist_ok=True)
         self.data_root = self.case_dir / "data"
 
-    def _run_cli(self, *args, machine=False, output=None):
-        cmd = [sys.executable, "-m", "kassiber", "--data-root", str(self.data_root)]
+    def _run_cli(self, *args, machine=False, output=None, explicit_data_root=True, env=None, cwd=None):
+        cmd = [sys.executable, "-m", "kassiber"]
+        if explicit_data_root:
+            cmd.extend(["--data-root", str(self.data_root)])
         if machine:
             cmd.append("--machine")
         if output is not None:
@@ -171,14 +174,15 @@ class ReviewRegressionTest(unittest.TestCase):
         cmd.extend(args)
         return subprocess.run(
             cmd,
-            cwd=ROOT,
+            cwd=cwd or ROOT,
             capture_output=True,
+            env=env,
             text=True,
             check=False,
         )
 
-    def _run_json(self, *args):
-        result = self._run_cli(*args, machine=True)
+    def _run_json(self, *args, **run_kwargs):
+        result = self._run_cli(*args, machine=True, **run_kwargs)
         stdout = result.stdout.strip()
         self.assertTrue(stdout, msg=f"No stdout for {args!r}; stderr={result.stderr!r}")
         try:
@@ -535,6 +539,57 @@ class ReviewRegressionTest(unittest.TestCase):
         text = output_path.read_text(encoding="utf-8")
         self.assertIn("version", text)
         self.assertIn("data_root", text)
+
+    def test_default_home_state_ignores_repo_local_env(self):
+        repo_dir = self.case_dir / "repo"
+        repo_dir.mkdir(parents=True, exist_ok=True)
+        (repo_dir / ".env").write_text("KASSIBER_DEFAULT_BACKEND=broken\n", encoding="utf-8")
+        home_dir = self.case_dir / "home"
+        env = {
+            key: value
+            for key, value in os.environ.items()
+            if not key.startswith(("KASSIBER_", "SATBOOKS_"))
+        }
+        env["HOME"] = str(home_dir)
+        env["PYTHONPATH"] = str(ROOT) if not env.get("PYTHONPATH") else f"{ROOT}{os.pathsep}{env['PYTHONPATH']}"
+
+        payload, result = self._run_json(
+            "init",
+            explicit_data_root=False,
+            env=env,
+            cwd=repo_dir,
+        )
+        self._assert_ok(payload, result, "init")
+        expected_root = home_dir / ".kassiber"
+        self.assertEqual(payload["data"]["state_root"], str(expected_root))
+        self.assertEqual(payload["data"]["data_root"], str(expected_root / "data"))
+        self.assertEqual(payload["data"]["database"], str(expected_root / "data" / "kassiber.sqlite3"))
+        self.assertEqual(payload["data"]["config_root"], str(expected_root / "config"))
+        self.assertEqual(payload["data"]["settings_file"], str(expected_root / "config" / "settings.json"))
+        self.assertEqual(payload["data"]["exports_root"], str(expected_root / "exports"))
+        self.assertEqual(payload["data"]["env_file"], str(expected_root / "config" / "backends.env"))
+        self.assertTrue((expected_root / "data" / "kassiber.sqlite3").exists())
+        self.assertTrue((expected_root / "config" / "settings.json").exists())
+        settings_payload = json.loads((expected_root / "config" / "settings.json").read_text(encoding="utf-8"))
+        self.assertEqual(settings_payload["paths"]["state_root"], str(expected_root))
+        self.assertEqual(settings_payload["paths"]["data_root"], str(expected_root / "data"))
+        self.assertEqual(settings_payload["paths"]["env_file"], str(expected_root / "config" / "backends.env"))
+        self.assertFalse((repo_dir / "kassiber.sqlite3").exists())
+
+        payload, result = self._run_json(
+            "status",
+            explicit_data_root=False,
+            env=env,
+            cwd=repo_dir,
+        )
+        self._assert_ok(payload, result, "status")
+        self.assertEqual(payload["data"]["state_root"], str(expected_root))
+        self.assertEqual(payload["data"]["data_root"], str(expected_root / "data"))
+        self.assertEqual(payload["data"]["config_root"], str(expected_root / "config"))
+        self.assertEqual(payload["data"]["settings_file"], str(expected_root / "config" / "settings.json"))
+        self.assertEqual(payload["data"]["exports_root"], str(expected_root / "exports"))
+        self.assertEqual(payload["data"]["env_file"], str(expected_root / "config" / "backends.env"))
+        self.assertEqual(payload["data"]["default_backend"], "mempool")
 
     def test_migration_preserves_child_rows(self):
         self.data_root.mkdir(parents=True, exist_ok=True)

@@ -63,19 +63,26 @@ reports are fully offline.
 
 ## Local storage
 
-- `~/.local/share/kassiber/kassiber.sqlite3` — SQLite DB. Contains
+- `~/.kassiber/data/kassiber.sqlite3` — default SQLite DB. Contains
   descriptors, xpubs, addresses, transactions, metadata, rates cache,
   and backend overlay.
+- `~/.kassiber/config/backends.env` — default backend config file. May contain
+  Bitcoin Core RPC credentials and backend tokens.
+- `~/.kassiber/config/settings.json` — managed state manifest for the active
+  path layout. Not secret by itself, but it reveals where the rest of the
+  local state lives.
 - Liquid descriptor wallets embed **private SLIP77 blinding keys** in
   `wallets.config_json`. Anyone who can read the DB can unblind your
   confidential outputs.
-- `.env` may contain Bitcoin Core RPC credentials and backend tokens.
-  Keep out of version control. Prefer `COOKIEFILE` over inline
+- Older installs may still resolve to `~/.local/share/kassiber`,
+  `~/.local/share/satbooks`, or a legacy `<data-root>/.env`; run
+  `kassiber status` to see the active paths.
+- Keep backend config out of version control. Prefer `COOKIEFILE` over inline
   `USERNAME` / `PASSWORD`.
 
 ### At-rest encryption — not implemented yet
 
-**Nothing Kassiber writes is encrypted.** The SQLite database, `.env`
+**Nothing Kassiber writes is encrypted.** The SQLite database, `backends.env`
 file, and any exported CSVs are plain files on disk. That includes
 every xpub, descriptor, SLIP77 blinding key, backend URL, auth header,
 token, and RPC credential the tool has touched.
@@ -88,13 +95,14 @@ The intended direction is seamless integration with the OS keychain
 DPAPI / Credential Manager) so that sensitive fields — blinding keys,
 RPC credentials, backend tokens — are sealed by default and unlocked
 on demand, without the user managing a separate passphrase. Until that
-lands, treat the data directory and `.env` as sensitive material.
+lands, treat the data directory and backend config file as sensitive material.
 
 ## Caveats
 
 - **Secrets on the command line end up in shell history.** `backends
   create --token ...` and `--auth-header ...` write credentials into
-  `~/.zsh_history` / `~/.bash_history`. Prefer `.env` or environment
+  `~/.zsh_history` / `~/.bash_history`. Prefer `~/.kassiber/config/backends.env`
+  (or another `--env-file`) or environment
   variables for anything sensitive.
 - **`--debug` and `--machine` output can leak secrets.** Debug stack
   traces and machine envelopes include backend URLs, tokens, and —
@@ -126,9 +134,10 @@ lands, treat the data directory and `.env` as sensitive material.
   configure. Tunnel remote nodes over SSH / VPN / TLS proxy.
 - **Fixed, identifying `User-Agent`.** Every outbound HTTP request
   advertises `kassiber/<version>`.
-- **Legacy data-root fallback.** If `~/.local/share/kassiber` does not
-  exist but `~/.local/share/satbooks` does, Kassiber opens the legacy
-  directory. `kassiber status` shows the effective path.
+- **Legacy data-root fallback.** If `~/.kassiber` does not exist yet but
+  `~/.local/share/kassiber` or `~/.local/share/satbooks` does, Kassiber
+  keeps using the older directory. `kassiber status` shows the effective
+  path.
 - **Declared-but-inactive wallet kinds.** `coreln`, `lnd`, `nwc` exist
   in the catalog but do not sync; credentials registered against them
   sit in the DB unused.
