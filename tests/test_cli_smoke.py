@@ -47,6 +47,15 @@ _HOT_TRANSFER_CSV = """date,txid,direction,asset,amount,fee,fiat_rate,descriptio
 2026-02-01T12:00:00Z,onchain-self-transfer-1,inbound,BTC,0.50000000,0,65000,Receive from cold wallet
 """
 
+_COLD_TRANSFER_VALUE_ONLY_CSV = """date,txid,direction,asset,amount,fee,fiat_value,description
+2026-01-01T10:00:00Z,cold-funding-value-1,inbound,BTC,1.00000000,0,60000,Cold acquisition
+2026-02-01T12:00:00Z,onchain-self-transfer-value-1,outbound,BTC,0.50000000,0.001,32500,Move to hot wallet
+"""
+
+_HOT_TRANSFER_VALUE_ONLY_CSV = """date,txid,direction,asset,amount,fee,fiat_value,description
+2026-02-01T12:00:00Z,onchain-self-transfer-value-1,inbound,BTC,0.50000000,0,32500,Receive from cold wallet
+"""
+
 # Manual same-asset pair scenario: two BTC legs whose external_ids deliberately
 # don't match, so auto-detection skips them. The user knows they're paired
 # (e.g., a swap via a custom counterparty) and creates a manual pair.
@@ -127,6 +136,10 @@ class CliSmokeTest(unittest.TestCase):
         cls.cold_transfer_csv.write_text(_COLD_TRANSFER_CSV, encoding="utf-8")
         cls.hot_transfer_csv = Path(cls._tmp.name) / "hot-transfer.csv"
         cls.hot_transfer_csv.write_text(_HOT_TRANSFER_CSV, encoding="utf-8")
+        cls.cold_transfer_value_only_csv = Path(cls._tmp.name) / "cold-transfer-value-only.csv"
+        cls.cold_transfer_value_only_csv.write_text(_COLD_TRANSFER_VALUE_ONLY_CSV, encoding="utf-8")
+        cls.hot_transfer_value_only_csv = Path(cls._tmp.name) / "hot-transfer-value-only.csv"
+        cls.hot_transfer_value_only_csv.write_text(_HOT_TRANSFER_VALUE_ONLY_CSV, encoding="utf-8")
         cls.manual_from_csv = Path(cls._tmp.name) / "manual-from.csv"
         cls.manual_from_csv.write_text(_MANUAL_FROM_CSV, encoding="utf-8")
         cls.manual_to_csv = Path(cls._tmp.name) / "manual-to.csv"
@@ -533,6 +546,121 @@ class CliSmokeTest(unittest.TestCase):
         total_qty = sum(float(r["quantity"]) for r in btc_rows)
         self.assertAlmostEqual(total_qty, 0.999, places=8)
 
+    def test_13a_intra_transfer_fiat_value_spot_price(self):
+        payload = self._cli(
+            "profiles", "create",
+            "--workspace", "Main",
+            "--fiat-currency", "USD",
+            "--tax-country", "generic",
+            "TransferValueOnly",
+        )
+        self._assert_kind(payload, "profiles.create")
+
+        for label in ("ColdValue", "HotValue"):
+            payload = self._cli(
+                "wallets", "create",
+                "--workspace", "Main",
+                "--profile", "TransferValueOnly",
+                "--label", label,
+                "--kind", "custom",
+            )
+            self._assert_kind(payload, "wallets.create")
+
+        self._cli(
+            "wallets", "import-csv",
+            "--workspace", "Main",
+            "--profile", "TransferValueOnly",
+            "--wallet", "ColdValue",
+            "--file", str(self.cold_transfer_value_only_csv),
+        )
+        self._cli(
+            "wallets", "import-csv",
+            "--workspace", "Main",
+            "--profile", "TransferValueOnly",
+            "--wallet", "HotValue",
+            "--file", str(self.hot_transfer_value_only_csv),
+        )
+
+        payload = self._cli(
+            "journals", "process",
+            "--workspace", "Main",
+            "--profile", "TransferValueOnly",
+        )
+        self._assert_kind(payload, "journals.process")
+        self.assertEqual(payload["data"]["transfers_detected"], 1)
+
+        payload = self._cli(
+            "reports", "capital-gains",
+            "--workspace", "Main",
+            "--profile", "TransferValueOnly",
+        )
+        self._assert_kind(payload, "reports.capital-gains")
+        rows = payload["data"]
+        self.assertEqual(len(rows), 1)
+        gain_row = rows[0]
+        self.assertEqual(gain_row["entry_type"], "transfer_fee")
+        self.assertAlmostEqual(float(gain_row["proceeds"]), 65.0, places=4)
+        self.assertAlmostEqual(float(gain_row["cost_basis"]), 60.0, places=4)
+        self.assertAlmostEqual(float(gain_row["gain_loss"]), 5.0, places=4)
+
+    def test_13b_pair_by_shared_external_id(self):
+        payload = self._cli(
+            "profiles", "create",
+            "--workspace", "Main",
+            "--fiat-currency", "USD",
+            "--tax-country", "generic",
+            "SharedTxid",
+        )
+        self._assert_kind(payload, "profiles.create")
+
+        for label in ("ColdShared", "HotShared"):
+            payload = self._cli(
+                "wallets", "create",
+                "--workspace", "Main",
+                "--profile", "SharedTxid",
+                "--label", label,
+                "--kind", "custom",
+            )
+            self._assert_kind(payload, "wallets.create")
+
+        self._cli(
+            "wallets", "import-csv",
+            "--workspace", "Main",
+            "--profile", "SharedTxid",
+            "--wallet", "ColdShared",
+            "--file", str(self.cold_transfer_csv),
+        )
+        self._cli(
+            "wallets", "import-csv",
+            "--workspace", "Main",
+            "--profile", "SharedTxid",
+            "--wallet", "HotShared",
+            "--file", str(self.hot_transfer_csv),
+        )
+
+        payload = self._cli(
+            "transfers", "pair",
+            "--workspace", "Main",
+            "--profile", "SharedTxid",
+            "--tx-out", "onchain-self-transfer-1",
+            "--tx-in", "onchain-self-transfer-1",
+            "--policy", "carrying-value",
+        )
+        self._assert_kind(payload, "transfers.pair")
+        pair_id = payload["data"]["id"]
+        self.assertNotEqual(payload["data"]["out_transaction_id"], payload["data"]["in_transaction_id"])
+
+        payload = self._cli(
+            "transfers", "list",
+            "--workspace", "Main",
+            "--profile", "SharedTxid",
+        )
+        self._assert_kind(payload, "transfers.list")
+        self.assertEqual(len(payload["data"]), 1)
+        self.assertEqual(payload["data"][0]["id"], pair_id)
+        self.assertEqual(payload["data"][0]["out"]["wallet"], "ColdShared")
+        self.assertEqual(payload["data"][0]["in"]["wallet"], "HotShared")
+
     def test_14_manual_same_asset_pairing(self):
         # Auto-detection only fires when external_ids match. The two BTC legs
         # below deliberately have different external_ids; the user pairs them
@@ -577,6 +705,21 @@ class CliSmokeTest(unittest.TestCase):
         )
         self.assertEqual(payload["data"]["transfers_detected"], 0)
         self.assertEqual(payload["data"]["cross_asset_pairs"], 0)
+
+        payload, code = _run(
+            self.data_root,
+            "transfers", "pair",
+            "--workspace", "Main",
+            "--profile", "ManualPair",
+            "--tx-out", "manual-out-leg",
+            "--tx-in", "manual-in-leg",
+            "--kind", "manual",
+            "--policy", "taxable",
+        )
+        self.assertNotEqual(code, 0)
+        self.assertEqual(payload.get("kind"), "error")
+        self.assertEqual(payload["error"]["code"], "validation")
+        self.assertIn("Same-asset taxable", payload["error"]["message"])
 
         payload = self._cli(
             "transfers", "pair",

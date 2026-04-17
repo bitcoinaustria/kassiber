@@ -28,10 +28,12 @@ def apply_manual_pairs(rows, auto_pairs, manual_pair_records):
     over auto-detection: any auto-pair that touches a manually-paired
     transaction is dropped, and the manual pair takes its place.
 
-    Same-asset manual pairs feed back into the IntraTransaction pipeline
-    (same shape as auto pairs). Cross-asset pairs are returned separately
-    so the journal pipeline can record them as audit metadata without
-    handing them to RP2.
+    Same-asset manual pairs with ``policy=carrying-value`` feed back into
+    the IntraTransaction pipeline (same shape as auto pairs). Cross-asset
+    pairs are returned separately so the journal pipeline can record them
+    as audit metadata without handing them to RP2. Any existing manual
+    pair with a different policy still suppresses auto-detection for those
+    rows, but the legs are left on the normal SELL + BUY path.
 
     Args:
         rows: full row list for the profile (sqlite3.Row-like).
@@ -59,9 +61,9 @@ def apply_manual_pairs(rows, auto_pairs, manual_pair_records):
             continue
         manually_paired_ids.add(out_id)
         manually_paired_ids.add(in_id)
-        if out_row["asset"] == in_row["asset"]:
+        if out_row["asset"] == in_row["asset"] and record["policy"] == "carrying-value":
             manual_same_asset.append({"out": out_row, "in": in_row})
-        else:
+        elif out_row["asset"] != in_row["asset"]:
             cross_asset_pairs.append(
                 {
                     "pair_id": record["id"],
