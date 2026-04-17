@@ -55,6 +55,7 @@ Kassiber is currently in **dev mode**: renaming commands, breaking flags, and re
 - `metadata records {list,get,note {set,clear},tag {add,remove},excluded {set,clear}}`
 - `metadata bip329 {import,list,export}`
 - `journals {process,list,quarantined,events {list,get},quarantine {show,clear,resolve {price-override,exclude}}}`
+- `transfers {pair,list,unpair}`
 - `reports {balance-sheet,portfolio-summary,capital-gains,journal-entries,balance-history}`
 - `rates {pairs,sync,latest,range,set}`
 
@@ -66,7 +67,11 @@ List endpoints with `--limit` also accept `--cursor`. The cursor is an opaque ba
 
 - The tax engine is RP2-backed and driven from `kassiber/app.py`.
 - Policy selection and RP2 country defaults are centralized in `kassiber/tax_policy.py`.
-- RP2 runs wallet-scoped, not globally pooled across the whole profile.
+- RP2 runs per-asset (pooled across all wallets of a profile) so `IntraTransaction` (MOVE) carries cost basis between user-owned wallets. Wallet identity is preserved by setting RP2's `exchange` to the wallet label and recovering per-wallet quantity buckets via `BalanceSet`.
+- Self-transfer detection lives in `kassiber/transfers.py`. The detector pairs same-`external_id` outbound + inbound rows across two wallets of the same profile; the journal pipeline turns each pair into an `IntraTransaction` plus `transfer_out` / `transfer_in` (and, when there's a fee, `transfer_fee`) ledger entries.
+- Manual pairing via `transfers pair / list / unpair` (table `transaction_pairs`) overrides auto-detection: `apply_manual_pairs` in `kassiber/transfers.py` filters out any auto-pair that touches a manually-paired row. Same-asset manual pairs currently support `--policy carrying-value` and feed the existing IntraTransaction path; same-asset `--policy taxable` is rejected and users should leave those legs unpaired to preserve normal SELL + BUY treatment. Cross-asset pairs (BTC ↔ LBTC peg-ins/peg-outs, submarine swaps) are stored as audit metadata and surfaced via `cross_asset_pairs` in the ledger state and the `journals process` envelope; the legs themselves still process as a normal SELL + BUY because RP2 `IntraTransaction` is same-asset only. Cross-asset `--policy carrying-value` is rejected at CLI creation time — implementing it requires unified FIFO across assets and is deferred (see TODO.md).
+- Liquid peg-in/peg-out detection must not lean on hardcoded federation addresses (per-claim tweaked, federation keys rotate). Use the manual pair CLI or non-address heuristics (time + amount + direction inversion + same-profile constraint) instead.
+- Per-wallet portfolio rows show that wallet's residual quantity at the asset's average residual basis — an allocation, not a physical-lot answer.
 - Supported lot selection: `FIFO`, `LIFO`, `HIFO`, `LOFO`.
 - Profiles currently expose the RP2 `generic` tax policy, with explicit `tax_long_term_days`.
 - Wallets can be flagged manually as `Altbestand`; disposals from those wallets are treated as tax-free while Neubestand wallets use normal tax treatment.
@@ -79,7 +84,7 @@ List endpoints with `--limit` also accept `--cursor`. The cursor is an opaque ba
 - Prefer standard-library solutions unless a dependency clearly buys a lot.
 - Keep `--machine` output deterministic — add a `kind` to every new envelope.
 - Keep envelope error shapes consistent: use `AppError(code=..., hint=..., retryable=..., details=...)`.
-- Be careful with multi-wallet isolation: avoid mixing accounting state across wallets unless that is explicitly intended.
+- Per-asset pooling is intentional so RP2 `IntraTransaction` works across wallets; per-wallet output remains via `BalanceSet`. Do not regress to per-wallet RP2 calls without thinking through the transfer story first.
 - Keep wallet-level `Altbestand` handling separate from profile-level country policy unless there is a deliberate migration plan.
 - Preserve the default `mempool.space` Esplora backend unless there is a strong reason to change it.
 - Prefer additive schema changes that work with `CREATE TABLE IF NOT EXISTS`.

@@ -101,6 +101,7 @@ from .tax_policy import (
     build_tax_policy,
     supported_tax_countries,
 )
+from .transfers import apply_manual_pairs, detect_intra_transfers
 from .wallet_descriptors import (
     DEFAULT_DESCRIPTOR_GAP_LIMIT,
     branch_limits,
@@ -546,9 +547,11 @@ def get_rp2_modules():
             "AVLTree": import_module("prezzemolo.avl_tree").AVLTree,
             "AbstractCountry": import_module("rp2.abstract_country").AbstractCountry,
             "AccountingEngine": import_module("rp2.accounting_engine").AccountingEngine,
+            "BalanceSet": import_module("rp2.balance").BalanceSet,
             "Configuration": import_module("rp2.configuration").Configuration,
             "InputData": import_module("rp2.input_data").InputData,
             "InTransaction": import_module("rp2.in_transaction").InTransaction,
+            "IntraTransaction": import_module("rp2.intra_transaction").IntraTransaction,
             "OutTransaction": import_module("rp2.out_transaction").OutTransaction,
             "TransactionSet": import_module("rp2.transaction_set").TransactionSet,
             "compute_tax": import_module("rp2.tax_engine").compute_tax,
@@ -773,17 +776,21 @@ def resolve_wallet(conn, profile_id, ref):
     return row
 
 
-def resolve_transaction(conn, profile_id, ref):
-    row = conn.execute(
-        """
-        SELECT * FROM transactions
-        WHERE profile_id = ? AND (id = ? OR external_id = ?)
-        LIMIT 1
-        """,
-        (profile_id, ref, ref),
-    ).fetchone()
+def resolve_transaction(conn, profile_id, ref, direction=None):
+    query = [
+        "SELECT * FROM transactions WHERE profile_id = ?",
+    ]
+    params = [profile_id]
+    if direction is not None:
+        query.append("AND direction = ?")
+        params.append(direction)
+    query.append("AND (id = ? OR external_id = ?) LIMIT 1")
+    params.extend([ref, ref])
+    row = conn.execute(" ".join(query), tuple(params)).fetchone()
     if not row:
-        raise AppError(f"Transaction '{ref}' not found")
+        if direction is None:
+            raise AppError(f"Transaction '{ref}' not found")
+        raise AppError(f"{direction.capitalize()} transaction '{ref}' not found")
     return row
 
 
@@ -806,6 +813,170 @@ def invalidate_journals(conn, profile_id):
         "UPDATE profiles SET last_processed_at = NULL, last_processed_tx_count = 0 WHERE id = ?",
         (profile_id,),
     )
+
+
+TRANSFER_PAIR_KINDS = ("manual", "peg-in", "peg-out", "submarine-swap")
+TRANSFER_PAIR_POLICIES = ("carrying-value", "taxable")
+
+
+def _pair_to_dict(row):
+    return {
+        "id": row["id"],
+        "workspace_id": row["workspace_id"],
+        "profile_id": row["profile_id"],
+        "out_transaction_id": row["out_transaction_id"],
+        "in_transaction_id": row["in_transaction_id"],
+        "kind": row["kind"],
+        "policy": row["policy"],
+        "notes": row["notes"],
+        "created_at": row["created_at"],
+    }
+
+
+def create_transaction_pair(
+    conn,
+    workspace_ref,
+    profile_ref,
+    out_ref,
+    in_ref,
+    kind="manual",
+    policy="carrying-value",
+    notes=None,
+):
+    workspace, profile = resolve_scope(conn, workspace_ref, profile_ref)
+    if kind not in TRANSFER_PAIR_KINDS:
+        raise AppError(
+            f"Unsupported pair kind '{kind}'. Supported: {', '.join(TRANSFER_PAIR_KINDS)}",
+            code="validation",
+        )
+    if policy not in TRANSFER_PAIR_POLICIES:
+        raise AppError(
+            f"Unsupported pair policy '{policy}'. Supported: {', '.join(TRANSFER_PAIR_POLICIES)}",
+            code="validation",
+        )
+    out_row = resolve_transaction(conn, profile["id"], out_ref, direction="outbound")
+    in_row = resolve_transaction(conn, profile["id"], in_ref, direction="inbound")
+    if out_row["id"] == in_row["id"]:
+        raise AppError("--tx-out and --tx-in must reference different transactions", code="validation")
+    if out_row["wallet_id"] == in_row["wallet_id"]:
+        raise AppError("Pair legs must be in different wallets", code="validation")
+    if out_row["asset"] == in_row["asset"] and policy == "taxable":
+        raise AppError(
+            f"Same-asset taxable pairs are not supported yet "
+            f"(asset={out_row['asset']}). Leave the legs unpaired to keep "
+            f"normal SELL + BUY treatment, or use --policy carrying-value "
+            f"for a self-transfer.",
+            code="validation",
+            hint="Re-run with --policy carrying-value, or omit the pair entirely to preserve taxable SELL + BUY behavior.",
+        )
+    if out_row["asset"] != in_row["asset"] and policy == "carrying-value":
+        raise AppError(
+            f"Cross-asset carrying-value pairs are not yet supported "
+            f"(out={out_row['asset']}, in={in_row['asset']}). "
+            f"Use --policy taxable for now; carrying-value support is tracked in TODO.md.",
+            code="validation",
+            hint="Re-run with --policy taxable, or pair two same-asset transactions.",
+        )
+    existing = conn.execute(
+        """
+        SELECT id FROM transaction_pairs
+        WHERE profile_id = ? AND (out_transaction_id IN (?, ?) OR in_transaction_id IN (?, ?))
+        LIMIT 1
+        """,
+        (profile["id"], out_row["id"], in_row["id"], out_row["id"], in_row["id"]),
+    ).fetchone()
+    if existing:
+        raise AppError(
+            f"One of the transactions is already paired (pair id={existing['id']}). "
+            f"Run `kassiber transfers unpair --pair-id {existing['id']}` first.",
+            code="conflict",
+        )
+    pair_id = str(uuid.uuid4())
+    conn.execute(
+        """
+        INSERT INTO transaction_pairs(
+            id, workspace_id, profile_id, out_transaction_id, in_transaction_id,
+            kind, policy, notes, created_at
+        ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        (
+            pair_id,
+            workspace["id"],
+            profile["id"],
+            out_row["id"],
+            in_row["id"],
+            kind,
+            policy,
+            notes,
+            now_iso(),
+        ),
+    )
+    invalidate_journals(conn, profile["id"])
+    conn.commit()
+    return _pair_to_dict(
+        conn.execute("SELECT * FROM transaction_pairs WHERE id = ?", (pair_id,)).fetchone()
+    )
+
+
+def list_transaction_pairs(conn, workspace_ref, profile_ref):
+    _, profile = resolve_scope(conn, workspace_ref, profile_ref)
+    rows = conn.execute(
+        """
+        SELECT
+            p.*,
+            tout.external_id AS out_external_id,
+            tout.asset AS out_asset,
+            tout.amount AS out_amount_msat,
+            wout.label AS out_wallet,
+            tin.external_id AS in_external_id,
+            tin.asset AS in_asset,
+            tin.amount AS in_amount_msat,
+            win.label AS in_wallet
+        FROM transaction_pairs p
+        JOIN transactions tout ON tout.id = p.out_transaction_id
+        JOIN transactions tin ON tin.id = p.in_transaction_id
+        JOIN wallets wout ON wout.id = tout.wallet_id
+        JOIN wallets win ON win.id = tin.wallet_id
+        WHERE p.profile_id = ?
+        ORDER BY p.created_at DESC
+        """,
+        (profile["id"],),
+    ).fetchall()
+    output = []
+    for row in rows:
+        entry = _pair_to_dict(row)
+        entry["out"] = {
+            "transaction_id": row["out_transaction_id"],
+            "external_id": row["out_external_id"] or "",
+            "wallet": row["out_wallet"],
+            "asset": row["out_asset"],
+            "amount": float(msat_to_btc(row["out_amount_msat"])),
+            "amount_msat": int(row["out_amount_msat"]),
+        }
+        entry["in"] = {
+            "transaction_id": row["in_transaction_id"],
+            "external_id": row["in_external_id"] or "",
+            "wallet": row["in_wallet"],
+            "asset": row["in_asset"],
+            "amount": float(msat_to_btc(row["in_amount_msat"])),
+            "amount_msat": int(row["in_amount_msat"]),
+        }
+        output.append(entry)
+    return output
+
+
+def delete_transaction_pair(conn, workspace_ref, profile_ref, pair_id):
+    _, profile = resolve_scope(conn, workspace_ref, profile_ref)
+    row = conn.execute(
+        "SELECT * FROM transaction_pairs WHERE id = ? AND profile_id = ?",
+        (pair_id, profile["id"]),
+    ).fetchone()
+    if not row:
+        raise AppError(f"Pair '{pair_id}' not found", code="not_found")
+    conn.execute("DELETE FROM transaction_pairs WHERE id = ?", (pair_id,))
+    invalidate_journals(conn, profile["id"])
+    conn.commit()
+    return {"deleted": pair_id}
 
 
 def init_app(conn):
@@ -3768,23 +3939,164 @@ def auto_price_transactions_from_rates_cache(conn, profile):
     return auto_priced
 
 
-def rp2_wallet_state(profile, wallet, asset, rows, configuration):
+def rp2_asset_state(profile, asset, rows, wallet_refs_by_id, intra_pairs, configuration):
+    """Build RP2 ``ComputedData`` for one asset across every wallet in the profile.
+
+    Self-transfers (one outbound + one inbound sharing the same on-chain txid in
+    different wallets) are emitted as a single ``IntraTransaction`` instead of an
+    independent disposal + acquisition pair, which lets cost basis follow coins
+    across wallet boundaries.
+    """
     modules = get_rp2_modules()
     TransactionSet = modules["TransactionSet"]
     InTransaction = modules["InTransaction"]
     OutTransaction = modules["OutTransaction"]
+    IntraTransaction = modules["IntraTransaction"]
     InputData = modules["InputData"]
+    BalanceSet = modules["BalanceSet"]
     compute_tax = modules["compute_tax"]
-    in_transactions = TransactionSet(configuration, "IN", asset)
-    out_transactions = TransactionSet(configuration, "OUT", asset)
-    intra_transactions = TransactionSet(configuration, "INTRA", asset)
+    in_set = TransactionSet(configuration, "IN", asset)
+    out_set = TransactionSet(configuration, "OUT", asset)
+    intra_set = TransactionSet(configuration, "INTRA", asset)
     holder = profile["label"]
     total_available = Decimal("0")
     priced_available = Decimal("0")
     quarantines = []
+    intra_audit = []
     row_index = 1
     row_by_id = {row["id"]: row for row in rows}
+
+    pair_by_row = {}
+    for pair in intra_pairs:
+        pair_by_row[pair["out"]["id"]] = ("out", pair)
+        pair_by_row[pair["in"]["id"]] = ("in", pair)
+    handled_pairs = set()
+
     for row in rows:
+        role_pair = pair_by_row.get(row["id"])
+        if role_pair is not None:
+            _, pair = role_pair
+            pair_key = id(pair)
+            if pair_key in handled_pairs:
+                continue
+            handled_pairs.add(pair_key)
+            out_row = pair["out"]
+            in_row = pair["in"]
+            from_wallet = wallet_refs_by_id[out_row["wallet_id"]]
+            to_wallet = wallet_refs_by_id[in_row["wallet_id"]]
+            sent = msat_to_btc(out_row["amount"]) + msat_to_btc(out_row["fee"])
+            received = msat_to_btc(in_row["amount"])
+            if sent < received:
+                quarantines.append(
+                    rp2_quarantine(
+                        profile,
+                        out_row,
+                        "transfer_mismatch",
+                        {
+                            "from_wallet": from_wallet["label"],
+                            "to_wallet": to_wallet["label"],
+                            "sent": float(sent),
+                            "received": float(received),
+                        },
+                    )
+                )
+                continue
+            crypto_fee = sent - received
+            spot_price = rp2_spot_price(out_row, msat_to_btc(out_row["amount"]))
+            if spot_price is None:
+                spot_price = rp2_spot_price(in_row, msat_to_btc(in_row["amount"]))
+            if spot_price is None and crypto_fee > 0:
+                quarantines.append(
+                    rp2_quarantine(
+                        profile,
+                        out_row,
+                        "missing_spot_price",
+                        {
+                            "from_wallet": from_wallet["label"],
+                            "to_wallet": to_wallet["label"],
+                            "asset": asset,
+                            "direction": "transfer",
+                            "required_for": "transfer_fee",
+                        },
+                    )
+                )
+                continue
+            if total_available < sent:
+                quarantines.append(
+                    rp2_quarantine(
+                        profile,
+                        out_row,
+                        "insufficient_lots",
+                        {
+                            "from_wallet": from_wallet["label"],
+                            "asset": asset,
+                            "required": float(sent),
+                            "available": float(total_available),
+                        },
+                    )
+                )
+                continue
+            if priced_available < sent:
+                quarantines.append(
+                    rp2_quarantine(
+                        profile,
+                        out_row,
+                        "missing_cost_basis",
+                        {
+                            "from_wallet": from_wallet["label"],
+                            "asset": asset,
+                            "required": float(sent),
+                            "priced_available": float(priced_available),
+                        },
+                    )
+                )
+                continue
+            description = (
+                out_row["note"]
+                or out_row["description"]
+                or out_row["kind"]
+                or f"Transfer {from_wallet['label']} → {to_wallet['label']}"
+            )
+            intra_set.add_entry(
+                IntraTransaction(
+                    configuration=configuration,
+                    timestamp=out_row["occurred_at"],
+                    asset=asset,
+                    from_exchange=from_wallet["label"],
+                    from_holder=holder,
+                    to_exchange=to_wallet["label"],
+                    to_holder=holder,
+                    spot_price=rp2_decimal(spot_price if spot_price is not None else 0),
+                    crypto_sent=rp2_decimal(sent),
+                    crypto_received=rp2_decimal(received),
+                    row=row_index,
+                    unique_id=out_row["id"],
+                    notes=description,
+                )
+            )
+            row_index += 1
+            total_available -= crypto_fee
+            priced_available -= crypto_fee
+            intra_audit.append(
+                {
+                    "out_id": out_row["id"],
+                    "in_id": in_row["id"],
+                    "from_wallet_id": from_wallet["id"],
+                    "from_wallet_label": from_wallet["label"],
+                    "to_wallet_id": to_wallet["id"],
+                    "to_wallet_label": to_wallet["label"],
+                    "asset": asset,
+                    "occurred_at": out_row["occurred_at"],
+                    "external_id": out_row["external_id"],
+                    "crypto_sent": float(sent),
+                    "crypto_received": float(received),
+                    "crypto_fee": float(crypto_fee),
+                    "spot_price": float(spot_price) if spot_price is not None else 0.0,
+                }
+            )
+            continue
+
+        wallet = wallet_refs_by_id[row["wallet_id"]]
         amount = msat_to_btc(row["amount"])
         fee = msat_to_btc(row["fee"])
         description = row["note"] or row["description"] or row["kind"] or row["id"]
@@ -3807,7 +4119,7 @@ def rp2_wallet_state(profile, wallet, asset, rows, configuration):
                 )
                 continue
             fiat_value = dec(row["fiat_value"]) if row["fiat_value"] is not None else amount * spot_price
-            in_transactions.add_entry(
+            in_set.add_entry(
                 InTransaction(
                     configuration=configuration,
                     timestamp=row["occurred_at"],
@@ -3878,7 +4190,7 @@ def rp2_wallet_state(profile, wallet, asset, rows, configuration):
             )
             continue
         fiat_out_no_fee = dec(row["fiat_value"]) if row["fiat_value"] is not None else amount * spot_price
-        out_transactions.add_entry(
+        out_set.add_entry(
             OutTransaction(
                 configuration=configuration,
                 timestamp=row["occurred_at"],
@@ -3899,25 +4211,42 @@ def rp2_wallet_state(profile, wallet, asset, rows, configuration):
         total_available -= needed
         priced_available -= needed
         row_index += 1
-    if in_transactions.count == 0:
-        return None, quarantines, row_by_id
+
+    if in_set.count == 0:
+        return None, quarantines, row_by_id, intra_audit, None, None
     input_data = InputData(
         asset=asset,
-        unfiltered_in_transaction_set=in_transactions,
-        unfiltered_out_transaction_set=out_transactions,
-        unfiltered_intra_transaction_set=intra_transactions,
+        unfiltered_in_transaction_set=in_set,
+        unfiltered_out_transaction_set=out_set,
+        unfiltered_intra_transaction_set=intra_set,
     )
     try:
         computed_data = compute_tax(configuration, build_rp2_accounting_engine(profile), input_data)
     except Exception as exc:
-        raise AppError(f"RP2 tax calculation failed for wallet '{wallet['label']}' asset '{asset}': {exc}") from exc
-    return computed_data, quarantines, row_by_id
+        raise AppError(f"RP2 tax calculation failed for asset '{asset}': {exc}") from exc
+    from datetime import date as _date
+    balance_set = BalanceSet(configuration, input_data, _date.max)
+    return computed_data, quarantines, row_by_id, intra_audit, balance_set, input_data
 
 
-def append_rp2_journal_entries(entries, computed_data, wallet, profile, row_by_id):
-    altbestand = wallet_is_altbestand(wallet)
+def append_rp2_journal_entries(entries, computed_data, wallet_refs_by_label, profile, row_by_id, intra_audit):
+    altbestand_by_label = {label: wallet_is_altbestand(ref) for label, ref in wallet_refs_by_label.items()}
+
+    def _wallet_for(transaction):
+        # IntraTransaction (MOVE) uses from_exchange/to_exchange; In/Out use exchange.
+        # The fee disposal is attributed to the sending wallet.
+        label = getattr(transaction, "exchange", None) or getattr(transaction, "from_exchange", None)
+        ref = wallet_refs_by_label.get(label)
+        if ref is None:
+            raise AppError(
+                f"RP2 emitted transaction for unknown wallet '{label}'",
+                code="internal",
+            )
+        return ref
+
     for transaction in computed_data.in_transaction_set:
         source_row = row_by_id.get(transaction.unique_id)
+        wallet = _wallet_for(transaction)
         entries.append(
             {
                 "id": str(uuid.uuid4()),
@@ -3938,15 +4267,27 @@ def append_rp2_journal_entries(entries, computed_data, wallet, profile, row_by_i
                 "description": transaction.notes or (source_row["description"] if source_row else "Inbound transaction"),
             }
         )
+
+    audit_by_out_id = {audit["out_id"]: audit for audit in intra_audit}
+
     realized_by_event = {}
     for gain_loss in computed_data.gain_loss_set:
         taxable_event = gain_loss.taxable_event
+        wallet = _wallet_for(taxable_event)
+        is_intra = taxable_event.unique_id in audit_by_out_id and taxable_event.asset == computed_data.asset and taxable_event.transaction_type.value.lower() == "move"
+        if is_intra:
+            entry_type = "transfer_fee"
+        elif taxable_event.transaction_type.value == "FEE":
+            entry_type = "fee"
+        else:
+            entry_type = "disposal"
         event = realized_by_event.setdefault(
             taxable_event.internal_id,
             {
                 "transaction_id": taxable_event.unique_id,
+                "wallet": wallet,
                 "occurred_at": row_by_id[taxable_event.unique_id]["occurred_at"] if taxable_event.unique_id in row_by_id else taxable_event.timestamp.isoformat(),
-                "entry_type": "fee" if taxable_event.transaction_type.value == "FEE" else "disposal",
+                "entry_type": entry_type,
                 "asset": taxable_event.asset,
                 "quantity": Decimal("0"),
                 "fiat_value": Decimal("0"),
@@ -3963,13 +4304,15 @@ def append_rp2_journal_entries(entries, computed_data, wallet, profile, row_by_i
         event["proceeds"] += dec(gain_loss.taxable_event_fiat_amount_with_fee_fraction)
         event["gain_loss"] += dec(gain_loss.fiat_gain)
     for event in realized_by_event.values():
+        wallet = event["wallet"]
+        altbestand = altbestand_by_label.get(wallet["label"], False)
         description = event["description"]
         proceeds = event["proceeds"]
         cost_basis = event["cost_basis"]
         gain_loss = event["gain_loss"]
         if altbestand:
             description = f"{description} [Altbestand tax-free]"
-            if event["entry_type"] == "fee":
+            if event["entry_type"] in ("fee", "transfer_fee"):
                 proceeds = Decimal("0")
                 cost_basis = Decimal("0")
             else:
@@ -3996,28 +4339,88 @@ def append_rp2_journal_entries(entries, computed_data, wallet, profile, row_by_i
             }
         )
 
+    for audit in intra_audit:
+        from_wallet = wallet_refs_by_label[audit["from_wallet_label"]]
+        to_wallet = wallet_refs_by_label[audit["to_wallet_label"]]
+        sent = dec(audit["crypto_sent"])
+        received = dec(audit["crypto_received"])
+        description = f"Transfer {from_wallet['label']} → {to_wallet['label']}"
+        entries.append(
+            {
+                "id": str(uuid.uuid4()),
+                "workspace_id": profile["workspace_id"],
+                "profile_id": profile["id"],
+                "transaction_id": audit["out_id"],
+                "wallet_id": from_wallet["id"],
+                "account_id": from_wallet["wallet_account_id"],
+                "occurred_at": audit["occurred_at"],
+                "entry_type": "transfer_out",
+                "asset": audit["asset"],
+                "quantity": -sent,
+                "fiat_value": Decimal("0"),
+                "unit_cost": Decimal("0"),
+                "cost_basis": None,
+                "proceeds": None,
+                "gain_loss": None,
+                "description": description,
+            }
+        )
+        entries.append(
+            {
+                "id": str(uuid.uuid4()),
+                "workspace_id": profile["workspace_id"],
+                "profile_id": profile["id"],
+                "transaction_id": audit["in_id"],
+                "wallet_id": to_wallet["id"],
+                "account_id": to_wallet["wallet_account_id"],
+                "occurred_at": audit["occurred_at"],
+                "entry_type": "transfer_in",
+                "asset": audit["asset"],
+                "quantity": received,
+                "fiat_value": Decimal("0"),
+                "unit_cost": Decimal("0"),
+                "cost_basis": None,
+                "proceeds": None,
+                "gain_loss": None,
+                "description": description,
+            }
+        )
 
-def accumulate_rp2_holdings(account_holdings, wallet_holdings, computed_data, wallet):
+
+def accumulate_asset_holdings(account_holdings, wallet_holdings, computed_data, balance_set, wallet_refs_by_label):
+    asset = computed_data.asset
+    total_quantity = Decimal("0")
+    total_cost_basis = Decimal("0")
     for transaction in computed_data.in_transaction_set:
         sold_percent = dec(computed_data.get_in_lot_sold_percentage(transaction))
         remaining_ratio = Decimal("1") - sold_percent
         if remaining_ratio <= 0:
             continue
-        quantity = dec(transaction.crypto_in) * remaining_ratio
+        total_quantity += dec(transaction.crypto_in) * remaining_ratio
+        total_cost_basis += dec(transaction.fiat_in_with_fee) * remaining_ratio
+    if total_quantity <= 0 or balance_set is None:
+        return
+    avg_basis_per_unit = total_cost_basis / total_quantity
+    for balance in balance_set:
+        wallet_label = balance.exchange
+        wallet = wallet_refs_by_label.get(wallet_label)
+        if wallet is None:
+            continue
+        quantity = dec(balance.final_balance)
         if quantity <= 0:
             continue
-        cost_basis = dec(transaction.fiat_in_with_fee) * remaining_ratio
+        cost_basis = quantity * avg_basis_per_unit
         account_key = (
             wallet["wallet_account_id"],
             wallet["account_code"],
             wallet["account_label"],
-            transaction.asset,
+            asset,
         )
         wallet_key = (
             wallet["id"],
             wallet["label"],
             wallet["account_code"],
-            transaction.asset,
+            asset,
         )
         account_holdings[account_key]["quantity"] += quantity
         account_holdings[account_key]["cost_basis"] += cost_basis
@@ -4046,10 +4449,16 @@ def build_ledger_state(conn, profile):
     ).fetchall()
     wallet_labels = {row["wallet_label"] for row in rows}
     assets = {row["asset"] for row in rows}
+    manual_pair_records = conn.execute(
+        "SELECT * FROM transaction_pairs WHERE profile_id = ?",
+        (profile["id"],),
+    ).fetchall()
     if not rows:
         return {
             "entries": [],
             "quarantines": [],
+            "intra_audit": [],
+            "cross_asset_pairs": [],
             "account_holdings": defaultdict(lambda: {"quantity": Decimal("0"), "cost_basis": Decimal("0")}),
             "wallet_holdings": defaultdict(lambda: {"quantity": Decimal("0"), "cost_basis": Decimal("0")}),
             "latest_rates": latest_rates_for_profile(conn, profile["id"]),
@@ -4057,16 +4466,16 @@ def build_ledger_state(conn, profile):
     configuration, configuration_path = make_rp2_configuration(profile, wallet_labels, assets)
     entries = []
     quarantines = []
+    intra_audit_all = []
+    cross_asset_pairs = []
     account_holdings = defaultdict(lambda: {"quantity": Decimal("0"), "cost_basis": Decimal("0")})
     wallet_holdings = defaultdict(lambda: {"quantity": Decimal("0"), "cost_basis": Decimal("0")})
     rates = latest_rates_for_profile(conn, profile["id"])
     try:
-        grouped_rows = defaultdict(list)
-        wallet_refs = {}
+        wallet_refs_by_id = {}
         for row in rows:
-            grouped_rows[(row["wallet_id"], row["asset"])].append(row)
             wallet_config = json.loads(row["config_json"] or "{}")
-            wallet_refs[row["wallet_id"]] = {
+            wallet_refs_by_id[row["wallet_id"]] = {
                 "id": row["wallet_id"],
                 "label": row["wallet_label"],
                 "wallet_account_id": row["wallet_account_id"],
@@ -4074,19 +4483,33 @@ def build_ledger_state(conn, profile):
                 "account_label": row["account_label"],
                 "altbestand": wallet_config.get("altbestand", False),
             }
-        for (wallet_id, asset), wallet_rows in grouped_rows.items():
-            computed_data, wallet_quarantines, row_by_id = rp2_wallet_state(
+        wallet_refs_by_label = {ref["label"]: ref for ref in wallet_refs_by_id.values()}
+
+        auto_pairs, _ = detect_intra_transfers(rows)
+        all_pairs, cross_asset_pairs = apply_manual_pairs(rows, auto_pairs, manual_pair_records)
+
+        rows_by_asset = defaultdict(list)
+        for row in rows:
+            rows_by_asset[row["asset"]].append(row)
+        pairs_by_asset = defaultdict(list)
+        for pair in all_pairs:
+            pairs_by_asset[pair["out"]["asset"]].append(pair)
+
+        for asset, asset_rows in rows_by_asset.items():
+            computed_data, asset_quarantines, row_by_id, intra_audit, balance_set, _input = rp2_asset_state(
                 profile,
-                wallet_refs[wallet_id],
                 asset,
-                wallet_rows,
+                asset_rows,
+                wallet_refs_by_id,
+                pairs_by_asset.get(asset, []),
                 configuration,
             )
-            quarantines.extend(wallet_quarantines)
+            quarantines.extend(asset_quarantines)
+            intra_audit_all.extend(intra_audit)
             if computed_data is None:
                 continue
-            append_rp2_journal_entries(entries, computed_data, wallet_refs[wallet_id], profile, row_by_id)
-            accumulate_rp2_holdings(account_holdings, wallet_holdings, computed_data, wallet_refs[wallet_id])
+            append_rp2_journal_entries(entries, computed_data, wallet_refs_by_label, profile, row_by_id, intra_audit)
+            accumulate_asset_holdings(account_holdings, wallet_holdings, computed_data, balance_set, wallet_refs_by_label)
     finally:
         try:
             os.unlink(configuration_path)
@@ -4095,6 +4518,8 @@ def build_ledger_state(conn, profile):
     return {
         "entries": entries,
         "quarantines": quarantines,
+        "intra_audit": intra_audit_all,
+        "cross_asset_pairs": cross_asset_pairs,
         "account_holdings": account_holdings,
         "wallet_holdings": wallet_holdings,
         "latest_rates": rates,
@@ -4166,6 +4591,8 @@ def process_journals(conn, workspace_ref, profile_ref):
         "profile": profile["label"],
         "entries_created": len(state["entries"]),
         "quarantined": len(state["quarantines"]),
+        "transfers_detected": len(state.get("intra_audit", [])),
+        "cross_asset_pairs": len(state.get("cross_asset_pairs", [])),
         "auto_priced": auto_priced,
         "processed_transactions": tx_count,
         "processed_at": created_at,
@@ -4649,7 +5076,7 @@ def report_capital_gains(conn, workspace_ref, profile_ref):
             COALESCE(je.description, '') AS description
         FROM journal_entries je
         JOIN wallets w ON w.id = je.wallet_id
-        WHERE je.profile_id = ? AND je.entry_type IN ('disposal', 'fee')
+        WHERE je.profile_id = ? AND je.entry_type IN ('disposal', 'fee', 'transfer_fee')
         ORDER BY je.occurred_at ASC
         """,
         (profile["id"],),
@@ -5937,6 +6364,24 @@ def build_parser():
     q_exclude.add_argument("--profile")
     q_exclude.add_argument("--transaction", required=True)
 
+    transfers = sub.add_parser("transfers")
+    transfers_sub = transfers.add_subparsers(dest="transfers_command", required=True)
+    transfers_list = transfers_sub.add_parser("list")
+    transfers_list.add_argument("--workspace")
+    transfers_list.add_argument("--profile")
+    transfers_pair = transfers_sub.add_parser("pair")
+    transfers_pair.add_argument("--workspace")
+    transfers_pair.add_argument("--profile")
+    transfers_pair.add_argument("--tx-out", required=True, dest="tx_out", help="Outbound transaction id or external_id")
+    transfers_pair.add_argument("--tx-in", required=True, dest="tx_in", help="Inbound transaction id or external_id")
+    transfers_pair.add_argument("--kind", choices=list(TRANSFER_PAIR_KINDS), default="manual")
+    transfers_pair.add_argument("--policy", choices=list(TRANSFER_PAIR_POLICIES), default="carrying-value")
+    transfers_pair.add_argument("--note", dest="note")
+    transfers_unpair = transfers_sub.add_parser("unpair")
+    transfers_unpair.add_argument("--workspace")
+    transfers_unpair.add_argument("--profile")
+    transfers_unpair.add_argument("--pair-id", required=True, dest="pair_id")
+
     reports = sub.add_parser("reports")
     reports_sub = reports.add_subparsers(dest="reports_command", required=True)
     for report_name in ["balance-sheet", "portfolio-summary", "capital-gains", "journal-entries"]:
@@ -6364,6 +6809,28 @@ def dispatch(conn, args):
                             conn, args.workspace, args.profile, args.transaction
                         ),
                     )
+    if args.command == "transfers":
+        if args.transfers_command == "list":
+            return emit(args, list_transaction_pairs(conn, args.workspace, args.profile))
+        if args.transfers_command == "pair":
+            return emit(
+                args,
+                create_transaction_pair(
+                    conn,
+                    args.workspace,
+                    args.profile,
+                    args.tx_out,
+                    args.tx_in,
+                    kind=args.kind,
+                    policy=args.policy,
+                    notes=args.note,
+                ),
+            )
+        if args.transfers_command == "unpair":
+            return emit(
+                args,
+                delete_transaction_pair(conn, args.workspace, args.profile, args.pair_id),
+            )
     if args.command == "reports":
         if args.reports_command == "balance-sheet":
             return emit(args, report_balance_sheet(conn, args.workspace, args.profile))
