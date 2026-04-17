@@ -15,11 +15,19 @@ It is designed around:
 - multiple accounts per profile
 - multiple wallets per profile
 - explicit profile tax policy defaults
-- `.env`-driven and DB-backed named sync backends
+- dotenv-driven and DB-backed named sync backends
 - explicit journal processing before reporting
 - capital gains, balance sheet, portfolio, and balance-history reporting
 - a cached exchange-rate table with manual override and CoinGecko sync
 - a machine-readable JSON envelope for every command
+
+By default Kassiber keeps user state in a hidden home tree:
+`~/.kassiber/data/kassiber.sqlite3` for the SQLite store,
+`~/.kassiber/config/backends.env` for backend config,
+`~/.kassiber/config/settings.json` for the managed state manifest, and
+`~/.kassiber/exports/` as the reserved place to keep generated report files.
+`kassiber status` shows the active paths, and `--data-root` / `--env-file`
+let you override them.
 
 ## What is implemented
 
@@ -44,7 +52,7 @@ It is designed around:
 - manual `Altbestand` provenance flag for tax-free disposals
 
 ### Backends
-- `.env` seed + DB-backed overlay (`backends` table)
+- dotenv seed + DB-backed overlay (`backends` table)
 - `backends kinds / list / get / create / update / delete / set-default / clear-default`
 - backend kinds: `esplora`, `electrum`, `bitcoinrpc`
 - built-in Bitcoin Austria `mempool` + `fulcrum` backends, plus a bundled `liquid` Electrum endpoint
@@ -172,9 +180,23 @@ python3 -m kassiber reports balance-history --interval month \
   --start 2025-01-01T00:00:00Z --end 2025-12-31T23:59:59Z
 ```
 
+The first `init` creates the default hidden home state tree if it does not
+exist yet:
+
+- `~/.kassiber/data`
+- `~/.kassiber/config`
+- `~/.kassiber/exports`
+
+`settings.json` is written into `~/.kassiber/config/` automatically and records
+the active path layout (`state_root`, `data_root`, `database`, `env_file`,
+`exports_root`) so the whole state tree is easy to inspect.
+
 ## Backends via `.env`
 
-Kassiber loads named sync backends from `.env`. Without any user config it already includes:
+Kassiber loads named sync backends from a dotenv file. By default that path
+is `~/.kassiber/config/backends.env` (or the matching `config/backends.env`
+state sibling when you override `--data-root`). Without any user config it
+already includes:
 
 - `mempool` → `esplora` → `https://mempool.bitcoin-austria.at/api`
 - `fulcrum` → `electrum` → `ssl://index.bitcoin-austria.at:50002`
@@ -268,6 +290,9 @@ For `bitcoinrpc`, Kassiber creates or loads a dedicated watch-only Bitcoin Core 
 
 ### Example `.env`
 
+Copy [.env.example](.env.example) to `~/.kassiber/config/backends.env` if you
+want a real file to edit, or point Kassiber somewhere else with `--env-file`.
+
 ```dotenv
 KASSIBER_DEFAULT_BACKEND=mempool
 
@@ -334,7 +359,7 @@ python3 -m kassiber wallets create \
 
 For Liquid:
 
-- Kassiber does not ship a built-in public Liquid backend default. Point the wallet at an explicitly named backend in `.env`.
+- Kassiber does not ship a built-in public Liquid backend default. Point the wallet at an explicitly named backend in `~/.kassiber/config/backends.env` (or your chosen `--env-file`).
 - Private blinding keys are required for full sync, balances, and fee accounting.
 - Kassiber accepts modern `ct(...)` / `elwpkh(...)` Liquid descriptor syntax and normalizes it internally for the current descriptor library.
 
@@ -547,7 +572,7 @@ Wallet-level `Altbestand` stays separate from the profile policy because it is p
   - [kassiber/util.py](kassiber/util.py) — tiny type-coercion helpers.
   - [kassiber/envelope.py](kassiber/envelope.py) — JSON envelope contract and output writers.
   - [kassiber/db.py](kassiber/db.py) — SQLite schema, data-root resolution, settings helpers.
-  - [kassiber/backends.py](kassiber/backends.py) — `.env` seed + DB overlay for named sync backends.
+  - [kassiber/backends.py](kassiber/backends.py) — dotenv seed + DB overlay for named sync backends.
   - [kassiber/tax_policy.py](kassiber/tax_policy.py) — profile tax-policy layer.
   - [kassiber/wallet_descriptors.py](kassiber/wallet_descriptors.py) — descriptor handling.
 - SQLite remains the system of record. BTC-denominated amounts (`transactions.amount`, `transactions.fee`, `journal_entries.quantity`) are stored as INTEGER msat — the Lightning convention. Machine envelopes expose both the human-friendly BTC decimal and an exact `_msat` integer for every amount.

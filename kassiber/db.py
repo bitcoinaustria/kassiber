@@ -20,6 +20,7 @@ Call sites should never embed their own `CREATE TABLE` or `ALTER TABLE`
 DDL — add it to `SCHEMA` or `ensure_schema_compat` here instead.
 """
 
+import json
 import os
 import sqlite3
 from pathlib import Path
@@ -29,7 +30,13 @@ from .tax_policy import DEFAULT_LONG_TERM_DAYS, DEFAULT_TAX_COUNTRY
 
 APP_NAME = "kassiber"
 LEGACY_APP_NAME = "satbooks"
-DEFAULT_DATA_ROOT = os.path.expanduser(f"~/.local/share/{APP_NAME}")
+DEFAULT_STATE_ROOT = os.path.expanduser(f"~/.{APP_NAME}")
+DEFAULT_DATA_DIRNAME = "data"
+DEFAULT_CONFIG_DIRNAME = "config"
+DEFAULT_EXPORTS_DIRNAME = "exports"
+DEFAULT_SETTINGS_FILENAME = "settings.json"
+DEFAULT_DATA_ROOT = os.path.join(DEFAULT_STATE_ROOT, DEFAULT_DATA_DIRNAME)
+LEGACY_XDG_DATA_ROOT = os.path.expanduser(f"~/.local/share/{APP_NAME}")
 LEGACY_DATA_ROOT = os.path.expanduser(f"~/.local/share/{LEGACY_APP_NAME}")
 DEFAULT_DB_FILENAME = f"{APP_NAME}.sqlite3"
 LEGACY_DB_FILENAME = f"{LEGACY_APP_NAME}.sqlite3"
@@ -208,18 +215,88 @@ def ensure_data_root(data_root):
 
 
 def resolve_effective_data_root(data_root):
-    """Redirect the default data root to the legacy `satbooks` dir when present.
+    """Resolve the active data root, honoring older home/XDG locations.
 
-    Preserves user data across the kassiber rename: only kicks in when the
-    user passed the default `~/.local/share/kassiber` path and that dir
-    does not exist but `~/.local/share/satbooks` does.
+    Kassiber now prefers a single hidden home folder (`~/.kassiber`) so
+    repo checkouts stay stateless by default. Existing users keep working:
+    when the caller requested the default hidden-home path and it does not
+    exist yet, fall back to the older XDG-style locations.
     """
     requested = Path(data_root).expanduser()
     if requested == Path(DEFAULT_DATA_ROOT).expanduser():
-        legacy = Path(LEGACY_DATA_ROOT).expanduser()
-        if not requested.exists() and legacy.exists():
-            return legacy
+        for legacy in (
+            Path(LEGACY_XDG_DATA_ROOT).expanduser(),
+            Path(LEGACY_DATA_ROOT).expanduser(),
+        ):
+            if not requested.exists() and legacy.exists():
+                return legacy
     return requested
+
+
+def resolve_effective_state_root(data_root):
+    """Return the root directory that owns `data/`, `config/`, and `exports/`."""
+    effective_data_root = Path(resolve_effective_data_root(data_root)).expanduser()
+    legacy_roots = {
+        Path(LEGACY_XDG_DATA_ROOT).expanduser(),
+        Path(LEGACY_DATA_ROOT).expanduser(),
+    }
+    if effective_data_root in legacy_roots:
+        return effective_data_root
+    if effective_data_root.name == DEFAULT_DATA_DIRNAME:
+        return effective_data_root.parent
+    return effective_data_root
+
+
+def resolve_config_root(data_root):
+    """Return the directory that holds human-editable config files."""
+    return Path(resolve_effective_state_root(data_root)).expanduser() / DEFAULT_CONFIG_DIRNAME
+
+
+def resolve_exports_root(data_root):
+    """Return the default directory for user-generated exports/report files."""
+    return Path(resolve_effective_state_root(data_root)).expanduser() / DEFAULT_EXPORTS_DIRNAME
+
+
+def resolve_settings_path(data_root):
+    """Return the managed JSON settings file path for the active state root."""
+    return resolve_config_root(data_root) / DEFAULT_SETTINGS_FILENAME
+
+
+def ensure_settings_file(data_root, env_file):
+    """Create or refresh the managed `settings.json` state manifest."""
+    settings_path = resolve_settings_path(data_root)
+    payload = {
+        "schema_version": 1,
+        "app": APP_NAME,
+        "paths": {
+            "state_root": str(resolve_effective_state_root(data_root)),
+            "data_root": str(resolve_effective_data_root(data_root)),
+            "database": str(resolve_database_path(resolve_effective_data_root(data_root))),
+            "config_root": str(resolve_config_root(data_root)),
+            "settings_file": str(settings_path),
+            "env_file": str(Path(env_file).expanduser()),
+            "exports_root": str(resolve_exports_root(data_root)),
+        },
+    }
+    existing = {}
+    if settings_path.exists():
+        try:
+            loaded = json.loads(settings_path.read_text(encoding="utf-8"))
+            if isinstance(loaded, dict):
+                existing = loaded
+        except (OSError, ValueError, json.JSONDecodeError):
+            existing = {}
+    merged = dict(existing)
+    merged["schema_version"] = payload["schema_version"]
+    merged["app"] = payload["app"]
+    existing_paths = existing.get("paths")
+    merged_paths = dict(existing_paths) if isinstance(existing_paths, dict) else {}
+    merged_paths.update(payload["paths"])
+    merged["paths"] = merged_paths
+    if merged == existing:
+        return settings_path
+    settings_path.write_text(json.dumps(merged, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    return settings_path
 
 
 def resolve_database_path(data_root):

@@ -5,7 +5,7 @@ A "backend" in kassiber is a pointer to an external blockchain indexer
 etc.) that wallets use to sync transactions. Backends live in two
 places, and this module reconciles them:
 
-1. **Environment / `.env`** — the built-in `mempool` default plus any
+1. **Environment / dotenv config** — the built-in `mempool` default plus any
    `KASSIBER_BACKEND_<NAME>_<FIELD>` variables. Loaded by
    `load_runtime_config`.
 2. **Database** — user-created rows in the `backends` table, plus an
@@ -26,7 +26,13 @@ directly, since env-sourced and DB-sourced dicts differ slightly.
 import os
 from pathlib import Path
 
-from .db import get_setting, set_setting
+from .db import (
+    DEFAULT_CONFIG_DIRNAME,
+    DEFAULT_DATA_ROOT,
+    get_setting,
+    resolve_effective_state_root,
+    set_setting,
+)
 from .errors import AppError
 from .time_utils import now_iso
 from .util import (
@@ -67,6 +73,30 @@ DEFAULT_BACKENDS = {
 }
 
 BACKEND_KINDS = {"esplora", "mempool", "electrum", "liquid-esplora", "custom"}
+DEFAULT_ENV_FILENAME = "backends.env"
+
+
+def resolve_effective_env_file(env_file=None, data_root=None):
+    """Pick the active backend config path.
+
+    Defaults follow the effective data root so Kassiber's config lands in the
+    same hidden home folder as the SQLite store. If an older `.env` already
+    exists inside that state directory, keep using it until the user moves it.
+    """
+    if env_file:
+        return Path(env_file).expanduser()
+    state_root = Path(resolve_effective_state_root(data_root or DEFAULT_DATA_ROOT)).expanduser()
+    preferred = state_root / DEFAULT_CONFIG_DIRNAME / DEFAULT_ENV_FILENAME
+    legacy_candidates = (
+        state_root / "config.env",
+        state_root / ".env",
+    )
+    if preferred.exists():
+        return preferred
+    for legacy in legacy_candidates:
+        if legacy.exists():
+            return legacy
+    return preferred
 
 
 def load_dotenv_file(path):
@@ -92,7 +122,7 @@ def load_dotenv_file(path):
 
 
 def load_runtime_config(env_file):
-    """Build the runtime backend config from env / .env only (no DB).
+    """Build the runtime backend config from env / dotenv file only (no DB).
 
     Returns a dict with `env_file`, `env_file_exists`, `default_backend`,
     and `backends` (a name->config dict). Call `merge_db_backends` on
