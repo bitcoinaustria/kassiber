@@ -1846,6 +1846,9 @@ def sync_target_from_derived(target):
         "address": target.address,
         "unconfidential_address": target.unconfidential_address,
         "script_pubkey": target.script_pubkey,
+        "derivation_path": target.derivation_path,
+        "derivation_paths": list(target.derivation_paths),
+        "key_origins": list(target.key_origins),
     }
 
 
