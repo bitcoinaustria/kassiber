@@ -33,6 +33,43 @@ _CACHE_PRICING_CSV = """date,txid,direction,asset,amount,fee,description
 2024-05-10T09:00:00Z,cache-price-1,inbound,BTC,0.01000000,0,Cached price sample
 """
 
+# Cross-wallet self-transfer scenario: cold wallet receives 1 BTC, then sends
+# 0.5 BTC + 0.001 BTC network fee to the hot wallet. The same on-chain txid
+# appears in both wallet exports, which is the trigger for IntraTransaction
+# detection. With detection on: only the 0.001 BTC network fee is realized as
+# a disposal; the 0.5 BTC transfer carries its cost basis to the hot wallet.
+_COLD_TRANSFER_CSV = """date,txid,direction,asset,amount,fee,fiat_rate,description
+2026-01-01T10:00:00Z,cold-funding-1,inbound,BTC,1.00000000,0,60000,Cold acquisition
+2026-02-01T12:00:00Z,onchain-self-transfer-1,outbound,BTC,0.50000000,0.001,65000,Move to hot wallet
+"""
+
+_HOT_TRANSFER_CSV = """date,txid,direction,asset,amount,fee,fiat_rate,description
+2026-02-01T12:00:00Z,onchain-self-transfer-1,inbound,BTC,0.50000000,0,65000,Receive from cold wallet
+"""
+
+# Manual same-asset pair scenario: two BTC legs whose external_ids deliberately
+# don't match, so auto-detection skips them. The user knows they're paired
+# (e.g., a swap via a custom counterparty) and creates a manual pair.
+_MANUAL_FROM_CSV = """date,txid,direction,asset,amount,fee,fiat_rate,description
+2026-03-01T10:00:00Z,manual-fund-1,inbound,BTC,0.20000000,0,70000,Acquisition
+2026-03-15T10:00:00Z,manual-out-leg,outbound,BTC,0.10000000,0.0005,72000,Manual swap out
+"""
+
+_MANUAL_TO_CSV = """date,txid,direction,asset,amount,fee,fiat_rate,description
+2026-03-15T10:05:00Z,manual-in-leg,inbound,BTC,0.10000000,0,72000,Manual swap in
+"""
+
+# Cross-asset (BTC → LBTC) scenario for the carrying-value rejection +
+# taxable acceptance tests.
+_CROSS_BTC_CSV = """date,txid,direction,asset,amount,fee,fiat_rate,description
+2026-04-01T10:00:00Z,cross-fund-1,inbound,BTC,0.10000000,0,80000,BTC acquisition
+2026-04-15T10:00:00Z,cross-out-leg,outbound,BTC,0.10000000,0.0001,82000,Peg-in to Liquid
+"""
+
+_CROSS_LBTC_CSV = """date,txid,direction,asset,amount,fee,fiat_rate,description
+2026-04-15T10:30:00Z,cross-in-leg,inbound,LBTC,0.10000000,0,82000,Peg-in receive
+"""
+
 
 def _run(data_root, *args):
     """Invoke `python -m kassiber --data-root DATA --machine ARGS...`.
@@ -86,6 +123,18 @@ class CliSmokeTest(unittest.TestCase):
         cls.phoenix_csv.write_text(_PHOENIX_CSV, encoding="utf-8")
         cls.cache_pricing_csv = Path(cls._tmp.name) / "cache-pricing.csv"
         cls.cache_pricing_csv.write_text(_CACHE_PRICING_CSV, encoding="utf-8")
+        cls.cold_transfer_csv = Path(cls._tmp.name) / "cold-transfer.csv"
+        cls.cold_transfer_csv.write_text(_COLD_TRANSFER_CSV, encoding="utf-8")
+        cls.hot_transfer_csv = Path(cls._tmp.name) / "hot-transfer.csv"
+        cls.hot_transfer_csv.write_text(_HOT_TRANSFER_CSV, encoding="utf-8")
+        cls.manual_from_csv = Path(cls._tmp.name) / "manual-from.csv"
+        cls.manual_from_csv.write_text(_MANUAL_FROM_CSV, encoding="utf-8")
+        cls.manual_to_csv = Path(cls._tmp.name) / "manual-to.csv"
+        cls.manual_to_csv.write_text(_MANUAL_TO_CSV, encoding="utf-8")
+        cls.cross_btc_csv = Path(cls._tmp.name) / "cross-btc.csv"
+        cls.cross_btc_csv.write_text(_CROSS_BTC_CSV, encoding="utf-8")
+        cls.cross_lbtc_csv = Path(cls._tmp.name) / "cross-lbtc.csv"
+        cls.cross_lbtc_csv.write_text(_CROSS_LBTC_CSV, encoding="utf-8")
 
     @classmethod
     def tearDownClass(cls):
@@ -369,6 +418,285 @@ class CliSmokeTest(unittest.TestCase):
         for field in ("code", "message", "hint", "details", "retryable"):
             self.assertIn(field, err)
         self.assertEqual(err["code"], "validation")
+
+    def test_13_cross_wallet_intra_transfer(self):
+        # New profile so the assertions don't tangle with prior tests.
+        payload = self._cli(
+            "profiles", "create",
+            "--workspace", "Main",
+            "--fiat-currency", "USD",
+            "--tax-country", "generic",
+            "Transfer",
+        )
+        self._assert_kind(payload, "profiles.create")
+
+        for label in ("Cold", "Hot"):
+            payload = self._cli(
+                "wallets", "create",
+                "--workspace", "Main",
+                "--profile", "Transfer",
+                "--label", label,
+                "--kind", "custom",
+            )
+            self._assert_kind(payload, "wallets.create")
+
+        payload = self._cli(
+            "wallets", "import-csv",
+            "--workspace", "Main",
+            "--profile", "Transfer",
+            "--wallet", "Cold",
+            "--file", str(self.cold_transfer_csv),
+        )
+        self._assert_kind(payload, "wallets.import-csv")
+        self.assertEqual(payload["data"]["imported"], 2)
+
+        payload = self._cli(
+            "wallets", "import-csv",
+            "--workspace", "Main",
+            "--profile", "Transfer",
+            "--wallet", "Hot",
+            "--file", str(self.hot_transfer_csv),
+        )
+        self._assert_kind(payload, "wallets.import-csv")
+        self.assertEqual(payload["data"]["imported"], 1)
+
+        payload = self._cli(
+            "journals", "process",
+            "--workspace", "Main",
+            "--profile", "Transfer",
+        )
+        self._assert_kind(payload, "journals.process")
+        data = payload["data"]
+        # 1 acquisition (cold inbound) + 1 transfer_fee + 1 transfer_out + 1 transfer_in
+        self.assertEqual(data["transfers_detected"], 1)
+        self.assertEqual(data["entries_created"], 4)
+        self.assertEqual(data["quarantined"], 0)
+        self.assertEqual(data["processed_transactions"], 3)
+
+        payload = self._cli(
+            "reports", "journal-entries",
+            "--workspace", "Main",
+            "--profile", "Transfer",
+        )
+        self._assert_kind(payload, "reports.journal-entries")
+        entries = payload["data"]
+        types = sorted(e["entry_type"] for e in entries)
+        self.assertEqual(types, ["acquisition", "transfer_fee", "transfer_in", "transfer_out"])
+
+        # The transfer_out / transfer_in pair must zero out across wallets.
+        out_entry = next(e for e in entries if e["entry_type"] == "transfer_out")
+        in_entry = next(e for e in entries if e["entry_type"] == "transfer_in")
+        self.assertEqual(out_entry["wallet"], "Cold")
+        self.assertEqual(in_entry["wallet"], "Hot")
+        self.assertAlmostEqual(float(out_entry["quantity"]), -0.501, places=8)
+        self.assertAlmostEqual(float(in_entry["quantity"]), 0.5, places=8)
+
+        # Only the 0.001 BTC network fee is realized as a taxable disposal.
+        payload = self._cli(
+            "reports", "capital-gains",
+            "--workspace", "Main",
+            "--profile", "Transfer",
+        )
+        rows = payload["data"]
+        self.assertEqual(len(rows), 1)
+        gain_row = rows[0]
+        self.assertEqual(gain_row["entry_type"], "transfer_fee")
+        self.assertEqual(gain_row["wallet"], "Cold")
+        self.assertAlmostEqual(float(gain_row["quantity"]), 0.001, places=8)
+        self.assertAlmostEqual(float(gain_row["proceeds"]), 65.0, places=4)
+        self.assertAlmostEqual(float(gain_row["cost_basis"]), 60.0, places=4)
+        self.assertAlmostEqual(float(gain_row["gain_loss"]), 5.0, places=4)
+
+        # Cost basis follows the moved coins to Hot, so both wallets show non-zero
+        # holdings with positive average cost.
+        payload = self._cli(
+            "reports", "portfolio-summary",
+            "--workspace", "Main",
+            "--profile", "Transfer",
+        )
+        rows = {r["wallet"]: r for r in payload["data"]}
+        self.assertEqual(set(rows), {"Cold", "Hot"})
+        self.assertAlmostEqual(float(rows["Cold"]["quantity"]), 0.499, places=8)
+        self.assertAlmostEqual(float(rows["Hot"]["quantity"]), 0.5, places=8)
+        # Average cost is global ($59,940 / 0.999 BTC = $60,000) since the only
+        # acquisition was at $60k.
+        self.assertAlmostEqual(float(rows["Cold"]["avg_cost"]), 60000.0, places=2)
+        self.assertAlmostEqual(float(rows["Hot"]["avg_cost"]), 60000.0, places=2)
+
+        # Aggregate BTC across both wallets: 0.499 + 0.5 = 0.999 BTC.
+        payload = self._cli(
+            "reports", "balance-sheet",
+            "--workspace", "Main",
+            "--profile", "Transfer",
+        )
+        btc_rows = [r for r in payload["data"] if r.get("asset") == "BTC"]
+        total_qty = sum(float(r["quantity"]) for r in btc_rows)
+        self.assertAlmostEqual(total_qty, 0.999, places=8)
+
+    def test_14_manual_same_asset_pairing(self):
+        # Auto-detection only fires when external_ids match. The two BTC legs
+        # below deliberately have different external_ids; the user pairs them
+        # explicitly so the journal pipeline still treats them as an
+        # IntraTransaction.
+        payload = self._cli(
+            "profiles", "create",
+            "--workspace", "Main",
+            "--fiat-currency", "USD",
+            "--tax-country", "generic",
+            "ManualPair",
+        )
+        self._assert_kind(payload, "profiles.create")
+        for label in ("From", "To"):
+            self._cli(
+                "wallets", "create",
+                "--workspace", "Main",
+                "--profile", "ManualPair",
+                "--label", label,
+                "--kind", "custom",
+            )
+        self._cli(
+            "wallets", "import-csv",
+            "--workspace", "Main",
+            "--profile", "ManualPair",
+            "--wallet", "From",
+            "--file", str(self.manual_from_csv),
+        )
+        self._cli(
+            "wallets", "import-csv",
+            "--workspace", "Main",
+            "--profile", "ManualPair",
+            "--wallet", "To",
+            "--file", str(self.manual_to_csv),
+        )
+
+        # Without a pair, processing books the outbound as a real disposal.
+        payload = self._cli(
+            "journals", "process",
+            "--workspace", "Main",
+            "--profile", "ManualPair",
+        )
+        self.assertEqual(payload["data"]["transfers_detected"], 0)
+        self.assertEqual(payload["data"]["cross_asset_pairs"], 0)
+
+        payload = self._cli(
+            "transfers", "pair",
+            "--workspace", "Main",
+            "--profile", "ManualPair",
+            "--tx-out", "manual-out-leg",
+            "--tx-in", "manual-in-leg",
+            "--kind", "manual",
+            "--policy", "carrying-value",
+        )
+        self._assert_kind(payload, "transfers.pair")
+        pair_id = payload["data"]["id"]
+
+        # Listing surfaces both legs with their wallets and assets.
+        payload = self._cli("transfers", "list", "--workspace", "Main", "--profile", "ManualPair")
+        self._assert_kind(payload, "transfers.list")
+        self.assertEqual(len(payload["data"]), 1)
+        self.assertEqual(payload["data"][0]["out"]["wallet"], "From")
+        self.assertEqual(payload["data"][0]["in"]["wallet"], "To")
+
+        # Reprocessing now treats the pair as an IntraTransaction: only the
+        # 0.0005 BTC fee is realized; the 0.1 BTC carries basis to the To wallet.
+        payload = self._cli(
+            "journals", "process",
+            "--workspace", "Main",
+            "--profile", "ManualPair",
+        )
+        data = payload["data"]
+        self.assertEqual(data["transfers_detected"], 1)
+        self.assertEqual(data["cross_asset_pairs"], 0)
+        # 1 acquisition + transfer_fee + transfer_out + transfer_in = 4 entries.
+        self.assertEqual(data["entries_created"], 4)
+
+        # Unpairing reverts behavior to a straight disposal on next process.
+        payload = self._cli(
+            "transfers", "unpair",
+            "--workspace", "Main",
+            "--profile", "ManualPair",
+            "--pair-id", pair_id,
+        )
+        self._assert_kind(payload, "transfers.unpair")
+        payload = self._cli(
+            "journals", "process",
+            "--workspace", "Main",
+            "--profile", "ManualPair",
+        )
+        self.assertEqual(payload["data"]["transfers_detected"], 0)
+
+    def test_15_cross_asset_pair_policies(self):
+        payload = self._cli(
+            "profiles", "create",
+            "--workspace", "Main",
+            "--fiat-currency", "USD",
+            "--tax-country", "generic",
+            "CrossAsset",
+        )
+        self._assert_kind(payload, "profiles.create")
+        for label in ("OnchainBTC", "Liquid"):
+            self._cli(
+                "wallets", "create",
+                "--workspace", "Main",
+                "--profile", "CrossAsset",
+                "--label", label,
+                "--kind", "custom",
+            )
+        self._cli(
+            "wallets", "import-csv",
+            "--workspace", "Main",
+            "--profile", "CrossAsset",
+            "--wallet", "OnchainBTC",
+            "--file", str(self.cross_btc_csv),
+        )
+        self._cli(
+            "wallets", "import-csv",
+            "--workspace", "Main",
+            "--profile", "CrossAsset",
+            "--wallet", "Liquid",
+            "--file", str(self.cross_lbtc_csv),
+        )
+
+        # Carrying-value across BTC ↔ LBTC is not yet supported — the CLI must
+        # reject the pair creation with a clear validation error envelope.
+        payload, code = _run(
+            self.data_root,
+            "transfers", "pair",
+            "--workspace", "Main",
+            "--profile", "CrossAsset",
+            "--tx-out", "cross-out-leg",
+            "--tx-in", "cross-in-leg",
+            "--policy", "carrying-value",
+        )
+        self.assertNotEqual(code, 0)
+        self.assertEqual(payload.get("kind"), "error")
+        self.assertEqual(payload["error"]["code"], "validation")
+        self.assertIn("carrying-value", payload["error"]["message"])
+
+        # Taxable cross-asset pair is accepted and surfaces in the envelope.
+        payload = self._cli(
+            "transfers", "pair",
+            "--workspace", "Main",
+            "--profile", "CrossAsset",
+            "--tx-out", "cross-out-leg",
+            "--tx-in", "cross-in-leg",
+            "--kind", "peg-in",
+            "--policy", "taxable",
+        )
+        self._assert_kind(payload, "transfers.pair")
+        self.assertEqual(payload["data"]["policy"], "taxable")
+        self.assertEqual(payload["data"]["kind"], "peg-in")
+
+        payload = self._cli(
+            "journals", "process",
+            "--workspace", "Main",
+            "--profile", "CrossAsset",
+        )
+        data = payload["data"]
+        # Cross-asset taxable pair: legs processed independently as SELL+BUY,
+        # so transfers_detected stays 0 and cross_asset_pairs reports 1.
+        self.assertEqual(data["transfers_detected"], 0)
+        self.assertEqual(data["cross_asset_pairs"], 1)
 
 
 if __name__ == "__main__":
