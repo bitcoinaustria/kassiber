@@ -342,6 +342,12 @@ For Liquid:
 
 `wallets derive` is useful for matching exports against your wallet scripts, checking receive/change branches locally, or feeding custom dashboards.
 
+In JSON output, each derived row now includes:
+
+- `derivation_path` for single-path descriptors
+- `derivation_paths` for the exact per-key BIP32 paths used at that leaf
+- `key_origins` in descriptor-style `[fingerprint/path]` notation, which is especially useful for multisig
+
 ## BTCPay imports
 
 Kassiber supports BTCPay wallet exports in CSV or JSON form.
