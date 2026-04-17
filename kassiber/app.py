@@ -79,6 +79,7 @@ from .msat import (
     dec,
     msat_to_btc,
 )
+from .pdf_report import format_table, write_text_pdf
 from .time_utils import (
     UNKNOWN_OCCURRED_AT,
     _iso_z,
@@ -2016,6 +2017,9 @@ def sync_target_from_derived(target):
         "address": target.address,
         "unconfidential_address": target.unconfidential_address,
         "script_pubkey": target.script_pubkey,
+        "derivation_path": target.derivation_path,
+        "derivation_paths": list(target.derivation_paths),
+        "key_origins": list(target.key_origins),
     }
 
 
@@ -5256,6 +5260,538 @@ def report_balance_history(
     return results
 
 
+def _report_kv_lines(pairs, label_width=28):
+    return [f"{label + ':':<{label_width}} {value}" for label, value in pairs]
+
+
+def _report_btc(value):
+    return f"{float(value):,.8f}"
+
+
+def _report_fiat(value):
+    return f"{float(value):,.2f}"
+
+
+def _report_count(value):
+    return f"{int(value or 0):,}"
+
+
+def _aggregate_balance_rows_from_portfolio(portfolio_rows):
+    grouped = {}
+    for row in portfolio_rows:
+        key = (row["account"], row["asset"])
+        bucket = grouped.setdefault(
+            key,
+            {
+                "account": row["account"],
+                "asset": row["asset"],
+                "quantity": 0.0,
+                "cost_basis": 0.0,
+                "market_value": 0.0,
+                "unrealized_pnl": 0.0,
+            },
+        )
+        bucket["quantity"] += float(row["quantity"])
+        bucket["cost_basis"] += float(row["cost_basis"])
+        bucket["market_value"] += float(row["market_value"])
+        bucket["unrealized_pnl"] += float(row["unrealized_pnl"])
+    return [
+        grouped[key]
+        for key in sorted(grouped.keys(), key=lambda item: (item[0] or "", item[1] or ""))
+    ]
+
+
+def _pdf_scope_wallets(conn, workspace_ref, profile_ref, wallet=None):
+    wallets = list_wallets(conn, workspace_ref, profile_ref)
+    if wallet is None:
+        return wallets
+    return [row for row in wallets if row["id"] == wallet["id"]]
+
+
+def _pdf_report_query_rows(conn, profile, wallet=None):
+    tx_filters = ["t.profile_id = ?"]
+    tx_params = [profile["id"]]
+    if wallet:
+        tx_filters.append("t.wallet_id = ?")
+        tx_params.append(wallet["id"])
+    tx_where = " AND ".join(tx_filters)
+
+    summary = conn.execute(
+        f"""
+        SELECT
+            COUNT(*) AS total_transactions,
+            SUM(CASE WHEN t.excluded = 0 THEN 1 ELSE 0 END) AS active_transactions,
+            SUM(CASE WHEN t.excluded = 1 THEN 1 ELSE 0 END) AS excluded_transactions,
+            SUM(CASE WHEN t.excluded = 0 AND t.direction = 'inbound' THEN 1 ELSE 0 END) AS inbound_transactions,
+            SUM(CASE WHEN t.excluded = 0 AND t.direction = 'outbound' THEN 1 ELSE 0 END) AS outbound_transactions,
+            COUNT(DISTINCT CASE WHEN t.excluded = 0 THEN t.asset END) AS asset_count,
+            MIN(CASE WHEN t.excluded = 0 THEN t.occurred_at END) AS first_transaction_at,
+            MAX(CASE WHEN t.excluded = 0 THEN t.occurred_at END) AS last_transaction_at,
+            SUM(CASE WHEN t.excluded = 0 AND (t.fiat_rate IS NOT NULL OR t.fiat_value IS NOT NULL) THEN 1 ELSE 0 END) AS priced_transactions,
+            SUM(CASE WHEN t.excluded = 0 AND COALESCE(TRIM(t.note), '') != '' THEN 1 ELSE 0 END) AS noted_transactions
+        FROM transactions t
+        WHERE {tx_where}
+        """,
+        tx_params,
+    ).fetchone()
+
+    tagged_transactions = conn.execute(
+        f"""
+        SELECT COUNT(DISTINCT tt.transaction_id) AS count
+        FROM transaction_tags tt
+        JOIN transactions t ON t.id = tt.transaction_id
+        WHERE {tx_where} AND t.excluded = 0
+        """,
+        tx_params,
+    ).fetchone()["count"]
+
+    journal_filters = ["je.profile_id = ?"]
+    journal_params = [profile["id"]]
+    if wallet:
+        journal_filters.append("je.wallet_id = ?")
+        journal_params.append(wallet["id"])
+    journal_where = " AND ".join(journal_filters)
+    journal_entries = conn.execute(
+        f"SELECT COUNT(*) AS count FROM journal_entries je WHERE {journal_where}",
+        journal_params,
+    ).fetchone()["count"]
+
+    quarantines = conn.execute(
+        f"""
+        SELECT COUNT(*) AS count
+        FROM journal_quarantines jq
+        JOIN transactions t ON t.id = jq.transaction_id
+        WHERE {tx_where}
+        """,
+        tx_params,
+    ).fetchone()["count"]
+
+    flow_by_asset = conn.execute(
+        f"""
+        SELECT
+            t.asset,
+            COUNT(*) AS tx_count,
+            SUM(CASE WHEN t.direction = 'inbound' THEN 1 ELSE 0 END) AS inbound_count,
+            SUM(CASE WHEN t.direction = 'outbound' THEN 1 ELSE 0 END) AS outbound_count,
+            SUM(CASE WHEN t.direction = 'inbound' THEN t.amount ELSE 0 END) AS inbound_amount,
+            SUM(CASE WHEN t.direction = 'outbound' THEN t.amount ELSE 0 END) AS outbound_amount,
+            SUM(t.fee) AS fee_amount
+        FROM transactions t
+        WHERE {tx_where} AND t.excluded = 0
+        GROUP BY t.asset
+        ORDER BY t.asset ASC
+        """,
+        tx_params,
+    ).fetchall()
+
+    flow_by_wallet = conn.execute(
+        f"""
+        SELECT
+            w.label AS wallet,
+            t.asset,
+            COUNT(*) AS tx_count,
+            SUM(CASE WHEN t.direction = 'inbound' THEN 1 ELSE 0 END) AS inbound_count,
+            SUM(CASE WHEN t.direction = 'outbound' THEN 1 ELSE 0 END) AS outbound_count,
+            SUM(CASE WHEN t.direction = 'inbound' THEN t.amount ELSE 0 END) AS inbound_amount,
+            SUM(CASE WHEN t.direction = 'outbound' THEN t.amount ELSE 0 END) AS outbound_amount,
+            SUM(t.fee) AS fee_amount,
+            MIN(t.occurred_at) AS first_at,
+            MAX(t.occurred_at) AS last_at
+        FROM transactions t
+        JOIN wallets w ON w.id = t.wallet_id
+        WHERE {tx_where} AND t.excluded = 0
+        GROUP BY w.label, t.asset
+        ORDER BY w.label ASC, t.asset ASC
+        """,
+        tx_params,
+    ).fetchall()
+
+    quarantine_rows = conn.execute(
+        f"""
+        SELECT jq.reason, COUNT(*) AS count
+        FROM journal_quarantines jq
+        JOIN transactions t ON t.id = jq.transaction_id
+        WHERE {tx_where}
+        GROUP BY jq.reason
+        ORDER BY count DESC, jq.reason ASC
+        """,
+        tx_params,
+    ).fetchall()
+
+    transactions = conn.execute(
+        f"""
+        SELECT
+            t.occurred_at,
+            w.label AS wallet,
+            t.direction,
+            t.asset,
+            t.amount,
+            t.fee,
+            COALESCE(t.description, '') AS description
+        FROM transactions t
+        JOIN wallets w ON w.id = t.wallet_id
+        WHERE {tx_where} AND t.excluded = 0
+        ORDER BY t.occurred_at ASC, t.created_at ASC, t.id ASC
+        """,
+        tx_params,
+    ).fetchall()
+
+    return {
+        "summary": summary,
+        "tagged_transactions": tagged_transactions,
+        "journal_entries": journal_entries,
+        "quarantines": quarantines,
+        "flow_by_asset": flow_by_asset,
+        "flow_by_wallet": flow_by_wallet,
+        "quarantine_rows": quarantine_rows,
+        "transactions": transactions,
+    }
+
+
+def build_pdf_report_lines(conn, workspace_ref, profile_ref, wallet_ref=None, history_limit=None):
+    workspace, profile = resolve_scope(conn, workspace_ref, profile_ref)
+    wallet = resolve_wallet(conn, profile["id"], wallet_ref) if wallet_ref else None
+    require_processed_journals(conn, profile)
+
+    scope_wallets = _pdf_scope_wallets(conn, workspace["id"], profile["id"], wallet=wallet)
+    portfolio_rows = report_portfolio_summary(conn, workspace["id"], profile["id"])
+    if wallet:
+        portfolio_rows = [row for row in portfolio_rows if row["wallet"] == wallet["label"]]
+    balance_rows = _aggregate_balance_rows_from_portfolio(portfolio_rows)
+
+    capital_rows = report_capital_gains(conn, workspace["id"], profile["id"])
+    if wallet:
+        capital_rows = [row for row in capital_rows if row["wallet"] == wallet["label"]]
+    history_rows = report_balance_history(
+        conn,
+        workspace["id"],
+        profile["id"],
+        interval="month",
+        wallet_ref=wallet["id"] if wallet else None,
+    )
+    if history_limit is not None and int(history_limit) > 0:
+        history_rows = history_rows[-int(history_limit) :]
+
+    query_rows = _pdf_report_query_rows(conn, profile, wallet=wallet)
+    summary = query_rows["summary"]
+
+    holdings_cost_basis = sum(float(row["cost_basis"]) for row in balance_rows)
+    holdings_market_value = sum(float(row["market_value"]) for row in balance_rows)
+    holdings_unrealized = sum(float(row["unrealized_pnl"]) for row in balance_rows)
+    realized_proceeds = sum(float(row["proceeds"]) for row in capital_rows)
+    realized_cost_basis = sum(float(row["cost_basis"]) for row in capital_rows)
+    realized_gain_loss = sum(float(row["gain_loss"]) for row in capital_rows)
+
+    title_scope = wallet["label"] if wallet else profile["label"]
+    title = f"Kassiber PDF Report - {title_scope}"
+
+    lines = [title, "=" * len(title), ""]
+    lines.extend(
+        _report_kv_lines(
+            [
+                ("Generated at", now_iso()),
+                ("Workspace", workspace["label"]),
+                ("Profile", profile["label"]),
+                ("Wallet scope", wallet["label"] if wallet else "All wallets"),
+                ("Fiat currency", profile["fiat_currency"]),
+                ("Tax country", profile["tax_country"]),
+                ("Tax long-term days", profile["tax_long_term_days"]),
+                ("Gains algorithm", profile["gains_algorithm"]),
+                ("Last processed at", profile["last_processed_at"] or ""),
+                ("Processed tx count", _report_count(profile["last_processed_tx_count"])),
+            ]
+        )
+    )
+
+    lines.extend(["", "Executive Summary", "-----------------"])
+    lines.extend(
+        _report_kv_lines(
+            [
+                ("Wallets in scope", _report_count(len(scope_wallets))),
+                ("Assets in scope", _report_count(summary["asset_count"])),
+                ("Transactions (active)", _report_count(summary["active_transactions"])),
+                ("Transactions (excluded)", _report_count(summary["excluded_transactions"])),
+                ("Inbound transactions", _report_count(summary["inbound_transactions"])),
+                ("Outbound transactions", _report_count(summary["outbound_transactions"])),
+                ("Journal entries", _report_count(query_rows["journal_entries"])),
+                ("Quarantines", _report_count(query_rows["quarantines"])),
+                ("Priced transactions", _report_count(summary["priced_transactions"])),
+                ("Transactions with notes", _report_count(summary["noted_transactions"])),
+                ("Transactions with tags", _report_count(query_rows["tagged_transactions"])),
+                ("First transaction", summary["first_transaction_at"] or ""),
+                ("Last transaction", summary["last_transaction_at"] or ""),
+                ("Holdings cost basis", _report_fiat(holdings_cost_basis)),
+                ("Holdings market value", _report_fiat(holdings_market_value)),
+                ("Unrealized PnL", _report_fiat(holdings_unrealized)),
+                ("Realized proceeds", _report_fiat(realized_proceeds)),
+                ("Realized cost basis", _report_fiat(realized_cost_basis)),
+                ("Realized gain/loss", _report_fiat(realized_gain_loss)),
+            ]
+        )
+    )
+
+    lines.extend(["", "Wallet Inventory", "----------------"])
+    wallet_table_rows = [
+        [
+            row["label"],
+            row["kind"],
+            row["chain"],
+            row["network"],
+            row["backend"],
+            row["gap_limit"],
+            row["altbestand"] or "",
+        ]
+        for row in scope_wallets
+    ]
+    if wallet_table_rows:
+        lines.extend(
+            format_table(
+                ["Wallet", "Kind", "Chain", "Network", "Backend", "Gap", "Altb."],
+                wallet_table_rows,
+                [18, 12, 8, 10, 12, 5, 5],
+            )
+        )
+    else:
+        lines.append("No wallets in scope.")
+
+    lines.extend(["", "Asset Flow Summary", "------------------"])
+    asset_flow_rows = [
+        [
+            row["asset"],
+            _report_count(row["tx_count"]),
+            _report_count(row["inbound_count"]),
+            _report_count(row["outbound_count"]),
+            _report_btc(msat_to_btc(row["inbound_amount"] or 0)),
+            _report_btc(msat_to_btc(row["outbound_amount"] or 0)),
+            _report_btc(msat_to_btc(row["fee_amount"] or 0)),
+        ]
+        for row in query_rows["flow_by_asset"]
+    ]
+    if asset_flow_rows:
+        lines.extend(
+            format_table(
+                ["Asset", "Tx", "In", "Out", "Inbound", "Outbound", "Fees"],
+                asset_flow_rows,
+                [6, 6, 6, 6, 14, 14, 14],
+                align_right={1, 2, 3, 4, 5, 6},
+            )
+        )
+    else:
+        lines.append("No active transactions in scope.")
+
+    lines.extend(["", "Wallet Transaction Metrics", "--------------------------"])
+    wallet_flow_rows = [
+        [
+            row["wallet"],
+            row["asset"],
+            _report_count(row["tx_count"]),
+            _report_count(row["inbound_count"]),
+            _report_count(row["outbound_count"]),
+            _report_btc(msat_to_btc(row["inbound_amount"] or 0)),
+            _report_btc(msat_to_btc(row["outbound_amount"] or 0)),
+            _report_btc(msat_to_btc(row["fee_amount"] or 0)),
+        ]
+        for row in query_rows["flow_by_wallet"]
+    ]
+    if wallet_flow_rows:
+        lines.extend(
+            format_table(
+                ["Wallet", "Asset", "Tx", "In", "Out", "Inbound", "Outbound", "Fees"],
+                wallet_flow_rows,
+                [18, 6, 6, 6, 6, 14, 14, 14],
+                align_right={2, 3, 4, 5, 6, 7},
+            )
+        )
+    else:
+        lines.append("No wallet transaction metrics available.")
+
+    lines.extend(["", "Balance Sheet", "-------------"])
+    balance_table_rows = [
+        [
+            row["account"],
+            row["asset"],
+            _report_btc(row["quantity"]),
+            _report_fiat(row["cost_basis"]),
+            _report_fiat(row["market_value"]),
+            _report_fiat(row["unrealized_pnl"]),
+        ]
+        for row in balance_rows
+    ]
+    if balance_table_rows:
+        lines.extend(
+            format_table(
+                ["Account", "Asset", "Quantity", "Cost Basis", "Market Value", "Unrealized"],
+                balance_table_rows,
+                [16, 6, 14, 14, 14, 14],
+                align_right={2, 3, 4, 5},
+            )
+        )
+    else:
+        lines.append("No current holdings in scope.")
+
+    lines.extend(["", "Portfolio Summary", "-----------------"])
+    portfolio_table_rows = [
+        [
+            row["wallet"],
+            row["account"],
+            row["asset"],
+            _report_btc(row["quantity"]),
+            _report_fiat(row["avg_cost"]),
+            _report_fiat(row["cost_basis"]),
+            _report_fiat(row["market_value"]),
+            _report_fiat(row["unrealized_pnl"]),
+        ]
+        for row in portfolio_rows
+    ]
+    if portfolio_table_rows:
+        lines.extend(
+            format_table(
+                ["Wallet", "Account", "Asset", "Quantity", "Avg Cost", "Cost Basis", "Market", "Unreal."],
+                portfolio_table_rows,
+                [16, 12, 6, 12, 12, 12, 12, 12],
+                align_right={3, 4, 5, 6, 7},
+            )
+        )
+    else:
+        lines.append("No portfolio rows available.")
+
+    lines.extend(["", "Capital Gains Summary", "---------------------"])
+    if capital_rows:
+        grouped_capital = {}
+        for row in capital_rows:
+            key = (row["wallet"], row["asset"])
+            bucket = grouped_capital.setdefault(
+                key,
+                {
+                    "wallet": row["wallet"],
+                    "asset": row["asset"],
+                    "count": 0,
+                    "proceeds": 0.0,
+                    "cost_basis": 0.0,
+                    "gain_loss": 0.0,
+                },
+            )
+            bucket["count"] += 1
+            bucket["proceeds"] += float(row["proceeds"])
+            bucket["cost_basis"] += float(row["cost_basis"])
+            bucket["gain_loss"] += float(row["gain_loss"])
+        lines.extend(
+            format_table(
+                ["Wallet", "Asset", "Rows", "Proceeds", "Cost Basis", "Gain/Loss"],
+                [
+                    [
+                        bucket["wallet"],
+                        bucket["asset"],
+                        _report_count(bucket["count"]),
+                        _report_fiat(bucket["proceeds"]),
+                        _report_fiat(bucket["cost_basis"]),
+                        _report_fiat(bucket["gain_loss"]),
+                    ]
+                    for bucket in grouped_capital.values()
+                ],
+                [16, 6, 6, 14, 14, 14],
+                align_right={2, 3, 4, 5},
+            )
+        )
+        lines.extend(["", "Capital Gains Detail", "--------------------"])
+        detail_rows = [
+            [
+                row["occurred_at"][:10],
+                row["wallet"],
+                row["asset"],
+                _report_btc(row["quantity"]),
+                _report_fiat(row["proceeds"]),
+                _report_fiat(row["cost_basis"]),
+                _report_fiat(row["gain_loss"]),
+            ]
+            for row in capital_rows
+        ]
+        lines.extend(
+            format_table(
+                ["Date", "Wallet", "Asset", "Qty", "Proceeds", "Basis", "Gain/Loss"],
+                detail_rows,
+                [10, 16, 6, 12, 12, 12, 12],
+                align_right={3, 4, 5, 6},
+            )
+        )
+    else:
+        lines.append("No realized disposals in scope.")
+
+    lines.extend(["", "Balance History", "---------------"])
+    if history_rows:
+        lines.extend(
+            format_table(
+                ["Period Start", "Asset", "Quantity", "Cost Basis", "Market Value"],
+                [
+                    [
+                        row["period_start"][:10],
+                        row["asset"],
+                        _report_btc(row["quantity"]),
+                        _report_fiat(row["cumulative_cost_basis"]),
+                        _report_fiat(row["market_value"]),
+                    ]
+                    for row in history_rows
+                ],
+                [12, 6, 14, 14, 14],
+                align_right={2, 3, 4},
+            )
+        )
+    else:
+        lines.append("No balance history rows available.")
+
+    lines.extend(["", "Data Quality", "------------"])
+    if query_rows["quarantine_rows"]:
+        lines.extend(
+            format_table(
+                ["Reason", "Count"],
+                [[row["reason"], _report_count(row["count"])] for row in query_rows["quarantine_rows"]],
+                [28, 10],
+                align_right={1},
+            )
+        )
+    else:
+        lines.append("No quarantined transactions.")
+
+    lines.extend(["", "Transactions", "------------"])
+    if query_rows["transactions"]:
+        lines.extend(
+            format_table(
+                ["Date", "Wallet", "Dir", "Asset", "Amount", "Fee", "Description"],
+                [
+                    [
+                        row["occurred_at"][:10],
+                        row["wallet"],
+                        row["direction"][:3],
+                        row["asset"],
+                        _report_btc(msat_to_btc(row["amount"] or 0)),
+                        _report_btc(msat_to_btc(row["fee"] or 0)),
+                        row["description"],
+                    ]
+                    for row in query_rows["transactions"]
+                ],
+                [10, 14, 3, 6, 12, 12, 28],
+                align_right={4, 5},
+            )
+        )
+    else:
+        lines.append("No transactions in scope.")
+
+    return title, lines
+
+
+def export_pdf_report(conn, workspace_ref, profile_ref, file_path, wallet_ref=None, history_limit=None):
+    title, lines = build_pdf_report_lines(
+        conn,
+        workspace_ref,
+        profile_ref,
+        wallet_ref=wallet_ref,
+        history_limit=history_limit,
+    )
+    written = write_text_pdf(file_path, title, lines)
+    written["wallet"] = wallet_ref or ""
+    return written
+
+
 def show_status(conn, data_root):
     workspace_id = get_setting(conn, "context_workspace")
     profile_id = get_setting(conn, "context_profile")
@@ -5863,6 +6399,13 @@ def build_parser():
     balance_history.add_argument("--account")
     balance_history.add_argument("--asset")
 
+    export_pdf = reports_sub.add_parser("export-pdf")
+    export_pdf.add_argument("--workspace")
+    export_pdf.add_argument("--profile")
+    export_pdf.add_argument("--wallet")
+    export_pdf.add_argument("--file", required=True)
+    export_pdf.add_argument("--history-limit", type=int, default=0)
+
     rates = sub.add_parser("rates")
     rates_sub = rates.add_subparsers(dest="rates_command", required=True)
 
@@ -6310,6 +6853,18 @@ def dispatch(conn, args):
                     wallet_ref=args.wallet,
                     account_ref=args.account,
                     asset=args.asset,
+                ),
+            )
+        if args.reports_command == "export-pdf":
+            return emit(
+                args,
+                export_pdf_report(
+                    conn,
+                    args.workspace,
+                    args.profile,
+                    args.file,
+                    wallet_ref=args.wallet,
+                    history_limit=args.history_limit,
                 ),
             )
     if args.command == "rates":
