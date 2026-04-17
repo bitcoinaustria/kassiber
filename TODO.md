@@ -55,6 +55,31 @@ Keep the smoke suite green after every step.
   sync/import flow. Follow-up once that lands: attach optional BTCPay
   `InvoiceId` metadata to imported on-chain wallet addresses instead of
   trying to infer invoice/address matches from CSV exports.
+- **3h-pre** — Self-transfer detection is conservative on purpose: it only
+  pairs single-out + single-in rows that share `external_id`. Multi-output
+  transactions that fan out to several owned wallets, or 1→N coinjoin-style
+  splits, are not auto-paired. The `transfers pair / list / unpair` CLI
+  (table `transaction_pairs`) covers the 1↔1 manual case; extending it to
+  N-tuples (one outbound consumed by multiple inbound legs, or vice versa)
+  is still pending. Detection lives in `kassiber/transfers.py`.
+- **3h-pre3** — Cross-asset carrying-value swaps (BTC ↔ LBTC peg, on-chain
+  ↔ Lightning submarine swap) are stored today as audit metadata only:
+  `transfers pair --policy taxable` is accepted, the legs still process as
+  a normal SELL + BUY through the lot engine, and the pair surfaces in
+  `cross_asset_pairs` on the ledger state and `journals process` envelope.
+  `--policy carrying-value` is rejected at CLI creation time. Properly
+  carrying basis across asset boundaries needs unified FIFO that spans
+  assets (so disposing the inbound LBTC consumes the original BTC lots,
+  with only the network fee realizing a gain) — RP2's `IntraTransaction`
+  is same-asset only, so this is either a custom layer on top of RP2 or a
+  bespoke cross-asset lot tracker.
+- **3h-pre2** — Per-wallet portfolio rows currently show
+  `wallet_quantity * asset_avg_residual_basis`. That sums correctly to the
+  global residual basis but it is an allocation, not physical-lot tracking
+  — a disposal in wallet A may consume basis acquired in wallet B once
+  cross-wallet pooling is enabled. If physical-lot wallet attribution is
+  ever required (e.g. for jurisdiction-specific reporting), wrap RP2 with
+  a per-wallet lot tracker layered on top of the global FIFO/LIFO order.
 - **3h** — At-rest encryption for sensitive fields. Nothing on disk is
   encrypted today (SQLite DB, `.env`, exports). Target seamless OS
   keychain integration — macOS Keychain, Linux freedesktop

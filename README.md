@@ -57,7 +57,10 @@ It is designed around:
 - BIP329 JSONL metadata import, listing, and export
 
 ### Journals & processing
-- `journals process` runs the RP2 tax engine (FIFO/LIFO/HIFO/LOFO) over wallet-scoped lots
+- `journals process` runs the RP2 tax engine (FIFO/LIFO/HIFO/LOFO) per asset, pooling lots across wallets so cost basis follows on-chain coins between user-owned wallets
+- detects on-chain self-transfers (same `txid` outbound + inbound across two wallets of the same profile) and books them as RP2 `IntraTransaction` (MOVE): the network fee is the only realized disposal, and the moved coins keep their original cost basis at the destination wallet
+- emits `transfer_out`, `transfer_in`, and (when there's a fee) `transfer_fee` journal entries for each detected pair; the response envelope reports `transfers_detected`
+- `transfers pair / list / unpair` lets you manually link an outbound + inbound transaction across wallets when the auto-detector can't (different `txid`s, peg-in/peg-out, submarine swaps); same-asset manual pairs currently support `--policy carrying-value` and feed the IntraTransaction path, while cross-asset pairs are recorded as audit metadata
 - `journals events list` with `--wallet / --account / --asset / --entry-type / --start / --end` filters and opaque base64 cursor pagination
 - `journals events get --event-id` for a single entry
 - `journals quarantined` surfaces outbound transactions that couldn't be priced or lot-matched
@@ -84,7 +87,7 @@ It is designed around:
 
 Supported pairs today: `BTC-USD`, `BTC-EUR`. The cache is additive: a manual override and a synced rate can coexist at the same timestamp under different `source` values. The rates cache is an external data store; tax-aware reports still derive their fiat rates from priced transactions.
 
-For the current build, cost basis is tracked per wallet, which keeps multi-wallet balances and gains isolated and predictable. RP2 drives wallet-level lot matching and cost-basis computation; SQLite remains the system of record.
+Cost basis is pooled per asset across all wallets in a profile so the RP2 lot engine can match a disposal in one wallet against an acquisition in another and so on-chain self-transfers (booked as `IntraTransaction` MOVE) carry their original basis to the destination wallet. Per-wallet portfolio rows show that wallet's residual quantity multiplied by the asset's average residual basis — useful as an allocation, not as an authoritative answer to "which lot lives where." SQLite remains the system of record.
 
 ## Requirements
 
@@ -459,6 +462,41 @@ python3 -m kassiber journals events get --event-id <EVENT_ID>
 python3 -m kassiber journals quarantined
 ```
 
+## Transfer pairs
+
+Cross-wallet self-transfers are auto-detected when both legs share the same on-chain `txid`. When that signal is missing — different transactions per leg, BTC ↔ LBTC peg-ins/peg-outs, Lightning ↔ on-chain submarine swaps, manual cold-wallet rotations — link the legs explicitly:
+
+```bash
+# Same-asset manual pair (e.g. an exchange withdrawal that landed in your cold wallet
+# with a different external id than the deposit row). Becomes an RP2 IntraTransaction
+# (MOVE) so cost basis follows the coins to the destination wallet.
+python3 -m kassiber transfers pair \
+  --tx-out <OUT_TRANSACTION_ID> \
+  --tx-in  <IN_TRANSACTION_ID> \
+  --kind manual \
+  --policy carrying-value
+
+# Cross-asset pair (BTC outbound → LBTC inbound). Currently audit-only metadata
+# — `--policy taxable` is required and the legs still process as a normal SELL +
+# BUY through the lot engine. Use `--kind peg-in / peg-out / submarine-swap` to
+# tag the intent.
+python3 -m kassiber transfers pair \
+  --tx-out <BTC_OUT_ID> \
+  --tx-in  <LBTC_IN_ID> \
+  --kind peg-in \
+  --policy taxable \
+  --note "Liquid peg-in 2026-04"
+
+python3 -m kassiber transfers list
+python3 -m kassiber transfers unpair --pair-id <PAIR_ID>
+```
+
+Manual pairs override the auto-detector: if a manual pair touches a transaction that the auto-detector also matched, the manual pair wins. After any `pair / unpair`, journals are invalidated automatically — run `journals process` again before trusting reports.
+
+Same-asset manual pairs currently require `--policy carrying-value`. If you want the two legs to remain a taxable SELL + BUY, leave them unpaired.
+
+Cross-asset **carrying-value** swaps (basis flows BTC → LBTC with only the network fee taxable) are not yet supported and the CLI rejects them at creation time. The blocker is unified FIFO across asset boundaries; for now all cross-asset pairs are audit metadata only.
+
 ### Resolving quarantines
 
 Each quarantined transaction is one of `missing_spot_price`, `missing_cost_basis`, or `insufficient_lots`. The `journals quarantine` subcommands are the typed resolution paths:
@@ -559,7 +597,7 @@ Wallet-level `Altbestand` stays separate from the profile policy because it is p
   - [kassiber/tax_policy.py](kassiber/tax_policy.py) — profile tax-policy layer.
   - [kassiber/wallet_descriptors.py](kassiber/wallet_descriptors.py) — descriptor handling.
 - SQLite remains the system of record. BTC-denominated amounts (`transactions.amount`, `transactions.fee`, `journal_entries.quantity`) are stored as INTEGER msat — the Lightning convention. Machine envelopes expose both the human-friendly BTC decimal and an exact `_msat` integer for every amount.
-- RP2 is used as the wallet-scoped lot engine.
+- RP2 is used as the per-asset lot engine, with self-transfer detection promoting matching out/in pairs to RP2 `IntraTransaction` (MOVE) so basis follows on-chain BTC across user-owned wallets.
 - Wallet-level `Altbestand` remains manual provenance metadata; it is not part of the profile country policy.
 
 ## Dependency policy

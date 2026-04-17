@@ -68,6 +68,7 @@ _KIND_SUBCOMMAND_ATTRS = (
     "tags_command",
     "bip329_command",
     "journals_command",
+    "transfers_command",
     "events_command",
     "quarantine_command",
     "quarantine_resolve_command",
