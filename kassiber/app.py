@@ -775,17 +775,21 @@ def resolve_wallet(conn, profile_id, ref):
     return row
 
 
-def resolve_transaction(conn, profile_id, ref):
-    row = conn.execute(
-        """
-        SELECT * FROM transactions
-        WHERE profile_id = ? AND (id = ? OR external_id = ?)
-        LIMIT 1
-        """,
-        (profile_id, ref, ref),
-    ).fetchone()
+def resolve_transaction(conn, profile_id, ref, direction=None):
+    query = [
+        "SELECT * FROM transactions WHERE profile_id = ?",
+    ]
+    params = [profile_id]
+    if direction is not None:
+        query.append("AND direction = ?")
+        params.append(direction)
+    query.append("AND (id = ? OR external_id = ?) LIMIT 1")
+    params.extend([ref, ref])
+    row = conn.execute(" ".join(query), tuple(params)).fetchone()
     if not row:
-        raise AppError(f"Transaction '{ref}' not found")
+        if direction is None:
+            raise AppError(f"Transaction '{ref}' not found")
+        raise AppError(f"{direction.capitalize()} transaction '{ref}' not found")
     return row
 
 
@@ -849,16 +853,21 @@ def create_transaction_pair(
             f"Unsupported pair policy '{policy}'. Supported: {', '.join(TRANSFER_PAIR_POLICIES)}",
             code="validation",
         )
-    out_row = resolve_transaction(conn, profile["id"], out_ref)
-    in_row = resolve_transaction(conn, profile["id"], in_ref)
+    out_row = resolve_transaction(conn, profile["id"], out_ref, direction="outbound")
+    in_row = resolve_transaction(conn, profile["id"], in_ref, direction="inbound")
     if out_row["id"] == in_row["id"]:
         raise AppError("--tx-out and --tx-in must reference different transactions", code="validation")
-    if out_row["direction"] != "outbound":
-        raise AppError(f"--tx-out must reference an outbound transaction (got '{out_row['direction']}')", code="validation")
-    if in_row["direction"] != "inbound":
-        raise AppError(f"--tx-in must reference an inbound transaction (got '{in_row['direction']}')", code="validation")
     if out_row["wallet_id"] == in_row["wallet_id"]:
         raise AppError("Pair legs must be in different wallets", code="validation")
+    if out_row["asset"] == in_row["asset"] and policy == "taxable":
+        raise AppError(
+            f"Same-asset taxable pairs are not supported yet "
+            f"(asset={out_row['asset']}). Leave the legs unpaired to keep "
+            f"normal SELL + BUY treatment, or use --policy carrying-value "
+            f"for a self-transfer.",
+            code="validation",
+            hint="Re-run with --policy carrying-value, or omit the pair entirely to preserve taxable SELL + BUY behavior.",
+        )
     if out_row["asset"] != in_row["asset"] and policy == "carrying-value":
         raise AppError(
             f"Cross-asset carrying-value pairs are not yet supported "
@@ -3989,9 +3998,9 @@ def rp2_asset_state(profile, asset, rows, wallet_refs_by_id, intra_pairs, config
                 )
                 continue
             crypto_fee = sent - received
-            spot_price = rp2_spot_price(out_row, sent)
+            spot_price = rp2_spot_price(out_row, msat_to_btc(out_row["amount"]))
             if spot_price is None:
-                spot_price = rp2_spot_price(in_row, received)
+                spot_price = rp2_spot_price(in_row, msat_to_btc(in_row["amount"]))
             if spot_price is None and crypto_fee > 0:
                 quarantines.append(
                     rp2_quarantine(

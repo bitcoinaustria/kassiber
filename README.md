@@ -60,7 +60,7 @@ It is designed around:
 - `journals process` runs the RP2 tax engine (FIFO/LIFO/HIFO/LOFO) per asset, pooling lots across wallets so cost basis follows on-chain coins between user-owned wallets
 - detects on-chain self-transfers (same `txid` outbound + inbound across two wallets of the same profile) and books them as RP2 `IntraTransaction` (MOVE): the network fee is the only realized disposal, and the moved coins keep their original cost basis at the destination wallet
 - emits `transfer_out`, `transfer_in`, and (when there's a fee) `transfer_fee` journal entries for each detected pair; the response envelope reports `transfers_detected`
-- `transfers pair / list / unpair` lets you manually link an outbound + inbound transaction across wallets when the auto-detector can't (different `txid`s, peg-in/peg-out, submarine swaps); same-asset manual pairs feed the IntraTransaction path, cross-asset pairs are recorded as audit metadata
+- `transfers pair / list / unpair` lets you manually link an outbound + inbound transaction across wallets when the auto-detector can't (different `txid`s, peg-in/peg-out, submarine swaps); same-asset manual pairs currently support `--policy carrying-value` and feed the IntraTransaction path, while cross-asset pairs are recorded as audit metadata
 - `journals events list` with `--wallet / --account / --asset / --entry-type / --start / --end` filters and opaque base64 cursor pagination
 - `journals events get --event-id` for a single entry
 - `journals quarantined` surfaces outbound transactions that couldn't be priced or lot-matched
@@ -484,6 +484,8 @@ python3 -m kassiber transfers unpair --pair-id <PAIR_ID>
 ```
 
 Manual pairs override the auto-detector: if a manual pair touches a transaction that the auto-detector also matched, the manual pair wins. After any `pair / unpair`, journals are invalidated automatically — run `journals process` again before trusting reports.
+
+Same-asset manual pairs currently require `--policy carrying-value`. If you want the two legs to remain a taxable SELL + BUY, leave them unpaired.
 
 Cross-asset **carrying-value** swaps (basis flows BTC → LBTC with only the network fee taxable) are not yet supported and the CLI rejects them at creation time. The blocker is unified FIFO across asset boundaries; for now all cross-asset pairs are audit metadata only.
 
