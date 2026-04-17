@@ -9,6 +9,7 @@ from importlib import import_module
 
 
 DEFAULT_DESCRIPTOR_GAP_LIMIT = 20
+HARDENED_INDEX = 0x80000000
 LIQUID_POLICY_ASSET_IDS = {
     "liquidv1": "6f0279e9ed041c3d710a9f57d0c02928416460c4b722ae3457a11eec381c526d",
     "main": "6f0279e9ed041c3d710a9f57d0c02928416460c4b722ae3457a11eec381c526d",
@@ -76,6 +77,9 @@ class DerivedTarget:
     address: str
     unconfidential_address: str | None
     script_pubkey: str
+    derivation_path: str | None
+    derivation_paths: tuple[str, ...]
+    key_origins: tuple[str, ...]
 
 
 def get_embit_modules():
@@ -231,6 +235,51 @@ def branch_descriptor(branch):
     return branch.descriptor
 
 
+def _format_bip32_index(index):
+    value = int(index)
+    if value >= HARDENED_INDEX:
+        return f"{value - HARDENED_INDEX}'"
+    return str(value)
+
+
+def _format_bip32_path(derivation):
+    parts = [_format_bip32_index(index) for index in (derivation or [])]
+    if not parts:
+        return "m"
+    return "m/" + "/".join(parts)
+
+
+def _format_key_origin(origin):
+    fingerprint = getattr(origin, "fingerprint", b"") or b""
+    fingerprint_hex = fingerprint.hex() if isinstance(fingerprint, (bytes, bytearray)) else ""
+    path = _format_bip32_path(getattr(origin, "derivation", []) or [])
+    if fingerprint_hex and path != "m":
+        return f"[{fingerprint_hex}/{path[2:]}]"
+    if fingerprint_hex:
+        return f"[{fingerprint_hex}]"
+    return path
+
+
+def _descriptor_derivation_metadata(derived):
+    keys = list(getattr(derived, "keys", None) or [])
+    if not keys and getattr(derived, "key", None) is not None:
+        keys = [derived.key]
+    derivation_paths = []
+    key_origins = []
+    for key in keys:
+        origin = getattr(key, "origin", None)
+        if origin is None:
+            continue
+        derivation_path = _format_bip32_path(getattr(origin, "derivation", []) or [])
+        key_origin = _format_key_origin(origin)
+        if derivation_path not in derivation_paths:
+            derivation_paths.append(derivation_path)
+        if key_origin not in key_origins:
+            key_origins.append(key_origin)
+    derivation_path = derivation_paths[0] if len(derivation_paths) == 1 else None
+    return derivation_path, tuple(derivation_paths), tuple(key_origins)
+
+
 def derive_descriptor_target(plan, branch_index, address_index):
     branch = next((item for item in plan.branches if item.branch_index == branch_index), None)
     if branch is None:
@@ -250,6 +299,7 @@ def derive_descriptor_target(plan, branch_index, address_index):
     unconfidential_address = None
     if plan.chain == "liquid":
         unconfidential_address = derived.script_pubkey().address(network)
+    derivation_path, derivation_paths, key_origins = _descriptor_derivation_metadata(derived)
     return DerivedTarget(
         chain=plan.chain,
         network=plan.network,
@@ -259,6 +309,9 @@ def derive_descriptor_target(plan, branch_index, address_index):
         address=address,
         unconfidential_address=unconfidential_address,
         script_pubkey=script_pubkey,
+        derivation_path=derivation_path,
+        derivation_paths=derivation_paths,
+        key_origins=key_origins,
     )
 
 
