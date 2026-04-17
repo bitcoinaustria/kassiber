@@ -156,6 +156,20 @@ CREATE TABLE IF NOT EXISTS journal_quarantines (
     created_at TEXT NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS transaction_pairs (
+    id TEXT PRIMARY KEY,
+    workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+    profile_id TEXT NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+    out_transaction_id TEXT NOT NULL REFERENCES transactions(id) ON DELETE CASCADE,
+    in_transaction_id TEXT NOT NULL REFERENCES transactions(id) ON DELETE CASCADE,
+    kind TEXT NOT NULL DEFAULT 'manual',
+    policy TEXT NOT NULL DEFAULT 'carrying-value',
+    notes TEXT,
+    created_at TEXT NOT NULL,
+    UNIQUE (profile_id, out_transaction_id),
+    UNIQUE (profile_id, in_transaction_id)
+);
+
 CREATE TABLE IF NOT EXISTS bip329_labels (
     id TEXT PRIMARY KEY,
     workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
