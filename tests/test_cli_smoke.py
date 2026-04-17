@@ -80,6 +80,23 @@ _CROSS_LBTC_CSV = """date,txid,direction,asset,amount,fee,fiat_rate,description
 """
 
 
+def _sample_descriptor_pair():
+    from embit import bip32
+
+    seed = bytes.fromhex("000102030405060708090a0b0c0d0e0f" * 4)
+    root = bip32.HDKey.from_seed(seed)
+    account = root.derive("m/84h/0h/0h")
+    xpub = account.to_public().to_base58()
+    fingerprint = root.my_fingerprint.hex()
+    origin = f"[{fingerprint}/84h/0h/0h]"
+    return (
+        f"wpkh({origin}{xpub}/0/*)",
+        f"wpkh({origin}{xpub}/1/*)",
+        "m/84'/0'/0'",
+        fingerprint,
+    )
+
+
 def _run(data_root, *args):
     """Invoke `python -m kassiber --data-root DATA --machine ARGS...`.
 
@@ -148,6 +165,12 @@ class CliSmokeTest(unittest.TestCase):
         cls.cross_btc_csv.write_text(_CROSS_BTC_CSV, encoding="utf-8")
         cls.cross_lbtc_csv = Path(cls._tmp.name) / "cross-lbtc.csv"
         cls.cross_lbtc_csv.write_text(_CROSS_LBTC_CSV, encoding="utf-8")
+        (
+            cls.sample_descriptor,
+            cls.sample_change_descriptor,
+            cls.sample_derivation_root,
+            cls.sample_fingerprint,
+        ) = _sample_descriptor_pair()
 
     @classmethod
     def tearDownClass(cls):
@@ -242,6 +265,57 @@ class CliSmokeTest(unittest.TestCase):
         self.assertEqual(payload["data"]["label"], "Phoenix")
         self.assertEqual(payload["data"]["kind"], "phoenix")
 
+    def test_03a_descriptor_derive_exposes_paths(self):
+        payload = self._cli(
+            "wallets", "create",
+            "--workspace", "Main",
+            "--profile", "Default",
+            "--label", "Vault",
+            "--kind", "descriptor",
+            "--descriptor", self.sample_descriptor,
+            "--change-descriptor", self.sample_change_descriptor,
+            "--gap-limit", "5",
+        )
+        self._assert_kind(payload, "wallets.create")
+
+        payload = self._cli(
+            "wallets", "derive",
+            "--workspace", "Main",
+            "--profile", "Default",
+            "--wallet", "Vault",
+            "--count", "2",
+        )
+        self._assert_kind(payload, "wallets.derive")
+        rows = payload["data"]
+        self.assertEqual(len(rows), 4)
+
+        receive_0 = rows[0]
+        self.assertEqual(receive_0["branch_label"], "receive")
+        self.assertEqual(receive_0["derivation_path"], f"{self.sample_derivation_root}/0/0")
+        self.assertEqual(receive_0["derivation_paths"], [f"{self.sample_derivation_root}/0/0"])
+        self.assertEqual(receive_0["key_origins"], [f"[{self.sample_fingerprint}/84'/0'/0'/0/0]"])
+
+        change_0 = rows[2]
+        self.assertEqual(change_0["branch_label"], "change")
+        self.assertEqual(change_0["derivation_path"], f"{self.sample_derivation_root}/1/0")
+        self.assertEqual(change_0["derivation_paths"], [f"{self.sample_derivation_root}/1/0"])
+        self.assertEqual(change_0["key_origins"], [f"[{self.sample_fingerprint}/84'/0'/0'/1/0]"])
+
+        payload = self._cli(
+            "wallets", "derive",
+            "--workspace", "Main",
+            "--profile", "Default",
+            "--wallet", "Vault",
+            "--branch", "change",
+            "--start", "1",
+            "--count", "1",
+        )
+        self._assert_kind(payload, "wallets.derive")
+        change_only = payload["data"]
+        self.assertEqual(len(change_only), 1)
+        self.assertEqual(change_only[0]["branch_label"], "change")
+        self.assertEqual(change_only[0]["derivation_path"], f"{self.sample_derivation_root}/1/1")
+
     def test_04_phoenix_import(self):
         payload = self._cli(
             "wallets", "import-phoenix",
@@ -313,6 +387,26 @@ class CliSmokeTest(unittest.TestCase):
             "--interval", "month",
         )
         self._assert_kind(payload, "reports.balance-history")
+
+    def test_07a_export_pdf_report(self):
+        pdf_path = Path(self._tmp.name) / "kassiber-report.pdf"
+        if pdf_path.exists():
+            pdf_path.unlink()
+        payload = self._cli(
+            "reports", "export-pdf",
+            "--workspace", "Main",
+            "--profile", "Default",
+            "--file", str(pdf_path),
+        )
+        self._assert_kind(payload, "reports.export-pdf")
+        data = payload["data"]
+        self.assertEqual(Path(data["file"]), pdf_path.resolve())
+        self.assertTrue(pdf_path.exists())
+        self.assertGreater(pdf_path.stat().st_size, 1000)
+        payload_bytes = pdf_path.read_bytes()
+        header = payload_bytes[:8]
+        self.assertTrue(header.startswith(b"%PDF-1.4"))
+        self.assertIn(b"/MediaBox [0 0 842 595]", payload_bytes)
 
     def test_08_capital_gains_msat_and_counts(self):
         payload = self._cli(
