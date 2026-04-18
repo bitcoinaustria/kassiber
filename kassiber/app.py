@@ -1,7 +1,6 @@
 import argparse
 import base64
 import binascii
-import csv
 import hashlib
 import json
 import os
@@ -75,6 +74,12 @@ from .envelope import (
     print_table,
 )
 from .errors import AppError
+from .importers import (
+    is_btcpay_format,
+    is_phoenix_format,
+    load_bip329_file,
+    load_import_records,
+)
 from .msat import (
     MSAT_PER_BTC,
     SATS_PER_BTC,
@@ -1554,210 +1559,6 @@ def delete_wallet(conn, workspace_ref, profile_ref, wallet_ref, cascade=False):
         "deleted": True,
         "cascaded_transactions": tx_count if cascade else 0,
     }
-
-
-def load_import_records(file_path, input_format):
-    if input_format == "json":
-        with open(file_path, "r", encoding="utf-8") as handle:
-            payload = json.load(handle)
-        if isinstance(payload, dict):
-            payload = payload.get("transactions", [])
-        if not isinstance(payload, list):
-            raise AppError("JSON import must be a list of transaction objects")
-        return payload
-    if input_format == "csv":
-        with open(file_path, "r", encoding="utf-8", newline="") as handle:
-            return list(csv.DictReader(handle))
-    if input_format == "btcpay_json":
-        return load_btcpay_export_records(file_path, "json")
-    if input_format == "btcpay_csv":
-        return load_btcpay_export_records(file_path, "csv")
-    if input_format == "phoenix_csv":
-        return load_phoenix_csv_records(file_path)
-    raise AppError(f"Unsupported input format '{input_format}'")
-
-
-def parse_btcpay_amount(amount_text, currency=None):
-    if amount_text is None:
-        raise AppError("BTCPay export is missing Amount")
-    text = str(amount_text).strip()
-    asset = str(currency or "BTC").strip().upper()
-    suffixes = [asset, asset.lower(), asset.upper()]
-    for suffix in suffixes:
-        if suffix and text.endswith(suffix):
-            text = text[: -len(suffix)].strip()
-            break
-    return dec(text)
-
-
-def parse_btcpay_labels(value):
-    if value is None or value == "":
-        return []
-    if isinstance(value, list):
-        return [str(item).strip() for item in value if str(item).strip()]
-    return [part.strip() for part in str(value).split(",") if part.strip()]
-
-
-def normalize_btcpay_record(record):
-    sanitized_record = {str(key): value for key, value in record.items() if key is not None}
-    txid = sanitized_record.get("TransactionId") or sanitized_record.get("Transaction Id")
-    timestamp = sanitized_record.get("Timestamp")
-    currency = normalize_asset_code(sanitized_record.get("Currency") or "BTC")
-    amount = parse_btcpay_amount(sanitized_record.get("Amount"), currency=currency)
-    comment = sanitized_record.get("Comment")
-    labels = parse_btcpay_labels(sanitized_record.get("Labels"))
-    return {
-        "txid": txid,
-        "occurred_at": timestamp,
-        "direction": "outbound" if amount < 0 else "inbound",
-        "asset": currency,
-        "amount": abs(amount),
-        "fee": Decimal("0"),
-        "fiat_rate": None,
-        "fiat_value": None,
-        "kind": "withdrawal" if amount < 0 else "deposit",
-        "description": comment or "Imported from BTCPay",
-        "counterparty": None,
-        "_btcpay_comment": comment,
-        "_btcpay_labels": labels,
-        "raw_json": json.dumps(json_ready(sanitized_record), sort_keys=True),
-    }
-
-
-def load_btcpay_export_records(file_path, input_format):
-    if input_format == "json":
-        with open(file_path, "r", encoding="utf-8") as handle:
-            payload = json.load(handle)
-        if not isinstance(payload, list):
-            raise AppError("BTCPay JSON export must be a list of transaction objects")
-        rows = payload
-    elif input_format == "csv":
-        with open(file_path, "r", encoding="utf-8", newline="") as handle:
-            rows = list(csv.DictReader(handle))
-    else:
-        raise AppError(f"Unsupported BTCPay input format '{input_format}'")
-    return [normalize_btcpay_record(row) for row in rows]
-
-
-def is_btcpay_format(input_format):
-    return input_format in {"btcpay_json", "btcpay_csv"}
-
-
-_PHOENIX_REQUIRED_COLUMNS = (
-    "date",
-    "id",
-    "type",
-    "amount_msat",
-)
-
-_PHOENIX_OUTBOUND_TYPES = {
-    "lightning_sent",
-    "swap_out",
-    "legacy_swap_out",
-    "channel_close",
-    "liquidity_purchase",
-    "fee_bumping",
-}
-
-_PHOENIX_INBOUND_TYPES = {
-    "lightning_received",
-    "swap_in",
-    "legacy_swap_in",
-    "legacy_pay_to_open",
-}
-
-
-def parse_phoenix_fiat_amount(amount_text):
-    """Parse a Phoenix amount_fiat cell like "22.9998 USD" into (Decimal, currency)."""
-    if amount_text is None:
-        return None, None
-    text = str(amount_text).strip()
-    if not text:
-        return None, None
-    parts = text.split()
-    if len(parts) == 1:
-        return dec(parts[0]), None
-    value = dec(parts[0])
-    currency = normalize_asset_code(parts[1])
-    return value, currency
-
-
-def normalize_phoenix_record(record):
-    sanitized = {str(key): value for key, value in record.items() if key is not None}
-    for column in _PHOENIX_REQUIRED_COLUMNS:
-        if column not in sanitized:
-            raise AppError(f"Phoenix CSV is missing required column '{column}'")
-    phoenix_type = str(sanitized.get("type") or "").strip() or "unknown"
-    amount_msat_raw = str(sanitized.get("amount_msat") or "0").strip() or "0"
-    try:
-        amount_msat_signed = int(amount_msat_raw)
-    except ValueError as exc:
-        raise AppError(f"Invalid Phoenix amount_msat '{amount_msat_raw}'") from exc
-    if amount_msat_signed < 0:
-        direction = "outbound"
-    elif amount_msat_signed > 0:
-        direction = "inbound"
-    elif phoenix_type in _PHOENIX_OUTBOUND_TYPES:
-        direction = "outbound"
-    elif phoenix_type in _PHOENIX_INBOUND_TYPES:
-        direction = "inbound"
-    else:
-        direction = "outbound"
-    amount_btc = msat_to_btc(abs(amount_msat_signed))
-    mining_fee_sat_raw = str(sanitized.get("mining_fee_sat") or "0").strip() or "0"
-    service_fee_msat_raw = str(sanitized.get("service_fee_msat") or "0").strip() or "0"
-    try:
-        mining_fee_msat = int(mining_fee_sat_raw) * 1000
-    except ValueError as exc:
-        raise AppError(f"Invalid Phoenix mining_fee_sat '{mining_fee_sat_raw}'") from exc
-    try:
-        service_fee_msat = int(service_fee_msat_raw)
-    except ValueError as exc:
-        raise AppError(f"Invalid Phoenix service_fee_msat '{service_fee_msat_raw}'") from exc
-    fee_btc = msat_to_btc(mining_fee_msat + service_fee_msat)
-    fiat_value_signed, _ = parse_phoenix_fiat_amount(sanitized.get("amount_fiat"))
-    fiat_value = abs(fiat_value_signed) if fiat_value_signed is not None else None
-    fiat_rate = None
-    if fiat_value is not None and amount_btc > 0:
-        fiat_rate = fiat_value / amount_btc
-    description = str_or_none(sanitized.get("description"))
-    counterparty = str_or_none(sanitized.get("destination"))
-    txid = str_or_none(sanitized.get("tx_id")) or str_or_none(sanitized.get("payment_hash"))
-    return {
-        "txid": sanitized.get("id"),
-        "occurred_at": sanitized.get("date"),
-        "direction": direction,
-        "asset": "BTC",
-        "amount": amount_btc,
-        "fee": fee_btc,
-        "fiat_rate": fiat_rate,
-        "fiat_value": fiat_value,
-        "kind": phoenix_type,
-        "description": description,
-        "counterparty": counterparty,
-        "_phoenix_type": phoenix_type,
-        "_phoenix_description": description,
-        "_phoenix_onchain_txid": txid,
-        "raw_json": json.dumps(json_ready(sanitized), sort_keys=True),
-    }
-
-
-def load_phoenix_csv_records(file_path):
-    with open(file_path, "r", encoding="utf-8", newline="") as handle:
-        rows = list(csv.DictReader(handle))
-    if not rows:
-        return []
-    header = rows[0].keys()
-    missing = [column for column in _PHOENIX_REQUIRED_COLUMNS if column not in header]
-    if missing:
-        raise AppError(
-            "Phoenix CSV is missing required columns: " + ", ".join(missing)
-        )
-    return [normalize_phoenix_record(row) for row in rows]
-
-
-def is_phoenix_format(input_format):
-    return input_format == "phoenix_csv"
 
 
 def apply_phoenix_metadata(conn, profile, wallet, records):
@@ -3351,49 +3152,6 @@ def list_transaction_records(
         "has_more": has_more,
         "limit": effective_limit,
     }
-
-
-def normalize_bip329_record(record):
-    if not isinstance(record, dict):
-        raise AppError("BIP329 records must be JSON objects")
-    record_type = str(record.get("type") or "").strip()
-    ref = str(record.get("ref") or "").strip()
-    if record_type not in {"tx", "addr", "pubkey", "input", "output", "xpub"}:
-        raise AppError(f"Unsupported BIP329 record type '{record_type}'")
-    if not ref:
-        raise AppError("BIP329 records require a non-empty ref")
-    spendable = record.get("spendable")
-    if spendable is not None and not isinstance(spendable, bool):
-        raise AppError("BIP329 spendable must be a boolean when present")
-    if spendable is not None and record_type != "output":
-        raise AppError("BIP329 spendable is only valid for output records")
-    return {
-        "type": record_type,
-        "ref": ref,
-        "label": str_or_none(record.get("label")),
-        "origin": str_or_none(record.get("origin")),
-        "spendable": spendable,
-        "data": {
-            key: value
-            for key, value in record.items()
-            if key not in {"type", "ref", "label", "origin", "spendable"}
-        },
-    }
-
-
-def load_bip329_file(file_path):
-    records = []
-    with open(file_path, "r", encoding="utf-8") as handle:
-        for line_number, raw_line in enumerate(handle, start=1):
-            line = raw_line.strip()
-            if not line:
-                continue
-            try:
-                payload = json.loads(line)
-            except json.JSONDecodeError as exc:
-                raise AppError(f"Invalid BIP329 JSON on line {line_number}") from exc
-            records.append(normalize_bip329_record(payload))
-    return records
 
 
 def import_bip329_labels(conn, workspace_ref, profile_ref, file_path, wallet_ref=None):
