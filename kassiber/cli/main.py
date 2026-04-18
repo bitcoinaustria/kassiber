@@ -5,8 +5,8 @@ import traceback
 
 # Import the existing handler surface so parser/dispatch can live here
 # before the deeper handler extraction is finished.
-from ..app import *  # noqa: F401,F403
-from ..app import _metadata_hooks, _report_hooks
+from .handlers import *  # noqa: F401,F403
+from .handlers import _metadata_hooks, _report_hooks
 from ..core.runtime import bootstrap_runtime, close_runtime, emit_error, resolve_output_format
 from ..errors import AppError
 
