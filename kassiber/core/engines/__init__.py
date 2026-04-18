@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any, Mapping
 
-from .base import TaxEngine, TaxEngineAssetResult
+from .base import TaxEngine, TaxEngineAssetResult, TaxEngineLedgerInputs, TaxEngineLedgerResult
 from .rp2 import GenericRP2TaxEngine
 
 
@@ -17,5 +17,7 @@ def build_tax_engine(profile: Mapping[str, Any]) -> TaxEngine:
 __all__ = [
     "TaxEngine",
     "TaxEngineAssetResult",
+    "TaxEngineLedgerInputs",
+    "TaxEngineLedgerResult",
     "build_tax_engine",
 ]
