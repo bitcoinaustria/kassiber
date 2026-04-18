@@ -65,6 +65,7 @@ def set_transaction_note(conn, workspace_ref, profile_ref, tx_ref, note, hooks: 
     _, profile = hooks.resolve_scope(conn, workspace_ref, profile_ref)
     tx = hooks.resolve_transaction(conn, profile["id"], tx_ref)
     conn.execute("UPDATE transactions SET note = ? WHERE id = ?", (note, tx["id"]))
+    hooks.invalidate_journals(conn, profile["id"])
     conn.commit()
     return {"transaction_id": tx["id"], "note": note}
 
@@ -113,6 +114,7 @@ def add_tag_to_transaction(conn, workspace_ref, profile_ref, tx_ref, tag_ref, ho
         "INSERT OR IGNORE INTO transaction_tags(transaction_id, tag_id) VALUES(?, ?)",
         (tx["id"], tag["id"]),
     )
+    hooks.invalidate_journals(conn, profile["id"])
     conn.commit()
     return {"transaction_id": tx["id"], "tag": tag["code"], "status": "added"}
 
@@ -125,6 +127,7 @@ def remove_tag_from_transaction(conn, workspace_ref, profile_ref, tx_ref, tag_re
         "DELETE FROM transaction_tags WHERE transaction_id = ? AND tag_id = ?",
         (tx["id"], tag["id"]),
     )
+    hooks.invalidate_journals(conn, profile["id"])
     conn.commit()
     return {"transaction_id": tx["id"], "tag": tag["code"], "status": "removed"}
 
@@ -392,6 +395,8 @@ def import_bip329_labels(conn, workspace_ref, profile_ref, file_path, hooks: Met
                 )
                 if conn.total_changes > before:
                     transaction_tags_added += 1
+    if records:
+        hooks.invalidate_journals(conn, profile["id"])
     conn.commit()
     return {
         "file": os.path.abspath(file_path),
