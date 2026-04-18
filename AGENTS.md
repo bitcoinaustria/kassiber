@@ -14,8 +14,8 @@
   - [kassiber/backends.py](kassiber/backends.py) — dotenv (`config/backends.env`) seed + DB overlay for named sync backends, plus CRUD helpers.
   - [kassiber/cli/handlers.py](kassiber/cli/handlers.py) — remaining CLI command handlers and compatibility-layer imports while deeper decomposition continues.
   - [kassiber/core/attachments.py](kassiber/core/attachments.py) — transaction attachment storage, URL-reference handling, integrity verification, and orphan-file GC for the managed attachment tree.
-  - [kassiber/core/engines/__init__.py](kassiber/core/engines/__init__.py) — tax-engine interface/resolver; selects the generic RP2 engine today and gates the experimental Austrian path.
-  - [kassiber/core/engines/austria.py](kassiber/core/engines/austria.py) — explicit experimental gate for `tax_country=at` until the dedicated Austrian engine is implemented and reviewed.
+  - [kassiber/core/engines/__init__.py](kassiber/core/engines/__init__.py) — tax-engine interface/resolver; selects the generic RP2 engine or the experimental Austrian engine by profile tax policy.
+  - [kassiber/core/engines/austria.py](kassiber/core/engines/austria.py) — experimental Austrian ledger builder on the shared engine seam; processes supported flows conservatively and quarantines unsupported provenance.
   - [kassiber/core/tax_events.py](kassiber/core/tax_events.py) — in-memory normalization seam between raw transaction rows and tax-engine inputs, including early quarantine classification for under-specified tax semantics.
   - [kassiber/core/sync.py](kassiber/core/sync.py) — wallet sync orchestration above backend-specific transport details.
   - [kassiber/core/sync_backends.py](kassiber/core/sync_backends.py) — descriptor target discovery plus `esplora`, `electrum`, and `bitcoinrpc` live-sync adapters.
@@ -95,7 +95,7 @@ List endpoints with `--limit` also accept `--cursor`. The cursor is an opaque ba
 - Liquid peg-in/peg-out detection must not lean on hardcoded federation addresses (per-claim tweaked, federation keys rotate). Use the manual pair CLI or non-address heuristics (time + amount + direction inversion + same-profile constraint) instead.
 - Per-wallet portfolio rows show that wallet's residual quantity at the asset's average residual basis — an allocation, not a physical-lot answer.
 - Supported lot selection: `FIFO`, `LIFO`, `HIFO`, `LOFO`.
-- Profiles expose the RP2 `generic` tax policy and an explicitly experimental Austrian `at` policy registration. Austrian profiles normalize to EUR and keep the legacy `tax_long_term_days` field shape for `Altbestand`, but journal processing intentionally raises `experimental_tax_policy` until the dedicated engine lands and is reviewed by a Steuerberater.
+- Profiles expose the RP2 `generic` tax policy and an explicitly experimental Austrian `at` policy registration. Austrian profiles normalize to EUR, keep the legacy `tax_long_term_days` field shape for `Altbestand`, and pin the legacy `gains_algorithm` field to `FIFO` because the Austrian engine applies its own FIFO / moving-average rules internally. Supported Austrian journal flows now process through `kassiber/core/engines/austria.py`, while ambiguous provenance quarantines instead of being guessed. Austrian JSON report envelopes carry top-level `experimental` / `review_required` markers so automation does not lose the review gate after journals are processed.
 - Wallets can be flagged manually as `Altbestand`; disposals from those wallets are treated as tax-free while Neubestand wallets use normal tax treatment.
 - Journals must be reprocessed after any transaction, metadata, or exclusion change before reports are trusted.
 - Transactions without usable fiat pricing are quarantined during journal processing instead of receiving zero-basis tax treatment.
@@ -169,14 +169,14 @@ uv run python -m kassiber rates --help
 ## Known gaps
 
 - BTC-denominated amounts are stored as INTEGER msat in SQLite. Machine envelopes expose both `amount` (BTC float) and `amount_msat` (integer), and the same for `fee` / `quantity`. Fiat columns (`fiat_value`, `fiat_rate`, etc.) are still REAL.
-- Rates cache (`rates pairs/sync/latest/range/set`) stores BTC-USD / BTC-EUR samples from CoinGecko or manual upsert, but journal processing still derives fiat rates from priced transactions rather than the cache.
+- Rates cache (`rates pairs/sync/latest/range/set`) stores BTC-USD / BTC-EUR samples from CoinGecko or manual upsert. `journals process` can auto-fill missing transaction prices from the cache when a matching sample exists at or before the transaction timestamp, but reports still use stored transaction and journal pricing rather than querying the cache live.
 - Phoenix Lightning wallet CSV import is implemented (`wallets import-phoenix`). River CSV importer is not implemented yet.
 - No `custom` wallet kind CSV mapping DSL yet.
-- No account adjustments / per-event rate overrides yet.
+- No account adjustments yet.
 - No per-profile Tor proxy configuration yet.
 - No descriptor/xpub-native live sync through `bitcoinrpc` yet.
 - No self-hosted Liquid `elements_rpc` backend yet.
 - No BTCPay Greenfield API yet.
 - No Lightning node adapters yet (`coreln`, `lnd`, `nwc` kinds are declared but do not sync).
 - No REST/server mode or multi-user auth yet.
-- Austrian profile registration exists, but the Austrian journal engine and E 1kv export are not implemented yet; the path is intentionally gated as experimental.
+- Austrian journal processing exists for supported acquisitions, disposals, and self-transfers, but the path remains experimental, quarantines unclear provenance, keeps report envelopes visibly experimental, and does not yet ship E 1kv export.

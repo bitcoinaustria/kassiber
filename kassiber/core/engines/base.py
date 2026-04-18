@@ -5,17 +5,6 @@ from typing import Any, Mapping, Protocol, Sequence
 
 
 @dataclass(frozen=True)
-class TaxEngineAssetResult:
-    """Per-asset engine result kept for internal engine compatibility."""
-
-    entries: list[dict[str, Any]]
-    quarantines: list[dict[str, Any]]
-    intra_audit: list[dict[str, Any]]
-    account_holdings: dict[tuple[Any, ...], dict[str, Any]]
-    wallet_holdings: dict[tuple[Any, ...], dict[str, Any]]
-
-
-@dataclass(frozen=True)
 class TaxEngineLedgerInputs:
     """Raw per-profile inputs loaded from SQLite before engine processing."""
 
@@ -49,7 +38,11 @@ class TaxEngineLedgerResult:
 
 
 class TaxEngine(Protocol):
-    """Profile-level tax engine interface."""
+    """Profile-level tax engine interface.
+
+    Engines receive raw per-profile journal inputs and return the aggregated
+    ledger state that handlers persist into Kassiber's journal tables.
+    """
 
     def build_ledger_state(self, inputs: TaxEngineLedgerInputs) -> TaxEngineLedgerResult:
         """Return aggregated ledger state for one profile."""
