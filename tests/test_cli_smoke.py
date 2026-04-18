@@ -165,6 +165,8 @@ class CliSmokeTest(unittest.TestCase):
         cls.cross_btc_csv.write_text(_CROSS_BTC_CSV, encoding="utf-8")
         cls.cross_lbtc_csv = Path(cls._tmp.name) / "cross-lbtc.csv"
         cls.cross_lbtc_csv.write_text(_CROSS_LBTC_CSV, encoding="utf-8")
+        cls.attachment_file = Path(cls._tmp.name) / "attachment-note.txt"
+        cls.attachment_file.write_text("Signed invoice copy\n", encoding="utf-8")
         (
             cls.sample_descriptor,
             cls.sample_change_descriptor,
@@ -198,6 +200,7 @@ class CliSmokeTest(unittest.TestCase):
         self.assertEqual(payload["data"]["config_root"], str(self.data_root.parent / "config"))
         self.assertEqual(payload["data"]["settings_file"], str(self.data_root.parent / "config" / "settings.json"))
         self.assertEqual(payload["data"]["exports_root"], str(self.data_root.parent / "exports"))
+        self.assertEqual(payload["data"]["attachments_root"], str(self.data_root.parent / "attachments"))
         self.assertEqual(payload["data"]["env_file"], str(self.data_root.parent / "config" / "backends.env"))
 
         payload = self._cli("status")
@@ -209,6 +212,7 @@ class CliSmokeTest(unittest.TestCase):
         self.assertEqual(payload["data"]["config_root"], str(self.data_root.parent / "config"))
         self.assertEqual(payload["data"]["settings_file"], str(self.data_root.parent / "config" / "settings.json"))
         self.assertEqual(payload["data"]["exports_root"], str(self.data_root.parent / "exports"))
+        self.assertEqual(payload["data"]["attachments_root"], str(self.data_root.parent / "attachments"))
         self.assertEqual(payload["data"]["env_file"], str(self.data_root.parent / "config" / "backends.env"))
 
     def test_01a_backends_batch_size_roundtrip(self):
@@ -363,6 +367,93 @@ class CliSmokeTest(unittest.TestCase):
         outbound_msat = sum(r["amount_msat"] for r in records if r["direction"] == "outbound")
         self.assertEqual(inbound_msat, 5_000_000_000 + 3_000_000)
         self.assertEqual(outbound_msat, 5_000_000 + 500_000_000)
+
+    def test_05a_attachments_lifecycle(self):
+        payload = self._cli(
+            "metadata", "records", "list",
+            "--workspace", "Main",
+            "--profile", "Default",
+        )
+        self._assert_kind(payload, "metadata.records.list")
+        tx_ref = payload["data"]["records"][0]["transaction_id"]
+
+        payload = self._cli(
+            "attachments", "add",
+            "--workspace", "Main",
+            "--profile", "Default",
+            "--transaction", tx_ref,
+            "--file", str(self.attachment_file),
+            "--label", "Invoice copy",
+        )
+        self._assert_kind(payload, "attachments.add")
+        file_attachment = payload["data"]
+        self.assertEqual(file_attachment["attachment_type"], "file")
+        self.assertEqual(file_attachment["label"], "Invoice copy")
+        self.assertTrue(file_attachment["exists"])
+        stored_path = self.data_root.parent / "attachments" / file_attachment["stored_relpath"]
+        self.assertTrue(stored_path.exists())
+
+        payload = self._cli(
+            "attachments", "add",
+            "--workspace", "Main",
+            "--profile", "Default",
+            "--transaction", tx_ref,
+            "--url", "https://example.com/tx/notes/1",
+            "--label", "Support ticket",
+        )
+        self._assert_kind(payload, "attachments.add")
+        url_attachment = payload["data"]
+        self.assertEqual(url_attachment["attachment_type"], "url")
+        self.assertEqual(url_attachment["url"], "https://example.com/tx/notes/1")
+        self.assertFalse(url_attachment["stored_relpath"])
+
+        payload = self._cli(
+            "attachments", "list",
+            "--workspace", "Main",
+            "--profile", "Default",
+            "--transaction", tx_ref,
+        )
+        self._assert_kind(payload, "attachments.list")
+        rows = payload["data"]
+        self.assertEqual(len(rows), 2)
+        self.assertEqual(sorted(row["attachment_type"] for row in rows), ["file", "url"])
+
+        payload = self._cli(
+            "attachments", "verify",
+            "--workspace", "Main",
+            "--profile", "Default",
+            "--transaction", tx_ref,
+        )
+        self._assert_kind(payload, "attachments.verify")
+        self.assertEqual(payload["data"]["checked"], 2)
+        self.assertEqual(payload["data"]["broken"], 0)
+        self.assertEqual(payload["data"]["ok"], 2)
+        by_type = {row["attachment_type"]: row for row in payload["data"]["results"]}
+        self.assertEqual(by_type["file"]["status"], "ok")
+        self.assertEqual(by_type["file"]["issues"], [])
+        self.assertEqual(by_type["url"]["status"], "ok")
+        self.assertEqual(by_type["url"]["issues"], [])
+
+        payload = self._cli(
+            "attachments", "remove",
+            "--workspace", "Main",
+            "--profile", "Default",
+            file_attachment["id"],
+        )
+        self._assert_kind(payload, "attachments.remove")
+        self.assertTrue(payload["data"]["removed"])
+        self.assertTrue(payload["data"]["deleted_file"])
+        self.assertFalse(stored_path.exists())
+
+        payload = self._cli(
+            "attachments", "list",
+            "--workspace", "Main",
+            "--profile", "Default",
+            "--transaction", tx_ref,
+        )
+        self._assert_kind(payload, "attachments.list")
+        self.assertEqual(len(payload["data"]), 1)
+        self.assertEqual(payload["data"][0]["id"], url_attachment["id"])
 
     def test_06_journals_process(self):
         payload = self._cli(

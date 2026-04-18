@@ -63,6 +63,7 @@ _KIND_SUBCOMMAND_ATTRS = (
     "accounts_command",
     "wallets_command",
     "transactions_command",
+    "attachments_command",
     "metadata_command",
     "notes_command",
     "tags_command",
