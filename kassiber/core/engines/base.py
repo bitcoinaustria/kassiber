@@ -5,6 +5,17 @@ from typing import Any, Mapping, Protocol, Sequence
 
 
 @dataclass(frozen=True)
+class TaxEngineAssetResult:
+    """Per-asset engine result kept for internal engine compatibility."""
+
+    entries: list[dict[str, Any]]
+    quarantines: list[dict[str, Any]]
+    intra_audit: list[dict[str, Any]]
+    account_holdings: dict[tuple[Any, ...], dict[str, Any]]
+    wallet_holdings: dict[tuple[Any, ...], dict[str, Any]]
+
+
+@dataclass(frozen=True)
 class TaxEngineLedgerInputs:
     """Raw per-profile inputs loaded from SQLite before engine processing."""
 
