@@ -9,6 +9,7 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parent.parent
+FIXTURES = Path(__file__).resolve().parent / "fixtures"
 
 
 _OLD_SCHEMA_SQL = """
@@ -147,6 +148,15 @@ CREATE TABLE bip329_labels (
 );
 """
 
+_FIXTURE_COLD_TRANSFER_CSV = """date,txid,direction,asset,amount,fee,fiat_rate,description
+2026-01-01T10:00:00Z,cold-funding-1,inbound,BTC,1.00000000,0,60000,Cold acquisition
+2026-02-01T12:00:00Z,onchain-self-transfer-1,outbound,BTC,0.50000000,0.001,65000,Move to hot wallet
+"""
+
+_FIXTURE_HOT_TRANSFER_CSV = """date,txid,direction,asset,amount,fee,fiat_rate,description
+2026-02-01T12:00:00Z,onchain-self-transfer-1,inbound,BTC,0.50000000,0,65000,Receive from cold wallet
+"""
+
 
 class ReviewRegressionTest(unittest.TestCase):
     @classmethod
@@ -195,6 +205,9 @@ class ReviewRegressionTest(unittest.TestCase):
     def _assert_ok(self, payload, result, kind):
         self.assertEqual(result.returncode, 0, msg=f"{payload!r}")
         self.assertEqual(payload.get("kind"), kind)
+
+    def _load_fixture(self, name):
+        return json.loads((FIXTURES / name).read_text(encoding="utf-8"))
 
     def _bootstrap_wallet(self, label="Wallet", kind="phoenix"):
         payload, result = self._run_json("init")
@@ -463,6 +476,110 @@ class ReviewRegressionTest(unittest.TestCase):
         conn.close()
         self.assertAlmostEqual(tx["fiat_rate"], 60000.0, places=4)
         self.assertAlmostEqual(tx["fiat_value"], 600.0, places=4)
+
+    def test_generic_rp2_transfer_snapshot_matches_fixture(self):
+        payload, result = self._run_json(
+            "init",
+        )
+        self._assert_ok(payload, result, "init")
+        payload, result = self._run_json("workspaces", "create", "Main")
+        self._assert_ok(payload, result, "workspaces.create")
+        payload, result = self._run_json(
+            "profiles", "create",
+            "--workspace", "Main",
+            "--fiat-currency", "USD",
+            "--tax-country", "generic",
+            "FixtureTransfer",
+        )
+        self._assert_ok(payload, result, "profiles.create")
+
+        cold_csv = self.case_dir / "fixture-cold.csv"
+        hot_csv = self.case_dir / "fixture-hot.csv"
+        cold_csv.write_text(_FIXTURE_COLD_TRANSFER_CSV, encoding="utf-8")
+        hot_csv.write_text(_FIXTURE_HOT_TRANSFER_CSV, encoding="utf-8")
+
+        for label in ("Cold", "Hot"):
+            payload, result = self._run_json(
+                "wallets", "create",
+                "--workspace", "Main",
+                "--profile", "FixtureTransfer",
+                "--label", label,
+                "--kind", "custom",
+            )
+            self._assert_ok(payload, result, "wallets.create")
+
+        payload, result = self._run_json(
+            "wallets", "import-csv",
+            "--workspace", "Main",
+            "--profile", "FixtureTransfer",
+            "--wallet", "Cold",
+            "--file", str(cold_csv),
+        )
+        self._assert_ok(payload, result, "wallets.import-csv")
+        payload, result = self._run_json(
+            "wallets", "import-csv",
+            "--workspace", "Main",
+            "--profile", "FixtureTransfer",
+            "--wallet", "Hot",
+            "--file", str(hot_csv),
+        )
+        self._assert_ok(payload, result, "wallets.import-csv")
+
+        summary, result = self._run_json(
+            "journals", "process",
+            "--workspace", "Main",
+            "--profile", "FixtureTransfer",
+        )
+        self._assert_ok(summary, result, "journals.process")
+
+        journal_entries, result = self._run_json(
+            "reports", "journal-entries",
+            "--workspace", "Main",
+            "--profile", "FixtureTransfer",
+        )
+        self._assert_ok(journal_entries, result, "reports.journal-entries")
+
+        capital_gains, result = self._run_json(
+            "reports", "capital-gains",
+            "--workspace", "Main",
+            "--profile", "FixtureTransfer",
+        )
+        self._assert_ok(capital_gains, result, "reports.capital-gains")
+
+        portfolio_summary, result = self._run_json(
+            "reports", "portfolio-summary",
+            "--workspace", "Main",
+            "--profile", "FixtureTransfer",
+        )
+        self._assert_ok(portfolio_summary, result, "reports.portfolio-summary")
+
+        actual = {
+            "summary": {
+                key: value
+                for key, value in summary["data"].items()
+                if key not in {"processed_at", "profile"}
+            },
+            "journal_entries": sorted(
+                [
+                    {key: value for key, value in row.items() if key != "id"}
+                    for row in journal_entries["data"]
+                ],
+                key=lambda row: (row["occurred_at"], row["entry_type"], row["wallet"], row["description"]),
+            ),
+            "capital_gains": sorted(
+                [
+                    {key: value for key, value in row.items() if key != "transaction_id"}
+                    for row in capital_gains["data"]
+                ],
+                key=lambda row: (row["occurred_at"], row["entry_type"], row["wallet"]),
+            ),
+            "portfolio_summary": sorted(
+                portfolio_summary["data"],
+                key=lambda row: row["wallet"],
+            ),
+        }
+        expected = self._load_fixture("generic_rp2_transfer_snapshot.json")
+        self.assertEqual(actual, expected)
 
     def test_balance_history_uses_historical_rate_and_remaining_basis(self):
         self._bootstrap_wallet(label="W")

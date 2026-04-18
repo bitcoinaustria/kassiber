@@ -116,10 +116,10 @@ top of the monolith.
 
 ### 0.5b - RP2 extraction
 
-- [ ] Move the current generic RP2 journal flow behind the new engine seam
-- [ ] Preserve current transfer handling, quarantine behavior, and report
+- [x] Move the current generic RP2 journal flow behind the new engine seam
+- [x] Preserve current transfer handling, quarantine behavior, and report
   outputs
-- [ ] Use fixture comparisons and smoke tests to catch rounding or journal
+- [x] Use fixture comparisons and smoke tests to catch rounding or journal
   regressions
 
 ### 0.5c - Transaction attachments
