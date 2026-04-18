@@ -24,7 +24,7 @@ Three concurrent tracks, all grounded in a single library refactor:
 
 1. **Phase 0 — Core extraction.** Carve a reusable `kassiber.core` library out of `app.py`. CLI becomes a thin translator. Precondition for everything else. See `02-core-extraction.md`.
 2. **Desktop UI.** PySide6 + QML application that imports `kassiber.core` directly. Warm, document-oriented desktop layout guided by project-approved reference screenshots. See `04-desktop-ui.md`.
-3. **Austrian tax engine.** A sibling engine to the existing RP2 path, because the Austrian regime (moving average per wallet from 2023, non-taxable crypto-crypto swaps, Altvermögen vs Neuvermögen classification) is structurally different from what RP2 models. See `06-austrian-tax-engine.md`.
+3. **Austrian tax engine.** A sibling engine to the existing RP2 path, because the Austrian regime needs its own normalization/provenance layer, moving-average cost basis from 2023 onward, and Altvermögen vs Neuvermögen classification rules that do not fit RP2's model. See `06-austrian-tax-engine.md`.
 
 Plus one small new feature with cross-cutting impact:
 
@@ -61,7 +61,7 @@ Plus one small new feature with cross-cutting impact:
 | Phase | Scope | Rough effort |
 |---|---|---|
 | **0** | Library extraction: `kassiber.core`, `kassiber.cli`. Smoke tests stay green. | 3–5 days |
-| **0.5** | Austrian tax engine + E 1kv report + attachments feature. CLI-only for all of it. | 7–10 days |
+| **0.5** | Austrian tax normalization layer + Austrian engine + E 1kv report + attachments feature. CLI-only for all of it. | 7–10 days |
 | **1** | PySide6 app shell, empty state matching the approved reference state | 2 days |
 | **2** | Read-only dashboard: six tiles wired to `core/` | 4–6 days |
 | **3** | Add Connection modal, sync action with progress, CSV import, attachment drag-drop | 4–5 days |
@@ -88,6 +88,7 @@ Plus one small new feature with cross-cutting impact:
 - **Not legal or tax advice.** The Austrian engine ships behind a disclaimer. Production use gated on Steuerberater review.
 - **Not a commitment to dates.** Effort estimates are for sequencing, not scheduling.
 - **Not final on report aesthetics.** E 1kv output will evolve with user's Steuerberater feedback.
+- **Not a hidden schema redesign.** Phase 0 keeps today's runtime/bootstrap contract, `TEXT` IDs, scope fields, and machine envelope shape unless a later doc calls out a deliberate migration.
 - **Not a rewrite.** The refactor in Phase 0 is mechanical, not a re-architecture. Pure logic moves; behavior identical (smoke tests prove it).
 
 ## Known risks

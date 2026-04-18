@@ -8,6 +8,8 @@ This document catalogues tax questions where **BMF has not published a clear pos
 
 These are surfaced in the E 1kv PDF footer so a reviewing Steuerberater sees exactly which assumptions were used.
 
+Important implementation note: these defaults only apply when Kassiber's normalization/provenance layer has enough information to classify the event confidently. If the required facts are missing, the event is quarantined instead of silently receiving one of these defaults.
+
 **Last updated:** 2026-04-18. Maintainer: project owner + Steuerberater (post-MVP).
 
 ---
@@ -82,7 +84,7 @@ This is a pure pooling rule.
 
 **What would change the default.** A BMF ruling on multi-input consolidation. A Steuerberater instruction per specific client.
 
-**Engine behavior.** Consolidation events from self-transfers apply the weighted average. The journal entry carries a note recording the source wallets and their contributed quantities. Entry has `note="AT-003 default pooling rule applied"`.
+**Engine behavior.** Consolidation events from self-transfers apply the weighted average across the contributing normalized tax containers. The journal entry carries a note recording the source wallets/containers and their contributed quantities. Entry has `note="AT-003 default pooling rule applied"`.
 
 **Status.** Open. Priority: medium — important for any user who does wallet hygiene (many addresses → one cold storage wallet).
 
@@ -105,7 +107,7 @@ This is a pure pooling rule.
 
 **What would change the default.** A BMF ruling endorsing FMV-at-death basis. Unlikely based on current Austrian tax policy direction.
 
-**Engine behavior.** When a user marks a wallet's initial contents as inherited (via `kassiber wallet set <id> --inherited-from <iso-date> --original-basis <eur-amount>`), the engine treats the lot as acquired on the original date with the original cost. Altvermögen classification is preserved if the original date qualifies.
+**Engine behavior.** MVP does not yet have a dedicated inheritance workflow. Until explicit provenance capture exists, inherited holdings are either annotated through the tax-annotation layer or quarantined as unsupported for Austrian processing. Once inheritance support lands, it should capture original acquisition date and basis explicitly rather than inferring from first observation.
 
 **Status.** Open. Priority: low — relevant only to users with inherited BTC. Default is the safe choice.
 
@@ -128,7 +130,7 @@ This is a pure pooling rule.
 
 **What would change the default.** An Austrian court or BMF ruling treating CoinJoin as a taxable event.
 
-**Engine behavior.** CoinJoin transactions are flagged at ingestion by pattern detection (multiple equal-size outputs, characteristic signatures). When detected, they're treated as a self-transfer of the user's contributed amount with fees proportionally applied. A note on the journal entry records the CoinJoin detection.
+**Engine behavior.** CoinJoin handling is not assumed to exist for MVP. Until Kassiber has explicit CoinJoin provenance or robust detection, CoinJoin-like fanout transactions should remain quarantined or manually annotated instead of being auto-classified.
 
 **Status.** Open. Priority: medium for privacy-conscious users, low for typical cases.
 
@@ -187,7 +189,7 @@ This is a pure pooling rule.
 
 **What would change the default.** Nothing technical. The user must be able to demonstrate ownership if audited; the engine cannot verify this.
 
-**Engine behavior.** As described. The engine also tags the wallet with a "first observed by kassiber" timestamp for diagnostic purposes but does not use it for classification.
+**Engine behavior.** As described. The engine does not depend on a separate persisted "first observed by kassiber" field for the tax classification itself.
 
 **Status.** Closed. Default is clearly correct.
 
@@ -197,7 +199,7 @@ This is a pure pooling rule.
 
 **Question.** Who decides whether a wallet's contents are Altvermögen — the user's explicit declaration, or the engine's computation from transaction timestamps?
 
-**Default applied.** Both, with the user's explicit declaration acting as a safety override. The engine classifies each lot by its acquisition date. The `wallets.altbestand_declared` flag serves two purposes:
+**Default applied.** Both, with the user's explicit declaration acting as a safety override. The engine classifies each lot by its acquisition date. Kassiber's existing wallet-level Altbestand provenance serves two purposes:
 
 1. **Trust signal:** If the user has declared the wallet as originating from Altvermögen holdings, this is logged alongside computed classifications. Discrepancies (e.g., user declares Altvermögen but a lot has timestamp 2022-05-01) surface as warnings, not errors.
 2. **Fallback:** For wallets imported from exchanges or partial records where some transaction dates are unknown, the declaration applies to pre-reform-dated lots.
@@ -208,7 +210,7 @@ This is a pure pooling rule.
 
 **What would change the default.** A BMF requirement that tools refuse to compute Altvermögen without explicit user declaration. Unlikely.
 
-**Engine behavior.** As described. Warnings surface in the PDF's disclaimer section for review.
+**Engine behavior.** As described. Warnings surface in the PDF's disclaimer section for review. For MVP this rides on the existing wallet-level Altbestand provenance contract rather than a new dedicated column.
 
 **Status.** Open. Could evolve into a small UI flow in Phase 5+ where the user walks through each wallet confirming Altvermögen status.
 
@@ -228,7 +230,7 @@ This is a pure pooling rule.
 
 **What would change the default.** A BMF clarification on cross-provider offset handling.
 
-**Engine behavior.** The engine surfaces per-provider and cross-provider summaries. The E 1kv output has a line explicitly noting "inländisch — KESt already withheld" vs "ausländisch — taxpayer declares."
+**Engine behavior.** This is not fully supported in MVP because Kassiber does not yet persist provider domicile / withheld-KESt metadata in a structured way. Until that metadata exists, Austrian output should treat provider-withheld tax as outside the supported automation boundary and surface a warning or quarantine as appropriate.
 
 **Status.** Open. Priority: medium for users with multiple domestic providers.
 
@@ -258,7 +260,7 @@ The PDF report footer lists every open question whose default was invoked for tr
 When a question is resolved (new BMF ruling, Steuerberater opinion obtained, consensus shifts):
 
 1. Update this document — keep the history of the prior default in an "Old default" section
-2. Add a migration (if the resolution changes stored classification): `NNN_at_open_question_ATXXX_resolution.sql`
+2. Add a migration only if the resolution changes persisted annotation/provenance fields or other stored metadata
 3. Update engine code with the new behavior
 4. Bump a `at_engine_version` constant
 5. Offer the user a "Recompute journal" action on profile settings; the prior journal is archived

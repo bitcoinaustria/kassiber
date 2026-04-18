@@ -28,7 +28,7 @@ Python-only stack. QML declarative layout, Python signals/slots for logic. Qt's 
 - **No webview at all.** Native widgets render via Qt's own stack. Zero JavaScript runtime surface. Good for cybersec posture.
 - **No Node in any form.** Not runtime, not dev-time.
 - **Mature and stable.** Qt is 30+ years old. PySide6 is LTS and actively maintained.
-- **Packaging is solved.** `briefcase` produces signed macOS `.app`, Linux `.deb/.rpm/.AppImage`, Windows `.msi` from the same project.
+- **Packaging is strong on the targets that matter.** `briefcase` gives us a clean macOS path now and credible Linux/Windows options later, without introducing a second runtime stack.
 - **QtCharts** gives us the Balance Over Time chart without a third-party library.
 - **Accessibility and native feel** on each OS come for free (menu bar on macOS, Wayland on Linux, etc.).
 
