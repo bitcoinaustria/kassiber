@@ -80,7 +80,7 @@ modules without changing user-visible behavior.
   explicit
 - [x] Move `_RP2_MODULES` / `get_rp2_modules` behind a journals or engine
   seam
-- [ ] Introduce a tax-engine interface that preserves today's RP2-backed
+- [x] Introduce a tax-engine interface that preserves today's RP2-backed
   generic behavior
 
 ### 0e - CLI cutover and cleanup
