@@ -3,7 +3,7 @@
 ## Project shape
 
 - Kassiber is a local-first Bitcoin accounting CLI.
-- The CLI entrypoint now lives in [kassiber/cli/main.py](kassiber/cli/main.py). The remaining not-yet-extracted command implementations (importers, rates, wallets, sync adapters, journals) still live in [kassiber/app.py](kassiber/app.py).
+- The CLI entrypoint now lives in [kassiber/cli/main.py](kassiber/cli/main.py). The remaining not-yet-extracted command implementations (notably wallet, journal, and some rate flows) still live in [kassiber/app.py](kassiber/app.py).
 - Supporting modules (bottom-up — no back-edges into `app.py`):
   - [kassiber/errors.py](kassiber/errors.py) — `AppError` typed exception carrying `code`, `hint`, `details`, `retryable`.
   - [kassiber/time_utils.py](kassiber/time_utils.py) — timestamp parsing + RFC3339 formatting and `UNKNOWN_OCCURRED_AT`.
@@ -12,6 +12,8 @@
   - [kassiber/envelope.py](kassiber/envelope.py) — JSON envelope contract, `emit`, table/plain/csv output writers, and the `_KIND_SUBCOMMAND_ATTRS` kind map.
   - [kassiber/db.py](kassiber/db.py) — SQLite schema, `open_db`, data-root resolution, settings helpers, and msat column migrations.
   - [kassiber/backends.py](kassiber/backends.py) — dotenv (`config/backends.env`) seed + DB overlay for named sync backends, plus CRUD helpers.
+  - [kassiber/core/sync.py](kassiber/core/sync.py) — wallet sync orchestration above backend-specific transport details.
+  - [kassiber/core/sync_backends.py](kassiber/core/sync_backends.py) — descriptor target discovery plus `esplora`, `electrum`, and `bitcoinrpc` live-sync adapters.
   - [kassiber/core/reports.py](kassiber/core/reports.py) — extracted report builders, balance-history calculations, and PDF export assembly behind hookable journal/runtime dependencies.
   - [kassiber/tax_policy.py](kassiber/tax_policy.py) — profile tax-policy layer.
   - [kassiber/wallet_descriptors.py](kassiber/wallet_descriptors.py) — descriptor normalization, chain/network validation.
