@@ -31,6 +31,7 @@ from ..backends import (
     update_db_backend,
 )
 from ..core import accounts as core_accounts
+from ..core import attachments as core_attachments
 from ..core import imports as core_imports
 from ..core import metadata as core_metadata
 from ..core import rates as core_rates
@@ -50,6 +51,7 @@ from ..db import (
     ensure_column,
     ensure_schema_compat,
     get_setting,
+    resolve_attachments_root,
     resolve_config_root,
     resolve_database_path,
     resolve_effective_data_root,
@@ -1030,6 +1032,14 @@ def _metadata_hooks():
         iso_z=_iso_z,
         encode_cursor=_encode_event_cursor,
         decode_cursor=_decode_event_cursor,
+    )
+
+
+def _attachment_hooks():
+    return core_attachments.AttachmentHooks(
+        resolve_scope=resolve_scope,
+        resolve_transaction=resolve_transaction,
+        now_iso=now_iso,
     )
 
 
@@ -2226,6 +2236,7 @@ def cmd_init(conn, args):
             "config_root": str(resolve_config_root(args.data_root)),
             "settings_file": str(resolve_settings_path(args.data_root)),
             "exports_root": str(resolve_exports_root(args.data_root)),
+            "attachments_root": str(resolve_attachments_root(args.data_root)),
             "env_file": str(args.env_file),
         },
     )

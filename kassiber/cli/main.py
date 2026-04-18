@@ -6,7 +6,8 @@ import traceback
 # Import the existing handler surface so parser/dispatch can live here
 # before the deeper handler extraction is finished.
 from .handlers import *  # noqa: F401,F403
-from .handlers import _metadata_hooks, _report_hooks
+from .handlers import _attachment_hooks, _metadata_hooks, _report_hooks
+from ..core import attachments as core_attachments
 from ..core.runtime import bootstrap_runtime, close_runtime, emit_error, resolve_output_format
 from ..errors import AppError
 
@@ -247,6 +248,36 @@ def build_parser():
     tx_list.add_argument("--profile")
     tx_list.add_argument("--wallet")
     tx_list.add_argument("--limit", type=int, default=100)
+
+    attachments = sub.add_parser("attachments")
+    attachments_sub = attachments.add_subparsers(dest="attachments_command", required=True)
+    attachments_add = attachments_sub.add_parser("add")
+    attachments_add.add_argument("--workspace")
+    attachments_add.add_argument("--profile")
+    attachments_add.add_argument("--transaction", required=True)
+    attachments_source = attachments_add.add_mutually_exclusive_group(required=True)
+    attachments_source.add_argument("--file")
+    attachments_source.add_argument("--url")
+    attachments_add.add_argument("--label")
+    attachments_add.add_argument("--media-type")
+
+    attachments_list = attachments_sub.add_parser("list")
+    attachments_list.add_argument("--workspace")
+    attachments_list.add_argument("--profile")
+    attachments_list.add_argument("--transaction")
+
+    attachments_remove = attachments_sub.add_parser("remove")
+    attachments_remove.add_argument("--workspace")
+    attachments_remove.add_argument("--profile")
+    attachments_remove.add_argument("attachment_id")
+
+    attachments_verify = attachments_sub.add_parser("verify")
+    attachments_verify.add_argument("--workspace")
+    attachments_verify.add_argument("--profile")
+    attachments_verify.add_argument("--transaction")
+
+    attachments_gc = attachments_sub.add_parser("gc")
+    attachments_gc.add_argument("--dry-run", action="store_true")
 
     metadata = sub.add_parser("metadata")
     meta_sub = metadata.add_subparsers(dest="metadata_command", required=True)
@@ -764,6 +795,69 @@ def dispatch(conn, args):
     if args.command == "transactions":
         if args.transactions_command == "list":
             return emit(args, list_transactions(conn, args.workspace, args.profile, args.wallet, args.limit))
+    if args.command == "attachments":
+        attachment_hooks = _attachment_hooks()
+        if args.attachments_command == "add":
+            return emit(
+                args,
+                core_attachments.add_attachment(
+                    conn,
+                    args.data_root,
+                    args.workspace,
+                    args.profile,
+                    args.transaction,
+                    attachment_hooks,
+                    file_path=args.file,
+                    url=args.url,
+                    label=args.label,
+                    media_type=args.media_type,
+                ),
+            )
+        if args.attachments_command == "list":
+            return emit(
+                args,
+                core_attachments.list_attachments(
+                    conn,
+                    args.data_root,
+                    args.workspace,
+                    args.profile,
+                    attachment_hooks,
+                    tx_ref=args.transaction,
+                ),
+            )
+        if args.attachments_command == "remove":
+            return emit(
+                args,
+                core_attachments.remove_attachment(
+                    conn,
+                    args.data_root,
+                    args.workspace,
+                    args.profile,
+                    args.attachment_id,
+                    attachment_hooks,
+                ),
+            )
+        if args.attachments_command == "verify":
+            return emit(
+                args,
+                core_attachments.verify_attachments(
+                    conn,
+                    args.data_root,
+                    args.workspace,
+                    args.profile,
+                    attachment_hooks,
+                    tx_ref=args.transaction,
+                ),
+            )
+        if args.attachments_command == "gc":
+            return emit(
+                args,
+                core_attachments.gc_attachments(
+                    conn,
+                    args.data_root,
+                    dry_run=args.dry_run,
+                ),
+            )
     if args.command == "metadata":
         metadata_hooks = _metadata_hooks()
         if args.metadata_command == "notes":

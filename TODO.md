@@ -124,11 +124,11 @@ top of the monolith.
 
 ### 0.5c - Transaction attachments
 
-- [ ] Add attachment storage and metadata table
-- [ ] Add CLI commands for add/list/remove plus `attachments gc` and
+- [x] Add attachment storage and metadata table
+- [x] Add CLI commands for add/list/remove plus `attachments gc` and
   `attachments verify`
-- [ ] Make backup/restore aware of attachment files
-- [ ] Keep URL attachments string-only; no fetching or indexing
+- [x] Make backup/restore aware of attachment files
+- [x] Keep URL attachments string-only; no fetching or indexing
 
 ### 0.5d - Austrian tax support
 
@@ -192,6 +192,7 @@ Run these after any extraction or behavior change:
 - `uv run python -m kassiber wallets kinds`
 - `uv run python -m kassiber profiles create --help`
 - `uv run python -m kassiber metadata records --help`
+- `uv run python -m kassiber attachments list --help`
 - `uv run python -m kassiber journals events --help`
 - `uv run python -m kassiber reports balance-history --help`
 - `uv run python -m kassiber rates --help`

@@ -684,6 +684,7 @@ class ReviewRegressionTest(unittest.TestCase):
         self.assertEqual(payload["data"]["config_root"], str(expected_root / "config"))
         self.assertEqual(payload["data"]["settings_file"], str(expected_root / "config" / "settings.json"))
         self.assertEqual(payload["data"]["exports_root"], str(expected_root / "exports"))
+        self.assertEqual(payload["data"]["attachments_root"], str(expected_root / "attachments"))
         self.assertEqual(payload["data"]["env_file"], str(expected_root / "config" / "backends.env"))
         self.assertTrue((expected_root / "data" / "kassiber.sqlite3").exists())
         self.assertTrue((expected_root / "config" / "settings.json").exists())
@@ -691,6 +692,7 @@ class ReviewRegressionTest(unittest.TestCase):
         self.assertEqual(settings_payload["paths"]["state_root"], str(expected_root))
         self.assertEqual(settings_payload["paths"]["data_root"], str(expected_root / "data"))
         self.assertEqual(settings_payload["paths"]["env_file"], str(expected_root / "config" / "backends.env"))
+        self.assertEqual(settings_payload["paths"]["attachments_root"], str(expected_root / "attachments"))
         self.assertFalse((repo_dir / "kassiber.sqlite3").exists())
 
         payload, result = self._run_json(
@@ -705,8 +707,154 @@ class ReviewRegressionTest(unittest.TestCase):
         self.assertEqual(payload["data"]["config_root"], str(expected_root / "config"))
         self.assertEqual(payload["data"]["settings_file"], str(expected_root / "config" / "settings.json"))
         self.assertEqual(payload["data"]["exports_root"], str(expected_root / "exports"))
+        self.assertEqual(payload["data"]["attachments_root"], str(expected_root / "attachments"))
         self.assertEqual(payload["data"]["env_file"], str(expected_root / "config" / "backends.env"))
         self.assertEqual(payload["data"]["default_backend"], "mempool")
+
+    def test_attachments_verify_reports_missing_file(self):
+        self._bootstrap_wallet(label="Attachable")
+        json_file = self.case_dir / "attachment-import.json"
+        json_file.write_text(
+            json.dumps(
+                [
+                    {
+                        "date": "2024-01-01",
+                        "direction": "inbound",
+                        "asset": "BTC",
+                        "amount": "0.001",
+                        "fee": "0",
+                        "txid": "attach-demo",
+                    }
+                ]
+            ),
+            encoding="utf-8",
+        )
+        payload, result = self._run_json(
+            "wallets", "import-json",
+            "--workspace", "Main",
+            "--profile", "Default",
+            "--wallet", "Attachable",
+            "--file", str(json_file),
+        )
+        self._assert_ok(payload, result, "wallets.import-json")
+
+        attachment_file = self.case_dir / "receipt.txt"
+        attachment_file.write_text("receipt\n", encoding="utf-8")
+        payload, result = self._run_json(
+            "attachments", "add",
+            "--workspace", "Main",
+            "--profile", "Default",
+            "--transaction", "attach-demo",
+            "--file", str(attachment_file),
+        )
+        self._assert_ok(payload, result, "attachments.add")
+        stored_path = self.case_dir / "attachments" / payload["data"]["stored_relpath"]
+        stored_path.unlink()
+
+        payload, result = self._run_json(
+            "attachments", "verify",
+            "--workspace", "Main",
+            "--profile", "Default",
+        )
+        self._assert_ok(payload, result, "attachments.verify")
+        self.assertEqual(payload["data"]["checked"], 1)
+        self.assertEqual(payload["data"]["broken"], 1)
+        self.assertEqual(payload["data"]["ok"], 0)
+        broken = payload["data"]["results"][0]
+        self.assertEqual(broken["status"], "broken")
+        self.assertEqual(broken["issues"], ["missing_file"])
+
+    def test_attachments_verify_and_remove_ignore_escaped_storage_path(self):
+        self._bootstrap_wallet(label="AttachEscape")
+        json_file = self.case_dir / "attachment-escape-import.json"
+        json_file.write_text(
+            json.dumps(
+                [
+                    {
+                        "date": "2024-01-01",
+                        "direction": "inbound",
+                        "asset": "BTC",
+                        "amount": "0.001",
+                        "fee": "0",
+                        "txid": "attach-escape",
+                    }
+                ]
+            ),
+            encoding="utf-8",
+        )
+        payload, result = self._run_json(
+            "wallets", "import-json",
+            "--workspace", "Main",
+            "--profile", "Default",
+            "--wallet", "AttachEscape",
+            "--file", str(json_file),
+        )
+        self._assert_ok(payload, result, "wallets.import-json")
+
+        attachment_file = self.case_dir / "escape-receipt.txt"
+        attachment_file.write_text("escape\n", encoding="utf-8")
+        payload, result = self._run_json(
+            "attachments", "add",
+            "--workspace", "Main",
+            "--profile", "Default",
+            "--transaction", "attach-escape",
+            "--file", str(attachment_file),
+        )
+        self._assert_ok(payload, result, "attachments.add")
+        attachment_id = payload["data"]["id"]
+        external_path = self.case_dir / "escape-target.txt"
+        external_path.write_text("do not delete\n", encoding="utf-8")
+
+        conn = sqlite3.connect(self.data_root / "kassiber.sqlite3")
+        conn.execute(
+            "UPDATE attachments SET stored_relpath = ? WHERE id = ?",
+            ("../escape-target.txt", attachment_id),
+        )
+        conn.commit()
+        conn.close()
+
+        payload, result = self._run_json(
+            "attachments", "verify",
+            "--workspace", "Main",
+            "--profile", "Default",
+        )
+        self._assert_ok(payload, result, "attachments.verify")
+        self.assertEqual(payload["data"]["checked"], 1)
+        self.assertEqual(payload["data"]["broken"], 1)
+        broken = payload["data"]["results"][0]
+        self.assertEqual(broken["issues"], ["invalid_storage_path"])
+
+        payload, result = self._run_json(
+            "attachments", "remove",
+            "--workspace", "Main",
+            "--profile", "Default",
+            attachment_id,
+        )
+        self._assert_ok(payload, result, "attachments.remove")
+        self.assertTrue(payload["data"]["removed"])
+        self.assertFalse(payload["data"]["deleted_file"])
+        self.assertTrue(external_path.exists())
+
+    def test_attachments_gc_removes_orphan_files(self):
+        payload, result = self._run_json("init")
+        self._assert_ok(payload, result, "init")
+        attachments_root = Path(payload["data"]["attachments_root"])
+        orphan_path = attachments_root / "orphan" / "lost.bin"
+        orphan_path.parent.mkdir(parents=True, exist_ok=True)
+        orphan_path.write_bytes(b"orphan")
+
+        payload, result = self._run_json("attachments", "gc", "--dry-run")
+        self._assert_ok(payload, result, "attachments.gc")
+        self.assertEqual(payload["data"]["orphaned_files"], 1)
+        self.assertEqual(payload["data"]["removed_files"], 0)
+        self.assertEqual(payload["data"]["files"][0]["stored_relpath"], "orphan/lost.bin")
+        self.assertTrue(orphan_path.exists())
+
+        payload, result = self._run_json("attachments", "gc")
+        self._assert_ok(payload, result, "attachments.gc")
+        self.assertEqual(payload["data"]["orphaned_files"], 1)
+        self.assertEqual(payload["data"]["removed_files"], 1)
+        self.assertFalse(orphan_path.exists())
 
     def test_migration_preserves_child_rows(self):
         self.data_root.mkdir(parents=True, exist_ok=True)

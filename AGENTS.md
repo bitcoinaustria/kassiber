@@ -13,6 +13,7 @@
   - [kassiber/db.py](kassiber/db.py) — SQLite schema, `open_db`, data-root resolution, settings helpers, and msat column migrations.
   - [kassiber/backends.py](kassiber/backends.py) — dotenv (`config/backends.env`) seed + DB overlay for named sync backends, plus CRUD helpers.
   - [kassiber/cli/handlers.py](kassiber/cli/handlers.py) — remaining CLI command handlers and compatibility-layer imports while deeper decomposition continues.
+  - [kassiber/core/attachments.py](kassiber/core/attachments.py) — transaction attachment storage, URL-reference handling, integrity verification, and orphan-file GC for the managed attachment tree.
   - [kassiber/core/engines/__init__.py](kassiber/core/engines/__init__.py) — tax-engine interface/resolver; currently selects the generic RP2 engine.
   - [kassiber/core/tax_events.py](kassiber/core/tax_events.py) — in-memory normalization seam between raw transaction rows and tax-engine inputs, including early quarantine classification for under-specified tax semantics.
   - [kassiber/core/sync.py](kassiber/core/sync.py) — wallet sync orchestration above backend-specific transport details.
@@ -36,7 +37,7 @@ Kassiber is currently in **dev mode**: renaming commands, breaking flags, and re
 ## Current architecture
 
 - Data lives in a local SQLite database (system of record).
-- Default user state lives under `~/.kassiber/{data,config,exports}` unless `--data-root` / `--env-file` overrides it; the managed layout manifest lives at `~/.kassiber/config/settings.json`.
+- Default user state lives under `~/.kassiber/{data,config,exports,attachments}` unless `--data-root` / `--env-file` overrides it; the managed layout manifest lives at `~/.kassiber/config/settings.json`.
 - The CLI model is:
   - backend (dotenv seed + DB overlay via the `backends` table)
   - workspace
@@ -44,6 +45,7 @@ Kassiber is currently in **dev mode**: renaming commands, breaking flags, and re
   - account
   - wallet
   - transactions
+  - attachments
   - metadata (notes, tags, inclusion)
   - journals (RP2 processing + quarantine)
   - reports (balance-sheet, portfolio-summary, capital-gains, journal-entries, balance-history)
@@ -53,6 +55,7 @@ Kassiber is currently in **dev mode**: renaming commands, breaking flags, and re
 - Live sync kinds implemented: `esplora`, `electrum`, `bitcoinrpc`.
 - BIP329 records are stored in SQLite and transaction labels are bridged into Kassiber tags.
 - BTCPay CSV/JSON imports become transactions, with comments mapped to notes and labels mapped to tags.
+- Transaction attachments are stored in a managed `attachments/` state sibling; file attachments are copied locally and URL attachments remain literal strings with no fetching or indexing.
 - Profile-level tax defaults are stored on `profiles` as `fiat_currency`, `tax_country`, `tax_long_term_days`, and `gains_algorithm`.
 - Wallet-level tax provenance stays in `wallets.config_json`, including the manual `altbestand` flag.
 
@@ -65,6 +68,7 @@ Kassiber is currently in **dev mode**: renaming commands, breaking flags, and re
 - `wallets {kinds,list,create,get,update,delete,sync,derive,set-altbestand,set-neubestand,import-json,import-csv,import-btcpay,import-phoenix}`
 - `backends {kinds,list,get,create,update,delete,set-default,clear-default}`
 - `transactions {list}`
+- `attachments {add,list,remove,verify,gc}`
 - `metadata records {list,get,note {set,clear},tag {add,remove},excluded {set,clear}}`
 - `metadata bip329 {import,list,export}`
 - `journals {process,list,quarantined,events {list,get},quarantine {show,clear,resolve {price-override,exclude}}}`
@@ -139,6 +143,7 @@ uv run python -m kassiber backends list
 uv run python -m kassiber wallets kinds
 uv run python -m kassiber profiles create --help
 uv run python -m kassiber metadata records --help
+uv run python -m kassiber attachments list --help
 uv run python -m kassiber journals events --help
 uv run python -m kassiber reports balance-history --help
 uv run python -m kassiber rates --help
