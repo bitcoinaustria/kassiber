@@ -1,17 +1,17 @@
 from __future__ import annotations
 
-import json
 import tempfile
 import uuid
 from collections import defaultdict
 from decimal import Decimal
 from importlib import import_module
-from typing import Any, Iterable, Mapping, Sequence
+from typing import Any, Iterable, Mapping
 
 from ...errors import AppError
-from ...msat import dec, msat_to_btc
+from ...msat import dec
 from ...tax_policy import build_tax_policy
 from ...util import parse_bool
+from ..tax_events import NormalizedTaxAssetInputs, build_tax_quarantine
 from .base import TaxEngineAssetResult
 
 _RP2_MODULES = None
@@ -165,33 +165,15 @@ def build_rp2_accounting_engine(profile: Mapping[str, Any]):
     return modules["AccountingEngine"](years_2_methods=years_to_methods)
 
 
-def _rp2_spot_price(row, quantity):
-    if row["fiat_rate"] is not None:
-        rate = dec(row["fiat_rate"])
-        if rate > 0:
-            return rate
-    if row["fiat_value"] is not None and quantity > 0:
-        value = dec(row["fiat_value"])
-        if value > 0:
-            return value / quantity
-    return None
-
-
 def _rp2_quarantine(profile, row, reason, detail):
-    return {
-        "transaction_id": row["id"],
-        "workspace_id": profile["workspace_id"],
-        "profile_id": profile["id"],
-        "reason": reason,
-        "detail_json": json.dumps(detail, sort_keys=True),
-    }
+    return build_tax_quarantine(profile, row, reason, detail)
 
 
 def _wallet_is_altbestand(wallet):
     return parse_bool(wallet.get("altbestand"), default=False)
 
 
-def _rp2_asset_state(profile, asset, rows, wallet_refs_by_id, intra_pairs, configuration):
+def _rp2_asset_state(profile, normalized_inputs: NormalizedTaxAssetInputs, configuration):
     """Build RP2 ``ComputedData`` for one asset across every wallet in the profile."""
 
     modules = get_rp2_modules()
@@ -202,202 +184,128 @@ def _rp2_asset_state(profile, asset, rows, wallet_refs_by_id, intra_pairs, confi
     InputData = modules["InputData"]
     BalanceSet = modules["BalanceSet"]
     compute_tax = modules["compute_tax"]
+    asset = normalized_inputs.asset
     in_set = TransactionSet(configuration, "IN", asset)
     out_set = TransactionSet(configuration, "OUT", asset)
     intra_set = TransactionSet(configuration, "INTRA", asset)
     holder = profile["label"]
     total_available = Decimal("0")
     priced_available = Decimal("0")
-    quarantines = []
+    quarantines = list(normalized_inputs.quarantines)
     intra_audit = []
     row_index = 1
-    row_by_id = {row["id"]: row for row in rows}
+    row_by_id = dict(normalized_inputs.row_by_id)
+    events_by_id = {event.transaction_id: event for event in normalized_inputs.events}
+    transfers_by_id = {transfer.out_transaction_id: transfer for transfer in normalized_inputs.transfers}
 
-    pair_by_row = {}
-    for pair in intra_pairs:
-        pair_by_row[pair["out"]["id"]] = ("out", pair)
-        pair_by_row[pair["in"]["id"]] = ("in", pair)
-    handled_pairs = set()
-
-    for row in rows:
-        role_pair = pair_by_row.get(row["id"])
-        if role_pair is not None:
-            _, pair = role_pair
-            pair_key = id(pair)
-            if pair_key in handled_pairs:
-                continue
-            handled_pairs.add(pair_key)
-            out_row = pair["out"]
-            in_row = pair["in"]
-            from_wallet = wallet_refs_by_id[out_row["wallet_id"]]
-            to_wallet = wallet_refs_by_id[in_row["wallet_id"]]
-            sent = msat_to_btc(out_row["amount"]) + msat_to_btc(out_row["fee"])
-            received = msat_to_btc(in_row["amount"])
-            if sent < received:
+    for item_kind, item_id in normalized_inputs.ordered_items:
+        if item_kind == "transfer":
+            transfer = transfers_by_id[item_id]
+            if total_available < transfer.sent:
                 quarantines.append(
                     _rp2_quarantine(
                         profile,
-                        out_row,
-                        "transfer_mismatch",
-                        {
-                            "from_wallet": from_wallet["label"],
-                            "to_wallet": to_wallet["label"],
-                            "sent": float(sent),
-                            "received": float(received),
-                        },
-                    )
-                )
-                continue
-            crypto_fee = sent - received
-            spot_price = _rp2_spot_price(out_row, msat_to_btc(out_row["amount"]))
-            if spot_price is None:
-                spot_price = _rp2_spot_price(in_row, msat_to_btc(in_row["amount"]))
-            if spot_price is None and crypto_fee > 0:
-                quarantines.append(
-                    _rp2_quarantine(
-                        profile,
-                        out_row,
-                        "missing_spot_price",
-                        {
-                            "from_wallet": from_wallet["label"],
-                            "to_wallet": to_wallet["label"],
-                            "asset": asset,
-                            "direction": "transfer",
-                            "required_for": "transfer_fee",
-                        },
-                    )
-                )
-                continue
-            if total_available < sent:
-                quarantines.append(
-                    _rp2_quarantine(
-                        profile,
-                        out_row,
+                        transfer.out_row,
                         "insufficient_lots",
                         {
-                            "from_wallet": from_wallet["label"],
+                            "from_wallet": transfer.from_wallet_label,
                             "asset": asset,
-                            "required": float(sent),
+                            "required": float(transfer.sent),
                             "available": float(total_available),
                         },
                     )
                 )
                 continue
-            if priced_available < sent:
+            if priced_available < transfer.sent:
                 quarantines.append(
                     _rp2_quarantine(
                         profile,
-                        out_row,
+                        transfer.out_row,
                         "missing_cost_basis",
                         {
-                            "from_wallet": from_wallet["label"],
+                            "from_wallet": transfer.from_wallet_label,
                             "asset": asset,
-                            "required": float(sent),
+                            "required": float(transfer.sent),
                             "priced_available": float(priced_available),
                         },
                     )
                 )
                 continue
-            description = (
-                out_row["note"]
-                or out_row["description"]
-                or out_row["kind"]
-                or f"Transfer {from_wallet['label']} -> {to_wallet['label']}"
-            )
             intra_set.add_entry(
                 IntraTransaction(
                     configuration=configuration,
-                    timestamp=out_row["occurred_at"],
+                    timestamp=transfer.occurred_at,
                     asset=asset,
-                    from_exchange=from_wallet["label"],
+                    from_exchange=transfer.from_wallet_label,
                     from_holder=holder,
-                    to_exchange=to_wallet["label"],
+                    to_exchange=transfer.to_wallet_label,
                     to_holder=holder,
-                    spot_price=rp2_decimal(spot_price if spot_price is not None else 0),
-                    crypto_sent=rp2_decimal(sent),
-                    crypto_received=rp2_decimal(received),
+                    spot_price=rp2_decimal(transfer.spot_price if transfer.spot_price is not None else 0),
+                    crypto_sent=rp2_decimal(transfer.sent),
+                    crypto_received=rp2_decimal(transfer.received),
                     row=row_index,
-                    unique_id=out_row["id"],
-                    notes=description,
+                    unique_id=transfer.out_transaction_id,
+                    notes=transfer.description,
                 )
             )
             row_index += 1
-            total_available -= crypto_fee
-            priced_available -= crypto_fee
+            total_available -= transfer.fee
+            priced_available -= transfer.fee
             intra_audit.append(
                 {
-                    "out_id": out_row["id"],
-                    "in_id": in_row["id"],
-                    "from_wallet_id": from_wallet["id"],
-                    "from_wallet_label": from_wallet["label"],
-                    "to_wallet_id": to_wallet["id"],
-                    "to_wallet_label": to_wallet["label"],
+                    "out_id": transfer.out_transaction_id,
+                    "in_id": transfer.in_transaction_id,
+                    "from_wallet_id": transfer.from_wallet_id,
+                    "from_wallet_label": transfer.from_wallet_label,
+                    "to_wallet_id": transfer.to_wallet_id,
+                    "to_wallet_label": transfer.to_wallet_label,
                     "asset": asset,
-                    "occurred_at": out_row["occurred_at"],
-                    "external_id": out_row["external_id"],
-                    "crypto_sent": float(sent),
-                    "crypto_received": float(received),
-                    "crypto_fee": float(crypto_fee),
-                    "spot_price": float(spot_price) if spot_price is not None else 0.0,
+                    "occurred_at": transfer.occurred_at,
+                    "external_id": transfer.external_id,
+                    "crypto_sent": float(transfer.sent),
+                    "crypto_received": float(transfer.received),
+                    "crypto_fee": float(transfer.fee),
+                    "spot_price": float(transfer.spot_price) if transfer.spot_price is not None else 0.0,
                 }
             )
             continue
 
-        wallet = wallet_refs_by_id[row["wallet_id"]]
-        amount = msat_to_btc(row["amount"])
-        fee = msat_to_btc(row["fee"])
-        description = row["note"] or row["description"] or row["kind"] or row["id"]
-        if row["direction"] == "inbound":
-            total_available += amount
-            spot_price = _rp2_spot_price(row, amount)
-            if spot_price is None:
-                quarantines.append(
-                    _rp2_quarantine(
-                        profile,
-                        row,
-                        "missing_spot_price",
-                        {
-                            "wallet": wallet["label"],
-                            "asset": asset,
-                            "direction": row["direction"],
-                            "required_for": "acquisition",
-                        },
-                    )
-                )
-                continue
-            fiat_value = dec(row["fiat_value"]) if row["fiat_value"] is not None else amount * spot_price
+        event = events_by_id[item_id]
+        if event.direction == "inbound":
+            total_available += event.amount
             in_set.add_entry(
                 InTransaction(
                     configuration=configuration,
-                    timestamp=row["occurred_at"],
+                    timestamp=event.occurred_at,
                     asset=asset,
-                    exchange=wallet["label"],
+                    exchange=event.wallet_label,
                     holder=holder,
                     transaction_type="BUY",
-                    spot_price=rp2_decimal(spot_price),
-                    crypto_in=rp2_decimal(amount),
-                    fiat_in_no_fee=rp2_decimal(fiat_value),
-                    fiat_in_with_fee=rp2_decimal(fiat_value),
+                    spot_price=rp2_decimal(event.spot_price),
+                    crypto_in=rp2_decimal(event.amount),
+                    fiat_in_no_fee=rp2_decimal(event.fiat_value),
+                    fiat_in_with_fee=rp2_decimal(event.fiat_value),
                     fiat_fee=rp2_decimal(0),
                     row=row_index,
-                    unique_id=row["id"],
-                    notes=description,
+                    unique_id=event.transaction_id,
+                    notes=event.description,
                 )
             )
-            priced_available += amount
+            priced_available += event.amount
             row_index += 1
             continue
-        needed = amount + fee
+
+        needed = event.amount + event.fee
         if needed <= 0:
             continue
         if total_available < needed:
             quarantines.append(
                 _rp2_quarantine(
                     profile,
-                    row,
+                    event.raw_row,
                     "insufficient_lots",
                     {
-                        "wallet": wallet["label"],
+                        "wallet": event.wallet_label,
                         "asset": asset,
                         "required": float(needed),
                         "available": float(total_available),
@@ -409,10 +317,10 @@ def _rp2_asset_state(profile, asset, rows, wallet_refs_by_id, intra_pairs, confi
             quarantines.append(
                 _rp2_quarantine(
                     profile,
-                    row,
+                    event.raw_row,
                     "missing_cost_basis",
                     {
-                        "wallet": wallet["label"],
+                        "wallet": event.wallet_label,
                         "asset": asset,
                         "required": float(needed),
                         "priced_available": float(priced_available),
@@ -420,39 +328,22 @@ def _rp2_asset_state(profile, asset, rows, wallet_refs_by_id, intra_pairs, confi
                 )
             )
             continue
-        spot_price = _rp2_spot_price(row, amount if amount > 0 else fee)
-        if spot_price is None:
-            quarantines.append(
-                _rp2_quarantine(
-                    profile,
-                    row,
-                    "missing_spot_price",
-                    {
-                        "wallet": wallet["label"],
-                        "asset": asset,
-                        "direction": row["direction"],
-                        "required_for": "disposal",
-                    },
-                )
-            )
-            continue
-        fiat_out_no_fee = dec(row["fiat_value"]) if row["fiat_value"] is not None else amount * spot_price
         out_set.add_entry(
             OutTransaction(
                 configuration=configuration,
-                timestamp=row["occurred_at"],
+                timestamp=event.occurred_at,
                 asset=asset,
-                exchange=wallet["label"],
+                exchange=event.wallet_label,
                 holder=holder,
-                transaction_type="SELL" if amount > 0 else "FEE",
-                spot_price=rp2_decimal(spot_price),
-                crypto_out_no_fee=rp2_decimal(amount),
-                crypto_fee=rp2_decimal(fee),
-                fiat_out_no_fee=rp2_decimal(fiat_out_no_fee) if amount > 0 else None,
-                fiat_fee=rp2_decimal(fee * spot_price),
+                transaction_type="SELL" if event.amount > 0 else "FEE",
+                spot_price=rp2_decimal(event.spot_price),
+                crypto_out_no_fee=rp2_decimal(event.amount),
+                crypto_fee=rp2_decimal(event.fee),
+                fiat_out_no_fee=rp2_decimal(event.fiat_value) if event.amount > 0 else None,
+                fiat_fee=rp2_decimal(event.fee * event.spot_price),
                 row=row_index,
-                unique_id=row["id"],
-                notes=description,
+                unique_id=event.transaction_id,
+                notes=event.description,
             )
         )
         total_available -= needed
@@ -688,19 +579,13 @@ class GenericRP2TaxEngine:
 
     def process_asset(
         self,
-        asset: str,
-        rows: Sequence[Mapping[str, Any]],
-        wallet_refs_by_id: Mapping[str, Mapping[str, Any]],
+        normalized_inputs: NormalizedTaxAssetInputs,
         wallet_refs_by_label: Mapping[str, Mapping[str, Any]],
-        intra_pairs: Sequence[Mapping[str, Any]],
         configuration: Any,
     ) -> TaxEngineAssetResult:
         computed_data, quarantines, row_by_id, intra_audit, balance_set = _rp2_asset_state(
             self.profile,
-            asset,
-            rows,
-            wallet_refs_by_id,
-            intra_pairs,
+            normalized_inputs,
             configuration,
         )
         if computed_data is None:

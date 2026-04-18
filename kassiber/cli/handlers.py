@@ -43,6 +43,7 @@ from ..core.repo import current_context_snapshot
 from ..core.runtime import (
     build_status_payload,
 )
+from ..core.tax_events import normalize_tax_asset_inputs
 from ..db import (
     APP_NAME,
     DEFAULT_DATA_ROOT,
@@ -1656,12 +1657,16 @@ def build_ledger_state(conn, profile):
             pairs_by_asset[pair["out"]["asset"]].append(pair)
 
         for asset, asset_rows in rows_by_asset.items():
-            asset_result = tax_engine.process_asset(
+            normalized_inputs = normalize_tax_asset_inputs(
+                profile,
                 asset,
                 asset_rows,
                 wallet_refs_by_id,
-                wallet_refs_by_label,
                 pairs_by_asset.get(asset, []),
+            )
+            asset_result = tax_engine.process_asset(
+                normalized_inputs,
+                wallet_refs_by_label,
                 configuration,
             )
             quarantines.extend(asset_result.quarantines)
@@ -2297,4 +2302,3 @@ def cmd_context_set(conn, args):
     else:
         raise AppError("Provide --workspace and/or --profile")
     cmd_context_show(conn, args)
-
