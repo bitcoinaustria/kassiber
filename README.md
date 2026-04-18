@@ -583,7 +583,7 @@ RP2 needs fiat pricing to compute tax lots. If imported or synced transactions d
 
 ## Tax policy
 
-Profiles carry their own tax policy defaults. Kassiber currently exposes the RP2-backed `generic` policy and an explicitly experimental Austrian `at` registration on top of the shared engine seam. The Austrian path normalizes profiles to EUR and preserves the legacy 365-day field shape for `Altbestand`, but journal processing intentionally stops with an `experimental_tax_policy` error until the dedicated Austrian engine is implemented and reviewed by a Steuerberater.
+Profiles carry their own tax policy defaults. Kassiber currently exposes the RP2-backed `generic` policy and an explicitly experimental Austrian `at` path on top of the shared engine seam. Austrian profiles normalize to EUR and preserve the legacy 365-day field shape for `Altbestand`. Supported Austrian journal flows now process through the dedicated engine, while unsupported or ambiguous provenance quarantines instead of being guessed. JSON report envelopes for Austrian profiles also carry top-level `experimental` / `review_required` markers so downstream automation keeps the review gate visible. The Austrian path is still experimental and should be reviewed by a Steuerberater before filing.
 
 ```bash
 python3 -m kassiber profiles create austrian \
@@ -615,7 +615,7 @@ Wallet-level `Altbestand` stays separate from the profile policy because it is p
 - remote server mode / REST API
 - browser / multi-user auth
 - role-based access
-- Austrian journal engine, Austrian defaults beyond profile registration, and E 1kv export
+- Austrian E 1kv export and broader provenance coverage beyond the current conservative Austrian engine defaults
 
 ## Architecture notes
 

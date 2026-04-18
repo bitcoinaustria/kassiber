@@ -136,8 +136,10 @@ top of the monolith.
 - [x] Add Austrian policy registration on top of the shared engine seam
 - [x] Keep the Austrian path explicitly experimental until reviewed by a
   Steuerberater
-- [ ] Implement Austrian defaults only where provenance is sufficient;
+- [x] Implement Austrian defaults only where provenance is sufficient;
   quarantine the rest
+- [ ] Expand Austrian provenance coverage beyond the current acquisition /
+  disposal / self-transfer defaults
 - [ ] Add E 1kv CSV/PDF export only after the engine behavior is testable
 
 ### 0.5e - Rates and journal follow-through

@@ -1286,7 +1286,7 @@ def process_journals(conn, workspace_ref, profile_ref):
         (created_at, tx_count, profile["id"]),
     )
     conn.commit()
-    return {
+    result = {
         "profile": profile["label"],
         "entries_created": len(state["entries"]),
         "quarantined": len(state["quarantines"]),
@@ -1296,6 +1296,10 @@ def process_journals(conn, workspace_ref, profile_ref):
         "processed_transactions": tx_count,
         "processed_at": created_at,
     }
+    if build_tax_policy(profile).tax_country == "at":
+        result["experimental"] = True
+        result["review_required"] = "steuerberater"
+    return result
 
 
 DEFAULT_EVENTS_LIMIT = 100
