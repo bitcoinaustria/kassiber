@@ -1,7 +1,7 @@
 # Storage Conventions
 
 **Engine:** SQLite (stdlib `sqlite3`).
-**Path:** `~/.kassiber/data/kassiber.sqlite3` (overridable via `KASSIBER_DATA_DIR` and the settings manifest).
+**Path:** `~/.kassiber/data/kassiber.sqlite3` (resolved via the existing `--data-root` / settings-manifest flow).
 **Mode:** WAL for concurrent CLI + UI access.
 **ORM:** None. Plain SQL + dataclass returns through a small repository layer.
 
@@ -21,7 +21,7 @@ Decided in a separate discussion. Summary:
 
 ## Connection opening — mandatory pragmas
 
-Every connection opened by `core.db.open_conn()` runs:
+Every connection opened by the canonical DB bootstrap (`db.py::open_db()` during Phase 0, later possibly re-exported as `core.db.open_db()`) runs:
 
 ```sql
 PRAGMA journal_mode = WAL;           -- concurrent reads during writes
@@ -69,7 +69,9 @@ def apply_pending_migrations(conn: sqlite3.Connection) -> list[int]:
 - Connection is already opened with standard pragmas.
 - Each migration runs in its own transaction; partial application is impossible.
 - After success, the runner inserts into `schema_version (version, applied_at)`.
-- Every CLI command that writes calls `apply_pending_migrations` first. UI calls it on app start.
+- `open_db()` remains the canonical entrypoint and is responsible for leaving the DB usable for both reads and writes on every invocation.
+- During the transition away from embedded schema DDL, `open_db()` may still call today's compatibility helpers (`SCHEMA`, `ensure_schema_compat`, msat migration) before or after the SQL-file runner. The rule is behavioral compatibility, not a flag day.
+- The migration runner is invoked from the canonical bootstrap path, not only from write commands, so older databases never fail on read-only commands.
 - First-run bootstrap: if `schema_version` table doesn't exist, create it, then treat every file as pending.
 
 ### Migration file rules
@@ -82,19 +84,23 @@ def apply_pending_migrations(conn: sqlite3.Connection) -> list[int]:
 
 ### Example
 
-`003_add_wallet_altbestand.sql`:
+`002_add_transaction_attachments.sql`:
 
 ```sql
--- Austrian tax regime: mark pre-2021-03-01 wallet contents as Altvermögen
--- See docs/plan/06-austrian-tax-engine.md
+CREATE TABLE transaction_attachments (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    tx_id       TEXT NOT NULL REFERENCES transactions(id) ON DELETE CASCADE,
+    kind        TEXT NOT NULL CHECK (kind IN ('file', 'url')),
+    sha256      TEXT,
+    filename    TEXT,
+    mime        TEXT,
+    size_bytes  INTEGER,
+    url         TEXT,
+    note        TEXT NOT NULL DEFAULT '',
+    created_at  TEXT NOT NULL
+);
 
-ALTER TABLE wallets
-    ADD COLUMN altbestand INTEGER NOT NULL DEFAULT 0;
-    -- 0 = false, 1 = true (SQLite has no native bool)
-
--- existing rows default to 0 (Neuvermögen-treated)
--- user marks Altvermögen wallets explicitly via
--- `kassiber wallet set <id> --altbestand`
+CREATE INDEX idx_attachments_tx ON transaction_attachments(tx_id);
 ```
 
 ## Repository pattern
@@ -111,29 +117,34 @@ from sqlite3 import Connection
 
 @dataclass(frozen=True)
 class Wallet:
-    id: int
-    account_id: int
-    kind: str        # 'descriptor' | 'xpub' | 'address' | 'coreln' | ...
-    name: str
-    altbestand: bool
-    created_at: str  # ISO8601
+    id: str
+    workspace_id: str
+    profile_id: str
+    account_id: str | None
+    label: str
+    kind: str
+    config_json: str
+    created_at: str
 
-def list_wallets(conn: Connection, *, account_id: int | None = None) -> list[Wallet]:
-    sql = """SELECT id, account_id, kind, name, altbestand, created_at
+def list_wallets(conn: Connection, *, profile_id: str, account_id: str | None = None) -> list[Wallet]:
+    sql = """SELECT id, workspace_id, profile_id, account_id, label, kind, config_json, created_at
              FROM wallets
-             WHERE (? IS NULL OR account_id = ?)
-             ORDER BY name"""
-    rows = conn.execute(sql, (account_id, account_id)).fetchall()
+             WHERE profile_id = ?
+               AND (? IS NULL OR account_id = ?)
+             ORDER BY label"""
+    rows = conn.execute(sql, (profile_id, account_id, account_id)).fetchall()
     return [Wallet(
-        id=r[0], account_id=r[1], kind=r[2], name=r[3],
-        altbestand=bool(r[4]), created_at=r[5],
+        id=r[0], workspace_id=r[1], profile_id=r[2], account_id=r[3],
+        label=r[4], kind=r[5], config_json=r[6], created_at=r[7],
     ) for r in rows]
 
-def get_wallet(conn: Connection, wallet_id: int) -> Wallet | None: ...
-def insert_wallet(conn: Connection, *, account_id: int, kind: str, name: str, altbestand: bool = False) -> Wallet: ...
-def update_wallet(conn: Connection, wallet_id: int, **fields) -> Wallet: ...
-def delete_wallet(conn: Connection, wallet_id: int) -> None: ...
+def get_wallet(conn: Connection, wallet_id: str) -> Wallet | None: ...
+def insert_wallet(conn: Connection, *, workspace_id: str, profile_id: str, label: str, kind: str, config_json: str = "{}") -> Wallet: ...
+def update_wallet(conn: Connection, wallet_id: str, **fields) -> Wallet: ...
+def delete_wallet(conn: Connection, wallet_id: str) -> None: ...
 ```
+
+Domain helpers can project additional convenience fields from `config_json` (for example wallet-level tax provenance) without pretending the raw schema is different from what Kassiber stores today.
 
 ### Principles
 
@@ -179,7 +190,7 @@ For now: rely on OS-level disk encryption. Revisit if we ship to users other tha
 - **No auto-commit in the middle of a domain operation.** Use `with conn:` blocks to scope transactions around domain functions.
 - **No connection pooling.** Each CLI invocation opens one connection; the UI keeps one long-lived connection on the main thread plus per-worker connections in QThreads.
 - **No `PRAGMA journal_mode = MEMORY` or `OFF`.** Corruption risk. Smoke-test speed is fine under WAL.
-- **No schemas in Python code.** All DDL lives in migration SQL files. The runtime never calls `CREATE TABLE`.
+- **No stray DDL in random call sites.** During the migration transition, `db.py` remains the canonical place that can still contain bootstrap DDL/compatibility logic. Once the runner fully replaces it, new DDL belongs in migration SQL files, not scattered around the codebase.
 
 ## Storage layout summary
 

@@ -11,10 +11,11 @@ This doc specifies the desktop UI through MVP (end of Phase 4). Post-MVP items a
 
 - Entry point: `kassiber ui` — a CLI subcommand that imports `kassiber.ui.app` and calls `run()`.
 - On start:
-  1. Resolve data root via existing `core.db.resolve_effective_data_root`
-  2. `apply_pending_migrations(conn)` (see `03-storage-conventions.md`)
-  3. If no profile exists or `ui.first_run == True`, show Welcome wizard (Phase 4)
-  4. Otherwise, show main window
+  1. Call the shared runtime/bootstrap layer from `core.runtime`
+  2. Resolve data root / env file / settings / backend overlay through the same path as the CLI
+  3. Open the DB through the canonical bootstrap path and ensure pending migrations / compatibility fixes are applied
+  4. If no profile exists or `ui.first_run == True`, show Welcome wizard (Phase 4)
+  5. Otherwise, show main window
 - Closes cleanly on window close. Persists window geometry + tile-hide flags to `~/.kassiber/config/settings.json` under a `ui:` subkey.
 
 ## Source layout
@@ -338,7 +339,7 @@ Matches screenshot 5.
 - Use `briefcase` configured in `pyproject.toml`
 - macOS: produce a `.app` bundle; support code-signing if Apple Developer credentials are supplied via env vars (CI-friendly)
 - Notarization is optional for MVP — unsigned app is fine for the project owner's own use
-- Linux: `briefcase create linux appimage` as a secondary target
+- Linux: evaluate native packages / Flatpak after the macOS path is stable; do not treat AppImage as the default packaging target
 - Windows: Phase 5+
 
 ### Done when
@@ -384,8 +385,8 @@ Not in MVP scope but targeted for Phase 5+:
 
 ## Testing
 
-- **Unit tests** for view-models (no QML): pytest with Qt test fixtures; mock `core.*` calls; verify signals are emitted as expected
-- **Smoke tests** for QML: render each tile with a fixture view-model and snapshot the tree (using `pytest-qt`)
+- **Unit tests** for view-models (no QML): Python-side tests with Qt fixtures once the UI lands; mock `core.*` calls; verify signals are emitted as expected
+- **Smoke tests** for QML: render each tile with a fixture view-model and snapshot the tree once a Qt test harness is added
 - **Manual golden path** at end of each phase: fresh install → welcome → add xpub wallet → sync → filter last month → export capital gains CSV. Documented in `tests/ui_smoke.md` as a human-runnable script.
 - No full-E2E automation in MVP (Qt GUI automation is expensive; we catch regressions in view-model unit tests)
 
@@ -397,7 +398,7 @@ In `pyproject.toml`:
 [tool.briefcase.app.kassiber]
 formal_name = "Kassiber"
 description = "Local-first Bitcoin accounting"
-license = "AGPL-3.0-or-later"  # or whatever ships
+license = "AGPL-3.0-only"  # match the current project metadata unless intentionally changed
 icon = "kassiber/ui/resources/images/icon"
 
 [tool.briefcase.app.kassiber.macOS]

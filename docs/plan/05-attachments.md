@@ -21,7 +21,7 @@ A transaction can have zero or more attachments. Each attachment is either a **l
 ```sql
 CREATE TABLE transaction_attachments (
     id              INTEGER PRIMARY KEY AUTOINCREMENT,
-    tx_id           INTEGER NOT NULL REFERENCES transactions(id) ON DELETE CASCADE,
+    tx_id           TEXT    NOT NULL REFERENCES transactions(id) ON DELETE CASCADE,
     kind            TEXT    NOT NULL CHECK (kind IN ('file', 'url')),
     -- for kind='file':
     sha256          TEXT,                -- 64-hex lowercase; NULL for URL kind
@@ -90,25 +90,25 @@ Just a string. No fetching, no caching, no link-checking. Opening the URL is the
 ## CLI surface
 
 ```
-kassiber tx attach <tx-id> --file <path> [--note "..."]
-kassiber tx attach <tx-id> --url <url>   [--note "..."]
-kassiber tx attachments <tx-id>            # list attachments
-kassiber tx detach <attachment-id>
-kassiber attachments gc                    # garbage-collect orphaned files
-kassiber attachments verify                # verify sha256 of every stored file
+kassiber metadata records attachment add-file --transaction <tx-id> --file <path> [--note "..."]
+kassiber metadata records attachment add-url  --transaction <tx-id> --url <url>   [--note "..."]
+kassiber metadata records attachment list     --transaction <tx-id>
+kassiber metadata records attachment remove   --attachment <attachment-id>
+kassiber attachments gc
+kassiber attachments verify
 ```
 
 Envelope shapes:
 
 ```json
 // attach success
-{"status": "ok", "data": {"attachment_id": 42, "tx_id": 17, "kind": "file", "sha256": "ab...", "filename": "rechnung.pdf", "size_bytes": 182344}}
+{"kind": "metadata.records.attachment.add-file", "schema_version": 1, "data": {"attachment_id": 42, "tx_id": "tx_123", "kind": "file", "sha256": "ab...", "filename": "rechnung.pdf", "size_bytes": 182344}}
 
 // list
-{"status": "ok", "data": {"tx_id": 17, "attachments": [ {...}, {...} ]}}
+{"kind": "metadata.records.attachment.list", "schema_version": 1, "data": {"tx_id": "tx_123", "attachments": [ {...}, {...} ]}}
 
 // gc
-{"status": "ok", "data": {"freed_count": 3, "freed_bytes": 524288}}
+{"kind": "attachments.gc", "schema_version": 1, "data": {"freed_count": 3, "freed_bytes": 524288}}
 ```
 
 ## UI surface (Phase 3)
@@ -186,7 +186,8 @@ Restore:
 
 - `core/attachments.py` — new module: `attach_file(conn, tx_id, path, note="")`, `attach_url(conn, tx_id, url, note="")`, `list_attachments(conn, tx_id)`, `detach(conn, attachment_id)`, `gc(conn)`, `verify(conn)`
 - `core/repo/attachments.py` — CRUD with typed `Attachment` dataclass
-- `cli/commands/attach.py` — argparse wiring
+- `cli/commands/metadata.py` — transaction-bound attachment subcommands
+- `cli/commands/attachments.py` — maintenance commands (`gc`, `verify`)
 - `ui/viewmodels/transaction_vm.py` — attachment list as Qt property; signals for attach/detach
 - `ui/resources/qml/dialogs/TransactionDetail.qml` — drag-drop zone, URL form, chips
 - Migration `core/migrations/002_add_transaction_attachments.sql`
