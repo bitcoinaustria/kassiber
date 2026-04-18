@@ -3,7 +3,7 @@
 ## Project shape
 
 - Kassiber is a local-first Bitcoin accounting CLI.
-- The CLI entrypoint and the remaining not-yet-extracted command implementations (importers, rates, wallets, sync adapters, journals, and the argparse tree) live in [kassiber/app.py](kassiber/app.py).
+- The CLI entrypoint now lives in [kassiber/cli/main.py](kassiber/cli/main.py). The remaining not-yet-extracted command implementations (importers, rates, wallets, sync adapters, journals) still live in [kassiber/app.py](kassiber/app.py).
 - Supporting modules (bottom-up — no back-edges into `app.py`):
   - [kassiber/errors.py](kassiber/errors.py) — `AppError` typed exception carrying `code`, `hint`, `details`, `retryable`.
   - [kassiber/time_utils.py](kassiber/time_utils.py) — timestamp parsing + RFC3339 formatting and `UNKNOWN_OCCURRED_AT`.
