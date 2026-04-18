@@ -81,7 +81,7 @@ Keep the smoke suite green after every step.
   ever required (e.g. for jurisdiction-specific reporting), wrap RP2 with
   a per-wallet lot tracker layered on top of the global FIFO/LIFO order.
 - **3h** — At-rest encryption for sensitive fields. Nothing on disk is
-  encrypted today (SQLite DB, `.env`, exports). Target seamless OS
+  encrypted today (SQLite DB, `config/backends.env` / legacy `.env`, exports). Target seamless OS
   keychain integration — macOS Keychain, Linux freedesktop
   secret-service / libsecret, Windows DPAPI / Credential Manager — so
   SLIP77 blinding keys, backend tokens, auth headers, and RPC

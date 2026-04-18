@@ -23,6 +23,7 @@ from urllib import request as urlrequest
 from . import __version__
 from .backends import (
     BACKEND_KINDS,
+    DEFAULT_ENV_FILENAME,
     DEFAULT_BACKENDS,
     backend_batch_size,
     _backend_row_to_dict,
@@ -39,24 +40,26 @@ from .backends import (
     load_runtime_config,
     merge_db_backends,
     resolve_backend,
+    resolve_effective_env_file,
     set_default_backend,
     update_db_backend,
 )
 from .db import (
     APP_NAME,
     DEFAULT_DATA_ROOT,
-    DEFAULT_DB_FILENAME,
-    LEGACY_APP_NAME,
-    LEGACY_DATA_ROOT,
-    LEGACY_DB_FILENAME,
     SCHEMA,
     ensure_column,
     ensure_data_root,
+    ensure_settings_file,
     ensure_schema_compat,
     get_setting,
     open_db,
+    resolve_config_root,
     resolve_database_path,
     resolve_effective_data_root,
+    resolve_effective_state_root,
+    resolve_exports_root,
+    resolve_settings_path,
     set_setting,
 )
 from .envelope import (
@@ -119,7 +122,6 @@ from .wallet_descriptors import (
 )
 
 
-DEFAULT_ENV_FILE = ".env"
 ACCOUNT_TYPES = {"asset", "liability", "equity", "income", "expense"}
 RP2_ACCOUNTING_METHODS = ("FIFO", "LIFO", "HIFO", "LOFO")
 WALLET_KINDS = [
@@ -5797,6 +5799,8 @@ def show_status(conn, data_root):
     profile_id = get_setting(conn, "context_profile")
     workspace = conn.execute("SELECT label FROM workspaces WHERE id = ?", (workspace_id,)).fetchone() if workspace_id else None
     profile = conn.execute("SELECT label FROM profiles WHERE id = ?", (profile_id,)).fetchone() if profile_id else None
+    effective_data_root = resolve_effective_data_root(data_root)
+    state_root = resolve_effective_state_root(data_root)
     counts = {
         "workspaces": conn.execute("SELECT COUNT(*) AS count FROM workspaces").fetchone()["count"],
         "profiles": conn.execute("SELECT COUNT(*) AS count FROM profiles").fetchone()["count"],
@@ -5810,7 +5814,12 @@ def show_status(conn, data_root):
         "version": __version__,
         "schema_version": SCHEMA_VERSION,
         "auth": {"mode": "local", "authenticated": True},
-        "data_root": str(resolve_effective_data_root(data_root)),
+        "state_root": str(state_root),
+        "data_root": str(effective_data_root),
+        "database": str(resolve_database_path(effective_data_root)),
+        "config_root": str(resolve_config_root(data_root)),
+        "settings_file": str(resolve_settings_path(data_root)),
+        "exports_root": str(resolve_exports_root(data_root)),
         "current_workspace": workspace["label"] if workspace else "",
         "current_profile": profile["label"] if profile else "",
         **counts,
@@ -5904,12 +5913,19 @@ def update_profile(conn, workspace_ref, profile_ref, updates):
 
 def cmd_init(conn, args):
     init_app(conn)
+    state_root = resolve_effective_state_root(args.data_root)
+    effective_data_root = resolve_effective_data_root(args.data_root)
     emit(
         args,
         {
             "version": __version__,
-            "data_root": str(resolve_effective_data_root(args.data_root)),
-            "database": str(resolve_database_path(resolve_effective_data_root(args.data_root))),
+            "state_root": str(state_root),
+            "data_root": str(effective_data_root),
+            "database": str(resolve_database_path(effective_data_root)),
+            "config_root": str(resolve_config_root(args.data_root)),
+            "settings_file": str(resolve_settings_path(args.data_root)),
+            "exports_root": str(resolve_exports_root(args.data_root)),
+            "env_file": str(args.env_file),
         },
     )
 
@@ -5961,7 +5977,11 @@ def build_parser():
         description="Open-source, local-first Bitcoin accounting CLI with multi-account and multi-wallet support.",
     )
     parser.add_argument("--data-root", default=DEFAULT_DATA_ROOT, help="Data directory for the local SQLite store")
-    parser.add_argument("--env-file", default=DEFAULT_ENV_FILE, help="Path to a .env file that defines named sync backends")
+    parser.add_argument(
+        "--env-file",
+        default=None,
+        help=f"Path to a dotenv file that defines named sync backends (managed default: ~/.kassiber/config/{DEFAULT_ENV_FILENAME})",
+    )
     parser.add_argument(
         "--format",
         choices=list(OUTPUT_FORMATS),
@@ -6949,6 +6969,12 @@ def main(argv=None):
         args.format = "table"
         _emit_error(args, exc)
         return 1
+    args.data_root = str(resolve_effective_data_root(args.data_root))
+    args.env_file = str(resolve_effective_env_file(args.env_file, args.data_root))
+    ensure_data_root(args.data_root)
+    ensure_data_root(Path(args.env_file).expanduser().parent)
+    ensure_data_root(resolve_exports_root(args.data_root))
+    ensure_settings_file(args.data_root, args.env_file)
     args.runtime_config = load_runtime_config(args.env_file)
     conn = open_db(args.data_root) if command_needs_db(args) else None
     if conn is not None:
