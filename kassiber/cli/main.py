@@ -1,18 +1,64 @@
 from __future__ import annotations
 
+import argparse
+import json
+import sqlite3
 import sys
 import traceback
+from typing import Any, Sequence
 
-# Import the existing handler surface so parser/dispatch can live here
-# before the deeper handler extraction is finished.
-from .handlers import *  # noqa: F401,F403
-from .handlers import _attachment_hooks, _metadata_hooks, _report_hooks
+from .handlers import (
+    APP_NAME,
+    BACKEND_KINDS,
+    DEFAULT_DATA_ROOT,
+    DEFAULT_ENV_FILENAME,
+    DEFAULT_EVENTS_LIMIT,
+    DEFAULT_LONG_TERM_DAYS,
+    DEFAULT_TAX_COUNTRY,
+    OUTPUT_FORMATS,
+    RP2_ACCOUNTING_METHODS,
+    TRANSFER_PAIR_KINDS,
+    TRANSFER_PAIR_POLICIES,
+    _attachment_hooks,
+    _metadata_hooks,
+    _report_hooks,
+    clear_quarantine,
+    cmd_context_set,
+    cmd_context_show,
+    cmd_init,
+    cmd_status,
+    create_transaction_pair,
+    delete_transaction_pair,
+    derive_wallet_targets,
+    emit,
+    get_journal_event,
+    import_into_wallet,
+    list_journal_entries,
+    list_journal_events,
+    list_quarantines,
+    list_transaction_pairs,
+    list_transactions,
+    normalize_asset_code,
+    normalize_chain_value,
+    normalize_network_value,
+    process_journals,
+    resolve_quarantine_exclude,
+    resolve_quarantine_price_override,
+    show_quarantine,
+    supported_tax_countries,
+    sync_wallet,
+)
+from ..core import accounts as core_accounts
 from ..core import attachments as core_attachments
+from ..core import metadata as core_metadata
+from ..core import rates as core_rates
+from ..core import reports as core_reports
+from ..core import wallets as core_wallets
 from ..core.runtime import bootstrap_runtime, close_runtime, emit_error, resolve_output_format
 from ..errors import AppError
 
 
-def build_parser():
+def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog=APP_NAME,
         description="Open-source, local-first Bitcoin accounting CLI with multi-account and multi-wallet support.",
@@ -323,7 +369,7 @@ def build_parser():
     bip329_list.add_argument("--workspace")
     bip329_list.add_argument("--profile")
     bip329_list.add_argument("--wallet")
-    bip329_list.add_argument("--limit", type=int, default=100)
+    bip329_list.add_argument("--limit", type=int, default=core_metadata.DEFAULT_RECORDS_LIMIT)
     bip329_export = bip329_sub.add_parser("export")
     bip329_export.add_argument("--workspace")
     bip329_export.add_argument("--profile")
@@ -353,7 +399,7 @@ def build_parser():
     records_list.add_argument("--start")
     records_list.add_argument("--end")
     records_list.add_argument("--cursor")
-    records_list.add_argument("--limit", type=int, default=DEFAULT_EVENTS_LIMIT)
+    records_list.add_argument("--limit", type=int, default=core_metadata.DEFAULT_RECORDS_LIMIT)
 
     records_get = records_sub.add_parser("get")
     records_get.add_argument("--workspace")
@@ -527,7 +573,7 @@ def build_parser():
     return parser
 
 
-def dispatch(conn, args):
+def dispatch(conn: sqlite3.Connection | None, args: argparse.Namespace) -> Any:
     if args.command == "init":
         return cmd_init(conn, args)
     if args.command == "status":
@@ -1174,15 +1220,17 @@ def dispatch(conn, args):
     raise AppError("Unknown command")
 
 
-def command_needs_db(args):
+def command_needs_db(args: argparse.Namespace) -> bool:
+    if args.command == "backends" and getattr(args, "backends_command", None) == "kinds":
+        return False
+    if args.command == "wallets" and getattr(args, "wallets_command", None) == "kinds":
+        return False
     return True
 
-def main(argv=None):
+
+def main(argv: Sequence[str] | None = None) -> int:
     parser = build_parser()
-    try:
-        args = parser.parse_args(argv)
-    except SystemExit:
-        raise
+    args = parser.parse_args(argv)
 
     runtime = None
     try:
