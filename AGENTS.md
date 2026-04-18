@@ -3,8 +3,8 @@
 ## Project shape
 
 - Kassiber is a local-first Bitcoin accounting CLI.
-- The CLI entrypoint now lives in [kassiber/cli/main.py](kassiber/cli/main.py). The command implementation surface now lives in [kassiber/cli/handlers.py](kassiber/cli/handlers.py), and [kassiber/app.py](kassiber/app.py) is a compatibility shim.
-- Supporting modules (bottom-up — no back-edges into `app.py`):
+- The CLI entrypoint lives in [kassiber/cli/main.py](kassiber/cli/main.py). The remaining command implementation surface lives in [kassiber/cli/handlers.py](kassiber/cli/handlers.py).
+- Supporting modules (bottom-up — no back-edges into the CLI layer):
   - [kassiber/errors.py](kassiber/errors.py) — `AppError` typed exception carrying `code`, `hint`, `details`, `retryable`.
   - [kassiber/time_utils.py](kassiber/time_utils.py) — timestamp parsing + RFC3339 formatting and `UNKNOWN_OCCURRED_AT`.
   - [kassiber/msat.py](kassiber/msat.py) — `SATS_PER_BTC`, `MSAT_PER_BTC`, `dec`, `btc_to_msat`, `msat_to_btc`.
@@ -30,8 +30,8 @@
   cleanup, Austrian tax support, and the later desktop UI work.
 
 Phase 0 core extraction is green: the CLI/runtime surface is split out of
-`kassiber/app.py`, the smoke suite passes, and future work should build on
-the extracted modules instead of re-growing the shim.
+the old `kassiber/app.py` monolith, the smoke suite passes, and future
+work should build on the extracted modules instead of re-growing a shim.
 
 Kassiber is currently in **dev mode**: renaming commands, breaking flags, and reshaping subcommand trees is acceptable as long as docs in the tree are updated in the same change. There is no deprecation-alias layer.
 
@@ -133,7 +133,11 @@ PYTHONPYCACHEPREFIX=/tmp/kassiber-pyc uv run python -m py_compile kassiber/*.py
 uv run python -m unittest tests.test_cli_smoke -v
 ```
 
-  This is the behavior pin. If you refactor internals (e.g. split `kassiber/app.py` into modules) the suite MUST still pass unchanged — it asserts envelope `kind` + `schema_version`, msat fields, Phoenix import counts, balance-sheet totals, and error-envelope shape. Prefer extending this suite to adding new test files.
+  This is the behavior pin. If you refactor internals the suite MUST
+  still pass unchanged — it asserts envelope `kind` + `schema_version`,
+  msat fields, Phoenix import counts, balance-sheet totals, and
+  error-envelope shape. Prefer extending this suite to adding new test
+  files.
 
 - CLI smoke checks:
 

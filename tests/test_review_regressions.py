@@ -5,7 +5,10 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from decimal import Decimal
 from pathlib import Path
+
+from kassiber.core.engines import TaxEngineLedgerInputs, build_tax_engine
 
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -157,6 +160,70 @@ _FIXTURE_HOT_TRANSFER_CSV = """date,txid,direction,asset,amount,fee,fiat_rate,de
 2026-02-01T12:00:00Z,onchain-self-transfer-1,inbound,BTC,0.50000000,0,65000,Receive from cold wallet
 """
 
+_CROSS_BTC_CSV = """date,txid,direction,asset,amount,fee,fiat_rate,description
+2026-04-01T10:00:00Z,cross-fund-1,inbound,BTC,0.10010000,0,80000,BTC acquisition
+2026-04-15T10:00:00Z,cross-out-leg,outbound,BTC,0.10000000,0.0001,82000,Peg-in to Liquid
+"""
+
+_CROSS_LBTC_CSV = """date,txid,direction,asset,amount,fee,fiat_rate,description
+2026-04-15T10:30:00Z,cross-in-leg,inbound,LBTC,0.10000000,0,82000,Peg-in receive
+"""
+
+
+def _json_decimal(value):
+    if isinstance(value, Decimal):
+        return float(value)
+    return value
+
+
+def _normalize_engine_entries(entries):
+    return sorted(
+        [
+            {key: _json_decimal(value) for key, value in entry.items() if key != "id"}
+            for entry in entries
+        ],
+        key=lambda row: (row["occurred_at"], row["entry_type"], row["wallet_id"], row["description"]),
+    )
+
+
+def _normalize_holdings(holdings, keys):
+    rows = []
+    for key, totals in holdings.items():
+        row = {label: value for label, value in zip(keys, key)}
+        row["quantity"] = _json_decimal(totals["quantity"])
+        row["cost_basis"] = _json_decimal(totals["cost_basis"])
+        rows.append(row)
+    return sorted(rows, key=lambda row: tuple(row[label] for label in keys))
+
+
+def _normalize_quarantines(quarantines):
+    return sorted(
+        [
+            {
+                "transaction_id": quarantine["transaction_id"],
+                "workspace_id": quarantine["workspace_id"],
+                "profile_id": quarantine["profile_id"],
+                "reason": quarantine["reason"],
+                "detail": json.loads(quarantine["detail_json"]),
+            }
+            for quarantine in quarantines
+        ],
+        key=lambda row: (row["transaction_id"], row["reason"]),
+    )
+
+
+def _normalize_intra_audit(rows):
+    return sorted(
+        [
+            {
+                key: _json_decimal(value)
+                for key, value in row.items()
+            }
+            for row in rows
+        ],
+        key=lambda row: (row["occurred_at"], row["out_id"], row["in_id"]),
+    )
+
 
 class ReviewRegressionTest(unittest.TestCase):
     @classmethod
@@ -271,6 +338,294 @@ class ReviewRegressionTest(unittest.TestCase):
         )
         conn.commit()
         conn.close()
+
+    def _direct_transfer_engine_inputs(self):
+        profile = {
+            "id": "profile-transfer",
+            "workspace_id": "workspace-main",
+            "label": "FixtureTransfer",
+            "fiat_currency": "USD",
+            "tax_country": "generic",
+            "tax_long_term_days": 365,
+            "gains_algorithm": "FIFO",
+        }
+        wallet_refs_by_id = {
+            "wallet-cold": {
+                "id": "wallet-cold",
+                "label": "Cold",
+                "wallet_account_id": "account-treasury",
+                "account_code": "treasury",
+                "account_label": "Treasury",
+                "altbestand": False,
+            },
+            "wallet-hot": {
+                "id": "wallet-hot",
+                "label": "Hot",
+                "wallet_account_id": "account-treasury",
+                "account_code": "treasury",
+                "account_label": "Treasury",
+                "altbestand": False,
+            },
+        }
+        rows = [
+            {
+                "id": "cold-funding-1",
+                "wallet_id": "wallet-cold",
+                "wallet_label": "Cold",
+                "wallet_account_id": "account-treasury",
+                "account_code": "treasury",
+                "account_label": "Treasury",
+                "occurred_at": "2026-01-01T10:00:00Z",
+                "direction": "inbound",
+                "asset": "BTC",
+                "amount": 100_000_000_000,
+                "fee": 0,
+                "fiat_rate": 60000,
+                "fiat_value": 60000,
+                "kind": "deposit",
+                "description": "Cold acquisition",
+                "note": None,
+                "external_id": "cold-funding-1",
+                "created_at": "2026-01-01T10:00:00Z",
+            },
+            {
+                "id": "onchain-self-transfer-1-out",
+                "wallet_id": "wallet-cold",
+                "wallet_label": "Cold",
+                "wallet_account_id": "account-treasury",
+                "account_code": "treasury",
+                "account_label": "Treasury",
+                "occurred_at": "2026-02-01T12:00:00Z",
+                "direction": "outbound",
+                "asset": "BTC",
+                "amount": 50_000_000_000,
+                "fee": 100_000_000,
+                "fiat_rate": 65000,
+                "fiat_value": 32500,
+                "kind": "withdrawal",
+                "description": "Move to hot wallet",
+                "note": None,
+                "external_id": "onchain-self-transfer-1",
+                "created_at": "2026-02-01T12:00:00Z",
+            },
+            {
+                "id": "onchain-self-transfer-1-in",
+                "wallet_id": "wallet-hot",
+                "wallet_label": "Hot",
+                "wallet_account_id": "account-treasury",
+                "account_code": "treasury",
+                "account_label": "Treasury",
+                "occurred_at": "2026-02-01T12:00:00Z",
+                "direction": "inbound",
+                "asset": "BTC",
+                "amount": 50_000_000_000,
+                "fee": 0,
+                "fiat_rate": 65000,
+                "fiat_value": 32500,
+                "kind": "deposit",
+                "description": "Receive from cold wallet",
+                "note": None,
+                "external_id": "onchain-self-transfer-1",
+                "created_at": "2026-02-01T12:00:00Z",
+            },
+        ]
+        return profile, TaxEngineLedgerInputs(
+            rows=rows,
+            wallet_refs_by_id=wallet_refs_by_id,
+            manual_pair_records=[],
+        )
+
+    def _direct_missing_quarantine_engine_inputs(self):
+        profile = {
+            "id": "profile-missing-price",
+            "workspace_id": "workspace-main",
+            "label": "FixtureMissingPrice",
+            "fiat_currency": "USD",
+            "tax_country": "generic",
+            "tax_long_term_days": 365,
+            "gains_algorithm": "FIFO",
+        }
+        wallet_refs_by_id = {
+            "wallet-cold": {
+                "id": "wallet-cold",
+                "label": "Cold",
+                "wallet_account_id": "account-treasury",
+                "account_code": "treasury",
+                "account_label": "Treasury",
+                "altbestand": False,
+            },
+        }
+        rows = [
+            {
+                "id": "priced-buy-1",
+                "wallet_id": "wallet-cold",
+                "wallet_label": "Cold",
+                "wallet_account_id": "account-treasury",
+                "account_code": "treasury",
+                "account_label": "Treasury",
+                "occurred_at": "2026-03-01T09:00:00Z",
+                "direction": "inbound",
+                "asset": "BTC",
+                "amount": 100_000_000_000,
+                "fee": 0,
+                "fiat_rate": 60000,
+                "fiat_value": 60000,
+                "kind": "deposit",
+                "description": "Seed BTC",
+                "note": None,
+                "external_id": "priced-buy-1",
+                "created_at": "2026-03-01T09:00:00Z",
+            },
+            {
+                "id": "unpriced-spend-1",
+                "wallet_id": "wallet-cold",
+                "wallet_label": "Cold",
+                "wallet_account_id": "account-treasury",
+                "account_code": "treasury",
+                "account_label": "Treasury",
+                "occurred_at": "2026-03-02T09:00:00Z",
+                "direction": "outbound",
+                "asset": "BTC",
+                "amount": 10_000_000_000,
+                "fee": 0,
+                "fiat_rate": None,
+                "fiat_value": None,
+                "kind": "withdrawal",
+                "description": "Unpriced spend",
+                "note": None,
+                "external_id": "unpriced-spend-1",
+                "created_at": "2026-03-02T09:00:00Z",
+            },
+        ]
+        return profile, TaxEngineLedgerInputs(
+            rows=rows,
+            wallet_refs_by_id=wallet_refs_by_id,
+            manual_pair_records=[],
+        )
+
+    def _direct_cross_asset_pair_engine_inputs(self):
+        profile = {
+            "id": "profile-cross-asset",
+            "workspace_id": "workspace-main",
+            "label": "FixtureCrossAsset",
+            "fiat_currency": "USD",
+            "tax_country": "generic",
+            "tax_long_term_days": 365,
+            "gains_algorithm": "FIFO",
+        }
+        wallet_refs_by_id = {
+            "wallet-cold": {
+                "id": "wallet-cold",
+                "label": "Cold",
+                "wallet_account_id": "account-treasury",
+                "account_code": "treasury",
+                "account_label": "Treasury",
+                "altbestand": False,
+            },
+            "wallet-liquid": {
+                "id": "wallet-liquid",
+                "label": "Liquid",
+                "wallet_account_id": "account-treasury",
+                "account_code": "treasury",
+                "account_label": "Treasury",
+                "altbestand": False,
+            },
+        }
+        rows = [
+            {
+                "id": "cross-fund-1",
+                "wallet_id": "wallet-cold",
+                "wallet_label": "Cold",
+                "wallet_account_id": "account-treasury",
+                "account_code": "treasury",
+                "account_label": "Treasury",
+                "occurred_at": "2026-04-01T10:00:00Z",
+                "direction": "inbound",
+                "asset": "BTC",
+                "amount": 10_010_000_000,
+                "fee": 0,
+                "fiat_rate": 80000,
+                "fiat_value": 8008,
+                "kind": "deposit",
+                "description": "BTC acquisition",
+                "note": None,
+                "external_id": "cross-fund-1",
+                "created_at": "2026-04-01T10:00:00Z",
+            },
+            {
+                "id": "cross-out-leg",
+                "wallet_id": "wallet-cold",
+                "wallet_label": "Cold",
+                "wallet_account_id": "account-treasury",
+                "account_code": "treasury",
+                "account_label": "Treasury",
+                "occurred_at": "2026-04-15T10:00:00Z",
+                "direction": "outbound",
+                "asset": "BTC",
+                "amount": 10_000_000_000,
+                "fee": 10_000_000,
+                "fiat_rate": 82000,
+                "fiat_value": 8200,
+                "kind": "withdrawal",
+                "description": "Peg-in to Liquid",
+                "note": None,
+                "external_id": "cross-out-leg",
+                "created_at": "2026-04-15T10:00:00Z",
+            },
+            {
+                "id": "cross-in-leg",
+                "wallet_id": "wallet-liquid",
+                "wallet_label": "Liquid",
+                "wallet_account_id": "account-treasury",
+                "account_code": "treasury",
+                "account_label": "Treasury",
+                "occurred_at": "2026-04-15T10:30:00Z",
+                "direction": "inbound",
+                "asset": "LBTC",
+                "amount": 10_000_000_000,
+                "fee": 0,
+                "fiat_rate": 82000,
+                "fiat_value": 8200,
+                "kind": "deposit",
+                "description": "Peg-in receive",
+                "note": None,
+                "external_id": "cross-in-leg",
+                "created_at": "2026-04-15T10:30:00Z",
+            },
+        ]
+        return profile, TaxEngineLedgerInputs(
+            rows=rows,
+            wallet_refs_by_id=wallet_refs_by_id,
+            manual_pair_records=[
+                {
+                    "id": "pair-cross-1",
+                    "out_transaction_id": "cross-out-leg",
+                    "in_transaction_id": "cross-in-leg",
+                    "kind": "peg-in",
+                    "policy": "taxable",
+                },
+            ],
+        )
+
+    def _direct_engine_snapshot(self, profile, inputs):
+        state = build_tax_engine(profile).build_ledger_state(inputs)
+        return {
+            "entries": _normalize_engine_entries(state.entries),
+            "quarantines": _normalize_quarantines(state.quarantines),
+            "intra_audit": _normalize_intra_audit(state.intra_audit),
+            "cross_asset_pairs": sorted(
+                state.cross_asset_pairs,
+                key=lambda row: (row["pair_id"], row["out_id"], row["in_id"]),
+            ),
+            "account_holdings": _normalize_holdings(
+                state.account_holdings,
+                ("account_id", "account_code", "account_label", "asset"),
+            ),
+            "wallet_holdings": _normalize_holdings(
+                state.wallet_holdings,
+                ("wallet_id", "wallet_label", "account_code", "asset"),
+            ),
+        }
 
     def test_btcpay_import_machine_mode_keeps_json_envelope(self):
         self._bootstrap_wallet(label="BTCPay")
@@ -477,6 +832,18 @@ class ReviewRegressionTest(unittest.TestCase):
         self.assertAlmostEqual(tx["fiat_rate"], 60000.0, places=4)
         self.assertAlmostEqual(tx["fiat_value"], 600.0, places=4)
 
+    def test_direct_generic_rp2_missing_price_quarantine_snapshot_matches_fixture(self):
+        profile, inputs = self._direct_missing_quarantine_engine_inputs()
+        actual = self._direct_engine_snapshot(profile, inputs)
+        expected = self._load_fixture("generic_rp2_missing_price_quarantine_snapshot.json")
+        self.assertEqual(actual, expected)
+
+    def test_direct_generic_rp2_cross_asset_pair_snapshot_matches_fixture(self):
+        profile, inputs = self._direct_cross_asset_pair_engine_inputs()
+        actual = self._direct_engine_snapshot(profile, inputs)
+        expected = self._load_fixture("generic_rp2_cross_asset_pair_snapshot.json")
+        self.assertEqual(actual, expected)
+
     def test_generic_rp2_transfer_snapshot_matches_fixture(self):
         payload, result = self._run_json(
             "init",
@@ -579,6 +946,215 @@ class ReviewRegressionTest(unittest.TestCase):
             ),
         }
         expected = self._load_fixture("generic_rp2_transfer_snapshot.json")
+        self.assertEqual(actual, expected)
+
+    def test_generic_rp2_engine_snapshot_matches_fixture(self):
+        profile, inputs = self._direct_transfer_engine_inputs()
+        actual = self._direct_engine_snapshot(profile, inputs)
+        expected = self._load_fixture("generic_rp2_engine_snapshot.json")
+        self.assertEqual(actual, expected)
+
+    def test_generic_rp2_engine_quarantines_unfunded_transfer(self):
+        profile, _ = self._direct_transfer_engine_inputs()
+        inputs = TaxEngineLedgerInputs(
+            rows=[
+                {
+                    "id": "transfer-out",
+                    "wallet_id": "wallet-cold",
+                    "wallet_label": "Cold",
+                    "wallet_account_id": "account-treasury",
+                    "account_code": "treasury",
+                    "account_label": "Treasury",
+                    "occurred_at": "2026-02-01T12:00:00Z",
+                    "direction": "outbound",
+                    "asset": "BTC",
+                    "amount": 50_000_000_000,
+                    "fee": 100_000_000,
+                    "fiat_rate": 65000,
+                    "fiat_value": 32500,
+                    "kind": "withdrawal",
+                    "description": "Move to hot wallet",
+                    "note": None,
+                    "external_id": "onchain-self-transfer-1",
+                    "created_at": "2026-02-01T12:00:00Z",
+                },
+                {
+                    "id": "transfer-in",
+                    "wallet_id": "wallet-hot",
+                    "wallet_label": "Hot",
+                    "wallet_account_id": "account-treasury",
+                    "account_code": "treasury",
+                    "account_label": "Treasury",
+                    "occurred_at": "2026-02-01T12:00:00Z",
+                    "direction": "inbound",
+                    "asset": "BTC",
+                    "amount": 50_000_000_000,
+                    "fee": 0,
+                    "fiat_rate": 65000,
+                    "fiat_value": 32500,
+                    "kind": "deposit",
+                    "description": "Receive from cold wallet",
+                    "note": None,
+                    "external_id": "onchain-self-transfer-1",
+                    "created_at": "2026-02-01T12:00:00Z",
+                },
+            ],
+            wallet_refs_by_id={
+                "wallet-cold": {
+                    "id": "wallet-cold",
+                    "label": "Cold",
+                    "wallet_account_id": "account-treasury",
+                    "account_code": "treasury",
+                    "account_label": "Treasury",
+                    "altbestand": False,
+                },
+                "wallet-hot": {
+                    "id": "wallet-hot",
+                    "label": "Hot",
+                    "wallet_account_id": "account-treasury",
+                    "account_code": "treasury",
+                    "account_label": "Treasury",
+                    "altbestand": False,
+                },
+            },
+            manual_pair_records=[],
+        )
+        state = build_tax_engine(profile).build_ledger_state(inputs)
+        self.assertEqual(state.entries, [])
+        self.assertEqual(len(state.quarantines), 1)
+        self.assertEqual(state.quarantines[0]["reason"], "insufficient_lots")
+
+    def test_missing_spot_price_snapshot_matches_fixture(self):
+        self._bootstrap_wallet(label="MissingPrice")
+        self._insert_transaction(
+            wallet_label="MissingPrice",
+            tx_id="missing-price",
+            occurred_at="2024-05-01T12:00:00Z",
+            amount_msat=1_000_000_000,
+        )
+        summary, result = self._run_json(
+            "journals", "process",
+            "--workspace", "Main",
+            "--profile", "Default",
+        )
+        self._assert_ok(summary, result, "journals.process")
+        quarantines, result = self._run_json(
+            "journals", "quarantined",
+            "--workspace", "Main",
+            "--profile", "Default",
+        )
+        self._assert_ok(quarantines, result, "journals.quarantined")
+        journal_entries, result = self._run_json(
+            "reports", "journal-entries",
+            "--workspace", "Main",
+            "--profile", "Default",
+        )
+        self._assert_ok(journal_entries, result, "reports.journal-entries")
+        actual = {
+            "summary": {
+                key: value
+                for key, value in summary["data"].items()
+                if key not in {"processed_at", "profile"}
+            },
+            "quarantines": [
+                {key: value for key, value in row.items() if key != "transaction_id"}
+                for row in quarantines["data"]
+            ],
+            "journal_entries": journal_entries["data"],
+        }
+        expected = self._load_fixture("generic_rp2_missing_spot_price_snapshot.json")
+        self.assertEqual(actual, expected)
+
+    def test_cross_asset_pair_snapshot_matches_fixture(self):
+        payload, result = self._run_json("init")
+        self._assert_ok(payload, result, "init")
+        payload, result = self._run_json("workspaces", "create", "Main")
+        self._assert_ok(payload, result, "workspaces.create")
+        payload, result = self._run_json(
+            "profiles", "create",
+            "--workspace", "Main",
+            "--fiat-currency", "USD",
+            "--tax-country", "generic",
+            "CrossAsset",
+        )
+        self._assert_ok(payload, result, "profiles.create")
+
+        cross_btc_csv = self.case_dir / "cross-btc.csv"
+        cross_lbtc_csv = self.case_dir / "cross-lbtc.csv"
+        cross_btc_csv.write_text(_CROSS_BTC_CSV, encoding="utf-8")
+        cross_lbtc_csv.write_text(_CROSS_LBTC_CSV, encoding="utf-8")
+
+        for label in ("Bitcoin", "Liquid"):
+            payload, result = self._run_json(
+                "wallets", "create",
+                "--workspace", "Main",
+                "--profile", "CrossAsset",
+                "--label", label,
+                "--kind", "custom",
+            )
+            self._assert_ok(payload, result, "wallets.create")
+
+        payload, result = self._run_json(
+            "wallets", "import-csv",
+            "--workspace", "Main",
+            "--profile", "CrossAsset",
+            "--wallet", "Bitcoin",
+            "--file", str(cross_btc_csv),
+        )
+        self._assert_ok(payload, result, "wallets.import-csv")
+        payload, result = self._run_json(
+            "wallets", "import-csv",
+            "--workspace", "Main",
+            "--profile", "CrossAsset",
+            "--wallet", "Liquid",
+            "--file", str(cross_lbtc_csv),
+        )
+        self._assert_ok(payload, result, "wallets.import-csv")
+        payload, result = self._run_json(
+            "transfers", "pair",
+            "--workspace", "Main",
+            "--profile", "CrossAsset",
+            "--tx-out", "cross-out-leg",
+            "--tx-in", "cross-in-leg",
+            "--kind", "peg-in",
+            "--policy", "taxable",
+        )
+        self._assert_ok(payload, result, "transfers.pair")
+
+        summary, result = self._run_json(
+            "journals", "process",
+            "--workspace", "Main",
+            "--profile", "CrossAsset",
+        )
+        self._assert_ok(summary, result, "journals.process")
+        quarantines, result = self._run_json(
+            "journals", "quarantined",
+            "--workspace", "Main",
+            "--profile", "CrossAsset",
+        )
+        self._assert_ok(quarantines, result, "journals.quarantined")
+        journal_entries, result = self._run_json(
+            "reports", "journal-entries",
+            "--workspace", "Main",
+            "--profile", "CrossAsset",
+        )
+        self._assert_ok(journal_entries, result, "reports.journal-entries")
+        actual = {
+            "summary": {
+                key: value
+                for key, value in summary["data"].items()
+                if key not in {"processed_at", "profile"}
+            },
+            "quarantines": [
+                {key: value for key, value in row.items() if key != "transaction_id"}
+                for row in quarantines["data"]
+            ],
+            "journal_entries": sorted(
+                [{key: value for key, value in row.items() if key != "id"} for row in journal_entries["data"]],
+                key=lambda row: (row["occurred_at"], row["entry_type"], row["wallet"], row["description"]),
+            ),
+        }
+        expected = self._load_fixture("generic_rp2_cross_asset_pairs_snapshot.json")
         self.assertEqual(actual, expected)
 
     def test_balance_history_uses_historical_rate_and_remaining_basis(self):

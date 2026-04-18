@@ -53,7 +53,8 @@ modules without changing user-visible behavior.
 - [x] Add `kassiber/core/runtime.py` for shared data-root, env-file,
   settings, backend overlay, DB-open, and context bootstrap
 - [x] Add `kassiber/cli/main.py` as the future argparse entrypoint
-- [x] Keep `kassiber.app:main` working through a shim until final cutover
+- [x] Keep the CLI cutover on `kassiber.cli.main:main`; the old `kassiber.app`
+  shim has now been removed
 
 ### 0b - CRUD, settings, and rates
 
