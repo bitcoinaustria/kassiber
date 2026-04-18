@@ -711,6 +711,153 @@ class ReviewRegressionTest(unittest.TestCase):
         self.assertEqual(payload["data"]["env_file"], str(expected_root / "config" / "backends.env"))
         self.assertEqual(payload["data"]["default_backend"], "mempool")
 
+    def test_austrian_profile_registration_is_eur_and_processing_is_gated(self):
+        payload, result = self._run_json("init")
+        self._assert_ok(payload, result, "init")
+        payload, result = self._run_json("workspaces", "create", "Main")
+        self._assert_ok(payload, result, "workspaces.create")
+        payload, result = self._run_json(
+            "profiles", "create",
+            "--workspace", "Main",
+            "--fiat-currency", "USD",
+            "--tax-country", "at",
+            "--tax-long-term-days", "999",
+            "Austrian",
+        )
+        self._assert_ok(payload, result, "profiles.create")
+        self.assertEqual(payload["data"]["tax_country"], "at")
+        self.assertEqual(payload["data"]["fiat_currency"], "EUR")
+        self.assertEqual(payload["data"]["tax_long_term_days"], 365)
+
+        payload, result = self._run_json(
+            "wallets", "create",
+            "--workspace", "Main",
+            "--profile", "Austrian",
+            "--label", "AT Wallet",
+            "--kind", "custom",
+        )
+        self._assert_ok(payload, result, "wallets.create")
+
+        json_file = self.case_dir / "austrian-import.json"
+        json_file.write_text(
+            json.dumps(
+                [
+                    {
+                        "date": "2024-01-01",
+                        "direction": "inbound",
+                        "asset": "BTC",
+                        "amount": "0.001",
+                        "fee": "0",
+                        "txid": "at-demo",
+                        "fiat_value": "40",
+                    }
+                ]
+            ),
+            encoding="utf-8",
+        )
+        payload, result = self._run_json(
+            "wallets", "import-json",
+            "--workspace", "Main",
+            "--profile", "Austrian",
+            "--wallet", "AT Wallet",
+            "--file", str(json_file),
+        )
+        self._assert_ok(payload, result, "wallets.import-json")
+
+        payload, result = self._run_json(
+            "journals", "process",
+            "--workspace", "Main",
+            "--profile", "Austrian",
+        )
+        self.assertNotEqual(result.returncode, 0, msg=payload)
+        self.assertEqual(payload.get("kind"), "error")
+        self.assertEqual(payload["error"]["code"], "experimental_tax_policy")
+        self.assertEqual(payload["error"]["details"]["tax_country"], "at")
+        self.assertEqual(payload["error"]["details"]["status"], "experimental")
+
+    def test_switching_profile_to_austrian_normalizes_and_invalidates_journals(self):
+        payload, result = self._run_json("init")
+        self._assert_ok(payload, result, "init")
+        payload, result = self._run_json("workspaces", "create", "Main")
+        self._assert_ok(payload, result, "workspaces.create")
+        payload, result = self._run_json(
+            "profiles", "create",
+            "--workspace", "Main",
+            "--fiat-currency", "USD",
+            "--tax-country", "generic",
+            "Default",
+        )
+        self._assert_ok(payload, result, "profiles.create")
+        payload, result = self._run_json(
+            "wallets", "create",
+            "--workspace", "Main",
+            "--profile", "Default",
+            "--label", "Wallet",
+            "--kind", "custom",
+        )
+        self._assert_ok(payload, result, "wallets.create")
+
+        json_file = self.case_dir / "switch-austrian-import.json"
+        json_file.write_text(
+            json.dumps(
+                [
+                    {
+                        "date": "2024-01-01",
+                        "direction": "inbound",
+                        "asset": "BTC",
+                        "amount": "0.001",
+                        "fee": "0",
+                        "txid": "switch-at-demo",
+                        "fiat_value": "40",
+                    }
+                ]
+            ),
+            encoding="utf-8",
+        )
+        payload, result = self._run_json(
+            "wallets", "import-json",
+            "--workspace", "Main",
+            "--profile", "Default",
+            "--wallet", "Wallet",
+            "--file", str(json_file),
+        )
+        self._assert_ok(payload, result, "wallets.import-json")
+        payload, result = self._run_json(
+            "journals", "process",
+            "--workspace", "Main",
+            "--profile", "Default",
+        )
+        self._assert_ok(payload, result, "journals.process")
+
+        payload, result = self._run_json(
+            "profiles", "set",
+            "--workspace", "Main",
+            "--profile", "Default",
+            "--tax-country", "at",
+        )
+        self._assert_ok(payload, result, "profiles.set")
+        self.assertEqual(payload["data"]["tax_country"], "at")
+        self.assertEqual(payload["data"]["fiat_currency"], "EUR")
+        self.assertEqual(payload["data"]["tax_long_term_days"], 365)
+        self.assertIsNone(payload["data"]["last_processed_at"])
+        self.assertEqual(payload["data"]["last_processed_tx_count"], 0)
+
+        payload, result = self._run_json(
+            "reports", "capital-gains",
+            "--workspace", "Main",
+            "--profile", "Default",
+        )
+        self.assertNotEqual(result.returncode, 0, msg=payload)
+        self.assertEqual(payload["error"]["message"], "Reports require fresh journals. Run `kassiber journals process` first.")
+
+        payload, result = self._run_json(
+            "journals", "process",
+            "--workspace", "Main",
+            "--profile", "Default",
+        )
+        self.assertNotEqual(result.returncode, 0, msg=payload)
+        self.assertEqual(payload["error"]["code"], "experimental_tax_policy")
+
     def test_attachments_verify_reports_missing_file(self):
         self._bootstrap_wallet(label="Attachable")
         json_file = self.case_dir / "attachment-import.json"

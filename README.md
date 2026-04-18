@@ -583,18 +583,18 @@ RP2 needs fiat pricing to compute tax lots. If imported or synced transactions d
 
 ## Tax policy
 
-Profiles carry their own tax policy defaults. Today Kassiber exposes the RP2-backed `generic` policy and stores it explicitly on the profile, so adding a future country-specific RP2 policy is a small policy-layer change rather than an app-wide refactor.
+Profiles carry their own tax policy defaults. Kassiber currently exposes the RP2-backed `generic` policy and an explicitly experimental Austrian `at` registration on top of the shared engine seam. The Austrian path normalizes profiles to EUR and preserves the legacy 365-day field shape for `Altbestand`, but journal processing intentionally stops with an `experimental_tax_policy` error until the dedicated Austrian engine is implemented and reviewed by a Steuerberater.
 
 ```bash
 python3 -m kassiber profiles create austrian \
   --fiat-currency EUR \
-  --tax-country generic \
+  --tax-country at \
   --tax-long-term-days 365 \
   --gains-algorithm FIFO
 
 python3 -m kassiber profiles list
 python3 -m kassiber profiles get --profile austrian
-python3 -m kassiber profiles set --profile austrian --gains-algorithm HIFO
+python3 -m kassiber journals process --profile austrian
 ```
 
 Wallet-level `Altbestand` stays separate from the profile policy because it is provenance metadata about specific holdings, not a country-wide rule.
@@ -615,6 +615,7 @@ Wallet-level `Altbestand` stays separate from the profile policy because it is p
 - remote server mode / REST API
 - browser / multi-user auth
 - role-based access
+- Austrian journal engine, Austrian defaults beyond profile registration, and E 1kv export
 
 ## Architecture notes
 
