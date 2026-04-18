@@ -14,6 +14,7 @@
   - [kassiber/backends.py](kassiber/backends.py) — dotenv (`config/backends.env`) seed + DB overlay for named sync backends, plus CRUD helpers.
   - [kassiber/cli/handlers.py](kassiber/cli/handlers.py) — remaining CLI command handlers and compatibility-layer imports while deeper decomposition continues.
   - [kassiber/core/engines/__init__.py](kassiber/core/engines/__init__.py) — tax-engine interface/resolver; currently selects the generic RP2 engine.
+  - [kassiber/core/tax_events.py](kassiber/core/tax_events.py) — in-memory normalization seam between raw transaction rows and tax-engine inputs, including early quarantine classification for under-specified tax semantics.
   - [kassiber/core/sync.py](kassiber/core/sync.py) — wallet sync orchestration above backend-specific transport details.
   - [kassiber/core/sync_backends.py](kassiber/core/sync_backends.py) — descriptor target discovery plus `esplora`, `electrum`, and `bitcoinrpc` live-sync adapters.
   - [kassiber/core/reports.py](kassiber/core/reports.py) — extracted report builders, balance-history calculations, and PDF export assembly behind hookable journal/runtime dependencies.
@@ -78,6 +79,8 @@ List endpoints with `--limit` also accept `--cursor`. The cursor is an opaque ba
 ## Tax engine
 
 - The tax engine now goes through `kassiber/core/engines.build_tax_engine(...)`; the current implementation behind that seam is still the generic RP2 engine in `kassiber/core/engines/rp2.py`.
+- Journal processing first normalizes raw transaction rows into in-memory tax events via `kassiber/core/tax_events.py`; raw `transactions` rows remain the source of truth and no derived regime state is persisted back onto them.
+- Under-specified tax semantics that used to fall through raw-row handling should quarantine at the normalization boundary instead of being guessed. That includes malformed same-asset transfers, missing required pricing, and unsupported tax directions.
 - Policy selection and RP2 country defaults are centralized in `kassiber/tax_policy.py`.
 - RP2 runs per-asset (pooled across all wallets of a profile) so `IntraTransaction` (MOVE) carries cost basis between user-owned wallets. Wallet identity is preserved by setting RP2's `exchange` to the wallet label and recovering per-wallet quantity buckets via `BalanceSet`.
 - Self-transfer detection lives in `kassiber/transfers.py`. The detector pairs same-`external_id` outbound + inbound rows across two wallets of the same profile; the journal pipeline turns each pair into an `IntraTransaction` plus `transfer_out` / `transfer_in` (and, when there's a fee, `transfer_fee`) ledger entries.

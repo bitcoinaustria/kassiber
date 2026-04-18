@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Iterable, Mapping, Protocol, Sequence
+from typing import Any, Iterable, Mapping, Protocol
+
+from ..tax_events import NormalizedTaxAssetInputs
 
 
 @dataclass(frozen=True)
@@ -19,11 +21,8 @@ class TaxEngine(Protocol):
 
     def process_asset(
         self,
-        asset: str,
-        rows: Sequence[Mapping[str, Any]],
-        wallet_refs_by_id: Mapping[str, Mapping[str, Any]],
+        normalized_inputs: NormalizedTaxAssetInputs,
         wallet_refs_by_label: Mapping[str, Mapping[str, Any]],
-        intra_pairs: Sequence[Mapping[str, Any]],
         configuration: Any,
     ) -> TaxEngineAssetResult:
         """Return journal entries, quarantines, and holding deltas for one asset."""
