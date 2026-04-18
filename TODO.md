@@ -132,8 +132,8 @@ top of the monolith.
 
 ### 0.5d - Austrian tax support
 
-- [ ] Add Austrian policy registration on top of the shared engine seam
-- [ ] Keep the Austrian path explicitly experimental until reviewed by a
+- [x] Add Austrian policy registration on top of the shared engine seam
+- [x] Keep the Austrian path explicitly experimental until reviewed by a
   Steuerberater
 - [ ] Implement Austrian defaults only where provenance is sufficient;
   quarantine the rest

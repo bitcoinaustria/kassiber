@@ -2193,7 +2193,7 @@ def update_profile(conn, workspace_ref, profile_ref, updates):
             hint=f"Choose one of: {', '.join(sorted(supported_tax_countries()))}",
         )
     try:
-        build_tax_policy(
+        policy = build_tax_policy(
             {
                 "fiat_currency": merged_fiat,
                 "tax_country": merged_country,
@@ -2202,6 +2202,13 @@ def update_profile(conn, workspace_ref, profile_ref, updates):
         )
     except ValueError as exc:
         raise AppError(str(exc), code="validation") from exc
+    normalized_algo = merged_algo.upper()
+    policy_changed = (
+        policy.fiat_currency != profile["fiat_currency"]
+        or policy.tax_country != profile["tax_country"]
+        or policy.long_term_days != profile["tax_long_term_days"]
+        or normalized_algo != profile["gains_algorithm"]
+    )
 
     conn.execute(
         """
@@ -2211,13 +2218,15 @@ def update_profile(conn, workspace_ref, profile_ref, updates):
         """,
         (
             merged_label,
-            merged_fiat,
-            merged_country,
-            merged_long_term,
-            merged_algo.upper(),
+            policy.fiat_currency,
+            policy.tax_country,
+            policy.long_term_days,
+            normalized_algo,
             profile["id"],
         ),
     )
+    if policy_changed:
+        invalidate_journals(conn, profile["id"])
     conn.commit()
     return get_profile_details(conn, workspace["label"], profile["id"])
 
