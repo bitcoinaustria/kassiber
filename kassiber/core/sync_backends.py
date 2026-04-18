@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-"""Backend-specific wallet sync helpers extracted from kassiber.app."""
+"""Backend-specific wallet sync helpers used by the CLI sync layer."""
 
 import base64
 import hashlib
@@ -10,6 +10,7 @@ import ssl
 from collections import defaultdict
 from decimal import Decimal
 from pathlib import Path
+from types import MappingProxyType
 from urllib import error as urlerror
 from urllib import parse as urlparse
 from urllib import request as urlrequest
@@ -31,7 +32,7 @@ from ..wallet_descriptors import (
     liquid_blinding_secret,
     liquid_plan_can_unblind,
 )
-from .sync import normalize_backend_kind
+from .sync import WalletSyncState, normalize_backend_kind
 from .wallets import (
     load_wallet_descriptor_plan_from_config,
     normalize_addresses,
@@ -551,15 +552,15 @@ def resolve_wallet_sync_targets(backend, wallet):
     else:
         addresses = normalize_addresses(config.get("addresses"))
         if not addresses:
-            return {
-                "chain": "",
-                "network": "",
-                "descriptor_plan": None,
-                "policy_asset_id": "",
-                "targets": [],
-                "tracked_scripts": {},
-                "history_cache": {},
-            }
+            return WalletSyncState(
+                chain="",
+                network="",
+                descriptor_plan=None,
+                policy_asset_id="",
+                targets=[],
+                tracked_scripts={},
+                history_cache={},
+            )
         chain = normalize_chain_value(config.get("chain"))
         network = normalize_network_value(chain, config.get("network"))
         if chain == "liquid":
@@ -567,15 +568,15 @@ def resolve_wallet_sync_targets(backend, wallet):
         validate_backend_for_wallet(backend, chain, network, has_descriptor=False)
         targets = [sync_target_from_address(address, chain, network, index) for index, address in enumerate(addresses)]
     tracked_scripts = {target["script_pubkey"]: target for target in targets}
-    return {
-        "chain": chain,
-        "network": network,
-        "descriptor_plan": descriptor_plan,
-        "policy_asset_id": wallet_policy_asset_id(config, chain, network),
-        "targets": targets,
-        "tracked_scripts": tracked_scripts,
-        "history_cache": history_cache,
-    }
+    return WalletSyncState(
+        chain=chain,
+        network=network,
+        descriptor_plan=descriptor_plan,
+        policy_asset_id=wallet_policy_asset_id(config, chain, network),
+        targets=targets,
+        tracked_scripts=tracked_scripts,
+        history_cache=history_cache,
+    )
 
 
 def fetch_esplora_history(base_url, resource_path, max_pages=None):
@@ -799,10 +800,10 @@ def record_components_from_liquid_tx(
     return records
 
 
-def esplora_records_for_wallet(backend, sync_state):
+def esplora_records_for_wallet(backend, sync_state: WalletSyncState):
     max_pages = parse_int(backend_value(backend, "maxpages"), default=0) or None
     transactions_by_txid = {}
-    for target in sync_state["targets"]:
+    for target in sync_state.targets:
         for tx in fetch_esplora_scripthash_transactions(backend["url"], target["script_pubkey"], max_pages=max_pages):
             transactions_by_txid[tx["txid"]] = tx
     records = []
@@ -824,7 +825,7 @@ def esplora_records_for_wallet(backend, sync_state):
         transactions_by_txid.values(),
         key=lambda item: (((item.get("status") or {}).get("block_time") or 0), item.get("txid", "")),
     ):
-        if sync_state["chain"] == "liquid":
+        if sync_state.chain == "liquid":
             raw_hex = http_get_text(
                 append_url_path(backend["url"], f"tx/{tx['txid']}/hex"),
                 timeout=backend_timeout(backend),
@@ -835,16 +836,16 @@ def esplora_records_for_wallet(backend, sync_state):
                     tx["txid"],
                     timestamp_to_iso((tx.get("status") or {}).get("block_time")),
                     decoded_tx,
-                    sync_state["descriptor_plan"],
-                    sync_state["tracked_scripts"],
+                    sync_state.descriptor_plan,
+                    sync_state.tracked_scripts,
                     backend["name"],
-                    sync_state["policy_asset_id"],
+                    sync_state.policy_asset_id,
                     liquid_tx_lookup,
                     {"tx": tx, "raw_hex": raw_hex},
                 )
             )
         else:
-            normalized = record_from_bitcoin_esplora_tx(tx, sync_state["tracked_scripts"], backend["name"])
+            normalized = record_from_bitcoin_esplora_tx(tx, sync_state.tracked_scripts, backend["name"])
             if normalized:
                 records.append(normalized)
     return records
@@ -1048,11 +1049,11 @@ def bitcoinrpc_records_for_wallet(backend, wallet, addresses):
     return records, {"core_wallet": wallet_name, "imported_addresses": imported_count}
 
 
-def bitcoinrpc_sync_adapter(backend, wallet, sync_state):
+def bitcoinrpc_sync_adapter(backend, wallet, sync_state: WalletSyncState):
     return bitcoinrpc_records_for_wallet(
         backend,
         wallet,
-        [target["address"] for target in sync_state["targets"] if target.get("address")],
+        [target["address"] for target in sync_state.targets if target.get("address")],
     )
 
 
@@ -1192,21 +1193,21 @@ def record_from_electrum_tx(txid, tx, height, tracked_scripts, backend_name, tx_
     }
 
 
-def electrum_records_for_wallet(backend, sync_state):
+def electrum_records_for_wallet(backend, sync_state: WalletSyncState):
     transactions = {}
     header_timestamps = {}
     records = []
     batch_size = backend_batch_size(backend)
     tracked_scripts = (
-        set(sync_state["tracked_scripts"])
-        if sync_state["chain"] == "bitcoin"
-        else sync_state["tracked_scripts"]
+        set(sync_state.tracked_scripts)
+        if sync_state.chain == "bitcoin"
+        else sync_state.tracked_scripts
     )
     with ElectrumClient(backend) as client:
         histories = []
-        history_cache = sync_state.get("history_cache") or {}
+        history_cache = sync_state.history_cache or {}
         uncached_scripthashes = []
-        for target in sync_state["targets"]:
+        for target in sync_state.targets:
             scripthash = scriptpubkey_scripthash(target["script_pubkey"])
             cached_history = history_cache.get(scripthash)
             if cached_history is not None:
@@ -1227,7 +1228,7 @@ def electrum_records_for_wallet(backend, sync_state):
         def lookup(txid):
             if txid not in transactions:
                 raw_tx = client.call("blockchain.transaction.get", [txid])
-                if sync_state["chain"] == "liquid":
+                if sync_state.chain == "liquid":
                     transactions[txid] = {
                         "raw_hex": raw_tx,
                         "decoded": decode_liquid_transaction(raw_tx),
@@ -1257,7 +1258,7 @@ def electrum_records_for_wallet(backend, sync_state):
                 batch_size=batch_size,
             )
             for txid, raw_tx in zip(ordered_txids, raw_transactions):
-                if sync_state["chain"] == "liquid":
+                if sync_state.chain == "liquid":
                     transactions[txid] = {
                         "raw_hex": raw_tx,
                         "decoded": decode_liquid_transaction(raw_tx),
@@ -1267,10 +1268,10 @@ def electrum_records_for_wallet(backend, sync_state):
         seen_txids = set(transactions)
         prev_txids = []
         for txid in ordered_txids:
-            current_tx = transactions[txid]["decoded"] if sync_state["chain"] == "liquid" else transactions[txid]
-            vins = current_tx.vin if sync_state["chain"] == "liquid" else current_tx.get("vin", [])
+            current_tx = transactions[txid]["decoded"] if sync_state.chain == "liquid" else transactions[txid]
+            vins = current_tx.vin if sync_state.chain == "liquid" else current_tx.get("vin", [])
             for vin in vins:
-                prev_txid = liquid_input_txid(vin) if sync_state["chain"] == "liquid" else vin.get("txid")
+                prev_txid = liquid_input_txid(vin) if sync_state.chain == "liquid" else vin.get("txid")
                 if not prev_txid or prev_txid in seen_txids:
                     continue
                 seen_txids.add(prev_txid)
@@ -1282,7 +1283,7 @@ def electrum_records_for_wallet(backend, sync_state):
                 batch_size=batch_size,
             )
             for txid, raw_tx in zip(prev_txids, raw_prev_transactions):
-                if sync_state["chain"] == "liquid":
+                if sync_state.chain == "liquid":
                     transactions[txid] = {
                         "raw_hex": raw_tx,
                         "decoded": decode_liquid_transaction(raw_tx),
@@ -1306,17 +1307,17 @@ def electrum_records_for_wallet(backend, sync_state):
                 header_timestamps[height] = block_header_timestamp(header_hex)
         for txid, history in ordered_histories:
             occurred_at = timestamp_to_iso(height_to_timestamp(history.get("height")))
-            if sync_state["chain"] == "liquid":
+            if sync_state.chain == "liquid":
                 current_tx = lookup(txid)
                 records.extend(
                     record_components_from_liquid_tx(
                         txid,
                         occurred_at,
                         current_tx["decoded"],
-                        sync_state["descriptor_plan"],
+                        sync_state.descriptor_plan,
                         tracked_scripts,
                         backend["name"],
-                        sync_state["policy_asset_id"],
+                        sync_state.policy_asset_id,
                         lambda prev_txid: lookup(prev_txid)["decoded"],
                         {"history": history, "raw_hex": current_tx["raw_hex"]},
                     )
@@ -1341,7 +1342,17 @@ def electrum_sync_adapter(backend, wallet, sync_state):
     return electrum_records_for_wallet(backend, sync_state), {}
 
 
+SYNC_BACKEND_ADAPTERS = MappingProxyType(
+    {
+        "esplora": esplora_sync_adapter,
+        "electrum": electrum_sync_adapter,
+        "bitcoinrpc": bitcoinrpc_sync_adapter,
+    }
+)
+
+
 __all__ = [
+    "SYNC_BACKEND_ADAPTERS",
     "bitcoinrpc_sync_adapter",
     "electrum_sync_adapter",
     "esplora_sync_adapter",

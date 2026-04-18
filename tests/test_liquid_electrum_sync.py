@@ -2,7 +2,8 @@ import json
 import unittest
 from unittest.mock import patch
 
-from kassiber.app import (
+from kassiber.core.sync import WalletSyncState
+from kassiber.core.sync_backends import (
     discover_descriptor_targets,
     electrum_records_for_wallet,
     record_components_from_liquid_tx,
@@ -74,7 +75,7 @@ class LiquidElectrumSyncTest(unittest.TestCase):
         prev_tx = _FakeTx(vin=[], vout=[_FakeOutput(tracked_script, 1000, policy_asset_id)])
 
         with patch(
-            "kassiber.app.liquid_output_amount_asset_id",
+            "kassiber.core.sync_backends.liquid_output_amount_asset_id",
             side_effect=lambda output, plan, target=None: (output.fake_value_sats, output.fake_asset_id),
         ):
             records = record_components_from_liquid_tx(
@@ -159,23 +160,24 @@ class LiquidElectrumSyncTest(unittest.TestCase):
                     raise AssertionError(f"Unexpected Electrum call: {key!r}")
                 return responses[key]
 
-        with patch("kassiber.app.ElectrumClient", FakeElectrumClient), patch(
-            "kassiber.app.decode_liquid_transaction",
+        with patch("kassiber.core.sync_backends.ElectrumClient", FakeElectrumClient), patch(
+            "kassiber.core.sync_backends.decode_liquid_transaction",
             side_effect=lambda raw_hex: raw_map[raw_hex],
         ), patch(
-            "kassiber.app.liquid_output_amount_asset_id",
+            "kassiber.core.sync_backends.liquid_output_amount_asset_id",
             side_effect=lambda output, plan, target=None: (output.fake_value_sats, output.fake_asset_id),
         ):
             records = electrum_records_for_wallet(
                 {"name": "liquid", "kind": "electrum", "url": "ssl://liquid.example:995"},
-                {
-                    "chain": "liquid",
-                    "network": "liquidv1",
-                    "descriptor_plan": object(),
-                    "policy_asset_id": policy_asset_id,
-                    "targets": [target],
-                    "tracked_scripts": {tracked_script: target},
-                },
+                WalletSyncState(
+                    chain="liquid",
+                    network="liquidv1",
+                    descriptor_plan=object(),
+                    policy_asset_id=policy_asset_id,
+                    targets=[target],
+                    tracked_scripts={tracked_script: target},
+                    history_cache={},
+                ),
             )
 
         self.assertEqual(len(records), 1)
@@ -225,8 +227,8 @@ class LiquidElectrumSyncTest(unittest.TestCase):
             self.assertEqual(target_used_batch([first_target, second_target]), [True, False])
             return [first_target, second_target]
 
-        with patch("kassiber.app.ElectrumClient", FakeElectrumClient), patch(
-            "kassiber.app.scan_descriptor_targets",
+        with patch("kassiber.core.sync_backends.ElectrumClient", FakeElectrumClient), patch(
+            "kassiber.core.sync_backends.scan_descriptor_targets",
             side_effect=fake_scan,
         ):
             discovery = discover_descriptor_targets(
@@ -305,26 +307,26 @@ class LiquidElectrumSyncTest(unittest.TestCase):
                         raise AssertionError(f"Unexpected batched call: {key!r}")
                 return responses
 
-        with patch("kassiber.app.ElectrumClient", FakeElectrumClient), patch(
-            "kassiber.app.decode_liquid_transaction",
+        with patch("kassiber.core.sync_backends.ElectrumClient", FakeElectrumClient), patch(
+            "kassiber.core.sync_backends.decode_liquid_transaction",
             side_effect=lambda raw_hex: raw_map[raw_hex],
         ), patch(
-            "kassiber.app.liquid_output_amount_asset_id",
+            "kassiber.core.sync_backends.liquid_output_amount_asset_id",
             side_effect=lambda output, plan, target=None: (output.fake_value_sats, output.fake_asset_id),
         ):
             records = electrum_records_for_wallet(
                 {"name": "liquid", "kind": "electrum", "url": "ssl://liquid.example:995"},
-                {
-                    "chain": "liquid",
-                    "network": "liquidv1",
-                    "descriptor_plan": object(),
-                    "policy_asset_id": policy_asset_id,
-                    "targets": [target],
-                    "tracked_scripts": {tracked_script: target},
-                    "history_cache": {
+                WalletSyncState(
+                    chain="liquid",
+                    network="liquidv1",
+                    descriptor_plan=object(),
+                    policy_asset_id=policy_asset_id,
+                    targets=[target],
+                    tracked_scripts={tracked_script: target},
+                    history_cache={
                         scriptpubkey_scripthash(tracked_script): [{"tx_hash": current_txid, "height": 123}]
                     },
-                },
+                ),
             )
 
         self.assertEqual(len(records), 1)

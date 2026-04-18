@@ -53,7 +53,8 @@ modules without changing user-visible behavior.
 - [x] Add `kassiber/core/runtime.py` for shared data-root, env-file,
   settings, backend overlay, DB-open, and context bootstrap
 - [x] Add `kassiber/cli/main.py` as the future argparse entrypoint
-- [x] Keep `kassiber.app:main` working through a shim until final cutover
+- [x] Keep the CLI cutover on `kassiber.cli.main:main`; the old `kassiber.app`
+  shim has now been removed
 
 ### 0b - CRUD, settings, and rates
 
@@ -135,8 +136,10 @@ top of the monolith.
 - [x] Add Austrian policy registration on top of the shared engine seam
 - [x] Keep the Austrian path explicitly experimental until reviewed by a
   Steuerberater
-- [ ] Implement Austrian defaults only where provenance is sufficient;
+- [x] Implement Austrian defaults only where provenance is sufficient;
   quarantine the rest
+- [ ] Expand Austrian provenance coverage beyond the current acquisition /
+  disposal / self-transfer defaults
 - [ ] Add E 1kv CSV/PDF export only after the engine behavior is testable
 
 ### 0.5e - Rates and journal follow-through

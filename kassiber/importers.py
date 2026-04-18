@@ -3,7 +3,8 @@
 Call sites hand a file path + format tag in and get back a list of
 normalized record dicts out — one dict per transaction, with the same
 shape across all formats so downstream DB-insertion code
-(`insert_wallet_records` in app.py) doesn't need to branch per wallet.
+(`insert_wallet_records` in `kassiber.core.imports`) doesn't need to
+branch per wallet.
 
 Four format families live here:
 
@@ -25,7 +26,7 @@ Four format families live here:
 coordinator layer. Adding a new format: add a `normalize_<fmt>_record`
 and a `load_<fmt>_records`, plug them into `load_import_records`, and
 add an `is_<fmt>_format` predicate so the metadata-application layer in
-app.py can hook format-specific side effects.
+`kassiber.core.imports` can hook format-specific side effects.
 
 Every parser raises `AppError` on unparseable input so the CLI surfaces
 a validation envelope rather than a bare `ValueError` / `KeyError`.
@@ -103,8 +104,9 @@ def normalize_btcpay_record(record):
     """Turn a raw BTCPay JSON/CSV row into the common import-record shape.
 
     Retains `_btcpay_comment` and `_btcpay_labels` as private keys so the
-    coordinator's `apply_btcpay_metadata` step can apply them to the
-    inserted transaction afterwards.
+    coordinator's `apply_btcpay_metadata` step in
+    `kassiber.core.imports` can apply them to the inserted transaction
+    afterwards.
     """
     sanitized_record = {str(key): value for key, value in record.items() if key is not None}
     txid = sanitized_record.get("TransactionId") or sanitized_record.get("Transaction Id")
@@ -203,7 +205,8 @@ def normalize_phoenix_record(record):
     `fiat_value / amount_btc` since Phoenix does not export the rate.
 
     Private keys `_phoenix_type`, `_phoenix_description`, and
-    `_phoenix_onchain_txid` feed `apply_phoenix_metadata` in app.py.
+    `_phoenix_onchain_txid` feed `apply_phoenix_metadata` in
+    `kassiber.core.imports`.
     """
     sanitized = {str(key): value for key, value in record.items() if key is not None}
     for column in _PHOENIX_REQUIRED_COLUMNS:

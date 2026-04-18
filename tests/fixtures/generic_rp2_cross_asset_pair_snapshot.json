@@ -1,0 +1,88 @@
+{
+  "account_holdings": [
+    {
+      "account_code": "treasury",
+      "account_id": "account-treasury",
+      "account_label": "Treasury",
+      "asset": "LBTC",
+      "cost_basis": 8200.0,
+      "quantity": 0.1
+    }
+  ],
+  "cross_asset_pairs": [
+    {
+      "in_asset": "LBTC",
+      "in_id": "cross-in-leg",
+      "kind": "peg-in",
+      "out_asset": "BTC",
+      "out_id": "cross-out-leg",
+      "pair_id": "pair-cross-1",
+      "policy": "taxable"
+    }
+  ],
+  "entries": [
+    {
+      "account_id": "account-treasury",
+      "asset": "BTC",
+      "cost_basis": null,
+      "description": "BTC acquisition",
+      "entry_type": "acquisition",
+      "fiat_value": 8008.0,
+      "gain_loss": null,
+      "occurred_at": "2026-04-01T10:00:00Z",
+      "proceeds": null,
+      "profile_id": "profile-cross-asset",
+      "quantity": 0.1001,
+      "transaction_id": "cross-fund-1",
+      "unit_cost": 80000.0,
+      "wallet_id": "wallet-cold",
+      "workspace_id": "workspace-main"
+    },
+    {
+      "account_id": "account-treasury",
+      "asset": "BTC",
+      "cost_basis": 8008.0,
+      "description": "Peg-in to Liquid",
+      "entry_type": "disposal",
+      "fiat_value": 8200.0,
+      "gain_loss": 192.0,
+      "occurred_at": "2026-04-15T10:00:00Z",
+      "proceeds": 8200.0,
+      "profile_id": "profile-cross-asset",
+      "quantity": -0.1001,
+      "transaction_id": "cross-out-leg",
+      "unit_cost": 0.0,
+      "wallet_id": "wallet-cold",
+      "workspace_id": "workspace-main"
+    },
+    {
+      "account_id": "account-treasury",
+      "asset": "LBTC",
+      "cost_basis": null,
+      "description": "Peg-in receive",
+      "entry_type": "acquisition",
+      "fiat_value": 8200.0,
+      "gain_loss": null,
+      "occurred_at": "2026-04-15T10:30:00Z",
+      "proceeds": null,
+      "profile_id": "profile-cross-asset",
+      "quantity": 0.1,
+      "transaction_id": "cross-in-leg",
+      "unit_cost": 82000.0,
+      "wallet_id": "wallet-liquid",
+      "workspace_id": "workspace-main"
+    }
+  ],
+  "intra_audit": [],
+  "quarantines": [],
+  "wallet_holdings": [
+    {
+      "account_code": "treasury",
+      "asset": "LBTC",
+      "cost_basis": 8200.0,
+      "quantity": 0.1,
+      "wallet_id": "wallet-liquid",
+      "wallet_label": "Liquid"
+    }
+  ]
+}

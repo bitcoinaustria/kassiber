@@ -1,22 +1,13 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Iterable, Mapping, Protocol, Sequence
-
-from ..tax_events import NormalizedTaxAssetInputs
-
-
-@dataclass(frozen=True)
-class TaxEngineAssetResult:
-    entries: list[dict[str, Any]]
-    quarantines: list[dict[str, Any]]
-    intra_audit: list[dict[str, Any]]
-    account_holdings: dict[tuple[Any, ...], dict[str, Any]]
-    wallet_holdings: dict[tuple[Any, ...], dict[str, Any]]
+from typing import Any, Mapping, Protocol, Sequence
 
 
 @dataclass(frozen=True)
 class TaxEngineLedgerInputs:
+    """Raw per-profile inputs loaded from SQLite before engine processing."""
+
     rows: Sequence[Mapping[str, Any]]
     wallet_refs_by_id: Mapping[str, Mapping[str, Any]]
     manual_pair_records: Sequence[Mapping[str, Any]]
@@ -24,6 +15,20 @@ class TaxEngineLedgerInputs:
 
 @dataclass(frozen=True)
 class TaxEngineLedgerResult:
+    """Aggregated journal state emitted for one processed profile.
+
+    ``entries`` and ``quarantines`` match the rows persisted into the journal
+    tables. ``intra_audit`` contains the same-asset transfer audit trail used by
+    the current generic RP2 path. ``cross_asset_pairs`` carries manual
+    cross-asset pair metadata for envelope/report consumers without feeding
+    those pairs into RP2.
+
+    ``account_holdings`` keys are ``(account_id, account_code, account_label,
+    asset)`` tuples. ``wallet_holdings`` keys are ``(wallet_id, wallet_label,
+    account_code, asset)`` tuples. Each mapped value stores Decimal
+    ``quantity`` and ``cost_basis`` totals.
+    """
+
     entries: list[dict[str, Any]]
     quarantines: list[dict[str, Any]]
     intra_audit: list[dict[str, Any]]
@@ -33,24 +38,18 @@ class TaxEngineLedgerResult:
 
 
 class TaxEngine(Protocol):
-    def make_configuration(self, wallet_labels: Iterable[str], assets: Iterable[str]) -> tuple[Any, str | None]:
-        """Return the engine-specific configuration plus an optional cleanup token."""
+    """Profile-level tax engine interface.
+
+    Engines receive raw per-profile journal inputs and return the aggregated
+    ledger state that handlers persist into Kassiber's journal tables.
+    """
 
     def build_ledger_state(self, inputs: TaxEngineLedgerInputs) -> TaxEngineLedgerResult:
         """Return aggregated ledger state for one profile."""
 
-    def process_asset(
-        self,
-        normalized_inputs: NormalizedTaxAssetInputs,
-        wallet_refs_by_label: Mapping[str, Mapping[str, Any]],
-        configuration: Any,
-    ) -> TaxEngineAssetResult:
-        """Return journal entries, quarantines, and holding deltas for one asset."""
-
 
 __all__ = [
     "TaxEngine",
-    "TaxEngineAssetResult",
     "TaxEngineLedgerInputs",
     "TaxEngineLedgerResult",
 ]

@@ -100,7 +100,7 @@ let you override them.
 - `rates range <PAIR> [--start X] [--end Y] [--limit N]` — cached samples in a window, CSV-exportable
 - `rates set <PAIR> <TIMESTAMP> <RATE> [--source manual]` — upsert a manual rate without hitting the network
 
-Supported pairs today: `BTC-USD`, `BTC-EUR`. The cache is additive: a manual override and a synced rate can coexist at the same timestamp under different `source` values. During `journals process`, Kassiber now auto-fills missing transaction prices from the local cache when a matching sample exists at or before the transaction timestamp. Reports still use the stored transaction/journal pricing rather than querying the cache live.
+Supported pairs today: `BTC-USD`, `BTC-EUR`. The cache is additive: a manual override and a synced rate can coexist at the same timestamp under different `source` values. During `journals process`, Kassiber auto-fills missing transaction prices from the local cache when a matching sample exists at or before the transaction timestamp. Reports still use stored transaction and journal pricing rather than querying the cache live.
 
 Cost basis is pooled per asset across all wallets in a profile so the RP2 lot engine can match a disposal in one wallet against an acquisition in another and so on-chain self-transfers (booked as `IntraTransaction` MOVE) carry their original basis to the destination wallet. Per-wallet portfolio rows show that wallet's residual quantity multiplied by the asset's average residual basis — useful as an allocation, not as an authoritative answer to "which lot lives where." SQLite remains the system of record.
 
@@ -579,11 +579,11 @@ Generic wallet imports accept JSON arrays or CSV files with these fields:
 
 `amount` should be positive. If you provide a negative amount, Kassiber normalizes it and infers direction if possible.
 
-RP2 needs fiat pricing to compute tax lots. If imported or synced transactions do not include `fiat_rate` / `fiat_value`, Kassiber first tries to auto-fill them from the local rates cache during `journals process`; transactions are quarantined only when pricing is still unavailable after that lookup instead of silently receiving zero-basis tax results.
+RP2 and the Austrian engine need fiat pricing to compute tax lots. If imported or synced transactions do not include `fiat_rate` / `fiat_value`, Kassiber first tries to auto-fill them from the local rates cache during `journals process`; transactions are quarantined only if pricing is still unavailable instead of silently assigning zero-basis tax results.
 
 ## Tax policy
 
-Profiles carry their own tax policy defaults. Kassiber currently exposes the RP2-backed `generic` policy and an explicitly experimental Austrian `at` registration on top of the shared engine seam. The Austrian path normalizes profiles to EUR and preserves the legacy 365-day field shape for `Altbestand`, but journal processing intentionally stops with an `experimental_tax_policy` error until the dedicated Austrian engine is implemented and reviewed by a Steuerberater.
+Profiles carry their own tax policy defaults. Kassiber currently exposes the RP2-backed `generic` policy and an explicitly experimental Austrian `at` path on top of the shared engine seam. Austrian profiles normalize to EUR, preserve the legacy 365-day field shape for `Altbestand`, and pin the legacy `gains_algorithm` field to `FIFO` because the Austrian engine applies its own FIFO / moving-average rules internally. Supported Austrian journal flows now process through the dedicated engine, while unsupported or ambiguous provenance quarantines instead of being guessed. JSON report envelopes for Austrian profiles also carry top-level `experimental` / `review_required` markers so downstream automation keeps the review gate visible. The Austrian path is still experimental and should be reviewed by a Steuerberater before filing.
 
 ```bash
 python3 -m kassiber profiles create austrian \
@@ -601,10 +601,11 @@ Wallet-level `Altbestand` stays separate from the profile policy because it is p
 
 ## What is not implemented yet
 
-- account adjustments
+- tax-aware reports still derive rates from stored transaction and journal pricing rather than querying the rates cache live
 - fiat amounts stored as REAL (cents migration pending)
 - River Lightning CSV importer (Phoenix CSV is supported — see above)
 - `custom` wallet kind DSL for mapping arbitrary CSV schemas
+- account adjustments
 - per-profile Tor proxy configuration
 - xpub-native live sync without an explicit descriptor
 - descriptor-backed `bitcoinrpc` live sync
@@ -614,12 +615,12 @@ Wallet-level `Altbestand` stays separate from the profile policy because it is p
 - remote server mode / REST API
 - browser / multi-user auth
 - role-based access
-- Austrian journal engine, Austrian defaults beyond profile registration, and E 1kv export
+- Austrian E 1kv export and broader provenance coverage beyond the current conservative Austrian engine defaults
 
 ## Architecture notes
 
-- The CLI entrypoint and the command implementations (importers, rates, wallets, sync adapters, journals, metadata, reports, argparse tree) live in [kassiber/app.py](kassiber/app.py). An incremental bottom-up extraction is in progress.
-- Supporting modules currently extracted from `app.py`:
+- The CLI entrypoint lives in [kassiber/cli/main.py](kassiber/cli/main.py), and the remaining command handlers live in [kassiber/cli/handlers.py](kassiber/cli/handlers.py).
+- Supporting modules extracted from the old monolith:
   - [kassiber/errors.py](kassiber/errors.py) — `AppError` typed exception.
   - [kassiber/time_utils.py](kassiber/time_utils.py) — timestamp parsing + RFC3339 formatting.
   - [kassiber/msat.py](kassiber/msat.py) — BTC ↔ msat conversion helpers.

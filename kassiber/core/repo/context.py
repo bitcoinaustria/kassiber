@@ -16,10 +16,12 @@ def current_context_snapshot(conn):
         else None
     )
     profile = (
-        conn.execute("SELECT id, label FROM profiles WHERE id = ?", (profile_id,)).fetchone()
+        conn.execute("SELECT id, workspace_id, label FROM profiles WHERE id = ?", (profile_id,)).fetchone()
         if profile_id
         else None
     )
+    if workspace and profile and profile["workspace_id"] != workspace["id"]:
+        profile = None
     return {
         "workspace_id": workspace["id"] if workspace else "",
         "workspace_label": workspace["label"] if workspace else "",

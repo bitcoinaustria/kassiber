@@ -1,8 +1,8 @@
 # Austrian Tax Engine — Design
 
-**Status:** Designed, not yet implemented. Phase 0.5 scope.
-**Module:** `kassiber/core/engines/at_kryptovo.py`
-**Report:** `kassiber/core/reports/e1kv.py` (PDF + CSV)
+**Status:** An experimental Austrian journal engine now exists for supported acquisitions, disposals, and self-transfers. Unsupported or ambiguous provenance quarantines instead of being guessed, and Austrian JSON report envelopes carry explicit review markers; E 1kv export is still pending.
+**Module:** `kassiber/core/engines/austria.py`
+**Report:** Planned E 1kv export layered on top of the shared journal/report pipeline.
 **Legal gate:** Output requires Steuerberater review before filing. A disclaimer surfaces on first use and on every report.
 
 ## Why a separate engine and not an RP2 config
@@ -15,7 +15,7 @@ RP2 is excellent for US-style tax regimes (lot-based FIFO/LIFO/HIFO/LOFO with da
 
 Additionally, the Altvermögen rules themselves involve a 1-year Spekulationsfrist that resembles RP2's long-term threshold but only applies to the Altvermögen tranche and expires via swap, which adds state RP2 doesn't track.
 
-The cleanest path is a **separate engine** sharing kassiber's `TaxEngine` interface with `rp2_generic`. Both engines consume the same input shapes; users select one via tax policy.
+The cleanest path is a **separate engine** sharing Kassiber's current `TaxEngine` interface with `kassiber/core/engines/rp2.py`. Both engines should consume the same per-profile ledger inputs; users select one via tax policy.
 
 ## Prerequisite: normalization and provenance layer
 
@@ -27,13 +27,13 @@ Why:
 - Manual transfer pairs and cross-asset pair audit state already affect tax behavior and need to be explicit inputs.
 - Some Austrian questions require facts Kassiber may not currently observe; those cases must be quarantined or explicitly annotated rather than guessed.
 
-Phase 0.5 therefore introduces `core.normalized_events`:
+Phase 0.5 therefore introduces `kassiber/core/tax_events.py`:
 
 - Input: raw transactions, wallet metadata, transfer-pair state, explicit tax annotations, and rate lookup helpers.
 - Output: typed `NormalizedTaxEvent` records for the engine.
 - Rule: if the normalizer cannot prove the event type with acceptable confidence, it emits an ambiguous event and the engine quarantines it.
 
-This layer is shared by both `rp2_generic` and `at_kryptovo`, so the Austrian work improves the generic engine boundary instead of forking the ingestion story.
+This layer is shared by both the generic RP2 engine and the future Austrian engine, so the Austrian work improves the generic engine boundary instead of forking the ingestion story.
 
 ## Legal framework (sources)
 
@@ -175,67 +175,56 @@ Deliberate non-decisions for MVP:
 
 ## Engine interface
 
+Today the shared engine seam is intentionally narrow:
+
 ```python
-# core/engines/base.py
-from typing import Protocol, Callable
-from dataclasses import dataclass
+# kassiber/core/engines/base.py
+@dataclass(frozen=True)
+class TaxEngineLedgerInputs:
+    rows: Sequence[Mapping[str, Any]]
+    wallet_refs_by_id: Mapping[str, Mapping[str, Any]]
+    manual_pair_records: Sequence[Mapping[str, Any]]
 
-ProgressCallback = Callable[[str, float], None]  # (stage, 0..1)
 
 @dataclass(frozen=True)
-class TaxInput:
-    events: list[NormalizedTaxEvent]
-    wallets: list[Wallet]
-    rate_lookup: Callable[[str, str], Decimal | None]
-    transfer_pairs: TransferGraph
+class TaxEngineLedgerResult:
+    entries: list[dict[str, Any]]
+    quarantines: list[dict[str, Any]]
+    intra_audit: list[dict[str, Any]]
+    cross_asset_pairs: list[dict[str, Any]]
+    account_holdings: dict[tuple[Any, ...], dict[str, Any]]
+    wallet_holdings: dict[tuple[Any, ...], dict[str, Any]]
 
-@dataclass(frozen=True)
-class JournalEntryOut:
-    tx_id: str
-    kind: str                              # 'acquisition' | 'disposal' | 'income' | 'transfer'
-    container_id: str
-    at_regime: str | None                  # 'altvermoegen' | 'neuvermoegen' | None for income
-    qty_msat: int
-    price_eur_cents: int                   # FMV at event
-    cost_basis_eur_cents: int              # for disposals; 0 otherwise
-    proceeds_eur_cents: int                # for disposals; 0 otherwise
-    gain_loss_eur_cents: int               # proceeds - cost_basis for disposal; 0 otherwise
-    income_eur_cents: int                  # for income events; 0 otherwise
-    holding_period_days: int | None        # for Altvermögen disposals
-    note: str                              # human-readable trace
-
-@dataclass(frozen=True)
-class JournalResult:
-    entries: list[JournalEntryOut]
-    quarantined: list[tuple[str, str]]     # (tx_id, reason) for unpriced or ambiguous
-    summary: JournalSummary                # totals for E 1kv
 
 class TaxEngine(Protocol):
-    name: str
-    def compute(
-        self,
-        input: TaxInput,
-        policy: TaxPolicy,
-        *,
-        on_progress: ProgressCallback | None = None,
-    ) -> JournalResult: ...
+    def build_ledger_state(self, inputs: TaxEngineLedgerInputs) -> TaxEngineLedgerResult: ...
 ```
+
+The future Austrian engine should fit this same boundary. Austrian-specific summaries such as E 1kv totals belong in a reporting layer built from the shared journal state, not in a separate engine-only return type.
 
 ## Algorithm — full pipeline
 
-Pseudocode for `AtKryptoVoEngine.compute()`:
+Pseudocode for a future Austrian engine `build_ledger_state()`:
 
 ```
-# 1. Sort normalized events chronologically per container — stable order, UTC
-events = sort(input.events, key=(timestamp, tx_id))
+# 1. Start from the shared per-profile journal inputs
+rows = inputs.rows
+manual_pairs = inputs.manual_pair_records
+wallet_refs = inputs.wallet_refs_by_id
 
-# 2. Classify every acquisition-like event
+# 2. Reuse the same transfer detection/manual-pair story as the generic engine,
+#    then normalize per asset through kassiber/core/tax_events.py
+for asset, asset_rows in group_by_asset(rows):
+    normalized = normalize_tax_asset_inputs(profile, asset, asset_rows, wallet_refs, pairs_for_asset)
+    events = sort(normalized.events, key=(occurred_at, transaction_id))
+
+# 3. Classify every acquisition-like event
 for e in events:
     if e.kind is acquisition_like:
         e.at_regime = classify(e)
     # disposals inherit regime from the lot(s) they disposed
 
-# 3. Per-container running state
+# 4. Per-container running state
 state = {container_id: WalletState() for container_id in containers}
 
 # WalletState tracks:
@@ -243,17 +232,14 @@ state = {container_id: WalletState() for container_id in containers}
 #   - neuvermögen pre-2023 lots: list[NeuLot(qty_msat, cost_eur_cents, acquired_at)]
 #   - neuvermögen from-2023 running avg: (qty_msat, avg_price_eur_cents_per_btc)
 
-# 4. Iterate events
+# 5. Iterate events
 for e in events:
-    entries_out, quarantine_reason = process(e, state[e.container_id], rate_lookup, input.transfer_pairs)
+    entries_out, quarantine_reason = process(e, state[e.container_id], normalized.transfers)
     journal.extend(entries_out)
     if quarantine_reason:
         quarantined.append((e.tx_id, quarantine_reason))
 
-# 5. Group by tax year + regime, compute E 1kv summary
-summary = build_summary(journal)
-
-# 6. Persist through the shared journal pipeline
+# 6. Return shared ledger state; Austrian E 1kv summaries derive from journal output later
 ```
 
 ### `process()` per event kind
@@ -337,30 +323,36 @@ A footer on every E 1kv PDF repeats the Steuerberater-review gate and lists any 
 ## Policy registration
 
 ```python
-# kassiber/core/tax_policies/at.py
-from kassiber.core.tax_policy import TaxPolicy, POLICY_BUILDERS
-from kassiber.core.engines.at_kryptovo import AtKryptoVoEngine
-
+# kassiber/tax_policy.py
 def build_austrian_policy(profile):
     return TaxPolicy(
         tax_country="at",
         fiat_currency="EUR",
-        long_term_days=365,                         # legacy shape, respected by Altvermögen 1-year rule
-        accounting_methods=("fifo_moving_average",), # special; not a standard RP2 method
-        report_generators=("e1kv_pdf", "e1kv_csv"),
-        default_accounting_method="fifo_moving_average",
-        generation_language="en",                   # English UI strings; tax terms stay German
+        long_term_days=365,
+        accounting_methods=("fifo", "lifo", "hifo", "lofo"),
+        report_generators=("open_positions", "rp2_full_report"),
     )
 
-POLICY_BUILDERS["at"] = build_austrian_policy
-ENGINE_FOR_POLICY = {"at": AtKryptoVoEngine}
+
+# kassiber/core/engines/__init__.py
+def build_tax_engine(profile):
+    if normalize_tax_country(profile_value(profile, "tax_country")) == "at":
+        return ExperimentalAustrianTaxEngine(profile)
+    return GenericRP2TaxEngine(profile)
 ```
 
-The engine-for-policy map is consulted by `core.journals.process(profile)`.
+Today the policy registration and the first Austrian ledger builder both live behind `ExperimentalAustrianTaxEngine`. The engine runs on the shared ledger seam, but it remains conservative: unsupported semantics quarantine until Kassiber has stronger provenance capture.
 
 ## Testing
 
-`tests/test_at_kryptovo.py` covers:
+Current coverage in `tests/test_review_regressions.py` verifies:
+
+- Austrian profiles normalize to `tax_country="at"`, `fiat_currency="EUR"`, and `tax_long_term_days=365`
+- supported Austrian journal flows process successfully through the shared ledger seam
+- unsupported inbound kinds such as `lightning_received` quarantine as `insufficient_tax_provenance`
+- switching an existing profile to Austrian invalidates stale journals before reprocessing
+
+The scenarios below remain the desired target suite as provenance support expands:
 
 ### Scenario 1: Pure Altvermögen disposal after >1 year
 - Buy 1 BTC on 2020-06-01
@@ -421,17 +413,15 @@ The engine-for-policy map is consulted by `core.journals.process(profile)`.
 
 ## Implementation order within Phase 0.5
 
-1. Migration `004_transaction_tax_annotations.sql` if explicit tax-annotation storage is needed for MVP
-2. `core/normalized_events.py` — normalize raw transactions + transfer state + annotations into `NormalizedTaxEvent`
-3. `core/engines/base.py` — `TaxEngine` Protocol + `TaxInput` / `JournalResult` dataclasses
-4. `core/engines/rp2_generic.py` — extract current RP2 path to satisfy the interface (becomes the default for `tax_country=generic`)
-5. `core/engines/at_kryptovo.py` — the full AT engine
-6. `core/reports/e1kv.py` — PDF + CSV renderers
-7. `core/tax_policies/at.py` — POLICY_BUILDERS entry
-8. `cli/commands/journals.py` plus any needed annotation surfaces — route to correct engine based on policy
-9. `tests/test_at_kryptovo.py` — all scenarios above, including ambiguous-event quarantine
-10. `tests/test_e1kv_report.py` — golden file comparison for PDF + CSV
-11. Disclaimers modal + first-use gating (CLI warns; UI modal in Phase 4)
+1. Keep `kassiber/core/tax_events.py` as the shared normalization seam and extend it only where Austrian provenance needs more explicit annotation
+2. Keep `kassiber/core/engines/base.py` limited to `TaxEngineLedgerInputs` / `TaxEngineLedgerResult` and `build_ledger_state(...)`
+3. Keep `kassiber/core/engines/rp2.py` as the generic reference implementation for the shared seam
+4. Replace the `ExperimentalAustrianTaxEngine` gate in `kassiber/core/engines/austria.py` with the real Austrian ledger builder
+5. Add Austrian-specific report/export code on top of the shared journal output, likely under `kassiber/core/reports.py` or a dedicated report helper once the shape is stable
+6. Add any explicit tax-annotation storage only if the normalizer cannot derive legally defensible semantics from existing provenance
+7. Expand regression coverage from the current gating checks to the scenario suite above
+8. Add E 1kv CSV/PDF golden tests once report output exists
+9. Keep the Steuerberater-review gate/disclaimer when the engine becomes runnable
 
 ## Open questions
 

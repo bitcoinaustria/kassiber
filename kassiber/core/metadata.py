@@ -65,6 +65,7 @@ def set_transaction_note(conn, workspace_ref, profile_ref, tx_ref, note, hooks: 
     _, profile = hooks.resolve_scope(conn, workspace_ref, profile_ref)
     tx = hooks.resolve_transaction(conn, profile["id"], tx_ref)
     conn.execute("UPDATE transactions SET note = ? WHERE id = ?", (note, tx["id"]))
+    hooks.invalidate_journals(conn, profile["id"])
     conn.commit()
     return {"transaction_id": tx["id"], "note": note}
 
@@ -113,6 +114,7 @@ def add_tag_to_transaction(conn, workspace_ref, profile_ref, tx_ref, tag_ref, ho
         "INSERT OR IGNORE INTO transaction_tags(transaction_id, tag_id) VALUES(?, ?)",
         (tx["id"], tag["id"]),
     )
+    hooks.invalidate_journals(conn, profile["id"])
     conn.commit()
     return {"transaction_id": tx["id"], "tag": tag["code"], "status": "added"}
 
@@ -125,6 +127,7 @@ def remove_tag_from_transaction(conn, workspace_ref, profile_ref, tx_ref, tag_re
         "DELETE FROM transaction_tags WHERE transaction_id = ? AND tag_id = ?",
         (tx["id"], tag["id"]),
     )
+    hooks.invalidate_journals(conn, profile["id"])
     conn.commit()
     return {"transaction_id": tx["id"], "tag": tag["code"], "status": "removed"}
 
@@ -191,6 +194,7 @@ def list_transaction_records(
         raise AppError(
             f"--limit cannot exceed {MAX_RECORDS_LIMIT}",
             code="validation",
+            hint=f"Use cursor-based pagination instead of larger limits; max page size is {MAX_RECORDS_LIMIT}.",
         )
 
     where = ["t.profile_id = ?"]
@@ -391,6 +395,8 @@ def import_bip329_labels(conn, workspace_ref, profile_ref, file_path, hooks: Met
                 )
                 if conn.total_changes > before:
                     transaction_tags_added += 1
+    if records:
+        hooks.invalidate_journals(conn, profile["id"])
     conn.commit()
     return {
         "file": os.path.abspath(file_path),
@@ -402,14 +408,23 @@ def import_bip329_labels(conn, workspace_ref, profile_ref, file_path, hooks: Met
     }
 
 
-def list_bip329_labels(conn, workspace_ref, profile_ref, hooks: MetadataHooks, wallet_ref=None, limit=100):
+def list_bip329_labels(conn, workspace_ref, profile_ref, hooks: MetadataHooks, wallet_ref=None, limit=None):
     _, profile = hooks.resolve_scope(conn, workspace_ref, profile_ref)
+    effective_limit = limit if limit is not None else DEFAULT_RECORDS_LIMIT
+    if effective_limit <= 0:
+        raise AppError("--limit must be positive", code="validation")
+    if effective_limit > MAX_RECORDS_LIMIT:
+        raise AppError(
+            f"--limit cannot exceed {MAX_RECORDS_LIMIT}",
+            code="validation",
+            hint=f"Use a smaller --limit; max page size is {MAX_RECORDS_LIMIT}.",
+        )
     wallet = hooks.resolve_wallet(conn, profile["id"], wallet_ref) if wallet_ref else None
     wallet_clause = "AND wallet_id = ?" if wallet else ""
     params = [profile["id"]]
     if wallet:
         params.append(wallet["id"])
-    params.append(limit)
+    params.append(effective_limit)
     rows = conn.execute(
         f"""
         SELECT
