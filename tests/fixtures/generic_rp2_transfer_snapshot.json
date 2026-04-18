@@ -1,0 +1,104 @@
+{
+  "capital_gains": [
+    {
+      "asset": "BTC",
+      "cost_basis": 60.0,
+      "description": "Move to hot wallet",
+      "entry_type": "transfer_fee",
+      "gain_loss": 5.0,
+      "occurred_at": "2026-02-01T12:00:00Z",
+      "proceeds": 65.0,
+      "quantity": 0.001,
+      "quantity_msat": 100000000,
+      "wallet": "Cold"
+    }
+  ],
+  "journal_entries": [
+    {
+      "account": "treasury",
+      "asset": "BTC",
+      "cost_basis": 0,
+      "description": "Cold acquisition",
+      "entry_type": "acquisition",
+      "fiat_value": 60000.0,
+      "gain_loss": 0,
+      "occurred_at": "2026-01-01T10:00:00Z",
+      "proceeds": 0,
+      "quantity": 1.0,
+      "quantity_msat": 100000000000,
+      "wallet": "Cold"
+    },
+    {
+      "account": "treasury",
+      "asset": "BTC",
+      "cost_basis": 60.0,
+      "description": "Move to hot wallet",
+      "entry_type": "transfer_fee",
+      "fiat_value": 65.0,
+      "gain_loss": 5.0,
+      "occurred_at": "2026-02-01T12:00:00Z",
+      "proceeds": 65.0,
+      "quantity": -0.001,
+      "quantity_msat": -100000000,
+      "wallet": "Cold"
+    },
+    {
+      "account": "treasury",
+      "asset": "BTC",
+      "cost_basis": 0,
+      "description": "Transfer Cold -> Hot",
+      "entry_type": "transfer_in",
+      "fiat_value": 0.0,
+      "gain_loss": 0,
+      "occurred_at": "2026-02-01T12:00:00Z",
+      "proceeds": 0,
+      "quantity": 0.5,
+      "quantity_msat": 50000000000,
+      "wallet": "Hot"
+    },
+    {
+      "account": "treasury",
+      "asset": "BTC",
+      "cost_basis": 0,
+      "description": "Transfer Cold -> Hot",
+      "entry_type": "transfer_out",
+      "fiat_value": 0.0,
+      "gain_loss": 0,
+      "occurred_at": "2026-02-01T12:00:00Z",
+      "proceeds": 0,
+      "quantity": -0.501,
+      "quantity_msat": -50100000000,
+      "wallet": "Cold"
+    }
+  ],
+  "portfolio_summary": [
+    {
+      "account": "treasury",
+      "asset": "BTC",
+      "avg_cost": 60000.0,
+      "cost_basis": 29940.0,
+      "market_value": 32435.0,
+      "quantity": 0.499,
+      "unrealized_pnl": 2495.0,
+      "wallet": "Cold"
+    },
+    {
+      "account": "treasury",
+      "asset": "BTC",
+      "avg_cost": 60000.0,
+      "cost_basis": 30000.0,
+      "market_value": 32500.0,
+      "quantity": 0.5,
+      "unrealized_pnl": 2500.0,
+      "wallet": "Hot"
+    }
+  ],
+  "summary": {
+    "auto_priced": 0,
+    "cross_asset_pairs": 0,
+    "entries_created": 4,
+    "processed_transactions": 3,
+    "quarantined": 0,
+    "transfers_detected": 1
+  }
+}
