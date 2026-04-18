@@ -76,7 +76,7 @@ modules without changing user-visible behavior.
 - [x] Extract metadata note/tag/excluded, records, and BIP329 flows into
   `kassiber.core`
 - [ ] Extract report builders/export paths into `kassiber.core`
-- [ ] Move `_emit_error` out of `app.py` and make the envelope boundary
+- [x] Move `_emit_error` out of `app.py` and make the envelope boundary
   explicit
 - [x] Move `_RP2_MODULES` / `get_rp2_modules` behind a journals or engine
   seam
