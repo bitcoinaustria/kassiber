@@ -39,6 +39,11 @@ from .backends import (
     set_default_backend,
     update_db_backend,
 )
+from .core import accounts as core_accounts
+from .core import imports as core_imports
+from .core import rates as core_rates
+from .core import sync as core_sync
+from .core import wallets as core_wallets
 from .core.repo import current_context_snapshot
 from .core.runtime import (
     build_status_payload,
@@ -1655,80 +1660,20 @@ def normalize_import_record(record):
 
 
 def insert_wallet_records(conn, profile, wallet, records, source_label):
-    imported = 0
-    skipped = 0
-    for record in records:
-        normalized = normalize_import_record(record)
-        fingerprint = make_transaction_fingerprint(
-            wallet["id"],
-            normalized["external_id"],
-            normalized["occurred_at"],
-            normalized["direction"],
-            normalized["asset"],
-            normalized["amount"],
-            normalized["fee"],
-        )
-        exists = conn.execute(
-            "SELECT 1 FROM transactions WHERE fingerprint = ?",
-            (fingerprint,),
-        ).fetchone()
-        if exists:
-            skipped += 1
-            continue
-        tx_id = str(uuid.uuid4())
-        conn.execute(
-            """
-            INSERT INTO transactions(
-                id, workspace_id, profile_id, wallet_id, external_id, fingerprint,
-                occurred_at, direction, asset, amount, fee, fiat_currency,
-                fiat_rate, fiat_value, kind, description, counterparty, raw_json, created_at
-            ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """,
-            (
-                tx_id,
-                profile["workspace_id"],
-                profile["id"],
-                wallet["id"],
-                normalized["external_id"] or None,
-                fingerprint,
-                normalized["occurred_at"],
-                normalized["direction"],
-                normalized["asset"],
-                btc_to_msat(normalized["amount"]),
-                btc_to_msat(normalized["fee"]),
-                profile["fiat_currency"],
-                float(normalized["fiat_rate"]) if normalized["fiat_rate"] is not None else None,
-                float(normalized["fiat_value"]) if normalized["fiat_value"] is not None else None,
-                normalized["kind"],
-                normalized["description"],
-                normalized["counterparty"],
-                normalized["raw_json"],
-                now_iso(),
-            ),
-        )
-        imported += 1
-    invalidate_journals(conn, profile["id"])
-    conn.commit()
-    return {
-        "wallet": wallet["label"],
-        "source": source_label,
-        "imported": imported,
-        "skipped": skipped,
-    }
+    return core_imports.insert_wallet_records(
+        conn,
+        profile,
+        wallet,
+        records,
+        source_label,
+        _import_coordinator_hooks(),
+    )
 
 
 def import_into_wallet(conn, workspace_ref, profile_ref, wallet_ref, file_path, input_format):
     _, profile = resolve_scope(conn, workspace_ref, profile_ref)
     wallet = resolve_wallet(conn, profile["id"], wallet_ref)
-    records = load_import_records(file_path, input_format)
-    outcome = insert_wallet_records(conn, profile, wallet, records, f"file:{input_format}")
-    if is_btcpay_format(input_format):
-        outcome.update(apply_btcpay_metadata(conn, profile, wallet, records))
-    if is_phoenix_format(input_format):
-        outcome.update(apply_phoenix_metadata(conn, profile, wallet, records))
-    outcome["input_format"] = input_format
-    outcome["file"] = os.path.abspath(file_path)
-    return outcome
+    return _import_file_for_sync(conn, profile, wallet, file_path, input_format)
 
 
 def ensure_tag_row(conn, workspace_id, profile_id, code, label):
@@ -1748,6 +1693,35 @@ def ensure_tag_row(conn, workspace_id, profile_id, code, label):
         (tag_id, workspace_id, profile_id, normalized_code, label, now_iso()),
     )
     return conn.execute("SELECT * FROM tags WHERE id = ?", (tag_id,)).fetchone(), True
+
+
+def _import_coordinator_hooks():
+    return core_imports.ImportCoordinatorHooks(
+        ensure_tag_row=ensure_tag_row,
+        invalidate_journals=invalidate_journals,
+    )
+
+
+def _import_file_for_sync(conn, profile, wallet, file_path, input_format):
+    return core_imports.import_file_into_wallet(
+        conn,
+        profile,
+        wallet,
+        file_path,
+        input_format,
+        _import_coordinator_hooks(),
+    )
+
+
+def _insert_records_for_sync(conn, profile, wallet, records, source_label):
+    return core_imports.insert_wallet_records(
+        conn,
+        profile,
+        wallet,
+        records,
+        source_label,
+        _import_coordinator_hooks(),
+    )
 
 
 def apply_btcpay_metadata(conn, profile, wallet, records):
@@ -2456,6 +2430,35 @@ def bitcoinrpc_records_for_wallet(backend, wallet, addresses):
     return records, {"core_wallet": wallet_name, "imported_addresses": imported_count}
 
 
+def _bitcoinrpc_sync_adapter(backend, wallet, sync_state):
+    return bitcoinrpc_records_for_wallet(
+        backend,
+        wallet,
+        [target["address"] for target in sync_state["targets"] if target.get("address")],
+    )
+
+
+def _wallet_sync_hooks():
+    return core_sync.WalletSyncHooks(
+        import_file=_import_file_for_sync,
+        insert_records=_insert_records_for_sync,
+        resolve_backend=resolve_backend,
+        resolve_sync_state=resolve_wallet_sync_targets,
+        normalize_addresses=normalize_addresses,
+        backend_adapters={
+            "esplora": lambda backend, wallet, sync_state: (
+                esplora_records_for_wallet(backend, sync_state),
+                {},
+            ),
+            "electrum": lambda backend, wallet, sync_state: (
+                electrum_records_for_wallet(backend, sync_state),
+                {},
+            ),
+            "bitcoinrpc": _bitcoinrpc_sync_adapter,
+        },
+    )
+
+
 def read_varint(payload, offset):
     prefix = payload[offset]
     offset += 1
@@ -2738,49 +2741,13 @@ def electrum_records_for_wallet(backend, sync_state):
 
 def sync_wallet_from_backend(conn, runtime_config, workspace_ref, profile_ref, wallet):
     _, profile = resolve_scope(conn, workspace_ref, profile_ref)
-    config = json.loads(wallet["config_json"] or "{}")
-    backend = resolve_backend(runtime_config, config.get("backend"))
-    sync_state = resolve_wallet_sync_targets(backend, wallet)
-    if not sync_state["targets"]:
-        return {
-            "wallet": wallet["label"],
-            "status": "skipped",
-            "reason": "no addresses or descriptors configured for backend sync",
-        }
-    kind = normalize_backend_kind(backend["kind"])
-    adapter_meta = {}
-    if kind == "esplora":
-        normalized_records = esplora_records_for_wallet(backend, sync_state)
-    elif kind == "electrum":
-        normalized_records = electrum_records_for_wallet(backend, sync_state)
-    elif kind == "bitcoinrpc":
-        normalized_records, adapter_meta = bitcoinrpc_records_for_wallet(
-            backend,
-            wallet,
-            [target["address"] for target in sync_state["targets"] if target.get("address")],
-        )
-    else:
-        return {
-            "wallet": wallet["label"],
-            "status": "skipped",
-            "reason": f"backend kind '{backend['kind']}' is not implemented yet",
-        }
-    outcome = insert_wallet_records(conn, profile, wallet, normalized_records, f"backend:{backend['name']}")
-    outcome["backend"] = backend["name"]
-    outcome["backend_kind"] = kind
-    outcome["backend_url"] = backend["url"]
-    outcome["chain"] = sync_state["chain"]
-    outcome["network"] = sync_state["network"]
-    outcome["sync_mode"] = "descriptor" if sync_state["descriptor_plan"] else "addresses"
-    outcome["target_count"] = len(sync_state["targets"])
-    if sync_state["descriptor_plan"]:
-        outcome["gap_limit"] = sync_state["descriptor_plan"].gap_limit
-    else:
-        outcome["addresses"] = ",".join(target["address"] for target in sync_state["targets"] if target.get("address"))
-    if sync_state["policy_asset_id"]:
-        outcome["policy_asset"] = sync_state["policy_asset_id"]
-    outcome.update(adapter_meta)
-    return outcome
+    return core_sync.sync_wallet_from_backend(
+        conn,
+        runtime_config,
+        profile,
+        wallet,
+        _wallet_sync_hooks(),
+    )
 
 
 def sync_wallet(conn, runtime_config, workspace_ref, profile_ref, wallet_ref=None, sync_all=False):
@@ -2791,46 +2758,13 @@ def sync_wallet(conn, runtime_config, workspace_ref, profile_ref, wallet_ref=Non
         if not wallet_ref:
             raise AppError("Provide --wallet or use --all")
         wallets = [resolve_wallet(conn, profile["id"], wallet_ref)]
-    results = []
-    for wallet in wallets:
-        config = json.loads(wallet["config_json"] or "{}")
-        source_file = config.get("source_file")
-        source_format = config.get("source_format")
-        addresses = normalize_addresses(config.get("addresses"))
-        has_descriptor = bool(str_or_none(config.get("descriptor")))
-        if source_file and source_format:
-            outcome = import_into_wallet(
-                conn,
-                profile["workspace_id"],
-                profile["id"],
-                wallet["id"],
-                source_file,
-                source_format,
-            )
-            results.append({"wallet": wallet["label"], "status": "synced", **outcome})
-            continue
-        if addresses:
-            outcome = sync_wallet_from_backend(conn, runtime_config, profile["workspace_id"], profile["id"], wallet)
-            if outcome.get("status") == "skipped":
-                results.append(outcome)
-            else:
-                results.append({"wallet": wallet["label"], "status": "synced", **outcome})
-            continue
-        if has_descriptor:
-            outcome = sync_wallet_from_backend(conn, runtime_config, profile["workspace_id"], profile["id"], wallet)
-            if outcome.get("status") == "skipped":
-                results.append(outcome)
-            else:
-                results.append({"wallet": wallet["label"], "status": "synced", **outcome})
-            continue
-        results.append(
-            {
-                "wallet": wallet["label"],
-                "status": "skipped",
-                "reason": "no file source, descriptor, or backend addresses configured",
-            }
-        )
-    return results
+    return core_sync.sync_wallets(
+        conn,
+        runtime_config,
+        profile,
+        wallets,
+        _wallet_sync_hooks(),
+    )
 
 
 def resolve_descriptor_branch_index(plan, branch):
@@ -6177,42 +6111,18 @@ def dispatch(conn, args):
         return cmd_status(conn, args)
     if args.command == "backends":
         if args.backends_command == "list":
-            return emit(args, list_backends(args.runtime_config))
+            return emit(args, core_accounts.list_backends(args.runtime_config))
         if args.backends_command == "kinds":
-            return emit(args, [{"kind": k} for k in sorted(BACKEND_KINDS)])
+            return emit(args, core_accounts.list_backend_kinds())
         if args.backends_command == "get":
-            # Prefer DB row; fall back to runtime_config view if env/built-in only
-            try:
-                return emit(args, get_db_backend(conn, args.name))
-            except AppError as exc:
-                if exc.code != "not_found":
-                    raise
-                name = args.name.strip().lower()
-                backend = args.runtime_config["backends"].get(name)
-                if not backend:
-                    raise
-                return emit(
-                    args,
-                    {
-                        "name": name,
-                        "kind": backend.get("kind", ""),
-                        "chain": backend.get("chain", ""),
-                        "network": backend.get("network", ""),
-                        "url": backend.get("url", ""),
-                        "batch_size": backend.get("batch_size"),
-                        "auth_header": backend.get("auth_header", ""),
-                        "token": backend.get("token", ""),
-                        "timeout": backend.get("timeout"),
-                        "tor_proxy": backend.get("tor_proxy", ""),
-                        "notes": "",
-                        "source": backend.get("source", ""),
-                        "is_default": name == args.runtime_config["default_backend"],
-                    },
-                )
+            return emit(
+                args,
+                core_accounts.get_backend_details(conn, args.runtime_config, args.name),
+            )
         if args.backends_command == "create":
             return emit(
                 args,
-                create_db_backend(
+                core_accounts.create_backend(
                     conn,
                     args.name,
                     args.kind,
@@ -6240,13 +6150,16 @@ def dispatch(conn, args):
                 "tor_proxy": args.tor_proxy,
                 "notes": args.notes,
             }
-            return emit(args, update_db_backend(conn, args.name, updates))
+            return emit(args, core_accounts.update_backend(conn, args.name, updates))
         if args.backends_command == "delete":
-            return emit(args, delete_db_backend(conn, args.name))
+            return emit(args, core_accounts.delete_backend(conn, args.name))
         if args.backends_command == "set-default":
-            return emit(args, set_default_backend(conn, args.runtime_config, args.name))
+            return emit(
+                args,
+                core_accounts.set_default_backend(conn, args.runtime_config, args.name),
+            )
         if args.backends_command == "clear-default":
-            return emit(args, clear_default_backend(conn, args.runtime_config))
+            return emit(args, core_accounts.clear_default_backend(conn, args.runtime_config))
     if args.command == "context":
         if args.context_command == "show":
             return cmd_context_show(conn, args)
@@ -6256,17 +6169,17 @@ def dispatch(conn, args):
             return cmd_context_set(conn, args)
     if args.command == "workspaces":
         if args.workspaces_command == "list":
-            return emit(args, list_workspaces(conn))
+            return emit(args, core_accounts.list_workspaces(conn))
         if args.workspaces_command == "create":
-            return emit(args, dict(create_workspace(conn, args.label)))
+            return emit(args, dict(core_accounts.create_workspace(conn, args.label)))
     if args.command == "profiles":
         if args.profiles_command == "list":
-            return emit(args, list_profiles(conn, args.workspace))
+            return emit(args, core_accounts.list_profiles(conn, args.workspace))
         if args.profiles_command == "create":
             return emit(
                 args,
                 dict(
-                    create_profile(
+                    core_accounts.create_profile(
                         conn,
                         args.workspace,
                         args.label,
@@ -6278,7 +6191,10 @@ def dispatch(conn, args):
                 ),
             )
         if args.profiles_command == "get":
-            return emit(args, get_profile_details(conn, args.workspace, args.profile))
+            return emit(
+                args,
+                core_accounts.get_profile_details(conn, args.workspace, args.profile),
+            )
         if args.profiles_command == "set":
             updates = {
                 "label": args.label,
@@ -6293,15 +6209,18 @@ def dispatch(conn, args):
                     code="validation",
                     hint="Pass one or more of --label, --fiat-currency, --tax-country, --tax-long-term-days, --gains-algorithm",
                 )
-            return emit(args, update_profile(conn, args.workspace, args.profile, updates))
+            return emit(
+                args,
+                core_accounts.update_profile(conn, args.workspace, args.profile, updates),
+            )
     if args.command == "accounts":
         if args.accounts_command == "list":
-            return emit(args, list_accounts(conn, args.workspace, args.profile))
+            return emit(args, core_accounts.list_accounts(conn, args.workspace, args.profile))
         if args.accounts_command == "create":
             return emit(
                 args,
                 dict(
-                    create_account(
+                    core_accounts.create_account(
                         conn,
                         args.workspace,
                         args.profile,
@@ -6314,30 +6233,45 @@ def dispatch(conn, args):
             )
     if args.command == "wallets":
         if args.wallets_command == "list":
-            return emit(args, list_wallets(conn, args.workspace, args.profile))
+            return emit(args, core_wallets.list_wallets(conn, args.workspace, args.profile))
         if args.wallets_command == "create":
             return emit(
                 args,
                 dict(
-                    create_wallet(
+                    core_wallets.create_wallet(
                         conn,
                         args.workspace,
                         args.profile,
                         args.label,
                         args.kind,
                         args.account,
-                        parse_wallet_config(args),
+                        core_wallets.parse_wallet_config(args),
                     )
                 ),
             )
         if args.wallets_command == "set-altbestand":
-            return emit(args, set_wallet_altbestand(conn, args.workspace, args.profile, args.wallet, True))
+            return emit(
+                args,
+                core_wallets.set_wallet_altbestand(
+                    conn, args.workspace, args.profile, args.wallet, True
+                ),
+            )
         if args.wallets_command == "set-neubestand":
-            return emit(args, set_wallet_altbestand(conn, args.workspace, args.profile, args.wallet, False))
+            return emit(
+                args,
+                core_wallets.set_wallet_altbestand(
+                    conn, args.workspace, args.profile, args.wallet, False
+                ),
+            )
         if args.wallets_command == "kinds":
-            return emit(args, list_wallet_kinds())
+            return emit(args, core_wallets.list_wallet_kinds())
         if args.wallets_command == "get":
-            return emit(args, get_wallet_details(conn, args.workspace, args.profile, args.wallet))
+            return emit(
+                args,
+                core_wallets.get_wallet_details(
+                    conn, args.workspace, args.profile, args.wallet
+                ),
+            )
         if args.wallets_command == "update":
             if args.set_altbestand and args.clear_altbestand:
                 raise AppError(
@@ -6375,9 +6309,23 @@ def dispatch(conn, args):
                 "config": config_updates,
                 "clear": args.clear,
             }
-            return emit(args, update_wallet(conn, args.workspace, args.profile, args.wallet, updates))
+            return emit(
+                args,
+                core_wallets.update_wallet(
+                    conn, args.workspace, args.profile, args.wallet, updates
+                ),
+            )
         if args.wallets_command == "delete":
-            return emit(args, delete_wallet(conn, args.workspace, args.profile, args.wallet, cascade=args.cascade))
+            return emit(
+                args,
+                core_wallets.delete_wallet(
+                    conn,
+                    args.workspace,
+                    args.profile,
+                    args.wallet,
+                    cascade=args.cascade,
+                ),
+            )
         if args.wallets_command == "import-json":
             return emit(args, import_into_wallet(conn, args.workspace, args.profile, args.wallet, args.file, "json"))
         if args.wallets_command == "import-csv":
@@ -6603,18 +6551,18 @@ def dispatch(conn, args):
             )
     if args.command == "rates":
         if args.rates_command == "pairs":
-            return emit(args, list_cached_pairs(conn))
+            return emit(args, core_rates.list_cached_pairs(conn))
         if args.rates_command == "sync":
             return emit(
                 args,
-                sync_rates(conn, pair=args.pair, days=args.days, source=args.source),
+                core_rates.sync_rates(conn, pair=args.pair, days=args.days, source=args.source),
             )
         if args.rates_command == "latest":
-            return emit(args, get_latest_rate(conn, args.pair))
+            return emit(args, core_rates.get_latest_rate(conn, args.pair))
         if args.rates_command == "range":
             return emit(
                 args,
-                get_rate_range(
+                core_rates.get_rate_range(
                     conn,
                     args.pair,
                     start=args.start,
@@ -6625,7 +6573,9 @@ def dispatch(conn, args):
         if args.rates_command == "set":
             return emit(
                 args,
-                set_manual_rate(conn, args.pair, args.timestamp, args.rate, source=args.source),
+                core_rates.set_manual_rate(
+                    conn, args.pair, args.timestamp, args.rate, source=args.source
+                ),
             )
     raise AppError("Unknown command")
 
