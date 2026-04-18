@@ -38,12 +38,11 @@ from ..core import reports as core_reports
 from ..core import sync as core_sync
 from ..core import sync_backends as core_sync_backends
 from ..core import wallets as core_wallets
-from ..core.engines import build_tax_engine
+from ..core.engines import TaxEngineLedgerInputs, build_tax_engine
 from ..core.repo import current_context_snapshot
 from ..core.runtime import (
     build_status_payload,
 )
-from ..core.tax_events import normalize_tax_asset_inputs
 from ..db import (
     APP_NAME,
     DEFAULT_DATA_ROOT,
@@ -96,7 +95,6 @@ from ..tax_policy import (
     build_tax_policy,
     supported_tax_countries,
 )
-from ..transfers import apply_manual_pairs, detect_intra_transfers
 from ..wallet_descriptors import (
     DEFAULT_DESCRIPTOR_GAP_LIMIT,
     default_policy_asset_id,
@@ -1607,8 +1605,6 @@ def build_ledger_state(conn, profile):
         """,
         (profile["id"],),
     ).fetchall()
-    wallet_labels = {row["wallet_label"] for row in rows}
-    assets = {row["asset"] for row in rows}
     manual_pair_records = conn.execute(
         "SELECT * FROM transaction_pairs WHERE profile_id = ?",
         (profile["id"],),
@@ -1624,72 +1620,32 @@ def build_ledger_state(conn, profile):
             "latest_rates": latest_rates_for_profile(conn, profile["id"]),
         }
     tax_engine = build_tax_engine(profile)
-    configuration, configuration_path = tax_engine.make_configuration(wallet_labels, assets)
-    entries = []
-    quarantines = []
-    intra_audit_all = []
-    cross_asset_pairs = []
-    account_holdings = defaultdict(lambda: {"quantity": Decimal("0"), "cost_basis": Decimal("0")})
-    wallet_holdings = defaultdict(lambda: {"quantity": Decimal("0"), "cost_basis": Decimal("0")})
     rates = latest_rates_for_profile(conn, profile["id"])
-    try:
-        wallet_refs_by_id = {}
-        for row in rows:
-            wallet_config = json.loads(row["config_json"] or "{}")
-            wallet_refs_by_id[row["wallet_id"]] = {
-                "id": row["wallet_id"],
-                "label": row["wallet_label"],
-                "wallet_account_id": row["wallet_account_id"],
-                "account_code": row["account_code"],
-                "account_label": row["account_label"],
-                "altbestand": wallet_config.get("altbestand", False),
-            }
-        wallet_refs_by_label = {ref["label"]: ref for ref in wallet_refs_by_id.values()}
-
-        auto_pairs, _ = detect_intra_transfers(rows)
-        all_pairs, cross_asset_pairs = apply_manual_pairs(rows, auto_pairs, manual_pair_records)
-
-        rows_by_asset = defaultdict(list)
-        for row in rows:
-            rows_by_asset[row["asset"]].append(row)
-        pairs_by_asset = defaultdict(list)
-        for pair in all_pairs:
-            pairs_by_asset[pair["out"]["asset"]].append(pair)
-
-        for asset, asset_rows in rows_by_asset.items():
-            normalized_inputs = normalize_tax_asset_inputs(
-                profile,
-                asset,
-                asset_rows,
-                wallet_refs_by_id,
-                pairs_by_asset.get(asset, []),
-            )
-            asset_result = tax_engine.process_asset(
-                normalized_inputs,
-                wallet_refs_by_label,
-                configuration,
-            )
-            quarantines.extend(asset_result.quarantines)
-            intra_audit_all.extend(asset_result.intra_audit)
-            entries.extend(asset_result.entries)
-            for key, totals in asset_result.account_holdings.items():
-                account_holdings[key]["quantity"] += totals["quantity"]
-                account_holdings[key]["cost_basis"] += totals["cost_basis"]
-            for key, totals in asset_result.wallet_holdings.items():
-                wallet_holdings[key]["quantity"] += totals["quantity"]
-                wallet_holdings[key]["cost_basis"] += totals["cost_basis"]
-    finally:
-        try:
-            os.unlink(configuration_path)
-        except OSError:
-            pass
+    wallet_refs_by_id = {}
+    for row in rows:
+        wallet_config = json.loads(row["config_json"] or "{}")
+        wallet_refs_by_id[row["wallet_id"]] = {
+            "id": row["wallet_id"],
+            "label": row["wallet_label"],
+            "wallet_account_id": row["wallet_account_id"],
+            "account_code": row["account_code"],
+            "account_label": row["account_label"],
+            "altbestand": wallet_config.get("altbestand", False),
+        }
+    engine_state = tax_engine.build_ledger_state(
+        TaxEngineLedgerInputs(
+            rows=rows,
+            wallet_refs_by_id=wallet_refs_by_id,
+            manual_pair_records=manual_pair_records,
+        )
+    )
     return {
-        "entries": entries,
-        "quarantines": quarantines,
-        "intra_audit": intra_audit_all,
-        "cross_asset_pairs": cross_asset_pairs,
-        "account_holdings": account_holdings,
-        "wallet_holdings": wallet_holdings,
+        "entries": engine_state.entries,
+        "quarantines": engine_state.quarantines,
+        "intra_audit": engine_state.intra_audit,
+        "cross_asset_pairs": engine_state.cross_asset_pairs,
+        "account_holdings": engine_state.account_holdings,
+        "wallet_holdings": engine_state.wallet_holdings,
         "latest_rates": rates,
     }
 

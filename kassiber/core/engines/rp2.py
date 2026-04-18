@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import tempfile
 import uuid
 from collections import defaultdict
@@ -10,9 +11,10 @@ from typing import Any, Iterable, Mapping
 from ...errors import AppError
 from ...msat import dec
 from ...tax_policy import build_tax_policy
+from ...transfers import apply_manual_pairs, detect_intra_transfers
 from ...util import parse_bool
-from ..tax_events import NormalizedTaxAssetInputs, build_tax_quarantine
-from .base import TaxEngineAssetResult
+from ..tax_events import NormalizedTaxAssetInputs, build_tax_quarantine, normalize_tax_asset_inputs
+from .base import TaxEngineAssetResult, TaxEngineLedgerInputs, TaxEngineLedgerResult
 
 _RP2_MODULES = None
 
@@ -576,6 +578,79 @@ class GenericRP2TaxEngine:
 
     def make_configuration(self, wallet_labels: Iterable[str], assets: Iterable[str]):
         return make_rp2_configuration(self.profile, wallet_labels, assets)
+
+    def build_ledger_state(self, inputs: TaxEngineLedgerInputs) -> TaxEngineLedgerResult:
+        if not inputs.rows:
+            return TaxEngineLedgerResult(
+                entries=[],
+                quarantines=[],
+                intra_audit=[],
+                cross_asset_pairs=[],
+                account_holdings={},
+                wallet_holdings={},
+            )
+
+        wallet_labels = {row["wallet_label"] for row in inputs.rows}
+        assets = {row["asset"] for row in inputs.rows}
+        configuration, configuration_path = self.make_configuration(wallet_labels, assets)
+        entries: list[dict[str, Any]] = []
+        quarantines: list[dict[str, Any]] = []
+        intra_audit_all: list[dict[str, Any]] = []
+        account_holdings = defaultdict(lambda: {"quantity": Decimal("0"), "cost_basis": Decimal("0")})
+        wallet_holdings = defaultdict(lambda: {"quantity": Decimal("0"), "cost_basis": Decimal("0")})
+        cross_asset_pairs: list[dict[str, Any]] = []
+        try:
+            wallet_refs_by_label = {
+                ref["label"]: ref for ref in inputs.wallet_refs_by_id.values()
+            }
+            auto_pairs, _ = detect_intra_transfers(inputs.rows)
+            all_pairs, cross_asset_pairs = apply_manual_pairs(
+                inputs.rows,
+                auto_pairs,
+                inputs.manual_pair_records,
+            )
+            rows_by_asset = defaultdict(list)
+            for row in inputs.rows:
+                rows_by_asset[row["asset"]].append(row)
+            pairs_by_asset = defaultdict(list)
+            for pair in all_pairs:
+                pairs_by_asset[pair["out"]["asset"]].append(pair)
+
+            for asset, asset_rows in rows_by_asset.items():
+                normalized_inputs = normalize_tax_asset_inputs(
+                    self.profile,
+                    asset,
+                    asset_rows,
+                    inputs.wallet_refs_by_id,
+                    pairs_by_asset.get(asset, []),
+                )
+                asset_result = self.process_asset(
+                    normalized_inputs,
+                    wallet_refs_by_label,
+                    configuration,
+                )
+                quarantines.extend(asset_result.quarantines)
+                intra_audit_all.extend(asset_result.intra_audit)
+                entries.extend(asset_result.entries)
+                for key, totals in asset_result.account_holdings.items():
+                    account_holdings[key]["quantity"] += totals["quantity"]
+                    account_holdings[key]["cost_basis"] += totals["cost_basis"]
+                for key, totals in asset_result.wallet_holdings.items():
+                    wallet_holdings[key]["quantity"] += totals["quantity"]
+                    wallet_holdings[key]["cost_basis"] += totals["cost_basis"]
+        finally:
+            try:
+                os.unlink(configuration_path)
+            except OSError:
+                pass
+        return TaxEngineLedgerResult(
+            entries=entries,
+            quarantines=quarantines,
+            intra_audit=intra_audit_all,
+            cross_asset_pairs=cross_asset_pairs,
+            account_holdings=dict(account_holdings),
+            wallet_holdings=dict(wallet_holdings),
+        )
 
     def process_asset(
         self,
