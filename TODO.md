@@ -67,7 +67,7 @@ modules without changing user-visible behavior.
 
 - [x] Extract wallet sync orchestration into `kassiber/core/sync.py`
 - [x] Keep parser-only logic in `kassiber/importers.py`
-- [ ] Split backend-specific sync code into dedicated modules only when it
+- [x] Split backend-specific sync code into dedicated modules only when it
   shrinks `app.py` and keeps the dependency graph clean
 - [x] Preserve current `esplora`, `electrum`, and `bitcoinrpc` behavior
 
