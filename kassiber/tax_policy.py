@@ -2,6 +2,7 @@ from dataclasses import dataclass
 
 
 DEFAULT_TAX_COUNTRY = "generic"
+AUSTRIAN_TAX_COUNTRY = "at"
 DEFAULT_LONG_TERM_DAYS = 365
 DEFAULT_REPORT_GENERATORS = ("open_positions", "rp2_full_report")
 DEFAULT_ACCOUNTING_METHODS = ("fifo", "lifo", "hifo", "lofo")
@@ -55,6 +56,20 @@ def build_generic_policy(profile):
     )
 
 
+def build_austrian_policy(profile):
+    long_term_days = int(profile_value(profile, "tax_long_term_days", DEFAULT_LONG_TERM_DAYS) or DEFAULT_LONG_TERM_DAYS)
+    if long_term_days < 0:
+        raise ValueError("tax_long_term_days cannot be negative")
+    return TaxPolicy(
+        tax_country=AUSTRIAN_TAX_COUNTRY,
+        fiat_currency="EUR",
+        long_term_days=DEFAULT_LONG_TERM_DAYS,
+        accounting_methods=DEFAULT_ACCOUNTING_METHODS,
+        report_generators=DEFAULT_REPORT_GENERATORS,
+    )
+
+
 POLICY_BUILDERS = {
     DEFAULT_TAX_COUNTRY: build_generic_policy,
+    AUSTRIAN_TAX_COUNTRY: build_austrian_policy,
 }

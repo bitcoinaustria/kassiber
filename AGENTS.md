@@ -14,7 +14,8 @@
   - [kassiber/backends.py](kassiber/backends.py) — dotenv (`config/backends.env`) seed + DB overlay for named sync backends, plus CRUD helpers.
   - [kassiber/cli/handlers.py](kassiber/cli/handlers.py) — remaining CLI command handlers and compatibility-layer imports while deeper decomposition continues.
   - [kassiber/core/attachments.py](kassiber/core/attachments.py) — transaction attachment storage, URL-reference handling, integrity verification, and orphan-file GC for the managed attachment tree.
-  - [kassiber/core/engines/__init__.py](kassiber/core/engines/__init__.py) — tax-engine interface/resolver; currently selects the generic RP2 engine.
+  - [kassiber/core/engines/__init__.py](kassiber/core/engines/__init__.py) — tax-engine interface/resolver; selects the generic RP2 engine today and gates the experimental Austrian path.
+  - [kassiber/core/engines/austria.py](kassiber/core/engines/austria.py) — explicit experimental gate for `tax_country=at` until the dedicated Austrian engine is implemented and reviewed.
   - [kassiber/core/tax_events.py](kassiber/core/tax_events.py) — in-memory normalization seam between raw transaction rows and tax-engine inputs, including early quarantine classification for under-specified tax semantics.
   - [kassiber/core/sync.py](kassiber/core/sync.py) — wallet sync orchestration above backend-specific transport details.
   - [kassiber/core/sync_backends.py](kassiber/core/sync_backends.py) — descriptor target discovery plus `esplora`, `electrum`, and `bitcoinrpc` live-sync adapters.
@@ -94,7 +95,7 @@ List endpoints with `--limit` also accept `--cursor`. The cursor is an opaque ba
 - Liquid peg-in/peg-out detection must not lean on hardcoded federation addresses (per-claim tweaked, federation keys rotate). Use the manual pair CLI or non-address heuristics (time + amount + direction inversion + same-profile constraint) instead.
 - Per-wallet portfolio rows show that wallet's residual quantity at the asset's average residual basis — an allocation, not a physical-lot answer.
 - Supported lot selection: `FIFO`, `LIFO`, `HIFO`, `LOFO`.
-- Profiles currently expose the RP2 `generic` tax policy, with explicit `tax_long_term_days`.
+- Profiles expose the RP2 `generic` tax policy and an explicitly experimental Austrian `at` policy registration. Austrian profiles normalize to EUR and keep the legacy `tax_long_term_days` field shape for `Altbestand`, but journal processing intentionally raises `experimental_tax_policy` until the dedicated engine lands and is reviewed by a Steuerberater.
 - Wallets can be flagged manually as `Altbestand`; disposals from those wallets are treated as tax-free while Neubestand wallets use normal tax treatment.
 - Journals must be reprocessed after any transaction, metadata, or exclusion change before reports are trusted.
 - Transactions without usable fiat pricing are quarantined during journal processing instead of receiving zero-basis tax treatment.
@@ -174,4 +175,4 @@ uv run python -m kassiber rates --help
 - No BTCPay Greenfield API yet.
 - No Lightning node adapters yet (`coreln`, `lnd`, `nwc` kinds are declared but do not sync).
 - No REST/server mode or multi-user auth yet.
-- No country-specific RP2 policy plugin yet: profiles currently use the `generic` policy layer.
+- Austrian profile registration exists, but the Austrian journal engine and E 1kv export are not implemented yet; the path is intentionally gated as experimental.
