@@ -11,7 +11,7 @@
   - [kassiber/util.py](kassiber/util.py) — tiny type-coercion helpers (`str_or_none`, `parse_bool`, `parse_int`, chain/network normalizers).
   - [kassiber/envelope.py](kassiber/envelope.py) — JSON envelope contract, `emit`, table/plain/csv output writers, and the `_KIND_SUBCOMMAND_ATTRS` kind map.
   - [kassiber/db.py](kassiber/db.py) — SQLite schema, `open_db`, data-root resolution, settings helpers, and msat column migrations.
-  - [kassiber/backends.py](kassiber/backends.py) — `.env` seed + DB overlay for named sync backends, plus CRUD helpers.
+  - [kassiber/backends.py](kassiber/backends.py) — dotenv (`config/backends.env`) seed + DB overlay for named sync backends, plus CRUD helpers.
   - [kassiber/tax_policy.py](kassiber/tax_policy.py) — profile tax-policy layer.
   - [kassiber/wallet_descriptors.py](kassiber/wallet_descriptors.py) — descriptor normalization, chain/network validation.
 - Packaging is defined in [pyproject.toml](pyproject.toml).
@@ -24,8 +24,9 @@ Kassiber is currently in **dev mode**: renaming commands, breaking flags, and re
 ## Current architecture
 
 - Data lives in a local SQLite database (system of record).
+- Default user state lives under `~/.kassiber/{data,config,exports}` unless `--data-root` / `--env-file` overrides it; the managed layout manifest lives at `~/.kassiber/config/settings.json`.
 - The CLI model is:
-  - backend (`.env` seed + DB overlay via the `backends` table)
+  - backend (dotenv seed + DB overlay via the `backends` table)
   - workspace
   - profile (carries tax policy defaults)
   - account
