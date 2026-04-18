@@ -1711,6 +1711,59 @@ class ReviewRegressionTest(unittest.TestCase):
         self.assertAlmostEqual(tx["fiat_rate"], 60000.0, places=4)
         self.assertAlmostEqual(tx["fiat_value"], 600.0, places=4)
 
+    def test_quarantine_price_override_sets_missing_price_fields(self):
+        self._bootstrap_wallet(label="OverrideMe")
+        self._insert_transaction(
+            wallet_label="OverrideMe",
+            tx_id="override-demo",
+            occurred_at="2024-05-01T12:00:00Z",
+            amount_msat=1_000_000_000,
+        )
+        payload, result = self._run_json(
+            "journals", "process",
+            "--workspace", "Main",
+            "--profile", "Default",
+        )
+        self._assert_ok(payload, result, "journals.process")
+        self.assertEqual(payload["data"]["quarantined"], 1)
+
+        payload, result = self._run_json(
+            "journals", "quarantine", "resolve", "price-override",
+            "--workspace", "Main",
+            "--profile", "Default",
+            "--transaction", "override-demo",
+            "--fiat-rate", "61000",
+        )
+        self._assert_ok(payload, result, "journals.quarantine.resolve.price-override")
+        self.assertAlmostEqual(payload["data"]["fiat_rate"], 61000.0, places=4)
+        self.assertAlmostEqual(payload["data"]["fiat_value"], 610.0, places=4)
+
+        conn = sqlite3.connect(self.data_root / "kassiber.sqlite3")
+        conn.row_factory = sqlite3.Row
+        tx = conn.execute(
+            "SELECT fiat_rate, fiat_value FROM transactions WHERE external_id = 'override-demo'"
+        ).fetchone()
+        quarantine = conn.execute(
+            "SELECT COUNT(*) AS n FROM journal_quarantines WHERE transaction_id = (SELECT id FROM transactions WHERE external_id = 'override-demo')"
+        ).fetchone()
+        profile = conn.execute(
+            "SELECT last_processed_at, last_processed_tx_count FROM profiles WHERE label = 'Default'"
+        ).fetchone()
+        conn.close()
+        self.assertAlmostEqual(tx["fiat_rate"], 61000.0, places=4)
+        self.assertAlmostEqual(tx["fiat_value"], 610.0, places=4)
+        self.assertEqual(quarantine["n"], 0)
+        self.assertIsNone(profile["last_processed_at"])
+        self.assertEqual(profile["last_processed_tx_count"], 0)
+
+        payload, result = self._run_json(
+            "journals", "process",
+            "--workspace", "Main",
+            "--profile", "Default",
+        )
+        self._assert_ok(payload, result, "journals.process")
+        self.assertEqual(payload["data"]["quarantined"], 0)
+
     def test_direct_generic_rp2_missing_price_quarantine_snapshot_matches_fixture(self):
         profile, inputs = self._direct_missing_quarantine_engine_inputs()
         actual = self._direct_engine_snapshot(profile, inputs)

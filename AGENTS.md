@@ -114,6 +114,12 @@ List endpoints with `--limit` also accept `--cursor`. The cursor is an opaque ba
 - When a `TODO.md` item is completed or materially reshaped, update
   `TODO.md` in the same change and check or split the item so the backlog
   stays truthful.
+- Before pushing a code or docs change, review both `git diff --cached`
+  and any unstaged `git diff` separately from the implementation pass.
+  When second-agent tooling is available, have that reviewer inspect the
+  same diff; otherwise do a manual second-pass review yourself. Fix any
+  P1/P2 correctness or consistency issues before push, and mention any
+  deferred lower-severity concerns in the handoff.
 - When adding a new runtime dependency, update both the README dependency story and `THIRD_PARTY_LICENSES.md`.
 - Keep `THIRD_PARTY_LICENSES.md` concise: direct dependencies and notable license constraints matter more than a hand-maintained transitive dump.
 
