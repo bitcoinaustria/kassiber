@@ -13,6 +13,7 @@ from ..db import (
     ensure_data_root,
     ensure_settings_file,
     open_db,
+    resolve_attachments_root,
     resolve_config_root,
     resolve_database_path,
     resolve_effective_data_root,
@@ -33,6 +34,7 @@ class RuntimePaths:
     config_root: str
     settings_file: str
     exports_root: str
+    attachments_root: str
     database: str
 
 
@@ -64,6 +66,7 @@ def resolve_runtime_paths(data_root=None, env_file=None):
         config_root=str(resolve_config_root(effective_data_root)),
         settings_file=str(resolve_settings_path(effective_data_root)),
         exports_root=str(resolve_exports_root(effective_data_root)),
+        attachments_root=str(resolve_attachments_root(effective_data_root)),
         database=str(resolve_database_path(effective_data_root)),
     )
 
@@ -72,6 +75,7 @@ def ensure_runtime_layout(paths):
     ensure_data_root(paths.data_root)
     ensure_data_root(Path(paths.env_file).expanduser().parent)
     ensure_data_root(paths.exports_root)
+    ensure_data_root(paths.attachments_root)
     ensure_settings_file(paths.data_root, paths.env_file)
     return paths
 
@@ -152,6 +156,7 @@ def build_status_payload(conn, data_root):
         "config_root": paths.config_root,
         "settings_file": paths.settings_file,
         "exports_root": paths.exports_root,
+        "attachments_root": paths.attachments_root,
         "current_workspace": context["workspace_label"],
         "current_profile": context["profile_label"],
         **counts,

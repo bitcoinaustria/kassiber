@@ -25,7 +25,8 @@ By default Kassiber keeps user state in a hidden home tree:
 `~/.kassiber/data/kassiber.sqlite3` for the SQLite store,
 `~/.kassiber/config/backends.env` for backend config,
 `~/.kassiber/config/settings.json` for the managed state manifest, and
-`~/.kassiber/exports/` as the reserved place to keep generated report files.
+`~/.kassiber/exports/` as the reserved place to keep generated report files,
+plus `~/.kassiber/attachments/` for managed transaction attachment blobs.
 `kassiber status` shows the active paths, and `--data-root` / `--env-file`
 let you override them.
 
@@ -77,6 +78,12 @@ let you override them.
 - `metadata records list` with `--wallet / --tag / --has-note / --no-note / --excluded / --included / --start / --end` and cursor pagination
 - `metadata records get --transaction` — unified per-transaction view (note, tags, excluded)
 - `metadata records note set/clear`, `tag add/remove`, `excluded set/clear`
+
+### Attachments
+- `attachments add --transaction <tx> --file <path>` copies a local file into Kassiber's managed attachment store
+- `attachments add --transaction <tx> --url <https://...>` stores a URL reference as a literal string without fetching or indexing it
+- `attachments list`, `attachments remove`, `attachments verify`, and `attachments gc` manage and audit the local attachment store
+- the managed attachment root is exposed in `kassiber init`, `kassiber status`, and `config/settings.json` as `attachments_root` so backups can include it with the SQLite state
 
 ### Reports
 - `reports balance-sheet` — current account / liability / equity breakdown
@@ -191,10 +198,11 @@ exist yet:
 - `~/.kassiber/data`
 - `~/.kassiber/config`
 - `~/.kassiber/exports`
+- `~/.kassiber/attachments`
 
 `settings.json` is written into `~/.kassiber/config/` automatically and records
 the active path layout (`state_root`, `data_root`, `database`, `env_file`,
-`exports_root`) so the whole state tree is easy to inspect.
+`exports_root`, `attachments_root`) so the whole state tree is easy to inspect.
 
 ## Backends via `.env`
 

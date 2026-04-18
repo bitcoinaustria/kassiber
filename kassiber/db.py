@@ -34,6 +34,7 @@ DEFAULT_STATE_ROOT = os.path.expanduser(f"~/.{APP_NAME}")
 DEFAULT_DATA_DIRNAME = "data"
 DEFAULT_CONFIG_DIRNAME = "config"
 DEFAULT_EXPORTS_DIRNAME = "exports"
+DEFAULT_ATTACHMENTS_DIRNAME = "attachments"
 DEFAULT_SETTINGS_FILENAME = "settings.json"
 DEFAULT_DATA_ROOT = os.path.join(DEFAULT_STATE_ROOT, DEFAULT_DATA_DIRNAME)
 LEGACY_XDG_DATA_ROOT = os.path.expanduser(f"~/.local/share/{APP_NAME}")
@@ -218,6 +219,25 @@ CREATE TABLE IF NOT EXISTS rates_cache (
 
 CREATE INDEX IF NOT EXISTS idx_rates_cache_pair_ts
     ON rates_cache(pair, timestamp DESC);
+
+CREATE TABLE IF NOT EXISTS attachments (
+    id TEXT PRIMARY KEY,
+    workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+    profile_id TEXT NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+    transaction_id TEXT NOT NULL REFERENCES transactions(id) ON DELETE CASCADE,
+    attachment_type TEXT NOT NULL,
+    label TEXT NOT NULL,
+    original_filename TEXT,
+    stored_relpath TEXT,
+    source_url TEXT,
+    media_type TEXT,
+    size_bytes INTEGER,
+    sha256 TEXT,
+    created_at TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_attachments_profile_tx_created
+    ON attachments(profile_id, transaction_id, created_at DESC);
 """
 
 
@@ -271,6 +291,11 @@ def resolve_exports_root(data_root):
     return Path(resolve_effective_state_root(data_root)).expanduser() / DEFAULT_EXPORTS_DIRNAME
 
 
+def resolve_attachments_root(data_root):
+    """Return the default directory for locally-managed attachment blobs."""
+    return Path(resolve_effective_state_root(data_root)).expanduser() / DEFAULT_ATTACHMENTS_DIRNAME
+
+
 def resolve_settings_path(data_root):
     """Return the managed JSON settings file path for the active state root."""
     return resolve_config_root(data_root) / DEFAULT_SETTINGS_FILENAME
@@ -290,6 +315,7 @@ def ensure_settings_file(data_root, env_file):
             "settings_file": str(settings_path),
             "env_file": str(Path(env_file).expanduser()),
             "exports_root": str(resolve_exports_root(data_root)),
+            "attachments_root": str(resolve_attachments_root(data_root)),
         },
     }
     existing = {}
