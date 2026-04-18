@@ -17,7 +17,9 @@
 - Packaging is defined in [pyproject.toml](pyproject.toml).
 - User-facing behavior is documented in [README.md](README.md).
 - Third-party dependency and license notes are tracked in [THIRD_PARTY_LICENSES.md](THIRD_PARTY_LICENSES.md).
-- In-flight and deferred work is tracked in [TODO.md](TODO.md) — the remaining `app.py` extraction steps live there.
+- In-flight and deferred work is tracked in [TODO.md](TODO.md) — it is the
+  current execution backlog for core extraction, attachments, tax-engine
+  cleanup, Austrian tax support, and the later desktop UI work.
 
 Kassiber is currently in **dev mode**: renaming commands, breaking flags, and reshaping subcommand trees is acceptable as long as docs in the tree are updated in the same change. There is no deprecation-alias layer.
 
