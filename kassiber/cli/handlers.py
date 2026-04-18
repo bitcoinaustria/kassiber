@@ -1838,6 +1838,15 @@ def cmd_context_set(conn, args):
         if args.profile:
             profile = resolve_profile(conn, workspace["id"], args.profile)
             set_setting(conn, "context_profile", profile["id"])
+        else:
+            current_profile_id = get_setting(conn, "context_profile")
+            if current_profile_id:
+                profile = conn.execute(
+                    "SELECT 1 FROM profiles WHERE id = ? AND workspace_id = ?",
+                    (current_profile_id, workspace["id"]),
+                ).fetchone()
+                if not profile:
+                    set_setting(conn, "context_profile", "")
         conn.commit()
     elif args.profile:
         workspace = resolve_workspace(conn)

@@ -56,6 +56,8 @@ def create_workspace(conn, label):
         (workspace_id, label, now_iso()),
     )
     set_setting(conn, "context_workspace", workspace_id)
+    # A new workspace does not have a compatible current profile yet.
+    set_setting(conn, "context_profile", "")
     conn.commit()
     return conn.execute("SELECT * FROM workspaces WHERE id = ?", (workspace_id,)).fetchone()
 
