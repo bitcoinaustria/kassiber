@@ -267,6 +267,17 @@ class CliSmokeTest(unittest.TestCase):
         self.assertEqual(prof["tax_country"], "generic")
         self.assertEqual(prof["fiat_currency"], "USD")
 
+    def test_02a_ui_snapshot(self):
+        payload = self._cli("ui", "--workspace", "Main", "--profile", "Default")
+        self._assert_kind(payload, "ui.snapshot")
+        self.assertEqual(payload["data"]["scope"]["workspace_label"], "Main")
+        self.assertEqual(payload["data"]["scope"]["profile_label"], "Default")
+        self.assertEqual(payload["data"]["shell"]["project_label"], "Main / Default")
+        self.assertEqual(payload["data"]["shell"]["connection_count"], 0)
+        self.assertTrue(payload["data"]["shell"]["is_empty"])
+        self.assertEqual(len(payload["data"]["profiles"]), 1)
+        self.assertIn("placeholder", payload["data"]["shell"]["notices"][0].lower())
+
     def test_03_wallet_create(self):
         payload = self._cli(
             "wallets", "create",
