@@ -1725,12 +1725,14 @@ class ReviewRegressionTest(unittest.TestCase):
             "--fiat-currency", "USD",
             "--tax-country", "at",
             "--tax-long-term-days", "999",
+            "--gains-algorithm", "HIFO",
             "Austrian",
         )
         self._assert_ok(payload, result, "profiles.create")
         self.assertEqual(payload["data"]["tax_country"], "at")
         self.assertEqual(payload["data"]["fiat_currency"], "EUR")
         self.assertEqual(payload["data"]["tax_long_term_days"], 365)
+        self.assertEqual(payload["data"]["gains_algorithm"], "FIFO")
 
         payload, result = self._run_json(
             "wallets", "create",
@@ -1789,6 +1791,7 @@ class ReviewRegressionTest(unittest.TestCase):
             "--workspace", "Main",
             "--fiat-currency", "USD",
             "--tax-country", "generic",
+            "--gains-algorithm", "HIFO",
             "Default",
         )
         self._assert_ok(payload, result, "profiles.create")
@@ -1844,6 +1847,7 @@ class ReviewRegressionTest(unittest.TestCase):
         self.assertEqual(payload["data"]["tax_country"], "at")
         self.assertEqual(payload["data"]["fiat_currency"], "EUR")
         self.assertEqual(payload["data"]["tax_long_term_days"], 365)
+        self.assertEqual(payload["data"]["gains_algorithm"], "FIFO")
         self.assertIsNone(payload["data"]["last_processed_at"])
         self.assertEqual(payload["data"]["last_processed_tx_count"], 0)
 

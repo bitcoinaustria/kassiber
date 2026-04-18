@@ -95,7 +95,7 @@ List endpoints with `--limit` also accept `--cursor`. The cursor is an opaque ba
 - Liquid peg-in/peg-out detection must not lean on hardcoded federation addresses (per-claim tweaked, federation keys rotate). Use the manual pair CLI or non-address heuristics (time + amount + direction inversion + same-profile constraint) instead.
 - Per-wallet portfolio rows show that wallet's residual quantity at the asset's average residual basis — an allocation, not a physical-lot answer.
 - Supported lot selection: `FIFO`, `LIFO`, `HIFO`, `LOFO`.
-- Profiles expose the RP2 `generic` tax policy and an explicitly experimental Austrian `at` policy registration. Austrian profiles normalize to EUR and keep the legacy `tax_long_term_days` field shape for `Altbestand`; supported Austrian journal flows now process through `kassiber/core/engines/austria.py`, while ambiguous provenance quarantines instead of being guessed. Austrian JSON report envelopes carry top-level `experimental` / `review_required` markers so automation does not lose the review gate after journals are processed.
+- Profiles expose the RP2 `generic` tax policy and an explicitly experimental Austrian `at` policy registration. Austrian profiles normalize to EUR, keep the legacy `tax_long_term_days` field shape for `Altbestand`, and pin the legacy `gains_algorithm` field to `FIFO` because the Austrian engine applies its own FIFO / moving-average rules internally. Supported Austrian journal flows now process through `kassiber/core/engines/austria.py`, while ambiguous provenance quarantines instead of being guessed. Austrian JSON report envelopes carry top-level `experimental` / `review_required` markers so automation does not lose the review gate after journals are processed.
 - Wallets can be flagged manually as `Altbestand`; disposals from those wallets are treated as tax-free while Neubestand wallets use normal tax treatment.
 - Journals must be reprocessed after any transaction, metadata, or exclusion change before reports are trusted.
 - Transactions without usable fiat pricing are quarantined during journal processing instead of receiving zero-basis tax treatment.
@@ -169,10 +169,10 @@ uv run python -m kassiber rates --help
 ## Known gaps
 
 - BTC-denominated amounts are stored as INTEGER msat in SQLite. Machine envelopes expose both `amount` (BTC float) and `amount_msat` (integer), and the same for `fee` / `quantity`. Fiat columns (`fiat_value`, `fiat_rate`, etc.) are still REAL.
-- Rates cache (`rates pairs/sync/latest/range/set`) stores BTC-USD / BTC-EUR samples from CoinGecko or manual upsert, but journal processing still derives fiat rates from priced transactions rather than the cache.
+- Rates cache (`rates pairs/sync/latest/range/set`) stores BTC-USD / BTC-EUR samples from CoinGecko or manual upsert. `journals process` can auto-fill missing transaction prices from the cache when a matching sample exists at or before the transaction timestamp, but reports still use stored transaction and journal pricing rather than querying the cache live.
 - Phoenix Lightning wallet CSV import is implemented (`wallets import-phoenix`). River CSV importer is not implemented yet.
 - No `custom` wallet kind CSV mapping DSL yet.
-- No account adjustments / per-event rate overrides yet.
+- No account adjustments yet.
 - No per-profile Tor proxy configuration yet.
 - No descriptor/xpub-native live sync through `bitcoinrpc` yet.
 - No self-hosted Liquid `elements_rpc` backend yet.

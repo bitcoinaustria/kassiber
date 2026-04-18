@@ -14,7 +14,7 @@ from ..backends import (
 )
 from ..db import get_setting, set_setting
 from ..errors import AppError
-from ..tax_policy import build_tax_policy, supported_tax_countries
+from ..tax_policy import AUSTRIAN_TAX_COUNTRY, build_tax_policy, supported_tax_countries
 from ..time_utils import now_iso
 from ..wallet_descriptors import normalize_asset_code
 from .repo import invalidate_journals, resolve_profile, resolve_scope, resolve_workspace
@@ -26,6 +26,20 @@ _DEFAULT_ACCOUNTS = (
     ("fees", "Fees", "expense", "BTC"),
     ("external", "External", "equity", None),
 )
+
+
+def _normalized_profile_algorithm(raw_algorithm, policy):
+    if policy.tax_country == AUSTRIAN_TAX_COUNTRY:
+        return policy.default_accounting_method.upper()
+    normalized = str(raw_algorithm or policy.default_accounting_method).strip().upper()
+    allowed = {method.upper() for method in policy.accounting_methods}
+    if normalized not in allowed:
+        raise AppError(
+            f"Unsupported gains algorithm '{raw_algorithm}'",
+            code="validation",
+            hint=f"Choose one of: {', '.join(method.upper() for method in policy.accounting_methods)}",
+        )
+    return normalized
 
 
 def normalize_code(value):
@@ -92,6 +106,12 @@ def create_profile(
     workspace = resolve_workspace(conn, workspace_ref)
     if tax_long_term_days < 0:
         raise AppError("Tax long-term days cannot be negative")
+    if gains_algorithm.upper() not in RP2_ACCOUNTING_METHODS:
+        raise AppError(
+            f"Unsupported gains algorithm '{gains_algorithm}'",
+            code="validation",
+            hint=f"Choose one of: {', '.join(RP2_ACCOUNTING_METHODS)}",
+        )
     try:
         policy = build_tax_policy(
             {
@@ -102,6 +122,7 @@ def create_profile(
         )
     except ValueError as exc:
         raise AppError(str(exc)) from exc
+    normalized_algo = _normalized_profile_algorithm(gains_algorithm, policy)
     profile_id = str(uuid.uuid4())
     conn.execute(
         """
@@ -116,7 +137,7 @@ def create_profile(
             policy.fiat_currency,
             policy.tax_country,
             policy.long_term_days,
-            gains_algorithm.upper(),
+            normalized_algo,
             now_iso(),
         ),
     )
@@ -219,7 +240,7 @@ def update_profile(conn, workspace_ref, profile_ref, updates):
         )
     except ValueError as exc:
         raise AppError(str(exc), code="validation") from exc
-    normalized_algo = merged_algo.upper()
+    normalized_algo = _normalized_profile_algorithm(merged_algo, policy)
     policy_changed = (
         policy.fiat_currency != profile["fiat_currency"]
         or policy.tax_country != profile["tax_country"]

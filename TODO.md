@@ -144,9 +144,9 @@ top of the monolith.
 
 ### 0.5e - Rates and journal follow-through
 
-- [ ] Wire the rates cache into journal pricing where it improves the
+- [x] Wire the rates cache into journal pricing where it improves the
   current behavior without breaking the smoke contract
-- [ ] Add explicit per-event overrides only after the core engine boundary
+- [x] Add explicit per-event overrides only after the core engine boundary
   is stable
 
 ## Phase 1 - Desktop App
