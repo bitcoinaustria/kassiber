@@ -85,8 +85,8 @@ modules without changing user-visible behavior.
 
 ### 0e - CLI cutover and cleanup
 
-- [ ] Move argparse tree and command dispatch into `kassiber/cli/main.py`
-- [ ] Update `pyproject.toml` entrypoints once the new CLI path is stable
+- [x] Move argparse tree and command dispatch into `kassiber/cli/main.py`
+- [x] Update `pyproject.toml` entrypoints once the new CLI path is stable
 - [ ] Shrink `kassiber/app.py` to a tiny shim or delete it
 - [ ] Run the full smoke suite plus CLI help/smoke commands before
   calling Phase 0 done
