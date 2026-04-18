@@ -5,9 +5,11 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from argparse import Namespace
 from decimal import Decimal
 from pathlib import Path
 
+from kassiber.cli.main import command_needs_db
 from kassiber.core.engines import TaxEngineLedgerInputs, build_tax_engine
 
 
@@ -291,6 +293,39 @@ class ReviewRegressionTest(unittest.TestCase):
             "--kind", kind,
         )
         self._assert_ok(payload, result, "wallets.create")
+
+    def test_command_needs_db_skips_static_command_surfaces(self):
+        self.assertFalse(command_needs_db(Namespace(command="backends", backends_command="kinds")))
+        self.assertFalse(command_needs_db(Namespace(command="wallets", wallets_command="kinds")))
+        self.assertTrue(command_needs_db(Namespace(command="status")))
+        self.assertTrue(command_needs_db(Namespace(command="backends", backends_command="list")))
+        self.assertTrue(command_needs_db(Namespace(command="backends", backends_command="get")))
+        self.assertTrue(command_needs_db(Namespace(command="rates", rates_command="pairs")))
+
+    def test_metadata_limit_errors_keep_cursor_hint(self):
+        self._bootstrap_wallet()
+
+        payload, result = self._run_json(
+            "metadata", "records", "list",
+            "--workspace", "Main",
+            "--profile", "Default",
+            "--limit", "1001",
+        )
+        self.assertEqual(result.returncode, 1, msg=payload)
+        self.assertEqual(payload.get("kind"), "error")
+        self.assertEqual(payload["error"]["code"], "validation")
+        self.assertIn("cursor-based pagination", payload["error"]["hint"])
+
+        payload, result = self._run_json(
+            "metadata", "bip329", "list",
+            "--workspace", "Main",
+            "--profile", "Default",
+            "--limit", "1001",
+        )
+        self.assertEqual(result.returncode, 1, msg=payload)
+        self.assertEqual(payload.get("kind"), "error")
+        self.assertEqual(payload["error"]["code"], "validation")
+        self.assertEqual(payload["error"]["hint"], "Use a smaller --limit; max page size is 1000.")
 
     def _insert_transaction(self, *, wallet_label, tx_id, occurred_at, amount_msat, direction="inbound", asset="BTC"):
         db_path = self.data_root / "kassiber.sqlite3"

@@ -191,6 +191,7 @@ def list_transaction_records(
         raise AppError(
             f"--limit cannot exceed {MAX_RECORDS_LIMIT}",
             code="validation",
+            hint=f"Use cursor-based pagination instead of larger limits; max page size is {MAX_RECORDS_LIMIT}.",
         )
 
     where = ["t.profile_id = ?"]
@@ -402,14 +403,23 @@ def import_bip329_labels(conn, workspace_ref, profile_ref, file_path, hooks: Met
     }
 
 
-def list_bip329_labels(conn, workspace_ref, profile_ref, hooks: MetadataHooks, wallet_ref=None, limit=100):
+def list_bip329_labels(conn, workspace_ref, profile_ref, hooks: MetadataHooks, wallet_ref=None, limit=None):
     _, profile = hooks.resolve_scope(conn, workspace_ref, profile_ref)
+    effective_limit = limit if limit is not None else DEFAULT_RECORDS_LIMIT
+    if effective_limit <= 0:
+        raise AppError("--limit must be positive", code="validation")
+    if effective_limit > MAX_RECORDS_LIMIT:
+        raise AppError(
+            f"--limit cannot exceed {MAX_RECORDS_LIMIT}",
+            code="validation",
+            hint=f"Use a smaller --limit; max page size is {MAX_RECORDS_LIMIT}.",
+        )
     wallet = hooks.resolve_wallet(conn, profile["id"], wallet_ref) if wallet_ref else None
     wallet_clause = "AND wallet_id = ?" if wallet else ""
     params = [profile["id"]]
     if wallet:
         params.append(wallet["id"])
-    params.append(limit)
+    params.append(effective_limit)
     rows = conn.execute(
         f"""
         SELECT
