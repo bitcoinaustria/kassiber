@@ -39,6 +39,9 @@ from .backends import (
     set_default_backend,
     update_db_backend,
 )
+from .core import accounts as core_accounts
+from .core import rates as core_rates
+from .core import wallets as core_wallets
 from .core.repo import current_context_snapshot
 from .core.runtime import (
     build_status_payload,
@@ -6177,42 +6180,18 @@ def dispatch(conn, args):
         return cmd_status(conn, args)
     if args.command == "backends":
         if args.backends_command == "list":
-            return emit(args, list_backends(args.runtime_config))
+            return emit(args, core_accounts.list_backends(args.runtime_config))
         if args.backends_command == "kinds":
-            return emit(args, [{"kind": k} for k in sorted(BACKEND_KINDS)])
+            return emit(args, core_accounts.list_backend_kinds())
         if args.backends_command == "get":
-            # Prefer DB row; fall back to runtime_config view if env/built-in only
-            try:
-                return emit(args, get_db_backend(conn, args.name))
-            except AppError as exc:
-                if exc.code != "not_found":
-                    raise
-                name = args.name.strip().lower()
-                backend = args.runtime_config["backends"].get(name)
-                if not backend:
-                    raise
-                return emit(
-                    args,
-                    {
-                        "name": name,
-                        "kind": backend.get("kind", ""),
-                        "chain": backend.get("chain", ""),
-                        "network": backend.get("network", ""),
-                        "url": backend.get("url", ""),
-                        "batch_size": backend.get("batch_size"),
-                        "auth_header": backend.get("auth_header", ""),
-                        "token": backend.get("token", ""),
-                        "timeout": backend.get("timeout"),
-                        "tor_proxy": backend.get("tor_proxy", ""),
-                        "notes": "",
-                        "source": backend.get("source", ""),
-                        "is_default": name == args.runtime_config["default_backend"],
-                    },
-                )
+            return emit(
+                args,
+                core_accounts.get_backend_details(conn, args.runtime_config, args.name),
+            )
         if args.backends_command == "create":
             return emit(
                 args,
-                create_db_backend(
+                core_accounts.create_backend(
                     conn,
                     args.name,
                     args.kind,
@@ -6240,13 +6219,16 @@ def dispatch(conn, args):
                 "tor_proxy": args.tor_proxy,
                 "notes": args.notes,
             }
-            return emit(args, update_db_backend(conn, args.name, updates))
+            return emit(args, core_accounts.update_backend(conn, args.name, updates))
         if args.backends_command == "delete":
-            return emit(args, delete_db_backend(conn, args.name))
+            return emit(args, core_accounts.delete_backend(conn, args.name))
         if args.backends_command == "set-default":
-            return emit(args, set_default_backend(conn, args.runtime_config, args.name))
+            return emit(
+                args,
+                core_accounts.set_default_backend(conn, args.runtime_config, args.name),
+            )
         if args.backends_command == "clear-default":
-            return emit(args, clear_default_backend(conn, args.runtime_config))
+            return emit(args, core_accounts.clear_default_backend(conn, args.runtime_config))
     if args.command == "context":
         if args.context_command == "show":
             return cmd_context_show(conn, args)
@@ -6256,17 +6238,17 @@ def dispatch(conn, args):
             return cmd_context_set(conn, args)
     if args.command == "workspaces":
         if args.workspaces_command == "list":
-            return emit(args, list_workspaces(conn))
+            return emit(args, core_accounts.list_workspaces(conn))
         if args.workspaces_command == "create":
-            return emit(args, dict(create_workspace(conn, args.label)))
+            return emit(args, dict(core_accounts.create_workspace(conn, args.label)))
     if args.command == "profiles":
         if args.profiles_command == "list":
-            return emit(args, list_profiles(conn, args.workspace))
+            return emit(args, core_accounts.list_profiles(conn, args.workspace))
         if args.profiles_command == "create":
             return emit(
                 args,
                 dict(
-                    create_profile(
+                    core_accounts.create_profile(
                         conn,
                         args.workspace,
                         args.label,
@@ -6278,7 +6260,10 @@ def dispatch(conn, args):
                 ),
             )
         if args.profiles_command == "get":
-            return emit(args, get_profile_details(conn, args.workspace, args.profile))
+            return emit(
+                args,
+                core_accounts.get_profile_details(conn, args.workspace, args.profile),
+            )
         if args.profiles_command == "set":
             updates = {
                 "label": args.label,
@@ -6293,15 +6278,18 @@ def dispatch(conn, args):
                     code="validation",
                     hint="Pass one or more of --label, --fiat-currency, --tax-country, --tax-long-term-days, --gains-algorithm",
                 )
-            return emit(args, update_profile(conn, args.workspace, args.profile, updates))
+            return emit(
+                args,
+                core_accounts.update_profile(conn, args.workspace, args.profile, updates),
+            )
     if args.command == "accounts":
         if args.accounts_command == "list":
-            return emit(args, list_accounts(conn, args.workspace, args.profile))
+            return emit(args, core_accounts.list_accounts(conn, args.workspace, args.profile))
         if args.accounts_command == "create":
             return emit(
                 args,
                 dict(
-                    create_account(
+                    core_accounts.create_account(
                         conn,
                         args.workspace,
                         args.profile,
@@ -6314,30 +6302,45 @@ def dispatch(conn, args):
             )
     if args.command == "wallets":
         if args.wallets_command == "list":
-            return emit(args, list_wallets(conn, args.workspace, args.profile))
+            return emit(args, core_wallets.list_wallets(conn, args.workspace, args.profile))
         if args.wallets_command == "create":
             return emit(
                 args,
                 dict(
-                    create_wallet(
+                    core_wallets.create_wallet(
                         conn,
                         args.workspace,
                         args.profile,
                         args.label,
                         args.kind,
                         args.account,
-                        parse_wallet_config(args),
+                        core_wallets.parse_wallet_config(args),
                     )
                 ),
             )
         if args.wallets_command == "set-altbestand":
-            return emit(args, set_wallet_altbestand(conn, args.workspace, args.profile, args.wallet, True))
+            return emit(
+                args,
+                core_wallets.set_wallet_altbestand(
+                    conn, args.workspace, args.profile, args.wallet, True
+                ),
+            )
         if args.wallets_command == "set-neubestand":
-            return emit(args, set_wallet_altbestand(conn, args.workspace, args.profile, args.wallet, False))
+            return emit(
+                args,
+                core_wallets.set_wallet_altbestand(
+                    conn, args.workspace, args.profile, args.wallet, False
+                ),
+            )
         if args.wallets_command == "kinds":
-            return emit(args, list_wallet_kinds())
+            return emit(args, core_wallets.list_wallet_kinds())
         if args.wallets_command == "get":
-            return emit(args, get_wallet_details(conn, args.workspace, args.profile, args.wallet))
+            return emit(
+                args,
+                core_wallets.get_wallet_details(
+                    conn, args.workspace, args.profile, args.wallet
+                ),
+            )
         if args.wallets_command == "update":
             if args.set_altbestand and args.clear_altbestand:
                 raise AppError(
@@ -6375,9 +6378,23 @@ def dispatch(conn, args):
                 "config": config_updates,
                 "clear": args.clear,
             }
-            return emit(args, update_wallet(conn, args.workspace, args.profile, args.wallet, updates))
+            return emit(
+                args,
+                core_wallets.update_wallet(
+                    conn, args.workspace, args.profile, args.wallet, updates
+                ),
+            )
         if args.wallets_command == "delete":
-            return emit(args, delete_wallet(conn, args.workspace, args.profile, args.wallet, cascade=args.cascade))
+            return emit(
+                args,
+                core_wallets.delete_wallet(
+                    conn,
+                    args.workspace,
+                    args.profile,
+                    args.wallet,
+                    cascade=args.cascade,
+                ),
+            )
         if args.wallets_command == "import-json":
             return emit(args, import_into_wallet(conn, args.workspace, args.profile, args.wallet, args.file, "json"))
         if args.wallets_command == "import-csv":
@@ -6603,18 +6620,18 @@ def dispatch(conn, args):
             )
     if args.command == "rates":
         if args.rates_command == "pairs":
-            return emit(args, list_cached_pairs(conn))
+            return emit(args, core_rates.list_cached_pairs(conn))
         if args.rates_command == "sync":
             return emit(
                 args,
-                sync_rates(conn, pair=args.pair, days=args.days, source=args.source),
+                core_rates.sync_rates(conn, pair=args.pair, days=args.days, source=args.source),
             )
         if args.rates_command == "latest":
-            return emit(args, get_latest_rate(conn, args.pair))
+            return emit(args, core_rates.get_latest_rate(conn, args.pair))
         if args.rates_command == "range":
             return emit(
                 args,
-                get_rate_range(
+                core_rates.get_rate_range(
                     conn,
                     args.pair,
                     start=args.start,
@@ -6625,7 +6642,9 @@ def dispatch(conn, args):
         if args.rates_command == "set":
             return emit(
                 args,
-                set_manual_rate(conn, args.pair, args.timestamp, args.rate, source=args.source),
+                core_rates.set_manual_rate(
+                    conn, args.pair, args.timestamp, args.rate, source=args.source
+                ),
             )
     raise AppError("Unknown command")
 
