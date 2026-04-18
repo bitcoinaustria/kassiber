@@ -3,7 +3,7 @@
 ## Project shape
 
 - Kassiber is a local-first Bitcoin accounting CLI.
-- The CLI entrypoint now lives in [kassiber/cli/main.py](kassiber/cli/main.py). The remaining not-yet-extracted command implementations (notably wallet, journal, and some rate flows) still live in [kassiber/app.py](kassiber/app.py).
+- The CLI entrypoint now lives in [kassiber/cli/main.py](kassiber/cli/main.py). The command implementation surface now lives in [kassiber/cli/handlers.py](kassiber/cli/handlers.py), and [kassiber/app.py](kassiber/app.py) is a compatibility shim.
 - Supporting modules (bottom-up — no back-edges into `app.py`):
   - [kassiber/errors.py](kassiber/errors.py) — `AppError` typed exception carrying `code`, `hint`, `details`, `retryable`.
   - [kassiber/time_utils.py](kassiber/time_utils.py) — timestamp parsing + RFC3339 formatting and `UNKNOWN_OCCURRED_AT`.
@@ -12,6 +12,7 @@
   - [kassiber/envelope.py](kassiber/envelope.py) — JSON envelope contract, `emit`, table/plain/csv output writers, and the `_KIND_SUBCOMMAND_ATTRS` kind map.
   - [kassiber/db.py](kassiber/db.py) — SQLite schema, `open_db`, data-root resolution, settings helpers, and msat column migrations.
   - [kassiber/backends.py](kassiber/backends.py) — dotenv (`config/backends.env`) seed + DB overlay for named sync backends, plus CRUD helpers.
+  - [kassiber/cli/handlers.py](kassiber/cli/handlers.py) — remaining CLI command handlers and compatibility-layer imports while deeper decomposition continues.
   - [kassiber/core/engines/__init__.py](kassiber/core/engines/__init__.py) — tax-engine interface/resolver; currently selects the generic RP2 engine.
   - [kassiber/core/sync.py](kassiber/core/sync.py) — wallet sync orchestration above backend-specific transport details.
   - [kassiber/core/sync_backends.py](kassiber/core/sync_backends.py) — descriptor target discovery plus `esplora`, `electrum`, and `bitcoinrpc` live-sync adapters.
@@ -24,6 +25,10 @@
 - In-flight and deferred work is tracked in [TODO.md](TODO.md) — it is the
   current execution backlog for core extraction, attachments, tax-engine
   cleanup, Austrian tax support, and the later desktop UI work.
+
+Phase 0 core extraction is green: the CLI/runtime surface is split out of
+`kassiber/app.py`, the smoke suite passes, and future work should build on
+the extracted modules instead of re-growing the shim.
 
 Kassiber is currently in **dev mode**: renaming commands, breaking flags, and reshaping subcommand trees is acceptable as long as docs in the tree are updated in the same change. There is no deprecation-alias layer.
 
