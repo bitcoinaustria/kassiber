@@ -9,6 +9,7 @@ import uuid
 from collections import defaultdict
 from datetime import datetime, timezone
 from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
+from functools import lru_cache
 from pathlib import Path
 from urllib import error as urlerror
 from urllib import request as urlrequest
@@ -593,6 +594,7 @@ def import_into_wallet(conn, workspace_ref, profile_ref, wallet_ref, file_path, 
     return _import_file_for_sync(conn, profile, wallet, file_path, input_format)
 
 
+@lru_cache(maxsize=1)
 def _metadata_hooks():
     return core_metadata.MetadataHooks(
         resolve_scope=resolve_scope,
@@ -609,6 +611,7 @@ def _metadata_hooks():
     )
 
 
+@lru_cache(maxsize=1)
 def _attachment_hooks():
     return core_attachments.AttachmentHooks(
         resolve_scope=resolve_scope,
@@ -617,6 +620,7 @@ def _attachment_hooks():
     )
 
 
+@lru_cache(maxsize=1)
 def _report_hooks():
     return core_reports.ReportHooks(
         resolve_scope=resolve_scope,
@@ -633,6 +637,7 @@ def _report_hooks():
     )
 
 
+@lru_cache(maxsize=1)
 def _import_coordinator_hooks():
     return core_imports.ImportCoordinatorHooks(
         ensure_tag_row=lambda conn, workspace_id, profile_id, code, label: core_metadata.ensure_tag_row(
