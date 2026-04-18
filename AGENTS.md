@@ -4,6 +4,8 @@
 
 - Kassiber is a local-first Bitcoin accounting CLI.
 - The CLI entrypoint lives in [kassiber/cli/main.py](kassiber/cli/main.py). The remaining command implementation surface lives in [kassiber/cli/handlers.py](kassiber/cli/handlers.py).
+- Desktop planning is captured in [docs/plan/00-overview.md](docs/plan/00-overview.md), [docs/plan/01-stack-decision.md](docs/plan/01-stack-decision.md), and [docs/plan/04-desktop-ui.md](docs/plan/04-desktop-ui.md).
+- The Phase 1 desktop shell lives in [kassiber/ui/dashboard.py](kassiber/ui/dashboard.py), [kassiber/ui/app.py](kassiber/ui/app.py), and [kassiber/ui/viewmodels/](kassiber/ui/viewmodels/).
 - Supporting modules (bottom-up — no back-edges into the CLI layer):
   - [kassiber/errors.py](kassiber/errors.py) — `AppError` typed exception carrying `code`, `hint`, `details`, `retryable`.
   - [kassiber/time_utils.py](kassiber/time_utils.py) — timestamp parsing + RFC3339 formatting and `UNKNOWN_OCCURRED_AT`.
@@ -51,6 +53,7 @@ Kassiber is currently in **dev mode**: renaming commands, breaking flags, and re
   - journals (RP2 processing + quarantine)
   - reports (balance-sheet, portfolio-summary, capital-gains, journal-entries, balance-history)
   - rates (local cache + CoinGecko sync + manual override)
+  - ui (PySide6 + QML Phase 1 app shell over the local store)
 - Every command accepts `--format {table,plain,json,csv}`, `--output <path>`, `--machine` (= `--format json`), and `--debug`.
 - Successful responses use `{kind, schema_version, data}`. Errors use `{kind: "error", schema_version, error: {code, message, hint, details, retryable, debug}}`.
 - Live sync kinds implemented: `esplora`, `electrum`, `bitcoinrpc`.
@@ -62,7 +65,7 @@ Kassiber is currently in **dev mode**: renaming commands, breaking flags, and re
 
 ## Command surface
 
-- `init`, `status`, `context {show,current,set}`
+- `init`, `status`, `ui`, `context {show,current,set}`
 - `workspaces {list,create}`
 - `profiles {list,create,get,set}`
 - `accounts {list,create}`
@@ -130,7 +133,7 @@ All commands below assume project dependencies are installed — either via `uv 
 - Compile check:
 
 ```bash
-PYTHONPYCACHEPREFIX=/tmp/kassiber-pyc uv run python -m py_compile kassiber/*.py
+PYTHONPYCACHEPREFIX=/tmp/kassiber-pyc uv run python -m py_compile kassiber/*.py kassiber/ui/*.py kassiber/ui/viewmodels/*.py
 ```
 
 - End-to-end CLI smoke test (stdlib `unittest`, no pytest dep, ~1s):
@@ -158,6 +161,7 @@ uv run python -m kassiber attachments list --help
 uv run python -m kassiber journals events --help
 uv run python -m kassiber reports balance-history --help
 uv run python -m kassiber rates --help
+uv run python -m kassiber ui --help
 ```
 
 - Safe local workflow:
