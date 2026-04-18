@@ -51,7 +51,6 @@ class NormalizedTaxAssetInputs:
     transfers: Sequence[NormalizedTaxTransfer]
     ordered_items: Sequence[tuple[str, str]]
     quarantines: Sequence[dict[str, Any]]
-    row_by_id: Mapping[str, Mapping[str, Any]]
 
 
 def build_tax_quarantine(
@@ -92,7 +91,6 @@ def normalize_tax_asset_inputs(
     transfers: list[NormalizedTaxTransfer] = []
     ordered_items: list[tuple[str, str]] = []
     quarantines: list[dict[str, Any]] = []
-    row_by_id = {row["id"]: row for row in rows}
 
     pair_by_row: dict[str, tuple[str, Mapping[str, Any]]] = {}
     for pair in intra_pairs:
@@ -264,7 +262,6 @@ def normalize_tax_asset_inputs(
         transfers=transfers,
         ordered_items=ordered_items,
         quarantines=quarantines,
-        row_by_id=row_by_id,
     )
 
 

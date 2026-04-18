@@ -1,0 +1,30 @@
+{
+  "journal_entries": [],
+  "quarantines": [
+    {
+      "amount": 0.01,
+      "amount_msat": 1000000000,
+      "asset": "BTC",
+      "detail": {
+        "asset": "BTC",
+        "direction": "inbound",
+        "required_for": "acquisition",
+        "wallet": "MissingPrice"
+      },
+      "external_id": "missing-price",
+      "fee": 0.0,
+      "fee_msat": 0,
+      "occurred_at": "2024-05-01T12:00:00Z",
+      "reason": "missing_spot_price",
+      "wallet": "MissingPrice"
+    }
+  ],
+  "summary": {
+    "auto_priced": 0,
+    "cross_asset_pairs": 0,
+    "entries_created": 0,
+    "processed_transactions": 1,
+    "quarantined": 1,
+    "transfers_detected": 0
+  }
+}
