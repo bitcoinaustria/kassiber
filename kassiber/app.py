@@ -52,8 +52,6 @@ from .core.engines.rp2 import (
 from .core.repo import current_context_snapshot
 from .core.runtime import (
     build_status_payload,
-    emit_error as runtime_emit_error,
-    resolve_output_format as runtime_resolve_output_format,
 )
 from .db import (
     APP_NAME,
@@ -5950,14 +5948,6 @@ def dispatch(conn, args):
 
 def command_needs_db(args):
     return True
-
-
-def _resolve_output_format(args):
-    return runtime_resolve_output_format(args)
-
-
-def _emit_error(args, exc, debug_text=None):
-    runtime_emit_error(args, exc, debug_text=debug_text)
 
 
 def main(argv=None):
