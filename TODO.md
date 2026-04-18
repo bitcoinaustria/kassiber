@@ -31,7 +31,7 @@ Current direction:
 
 ## Right now
 
-- [ ] Finish the half-done `kassiber/importers.py` extraction:
+- [x] Finish the half-done `kassiber/importers.py` extraction:
   remove duplicate parser code from `kassiber/app.py`, import the shared
   helpers from `kassiber.importers`, then run the compile check and the
   CLI smoke suite

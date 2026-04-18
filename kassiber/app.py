@@ -93,7 +93,6 @@ from .time_utils import (
     _iso_z,
     _parse_iso_datetime,
     now_iso,
-    parse_timestamp,
     timestamp_to_iso,
 )
 from .util import (
@@ -140,8 +139,6 @@ WALLET_KINDS = [
     "river",
     "custom",
 ]
-INBOUND_DIRECTIONS = {"in", "inbound", "receive", "received", "deposit", "credit", "buy"}
-OUTBOUND_DIRECTIONS = {"out", "outbound", "send", "sent", "withdrawal", "withdraw", "debit", "sell"}
 B58_ALPHABET = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz"
 B58_INDEX = {char: index for index, char in enumerate(B58_ALPHABET)}
 BECH32_CHARSET = "qpzry9x8gf2tvdw0s3jn54khce6mua7l"
@@ -175,17 +172,6 @@ def normalize_addresses(values):
         seen.add(address)
         output.append(address)
     return output
-
-
-def normalize_direction(direction, amount):
-    if direction:
-        value = str(direction).strip().lower()
-        if value in INBOUND_DIRECTIONS:
-            return "inbound"
-        if value in OUTBOUND_DIRECTIONS:
-            return "outbound"
-        raise AppError(f"Unsupported direction '{direction}'")
-    return "outbound" if dec(amount) < 0 else "inbound"
 
 
 def http_get_json(url, timeout=30):
@@ -1409,65 +1395,6 @@ def delete_wallet(conn, workspace_ref, profile_ref, wallet_ref, cascade=False):
         "deleted": True,
         "cascaded_transactions": tx_count if cascade else 0,
     }
-
-def make_transaction_fingerprint(wallet_id, external_id, occurred_at, direction, asset, amount, fee):
-    payload = json.dumps(
-        {
-            "wallet_id": wallet_id,
-            "external_id": external_id,
-            "occurred_at": occurred_at,
-            "direction": direction,
-            "asset": asset,
-            "amount": str(amount),
-            "fee": str(fee),
-        },
-        sort_keys=True,
-    )
-    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
-
-
-def normalize_import_record(record):
-    raw_amount = dec(record.get("amount"))
-    direction = normalize_direction(record.get("direction"), raw_amount)
-    amount = abs(raw_amount)
-    fee = abs(dec(record.get("fee"), "0"))
-    fiat_rate = record.get("fiat_rate")
-    fiat_value = record.get("fiat_value")
-    rate = dec(fiat_rate) if fiat_rate not in (None, "") else None
-    value = dec(fiat_value) if fiat_value not in (None, "") else None
-    if value is None and rate is not None:
-        value = amount * rate
-    raw_json = record.get("raw_json")
-    if raw_json is None:
-        raw_json = json.dumps(json_ready(record), sort_keys=True)
-    elif not isinstance(raw_json, str):
-        raw_json = json.dumps(json_ready(raw_json), sort_keys=True)
-    return {
-        "external_id": str(record.get("txid") or record.get("id") or ""),
-        "occurred_at": parse_timestamp(record.get("occurred_at") or record.get("timestamp") or record.get("date")),
-        "direction": direction,
-        "asset": normalize_asset_code(record.get("asset") or "BTC"),
-        "amount": amount,
-        "fee": fee,
-        "fiat_rate": rate,
-        "fiat_value": value,
-        "kind": record.get("kind"),
-        "description": record.get("description"),
-        "counterparty": record.get("counterparty"),
-        "raw_json": raw_json,
-    }
-
-
-def insert_wallet_records(conn, profile, wallet, records, source_label):
-    return core_imports.insert_wallet_records(
-        conn,
-        profile,
-        wallet,
-        records,
-        source_label,
-        _import_coordinator_hooks(),
-    )
-
 
 def import_into_wallet(conn, workspace_ref, profile_ref, wallet_ref, file_path, input_format):
     _, profile = resolve_scope(conn, workspace_ref, profile_ref)
