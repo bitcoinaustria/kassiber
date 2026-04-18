@@ -99,8 +99,23 @@ def derive_kind(args, override=None):
     return ".".join(parts) if parts else "response"
 
 
-def build_envelope(kind, data):
-    return {"kind": kind, "schema_version": SCHEMA_VERSION, "data": json_ready(data)}
+_RESERVED_ENVELOPE_KEYS = {"kind", "schema_version", "data", "error"}
+
+
+def _normalized_envelope_meta(envelope_meta):
+    if not envelope_meta:
+        return {}
+    normalized = json_ready(envelope_meta)
+    for key in normalized:
+        if key in _RESERVED_ENVELOPE_KEYS:
+            raise ValueError(f"Envelope metadata cannot override reserved key '{key}'")
+    return normalized
+
+
+def build_envelope(kind, data, envelope_meta=None):
+    envelope = {"kind": kind, "schema_version": SCHEMA_VERSION, "data": json_ready(data)}
+    envelope.update(_normalized_envelope_meta(envelope_meta))
+    return envelope
 
 
 def build_error_envelope(code, message, details=None, hint=None, retryable=False, debug=None):
@@ -193,7 +208,7 @@ def _plain_list(payload):
     return "\n".join(blocks) if blocks else "(no rows)"
 
 
-def emit(args, payload, kind=None):
+def emit(args, payload, kind=None, envelope_meta=None):
     """Render `payload` to the user-selected output format.
 
     Never returns anything — side-effect-only. Call sites hand over the
@@ -202,7 +217,11 @@ def emit(args, payload, kind=None):
     """
     fmt = getattr(args, "format", "table")
     if fmt == "json":
-        envelope = build_envelope(derive_kind(args, override=kind), payload)
+        envelope = build_envelope(
+            derive_kind(args, override=kind),
+            payload,
+            envelope_meta=envelope_meta,
+        )
         _write_text(args, json.dumps(envelope, indent=2, sort_keys=False))
         return
     if fmt == "csv":

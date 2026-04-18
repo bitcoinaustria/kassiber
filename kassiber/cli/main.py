@@ -42,6 +42,7 @@ from .handlers import (
     normalize_chain_value,
     normalize_network_value,
     process_journals,
+    resolve_scope,
     resolve_quarantine_exclude,
     resolve_quarantine_price_override,
     show_quarantine,
@@ -56,6 +57,17 @@ from ..core import reports as core_reports
 from ..core import wallets as core_wallets
 from ..core.runtime import bootstrap_runtime, close_runtime, emit_error, resolve_output_format
 from ..errors import AppError
+from ..tax_policy import build_tax_policy
+
+
+def _report_envelope_meta(conn: sqlite3.Connection, workspace_ref: str | None, profile_ref: str | None) -> dict[str, Any] | None:
+    _, profile = resolve_scope(conn, workspace_ref, profile_ref)
+    if build_tax_policy(profile).tax_country != "at":
+        return None
+    return {
+        "experimental": True,
+        "review_required": "steuerberater",
+    }
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -1132,12 +1144,14 @@ def dispatch(conn: sqlite3.Connection | None, args: argparse.Namespace) -> Any:
             )
     if args.command == "reports":
         report_hooks = _report_hooks()
+        envelope_meta = _report_envelope_meta(conn, args.workspace, args.profile)
         if args.reports_command == "balance-sheet":
             return emit(
                 args,
                 core_reports.report_balance_sheet(
                     conn, args.workspace, args.profile, report_hooks
                 ),
+                envelope_meta=envelope_meta,
             )
         if args.reports_command == "portfolio-summary":
             return emit(
@@ -1145,6 +1159,7 @@ def dispatch(conn: sqlite3.Connection | None, args: argparse.Namespace) -> Any:
                 core_reports.report_portfolio_summary(
                     conn, args.workspace, args.profile, report_hooks
                 ),
+                envelope_meta=envelope_meta,
             )
         if args.reports_command == "capital-gains":
             return emit(
@@ -1152,6 +1167,7 @@ def dispatch(conn: sqlite3.Connection | None, args: argparse.Namespace) -> Any:
                 core_reports.report_capital_gains(
                     conn, args.workspace, args.profile, report_hooks
                 ),
+                envelope_meta=envelope_meta,
             )
         if args.reports_command == "journal-entries":
             return emit(
@@ -1159,6 +1175,7 @@ def dispatch(conn: sqlite3.Connection | None, args: argparse.Namespace) -> Any:
                 core_reports.report_journal_entries(
                     conn, args.workspace, args.profile, report_hooks
                 ),
+                envelope_meta=envelope_meta,
             )
         if args.reports_command == "balance-history":
             return emit(
@@ -1175,6 +1192,7 @@ def dispatch(conn: sqlite3.Connection | None, args: argparse.Namespace) -> Any:
                     account_ref=args.account,
                     asset=args.asset,
                 ),
+                envelope_meta=envelope_meta,
             )
         if args.reports_command == "export-pdf":
             return emit(
@@ -1188,6 +1206,7 @@ def dispatch(conn: sqlite3.Connection | None, args: argparse.Namespace) -> Any:
                     wallet_ref=args.wallet,
                     history_limit=args.history_limit,
                 ),
+                envelope_meta=envelope_meta,
             )
     if args.command == "rates":
         if args.rates_command == "pairs":
