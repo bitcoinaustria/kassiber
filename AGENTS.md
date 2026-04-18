@@ -92,6 +92,9 @@ List endpoints with `--limit` also accept `--cursor`. The cursor is an opaque ba
 - Preserve the default `mempool.space` Esplora backend unless there is a strong reason to change it.
 - Prefer additive schema changes that work with `CREATE TABLE IF NOT EXISTS`.
 - Prefer lightweight compatibility migrations for existing SQLite databases when adding profile fields.
+- When a `TODO.md` item is completed or materially reshaped, update
+  `TODO.md` in the same change and check or split the item so the backlog
+  stays truthful.
 - When adding a new runtime dependency, update both the README dependency story and `THIRD_PARTY_LICENSES.md`.
 - Keep `THIRD_PARTY_LICENSES.md` concise: direct dependencies and notable license constraints matter more than a hand-maintained transitive dump.
 

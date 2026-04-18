@@ -39,6 +39,7 @@ from .backends import (
 )
 from .core import accounts as core_accounts
 from .core import imports as core_imports
+from .core import metadata as core_metadata
 from .core import rates as core_rates
 from .core import sync as core_sync
 from .core import wallets as core_wallets
@@ -79,12 +80,6 @@ from .envelope import (
     print_table,
 )
 from .errors import AppError
-from .importers import (
-    is_btcpay_format,
-    is_phoenix_format,
-    load_bip329_file,
-    load_import_records,
-)
 from .msat import (
     MSAT_PER_BTC,
     SATS_PER_BTC,
@@ -1415,56 +1410,6 @@ def delete_wallet(conn, workspace_ref, profile_ref, wallet_ref, cascade=False):
         "cascaded_transactions": tx_count if cascade else 0,
     }
 
-
-def apply_phoenix_metadata(conn, profile, wallet, records):
-    notes_set = 0
-    tags_added = 0
-    tags_created = 0
-    for record in records:
-        txid = record.get("txid")
-        if not txid:
-            continue
-        tx = conn.execute(
-            """
-            SELECT id, note
-            FROM transactions
-            WHERE profile_id = ? AND wallet_id = ? AND external_id = ?
-            ORDER BY created_at DESC
-            LIMIT 1
-            """,
-            (profile["id"], wallet["id"], txid),
-        ).fetchone()
-        if not tx:
-            continue
-        description = str_or_none(record.get("_phoenix_description"))
-        if description and not tx["note"]:
-            conn.execute(
-                "UPDATE transactions SET note = ? WHERE id = ?",
-                (description, tx["id"]),
-            )
-            notes_set += 1
-        phoenix_type = str_or_none(record.get("_phoenix_type"))
-        if phoenix_type:
-            tag, created = ensure_tag_row(
-                conn, profile["workspace_id"], profile["id"], phoenix_type, phoenix_type
-            )
-            if created:
-                tags_created += 1
-            before = conn.total_changes
-            conn.execute(
-                "INSERT OR IGNORE INTO transaction_tags(transaction_id, tag_id) VALUES(?, ?)",
-                (tx["id"], tag["id"]),
-            )
-            if conn.total_changes > before:
-                tags_added += 1
-    conn.commit()
-    return {
-        "phoenix_notes_set": notes_set,
-        "phoenix_tags_added": tags_added,
-        "phoenix_tags_created": tags_created,
-    }
-
-
 def make_transaction_fingerprint(wallet_id, external_id, occurred_at, direction, asset, amount, fee):
     payload = json.dumps(
         {
@@ -1530,28 +1475,32 @@ def import_into_wallet(conn, workspace_ref, profile_ref, wallet_ref, file_path, 
     return _import_file_for_sync(conn, profile, wallet, file_path, input_format)
 
 
-def ensure_tag_row(conn, workspace_id, profile_id, code, label):
-    normalized_code = normalize_code(code)
-    existing = conn.execute(
-        "SELECT * FROM tags WHERE profile_id = ? AND code = ?",
-        (profile_id, normalized_code),
-    ).fetchone()
-    if existing:
-        return existing, False
-    tag_id = str(uuid.uuid4())
-    conn.execute(
-        """
-        INSERT INTO tags(id, workspace_id, profile_id, code, label, created_at)
-        VALUES(?, ?, ?, ?, ?, ?)
-        """,
-        (tag_id, workspace_id, profile_id, normalized_code, label, now_iso()),
+def _metadata_hooks():
+    return core_metadata.MetadataHooks(
+        resolve_scope=resolve_scope,
+        resolve_wallet=resolve_wallet,
+        resolve_tag=resolve_tag,
+        resolve_transaction=resolve_transaction,
+        normalize_code=normalize_code,
+        now_iso=now_iso,
+        invalidate_journals=invalidate_journals,
+        parse_iso_datetime=_parse_iso_datetime,
+        iso_z=_iso_z,
+        encode_cursor=_encode_event_cursor,
+        decode_cursor=_decode_event_cursor,
     )
-    return conn.execute("SELECT * FROM tags WHERE id = ?", (tag_id,)).fetchone(), True
 
 
 def _import_coordinator_hooks():
     return core_imports.ImportCoordinatorHooks(
-        ensure_tag_row=ensure_tag_row,
+        ensure_tag_row=lambda conn, workspace_id, profile_id, code, label: core_metadata.ensure_tag_row(
+            conn,
+            workspace_id,
+            profile_id,
+            code,
+            label,
+            _metadata_hooks(),
+        ),
         invalidate_journals=invalidate_journals,
     )
 
@@ -1576,49 +1525,6 @@ def _insert_records_for_sync(conn, profile, wallet, records, source_label):
         source_label,
         _import_coordinator_hooks(),
     )
-
-
-def apply_btcpay_metadata(conn, profile, wallet, records):
-    notes_set = 0
-    tags_added = 0
-    tags_created = 0
-    for record in records:
-        txid = record.get("txid")
-        if not txid:
-            continue
-        tx = conn.execute(
-            """
-            SELECT id, note
-            FROM transactions
-            WHERE profile_id = ? AND wallet_id = ? AND external_id = ?
-            ORDER BY created_at DESC
-            LIMIT 1
-            """,
-            (profile["id"], wallet["id"], txid),
-        ).fetchone()
-        if not tx:
-            continue
-        comment = str_or_none(record.get("_btcpay_comment"))
-        if comment and not tx["note"]:
-            conn.execute("UPDATE transactions SET note = ? WHERE id = ?", (comment, tx["id"]))
-            notes_set += 1
-        for label in record.get("_btcpay_labels", []):
-            tag, created = ensure_tag_row(conn, profile["workspace_id"], profile["id"], label, label)
-            if created:
-                tags_created += 1
-            before = conn.total_changes
-            conn.execute(
-                "INSERT OR IGNORE INTO transaction_tags(transaction_id, tag_id) VALUES(?, ?)",
-                (tx["id"], tag["id"]),
-            )
-            if conn.total_changes > before:
-                tags_added += 1
-    conn.commit()
-    return {
-        "btcpay_notes_set": notes_set,
-        "btcpay_tags_added": tags_added,
-        "btcpay_tags_created": tags_created,
-    }
 
 
 def sync_target_from_address(address, chain, network, address_index):
@@ -2703,410 +2609,6 @@ def list_transactions(conn, workspace_ref, profile_ref, wallet_ref=None, limit=1
         record["fee"] = float(msat_to_btc(record["fee"]))
         results.append(record)
     return results
-
-
-def set_transaction_note(conn, workspace_ref, profile_ref, tx_ref, note):
-    _, profile = resolve_scope(conn, workspace_ref, profile_ref)
-    tx = resolve_transaction(conn, profile["id"], tx_ref)
-    conn.execute("UPDATE transactions SET note = ? WHERE id = ?", (note, tx["id"]))
-    conn.commit()
-    return {"transaction_id": tx["id"], "note": note}
-
-
-def clear_transaction_note(conn, workspace_ref, profile_ref, tx_ref):
-    return set_transaction_note(conn, workspace_ref, profile_ref, tx_ref, None)
-
-
-def set_transaction_excluded(conn, workspace_ref, profile_ref, tx_ref, excluded):
-    _, profile = resolve_scope(conn, workspace_ref, profile_ref)
-    tx = resolve_transaction(conn, profile["id"], tx_ref)
-    conn.execute("UPDATE transactions SET excluded = ? WHERE id = ?", (1 if excluded else 0, tx["id"]))
-    invalidate_journals(conn, profile["id"])
-    conn.commit()
-    return {"transaction_id": tx["id"], "excluded": bool(excluded)}
-
-
-def create_tag(conn, workspace_ref, profile_ref, code, label):
-    workspace, profile = resolve_scope(conn, workspace_ref, profile_ref)
-    tag_id = str(uuid.uuid4())
-    conn.execute(
-        """
-        INSERT INTO tags(id, workspace_id, profile_id, code, label, created_at)
-        VALUES(?, ?, ?, ?, ?, ?)
-        """,
-        (tag_id, workspace["id"], profile["id"], normalize_code(code), label, now_iso()),
-    )
-    conn.commit()
-    return conn.execute("SELECT * FROM tags WHERE id = ?", (tag_id,)).fetchone()
-
-
-def list_tags(conn, workspace_ref, profile_ref):
-    _, profile = resolve_scope(conn, workspace_ref, profile_ref)
-    rows = conn.execute(
-        "SELECT id, code, label, created_at FROM tags WHERE profile_id = ? ORDER BY code ASC",
-        (profile["id"],),
-    ).fetchall()
-    return [dict(row) for row in rows]
-
-
-def add_tag_to_transaction(conn, workspace_ref, profile_ref, tx_ref, tag_ref):
-    _, profile = resolve_scope(conn, workspace_ref, profile_ref)
-    tx = resolve_transaction(conn, profile["id"], tx_ref)
-    tag = resolve_tag(conn, profile["id"], tag_ref)
-    conn.execute(
-        "INSERT OR IGNORE INTO transaction_tags(transaction_id, tag_id) VALUES(?, ?)",
-        (tx["id"], tag["id"]),
-    )
-    conn.commit()
-    return {"transaction_id": tx["id"], "tag": tag["code"], "status": "added"}
-
-
-def remove_tag_from_transaction(conn, workspace_ref, profile_ref, tx_ref, tag_ref):
-    _, profile = resolve_scope(conn, workspace_ref, profile_ref)
-    tx = resolve_transaction(conn, profile["id"], tx_ref)
-    tag = resolve_tag(conn, profile["id"], tag_ref)
-    conn.execute(
-        "DELETE FROM transaction_tags WHERE transaction_id = ? AND tag_id = ?",
-        (tx["id"], tag["id"]),
-    )
-    conn.commit()
-    return {"transaction_id": tx["id"], "tag": tag["code"], "status": "removed"}
-
-
-def _tags_for_transaction(conn, tx_id):
-    rows = conn.execute(
-        """
-        SELECT t.code, t.label
-        FROM transaction_tags tt
-        JOIN tags t ON t.id = tt.tag_id
-        WHERE tt.transaction_id = ?
-        ORDER BY t.code ASC
-        """,
-        (tx_id,),
-    ).fetchall()
-    return [{"code": row["code"], "label": row["label"]} for row in rows]
-
-
-def get_transaction_record(conn, workspace_ref, profile_ref, tx_ref):
-    _, profile = resolve_scope(conn, workspace_ref, profile_ref)
-    tx = resolve_transaction(conn, profile["id"], tx_ref)
-    wallet = conn.execute(
-        "SELECT id, label FROM wallets WHERE id = ?",
-        (tx["wallet_id"],),
-    ).fetchone()
-    return {
-        "transaction_id": tx["id"],
-        "external_id": tx["external_id"] or "",
-        "occurred_at": tx["occurred_at"],
-        "direction": tx["direction"],
-        "asset": tx["asset"],
-        "amount": float(msat_to_btc(tx["amount"])),
-        "amount_msat": int(tx["amount"]),
-        "fee": float(msat_to_btc(tx["fee"])),
-        "fee_msat": int(tx["fee"]),
-        "counterparty": tx["counterparty"] or "",
-        "wallet_id": wallet["id"] if wallet else "",
-        "wallet_label": wallet["label"] if wallet else "",
-        "note": tx["note"] or "",
-        "excluded": bool(tx["excluded"]),
-        "tags": _tags_for_transaction(conn, tx["id"]),
-    }
-
-
-def list_transaction_records(
-    conn,
-    workspace_ref,
-    profile_ref,
-    wallet=None,
-    tag=None,
-    has_note=None,
-    excluded=None,
-    start=None,
-    end=None,
-    cursor=None,
-    limit=None,
-):
-    _, profile = resolve_scope(conn, workspace_ref, profile_ref)
-    effective_limit = limit if limit is not None else DEFAULT_EVENTS_LIMIT
-    if effective_limit <= 0:
-        raise AppError("--limit must be positive", code="validation")
-    if effective_limit > MAX_EVENTS_LIMIT:
-        raise AppError(
-            f"--limit cannot exceed {MAX_EVENTS_LIMIT}",
-            code="validation",
-        )
-
-    where = ["t.profile_id = ?"]
-    params = [profile["id"]]
-    start_ts = _iso_z(_parse_iso_datetime(start, "start")) if start else None
-    end_ts = _iso_z(_parse_iso_datetime(end, "end")) if end else None
-
-    if wallet:
-        wallet_row = resolve_wallet(conn, profile["id"], wallet)
-        where.append("t.wallet_id = ?")
-        params.append(wallet_row["id"])
-    if tag:
-        tag_row = resolve_tag(conn, profile["id"], tag)
-        where.append("EXISTS (SELECT 1 FROM transaction_tags tt WHERE tt.transaction_id = t.id AND tt.tag_id = ?)")
-        params.append(tag_row["id"])
-    if has_note is True:
-        where.append("t.note IS NOT NULL AND t.note != ''")
-    elif has_note is False:
-        where.append("(t.note IS NULL OR t.note = '')")
-    if excluded is True:
-        where.append("t.excluded = 1")
-    elif excluded is False:
-        where.append("t.excluded = 0")
-    if start_ts:
-        where.append("t.occurred_at >= ?")
-        params.append(start_ts)
-    if end_ts:
-        where.append("t.occurred_at <= ?")
-        params.append(end_ts)
-
-    cursor_data = _decode_event_cursor(cursor)
-    if cursor_data:
-        where.append(
-            "(t.occurred_at < ? OR "
-            "(t.occurred_at = ? AND t.created_at < ?) OR "
-            "(t.occurred_at = ? AND t.created_at = ? AND t.id < ?))"
-        )
-        params.extend(
-            [
-                cursor_data["occurred_at"],
-                cursor_data["occurred_at"],
-                cursor_data["created_at"],
-                cursor_data["occurred_at"],
-                cursor_data["created_at"],
-                cursor_data["id"],
-            ]
-        )
-
-    query = f"""
-        SELECT
-            t.id,
-            t.occurred_at,
-            t.created_at,
-            t.external_id,
-            t.direction,
-            t.asset,
-            t.amount,
-            t.fee,
-            t.counterparty,
-            t.note,
-            t.excluded,
-            w.id AS wallet_id,
-            w.label AS wallet_label
-        FROM transactions t
-        LEFT JOIN wallets w ON w.id = t.wallet_id
-        WHERE {' AND '.join(where)}
-        ORDER BY t.occurred_at DESC, t.created_at DESC, t.id DESC
-        LIMIT ?
-    """
-    params.append(effective_limit + 1)
-    rows = conn.execute(query, params).fetchall()
-
-    has_more = len(rows) > effective_limit
-    page = rows[:effective_limit]
-    records = []
-    for row in page:
-        records.append(
-            {
-                "transaction_id": row["id"],
-                "external_id": row["external_id"] or "",
-                "occurred_at": row["occurred_at"],
-                "direction": row["direction"],
-                "asset": row["asset"],
-                "amount": float(msat_to_btc(row["amount"])),
-                "amount_msat": int(row["amount"]),
-                "fee": float(msat_to_btc(row["fee"])),
-                "fee_msat": int(row["fee"]),
-                "counterparty": row["counterparty"] or "",
-                "wallet_id": row["wallet_id"] or "",
-                "wallet_label": row["wallet_label"] or "",
-                "note": row["note"] or "",
-                "excluded": bool(row["excluded"]),
-                "tags": _tags_for_transaction(conn, row["id"]),
-            }
-        )
-    next_cursor = _encode_event_cursor(page[-1]) if has_more and page else None
-    return {
-        "records": records,
-        "next_cursor": next_cursor,
-        "has_more": has_more,
-        "limit": effective_limit,
-    }
-
-
-def import_bip329_labels(conn, workspace_ref, profile_ref, file_path, wallet_ref=None):
-    workspace, profile = resolve_scope(conn, workspace_ref, profile_ref)
-    wallet = resolve_wallet(conn, profile["id"], wallet_ref) if wallet_ref else None
-    records = load_bip329_file(file_path)
-    imported = 0
-    updated = 0
-    transaction_tags_added = 0
-    transaction_tags_created = 0
-    for record in records:
-        existing = conn.execute(
-            """
-            SELECT id
-            FROM bip329_labels
-            WHERE profile_id = ?
-              AND COALESCE(wallet_id, '') = ?
-              AND record_type = ?
-              AND ref = ?
-              AND COALESCE(label, '') = ?
-              AND COALESCE(origin, '') = ?
-            LIMIT 1
-            """,
-            (
-                profile["id"],
-                wallet["id"] if wallet else "",
-                record["type"],
-                record["ref"],
-                record["label"] or "",
-                record["origin"] or "",
-            ),
-        ).fetchone()
-        if existing:
-            conn.execute(
-                """
-                UPDATE bip329_labels
-                SET spendable = ?, data_json = ?
-                WHERE id = ?
-                """,
-                (
-                    None if record["spendable"] is None else (1 if record["spendable"] else 0),
-                    json.dumps(record["data"], sort_keys=True),
-                    existing["id"],
-                ),
-            )
-            updated += 1
-        else:
-            conn.execute(
-                """
-                INSERT INTO bip329_labels(
-                    id, workspace_id, profile_id, wallet_id, record_type, ref,
-                    label, origin, spendable, data_json, created_at
-                ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """,
-                (
-                    str(uuid.uuid4()),
-                    workspace["id"],
-                    profile["id"],
-                    wallet["id"] if wallet else None,
-                    record["type"],
-                    record["ref"],
-                    record["label"],
-                    record["origin"],
-                    None if record["spendable"] is None else (1 if record["spendable"] else 0),
-                    json.dumps(record["data"], sort_keys=True),
-                    now_iso(),
-                ),
-            )
-            imported += 1
-        if record["type"] == "tx" and record["label"]:
-            query = """
-                SELECT id
-                FROM transactions
-                WHERE profile_id = ? AND external_id = ?
-            """
-            params = [profile["id"], record["ref"]]
-            if wallet:
-                query += " AND wallet_id = ?"
-                params.append(wallet["id"])
-            tx_rows = conn.execute(query, params).fetchall()
-            for tx in tx_rows:
-                tag, created = ensure_tag_row(
-                    conn,
-                    profile["workspace_id"],
-                    profile["id"],
-                    record["label"],
-                    record["label"],
-                )
-                if created:
-                    transaction_tags_created += 1
-                before = conn.total_changes
-                conn.execute(
-                    "INSERT OR IGNORE INTO transaction_tags(transaction_id, tag_id) VALUES(?, ?)",
-                    (tx["id"], tag["id"]),
-                )
-                if conn.total_changes > before:
-                    transaction_tags_added += 1
-    conn.commit()
-    return {
-        "file": os.path.abspath(file_path),
-        "imported": imported,
-        "updated": updated,
-        "records": len(records),
-        "transaction_tags_created": transaction_tags_created,
-        "transaction_tags_added": transaction_tags_added,
-    }
-
-
-def list_bip329_labels(conn, workspace_ref, profile_ref, wallet_ref=None, limit=100):
-    _, profile = resolve_scope(conn, workspace_ref, profile_ref)
-    wallet = resolve_wallet(conn, profile["id"], wallet_ref) if wallet_ref else None
-    wallet_clause = "AND wallet_id = ?" if wallet else ""
-    params = [profile["id"]]
-    if wallet:
-        params.append(wallet["id"])
-    params.append(limit)
-    rows = conn.execute(
-        f"""
-        SELECT
-            record_type AS type,
-            ref,
-            COALESCE(label, '') AS label,
-            COALESCE(origin, '') AS origin,
-            CASE
-                WHEN spendable IS NULL THEN ''
-                WHEN spendable = 1 THEN 'true'
-                ELSE 'false'
-            END AS spendable,
-            created_at
-        FROM bip329_labels
-        WHERE profile_id = ? {wallet_clause}
-        ORDER BY created_at DESC
-        LIMIT ?
-        """,
-        params,
-    ).fetchall()
-    return [dict(row) for row in rows]
-
-
-def export_bip329_labels(conn, workspace_ref, profile_ref, file_path, wallet_ref=None):
-    _, profile = resolve_scope(conn, workspace_ref, profile_ref)
-    wallet = resolve_wallet(conn, profile["id"], wallet_ref) if wallet_ref else None
-    wallet_clause = "AND wallet_id = ?" if wallet else ""
-    params = [profile["id"]]
-    if wallet:
-        params.append(wallet["id"])
-    rows = conn.execute(
-        f"""
-        SELECT record_type, ref, label, origin, spendable, data_json
-        FROM bip329_labels
-        WHERE profile_id = ? {wallet_clause}
-        ORDER BY created_at ASC
-        """,
-        params,
-    ).fetchall()
-    output_lines = []
-    for row in rows:
-        payload = {"type": row["record_type"], "ref": row["ref"]}
-        if row["label"] is not None:
-            payload["label"] = row["label"]
-        if row["origin"] is not None:
-            payload["origin"] = row["origin"]
-        if row["spendable"] is not None:
-            payload["spendable"] = bool(row["spendable"])
-        payload.update(json.loads(row["data_json"] or "{}"))
-        output_lines.append(json.dumps(payload, ensure_ascii=True))
-    export_path = os.path.abspath(file_path)
-    with open(export_path, "w", encoding="utf-8") as handle:
-        if output_lines:
-            handle.write("\n".join(output_lines) + "\n")
-    return {"file": export_path, "exported": len(output_lines)}
 
 
 def available_quantity(lots):
@@ -6227,31 +5729,80 @@ def dispatch(conn, args):
         if args.transactions_command == "list":
             return emit(args, list_transactions(conn, args.workspace, args.profile, args.wallet, args.limit))
     if args.command == "metadata":
+        metadata_hooks = _metadata_hooks()
         if args.metadata_command == "notes":
             if args.notes_command == "set":
-                return emit(args, set_transaction_note(conn, args.workspace, args.profile, args.transaction, args.note))
+                return emit(
+                    args,
+                    core_metadata.set_transaction_note(
+                        conn, args.workspace, args.profile, args.transaction, args.note, metadata_hooks
+                    ),
+                )
             if args.notes_command == "clear":
-                return emit(args, clear_transaction_note(conn, args.workspace, args.profile, args.transaction))
+                return emit(
+                    args,
+                    core_metadata.clear_transaction_note(
+                        conn, args.workspace, args.profile, args.transaction, metadata_hooks
+                    ),
+                )
         if args.metadata_command == "tags":
             if args.tags_command == "list":
-                return emit(args, list_tags(conn, args.workspace, args.profile))
+                return emit(args, core_metadata.list_tags(conn, args.workspace, args.profile, metadata_hooks))
             if args.tags_command == "create":
-                return emit(args, dict(create_tag(conn, args.workspace, args.profile, args.code, args.label)))
+                return emit(
+                    args,
+                    dict(core_metadata.create_tag(conn, args.workspace, args.profile, args.code, args.label, metadata_hooks)),
+                )
             if args.tags_command == "add":
-                return emit(args, add_tag_to_transaction(conn, args.workspace, args.profile, args.transaction, args.tag))
+                return emit(
+                    args,
+                    core_metadata.add_tag_to_transaction(
+                        conn, args.workspace, args.profile, args.transaction, args.tag, metadata_hooks
+                    ),
+                )
             if args.tags_command == "remove":
-                return emit(args, remove_tag_from_transaction(conn, args.workspace, args.profile, args.transaction, args.tag))
+                return emit(
+                    args,
+                    core_metadata.remove_tag_from_transaction(
+                        conn, args.workspace, args.profile, args.transaction, args.tag, metadata_hooks
+                    ),
+                )
         if args.metadata_command == "bip329":
             if args.bip329_command == "import":
-                return emit(args, import_bip329_labels(conn, args.workspace, args.profile, args.file, args.wallet))
+                return emit(
+                    args,
+                    core_metadata.import_bip329_labels(
+                        conn, args.workspace, args.profile, args.file, metadata_hooks, wallet_ref=args.wallet
+                    ),
+                )
             if args.bip329_command == "list":
-                return emit(args, list_bip329_labels(conn, args.workspace, args.profile, args.wallet, args.limit))
+                return emit(
+                    args,
+                    core_metadata.list_bip329_labels(
+                        conn, args.workspace, args.profile, metadata_hooks, wallet_ref=args.wallet, limit=args.limit
+                    ),
+                )
             if args.bip329_command == "export":
-                return emit(args, export_bip329_labels(conn, args.workspace, args.profile, args.file, args.wallet))
+                return emit(
+                    args,
+                    core_metadata.export_bip329_labels(
+                        conn, args.workspace, args.profile, args.file, metadata_hooks, wallet_ref=args.wallet
+                    ),
+                )
         if args.metadata_command == "exclude":
-            return emit(args, set_transaction_excluded(conn, args.workspace, args.profile, args.transaction, True))
+            return emit(
+                args,
+                core_metadata.set_transaction_excluded(
+                    conn, args.workspace, args.profile, args.transaction, True, metadata_hooks
+                ),
+            )
         if args.metadata_command == "include":
-            return emit(args, set_transaction_excluded(conn, args.workspace, args.profile, args.transaction, False))
+            return emit(
+                args,
+                core_metadata.set_transaction_excluded(
+                    conn, args.workspace, args.profile, args.transaction, False, metadata_hooks
+                ),
+            )
         if args.metadata_command == "records":
             if args.records_command == "list":
                 if args.has_note and args.no_note:
@@ -6262,10 +5813,11 @@ def dispatch(conn, args):
                 excluded = True if args.excluded else (False if args.included else None)
                 return emit(
                     args,
-                    list_transaction_records(
+                    core_metadata.list_transaction_records(
                         conn,
                         args.workspace,
                         args.profile,
+                        metadata_hooks,
                         wallet=args.wallet,
                         tag=args.tag,
                         has_note=has_note,
@@ -6277,22 +5829,57 @@ def dispatch(conn, args):
                     ),
                 )
             if args.records_command == "get":
-                return emit(args, get_transaction_record(conn, args.workspace, args.profile, args.transaction))
+                return emit(
+                    args,
+                    core_metadata.get_transaction_record(
+                        conn, args.workspace, args.profile, args.transaction, metadata_hooks
+                    ),
+                )
             if args.records_command == "note":
                 if args.records_note_command == "set":
-                    return emit(args, set_transaction_note(conn, args.workspace, args.profile, args.transaction, args.note))
+                    return emit(
+                        args,
+                        core_metadata.set_transaction_note(
+                            conn, args.workspace, args.profile, args.transaction, args.note, metadata_hooks
+                        ),
+                    )
                 if args.records_note_command == "clear":
-                    return emit(args, clear_transaction_note(conn, args.workspace, args.profile, args.transaction))
+                    return emit(
+                        args,
+                        core_metadata.clear_transaction_note(
+                            conn, args.workspace, args.profile, args.transaction, metadata_hooks
+                        ),
+                    )
             if args.records_command == "tag":
                 if args.records_tag_command == "add":
-                    return emit(args, add_tag_to_transaction(conn, args.workspace, args.profile, args.transaction, args.tag))
+                    return emit(
+                        args,
+                        core_metadata.add_tag_to_transaction(
+                            conn, args.workspace, args.profile, args.transaction, args.tag, metadata_hooks
+                        ),
+                    )
                 if args.records_tag_command == "remove":
-                    return emit(args, remove_tag_from_transaction(conn, args.workspace, args.profile, args.transaction, args.tag))
+                    return emit(
+                        args,
+                        core_metadata.remove_tag_from_transaction(
+                            conn, args.workspace, args.profile, args.transaction, args.tag, metadata_hooks
+                        ),
+                    )
             if args.records_command == "excluded":
                 if args.records_excluded_command == "set":
-                    return emit(args, set_transaction_excluded(conn, args.workspace, args.profile, args.transaction, True))
+                    return emit(
+                        args,
+                        core_metadata.set_transaction_excluded(
+                            conn, args.workspace, args.profile, args.transaction, True, metadata_hooks
+                        ),
+                    )
                 if args.records_excluded_command == "clear":
-                    return emit(args, set_transaction_excluded(conn, args.workspace, args.profile, args.transaction, False))
+                    return emit(
+                        args,
+                        core_metadata.set_transaction_excluded(
+                            conn, args.workspace, args.profile, args.transaction, False, metadata_hooks
+                        ),
+                    )
     if args.command == "journals":
         if args.journals_command == "process":
             return emit(args, process_journals(conn, args.workspace, args.profile))
