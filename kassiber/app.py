@@ -35,24 +35,23 @@ from .backends import (
     get_db_backend,
     list_backends,
     list_db_backends,
-    load_dotenv_file,
-    load_runtime_config,
-    merge_db_backends,
     resolve_backend,
-    resolve_effective_env_file,
     set_default_backend,
     update_db_backend,
+)
+from .core.repo import current_context_snapshot
+from .core.runtime import (
+    build_status_payload,
+    emit_error as runtime_emit_error,
+    resolve_output_format as runtime_resolve_output_format,
 )
 from .db import (
     APP_NAME,
     DEFAULT_DATA_ROOT,
     SCHEMA,
     ensure_column,
-    ensure_data_root,
-    ensure_settings_file,
     ensure_schema_compat,
     get_setting,
-    open_db,
     resolve_config_root,
     resolve_database_path,
     resolve_effective_data_root,
@@ -63,10 +62,7 @@ from .db import (
 )
 from .envelope import (
     OUTPUT_FORMATS,
-    SCHEMA_VERSION,
-    _write_text,
     build_envelope,
-    build_error_envelope,
     derive_kind,
     emit,
     format_table_value,
@@ -5553,35 +5549,7 @@ def export_pdf_report(conn, workspace_ref, profile_ref, file_path, wallet_ref=No
 
 
 def show_status(conn, data_root):
-    workspace_id = get_setting(conn, "context_workspace")
-    profile_id = get_setting(conn, "context_profile")
-    workspace = conn.execute("SELECT label FROM workspaces WHERE id = ?", (workspace_id,)).fetchone() if workspace_id else None
-    profile = conn.execute("SELECT label FROM profiles WHERE id = ?", (profile_id,)).fetchone() if profile_id else None
-    effective_data_root = resolve_effective_data_root(data_root)
-    state_root = resolve_effective_state_root(data_root)
-    counts = {
-        "workspaces": conn.execute("SELECT COUNT(*) AS count FROM workspaces").fetchone()["count"],
-        "profiles": conn.execute("SELECT COUNT(*) AS count FROM profiles").fetchone()["count"],
-        "accounts": conn.execute("SELECT COUNT(*) AS count FROM accounts").fetchone()["count"],
-        "wallets": conn.execute("SELECT COUNT(*) AS count FROM wallets").fetchone()["count"],
-        "transactions": conn.execute("SELECT COUNT(*) AS count FROM transactions").fetchone()["count"],
-        "journal_entries": conn.execute("SELECT COUNT(*) AS count FROM journal_entries").fetchone()["count"],
-        "quarantines": conn.execute("SELECT COUNT(*) AS count FROM journal_quarantines").fetchone()["count"],
-    }
-    return {
-        "version": __version__,
-        "schema_version": SCHEMA_VERSION,
-        "auth": {"mode": "local", "authenticated": True},
-        "state_root": str(state_root),
-        "data_root": str(effective_data_root),
-        "database": str(resolve_database_path(effective_data_root)),
-        "config_root": str(resolve_config_root(data_root)),
-        "settings_file": str(resolve_settings_path(data_root)),
-        "exports_root": str(resolve_exports_root(data_root)),
-        "current_workspace": workspace["label"] if workspace else "",
-        "current_profile": profile["label"] if profile else "",
-        **counts,
-    }
+    return build_status_payload(conn, data_root)
 
 
 def get_profile_details(conn, workspace_ref=None, profile_ref=None):
@@ -5696,19 +5664,7 @@ def cmd_status(conn, args):
 
 
 def cmd_context_show(conn, args):
-    workspace_id = get_setting(conn, "context_workspace")
-    profile_id = get_setting(conn, "context_profile")
-    workspace = conn.execute("SELECT id, label FROM workspaces WHERE id = ?", (workspace_id,)).fetchone() if workspace_id else None
-    profile = conn.execute("SELECT id, label FROM profiles WHERE id = ?", (profile_id,)).fetchone() if profile_id else None
-    emit(
-        args,
-        {
-            "workspace_id": workspace["id"] if workspace else "",
-            "workspace_label": workspace["label"] if workspace else "",
-            "profile_id": profile["id"] if profile else "",
-            "profile_label": profile["label"] if profile else "",
-        },
-    )
+    emit(args, current_context_snapshot(conn))
 
 
 def cmd_context_set(conn, args):
@@ -6679,93 +6635,14 @@ def command_needs_db(args):
 
 
 def _resolve_output_format(args):
-    if args.machine:
-        if args.format is not None and args.format != "json":
-            raise AppError(
-                f"--machine requires --format json, got --format {args.format}",
-                code="invalid_flag_combination",
-            )
-        return "json"
-    return args.format or "table"
+    return runtime_resolve_output_format(args)
 
 
 def _emit_error(args, exc, debug_text=None):
-    code = getattr(exc, "code", "app_error") or "app_error"
-    message = str(exc)
-    details = getattr(exc, "details", None)
-    hint = getattr(exc, "hint", None)
-    retryable = getattr(exc, "retryable", False)
-    fmt = getattr(args, "format", None) or "table"
-    if fmt == "json":
-        envelope = build_error_envelope(
-            code,
-            message,
-            details=details,
-            hint=hint,
-            retryable=retryable,
-            debug=debug_text,
-        )
-        try:
-            _write_text(args, json.dumps(envelope, indent=2, sort_keys=False))
-        except Exception:
-            print(json.dumps(envelope, indent=2, sort_keys=False), file=sys.stderr)
-    else:
-        print(f"error: {message}", file=sys.stderr)
-        if hint:
-            print(f"hint: {hint}", file=sys.stderr)
+    runtime_emit_error(args, exc, debug_text=debug_text)
 
 
 def main(argv=None):
-    parser = build_parser()
-    try:
-        args = parser.parse_args(argv)
-    except SystemExit:
-        raise
-    try:
-        args.format = _resolve_output_format(args)
-    except AppError as exc:
-        args.format = "table"
-        _emit_error(args, exc)
-        return 1
-    args.data_root = str(resolve_effective_data_root(args.data_root))
-    args.env_file = str(resolve_effective_env_file(args.env_file, args.data_root))
-    ensure_data_root(args.data_root)
-    ensure_data_root(Path(args.env_file).expanduser().parent)
-    ensure_data_root(resolve_exports_root(args.data_root))
-    ensure_settings_file(args.data_root, args.env_file)
-    args.runtime_config = load_runtime_config(args.env_file)
-    conn = open_db(args.data_root) if command_needs_db(args) else None
-    if conn is not None:
-        try:
-            merge_db_backends(conn, args.runtime_config)
-        except AppError as exc:
-            debug_text = None
-            if args.debug:
-                import traceback
-                debug_text = traceback.format_exc()
-                sys.stderr.write(debug_text)
-            _emit_error(args, exc, debug_text=debug_text)
-            conn.close()
-            return 1
-    try:
-        dispatch(conn, args)
-        return 0
-    except AppError as exc:
-        debug_text = None
-        if args.debug:
-            import traceback
-            debug_text = traceback.format_exc()
-            sys.stderr.write(debug_text)
-        _emit_error(args, exc, debug_text=debug_text)
-        return 1
-    except Exception as exc:
-        import traceback
-        debug_text = traceback.format_exc()
-        if args.debug:
-            sys.stderr.write(debug_text)
-        wrapped = AppError(str(exc) or exc.__class__.__name__, code="internal_error")
-        _emit_error(args, wrapped, debug_text=debug_text if args.debug else None)
-        return 1
-    finally:
-        if conn is not None:
-            conn.close()
+    from .cli.main import main as cli_main
+
+    return cli_main(argv)
