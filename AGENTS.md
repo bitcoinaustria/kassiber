@@ -165,10 +165,10 @@ uv run python -m kassiber rates --help
 ## Known gaps
 
 - BTC-denominated amounts are stored as INTEGER msat in SQLite. Machine envelopes expose both `amount` (BTC float) and `amount_msat` (integer), and the same for `fee` / `quantity`. Fiat columns (`fiat_value`, `fiat_rate`, etc.) are still REAL.
-- Rates cache (`rates pairs/sync/latest/range/set`) stores BTC-USD / BTC-EUR samples from CoinGecko or manual upsert, but journal processing still derives fiat rates from priced transactions rather than the cache.
+- Rates cache (`rates pairs/sync/latest/range/set`) stores BTC-USD / BTC-EUR samples from CoinGecko or manual upsert, and `journals process` can auto-fill missing transaction prices from the cache when a matching sample exists at or before the transaction timestamp. Reports still use stored transaction/journal pricing rather than querying the cache live.
 - Phoenix Lightning wallet CSV import is implemented (`wallets import-phoenix`). River CSV importer is not implemented yet.
 - No `custom` wallet kind CSV mapping DSL yet.
-- No account adjustments / per-event rate overrides yet.
+- No account adjustments yet.
 - No per-profile Tor proxy configuration yet.
 - No descriptor/xpub-native live sync through `bitcoinrpc` yet.
 - No self-hosted Liquid `elements_rpc` backend yet.
