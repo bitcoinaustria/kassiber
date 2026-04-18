@@ -107,11 +107,11 @@ top of the monolith.
 
 ### 0.5a - Shared tax-input normalization seam
 
-- [ ] Add normalized tax-event inputs between raw transactions and engine
+- [x] Add normalized tax-event inputs between raw transactions and engine
   logic
-- [ ] Make ambiguous or under-specified tax semantics quarantineable
+- [x] Make ambiguous or under-specified tax semantics quarantineable
   instead of guessed
-- [ ] Keep raw `transactions` rows as the source of truth; do not persist
+- [x] Keep raw `transactions` rows as the source of truth; do not persist
   derived regime state onto them
 
 ### 0.5b - RP2 extraction
