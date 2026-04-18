@@ -73,6 +73,7 @@ def resolve_runtime_paths(data_root=None, env_file=None):
 
 def ensure_runtime_layout(paths):
     ensure_data_root(paths.data_root)
+    ensure_data_root(paths.config_root)
     ensure_data_root(Path(paths.env_file).expanduser().parent)
     ensure_data_root(paths.exports_root)
     ensure_data_root(paths.attachments_root)

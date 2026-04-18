@@ -6,6 +6,7 @@ AUSTRIAN_TAX_COUNTRY = "at"
 DEFAULT_LONG_TERM_DAYS = 365
 DEFAULT_REPORT_GENERATORS = ("open_positions", "rp2_full_report")
 DEFAULT_ACCOUNTING_METHODS = ("fifo", "lifo", "hifo", "lofo")
+AUSTRIAN_ACCOUNTING_METHODS = ("fifo",)
 
 
 @dataclass(frozen=True)
@@ -64,7 +65,7 @@ def build_austrian_policy(profile):
         tax_country=AUSTRIAN_TAX_COUNTRY,
         fiat_currency="EUR",
         long_term_days=DEFAULT_LONG_TERM_DAYS,
-        accounting_methods=DEFAULT_ACCOUNTING_METHODS,
+        accounting_methods=AUSTRIAN_ACCOUNTING_METHODS,
         report_generators=DEFAULT_REPORT_GENERATORS,
     )
 

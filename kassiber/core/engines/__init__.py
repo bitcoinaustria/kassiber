@@ -6,7 +6,7 @@ from typing import Any, Mapping
 
 from ...tax_policy import AUSTRIAN_TAX_COUNTRY, normalize_tax_country, profile_value
 from .austria import ExperimentalAustrianTaxEngine
-from .base import TaxEngine, TaxEngineAssetResult, TaxEngineLedgerInputs, TaxEngineLedgerResult
+from .base import TaxEngine, TaxEngineLedgerInputs, TaxEngineLedgerResult
 from .rp2 import GenericRP2TaxEngine
 
 
@@ -21,7 +21,6 @@ def build_tax_engine(profile: Mapping[str, Any]) -> TaxEngine:
 
 __all__ = [
     "TaxEngine",
-    "TaxEngineAssetResult",
     "TaxEngineLedgerInputs",
     "TaxEngineLedgerResult",
     "build_tax_engine",

@@ -4,9 +4,11 @@ import os
 import tempfile
 import uuid
 from collections import defaultdict
+from contextlib import contextmanager
+from dataclasses import dataclass
 from decimal import Decimal
 from importlib import import_module
-from typing import Any, Iterable, Mapping
+from typing import Any, Iterable, Iterator, Mapping
 
 from ...errors import AppError
 from ...msat import dec
@@ -14,12 +16,29 @@ from ...tax_policy import build_tax_policy
 from ...transfers import apply_manual_pairs, detect_intra_transfers
 from ...util import parse_bool
 from ..tax_events import NormalizedTaxAssetInputs, build_tax_quarantine, normalize_tax_asset_inputs
-from .base import TaxEngineAssetResult, TaxEngineLedgerInputs, TaxEngineLedgerResult
+from .base import TaxEngineLedgerInputs, TaxEngineLedgerResult
 
 _RP2_MODULES = None
 
 
-def get_rp2_modules() -> dict[str, Any]:
+@dataclass(frozen=True)
+class _RP2AssetResult:
+    entries: list[dict[str, Any]]
+    quarantines: list[dict[str, Any]]
+    intra_audit: list[dict[str, Any]]
+    account_holdings: dict[tuple[Any, ...], dict[str, Any]]
+    wallet_holdings: dict[tuple[Any, ...], dict[str, Any]]
+
+
+@dataclass(frozen=True)
+class _RP2AssetState:
+    computed_data: Any | None
+    quarantines: list[dict[str, Any]]
+    intra_audit: list[dict[str, Any]]
+    balance_set: Any | None
+
+
+def _get_rp2_modules() -> dict[str, Any]:
     global _RP2_MODULES
     if _RP2_MODULES is not None:
         return _RP2_MODULES
@@ -45,13 +64,13 @@ def get_rp2_modules() -> dict[str, Any]:
     return _RP2_MODULES
 
 
-def rp2_decimal(value: Any):
-    modules = get_rp2_modules()
+def _rp2_decimal(value: Any):
+    modules = _get_rp2_modules()
     return modules["RP2Decimal"](str(value))
 
 
-def make_rp2_country(profile: Mapping[str, Any]):
-    AbstractCountry = get_rp2_modules()["AbstractCountry"]
+def _make_rp2_country(profile: Mapping[str, Any]):
+    AbstractCountry = _get_rp2_modules()["AbstractCountry"]
     try:
         policy = build_tax_policy(profile)
     except ValueError as exc:
@@ -80,8 +99,13 @@ def make_rp2_country(profile: Mapping[str, Any]):
     return KassiberCountry()
 
 
-def make_rp2_configuration(profile: Mapping[str, Any], wallet_labels: Iterable[str], assets: Iterable[str]):
-    Configuration = get_rp2_modules()["Configuration"]
+@contextmanager
+def _rp2_configuration(
+    profile: Mapping[str, Any],
+    wallet_labels: Iterable[str],
+    assets: Iterable[str],
+) -> Iterator[Any]:
+    Configuration = _get_rp2_modules()["Configuration"]
     sorted_wallet_labels = sorted(wallet_labels)
     sorted_assets = sorted(assets)
     if not sorted_wallet_labels:
@@ -141,16 +165,23 @@ def make_rp2_configuration(profile: Mapping[str, Any], wallet_labels: Iterable[s
         ]
     )
     handle = tempfile.NamedTemporaryFile("w", encoding="utf-8", suffix=".ini", delete=False)
+    config_path = handle.name
     try:
         handle.write(content)
         handle.flush()
     finally:
         handle.close()
-    return Configuration(handle.name, make_rp2_country(profile)), handle.name
+    try:
+        yield Configuration(config_path, _make_rp2_country(profile))
+    finally:
+        try:
+            os.unlink(config_path)
+        except OSError:
+            pass
 
 
-def build_rp2_accounting_engine(profile: Mapping[str, Any]):
-    modules = get_rp2_modules()
+def _build_rp2_accounting_engine(profile: Mapping[str, Any]):
+    modules = _get_rp2_modules()
     method_name = str(profile["gains_algorithm"]).strip().lower()
     try:
         policy = build_tax_policy(profile)
@@ -167,18 +198,22 @@ def build_rp2_accounting_engine(profile: Mapping[str, Any]):
     return modules["AccountingEngine"](years_2_methods=years_to_methods)
 
 
-def _rp2_quarantine(profile, row, reason, detail):
-    return build_tax_quarantine(profile, row, reason, detail)
-
-
 def _wallet_is_altbestand(wallet):
     return parse_bool(wallet.get("altbestand"), default=False)
 
 
-def _rp2_asset_state(profile, normalized_inputs: NormalizedTaxAssetInputs, configuration):
+def _rows_by_transaction_id(normalized_inputs: NormalizedTaxAssetInputs) -> dict[str, Mapping[str, Any]]:
+    rows_by_id = {event.transaction_id: event.raw_row for event in normalized_inputs.events}
+    for transfer in normalized_inputs.transfers:
+        rows_by_id[transfer.out_transaction_id] = transfer.out_row
+        rows_by_id[transfer.in_transaction_id] = transfer.in_row
+    return rows_by_id
+
+
+def _rp2_asset_state(profile, normalized_inputs: NormalizedTaxAssetInputs, configuration) -> _RP2AssetState:
     """Build RP2 ``ComputedData`` for one asset across every wallet in the profile."""
 
-    modules = get_rp2_modules()
+    modules = _get_rp2_modules()
     TransactionSet = modules["TransactionSet"]
     InTransaction = modules["InTransaction"]
     OutTransaction = modules["OutTransaction"]
@@ -196,7 +231,6 @@ def _rp2_asset_state(profile, normalized_inputs: NormalizedTaxAssetInputs, confi
     quarantines = list(normalized_inputs.quarantines)
     intra_audit = []
     row_index = 1
-    row_by_id = dict(normalized_inputs.row_by_id)
     events_by_id = {event.transaction_id: event for event in normalized_inputs.events}
     transfers_by_id = {transfer.out_transaction_id: transfer for transfer in normalized_inputs.transfers}
 
@@ -205,7 +239,7 @@ def _rp2_asset_state(profile, normalized_inputs: NormalizedTaxAssetInputs, confi
             transfer = transfers_by_id[item_id]
             if total_available < transfer.sent:
                 quarantines.append(
-                    _rp2_quarantine(
+                    build_tax_quarantine(
                         profile,
                         transfer.out_row,
                         "insufficient_lots",
@@ -220,7 +254,7 @@ def _rp2_asset_state(profile, normalized_inputs: NormalizedTaxAssetInputs, confi
                 continue
             if priced_available < transfer.sent:
                 quarantines.append(
-                    _rp2_quarantine(
+                    build_tax_quarantine(
                         profile,
                         transfer.out_row,
                         "missing_cost_basis",
@@ -242,9 +276,9 @@ def _rp2_asset_state(profile, normalized_inputs: NormalizedTaxAssetInputs, confi
                     from_holder=holder,
                     to_exchange=transfer.to_wallet_label,
                     to_holder=holder,
-                    spot_price=rp2_decimal(transfer.spot_price if transfer.spot_price is not None else 0),
-                    crypto_sent=rp2_decimal(transfer.sent),
-                    crypto_received=rp2_decimal(transfer.received),
+                    spot_price=_rp2_decimal(transfer.spot_price if transfer.spot_price is not None else 0),
+                    crypto_sent=_rp2_decimal(transfer.sent),
+                    crypto_received=_rp2_decimal(transfer.received),
                     row=row_index,
                     unique_id=transfer.out_transaction_id,
                     notes=transfer.description,
@@ -283,11 +317,11 @@ def _rp2_asset_state(profile, normalized_inputs: NormalizedTaxAssetInputs, confi
                     exchange=event.wallet_label,
                     holder=holder,
                     transaction_type="BUY",
-                    spot_price=rp2_decimal(event.spot_price),
-                    crypto_in=rp2_decimal(event.amount),
-                    fiat_in_no_fee=rp2_decimal(event.fiat_value),
-                    fiat_in_with_fee=rp2_decimal(event.fiat_value),
-                    fiat_fee=rp2_decimal(0),
+                    spot_price=_rp2_decimal(event.spot_price),
+                    crypto_in=_rp2_decimal(event.amount),
+                    fiat_in_no_fee=_rp2_decimal(event.fiat_value),
+                    fiat_in_with_fee=_rp2_decimal(event.fiat_value),
+                    fiat_fee=_rp2_decimal(0),
                     row=row_index,
                     unique_id=event.transaction_id,
                     notes=event.description,
@@ -302,7 +336,7 @@ def _rp2_asset_state(profile, normalized_inputs: NormalizedTaxAssetInputs, confi
             continue
         if total_available < needed:
             quarantines.append(
-                _rp2_quarantine(
+                build_tax_quarantine(
                     profile,
                     event.raw_row,
                     "insufficient_lots",
@@ -317,7 +351,7 @@ def _rp2_asset_state(profile, normalized_inputs: NormalizedTaxAssetInputs, confi
             continue
         if priced_available < needed:
             quarantines.append(
-                _rp2_quarantine(
+                build_tax_quarantine(
                     profile,
                     event.raw_row,
                     "missing_cost_basis",
@@ -338,11 +372,11 @@ def _rp2_asset_state(profile, normalized_inputs: NormalizedTaxAssetInputs, confi
                 exchange=event.wallet_label,
                 holder=holder,
                 transaction_type="SELL" if event.amount > 0 else "FEE",
-                spot_price=rp2_decimal(event.spot_price),
-                crypto_out_no_fee=rp2_decimal(event.amount),
-                crypto_fee=rp2_decimal(event.fee),
-                fiat_out_no_fee=rp2_decimal(event.fiat_value) if event.amount > 0 else None,
-                fiat_fee=rp2_decimal(event.fee * event.spot_price),
+                spot_price=_rp2_decimal(event.spot_price),
+                crypto_out_no_fee=_rp2_decimal(event.amount),
+                crypto_fee=_rp2_decimal(event.fee),
+                fiat_out_no_fee=_rp2_decimal(event.fiat_value) if event.amount > 0 else None,
+                fiat_fee=_rp2_decimal(event.fee * event.spot_price),
                 row=row_index,
                 unique_id=event.transaction_id,
                 notes=event.description,
@@ -353,7 +387,12 @@ def _rp2_asset_state(profile, normalized_inputs: NormalizedTaxAssetInputs, confi
         row_index += 1
 
     if in_set.count == 0:
-        return None, quarantines, row_by_id, intra_audit, None
+        return _RP2AssetState(
+            computed_data=None,
+            quarantines=quarantines,
+            intra_audit=intra_audit,
+            balance_set=None,
+        )
     input_data = InputData(
         asset=asset,
         unfiltered_in_transaction_set=in_set,
@@ -361,13 +400,18 @@ def _rp2_asset_state(profile, normalized_inputs: NormalizedTaxAssetInputs, confi
         unfiltered_intra_transaction_set=intra_set,
     )
     try:
-        computed_data = compute_tax(configuration, build_rp2_accounting_engine(profile), input_data)
+        computed_data = compute_tax(configuration, _build_rp2_accounting_engine(profile), input_data)
     except Exception as exc:
         raise AppError(f"RP2 tax calculation failed for asset '{asset}': {exc}") from exc
     from datetime import date as _date
 
     balance_set = BalanceSet(configuration, input_data, _date.max)
-    return computed_data, quarantines, row_by_id, intra_audit, balance_set
+    return _RP2AssetState(
+        computed_data=computed_data,
+        quarantines=quarantines,
+        intra_audit=intra_audit,
+        balance_set=balance_set,
+    )
 
 
 def _append_rp2_journal_entries(entries, computed_data, wallet_refs_by_label, profile, row_by_id, intra_audit):
@@ -576,9 +620,6 @@ class GenericRP2TaxEngine:
     def __init__(self, profile: Mapping[str, Any]):
         self.profile = profile
 
-    def make_configuration(self, wallet_labels: Iterable[str], assets: Iterable[str]):
-        return make_rp2_configuration(self.profile, wallet_labels, assets)
-
     def build_ledger_state(self, inputs: TaxEngineLedgerInputs) -> TaxEngineLedgerResult:
         if not inputs.rows:
             return TaxEngineLedgerResult(
@@ -592,14 +633,13 @@ class GenericRP2TaxEngine:
 
         wallet_labels = {row["wallet_label"] for row in inputs.rows}
         assets = {row["asset"] for row in inputs.rows}
-        configuration, configuration_path = self.make_configuration(wallet_labels, assets)
         entries: list[dict[str, Any]] = []
         quarantines: list[dict[str, Any]] = []
         intra_audit_all: list[dict[str, Any]] = []
         account_holdings = defaultdict(lambda: {"quantity": Decimal("0"), "cost_basis": Decimal("0")})
         wallet_holdings = defaultdict(lambda: {"quantity": Decimal("0"), "cost_basis": Decimal("0")})
         cross_asset_pairs: list[dict[str, Any]] = []
-        try:
+        with _rp2_configuration(self.profile, wallet_labels, assets) as configuration:
             wallet_refs_by_label = {
                 ref["label"]: ref for ref in inputs.wallet_refs_by_id.values()
             }
@@ -624,7 +664,7 @@ class GenericRP2TaxEngine:
                     inputs.wallet_refs_by_id,
                     pairs_by_asset.get(asset, []),
                 )
-                asset_result = self.process_asset(
+                asset_result = self._process_asset(
                     normalized_inputs,
                     wallet_refs_by_label,
                     configuration,
@@ -638,11 +678,6 @@ class GenericRP2TaxEngine:
                 for key, totals in asset_result.wallet_holdings.items():
                     wallet_holdings[key]["quantity"] += totals["quantity"]
                     wallet_holdings[key]["cost_basis"] += totals["cost_basis"]
-        finally:
-            try:
-                os.unlink(configuration_path)
-            except OSError:
-                pass
         return TaxEngineLedgerResult(
             entries=entries,
             quarantines=quarantines,
@@ -652,34 +687,47 @@ class GenericRP2TaxEngine:
             wallet_holdings=dict(wallet_holdings),
         )
 
-    def process_asset(
+    def _process_asset(
         self,
         normalized_inputs: NormalizedTaxAssetInputs,
         wallet_refs_by_label: Mapping[str, Mapping[str, Any]],
         configuration: Any,
-    ) -> TaxEngineAssetResult:
-        computed_data, quarantines, row_by_id, intra_audit, balance_set = _rp2_asset_state(
+    ) -> _RP2AssetResult:
+        asset_state = _rp2_asset_state(
             self.profile,
             normalized_inputs,
             configuration,
         )
-        if computed_data is None:
-            return TaxEngineAssetResult(
+        if asset_state.computed_data is None:
+            return _RP2AssetResult(
                 entries=[],
-                quarantines=quarantines,
-                intra_audit=intra_audit,
+                quarantines=asset_state.quarantines,
+                intra_audit=asset_state.intra_audit,
                 account_holdings={},
                 wallet_holdings={},
             )
         entries = []
         account_holdings = defaultdict(lambda: {"quantity": Decimal("0"), "cost_basis": Decimal("0")})
         wallet_holdings = defaultdict(lambda: {"quantity": Decimal("0"), "cost_basis": Decimal("0")})
-        _append_rp2_journal_entries(entries, computed_data, wallet_refs_by_label, self.profile, row_by_id, intra_audit)
-        _accumulate_asset_holdings(account_holdings, wallet_holdings, computed_data, balance_set, wallet_refs_by_label)
-        return TaxEngineAssetResult(
+        _append_rp2_journal_entries(
+            entries,
+            asset_state.computed_data,
+            wallet_refs_by_label,
+            self.profile,
+            _rows_by_transaction_id(normalized_inputs),
+            asset_state.intra_audit,
+        )
+        _accumulate_asset_holdings(
+            account_holdings,
+            wallet_holdings,
+            asset_state.computed_data,
+            asset_state.balance_set,
+            wallet_refs_by_label,
+        )
+        return _RP2AssetResult(
             entries=entries,
-            quarantines=quarantines,
-            intra_audit=intra_audit,
+            quarantines=asset_state.quarantines,
+            intra_audit=asset_state.intra_audit,
             account_holdings=dict(account_holdings),
             wallet_holdings=dict(wallet_holdings),
         )
@@ -687,8 +735,4 @@ class GenericRP2TaxEngine:
 
 __all__ = [
     "GenericRP2TaxEngine",
-    "build_rp2_accounting_engine",
-    "get_rp2_modules",
-    "make_rp2_configuration",
-    "rp2_decimal",
 ]
