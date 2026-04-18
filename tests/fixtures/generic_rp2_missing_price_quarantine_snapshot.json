@@ -1,0 +1,57 @@
+{
+  "account_holdings": [
+    {
+      "account_code": "treasury",
+      "account_id": "account-treasury",
+      "account_label": "Treasury",
+      "asset": "BTC",
+      "cost_basis": 60000.0,
+      "quantity": 1.0
+    }
+  ],
+  "cross_asset_pairs": [],
+  "entries": [
+    {
+      "account_id": "account-treasury",
+      "asset": "BTC",
+      "cost_basis": null,
+      "description": "Seed BTC",
+      "entry_type": "acquisition",
+      "fiat_value": 60000.0,
+      "gain_loss": null,
+      "occurred_at": "2026-03-01T09:00:00Z",
+      "proceeds": null,
+      "profile_id": "profile-missing-price",
+      "quantity": 1.0,
+      "transaction_id": "priced-buy-1",
+      "unit_cost": 60000.0,
+      "wallet_id": "wallet-cold",
+      "workspace_id": "workspace-main"
+    }
+  ],
+  "intra_audit": [],
+  "quarantines": [
+    {
+      "detail": {
+        "asset": "BTC",
+        "direction": "outbound",
+        "required_for": "disposal",
+        "wallet": "Cold"
+      },
+      "profile_id": "profile-missing-price",
+      "reason": "missing_spot_price",
+      "transaction_id": "unpriced-spend-1",
+      "workspace_id": "workspace-main"
+    }
+  ],
+  "wallet_holdings": [
+    {
+      "account_code": "treasury",
+      "asset": "BTC",
+      "cost_basis": 60000.0,
+      "quantity": 1.0,
+      "wallet_id": "wallet-cold",
+      "wallet_label": "Cold"
+    }
+  ]
+}

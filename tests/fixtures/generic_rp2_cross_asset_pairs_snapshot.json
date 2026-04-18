@@ -1,0 +1,55 @@
+{
+  "journal_entries": [
+    {
+      "account": "treasury",
+      "asset": "BTC",
+      "cost_basis": 0,
+      "description": "BTC acquisition",
+      "entry_type": "acquisition",
+      "fiat_value": 8008.0,
+      "gain_loss": 0,
+      "occurred_at": "2026-04-01T10:00:00Z",
+      "proceeds": 0,
+      "quantity": 0.1001,
+      "quantity_msat": 10010000000,
+      "wallet": "Bitcoin"
+    },
+    {
+      "account": "treasury",
+      "asset": "BTC",
+      "cost_basis": 8008.0,
+      "description": "Peg-in to Liquid",
+      "entry_type": "disposal",
+      "fiat_value": 8200.0,
+      "gain_loss": 192.0,
+      "occurred_at": "2026-04-15T10:00:00Z",
+      "proceeds": 8200.0,
+      "quantity": -0.1001,
+      "quantity_msat": -10010000000,
+      "wallet": "Bitcoin"
+    },
+    {
+      "account": "treasury",
+      "asset": "LBTC",
+      "cost_basis": 0,
+      "description": "Peg-in receive",
+      "entry_type": "acquisition",
+      "fiat_value": 8200.0,
+      "gain_loss": 0,
+      "occurred_at": "2026-04-15T10:30:00Z",
+      "proceeds": 0,
+      "quantity": 0.1,
+      "quantity_msat": 10000000000,
+      "wallet": "Liquid"
+    }
+  ],
+  "quarantines": [],
+  "summary": {
+    "auto_priced": 0,
+    "cross_asset_pairs": 1,
+    "entries_created": 3,
+    "processed_transactions": 3,
+    "quarantined": 0,
+    "transfers_detected": 0
+  }
+}

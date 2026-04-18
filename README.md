@@ -619,8 +619,8 @@ Wallet-level `Altbestand` stays separate from the profile policy because it is p
 
 ## Architecture notes
 
-- The CLI entrypoint and the command implementations (importers, rates, wallets, sync adapters, journals, metadata, reports, argparse tree) live in [kassiber/app.py](kassiber/app.py). An incremental bottom-up extraction is in progress.
-- Supporting modules currently extracted from `app.py`:
+- The CLI entrypoint lives in [kassiber/cli/main.py](kassiber/cli/main.py), and the remaining command handlers live in [kassiber/cli/handlers.py](kassiber/cli/handlers.py).
+- Supporting modules extracted from the old monolith:
   - [kassiber/errors.py](kassiber/errors.py) — `AppError` typed exception.
   - [kassiber/time_utils.py](kassiber/time_utils.py) — timestamp parsing + RFC3339 formatting.
   - [kassiber/msat.py](kassiber/msat.py) — BTC ↔ msat conversion helpers.

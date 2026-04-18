@@ -5,22 +5,39 @@ from __future__ import annotations
 import json
 import sqlite3
 from dataclasses import dataclass
-from typing import Any, Callable, Mapping, Sequence
+from typing import Any, Callable, Mapping, MutableMapping, Sequence
 
+from ..errors import AppError
 from ..util import str_or_none
 
 WalletRow = Mapping[str, Any]
 ProfileRow = Mapping[str, Any]
-SyncState = Mapping[str, Any]
 RuntimeConfig = Mapping[str, Any]
 SyncOutcome = dict[str, Any]
 BackendRecord = Mapping[str, Any]
+SyncTarget = Mapping[str, Any]
+HistoryEntry = Mapping[str, Any]
+HistoryCache = MutableMapping[str, Sequence[HistoryEntry]]
 ImportFile = Callable[[sqlite3.Connection, ProfileRow, WalletRow, str, str], SyncOutcome]
 InsertRecords = Callable[[sqlite3.Connection, ProfileRow, WalletRow, Sequence[BackendRecord], str], SyncOutcome]
 ResolveBackend = Callable[[RuntimeConfig, str | None], Mapping[str, Any]]
-ResolveSyncState = Callable[[Mapping[str, Any], WalletRow], SyncState]
+ResolveSyncState = Callable[[Mapping[str, Any], WalletRow], "WalletSyncState"]
 NormalizeAddresses = Callable[[Any], Sequence[str]]
-BackendAdapter = Callable[[Mapping[str, Any], WalletRow, SyncState], tuple[Sequence[BackendRecord], Mapping[str, Any]]]
+BackendAdapter = Callable[
+    [Mapping[str, Any], WalletRow, "WalletSyncState"],
+    tuple[Sequence[BackendRecord], Mapping[str, Any]],
+]
+
+
+@dataclass(frozen=True, slots=True)
+class WalletSyncState:
+    chain: str
+    network: str
+    descriptor_plan: Any | None
+    policy_asset_id: str
+    targets: Sequence[SyncTarget]
+    tracked_scripts: Mapping[str, SyncTarget]
+    history_cache: HistoryCache
 
 
 @dataclass(frozen=True)
@@ -54,7 +71,7 @@ def sync_wallet_from_backend(
     config = json.loads(wallet["config_json"] or "{}")
     backend = hooks.resolve_backend(runtime_config, config.get("backend"))
     sync_state = hooks.resolve_sync_state(backend, wallet)
-    if not sync_state["targets"]:
+    if not sync_state.targets:
         return {
             "wallet": wallet["label"],
             "status": "skipped",
@@ -63,11 +80,10 @@ def sync_wallet_from_backend(
     kind = normalize_backend_kind(backend["kind"])
     adapter = hooks.backend_adapters.get(kind)
     if adapter is None:
-        return {
-            "wallet": wallet["label"],
-            "status": "skipped",
-            "reason": f"backend kind '{backend['kind']}' is not implemented yet",
-        }
+        raise AppError(
+            f"Wallet sync is not implemented for backend kind '{kind}'",
+            hint="Use an esplora, electrum, or bitcoinrpc backend for live sync.",
+        )
     normalized_records, adapter_meta = adapter(backend, wallet, sync_state)
     outcome = hooks.insert_records(
         conn,
@@ -79,18 +95,18 @@ def sync_wallet_from_backend(
     outcome["backend"] = backend["name"]
     outcome["backend_kind"] = kind
     outcome["backend_url"] = backend["url"]
-    outcome["chain"] = sync_state["chain"]
-    outcome["network"] = sync_state["network"]
-    outcome["sync_mode"] = "descriptor" if sync_state["descriptor_plan"] else "addresses"
-    outcome["target_count"] = len(sync_state["targets"])
-    if sync_state["descriptor_plan"]:
-        outcome["gap_limit"] = sync_state["descriptor_plan"].gap_limit
+    outcome["chain"] = sync_state.chain
+    outcome["network"] = sync_state.network
+    outcome["sync_mode"] = "descriptor" if sync_state.descriptor_plan else "addresses"
+    outcome["target_count"] = len(sync_state.targets)
+    if sync_state.descriptor_plan:
+        outcome["gap_limit"] = sync_state.descriptor_plan.gap_limit
     else:
         outcome["addresses"] = ",".join(
-            target["address"] for target in sync_state["targets"] if target.get("address")
+            target["address"] for target in sync_state.targets if target.get("address")
         )
-    if sync_state["policy_asset_id"]:
-        outcome["policy_asset"] = sync_state["policy_asset_id"]
+    if sync_state.policy_asset_id:
+        outcome["policy_asset"] = sync_state.policy_asset_id
     outcome.update(dict(adapter_meta or {}))
     return outcome
 
@@ -132,6 +148,7 @@ def sync_wallets(
 
 __all__ = [
     "WalletSyncHooks",
+    "WalletSyncState",
     "normalize_backend_kind",
     "sync_wallet_from_backend",
     "sync_wallets",
