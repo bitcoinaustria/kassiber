@@ -151,14 +151,16 @@ top of the monolith.
 
 ## Phase 1 - Desktop App
 
-Goal: build a local desktop UI over the shared core after the extraction
-work is done.
+Goal: build the Phase 1 PySide6/QML app shell from `docs/plan/04-desktop-ui.md`
+over the shared core after the extraction work is done.
 
-- [ ] Add `kassiber ui` entrypoint once `kassiber.core` is stable
-- [ ] Start with a macOS-first app shell and read-only dashboard
-- [ ] Keep long-running sync/import/journal work off the UI thread
-- [ ] Add connections, imports, attachments, and settings only after the
-  read-only shell is solid
+- [x] Add `kassiber ui` entrypoint once `kassiber.core` is stable
+- [x] Start with a macOS-first PySide6/QML app shell and empty state
+- [x] Persist window geometry in `settings.json` under a `ui` subkey
+- [ ] Add the Phase 2 read-only dashboard tiles over `kassiber.core`
+- [ ] Keep long-running sync/import/journal work off the UI thread via QThreads once those actions land
+- [ ] Add connections, imports, attachments, and fuller settings only after
+  the app shell is solid
 - [ ] Treat packaging/signing as a later step, not a blocker for the core
   refactor
 
@@ -187,7 +189,7 @@ work is done.
 
 Run these after any extraction or behavior change:
 
-- `PYTHONPYCACHEPREFIX=/tmp/kassiber-pyc uv run python -m py_compile kassiber/*.py`
+- `PYTHONPYCACHEPREFIX=/tmp/kassiber-pyc uv run python -m py_compile kassiber/*.py kassiber/ui/*.py kassiber/ui/viewmodels/*.py`
 - `uv run python -m unittest tests.test_cli_smoke -v`
 - `uv run python -m kassiber --help`
 - `uv run python -m kassiber --machine status`
@@ -199,3 +201,4 @@ Run these after any extraction or behavior change:
 - `uv run python -m kassiber journals events --help`
 - `uv run python -m kassiber reports balance-history --help`
 - `uv run python -m kassiber rates --help`
+- `uv run python -m kassiber ui --help`

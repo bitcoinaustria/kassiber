@@ -43,6 +43,7 @@ let you override them.
 - structured success envelope `{kind, schema_version, data}`
 - structured error envelope `{code, message, hint, details, retryable, debug}`
 - `--debug` surfaces stack traces inside the error envelope
+- `ui` opens the Phase 1 PySide6/QML desktop shell, and `--machine ui` emits the same shell snapshot as JSON
 
 ### Wallets
 - kinds: `descriptor`, `xpub`, `address`, `coreln`, `lnd`, `nwc`, `phoenix`, `river`, `custom`
@@ -93,6 +94,12 @@ let you override them.
 - `reports balance-history --interval {hour,day,week,month}` with `--start` / `--end` and `--wallet / --account / --asset` filters
 - `reports export-pdf --file report.pdf [--wallet <wallet>]` — comprehensive landscape PDF summary with complete holdings, flows, capital gains, history, transactions, and data-quality metrics
 
+### Desktop
+- `ui [--workspace <ws>] [--profile <profile>]` — macOS-first PySide6/QML app shell over the local SQLite store
+- Phase 1 currently ships the Clams-style frame, empty state, Project pill popover, and placeholder Add Connection / Settings dialogs
+- window size and position persist in `config/settings.json` under the `ui` key
+- `--machine ui` returns the same shell snapshot envelope for automation and smoke tests
+
 ### Rates
 - `rates pairs` — list supported pairs and per-pair cache coverage
 - `rates sync [--pair BTC-USD] [--days N] [--source coingecko]` — pull historical spot prices from CoinGecko into the local cache
@@ -108,9 +115,12 @@ Cost basis is pooled per asset across all wallets in a profile so the RP2 lot en
 
 - Python `>=3.10`
 - `embit>=0.8.0`
+- `PySide6>=6.7,<7`
 - `rp2>=1.7.2`
 
-The Python floor is set by the current RP2 and `embit` dependencies. RP2 is not an optional add-on: Kassiber uses it as the tax engine for journal processing and tax-aware reports.
+The Python floor is set by the current RP2, `embit`, and PySide6 dependencies. RP2 is not an optional add-on: Kassiber uses it as the tax engine for journal processing and tax-aware reports.
+
+`kassiber ui` now uses the PySide6 + QML stack described in `docs/plan/01-stack-decision.md` and `docs/plan/04-desktop-ui.md`.
 
 ## Installation
 
@@ -123,7 +133,7 @@ python3 -m pip install --upgrade pip
 python3 -m pip install -e .
 ```
 
-This installs Kassiber together with RP2, `embit`, and the rest of the supported runtime dependencies.
+This installs Kassiber together with RP2, `embit`, PySide6, and the rest of the supported runtime dependencies.
 
 `uv sync` is also supported and is used by the project's `uv.lock`.
 
@@ -187,6 +197,7 @@ python3 -m kassiber wallets create \
 python3 -m kassiber wallets sync --wallet coldcard
 python3 -m kassiber journals process
 python3 -m kassiber reports balance-sheet
+python3 -m kassiber ui
 python3 -m kassiber reports balance-history --interval month \
   --start 2025-01-01T00:00:00Z --end 2025-12-31T23:59:59Z
 python3 -m kassiber reports export-pdf --file report.pdf
