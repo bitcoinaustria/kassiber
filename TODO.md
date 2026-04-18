@@ -25,6 +25,8 @@ Current direction:
 - Keep changes local-first, standard-library-first, and additive where
   possible
 - Keep docs in lockstep with behavior changes
+- When a TODO item is completed, check it in the same PR or commit that
+  lands it; if scope changes, rewrite or split the item immediately
 - Never use `git add -A`
 
 ## Right now
@@ -33,7 +35,7 @@ Current direction:
   remove duplicate parser code from `kassiber/app.py`, import the shared
   helpers from `kassiber.importers`, then run the compile check and the
   CLI smoke suite
-- [ ] Map the current `app.py` seams before the next split:
+- [x] Map the current `app.py` seams before the next split:
   runtime/bootstrap, envelope/error emission, context resolution, SQL
   helpers, sync adapters, reports, and RP2 loading
 - [ ] Keep the repo in a behavior-preserving extraction mode until the
@@ -47,35 +49,36 @@ modules without changing user-visible behavior.
 
 ### 0a - Skeleton and bootstrap
 
-- [ ] Create `kassiber/core/` and `kassiber/cli/` package skeletons
-- [ ] Add `kassiber/core/runtime.py` for shared data-root, env-file,
+- [x] Create `kassiber/core/` and `kassiber/cli/` package skeletons
+- [x] Add `kassiber/core/runtime.py` for shared data-root, env-file,
   settings, backend overlay, DB-open, and context bootstrap
-- [ ] Add `kassiber/cli/main.py` as the future argparse entrypoint
-- [ ] Keep `kassiber.app:main` working through a shim until final cutover
+- [x] Add `kassiber/cli/main.py` as the future argparse entrypoint
+- [x] Keep `kassiber.app:main` working through a shim until final cutover
 
 ### 0b - CRUD, settings, and rates
 
-- [ ] Extract workspace/profile/account/backend CRUD into `kassiber.core`
-- [ ] Extract wallet read/write orchestration into `kassiber.core`
-- [ ] Extract local rates cache operations into `kassiber.core`
-- [ ] Introduce small `core/repo/*.py` modules only where they simplify
+- [x] Extract workspace/profile/account/backend CRUD into `kassiber.core`
+- [x] Extract wallet read/write orchestration into `kassiber.core`
+- [x] Extract local rates cache operations into `kassiber.core`
+- [x] Introduce small `core/repo/*.py` modules only where they simplify
   repeated SQL and reduce `app.py`
 
 ### 0c - Sync and import orchestration
 
-- [ ] Extract wallet sync orchestration into `kassiber/core/sync.py`
-- [ ] Keep parser-only logic in `kassiber/importers.py`
+- [x] Extract wallet sync orchestration into `kassiber/core/sync.py`
+- [x] Keep parser-only logic in `kassiber/importers.py`
 - [ ] Split backend-specific sync code into dedicated modules only when it
   shrinks `app.py` and keeps the dependency graph clean
-- [ ] Preserve current `esplora`, `electrum`, and `bitcoinrpc` behavior
+- [x] Preserve current `esplora`, `electrum`, and `bitcoinrpc` behavior
 
 ### 0d - Metadata, journals, reports, and RP2 seam
 
-- [ ] Extract metadata note/tag/excluded flows into `kassiber.core`
+- [x] Extract metadata note/tag/excluded, records, and BIP329 flows into
+  `kassiber.core`
 - [ ] Extract report builders/export paths into `kassiber.core`
 - [ ] Move `_emit_error` out of `app.py` and make the envelope boundary
   explicit
-- [ ] Move `_RP2_MODULES` / `get_rp2_modules` behind a journals or engine
+- [x] Move `_RP2_MODULES` / `get_rp2_modules` behind a journals or engine
   seam
 - [ ] Introduce a tax-engine interface that preserves today's RP2-backed
   generic behavior
