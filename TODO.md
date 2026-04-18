@@ -38,7 +38,7 @@ Current direction:
 - [x] Map the current `app.py` seams before the next split:
   runtime/bootstrap, envelope/error emission, context resolution, SQL
   helpers, sync adapters, reports, and RP2 loading
-- [ ] Keep the repo in a behavior-preserving extraction mode until the
+- [x] Keep the repo in a behavior-preserving extraction mode until the
   shared core exists; do not start UI implementation work before Phase 0
   is green
 
@@ -87,17 +87,17 @@ modules without changing user-visible behavior.
 
 - [x] Move argparse tree and command dispatch into `kassiber/cli/main.py`
 - [x] Update `pyproject.toml` entrypoints once the new CLI path is stable
-- [ ] Shrink `kassiber/app.py` to a tiny shim or delete it
-- [ ] Run the full smoke suite plus CLI help/smoke commands before
+- [x] Shrink `kassiber/app.py` to a tiny shim or delete it
+- [x] Run the full smoke suite plus CLI help/smoke commands before
   calling Phase 0 done
 
 ### Phase 0 done when
 
-- [ ] `tests/test_cli_smoke.py` passes unchanged or only with deliberate,
+- [x] `tests/test_cli_smoke.py` passes unchanged or only with deliberate,
   documented extensions
-- [ ] `kassiber/app.py` no longer contains business logic
-- [ ] RP2 imports are isolated to the extracted engine/journals surface
-- [ ] The CLI still emits the same machine envelope kinds and schema
+- [x] `kassiber/app.py` no longer contains business logic
+- [x] RP2 imports are isolated to the extracted engine/journals surface
+- [x] The CLI still emits the same machine envelope kinds and schema
   fields for existing commands
 
 ## Phase 0.5 - Attachments and Tax Engine Cleanup
