@@ -40,7 +40,9 @@ from .backends import (
     update_db_backend,
 )
 from .core import accounts as core_accounts
+from .core import imports as core_imports
 from .core import rates as core_rates
+from .core import sync as core_sync
 from .core import wallets as core_wallets
 from .core.repo import current_context_snapshot
 from .core.runtime import (
@@ -1658,80 +1660,20 @@ def normalize_import_record(record):
 
 
 def insert_wallet_records(conn, profile, wallet, records, source_label):
-    imported = 0
-    skipped = 0
-    for record in records:
-        normalized = normalize_import_record(record)
-        fingerprint = make_transaction_fingerprint(
-            wallet["id"],
-            normalized["external_id"],
-            normalized["occurred_at"],
-            normalized["direction"],
-            normalized["asset"],
-            normalized["amount"],
-            normalized["fee"],
-        )
-        exists = conn.execute(
-            "SELECT 1 FROM transactions WHERE fingerprint = ?",
-            (fingerprint,),
-        ).fetchone()
-        if exists:
-            skipped += 1
-            continue
-        tx_id = str(uuid.uuid4())
-        conn.execute(
-            """
-            INSERT INTO transactions(
-                id, workspace_id, profile_id, wallet_id, external_id, fingerprint,
-                occurred_at, direction, asset, amount, fee, fiat_currency,
-                fiat_rate, fiat_value, kind, description, counterparty, raw_json, created_at
-            ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """,
-            (
-                tx_id,
-                profile["workspace_id"],
-                profile["id"],
-                wallet["id"],
-                normalized["external_id"] or None,
-                fingerprint,
-                normalized["occurred_at"],
-                normalized["direction"],
-                normalized["asset"],
-                btc_to_msat(normalized["amount"]),
-                btc_to_msat(normalized["fee"]),
-                profile["fiat_currency"],
-                float(normalized["fiat_rate"]) if normalized["fiat_rate"] is not None else None,
-                float(normalized["fiat_value"]) if normalized["fiat_value"] is not None else None,
-                normalized["kind"],
-                normalized["description"],
-                normalized["counterparty"],
-                normalized["raw_json"],
-                now_iso(),
-            ),
-        )
-        imported += 1
-    invalidate_journals(conn, profile["id"])
-    conn.commit()
-    return {
-        "wallet": wallet["label"],
-        "source": source_label,
-        "imported": imported,
-        "skipped": skipped,
-    }
+    return core_imports.insert_wallet_records(
+        conn,
+        profile,
+        wallet,
+        records,
+        source_label,
+        _import_coordinator_hooks(),
+    )
 
 
 def import_into_wallet(conn, workspace_ref, profile_ref, wallet_ref, file_path, input_format):
     _, profile = resolve_scope(conn, workspace_ref, profile_ref)
     wallet = resolve_wallet(conn, profile["id"], wallet_ref)
-    records = load_import_records(file_path, input_format)
-    outcome = insert_wallet_records(conn, profile, wallet, records, f"file:{input_format}")
-    if is_btcpay_format(input_format):
-        outcome.update(apply_btcpay_metadata(conn, profile, wallet, records))
-    if is_phoenix_format(input_format):
-        outcome.update(apply_phoenix_metadata(conn, profile, wallet, records))
-    outcome["input_format"] = input_format
-    outcome["file"] = os.path.abspath(file_path)
-    return outcome
+    return _import_file_for_sync(conn, profile, wallet, file_path, input_format)
 
 
 def ensure_tag_row(conn, workspace_id, profile_id, code, label):
@@ -1751,6 +1693,35 @@ def ensure_tag_row(conn, workspace_id, profile_id, code, label):
         (tag_id, workspace_id, profile_id, normalized_code, label, now_iso()),
     )
     return conn.execute("SELECT * FROM tags WHERE id = ?", (tag_id,)).fetchone(), True
+
+
+def _import_coordinator_hooks():
+    return core_imports.ImportCoordinatorHooks(
+        ensure_tag_row=ensure_tag_row,
+        invalidate_journals=invalidate_journals,
+    )
+
+
+def _import_file_for_sync(conn, profile, wallet, file_path, input_format):
+    return core_imports.import_file_into_wallet(
+        conn,
+        profile,
+        wallet,
+        file_path,
+        input_format,
+        _import_coordinator_hooks(),
+    )
+
+
+def _insert_records_for_sync(conn, profile, wallet, records, source_label):
+    return core_imports.insert_wallet_records(
+        conn,
+        profile,
+        wallet,
+        records,
+        source_label,
+        _import_coordinator_hooks(),
+    )
 
 
 def apply_btcpay_metadata(conn, profile, wallet, records):
@@ -2459,6 +2430,35 @@ def bitcoinrpc_records_for_wallet(backend, wallet, addresses):
     return records, {"core_wallet": wallet_name, "imported_addresses": imported_count}
 
 
+def _bitcoinrpc_sync_adapter(backend, wallet, sync_state):
+    return bitcoinrpc_records_for_wallet(
+        backend,
+        wallet,
+        [target["address"] for target in sync_state["targets"] if target.get("address")],
+    )
+
+
+def _wallet_sync_hooks():
+    return core_sync.WalletSyncHooks(
+        import_file=_import_file_for_sync,
+        insert_records=_insert_records_for_sync,
+        resolve_backend=resolve_backend,
+        resolve_sync_state=resolve_wallet_sync_targets,
+        normalize_addresses=normalize_addresses,
+        backend_adapters={
+            "esplora": lambda backend, wallet, sync_state: (
+                esplora_records_for_wallet(backend, sync_state),
+                {},
+            ),
+            "electrum": lambda backend, wallet, sync_state: (
+                electrum_records_for_wallet(backend, sync_state),
+                {},
+            ),
+            "bitcoinrpc": _bitcoinrpc_sync_adapter,
+        },
+    )
+
+
 def read_varint(payload, offset):
     prefix = payload[offset]
     offset += 1
@@ -2741,49 +2741,13 @@ def electrum_records_for_wallet(backend, sync_state):
 
 def sync_wallet_from_backend(conn, runtime_config, workspace_ref, profile_ref, wallet):
     _, profile = resolve_scope(conn, workspace_ref, profile_ref)
-    config = json.loads(wallet["config_json"] or "{}")
-    backend = resolve_backend(runtime_config, config.get("backend"))
-    sync_state = resolve_wallet_sync_targets(backend, wallet)
-    if not sync_state["targets"]:
-        return {
-            "wallet": wallet["label"],
-            "status": "skipped",
-            "reason": "no addresses or descriptors configured for backend sync",
-        }
-    kind = normalize_backend_kind(backend["kind"])
-    adapter_meta = {}
-    if kind == "esplora":
-        normalized_records = esplora_records_for_wallet(backend, sync_state)
-    elif kind == "electrum":
-        normalized_records = electrum_records_for_wallet(backend, sync_state)
-    elif kind == "bitcoinrpc":
-        normalized_records, adapter_meta = bitcoinrpc_records_for_wallet(
-            backend,
-            wallet,
-            [target["address"] for target in sync_state["targets"] if target.get("address")],
-        )
-    else:
-        return {
-            "wallet": wallet["label"],
-            "status": "skipped",
-            "reason": f"backend kind '{backend['kind']}' is not implemented yet",
-        }
-    outcome = insert_wallet_records(conn, profile, wallet, normalized_records, f"backend:{backend['name']}")
-    outcome["backend"] = backend["name"]
-    outcome["backend_kind"] = kind
-    outcome["backend_url"] = backend["url"]
-    outcome["chain"] = sync_state["chain"]
-    outcome["network"] = sync_state["network"]
-    outcome["sync_mode"] = "descriptor" if sync_state["descriptor_plan"] else "addresses"
-    outcome["target_count"] = len(sync_state["targets"])
-    if sync_state["descriptor_plan"]:
-        outcome["gap_limit"] = sync_state["descriptor_plan"].gap_limit
-    else:
-        outcome["addresses"] = ",".join(target["address"] for target in sync_state["targets"] if target.get("address"))
-    if sync_state["policy_asset_id"]:
-        outcome["policy_asset"] = sync_state["policy_asset_id"]
-    outcome.update(adapter_meta)
-    return outcome
+    return core_sync.sync_wallet_from_backend(
+        conn,
+        runtime_config,
+        profile,
+        wallet,
+        _wallet_sync_hooks(),
+    )
 
 
 def sync_wallet(conn, runtime_config, workspace_ref, profile_ref, wallet_ref=None, sync_all=False):
@@ -2794,46 +2758,13 @@ def sync_wallet(conn, runtime_config, workspace_ref, profile_ref, wallet_ref=Non
         if not wallet_ref:
             raise AppError("Provide --wallet or use --all")
         wallets = [resolve_wallet(conn, profile["id"], wallet_ref)]
-    results = []
-    for wallet in wallets:
-        config = json.loads(wallet["config_json"] or "{}")
-        source_file = config.get("source_file")
-        source_format = config.get("source_format")
-        addresses = normalize_addresses(config.get("addresses"))
-        has_descriptor = bool(str_or_none(config.get("descriptor")))
-        if source_file and source_format:
-            outcome = import_into_wallet(
-                conn,
-                profile["workspace_id"],
-                profile["id"],
-                wallet["id"],
-                source_file,
-                source_format,
-            )
-            results.append({"wallet": wallet["label"], "status": "synced", **outcome})
-            continue
-        if addresses:
-            outcome = sync_wallet_from_backend(conn, runtime_config, profile["workspace_id"], profile["id"], wallet)
-            if outcome.get("status") == "skipped":
-                results.append(outcome)
-            else:
-                results.append({"wallet": wallet["label"], "status": "synced", **outcome})
-            continue
-        if has_descriptor:
-            outcome = sync_wallet_from_backend(conn, runtime_config, profile["workspace_id"], profile["id"], wallet)
-            if outcome.get("status") == "skipped":
-                results.append(outcome)
-            else:
-                results.append({"wallet": wallet["label"], "status": "synced", **outcome})
-            continue
-        results.append(
-            {
-                "wallet": wallet["label"],
-                "status": "skipped",
-                "reason": "no file source, descriptor, or backend addresses configured",
-            }
-        )
-    return results
+    return core_sync.sync_wallets(
+        conn,
+        runtime_config,
+        profile,
+        wallets,
+        _wallet_sync_hooks(),
+    )
 
 
 def resolve_descriptor_branch_index(plan, branch):
