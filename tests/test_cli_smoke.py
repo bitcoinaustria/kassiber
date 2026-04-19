@@ -537,6 +537,42 @@ class CliSmokeTest(unittest.TestCase):
             self.assertIn(field, err)
         self.assertEqual(err["code"], "validation")
 
+    def test_05d_tax_annotation_direction_validation_error_envelope(self):
+        for tx_ref, event_type, normalized_event_type, direction in [
+            ("22222222-aaaa-bbbb-cccc-000000000002", "sell", "sell", "inbound"),
+            ("33333333-aaaa-bbbb-cccc-000000000003", "receive-external", "receive_external", "outbound"),
+        ]:
+            with self.subTest(transaction=tx_ref, event_type=event_type):
+                payload, code = _run(
+                    self.data_root,
+                    "metadata", "records", "tax", "set",
+                    "--workspace", "Main",
+                    "--profile", "Default",
+                    "--transaction", tx_ref,
+                    "--event-type", event_type,
+                )
+                self.assertNotEqual(code, 0)
+                self.assertEqual(payload.get("kind"), "error")
+                self.assertEqual(payload.get("schema_version"), 1)
+                err = payload.get("error")
+                self.assertIsInstance(err, dict)
+                for field in ("code", "message", "hint", "details", "retryable"):
+                    self.assertIn(field, err)
+                self.assertEqual(err["code"], "validation")
+                self.assertIn(direction, err["message"])
+                self.assertIsInstance(err["details"], dict)
+                self.assertEqual(err["details"]["direction"], direction)
+                self.assertEqual(err["details"]["event_type"], normalized_event_type)
+
+                payload = self._cli(
+                    "metadata", "records", "tax", "get",
+                    "--workspace", "Main",
+                    "--profile", "Default",
+                    "--transaction", tx_ref,
+                )
+                self._assert_kind(payload, "metadata.records.tax.get")
+                self.assertIsNone(payload["data"]["tax_annotation"])
+
     def test_06_journals_process(self):
         payload = self._cli(
             "journals", "process",

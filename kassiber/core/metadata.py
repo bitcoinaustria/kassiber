@@ -23,6 +23,19 @@ TAX_ANNOTATION_EVENT_TYPES = (
     "airdrop",
     "hardfork",
 )
+_TAX_ANNOTATION_EVENT_TYPES_BY_DIRECTION = {
+    "inbound": frozenset(
+        {
+            "receive_external",
+            "mining_income",
+            "routing_income",
+            "staking_income",
+            "airdrop",
+            "hardfork",
+        }
+    ),
+    "outbound": frozenset({"sell", "spend"}),
+}
 
 ScopeResolver = Callable[[sqlite3.Connection, str | None, str | None], tuple[Mapping[str, Any], Mapping[str, Any]]]
 WalletResolver = Callable[[sqlite3.Connection, str, str], Mapping[str, Any]]
@@ -190,6 +203,33 @@ def normalize_tax_annotation_event_type(value):
     return normalized
 
 
+def validate_tax_annotation_direction(tx: Mapping[str, Any], event_type: str):
+    direction = str(tx["direction"] or "").strip().lower()
+    allowed_event_types = _TAX_ANNOTATION_EVENT_TYPES_BY_DIRECTION.get(direction)
+    if allowed_event_types is None:
+        raise AppError(
+            f"Transaction '{tx['id']}' has unsupported direction '{tx['direction']}' for tax annotations",
+            code="validation",
+            details={
+                "transaction_id": tx["id"],
+                "direction": tx["direction"],
+                "event_type": event_type,
+            },
+        )
+    if event_type not in allowed_event_types:
+        raise AppError(
+            f"Tax event type '{event_type}' is not valid for {direction} transactions",
+            code="validation",
+            hint="Choose one of: " + ", ".join(sorted(allowed_event_types)) + ".",
+            details={
+                "transaction_id": tx["id"],
+                "direction": direction,
+                "event_type": event_type,
+                "allowed_event_types": sorted(allowed_event_types),
+            },
+        )
+
+
 def get_transaction_tax_annotation(conn, workspace_ref, profile_ref, tx_ref, hooks: MetadataHooks):
     _, profile = hooks.resolve_scope(conn, workspace_ref, profile_ref)
     tx = hooks.resolve_transaction(conn, profile["id"], tx_ref)
@@ -210,6 +250,7 @@ def set_transaction_tax_annotation(
     _, profile = hooks.resolve_scope(conn, workspace_ref, profile_ref)
     tx = hooks.resolve_transaction(conn, profile["id"], tx_ref)
     normalized_event_type = normalize_tax_annotation_event_type(event_type)
+    validate_tax_annotation_direction(tx, normalized_event_type)
     existing = _tax_annotation_for_transaction(conn, tx["id"])
     provenance_json = "{}"
     if (

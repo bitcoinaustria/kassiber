@@ -2171,6 +2171,59 @@ class ReviewRegressionTest(unittest.TestCase):
         self.assertEqual(wallet_holdings[0]["cost_basis"], 0.0)
         self.assertEqual(_normalize_quarantines(state.quarantines), [])
 
+    def test_austrian_engine_processes_unpriced_annotated_zero_basis_inbounds(self):
+        cases = [
+            ("airdrop", "deposit", "Promotional payout"),
+            ("hardfork", "hardfork", "Fork allocation"),
+        ]
+        for event_type, raw_kind, description in cases:
+            with self.subTest(event_type=event_type):
+                profile, wallet_refs_by_id = self._austrian_annotation_context(
+                    f"profile-austrian-unpriced-{event_type}"
+                )
+                tx_id = f"at-unpriced-{event_type}-1"
+                inputs = TaxEngineLedgerInputs(
+                    rows=[
+                        {
+                            "id": tx_id,
+                            "wallet_id": "wallet-main",
+                            "wallet_label": "Main",
+                            "wallet_account_id": "account-treasury",
+                            "account_code": "treasury",
+                            "account_label": "Treasury",
+                            "occurred_at": "2024-01-01T10:00:00Z",
+                            "direction": "inbound",
+                            "asset": "BTC",
+                            "amount": 1_000_000_000,
+                            "fee": 0,
+                            "fiat_rate": None,
+                            "fiat_value": None,
+                            "kind": raw_kind,
+                            "description": description,
+                            "note": None,
+                            "external_id": tx_id,
+                            "created_at": "2024-01-01T10:00:00Z",
+                        },
+                    ],
+                    wallet_refs_by_id=wallet_refs_by_id,
+                    manual_pair_records=[],
+                    tax_annotations_by_tx_id={
+                        tx_id: {"event_type": event_type},
+                    },
+                )
+                state = build_tax_engine(profile).build_ledger_state(inputs)
+                entries = _normalize_engine_entries(state.entries)
+                self.assertEqual([row["entry_type"] for row in entries], ["acquisition"])
+                self.assertEqual(entries[0]["quantity"], 0.01)
+                self.assertEqual(entries[0]["fiat_value"], 0.0)
+                wallet_holdings = _normalize_holdings(
+                    state.wallet_holdings,
+                    ("wallet_id", "wallet_label", "account_code", "asset"),
+                )
+                self.assertEqual(wallet_holdings[0]["quantity"], 0.01)
+                self.assertEqual(wallet_holdings[0]["cost_basis"], 0.0)
+                self.assertEqual(_normalize_quarantines(state.quarantines), [])
+
     def test_austrian_engine_uses_moving_average_and_nets_sale_fees(self):
         profile, inputs = self._direct_austrian_moving_average_engine_inputs()
         state = build_tax_engine(profile).build_ledger_state(inputs)

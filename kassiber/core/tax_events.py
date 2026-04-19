@@ -7,6 +7,11 @@ from typing import Any, Mapping, Sequence
 
 from ..msat import dec, msat_to_btc
 
+_ZERO = Decimal("0")
+_UNPRICED_ZERO_BASIS_ANNOTATIONS_BY_COUNTRY = {
+    "at": frozenset({"airdrop", "hardfork"}),
+}
+
 
 @dataclass(frozen=True)
 class NormalizedTaxEvent:
@@ -81,6 +86,31 @@ def _spot_price_from_row(row: Mapping[str, Any], quantity: Decimal) -> Decimal |
     return None
 
 
+def _annotation_key(event_type: Any) -> str:
+    return str(event_type or "").strip().lower()
+
+
+def _mapping_text(mapping: Mapping[str, Any], key: str) -> str:
+    if hasattr(mapping, "keys") and key in mapping.keys():
+        return str(mapping[key] or "").strip().lower()
+    return str(getattr(mapping, key, "") or "").strip().lower()
+
+
+def _allows_unpriced_zero_basis_inbound(
+    profile: Mapping[str, Any],
+    direction: str,
+    tax_event_type: Any,
+    fee: Decimal,
+) -> bool:
+    if direction != "inbound" or fee > _ZERO:
+        return False
+    tax_country = _mapping_text(profile, "tax_country")
+    supported_annotations = _UNPRICED_ZERO_BASIS_ANNOTATIONS_BY_COUNTRY.get(
+        tax_country, frozenset()
+    )
+    return _annotation_key(tax_event_type) in supported_annotations
+
+
 def normalize_tax_asset_inputs(
     profile: Mapping[str, Any],
     asset: str,
@@ -93,6 +123,7 @@ def normalize_tax_asset_inputs(
     transfers: list[NormalizedTaxTransfer] = []
     ordered_items: list[tuple[str, str]] = []
     quarantines: list[dict[str, Any]] = []
+    tax_annotations = tax_annotations_by_tx_id or {}
 
     pair_by_row: dict[str, tuple[str, Mapping[str, Any]]] = {}
     for pair in intra_pairs:
@@ -186,9 +217,16 @@ def normalize_tax_asset_inputs(
         fee = msat_to_btc(row["fee"])
         description = row["note"] or row["description"] or row["kind"] or row["id"]
         direction = row["direction"]
+        tax_event_type = tax_annotations.get(row["id"], {}).get("event_type")
         if direction == "inbound":
             spot_price = _spot_price_from_row(row, amount)
-            if spot_price is None:
+            allow_unpriced_zero_basis = _allows_unpriced_zero_basis_inbound(
+                profile,
+                direction,
+                tax_event_type,
+                fee,
+            )
+            if spot_price is None and not allow_unpriced_zero_basis:
                 quarantines.append(
                     build_tax_quarantine(
                         profile,
@@ -203,7 +241,14 @@ def normalize_tax_asset_inputs(
                     )
                 )
                 continue
-            fiat_value = dec(row["fiat_value"]) if row["fiat_value"] is not None else amount * spot_price
+            if allow_unpriced_zero_basis and spot_price is None:
+                fiat_value = _ZERO
+            else:
+                fiat_value = (
+                    dec(row["fiat_value"])
+                    if row["fiat_value"] is not None
+                    else amount * spot_price
+                )
         elif direction == "outbound":
             needed = amount + fee
             if needed <= 0:
@@ -253,9 +298,7 @@ def normalize_tax_asset_inputs(
                 spot_price=spot_price,
                 fiat_value=fiat_value,
                 description=description,
-                tax_event_type=(
-                    (tax_annotations_by_tx_id or {}).get(row["id"], {}).get("event_type")
-                ),
+                tax_event_type=tax_event_type,
                 raw_row=row,
             )
         )
