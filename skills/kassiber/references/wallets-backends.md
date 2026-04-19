@@ -34,12 +34,14 @@ Discover available kinds with:
 kassiber wallets kinds
 ```
 
-Important kinds:
+Common kinds for the workflows in this skill:
 
 - `descriptor`
 - `address`
 - `phoenix`
 - `custom`
+
+`kassiber wallets kinds` currently exposes additional kinds too, including `xpub`, `coreln`, `lnd`, `nwc`, and `river`. Trust the CLI output if it differs from this focused shortlist.
 
 ## Descriptor wallets
 
@@ -61,13 +63,15 @@ Liquid example:
 kassiber wallets create \
   --label satoshi-liquid \
   --kind descriptor \
-  --account project-satoshi \
+  --account treasury \
   --backend liquid \
   --chain liquid \
   --network liquidv1 \
   --descriptor-file /path/to/receive.desc \
   --change-descriptor-file /path/to/change.desc
 ```
+
+If the user wants a custom account like `project-satoshi`, create that account first and then reference it with `--account`.
 
 Liquid requirements:
 

@@ -18,7 +18,7 @@ kassiber --format csv --output journal-entries.csv reports journal-entries
 kassiber --machine reports balance-sheet
 ```
 
-When parsing programmatically, use `--machine`.
+When parsing programmatically, use `--machine`. Use it alone or with `--format json`; Kassiber rejects any other explicit `--format` value.
 
 ## Rates
 
@@ -37,6 +37,10 @@ If pricing looks incomplete, sync rates and then re-run:
 ```bash
 kassiber journals process
 ```
+
+## Pagination
+
+Some machine-readable list responses are paginated and keep rows under command-specific keys such as `.data.records` or `.data.events`. When `next_cursor` is present, keep requesting more pages until it becomes `null`.
 
 ## Balance sheet
 

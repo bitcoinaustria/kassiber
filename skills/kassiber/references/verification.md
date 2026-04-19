@@ -24,6 +24,11 @@ This skill bundles a verification helper:
 <skill-dir>/scripts/verify-state.sh --section wallets
 ```
 
+Requirements:
+
+- `jq` must be installed
+- if `kassiber` is not on `PATH`, the Kassiber repo needs to be available relative to the skill bundle so the script can resolve the repo root and run `uv`
+
 It checks:
 
 - runtime and path resolution
@@ -31,6 +36,8 @@ It checks:
 - wallet count
 - journal entry count
 - quarantine count
+
+The helper emits a machine-readable envelope with a `summary` section. Hard failures land in `summary.issues`; softer prompts like zero wallets on a fresh install or non-zero quarantine land in `summary.attention`.
 
 ## Useful smoke commands
 
