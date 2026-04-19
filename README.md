@@ -167,6 +167,45 @@ Errors use the same shape with `kind: "error"`:
 
 `--format plain` produces key-value output for display; `--format csv` with `--output <path>` writes a file suitable for spreadsheets and works on any command that returns a list of dicts.
 
+## Manual init
+
+Kassiber does not have an interactive onboarding flow. `kassiber init` only
+creates the local state tree and reports the active paths; it does not create a
+workspace, profile, account, or wallet for you.
+
+A minimal manual setup looks like this:
+
+```bash
+python3 -m kassiber init
+python3 -m kassiber status
+python3 -m kassiber workspaces create personal
+python3 -m kassiber profiles create main \
+  --workspace personal \
+  --fiat-currency EUR \
+  --tax-country at \
+  --tax-long-term-days 365 \
+  --gains-algorithm FIFO
+python3 -m kassiber context set --workspace personal --profile main
+```
+
+After that, create any custom accounts you need and add or import wallets:
+
+```bash
+python3 -m kassiber accounts create \
+  --code project-satoshi \
+  --label "Project Satoshi" \
+  --type asset
+python3 -m kassiber wallets create \
+  --label satoshi-liquid \
+  --kind descriptor \
+  --account project-satoshi \
+  --backend liquid \
+  --chain liquid \
+  --network liquidv1 \
+  --descriptor-file /path/to/receive.desc \
+  --change-descriptor-file /path/to/change.desc
+```
+
 ## Quick start
 
 ```bash
