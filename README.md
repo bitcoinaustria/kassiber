@@ -76,7 +76,7 @@ let you override them.
 - `journals quarantined` surfaces outbound transactions that couldn't be priced or lot-matched
 
 ### Metadata
-- `metadata records list` with `--wallet / --tag / --has-note / --no-note / --excluded / --included / --start / --end` and cursor pagination
+- `metadata records list` with `--wallet / --tag / --has-note / --no-note / --excluded / --included / --start / --end` and cursor pagination; JSON rows include `tax_event_type` when a transaction is annotated
 - `metadata records get --transaction` — unified per-transaction view (note, tags, excluded, tax annotation)
 - `metadata records note set/clear`, `tax get/set/clear`, `tag add/remove`, `excluded set/clear`
 
@@ -516,6 +516,10 @@ The `metadata records` namespace is the canonical interface for per-transaction 
 python3 -m kassiber metadata records list \
   --wallet coldcard --has-note --limit 50
 
+# Machine output includes tax_event_type when present
+python3 -m kassiber --machine metadata records list \
+  --profile austrian
+
 # Single-transaction view (note, tags, excluded, tax_annotation)
 python3 -m kassiber metadata records get --transaction <TRANSACTION_ID>
 
@@ -536,6 +540,8 @@ python3 -m kassiber metadata records tag remove --transaction <ID> --tag tax-lot
 python3 -m kassiber metadata records excluded set --transaction <ID>
 python3 -m kassiber metadata records excluded clear --transaction <ID>
 ```
+
+Canonical tax annotation event types are `receive_external`, `sell`, `spend`, `mining_income`, `routing_income`, `staking_income`, `airdrop`, and `hardfork`. The CLI also accepts kebab-case aliases such as `routing-income` and normalizes them before storage.
 
 ## Journal events
 
@@ -638,7 +644,7 @@ RP2 and the Austrian engine need fiat pricing to compute tax lots. If imported o
 
 ## Tax policy
 
-Profiles carry their own tax policy defaults. Kassiber currently exposes the RP2-backed `generic` policy and an explicitly experimental Austrian `at` path on top of the shared engine seam. Austrian profiles normalize to EUR, preserve the legacy 365-day field shape for `Altbestand`, and pin the legacy `gains_algorithm` field to `FIFO` because the Austrian engine applies its own FIFO / moving-average rules internally. Supported Austrian journal flows now process through the dedicated engine, while unsupported or ambiguous provenance quarantines instead of being guessed. When synced or imported rows are too ambiguous for Austrian treatment, `metadata records tax set` can now attach explicit semantics such as `receive_external`, `spend`, `mining_income`, `routing_income`, `staking_income`, `airdrop`, or `hardfork` without mutating the raw transaction row itself. JSON report envelopes for Austrian profiles also carry top-level `experimental` / `review_required` markers so downstream automation keeps the review gate visible. The Austrian path is still experimental and should be reviewed by a Steuerberater before filing.
+Profiles carry their own tax policy defaults. Kassiber currently exposes the RP2-backed `generic` policy and an explicitly experimental Austrian `at` path on top of the shared engine seam. Austrian profiles normalize to EUR, preserve the legacy 365-day field shape for `Altbestand`, and pin the legacy `gains_algorithm` field to `FIFO` because the Austrian engine applies its own FIFO / moving-average rules internally. Supported Austrian journal flows now process through the dedicated engine, while unsupported or ambiguous provenance quarantines instead of being guessed. When synced or imported rows are too ambiguous for Austrian treatment, `metadata records tax set` can now attach explicit semantics such as `receive_external`, `sell`, `spend`, `mining_income`, `routing_income`, `staking_income`, `airdrop`, or `hardfork` without mutating the raw transaction row itself. The CLI accepts kebab-case aliases and stores the canonical snake_case form. JSON report envelopes for Austrian profiles also carry top-level `experimental` / `review_required` markers so downstream automation keeps the review gate visible. The Austrian path is still experimental and should be reviewed by a Steuerberater before filing.
 
 ```bash
 python3 -m kassiber profiles create austrian \
