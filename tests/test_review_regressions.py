@@ -1486,6 +1486,28 @@ class ReviewRegressionTest(unittest.TestCase):
             manual_pair_records=[],
         )
 
+    def _austrian_annotation_context(self, profile_id="profile-austrian-annotation"):
+        profile = {
+            "id": profile_id,
+            "workspace_id": "workspace-main",
+            "label": "FixtureAustrianAnnotated",
+            "fiat_currency": "EUR",
+            "tax_country": "at",
+            "tax_long_term_days": 365,
+            "gains_algorithm": "FIFO",
+        }
+        wallet_refs_by_id = {
+            "wallet-main": {
+                "id": "wallet-main",
+                "label": "Main",
+                "wallet_account_id": "account-treasury",
+                "account_code": "treasury",
+                "account_label": "Treasury",
+                "altbestand": False,
+            },
+        }
+        return profile, wallet_refs_by_id
+
     def _direct_engine_snapshot(self, profile, inputs):
         state = build_tax_engine(profile).build_ledger_state(inputs)
         return {
@@ -1943,6 +1965,212 @@ class ReviewRegressionTest(unittest.TestCase):
         self.assertEqual(quarantine["reason"], "insufficient_tax_provenance")
         self.assertEqual(quarantine["detail"]["kind"], "deposit")
 
+    def test_austrian_engine_processes_annotated_external_receive(self):
+        profile, wallet_refs_by_id = self._austrian_annotation_context("profile-austrian-receive")
+        inputs = TaxEngineLedgerInputs(
+            rows=[
+                {
+                    "id": "at-receive-1",
+                    "wallet_id": "wallet-main",
+                    "wallet_label": "Main",
+                    "wallet_account_id": "account-treasury",
+                    "account_code": "treasury",
+                    "account_label": "Treasury",
+                    "occurred_at": "2024-01-01T10:00:00Z",
+                    "direction": "inbound",
+                    "asset": "BTC",
+                    "amount": 10_000_000_000,
+                    "fee": 0,
+                    "fiat_rate": 40000,
+                    "fiat_value": 4000,
+                    "kind": "deposit",
+                    "description": "External receive",
+                    "note": None,
+                    "external_id": "at-receive-1",
+                    "created_at": "2024-01-01T10:00:00Z",
+                },
+            ],
+            wallet_refs_by_id=wallet_refs_by_id,
+            manual_pair_records=[],
+            tax_annotations_by_tx_id={
+                "at-receive-1": {"event_type": "receive_external"},
+            },
+        )
+        state = build_tax_engine(profile).build_ledger_state(inputs)
+        entries = _normalize_engine_entries(state.entries)
+        self.assertEqual([row["entry_type"] for row in entries], ["acquisition"])
+        self.assertEqual(entries[0]["quantity"], 0.1)
+        self.assertEqual(entries[0]["fiat_value"], 4000.0)
+        self.assertEqual(_normalize_quarantines(state.quarantines), [])
+        wallet_holdings = _normalize_holdings(
+            state.wallet_holdings,
+            ("wallet_id", "wallet_label", "account_code", "asset"),
+        )
+        self.assertEqual(wallet_holdings[0]["quantity"], 0.1)
+        self.assertEqual(wallet_holdings[0]["cost_basis"], 4000.0)
+
+    def test_austrian_engine_processes_annotated_withdrawal_as_spend(self):
+        profile, wallet_refs_by_id = self._austrian_annotation_context("profile-austrian-spend")
+        inputs = TaxEngineLedgerInputs(
+            rows=[
+                {
+                    "id": "at-spend-buy-1",
+                    "wallet_id": "wallet-main",
+                    "wallet_label": "Main",
+                    "wallet_account_id": "account-treasury",
+                    "account_code": "treasury",
+                    "account_label": "Treasury",
+                    "occurred_at": "2024-01-01T10:00:00Z",
+                    "direction": "inbound",
+                    "asset": "BTC",
+                    "amount": 50_000_000_000,
+                    "fee": 0,
+                    "fiat_rate": 40000,
+                    "fiat_value": 20000,
+                    "kind": "buy",
+                    "description": "Seed buy",
+                    "note": None,
+                    "external_id": "at-spend-buy-1",
+                    "created_at": "2024-01-01T10:00:00Z",
+                },
+                {
+                    "id": "at-spend-1",
+                    "wallet_id": "wallet-main",
+                    "wallet_label": "Main",
+                    "wallet_account_id": "account-treasury",
+                    "account_code": "treasury",
+                    "account_label": "Treasury",
+                    "occurred_at": "2024-01-10T10:00:00Z",
+                    "direction": "outbound",
+                    "asset": "BTC",
+                    "amount": 10_000_000_000,
+                    "fee": 0,
+                    "fiat_rate": 42000,
+                    "fiat_value": 4200,
+                    "kind": "withdrawal",
+                    "description": "Annotated spend",
+                    "note": None,
+                    "external_id": "at-spend-1",
+                    "created_at": "2024-01-10T10:00:00Z",
+                },
+            ],
+            wallet_refs_by_id=wallet_refs_by_id,
+            manual_pair_records=[],
+            tax_annotations_by_tx_id={
+                "at-spend-1": {"event_type": "spend"},
+            },
+        )
+        state = build_tax_engine(profile).build_ledger_state(inputs)
+        entries = _normalize_engine_entries(state.entries)
+        self.assertEqual([row["entry_type"] for row in entries], ["acquisition", "disposal"])
+        disposal = entries[-1]
+        self.assertEqual(disposal["cost_basis"], 4000.0)
+        self.assertEqual(disposal["proceeds"], 4200.0)
+        self.assertEqual(disposal["gain_loss"], 200.0)
+        self.assertEqual(_normalize_quarantines(state.quarantines), [])
+
+    def test_austrian_engine_processes_annotated_income_types(self):
+        cases = [
+            ("routing_income", "lightning_received", "Routing fee"),
+            ("mining_income", "deposit", "Mining payout"),
+            ("staking_income", "deposit", "Staking reward"),
+        ]
+        for event_type, raw_kind, description in cases:
+            with self.subTest(event_type=event_type):
+                profile, wallet_refs_by_id = self._austrian_annotation_context(
+                    f"profile-austrian-{event_type}"
+                )
+                tx_id = f"at-{event_type}-annotated-1"
+                inputs = TaxEngineLedgerInputs(
+                    rows=[
+                        {
+                            "id": tx_id,
+                            "wallet_id": "wallet-main",
+                            "wallet_label": "Main",
+                            "wallet_account_id": "account-treasury",
+                            "account_code": "treasury",
+                            "account_label": "Treasury",
+                            "occurred_at": "2024-01-01T10:00:00Z",
+                            "direction": "inbound",
+                            "asset": "BTC",
+                            "amount": 100_000_000,
+                            "fee": 0,
+                            "fiat_rate": 40000,
+                            "fiat_value": 40,
+                            "kind": raw_kind,
+                            "description": description,
+                            "note": None,
+                            "external_id": tx_id,
+                            "created_at": "2024-01-01T10:00:00Z",
+                        },
+                    ],
+                    wallet_refs_by_id=wallet_refs_by_id,
+                    manual_pair_records=[],
+                    tax_annotations_by_tx_id={
+                        tx_id: {"event_type": event_type},
+                    },
+                )
+                state = build_tax_engine(profile).build_ledger_state(inputs)
+                entries = _normalize_engine_entries(state.entries)
+                self.assertEqual([row["entry_type"] for row in entries], ["acquisition", "income"])
+                acquisition = next(row for row in entries if row["entry_type"] == "acquisition")
+                income = next(row for row in entries if row["entry_type"] == "income")
+                self.assertEqual(acquisition["quantity"], 0.001)
+                self.assertEqual(acquisition["fiat_value"], 40.0)
+                self.assertEqual(income["quantity"], 0.0)
+                self.assertEqual(income["fiat_value"], 40.0)
+                wallet_holdings = _normalize_holdings(
+                    state.wallet_holdings,
+                    ("wallet_id", "wallet_label", "account_code", "asset"),
+                )
+                self.assertEqual(wallet_holdings[0]["quantity"], 0.001)
+                self.assertEqual(wallet_holdings[0]["cost_basis"], 40.0)
+                self.assertEqual(_normalize_quarantines(state.quarantines), [])
+
+    def test_austrian_engine_processes_annotated_airdrop_as_zero_basis(self):
+        profile, wallet_refs_by_id = self._austrian_annotation_context("profile-austrian-airdrop")
+        inputs = TaxEngineLedgerInputs(
+            rows=[
+                {
+                    "id": "at-airdrop-1",
+                    "wallet_id": "wallet-main",
+                    "wallet_label": "Main",
+                    "wallet_account_id": "account-treasury",
+                    "account_code": "treasury",
+                    "account_label": "Treasury",
+                    "occurred_at": "2024-01-01T10:00:00Z",
+                    "direction": "inbound",
+                    "asset": "BTC",
+                    "amount": 1_000_000_000,
+                    "fee": 0,
+                    "fiat_rate": 40000,
+                    "fiat_value": 400,
+                    "kind": "deposit",
+                    "description": "Promotional payout",
+                    "note": None,
+                    "external_id": "at-airdrop-1",
+                    "created_at": "2024-01-01T10:00:00Z",
+                },
+            ],
+            wallet_refs_by_id=wallet_refs_by_id,
+            manual_pair_records=[],
+            tax_annotations_by_tx_id={
+                "at-airdrop-1": {"event_type": "airdrop"},
+            },
+        )
+        state = build_tax_engine(profile).build_ledger_state(inputs)
+        entries = _normalize_engine_entries(state.entries)
+        self.assertEqual([row["entry_type"] for row in entries], ["acquisition"])
+        self.assertEqual(entries[0]["quantity"], 0.01)
+        self.assertEqual(entries[0]["fiat_value"], 0.0)
+        wallet_holdings = _normalize_holdings(
+            state.wallet_holdings,
+            ("wallet_id", "wallet_label", "account_code", "asset"),
+        )
+        self.assertEqual(wallet_holdings[0]["quantity"], 0.01)
+        self.assertEqual(wallet_holdings[0]["cost_basis"], 0.0)
+        self.assertEqual(_normalize_quarantines(state.quarantines), [])
+
     def test_austrian_engine_uses_moving_average_and_nets_sale_fees(self):
         profile, inputs = self._direct_austrian_moving_average_engine_inputs()
         state = build_tax_engine(profile).build_ledger_state(inputs)
@@ -2370,6 +2598,103 @@ class ReviewRegressionTest(unittest.TestCase):
         self.assertAlmostEqual(january["market_value"], 10000.0, places=4)
         self.assertAlmostEqual(february["cumulative_cost_basis"], 5000.0, places=4)
         self.assertAlmostEqual(february["market_value"], 10000.0, places=4)
+
+    def test_austrian_annotated_income_roundtrip_keeps_balance_history_cost_basis_once(self):
+        payload, result = self._run_json("init")
+        self._assert_ok(payload, result, "init")
+        payload, result = self._run_json("workspaces", "create", "Main")
+        self._assert_ok(payload, result, "workspaces.create")
+        payload, result = self._run_json(
+            "profiles", "create",
+            "--workspace", "Main",
+            "--fiat-currency", "EUR",
+            "--tax-country", "at",
+            "Austrian",
+        )
+        self._assert_ok(payload, result, "profiles.create")
+        payload, result = self._run_json(
+            "wallets", "create",
+            "--workspace", "Main",
+            "--profile", "Austrian",
+            "--label", "AT Wallet",
+            "--kind", "custom",
+        )
+        self._assert_ok(payload, result, "wallets.create")
+
+        json_file = self.case_dir / "austrian-income-report-import.json"
+        json_file.write_text(
+            json.dumps(
+                [
+                    {
+                        "date": "2024-01-01",
+                        "direction": "inbound",
+                        "asset": "BTC",
+                        "amount": "0.001",
+                        "fee": "0",
+                        "kind": "lightning_received",
+                        "txid": "at-income-report-demo",
+                        "fiat_value": "40",
+                    }
+                ]
+            ),
+            encoding="utf-8",
+        )
+        payload, result = self._run_json(
+            "wallets", "import-json",
+            "--workspace", "Main",
+            "--profile", "Austrian",
+            "--wallet", "AT Wallet",
+            "--file", str(json_file),
+        )
+        self._assert_ok(payload, result, "wallets.import-json")
+
+        payload, result = self._run_json(
+            "metadata", "records", "tax", "set",
+            "--workspace", "Main",
+            "--profile", "Austrian",
+            "--transaction", "at-income-report-demo",
+            "--event-type", "routing-income",
+        )
+        self._assert_ok(payload, result, "metadata.records.tax.set")
+        self.assertEqual(payload["data"]["tax_annotation"]["event_type"], "routing_income")
+
+        payload, result = self._run_json(
+            "journals", "process",
+            "--workspace", "Main",
+            "--profile", "Austrian",
+        )
+        self._assert_ok(payload, result, "journals.process")
+        self.assertEqual(payload["data"]["entries_created"], 2)
+        self.assertEqual(payload["data"]["quarantined"], 0)
+
+        payload, result = self._run_json(
+            "reports", "journal-entries",
+            "--workspace", "Main",
+            "--profile", "Austrian",
+        )
+        self._assert_ok(payload, result, "reports.journal-entries")
+        self.assertTrue(payload["experimental"])
+        self.assertEqual(payload["review_required"], "steuerberater")
+        rows_by_type = {row["entry_type"]: row for row in payload["data"]}
+        self.assertEqual(set(rows_by_type), {"acquisition", "income"})
+        self.assertAlmostEqual(rows_by_type["acquisition"]["quantity"], 0.001, places=8)
+        self.assertAlmostEqual(rows_by_type["acquisition"]["fiat_value"], 40.0, places=4)
+        self.assertAlmostEqual(rows_by_type["income"]["quantity"], 0.0, places=8)
+        self.assertAlmostEqual(rows_by_type["income"]["fiat_value"], 40.0, places=4)
+
+        payload, result = self._run_json(
+            "reports", "balance-history",
+            "--workspace", "Main",
+            "--profile", "Austrian",
+            "--interval", "month",
+        )
+        self._assert_ok(payload, result, "reports.balance-history")
+        self.assertTrue(payload["experimental"])
+        self.assertEqual(payload["review_required"], "steuerberater")
+        january = next(row for row in payload["data"] if row["period_start"] == "2024-01-01T00:00:00Z")
+        self.assertAlmostEqual(january["quantity"], 0.001, places=8)
+        self.assertAlmostEqual(january["cumulative_cost_basis"], 40.0, places=4)
+        self.assertAlmostEqual(january["market_value"], 40.0, places=4)
 
     def test_table_output_honors_output_path(self):
         output_path = self.case_dir / "init.txt"

@@ -73,7 +73,7 @@ Kassiber is currently in **dev mode**: renaming commands, breaking flags, and re
 - `backends {kinds,list,get,create,update,delete,set-default,clear-default}`
 - `transactions {list}`
 - `attachments {add,list,remove,verify,gc}`
-- `metadata records {list,get,note {set,clear},tag {add,remove},excluded {set,clear}}`
+- `metadata records {list,get,note {set,clear},tax {get,set,clear},tag {add,remove},excluded {set,clear}}`
 - `metadata bip329 {import,list,export}`
 - `journals {process,list,quarantined,events {list,get},quarantine {show,clear,resolve {price-override,exclude}}}`
 - `transfers {pair,list,unpair}`
@@ -88,6 +88,7 @@ List endpoints with `--limit` also accept `--cursor`. The cursor is an opaque ba
 
 - The tax engine now goes through `kassiber/core/engines.build_tax_engine(...)`; the current implementation behind that seam is still the generic RP2 engine in `kassiber/core/engines/rp2.py`.
 - Journal processing first normalizes raw transaction rows into in-memory tax events via `kassiber/core/tax_events.py`; raw `transactions` rows remain the source of truth and no derived regime state is persisted back onto them.
+- Explicit Austrian tax annotations now live in `transaction_tax_annotations`; use `metadata records tax {get,set,clear}` to clarify ambiguous rows without rewriting the raw transaction.
 - Under-specified tax semantics that used to fall through raw-row handling should quarantine at the normalization boundary instead of being guessed. That includes malformed same-asset transfers, missing required pricing, and unsupported tax directions.
 - The generic RP2 engine now owns the per-profile journal orchestration behind the engine seam: transfer detection, manual-pair application, per-asset grouping, normalized event preparation, and holdings aggregation all live in `kassiber/core/engines/rp2.py`, while CLI handlers only load rows and persist the resulting journal state.
 - Snapshot coverage for the current generic transfer path lives in [tests/fixtures/generic_rp2_transfer_snapshot.json](tests/fixtures/generic_rp2_transfer_snapshot.json) and is enforced by `tests/test_review_regressions.py` in addition to the CLI smoke suite.

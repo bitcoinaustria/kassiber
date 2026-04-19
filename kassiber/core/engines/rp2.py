@@ -663,6 +663,7 @@ class GenericRP2TaxEngine:
                     asset_rows,
                     inputs.wallet_refs_by_id,
                     pairs_by_asset.get(asset, []),
+                    tax_annotations_by_tx_id=inputs.tax_annotations_by_tx_id,
                 )
                 asset_result = self._process_asset(
                     normalized_inputs,

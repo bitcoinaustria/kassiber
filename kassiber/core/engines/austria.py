@@ -42,6 +42,27 @@ _SUPPORTED_OUTBOUND_DISPOSAL_KINDS = {
     "sell",
     "spend",
 }
+_ANNOTATED_INBOUND_ACQUISITION_TYPES = {
+    "receive_external",
+    "mining_income",
+    "routing_income",
+    "staking_income",
+    "airdrop",
+    "hardfork",
+}
+_ANNOTATED_OUTBOUND_DISPOSAL_TYPES = {
+    "sell",
+    "spend",
+}
+_ANNOTATED_INCOME_TYPES = {
+    "mining_income",
+    "routing_income",
+    "staking_income",
+}
+_ANNOTATED_ZERO_BASIS_TYPES = {
+    "airdrop",
+    "hardfork",
+}
 
 
 @dataclass(frozen=True)
@@ -108,6 +129,14 @@ def _kind_text(row: Mapping[str, Any]) -> str:
     if hasattr(row, "keys") and "kind" in row.keys():
         return str(row["kind"] or "").strip().lower()
     return str(getattr(row, "kind", "") or "").strip().lower()
+
+
+def _annotation_text(event: NormalizedTaxEvent) -> str:
+    return str(event.tax_event_type or "").strip().lower()
+
+
+def _effective_event_kind(event: NormalizedTaxEvent) -> str:
+    return _annotation_text(event) or _kind_text(event.raw_row)
 
 
 def _regime_label(regime: str, disposed_at_dt: datetime | None = None, acquired_at_dt: datetime | None = None) -> str:
@@ -418,6 +447,9 @@ def _holdings_for_asset(
 
 
 def _unsupported_inbound_kind(event: NormalizedTaxEvent) -> bool:
+    annotation = _annotation_text(event)
+    if annotation:
+        return annotation not in _ANNOTATED_INBOUND_ACQUISITION_TYPES
     kind = _kind_text(event.raw_row)
     if kind in _SUPPORTED_INBOUND_ACQUISITION_KINDS:
         return False
@@ -427,6 +459,9 @@ def _unsupported_inbound_kind(event: NormalizedTaxEvent) -> bool:
 
 
 def _unsupported_outbound_kind(event: NormalizedTaxEvent) -> bool:
+    annotation = _annotation_text(event)
+    if annotation:
+        return annotation not in _ANNOTATED_OUTBOUND_DISPOSAL_TYPES
     kind = _kind_text(event.raw_row)
     if kind in _SUPPORTED_OUTBOUND_DISPOSAL_KINDS:
         return False
@@ -495,6 +530,7 @@ class ExperimentalAustrianTaxEngine:
                 asset_rows,
                 inputs.wallet_refs_by_id,
                 pairs_by_asset.get(asset, []),
+                tax_annotations_by_tx_id=inputs.tax_annotations_by_tx_id,
             )
             asset_result = self._process_asset(
                 normalized_inputs,
@@ -666,21 +702,41 @@ class ExperimentalAustrianTaxEngine:
                                 "wallet": wallet["label"],
                                 "asset": event.asset,
                                 "direction": event.direction,
-                                "kind": _kind_text(event.raw_row),
+                                "kind": _effective_event_kind(event),
                             },
                         )
                     )
                     continue
                 if event.amount <= 0:
                     continue
+                annotation = _annotation_text(event)
                 total_cost = event.fiat_value + (event.fee * (event.spot_price or _ZERO))
+                acquisition_cost = _ZERO if annotation in _ANNOTATED_ZERO_BASIS_TYPES else total_cost
                 regime = _add_acquisition_to_wallet(
                     state,
                     wallet,
                     event.occurred_at,
                     event.amount,
-                    total_cost,
+                    acquisition_cost,
                 )
+                if annotation in _ANNOTATED_INCOME_TYPES:
+                    entries.append(
+                        _journal_entry(
+                            self.profile,
+                            wallet,
+                            transaction_id=event.transaction_id,
+                            occurred_at=event.occurred_at,
+                            entry_type="income",
+                            asset=event.asset,
+                            quantity=_ZERO,
+                            fiat_value=event.fiat_value,
+                            unit_cost=event.spot_price or _ZERO,
+                            cost_basis=None,
+                            proceeds=None,
+                            gain_loss=None,
+                            description=event.description,
+                        )
+                    )
                 entries.append(
                     _journal_entry(
                         self.profile,
@@ -690,8 +746,8 @@ class ExperimentalAustrianTaxEngine:
                         entry_type="acquisition",
                         asset=event.asset,
                         quantity=event.amount,
-                        fiat_value=total_cost,
-                        unit_cost=(total_cost / event.amount) if event.amount else _ZERO,
+                        fiat_value=acquisition_cost,
+                        unit_cost=(acquisition_cost / event.amount) if event.amount else _ZERO,
                         cost_basis=None,
                         proceeds=None,
                         gain_loss=None,
@@ -710,7 +766,7 @@ class ExperimentalAustrianTaxEngine:
                             "wallet": wallet["label"],
                             "asset": event.asset,
                             "direction": event.direction,
-                            "kind": _kind_text(event.raw_row),
+                            "kind": _effective_event_kind(event),
                         },
                     )
                 )

@@ -13,6 +13,16 @@ from ..msat import msat_to_btc
 
 DEFAULT_RECORDS_LIMIT = 100
 MAX_RECORDS_LIMIT = 1000
+TAX_ANNOTATION_EVENT_TYPES = (
+    "receive_external",
+    "sell",
+    "spend",
+    "mining_income",
+    "routing_income",
+    "staking_income",
+    "airdrop",
+    "hardfork",
+)
 
 ScopeResolver = Callable[[sqlite3.Connection, str | None, str | None], tuple[Mapping[str, Any], Mapping[str, Any]]]
 WalletResolver = Callable[[sqlite3.Connection, str, str], Mapping[str, Any]]
@@ -146,6 +156,107 @@ def _tags_for_transaction(conn, tx_id):
     return [{"code": row["code"], "label": row["label"]} for row in rows]
 
 
+def _tax_annotation_for_transaction(conn, tx_id):
+    row = conn.execute(
+        """
+        SELECT event_type, provenance_json, created_at, updated_at
+        FROM transaction_tax_annotations
+        WHERE transaction_id = ?
+        """,
+        (tx_id,),
+    ).fetchone()
+    if not row:
+        return None
+    return {
+        "event_type": row["event_type"],
+        "provenance": json.loads(row["provenance_json"] or "{}"),
+        "created_at": row["created_at"],
+        "updated_at": row["updated_at"],
+    }
+
+
+def normalize_tax_annotation_event_type(value):
+    normalized = str(value or "").strip().lower().replace("-", "_")
+    if normalized not in TAX_ANNOTATION_EVENT_TYPES:
+        raise AppError(
+            f"Unsupported tax event type '{value}'",
+            code="validation",
+            hint=(
+                "Choose one of: "
+                + ", ".join(TAX_ANNOTATION_EVENT_TYPES)
+                + ". Kebab-case aliases like mining-income are also accepted."
+            ),
+        )
+    return normalized
+
+
+def get_transaction_tax_annotation(conn, workspace_ref, profile_ref, tx_ref, hooks: MetadataHooks):
+    _, profile = hooks.resolve_scope(conn, workspace_ref, profile_ref)
+    tx = hooks.resolve_transaction(conn, profile["id"], tx_ref)
+    return {
+        "transaction_id": tx["id"],
+        "tax_annotation": _tax_annotation_for_transaction(conn, tx["id"]),
+    }
+
+
+def set_transaction_tax_annotation(
+    conn,
+    workspace_ref,
+    profile_ref,
+    tx_ref,
+    event_type,
+    hooks: MetadataHooks,
+):
+    _, profile = hooks.resolve_scope(conn, workspace_ref, profile_ref)
+    tx = hooks.resolve_transaction(conn, profile["id"], tx_ref)
+    normalized_event_type = normalize_tax_annotation_event_type(event_type)
+    existing = _tax_annotation_for_transaction(conn, tx["id"])
+    provenance_json = "{}"
+    if (
+        existing
+        and existing["event_type"] == normalized_event_type
+        and existing["provenance"] == {}
+    ):
+        return {"transaction_id": tx["id"], "tax_annotation": existing}
+    timestamp = hooks.now_iso()
+    conn.execute(
+        """
+        INSERT INTO transaction_tax_annotations(
+            transaction_id, event_type, provenance_json, created_at, updated_at
+        ) VALUES(?, ?, ?, ?, ?)
+        ON CONFLICT(transaction_id) DO UPDATE SET
+            event_type = excluded.event_type,
+            provenance_json = excluded.provenance_json,
+            updated_at = excluded.updated_at
+        """,
+        (tx["id"], normalized_event_type, provenance_json, timestamp, timestamp),
+    )
+    hooks.invalidate_journals(conn, profile["id"])
+    conn.commit()
+    return {
+        "transaction_id": tx["id"],
+        "tax_annotation": _tax_annotation_for_transaction(conn, tx["id"]),
+    }
+
+
+def clear_transaction_tax_annotation(conn, workspace_ref, profile_ref, tx_ref, hooks: MetadataHooks):
+    _, profile = hooks.resolve_scope(conn, workspace_ref, profile_ref)
+    tx = hooks.resolve_transaction(conn, profile["id"], tx_ref)
+    before = conn.total_changes
+    conn.execute(
+        "DELETE FROM transaction_tax_annotations WHERE transaction_id = ?",
+        (tx["id"],),
+    )
+    changed = conn.total_changes > before
+    if changed:
+        hooks.invalidate_journals(conn, profile["id"])
+        conn.commit()
+    return {
+        "transaction_id": tx["id"],
+        "tax_annotation": None,
+    }
+
+
 def get_transaction_record(conn, workspace_ref, profile_ref, tx_ref, hooks: MetadataHooks):
     _, profile = hooks.resolve_scope(conn, workspace_ref, profile_ref)
     tx = hooks.resolve_transaction(conn, profile["id"], tx_ref)
@@ -169,6 +280,7 @@ def get_transaction_record(conn, workspace_ref, profile_ref, tx_ref, hooks: Meta
         "note": tx["note"] or "",
         "excluded": bool(tx["excluded"]),
         "tags": _tags_for_transaction(conn, tx["id"]),
+        "tax_annotation": _tax_annotation_for_transaction(conn, tx["id"]),
     }
 
 
@@ -256,9 +368,11 @@ def list_transaction_records(
             t.counterparty,
             t.note,
             t.excluded,
+            tta.event_type AS tax_event_type,
             w.id AS wallet_id,
             w.label AS wallet_label
         FROM transactions t
+        LEFT JOIN transaction_tax_annotations tta ON tta.transaction_id = t.id
         LEFT JOIN wallets w ON w.id = t.wallet_id
         WHERE {' AND '.join(where)}
         ORDER BY t.occurred_at DESC, t.created_at DESC, t.id DESC
@@ -287,6 +401,7 @@ def list_transaction_records(
                 "wallet_label": row["wallet_label"] or "",
                 "note": row["note"] or "",
                 "excluded": bool(row["excluded"]),
+                "tax_event_type": row["tax_event_type"] or "",
                 "tags": _tags_for_transaction(conn, row["id"]),
             }
         )
@@ -491,15 +606,20 @@ __all__ = [
     "MetadataHooks",
     "add_tag_to_transaction",
     "clear_transaction_note",
+    "clear_transaction_tax_annotation",
     "create_tag",
     "ensure_tag_row",
     "export_bip329_labels",
     "get_transaction_record",
+    "get_transaction_tax_annotation",
     "import_bip329_labels",
     "list_bip329_labels",
     "list_tags",
     "list_transaction_records",
+    "normalize_tax_annotation_event_type",
     "remove_tag_from_transaction",
     "set_transaction_excluded",
     "set_transaction_note",
+    "set_transaction_tax_annotation",
+    "TAX_ANNOTATION_EVENT_TYPES",
 ]

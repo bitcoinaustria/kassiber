@@ -77,8 +77,8 @@ let you override them.
 
 ### Metadata
 - `metadata records list` with `--wallet / --tag / --has-note / --no-note / --excluded / --included / --start / --end` and cursor pagination
-- `metadata records get --transaction` — unified per-transaction view (note, tags, excluded)
-- `metadata records note set/clear`, `tag add/remove`, `excluded set/clear`
+- `metadata records get --transaction` — unified per-transaction view (note, tags, excluded, tax annotation)
+- `metadata records note set/clear`, `tax get/set/clear`, `tag add/remove`, `excluded set/clear`
 
 ### Attachments
 - `attachments add --transaction <tx> --file <path>` copies a local file into Kassiber's managed attachment store
@@ -509,19 +509,24 @@ Kassiber preserves the full BIP329 record and uses transaction labels to create 
 
 ## Metadata records
 
-The `metadata records` namespace is the canonical interface for per-transaction bookkeeping: notes, tags, and inclusion/exclusion.
+The `metadata records` namespace is the canonical interface for per-transaction bookkeeping: notes, tags, inclusion/exclusion, and explicit tax annotations for ambiguous Austrian flows.
 
 ```bash
 # List with filters + cursor pagination
 python3 -m kassiber metadata records list \
   --wallet coldcard --has-note --limit 50
 
-# Single-transaction view (note, tags, excluded)
+# Single-transaction view (note, tags, excluded, tax_annotation)
 python3 -m kassiber metadata records get --transaction <TRANSACTION_ID>
 
 # Note CRUD
 python3 -m kassiber metadata records note set --transaction <ID> --note "Cold storage move"
 python3 -m kassiber metadata records note clear --transaction <ID>
+
+# Tax annotation CRUD for ambiguous Austrian provenance
+python3 -m kassiber metadata records tax get --transaction <ID>
+python3 -m kassiber metadata records tax set --transaction <ID> --event-type routing-income
+python3 -m kassiber metadata records tax clear --transaction <ID>
 
 # Tag CRUD (tags are created on-demand with a code)
 python3 -m kassiber metadata records tag add --transaction <ID> --tag tax-lot
@@ -633,7 +638,7 @@ RP2 and the Austrian engine need fiat pricing to compute tax lots. If imported o
 
 ## Tax policy
 
-Profiles carry their own tax policy defaults. Kassiber currently exposes the RP2-backed `generic` policy and an explicitly experimental Austrian `at` path on top of the shared engine seam. Austrian profiles normalize to EUR, preserve the legacy 365-day field shape for `Altbestand`, and pin the legacy `gains_algorithm` field to `FIFO` because the Austrian engine applies its own FIFO / moving-average rules internally. Supported Austrian journal flows now process through the dedicated engine, while unsupported or ambiguous provenance quarantines instead of being guessed. JSON report envelopes for Austrian profiles also carry top-level `experimental` / `review_required` markers so downstream automation keeps the review gate visible. The Austrian path is still experimental and should be reviewed by a Steuerberater before filing.
+Profiles carry their own tax policy defaults. Kassiber currently exposes the RP2-backed `generic` policy and an explicitly experimental Austrian `at` path on top of the shared engine seam. Austrian profiles normalize to EUR, preserve the legacy 365-day field shape for `Altbestand`, and pin the legacy `gains_algorithm` field to `FIFO` because the Austrian engine applies its own FIFO / moving-average rules internally. Supported Austrian journal flows now process through the dedicated engine, while unsupported or ambiguous provenance quarantines instead of being guessed. When synced or imported rows are too ambiguous for Austrian treatment, `metadata records tax set` can now attach explicit semantics such as `receive_external`, `spend`, `mining_income`, `routing_income`, `staking_income`, `airdrop`, or `hardfork` without mutating the raw transaction row itself. JSON report envelopes for Austrian profiles also carry top-level `experimental` / `review_required` markers so downstream automation keeps the review gate visible. The Austrian path is still experimental and should be reviewed by a Steuerberater before filing.
 
 ```bash
 python3 -m kassiber profiles create austrian \
@@ -665,7 +670,8 @@ Wallet-level `Altbestand` stays separate from the profile policy because it is p
 - remote server mode / REST API
 - browser / multi-user auth
 - role-based access
-- Austrian E 1kv export and broader provenance coverage beyond the current conservative Austrian engine defaults
+- Austrian E 1kv export
+- Austrian carryover-basis provenance beyond the current annotation-backed defaults (for example gifts, inheritance, or explicit acquired-at overrides)
 
 ## Architecture notes
 

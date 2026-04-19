@@ -1194,9 +1194,28 @@ def build_ledger_state(conn, profile):
         "SELECT * FROM transaction_pairs WHERE profile_id = ?",
         (profile["id"],),
     ).fetchall()
+    tax_annotations = conn.execute(
+        """
+        SELECT transaction_id, event_type, provenance_json, created_at, updated_at
+        FROM transaction_tax_annotations
+        WHERE transaction_id IN (
+            SELECT id FROM transactions WHERE profile_id = ?
+        )
+        """,
+        (profile["id"],),
+    ).fetchall()
     tax_engine = build_tax_engine(profile)
     rates = latest_rates_for_profile(conn, profile["id"])
     wallet_refs_by_id = {}
+    tax_annotations_by_tx_id = {
+        row["transaction_id"]: {
+            "event_type": row["event_type"],
+            "provenance": json.loads(row["provenance_json"] or "{}"),
+            "created_at": row["created_at"],
+            "updated_at": row["updated_at"],
+        }
+        for row in tax_annotations
+    }
     for row in rows:
         wallet_config = json.loads(row["config_json"] or "{}")
         wallet_refs_by_id[row["wallet_id"]] = {
@@ -1212,6 +1231,7 @@ def build_ledger_state(conn, profile):
             rows=rows,
             wallet_refs_by_id=wallet_refs_by_id,
             manual_pair_records=manual_pair_records,
+            tax_annotations_by_tx_id=tax_annotations_by_tx_id,
         )
     )
     return {

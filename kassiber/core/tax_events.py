@@ -22,6 +22,7 @@ class NormalizedTaxEvent:
     fiat_value: Decimal | None
     description: str
     raw_row: Mapping[str, Any]
+    tax_event_type: str | None = None
 
 
 @dataclass(frozen=True)
@@ -86,6 +87,7 @@ def normalize_tax_asset_inputs(
     rows: Sequence[Mapping[str, Any]],
     wallet_refs_by_id: Mapping[str, Mapping[str, Any]],
     intra_pairs: Sequence[Mapping[str, Any]],
+    tax_annotations_by_tx_id: Mapping[str, Mapping[str, Any]] | None = None,
 ) -> NormalizedTaxAssetInputs:
     events: list[NormalizedTaxEvent] = []
     transfers: list[NormalizedTaxTransfer] = []
@@ -251,6 +253,9 @@ def normalize_tax_asset_inputs(
                 spot_price=spot_price,
                 fiat_value=fiat_value,
                 description=description,
+                tax_event_type=(
+                    (tax_annotations_by_tx_id or {}).get(row["id"], {}).get("event_type")
+                ),
                 raw_row=row,
             )
         )

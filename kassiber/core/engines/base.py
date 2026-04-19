@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any, Mapping, Protocol, Sequence
 
 
@@ -11,6 +11,7 @@ class TaxEngineLedgerInputs:
     rows: Sequence[Mapping[str, Any]]
     wallet_refs_by_id: Mapping[str, Mapping[str, Any]]
     manual_pair_records: Sequence[Mapping[str, Any]]
+    tax_annotations_by_tx_id: Mapping[str, Mapping[str, Any]] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)

@@ -270,9 +270,9 @@ def report_balance_history(
         while event_idx < len(events) and events[event_idx][0] < bucket_end:
             _, ev_asset, ev_qty, ev_fiat, ev_cost_basis = events[event_idx]
             cumulative[ev_asset] += ev_qty
-            if ev_qty >= 0:
+            if ev_qty > 0:
                 cumulative_fiat[ev_asset] += ev_fiat
-            else:
+            elif ev_qty < 0:
                 cumulative_fiat[ev_asset] -= ev_cost_basis
             event_idx += 1
         while rate_idx < len(rate_events) and rate_events[rate_idx][0] < bucket_end:

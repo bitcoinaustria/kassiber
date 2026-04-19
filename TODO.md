@@ -138,8 +138,11 @@ top of the monolith.
   Steuerberater
 - [x] Implement Austrian defaults only where provenance is sufficient;
   quarantine the rest
-- [ ] Expand Austrian provenance coverage beyond the current acquisition /
-  disposal / self-transfer defaults
+- [x] Add annotation-backed Austrian provenance for explicit external
+  receives, sells/spends, mining/routing/staking income, and zero-basis
+  airdrop/hardfork flows without guessing ambiguous raw rows
+- [ ] Add Austrian carryover-basis provenance for gifts, inheritance, and
+  explicit acquired-at overrides
 - [ ] Add E 1kv CSV/PDF export only after the engine behavior is testable
 
 ### 0.5e - Rates and journal follow-through

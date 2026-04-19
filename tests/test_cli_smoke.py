@@ -466,6 +466,77 @@ class CliSmokeTest(unittest.TestCase):
         self.assertEqual(len(payload["data"]), 1)
         self.assertEqual(payload["data"][0]["id"], url_attachment["id"])
 
+    def test_05b_tax_annotation_crud(self):
+        tx_ref = "22222222-aaaa-bbbb-cccc-000000000002"
+
+        payload = self._cli(
+            "metadata", "records", "tax", "get",
+            "--workspace", "Main",
+            "--profile", "Default",
+            "--transaction", tx_ref,
+        )
+        self._assert_kind(payload, "metadata.records.tax.get")
+        self.assertIsNone(payload["data"]["tax_annotation"])
+
+        payload = self._cli(
+            "metadata", "records", "tax", "set",
+            "--workspace", "Main",
+            "--profile", "Default",
+            "--transaction", tx_ref,
+            "--event-type", "routing-income",
+        )
+        self._assert_kind(payload, "metadata.records.tax.set")
+        self.assertEqual(payload["data"]["tax_annotation"]["event_type"], "routing_income")
+        self.assertEqual(payload["data"]["tax_annotation"]["provenance"], {})
+
+        payload = self._cli(
+            "metadata", "records", "get",
+            "--workspace", "Main",
+            "--profile", "Default",
+            "--transaction", tx_ref,
+        )
+        self._assert_kind(payload, "metadata.records.get")
+        self.assertEqual(payload["data"]["tax_annotation"]["event_type"], "routing_income")
+
+        payload = self._cli(
+            "metadata", "records", "list",
+            "--workspace", "Main",
+            "--profile", "Default",
+        )
+        self._assert_kind(payload, "metadata.records.list")
+        annotated = next(
+            row for row in payload["data"]["records"]
+            if row["external_id"] == tx_ref
+        )
+        self.assertEqual(annotated["tax_event_type"], "routing_income")
+
+        payload = self._cli(
+            "metadata", "records", "tax", "clear",
+            "--workspace", "Main",
+            "--profile", "Default",
+            "--transaction", tx_ref,
+        )
+        self._assert_kind(payload, "metadata.records.tax.clear")
+        self.assertIsNone(payload["data"]["tax_annotation"])
+
+    def test_05c_tax_annotation_validation_error_envelope(self):
+        payload, code = _run(
+            self.data_root,
+            "metadata", "records", "tax", "set",
+            "--workspace", "Main",
+            "--profile", "Default",
+            "--transaction", "22222222-aaaa-bbbb-cccc-000000000002",
+            "--event-type", "gift-receive",
+        )
+        self.assertNotEqual(code, 0)
+        self.assertEqual(payload.get("kind"), "error")
+        self.assertEqual(payload.get("schema_version"), 1)
+        err = payload.get("error")
+        self.assertIsInstance(err, dict)
+        for field in ("code", "message", "hint", "details", "retryable"):
+            self.assertIn(field, err)
+        self.assertEqual(err["code"], "validation")
+
     def test_06_journals_process(self):
         payload = self._cli(
             "journals", "process",

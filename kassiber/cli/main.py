@@ -434,6 +434,22 @@ def build_parser() -> argparse.ArgumentParser:
     rn_clear.add_argument("--profile")
     rn_clear.add_argument("--transaction", required=True)
 
+    records_tax = records_sub.add_parser("tax")
+    records_tax_sub = records_tax.add_subparsers(dest="records_tax_command", required=True)
+    rtax_get = records_tax_sub.add_parser("get")
+    rtax_get.add_argument("--workspace")
+    rtax_get.add_argument("--profile")
+    rtax_get.add_argument("--transaction", required=True)
+    rtax_set = records_tax_sub.add_parser("set")
+    rtax_set.add_argument("--workspace")
+    rtax_set.add_argument("--profile")
+    rtax_set.add_argument("--transaction", required=True)
+    rtax_set.add_argument("--event-type", required=True)
+    rtax_clear = records_tax_sub.add_parser("clear")
+    rtax_clear.add_argument("--workspace")
+    rtax_clear.add_argument("--profile")
+    rtax_clear.add_argument("--transaction", required=True)
+
     records_tag = records_sub.add_parser("tag")
     records_tag_sub = records_tag.add_subparsers(dest="records_tag_command", required=True)
     rt_add = records_tag_sub.add_parser("add")
@@ -1072,6 +1088,33 @@ def dispatch(conn: sqlite3.Connection | None, args: argparse.Namespace) -> Any:
                     return emit(
                         args,
                         core_metadata.clear_transaction_note(
+                            conn, args.workspace, args.profile, args.transaction, metadata_hooks
+                        ),
+                    )
+            if args.records_command == "tax":
+                if args.records_tax_command == "get":
+                    return emit(
+                        args,
+                        core_metadata.get_transaction_tax_annotation(
+                            conn, args.workspace, args.profile, args.transaction, metadata_hooks
+                        ),
+                    )
+                if args.records_tax_command == "set":
+                    return emit(
+                        args,
+                        core_metadata.set_transaction_tax_annotation(
+                            conn,
+                            args.workspace,
+                            args.profile,
+                            args.transaction,
+                            args.event_type,
+                            metadata_hooks,
+                        ),
+                    )
+                if args.records_tax_command == "clear":
+                    return emit(
+                        args,
+                        core_metadata.clear_transaction_tax_annotation(
                             conn, args.workspace, args.profile, args.transaction, metadata_hooks
                         ),
                     )
