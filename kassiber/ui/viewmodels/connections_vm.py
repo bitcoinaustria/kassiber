@@ -34,6 +34,19 @@ class ConnectionsViewModel(QObject):
         self._selected_id = items[0]["id"]
         return items[0]
 
+    def _transactions(self) -> list[dict[str, Any]]:
+        return list((self._snapshot.get("transactions") or {}).get("items") or [])
+
+    def _selected_transactions(self) -> list[dict[str, Any]]:
+        selected = self._selected()
+        if not selected:
+            return []
+        label = str(selected.get("label") or "").strip().lower()
+        if not label:
+            return self._transactions()[:6]
+        matches = [item for item in self._transactions() if label in str(item.get("wallet") or "").lower()]
+        return matches[:6] if matches else self._transactions()[:6]
+
     @Property(bool, notify=snapshotChanged)
     def isEmpty(self) -> bool:
         return len(self._items()) == 0
@@ -69,6 +82,10 @@ class ConnectionsViewModel(QObject):
     @Property("QVariantList", notify=selectionChanged)
     def selectedDetails(self):
         return list(self._selected().get("detail_rows") or [])
+
+    @Property("QVariantList", notify=selectionChanged)
+    def selectedTransactions(self):
+        return self._selected_transactions()
 
     @Slot(str)
     def selectConnection(self, connection_id: str) -> None:

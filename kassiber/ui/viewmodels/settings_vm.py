@@ -34,3 +34,27 @@ class SettingsViewModel(QObject):
     @Property("QVariantList", notify=snapshotChanged)
     def cards(self):
         return list(self._settings().get("cards") or [])
+
+    @Property("QVariantList", notify=snapshotChanged)
+    def privacyRows(self):
+        return list(self._settings().get("privacy_rows") or [])
+
+    @Property("QVariantList", notify=snapshotChanged)
+    def lockRows(self):
+        return list(self._settings().get("lock_rows") or [])
+
+    @Property("QVariantList", notify=snapshotChanged)
+    def idleOptions(self):
+        return list(self._settings().get("idle_options") or [])
+
+    @Property(int, notify=snapshotChanged)
+    def activeIdleOption(self) -> int:
+        return int(self._settings().get("active_idle_option") or 0)
+
+    @Property("QVariantList", notify=snapshotChanged)
+    def backendRows(self):
+        return list(self._settings().get("backend_rows") or [])
+
+    @Property("QVariantList", notify=snapshotChanged)
+    def dataActions(self):
+        return list(self._settings().get("data_actions") or [])

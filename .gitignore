@@ -13,3 +13,4 @@ dist/
 .claude/
 .kassiber-test/
 log/
+/temp

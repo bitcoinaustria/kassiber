@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 from typing import Any
 
@@ -63,11 +64,46 @@ def _write_window_state(settings_path: Path, window) -> None:
         "height": int(window.property("height")),
     }
     payload["ui"] = ui_section
-    settings_path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    try:
+        settings_path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    except OSError:
+        # Best-effort persistence only; screenshot/offscreen flows may not have permission.
+        return
 
 
 def _qml_path() -> Path:
     return Path(__file__).resolve().parent / "resources" / "qml" / "Main.qml"
+
+
+def _apply_preview_scene(snapshot: dict[str, Any], preview_scene: str) -> str:
+    scene = str(preview_scene or "").strip().lower()
+    if not scene:
+        return ""
+
+    page_map = {
+        "welcome": "welcome",
+        "overview": "overview",
+        "overview-empty": "overview",
+        "overview-data": "overview",
+        "transactions": "transactions",
+        "tax": "reports",
+        "reports": "reports",
+        "tax-capital-gains": "reports",
+        "connection-detail": "connection-detail",
+        "settings": "settings",
+    }
+    page = page_map.get(scene, scene)
+
+    if scene == "overview-empty":
+        shell = dict(snapshot.get("shell") or {})
+        shell["is_empty"] = True
+        shell["has_data"] = False
+        shell["connection_count"] = 0
+        snapshot["shell"] = shell
+        snapshot["connections"] = {"items": []}
+        snapshot["transactions"] = {"items": []}
+
+    return page
 
 
 def build_application(
@@ -92,6 +128,9 @@ def build_application(
         workspace_ref=workspace_ref,
         profile_ref=profile_ref,
     )
+    preview_scene = (os.environ.get("KASSIBER_UI_PREVIEW_PAGE") or "").strip()
+    capture_mode = (os.environ.get("KASSIBER_UI_CAPTURE") or "").strip().lower() in {"1", "true", "yes", "on"}
+    preview_page = _apply_preview_scene(snapshot, preview_scene)
     settings_path = resolve_settings_path(data_root)
     window_state = _read_window_state(settings_path)
 
@@ -101,6 +140,8 @@ def build_application(
     app.setApplicationDisplayName("Kassiber")
 
     dashboard_vm = DashboardViewModel(snapshot)
+    if preview_page:
+        dashboard_vm.selectPage(preview_page)
     connections_vm = ConnectionsViewModel(snapshot)
     transactions_vm = TransactionsViewModel(snapshot)
     reports_vm = ReportsViewModel(snapshot)
@@ -122,6 +163,8 @@ def build_application(
     context.setContextProperty("settingsVM", settings_vm)
     context.setContextProperty("theme", theme)
     context.setContextProperty("windowState", window_state)
+    context.setContextProperty("uiPreviewPage", preview_scene)
+    context.setContextProperty("uiCaptureMode", capture_mode)
     engine._kassiber_refs = {
         "dashboard_vm": dashboard_vm,
         "connections_vm": connections_vm,

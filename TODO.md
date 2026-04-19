@@ -158,8 +158,8 @@ over the shared core after the extraction work is done.
 - [x] Start with a macOS-first PySide6/QML app shell and empty state
 - [x] Persist window geometry in `settings.json` under a `ui` subkey
 - [x] Replace the single placeholder panel with a routed mockup scaffold for Welcome, Overview, Connection Detail, Transaction View, Tax Reports, and Settings
-- [ ] Add the Phase 2 read-only dashboard tiles over `kassiber.core`
-- [ ] Translate the Claude Design mockups into their final per-screen QML polish as screenshots/assets are collected under `docs/design/`
+- [x] Add the Phase 2 read-only dashboard tiles over `kassiber.core`
+- [ ] Continue screenshot-driven polish for the Claude Design screens and close the remaining spacing/typography/detail gaps as assets are collected under `docs/design/`
 - [ ] Keep long-running sync/import/journal work off the UI thread via QThreads once those actions land
 - [ ] Add connections, imports, attachments, and fuller settings only after
   the app shell is solid
