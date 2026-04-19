@@ -1,0 +1,26 @@
+#:schema https://developers.openai.com/codex/config-schema.json
+
+approval_policy = "on-request"
+sandbox_mode = "workspace-write"
+web_search = "live"
+
+persistent_instructions = "Follow AGENTS.md. For non-trivial kassiber changes, inspect evidence first, plan before editing, and run the quality gate before proposing push-ready work."
+
+[features]
+multi_agent = true
+
+[agents]
+max_threads = 3
+max_depth = 1
+
+[agents.explorer]
+description = "Read-only codebase explorer for kassiber evidence gathering before changes."
+config_file = "agents/explorer.toml"
+
+[agents.reviewer]
+description = "Reviewer focused on kassiber correctness, regressions, docs drift, and missing verification."
+config_file = "agents/reviewer.toml"
+
+[agents.docs_researcher]
+description = "Use only when tax, API, or release-note verification needs external docs."
+config_file = "agents/docs-researcher.toml"

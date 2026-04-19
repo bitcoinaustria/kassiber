@@ -10,6 +10,6 @@ dist/
 .demo-data/
 .live-data/
 .live-data2/
-.claude/
+.claude/settings.local.json
 .kassiber-test/
 log/
