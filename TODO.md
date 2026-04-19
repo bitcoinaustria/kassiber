@@ -173,7 +173,7 @@ work is done.
 - [ ] Revisit per-wallet basis attribution if a jurisdiction ever needs
   physical-lot answers
 - [ ] At-rest encryption / OS keychain integration
-- [ ] Kassiber skill bundle for agents
+- [x] Kassiber skill bundle for agents (`skills/kassiber`)
 - [ ] Optional server/REST mode, still local-first and opt-in
 
 ## Open bugs and debt

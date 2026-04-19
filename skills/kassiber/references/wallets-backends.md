@@ -1,0 +1,122 @@
+# Wallets and Backends
+
+Use this reference for wallet onboarding, descriptor setup, backend selection, wallet imports, and wallet sync.
+
+## Backends
+
+Backends are Kassiber's sync endpoints. List and inspect them first:
+
+```bash
+kassiber backends list
+kassiber backends kinds
+kassiber backends get liquid
+```
+
+Common backend operations:
+
+```bash
+kassiber backends create my-esplora --kind esplora --url https://example.invalid/api
+kassiber backends update my-esplora --url https://new.example.invalid/api
+kassiber backends set-default my-esplora
+```
+
+Built-in defaults often include:
+
+- `mempool` for Bitcoin Esplora
+- `fulcrum` for Bitcoin Electrum
+- `liquid` for Liquid Electrum
+
+## Wallet kinds
+
+Discover available kinds with:
+
+```bash
+kassiber wallets kinds
+```
+
+Important kinds:
+
+- `descriptor`
+- `address`
+- `phoenix`
+- `custom`
+
+## Descriptor wallets
+
+Bitcoin example:
+
+```bash
+kassiber wallets create \
+  --label vault \
+  --kind descriptor \
+  --account treasury \
+  --backend mempool \
+  --descriptor-file /path/to/receive.desc \
+  --change-descriptor-file /path/to/change.desc
+```
+
+Liquid example:
+
+```bash
+kassiber wallets create \
+  --label satoshi-liquid \
+  --kind descriptor \
+  --account project-satoshi \
+  --backend liquid \
+  --chain liquid \
+  --network liquidv1 \
+  --descriptor-file /path/to/receive.desc \
+  --change-descriptor-file /path/to/change.desc
+```
+
+Liquid requirements:
+
+- explicit `--backend`
+- private blinding keys in the descriptor material
+
+If those are missing, do not keep guessing; fix the descriptor or backend first.
+
+## Sync and derivation
+
+```bash
+kassiber wallets list
+kassiber wallets get --wallet satoshi-liquid
+kassiber wallets derive --wallet satoshi-liquid --count 5
+kassiber wallets sync --wallet satoshi-liquid
+```
+
+## Imports
+
+Import into an existing wallet when the file represents the same real wallet.
+
+BTCPay:
+
+```bash
+kassiber wallets import-btcpay --wallet btcpay --file /path/to/export.csv --input-format csv
+```
+
+Phoenix:
+
+```bash
+kassiber wallets import-phoenix --wallet phoenix --file /path/to/export.csv
+```
+
+Generic files:
+
+```bash
+kassiber wallets import-json --wallet wallet-name --file /path/to/data.json
+kassiber wallets import-csv --wallet wallet-name --file /path/to/data.csv
+```
+
+Do not create a second wallet for a BTCPay or Phoenix export when it belongs to a wallet already tracked in Kassiber.
+
+## Wallet provenance
+
+`Altbestand` is set per wallet:
+
+```bash
+kassiber wallets set-altbestand --wallet satoshi-btc-alt
+kassiber wallets set-neubestand --wallet satoshi-btc-alt
+```
+
+Use separate wallet records when a user needs clean Altbestand versus Neubestand tracking.
