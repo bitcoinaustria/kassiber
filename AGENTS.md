@@ -123,12 +123,18 @@ List endpoints with `--limit` also accept `--cursor`. The cursor is an opaque ba
   same diff; otherwise do a manual second-pass review yourself. Fix any
   P1/P2 correctness or consistency issues before push, and mention any
   deferred lower-severity concerns in the handoff.
+- For non-trivial changes touching CLI behavior, tax logic, schema,
+  reports, or multiple docs, gather repo evidence first, then restate the
+  requirement, risks, and step plan before editing.
+- Prefer the repo-local `skills/kassiber/` references before generic
+  agent habits when working on Kassiber-specific flows.
+- Before calling work push-ready, run `./scripts/quality-gate.sh`.
 - When adding a new runtime dependency, update both the README dependency story and `THIRD_PARTY_LICENSES.md`.
 - Keep `THIRD_PARTY_LICENSES.md` concise: direct dependencies and notable license constraints matter more than a hand-maintained transitive dump.
 
 ## Verification
 
-All commands below assume project dependencies are installed — either via `uv sync` (then prefix with `uv run`) or via `pip install -e .` inside an activated venv (then use `python3` directly). The examples use `uv run python` because it works without pre-activation; swap in `python3` when working inside an activated venv.
+All commands below assume project dependencies are installed — either via `uv sync` (then prefix with `uv run`) or via `pip install -e .` inside an activated venv (then use `python3` directly). The examples use `uv run python` because it works without pre-activation; swap in `python3` when working inside an activated venv. For the baseline push/PR pass, use `./scripts/quality-gate.sh` as the single trusted entrypoint; the commands below are the underlying pieces.
 
 - Compile check:
 

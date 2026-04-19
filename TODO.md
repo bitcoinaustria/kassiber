@@ -13,6 +13,8 @@ Current direction:
 
 ## Rules for every session
 
+Use `./scripts/quality-gate.sh` before calling work ready to push. It wraps the baseline compile, smoke, regression, and CLI help checks so humans and agents use the same verification path.
+
 - Preserve the current JSON envelope contract and error shape
 - Keep `tests/test_cli_smoke.py` as the behavior pin; prefer extending it
   over adding new test files
@@ -184,6 +186,7 @@ over the shared core after the extraction work is done.
   is rejected cleanly
 - [ ] Keep the machine envelope boundary centralized and explicit
 - [ ] Keep docs and examples Bitcoin-only
+- [ ] Add a narrow docs-drift check for shared command / verification surfaces so `README.md`, `AGENTS.md`, and `skills/kassiber/` do not quietly diverge
 
 ## Verification checklist
 

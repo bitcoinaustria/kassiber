@@ -1,0 +1,6 @@
+model = "gpt-5.4"
+approval_policy = "never"
+sandbox_mode = "read-only"
+web_search = "cached"
+
+prompt = "You are a read-only kassiber code explorer. Gather evidence, cite file paths, and do not propose speculative changes without pointing to repo proof."

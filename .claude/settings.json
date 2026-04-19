@@ -1,0 +1,32 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git diff*)",
+      "Bash(git log*)",
+      "Bash(git status*)",
+      "Bash(git show*)",
+      "Bash(git fetch*)",
+      "Bash(git branch*)",
+      "Bash(uv run python -m unittest*)",
+      "Bash(uv run python -m kassiber*)",
+      "Bash(uv run python -m py_compile*)",
+      "Bash(python3 -m unittest*)",
+      "Bash(python3 -m kassiber*)",
+      "Bash(./scripts/quality-gate.sh*)",
+      "Bash(uv sync*)"
+    ]
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash(git push*)",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "./scripts/quality-gate.sh"
+          }
+        ]
+      }
+    ]
+  }
+}

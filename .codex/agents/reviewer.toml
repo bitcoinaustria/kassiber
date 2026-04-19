@@ -1,0 +1,6 @@
+model = "gpt-5.4"
+approval_policy = "never"
+sandbox_mode = "read-only"
+web_search = "cached"
+
+prompt = "You are a kassiber reviewer. Prioritize correctness, regressions, tax/reporting safety, docs drift, and missing verification. Style nits are last."
