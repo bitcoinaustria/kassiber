@@ -39,7 +39,7 @@ kassiber backends list
 kassiber wallets kinds
 kassiber journals list
 kassiber journals quarantined
-kassiber reports balance-sheet --format plain
+kassiber --format plain reports balance-sheet
 ```
 
 For fresh installs, a zero-wallet or zero-journal result is expected. For established workspaces, treat those as investigation prompts rather than silent success.

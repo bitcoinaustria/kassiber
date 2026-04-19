@@ -10,6 +10,14 @@ Preferred defaults:
 - `--format csv --output <path>` for export-style reports
 - `reports export-pdf` only when the user explicitly asks for a PDF
 
+`--machine`, `--format`, and `--output` are global flags and belong before the subcommand tree. Examples:
+
+```bash
+kassiber --format plain reports balance-sheet
+kassiber --format csv --output journal-entries.csv reports journal-entries
+kassiber --machine reports balance-sheet
+```
+
 When parsing programmatically, use `--machine`.
 
 ## Rates
@@ -33,33 +41,33 @@ kassiber journals process
 ## Balance sheet
 
 ```bash
-kassiber reports balance-sheet --format plain
+kassiber --format plain reports balance-sheet
 ```
 
 ## Portfolio summary
 
 ```bash
-kassiber reports portfolio-summary --format plain
+kassiber --format plain reports portfolio-summary
 ```
 
 ## Capital gains
 
 ```bash
-kassiber reports capital-gains --format csv --output capital-gains.csv
+kassiber --format csv --output capital-gains.csv reports capital-gains
 ```
 
 ## Journal entries
 
 ```bash
-kassiber reports journal-entries --format csv --output journal-entries.csv
+kassiber --format csv --output journal-entries.csv reports journal-entries
 ```
 
 ## Balance history
 
 ```bash
-kassiber reports balance-history --format plain --interval month
-kassiber reports balance-history --format csv --output balance-history.csv --interval week
-kassiber reports balance-history --wallet satoshi-liquid --asset BTC --start 2025-01-01T00:00:00Z --end 2025-12-31T23:59:59Z
+kassiber --format plain reports balance-history --interval month
+kassiber --format csv --output balance-history.csv reports balance-history --interval week
+kassiber --format plain reports balance-history --wallet satoshi-liquid --asset BTC --start 2025-01-01T00:00:00Z --end 2025-12-31T23:59:59Z
 ```
 
 ## PDF export
