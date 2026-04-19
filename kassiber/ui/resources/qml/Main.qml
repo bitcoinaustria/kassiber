@@ -4,17 +4,19 @@ import QtQuick.Layouts 1.15
 
 import "components"
 import "dialogs"
+import "pages"
 
 ApplicationWindow {
     id: root
     objectName: "mainWindow"
+    readonly property bool welcomeMode: dashboardVM.currentPage === "welcome"
     visible: false
     title: dashboardVM.windowTitle
     width: windowState.width > 0 ? windowState.width : 1240
     height: windowState.height > 0 ? windowState.height : 820
     minimumWidth: 980
     minimumHeight: 640
-    color: theme.bg
+    color: welcomeMode ? theme.warmBg : theme.bg
 
     AddConnectionDialog {
         id: addConnectionDialog
@@ -95,209 +97,251 @@ ApplicationWindow {
 
     ColumnLayout {
         anchors.fill: parent
-        anchors.margins: theme.spacingLg
-        spacing: theme.spacingLg
+        anchors.margins: welcomeMode ? 0 : theme.spacingLg
+        spacing: welcomeMode ? 0 : theme.spacingLg
 
-        RowLayout {
-            Layout.fillWidth: true
-            spacing: theme.spacingMd
-
-            Rectangle {
-                width: 42
-                height: 42
-                radius: 21
-                color: theme.accent
-
-                Text {
-                    anchors.centerIn: parent
-                    text: "K"
-                    color: "#FFFFFF"
-                    font.family: theme.displayFont
-                    font.pixelSize: 22
-                    font.bold: true
-                }
-            }
-
-            ColumnLayout {
-                spacing: 2
-
-                Text {
-                    text: "Kassiber"
-                    color: theme.ink
-                    font.family: theme.displayFont
-                    font.pixelSize: 26
-                    font.bold: true
-                }
-
-                Text {
-                    text: dashboardVM.phaseSummary
-                    color: theme.inkMuted
-                    font.family: theme.bodyFont
-                    font.pixelSize: 13
-                }
-            }
-
-            Item {
-                Layout.fillWidth: true
-            }
-
-            Button {
-                text: dashboardVM.projectLabel
-                onClicked: projectPopup.open()
-                contentItem: Text {
-                    text: parent.text
-                    color: theme.ink
-                    font.family: theme.bodyFont
-                    font.pixelSize: 13
-                    horizontalAlignment: Text.AlignHCenter
-                    verticalAlignment: Text.AlignVCenter
-                    elide: Text.ElideRight
-                }
-                background: Rectangle {
-                    color: theme.card
-                    radius: theme.radiusLg
-                    border.color: theme.chipBorder
-                    border.width: 1
-                }
-                implicitWidth: 240
-                implicitHeight: 42
-            }
-        }
-
-        Item {
+        WelcomePage {
             Layout.fillWidth: true
             Layout.fillHeight: true
+            visible: root.welcomeMode
+        }
 
-            Rectangle {
-                anchors.centerIn: parent
-                width: Math.min(parent.width - theme.spacingXl, 680)
-                height: 360
-                color: theme.card
-                radius: theme.radiusLg
-                border.color: theme.cardBorder
-                border.width: 1
+        ColumnLayout {
+            Layout.fillWidth: true
+            Layout.fillHeight: true
+            visible: !root.welcomeMode
+            spacing: theme.spacingLg
 
-                ColumnLayout {
-                    anchors.fill: parent
-                    anchors.margins: theme.spacingXl
-                    spacing: theme.spacingMd
+            RowLayout {
+                Layout.fillWidth: true
+                spacing: theme.spacingMd
 
-                    Rectangle {
-                        Layout.alignment: Qt.AlignHCenter
-                        width: 64
-                        height: 64
-                        radius: 32
-                        color: "transparent"
-                        border.color: theme.chipBorder
-                        border.width: 1
-
-                        Text {
-                            anchors.centerIn: parent
-                            text: connectionsVM.isEmpty ? "+" : "i"
-                            color: theme.accent
-                            font.family: theme.displayFont
-                            font.pixelSize: 28
-                            font.bold: true
-                        }
-                    }
+                Rectangle {
+                    width: 42
+                    height: 42
+                    radius: 21
+                    color: theme.accent
 
                     Text {
-                        Layout.alignment: Qt.AlignHCenter
-                        text: dashboardVM.shellTitle
+                        anchors.centerIn: parent
+                        text: "K"
+                        color: "#FFFFFF"
+                        font.family: theme.displayFont
+                        font.pixelSize: 22
+                        font.bold: true
+                    }
+                }
+
+                ColumnLayout {
+                    spacing: 2
+
+                    Text {
+                        text: "Kassiber"
                         color: theme.ink
                         font.family: theme.displayFont
-                        font.pixelSize: 28
+                        font.pixelSize: 26
                         font.bold: true
                     }
 
                     Text {
-                        Layout.fillWidth: true
+                        text: dashboardVM.phaseSummary
+                        color: theme.inkMuted
+                        font.family: theme.bodyFont
+                        font.pixelSize: 13
+                    }
+                }
+
+                Item {
+                    Layout.fillWidth: true
+                }
+
+                Button {
+                    text: dashboardVM.projectLabel
+                    onClicked: projectPopup.open()
+                    contentItem: Text {
+                        text: parent.text
+                        color: theme.ink
+                        font.family: theme.bodyFont
+                        font.pixelSize: 13
                         horizontalAlignment: Text.AlignHCenter
-                        wrapMode: Text.WordWrap
-                        text: dashboardVM.shellBody
-                        color: theme.inkMuted
-                        font.family: theme.bodyFont
-                        font.pixelSize: 15
+                        verticalAlignment: Text.AlignVCenter
+                        elide: Text.ElideRight
                     }
-
-                    PrimaryButton {
-                        Layout.alignment: Qt.AlignHCenter
-                        text: connectionsVM.ctaLabel
-                        enabled: connectionsVM.canOpenAddConnection
-                        onClicked: addConnectionDialog.open()
+                    background: Rectangle {
+                        color: theme.card
+                        radius: theme.radiusLg
+                        border.color: theme.chipBorder
+                        border.width: 1
                     }
+                    implicitWidth: 240
+                    implicitHeight: 42
+                }
+            }
 
-                    Text {
-                        Layout.alignment: Qt.AlignHCenter
-                        text: connectionsVM.emptyBadge + "  |  " + connectionsVM.connectionCount + " wallet(s)"
-                        color: theme.inkMuted
-                        font.family: theme.bodyFont
-                        font.pixelSize: 12
-                    }
+            RowLayout {
+                Layout.fillWidth: true
+                Layout.fillHeight: true
+                spacing: theme.spacingLg
 
-                    Repeater {
-                        model: dashboardVM.notices
-                        delegate: Rectangle {
+                Card {
+                    Layout.preferredWidth: 280
+                    Layout.fillHeight: true
+
+                    ColumnLayout {
+                        anchors.fill: parent
+                        spacing: theme.spacingMd
+
+                        Text {
+                            text: "Screens"
+                            color: theme.ink
+                            font.family: theme.displayFont
+                            font.pixelSize: 24
+                            font.bold: true
+                        }
+
+                        Text {
                             Layout.fillWidth: true
-                            radius: theme.radiusMd
-                            color: "#FAF7F0"
-                            border.color: theme.cardBorder
-                            border.width: 1
-                            implicitHeight: noticeText.implicitHeight + theme.spacingMd
+                            wrapMode: Text.WordWrap
+                            text: "This left rail mirrors the mockup list so each screen can be translated into QML incrementally."
+                            color: theme.inkMuted
+                            font.family: theme.bodyFont
+                            font.pixelSize: 13
+                        }
 
-                            Text {
-                                id: noticeText
-                                anchors.fill: parent
-                                anchors.margins: theme.spacingSm
-                                wrapMode: Text.WordWrap
-                                text: modelData
-                                color: theme.inkMuted
-                                font.family: theme.bodyFont
-                                font.pixelSize: 12
+                        Repeater {
+                            model: dashboardVM.pages
+
+                            Button {
+                                Layout.fillWidth: true
+                                enabled: modelData["enabled"] === true
+                                onClicked: dashboardVM.selectPage(modelData["id"])
+
+                                contentItem: Column {
+                                    Text {
+                                        text: modelData["label"]
+                                        color: enabled ? theme.ink : theme.inkMuted
+                                        font.family: theme.displayFont
+                                        font.pixelSize: 18
+                                        font.bold: true
+                                    }
+
+                                    Text {
+                                        text: modelData["caption"]
+                                        color: theme.inkMuted
+                                        font.family: theme.bodyFont
+                                        font.pixelSize: 12
+                                    }
+                                }
+
+                                background: Rectangle {
+                                    color: dashboardVM.currentPage === modelData["id"] ? theme.cardAlt : "transparent"
+                                    radius: theme.radiusMd
+                                    border.color: theme.cardBorder
+                                    border.width: 1
+                                }
+
+                                implicitHeight: 72
+                            }
+                        }
+
+                        Item {
+                            Layout.fillHeight: true
+                        }
+
+                        Repeater {
+                            model: dashboardVM.notices
+                            delegate: Rectangle {
+                                Layout.fillWidth: true
+                                radius: theme.radiusMd
+                                color: theme.cardAlt
+                                border.color: theme.cardBorder
+                                border.width: 1
+                                implicitHeight: noticeText.implicitHeight + theme.spacingMd
+
+                                Text {
+                                    id: noticeText
+                                    anchors.fill: parent
+                                    anchors.margins: theme.spacingSm
+                                    wrapMode: Text.WordWrap
+                                    text: modelData
+                                    color: theme.inkMuted
+                                    font.family: theme.bodyFont
+                                    font.pixelSize: 12
+                                }
                             }
                         }
                     }
                 }
+
+                Card {
+                    Layout.fillWidth: true
+                    Layout.fillHeight: true
+
+                    StackLayout {
+                        anchors.fill: parent
+                        currentIndex: dashboardVM.pageIndex
+
+                        WelcomePage {
+                        }
+
+                        OverviewPage {
+                            onRequestAddConnection: addConnectionDialog.open()
+                        }
+
+                        ConnectionDetailPage {
+                            onRequestAddConnection: addConnectionDialog.open()
+                        }
+
+                        TransactionsPage {
+                        }
+
+                        ReportsPage {
+                        }
+
+                        SettingsPage {
+                        }
+                    }
+                }
             }
-        }
 
-        RowLayout {
-            Layout.fillWidth: true
-            spacing: theme.spacingMd
-
-            Text {
-                text: settingsVM.versionText
-                color: theme.inkMuted
-                font.family: theme.bodyFont
-                font.pixelSize: 12
-            }
-
-            Text {
-                text: dashboardVM.footerSummary
-                color: theme.inkMuted
-                font.family: theme.bodyFont
-                font.pixelSize: 12
-            }
-
-            Item {
+            RowLayout {
                 Layout.fillWidth: true
-            }
+                spacing: theme.spacingMd
 
-            ToolButton {
-                text: "Settings"
-                onClicked: settingsDialog.open()
-            }
+                Text {
+                    text: settingsVM.versionText
+                    color: theme.inkMuted
+                    font.family: theme.bodyFont
+                    font.pixelSize: 12
+                }
 
-            ToolButton {
-                text: "GitHub"
-            }
+                Text {
+                    text: dashboardVM.footerSummary
+                    color: theme.inkMuted
+                    font.family: theme.bodyFont
+                    font.pixelSize: 12
+                }
 
-            ToolButton {
-                text: "Nostr"
-            }
+                Item {
+                    Layout.fillWidth: true
+                }
 
-            ToolButton {
-                text: "Support the App"
+                ToolButton {
+                    text: "Settings"
+                    onClicked: dashboardVM.selectPage("settings")
+                }
+
+                ToolButton {
+                    text: "GitHub"
+                }
+
+                ToolButton {
+                    text: "Nostr"
+                }
+
+                ToolButton {
+                    text: "Support the App"
+                }
             }
         }
     }

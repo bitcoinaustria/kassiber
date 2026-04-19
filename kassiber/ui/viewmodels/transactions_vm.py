@@ -5,7 +5,7 @@ from typing import Any
 from PySide6.QtCore import QObject, Property, Signal, Slot
 
 
-class ConnectionsViewModel(QObject):
+class TransactionsViewModel(QObject):
     snapshotChanged = Signal()
     selectionChanged = Signal()
 
@@ -15,14 +15,11 @@ class ConnectionsViewModel(QObject):
         items = self._items()
         self._selected_id = items[0]["id"] if items else ""
 
-    def _scope(self) -> dict[str, Any]:
-        return self._snapshot.get("scope") or {}
-
-    def _connections(self) -> dict[str, Any]:
-        return self._snapshot.get("connections") or {}
+    def _transactions(self) -> dict[str, Any]:
+        return self._snapshot.get("transactions") or {}
 
     def _items(self) -> list[dict[str, Any]]:
-        return list(self._connections().get("items") or [])
+        return list(self._transactions().get("items") or [])
 
     def _selected(self) -> dict[str, Any]:
         items = self._items()
@@ -38,29 +35,9 @@ class ConnectionsViewModel(QObject):
     def isEmpty(self) -> bool:
         return len(self._items()) == 0
 
-    @Property(int, notify=snapshotChanged)
-    def connectionCount(self) -> int:
-        return len(self._items())
-
-    @Property(str, notify=snapshotChanged)
-    def ctaLabel(self) -> str:
-        return "+ Add Connection"
-
-    @Property(bool, notify=snapshotChanged)
-    def canOpenAddConnection(self) -> bool:
-        return bool(self._scope())
-
-    @Property(str, notify=snapshotChanged)
-    def emptyBadge(self) -> str:
-        return "No Connections" if self.isEmpty else "Connections Found"
-
     @Property("QVariantList", notify=snapshotChanged)
     def items(self):
         return self._items()
-
-    @Property(str, notify=selectionChanged)
-    def selectedId(self) -> str:
-        return self._selected().get("id", "")
 
     @Property("QVariantMap", notify=selectionChanged)
     def selectedItem(self):
@@ -71,8 +48,8 @@ class ConnectionsViewModel(QObject):
         return list(self._selected().get("detail_rows") or [])
 
     @Slot(str)
-    def selectConnection(self, connection_id: str) -> None:
-        normalized = str(connection_id or "").strip()
+    def selectTransaction(self, transaction_id: str) -> None:
+        normalized = str(transaction_id or "").strip()
         if not normalized or normalized == self._selected_id:
             return
         for item in self._items():
