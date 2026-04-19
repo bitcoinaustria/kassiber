@@ -81,7 +81,9 @@ def build_application(
     from .theme import Theme
     from .viewmodels.connections_vm import ConnectionsViewModel
     from .viewmodels.dashboard_vm import DashboardViewModel
+    from .viewmodels.reports_vm import ReportsViewModel
     from .viewmodels.settings_vm import SettingsViewModel
+    from .viewmodels.transactions_vm import TransactionsViewModel
 
     snapshot = collect_ui_snapshot(
         conn,
@@ -100,23 +102,31 @@ def build_application(
 
     dashboard_vm = DashboardViewModel(snapshot)
     connections_vm = ConnectionsViewModel(snapshot)
+    transactions_vm = TransactionsViewModel(snapshot)
+    reports_vm = ReportsViewModel(snapshot)
     settings_vm = SettingsViewModel(snapshot)
     theme = Theme()
 
     engine = QQmlApplicationEngine()
     dashboard_vm.setParent(engine)
     connections_vm.setParent(engine)
+    transactions_vm.setParent(engine)
+    reports_vm.setParent(engine)
     settings_vm.setParent(engine)
     theme.setParent(engine)
     context = engine.rootContext()
     context.setContextProperty("dashboardVM", dashboard_vm)
     context.setContextProperty("connectionsVM", connections_vm)
+    context.setContextProperty("transactionsVM", transactions_vm)
+    context.setContextProperty("reportsVM", reports_vm)
     context.setContextProperty("settingsVM", settings_vm)
     context.setContextProperty("theme", theme)
     context.setContextProperty("windowState", window_state)
     engine._kassiber_refs = {
         "dashboard_vm": dashboard_vm,
         "connections_vm": connections_vm,
+        "transactions_vm": transactions_vm,
+        "reports_vm": reports_vm,
         "settings_vm": settings_vm,
         "theme": theme,
     }

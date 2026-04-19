@@ -15,6 +15,9 @@ class SettingsViewModel(QObject):
     def _status(self) -> dict[str, Any]:
         return self._snapshot.get("status") or {}
 
+    def _settings(self) -> dict[str, Any]:
+        return self._snapshot.get("settings") or {}
+
     @Property(str, notify=snapshotChanged)
     def versionText(self) -> str:
         version = self._status().get("version", "")
@@ -27,3 +30,7 @@ class SettingsViewModel(QObject):
     @Property(str, notify=snapshotChanged)
     def envFile(self) -> str:
         return self._status().get("env_file", "")
+
+    @Property("QVariantList", notify=snapshotChanged)
+    def cards(self):
+        return list(self._settings().get("cards") or [])
