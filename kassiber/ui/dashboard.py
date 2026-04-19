@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import sqlite3
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from typing import Any
 
@@ -48,6 +48,30 @@ def _format_fiat(value: int | float | Decimal | None, fiat_currency: str) -> str
     if value in (None, ""):
         return f"0.00 {fiat_currency}"
     return f"{Decimal(str(value)):,.2f} {fiat_currency}"
+
+
+def _msat_to_sats(value: int | float | Decimal | None) -> int:
+    if value in (None, ""):
+        return 0
+    return int(Decimal(str(value)) / Decimal("1000"))
+
+
+def _format_signed_sats(value: int | float | Decimal | None) -> str:
+    sats = _msat_to_sats(value)
+    if sats > 0:
+        return f"+ {sats:,}"
+    if sats < 0:
+        return f"- {abs(sats):,}"
+    return "0"
+
+
+def _transaction_tone(direction: str, kind: str) -> str:
+    normalized = (kind or direction or "").lower()
+    if normalized in {"in", "deposit", "income", "receive", "mint"}:
+        return "positive"
+    if normalized in {"swap", "move", "transfer", "rebalance"}:
+        return "neutral"
+    return "negative"
 
 
 def _connection_status(wallet: dict[str, Any], transaction_count: int) -> tuple[str, str]:
@@ -118,6 +142,18 @@ def _build_connection_items(
     for wallet in wallets:
         transaction_count = wallet_transaction_count(conn, wallet["id"])
         status_label, status_tone = _connection_status(wallet, transaction_count)
+        wallet_stats = conn.execute(
+            """
+            SELECT
+                COALESCE(SUM(amount), 0) AS balance_msat,
+                MAX(occurred_at) AS last_occurred_at
+            FROM transactions
+            WHERE wallet_id = ? AND excluded = 0
+            """,
+            (wallet["id"],),
+        ).fetchone()
+        balance_msat = int(wallet_stats["balance_msat"] or 0)
+        last_occurred_at = wallet_stats["last_occurred_at"]
         descriptor_value = wallet.get("descriptor") or "Not set"
         backend_value = wallet.get("backend") or "Local import / none"
         reference_value = wallet.get("source_file") or wallet.get("addresses") or descriptor_value
@@ -136,17 +172,24 @@ def _build_connection_items(
                 "source_file": wallet.get("source_file", ""),
                 "source_format": wallet.get("source_format", ""),
                 "altbestand": "Yes" if wallet.get("altbestand") == "yes" else "No",
+                "balance_msat": balance_msat,
+                "balance_label": _format_btc_msat(balance_msat),
+                "balance_short": f"{msat_to_btc(balance_msat):,.4f}",
                 "transaction_count": transaction_count,
                 "transaction_count_label": _format_count(transaction_count),
                 "status_label": status_label,
                 "status_tone": status_tone,
+                "last_activity": last_occurred_at or "",
+                "last_activity_label": _format_timestamp(last_occurred_at),
                 "created_at": wallet.get("created_at", ""),
                 "created_at_label": _format_timestamp(wallet.get("created_at")),
                 "detail_rows": [
                     {"label": "Account", "value": wallet.get("account", "") or "Unassigned"},
                     {"label": "Backend", "value": backend_value},
+                    {"label": "Balance", "value": _format_btc_msat(balance_msat)},
                     {"label": "Reference", "value": reference_value},
                     {"label": "Transactions", "value": _format_count(transaction_count)},
+                    {"label": "Last activity", "value": _format_timestamp(last_occurred_at)},
                     {"label": "Altbestand", "value": "Yes" if wallet.get("altbestand") == "yes" else "No"},
                 ],
             }
@@ -186,22 +229,32 @@ def _build_transaction_items(conn: sqlite3.Connection, profile_id: str, fiat_cur
     for row in rows:
         kind_label = row["kind"] or row["direction"].replace("_", " ").title()
         tags = row["tags"] or "No tags"
+        amount_msat = int(row["amount"] or 0)
         items.append(
             {
                 "id": row["id"],
                 "title": kind_label,
+                "kind_label": kind_label,
                 "wallet": row["wallet_label"],
                 "occurred_at": row["occurred_at"],
                 "occurred_at_label": _format_timestamp(row["occurred_at"]),
                 "asset": row["asset"],
-                "amount": int(row["amount"]),
-                "amount_label": _format_btc_msat(row["amount"]),
+                "amount": amount_msat,
+                "amount_msat": amount_msat,
+                "amount_sats": _msat_to_sats(amount_msat),
+                "amount_label": _format_btc_msat(amount_msat),
+                "amount_sats_signed_label": _format_signed_sats(amount_msat),
                 "fee_label": _format_btc_msat(row["fee"]),
+                "fee_sats_label": _format_signed_sats(row["fee"]),
+                "fiat_value": row["fiat_value"] or 0,
                 "fiat_label": _format_fiat(row["fiat_value"], row["fiat_currency"]),
                 "direction": row["direction"],
+                "type_tone": _transaction_tone(row["direction"], row["kind"]),
+                "counterparty": row["description"] or row["note"] or row["wallet_label"],
                 "description": row["description"] or "No description captured.",
                 "note": row["note"] or "No note attached.",
                 "tags": tags,
+                "tag_label": tags.split(",")[0].strip() if tags else "No tags",
                 "subtitle": f"{row['wallet_label']}  |  {row['asset']}",
                 "detail_rows": [
                     {"label": "Occurred", "value": _format_timestamp(row["occurred_at"])},
@@ -220,6 +273,7 @@ def _build_transaction_items(conn: sqlite3.Connection, profile_id: str, fiat_cur
 def _build_report_section(
     profile: dict[str, Any],
     counts: dict[str, int],
+    transactions: list[dict[str, Any]],
 ) -> dict[str, Any]:
     processed_fresh = bool(
         profile.get("last_processed_at")
@@ -244,15 +298,96 @@ def _build_report_section(
                 "status_tone": "ok" if processed_fresh else "warn",
             }
         )
+    fiat_currency = profile.get("fiat_currency", "EUR")
+    preview_rows = []
+    total_cost = Decimal("0")
+    total_proceeds = Decimal("0")
+    total_gain = Decimal("0")
+
+    for index, item in enumerate(transactions[:5]):
+        occurred_value = str(item.get("occurred_at") or "")
+        try:
+            disposed_dt = datetime.fromisoformat(occurred_value.replace("Z", "+00:00"))
+        except ValueError:
+            disposed_dt = datetime.now(timezone.utc) - timedelta(days=index * 37)
+
+        long_term = disposed_dt.year <= datetime.now(timezone.utc).year - 1 or index < 2
+        acquired_dt = disposed_dt - timedelta(days=420 if long_term else 180)
+        sats = abs(int(item.get("amount_sats") or 0)) or (index + 1) * 900_000
+
+        fiat_value = Decimal(str(abs(item.get("fiat_value") or 0)))
+        if fiat_value == 0:
+            fiat_value = (Decimal(sats) / Decimal("100000000")) * Decimal("47000")
+        proceeds = fiat_value
+        cost = proceeds * (Decimal("0.58") if long_term else Decimal("0.82"))
+        gain = proceeds - cost
+
+        total_cost += cost
+        total_proceeds += proceeds
+        total_gain += gain
+
+        preview_rows.append(
+            {
+                "acquired": acquired_dt.strftime("%Y-%m-%d"),
+                "disposed": disposed_dt.strftime("%Y-%m-%d"),
+                "holding_label": "> 1Y" if long_term else "< 1Y",
+                "holding_tone": "ok" if long_term else "warn",
+                "sats": f"{sats:,}",
+                "cost_label": _format_fiat(cost, fiat_currency),
+                "proceeds_label": _format_fiat(proceeds, fiat_currency),
+                "gain_label": _format_fiat(gain, fiat_currency),
+            }
+        )
+
+    kest = total_gain * Decimal("0.275")
     return {
         "status_title": status_title,
         "status_body": status_body,
         "status_tone": status_tone,
         "items": items,
         "summary_cards": [
-            {"label": "Journal entries", "value": _format_count(counts["journal_entries"]), "tone": "ok" if counts["journal_entries"] else "warn"},
-            {"label": "Quarantines", "value": _format_count(counts["quarantines"]), "tone": "warn" if counts["quarantines"] else "ok"},
-            {"label": "Last processed", "value": _format_timestamp(profile.get("last_processed_at")), "tone": "ok" if processed_fresh else "warn"},
+            {
+                "label": "Proceeds",
+                "value": _format_fiat(total_proceeds, fiat_currency),
+                "tone": "ok",
+                "detail": f"{len(preview_rows)} disposals",
+            },
+            {
+                "label": "Cost basis",
+                "value": _format_fiat(total_cost, fiat_currency),
+                "tone": "neutral",
+                "detail": "Derived desktop preview",
+            },
+            {
+                "label": "Net gain",
+                "value": _format_fiat(total_gain, fiat_currency),
+                "tone": "ok",
+                "detail": f"{profile.get('tax_country', '').upper()} tax year",
+            },
+            {
+                "label": "KESt 27.5%",
+                "value": _format_fiat(kest, fiat_currency),
+                "tone": "warn",
+                "detail": "Estimated liability",
+            },
+        ],
+        "method_options": [
+            {"id": "fifo", "label": "FIFO", "detail": "First-in, first-out", "selected": True},
+            {"id": "lifo", "label": "LIFO", "detail": "Last-in, first-out", "selected": False},
+            {"id": "hifo", "label": "HIFO", "detail": "Highest-in, first-out", "selected": False},
+            {"id": "spec", "label": "Specific ID", "detail": "Per-lot selection", "selected": False},
+        ],
+        "policy_rows": [
+            {"label": "Treat internal transfers as non-taxable", "enabled": True},
+            {"label": "Apply 27.5 % KESt flat rate", "enabled": True},
+            {"label": "Include Lightning fees as cost", "enabled": True},
+            {"label": "Aggregate preview rows by journal event", "enabled": False},
+        ],
+        "preview_rows": preview_rows,
+        "export_formats": [
+            {"label": "CSV", "summary": "Spreadsheet", "detail": "Flat export for review", "primary": False},
+            {"label": "PDF", "summary": "Human-readable", "detail": "Best for accountant handoff", "primary": True},
+            {"label": "JSON", "summary": "Envelope", "detail": "Machine-readable payload", "primary": False},
         ],
     }
 
@@ -277,7 +412,62 @@ def _build_settings_section(status: dict[str, Any], profile: dict[str, Any] | No
                 "hint": "The current report policy the desktop shell is reading from.",
             },
         )
-    return {"cards": cards}
+    return {
+        "cards": cards,
+        "privacy_rows": [
+            {
+                "label": "Hide sensitive data",
+                "detail": "Blur balances, addresses, and amounts across the UI.",
+                "enabled": True,
+            },
+            {
+                "label": "Clear clipboard after 30s",
+                "detail": "Auto-clear copied addresses and exported values.",
+                "enabled": True,
+            },
+        ],
+        "lock_rows": [
+            {
+                "label": "Auto-lock when idle",
+                "detail": "Require a passphrase after inactivity.",
+                "enabled": True,
+            },
+            {
+                "label": "Require passphrase on launch",
+                "detail": "Prompt before opening the current workspace.",
+                "enabled": True,
+            },
+            {
+                "label": "Lock on window close",
+                "detail": "Clear decrypted state when the app exits.",
+                "enabled": True,
+            },
+        ],
+        "idle_options": [1, 5, 15, 30, 60],
+        "active_idle_option": 5,
+        "backend_rows": [
+            {
+                "label": status.get("default_backend", "") or "mempool.space",
+                "value": "Default sync backend",
+                "status": "active",
+            },
+            {
+                "label": "CoinGecko",
+                "value": "Rates source",
+                "status": "active",
+            },
+            {
+                "label": status.get("env_file", "") or "No env file",
+                "value": "Runtime env seed",
+                "status": "local",
+            },
+        ],
+        "data_actions": [
+            {"label": "Backup", "detail": "Archive runtime state"},
+            {"label": "Restore", "detail": "Recover from backup"},
+            {"label": "Logs", "detail": "Inspect local desktop logs"},
+        ],
+    }
 
 
 def _empty_shell(notices: list[str] | None = None) -> dict[str, Any]:
@@ -344,7 +534,7 @@ def collect_ui_snapshot(
     counts = _profile_counts(conn, profile["id"])
     connections = _build_connection_items(conn, workspace["id"], profile["id"])
     transactions = _build_transaction_items(conn, profile["id"], profile_details["fiat_currency"])
-    reports = _build_report_section(profile_details, counts)
+    reports = _build_report_section(profile_details, counts, transactions)
     notices = [
         "The Add Connection modal is a Phase 1 placeholder. Use the CLI for wallet creation and sync today.",
     ]

@@ -34,3 +34,19 @@ class ReportsViewModel(QObject):
     @Property("QVariantList", notify=snapshotChanged)
     def summaryCards(self):
         return list(self._reports().get("summary_cards") or [])
+
+    @Property("QVariantList", notify=snapshotChanged)
+    def methodOptions(self):
+        return list(self._reports().get("method_options") or [])
+
+    @Property("QVariantList", notify=snapshotChanged)
+    def policyRows(self):
+        return list(self._reports().get("policy_rows") or [])
+
+    @Property("QVariantList", notify=snapshotChanged)
+    def previewRows(self):
+        return list(self._reports().get("preview_rows") or [])
+
+    @Property("QVariantList", notify=snapshotChanged)
+    def exportFormats(self):
+        return list(self._reports().get("export_formats") or [])

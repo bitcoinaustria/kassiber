@@ -2,6 +2,8 @@ import QtQuick 2.15
 import QtQuick.Controls 2.15
 import QtQuick.Layouts 1.15
 
+import "../components"
+
 Item {
     id: root
     property string selectedResidency: "AT"
@@ -84,100 +86,11 @@ Item {
                     anchors.centerIn: parent
                     spacing: 24
 
-                    Item {
-                        width: 220
-                        height: 220
-
-                        Rectangle {
-                            anchors.centerIn: parent
-                            width: 182
-                            height: 182
-                            radius: 91
-                            color: "transparent"
-                            border.color: theme.warmShadow
-                            border.width: 1
-                        }
-
-                        Rectangle {
-                            anchors.centerIn: parent
-                            width: 138
-                            height: 138
-                            radius: 69
-                            color: "transparent"
-                            border.color: theme.warmShadow
-                            border.width: 1
-                        }
-
-                        Rectangle {
-                            anchors.centerIn: parent
-                            width: 88
-                            height: 88
-                            radius: 44
-                            color: "transparent"
-                            border.color: theme.warmShadow
-                            border.width: 1
-                        }
-
-                        Item {
-                            anchors.centerIn: parent
-                            width: 48
-                            height: 34
-
-                            Rectangle {
-                                anchors.fill: parent
-                                color: "transparent"
-                                border.color: theme.warmShadow
-                                border.width: 2
-                            }
-
-                            Rectangle {
-                                x: 0
-                                y: 0
-                                width: parent.width
-                                height: 2
-                                rotation: 35
-                                transformOrigin: Item.Left
-                                color: theme.warmShadow
-                            }
-
-                            Rectangle {
-                                x: parent.width
-                                y: 0
-                                width: parent.width
-                                height: 2
-                                rotation: 145
-                                transformOrigin: Item.Left
-                                color: theme.warmShadow
-                            }
-
-                            Rectangle {
-                                anchors.centerIn: parent
-                                width: 14
-                                height: 14
-                                radius: 7
-                                color: theme.accent
-                            }
-                        }
-
-                        Text {
-                            anchors.horizontalCenter: parent.horizontalCenter
-                            y: 32
-                            text: "BITCOIN · ACCOUNTING · AUSTRIA"
-                            color: theme.warmShadow
-                            font.family: theme.displayFont
-                            font.pixelSize: 10
-                            font.letterSpacing: 2.8
-                        }
-
-                        Text {
-                            anchors.horizontalCenter: parent.horizontalCenter
-                            y: parent.height - 46
-                            text: "PRIVATE · LOCAL"
-                            color: theme.warmShadow
-                            font.family: theme.displayFont
-                            font.pixelSize: 10
-                            font.letterSpacing: 2.8
-                        }
+                    SealLockup {
+                        size: 220
+                        inkColor: theme.warmShadow
+                        sealColor: theme.accent
+                        ringText: "BITCOIN * ACCOUNTING * AUSTRIA * PRIVATE * LOCAL *"
                     }
 
                     Text {
@@ -185,8 +98,8 @@ Item {
                         horizontalAlignment: Text.AlignHCenter
                         text: dashboardVM.welcomeStampCaption
                         color: theme.warmShadow
-                        font.family: theme.bodyFont
-                        font.pixelSize: 12
+                        font.family: theme.monoFont
+                        font.pixelSize: 11
                         font.letterSpacing: 2.8
                     }
                 }
@@ -204,7 +117,7 @@ Item {
                 Text {
                     text: dashboardVM.welcomeTitle
                     color: theme.ink
-                    font.family: theme.displayFont
+                    font.family: theme.serifFont
                     font.pixelSize: 64
                     font.bold: false
                 }
@@ -214,8 +127,8 @@ Item {
                     wrapMode: Text.WordWrap
                     text: dashboardVM.welcomeBody
                     color: Qt.rgba(0.18, 0.16, 0.14, 0.78)
-                    font.family: theme.displayFont
-                    font.pixelSize: 16
+                    font.family: theme.sansFont
+                    font.pixelSize: 15
                     lineHeight: 1.35
                     Layout.maximumWidth: 520
                 }
@@ -231,8 +144,8 @@ Item {
                         Text {
                             text: "YOUR NAME"
                             color: theme.inkMuted
-                            font.family: theme.bodyFont
-                            font.pixelSize: 14
+                            font.family: theme.monoFont
+                            font.pixelSize: 13
                             font.bold: true
                             font.letterSpacing: 2
                         }
@@ -240,8 +153,8 @@ Item {
                         TextField {
                             Layout.fillWidth: true
                             placeholderText: dashboardVM.welcomeNamePlaceholder
-                            font.family: theme.displayFont
-                            font.pixelSize: 16
+                            font.family: theme.sansFont
+                            font.pixelSize: 15
                             color: theme.ink
                             padding: 12
                             placeholderTextColor: Qt.rgba(0.28, 0.25, 0.22, 0.30)
@@ -260,8 +173,8 @@ Item {
                         Text {
                             text: "WORKSPACE"
                             color: theme.inkMuted
-                            font.family: theme.bodyFont
-                            font.pixelSize: 14
+                            font.family: theme.monoFont
+                            font.pixelSize: 13
                             font.bold: true
                             font.letterSpacing: 2
                         }
@@ -269,8 +182,8 @@ Item {
                         TextField {
                             Layout.fillWidth: true
                             text: dashboardVM.welcomeWorkspaceValue
-                            font.family: theme.displayFont
-                            font.pixelSize: 16
+                            font.family: theme.sansFont
+                            font.pixelSize: 15
                             color: theme.ink
                             padding: 12
                             background: Rectangle {
@@ -289,8 +202,8 @@ Item {
                     Text {
                         text: "TAX RESIDENCY"
                         color: theme.inkMuted
-                        font.family: theme.bodyFont
-                        font.pixelSize: 14
+                        font.family: theme.monoFont
+                        font.pixelSize: 13
                         font.bold: true
                         font.letterSpacing: 2
                     }
@@ -313,8 +226,8 @@ Item {
                                 contentItem: Text {
                                     text: parent.text
                                     color: parent.selected ? theme.warmPaper : theme.inkMuted
-                                    font.family: theme.bodyFont
-                                    font.pixelSize: 14
+                                    font.family: theme.monoFont
+                                    font.pixelSize: 13
                                     font.bold: true
                                     horizontalAlignment: Text.AlignHCenter
                                     verticalAlignment: Text.AlignVCenter
@@ -336,7 +249,7 @@ Item {
                     spacing: 16
 
                     Button {
-                        text: "  ->  Let's go"
+                        text: "\u2192  Let's go"
                         onClicked: dashboardVM.selectPage(dashboardVM.hasProfile ? "overview" : "settings")
                         leftPadding: 18
                         rightPadding: 18
@@ -346,7 +259,7 @@ Item {
                         contentItem: Text {
                             text: parent.text
                             color: "#FFF8F1"
-                            font.family: theme.bodyFont
+                            font.family: theme.sansFont
                             font.pixelSize: 16
                             font.bold: true
                             horizontalAlignment: Text.AlignHCenter
@@ -369,8 +282,8 @@ Item {
                             ? dashboardVM.welcomeResidencyNote
                             : "Tax defaults will follow the selected residency preset. Editable later."
                         color: theme.inkMuted
-                        font.family: theme.bodyFont
-                        font.pixelSize: 13
+                        font.family: theme.monoFont
+                        font.pixelSize: 12
                         Layout.maximumWidth: 360
                     }
                 }

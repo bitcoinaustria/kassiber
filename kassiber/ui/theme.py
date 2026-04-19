@@ -4,22 +4,29 @@ from PySide6.QtCore import QObject, Property
 
 
 COLORS = {
-    "bg": "#F5F1E8",
-    "card": "#FFFFFF",
-    "card_border": "#EDEAE0",
-    "card_alt": "#FAF7F0",
+    "bg": "#F0E8DB",
+    "paper": "#F0E8DB",
+    "paper_2": "#F7F1E5",
+    "paper_3": "#FFF9F0",
+    "card": "#F7F1E5",
+    "card_border": "#D9CFBC",
+    "card_alt": "#F7F1E5",
     "warm_bg": "#EFE6D8",
     "warm_paper": "#F6EEDD",
     "warm_border": "#D8CDBD",
     "warm_grid": "#E7DDCF",
     "warm_grid_strong": "#DDD1C0",
     "warm_shadow": "#1E1916",
-    "warm_accent": "#D4A3A3",
+    "warm_accent": "#CD6873",
+    "line": "#D9CFBC",
+    "line_2": "#C4B89F",
     "ink": "#1A1916",
     "ink_muted": "#6B6862",
-    "accent": "#8B0000",
-    "accent_dim": "#C08A8A",
-    "chip_border": "#C9C4B8",
+    "ink_2": "#534A40",
+    "ink_3": "#8A7F71",
+    "accent": "#8A1F2B",
+    "accent_dim": "#CD6873",
+    "chip_border": "#C4B89F",
     "pill_amber": "#D97706",
     "pill_yellow": "#CA8A04",
     "pill_teal": "#0F766E",
@@ -33,17 +40,32 @@ COLORS = {
 
 FONTS = {
     "display": "Baskerville",
-    "body": "Menlo",
+    "serif": "Baskerville",
+    "sans": "Helvetica Neue",
+    "body": "Helvetica Neue",
+    "mono": "Menlo",
 }
 
-SPACING = {"sm": 8, "md": 16, "lg": 24, "xl": 40}
-RADIUS = {"sm": 4, "md": 8, "lg": 12}
+SPACING = {"xs": 4, "sm": 8, "md": 16, "lg": 24, "xl": 40, "xxl": 56}
+RADIUS = {"sm": 2, "md": 8, "lg": 12, "xl": 18}
 
 
 class Theme(QObject):
     @Property(str, constant=True)
     def bg(self) -> str:
         return COLORS["bg"]
+
+    @Property(str, constant=True)
+    def paper(self) -> str:
+        return COLORS["paper"]
+
+    @Property(str, constant=True)
+    def paper2(self) -> str:
+        return COLORS["paper_2"]
+
+    @Property(str, constant=True)
+    def paper3(self) -> str:
+        return COLORS["paper_3"]
 
     @Property(str, constant=True)
     def card(self) -> str:
@@ -86,12 +108,28 @@ class Theme(QObject):
         return COLORS["warm_accent"]
 
     @Property(str, constant=True)
+    def line(self) -> str:
+        return COLORS["line"]
+
+    @Property(str, constant=True)
+    def line2(self) -> str:
+        return COLORS["line_2"]
+
+    @Property(str, constant=True)
     def ink(self) -> str:
         return COLORS["ink"]
 
     @Property(str, constant=True)
     def inkMuted(self) -> str:
         return COLORS["ink_muted"]
+
+    @Property(str, constant=True)
+    def ink2(self) -> str:
+        return COLORS["ink_2"]
+
+    @Property(str, constant=True)
+    def ink3(self) -> str:
+        return COLORS["ink_3"]
 
     @Property(str, constant=True)
     def accent(self) -> str:
@@ -146,8 +184,24 @@ class Theme(QObject):
         return FONTS["display"]
 
     @Property(str, constant=True)
+    def serifFont(self) -> str:
+        return FONTS["serif"]
+
+    @Property(str, constant=True)
+    def sansFont(self) -> str:
+        return FONTS["sans"]
+
+    @Property(str, constant=True)
     def bodyFont(self) -> str:
         return FONTS["body"]
+
+    @Property(str, constant=True)
+    def monoFont(self) -> str:
+        return FONTS["mono"]
+
+    @Property(int, constant=True)
+    def spacingXs(self) -> int:
+        return SPACING["xs"]
 
     @Property(int, constant=True)
     def spacingSm(self) -> int:
@@ -166,6 +220,10 @@ class Theme(QObject):
         return SPACING["xl"]
 
     @Property(int, constant=True)
+    def spacingXxl(self) -> int:
+        return SPACING["xxl"]
+
+    @Property(int, constant=True)
     def radiusSm(self) -> int:
         return RADIUS["sm"]
 
@@ -176,6 +234,10 @@ class Theme(QObject):
     @Property(int, constant=True)
     def radiusLg(self) -> int:
         return RADIUS["lg"]
+
+    @Property(int, constant=True)
+    def radiusXl(self) -> int:
+        return RADIUS["xl"]
 
 
 __all__ = ["Theme", "COLORS", "FONTS", "SPACING", "RADIUS"]
