@@ -137,6 +137,12 @@ This installs Kassiber together with RP2, `embit`, PySide6, and the rest of the 
 
 `uv sync` is also supported and is used by the project's `uv.lock`.
 
+Contributor workflow lives in [CONTRIBUTING.md](CONTRIBUTING.md). Before pushing code or docs changes, run:
+
+```bash
+./scripts/quality-gate.sh
+```
+
 ## JSON envelope
 
 Every command accepts `--machine` (or `--format json`) and emits a deterministic envelope:
