@@ -1,0 +1,78 @@
+{
+  "account_holdings": [
+    {
+      "account_code": "treasury",
+      "account_id": "account-treasury",
+      "account_label": "Treasury",
+      "asset": "BTC",
+      "cost_basis": 25500.0,
+      "quantity": 1.2
+    }
+  ],
+  "cross_asset_pairs": [],
+  "entries": [
+    {
+      "account_id": "account-treasury",
+      "asset": "BTC",
+      "cost_basis": null,
+      "description": "at_regime=alt at_pool=wallet-a Vienna Alt buy",
+      "entry_type": "acquisition",
+      "fiat_value": 4500.0,
+      "gain_loss": null,
+      "occurred_at": "2020-05-01T10:00:00Z",
+      "proceeds": null,
+      "profile_id": "profile-at",
+      "quantity": 0.5,
+      "transaction_id": "alt-buy-1",
+      "unit_cost": 9000.0,
+      "wallet_id": "wallet-a",
+      "workspace_id": "workspace-main"
+    },
+    {
+      "account_id": "account-treasury",
+      "asset": "BTC",
+      "cost_basis": null,
+      "description": "at_regime=neu at_pool=wallet-a Vienna Neu buy",
+      "entry_type": "acquisition",
+      "fiat_value": 30000.0,
+      "gain_loss": null,
+      "occurred_at": "2024-06-01T10:00:00Z",
+      "proceeds": null,
+      "profile_id": "profile-at",
+      "quantity": 1.0,
+      "transaction_id": "neu-buy-1",
+      "unit_cost": 30000.0,
+      "wallet_id": "wallet-a",
+      "workspace_id": "workspace-main"
+    },
+    {
+      "account_id": "account-treasury",
+      "asset": "BTC",
+      "cost_basis": 9000.0,
+      "description": "at_regime=neu at_pool=wallet-a Vienna Neu sell",
+      "entry_type": "disposal",
+      "fiat_value": 15000.0,
+      "gain_loss": 6000.0,
+      "occurred_at": "2025-03-01T09:00:00Z",
+      "proceeds": 15000.0,
+      "profile_id": "profile-at",
+      "quantity": -0.3,
+      "transaction_id": "neu-sell-1",
+      "unit_cost": 0.0,
+      "wallet_id": "wallet-a",
+      "workspace_id": "workspace-main"
+    }
+  ],
+  "intra_audit": [],
+  "quarantines": [],
+  "wallet_holdings": [
+    {
+      "account_code": "treasury",
+      "asset": "BTC",
+      "cost_basis": 25500.0,
+      "quantity": 1.2,
+      "wallet_id": "wallet-a",
+      "wallet_label": "Vienna"
+    }
+  ]
+}
