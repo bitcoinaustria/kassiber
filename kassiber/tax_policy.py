@@ -9,7 +9,7 @@ AUSTRIAN_TAX_COUNTRY = "at"
 DEFAULT_LONG_TERM_DAYS = 365
 DEFAULT_REPORT_GENERATORS = ("open_positions", "rp2_full_report")
 DEFAULT_ACCOUNTING_METHODS = ("fifo", "lifo", "hifo", "lofo")
-ACTIVE_TAX_COUNTRIES = (DEFAULT_TAX_COUNTRY,)
+ACTIVE_TAX_COUNTRIES = (DEFAULT_TAX_COUNTRY, AUSTRIAN_TAX_COUNTRY)
 
 
 @dataclass(frozen=True)
@@ -99,17 +99,6 @@ def require_tax_country_supported_for_profile_mutation(value):
     country = normalize_tax_country(value)
     if country in ACTIVE_TAX_COUNTRIES:
         return country
-    if country == AUSTRIAN_TAX_COUNTRY:
-        raise AppError(
-            "Austrian tax profiles are currently unavailable in Kassiber.",
-            code="unsupported",
-            hint=(
-                "Use `--tax-country generic` for the active RP2-backed path. "
-                "Future Austrian support will land through the Kassiber-maintained RP2 fork at "
-                "`bitcoinaustria/rp2`."
-            ),
-            details={"tax_country": country, "planned_engine": "bitcoinaustria/rp2"},
-        )
     raise AppError(
         f"Unsupported tax country '{value}'",
         code="validation",
@@ -119,19 +108,8 @@ def require_tax_country_supported_for_profile_mutation(value):
 
 def require_tax_processing_supported(profile):
     country = normalize_tax_country(profile_value(profile, "tax_country"))
-    if country == DEFAULT_TAX_COUNTRY:
+    if country in ACTIVE_TAX_COUNTRIES:
         return
-    if country == AUSTRIAN_TAX_COUNTRY:
-        raise AppError(
-            "Austrian tax processing is currently unavailable in Kassiber.",
-            code="unsupported",
-            hint=(
-                "Use `tax_country=generic` for the active RP2-backed path. "
-                "Future Austrian support will land through the Kassiber-maintained RP2 fork at "
-                "`bitcoinaustria/rp2`."
-            ),
-            details={"tax_country": country, "planned_engine": "bitcoinaustria/rp2"},
-        )
     raise AppError(
         f"Unsupported tax country '{country}'",
         code="validation",

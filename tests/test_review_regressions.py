@@ -312,11 +312,11 @@ class ReviewRegressionTest(unittest.TestCase):
         conn.commit()
         conn.close()
 
-    def _assert_austrian_unsupported(self, payload):
-        self.assertEqual(payload.get("kind"), "error")
-        self.assertEqual(payload["error"]["code"], "unsupported")
-        self.assertEqual(payload["error"]["details"]["tax_country"], "at")
-        self.assertIn("bitcoinaustria/rp2", payload["error"]["hint"])
+    def _assert_austrian_policy(self, payload):
+        """AT profiles inherit defaults from rp2's `AT` country plugin."""
+        self.assertEqual(payload["data"]["tax_country"], "at")
+        self.assertEqual(payload["data"]["fiat_currency"], "EUR")
+        self.assertEqual(payload["data"]["gains_algorithm"], "MOVING_AVERAGE_AT")
 
     def test_command_needs_db_skips_static_command_surfaces(self):
         self.assertFalse(command_needs_db(Namespace(command="backends", backends_command="kinds")))
@@ -1764,21 +1764,29 @@ class ReviewRegressionTest(unittest.TestCase):
         expected = self._load_fixture("generic_rp2_engine_snapshot.json")
         self.assertEqual(actual, expected)
 
-    def test_build_tax_engine_rejects_austrian_profile(self):
+    def test_build_tax_engine_accepts_austrian_profile_and_routes_to_rp2_at(self):
         profile = {
-            "id": "profile-austrian-disabled",
+            "id": "profile-at",
             "workspace_id": "workspace-main",
-            "label": "FixtureAustrianDisabled",
+            "label": "FixtureAustrian",
             "fiat_currency": "EUR",
             "tax_country": "at",
             "tax_long_term_days": 365,
-            "gains_algorithm": "FIFO",
+            "gains_algorithm": "moving_average_at",
         }
-        with self.assertRaises(AppError) as exc:
-            build_tax_engine(profile)
-        self.assertEqual(exc.exception.code, "unsupported")
-        self.assertEqual(exc.exception.details["tax_country"], "at")
-        self.assertIn("bitcoinaustria/rp2", exc.exception.hint)
+        engine = build_tax_engine(profile)
+        self.assertIsNotNone(engine)
+        # Policy should reflect rp2's AT plugin — moving_average_at default,
+        # de_AT language, AT-specific reports.
+        from kassiber.tax_policy import build_tax_policy
+
+        policy = build_tax_policy(profile)
+        self.assertEqual(policy.tax_country, "at")
+        self.assertEqual(policy.fiat_currency, "EUR")
+        self.assertEqual(policy.default_accounting_method, "moving_average_at")
+        self.assertIn("moving_average_at", policy.accounting_methods)
+        self.assertEqual(policy.generation_language, "de_AT")
+        self.assertIn("at.tax_report_at", policy.report_generators)
 
     def test_generic_rp2_engine_quarantines_unfunded_transfer(self):
         profile, _ = self._direct_transfer_engine_inputs()
@@ -2111,7 +2119,7 @@ class ReviewRegressionTest(unittest.TestCase):
         self.assertEqual(payload["data"]["env_file"], str(expected_root / "config" / "backends.env"))
         self.assertEqual(payload["data"]["default_backend"], "mempool")
 
-    def test_profiles_create_rejects_austrian_tax_country(self):
+    def test_profiles_create_accepts_austrian_tax_country(self):
         payload, result = self._run_json("init")
         self._assert_ok(payload, result, "init")
         payload, result = self._run_json("workspaces", "create", "Main")
@@ -2119,29 +2127,28 @@ class ReviewRegressionTest(unittest.TestCase):
         payload, result = self._run_json(
             "profiles", "create",
             "--workspace", "Main",
-            "--fiat-currency", "USD",
             "--tax-country", "at",
-            "--tax-long-term-days", "999",
-            "--gains-algorithm", "HIFO",
+            "--gains-algorithm", "MOVING_AVERAGE_AT",
             "Austrian",
         )
-        self.assertNotEqual(result.returncode, 0, msg=payload)
-        self._assert_austrian_unsupported(payload)
+        self._assert_ok(payload, result, "profiles.create")
+        self._assert_austrian_policy(payload)
 
-    def test_profiles_set_rejects_switching_to_austrian_tax_country(self):
+    def test_profiles_set_accepts_switching_to_austrian_tax_country(self):
         self._bootstrap_profile()
         payload, result = self._run_json(
             "profiles", "set",
             "--workspace", "Main",
             "--profile", "Default",
             "--tax-country", "at",
+            "--gains-algorithm", "MOVING_AVERAGE_AT",
         )
-        self.assertNotEqual(result.returncode, 0, msg=payload)
-        self._assert_austrian_unsupported(payload)
+        self._assert_ok(payload, result, "profiles.set")
+        self._assert_austrian_policy(payload)
 
-    def test_legacy_austrian_profile_journals_process_fails_fast(self):
-        self._bootstrap_wallet(label="LegacyAT")
-        json_file = self.case_dir / "legacy-austrian-import.json"
+    def test_austrian_profile_journals_process_succeeds(self):
+        self._bootstrap_wallet(label="AustrianJournal")
+        json_file = self.case_dir / "austrian-import.json"
         json_file.write_text(
             json.dumps(
                 [
@@ -2152,7 +2159,7 @@ class ReviewRegressionTest(unittest.TestCase):
                         "amount": "0.001",
                         "fee": "0",
                         "kind": "buy",
-                        "txid": "legacy-at-demo",
+                        "txid": "at-demo",
                         "fiat_value": "40",
                     }
                 ]
@@ -2163,63 +2170,75 @@ class ReviewRegressionTest(unittest.TestCase):
             "wallets", "import-json",
             "--workspace", "Main",
             "--profile", "Default",
-            "--wallet", "LegacyAT",
+            "--wallet", "AustrianJournal",
             "--file", str(json_file),
         )
         self._assert_ok(payload, result, "wallets.import-json")
         self._set_profile_tax_country("Default", "at")
-
         payload, result = self._run_json(
-            "journals", "process",
+            "profiles", "set",
             "--workspace", "Main",
             "--profile", "Default",
+            "--gains-algorithm", "MOVING_AVERAGE_AT",
         )
-        self.assertNotEqual(result.returncode, 0, msg=payload)
-        self._assert_austrian_unsupported(payload)
+        self._assert_ok(payload, result, "profiles.set")
 
-    def test_legacy_austrian_profile_reports_fail_fast_even_with_fresh_generic_journals(self):
-        self._bootstrap_wallet(label="LegacyReport")
-        json_file = self.case_dir / "legacy-austrian-report-import.json"
-        json_file.write_text(
-            json.dumps(
-                [
-                    {
-                        "date": "2024-01-01",
-                        "direction": "inbound",
-                        "asset": "BTC",
-                        "amount": "0.001",
-                        "fee": "0",
-                        "kind": "buy",
-                        "txid": "legacy-at-report-demo",
-                        "fiat_value": "40",
-                    }
-                ]
-            ),
-            encoding="utf-8",
-        )
-        payload, result = self._run_json(
-            "wallets", "import-json",
-            "--workspace", "Main",
-            "--profile", "Default",
-            "--wallet", "LegacyReport",
-            "--file", str(json_file),
-        )
-        self._assert_ok(payload, result, "wallets.import-json")
         payload, result = self._run_json(
             "journals", "process",
             "--workspace", "Main",
             "--profile", "Default",
         )
         self._assert_ok(payload, result, "journals.process")
+
+    def test_austrian_profile_reports_capital_gains_succeeds(self):
+        self._bootstrap_wallet(label="AustrianReport")
+        json_file = self.case_dir / "austrian-report-import.json"
+        json_file.write_text(
+            json.dumps(
+                [
+                    {
+                        "date": "2024-01-01",
+                        "direction": "inbound",
+                        "asset": "BTC",
+                        "amount": "0.001",
+                        "fee": "0",
+                        "kind": "buy",
+                        "txid": "at-report-demo",
+                        "fiat_value": "40",
+                    }
+                ]
+            ),
+            encoding="utf-8",
+        )
+        payload, result = self._run_json(
+            "wallets", "import-json",
+            "--workspace", "Main",
+            "--profile", "Default",
+            "--wallet", "AustrianReport",
+            "--file", str(json_file),
+        )
+        self._assert_ok(payload, result, "wallets.import-json")
         self._set_profile_tax_country("Default", "at")
+        payload, result = self._run_json(
+            "profiles", "set",
+            "--workspace", "Main",
+            "--profile", "Default",
+            "--gains-algorithm", "MOVING_AVERAGE_AT",
+        )
+        self._assert_ok(payload, result, "profiles.set")
+        payload, result = self._run_json(
+            "journals", "process",
+            "--workspace", "Main",
+            "--profile", "Default",
+        )
+        self._assert_ok(payload, result, "journals.process")
 
         payload, result = self._run_json(
             "reports", "capital-gains",
             "--workspace", "Main",
             "--profile", "Default",
         )
-        self.assertNotEqual(result.returncode, 0, msg=payload)
-        self._assert_austrian_unsupported(payload)
+        self._assert_ok(payload, result, "reports.capital-gains")
 
     def test_attachments_verify_reports_missing_file(self):
         self._bootstrap_wallet(label="Attachable")
