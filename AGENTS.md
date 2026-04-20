@@ -16,8 +16,7 @@
   - [kassiber/backends.py](kassiber/backends.py) — dotenv (`config/backends.env`) seed + DB overlay for named sync backends, plus CRUD helpers.
   - [kassiber/cli/handlers.py](kassiber/cli/handlers.py) — remaining CLI command handlers and compatibility-layer imports while deeper decomposition continues.
   - [kassiber/core/attachments.py](kassiber/core/attachments.py) — transaction attachment storage, URL-reference handling, integrity verification, and orphan-file GC for the managed attachment tree.
-  - [kassiber/core/engines/__init__.py](kassiber/core/engines/__init__.py) — tax-engine interface/resolver; today selects the generic RP2 engine or the experimental Austrian path by profile tax policy, with the long-term direction being a single RP2-backed adapter.
-  - [kassiber/core/engines/austria.py](kassiber/core/engines/austria.py) — transitional Austrian ledger builder on the shared engine seam; it processes supported flows conservatively while Austrian tax semantics migrate toward the Kassiber-maintained RP2 fork.
+  - [kassiber/core/engines/__init__.py](kassiber/core/engines/__init__.py) — tax-engine interface/resolver; today only the generic RP2 path is active, while Austrian processing stays disabled until it lands through the Kassiber-maintained RP2 fork.
   - [kassiber/core/tax_events.py](kassiber/core/tax_events.py) — in-memory normalization seam between raw transaction rows and tax-engine inputs, including early quarantine classification for under-specified tax semantics.
   - [kassiber/core/sync.py](kassiber/core/sync.py) — wallet sync orchestration above backend-specific transport details.
   - [kassiber/core/sync_backends.py](kassiber/core/sync_backends.py) — descriptor target discovery plus `esplora`, `electrum`, and `bitcoinrpc` live-sync adapters.
@@ -61,7 +60,6 @@ Kassiber is currently in **dev mode**: renaming commands, breaking flags, and re
 - BTCPay CSV/JSON imports become transactions, with comments mapped to notes and labels mapped to tags.
 - Transaction attachments are stored in a managed `attachments/` state sibling; file attachments are copied locally and URL attachments remain literal strings with no fetching or indexing.
 - Profile-level tax defaults are stored on `profiles` as `fiat_currency`, `tax_country`, `tax_long_term_days`, and `gains_algorithm`.
-- Wallet-level tax provenance stays in `wallets.config_json`, including the manual `altbestand` flag.
 
 ## Command surface
 
@@ -69,7 +67,7 @@ Kassiber is currently in **dev mode**: renaming commands, breaking flags, and re
 - `workspaces {list,create}`
 - `profiles {list,create,get,set}`
 - `accounts {list,create}`
-- `wallets {kinds,list,create,get,update,delete,sync,derive,set-altbestand,set-neubestand,import-json,import-csv,import-btcpay,import-phoenix}`
+- `wallets {kinds,list,create,get,update,delete,sync,derive,import-json,import-csv,import-btcpay,import-phoenix}`
 - `backends {kinds,list,get,create,update,delete,set-default,clear-default}`
 - `transactions {list}`
 - `attachments {add,list,remove,verify,gc}`
@@ -86,7 +84,7 @@ List endpoints with `--limit` also accept `--cursor`. The cursor is an opaque ba
 
 ## Tax engine
 
-- The tax engine now goes through `kassiber/core/engines.build_tax_engine(...)`; today the generic path runs through `kassiber/core/engines/rp2.py`, while the Austrian path remains transitional and is expected to converge on the same RP2-backed seam.
+- The tax engine now goes through `kassiber/core/engines.build_tax_engine(...)`; today only the generic path runs through `kassiber/core/engines/rp2.py`.
 - Journal processing first normalizes raw transaction rows into in-memory tax events via `kassiber/core/tax_events.py`; raw `transactions` rows remain the source of truth and no derived regime state is persisted back onto them.
 - Under-specified tax semantics that used to fall through raw-row handling should quarantine at the normalization boundary instead of being guessed. That includes malformed same-asset transfers, missing required pricing, and unsupported tax directions.
 - The generic RP2 engine now owns the per-profile journal orchestration behind the engine seam: transfer detection, manual-pair application, per-asset grouping, normalized event preparation, and holdings aggregation all live in `kassiber/core/engines/rp2.py`, while CLI handlers only load rows and persist the resulting journal state.
@@ -98,8 +96,7 @@ List endpoints with `--limit` also accept `--cursor`. The cursor is an opaque ba
 - Liquid peg-in/peg-out detection must not lean on hardcoded federation addresses (per-claim tweaked, federation keys rotate). Use the manual pair CLI or non-address heuristics (time + amount + direction inversion + same-profile constraint) instead.
 - Per-wallet portfolio rows show that wallet's residual quantity at the asset's average residual basis — an allocation, not a physical-lot answer.
 - Supported lot selection: `FIFO`, `LIFO`, `HIFO`, `LOFO`.
-- Profiles expose the RP2 `generic` tax policy and an explicitly experimental Austrian `at` policy registration. Austrian profiles normalize to EUR, keep the legacy `tax_long_term_days` field shape for `Altbestand`, and pin the legacy `gains_algorithm` field to `FIFO`. Supported Austrian journal flows still process through `kassiber/core/engines/austria.py` today, but that path is transitional: long-term Austrian tax semantics should move into the Kassiber-maintained RP2 fork while Kassiber keeps normalization, provenance capture, transfer preparation, and review-gated reporting on top. Austrian JSON report envelopes carry top-level `experimental` / `review_required` markers so automation does not lose the review gate after journals are processed.
-- Wallets can be flagged manually as `Altbestand`; disposals from those wallets are treated as tax-free while Neubestand wallets use normal tax treatment.
+- Profiles expose the RP2 `generic` tax policy as the only active processing mode. Austrian tax support is planned in the Kassiber-maintained RP2 fork; until that lands, Austrian profiles should fail fast for journal processing and reports instead of running Kassiber-side tax math.
 - Journals must be reprocessed after any transaction, metadata, or exclusion change before reports are trusted.
 - Transactions without usable fiat pricing are quarantined during journal processing instead of receiving zero-basis tax treatment.
 
@@ -110,7 +107,7 @@ List endpoints with `--limit` also accept `--cursor`. The cursor is an opaque ba
 - Keep `--machine` output deterministic — add a `kind` to every new envelope.
 - Keep envelope error shapes consistent: use `AppError(code=..., hint=..., retryable=..., details=...)`.
 - Per-asset pooling is intentional so RP2 `IntraTransaction` works across wallets; per-wallet output remains via `BalanceSet`. Do not regress to per-wallet RP2 calls without thinking through the transfer story first.
-- Keep wallet-level `Altbestand` handling separate from profile-level country policy unless there is a deliberate migration plan.
+- Do not reintroduce Austrian-only tax computation or metadata semantics into Kassiber while the RP2-fork path is still unavailable.
 - Preserve the default `mempool.space` Esplora backend unless there is a strong reason to change it.
 - Prefer additive schema changes that work with `CREATE TABLE IF NOT EXISTS`.
 - Prefer lightweight compatibility migrations for existing SQLite databases when adding profile fields.
@@ -174,12 +171,10 @@ uv run python -m kassiber ui --help
   - create a temp data root via `--data-root /tmp/smoke/data`
   - `init`, then create workspace/profile/wallet and seed transactions
   - verify `profiles list` shows `tax_country` and `tax_long_term_days`
-  - optionally mark a wallet as `Altbestand`
   - import priced CSV, BTCPay CSV, or Phoenix CSV
   - import BIP329 JSONL
   - process journals
   - run each report, including `reports balance-history --interval month`
-  - if testing `Altbestand`, verify capital gains are zeroed for that wallet and return after `set-neubestand`
   - exercise the rates cache: `rates pairs`, `rates set BTC-USD <ts> <rate>`, `rates latest BTC-USD`, `rates range BTC-USD --start <ts>`; optionally `rates sync --pair BTC-USD --days 7` when network access is acceptable
 
 ## Known gaps
@@ -195,4 +190,4 @@ uv run python -m kassiber ui --help
 - No BTCPay Greenfield API yet.
 - No Lightning node adapters yet (`coreln`, `lnd`, `nwc` kinds are declared but do not sync).
 - No REST/server mode or multi-user auth yet.
-- Austrian journal processing exists for supported acquisitions, disposals, and self-transfers, but the path remains experimental, quarantines unclear provenance, keeps report envelopes visibly experimental, and does not yet ship E 1kv export.
+- Austrian tax processing is unavailable in Kassiber until the RP2-backed path lands in `bitcoinaustria/rp2`; `generic` is the only supported tax-processing mode today.

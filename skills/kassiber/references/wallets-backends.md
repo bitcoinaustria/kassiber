@@ -114,13 +114,10 @@ kassiber wallets import-csv --wallet wallet-name --file /path/to/data.csv
 
 Do not create a second wallet for a BTCPay or Phoenix export when it belongs to a wallet already tracked in Kassiber.
 
-## Wallet provenance
+## Austrian profiles
 
-`Altbestand` is set per wallet:
+Kassiber does not currently expose Austrian-specific wallet provenance controls.
 
-```bash
-kassiber wallets set-altbestand --wallet satoshi-btc-alt
-kassiber wallets set-neubestand --wallet satoshi-btc-alt
-```
-
-Use separate wallet records when a user needs clean Altbestand versus Neubestand tracking.
+If the user asks about Austrian tax handling, explain that Austrian tax
+processing is unavailable in Kassiber today and is planned through the
+Kassiber-maintained RP2 fork at `bitcoinaustria/rp2`.

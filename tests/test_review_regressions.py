@@ -11,6 +11,7 @@ from pathlib import Path
 
 from kassiber.cli.main import command_needs_db
 from kassiber.core.engines import TaxEngineLedgerInputs, build_tax_engine
+from kassiber.errors import AppError
 
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -302,6 +303,21 @@ class ReviewRegressionTest(unittest.TestCase):
         payload, result = self._run_json("profiles", "create", "--workspace", "Main", profile_label)
         self._assert_ok(payload, result, "profiles.create")
 
+    def _set_profile_tax_country(self, profile_label, tax_country):
+        conn = sqlite3.connect(self.data_root / "kassiber.sqlite3")
+        conn.execute(
+            "UPDATE profiles SET tax_country = ? WHERE label = ?",
+            (tax_country, profile_label),
+        )
+        conn.commit()
+        conn.close()
+
+    def _assert_austrian_unsupported(self, payload):
+        self.assertEqual(payload.get("kind"), "error")
+        self.assertEqual(payload["error"]["code"], "unsupported")
+        self.assertEqual(payload["error"]["details"]["tax_country"], "at")
+        self.assertIn("bitcoinaustria/rp2", payload["error"]["hint"])
+
     def test_command_needs_db_skips_static_command_surfaces(self):
         self.assertFalse(command_needs_db(Namespace(command="backends", backends_command="kinds")))
         self.assertFalse(command_needs_db(Namespace(command="wallets", wallets_command="kinds")))
@@ -383,6 +399,49 @@ class ReviewRegressionTest(unittest.TestCase):
         self.assertEqual(len(payload["data"]), 1)
         self.assertEqual(payload["data"][0]["label"], "Ops")
         self.assertEqual(payload["data"][0]["account"], "cash-ops")
+
+    def test_wallets_update_preserves_legacy_altbestand_config(self):
+        self._bootstrap_wallet(label="LegacyWallet", kind="custom")
+
+        db_path = self.data_root / "kassiber.sqlite3"
+        conn = sqlite3.connect(db_path)
+        wallet = conn.execute(
+            "SELECT id, config_json FROM wallets WHERE label = 'LegacyWallet'"
+        ).fetchone()
+        config = json.loads(wallet[1])
+        config["altbestand"] = True
+        conn.execute(
+            "UPDATE wallets SET config_json = ? WHERE id = ?",
+            (json.dumps(config, sort_keys=True), wallet[0]),
+        )
+        conn.commit()
+        conn.close()
+
+        payload, result = self._run_json(
+            "wallets", "get",
+            "--workspace", "Main",
+            "--profile", "Default",
+            "--wallet", "LegacyWallet",
+        )
+        self._assert_ok(payload, result, "wallets.get")
+        self.assertTrue(payload["data"]["config"]["altbestand"])
+
+        payload, result = self._run_json(
+            "wallets", "update",
+            "--workspace", "Main",
+            "--profile", "Default",
+            "--wallet", "LegacyWallet",
+            "--label", "LegacyWalletRenamed",
+        )
+        self._assert_ok(payload, result, "wallets.update")
+        self.assertTrue(payload["data"]["config"]["altbestand"])
+
+        conn = sqlite3.connect(db_path)
+        stored = conn.execute(
+            "SELECT config_json FROM wallets WHERE label = 'LegacyWalletRenamed'"
+        ).fetchone()[0]
+        conn.close()
+        self.assertTrue(json.loads(stored)["altbestand"])
 
     def test_custom_env_file_backend_overlay_and_default_roundtrip(self):
         env_file = self.case_dir / "custom-backends.env"
@@ -1059,7 +1118,6 @@ class ReviewRegressionTest(unittest.TestCase):
                 "wallet_account_id": "account-treasury",
                 "account_code": "treasury",
                 "account_label": "Treasury",
-                "altbestand": False,
             },
             "wallet-hot": {
                 "id": "wallet-hot",
@@ -1067,7 +1125,6 @@ class ReviewRegressionTest(unittest.TestCase):
                 "wallet_account_id": "account-treasury",
                 "account_code": "treasury",
                 "account_label": "Treasury",
-                "altbestand": False,
             },
         }
         rows = [
@@ -1155,7 +1212,6 @@ class ReviewRegressionTest(unittest.TestCase):
                 "wallet_account_id": "account-treasury",
                 "account_code": "treasury",
                 "account_label": "Treasury",
-                "altbestand": False,
             },
         }
         rows = [
@@ -1223,7 +1279,6 @@ class ReviewRegressionTest(unittest.TestCase):
                 "wallet_account_id": "account-treasury",
                 "account_code": "treasury",
                 "account_label": "Treasury",
-                "altbestand": False,
             },
             "wallet-liquid": {
                 "id": "wallet-liquid",
@@ -1231,7 +1286,6 @@ class ReviewRegressionTest(unittest.TestCase):
                 "wallet_account_id": "account-treasury",
                 "account_code": "treasury",
                 "account_label": "Treasury",
-                "altbestand": False,
             },
         }
         rows = [
@@ -1308,182 +1362,6 @@ class ReviewRegressionTest(unittest.TestCase):
                     "policy": "taxable",
                 },
             ],
-        )
-
-    def _direct_austrian_fifo_engine_inputs(self):
-        profile = {
-            "id": "profile-austrian-fifo",
-            "workspace_id": "workspace-main",
-            "label": "FixtureAustrian",
-            "fiat_currency": "EUR",
-            "tax_country": "at",
-            "tax_long_term_days": 365,
-            "gains_algorithm": "FIFO",
-        }
-        wallet_refs_by_id = {
-            "wallet-main": {
-                "id": "wallet-main",
-                "label": "Main",
-                "wallet_account_id": "account-treasury",
-                "account_code": "treasury",
-                "account_label": "Treasury",
-                "altbestand": False,
-            },
-        }
-        rows = [
-            {
-                "id": "at-buy-1",
-                "wallet_id": "wallet-main",
-                "wallet_label": "Main",
-                "wallet_account_id": "account-treasury",
-                "account_code": "treasury",
-                "account_label": "Treasury",
-                "occurred_at": "2022-04-01T10:00:00Z",
-                "direction": "inbound",
-                "asset": "BTC",
-                "amount": 100_000_000_000,
-                "fee": 0,
-                "fiat_rate": 35000,
-                "fiat_value": 35000,
-                "kind": "buy",
-                "description": "Buy 1",
-                "note": None,
-                "external_id": "at-buy-1",
-                "created_at": "2022-04-01T10:00:00Z",
-            },
-            {
-                "id": "at-buy-2",
-                "wallet_id": "wallet-main",
-                "wallet_label": "Main",
-                "wallet_account_id": "account-treasury",
-                "account_code": "treasury",
-                "account_label": "Treasury",
-                "occurred_at": "2022-08-01T10:00:00Z",
-                "direction": "inbound",
-                "asset": "BTC",
-                "amount": 100_000_000_000,
-                "fee": 0,
-                "fiat_rate": 20000,
-                "fiat_value": 20000,
-                "kind": "buy",
-                "description": "Buy 2",
-                "note": None,
-                "external_id": "at-buy-2",
-                "created_at": "2022-08-01T10:00:00Z",
-            },
-            {
-                "id": "at-sell-1",
-                "wallet_id": "wallet-main",
-                "wallet_label": "Main",
-                "wallet_account_id": "account-treasury",
-                "account_code": "treasury",
-                "account_label": "Treasury",
-                "occurred_at": "2022-11-01T10:00:00Z",
-                "direction": "outbound",
-                "asset": "BTC",
-                "amount": 150_000_000_000,
-                "fee": 0,
-                "fiat_rate": 25000,
-                "fiat_value": 37500,
-                "kind": "sell",
-                "description": "Sell 1.5",
-                "note": None,
-                "external_id": "at-sell-1",
-                "created_at": "2022-11-01T10:00:00Z",
-            },
-        ]
-        return profile, TaxEngineLedgerInputs(
-            rows=rows,
-            wallet_refs_by_id=wallet_refs_by_id,
-            manual_pair_records=[],
-        )
-
-    def _direct_austrian_moving_average_engine_inputs(self):
-        profile = {
-            "id": "profile-austrian-avg",
-            "workspace_id": "workspace-main",
-            "label": "FixtureAustrianAvg",
-            "fiat_currency": "EUR",
-            "tax_country": "at",
-            "tax_long_term_days": 365,
-            "gains_algorithm": "FIFO",
-        }
-        wallet_refs_by_id = {
-            "wallet-main": {
-                "id": "wallet-main",
-                "label": "Main",
-                "wallet_account_id": "account-treasury",
-                "account_code": "treasury",
-                "account_label": "Treasury",
-                "altbestand": False,
-            },
-        }
-        rows = [
-            {
-                "id": "at-avg-buy-1",
-                "wallet_id": "wallet-main",
-                "wallet_label": "Main",
-                "wallet_account_id": "account-treasury",
-                "account_code": "treasury",
-                "account_label": "Treasury",
-                "occurred_at": "2023-02-01T10:00:00Z",
-                "direction": "inbound",
-                "asset": "BTC",
-                "amount": 100_000_000_000,
-                "fee": 0,
-                "fiat_rate": 22000,
-                "fiat_value": 22000,
-                "kind": "buy",
-                "description": "Avg buy 1",
-                "note": None,
-                "external_id": "at-avg-buy-1",
-                "created_at": "2023-02-01T10:00:00Z",
-            },
-            {
-                "id": "at-avg-buy-2",
-                "wallet_id": "wallet-main",
-                "wallet_label": "Main",
-                "wallet_account_id": "account-treasury",
-                "account_code": "treasury",
-                "account_label": "Treasury",
-                "occurred_at": "2023-06-01T10:00:00Z",
-                "direction": "inbound",
-                "asset": "BTC",
-                "amount": 100_000_000_000,
-                "fee": 0,
-                "fiat_rate": 28000,
-                "fiat_value": 28000,
-                "kind": "buy",
-                "description": "Avg buy 2",
-                "note": None,
-                "external_id": "at-avg-buy-2",
-                "created_at": "2023-06-01T10:00:00Z",
-            },
-            {
-                "id": "at-avg-sell-1",
-                "wallet_id": "wallet-main",
-                "wallet_label": "Main",
-                "wallet_account_id": "account-treasury",
-                "account_code": "treasury",
-                "account_label": "Treasury",
-                "occurred_at": "2023-09-01T10:00:00Z",
-                "direction": "outbound",
-                "asset": "BTC",
-                "amount": 50_000_000_000,
-                "fee": 1_000_000_000,
-                "fiat_rate": 30000,
-                "fiat_value": 15000,
-                "kind": "sell",
-                "description": "Avg sell",
-                "note": None,
-                "external_id": "at-avg-sell-1",
-                "created_at": "2023-09-01T10:00:00Z",
-            },
-        ]
-        return profile, TaxEngineLedgerInputs(
-            rows=rows,
-            wallet_refs_by_id=wallet_refs_by_id,
-            manual_pair_records=[],
         )
 
     def _direct_engine_snapshot(self, profile, inputs):
@@ -1886,169 +1764,21 @@ class ReviewRegressionTest(unittest.TestCase):
         expected = self._load_fixture("generic_rp2_engine_snapshot.json")
         self.assertEqual(actual, expected)
 
-    def test_austrian_fifo_engine_snapshot_matches_fixture(self):
-        profile, inputs = self._direct_austrian_fifo_engine_inputs()
-        actual = self._direct_engine_snapshot(profile, inputs)
-        expected = self._load_fixture("austrian_fifo_engine_snapshot.json")
-        self.assertEqual(actual, expected)
-
-    def test_austrian_engine_quarantines_plain_inbound_deposit(self):
+    def test_build_tax_engine_rejects_austrian_profile(self):
         profile = {
-            "id": "profile-austrian-deposit",
+            "id": "profile-austrian-disabled",
             "workspace_id": "workspace-main",
-            "label": "FixtureAustrianDeposit",
+            "label": "FixtureAustrianDisabled",
             "fiat_currency": "EUR",
             "tax_country": "at",
             "tax_long_term_days": 365,
             "gains_algorithm": "FIFO",
         }
-        inputs = TaxEngineLedgerInputs(
-            rows=[
-                {
-                    "id": "at-deposit-1",
-                    "wallet_id": "wallet-main",
-                    "wallet_label": "Main",
-                    "wallet_account_id": "account-treasury",
-                    "account_code": "treasury",
-                    "account_label": "Treasury",
-                    "occurred_at": "2024-01-01T10:00:00Z",
-                    "direction": "inbound",
-                    "asset": "BTC",
-                    "amount": 100_000_000,
-                    "fee": 0,
-                    "fiat_rate": 40000,
-                    "fiat_value": 40,
-                    "kind": "deposit",
-                    "description": "Ambiguous inbound",
-                    "note": None,
-                    "external_id": "at-deposit-1",
-                    "created_at": "2024-01-01T10:00:00Z",
-                },
-            ],
-            wallet_refs_by_id={
-                "wallet-main": {
-                    "id": "wallet-main",
-                    "label": "Main",
-                    "wallet_account_id": "account-treasury",
-                    "account_code": "treasury",
-                    "account_label": "Treasury",
-                    "altbestand": False,
-                },
-            },
-            manual_pair_records=[],
-        )
-        state = build_tax_engine(profile).build_ledger_state(inputs)
-        self.assertEqual(state.entries, [])
-        quarantine = _normalize_quarantines(state.quarantines)[0]
-        self.assertEqual(quarantine["reason"], "insufficient_tax_provenance")
-        self.assertEqual(quarantine["detail"]["kind"], "deposit")
-
-    def test_austrian_engine_uses_moving_average_and_nets_sale_fees(self):
-        profile, inputs = self._direct_austrian_moving_average_engine_inputs()
-        state = build_tax_engine(profile).build_ledger_state(inputs)
-        entries = _normalize_engine_entries(state.entries)
-        self.assertEqual([row["entry_type"] for row in entries], ["acquisition", "acquisition", "disposal"])
-        disposal = entries[-1]
-        self.assertEqual(disposal["description"], "Avg sell [Neuvermoegen moving average]")
-        self.assertEqual(disposal["quantity"], -0.51)
-        self.assertEqual(disposal["proceeds"], 14700.0)
-        self.assertEqual(disposal["cost_basis"], 12750.0)
-        self.assertEqual(disposal["gain_loss"], 1950.0)
-        wallet_holdings = _normalize_holdings(
-            state.wallet_holdings,
-            ("wallet_id", "wallet_label", "account_code", "asset"),
-        )
-        self.assertEqual(wallet_holdings[0]["quantity"], 1.49)
-        self.assertEqual(wallet_holdings[0]["cost_basis"], 37250.0)
-
-    def test_austrian_engine_processes_taxable_cross_asset_pairs_as_normal_legs(self):
-        profile, inputs = self._direct_cross_asset_pair_engine_inputs()
-        profile = {**profile, "fiat_currency": "EUR", "tax_country": "at"}
-        state = build_tax_engine(profile).build_ledger_state(inputs)
-        entries = _normalize_engine_entries(state.entries)
-        self.assertEqual(
-            [row["entry_type"] for row in entries],
-            ["acquisition", "disposal", "acquisition"],
-        )
-        self.assertEqual(entries[1]["transaction_id"], "cross-out-leg")
-        self.assertEqual(entries[2]["transaction_id"], "cross-in-leg")
-        self.assertEqual(_normalize_quarantines(state.quarantines), [])
-        self.assertEqual(len(state.cross_asset_pairs), 1)
-        self.assertEqual(state.cross_asset_pairs[0]["policy"], "taxable")
-
-    def test_austrian_engine_quarantines_ambiguous_outbound_withdrawal(self):
-        profile = {
-            "id": "profile-austria-withdrawal",
-            "workspace_id": "workspace-main",
-            "label": "FixtureAustriaWithdrawal",
-            "fiat_currency": "EUR",
-            "tax_country": "at",
-            "tax_long_term_days": 365,
-            "gains_algorithm": "FIFO",
-        }
-        inputs = TaxEngineLedgerInputs(
-            rows=[
-                {
-                    "id": "fund-buy",
-                    "wallet_id": "wallet-main",
-                    "wallet_label": "Main",
-                    "wallet_account_id": "account-treasury",
-                    "account_code": "treasury",
-                    "account_label": "Treasury",
-                    "occurred_at": "2024-01-01T10:00:00Z",
-                    "direction": "inbound",
-                    "asset": "BTC",
-                    "amount": 50_000_000_000,
-                    "fee": 0,
-                    "fiat_rate": 40000,
-                    "fiat_value": 20000,
-                    "kind": "buy",
-                    "description": "Seed buy",
-                    "note": None,
-                    "external_id": "fund-buy",
-                    "created_at": "2024-01-01T10:00:00Z",
-                },
-                {
-                    "id": "ambiguous-withdrawal",
-                    "wallet_id": "wallet-main",
-                    "wallet_label": "Main",
-                    "wallet_account_id": "account-treasury",
-                    "account_code": "treasury",
-                    "account_label": "Treasury",
-                    "occurred_at": "2024-01-10T10:00:00Z",
-                    "direction": "outbound",
-                    "asset": "BTC",
-                    "amount": 10_000_000_000,
-                    "fee": 0,
-                    "fiat_rate": 42000,
-                    "fiat_value": 4200,
-                    "kind": "withdrawal",
-                    "description": "Synced withdrawal",
-                    "note": None,
-                    "external_id": "ambiguous-withdrawal",
-                    "created_at": "2024-01-10T10:00:00Z",
-                },
-            ],
-            wallet_refs_by_id={
-                "wallet-main": {
-                    "id": "wallet-main",
-                    "label": "Main",
-                    "wallet_account_id": "account-treasury",
-                    "account_code": "treasury",
-                    "account_label": "Treasury",
-                    "altbestand": False,
-                },
-            },
-            manual_pair_records=[],
-        )
-        state = build_tax_engine(profile).build_ledger_state(inputs)
-        entries = _normalize_engine_entries(state.entries)
-        self.assertEqual([row["entry_type"] for row in entries], ["acquisition"])
-        quarantine = _normalize_quarantines(state.quarantines)[0]
-        self.assertEqual(quarantine["transaction_id"], "ambiguous-withdrawal")
-        self.assertEqual(quarantine["reason"], "insufficient_tax_provenance")
-        self.assertEqual(quarantine["detail"]["kind"], "withdrawal")
-        self.assertEqual(quarantine["detail"]["direction"], "outbound")
+        with self.assertRaises(AppError) as exc:
+            build_tax_engine(profile)
+        self.assertEqual(exc.exception.code, "unsupported")
+        self.assertEqual(exc.exception.details["tax_country"], "at")
+        self.assertIn("bitcoinaustria/rp2", exc.exception.hint)
 
     def test_generic_rp2_engine_quarantines_unfunded_transfer(self):
         profile, _ = self._direct_transfer_engine_inputs()
@@ -2102,7 +1832,6 @@ class ReviewRegressionTest(unittest.TestCase):
                     "wallet_account_id": "account-treasury",
                     "account_code": "treasury",
                     "account_label": "Treasury",
-                    "altbestand": False,
                 },
                 "wallet-hot": {
                     "id": "wallet-hot",
@@ -2110,7 +1839,6 @@ class ReviewRegressionTest(unittest.TestCase):
                     "wallet_account_id": "account-treasury",
                     "account_code": "treasury",
                     "account_label": "Treasury",
-                    "altbestand": False,
                 },
             },
             manual_pair_records=[],
@@ -2119,58 +1847,6 @@ class ReviewRegressionTest(unittest.TestCase):
         self.assertEqual(state.entries, [])
         self.assertEqual(len(state.quarantines), 1)
         self.assertEqual(state.quarantines[0]["reason"], "insufficient_lots")
-
-    def test_austrian_engine_quarantines_unsupported_inbound_kind(self):
-        profile = {
-            "id": "profile-austrian-quarantine",
-            "workspace_id": "workspace-main",
-            "label": "FixtureAustrianQuarantine",
-            "fiat_currency": "EUR",
-            "tax_country": "at",
-            "tax_long_term_days": 365,
-            "gains_algorithm": "FIFO",
-        }
-        inputs = TaxEngineLedgerInputs(
-            rows=[
-                {
-                    "id": "at-income-1",
-                    "wallet_id": "wallet-main",
-                    "wallet_label": "Main",
-                    "wallet_account_id": "account-treasury",
-                    "account_code": "treasury",
-                    "account_label": "Treasury",
-                    "occurred_at": "2024-01-01T10:00:00Z",
-                    "direction": "inbound",
-                    "asset": "BTC",
-                    "amount": 1_000_000,
-                    "fee": 0,
-                    "fiat_rate": 40000,
-                    "fiat_value": 0.4,
-                    "kind": "lightning_received",
-                    "description": "Routing fee",
-                    "note": None,
-                    "external_id": "at-income-1",
-                    "created_at": "2024-01-01T10:00:00Z",
-                },
-            ],
-            wallet_refs_by_id={
-                "wallet-main": {
-                    "id": "wallet-main",
-                    "label": "Main",
-                    "wallet_account_id": "account-treasury",
-                    "account_code": "treasury",
-                    "account_label": "Treasury",
-                    "altbestand": False,
-                },
-            },
-            manual_pair_records=[],
-        )
-        state = build_tax_engine(profile).build_ledger_state(inputs)
-        self.assertEqual(state.entries, [])
-        self.assertEqual(len(state.quarantines), 1)
-        quarantine = _normalize_quarantines(state.quarantines)[0]
-        self.assertEqual(quarantine["reason"], "insufficient_tax_provenance")
-        self.assertEqual(quarantine["detail"]["kind"], "lightning_received")
 
     def test_missing_spot_price_snapshot_matches_fixture(self):
         self._bootstrap_wallet(label="MissingPrice")
@@ -2435,7 +2111,7 @@ class ReviewRegressionTest(unittest.TestCase):
         self.assertEqual(payload["data"]["env_file"], str(expected_root / "config" / "backends.env"))
         self.assertEqual(payload["data"]["default_backend"], "mempool")
 
-    def test_austrian_profile_registration_is_eur_and_processing_supported_flow(self):
+    def test_profiles_create_rejects_austrian_tax_country(self):
         payload, result = self._run_json("init")
         self._assert_ok(payload, result, "init")
         payload, result = self._run_json("workspaces", "create", "Main")
@@ -2449,128 +2125,93 @@ class ReviewRegressionTest(unittest.TestCase):
             "--gains-algorithm", "HIFO",
             "Austrian",
         )
-        self._assert_ok(payload, result, "profiles.create")
-        self.assertEqual(payload["data"]["tax_country"], "at")
-        self.assertEqual(payload["data"]["fiat_currency"], "EUR")
-        self.assertEqual(payload["data"]["tax_long_term_days"], 365)
-        self.assertEqual(payload["data"]["gains_algorithm"], "FIFO")
+        self.assertNotEqual(result.returncode, 0, msg=payload)
+        self._assert_austrian_unsupported(payload)
 
-        payload, result = self._run_json(
-            "wallets", "create",
-            "--workspace", "Main",
-            "--profile", "Austrian",
-            "--label", "AT Wallet",
-            "--kind", "custom",
-        )
-        self._assert_ok(payload, result, "wallets.create")
-
-        json_file = self.case_dir / "austrian-import.json"
-        json_file.write_text(
-            json.dumps(
-                [
-                    {
-                        "date": "2024-01-01",
-                        "direction": "inbound",
-                        "asset": "BTC",
-                        "amount": "0.001",
-                        "fee": "0",
-                        "kind": "buy",
-                        "txid": "at-demo",
-                        "fiat_value": "40",
-                    }
-                ]
-            ),
-            encoding="utf-8",
-        )
-        payload, result = self._run_json(
-            "wallets", "import-json",
-            "--workspace", "Main",
-            "--profile", "Austrian",
-            "--wallet", "AT Wallet",
-            "--file", str(json_file),
-        )
-        self._assert_ok(payload, result, "wallets.import-json")
-
-        payload, result = self._run_json(
-            "journals", "process",
-            "--workspace", "Main",
-            "--profile", "Austrian",
-        )
-        self._assert_ok(payload, result, "journals.process")
-        self.assertEqual(payload["data"]["entries_created"], 1)
-        self.assertEqual(payload["data"]["quarantined"], 0)
-        self.assertTrue(payload["data"]["experimental"])
-        self.assertEqual(payload["data"]["review_required"], "steuerberater")
-
-    def test_switching_profile_to_austrian_normalizes_and_invalidates_journals(self):
-        payload, result = self._run_json("init")
-        self._assert_ok(payload, result, "init")
-        payload, result = self._run_json("workspaces", "create", "Main")
-        self._assert_ok(payload, result, "workspaces.create")
-        payload, result = self._run_json(
-            "profiles", "create",
-            "--workspace", "Main",
-            "--fiat-currency", "USD",
-            "--tax-country", "generic",
-            "--gains-algorithm", "HIFO",
-            "Default",
-        )
-        self._assert_ok(payload, result, "profiles.create")
-        payload, result = self._run_json(
-            "wallets", "create",
-            "--workspace", "Main",
-            "--profile", "Default",
-            "--label", "Wallet",
-            "--kind", "custom",
-        )
-        self._assert_ok(payload, result, "wallets.create")
-
-        json_file = self.case_dir / "switch-austrian-import.json"
-        json_file.write_text(
-            json.dumps(
-                [
-                    {
-                        "date": "2024-01-01",
-                        "direction": "inbound",
-                        "asset": "BTC",
-                        "amount": "0.001",
-                        "fee": "0",
-                        "kind": "buy",
-                        "txid": "switch-at-demo",
-                        "fiat_value": "40",
-                    }
-                ]
-            ),
-            encoding="utf-8",
-        )
-        payload, result = self._run_json(
-            "wallets", "import-json",
-            "--workspace", "Main",
-            "--profile", "Default",
-            "--wallet", "Wallet",
-            "--file", str(json_file),
-        )
-        self._assert_ok(payload, result, "wallets.import-json")
-        payload, result = self._run_json(
-            "journals", "process",
-            "--workspace", "Main",
-            "--profile", "Default",
-        )
-        self._assert_ok(payload, result, "journals.process")
-
+    def test_profiles_set_rejects_switching_to_austrian_tax_country(self):
+        self._bootstrap_profile()
         payload, result = self._run_json(
             "profiles", "set",
             "--workspace", "Main",
             "--profile", "Default",
             "--tax-country", "at",
         )
-        self._assert_ok(payload, result, "profiles.set")
-        self.assertEqual(payload["data"]["tax_country"], "at")
-        self.assertEqual(payload["data"]["fiat_currency"], "EUR")
-        self.assertEqual(payload["data"]["tax_long_term_days"], 365)
-        self.assertEqual(payload["data"]["gains_algorithm"], "FIFO")
-        self.assertIsNone(payload["data"]["last_processed_at"])
-        self.assertEqual(payload["data"]["last_processed_tx_count"], 0)
+        self.assertNotEqual(result.returncode, 0, msg=payload)
+        self._assert_austrian_unsupported(payload)
+
+    def test_legacy_austrian_profile_journals_process_fails_fast(self):
+        self._bootstrap_wallet(label="LegacyAT")
+        json_file = self.case_dir / "legacy-austrian-import.json"
+        json_file.write_text(
+            json.dumps(
+                [
+                    {
+                        "date": "2024-01-01",
+                        "direction": "inbound",
+                        "asset": "BTC",
+                        "amount": "0.001",
+                        "fee": "0",
+                        "kind": "buy",
+                        "txid": "legacy-at-demo",
+                        "fiat_value": "40",
+                    }
+                ]
+            ),
+            encoding="utf-8",
+        )
+        payload, result = self._run_json(
+            "wallets", "import-json",
+            "--workspace", "Main",
+            "--profile", "Default",
+            "--wallet", "LegacyAT",
+            "--file", str(json_file),
+        )
+        self._assert_ok(payload, result, "wallets.import-json")
+        self._set_profile_tax_country("Default", "at")
+
+        payload, result = self._run_json(
+            "journals", "process",
+            "--workspace", "Main",
+            "--profile", "Default",
+        )
+        self.assertNotEqual(result.returncode, 0, msg=payload)
+        self._assert_austrian_unsupported(payload)
+
+    def test_legacy_austrian_profile_reports_fail_fast_even_with_fresh_generic_journals(self):
+        self._bootstrap_wallet(label="LegacyReport")
+        json_file = self.case_dir / "legacy-austrian-report-import.json"
+        json_file.write_text(
+            json.dumps(
+                [
+                    {
+                        "date": "2024-01-01",
+                        "direction": "inbound",
+                        "asset": "BTC",
+                        "amount": "0.001",
+                        "fee": "0",
+                        "kind": "buy",
+                        "txid": "legacy-at-report-demo",
+                        "fiat_value": "40",
+                    }
+                ]
+            ),
+            encoding="utf-8",
+        )
+        payload, result = self._run_json(
+            "wallets", "import-json",
+            "--workspace", "Main",
+            "--profile", "Default",
+            "--wallet", "LegacyReport",
+            "--file", str(json_file),
+        )
+        self._assert_ok(payload, result, "wallets.import-json")
+        payload, result = self._run_json(
+            "journals", "process",
+            "--workspace", "Main",
+            "--profile", "Default",
+        )
+        self._assert_ok(payload, result, "journals.process")
+        self._set_profile_tax_country("Default", "at")
 
         payload, result = self._run_json(
             "reports", "capital-gains",
@@ -2578,93 +2219,7 @@ class ReviewRegressionTest(unittest.TestCase):
             "--profile", "Default",
         )
         self.assertNotEqual(result.returncode, 0, msg=payload)
-        self.assertEqual(payload["error"]["message"], "Reports require fresh journals. Run `kassiber journals process` first.")
-
-        payload, result = self._run_json(
-            "journals", "process",
-            "--workspace", "Main",
-            "--profile", "Default",
-        )
-        self._assert_ok(payload, result, "journals.process")
-        self.assertEqual(payload["data"]["entries_created"], 1)
-        self.assertEqual(payload["data"]["quarantined"], 0)
-        self.assertTrue(payload["data"]["experimental"])
-        self.assertEqual(payload["data"]["review_required"], "steuerberater")
-
-    def test_austrian_reports_include_experimental_review_marker_in_envelope(self):
-        payload, result = self._run_json("init")
-        self._assert_ok(payload, result, "init")
-        payload, result = self._run_json("workspaces", "create", "Main")
-        self._assert_ok(payload, result, "workspaces.create")
-        payload, result = self._run_json(
-            "profiles", "create",
-            "--workspace", "Main",
-            "--fiat-currency", "EUR",
-            "--tax-country", "at",
-            "Austrian",
-        )
-        self._assert_ok(payload, result, "profiles.create")
-        payload, result = self._run_json(
-            "wallets", "create",
-            "--workspace", "Main",
-            "--profile", "Austrian",
-            "--label", "AT Wallet",
-            "--kind", "custom",
-        )
-        self._assert_ok(payload, result, "wallets.create")
-
-        json_file = self.case_dir / "austrian-report-import.json"
-        json_file.write_text(
-            json.dumps(
-                [
-                    {
-                        "date": "2024-01-01",
-                        "direction": "inbound",
-                        "asset": "BTC",
-                        "amount": "0.001",
-                        "fee": "0",
-                        "kind": "buy",
-                        "txid": "at-report-demo",
-                        "fiat_value": "40",
-                    }
-                ]
-            ),
-            encoding="utf-8",
-        )
-        payload, result = self._run_json(
-            "wallets", "import-json",
-            "--workspace", "Main",
-            "--profile", "Austrian",
-            "--wallet", "AT Wallet",
-            "--file", str(json_file),
-        )
-        self._assert_ok(payload, result, "wallets.import-json")
-        payload, result = self._run_json(
-            "journals", "process",
-            "--workspace", "Main",
-            "--profile", "Austrian",
-        )
-        self._assert_ok(payload, result, "journals.process")
-
-        report_invocations = [
-            ("balance-sheet", []),
-            ("portfolio-summary", []),
-            ("capital-gains", []),
-            ("journal-entries", []),
-            ("balance-history", []),
-            ("export-pdf", ["--file", str(self.case_dir / "austrian-report.pdf")]),
-        ]
-        for report_name, extra_args in report_invocations:
-            payload, result = self._run_json(
-                "reports",
-                report_name,
-                "--workspace", "Main",
-                "--profile", "Austrian",
-                *extra_args,
-            )
-            self._assert_ok(payload, result, f"reports.{report_name}")
-            self.assertTrue(payload["experimental"])
-            self.assertEqual(payload["review_required"], "steuerberater")
+        self._assert_austrian_unsupported(payload)
 
     def test_attachments_verify_reports_missing_file(self):
         self._bootstrap_wallet(label="Attachable")

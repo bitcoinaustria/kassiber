@@ -1,6 +1,6 @@
 ---
 name: kassiber
-description: Use this skill when the user wants to use the Kassiber CLI for local-first Bitcoin accounting, wallet onboarding, transaction imports, journal processing, metadata cleanup, or tax and portfolio reports. Applies to requests about Kassiber workspaces, profiles, accounts, wallets, backends, rates, attachments, BIP329 labels, quarantines, and Austrian or generic tax reporting, even when the user does not say Kassiber by name.
+description: Use this skill when the user wants to use the Kassiber CLI for local-first Bitcoin accounting, wallet onboarding, transaction imports, journal processing, metadata cleanup, or tax and portfolio reports. Applies to requests about Kassiber workspaces, profiles, accounts, wallets, backends, rates, attachments, BIP329 labels, quarantines, generic tax reporting, and Austrian-support planning/questions, even when the user does not say Kassiber by name.
 ---
 
 # Kassiber
@@ -33,7 +33,7 @@ All `scripts/` paths in this skill are relative to the directory containing this
 - Quarantined transactions are omitted from accurate downstream reporting until resolved or excluded.
 - Paginated list commands keep rows under command-specific keys such as `.data.records` and `.data.events`. Do not assume every list response uses the same field name.
 - For paginated responses like `journals events list` and `metadata records list`, always follow `next_cursor` until it is `null`.
-- `Altbestand` is wallet-level provenance metadata, not a profile-level setting. Split mixed holdings into separate wallet records when the history can be separated cleanly.
+- Austrian tax processing is currently unavailable in Kassiber. Point Austrian tax questions to the planned RP2-fork integration rather than implying Kassiber computes Austrian results today.
 - `kassiber status` may resolve to a legacy XDG path on machines with older state trees. Use status output, not assumptions, to find the live database.
 - Kassiber already has `reports export-pdf`; do not invent bespoke render scripts unless the user specifically wants a custom format beyond the built-in export.
 

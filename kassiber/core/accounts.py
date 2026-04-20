@@ -14,7 +14,12 @@ from ..backends import (
 )
 from ..db import get_setting, set_setting
 from ..errors import AppError
-from ..tax_policy import AUSTRIAN_TAX_COUNTRY, build_tax_policy, supported_tax_countries
+from ..tax_policy import (
+    AUSTRIAN_TAX_COUNTRY,
+    build_tax_policy,
+    require_tax_country_supported_for_profile_mutation,
+    supported_tax_countries,
+)
 from ..time_utils import now_iso
 from ..wallet_descriptors import normalize_asset_code
 from .repo import invalidate_journals, resolve_profile, resolve_scope, resolve_workspace
@@ -108,6 +113,7 @@ def create_profile(
     workspace = resolve_workspace(conn, workspace_ref)
     if tax_long_term_days < 0:
         raise AppError("Tax long-term days cannot be negative")
+    require_tax_country_supported_for_profile_mutation(tax_country)
     if gains_algorithm.upper() not in RP2_ACCOUNTING_METHODS:
         raise AppError(
             f"Unsupported gains algorithm '{gains_algorithm}'",
@@ -226,12 +232,8 @@ def update_profile(conn, workspace_ref, profile_ref, updates):
             code="validation",
             hint=f"Choose one of: {', '.join(RP2_ACCOUNTING_METHODS)}",
         )
-    if new_country is not None and new_country not in supported_tax_countries():
-        raise AppError(
-            f"Unsupported tax country '{new_country}'",
-            code="validation",
-            hint=f"Choose one of: {', '.join(sorted(supported_tax_countries()))}",
-        )
+    if new_country is not None:
+        require_tax_country_supported_for_profile_mutation(new_country)
     try:
         policy = build_tax_policy(
             {

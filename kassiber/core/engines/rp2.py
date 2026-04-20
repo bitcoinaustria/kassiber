@@ -14,7 +14,6 @@ from ...errors import AppError
 from ...msat import dec
 from ...tax_policy import build_tax_policy
 from ...transfers import apply_manual_pairs, detect_intra_transfers
-from ...util import parse_bool
 from ..tax_events import NormalizedTaxAssetInputs, build_tax_quarantine, normalize_tax_asset_inputs
 from .base import TaxEngineLedgerInputs, TaxEngineLedgerResult
 
@@ -196,10 +195,6 @@ def _build_rp2_accounting_engine(profile: Mapping[str, Any]):
     years_to_methods = modules["AVLTree"]()
     years_to_methods.insert_node(1970, method_module.AccountingMethod())
     return modules["AccountingEngine"](years_2_methods=years_to_methods)
-
-
-def _wallet_is_altbestand(wallet):
-    return parse_bool(wallet.get("altbestand"), default=False)
 
 
 def _rows_by_transaction_id(normalized_inputs: NormalizedTaxAssetInputs) -> dict[str, Mapping[str, Any]]:
@@ -415,8 +410,6 @@ def _rp2_asset_state(profile, normalized_inputs: NormalizedTaxAssetInputs, confi
 
 
 def _append_rp2_journal_entries(entries, computed_data, wallet_refs_by_label, profile, row_by_id, intra_audit):
-    altbestand_by_label = {label: _wallet_is_altbestand(ref) for label, ref in wallet_refs_by_label.items()}
-
     def _wallet_for(transaction):
         label = getattr(transaction, "exchange", None) or getattr(transaction, "from_exchange", None)
         ref = wallet_refs_by_label.get(label)
@@ -491,19 +484,10 @@ def _append_rp2_journal_entries(entries, computed_data, wallet_refs_by_label, pr
         event["gain_loss"] += dec(gain_loss.fiat_gain)
     for event in realized_by_event.values():
         wallet = event["wallet"]
-        altbestand = altbestand_by_label.get(wallet["label"], False)
         description = event["description"]
         proceeds = event["proceeds"]
         cost_basis = event["cost_basis"]
         gain_loss = event["gain_loss"]
-        if altbestand:
-            description = f"{description} [Altbestand tax-free]"
-            if event["entry_type"] in ("fee", "transfer_fee"):
-                proceeds = Decimal("0")
-                cost_basis = Decimal("0")
-            else:
-                cost_basis = proceeds
-            gain_loss = Decimal("0")
         entries.append(
             {
                 "id": str(uuid.uuid4()),
