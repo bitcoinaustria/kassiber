@@ -14,6 +14,12 @@ from ...errors import AppError
 from ...msat import dec
 from ...tax_policy import build_tax_policy
 from ...transfers import apply_manual_pairs, detect_intra_transfers
+from ..austrian import (
+    AT_SWAP_QUARANTINE_REASON,
+    AT_SWAP_TWO_PASS_REASON_CODE,
+    REGIME_NEU,
+    infer_regime_from_timestamp,
+)
 from ..tax_events import NormalizedTaxAssetInputs, build_tax_quarantine, normalize_tax_asset_inputs
 from .base import TaxEngineLedgerInputs, TaxEngineLedgerResult
 
@@ -91,6 +97,15 @@ def _compose_event_notes(event: Any) -> str:
     if description:
         tokens.append(description)
     return " ".join(tokens)
+
+
+def _profile_str(profile: Mapping[str, Any], key: str) -> str:
+    if hasattr(profile, "keys") and key in profile.keys():
+        value = profile[key]
+        if value is None:
+            return ""
+        return str(value).strip()
+    return ""
 
 
 def _compose_transfer_notes(transfer: Any) -> str:
@@ -684,8 +699,15 @@ class GenericRP2TaxEngine:
                 auto_pairs,
                 inputs.manual_pair_records,
             )
+            swap_link_by_row_id, quarantined_row_ids, swap_quarantines = self._classify_at_cross_asset_pairs(
+                cross_asset_pairs,
+                inputs.rows,
+            )
+            quarantines.extend(swap_quarantines)
             rows_by_asset = defaultdict(list)
             for row in inputs.rows:
+                if row["id"] in quarantined_row_ids:
+                    continue
                 rows_by_asset[row["asset"]].append(row)
             pairs_by_asset = defaultdict(list)
             for pair in all_pairs:
@@ -698,6 +720,7 @@ class GenericRP2TaxEngine:
                     asset_rows,
                     inputs.wallet_refs_by_id,
                     pairs_by_asset.get(asset, []),
+                    at_swap_link_by_row_id=swap_link_by_row_id,
                 )
                 asset_result = self._process_asset(
                     normalized_inputs,
@@ -721,6 +744,81 @@ class GenericRP2TaxEngine:
             account_holdings=dict(account_holdings),
             wallet_holdings=dict(wallet_holdings),
         )
+
+    def _classify_at_cross_asset_pairs(
+        self,
+        cross_asset_pairs: list[dict[str, Any]],
+        rows: Iterable[Mapping[str, Any]],
+    ) -> tuple[dict[str, str], set[str], list[dict[str, Any]]]:
+        """Decide which cross-asset pairs are AT Neu swaps and quarantine them.
+
+        v1 handling (Option C from the handoff contract):
+
+        - Profile is AT + outgoing leg is Neu → quarantine both legs with
+          reason ``at_swap_basis_carry_unresolved``. The legs do not reach
+          rp2 for this pass; the quarantine surfaces in
+          ``journals process`` output so operators can resolve the basis
+          carry (manual override or future two-pass compute).
+        - Profile is AT + outgoing leg is Alt → let both legs flow through
+          as normal SELL + BUY. rp2's AT plugin ignores ``at_swap_link``
+          for Alt because Altvermögen swaps realize under § 31 EStG.
+        - Profile is not AT → no tagging, no quarantine. Cross-asset pairs
+          remain audit-only metadata as today.
+
+        Returns ``(swap_link_by_row_id, quarantined_row_ids, quarantines)``.
+        """
+        tax_country = _profile_str(self.profile, "tax_country").lower()
+        if tax_country != "at" or not cross_asset_pairs:
+            return {}, set(), []
+        rows_by_id = {row["id"]: row for row in rows}
+        swap_link_by_row_id: dict[str, str] = {}
+        quarantined_row_ids: set[str] = set()
+        quarantines: list[dict[str, Any]] = []
+        for pair in cross_asset_pairs:
+            out_id = pair["out_id"]
+            in_id = pair["in_id"]
+            out_row = rows_by_id.get(out_id)
+            in_row = rows_by_id.get(in_id)
+            if out_row is None or in_row is None:
+                continue
+            regime = infer_regime_from_timestamp(out_row["occurred_at"])
+            if regime != REGIME_NEU:
+                # Alt swaps realize. rp2 ignores at_swap_link for Alt, but we
+                # deliberately do NOT set it so the lot-pairing audit trail
+                # reflects a normal disposal + acquisition rather than a
+                # tagged-but-ignored swap.
+                continue
+            # TODO(austrian): replace Option C (quarantine) with Option A
+            # (topological two-pass compute) so we can seed the incoming
+            # leg's carried_basis_fiat from the outgoing asset's pool
+            # average. See docs/austrian-handoff.md for the design.
+            pair_id = pair.get("pair_id") or f"{out_id}->{in_id}"
+            swap_detail = {
+                "outgoing_asset": pair["out_asset"],
+                "incoming_asset": pair["in_asset"],
+                "out_amount": float(out_row["amount"]) if out_row["amount"] is not None else None,
+                "at_swap_link": pair_id,
+                "reason_code": AT_SWAP_TWO_PASS_REASON_CODE,
+            }
+            quarantines.append(
+                build_tax_quarantine(
+                    self.profile,
+                    out_row,
+                    AT_SWAP_QUARANTINE_REASON,
+                    swap_detail,
+                )
+            )
+            quarantines.append(
+                build_tax_quarantine(
+                    self.profile,
+                    in_row,
+                    AT_SWAP_QUARANTINE_REASON,
+                    swap_detail,
+                )
+            )
+            quarantined_row_ids.add(out_id)
+            quarantined_row_ids.add(in_id)
+        return swap_link_by_row_id, quarantined_row_ids, quarantines
 
     def _process_asset(
         self,
