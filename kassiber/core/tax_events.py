@@ -3,9 +3,16 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass
 from decimal import Decimal
-from typing import Any, Mapping, Sequence
+from typing import Any, Literal, Mapping, Optional, Sequence
 
 from ..msat import dec, msat_to_btc
+
+# Austrian tax-semantic markers carried on NormalizedTaxEvent / NormalizedTaxTransfer.
+# The rp2 AT plugin reads these through the `notes` channel of InTransaction /
+# OutTransaction; Kassiber serializes them at the rp2 adapter boundary (see
+# kassiber/core/engines/rp2.py). Typed fields are the source of truth inside
+# Kassiber — free-form description text is never parsed as protocol.
+AtRegime = Literal["alt", "neu"]
 
 
 @dataclass(frozen=True)
@@ -22,6 +29,29 @@ class NormalizedTaxEvent:
     fiat_value: Decimal | None
     description: str
     raw_row: Mapping[str, Any]
+    # Austrian regime classification. "alt" = Altvermögen (acquired on/before
+    # 2021-02-28 Europe/Vienna, FIFO + 365-day Spekulationsfrist); "neu" =
+    # Neuvermögen (acquired after the cutoff, moving-average pool). Populated
+    # by Austrian classification in normalize_tax_asset_inputs when the
+    # profile's tax_country is "at"; None for non-AT profiles or when rp2's
+    # date-based inference should decide.
+    at_regime: Optional[AtRegime] = None
+    # Moving-average pool partition id (Neu only; ignored by rp2 for Alt).
+    # Kassiber decides what a pool is — v1 uses wallet_id. None means
+    # "absent marker", which rp2 treats as the `AT_DEFAULT_POOL` bucket.
+    at_pool: Optional[str] = None
+    # Non-empty id tagging one leg of a matched crypto-to-crypto swap.
+    # On a Neu outgoing leg, rp2 emits a zero-gain GainLoss and depletes
+    # the pool at its running average. None means "not a swap". Empty
+    # string is invalid and would trigger rp2 RP2ValueError — the
+    # normalization layer must synthesize a stable non-empty id when
+    # tagging swap legs.
+    at_swap_link: Optional[str] = None
+    # Carried basis in fiat for the incoming leg of a swap. When set, it
+    # overrides `fiat_value` as the basis seeded into rp2's InTransaction,
+    # so the destination asset's pool inherits the outgoing asset's basis
+    # (§ 27b Abs 3 Z 2 EStG). None means "use fiat_value" (spot-at-receipt).
+    carried_basis_fiat: Optional[Decimal] = None
 
 
 @dataclass(frozen=True)
@@ -42,6 +72,10 @@ class NormalizedTaxTransfer:
     external_id: str | None
     out_row: Mapping[str, Any]
     in_row: Mapping[str, Any]
+    # Pool partition id to preserve across an intra-wallet move when
+    # Kassiber models pools as per-wallet. Intra transfers don't have
+    # a regime or swap-link concept; only the pool marker applies.
+    at_pool: Optional[str] = None
 
 
 @dataclass(frozen=True)
