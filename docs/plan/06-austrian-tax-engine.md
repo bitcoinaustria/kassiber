@@ -1,6 +1,6 @@
 # Austrian Tax Support On RP2 — Design
 
-**Status:** Direction changed: Kassiber should stop growing a parallel Austrian tax engine and instead move Austrian tax semantics into the Kassiber-maintained RP2 fork at `https://github.com/bitcoinaustria/rp2`. Kassiber keeps the normalization/provenance layer, local-first workflow, and integration seam; Austrian JSON report envelopes remain explicitly review-gated while the migration is in progress.
+**Status:** Kassiber-side Austrian tax processing has been removed. `generic` is the only active tax-processing mode in Kassiber today. This document describes the future Austrian path in the Kassiber-maintained RP2 fork at `https://github.com/bitcoinaustria/rp2`, where Austrian output should remain explicitly review-gated once it exists again.
 **Module:** RP2 fork plugins for Austrian country / accounting / reports, integrated from Kassiber through `kassiber/core/engines/rp2.py`
 **Report:** Planned E 1kv export layered on top of the shared journal/report pipeline and backed by RP2-fork output.
 **Legal gate:** Output requires Steuerberater review before filing. A disclaimer surfaces on first use and on every report.
@@ -21,7 +21,7 @@ Austria still requires capabilities that stock RP2 does not yet model cleanly:
 
 Additionally, the Altvermögen rules themselves involve a 1-year Spekulationsfrist that resembles RP2's long-term threshold but only applies to the Altvermögen tranche and expires via swap, which adds state RP2 doesn't track.
 
-The change in direction is that these gaps should be closed in the RP2 fork via Austrian plugins and any missing tax primitives, rather than by making Kassiber permanently own Austrian tax math in `kassiber/core/engines/austria.py`.
+The change in direction is that these gaps should be closed in the RP2 fork via Austrian plugins and any missing tax primitives, rather than by making Kassiber own Austrian tax math itself.
 
 ## Prerequisite: normalization and provenance layer
 
@@ -177,7 +177,7 @@ Deliberate non-decisions for MVP:
 
 - **No `transactions.at_regime` column.** Raw transactions stay source-of-truth.
 - **No `at_journal_cache` table.** Austrian processing writes through the same rebuildable journal path as the generic engine. If caching is needed later, add a disposable report cache keyed by `policy_hash`, not a second authoritative ledger.
-- **No new wallet Altbestand column in Phase 0.5.** The existing wallet-level Altbestand provenance stays in `wallets.config_json` until there is a deliberate migration away from that contract.
+- **No Austrian-only wallet provenance column inside Kassiber until the RP2-backed path needs it.** Add persisted Austrian metadata only if the future RP2 integration proves it is necessary.
 
 ## Engine interface
 
@@ -271,7 +271,7 @@ First use of `at` policy shows a one-time modal:
 >
 > The output is designed to support your preparation of the E 1kv form but must be reviewed by a Steuerberater before filing.
 >
-> Kassiber maintains a list of genuinely unsettled questions in the Austrian crypto tax landscape (see `docs/plan/07-austrian-tax-open-questions.md`). The engine applies a reasonable default for each; your Steuerberater may instruct a different treatment.
+> Kassiber maintains a list of genuinely unsettled questions in the Austrian crypto tax landscape (see `docs/plan/07-austrian-tax-open-questions.md`). Those notes are planning input for the future RP2-backed Austrian path; Kassiber does not apply them today.
 
 A footer on every E 1kv PDF repeats the Steuerberater-review gate and lists any open-question defaults used in that report.
 
@@ -283,7 +283,7 @@ def build_austrian_policy(profile):
     return TaxPolicy(
         tax_country="at",
         fiat_currency="EUR",
-        long_term_days=365,  # preserved legacy field shape for Altbestand compatibility
+        long_term_days=365,  # preserved field shape for future Austrian RP2 integration
         accounting_methods=("fifo",),
         report_generators=("open_positions", "rp2_full_report"),
     )
@@ -298,12 +298,11 @@ The target state is one RP2-backed adapter in Kassiber. Austrian profile selecti
 
 ## Testing
 
-Current coverage in `tests/test_review_regressions.py` verifies the existing migration scaffolding and should become the parity suite for the RP2-backed path:
+Current coverage in `tests/test_review_regressions.py` verifies the fail-fast behavior for Austrian profiles and should grow into the parity suite for the future RP2-backed path:
 
-- Austrian profiles normalize to `tax_country="at"`, `fiat_currency="EUR"`, and `tax_long_term_days=365`
-- supported Austrian journal flows process successfully through the shared ledger seam
-- unsupported inbound kinds such as `lightning_received` quarantine as `insufficient_tax_provenance`
-- switching an existing profile to Austrian invalidates stale journals before reprocessing
+- new profile creation or profile switches to `tax_country="at"` are rejected as unsupported
+- legacy Austrian profiles fail fast for `journals process`
+- legacy Austrian profiles fail fast for report commands even if stale journal data already exists
 
 The scenarios below remain the desired target suite as provenance support expands:
 
@@ -373,7 +372,7 @@ The scenarios below remain the desired target suite as provenance support expand
 5. Use Kassiber's transfer detection, manual pairing, and multi-account preparation to feed the Austrian RP2 path clean inputs
 6. Add Austrian-specific report/export code on top of the shared journal output, likely under `kassiber/core/reports.py` or a dedicated report helper once the shape is stable
 7. Add any explicit tax-annotation storage only if the normalizer cannot derive legally defensible semantics from existing provenance
-8. Expand regression coverage from the current gating checks to the scenario suite above and use it as the parity gate for deleting `kassiber/core/engines/austria.py`
+8. Expand regression coverage from the current fail-fast checks to the scenario suite above and use it as the parity gate for re-enabling Austrian profiles
 9. Add E 1kv CSV/PDF golden tests once report output exists
 10. Keep the Steuerberater-review gate/disclaimer when the RP2-backed path becomes runnable
 

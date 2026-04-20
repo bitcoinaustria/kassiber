@@ -1,6 +1,6 @@
 # Austrian Tax — Open Questions (Live Backlog)
 
-This document catalogues tax questions where **BMF has not published a clear position** or where authoritative sources disagree. For each:
+This document catalogues tax questions where **BMF has not published a clear position** or where authoritative sources disagree. It is planning input for the future Austrian RP2-backed path; Kassiber does not apply these defaults today. For each:
 
 - A default behavior the engine applies
 - The evidence informing that default
@@ -107,7 +107,7 @@ This is a pure pooling rule.
 
 **What would change the default.** A BMF ruling endorsing FMV-at-death basis. Unlikely based on current Austrian tax policy direction.
 
-**Engine behavior.** MVP does not yet have a dedicated inheritance workflow. Until explicit provenance capture exists, inherited holdings are either annotated through the tax-annotation layer or quarantined as unsupported for Austrian processing. Once inheritance support lands, it should capture original acquisition date and basis explicitly rather than inferring from first observation.
+**Planned engine behavior.** MVP does not yet have a dedicated inheritance workflow. Until explicit provenance capture exists, inherited holdings should be either annotated through the tax-annotation layer or quarantined as unsupported for Austrian processing. Once Austrian support lands, it should capture original acquisition date and basis explicitly rather than inferring from first observation.
 
 **Status.** Open. Priority: low — relevant only to users with inherited BTC. Default is the safe choice.
 
@@ -199,7 +199,7 @@ This is a pure pooling rule.
 
 **Question.** Who decides whether a wallet's contents are Altvermögen — the user's explicit declaration, or the engine's computation from transaction timestamps?
 
-**Default applied.** Both, with the user's explicit declaration acting as a safety override. The engine classifies each lot by its acquisition date. Kassiber's existing wallet-level Altbestand provenance serves two purposes:
+**Default applied.** Both, with the user's explicit declaration acting as a safety override. The future RP2-backed engine would classify each lot by its acquisition date. If Austrian support needs explicit wallet-level provenance again, Kassiber should add it deliberately rather than assuming a live `Altbestand` workflow already exists.
 
 1. **Trust signal:** If the user has declared the wallet as originating from Altvermögen holdings, this is logged alongside computed classifications. Discrepancies (e.g., user declares Altvermögen but a lot has timestamp 2022-05-01) surface as warnings, not errors.
 2. **Fallback:** For wallets imported from exchanges or partial records where some transaction dates are unknown, the declaration applies to pre-reform-dated lots.
@@ -210,7 +210,7 @@ This is a pure pooling rule.
 
 **What would change the default.** A BMF requirement that tools refuse to compute Altvermögen without explicit user declaration. Unlikely.
 
-**Engine behavior.** As described. Warnings surface in the PDF's disclaimer section for review. For MVP this rides on the existing wallet-level Altbestand provenance contract rather than a new dedicated column.
+**Planned engine behavior.** As described. Warnings should surface in the PDF's disclaimer section for review once Austrian output exists again. Add any wallet-level Austrian provenance contract only if the RP2-backed path proves it is necessary.
 
 **Status.** Open. Could evolve into a small UI flow in Phase 5+ where the user walks through each wallet confirming Altvermögen status.
 
@@ -230,7 +230,7 @@ This is a pure pooling rule.
 
 **What would change the default.** A BMF clarification on cross-provider offset handling.
 
-**Engine behavior.** This is not fully supported in MVP because Kassiber does not yet persist provider domicile / withheld-KESt metadata in a structured way. Until that metadata exists, Austrian output should treat provider-withheld tax as outside the supported automation boundary and surface a warning or quarantine as appropriate.
+**Planned engine behavior.** This is not fully supported in MVP because Kassiber does not yet persist provider domicile / withheld-KESt metadata in a structured way. Until that metadata exists, the future Austrian output should treat provider-withheld tax as outside the supported automation boundary and surface a warning or quarantine as appropriate.
 
 **Status.** Open. Priority: medium for users with multiple domestic providers.
 

@@ -13,9 +13,7 @@ Profiles carry tax defaults through:
 Current policies:
 
 - `generic` -> RP2-backed lot accounting
-- `at` -> explicitly experimental Austrian path, with migration underway toward the Kassiber-maintained RP2 fork at [bitcoinaustria/rp2](https://github.com/bitcoinaustria/rp2)
-
-Wallet-level `Altbestand` remains separate from the profile policy because it is provenance metadata about specific holdings, not a profile-wide country setting.
+- `at` -> recognized for legacy profiles, but tax processing is currently unavailable in Kassiber and is planned through the Kassiber-maintained RP2 fork at [bitcoinaustria/rp2](https://github.com/bitcoinaustria/rp2)
 
 ## Journal processing
 
@@ -28,6 +26,7 @@ python3 -m kassiber journals process
 Important behavior:
 
 - generic lot accounting currently runs through RP2
+- `generic` is the only active tax-processing mode today
 - cost basis is pooled per asset across all wallets in a profile
 - self-transfers between user-owned wallets become RP2 `IntraTransaction` moves when Kassiber can prove the relationship
 - missing or ambiguous tax inputs quarantine instead of being silently guessed
@@ -106,14 +105,12 @@ Reports still use stored transaction and journal pricing rather than querying th
 
 ## Austrian notes
 
-The Austrian path is still experimental and should be reviewed by a Steuerberater before filing.
+Kassiber does not currently compute Austrian tax results itself.
 
-Current Austrian behavior:
+Current Austrian status:
 
-- EUR normalization at the profile level
-- review-gated output with explicit experimental markers
-- conservative quarantine when provenance is unclear
-
-Directionally, Kassiber should keep the normalization and provenance layer while Austrian tax semantics move into RP2 or the Kassiber-maintained RP2 fork.
+- Austrian tax processing is unavailable in Kassiber today
+- `journals process` and report commands fail fast for Austrian profiles
+- future Austrian support is planned through the Kassiber-maintained RP2 fork, while Kassiber keeps normalization, provenance capture, transfer preparation, and review UX
 
 See [../plan/06-austrian-tax-engine.md](../plan/06-austrian-tax-engine.md) for the design direction.

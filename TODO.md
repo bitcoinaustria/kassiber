@@ -23,8 +23,6 @@ Use `./scripts/quality-gate.sh` before calling work ready to push. It wraps the 
   `tax_policy.py`, `wallet_descriptors.py`, `transfers.py`, and
   `importers.py` as leaf modules unless moving them deletes real code
   from `app.py`
-- Keep wallet-level `Altbestand` provenance separate from profile-level
-  tax policy unless there is an explicit migration plan
 - Keep changes local-first, standard-library-first, and additive where
   possible
 - Keep docs in lockstep with behavior changes
@@ -136,20 +134,17 @@ top of the monolith.
 
 ### 0.5d - Austrian tax support
 
-- [x] Add Austrian policy registration on top of the shared engine seam
-- [x] Keep the Austrian path explicitly experimental until reviewed by a
-  Steuerberater
-- [x] Implement Austrian defaults only where provenance is sufficient;
-  quarantine the rest
+- [x] Remove the Kassiber-side Austrian engine and make `generic` the only
+  active processing path for now
+- [x] Fail fast for Austrian profiles until a real RP2-backed
+  implementation exists
 - [x] Fork RP2 to `bitcoinaustria/rp2` so Austrian tax logic can live in the
   tax engine rather than expanding Kassiber-side tax math
 - [ ] Add Austrian country / accounting / report plugins in the RP2 fork
 - [ ] Keep Kassiber-side normalization, provenance capture, and multi-account
   transfer preparation feeding the RP2-backed Austrian path
-- [ ] Migrate Austrian regression fixtures from the Kassiber custom engine to
-  the RP2-backed path before deleting the custom engine
-- [ ] Remove or reduce `kassiber/core/engines/austria.py` once RP2-backed
-  parity lands
+- [ ] Re-enable Austrian profiles only once the RP2-backed path is wired,
+  tested, and documented
 - [ ] Add E 1kv CSV/PDF export only after the RP2-backed behavior is testable
 
 ### 0.5e - Rates and journal follow-through
