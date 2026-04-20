@@ -16,8 +16,8 @@
   - [kassiber/backends.py](kassiber/backends.py) — dotenv (`config/backends.env`) seed + DB overlay for named sync backends, plus CRUD helpers.
   - [kassiber/cli/handlers.py](kassiber/cli/handlers.py) — remaining CLI command handlers and compatibility-layer imports while deeper decomposition continues.
   - [kassiber/core/attachments.py](kassiber/core/attachments.py) — transaction attachment storage, URL-reference handling, integrity verification, and orphan-file GC for the managed attachment tree.
-  - [kassiber/core/engines/__init__.py](kassiber/core/engines/__init__.py) — tax-engine interface/resolver; selects the generic RP2 engine or the experimental Austrian engine by profile tax policy.
-  - [kassiber/core/engines/austria.py](kassiber/core/engines/austria.py) — experimental Austrian ledger builder on the shared engine seam; processes supported flows conservatively and quarantines unsupported provenance.
+  - [kassiber/core/engines/__init__.py](kassiber/core/engines/__init__.py) — tax-engine interface/resolver; today selects the generic RP2 engine or the experimental Austrian path by profile tax policy, with the long-term direction being a single RP2-backed adapter.
+  - [kassiber/core/engines/austria.py](kassiber/core/engines/austria.py) — transitional Austrian ledger builder on the shared engine seam; it processes supported flows conservatively while Austrian tax semantics migrate toward the Kassiber-maintained RP2 fork.
   - [kassiber/core/tax_events.py](kassiber/core/tax_events.py) — in-memory normalization seam between raw transaction rows and tax-engine inputs, including early quarantine classification for under-specified tax semantics.
   - [kassiber/core/sync.py](kassiber/core/sync.py) — wallet sync orchestration above backend-specific transport details.
   - [kassiber/core/sync_backends.py](kassiber/core/sync_backends.py) — descriptor target discovery plus `esplora`, `electrum`, and `bitcoinrpc` live-sync adapters.
@@ -86,7 +86,7 @@ List endpoints with `--limit` also accept `--cursor`. The cursor is an opaque ba
 
 ## Tax engine
 
-- The tax engine now goes through `kassiber/core/engines.build_tax_engine(...)`; the current implementation behind that seam is still the generic RP2 engine in `kassiber/core/engines/rp2.py`.
+- The tax engine now goes through `kassiber/core/engines.build_tax_engine(...)`; today the generic path runs through `kassiber/core/engines/rp2.py`, while the Austrian path remains transitional and is expected to converge on the same RP2-backed seam.
 - Journal processing first normalizes raw transaction rows into in-memory tax events via `kassiber/core/tax_events.py`; raw `transactions` rows remain the source of truth and no derived regime state is persisted back onto them.
 - Under-specified tax semantics that used to fall through raw-row handling should quarantine at the normalization boundary instead of being guessed. That includes malformed same-asset transfers, missing required pricing, and unsupported tax directions.
 - The generic RP2 engine now owns the per-profile journal orchestration behind the engine seam: transfer detection, manual-pair application, per-asset grouping, normalized event preparation, and holdings aggregation all live in `kassiber/core/engines/rp2.py`, while CLI handlers only load rows and persist the resulting journal state.
@@ -98,7 +98,7 @@ List endpoints with `--limit` also accept `--cursor`. The cursor is an opaque ba
 - Liquid peg-in/peg-out detection must not lean on hardcoded federation addresses (per-claim tweaked, federation keys rotate). Use the manual pair CLI or non-address heuristics (time + amount + direction inversion + same-profile constraint) instead.
 - Per-wallet portfolio rows show that wallet's residual quantity at the asset's average residual basis — an allocation, not a physical-lot answer.
 - Supported lot selection: `FIFO`, `LIFO`, `HIFO`, `LOFO`.
-- Profiles expose the RP2 `generic` tax policy and an explicitly experimental Austrian `at` policy registration. Austrian profiles normalize to EUR, keep the legacy `tax_long_term_days` field shape for `Altbestand`, and pin the legacy `gains_algorithm` field to `FIFO` because the Austrian engine applies its own FIFO / moving-average rules internally. Supported Austrian journal flows now process through `kassiber/core/engines/austria.py`, while ambiguous provenance quarantines instead of being guessed. Austrian JSON report envelopes carry top-level `experimental` / `review_required` markers so automation does not lose the review gate after journals are processed.
+- Profiles expose the RP2 `generic` tax policy and an explicitly experimental Austrian `at` policy registration. Austrian profiles normalize to EUR, keep the legacy `tax_long_term_days` field shape for `Altbestand`, and pin the legacy `gains_algorithm` field to `FIFO`. Supported Austrian journal flows still process through `kassiber/core/engines/austria.py` today, but that path is transitional: long-term Austrian tax semantics should move into the Kassiber-maintained RP2 fork while Kassiber keeps normalization, provenance capture, transfer preparation, and review-gated reporting on top. Austrian JSON report envelopes carry top-level `experimental` / `review_required` markers so automation does not lose the review gate after journals are processed.
 - Wallets can be flagged manually as `Altbestand`; disposals from those wallets are treated as tax-free while Neubestand wallets use normal tax treatment.
 - Journals must be reprocessed after any transaction, metadata, or exclusion change before reports are trusted.
 - Transactions without usable fiat pricing are quarantined during journal processing instead of receiving zero-basis tax treatment.

@@ -71,6 +71,9 @@ reports are fully offline.
 - `~/.kassiber/config/settings.json` — managed state manifest for the active
   path layout. Not secret by itself, but it reveals where the rest of the
   local state lives.
+- `~/.kassiber/attachments/` — managed attachment store for copied local files.
+  URL attachments are stored as literal references in the database and are not
+  fetched.
 - Liquid descriptor wallets embed **private SLIP77 blinding keys** in
   `wallets.config_json`. Anyone who can read the DB can unblind your
   confidential outputs.
@@ -122,9 +125,11 @@ lands, treat the data directory and backend config file as sensitive material.
 - **No rate-source cross-check.** Wrong CoinGecko rates become wrong
   cost basis becomes wrong capital-gains. For tax-grade numbers prefer
   `rates set` with values you trust.
-- **Tax engine is `generic` only.** RP2 runs the generic policy
-  regardless of `tax_country`. Capital-gains output is not
-  jurisdiction-specific tax advice.
+- **Austrian tax support is still experimental.** Kassiber does have an
+  Austrian `at` policy path today, but it remains review-gated, conservative,
+  and in architectural transition toward the Kassiber-maintained RP2 fork.
+  Neither generic nor Austrian output should be treated as jurisdiction-specific
+  tax advice without review.
 - **`Altbestand` is a bookkeeping assertion,** not a cryptographic
   proof. Keep your own paper trail.
 - **Electrum `INSECURE=1` disables TLS verification.** Only against

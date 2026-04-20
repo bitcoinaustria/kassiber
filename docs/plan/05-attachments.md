@@ -1,6 +1,6 @@
 # Transaction Attachments
 
-**Status:** New feature. Not yet implemented.
+**Status:** Historical design note. Attachments have since shipped, but the implementation landed with a simpler CLI and storage layout than this draft describes. Treat `README.md`, `AGENTS.md`, and `kassiber/core/attachments.py` as the source of truth for current behavior until this plan doc is fully reconciled.
 **Scope:** CLI in Phase 0.5, UI drag-drop in Phase 3.
 **Purpose:** Let users tag a receipt PDF (or other file) or a drive link to any transaction. Supports audit trails, personal bookkeeping, and Finanzamt backup.
 
