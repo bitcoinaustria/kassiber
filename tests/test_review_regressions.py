@@ -400,6 +400,49 @@ class ReviewRegressionTest(unittest.TestCase):
         self.assertEqual(payload["data"][0]["label"], "Ops")
         self.assertEqual(payload["data"][0]["account"], "cash-ops")
 
+    def test_wallets_update_preserves_legacy_altbestand_config(self):
+        self._bootstrap_wallet(label="LegacyWallet", kind="custom")
+
+        db_path = self.data_root / "kassiber.sqlite3"
+        conn = sqlite3.connect(db_path)
+        wallet = conn.execute(
+            "SELECT id, config_json FROM wallets WHERE label = 'LegacyWallet'"
+        ).fetchone()
+        config = json.loads(wallet[1])
+        config["altbestand"] = True
+        conn.execute(
+            "UPDATE wallets SET config_json = ? WHERE id = ?",
+            (json.dumps(config, sort_keys=True), wallet[0]),
+        )
+        conn.commit()
+        conn.close()
+
+        payload, result = self._run_json(
+            "wallets", "get",
+            "--workspace", "Main",
+            "--profile", "Default",
+            "--wallet", "LegacyWallet",
+        )
+        self._assert_ok(payload, result, "wallets.get")
+        self.assertTrue(payload["data"]["config"]["altbestand"])
+
+        payload, result = self._run_json(
+            "wallets", "update",
+            "--workspace", "Main",
+            "--profile", "Default",
+            "--wallet", "LegacyWallet",
+            "--label", "LegacyWalletRenamed",
+        )
+        self._assert_ok(payload, result, "wallets.update")
+        self.assertTrue(payload["data"]["config"]["altbestand"])
+
+        conn = sqlite3.connect(db_path)
+        stored = conn.execute(
+            "SELECT config_json FROM wallets WHERE label = 'LegacyWalletRenamed'"
+        ).fetchone()[0]
+        conn.close()
+        self.assertTrue(json.loads(stored)["altbestand"])
+
     def test_custom_env_file_backend_overlay_and_default_roundtrip(self):
         env_file = self.case_dir / "custom-backends.env"
         env_file.write_text(

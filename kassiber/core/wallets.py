@@ -321,7 +321,6 @@ def list_wallet_kinds():
 
 def wallet_row_to_dict(row):
     config = json.loads(row["config_json"] or "{}")
-    config.pop("altbestand", None)
     descriptor_state, chain, network = _wallet_descriptor_state(config)
     return {
         "id": row["id"],
@@ -380,8 +379,8 @@ def update_wallet(conn, workspace_ref, profile_ref, wallet_ref, updates):
         account = resolve_account(conn, profile["id"], new_account)
         account_id = account["id"]
 
+    # Preserve legacy Austrian provenance metadata until a deliberate migration removes it.
     config = json.loads(wallet["config_json"] or "{}")
-    config.pop("altbestand", None)
     for field in clear_fields:
         config.pop(field, None)
     for key, value in config_updates.items():
