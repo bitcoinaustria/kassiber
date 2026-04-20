@@ -1195,6 +1195,203 @@ class ReviewRegressionTest(unittest.TestCase):
             manual_pair_records=[],
         )
 
+    def _direct_austrian_engine_inputs(self):
+        profile = {
+            "id": "profile-at",
+            "workspace_id": "workspace-main",
+            "label": "FixtureAustrian",
+            "fiat_currency": "EUR",
+            "tax_country": "at",
+            "tax_long_term_days": 9223372036854775807,
+            "gains_algorithm": "MOVING_AVERAGE_AT",
+        }
+        wallet_refs_by_id = {
+            "wallet-a": {
+                "id": "wallet-a",
+                "label": "Vienna",
+                "wallet_account_id": "account-treasury",
+                "account_code": "treasury",
+                "account_label": "Treasury",
+            },
+            "wallet-b": {
+                "id": "wallet-b",
+                "label": "Liquid",
+                "wallet_account_id": "account-treasury",
+                "account_code": "treasury",
+                "account_label": "Treasury",
+            },
+        }
+        rows = [
+            {
+                "id": "alt-buy-1",
+                "wallet_id": "wallet-a",
+                "wallet_label": "Vienna",
+                "wallet_account_id": "account-treasury",
+                "account_code": "treasury",
+                "account_label": "Treasury",
+                "occurred_at": "2020-05-01T10:00:00Z",
+                "direction": "inbound",
+                "asset": "BTC",
+                "amount": 50_000_000_000,
+                "fee": 0,
+                "fiat_rate": 9000,
+                "fiat_value": 4500,
+                "kind": "deposit",
+                "description": "Vienna Alt buy",
+                "note": None,
+                "external_id": "alt-buy-1",
+                "created_at": "2020-05-01T10:00:00Z",
+            },
+            {
+                "id": "neu-buy-1",
+                "wallet_id": "wallet-a",
+                "wallet_label": "Vienna",
+                "wallet_account_id": "account-treasury",
+                "account_code": "treasury",
+                "account_label": "Treasury",
+                "occurred_at": "2024-06-01T10:00:00Z",
+                "direction": "inbound",
+                "asset": "BTC",
+                "amount": 100_000_000_000,
+                "fee": 0,
+                "fiat_rate": 30000,
+                "fiat_value": 30000,
+                "kind": "deposit",
+                "description": "Vienna Neu buy",
+                "note": None,
+                "external_id": "neu-buy-1",
+                "created_at": "2024-06-01T10:00:00Z",
+            },
+            {
+                "id": "neu-sell-1",
+                "wallet_id": "wallet-a",
+                "wallet_label": "Vienna",
+                "wallet_account_id": "account-treasury",
+                "account_code": "treasury",
+                "account_label": "Treasury",
+                "occurred_at": "2025-03-01T09:00:00Z",
+                "direction": "outbound",
+                "asset": "BTC",
+                "amount": 30_000_000_000,
+                "fee": 0,
+                "fiat_rate": 50000,
+                "fiat_value": 15000,
+                "kind": "withdrawal",
+                "description": "Vienna Neu sell",
+                "note": None,
+                "external_id": "neu-sell-1",
+                "created_at": "2025-03-01T09:00:00Z",
+            },
+        ]
+        return profile, TaxEngineLedgerInputs(
+            rows=rows,
+            wallet_refs_by_id=wallet_refs_by_id,
+            manual_pair_records=[],
+        )
+
+    def _direct_austrian_cross_asset_swap_inputs(self):
+        profile = {
+            "id": "profile-at",
+            "workspace_id": "workspace-main",
+            "label": "FixtureAustrianSwap",
+            "fiat_currency": "EUR",
+            "tax_country": "at",
+            "tax_long_term_days": 9223372036854775807,
+            "gains_algorithm": "MOVING_AVERAGE_AT",
+        }
+        wallet_refs_by_id = {
+            "wallet-a": {
+                "id": "wallet-a",
+                "label": "Vienna",
+                "wallet_account_id": "account-treasury",
+                "account_code": "treasury",
+                "account_label": "Treasury",
+            },
+            "wallet-b": {
+                "id": "wallet-b",
+                "label": "Liquid",
+                "wallet_account_id": "account-treasury",
+                "account_code": "treasury",
+                "account_label": "Treasury",
+            },
+        }
+        rows = [
+            {
+                "id": "neu-buy-1",
+                "wallet_id": "wallet-a",
+                "wallet_label": "Vienna",
+                "wallet_account_id": "account-treasury",
+                "account_code": "treasury",
+                "account_label": "Treasury",
+                "occurred_at": "2024-06-01T10:00:00Z",
+                "direction": "inbound",
+                "asset": "BTC",
+                "amount": 100_000_000_000,
+                "fee": 0,
+                "fiat_rate": 30000,
+                "fiat_value": 30000,
+                "kind": "deposit",
+                "description": "Vienna Neu buy",
+                "note": None,
+                "external_id": "neu-buy-1",
+                "created_at": "2024-06-01T10:00:00Z",
+            },
+            {
+                "id": "swap-out-1",
+                "wallet_id": "wallet-a",
+                "wallet_label": "Vienna",
+                "wallet_account_id": "account-treasury",
+                "account_code": "treasury",
+                "account_label": "Treasury",
+                "occurred_at": "2025-03-01T09:00:00Z",
+                "direction": "outbound",
+                "asset": "BTC",
+                "amount": 50_000_000_000,
+                "fee": 0,
+                "fiat_rate": 50000,
+                "fiat_value": 25000,
+                "kind": "withdrawal",
+                "description": "Peg-out BTC->LBTC",
+                "note": None,
+                "external_id": "swap-1-out",
+                "created_at": "2025-03-01T09:00:00Z",
+            },
+            {
+                "id": "swap-in-1",
+                "wallet_id": "wallet-b",
+                "wallet_label": "Liquid",
+                "wallet_account_id": "account-treasury",
+                "account_code": "treasury",
+                "account_label": "Treasury",
+                "occurred_at": "2025-03-01T09:00:00Z",
+                "direction": "inbound",
+                "asset": "LBTC",
+                "amount": 50_000_000_000,
+                "fee": 0,
+                "fiat_rate": 50000,
+                "fiat_value": 25000,
+                "kind": "deposit",
+                "description": "Peg-in BTC->LBTC",
+                "note": None,
+                "external_id": "swap-1-in",
+                "created_at": "2025-03-01T09:00:00Z",
+            },
+        ]
+        manual_pairs = [
+            {
+                "id": "mp-at-swap-1",
+                "out_transaction_id": "swap-out-1",
+                "in_transaction_id": "swap-in-1",
+                "policy": "taxable",
+                "kind": "swap",
+            },
+        ]
+        return profile, TaxEngineLedgerInputs(
+            rows=rows,
+            wallet_refs_by_id=wallet_refs_by_id,
+            manual_pair_records=manual_pairs,
+        )
+
     def _direct_missing_quarantine_engine_inputs(self):
         profile = {
             "id": "profile-missing-price",
@@ -1762,6 +1959,20 @@ class ReviewRegressionTest(unittest.TestCase):
         profile, inputs = self._direct_transfer_engine_inputs()
         actual = self._direct_engine_snapshot(profile, inputs)
         expected = self._load_fixture("generic_rp2_engine_snapshot.json")
+        self.assertEqual(actual, expected)
+
+    def test_austrian_rp2_engine_snapshot_matches_fixture(self):
+        """End-to-end: AT profile produces rp2-AT-marked notes, moving-average disposal math, and Alt/Neu classification."""
+        profile, inputs = self._direct_austrian_engine_inputs()
+        actual = self._direct_engine_snapshot(profile, inputs)
+        expected = self._load_fixture("austrian_rp2_engine_snapshot.json")
+        self.assertEqual(actual, expected)
+
+    def test_austrian_rp2_cross_asset_swap_is_quarantined(self):
+        """End-to-end: AT profile quarantines Neu cross-asset swap pairs (Option C)."""
+        profile, inputs = self._direct_austrian_cross_asset_swap_inputs()
+        actual = self._direct_engine_snapshot(profile, inputs)
+        expected = self._load_fixture("austrian_rp2_cross_asset_swap_snapshot.json")
         self.assertEqual(actual, expected)
 
     def test_build_tax_engine_accepts_austrian_profile_and_routes_to_rp2_at(self):
