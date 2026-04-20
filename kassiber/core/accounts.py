@@ -15,7 +15,6 @@ from ..backends import (
 from ..db import get_setting, set_setting
 from ..errors import AppError
 from ..tax_policy import (
-    AUSTRIAN_TAX_COUNTRY,
     build_tax_policy,
     require_tax_country_supported_for_profile_mutation,
     supported_tax_countries,
@@ -25,7 +24,18 @@ from ..wallet_descriptors import normalize_asset_code
 from .repo import invalidate_journals, resolve_profile, resolve_scope, resolve_workspace
 
 ACCOUNT_TYPES = {"asset", "liability", "equity", "income", "expense"}
-RP2_ACCOUNTING_METHODS = ("FIFO", "LIFO", "HIFO", "LOFO")
+# Union of accounting methods across all supported countries. The per-policy
+# allowed subset is enforced in `_normalized_profile_algorithm`, so this tuple
+# is only the argparse-level superset (the CLI rejects typos before we build
+# a policy, then the policy narrows it further based on tax_country).
+RP2_ACCOUNTING_METHODS = (
+    "FIFO",
+    "LIFO",
+    "HIFO",
+    "LOFO",
+    "MOVING_AVERAGE",
+    "MOVING_AVERAGE_AT",
+)
 _DEFAULT_ACCOUNTS = (
     ("treasury", "Treasury", "asset", "BTC"),
     ("fees", "Fees", "expense", "BTC"),
@@ -34,15 +44,13 @@ _DEFAULT_ACCOUNTS = (
 
 
 def _normalized_profile_algorithm(raw_algorithm, policy):
-    if policy.tax_country == AUSTRIAN_TAX_COUNTRY:
-        return policy.default_accounting_method.upper()
     normalized = str(raw_algorithm or policy.default_accounting_method).strip().upper()
     allowed = {method.upper() for method in policy.accounting_methods}
     if normalized not in allowed:
         raise AppError(
-            f"Unsupported gains algorithm '{raw_algorithm}'",
+            f"Unsupported gains algorithm '{raw_algorithm}' for tax_country='{policy.tax_country}'",
             code="validation",
-            hint=f"Choose one of: {', '.join(method.upper() for method in policy.accounting_methods)}",
+            hint=f"Choose one of: {', '.join(sorted(method.upper() for method in policy.accounting_methods))}",
         )
     return normalized
 

@@ -140,12 +140,16 @@ top of the monolith.
   implementation exists
 - [x] Fork RP2 to `bitcoinaustria/rp2` so Austrian tax logic can live in the
   tax engine rather than expanding Kassiber-side tax math
-- [ ] Add Austrian country / accounting / report plugins in the RP2 fork
-- [ ] Keep Kassiber-side normalization, provenance capture, and multi-account
+- [x] Add Austrian country / accounting / report plugins in the RP2 fork
+- [x] Keep Kassiber-side normalization, provenance capture, and multi-account
   transfer preparation feeding the RP2-backed Austrian path
-- [ ] Re-enable Austrian profiles only once the RP2-backed path is wired,
+- [x] Re-enable Austrian profiles now that the RP2-backed path is wired,
   tested, and documented
-- [ ] Add E 1kv CSV/PDF export only after the RP2-backed behavior is testable
+- [ ] Replace Option C (quarantine-on-cross-asset-Neu-swap) with Option A
+  (topological two-pass compute) so `carried_basis_fiat` is populated
+  automatically; see [docs/austrian-handoff.md](docs/austrian-handoff.md)
+- [ ] Add E 1kv CSV/PDF export path on top of rp2's `at.tax_report_at`
+  generator
 
 ### 0.5e - Rates and journal follow-through
 

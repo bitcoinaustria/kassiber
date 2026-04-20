@@ -111,7 +111,14 @@ from ..wallet_descriptors import (
 
 
 ACCOUNT_TYPES = {"asset", "liability", "equity", "income", "expense"}
-RP2_ACCOUNTING_METHODS = ("FIFO", "LIFO", "HIFO", "LOFO")
+RP2_ACCOUNTING_METHODS = (
+    "FIFO",
+    "LIFO",
+    "HIFO",
+    "LOFO",
+    "MOVING_AVERAGE",
+    "MOVING_AVERAGE_AT",
+)
 WALLET_KINDS = [
     "descriptor",
     "xpub",
