@@ -103,7 +103,7 @@ Bitcoin Core-specific fields:
 - `COOKIEFILE`
 - `WALLETPREFIX`
 
-Note: the current sync layer supports `bitcoinrpc`, but the `backends create --kind ...` CLI choices do not yet expose it. For now, define `bitcoinrpc` backends through `backends.env`.
+Note: `bitcoinrpc` support is currently partial. Kassiber can use it for Bitcoin address-based wallets, but descriptor- and xpub-backed live sync still require Esplora or Electrum. The `backends create --kind ...` CLI choices also do not yet expose `bitcoinrpc`, so define it through `backends.env`.
 
 ## Notes by backend type
 
@@ -127,13 +127,14 @@ Use this for Electrum/Fulcrum-style servers.
 
 Use this when you run your own node.
 
+- today this path is for Bitcoin address-based sync; descriptor/xpub live sync is not implemented on `bitcoinrpc` yet
 - Kassiber creates or reuses a dedicated watch-only Core wallet per Kassiber wallet
 - this keeps wallet sync isolated instead of mixing unrelated watch-only imports together
 - plain `http://` is only safe on localhost or over a trusted tunnel
 
 ## Descriptor and Liquid notes
 
-Descriptor wallets derive receive and change scripts locally and then sync through the selected backend.
+Descriptor wallets derive receive and change scripts locally and then sync through an Esplora- or Electrum-backed backend.
 
 Example Bitcoin descriptor wallet:
 
