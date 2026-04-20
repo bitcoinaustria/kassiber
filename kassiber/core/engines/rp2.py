@@ -68,6 +68,42 @@ def _rp2_decimal(value: Any):
     return modules["RP2Decimal"](str(value))
 
 
+def _compose_event_notes(event: Any) -> str:
+    """Serialize typed Austrian markers plus human description into rp2 notes.
+
+    Markers come first in a fixed order (regime, pool, swap_link) so downstream
+    diffs are stable; free-form description follows. Absent markers produce no
+    token — the rp2 AT plugin treats "absent" and "empty value" differently
+    (empty `at_swap_link=` raises RP2ValueError), so we never emit a bare
+    `key=` token.
+    """
+    tokens: list[str] = []
+    regime = getattr(event, "at_regime", None)
+    if regime:
+        tokens.append(f"at_regime={regime}")
+    pool = getattr(event, "at_pool", None)
+    if pool:
+        tokens.append(f"at_pool={pool}")
+    swap_link = getattr(event, "at_swap_link", None)
+    if swap_link:
+        tokens.append(f"at_swap_link={swap_link}")
+    description = getattr(event, "description", "") or ""
+    if description:
+        tokens.append(description)
+    return " ".join(tokens)
+
+
+def _compose_transfer_notes(transfer: Any) -> str:
+    tokens: list[str] = []
+    pool = getattr(transfer, "at_pool", None)
+    if pool:
+        tokens.append(f"at_pool={pool}")
+    description = getattr(transfer, "description", "") or ""
+    if description:
+        tokens.append(description)
+    return " ".join(tokens)
+
+
 def _make_rp2_country(profile: Mapping[str, Any]):
     AbstractCountry = _get_rp2_modules()["AbstractCountry"]
     try:
@@ -290,7 +326,7 @@ def _rp2_asset_state(profile, normalized_inputs: NormalizedTaxAssetInputs, confi
                     crypto_received=_rp2_decimal(transfer.received),
                     row=row_index,
                     unique_id=transfer.out_transaction_id,
-                    notes=transfer.description,
+                    notes=_compose_transfer_notes(transfer),
                 )
             )
             row_index += 1
@@ -318,6 +354,7 @@ def _rp2_asset_state(profile, normalized_inputs: NormalizedTaxAssetInputs, confi
         event = events_by_id[item_id]
         if event.direction == "inbound":
             total_available += event.amount
+            basis = event.carried_basis_fiat if event.carried_basis_fiat is not None else event.fiat_value
             in_set.add_entry(
                 InTransaction(
                     configuration=configuration,
@@ -329,11 +366,11 @@ def _rp2_asset_state(profile, normalized_inputs: NormalizedTaxAssetInputs, confi
                     spot_price=_rp2_decimal(event.spot_price),
                     crypto_in=_rp2_decimal(event.amount),
                     fiat_in_no_fee=_rp2_decimal(event.fiat_value),
-                    fiat_in_with_fee=_rp2_decimal(event.fiat_value),
+                    fiat_in_with_fee=_rp2_decimal(basis),
                     fiat_fee=_rp2_decimal(0),
                     row=row_index,
                     unique_id=event.transaction_id,
-                    notes=event.description,
+                    notes=_compose_event_notes(event),
                 )
             )
             priced_available += event.amount
@@ -388,7 +425,7 @@ def _rp2_asset_state(profile, normalized_inputs: NormalizedTaxAssetInputs, confi
                 fiat_fee=_rp2_decimal(event.fee * event.spot_price),
                 row=row_index,
                 unique_id=event.transaction_id,
-                notes=event.description,
+                notes=_compose_event_notes(event),
             )
         )
         total_available -= needed
