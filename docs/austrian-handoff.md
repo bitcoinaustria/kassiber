@@ -30,7 +30,7 @@ swap legs.
 
 | Field | Type | Populated by |
 | --- | --- | --- |
-| `at_regime` | `"alt" | "neu" | None` | `normalize_tax_asset_inputs` from the 2021-03-01 Europe/Vienna date cutoff (v1). Future: explicit row annotations. |
+| `at_regime` | `"alt" | "neu" | None` | Inbound rows: direct from the 2021-03-01 Europe/Vienna acquisition cutoff. Outbound rows: same cutoff by default, but post-cutoff disposals fall back to `alt` when only Alt inventory remains in scope. Future: explicit row annotations. |
 | `at_pool` | `str | None` | v1: wallet_id. Future: configurable per profile. |
 | `at_swap_link` | `str | None` | Engine classifier tags both legs of a Neu cross-asset pair with the pair id. |
 | `carried_basis_fiat` | `Decimal | None` | Incoming leg of a Neu swap. v1: unset (quarantined). Future: Option A two-pass compute. |
@@ -85,9 +85,10 @@ legs (wrong).
 Unmarked disposals where both Alt and Neu lots are available raise
 `RP2ValueError` on the rp2 side. Kassiber is expected to resolve the
 ambiguity by emitting an explicit `at_regime=` marker on the disposal.
-In v1 all Kassiber-side regime classification is date-based, so this
-path is not exercised unless users manually override regime — a future
-commit may add an `at_regime_override` raw-row column.
+In v1 Kassiber still defaults post-cutoff disposals toward Neu, but it
+falls back to `at_regime=alt` once only Alt inventory remains. Mixed
+Alt+Neu holdings are still a caller-policy problem and may require a
+future `at_regime_override` raw-row column.
 
 ## Cutoff constant duplication
 

@@ -67,7 +67,7 @@ dependencies = [
 requires-dist = [
     { name = "embit", specifier = ">=0.8.0" },
     { name = "pyside6", specifier = ">=6.7,<7" },
-    { name = "rp2", specifier = ">=1.7.2" },
+    { name = "rp2", git = "https://github.com/bitcoinaustria/rp2.git?rev=2fc8592cd952f7aa64669a8ffbd1476dfc48abf9" },
 ]
 
 [[package]]
@@ -295,7 +295,7 @@ wheels = [
 [[package]]
 name = "rp2"
 version = "1.7.2"
-source = { registry = "https://pypi.org/simple" }
+source = { git = "https://github.com/bitcoinaustria/rp2.git?rev=2fc8592cd952f7aa64669a8ffbd1476dfc48abf9#2fc8592cd952f7aa64669a8ffbd1476dfc48abf9" }
 dependencies = [
     { name = "babel" },
     { name = "jsonschema" },
@@ -303,10 +303,6 @@ dependencies = [
     { name = "pycountry" },
     { name = "pyexcel-ezodf" },
     { name = "python-dateutil" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/c8/8a/abb46aef46ef2d05e43642d3873104325a681403ab9857d428eda83abcbd/rp2-1.7.2.tar.gz", hash = "sha256:c373ddade7e450bccb7f7410b56e6614d1cfabec2d32cb12a2f35b64504d4008", size = 6910309, upload-time = "2025-02-15T21:56:36.328Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/72/4e/a02e38561e38d6e019f55c2f2d31e8044928c26fd4c5bc642cc916e081db/rp2-1.7.2-py3-none-any.whl", hash = "sha256:7d8b7d6455e045d9ac2c7f8a78d066a1dc1782043fcf83bb47c0a882ceca2cd0", size = 557224, upload-time = "2025-02-15T21:56:33.763Z" },
 ]
 
 [[package]]

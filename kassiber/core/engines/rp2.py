@@ -18,7 +18,7 @@ from ..austrian import (
     AT_SWAP_QUARANTINE_REASON,
     AT_SWAP_TWO_PASS_REASON_CODE,
     REGIME_NEU,
-    infer_regime_from_timestamp,
+    infer_outbound_regimes,
 )
 from ..tax_events import NormalizedTaxAssetInputs, build_tax_quarantine, normalize_tax_asset_inputs
 from .base import TaxEngineLedgerInputs, TaxEngineLedgerResult
@@ -771,6 +771,12 @@ class GenericRP2TaxEngine:
         if tax_country != "at" or not cross_asset_pairs:
             return {}, set(), []
         rows_by_id = {row["id"]: row for row in rows}
+        rows_by_asset = defaultdict(list)
+        for row in rows:
+            rows_by_asset[row["asset"]].append(row)
+        outbound_regimes_by_row_id: dict[str, str] = {}
+        for asset_rows in rows_by_asset.values():
+            outbound_regimes_by_row_id.update(infer_outbound_regimes(asset_rows))
         swap_link_by_row_id: dict[str, str] = {}
         quarantined_row_ids: set[str] = set()
         quarantines: list[dict[str, Any]] = []
@@ -781,7 +787,7 @@ class GenericRP2TaxEngine:
             in_row = rows_by_id.get(in_id)
             if out_row is None or in_row is None:
                 continue
-            regime = infer_regime_from_timestamp(out_row["occurred_at"])
+            regime = outbound_regimes_by_row_id.get(out_id, REGIME_NEU)
             if regime != REGIME_NEU:
                 # Alt swaps realize. rp2 ignores at_swap_link for Alt, but we
                 # deliberately do NOT set it so the lot-pairing audit trail

@@ -6,6 +6,7 @@ from kassiber.core.austrian import (
     AT_SWAP_TWO_PASS_REASON_CODE,
     REGIME_ALT,
     REGIME_NEU,
+    infer_outbound_regimes,
     infer_regime_from_timestamp,
     resolve_pool_id,
 )
@@ -76,6 +77,23 @@ class ResolvePoolIdTest(unittest.TestCase):
     def test_missing_wallet_id_falls_back_to_default(self):
         self.assertEqual(resolve_pool_id(None), "default")
         self.assertEqual(resolve_pool_id(""), "default")
+
+
+class InferOutboundRegimesTest(unittest.TestCase):
+    def test_post_cutoff_sale_with_only_alt_inventory_falls_back_to_alt(self):
+        rows = [
+            _row("buy-alt", "wallet-a", "inbound", 100_000_000, occurred_at="2020-06-01T00:00:00Z"),
+            _row("sell-later", "wallet-a", "outbound", 100_000_000, occurred_at="2025-06-01T00:00:00Z"),
+        ]
+        self.assertEqual(infer_outbound_regimes(rows), {"sell-later": REGIME_ALT})
+
+    def test_post_cutoff_sale_with_neu_inventory_stays_neu(self):
+        rows = [
+            _row("buy-alt", "wallet-a", "inbound", 50_000_000, occurred_at="2020-06-01T00:00:00Z"),
+            _row("buy-neu", "wallet-a", "inbound", 100_000_000, occurred_at="2024-06-01T00:00:00Z"),
+            _row("sell-later", "wallet-a", "outbound", 30_000_000, occurred_at="2025-06-01T00:00:00Z"),
+        ]
+        self.assertEqual(infer_outbound_regimes(rows), {"sell-later": REGIME_NEU})
 
 
 class AustrianNormalizationTest(unittest.TestCase):
@@ -152,6 +170,16 @@ class AustrianNormalizationTest(unittest.TestCase):
         self.assertEqual(len(result.transfers), 1)
         self.assertEqual(result.transfers[0].at_pool, "wallet-a")
 
+    def test_at_outbound_post_cutoff_with_only_alt_inventory_gets_alt_regime(self):
+        rows = [
+            _row("buy-alt", "wallet-a", "inbound", 100_000_000, occurred_at="2020-06-01T00:00:00Z"),
+            _row("sell-later", "wallet-a", "outbound", 100_000_000, occurred_at="2025-06-01T00:00:00Z"),
+        ]
+        result = normalize_tax_asset_inputs(
+            self.at_profile, "BTC", rows, self.wallet_refs, []
+        )
+        self.assertEqual(result.events[1].at_regime, REGIME_ALT)
+
 
 class AtCrossAssetSwapEngineTest(unittest.TestCase):
     """End-to-end engine-level handling of AT cross-asset swap pairs.
@@ -218,8 +246,9 @@ class AtCrossAssetSwapEngineTest(unittest.TestCase):
         profile = {"id": "p1", "workspace_id": "w1", "tax_country": "at"}
         engine = self.GenericRP2TaxEngine(profile)
         rows = [
-            self._make_row("out-1", "BTC", "outbound", 1, "2019-06-01T00:00:00Z"),
-            self._make_row("in-1", "LBTC", "inbound", 1, "2019-06-01T00:00:00Z"),
+            self._make_row("buy-alt", "BTC", "inbound", 1, "2020-06-01T00:00:00Z"),
+            self._make_row("out-1", "BTC", "outbound", 1, "2025-06-01T00:00:00Z"),
+            self._make_row("in-1", "LBTC", "inbound", 1, "2025-06-01T00:00:00Z"),
         ]
         pairs = [
             {
