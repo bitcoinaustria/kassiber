@@ -1,13 +1,19 @@
-# Austrian Tax Engine — Design
+# Austrian Tax Support On RP2 — Design
 
-**Status:** An experimental Austrian journal engine now exists for supported acquisitions, disposals, and self-transfers. Unsupported or ambiguous provenance quarantines instead of being guessed, and Austrian JSON report envelopes carry explicit review markers; E 1kv export is still pending.
-**Module:** `kassiber/core/engines/austria.py`
-**Report:** Planned E 1kv export layered on top of the shared journal/report pipeline.
+**Status:** Direction changed: Kassiber should stop growing a parallel Austrian tax engine and instead move Austrian tax semantics into the Kassiber-maintained RP2 fork at `https://github.com/bitcoinaustria/rp2`. Kassiber keeps the normalization/provenance layer, local-first workflow, and integration seam; Austrian JSON report envelopes remain explicitly review-gated while the migration is in progress.
+**Module:** RP2 fork plugins for Austrian country / accounting / reports, integrated from Kassiber through `kassiber/core/engines/rp2.py`
+**Report:** Planned E 1kv export layered on top of the shared journal/report pipeline and backed by RP2-fork output.
 **Legal gate:** Output requires Steuerberater review before filing. A disclaimer surfaces on first use and on every report.
 
-## Why a separate engine and not an RP2 config
+## Why RP2 should be the tax engine
 
-RP2 is excellent for US-style tax regimes (lot-based FIFO/LIFO/HIFO/LOFO with day-count holding periods). The Austrian regime differs structurally in three ways that RP2 does not model:
+Kassiber should be the local-first Bitcoin accounting product on top of the tax engine, not a second tax engine beside it. RP2 already has a country/accounting/report plugin architecture, and Kassiber now has a maintained fork at `bitcoinaustria/rp2`, so the strategic direction is:
+
+- **RP2 owns tax computation.** Country semantics, accounting methods, lot math, gains/losses, and tax-report generators belong in RP2 or the Kassiber-maintained RP2 fork.
+- **Kassiber owns facts and workflow.** Wallet sync, Bitcoin-node integration, import adapters, rates, provenance capture, transfer pairing, AI tagging, review/quarantine UX, and desktop/CLI presentation belong in Kassiber.
+- **Kassiber prepares and explains; RP2 computes.** Kassiber normalizes raw transaction history into tax-ready facts, then feeds those facts to RP2 and renders the results back into local-first reports and UI flows.
+
+Austria still requires capabilities that stock RP2 does not yet model cleanly:
 
 1. **Cost basis from 2023-01-01 requires gleitender Durchschnittspreis** (moving average). RP2 has no moving-average engine — all its accounting methods are lot-tracking.
 2. **Crypto-to-crypto swaps are non-taxable for Neuvermögen** under §27b Abs 3 Z 2 EStG, with basis carrying to the new asset. RP2 treats every disposal as taxable.
@@ -15,11 +21,11 @@ RP2 is excellent for US-style tax regimes (lot-based FIFO/LIFO/HIFO/LOFO with da
 
 Additionally, the Altvermögen rules themselves involve a 1-year Spekulationsfrist that resembles RP2's long-term threshold but only applies to the Altvermögen tranche and expires via swap, which adds state RP2 doesn't track.
 
-The cleanest path is a **separate engine** sharing Kassiber's current `TaxEngine` interface with `kassiber/core/engines/rp2.py`. Both engines should consume the same per-profile ledger inputs; users select one via tax policy.
+The change in direction is that these gaps should be closed in the RP2 fork via Austrian plugins and any missing tax primitives, rather than by making Kassiber permanently own Austrian tax math in `kassiber/core/engines/austria.py`.
 
 ## Prerequisite: normalization and provenance layer
 
-Before the Austrian engine can be trusted, Kassiber needs a tax-input normalization seam between raw transactions and tax-engine logic.
+Before Austrian RP2 integration can be trusted, Kassiber needs a tax-input normalization seam between raw transactions and tax-engine logic.
 
 Why:
 
@@ -33,7 +39,7 @@ Phase 0.5 therefore introduces `kassiber/core/tax_events.py`:
 - Output: typed `NormalizedTaxEvent` records for the engine.
 - Rule: if the normalizer cannot prove the event type with acceptable confidence, it emits an ambiguous event and the engine quarantines it.
 
-This layer is shared by both the generic RP2 engine and the future Austrian engine, so the Austrian work improves the generic engine boundary instead of forking the ingestion story.
+This layer is shared by both the generic RP2 path and the future Austrian RP2-fork path, so the Austrian work improves the generic engine boundary instead of forking the ingestion story.
 
 ## Legal framework (sources)
 
@@ -200,81 +206,30 @@ class TaxEngine(Protocol):
     def build_ledger_state(self, inputs: TaxEngineLedgerInputs) -> TaxEngineLedgerResult: ...
 ```
 
-The future Austrian engine should fit this same boundary. Austrian-specific summaries such as E 1kv totals belong in a reporting layer built from the shared journal state, not in a separate engine-only return type.
+The future Austrian RP2-backed path should fit this same boundary. Austrian-specific summaries such as E 1kv totals belong in a reporting layer built from the shared journal state, not in a separate Kassiber-only tax engine return type.
 
-## Algorithm — full pipeline
+## RP2 fork requirements
 
-Pseudocode for a future Austrian engine `build_ledger_state()`:
+The important implementation point is not a Kassiber-side Austrian algorithm anymore. It is the capability boundary the RP2 fork needs to provide while Kassiber keeps normalization, provenance, and orchestration outside the tax math.
 
-```
-# 1. Start from the shared per-profile journal inputs
-rows = inputs.rows
-manual_pairs = inputs.manual_pair_records
-wallet_refs = inputs.wallet_refs_by_id
+Kassiber should continue to do these parts:
 
-# 2. Reuse the same transfer detection/manual-pair story as the generic engine,
-#    then normalize per asset through kassiber/core/tax_events.py
-for asset, asset_rows in group_by_asset(rows):
-    normalized = normalize_tax_asset_inputs(profile, asset, asset_rows, wallet_refs, pairs_for_asset)
-    events = sort(normalized.events, key=(occurred_at, transaction_id))
+- start from the shared per-profile journal inputs
+- reuse the same transfer detection and manual-pair application story as the generic path
+- normalize raw rows into typed tax events via `kassiber/core/tax_events.py`
+- quarantine events whose Austrian tax semantics cannot be derived with acceptable confidence
+- persist shared ledger output and render Austrian summaries such as E 1kv on top
 
-# 3. Classify every acquisition-like event
-for e in events:
-    if e.kind is acquisition_like:
-        e.at_regime = classify(e)
-    # disposals inherit regime from the lot(s) they disposed
+The RP2 fork should own these Austrian-specific semantics:
 
-# 4. Per-container running state
-state = {container_id: WalletState() for container_id in containers}
+- Altvermögen classification and holding-period handling
+- Neuvermögen FIFO behavior before 2023
+- Neuvermögen moving-average behavior from 2023 onward
+- carry-forward of basis and regime across self-transfers
+- treatment of income-like receipts such as mining, routing fees, and airdrops
+- Austrian loss-offset behavior within the supported regime
 
-# WalletState tracks:
-#   - altvermögen lots: list[AltLot(qty_msat, cost_eur_cents, acquired_at)]
-#   - neuvermögen pre-2023 lots: list[NeuLot(qty_msat, cost_eur_cents, acquired_at)]
-#   - neuvermögen from-2023 running avg: (qty_msat, avg_price_eur_cents_per_btc)
-
-# 5. Iterate events
-for e in events:
-    entries_out, quarantine_reason = process(e, state[e.container_id], normalized.transfers)
-    journal.extend(entries_out)
-    if quarantine_reason:
-        quarantined.append((e.tx_id, quarantine_reason))
-
-# 6. Return shared ledger state; Austrian E 1kv summaries derive from journal output later
-```
-
-### `process()` per event kind
-
-**Acquisition (buy, receive from external, mining, airdrop, lending income):**
-- Determine regime (above)
-- If regime == 'altvermoegen': append `AltLot(qty, cost=eur_at_fmv, acquired_at=e.timestamp)` to wallet state
-- If regime == 'neuvermoegen' pre-2023: append `NeuLot(...)` to wallet state
-- If regime == 'neuvermoegen' from-2023: update running `(qty, avg_price)`
-- For income events (mining, staking, airdrops, lending, LN routing): emit an `income` JournalEntry with `income_eur_cents=FMV` (cost=0 for airdrops/staking)
-
-**Disposal (sell, spend, BTC → altcoin if treated as disposal under Altvermögen):**
-- If the container's earliest lots are Altvermögen: apply FIFO within Altvermögen, determine holding period, emit `disposal` entry. If >1y, emit with `gain_loss = 0` (tax-free note in the entry); if ≤1y, emit with real gain and `at_regime='altvermoegen'` (user handles progressive rate externally)
-- If the container's earliest lots are Neuvermögen pre-2023: FIFO within NeuLots, emit disposal at 27.5% path
-- If the container's current regime is Neuvermögen from-2023: consume qty from running state, emit disposal at 27.5% path. Average unchanged.
-
-**Self-transfer (same-owner movement, outgoing leg):**
-- No journal entry
-- Move qty to destination container:
-  - If Altvermögen: preserve per-lot breakdown (carry acquired_at and cost intact)
-  - If Neuvermögen from-2023: update destination's running average per the rule (inherit source's avg_price for the transferred qty)
-  - If there is a transfer fee, emit the AT equivalent of today's `transfer_fee` disposal treatment rather than dropping the fee on the floor
-
-**Missing price:**
-- Quarantine with reason: `"no EUR rate available at timestamp"`
-
-**Ambiguous regime or unsupported provenance:**
-- Quarantine with reason such as `"regime classification failed"` or `"insufficient tax provenance"` and surface in report
-
-### Loss treatment
-
-- Losses within Neuvermögen offset gains within Neuvermögen, same tax year, same regime
-- No carryforward (per § 27 EStG as applied to crypto since the reform)
-- Losses within Altvermögen don't offset Neuvermögen gains (different regime)
-- The engine surfaces all gains and losses separately; offsetting is applied in the summary and surfaced in the E 1kv output
+If a future design sketch needs pseudocode, it should live in the RP2 fork or in a fork-specific design note, not in Kassiber planning docs in a way that implies a growing Kassiber-side Austrian engine.
 
 ## E 1kv report
 
@@ -312,7 +267,7 @@ CSV: stdlib `csv.writer`, UTF-8, BOM on first byte for Excel compatibility (Aust
 
 First use of `at` policy shows a one-time modal:
 
-> Kassiber's Austrian tax engine is a self-help tool. It does not constitute tax advice.
+> Kassiber's Austrian tax support path is a self-help tool. It does not constitute tax advice.
 >
 > The output is designed to support your preparation of the E 1kv form but must be reviewed by a Steuerberater before filing.
 >
@@ -320,7 +275,7 @@ First use of `at` policy shows a one-time modal:
 
 A footer on every E 1kv PDF repeats the Steuerberater-review gate and lists any open-question defaults used in that report.
 
-## Policy registration
+## Policy registration target
 
 ```python
 # kassiber/tax_policy.py
@@ -328,24 +283,22 @@ def build_austrian_policy(profile):
     return TaxPolicy(
         tax_country="at",
         fiat_currency="EUR",
-        long_term_days=365,
-        accounting_methods=("fifo", "lifo", "hifo", "lofo"),
+        long_term_days=365,  # preserved legacy field shape for Altbestand compatibility
+        accounting_methods=("fifo",),
         report_generators=("open_positions", "rp2_full_report"),
     )
 
 
 # kassiber/core/engines/__init__.py
 def build_tax_engine(profile):
-    if normalize_tax_country(profile_value(profile, "tax_country")) == "at":
-        return ExperimentalAustrianTaxEngine(profile)
-    return GenericRP2TaxEngine(profile)
+    return RP2BackedTaxEngine(profile)
 ```
 
-Today the policy registration and the first Austrian ledger builder both live behind `ExperimentalAustrianTaxEngine`. The engine runs on the shared ledger seam, but it remains conservative: unsupported semantics quarantine until Kassiber has stronger provenance capture.
+The target state is one RP2-backed adapter in Kassiber. Austrian profile selection still happens from Kassiber profiles, but the adapter should choose Austrian country, accounting, and report plugins in the RP2 fork rather than a Kassiber-side Austrian ledger builder.
 
 ## Testing
 
-Current coverage in `tests/test_review_regressions.py` verifies:
+Current coverage in `tests/test_review_regressions.py` verifies the existing migration scaffolding and should become the parity suite for the RP2-backed path:
 
 - Austrian profiles normalize to `tax_country="at"`, `fiat_currency="EUR"`, and `tax_long_term_days=365`
 - supported Austrian journal flows process successfully through the shared ledger seam
@@ -415,13 +368,14 @@ The scenarios below remain the desired target suite as provenance support expand
 
 1. Keep `kassiber/core/tax_events.py` as the shared normalization seam and extend it only where Austrian provenance needs more explicit annotation
 2. Keep `kassiber/core/engines/base.py` limited to `TaxEngineLedgerInputs` / `TaxEngineLedgerResult` and `build_ledger_state(...)`
-3. Keep `kassiber/core/engines/rp2.py` as the generic reference implementation for the shared seam
-4. Replace the `ExperimentalAustrianTaxEngine` gate in `kassiber/core/engines/austria.py` with the real Austrian ledger builder
-5. Add Austrian-specific report/export code on top of the shared journal output, likely under `kassiber/core/reports.py` or a dedicated report helper once the shape is stable
-6. Add any explicit tax-annotation storage only if the normalizer cannot derive legally defensible semantics from existing provenance
-7. Expand regression coverage from the current gating checks to the scenario suite above
-8. Add E 1kv CSV/PDF golden tests once report output exists
-9. Keep the Steuerberater-review gate/disclaimer when the engine becomes runnable
+3. Keep `kassiber/core/engines/rp2.py` as the only long-term tax-engine adapter in Kassiber
+4. Implement Austrian country / accounting / report plugins in `bitcoinaustria/rp2`
+5. Use Kassiber's transfer detection, manual pairing, and multi-account preparation to feed the Austrian RP2 path clean inputs
+6. Add Austrian-specific report/export code on top of the shared journal output, likely under `kassiber/core/reports.py` or a dedicated report helper once the shape is stable
+7. Add any explicit tax-annotation storage only if the normalizer cannot derive legally defensible semantics from existing provenance
+8. Expand regression coverage from the current gating checks to the scenario suite above and use it as the parity gate for deleting `kassiber/core/engines/austria.py`
+9. Add E 1kv CSV/PDF golden tests once report output exists
+10. Keep the Steuerberater-review gate/disclaimer when the RP2-backed path becomes runnable
 
 ## Open questions
 

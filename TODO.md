@@ -5,11 +5,12 @@ This file replaces the old extraction-only checklist. Treat the previous
 
 Current direction:
 
-1. Extract a reusable `kassiber.core` from `kassiber/app.py`
-2. Keep the CLI first-class and machine output stable while extracting
-3. Add the next cross-cutting features on top of that core:
-   attachments, tax-engine cleanup, Austrian tax support
-4. Build the desktop UI only after the shared core is real
+1. Keep the extracted `kassiber.core` / `kassiber.cli` split stable
+2. Keep the CLI first-class and machine output stable while building on that core
+3. Add the next cross-cutting features on top of the extracted core:
+   attachments, tax-engine cleanup, Austrian RP2 integration
+4. Keep desktop work layered on the shared core rather than reintroducing
+   monoliths or duplicate logic
 
 ## Rules for every session
 
@@ -140,9 +141,16 @@ top of the monolith.
   Steuerberater
 - [x] Implement Austrian defaults only where provenance is sufficient;
   quarantine the rest
-- [ ] Expand Austrian provenance coverage beyond the current acquisition /
-  disposal / self-transfer defaults
-- [ ] Add E 1kv CSV/PDF export only after the engine behavior is testable
+- [x] Fork RP2 to `bitcoinaustria/rp2` so Austrian tax logic can live in the
+  tax engine rather than expanding Kassiber-side tax math
+- [ ] Add Austrian country / accounting / report plugins in the RP2 fork
+- [ ] Keep Kassiber-side normalization, provenance capture, and multi-account
+  transfer preparation feeding the RP2-backed Austrian path
+- [ ] Migrate Austrian regression fixtures from the Kassiber custom engine to
+  the RP2-backed path before deleting the custom engine
+- [ ] Remove or reduce `kassiber/core/engines/austria.py` once RP2-backed
+  parity lands
+- [ ] Add E 1kv CSV/PDF export only after the RP2-backed behavior is testable
 
 ### 0.5e - Rates and journal follow-through
 
