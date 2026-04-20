@@ -115,7 +115,7 @@ Concrete font picks are deferred — exact faces can be negotiated during Phase 
 | `core.sync.*` | Always worker QThread |
 | Importers | Always worker QThread |
 | Backup/restore | Always worker QThread |
-| Journal computation (AT tax engine) | Always worker QThread |
+| Journal computation (RP2-backed tax engine, including Austrian fork/plugins) | Always worker QThread |
 | QML rendering, input, signals | Main thread only |
 
 Workers communicate via Qt signals. Progress callbacks into `core.*` functions emit signals that view-models re-expose as observable properties (e.g., `dashboardVM.syncProgress`).
@@ -228,7 +228,7 @@ Artifacts from each design session live under `docs/design/phase-<n>/` alongside
 - Static card with two links:
   - "Capital Gains Report" — opens file-save dialog, writes CSV via `core.reports.capital_gains.to_csv(...)`
   - "Journal Entries Export" — same pattern for `core.reports.journal_entries.to_csv(...)`
-- Will grow an "Austrian E 1kv (PDF)" link once AT engine ships (see `06-austrian-tax-engine.md`)
+- Will grow an "Austrian E 1kv (PDF)" link once the Austrian RP2 plugin path ships (see `06-austrian-tax-engine.md`)
 
 ### Layout
 
@@ -306,7 +306,7 @@ Matches the approved connection-flow reference state.
 - [ ] Adding an xpub wallet syncs its transactions and updates all tiles
 - [ ] Importing a Phoenix CSV creates a virtual wallet with all rows
 - [ ] Sync shows live progress in the bottom banner
-- [ ] Dropping a PDF onto a transaction creates an attachment and the file lands in `~/.kassiber/data/attachments/`
+- [ ] Dropping a PDF onto a transaction creates an attachment and the file lands in `~/.kassiber/attachments/`
 - [ ] Adding a drive URL to a transaction persists and reopens on click
 - [ ] Wallet detail can toggle altbestand and the flag is respected by the next journal computation
 
@@ -332,7 +332,7 @@ Matches the approved settings reference.
 - "Backup Data" button — creates `.kassiber.tar` archive (DB via `sqlite3 .backup` + attachments dir) via `backup_worker`
 - "Restore from backup" button — confirmation dialog, then unpack archive and replace live DB (after stopping any worker)
 - "Reset app" button (red, destructive) — triple-confirm, then wipes `~/.kassiber/data/` and returns to Welcome wizard
-- Future section (not MVP): "Tax country" dropdown — switching it re-runs journal computation; Austrian engine lives in Phase 0.5
+- Future section (not MVP): "Tax country" dropdown — switching it re-runs journal computation; Austrian RP2 plugin / fork integration lives in Phase 0.5
 
 ### Packaging
 
