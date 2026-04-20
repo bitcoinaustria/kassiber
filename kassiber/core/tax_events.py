@@ -6,6 +6,7 @@ from decimal import Decimal
 from typing import Any, Literal, Mapping, Optional, Sequence
 
 from ..msat import dec, msat_to_btc
+from .austrian import infer_regime_from_timestamp, resolve_pool_id
 
 # Austrian tax-semantic markers carried on NormalizedTaxEvent / NormalizedTaxTransfer.
 # The rp2 AT plugin reads these through the `notes` channel of InTransaction /
@@ -120,7 +121,15 @@ def normalize_tax_asset_inputs(
     rows: Sequence[Mapping[str, Any]],
     wallet_refs_by_id: Mapping[str, Mapping[str, Any]],
     intra_pairs: Sequence[Mapping[str, Any]],
+    at_swap_link_by_row_id: Optional[Mapping[str, str]] = None,
+    at_carried_basis_by_row_id: Optional[Mapping[str, Decimal]] = None,
 ) -> NormalizedTaxAssetInputs:
+    tax_country = ""
+    if hasattr(profile, "keys") and "tax_country" in profile.keys():
+        tax_country = str(profile["tax_country"] or "").strip().lower()
+    is_at = tax_country == "at"
+    swap_link_map = at_swap_link_by_row_id or {}
+    carried_basis_map = at_carried_basis_by_row_id or {}
     events: list[NormalizedTaxEvent] = []
     transfers: list[NormalizedTaxTransfer] = []
     ordered_items: list[tuple[str, str]] = []
@@ -208,6 +217,7 @@ def normalize_tax_asset_inputs(
                     external_id=out_row["external_id"],
                     out_row=out_row,
                     in_row=in_row,
+                    at_pool=resolve_pool_id(from_wallet["id"]) if is_at else None,
                 )
             )
             ordered_items.append(("transfer", out_row["id"]))
@@ -272,6 +282,19 @@ def normalize_tax_asset_inputs(
             )
             continue
 
+        at_regime = None
+        at_pool = None
+        at_swap_link = None
+        carried_basis_fiat = None
+        if is_at:
+            at_regime = infer_regime_from_timestamp(row["occurred_at"])
+            at_pool = resolve_pool_id(wallet["id"])
+            linked = swap_link_map.get(row["id"])
+            if linked:
+                at_swap_link = linked
+            carried = carried_basis_map.get(row["id"])
+            if carried is not None and direction == "inbound":
+                carried_basis_fiat = carried
         events.append(
             NormalizedTaxEvent(
                 transaction_id=row["id"],
@@ -286,6 +309,10 @@ def normalize_tax_asset_inputs(
                 fiat_value=fiat_value,
                 description=description,
                 raw_row=row,
+                at_regime=at_regime,
+                at_pool=at_pool,
+                at_swap_link=at_swap_link,
+                carried_basis_fiat=carried_basis_fiat,
             )
         )
         ordered_items.append(("event", row["id"]))
