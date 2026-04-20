@@ -74,6 +74,20 @@ def _make_rp2_country(profile: Mapping[str, Any]):
         policy = build_tax_policy(profile)
     except ValueError as exc:
         raise AppError(str(exc)) from exc
+    if policy.tax_country == "at":
+        try:
+            at_module = import_module("rp2.plugin.country.at")
+        except ModuleNotFoundError as exc:
+            raise AppError(
+                "Austrian tax support requires rp2 with the `at` country plugin.",
+                code="unsupported",
+                hint=(
+                    "Install the Kassiber-maintained rp2 fork (>= 1.7.2 with the AT plugin) from "
+                    "`bitcoinaustria/rp2`."
+                ),
+                details={"missing_module": "rp2.plugin.country.at"},
+            ) from exc
+        return at_module.AT()
     currency_code = policy.fiat_currency
 
     class KassiberCountry(AbstractCountry):
