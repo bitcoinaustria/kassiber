@@ -125,13 +125,13 @@ lands, treat the data directory and backend config file as sensitive material.
 - **No rate-source cross-check.** Wrong CoinGecko rates become wrong
   cost basis becomes wrong capital-gains. For tax-grade numbers prefer
   `rates set` with values you trust.
-- **Austrian tax support is still experimental.** Kassiber does have an
-  Austrian `at` policy path today, but it remains review-gated, conservative,
-  and in architectural transition toward the Kassiber-maintained RP2 fork.
-  Neither generic nor Austrian output should be treated as jurisdiction-specific
-  tax advice without review.
-- **`Altbestand` is a bookkeeping assertion,** not a cryptographic
-  proof. Keep your own paper trail.
+- **Austrian tax processing is currently unavailable.** Kassiber only
+  supports the generic RP2-backed path today. Future Austrian support is
+  planned in the Kassiber-maintained RP2 fork at `bitcoinaustria/rp2`;
+  until then, `tax_country=at` should be treated as unsupported.
+- **Generic tax output is not tax advice.** It is accounting software
+  output built on local wallet history and available pricing, not a
+  substitute for jurisdiction-specific review.
 - **Electrum `INSECURE=1` disables TLS verification.** Only against
   servers you fully control — never against a public Electrum server.
 - **Plain HTTP to Bitcoin Core is only safe on localhost.** Kassiber

@@ -88,7 +88,6 @@ from ..time_utils import (
 from ..util import (
     normalize_chain_value,
     normalize_network_value,
-    parse_bool,
     parse_int,
     str_or_none,
 )
@@ -96,7 +95,8 @@ from ..tax_policy import (
     DEFAULT_LONG_TERM_DAYS,
     DEFAULT_TAX_COUNTRY,
     build_tax_policy,
-    supported_tax_countries,
+    require_tax_country_supported_for_profile_mutation,
+    require_tax_processing_supported,
 )
 from ..wallet_descriptors import (
     DEFAULT_DESCRIPTOR_GAP_LIMIT,
@@ -530,8 +530,6 @@ def parse_wallet_config(args):
         config["source_file"] = os.path.abspath(args.source_file)
     if getattr(args, "source_format", None):
         config["source_format"] = args.source_format
-    if getattr(args, "altbestand", False):
-        config["altbestand"] = True
     chain, network = wallet_live_chain_config(config)
     if chain:
         config["chain"] = chain
@@ -1172,6 +1170,7 @@ def auto_price_transactions_from_rates_cache(conn, profile):
 
 
 def build_ledger_state(conn, profile):
+    require_tax_processing_supported(profile)
     rows = conn.execute(
         """
         SELECT
@@ -1205,7 +1204,6 @@ def build_ledger_state(conn, profile):
             "wallet_account_id": row["wallet_account_id"],
             "account_code": row["account_code"],
             "account_label": row["account_label"],
-            "altbestand": wallet_config.get("altbestand", False),
         }
     engine_state = tax_engine.build_ledger_state(
         TaxEngineLedgerInputs(
@@ -1227,6 +1225,7 @@ def build_ledger_state(conn, profile):
 
 def process_journals(conn, workspace_ref, profile_ref):
     _, profile = resolve_scope(conn, workspace_ref, profile_ref)
+    require_tax_processing_supported(profile)
     auto_priced = auto_price_transactions_from_rates_cache(conn, profile)
     state = build_ledger_state(conn, profile)
     conn.execute("DELETE FROM journal_entries WHERE profile_id = ?", (profile["id"],))
@@ -1296,9 +1295,6 @@ def process_journals(conn, workspace_ref, profile_ref):
         "processed_transactions": tx_count,
         "processed_at": created_at,
     }
-    if build_tax_policy(profile).tax_country == "at":
-        result["experimental"] = True
-        result["review_required"] = "steuerberater"
     return result
 
 
@@ -1755,12 +1751,8 @@ def update_profile(conn, workspace_ref, profile_ref, updates):
             code="validation",
             hint=f"Choose one of: {', '.join(RP2_ACCOUNTING_METHODS)}",
         )
-    if new_country is not None and new_country not in supported_tax_countries():
-        raise AppError(
-            f"Unsupported tax country '{new_country}'",
-            code="validation",
-            hint=f"Choose one of: {', '.join(sorted(supported_tax_countries()))}",
-        )
+    if new_country is not None:
+        require_tax_country_supported_for_profile_mutation(new_country)
     try:
         policy = build_tax_policy(
             {

@@ -228,7 +228,7 @@ Artifacts from each design session live under `docs/design/phase-<n>/` alongside
 - Static card with two links:
   - "Capital Gains Report" — opens file-save dialog, writes CSV via `core.reports.capital_gains.to_csv(...)`
   - "Journal Entries Export" — same pattern for `core.reports.journal_entries.to_csv(...)`
-- Will grow an "Austrian E 1kv (PDF)" link once the Austrian RP2 plugin path ships (see `06-austrian-tax-engine.md`)
+- Will grow an "Austrian E 1kv (PDF)" link only after Austrian support lands through the RP2 fork path (see `06-austrian-tax-engine.md`)
 
 ### Layout
 
@@ -298,8 +298,8 @@ Matches screenshot 3.
 ### Wallet Detail dialog
 
 - Opened from Connections tile
-- Shows: name, kind, xpub/descriptor/address (respecting Hide sensitive toggle), altbestand flag (Austrian tax — editable), last sync time, transaction count
-- Edit name inline; checkbox for altbestand; Save / Cancel
+- Shows: name, kind, xpub/descriptor/address (respecting Hide sensitive toggle), last sync time, transaction count
+- Edit name inline; Save / Cancel
 
 ### Done when
 
@@ -308,7 +308,6 @@ Matches screenshot 3.
 - [ ] Sync shows live progress in the bottom banner
 - [ ] Dropping a PDF onto a transaction creates an attachment and the file lands in `~/.kassiber/attachments/`
 - [ ] Adding a drive URL to a transaction persists and reopens on click
-- [ ] Wallet detail can toggle altbestand and the flag is respected by the next journal computation
 
 ---
 
@@ -320,7 +319,7 @@ Matches screenshot 3.
 
 - Shown on first run (no profile in DB, or `ui.first_run` flag unset)
 - Matches screenshot 1: Welcome title, logo, name input, "Let's go!" CTA
-- Optional second step: fiat currency (USD / EUR / …), tax country (Generic / Austria)
+- Optional second step: fiat currency (USD / EUR / …), with `generic` as the only active tax-processing mode until Austrian RP2 support ships
 - On completion: creates default workspace + profile, stores `ui.first_run = False`
 
 ### Settings dialog
@@ -332,7 +331,7 @@ Matches screenshot 5.
 - "Backup Data" button — creates `.kassiber.tar` archive (DB via `sqlite3 .backup` + attachments dir) via `backup_worker`
 - "Restore from backup" button — confirmation dialog, then unpack archive and replace live DB (after stopping any worker)
 - "Reset app" button (red, destructive) — triple-confirm, then wipes `~/.kassiber/data/` and returns to Welcome wizard
-- Future section (not MVP): "Tax country" dropdown — switching it re-runs journal computation; Austrian RP2 plugin / fork integration lives in Phase 0.5
+- Future section (not MVP): "Tax country" dropdown — switching it re-runs journal computation once the Austrian RP2 plugin / fork integration exists
 
 ### Packaging
 

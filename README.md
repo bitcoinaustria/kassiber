@@ -27,13 +27,13 @@ Kassiber is the local-first accounting product layer. It owns:
 - review and quarantine workflows
 - CLI and desktop UX
 
-RP2 is the intended tax core. Kassiber already uses RP2 for the generic path and is moving Austrian tax support toward the Kassiber-maintained RP2 fork.
+RP2 is the tax core. Kassiber uses RP2 for the active generic path and plans any future Austrian support through the Kassiber-maintained RP2 fork.
 
 Today:
 
-- the `generic` tax policy already runs through the RP2 path
-- Austrian support is still experimental
-- Austrian tax support is being migrated toward the Kassiber-maintained RP2 fork at [bitcoinaustria/rp2](https://github.com/bitcoinaustria/rp2)
+- the `generic` tax policy runs through the RP2 path
+- `generic` is the only currently supported tax-processing mode
+- Austrian tax processing is unavailable in Kassiber until the RP2 fork work lands at [bitcoinaustria/rp2](https://github.com/bitcoinaustria/rp2)
 
 The intended split is simple: Kassiber prepares and explains; RP2 computes.
 
@@ -115,17 +115,6 @@ python3 -m kassiber reports capital-gains
 python3 -m kassiber ui
 ```
 
-For an Austrian profile:
-
-```bash
-python3 -m kassiber profiles create austrian \
-  --workspace personal \
-  --fiat-currency EUR \
-  --tax-country at \
-  --tax-long-term-days 365 \
-  --gains-algorithm FIFO
-```
-
 ## Docs
 
 Reference docs:
@@ -153,8 +142,8 @@ Contributor docs:
 
 Notable gaps today:
 
+- Austrian tax processing is unavailable until the RP2 fork integration lands
 - Austrian E 1kv export is not shipped yet
-- Austrian RP2 fork/plugin migration is still in progress
 - descriptor/xpub live sync through `bitcoinrpc` is not implemented yet
 - some Lightning node adapters are declared but do not sync yet
 - `custom` wallet import mapping is not implemented yet

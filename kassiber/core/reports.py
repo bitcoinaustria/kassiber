@@ -9,6 +9,7 @@ from typing import Any, Callable, Mapping, Sequence
 
 from ..errors import AppError
 from ..msat import dec, msat_to_btc
+from ..tax_policy import require_tax_processing_supported
 
 INTERVAL_CHOICES = ("hour", "day", "week", "month")
 
@@ -40,8 +41,14 @@ class ReportHooks:
     write_text_pdf: WriteTextPdf
 
 
+def _resolve_report_scope(conn, workspace_ref, profile_ref, hooks: ReportHooks):
+    workspace, profile = hooks.resolve_scope(conn, workspace_ref, profile_ref)
+    require_tax_processing_supported(profile)
+    return workspace, profile
+
+
 def report_balance_sheet(conn, workspace_ref, profile_ref, hooks: ReportHooks):
-    _, profile = hooks.resolve_scope(conn, workspace_ref, profile_ref)
+    _, profile = _resolve_report_scope(conn, workspace_ref, profile_ref, hooks)
     hooks.require_processed_journals(conn, profile)
     state = hooks.build_ledger_state(conn, profile)
     rows = []
@@ -69,7 +76,7 @@ def report_balance_sheet(conn, workspace_ref, profile_ref, hooks: ReportHooks):
 
 
 def report_portfolio_summary(conn, workspace_ref, profile_ref, hooks: ReportHooks):
-    _, profile = hooks.resolve_scope(conn, workspace_ref, profile_ref)
+    _, profile = _resolve_report_scope(conn, workspace_ref, profile_ref, hooks)
     hooks.require_processed_journals(conn, profile)
     state = hooks.build_ledger_state(conn, profile)
     rows = []
@@ -100,7 +107,7 @@ def report_portfolio_summary(conn, workspace_ref, profile_ref, hooks: ReportHook
 
 
 def report_capital_gains(conn, workspace_ref, profile_ref, hooks: ReportHooks):
-    _, profile = hooks.resolve_scope(conn, workspace_ref, profile_ref)
+    _, profile = _resolve_report_scope(conn, workspace_ref, profile_ref, hooks)
     hooks.require_processed_journals(conn, profile)
     rows = conn.execute(
         """
@@ -132,7 +139,7 @@ def report_capital_gains(conn, workspace_ref, profile_ref, hooks: ReportHooks):
 
 
 def report_journal_entries(conn, workspace_ref, profile_ref, hooks: ReportHooks):
-    _, profile = hooks.resolve_scope(conn, workspace_ref, profile_ref)
+    _, profile = _resolve_report_scope(conn, workspace_ref, profile_ref, hooks)
     hooks.require_processed_journals(conn, profile)
     return hooks.list_journal_entries(conn, profile["workspace_id"], profile["id"], limit=1000)
 
@@ -182,7 +189,7 @@ def report_balance_history(
             code="validation",
             hint=f"Choose one of: {', '.join(INTERVAL_CHOICES)}",
         )
-    _, profile = hooks.resolve_scope(conn, workspace_ref, profile_ref)
+    _, profile = _resolve_report_scope(conn, workspace_ref, profile_ref, hooks)
     hooks.require_processed_journals(conn, profile)
     start_dt = hooks.parse_iso_datetime(start, "start")
     end_dt = hooks.parse_iso_datetime(end, "end")
@@ -488,7 +495,7 @@ def _pdf_report_query_rows(conn, profile, wallet=None):
 
 
 def build_pdf_report_lines(conn, workspace_ref, profile_ref, hooks: ReportHooks, wallet_ref=None, history_limit=None):
-    workspace, profile = hooks.resolve_scope(conn, workspace_ref, profile_ref)
+    workspace, profile = _resolve_report_scope(conn, workspace_ref, profile_ref, hooks)
     wallet = hooks.resolve_wallet(conn, profile["id"], wallet_ref) if wallet_ref else None
     hooks.require_processed_journals(conn, profile)
 
@@ -579,16 +586,15 @@ def build_pdf_report_lines(conn, workspace_ref, profile_ref, hooks: ReportHooks,
             row["network"],
             row["backend"],
             row["gap_limit"],
-            row["altbestand"] or "",
         ]
         for row in scope_wallets
     ]
     if wallet_table_rows:
         lines.extend(
             hooks.format_table(
-                ["Wallet", "Kind", "Chain", "Network", "Backend", "Gap", "Altb."],
+                ["Wallet", "Kind", "Chain", "Network", "Backend", "Gap"],
                 wallet_table_rows,
-                [18, 12, 8, 10, 12, 5, 5],
+                [18, 12, 8, 10, 12, 5],
             )
         )
     else:
