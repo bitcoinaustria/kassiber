@@ -10,10 +10,10 @@
 
 A **local-first Bitcoin accounting CLI**, written in Python.
 
-- Entry point: `kassiber/__main__.py` → `kassiber/app.py::main(argv)`
-- Business logic and CLI dispatch are currently fused into a single ~7,000-line `app.py` (explicitly flagged for extraction in `AGENTS.md`)
+- Entry point: `kassiber/cli/main.py` (via `kassiber/__main__.py`)
+- Phase 0 core extraction is green: the old `app.py` monolith has been split into reusable `kassiber.core` modules plus a dedicated CLI layer
 - Storage: SQLite at `~/.kassiber/data/kassiber.sqlite3`, integer msat amounts (never float)
-- Tax engine: [RP2](https://github.com/eprbell/rp2) (open source, Python) used through an indirection layer in `app.py`
+- Tax engine: [RP2](https://github.com/eprbell/rp2), with Kassiber now maintaining an Austrian-focused fork at [bitcoinaustria/rp2](https://github.com/bitcoinaustria/rp2)
 - External I/O: Esplora / Electrum / Bitcoin Core RPC; CoinGecko for rates; Phoenix/BTCPay/BIP329 importers
 - Test contract: `tests/test_cli_smoke.py` pins the machine-readable JSON envelope emitted by every CLI command — this is the reliable seam the whole plan hangs on
 - Data model: workspaces → profiles → accounts → wallets → transactions, with journal_entries, journal_quarantines, transaction_pairs, tags, bip329_labels, backends, rates_cache
@@ -24,7 +24,7 @@ Three concurrent tracks, all grounded in a single library refactor:
 
 1. **Phase 0 — Core extraction.** Carve a reusable `kassiber.core` library out of `app.py`. CLI becomes a thin translator. Precondition for everything else. See `02-core-extraction.md`.
 2. **Desktop UI.** PySide6 + QML application that imports `kassiber.core` directly. Clams-inspired layout. See `04-desktop-ui.md`.
-3. **Austrian tax engine.** A sibling engine to the existing RP2 path, because the Austrian regime needs its own normalization/provenance layer, moving-average cost basis from 2023 onward, and Altvermögen vs Neuvermögen classification rules that do not fit RP2's model. See `06-austrian-tax-engine.md`.
+3. **Austrian tax support on top of RP2.** Kassiber keeps the normalization/provenance layer and local-first workflow, while Austrian tax semantics move into a Kassiber-maintained RP2 fork / plugin path. See `06-austrian-tax-engine.md`.
 
 Plus one small new feature with cross-cutting impact:
 
@@ -60,8 +60,8 @@ Plus one small new feature with cross-cutting impact:
 
 | Phase | Scope | Rough effort |
 |---|---|---|
-| **0** | Library extraction: `kassiber.core`, `kassiber.cli`. Smoke tests stay green. | 3–5 days |
-| **0.5** | Austrian tax normalization layer + Austrian engine + E 1kv report + attachments feature. CLI-only for all of it. | 7–10 days |
+| **0** | Library extraction: `kassiber.core`, `kassiber.cli`. Smoke tests stay green. | Done |
+| **0.5** | Austrian tax normalization layer + RP2-fork/plugin integration + E 1kv report + attachments feature. CLI-only for all of it. | 7–10 days |
 | **1** | PySide6 app shell, empty state matching Clams screenshot 2 | 2 days |
 | **2** | Read-only dashboard: six tiles wired to `core/` | 4–6 days |
 | **3** | Add Connection modal, sync action with progress, CSV import, attachment drag-drop | 4–5 days |
@@ -80,12 +80,12 @@ Plus one small new feature with cross-cutting impact:
 | [03-storage-conventions.md](./03-storage-conventions.md) | SQLite discipline: WAL, FKs, migrations, repository pattern. |
 | [04-desktop-ui.md](./04-desktop-ui.md) | Phases 1–4 UI spec. Tile-by-tile. QML conventions. Threading. |
 | [05-attachments.md](./05-attachments.md) | Transaction attachments: schema, storage, CLI, UI, backup. |
-| [06-austrian-tax-engine.md](./06-austrian-tax-engine.md) | AT engine algorithm, data model, E 1kv report layout. |
+| [06-austrian-tax-engine.md](./06-austrian-tax-engine.md) | Austrian RP2-backed tax support, data model, E 1kv report layout. |
 | [07-austrian-tax-open-questions.md](./07-austrian-tax-open-questions.md) | Live backlog of genuinely unsettled AT tax questions. |
 
 ## What this plan is not
 
-- **Not legal or tax advice.** The Austrian engine ships behind a disclaimer. Production use gated on Steuerberater review.
+- **Not legal or tax advice.** Austrian output ships behind a disclaimer. Production use gated on Steuerberater review.
 - **Not a commitment to dates.** Effort estimates are for sequencing, not scheduling.
 - **Not final on report aesthetics.** E 1kv output will evolve with user's Steuerberater feedback.
 - **Not a hidden schema redesign.** Phase 0 keeps today's runtime/bootstrap contract, `TEXT` IDs, scope fields, and machine envelope shape unless a later doc calls out a deliberate migration.
@@ -95,12 +95,12 @@ Plus one small new feature with cross-cutting impact:
 
 | Risk | Mitigation |
 |---|---|
-| RP2 single-maintainer stagnation | Isolated behind `core/engines/rp2_generic.py`. Vendor in-tree if upstream dies. |
-| Austrian BMF guidance evolves | Engine is plain Python under our control; versioning via migrations + regime cutoff constants in code |
+| RP2 single-maintainer stagnation | Kassiber now has a maintained fork at `bitcoinaustria/rp2`; keep the integration isolated behind `core/engines/rp2.py` and upstream what we can |
+| Austrian BMF guidance evolves | Keep Kassiber-side provenance / normalization flexible and implement Austrian tax semantics in the RP2 fork where they belong |
 | app.py extraction breaks the envelope | Smoke tests are extensive enough to catch it; extract one command at a time |
 | PySide6 LGPL license surprises | LGPL is fine for a freely distributed app; no Qt commercial license needed |
 | Solo vibecoding drift | Each phase has concrete success criteria (smoke green, tile renders real data, packaged `.app` launches) |
 
 ## Next action
 
-Phase 0 kickoff. Recommended: commit this `docs/plan/` directory and the companion memory snapshot, then branch fresh for the extraction work. Details in `02-core-extraction.md`.
+RP2 fork integration kickoff. Recommended: keep Kassiber-side work focused on normalization, provenance capture, transfer preparation, and report integration while Austrian tax semantics move into `bitcoinaustria/rp2`. Details in `06-austrian-tax-engine.md`.

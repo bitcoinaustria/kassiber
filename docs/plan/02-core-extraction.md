@@ -1,10 +1,10 @@
 # Phase 0: Core Library Extraction
 
-**Goal:** Carve a reusable `kassiber.core` library out of the current 7k-line `kassiber/app.py`. The CLI becomes a thin argparse translator that calls into `core`. The UI (later phases) imports `core` directly.
+**Goal:** Record how Phase 0 carved a reusable `kassiber.core` library out of the old `kassiber/app.py` monolith. The CLI is now a thin argparse translator that calls into `core`, and the UI imports the same core directly.
 
-**Status:** Not started. This doc defines the target shape and the migration plan.
+**Status:** Completed for the current repo shape. Keep this doc as the reference architecture, guardrails, and rationale for future extraction work; do not treat it as an open execution plan.
 
-**Why now:** Both the desktop UI and the Austrian tax engine depend on a clean library surface. Doing them against the current monolith would either scatter business logic further or require duplication. `AGENTS.md` already flags this refactor as in progress.
+**Why it mattered:** Both the desktop UI and the Austrian RP2 integration depend on a clean library surface. Doing them against the old monolith would have scattered business logic further or forced duplication. The current extracted layout is the result of this phase.
 
 ## Why it's safe
 
@@ -21,11 +21,11 @@ These are hard constraints for the extraction work:
 3. **Do not regress `open_db()` behavior.** Any extracted DB-open path must still leave old databases readable and writable by applying the current compatibility logic.
 4. **Do not move already-good leaf modules just for aesthetics.** Extraction effort should go toward shrinking `app.py`, not renaming stable support code.
 
-## Current shape
+## Pre-extraction shape
 
 ```
 kassiber/
-  __main__.py            # thin: calls app.main
+  __main__.py            # called app.main
   app.py                 # ~7000 lines: argparse + dispatch + domain + SQL
   db.py                  # schema, connection, path resolution
   envelope.py            # JSON envelope emitter
@@ -44,14 +44,50 @@ Characteristics:
 - Domain logic, SQL, argparse, envelope emission, and output printing are interleaved inside `app.py`
 - RP2 is lazy-imported inside `app.py` (`get_rp2_modules()` at `app.py:543`), tax computation lives around lines 4125–4580
 - Some modules (`db.py`, `envelope.py`, `msat.py`, `tax_policy.py`, `transfers.py`, `importers.py`, `backends.py`) are already clean and reusable — they stay put
-- `app.py` is the thing we break up
+- `app.py` was the thing we needed to break up
 
-## Target shape
+## Landed shape
+
+The current repo no longer has that monolith. The landing shape is broadly:
+
+```text
+kassiber/
+  __main__.py            # delegates to kassiber.cli.main
+  backends.py
+  db.py
+  envelope.py
+  errors.py
+  importers.py
+  msat.py
+  tax_policy.py
+  transfers.py
+  wallet_descriptors.py
+  cli/
+    main.py
+    handlers.py
+  core/
+    runtime.py
+    attachments.py
+    reports.py
+    sync.py
+    sync_backends.py
+    tax_events.py
+    engines/
+      base.py
+      rp2.py
+      austria.py
+  ui/
+    app.py
+    dashboard.py
+    viewmodels/
+```
+
+## Extraction target shape (historical)
 
 ```
 kassiber/
   __main__.py                    # delegates to kassiber.cli.main
-  app.py                         # thin shim during migration; may disappear at the end
+  app.py                         # thin shim during migration in the original plan; the current repo no longer keeps it
   db.py                          # remains canonical DB bootstrap in Phase 0
   envelope.py                    # remains canonical envelope contract
   errors.py                      # remains canonical AppError definition
@@ -79,17 +115,17 @@ kassiber/
     sync.py                      # backend dispatch + orchestration
     journals.py                  # journal processing orchestration
     attachments.py               # NEW — file/url attachment logic
-    normalized_events.py         # NEW — Phase 0.5 tax normalization seam
+    tax_events.py                # NEW — Phase 0.5 tax normalization seam
     engines/
       __init__.py
       base.py                    # NEW — abstract TaxEngine interface
-      rp2_generic.py             # RP2 path extracted from app.py
-      at_kryptovo.py             # NEW — Austrian engine; see 06-austrian-tax-engine.md
+      rp2.py                     # RP2 adapter extracted from app.py
+      austria.py                 # transitional Austrian adapter during migration to the RP2 fork
     reports/
       __init__.py
       capital_gains.py
       journal_entries.py
-      e1kv.py                    # NEW — Austrian E 1kv PDF + CSV; see 06
+      e1kv.py                    # NEW — Austrian E 1kv PDF + CSV; backed by RP2-fork output; see 06
       pdf.py                     # moved from pdf_report.py
     migrations/
       __init__.py
@@ -127,7 +163,7 @@ kassiber/
 4. **No global state.** No module-level caches of config or connections. Pass what's needed.
 5. **Exceptions are `AppError` subclasses** or standard Python exceptions. The CLI catches and maps to envelope error shape.
 6. **Pure where possible.** `core.reports.capital_gains.build_report(entries) -> Report` should not touch the DB; DB reads happen in a caller function that bundles the inputs.
-7. **Tax engine is behind an interface.** No file outside `core/engines/` imports `rp2`. The boundary pays for itself when Austrian engine arrives.
+7. **Tax engine is behind an interface.** No file outside `core/engines/` imports `rp2`. The boundary pays for itself when Austrian support moves into the Kassiber-maintained RP2 fork.
 
 ## Shared runtime/bootstrap responsibilities
 
@@ -204,15 +240,15 @@ This is the biggest single chunk.
           on_progress: ProgressCallback | None = None,
       ) -> JournalResult: ...
   ```
-- Move the RP2 integration (app.py:540–681, plus the ledger state + journal write at app.py:4125–4582) into `core/engines/rp2_generic.py`
+- Move the RP2 integration (app.py:540–681, plus the ledger state + journal write at app.py:4125–4582) into `core/engines/rp2.py`
 - The envelope-emitting wrapper (`kassiber journals process`) stays in the CLI, but its guts become: build inputs, call engine, persist `JournalResult` to `journal_entries` + `journal_quarantines`, emit envelope.
 
 ### Wave 4.5 — tax normalization seam (0.5–1 day)
 
-- Add `core/normalized_events.py` as the bridge between raw transactions and tax-engine input
+- Add `core/tax_events.py` as the bridge between raw transactions and tax-engine input
 - Normalize raw transactions + transfer-pair state + explicit annotations into typed tax events
 - Quarantine ambiguous events instead of guessing at mining / inheritance / routing income / swap semantics
-- Keep this seam shared so both `rp2_generic` and `at_kryptovo` consume the same normalized input contract
+- Keep this seam shared so both the generic RP2 path and the future Austrian RP2-fork path consume the same normalized input contract
 
 ### Wave 5 — reports (1 day)
 
@@ -228,16 +264,14 @@ This is the biggest single chunk.
 
 **Estimated total:** 5–7 working days for a solo vibecoder with Claude.
 
-## Success criteria
+## Landed outcomes
 
-- [ ] `tests/test_cli_smoke.py` passes unchanged
-- [ ] `grep -r "argparse\|sys.argv\|sys.exit\|^print\|\.print(" kassiber/core/` returns zero hits
-- [ ] `grep -r "import rp2\|from rp2" kassiber/` returns hits only inside `kassiber/core/engines/rp2_generic.py`
-- [ ] Every CLI command's source footprint in `cli/commands/*.py` is <100 lines (guideline, not hard rule)
-- [ ] `kassiber/app.py` is either deleted or contains only a deprecation shim
-- [ ] The Phase 0 extraction does not change ID types, scope fields, or the location of wallet-level Altbestand provenance
-- [ ] A new unit-test file `tests/test_core_unit.py` covers the direct-call surface of at least `core.wallets`, `core.accounts`, `core.transactions`, `core.rates`
-- [ ] `python -c "from kassiber.core import wallets, accounts, transactions, rates, sync, engines"` imports cleanly without loading argparse, sqlite3 connections, or RP2
+- [x] `tests/test_cli_smoke.py` remained the behavior pin through extraction
+- [x] argparse and envelope emission moved out of the old monolith into the CLI layer
+- [x] RP2 imports now live behind the engine seam
+- [x] `kassiber/app.py` is gone and `__main__.py` delegates to `kassiber.cli.main`
+- [x] wallet-level Altbestand provenance stayed separate from profile country policy
+- [x] the extracted layout is now the baseline for desktop work and Austrian RP2 integration
 
 ## Non-goals
 
@@ -261,5 +295,5 @@ This is the biggest single chunk.
 With `core` in place, three things unlock in parallel:
 
 1. The **desktop UI** (phases 1–4) can be built against a clean surface
-2. The **Austrian tax engine** can be added as a sibling of `rp2_generic` without touching CLI wiring
+2. The **Austrian RP2-fork integration** can be added on the same seam without touching CLI wiring
 3. The **attachments feature** can be added as a cross-cutting capability that both CLI and UI use
