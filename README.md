@@ -27,13 +27,13 @@ Kassiber is the local-first accounting product layer. It owns:
 - review and quarantine workflows
 - CLI and desktop UX
 
-RP2 is the tax core. Kassiber uses RP2 for the active generic path and plans any future Austrian support through the Kassiber-maintained RP2 fork.
+RP2 is the tax core. Kassiber currently installs the Kassiber-maintained fork at [bitcoinaustria/rp2](https://github.com/bitcoinaustria/rp2), which carries the Austrian plugin work alongside the generic path.
 
 Today:
 
 - the `generic` tax policy runs through the RP2 path
 - `generic` is the only currently supported tax-processing mode
-- Austrian tax processing is unavailable in Kassiber until the RP2 fork work lands at [bitcoinaustria/rp2](https://github.com/bitcoinaustria/rp2)
+- Austrian tax processing is still unavailable in this branch until the Kassiber-side integration lands
 
 The intended split is simple: Kassiber prepares and explains; RP2 computes.
 
@@ -56,7 +56,7 @@ Requirements:
 - Python `>=3.10`
 - `embit>=0.8.0`
 - `PySide6>=6.7,<7`
-- `rp2>=1.7.2`
+- `rp2` from `bitcoinaustria/rp2` (pinned in `pyproject.toml`)
 
 Install in a virtual environment:
 
@@ -142,7 +142,7 @@ Contributor docs:
 
 Notable gaps today:
 
-- Austrian tax processing is unavailable until the RP2 fork integration lands
+- Austrian tax processing is unavailable until the Kassiber-side integration lands
 - Austrian E 1kv export is not shipped yet
 - descriptor/xpub live sync through `bitcoinrpc` is not implemented yet
 - some Lightning node adapters are declared but do not sync yet

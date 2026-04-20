@@ -6,7 +6,7 @@ from decimal import Decimal
 from typing import Any, Literal, Mapping, Optional, Sequence
 
 from ..msat import dec, msat_to_btc
-from .austrian import infer_regime_from_timestamp, resolve_pool_id
+from .austrian import infer_outbound_regimes, infer_regime_from_timestamp, resolve_pool_id
 
 # Austrian tax-semantic markers carried on NormalizedTaxEvent / NormalizedTaxTransfer.
 # The rp2 AT plugin reads these through the `notes` channel of InTransaction /
@@ -130,6 +130,7 @@ def normalize_tax_asset_inputs(
     is_at = tax_country == "at"
     swap_link_map = at_swap_link_by_row_id or {}
     carried_basis_map = at_carried_basis_by_row_id or {}
+    outbound_regimes = infer_outbound_regimes(rows) if is_at else {}
     events: list[NormalizedTaxEvent] = []
     transfers: list[NormalizedTaxTransfer] = []
     ordered_items: list[tuple[str, str]] = []
@@ -287,8 +288,11 @@ def normalize_tax_asset_inputs(
         at_swap_link = None
         carried_basis_fiat = None
         if is_at:
-            at_regime = infer_regime_from_timestamp(row["occurred_at"])
             at_pool = resolve_pool_id(wallet["id"])
+            if direction == "inbound":
+                at_regime = infer_regime_from_timestamp(row["occurred_at"])
+            else:
+                at_regime = outbound_regimes.get(row["id"], infer_regime_from_timestamp(row["occurred_at"]))
             linked = swap_link_map.get(row["id"])
             if linked:
                 at_swap_link = linked

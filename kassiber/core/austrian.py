@@ -16,8 +16,9 @@ of rp2 imports (Kassiber-core does not depend on rp2 types).
 
 from __future__ import annotations
 
+from collections import defaultdict
 from datetime import datetime
-from typing import Literal, Optional
+from typing import Any, Literal, Mapping, Optional, Sequence
 from zoneinfo import ZoneInfo
 
 # Altvermögen / Neuvermögen cutoff per § 27b EStG. Acquisitions on or before
@@ -35,6 +36,12 @@ REGIME_NEU: Literal["neu"] = "neu"
 # swap validation problems that might share the same reason in the future.
 AT_SWAP_QUARANTINE_REASON = "at_swap_basis_carry_unresolved"
 AT_SWAP_TWO_PASS_REASON_CODE = "needs_two_pass_compute"
+
+
+def _row_value(row: Mapping[str, Any], key: str, default: Any = None) -> Any:
+    if hasattr(row, "keys") and key in row.keys():
+        return row[key]
+    return default
 
 
 def _parse_occurred_at(value: str) -> datetime:
@@ -59,6 +66,52 @@ def infer_regime_from_timestamp(occurred_at: str) -> Literal["alt", "neu"]:
     return REGIME_ALT if when < AT_NEU_CUTOFF else REGIME_NEU
 
 
+def infer_outbound_regimes(rows: Sequence[Mapping[str, Any]]) -> dict[str, Literal["alt", "neu"]]:
+    """Infer Austrian disposal regimes from the rows seen so far.
+
+    v1 keeps the branch's existing bias toward Neu for post-cutoff disposals
+    when a Neu pool is still populated, but it must not force `at_regime=neu`
+    once only Alt inventory remains. The result is a best-effort per-row map
+    that callers can reuse both for normal outbound events and for cross-asset
+    swap classification.
+    """
+
+    alt_available_msat = 0
+    neu_available_msat_by_pool: dict[str, int] = defaultdict(int)
+    regimes_by_row_id: dict[str, Literal["alt", "neu"]] = {}
+
+    for row in rows:
+        direction = str(_row_value(row, "direction") or "").strip().lower()
+        amount_msat = int(_row_value(row, "amount") or 0)
+        fee_msat = int(_row_value(row, "fee") or 0)
+        if direction == "inbound":
+            regime = infer_regime_from_timestamp(str(row["occurred_at"]))
+            if regime == REGIME_ALT:
+                alt_available_msat += amount_msat
+            else:
+                pool_id = resolve_pool_id(_row_value(row, "wallet_id"))
+                neu_available_msat_by_pool[pool_id] += amount_msat
+            continue
+        if direction != "outbound":
+            continue
+
+        pool_id = resolve_pool_id(_row_value(row, "wallet_id"))
+        regime = infer_regime_from_timestamp(str(row["occurred_at"]))
+        if regime == REGIME_NEU and alt_available_msat > 0 and neu_available_msat_by_pool.get(pool_id, 0) <= 0:
+            regime = REGIME_ALT
+        regimes_by_row_id[str(row["id"])] = regime
+
+        needed_msat = amount_msat + fee_msat
+        if needed_msat <= 0:
+            continue
+        if regime == REGIME_ALT:
+            alt_available_msat = max(0, alt_available_msat - needed_msat)
+        else:
+            neu_available_msat_by_pool[pool_id] = max(0, neu_available_msat_by_pool.get(pool_id, 0) - needed_msat)
+
+    return regimes_by_row_id
+
+
 def resolve_pool_id(wallet_id: Optional[str]) -> str:
     """One pool per wallet. Falls back to `"default"` when wallet_id is missing.
 
@@ -78,6 +131,7 @@ __all__ = [
     "AT_SWAP_TWO_PASS_REASON_CODE",
     "REGIME_ALT",
     "REGIME_NEU",
+    "infer_outbound_regimes",
     "infer_regime_from_timestamp",
     "resolve_pool_id",
 ]

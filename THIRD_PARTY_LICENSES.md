@@ -6,11 +6,11 @@ It is not meant to be a hand-maintained inventory of every transitive package in
 
 ## Core dependency credit
 
-Kassiber currently depends directly on [RP2](https://github.com/eprbell/rp2) as its tax engine, [embit](https://github.com/diybitcoinhardware/embit) for descriptor derivation and Liquid support, and [PySide6](https://doc.qt.io/qtforpython-6/) for the desktop UI shell.
+Kassiber currently depends directly on the Kassiber-maintained [RP2 fork](https://github.com/bitcoinaustria/rp2) as its tax engine, [embit](https://github.com/diybitcoinhardware/embit) for descriptor derivation and Liquid support, and [PySide6](https://doc.qt.io/qtforpython-6/) for the desktop UI shell.
 
 | Package | Version policy | Role | License |
 | --- | --- | --- | --- |
-| `rp2` | `>=1.7.2` | Tax engine used by journal processing and tax-aware reports | Apache-2.0 |
+| `rp2` | `git+https://github.com/bitcoinaustria/rp2.git@2fc8592cd952f7aa64669a8ffbd1476dfc48abf9` | Tax engine used by journal processing and tax-aware reports | Apache-2.0 |
 | `embit` | `>=0.8.0` | Bitcoin/Liquid descriptor parsing, script derivation, Liquid confidential output handling | MIT |
 | `PySide6` | `>=6.7,<7` | PySide6 + QML desktop UI shell and future desktop flows | LGPL-3.0-only |
 
