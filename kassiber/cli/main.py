@@ -46,7 +46,6 @@ from .handlers import (
     resolve_quarantine_exclude,
     resolve_quarantine_price_override,
     show_quarantine,
-    supported_tax_countries,
     sync_wallet,
 )
 from ..core import accounts as core_accounts
@@ -57,18 +56,8 @@ from ..core import reports as core_reports
 from ..core import wallets as core_wallets
 from ..core.runtime import bootstrap_runtime, close_runtime, emit_error, resolve_output_format
 from ..errors import AppError
-from ..tax_policy import build_tax_policy
+from ..tax_policy import supported_tax_countries
 from ..ui.dashboard import collect_ui_snapshot
-
-
-def _report_envelope_meta(conn: sqlite3.Connection, workspace_ref: str | None, profile_ref: str | None) -> dict[str, Any] | None:
-    _, profile = resolve_scope(conn, workspace_ref, profile_ref)
-    if build_tax_policy(profile).tax_country != "at":
-        return None
-    return {
-        "experimental": True,
-        "review_required": "steuerberater",
-    }
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -175,7 +164,11 @@ def build_parser() -> argparse.ArgumentParser:
     profiles_create.add_argument("label")
     profiles_create.add_argument("--workspace")
     profiles_create.add_argument("--fiat-currency", default="USD")
-    profiles_create.add_argument("--tax-country", choices=list(supported_tax_countries()), default=DEFAULT_TAX_COUNTRY)
+    profiles_create.add_argument(
+        "--tax-country",
+        default=DEFAULT_TAX_COUNTRY,
+        help=f"Tax country for the profile (currently supported: {', '.join(supported_tax_countries())})",
+    )
     profiles_create.add_argument("--tax-long-term-days", type=int, default=DEFAULT_LONG_TERM_DAYS)
     profiles_create.add_argument("--gains-algorithm", choices=list(RP2_ACCOUNTING_METHODS), default="FIFO")
 
@@ -188,7 +181,10 @@ def build_parser() -> argparse.ArgumentParser:
     profiles_set.add_argument("--profile")
     profiles_set.add_argument("--label")
     profiles_set.add_argument("--fiat-currency")
-    profiles_set.add_argument("--tax-country", choices=list(supported_tax_countries()))
+    profiles_set.add_argument(
+        "--tax-country",
+        help=f"Tax country for the profile (currently supported: {', '.join(supported_tax_countries())})",
+    )
     profiles_set.add_argument("--tax-long-term-days", type=int)
     profiles_set.add_argument("--gains-algorithm", choices=list(RP2_ACCOUNTING_METHODS))
 
@@ -226,19 +222,10 @@ def build_parser() -> argparse.ArgumentParser:
     wallets_create.add_argument("--change-descriptor-file")
     wallets_create.add_argument("--gap-limit", type=int)
     wallets_create.add_argument("--policy-asset")
-    wallets_create.add_argument("--altbestand", action="store_true")
     wallets_create.add_argument("--config")
     wallets_create.add_argument("--config-file")
     wallets_create.add_argument("--source-file")
     wallets_create.add_argument("--source-format", choices=["json", "csv", "btcpay_json", "btcpay_csv", "phoenix_csv"])
-    wallets_altbestand = wallets_sub.add_parser("set-altbestand")
-    wallets_altbestand.add_argument("--workspace")
-    wallets_altbestand.add_argument("--profile")
-    wallets_altbestand.add_argument("--wallet", required=True)
-    wallets_neubestand = wallets_sub.add_parser("set-neubestand")
-    wallets_neubestand.add_argument("--workspace")
-    wallets_neubestand.add_argument("--profile")
-    wallets_neubestand.add_argument("--wallet", required=True)
 
     wallets_sub.add_parser("kinds")
 
@@ -260,8 +247,6 @@ def build_parser() -> argparse.ArgumentParser:
     wallets_update.add_argument("--policy-asset")
     wallets_update.add_argument("--config")
     wallets_update.add_argument("--config-file")
-    wallets_update.add_argument("--set-altbestand", action="store_true")
-    wallets_update.add_argument("--clear-altbestand", action="store_true")
     wallets_update.add_argument("--clear", action="append", default=[], metavar="FIELD", help="Clear a config field (repeatable)")
 
     wallets_delete = wallets_sub.add_parser("delete")
@@ -767,20 +752,6 @@ def dispatch(conn: sqlite3.Connection | None, args: argparse.Namespace) -> Any:
                     )
                 ),
             )
-        if args.wallets_command == "set-altbestand":
-            return emit(
-                args,
-                core_wallets.set_wallet_altbestand(
-                    conn, args.workspace, args.profile, args.wallet, True
-                ),
-            )
-        if args.wallets_command == "set-neubestand":
-            return emit(
-                args,
-                core_wallets.set_wallet_altbestand(
-                    conn, args.workspace, args.profile, args.wallet, False
-                ),
-            )
         if args.wallets_command == "kinds":
             return emit(args, core_wallets.list_wallet_kinds())
         if args.wallets_command == "get":
@@ -791,16 +762,6 @@ def dispatch(conn: sqlite3.Connection | None, args: argparse.Namespace) -> Any:
                 ),
             )
         if args.wallets_command == "update":
-            if args.set_altbestand and args.clear_altbestand:
-                raise AppError(
-                    "--set-altbestand and --clear-altbestand are mutually exclusive",
-                    code="validation",
-                )
-            altbestand = None
-            if args.set_altbestand:
-                altbestand = True
-            elif args.clear_altbestand:
-                altbestand = False
             config_updates = {}
             if args.config:
                 config_updates.update(json.loads(args.config))
@@ -823,7 +784,6 @@ def dispatch(conn: sqlite3.Connection | None, args: argparse.Namespace) -> Any:
             updates = {
                 "label": args.label,
                 "account": args.account,
-                "altbestand": altbestand,
                 "config": config_updates,
                 "clear": args.clear,
             }
@@ -1181,14 +1141,12 @@ def dispatch(conn: sqlite3.Connection | None, args: argparse.Namespace) -> Any:
             )
     if args.command == "reports":
         report_hooks = _report_hooks()
-        envelope_meta = _report_envelope_meta(conn, args.workspace, args.profile)
         if args.reports_command == "balance-sheet":
             return emit(
                 args,
                 core_reports.report_balance_sheet(
                     conn, args.workspace, args.profile, report_hooks
                 ),
-                envelope_meta=envelope_meta,
             )
         if args.reports_command == "portfolio-summary":
             return emit(
@@ -1196,7 +1154,6 @@ def dispatch(conn: sqlite3.Connection | None, args: argparse.Namespace) -> Any:
                 core_reports.report_portfolio_summary(
                     conn, args.workspace, args.profile, report_hooks
                 ),
-                envelope_meta=envelope_meta,
             )
         if args.reports_command == "capital-gains":
             return emit(
@@ -1204,7 +1161,6 @@ def dispatch(conn: sqlite3.Connection | None, args: argparse.Namespace) -> Any:
                 core_reports.report_capital_gains(
                     conn, args.workspace, args.profile, report_hooks
                 ),
-                envelope_meta=envelope_meta,
             )
         if args.reports_command == "journal-entries":
             return emit(
@@ -1212,7 +1168,6 @@ def dispatch(conn: sqlite3.Connection | None, args: argparse.Namespace) -> Any:
                 core_reports.report_journal_entries(
                     conn, args.workspace, args.profile, report_hooks
                 ),
-                envelope_meta=envelope_meta,
             )
         if args.reports_command == "balance-history":
             return emit(
@@ -1229,7 +1184,6 @@ def dispatch(conn: sqlite3.Connection | None, args: argparse.Namespace) -> Any:
                     account_ref=args.account,
                     asset=args.asset,
                 ),
-                envelope_meta=envelope_meta,
             )
         if args.reports_command == "export-pdf":
             return emit(
@@ -1243,7 +1197,6 @@ def dispatch(conn: sqlite3.Connection | None, args: argparse.Namespace) -> Any:
                     wallet_ref=args.wallet,
                     history_limit=args.history_limit,
                 ),
-                envelope_meta=envelope_meta,
             )
     if args.command == "rates":
         if args.rates_command == "pairs":

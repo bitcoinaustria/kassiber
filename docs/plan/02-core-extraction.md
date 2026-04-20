@@ -75,7 +75,6 @@ kassiber/
     engines/
       base.py
       rp2.py
-      austria.py
   ui/
     app.py
     dashboard.py
@@ -120,7 +119,6 @@ kassiber/
       __init__.py
       base.py                    # NEW — abstract TaxEngine interface
       rp2.py                     # RP2 adapter extracted from app.py
-      austria.py                 # transitional Austrian adapter during migration to the RP2 fork
     reports/
       __init__.py
       capital_gains.py
@@ -270,7 +268,7 @@ This is the biggest single chunk.
 - [x] argparse and envelope emission moved out of the old monolith into the CLI layer
 - [x] RP2 imports now live behind the engine seam
 - [x] `kassiber/app.py` is gone and `__main__.py` delegates to `kassiber.cli.main`
-- [x] wallet-level Altbestand provenance stayed separate from profile country policy
+- [x] Austrian-specific provenance did not become a profile-wide setting during extraction
 - [x] the extracted layout is now the baseline for desktop work and Austrian RP2 integration
 
 ## Non-goals

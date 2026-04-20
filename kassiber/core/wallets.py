@@ -7,7 +7,7 @@ from pathlib import Path
 
 from ..errors import AppError
 from ..time_utils import now_iso
-from ..util import normalize_chain_value, normalize_network_value, parse_bool, str_or_none
+from ..util import normalize_chain_value, normalize_network_value, str_or_none
 from ..wallet_descriptors import (
     DEFAULT_DESCRIPTOR_GAP_LIMIT,
     default_policy_asset_id,
@@ -145,8 +145,6 @@ def parse_wallet_config(args):
         config["source_file"] = os.path.abspath(args.source_file)
     if getattr(args, "source_format", None):
         config["source_format"] = args.source_format
-    if getattr(args, "altbestand", False):
-        config["altbestand"] = True
     chain, network = wallet_live_chain_config(config)
     if chain:
         config["chain"] = chain
@@ -235,6 +233,7 @@ def list_wallets(conn, workspace_ref, profile_ref):
     output = []
     for row in rows:
         config = json.loads(row["config_json"] or "{}")
+        config.pop("altbestand", None)
         descriptor_state, chain, network = _wallet_descriptor_state(config)
         output.append(
             {
@@ -248,27 +247,12 @@ def list_wallets(conn, workspace_ref, profile_ref):
                 "addresses": ",".join(normalize_addresses(config.get("addresses"))),
                 "descriptor": descriptor_state,
                 "gap_limit": config.get("gap_limit", DEFAULT_DESCRIPTOR_GAP_LIMIT if descriptor_state else ""),
-                "altbestand": "yes" if parse_bool(config.get("altbestand"), default=False) else "",
                 "source_format": config.get("source_format", ""),
                 "source_file": config.get("source_file", ""),
                 "created_at": row["created_at"],
             }
         )
     return output
-
-
-def set_wallet_altbestand(conn, workspace_ref, profile_ref, wallet_ref, enabled):
-    _, profile = resolve_scope(conn, workspace_ref, profile_ref)
-    wallet = resolve_wallet(conn, profile["id"], wallet_ref)
-    config = json.loads(wallet["config_json"] or "{}")
-    if enabled:
-        config["altbestand"] = True
-    else:
-        config.pop("altbestand", None)
-    conn.execute("UPDATE wallets SET config_json = ? WHERE id = ?", (json.dumps(config, sort_keys=True), wallet["id"]))
-    invalidate_journals(conn, profile["id"])
-    conn.commit()
-    return {"wallet": wallet["label"], "altbestand": bool(enabled)}
 
 
 WALLET_KIND_CATALOG = {
@@ -337,6 +321,7 @@ def list_wallet_kinds():
 
 def wallet_row_to_dict(row):
     config = json.loads(row["config_json"] or "{}")
+    config.pop("altbestand", None)
     descriptor_state, chain, network = _wallet_descriptor_state(config)
     return {
         "id": row["id"],
@@ -356,7 +341,6 @@ def wallet_row_to_dict(row):
         "change_descriptor": bool(config.get("change_descriptor")),
         "gap_limit": config.get("gap_limit"),
         "policy_asset": config.get("policy_asset"),
-        "altbestand": parse_bool(config.get("altbestand"), default=False),
         "source_file": config.get("source_file", ""),
         "source_format": config.get("source_format", ""),
         "config": config,
@@ -375,21 +359,19 @@ def update_wallet(conn, workspace_ref, profile_ref, wallet_ref, updates):
     wallet = resolve_wallet(conn, profile["id"], wallet_ref)
     new_label = updates.get("label")
     new_account = updates.get("account")
-    new_altbestand = updates.get("altbestand")
     config_updates = updates.get("config") or {}
     clear_fields = updates.get("clear") or []
 
     if (
         new_label is None
         and new_account is None
-        and new_altbestand is None
         and not config_updates
         and not clear_fields
     ):
         raise AppError(
             "wallets update requires at least one field to change",
             code="validation",
-            hint="Pass --label, --account, --set-altbestand/--clear-altbestand, --config/--config-file, or --clear <field>",
+            hint="Pass --label, --account, --config/--config-file, or --clear <field>",
         )
 
     label_value = new_label if new_label is not None else wallet["label"]
@@ -399,6 +381,7 @@ def update_wallet(conn, workspace_ref, profile_ref, wallet_ref, updates):
         account_id = account["id"]
 
     config = json.loads(wallet["config_json"] or "{}")
+    config.pop("altbestand", None)
     for field in clear_fields:
         config.pop(field, None)
     for key, value in config_updates.items():
@@ -406,10 +389,6 @@ def update_wallet(conn, workspace_ref, profile_ref, wallet_ref, updates):
             config.pop(key, None)
         else:
             config[key] = value
-    if new_altbestand is True:
-        config["altbestand"] = True
-    elif new_altbestand is False:
-        config.pop("altbestand", None)
 
     chain, network = wallet_live_chain_config(config)
     if chain:
@@ -465,7 +444,6 @@ __all__ = [
     "normalize_wallet_kind",
     "parse_wallet_config",
     "read_text_argument",
-    "set_wallet_altbestand",
     "update_wallet",
     "wallet_live_chain_config",
     "wallet_policy_asset_id",
