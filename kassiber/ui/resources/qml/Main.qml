@@ -14,6 +14,7 @@ ApplicationWindow {
     readonly property bool standaloneWelcomeMode: dashboardVM.currentPage === "welcome" && (!dashboardVM.hasProfile || previewSceneMode)
     property bool hideSensitivePreview: false
     property string previewLanguage: "EN"
+    property bool previewDialogBootstrapped: false
 
     visible: false
     title: dashboardVM.windowTitle
@@ -37,6 +38,18 @@ ApplicationWindow {
             if (addConnectionDialog.opened) {
                 addConnectionDialog.close()
             }
+        }
+    }
+
+    onVisibleChanged: {
+        if (!visible || previewDialogBootstrapped) {
+            return
+        }
+        previewDialogBootstrapped = true
+        if (uiPreviewPage === "add-connection-picker") {
+            addConnectionDialog.openPicker()
+        } else if (uiPreviewPage === "add-connection-xpub") {
+            addConnectionDialog.openForKind("xpub", true)
         }
     }
 

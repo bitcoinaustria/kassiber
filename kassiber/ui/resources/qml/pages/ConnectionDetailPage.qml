@@ -31,6 +31,11 @@ Item {
         if (t === "Expense") return theme.typeExpense
         if (t === "Transfer") return theme.typeTransfer
         if (t === "Swap") return theme.typeSwap
+        if (t === "Consolidation") return theme.typeConsolidation
+        if (t === "Rebalance") return theme.typeRebalance
+        if (t === "Mint") return theme.typeMint
+        if (t === "Melt") return theme.typeMelt
+        if (t === "Fee") return theme.typeFee
         return Design.ink3(theme)
     }
 
@@ -256,7 +261,7 @@ Item {
 
                                     Text {
                                         Layout.preferredWidth: root.colDate
-                                        text: (modelData["occurred_at_label"] || "").substring(5, 10)
+                                        text: modelData["occurred_on_label"] || ""
                                         color: Design.ink2(theme)
                                         font.family: Design.mono(theme)
                                         font.pixelSize: theme.fontBodySmall
@@ -264,8 +269,8 @@ Item {
 
                                     Text {
                                         Layout.preferredWidth: root.colType
-                                        text: (modelData["kind_label"] || "").toUpperCase()
-                                        color: root.typeColor(modelData["kind_label"] || "")
+                                        text: (modelData["type_label"] || modelData["kind_label"] || "").toUpperCase()
+                                        color: root.typeColor(modelData["type_badge_tone"] || "")
                                         font.family: Design.mono(theme)
                                         font.pixelSize: theme.fontMicro
                                         font.weight: Font.DemiBold

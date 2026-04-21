@@ -35,6 +35,18 @@ class TransactionsViewModel(QObject):
     def isEmpty(self) -> bool:
         return len(self._items()) == 0
 
+    @Property(int, notify=snapshotChanged)
+    def totalCount(self) -> int:
+        return int(self._transactions().get("total_count") or 0)
+
+    @Property(str, notify=snapshotChanged)
+    def historyLabel(self) -> str:
+        return str(self._transactions().get("history_label") or "LOCAL SNAPSHOT")
+
+    @Property("QVariantList", notify=snapshotChanged)
+    def filterOptions(self):
+        return list(self._transactions().get("filter_options") or [])
+
     @Property("QVariantList", notify=snapshotChanged)
     def items(self):
         return self._items()
