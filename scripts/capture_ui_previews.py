@@ -37,6 +37,10 @@ def _run_many(args: argparse.Namespace) -> int:
             "--delay-ms",
             str(args.delay_ms),
         ]
+        if args.data_root:
+            cmd.extend(["--data-root", str(args.data_root)])
+        if args.env_file:
+            cmd.extend(["--env-file", str(args.env_file)])
         result = subprocess.run(cmd)
         if result.returncode != 0:
             return result.returncode
@@ -47,6 +51,7 @@ def _capture_one(args: argparse.Namespace) -> int:
     os.environ["QT_QPA_PLATFORM"] = "offscreen"
     os.environ["KASSIBER_UI_PREVIEW_PAGE"] = args.scene
     os.environ["KASSIBER_UI_CAPTURE"] = "1"
+    os.environ["KASSIBER_UI_DISABLE_STATE_WRITE"] = "1"
 
     from PySide6.QtCore import QTimer
 
@@ -59,7 +64,7 @@ def _capture_one(args: argparse.Namespace) -> int:
     output_dir.mkdir(parents=True, exist_ok=True)
     output_path = output_dir / f"{args.scene}.png"
 
-    paths = ensure_runtime_layout(resolve_runtime_paths(None, None))
+    paths = ensure_runtime_layout(resolve_runtime_paths(args.data_root, args.env_file))
     runtime_config = load_runtime_config(paths.env_file)
     conn = open_db(paths.data_root)
     merge_db_backends(conn, runtime_config)
@@ -94,6 +99,8 @@ def main() -> int:
     parser.add_argument("--width", type=int, default=1360, help="Capture width in pixels.")
     parser.add_argument("--height", type=int, default=860, help="Capture height in pixels.")
     parser.add_argument("--delay-ms", type=int, default=250, help="Delay before capture.")
+    parser.add_argument("--data-root", default=None, help="Optional data root to capture from.")
+    parser.add_argument("--env-file", default=None, help="Optional env file to capture from.")
     args = parser.parse_args()
 
     if args.scene:

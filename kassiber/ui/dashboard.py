@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import sqlite3
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from decimal import Decimal
 from typing import Any
 
@@ -218,7 +218,7 @@ def _build_transaction_items(conn: sqlite3.Connection, profile_id: str, fiat_cur
         JOIN wallets w ON w.id = t.wallet_id
         LEFT JOIN transaction_tags tt ON tt.transaction_id = t.id
         LEFT JOIN tags ON tags.id = tt.tag_id
-        WHERE t.profile_id = ?
+        WHERE t.profile_id = ? AND t.excluded = 0
         GROUP BY t.id
         ORDER BY t.occurred_at DESC, t.created_at DESC, t.id DESC
         LIMIT 18
@@ -275,11 +275,25 @@ def _build_report_section(
     counts: dict[str, int],
     transactions: list[dict[str, Any]],
 ) -> dict[str, Any]:
+    tax_country = str(profile.get("tax_country") or "generic").lower()
+    gains_algorithm = str(profile.get("gains_algorithm") or "FIFO").upper()
     processed_fresh = bool(
         profile.get("last_processed_at")
         and int(profile.get("last_processed_tx_count") or 0) == counts["transactions"]
     )
-    if processed_fresh:
+    supports_runtime_reports = tax_country == "generic"
+    if not supports_runtime_reports:
+        status_title = "Report preview unavailable"
+        status_body = (
+            f"{tax_country.upper()} tax processing is not available in Kassiber yet. "
+            "This desktop surface only shows readiness and profile policy metadata."
+        )
+        status_tone = "warn"
+    elif counts["quarantines"]:
+        status_title = "Reports blocked by quarantines"
+        status_body = "Resolve or exclude quarantined transactions before trusting downstream reports."
+        status_tone = "warn"
+    elif processed_fresh:
         status_title = "Reports ready"
         status_body = "Journal data looks fresh enough for the read-only reports surface."
         status_tone = "ok"
@@ -294,52 +308,37 @@ def _build_report_section(
                 "id": report_id,
                 "label": label,
                 "summary": summary,
-                "status": "Ready" if processed_fresh else "Needs journals",
-                "status_tone": "ok" if processed_fresh else "warn",
+                "status": (
+                    "Ready"
+                    if supports_runtime_reports and processed_fresh and counts["quarantines"] == 0
+                    else ("Unavailable" if not supports_runtime_reports else "Needs attention")
+                ),
+                "status_tone": (
+                    "ok"
+                    if supports_runtime_reports and processed_fresh and counts["quarantines"] == 0
+                    else "warn"
+                ),
             }
         )
-    fiat_currency = profile.get("fiat_currency", "EUR")
-    preview_rows = []
-    total_cost = Decimal("0")
-    total_proceeds = Decimal("0")
-    total_gain = Decimal("0")
-
-    for index, item in enumerate(transactions[:5]):
-        occurred_value = str(item.get("occurred_at") or "")
-        try:
-            disposed_dt = datetime.fromisoformat(occurred_value.replace("Z", "+00:00"))
-        except ValueError:
-            disposed_dt = datetime.now(timezone.utc) - timedelta(days=index * 37)
-
-        long_term = disposed_dt.year <= datetime.now(timezone.utc).year - 1 or index < 2
-        acquired_dt = disposed_dt - timedelta(days=420 if long_term else 180)
-        sats = abs(int(item.get("amount_sats") or 0)) or (index + 1) * 900_000
-
-        fiat_value = Decimal(str(abs(item.get("fiat_value") or 0)))
-        if fiat_value == 0:
-            fiat_value = (Decimal(sats) / Decimal("100000000")) * Decimal("47000")
-        proceeds = fiat_value
-        cost = proceeds * (Decimal("0.58") if long_term else Decimal("0.82"))
-        gain = proceeds - cost
-
-        total_cost += cost
-        total_proceeds += proceeds
-        total_gain += gain
-
-        preview_rows.append(
-            {
-                "acquired": acquired_dt.strftime("%Y-%m-%d"),
-                "disposed": disposed_dt.strftime("%Y-%m-%d"),
-                "holding_label": "> 1Y" if long_term else "< 1Y",
-                "holding_tone": "ok" if long_term else "warn",
-                "sats": f"{sats:,}",
-                "cost_label": _format_fiat(cost, fiat_currency),
-                "proceeds_label": _format_fiat(proceeds, fiat_currency),
-                "gain_label": _format_fiat(gain, fiat_currency),
-            }
-        )
-
-    kest = total_gain * Decimal("0.275")
+    fiat_currency = str(profile.get("fiat_currency") or "EUR").upper()
+    preview_rows = [
+        {
+            "occurred": item.get("occurred_at_label", ""),
+            "wallet": item.get("wallet", ""),
+            "kind_label": item.get("kind_label", ""),
+            "kind_tone": item.get("type_tone", "neutral"),
+            "amount_label": item.get("amount_label", ""),
+            "fiat_label": item.get("fiat_label", ""),
+            "tags": item.get("tags", ""),
+        }
+        for item in transactions[:6]
+    ]
+    method_details = {
+        "FIFO": "First-in, first-out",
+        "LIFO": "Last-in, first-out",
+        "HIFO": "Highest-in, first-out",
+        "LOFO": "Lowest-in, first-out",
+    }
     return {
         "status_title": status_title,
         "status_body": status_body,
@@ -347,47 +346,62 @@ def _build_report_section(
         "items": items,
         "summary_cards": [
             {
-                "label": "Proceeds",
-                "value": _format_fiat(total_proceeds, fiat_currency),
+                "label": "Transactions",
+                "value": _format_count(counts["transactions"]),
                 "tone": "ok",
-                "detail": f"{len(preview_rows)} disposals",
+                "detail": "Included in the current profile",
             },
             {
-                "label": "Cost basis",
-                "value": _format_fiat(total_cost, fiat_currency),
+                "label": "Journal entries",
+                "value": _format_count(counts["journal_entries"]),
+                "tone": "ok" if counts["journal_entries"] else "warn",
+                "detail": "Derived after processing",
+            },
+            {
+                "label": "Quarantines",
+                "value": _format_count(counts["quarantines"]),
+                "tone": "warn" if counts["quarantines"] else "ok",
+                "detail": "Need review before trusting reports",
+            },
+            {
+                "label": "Lot method",
+                "value": gains_algorithm,
                 "tone": "neutral",
-                "detail": "Derived desktop preview",
-            },
-            {
-                "label": "Net gain",
-                "value": _format_fiat(total_gain, fiat_currency),
-                "tone": "ok",
-                "detail": f"{profile.get('tax_country', '').upper()} tax year",
-            },
-            {
-                "label": "KESt 27.5%",
-                "value": _format_fiat(kest, fiat_currency),
-                "tone": "warn",
-                "detail": "Estimated liability",
+                "detail": f"{fiat_currency} profile policy",
             },
         ],
         "method_options": [
-            {"id": "fifo", "label": "FIFO", "detail": "First-in, first-out", "selected": True},
-            {"id": "lifo", "label": "LIFO", "detail": "Last-in, first-out", "selected": False},
-            {"id": "hifo", "label": "HIFO", "detail": "Highest-in, first-out", "selected": False},
-            {"id": "spec", "label": "Specific ID", "detail": "Per-lot selection", "selected": False},
+            {
+                "id": algorithm.lower(),
+                "label": algorithm,
+                "detail": method_details[algorithm],
+                "selected": gains_algorithm == algorithm,
+            }
+            for algorithm in ("FIFO", "LIFO", "HIFO", "LOFO")
         ],
         "policy_rows": [
-            {"label": "Treat internal transfers as non-taxable", "enabled": True},
-            {"label": "Apply 27.5 % KESt flat rate", "enabled": True},
-            {"label": "Include Lightning fees as cost", "enabled": True},
-            {"label": "Aggregate preview rows by journal event", "enabled": False},
+            {
+                "label": "Tax policy",
+                "detail": tax_country.upper(),
+            },
+            {
+                "label": "Journals",
+                "detail": status_title,
+            },
+            {
+                "label": "Cost basis pooling",
+                "detail": "Per asset across all wallets in the active profile.",
+            },
+            {
+                "label": "Pricing source",
+                "detail": "Stored transaction and journal pricing, not live rates queries.",
+            },
         ],
         "preview_rows": preview_rows,
         "export_formats": [
-            {"label": "CSV", "summary": "Spreadsheet", "detail": "Flat export for review", "primary": False},
-            {"label": "PDF", "summary": "Human-readable", "detail": "Best for accountant handoff", "primary": True},
-            {"label": "JSON", "summary": "Envelope", "detail": "Machine-readable payload", "primary": False},
+            {"label": "CSV", "summary": "Spreadsheet", "detail": "Tabular export for review", "primary": True},
+            {"label": "JSON", "summary": "Envelope", "detail": "Machine-readable report payload", "primary": False},
+            {"label": "PLAIN", "summary": "Terminal", "detail": "Human-readable CLI output", "primary": False},
         ],
     }
 
