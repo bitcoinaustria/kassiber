@@ -10,38 +10,55 @@ import sys
 from pathlib import Path
 
 
+REPO_ROOT = Path(__file__).resolve().parent.parent
 SCENE_SOURCES = {
     "welcome": {
-        "jsx": "/Users/dev/Github/kassiber/temp/screens/welcome.jsx",
+        "jsx": "screens/welcome.jsx",
         "html_scene": "welcome",
     },
     "overview-empty": {
-        "jsx": "/Users/dev/Github/kassiber/temp/screens/overview.jsx",
+        "jsx": "screens/overview.jsx",
         "html_scene": "overview",
     },
     "overview-data": {
-        "jsx": "/Users/dev/Github/kassiber/temp/screens/overview.jsx",
+        "jsx": "screens/overview.jsx",
         "html_scene": "overview-full",
     },
     "transactions": {
-        "jsx": "/Users/dev/Github/kassiber/temp/screens/transactions.jsx",
+        "jsx": "screens/transactions.jsx",
         "html_scene": "transactions",
     },
     "tax": {
-        "jsx": "/Users/dev/Github/kassiber/temp/screens/tax.jsx",
+        "jsx": "screens/tax.jsx",
         "html_scene": "reports",
     },
     "connection-detail": {
-        "jsx": "/Users/dev/Github/kassiber/temp/screens/connections.jsx",
+        "jsx": "screens/connections.jsx",
         "html_scene": "connection-detail",
     },
     "settings": {
-        "jsx": "/Users/dev/Github/kassiber/temp/screens/settings.jsx",
+        "jsx": "screens/settings.jsx",
         "html_scene": "settings",
     },
 }
 
 IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".webp"}
+
+
+def _display_path(path: Path | None) -> str:
+    if path is None:
+        return ""
+    try:
+        return str(path.resolve().relative_to(REPO_ROOT))
+    except ValueError:
+        return str(path.resolve())
+
+
+def _resolve_optional_file(root: str, relative_path: str) -> Path | None:
+    if not root:
+        return None
+    candidate = (Path(root).expanduser().resolve() / relative_path).resolve()
+    return candidate if candidate.exists() else None
 
 
 def _copy_reference_images(reference_dir: Path, output_dir: Path) -> dict[str, str]:
@@ -80,15 +97,18 @@ def _render_gallery(
     captures_dir: Path,
     reference_images: dict[str, str],
     scenes: list[str],
+    jsx_root: str,
+    html_export: str,
 ) -> None:
     rows = []
     manifest = []
+    html_export_path = Path(html_export).expanduser().resolve() if html_export else None
     for scene in scenes:
         source = SCENE_SOURCES.get(scene, {})
         capture_path = captures_dir / f"{scene}.png"
         capture_rel = str(capture_path.relative_to(output_dir)) if capture_path.exists() else ""
         reference_rel = reference_images.get(scene, "")
-        jsx = source.get("jsx", "")
+        jsx = _display_path(_resolve_optional_file(jsx_root, source.get("jsx", "")))
         html_scene = source.get("html_scene", "")
         manifest.append(
             {
@@ -96,7 +116,7 @@ def _render_gallery(
                 "capture": capture_rel,
                 "reference_image": reference_rel,
                 "jsx_source": jsx,
-                "html_export": "/Users/dev/Downloads/Kassiber.html",
+                "html_export": _display_path(html_export_path),
                 "html_scene": html_scene,
             }
         )
@@ -116,8 +136,8 @@ def _render_gallery(
             <section class="scene">
               <div class="meta">
                 <h2>{html.escape(scene)}</h2>
-                <p><strong>JSX source:</strong> <code>{html.escape(jsx)}</code></p>
-                <p><strong>HTML export:</strong> <code>/Users/dev/Downloads/Kassiber.html</code> <span class="tag">{html.escape(html_scene)}</span></p>
+                <p><strong>JSX source:</strong> <code>{html.escape(jsx or "not provided")}</code></p>
+                <p><strong>HTML export:</strong> <code>{html.escape(_display_path(html_export_path) or "not provided")}</code> <span class="tag">{html.escape(html_scene)}</span></p>
               </div>
               <div class="grid">
                 <div class="panel">
@@ -251,8 +271,18 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="Build a side-by-side gallery for Kassiber UI review.")
     parser.add_argument(
         "--reference-images-dir",
-        default="/Users/dev/Github/kassiber/temp",
+        default="docs/design/review-reference",
         help="Directory containing named scene screenshots such as welcome.png or overview-data.png.",
+    )
+    parser.add_argument(
+        "--jsx-root",
+        default="",
+        help="Optional root directory containing a Claude Design export with screens/*.jsx.",
+    )
+    parser.add_argument(
+        "--html-export",
+        default="",
+        help="Optional exported HTML file used as the visual reference bundle.",
     )
     parser.add_argument(
         "--output-dir",
@@ -281,7 +311,14 @@ def main() -> int:
     if not args.skip_capture:
         _capture_previews(captures_dir, scenes)
     reference_images = _copy_reference_images(Path(args.reference_images_dir).resolve(), output_dir)
-    _render_gallery(output_dir, captures_dir, reference_images, scenes)
+    _render_gallery(
+        output_dir,
+        captures_dir,
+        reference_images,
+        scenes,
+        args.jsx_root,
+        args.html_export,
+    )
     print(f"gallery: {output_dir / 'index.html'}")
     return 0
 

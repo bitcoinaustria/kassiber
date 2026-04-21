@@ -292,6 +292,8 @@ ApplicationWindow {
                 }
 
                 ReportsPage {
+                    hideSensitive: root.hideSensitivePreview
+                    onRequestBack: dashboardVM.selectPage("overview")
                 }
 
                 SettingsPage {

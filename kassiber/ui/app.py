@@ -71,6 +71,8 @@ def _read_window_state(settings_path: Path) -> dict[str, int]:
 
 
 def _write_window_state(settings_path: Path, window) -> None:
+    if (os.environ.get("KASSIBER_UI_DISABLE_STATE_WRITE") or "").strip().lower() in {"1", "true", "yes", "on"}:
+        return
     payload = _load_settings_blob(settings_path)
     ui_section = dict(payload.get("ui")) if isinstance(payload.get("ui"), dict) else {}
     ui_section["window"] = {
@@ -147,6 +149,9 @@ def build_application(
     )
     preview_scene = (os.environ.get("KASSIBER_UI_PREVIEW_PAGE") or "").strip()
     capture_mode = (os.environ.get("KASSIBER_UI_CAPTURE") or "").strip().lower() in {"1", "true", "yes", "on"}
+    disable_state_write = capture_mode or (
+        (os.environ.get("KASSIBER_UI_DISABLE_STATE_WRITE") or "").strip().lower() in {"1", "true", "yes", "on"}
+    )
     preview_page = _apply_preview_scene(snapshot, preview_scene)
     settings_path = resolve_settings_path(data_root)
     window_state = _read_window_state(settings_path)
@@ -205,7 +210,8 @@ def build_application(
     if window_state["height"] > 0:
         window.setProperty("height", window_state["height"])
     window.setProperty("visible", True)
-    app.aboutToQuit.connect(lambda: _write_window_state(settings_path, window))
+    if not disable_state_write:
+        app.aboutToQuit.connect(lambda: _write_window_state(settings_path, window))
     return app, engine, window
 
 
