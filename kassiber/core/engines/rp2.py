@@ -25,6 +25,28 @@ from ..tax_events import NormalizedTaxAssetInputs, build_tax_quarantine, normali
 from .base import TaxEngineLedgerInputs, TaxEngineLedgerResult
 
 _RP2_MODULES = None
+_RP2_EARN_TRANSACTION_TYPES = {
+    "airdrop",
+    "hardfork",
+    "income",
+    "interest",
+    "mining",
+    "staking",
+    "wages",
+}
+_RP2_INBOUND_KIND_TO_TRANSACTION_TYPE = {
+    "airdrop": "AIRDROP",
+    "hardfork": "HARDFORK",
+    "hard_fork": "HARDFORK",
+    "income": "INCOME",
+    "interest": "INTEREST",
+    "lending_interest": "INTEREST",
+    "mining": "MINING",
+    "mining_reward": "MINING",
+    "routing_income": "INCOME",
+    "staking": "STAKING",
+    "wages": "WAGES",
+}
 
 
 @dataclass(frozen=True)
@@ -140,6 +162,27 @@ def _profile_str(profile: Mapping[str, Any], key: str) -> str:
             return ""
         return str(value).strip()
     return ""
+
+
+def _normalized_event_kind(event: Any) -> str:
+    raw_row = getattr(event, "raw_row", None) or {}
+    kind = raw_row["kind"] if hasattr(raw_row, "keys") and "kind" in raw_row.keys() else None
+    if kind is None:
+        return ""
+    return str(kind).strip().lower().replace("-", "_").replace(" ", "_")
+
+
+def _rp2_in_transaction_type(event: Any) -> str:
+    kind = _normalized_event_kind(event)
+    return _RP2_INBOUND_KIND_TO_TRANSACTION_TYPE.get(kind, "BUY")
+
+
+def _is_rp2_earn_transaction_type(transaction_type: Any) -> bool:
+    checker = getattr(transaction_type, "is_earn_type", None)
+    if callable(checker):
+        return bool(checker())
+    value = getattr(transaction_type, "value", transaction_type)
+    return str(value or "").strip().lower() in _RP2_EARN_TRANSACTION_TYPES
 
 
 def _compose_transfer_notes(transfer: Any) -> str:
@@ -399,7 +442,7 @@ def _rp2_asset_state(profile, normalized_inputs: NormalizedTaxAssetInputs, confi
                     asset=asset,
                     exchange=event.wallet_label,
                     holder=holder,
-                    transaction_type="BUY",
+                    transaction_type=_rp2_in_transaction_type(event),
                     spot_price=_rp2_decimal(event.spot_price),
                     crypto_in=_rp2_decimal(event.amount),
                     fiat_in_no_fee=_rp2_decimal(event.fiat_value),
@@ -539,12 +582,15 @@ def _append_rp2_journal_entries(entries, computed_data, wallet_refs_by_label, pr
     for gain_loss in computed_data.gain_loss_set:
         taxable_event = gain_loss.taxable_event
         wallet = _wallet_for(taxable_event)
+        is_earn = _is_rp2_earn_transaction_type(taxable_event.transaction_type)
         is_intra = (
             taxable_event.unique_id in audit_by_out_id
             and taxable_event.asset == computed_data.asset
             and taxable_event.transaction_type.value.lower() == "move"
         )
-        if is_intra:
+        if is_earn:
+            entry_type = "income"
+        elif is_intra:
             entry_type = "transfer_fee"
         elif taxable_event.transaction_type.value == "FEE":
             entry_type = "fee"
@@ -589,6 +635,7 @@ def _append_rp2_journal_entries(entries, computed_data, wallet_refs_by_label, pr
         proceeds = event["proceeds"]
         cost_basis = event["cost_basis"]
         gain_loss = event["gain_loss"]
+        quantity = event["quantity"] if event["entry_type"] == "income" else -event["quantity"]
         entry = {
             "id": str(uuid.uuid4()),
             "workspace_id": profile["workspace_id"],
@@ -599,7 +646,7 @@ def _append_rp2_journal_entries(entries, computed_data, wallet_refs_by_label, pr
             "occurred_at": event["occurred_at"],
             "entry_type": event["entry_type"],
             "asset": event["asset"],
-            "quantity": -event["quantity"],
+            "quantity": quantity,
             "fiat_value": proceeds,
             "unit_cost": Decimal("0"),
             "cost_basis": cost_basis,

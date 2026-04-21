@@ -36,7 +36,24 @@ swap legs.
 | `at_swap_link` | `str | None` | Engine classifier tags both legs of a Neu cross-asset pair with the pair id. |
 | `carried_basis_fiat` | `Decimal | None` | Incoming leg of a Neu swap. v1: unset (quarantined). Future: Option A two-pass compute. |
 
-## Disposal bucketing contract
+## Receipt and disposal bucketing contract
+
+Before `compute_tax`, Kassiber maps explicit inbound `transactions.kind`
+values onto rp2 transaction types. Today the adapter promotes only
+unambiguous earn-like kinds:
+
+- `staking` -> `STAKING`
+- `interest`, `lending_interest` -> `INTEREST`
+- `mining`, `mining_reward` -> `MINING`
+- `airdrop` -> `AIRDROP`
+- `hardfork`, `hard_fork` -> `HARDFORK`
+- `income`, `routing_income` -> `INCOME`
+- `wages` -> `WAGES`
+
+Generic wallet-sync / CSV receives such as `deposit`, `buy`, or Phoenix
+transport types still go through rp2 as `BUY`. Kassiber does not invent
+income semantics for unlabeled inbound rows: explicit `kind` values are
+the only promotion signal in v1.
 
 rp2 Phase 9 exports `AtDisposalCategory` and `classify_disposal(gain_loss)`
 from `rp2.plugin.country.at`. Kassiber consumes that API when it turns
@@ -64,8 +81,8 @@ Current Kassiber mapping:
 One taxable event can split across multiple gain/loss rows in rp2, so
 Kassiber groups Austrian realized journal rows by `(taxable_event,
 at_category)` rather than by transaction id alone. That keeps mixed Alt
-holding-period cases and future mixed-income cases representable without
-guessing in the report layer.
+holding-period cases and current income/disposal splits representable
+without guessing in the report layer.
 
 ## Swap basis-carry (§ 27b Abs 3 Z 2 EStG)
 
