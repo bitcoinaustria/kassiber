@@ -153,12 +153,18 @@ def _normalize_slip77_key(match):
     return f"slip77({modules['PrivateKey'](secret).wif()})"
 
 
+def _compact_descriptor_text(descriptor_text):
+    # Output descriptors do not use significant whitespace, and normalizing it
+    # here lets `--descriptor-file` accept readable multi-line formatting.
+    return re.sub(r"\s+", "", str(descriptor_text or ""))
+
+
 def normalize_descriptor_text(chain, descriptor_text):
-    text = str(descriptor_text or "").strip()
+    text = _compact_descriptor_text(descriptor_text)
     if not text:
         return ""
     if "#" in text:
-        text = text.split("#", 1)[0].strip()
+        text = text.split("#", 1)[0]
     if normalize_chain(chain) != "liquid":
         return text
     normalized = text
