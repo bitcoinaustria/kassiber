@@ -1,9 +1,10 @@
 # Austrian tax handoff contract (Kassiber ↔ rp2)
 
-Kassiber is the marker emitter. The rp2 AT plugin
-(`rp2.plugin.country.at`) is the marker interpreter. This doc pins the
-contract between them and records v1 scope decisions so future commits
-can tighten the handoff without rediscovering them.
+Kassiber is the marker emitter and Austrian reporting layer. The rp2 AT
+plugin (`rp2.plugin.country.at`) is the tax-semantics interpreter and
+pool-math engine. This doc pins the contract between them and records v1
+scope decisions so future commits can tighten the handoff without
+rediscovering them.
 
 ## Wire format
 
@@ -34,6 +35,37 @@ swap legs.
 | `at_pool` | `str | None` | v1: wallet_id. Future: configurable per profile. |
 | `at_swap_link` | `str | None` | Engine classifier tags both legs of a Neu cross-asset pair with the pair id. |
 | `carried_basis_fiat` | `Decimal | None` | Incoming leg of a Neu swap. v1: unset (quarantined). Future: Option A two-pass compute. |
+
+## Disposal bucketing contract
+
+rp2 Phase 9 exports `AtDisposalCategory` and `classify_disposal(gain_loss)`
+from `rp2.plugin.country.at`. Kassiber consumes that API when it turns
+`computed_data.gain_loss_set` into persisted journal rows:
+
+- rp2 decides the semantic category from the matched lot, swap marker,
+  and holding period.
+- Kassiber persists the resulting `at_category` string on journal rows.
+- Kassiber maps that semantic category onto current BMF / FinanzOnline
+  Kennzahlen via its own table so tax-form wiring can evolve without
+  re-implementing Austrian tax semantics.
+
+Current Kassiber mapping:
+
+| `AtDisposalCategory` | Kassiber `at_category` | Current Kennzahl |
+| --- | --- | --- |
+| `INCOME_GENERAL` | `income_general` | `172` |
+| `INCOME_CAPITAL_YIELD` | `income_capital_yield` | `175` |
+| `NEU_GAIN` | `neu_gain` | `174` |
+| `NEU_LOSS` | `neu_loss` | `176` |
+| `NEU_SWAP` | `neu_swap` | none |
+| `ALT_SPEKULATION` | `alt_spekulation` | `801` |
+| `ALT_TAXFREE` | `alt_taxfree` | none |
+
+One taxable event can split across multiple gain/loss rows in rp2, so
+Kassiber groups Austrian realized journal rows by `(taxable_event,
+at_category)` rather than by transaction id alone. That keeps mixed Alt
+holding-period cases and future mixed-income cases representable without
+guessing in the report layer.
 
 ## Swap basis-carry (§ 27b Abs 3 Z 2 EStG)
 

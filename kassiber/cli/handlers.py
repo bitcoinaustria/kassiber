@@ -1244,8 +1244,8 @@ def process_journals(conn, workspace_ref, profile_ref):
             INSERT INTO journal_entries(
                 id, workspace_id, profile_id, transaction_id, wallet_id, account_id,
                 occurred_at, entry_type, asset, quantity, fiat_value, unit_cost,
-                cost_basis, proceeds, gain_loss, description, created_at
-            ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                cost_basis, proceeds, gain_loss, description, at_category, at_kennzahl, created_at
+            ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 entry["id"],
@@ -1264,6 +1264,8 @@ def process_journals(conn, workspace_ref, profile_ref):
                 float(entry["proceeds"]) if entry["proceeds"] is not None else None,
                 float(entry["gain_loss"]) if entry["gain_loss"] is not None else None,
                 entry["description"],
+                entry.get("at_category"),
+                entry.get("at_kennzahl"),
                 created_at,
             ),
         )
@@ -1417,7 +1419,9 @@ def list_journal_events(
             COALESCE(je.cost_basis, 0) AS cost_basis,
             COALESCE(je.proceeds, 0) AS proceeds,
             COALESCE(je.gain_loss, 0) AS gain_loss,
-            COALESCE(je.description, '') AS description
+            COALESCE(je.description, '') AS description,
+            je.at_category,
+            je.at_kennzahl
         FROM journal_entries je
         JOIN wallets w ON w.id = je.wallet_id
         LEFT JOIN accounts a ON a.id = je.account_id
@@ -1435,6 +1439,10 @@ def list_journal_events(
         event = dict(row)
         event["quantity_msat"] = int(event["quantity"])
         event["quantity"] = float(msat_to_btc(event["quantity"]))
+        if event.get("at_category") is None:
+            event.pop("at_category", None)
+        if event.get("at_kennzahl") is None:
+            event.pop("at_kennzahl", None)
         events.append(event)
     next_cursor = _encode_event_cursor(page[-1]) if has_more and page else None
 
@@ -1495,12 +1503,14 @@ def list_journal_entries(conn, workspace_ref, profile_ref, limit=200):
             COALESCE(je.cost_basis, 0) AS cost_basis,
             COALESCE(je.proceeds, 0) AS proceeds,
             COALESCE(je.gain_loss, 0) AS gain_loss,
-            COALESCE(je.description, '') AS description
+            COALESCE(je.description, '') AS description,
+            je.at_category,
+            je.at_kennzahl
         FROM journal_entries je
         JOIN wallets w ON w.id = je.wallet_id
         LEFT JOIN accounts a ON a.id = je.account_id
         WHERE je.profile_id = ?
-        ORDER BY je.occurred_at DESC, je.created_at DESC
+        ORDER BY je.occurred_at DESC, je.created_at DESC, je.id DESC
         LIMIT ?
         """,
         (profile["id"], limit),
@@ -1510,6 +1520,10 @@ def list_journal_entries(conn, workspace_ref, profile_ref, limit=200):
         entry = dict(row)
         entry["quantity_msat"] = int(entry["quantity"])
         entry["quantity"] = float(msat_to_btc(entry["quantity"]))
+        if entry.get("at_category") is None:
+            entry.pop("at_category", None)
+        if entry.get("at_kennzahl") is None:
+            entry.pop("at_kennzahl", None)
         results.append(entry)
     return results
 

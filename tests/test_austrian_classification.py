@@ -8,6 +8,7 @@ from kassiber.core.austrian import (
     REGIME_NEU,
     infer_outbound_regimes,
     infer_regime_from_timestamp,
+    kennzahl_for_disposal_category,
     resolve_pool_id,
 )
 from kassiber.core.tax_events import normalize_tax_asset_inputs
@@ -94,6 +95,20 @@ class InferOutboundRegimesTest(unittest.TestCase):
             _row("sell-later", "wallet-a", "outbound", 30_000_000, occurred_at="2025-06-01T00:00:00Z"),
         ]
         self.assertEqual(infer_outbound_regimes(rows), {"sell-later": REGIME_NEU})
+
+
+class AustrianKennzahlMappingTest(unittest.TestCase):
+    def test_maps_known_categories(self):
+        self.assertEqual(kennzahl_for_disposal_category("income_general"), 172)
+        self.assertEqual(kennzahl_for_disposal_category("income_capital_yield"), 175)
+        self.assertEqual(kennzahl_for_disposal_category("neu_gain"), 174)
+        self.assertEqual(kennzahl_for_disposal_category("neu_loss"), 176)
+        self.assertEqual(kennzahl_for_disposal_category("alt_spekulation"), 801)
+
+    def test_returns_none_for_non_reported_categories(self):
+        self.assertIsNone(kennzahl_for_disposal_category("neu_swap"))
+        self.assertIsNone(kennzahl_for_disposal_category("alt_taxfree"))
+        self.assertIsNone(kennzahl_for_disposal_category(None))
 
 
 class AustrianNormalizationTest(unittest.TestCase):

@@ -27,13 +27,13 @@ Kassiber is the local-first accounting product layer. It owns:
 - review and quarantine workflows
 - CLI and desktop UX
 
-RP2 is the tax core. Kassiber currently installs the Kassiber-maintained fork at [bitcoinaustria/rp2](https://github.com/bitcoinaustria/rp2), which carries the Austrian plugin work alongside the generic path.
+RP2 is the tax core. Kassiber currently installs the Kassiber-maintained fork at [bitcoinaustria/rp2](https://github.com/bitcoinaustria/rp2), which carries the Austrian country plugin, moving-average accounting support, and the disposal-classifier API Kassiber uses for Austrian reporting semantics.
 
 Today:
 
-- the `generic` tax policy runs through the RP2 path
-- `generic` is the only currently supported tax-processing mode
-- Austrian tax processing is still unavailable in this branch until the Kassiber-side integration lands
+- the `generic` tax policy runs through RP2
+- the `at` tax policy runs through RP2's Austrian plugin plus Kassiber-side category/Kennzahl mapping
+- Neu cross-asset swaps are still quarantined in v1 until Kassiber grows the two-pass basis-carry upgrade
 
 The intended split is simple: Kassiber prepares and explains; RP2 computes.
 

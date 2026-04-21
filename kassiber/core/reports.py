@@ -121,11 +121,13 @@ def report_capital_gains(conn, workspace_ref, profile_ref, hooks: ReportHooks):
             COALESCE(je.proceeds, 0) AS proceeds,
             COALESCE(je.cost_basis, 0) AS cost_basis,
             COALESCE(je.gain_loss, 0) AS gain_loss,
-            COALESCE(je.description, '') AS description
+            COALESCE(je.description, '') AS description,
+            je.at_category,
+            je.at_kennzahl
         FROM journal_entries je
         JOIN wallets w ON w.id = je.wallet_id
         WHERE je.profile_id = ? AND je.entry_type IN ('disposal', 'fee', 'transfer_fee')
-        ORDER BY je.occurred_at ASC
+        ORDER BY je.occurred_at ASC, je.created_at ASC, je.id ASC
         """,
         (profile["id"],),
     ).fetchall()
@@ -134,6 +136,10 @@ def report_capital_gains(conn, workspace_ref, profile_ref, hooks: ReportHooks):
         entry = dict(row)
         entry["quantity_msat"] = int(entry["quantity"])
         entry["quantity"] = float(msat_to_btc(entry["quantity"]))
+        if entry.get("at_category") is None:
+            entry.pop("at_category", None)
+        if entry.get("at_kennzahl") is None:
+            entry.pop("at_kennzahl", None)
         results.append(entry)
     return results
 
