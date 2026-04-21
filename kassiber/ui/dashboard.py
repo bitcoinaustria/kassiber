@@ -470,6 +470,7 @@ def _build_settings_section(status: dict[str, Any], profile: dict[str, Any] | No
     }
 
 
+
 def _empty_shell(notices: list[str] | None = None) -> dict[str, Any]:
     return {
         "phase": 1,

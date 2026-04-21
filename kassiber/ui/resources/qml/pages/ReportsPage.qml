@@ -3,518 +3,303 @@ import QtQuick.Controls 2.15
 import QtQuick.Layouts 1.15
 
 import "../components"
+import "../components/Design.js" as Design
 
-ScrollView {
+// Static Tax / Capital-gains report view (mapped to dashboard "reports" route).
+// No view-model bindings — inline mock data matching tax.jsx.
+Item {
     id: root
-    clip: true
 
-    property int selectedYear: 2025
-    property string selectedMethod: "fifo"
-    property int previewStep: 1
-    readonly property real pageWidth: Math.max(availableWidth, 980)
-    readonly property bool stackedLayout: pageWidth < 1080
-    readonly property real leftRailWidth: stackedLayout ? pageWidth : 304
-    readonly property real rightColumnWidth: stackedLayout ? pageWidth : pageWidth - leftRailWidth - 14
-    readonly property var yearOptions: [2023, 2024, 2025, 2026]
-    readonly property var methodOptions: reportsVM.methodOptions || []
-    readonly property var policyRows: reportsVM.policyRows || []
-    readonly property var summaryCards: reportsVM.summaryCards || []
-    readonly property var lotRows: reportsVM.previewRows || []
-    readonly property var exportFormats: reportsVM.exportFormats || []
+    property bool hideSensitive: false
 
-    function toneColor(tone) {
-        if (tone === "ok") {
-            return theme.ok
-        }
-        if (tone === "warn") {
-            return theme.accent
-        }
-        return theme.ink
-    }
+    signal requestBack()
 
-    function summaryValue(label, fallback) {
-        for (var i = 0; i < summaryCards.length; ++i) {
-            if (summaryCards[i]["label"] === label) {
-                return summaryCards[i]["value"] || fallback || ""
-            }
-        }
-        return fallback || ""
-    }
+    // Mock data --------------------------------------------------------------
 
-    function totalSats() {
-        var total = 0
-        for (var i = 0; i < lotRows.length; ++i) {
-            total += Number(String(lotRows[i]["sats"] || "0").replace(/,/g, ""))
-        }
-        return total.toLocaleString(Qt.locale("en_US"))
-    }
+    readonly property var mockYears: [2023, 2024, 2025, 2026]
+    readonly property int activeYear: 2025
+    readonly property string activeMethod: "fifo"
 
-    ScrollBar.horizontal.policy: ScrollBar.AlwaysOff
+    readonly property var mockMethods: [
+        { id: "fifo", label: "FIFO",        detail: "First-in, first-out \u00b7 Austrian default" },
+        { id: "lifo", label: "LIFO",        detail: "Last-in, first-out" },
+        { id: "hifo", label: "HIFO",        detail: "Highest-in, first-out (tax optimization)" },
+        { id: "spec", label: "Specific ID", detail: "Per-lot selection" }
+    ]
 
-    Item {
-        width: root.availableWidth
-        implicitHeight: contentColumn.implicitHeight
+    readonly property var mockPolicies: [
+        { label: "Treat internal transfers as non-taxable", checked: true },
+        { label: "Apply 27.5 % KESt flat rate",             checked: true },
+        { label: "Include Lightning channel fees as cost",  checked: true },
+        { label: "Aggregate lots per UTXO set",             checked: false }
+    ]
 
-        Column {
-            id: contentColumn
-            width: parent.width
-            spacing: 18
+    readonly property var mockLots: [
+        { acquired: "2022-03-18", disposed: "2025-11-04", holding: "> 1Y", longTerm: true,  sats: "12,000,000", cost: "3,851.20", proceeds: "8,204.18", gain: "+ 4,352.98" },
+        { acquired: "2023-07-02", disposed: "2025-11-04", holding: "> 1Y", longTerm: true,  sats: "8,000,000",  cost: "2,412.00", proceeds: "5,469.45", gain: "+ 3,057.45" },
+        { acquired: "2024-11-14", disposed: "2025-12-01", holding: "< 1Y", longTerm: false, sats: "3,500,000",  cost: "2,188.70", proceeds: "2,392.08", gain: "+ 203.38"   },
+        { acquired: "2025-02-09", disposed: "2025-12-20", holding: "< 1Y", longTerm: false, sats: "1,800,000",  cost: "1,011.55", proceeds: "1,290.12", gain: "+ 278.57"   },
+        { acquired: "2025-04-22", disposed: "2026-01-08", holding: "< 1Y", longTerm: false, sats: "900,000",    cost: "614.90",   proceeds: "635.14",   gain: "+ 20.24"    }
+    ]
 
-            Row {
-                width: parent.width
-                spacing: 18
+    readonly property var mockTotals: ({
+        sats: "26,200,000",
+        cost: "\u20ac 10,078.35",
+        proceeds: "\u20ac 17,990.97",
+        gain: "+ \u20ac 7,912.62",
+        kest: "\u20ac 2,175.97"
+    })
 
-                Column {
-                    width: Math.max(320, parent.width - headerActions.width - parent.spacing)
-                    spacing: 4
+    property var activeYearValue: activeYear
+    property string activeMethodValue: activeMethod
+    property int activeStep: 1
+
+    ScrollView {
+        anchors.fill: parent
+        clip: true
+        ScrollBar.horizontal.policy: ScrollBar.AlwaysOff
+
+        ColumnLayout {
+            width: root.width
+            spacing: theme.gridGap
+
+            // ------------------------------------------------------------------
+            // Header
+            // ------------------------------------------------------------------
+
+            RowLayout {
+                Layout.fillWidth: true
+                Layout.leftMargin: theme.pagePadding
+                Layout.rightMargin: theme.pagePadding
+                Layout.topMargin: theme.pagePadding
+                spacing: theme.spacingSm + 2
+
+                ColumnLayout {
+                    Layout.fillWidth: true
+                    spacing: 2
 
                     Text {
-                        text: "Report \u00b7 \u00a727a EStG \u00b7 Austria"
-                        color: theme.ink3
-                        font.family: theme.monoFont
-                        font.pixelSize: 10
-                        font.weight: Font.DemiBold
-                        font.capitalization: Font.AllUppercase
+                        text: "REPORT  \u00b7  \u00a727a EStG  \u00b7  AUSTRIA"
+                        color: Design.ink3(theme)
+                        font.family: Design.mono(theme)
+                        font.pixelSize: theme.fontCaption
                         font.letterSpacing: 1.4
                     }
 
                     Text {
-                        width: parent.width
                         text: "Capital gains"
-                        color: theme.ink
-                        font.family: theme.serifFont
-                        font.pixelSize: 32
-                        font.weight: Font.Normal
-                        font.letterSpacing: -0.4
-                        elide: Text.ElideRight
-                    }
-                }
-
-                Row {
-                    id: headerActions
-                    spacing: 18
-
-                    Text {
-                        anchors.verticalCenter: parent.verticalCenter
-                        text: "STEP " + root.previewStep + " / 2"
-                        color: theme.ink3
-                        font.family: theme.monoFont
-                        font.pixelSize: 10
+                        color: Design.ink(theme)
+                        font.family: Design.sans()
+                        font.pixelSize: theme.fontDisplay - 4
                         font.weight: Font.DemiBold
-                        font.capitalization: Font.AllUppercase
-                        font.letterSpacing: 1.2
-                    }
-
-                    Rectangle {
-                        implicitWidth: journalsLabel.implicitWidth + 20
-                        implicitHeight: 28
-                        color: "transparent"
-                        border.color: toneColor(reportsVM.statusTone)
-                        border.width: 1
-                        radius: 14
-
-                        Text {
-                            id: journalsLabel
-                            anchors.centerIn: parent
-                            text: reportsVM.statusTone === "ok" ? "Ready" : "Needs journals"
-                            color: toneColor(reportsVM.statusTone)
-                            font.family: theme.sansFont
-                            font.pixelSize: 11
-                            font.bold: true
-                        }
-                    }
-
-                    GhostButton {
-                        text: "Back"
-                        size: "sm"
-                        onClicked: dashboardVM.selectPage("overview")
+                        font.letterSpacing: -0.4
                     }
                 }
-            }
-
-            Rectangle {
-                width: parent.width
-                implicitHeight: noticeText.implicitHeight + 18
-                color: theme.paper2
-                border.color: theme.line
-                border.width: 1
 
                 Text {
-                    id: noticeText
-                    anchors.left: parent.left
-                    anchors.right: parent.right
-                    anchors.verticalCenter: parent.verticalCenter
-                    anchors.leftMargin: 14
-                    anchors.rightMargin: 14
-                    text: reportsVM.statusBody
-                    color: theme.ink2
-                    font.family: theme.sansFont
-                    font.pixelSize: 12
-                    wrapMode: Text.WordWrap
+                    text: "STEP " + root.activeStep + " / 2"
+                    color: Design.ink3(theme)
+                    font.family: Design.mono(theme)
+                    font.pixelSize: theme.fontCaption
+                    font.letterSpacing: 0.8
+                }
+
+                ActionButton {
+                    variant: "ghost"
+                    size: "sm"
+                    text: "\u2190 Back"
+                    onClicked: root.requestBack()
                 }
             }
 
-            Item {
-                width: parent.width
-                implicitHeight: stackedLayout ? stackedBody.implicitHeight : wideBody.implicitHeight
+            // ------------------------------------------------------------------
+            // Body: 2-col
+            // ------------------------------------------------------------------
 
-                Column {
-                    id: stackedBody
-                    visible: stackedLayout
-                    width: parent.width
-                    spacing: 14
+            GridLayout {
+                Layout.fillWidth: true
+                Layout.leftMargin: theme.pagePadding
+                Layout.rightMargin: theme.pagePadding
+                Layout.bottomMargin: theme.pagePadding
+                columns: 2
+                columnSpacing: theme.gridGap
+                rowSpacing: theme.gridGap
 
-                    Column {
-                        width: parent.width
-                        spacing: 10
+                // ----- Left column: config -----
+                ColumnLayout {
+                    Layout.fillWidth: true
+                    Layout.fillHeight: true
+                    Layout.minimumWidth: 320
+                    Layout.maximumWidth: 360
+                    spacing: theme.gridGap
 
-                        ReportRail {
-                            width: parent.width
-                        }
+                    Card {
+                        Layout.fillWidth: true
+                        title: "Reporting period"
 
-                        ReportPreview {
-                            width: parent.width
-                        }
-                    }
-                }
+                        ColumnLayout {
+                            anchors.left: parent.left
+                            anchors.right: parent.right
+                            anchors.top: parent.top
+                            spacing: theme.gridGap
 
-                Row {
-                    id: wideBody
-                    visible: !stackedLayout
-                    width: parent.width
-                    spacing: 14
-
-                    ReportRail {
-                        width: root.leftRailWidth
-                    }
-
-                    ReportPreview {
-                        width: root.rightColumnWidth
-                    }
-                }
-            }
-        }
-    }
-
-    component ReportRail: Column {
-        spacing: 10
-
-        Card {
-            width: parent.width
-            title: "Reporting period"
-
-            Column {
-                width: parent.width
-                spacing: 10
-
-                Flow {
-                    width: parent.width
-                    spacing: 6
-
-                    Repeater {
-                        model: root.yearOptions
-
-                        Pill {
-                            text: String(modelData)
-                            active: root.selectedYear === modelData
-                            tone: root.selectedYear === modelData ? "ink" : "muted"
-                            onClicked: root.selectedYear = modelData
-                        }
-                    }
-                }
-
-                Row {
-                    width: parent.width
-                    spacing: 8
-
-                    InputField {
-                        width: (parent.width - 8) / 2
-                        label: "From"
-                        mono: true
-                        text: root.selectedYear + "-01-01"
-                        readOnly: true
-                    }
-
-                    InputField {
-                        width: (parent.width - 8) / 2
-                        label: "To"
-                        mono: true
-                        text: root.selectedYear + "-12-31"
-                        readOnly: true
-                    }
-                }
-            }
-        }
-
-        Card {
-            width: parent.width
-            title: "Cost-basis method"
-
-            Column {
-                width: parent.width
-                spacing: 6
-
-                Repeater {
-                    model: root.methodOptions
-
-                    Rectangle {
-                        width: parent.width
-                        implicitHeight: 50
-                        color: root.selectedMethod === modelData["id"] ? theme.paper : "transparent"
-                        border.color: theme.line
-                        border.width: 1
-
-                        MouseArea {
-                            anchors.fill: parent
-                            onClicked: root.selectedMethod = modelData["id"]
-                        }
-
-                        Row {
-                            anchors.fill: parent
-                            anchors.leftMargin: 10
-                            anchors.rightMargin: 10
-                            spacing: 10
-
-                            Rectangle {
-                                width: 16
-                                height: 16
-                                radius: 8
-                                anchors.verticalCenter: parent.verticalCenter
-                                color: "transparent"
-                                border.color: root.selectedMethod === modelData["id"] ? theme.accent : theme.line
-                                border.width: 1
-
-                                Rectangle {
-                                    anchors.centerIn: parent
-                                    width: 8
-                                    height: 8
-                                    radius: 4
-                                    visible: root.selectedMethod === modelData["id"]
-                                    color: theme.accent
-                                }
-                            }
-
-                            Column {
-                                width: parent.width - 32
-                                anchors.verticalCenter: parent.verticalCenter
-                                spacing: 2
-
-                                Text {
-                                    width: parent.width
-                                    text: modelData["label"] || ""
-                                    color: theme.ink
-                                    font.family: theme.monoFont
-                                    font.pixelSize: 12
-                                    font.bold: true
-                                    elide: Text.ElideRight
-                                }
-
-                                Text {
-                                    width: parent.width
-                                    text: modelData["detail"] || ""
-                                    color: theme.ink3
-                                    font.family: theme.sansFont
-                                    font.pixelSize: 11
-                                    wrapMode: Text.WordWrap
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        Card {
-            width: parent.width
-            title: "Policy"
-
-            Column {
-                width: parent.width
-                spacing: 8
-
-                Repeater {
-                    model: root.policyRows
-
-                    Row {
-                        width: parent.width
-                        spacing: 10
-
-                        Rectangle {
-                            width: 30
-                            height: 16
-                            anchors.verticalCenter: parent.verticalCenter
-                            color: modelData["enabled"] ? theme.ink : theme.line2
-
-                            Rectangle {
-                                x: modelData["enabled"] ? 16 : 2
-                                y: 2
-                                width: 12
-                                height: 12
-                                color: theme.paper2
-                            }
-                        }
-
-                        Text {
-                            width: parent.width - 40
-                            anchors.verticalCenter: parent.verticalCenter
-                            text: modelData["label"] || ""
-                            color: theme.ink2
-                            font.family: theme.sansFont
-                            font.pixelSize: 12
-                            wrapMode: Text.WordWrap
-                        }
-                    }
-                }
-            }
-        }
-
-        PrimaryButton {
-            width: parent.width
-            text: root.previewStep === 1 ? "Generate preview" : "Preview ready"
-            enabled: reportsVM.items.length > 0
-            onClicked: root.previewStep = 2
-        }
-
-        Text {
-            width: parent.width
-            text: "These controls only reshape the desktop preview today. Report generation and export formats still depend on CLI-backed actions."
-            color: theme.ink3
-            font.family: theme.sansFont
-            font.pixelSize: 11
-            wrapMode: Text.WordWrap
-            lineHeight: 1.45
-        }
-    }
-
-    component ReportPreview: Column {
-        spacing: 10
-
-        Grid {
-            width: parent.width
-            columns: root.stackedLayout ? 2 : 4
-            columnSpacing: 10
-            rowSpacing: 10
-
-            Repeater {
-                model: root.summaryCards
-
-                Rectangle {
-                    width: root.stackedLayout ? (parent.width - parent.columnSpacing) / 2 : (parent.width - 30) / 4
-                    height: 88
-                    color: theme.paper2
-                    border.color: theme.line
-                    border.width: 1
-
-                    Column {
-                        anchors.fill: parent
-                        anchors.margins: 14
-                        spacing: 4
-
-                        Text {
-                            text: modelData["label"] || ""
-                            color: theme.ink3
-                            font.family: theme.sansFont
-                            font.pixelSize: 10
-                            font.weight: Font.DemiBold
-                            font.capitalization: Font.AllUppercase
-                            font.letterSpacing: 1.1
-                        }
-
-                        Text {
-                            text: modelData["value"] || ""
-                            color: toneColor(modelData["tone"])
-                            font.family: theme.serifFont
-                            font.pixelSize: 24
-                            font.weight: Font.Normal
-                        }
-
-                        Text {
-                            text: modelData["detail"] || ""
-                            color: theme.ink3
-                            font.family: theme.sansFont
-                            font.pixelSize: 11
-                        }
-                    }
-                }
-            }
-        }
-
-        Card {
-            width: parent.width
-            title: "Disposed lots \u00b7 " + root.selectedYear
-            pad: false
-
-            Item {
-                width: parent.width
-                implicitHeight: 36 + (root.lotRows.length * 38) + 40
-
-                Flickable {
-                    anchors.fill: parent
-                    clip: true
-                    contentWidth: Math.max(parent.width, 776)
-                    contentHeight: lotsColumn.implicitHeight
-                    interactive: contentWidth > width
-                    flickableDirection: Flickable.HorizontalFlick
-                    boundsBehavior: Flickable.StopAtBounds
-
-                    Column {
-                        id: lotsColumn
-                        width: Math.max(parent.width, 776)
-                        spacing: 0
-
-                        Rectangle {
-                            width: parent.width
-                            height: 36
-                            color: theme.paper
-
-                            Rectangle {
-                                anchors.left: parent.left
-                                anchors.right: parent.right
-                                anchors.bottom: parent.bottom
-                                height: 1
-                                color: theme.ink
-                            }
-
-                            Row {
-                                anchors.fill: parent
-                                anchors.leftMargin: 14
-                                anchors.rightMargin: 14
-                                spacing: 0
+                            Flow {
+                                Layout.fillWidth: true
+                                spacing: theme.spacingXs
 
                                 Repeater {
-                                    model: [
-                                        { "label": "Acquired", "width": 92 },
-                                        { "label": "Disposed", "width": 92 },
-                                        { "label": "Holding", "width": 84 },
-                                        { "label": "Sats", "width": 98, "alignRight": true },
-                                        { "label": "Cost EUR", "width": 116, "alignRight": true },
-                                        { "label": "Proceeds EUR", "width": 126, "alignRight": true },
-                                        { "label": "Gain EUR", "width": 112, "alignRight": true }
-                                    ]
+                                    model: root.mockYears
 
-                                    Text {
-                                        width: modelData["width"]
-                                        height: parent.height
-                                        verticalAlignment: Text.AlignVCenter
-                                        horizontalAlignment: modelData["alignRight"] ? Text.AlignRight : Text.AlignLeft
-                                        text: modelData["label"]
-                                        color: theme.ink3
-                                        font.family: theme.sansFont
-                                        font.pixelSize: 9
-                                        font.weight: Font.DemiBold
-                                        font.capitalization: Font.AllUppercase
-                                        font.letterSpacing: 1.2
+                                    Pill {
+                                        text: String(modelData)
+                                        active: root.activeYearValue === modelData
+                                        tone: root.activeYearValue === modelData ? "ink" : "muted"
+                                        onClicked: root.activeYearValue = modelData
                                     }
                                 }
                             }
+
+                            RowLayout {
+                                Layout.fillWidth: true
+                                spacing: theme.spacingSm
+
+                                DateInput {
+                                    Layout.fillWidth: true
+                                    label: "From"
+                                    value: root.activeYearValue + "-01-01"
+                                }
+
+                                DateInput {
+                                    Layout.fillWidth: true
+                                    label: "To"
+                                    value: root.activeYearValue + "-12-31"
+                                }
+                            }
+                        }
+                    }
+
+                    Card {
+                        Layout.fillWidth: true
+                        title: "Cost-basis method"
+
+                        ColumnLayout {
+                            anchors.left: parent.left
+                            anchors.right: parent.right
+                            anchors.top: parent.top
+                            spacing: theme.spacingSm - 2
+
+                            Repeater {
+                                model: root.mockMethods
+
+                                RadioRow {
+                                    Layout.fillWidth: true
+                                    selected: root.activeMethodValue === modelData.id
+                                    label: modelData.label
+                                    description: modelData.detail
+                                    onActivated: root.activeMethodValue = modelData.id
+                                }
+                            }
+                        }
+                    }
+
+                    Card {
+                        Layout.fillWidth: true
+                        title: "Policy"
+
+                        ColumnLayout {
+                            anchors.left: parent.left
+                            anchors.right: parent.right
+                            anchors.top: parent.top
+                            spacing: theme.spacingSm
+
+                            Repeater {
+                                model: root.mockPolicies
+
+                                ToggleRow {
+                                    Layout.fillWidth: true
+                                    label: modelData.label
+                                    checked: modelData.checked
+                                }
+                            }
+                        }
+                    }
+
+                    ActionButton {
+                        Layout.fillWidth: true
+                        variant: "primary"
+                        size: "lg"
+                        text: "\u2192  Generate preview"
+                        onClicked: root.activeStep = 2
+                    }
+                }
+
+                // ----- Right column: preview -----
+                ColumnLayout {
+                    Layout.fillWidth: true
+                    Layout.fillHeight: true
+                    Layout.minimumWidth: 520
+                    spacing: theme.gridGap
+
+                    GridLayout {
+                        Layout.fillWidth: true
+                        columns: 4
+                        columnSpacing: theme.gridGap
+                        rowSpacing: theme.gridGap
+
+                        StatTile {
+                            Layout.fillWidth: true
+                            Layout.fillHeight: true
+                            Layout.minimumWidth: 140
+                            label: "Proceeds"
+                            value: root.hideSensitive ? "\u2022 \u2022 \u2022 \u2022" : root.mockTotals.proceeds
+                            sub: root.mockLots.length + " disposals"
                         }
 
-                        Repeater {
-                            model: root.lotRows
+                        StatTile {
+                            Layout.fillWidth: true
+                            Layout.fillHeight: true
+                            Layout.minimumWidth: 140
+                            label: "Cost basis"
+                            value: root.hideSensitive ? "\u2022 \u2022 \u2022 \u2022" : root.mockTotals.cost
+                            sub: root.activeMethodValue.toUpperCase()
+                        }
 
+                        StatTile {
+                            Layout.fillWidth: true
+                            Layout.fillHeight: true
+                            Layout.minimumWidth: 140
+                            label: "Net gain"
+                            value: root.hideSensitive ? "\u2022 \u2022 \u2022 \u2022" : root.mockTotals.gain
+                            sub: root.activeYearValue + " tax year"
+                            valueColor: theme.positive
+                        }
+
+                        StatTile {
+                            Layout.fillWidth: true
+                            Layout.fillHeight: true
+                            Layout.minimumWidth: 140
+                            label: "KESt 27,5 %"
+                            value: root.hideSensitive ? "\u2022 \u2022 \u2022 \u2022" : root.mockTotals.kest
+                            sub: "Estimated liability"
+                            valueColor: Design.accent(theme)
+                        }
+                    }
+
+                    Card {
+                        Layout.fillWidth: true
+                        title: "Disposed lots \u00b7 " + root.activeYearValue
+                        pad: false
+
+                        ColumnLayout {
+                            anchors.left: parent.left
+                            anchors.right: parent.right
+                            anchors.top: parent.top
+                            spacing: 0
+
+                            // Header
                             Rectangle {
-                                width: parent.width
-                                height: 38
+                                Layout.fillWidth: true
+                                Layout.preferredHeight: theme.rowHeightDefault - 4
                                 color: "transparent"
 
                                 Rectangle {
@@ -522,243 +307,211 @@ ScrollView {
                                     anchors.right: parent.right
                                     anchors.bottom: parent.bottom
                                     height: 1
-                                    color: theme.line
+                                    color: Design.ink(theme)
                                 }
 
-                                Row {
+                                RowLayout {
                                     anchors.fill: parent
-                                    anchors.leftMargin: 14
-                                    anchors.rightMargin: 14
-                                    spacing: 0
+                                    anchors.leftMargin: theme.cardPadding
+                                    anchors.rightMargin: theme.cardPadding
+                                    spacing: theme.spacingSm + 2
 
-                                    Text {
-                                        width: 92
-                                        height: parent.height
-                                        verticalAlignment: Text.AlignVCenter
-                                        text: modelData["acquired"] || ""
-                                        color: theme.ink2
-                                        font.family: theme.monoFont
-                                        font.pixelSize: 11
+                                    Text { Layout.preferredWidth: 86;  text: "ACQUIRED"; color: Design.ink3(theme); font.family: Design.sans(); font.pixelSize: theme.fontMicro; font.weight: Font.DemiBold; font.letterSpacing: 1.2 }
+                                    Text { Layout.preferredWidth: 86;  text: "DISPOSED"; color: Design.ink3(theme); font.family: Design.sans(); font.pixelSize: theme.fontMicro; font.weight: Font.DemiBold; font.letterSpacing: 1.2 }
+                                    Text { Layout.preferredWidth: 60;  text: "HOLDING";  color: Design.ink3(theme); font.family: Design.sans(); font.pixelSize: theme.fontMicro; font.weight: Font.DemiBold; font.letterSpacing: 1.2 }
+                                    Text { Layout.fillWidth: true;     text: "SATS";     color: Design.ink3(theme); font.family: Design.sans(); font.pixelSize: theme.fontMicro; font.weight: Font.DemiBold; font.letterSpacing: 1.2; horizontalAlignment: Text.AlignRight }
+                                    Text { Layout.preferredWidth: 90;  text: "COST \u20ac";     color: Design.ink3(theme); font.family: Design.sans(); font.pixelSize: theme.fontMicro; font.weight: Font.DemiBold; font.letterSpacing: 1.2; horizontalAlignment: Text.AlignRight }
+                                    Text { Layout.preferredWidth: 90;  text: "PROCEEDS \u20ac"; color: Design.ink3(theme); font.family: Design.sans(); font.pixelSize: theme.fontMicro; font.weight: Font.DemiBold; font.letterSpacing: 1.2; horizontalAlignment: Text.AlignRight }
+                                    Text { Layout.preferredWidth: 80;  text: "GAIN \u20ac";     color: Design.ink3(theme); font.family: Design.sans(); font.pixelSize: theme.fontMicro; font.weight: Font.DemiBold; font.letterSpacing: 1.2; horizontalAlignment: Text.AlignRight }
+                                }
+                            }
+
+                            // Body rows
+                            Repeater {
+                                model: root.mockLots
+
+                                delegate: Rectangle {
+                                    Layout.fillWidth: true
+                                    Layout.preferredHeight: theme.rowHeightDefault - 4
+                                    color: "transparent"
+
+                                    Rectangle {
+                                        anchors.left: parent.left
+                                        anchors.right: parent.right
+                                        anchors.bottom: parent.bottom
+                                        height: 1
+                                        color: Design.line(theme)
                                     }
 
-                                    Text {
-                                        width: 92
-                                        height: parent.height
-                                        verticalAlignment: Text.AlignVCenter
-                                        text: modelData["disposed"] || ""
-                                        color: theme.ink2
-                                        font.family: theme.monoFont
-                                        font.pixelSize: 11
-                                    }
+                                    RowLayout {
+                                        anchors.fill: parent
+                                        anchors.leftMargin: theme.cardPadding
+                                        anchors.rightMargin: theme.cardPadding
+                                        spacing: theme.spacingSm + 2
 
-                                    Item {
-                                        width: 84
-                                        height: parent.height
+                                        Text { Layout.preferredWidth: 86; text: modelData.acquired; color: Design.ink2(theme); font.family: Design.mono(theme); font.pixelSize: theme.fontBodySmall }
+                                        Text { Layout.preferredWidth: 86; text: modelData.disposed; color: Design.ink2(theme); font.family: Design.mono(theme); font.pixelSize: theme.fontBodySmall }
 
-                                        Rectangle {
-                                            anchors.verticalCenter: parent.verticalCenter
-                                            width: holdingText.implicitWidth + 12
-                                            height: 22
-                                            radius: 11
-                                            color: "transparent"
-                                            border.color: toneColor(modelData["holding_tone"])
-                                            border.width: 1
+                                        Item {
+                                            Layout.preferredWidth: 60
+                                            Layout.preferredHeight: 18
 
-                                            Text {
-                                                id: holdingText
-                                                anchors.centerIn: parent
-                                                text: modelData["holding_label"] || ""
-                                                color: toneColor(modelData["holding_tone"])
-                                                font.family: theme.monoFont
-                                                font.pixelSize: 9
-                                                font.weight: Font.DemiBold
+                                            Rectangle {
+                                                anchors.verticalCenter: parent.verticalCenter
+                                                width: holdingText.implicitWidth + 12
+                                                height: holdingText.implicitHeight + 4
+                                                color: "transparent"
+                                                border.color: modelData.longTerm ? theme.positive : Design.ink3(theme)
+                                                border.width: 1
+
+                                                Text {
+                                                    id: holdingText
+                                                    anchors.centerIn: parent
+                                                    text: modelData.holding
+                                                    color: modelData.longTerm ? theme.positive : Design.ink2(theme)
+                                                    font.family: Design.mono(theme)
+                                                    font.pixelSize: theme.fontMicro
+                                                    font.letterSpacing: 1.0
+                                                }
                                             }
                                         }
-                                    }
 
-                                    Text {
-                                        width: 98
-                                        height: parent.height
-                                        verticalAlignment: Text.AlignVCenter
-                                        horizontalAlignment: Text.AlignRight
-                                        text: modelData["sats"] || ""
-                                        color: theme.ink
-                                        font.family: theme.monoFont
-                                        font.pixelSize: 11
-                                    }
+                                        Text {
+                                            Layout.fillWidth: true
+                                            text: root.hideSensitive ? "\u2022 \u2022 \u2022 \u2022" : modelData.sats
+                                            color: Design.ink2(theme)
+                                            font.family: Design.mono(theme)
+                                            font.pixelSize: theme.fontBodySmall
+                                            horizontalAlignment: Text.AlignRight
+                                        }
 
-                                    Text {
-                                        width: 116
-                                        height: parent.height
-                                        verticalAlignment: Text.AlignVCenter
-                                        horizontalAlignment: Text.AlignRight
-                                        text: modelData["cost_label"] || ""
-                                        color: theme.ink2
-                                        font.family: theme.monoFont
-                                        font.pixelSize: 11
-                                    }
+                                        Text {
+                                            Layout.preferredWidth: 90
+                                            text: root.hideSensitive ? "\u2022 \u2022 \u2022 \u2022" : modelData.cost
+                                            color: Design.ink2(theme)
+                                            font.family: Design.mono(theme)
+                                            font.pixelSize: theme.fontBodySmall
+                                            horizontalAlignment: Text.AlignRight
+                                        }
 
-                                    Text {
-                                        width: 126
-                                        height: parent.height
-                                        verticalAlignment: Text.AlignVCenter
-                                        horizontalAlignment: Text.AlignRight
-                                        text: modelData["proceeds_label"] || ""
-                                        color: theme.ink2
-                                        font.family: theme.monoFont
-                                        font.pixelSize: 11
-                                    }
+                                        Text {
+                                            Layout.preferredWidth: 90
+                                            text: root.hideSensitive ? "\u2022 \u2022 \u2022 \u2022" : modelData.proceeds
+                                            color: Design.ink2(theme)
+                                            font.family: Design.mono(theme)
+                                            font.pixelSize: theme.fontBodySmall
+                                            horizontalAlignment: Text.AlignRight
+                                        }
 
-                                    Text {
-                                        width: 112
-                                        height: parent.height
-                                        verticalAlignment: Text.AlignVCenter
-                                        horizontalAlignment: Text.AlignRight
-                                        text: modelData["gain_label"] || ""
-                                        color: theme.ok
-                                        font.family: theme.monoFont
-                                        font.pixelSize: 11
-                                        font.weight: Font.DemiBold
+                                        Text {
+                                            Layout.preferredWidth: 80
+                                            text: root.hideSensitive ? "\u2022 \u2022 \u2022 \u2022" : modelData.gain
+                                            color: theme.positive
+                                            font.family: Design.mono(theme)
+                                            font.pixelSize: theme.fontBodySmall
+                                            horizontalAlignment: Text.AlignRight
+                                        }
                                     }
                                 }
                             }
-                        }
 
-                        Rectangle {
-                            width: parent.width
-                            height: 40
-                            color: theme.paper
+                            // Totals row
+                            Rectangle {
+                                Layout.fillWidth: true
+                                Layout.preferredHeight: theme.rowHeightDefault
+                                color: Design.paper(theme)
 
-                            Row {
-                                anchors.fill: parent
-                                anchors.leftMargin: 14
-                                anchors.rightMargin: 14
-                                spacing: 0
+                                RowLayout {
+                                    anchors.fill: parent
+                                    anchors.leftMargin: theme.cardPadding
+                                    anchors.rightMargin: theme.cardPadding
+                                    spacing: theme.spacingSm + 2
 
-                                Text {
-                                    width: 268
-                                    height: parent.height
-                                    verticalAlignment: Text.AlignVCenter
-                                    text: "Total"
-                                    color: theme.ink
-                                    font.family: theme.monoFont
-                                    font.pixelSize: 11
-                                    font.weight: Font.DemiBold
-                                }
+                                    Text {
+                                        Layout.preferredWidth: 232
+                                        text: "Total"
+                                        color: Design.ink(theme)
+                                        font.family: Design.mono(theme)
+                                        font.pixelSize: theme.fontBodySmall
+                                        font.weight: Font.DemiBold
+                                    }
 
-                                Text {
-                                    width: 98
-                                    height: parent.height
-                                    verticalAlignment: Text.AlignVCenter
-                                    horizontalAlignment: Text.AlignRight
-                                    text: root.totalSats()
-                                    color: theme.ink
-                                    font.family: theme.monoFont
-                                    font.pixelSize: 11
-                                    font.weight: Font.DemiBold
-                                }
+                                    Text {
+                                        Layout.fillWidth: true
+                                        text: root.hideSensitive ? "\u2022 \u2022 \u2022 \u2022" : root.mockTotals.sats
+                                        color: Design.ink(theme)
+                                        font.family: Design.mono(theme)
+                                        font.pixelSize: theme.fontBodySmall
+                                        font.weight: Font.DemiBold
+                                        horizontalAlignment: Text.AlignRight
+                                    }
 
-                                Text {
-                                    width: 116
-                                    height: parent.height
-                                    verticalAlignment: Text.AlignVCenter
-                                    horizontalAlignment: Text.AlignRight
-                                    text: root.summaryValue("Cost basis", "")
-                                    color: theme.ink
-                                    font.family: theme.monoFont
-                                    font.pixelSize: 11
-                                    font.weight: Font.DemiBold
-                                }
+                                    Text {
+                                        Layout.preferredWidth: 90
+                                        text: root.hideSensitive ? "\u2022 \u2022 \u2022 \u2022" : root.mockTotals.cost.replace("\u20ac ", "")
+                                        color: Design.ink(theme)
+                                        font.family: Design.mono(theme)
+                                        font.pixelSize: theme.fontBodySmall
+                                        font.weight: Font.DemiBold
+                                        horizontalAlignment: Text.AlignRight
+                                    }
 
-                                Text {
-                                    width: 126
-                                    height: parent.height
-                                    verticalAlignment: Text.AlignVCenter
-                                    horizontalAlignment: Text.AlignRight
-                                    text: root.summaryValue("Proceeds", "")
-                                    color: theme.ink
-                                    font.family: theme.monoFont
-                                    font.pixelSize: 11
-                                    font.weight: Font.DemiBold
-                                }
+                                    Text {
+                                        Layout.preferredWidth: 90
+                                        text: root.hideSensitive ? "\u2022 \u2022 \u2022 \u2022" : root.mockTotals.proceeds.replace("\u20ac ", "")
+                                        color: Design.ink(theme)
+                                        font.family: Design.mono(theme)
+                                        font.pixelSize: theme.fontBodySmall
+                                        font.weight: Font.DemiBold
+                                        horizontalAlignment: Text.AlignRight
+                                    }
 
-                                Text {
-                                    width: 112
-                                    height: parent.height
-                                    verticalAlignment: Text.AlignVCenter
-                                    horizontalAlignment: Text.AlignRight
-                                    text: root.summaryValue("Net gain", "")
-                                    color: theme.ok
-                                    font.family: theme.monoFont
-                                    font.pixelSize: 11
-                                    font.weight: Font.DemiBold
+                                    Text {
+                                        Layout.preferredWidth: 80
+                                        text: root.hideSensitive ? "\u2022 \u2022 \u2022 \u2022" : root.mockTotals.gain
+                                        color: theme.positive
+                                        font.family: Design.mono(theme)
+                                        font.pixelSize: theme.fontBodySmall
+                                        font.weight: Font.DemiBold
+                                        horizontalAlignment: Text.AlignRight
+                                    }
                                 }
                             }
                         }
                     }
-                }
-            }
-        }
 
-        Grid {
-            width: parent.width
-            columns: root.stackedLayout ? 1 : 3
-            columnSpacing: 10
-            rowSpacing: 10
+                    GridLayout {
+                        Layout.fillWidth: true
+                        columns: 3
+                        columnSpacing: theme.gridGap
+                        rowSpacing: theme.gridGap
 
-            Repeater {
-                model: root.exportFormats
-
-                Rectangle {
-                    width: root.stackedLayout ? parent.width : (parent.width - 20) / 3
-                    height: 96
-                    color: modelData["primary"] ? theme.ink : theme.paper2
-                    border.color: modelData["primary"] ? theme.ink : theme.line
-                    border.width: 1
-
-                    Column {
-                        anchors.fill: parent
-                        anchors.margins: 16
-                        spacing: 3
-
-                        Row {
-                            width: parent.width
-
-                            Text {
-                                text: modelData["label"] || ""
-                                color: modelData["primary"] ? theme.paper2 : theme.ink
-                                font.family: theme.serifFont
-                                font.pixelSize: 22
-                            }
-
-                            Item {
-                                width: parent.width - exportText.implicitWidth - parent.children[0].implicitWidth
-                                height: 1
-                            }
-
-                            Text {
-                                id: exportText
-                                text: "Read-only"
-                                color: modelData["primary"] ? theme.paper2 : theme.ink3
-                                font.family: theme.sansFont
-                                font.pixelSize: 10
-                                font.bold: true
-                            }
+                        ExportFormat {
+                            Layout.fillWidth: true
+                            Layout.fillHeight: true
+                            Layout.minimumWidth: 160
+                            formatName: "CSV"
+                            subtitle: "Spreadsheet"
+                            detail: "17 columns \u00b7 UTF-8"
                         }
 
-                        Text {
-                            text: modelData["summary"] || ""
-                            color: modelData["primary"] ? theme.paper2 : theme.ink3
-                            font.family: theme.sansFont
-                            font.pixelSize: 11
+                        ExportFormat {
+                            Layout.fillWidth: true
+                            Layout.fillHeight: true
+                            Layout.minimumWidth: 160
+                            formatName: "PDF"
+                            subtitle: "Human-readable"
+                            detail: "4 pages \u00b7 \u00a727a format"
+                            primary: true
                         }
 
-                        Text {
-                            text: modelData["detail"] || ""
-                            color: modelData["primary"] ? theme.paper2 : theme.ink2
-                            font.family: theme.monoFont
-                            font.pixelSize: 10
-                            font.weight: Font.DemiBold
+                        ExportFormat {
+                            Layout.fillWidth: true
+                            Layout.fillHeight: true
+                            Layout.minimumWidth: 160
+                            formatName: "JSON"
+                            subtitle: "Envelope"
+                            detail: "Machine-readable"
                         }
                     }
                 }

@@ -3,377 +3,325 @@ import QtQuick.Controls 2.15
 import QtQuick.Layouts 1.15
 
 import "../components"
+import "../components/Design.js" as Design
 
-ScrollView {
+// Static Connection Detail view. Static mock data inline, no view-model
+// bindings. Reuses Card / KV / ActionButton / ProtocolIcon / StatTile.
+Item {
     id: root
+
+    property bool hideSensitive: false
+
     signal requestAddConnection()
-    clip: true
+    signal requestBack()
 
-    readonly property var connection: connectionsVM.selectedItem || ({})
-    readonly property var detailRows: connectionsVM.selectedDetails || []
-    readonly property var recentTransactions: connectionsVM.selectedTransactions || []
-    readonly property var relatedConnections: buildRelatedConnections()
-    readonly property real pageWidth: Math.max(0, availableWidth)
-    readonly property bool wideLayout: pageWidth >= 1120
-    readonly property bool compactHeader: pageWidth < 1080
+    // Mock data --------------------------------------------------------------
 
-    function limitItems(items, count) {
-        var out = []
-        if (!items) {
-            return out
-        }
-        for (var i = 0; i < items.length && i < count; ++i) {
-            out.push(items[i])
-        }
-        return out
+    readonly property var mockConnection: ({
+        label: "Cold Storage",
+        kind: "xpub",
+        protocol: "XPUB",
+        balanceBtc: "1.24810472 \u20bf",
+        balanceFiat: "\u20ac 89,162.05",
+        addresses: 142,
+        lastSync: "2m ago",
+        lastSyncTone: "ok",
+        gap: 10,
+        created: "2026-03-02 10:14",
+        derivation: "m / 84' / 0' / 0'",
+        backend: "mempool.space",
+        kassiberId: "conn_01HX2..3f7k"
+    })
+
+    readonly property var mockTxs: [
+        { date: "04-18 14:22", type: "Income",   sats: "+ 2,450,000",       eur: "+ \u20ac 1,749.79",    conf: 41  },
+        { date: "04-12 08:30", type: "Income",   sats: "+ 3,800,000",       eur: "+ \u20ac 2,713.97",    conf: 612 },
+        { date: "04-03 09:22", type: "Expense",  sats: "\u2212 42,180",     eur: "\u2212 \u20ac 30.13",  conf: 210 },
+        { date: "03-28 12:10", type: "Transfer", sats: "\u2212 1,210,000",  eur: "\u2212 \u20ac 864.18", conf: 320 },
+        { date: "03-20 18:44", type: "Income",   sats: "+ 4,250,000",       eur: "+ \u20ac 3,035.36",    conf: 980 }
+    ]
+
+    readonly property var mockAddresses: [
+        { address: "bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq", path: "m/84'/0'/0'/0/0" },
+        { address: "bc1q9d4ywgfnd8h43da5tpcxcn6ajv590cg6d3tg6a", path: "m/84'/0'/0'/0/1" },
+        { address: "bc1qxy2kgdygjrsqtzq2n0yrf2493p83kkfjhx0wlh", path: "m/84'/0'/0'/0/2" },
+        { address: "bc1qzk6qk7mxeq8p0we45e24gm20q6r4xrrjy0wl2g", path: "m/84'/0'/0'/0/3" },
+        { address: "bc1q3n7tz3qv4wtpgd6d8h3l8l6j3rhr8z2ydkn3g2", path: "m/84'/0'/0'/0/4" }
+    ]
+
+    readonly property int colDate: 80
+    readonly property int colType: 90
+    readonly property int colSats: 140
+    readonly property int colEur: 120
+    readonly property int colConf: 50
+
+    function typeColor(t) {
+        if (t === "Income") return theme.typeIncome
+        if (t === "Expense") return theme.typeExpense
+        if (t === "Transfer") return theme.typeTransfer
+        if (t === "Swap") return theme.typeSwap
+        return Design.ink3(theme)
     }
 
-    function buildRelatedConnections() {
-        var out = []
-        var items = connectionsVM.items || []
-        var currentId = String(connection["id"] || "")
-        for (var i = 0; i < items.length; ++i) {
-            if (String(items[i]["id"] || "") !== currentId) {
-                out.push(items[i])
-            }
-        }
-        return limitItems(out, 6)
-    }
+    ScrollView {
+        anchors.fill: parent
+        clip: true
+        ScrollBar.horizontal.policy: ScrollBar.AlwaysOff
 
-    function valueFor(label, fallback) {
-        for (var i = 0; i < detailRows.length; ++i) {
-            if (detailRows[i]["label"] === label) {
-                return detailRows[i]["value"] || fallback || ""
-            }
-        }
-        return fallback || ""
-    }
+        ColumnLayout {
+            width: root.width
+            spacing: theme.gridGap
 
-    function statusColor() {
-        return connection["status_tone"] === "ok" ? theme.ok : theme.warn
-    }
+            // ------------------------------------------------------------------
+            // Header
+            // ------------------------------------------------------------------
 
-    function badgeColor(kind) {
-        var normalized = String(kind || "").toLowerCase()
-        if (normalized.indexOf("descriptor") >= 0) {
-            return theme.pillIndigo
-        }
-        if (normalized.indexOf("xpub") >= 0 || normalized.indexOf("electrum") >= 0) {
-            return theme.pillTeal
-        }
-        if (normalized.indexOf("rpc") >= 0 || normalized.indexOf("esplora") >= 0) {
-            return theme.pillOlive
-        }
-        if (normalized.indexOf("ln") >= 0) {
-            return theme.pillAmber
-        }
-        return theme.pillGreen
-    }
+            RowLayout {
+                Layout.fillWidth: true
+                Layout.leftMargin: theme.pagePadding
+                Layout.rightMargin: theme.pagePadding
+                Layout.topMargin: theme.pagePadding
+                spacing: theme.spacingSm + 6
 
-    function relatedLabel(item) {
-        return (item["label"] || "") + "  \u00b7  " + (item["kind"] || "")
-    }
+                Button {
+                    flat: true
+                    padding: 0
+                    implicitWidth: 32
+                    implicitHeight: 32
+                    hoverEnabled: true
+                    onClicked: root.requestBack()
 
-    ScrollBar.horizontal.policy: ScrollBar.AlwaysOff
-
-    Item {
-        width: root.availableWidth
-        implicitHeight: connectionsVM.isEmpty ? emptyState.implicitHeight : contentColumn.implicitHeight
-
-        Column {
-            id: contentColumn
-            visible: !connectionsVM.isEmpty
-            width: parent.width
-            spacing: 10
-
-            Item {
-                width: parent.width
-                implicitHeight: headerGrid.implicitHeight
-
-                GridLayout {
-                    id: headerGrid
-                    width: parent.width
-                    columns: compactHeader ? 1 : 2
-                    columnSpacing: 16
-                    rowSpacing: 12
-
-                    RowLayout {
-                        Layout.fillWidth: true
-                        spacing: 14
-
-                        SecondaryButton {
-                            text: "\u2190"
-                            size: "sm"
-                            minWidth: 32
-                            onClicked: dashboardVM.selectPage("overview")
-                        }
-
-                        ProtocolIcon {
-                            kind: connection["kind"] || ""
-                            size: 40
-                        }
-
-                        ColumnLayout {
-                            Layout.fillWidth: true
-                            spacing: 4
-
-                            Text {
-                                Layout.fillWidth: true
-                                text: (connection["kind"] || "").toUpperCase() + " \u00b7 Connection"
-                                color: theme.ink3
-                                font.family: theme.monoFont
-                                font.pixelSize: 10
-                                font.capitalization: Font.AllUppercase
-                                font.letterSpacing: 1.2
-                                elide: Text.ElideRight
-                            }
-
-                            Text {
-                                Layout.fillWidth: true
-                                text: connection["label"] || "Connection detail"
-                                color: theme.ink
-                                font.family: theme.serifFont
-                                font.pixelSize: 30
-                                elide: Text.ElideRight
-                            }
-
-                            Text {
-                                Layout.fillWidth: true
-                                text: connection["subtitle"] || ""
-                                color: theme.ink2
-                                font.family: theme.sansFont
-                                font.pixelSize: 13
-                                elide: Text.ElideRight
-                            }
-                        }
+                    contentItem: Text {
+                        anchors.fill: parent
+                        text: "\u2039"
+                        color: Design.ink(theme)
+                        font.family: Design.mono(theme)
+                        font.pixelSize: theme.fontHeadingSm
+                        horizontalAlignment: Text.AlignHCenter
+                        verticalAlignment: Text.AlignVCenter
                     }
 
-                    Flow {
-                        Layout.fillWidth: true
-                        Layout.alignment: compactHeader ? Qt.AlignLeft : Qt.AlignRight | Qt.AlignTop
-                        width: compactHeader ? parent.width : Math.max(240, parent.width)
-                        spacing: 8
-
-                        SecondaryButton {
-                            text: "Sync"
-                            size: "sm"
-                        }
-
-                        GhostButton {
-                            text: "Edit"
-                            size: "sm"
-                        }
-
-                        DangerButton {
-                            text: "Remove"
-                            size: "sm"
-                        }
-                    }
-                }
-            }
-
-            GridLayout {
-                width: parent.width
-                columns: pageWidth >= 1260 ? 4 : (pageWidth >= 760 ? 2 : 1)
-                columnSpacing: 10
-                rowSpacing: 10
-
-                Repeater {
-                    model: [
-                        {
-                            "label": "Balance",
-                            "value": connection["balance_label"] || "0 BTC",
-                            "sub": connection["subtitle"] || ""
-                        },
-                        {
-                            "label": "Transactions",
-                            "value": connection["transaction_count_label"] || "0",
-                            "sub": "imported rows"
-                        },
-                        {
-                            "label": "Status",
-                            "value": connection["status_label"] || "Needs sync",
-                            "sub": connection["chain"] || ""
-                        },
-                        {
-                            "label": "Created",
-                            "value": connection["created_at_label"] || "Unknown",
-                            "sub": dashboardVM.projectSummary
-                        }
-                    ]
-
-                    Rectangle {
-                        Layout.fillWidth: true
-                        implicitHeight: 84
-                        color: theme.paper2
-                        border.color: theme.line
+                    background: Rectangle {
+                        color: "transparent"
+                        border.color: Design.line(theme)
                         border.width: 1
-
-                        Column {
-                            anchors.fill: parent
-                            anchors.margins: 14
-                            spacing: 4
-
-                            Text {
-                                text: modelData["label"]
-                                color: theme.ink3
-                                font.family: theme.sansFont
-                                font.pixelSize: 10
-                                font.bold: true
-                                font.capitalization: Font.AllUppercase
-                                font.letterSpacing: 1.1
-                            }
-
-                            Text {
-                                text: modelData["value"]
-                                color: modelData["label"] === "Status" ? statusColor() : theme.ink
-                                font.family: theme.monoFont
-                                font.pixelSize: 16
-                                font.bold: modelData["label"] === "Status"
-                            }
-
-                            Text {
-                                text: modelData["sub"]
-                                color: theme.ink3
-                                font.family: theme.sansFont
-                                font.pixelSize: 11
-                            }
-                        }
                     }
+                }
+
+                ProtocolIcon {
+                    kind: root.mockConnection.kind
+                    size: 40
+                }
+
+                ColumnLayout {
+                    Layout.fillWidth: true
+                    spacing: 2
+
+                    Text {
+                        text: root.mockConnection.protocol + "  \u00b7  CONNECTION"
+                        color: Design.ink3(theme)
+                        font.family: Design.mono(theme)
+                        font.pixelSize: theme.fontCaption
+                        font.letterSpacing: 1.4
+                    }
+
+                    Text {
+                        text: root.mockConnection.label
+                        color: Design.ink(theme)
+                        font.family: Design.sans()
+                        font.pixelSize: theme.fontDisplay - 2
+                        font.weight: Font.DemiBold
+                        font.letterSpacing: -0.4
+                    }
+                }
+
+                ActionButton { variant: "secondary"; size: "sm"; text: "\u27f3 Sync" }
+                ActionButton { variant: "secondary"; size: "sm"; text: "\u2193 Import labels" }
+                ActionButton { variant: "secondary"; size: "sm"; text: "\u2191 Export labels" }
+
+                Rectangle {
+                    Layout.preferredWidth: 1
+                    Layout.preferredHeight: 22
+                    color: Design.line(theme)
+                }
+
+                ActionButton { variant: "ghost"; size: "sm"; text: "Edit" }
+                ActionButton { variant: "danger"; size: "sm"; text: "Remove" }
+            }
+
+            // ------------------------------------------------------------------
+            // 4-stat tile row
+            // ------------------------------------------------------------------
+
+            GridLayout {
+                Layout.fillWidth: true
+                Layout.leftMargin: theme.pagePadding
+                Layout.rightMargin: theme.pagePadding
+                columns: 4
+                columnSpacing: theme.gridGap
+                rowSpacing: theme.gridGap
+
+                StatTile {
+                    Layout.fillWidth: true
+                    Layout.fillHeight: true
+                    Layout.minimumWidth: 220
+                    label: "Balance"
+                    value: root.hideSensitive ? "\u2022 \u2022 \u2022 \u2022" : root.mockConnection.balanceBtc
+                    sub: root.mockConnection.balanceFiat
+                }
+
+                StatTile {
+                    Layout.fillWidth: true
+                    Layout.fillHeight: true
+                    Layout.minimumWidth: 160
+                    label: "Addresses"
+                    value: String(root.mockConnection.addresses)
+                    sub: "derived"
+                }
+
+                StatTile {
+                    Layout.fillWidth: true
+                    Layout.fillHeight: true
+                    Layout.minimumWidth: 160
+                    label: "Last sync"
+                    value: root.mockConnection.lastSync
+                    sub: "synced"
+                    valueColor: theme.positive
+                }
+
+                StatTile {
+                    Layout.fillWidth: true
+                    Layout.fillHeight: true
+                    Layout.minimumWidth: 160
+                    label: "Gap limit"
+                    value: String(root.mockConnection.gap)
+                    sub: "unused window"
                 }
             }
 
-            GridLayout {
-                width: parent.width
-                columns: wideLayout ? 2 : 1
-                columnSpacing: 10
-                rowSpacing: 10
+            // ------------------------------------------------------------------
+            // 2-col row: Recent transactions | (Connection details + Derived addresses)
+            // ------------------------------------------------------------------
 
+            GridLayout {
+                Layout.fillWidth: true
+                Layout.leftMargin: theme.pagePadding
+                Layout.rightMargin: theme.pagePadding
+                Layout.bottomMargin: theme.pagePadding
+                columns: 2
+                columnSpacing: theme.gridGap
+                rowSpacing: theme.gridGap
+
+                // ----- Recent transactions -----
                 Card {
                     Layout.fillWidth: true
+                    Layout.fillHeight: true
+                    Layout.horizontalStretchFactor: 14
+                    Layout.minimumWidth: 520
                     title: "Recent transactions"
-                    action: Component {
-                        GhostButton {
-                            size: "sm"
-                            text: "Open all"
-                            onClicked: dashboardVM.selectPage("transactions")
-                        }
-                    }
                     pad: false
 
-                    Column {
-                        width: parent.width
+                    ColumnLayout {
+                        anchors.left: parent.left
+                        anchors.right: parent.right
+                        anchors.top: parent.top
+                        spacing: 0
 
                         Rectangle {
-                            width: parent.width
-                            height: 34
-                            color: theme.paper
-                            border.width: 0
+                            Layout.fillWidth: true
+                            Layout.preferredHeight: theme.rowHeightDefault - 6
+                            color: "transparent"
 
                             Rectangle {
                                 anchors.left: parent.left
                                 anchors.right: parent.right
                                 anchors.bottom: parent.bottom
                                 height: 1
-                                color: theme.ink
+                                color: Design.line(theme)
                             }
 
-                            Row {
+                            RowLayout {
                                 anchors.fill: parent
-                                anchors.leftMargin: 14
-                                anchors.rightMargin: 14
-                                spacing: 0
+                                anchors.leftMargin: theme.cardPadding
+                                anchors.rightMargin: theme.cardPadding
+                                spacing: theme.spacingSm + 4
 
-                                Repeater {
-                                    model: [
-                                        { "label": "Date", "width": 118 },
-                                        { "label": "Type", "width": 90 },
-                                        { "label": "Amount", "width": 120, "alignRight": true },
-                                        { "label": "Fiat", "width": 120, "alignRight": true }
-                                    ]
-
-                                    Text {
-                                        width: modelData["width"]
-                                        height: parent.height
-                                        verticalAlignment: Text.AlignVCenter
-                                        horizontalAlignment: modelData["alignRight"] ? Text.AlignRight : Text.AlignLeft
-                                        text: modelData["label"]
-                                        color: theme.ink3
-                                        font.family: theme.sansFont
-                                        font.pixelSize: 9
-                                        font.bold: true
-                                        font.capitalization: Font.AllUppercase
-                                        font.letterSpacing: 1.2
-                                    }
-                                }
+                                Text { Layout.preferredWidth: root.colDate; text: "DATE";  color: Design.ink3(theme); font.family: Design.sans(); font.pixelSize: theme.fontMicro; font.weight: Font.DemiBold; font.letterSpacing: 1.2 }
+                                Text { Layout.preferredWidth: root.colType; text: "TYPE";  color: Design.ink3(theme); font.family: Design.sans(); font.pixelSize: theme.fontMicro; font.weight: Font.DemiBold; font.letterSpacing: 1.2 }
+                                Item { Layout.fillWidth: true }
+                                Text { Layout.preferredWidth: root.colSats; text: "SATS";  color: Design.ink3(theme); font.family: Design.sans(); font.pixelSize: theme.fontMicro; font.weight: Font.DemiBold; font.letterSpacing: 1.2; horizontalAlignment: Text.AlignRight }
+                                Text { Layout.preferredWidth: root.colEur;  text: "\u20ac"; color: Design.ink3(theme); font.family: Design.sans(); font.pixelSize: theme.fontMicro; font.weight: Font.DemiBold; font.letterSpacing: 1.2; horizontalAlignment: Text.AlignRight }
+                                Text { Layout.preferredWidth: root.colConf; text: "CONF";  color: Design.ink3(theme); font.family: Design.sans(); font.pixelSize: theme.fontMicro; font.weight: Font.DemiBold; font.letterSpacing: 1.2; horizontalAlignment: Text.AlignRight }
                             }
                         }
 
                         Repeater {
-                            model: recentTransactions
+                            model: root.mockTxs
 
-                            Rectangle {
-                                width: parent.width
-                                height: 38
+                            delegate: Rectangle {
+                                Layout.fillWidth: true
+                                Layout.preferredHeight: theme.rowHeightDefault
                                 color: "transparent"
-                                border.width: 0
 
                                 Rectangle {
                                     anchors.left: parent.left
                                     anchors.right: parent.right
                                     anchors.bottom: parent.bottom
                                     height: 1
-                                    color: theme.line
+                                    color: Design.line(theme)
                                 }
 
-                                Row {
+                                RowLayout {
                                     anchors.fill: parent
-                                    anchors.leftMargin: 14
-                                    anchors.rightMargin: 14
-                                    spacing: 0
+                                    anchors.leftMargin: theme.cardPadding
+                                    anchors.rightMargin: theme.cardPadding
+                                    spacing: theme.spacingSm + 4
 
                                     Text {
-                                        width: 118
-                                        height: parent.height
-                                        verticalAlignment: Text.AlignVCenter
-                                        text: modelData["occurred_at_label"] || ""
-                                        color: theme.ink2
-                                        font.family: theme.monoFont
-                                        font.pixelSize: 11
+                                        Layout.preferredWidth: root.colDate
+                                        text: modelData.date
+                                        color: Design.ink2(theme)
+                                        font.family: Design.mono(theme)
+                                        font.pixelSize: theme.fontBodySmall
                                     }
 
                                     Text {
-                                        width: 90
-                                        height: parent.height
-                                        verticalAlignment: Text.AlignVCenter
-                                        text: modelData["title"] || ""
-                                        color: theme.ink
-                                        font.family: theme.monoFont
-                                        font.pixelSize: 10
-                                        font.capitalization: Font.AllUppercase
-                                        font.letterSpacing: 0.8
+                                        Layout.preferredWidth: root.colType
+                                        text: modelData.type.toUpperCase()
+                                        color: root.typeColor(modelData.type)
+                                        font.family: Design.mono(theme)
+                                        font.pixelSize: theme.fontMicro
+                                        font.weight: Font.DemiBold
+                                        font.letterSpacing: 1.0
                                     }
 
+                                    Item { Layout.fillWidth: true }
+
                                     Text {
-                                        width: 120
-                                        height: parent.height
-                                        verticalAlignment: Text.AlignVCenter
+                                        Layout.preferredWidth: root.colSats
+                                        text: root.hideSensitive ? "\u2022 \u2022 \u2022 \u2022" : modelData.sats
+                                        color: modelData.sats.indexOf("+") === 0 ? theme.positive : Design.ink(theme)
+                                        font.family: Design.mono(theme)
+                                        font.pixelSize: theme.fontBodySmall
                                         horizontalAlignment: Text.AlignRight
-                                        text: modelData["amount_sats_signed_label"] || ""
-                                        color: Number(modelData["amount_sats"] || 0) >= 0 ? theme.ok : theme.accent
-                                        font.family: theme.monoFont
-                                        font.pixelSize: 11
                                     }
 
                                     Text {
-                                        width: 120
-                                        height: parent.height
-                                        verticalAlignment: Text.AlignVCenter
+                                        Layout.preferredWidth: root.colEur
+                                        text: root.hideSensitive ? "\u2022 \u2022 \u2022 \u2022" : modelData.eur
+                                        color: Design.ink2(theme)
+                                        font.family: Design.mono(theme)
+                                        font.pixelSize: theme.fontBodySmall
                                         horizontalAlignment: Text.AlignRight
-                                        text: modelData["fiat_label"] || ""
-                                        color: theme.ink2
-                                        font.family: theme.monoFont
-                                        font.pixelSize: 11
+                                    }
+
+                                    Text {
+                                        Layout.preferredWidth: root.colConf
+                                        text: String(modelData.conf)
+                                        color: Design.ink3(theme)
+                                        font.family: Design.mono(theme)
+                                        font.pixelSize: theme.fontBodySmall
+                                        horizontalAlignment: Text.AlignRight
                                     }
                                 }
                             }
@@ -381,100 +329,51 @@ ScrollView {
                     }
                 }
 
-                Column {
+                // ----- Right column: Connection details + Derived addresses -----
+                ColumnLayout {
                     Layout.fillWidth: true
-                    spacing: 10
+                    Layout.fillHeight: true
+                    Layout.horizontalStretchFactor: 10
+                    Layout.minimumWidth: 320
+                    spacing: theme.gridGap
 
                     Card {
-                        width: parent.width
+                        Layout.fillWidth: true
                         title: "Connection details"
 
-                        GridLayout {
-                            width: parent.width
-                            columns: 2
-                            columnSpacing: 12
-                            rowSpacing: 10
+                        ColumnLayout {
+                            anchors.left: parent.left
+                            anchors.right: parent.right
+                            anchors.top: parent.top
+                            spacing: theme.spacingSm + 4
 
-                            Repeater {
-                                model: limitItems(detailRows, 6)
-
-                                Column {
-                                    Layout.fillWidth: true
-                                    spacing: 2
-
-                                    Text {
-                                        text: modelData["label"]
-                                        color: theme.ink3
-                                        font.family: theme.sansFont
-                                        font.pixelSize: 10
-                                        font.bold: true
-                                        font.capitalization: Font.AllUppercase
-                                        font.letterSpacing: 1.1
-                                    }
-
-                                    Text {
-                                        Layout.fillWidth: true
-                                        text: modelData["value"]
-                                        color: theme.ink
-                                        font.family: theme.monoFont
-                                        font.pixelSize: 12
-                                        wrapMode: Text.WrapAnywhere
-                                    }
-                                }
-                            }
+                            KV { label: "Label";        value: root.mockConnection.label;        mono: false }
+                            KV { label: "Protocol";     value: root.mockConnection.protocol }
+                            KV { label: "Derivation";   value: root.mockConnection.derivation }
+                            KV { label: "Backend";      value: root.mockConnection.backend;      mono: false }
+                            KV { label: "Created";      value: root.mockConnection.created }
+                            KV { label: "Kassiber ID";  value: root.mockConnection.kassiberId }
                         }
                     }
 
                     Card {
-                        width: parent.width
-                        title: "Reference"
-
-                        Column {
-                            width: parent.width
-                            spacing: 10
-
-                            Text {
-                                width: parent.width
-                                text: connection["reference"] || valueFor("Reference", "No reference available")
-                                color: theme.ink
-                                font.family: theme.monoFont
-                                font.pixelSize: 12
-                                wrapMode: Text.WrapAnywhere
-                            }
-
-                            Rectangle {
-                                width: parent.width
-                                height: 1
-                                color: theme.line
-                            }
-
-                            Text {
-                                width: parent.width
-                                text: "Backend  \u00b7  " + valueFor("Backend", connection["backend"] || "Local import / none")
-                                color: theme.ink2
-                                font.family: theme.monoFont
-                                font.pixelSize: 11
-                                wrapMode: Text.WrapAnywhere
-                            }
-                        }
-                    }
-
-                    Card {
-                        width: parent.width
-                        title: "Other connections"
+                        Layout.fillWidth: true
+                        title: "Derived addresses"
                         pad: false
 
-                        Column {
-                            width: parent.width
+                        ColumnLayout {
+                            anchors.left: parent.left
+                            anchors.right: parent.right
+                            anchors.top: parent.top
+                            spacing: 0
 
                             Repeater {
-                                model: root.relatedConnections
+                                model: root.mockAddresses
 
-                                Rectangle {
-                                    width: parent.width
-                                    height: 42
+                                delegate: Rectangle {
+                                    Layout.fillWidth: true
+                                    Layout.preferredHeight: theme.rowHeightCompact
                                     color: "transparent"
-                                    border.width: 0
 
                                     Rectangle {
                                         visible: index > 0
@@ -482,36 +381,30 @@ ScrollView {
                                         anchors.right: parent.right
                                         anchors.top: parent.top
                                         height: 1
-                                        color: theme.line
+                                        color: Design.line(theme)
                                     }
 
-                                    MouseArea {
+                                    RowLayout {
                                         anchors.fill: parent
-                                        onClicked: connectionsVM.selectConnection(modelData["id"])
-                                    }
+                                        anchors.leftMargin: theme.cardPadding
+                                        anchors.rightMargin: theme.cardPadding
 
-                                    Row {
-                                        anchors.fill: parent
-                                        anchors.leftMargin: 14
-                                        anchors.rightMargin: 14
-                                        spacing: 8
-
-                                        Rectangle {
-                                            width: 8
-                                            height: 8
-                                            radius: 4
-                                            anchors.verticalCenter: parent.verticalCenter
-                                            color: badgeColor(modelData["kind"])
+                                        Text {
+                                            Layout.fillWidth: true
+                                            text: root.hideSensitive
+                                                ? "\u2022 \u2022 \u2022 \u2022"
+                                                : modelData.address.slice(0, 28) + "\u2026"
+                                            color: Design.ink(theme)
+                                            font.family: Design.mono(theme)
+                                            font.pixelSize: theme.fontCaption
+                                            elide: Text.ElideRight
                                         }
 
                                         Text {
-                                            width: parent.width - 18
-                                            anchors.verticalCenter: parent.verticalCenter
-                                            text: relatedLabel(modelData)
-                                            color: theme.ink2
-                                            font.family: theme.monoFont
-                                            font.pixelSize: 11
-                                            elide: Text.ElideRight
+                                            text: modelData.path
+                                            color: Design.ink3(theme)
+                                            font.family: Design.mono(theme)
+                                            font.pixelSize: theme.fontCaption
                                         }
                                     }
                                 }
@@ -519,42 +412,6 @@ ScrollView {
                         }
                     }
                 }
-            }
-        }
-
-        Column {
-            id: emptyState
-            visible: connectionsVM.isEmpty
-            width: Math.min(parent.width, 620)
-            anchors.horizontalCenter: parent.horizontalCenter
-            anchors.top: parent.top
-            anchors.topMargin: 110
-            spacing: 18
-
-            Text {
-                width: parent.width
-                text: "No connections yet"
-                color: theme.ink
-                font.family: theme.serifFont
-                font.pixelSize: 36
-                horizontalAlignment: Text.AlignHCenter
-            }
-
-            Text {
-                width: parent.width
-                text: "Add a watch-only wallet or import a file first. This screen will then switch into the exported connection-detail layout with live read-only rows."
-                color: theme.ink2
-                font.family: theme.sansFont
-                font.pixelSize: 14
-                wrapMode: Text.WordWrap
-                lineHeight: 1.5
-                horizontalAlignment: Text.AlignHCenter
-            }
-
-            PrimaryButton {
-                anchors.horizontalCenter: parent.horizontalCenter
-                text: connectionsVM.ctaLabel
-                onClicked: root.requestAddConnection()
             }
         }
     }

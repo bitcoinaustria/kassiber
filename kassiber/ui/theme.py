@@ -4,13 +4,13 @@ from PySide6.QtCore import QObject, Property
 
 
 COLORS = {
-    "bg": "#F0E8DB",
-    "paper": "#F0E8DB",
-    "paper_2": "#F7F1E5",
-    "paper_3": "#FFF9F0",
-    "card": "#F7F1E5",
-    "card_border": "#D9CFBC",
-    "card_alt": "#F7F1E5",
+    "bg": "#FFFFFF",
+    "paper": "#FFFFFF",
+    "paper_2": "#FAFAFA",
+    "paper_3": "#F6F6F6",
+    "card": "#FAFAFA",
+    "card_border": "#D6D6D6",
+    "card_alt": "#FAFAFA",
     "warm_bg": "#EFE6D8",
     "warm_paper": "#F6EEDD",
     "warm_border": "#D8CDBD",
@@ -18,15 +18,15 @@ COLORS = {
     "warm_grid_strong": "#DDD1C0",
     "warm_shadow": "#1E1916",
     "warm_accent": "#CD6873",
-    "line": "#D9CFBC",
-    "line_2": "#C4B89F",
-    "ink": "#1A1916",
-    "ink_muted": "#6B6862",
-    "ink_2": "#534A40",
-    "ink_3": "#8A7F71",
-    "accent": "#8A1F2B",
-    "accent_dim": "#CD6873",
-    "chip_border": "#C4B89F",
+    "line": "#D6D6D6",
+    "line_2": "#BBBBBB",
+    "ink": "#222222",
+    "ink_muted": "#555555",
+    "ink_2": "#555555",
+    "ink_3": "#888888",
+    "accent": "#E3000F",
+    "accent_dim": "#F28A91",
+    "chip_border": "#BBBBBB",
     "pill_amber": "#D97706",
     "pill_yellow": "#CA8A04",
     "pill_teal": "#0F766E",
@@ -36,18 +36,62 @@ COLORS = {
     "ok": "#166534",
     "warn": "#B45309",
     "err": "#991B1B",
+    "positive": "#3FA66A",
+    "type_income": "#3FA66A",
+    "type_expense": "#E3000F",
+    "type_transfer": "#6B7280",
+    "type_swap": "#8B6F3C",
+    "type_consolidation": "#5D6B7A",
+    "type_rebalance": "#7D6B8A",
+    "type_mint": "#3F7AA6",
+    "type_melt": "#A66A3F",
+    "type_fee": "#8A7F71",
 }
 
 FONTS = {
-    "display": "Baskerville",
-    "serif": "Baskerville",
-    "sans": "Helvetica Neue",
-    "body": "Helvetica Neue",
-    "mono": "Menlo",
+    "display": "Blinker",
+    "serif": "Blinker",
+    "sans": "Blinker",
+    "body": "Blinker",
+    "mono": "Blinker",
 }
 
 SPACING = {"xs": 4, "sm": 8, "md": 16, "lg": 24, "xl": 40, "xxl": 56}
 RADIUS = {"sm": 2, "md": 8, "lg": 12, "xl": 18}
+
+# Semantic tokens (named, fluid-layout-friendly)
+SEMANTIC = {
+    "page_padding": 12,
+    "grid_gap": 10,
+    "card_padding": 14,
+    "card_header_height": 36,
+    "chrome_gap": 18,
+    "header_height": 54,
+    "footer_height": 28,
+    "control_height_sm": 22,
+    "control_height_md": 26,
+    "control_height_lg": 36,
+    "row_height_compact": 32,
+    "row_height_default": 36,
+    "badge_padding_h": 6,
+    "badge_padding_v": 2,
+    "dot_size": 6,
+    "icon_tile_size": 34,
+}
+
+FONT_PX = {
+    "micro": 9,
+    "caption": 10,
+    "body_small": 11,
+    "body": 12,
+    "body_strong": 13,
+    "heading_xs": 14,
+    "heading_sm": 16,
+    "heading_md": 18,
+    "heading_lg": 20,
+    "heading_xl": 26,
+    "display": 32,
+}
 
 
 class Theme(QObject):
@@ -180,6 +224,46 @@ class Theme(QObject):
         return COLORS["err"]
 
     @Property(str, constant=True)
+    def positive(self) -> str:
+        return COLORS["positive"]
+
+    @Property(str, constant=True)
+    def typeIncome(self) -> str:
+        return COLORS["type_income"]
+
+    @Property(str, constant=True)
+    def typeExpense(self) -> str:
+        return COLORS["type_expense"]
+
+    @Property(str, constant=True)
+    def typeTransfer(self) -> str:
+        return COLORS["type_transfer"]
+
+    @Property(str, constant=True)
+    def typeSwap(self) -> str:
+        return COLORS["type_swap"]
+
+    @Property(str, constant=True)
+    def typeConsolidation(self) -> str:
+        return COLORS["type_consolidation"]
+
+    @Property(str, constant=True)
+    def typeRebalance(self) -> str:
+        return COLORS["type_rebalance"]
+
+    @Property(str, constant=True)
+    def typeMint(self) -> str:
+        return COLORS["type_mint"]
+
+    @Property(str, constant=True)
+    def typeMelt(self) -> str:
+        return COLORS["type_melt"]
+
+    @Property(str, constant=True)
+    def typeFee(self) -> str:
+        return COLORS["type_fee"]
+
+    @Property(str, constant=True)
     def displayFont(self) -> str:
         return FONTS["display"]
 
@@ -239,5 +323,115 @@ class Theme(QObject):
     def radiusXl(self) -> int:
         return RADIUS["xl"]
 
+    # Semantic layout tokens --------------------------------------------
+    @Property(int, constant=True)
+    def pagePadding(self) -> int:
+        return SEMANTIC["page_padding"]
 
-__all__ = ["Theme", "COLORS", "FONTS", "SPACING", "RADIUS"]
+    @Property(int, constant=True)
+    def gridGap(self) -> int:
+        return SEMANTIC["grid_gap"]
+
+    @Property(int, constant=True)
+    def cardPadding(self) -> int:
+        return SEMANTIC["card_padding"]
+
+    @Property(int, constant=True)
+    def cardHeaderHeight(self) -> int:
+        return SEMANTIC["card_header_height"]
+
+    @Property(int, constant=True)
+    def chromeGap(self) -> int:
+        return SEMANTIC["chrome_gap"]
+
+    @Property(int, constant=True)
+    def headerHeight(self) -> int:
+        return SEMANTIC["header_height"]
+
+    @Property(int, constant=True)
+    def footerHeight(self) -> int:
+        return SEMANTIC["footer_height"]
+
+    @Property(int, constant=True)
+    def controlHeightSm(self) -> int:
+        return SEMANTIC["control_height_sm"]
+
+    @Property(int, constant=True)
+    def controlHeightMd(self) -> int:
+        return SEMANTIC["control_height_md"]
+
+    @Property(int, constant=True)
+    def controlHeightLg(self) -> int:
+        return SEMANTIC["control_height_lg"]
+
+    @Property(int, constant=True)
+    def rowHeightCompact(self) -> int:
+        return SEMANTIC["row_height_compact"]
+
+    @Property(int, constant=True)
+    def rowHeightDefault(self) -> int:
+        return SEMANTIC["row_height_default"]
+
+    @Property(int, constant=True)
+    def badgePaddingH(self) -> int:
+        return SEMANTIC["badge_padding_h"]
+
+    @Property(int, constant=True)
+    def badgePaddingV(self) -> int:
+        return SEMANTIC["badge_padding_v"]
+
+    @Property(int, constant=True)
+    def dotSize(self) -> int:
+        return SEMANTIC["dot_size"]
+
+    @Property(int, constant=True)
+    def iconTileSize(self) -> int:
+        return SEMANTIC["icon_tile_size"]
+
+    # Font size scale ----------------------------------------------------
+    @Property(int, constant=True)
+    def fontMicro(self) -> int:
+        return FONT_PX["micro"]
+
+    @Property(int, constant=True)
+    def fontCaption(self) -> int:
+        return FONT_PX["caption"]
+
+    @Property(int, constant=True)
+    def fontBodySmall(self) -> int:
+        return FONT_PX["body_small"]
+
+    @Property(int, constant=True)
+    def fontBody(self) -> int:
+        return FONT_PX["body"]
+
+    @Property(int, constant=True)
+    def fontBodyStrong(self) -> int:
+        return FONT_PX["body_strong"]
+
+    @Property(int, constant=True)
+    def fontHeadingXs(self) -> int:
+        return FONT_PX["heading_xs"]
+
+    @Property(int, constant=True)
+    def fontHeadingSm(self) -> int:
+        return FONT_PX["heading_sm"]
+
+    @Property(int, constant=True)
+    def fontHeadingMd(self) -> int:
+        return FONT_PX["heading_md"]
+
+    @Property(int, constant=True)
+    def fontHeadingLg(self) -> int:
+        return FONT_PX["heading_lg"]
+
+    @Property(int, constant=True)
+    def fontHeadingXl(self) -> int:
+        return FONT_PX["heading_xl"]
+
+    @Property(int, constant=True)
+    def fontDisplay(self) -> int:
+        return FONT_PX["display"]
+
+
+__all__ = ["Theme", "COLORS", "FONTS", "SPACING", "RADIUS", "SEMANTIC", "FONT_PX"]

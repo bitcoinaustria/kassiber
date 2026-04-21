@@ -3,45 +3,64 @@ import QtQuick.Controls 2.15
 
 import "Design.js" as Design
 
+// Card — framed container with optional header + padded content slot.
+//
+// The card is self-sizing: its implicitHeight flows from its content's
+// childrenRect, so parents that don't pin Layout.preferredHeight get a
+// naturally-fit card. Content still fills width via `content.width = body.width`.
 Rectangle {
     id: root
-    property int padding: 14
-    property bool pad: true
-    property color fillColor: Design.paperAlt(theme)
-    property color strokeColor: Design.line(theme)
-    property int cornerRadius: 2
+
+    default property alias content: bodyContent.data
+
     property string eyebrow: ""
     property string title: ""
     property string subtitle: ""
     property Component action: null
-    property bool headerDividerVisible: headerVisible
-    property int headerMinimumHeight: 36
-    default property alias content: body.data
 
-    readonly property bool headerVisible: eyebrow.length > 0 || title.length > 0 || subtitle.length > 0 || action !== null
-    readonly property int bodyPadding: pad ? padding : 0
+    property bool pad: true
+    property int padding: theme.cardPadding
+    property int cornerRadius: theme.radiusSm
+    property color fillColor: Design.paperAlt(theme)
+    property color strokeColor: Design.line(theme)
+
+    readonly property bool headerVisible:
+        eyebrow.length > 0 || title.length > 0 || subtitle.length > 0 || action !== null
+    readonly property int innerPadding: pad ? padding : 0
 
     color: fillColor
     radius: cornerRadius
     border.color: strokeColor
     border.width: 1
     clip: true
-    implicitWidth: Math.max(240, headerVisible ? headerRow.implicitWidth + 28 : 240)
-    implicitHeight: (headerVisible ? header.implicitHeight : 0) + body.implicitHeight + bodyPadding * 2
 
+    // implicit size flows from header + content
+    implicitWidth: Math.max(
+        240,
+        (headerVisible ? headerRow.implicitWidth + 28 : 0),
+        bodyContent.implicitWidth + innerPadding * 2
+    )
+    implicitHeight:
+        (headerVisible ? header.height : 0)
+        + bodyContent.implicitHeight
+        + innerPadding * 2
+
+    // Header ---------------------------------------------------------------
     Item {
         id: header
         visible: root.headerVisible
-        anchors.top: parent.top
         anchors.left: parent.left
         anchors.right: parent.right
-        height: visible ? Math.max(root.headerMinimumHeight, headerRow.implicitHeight + 16) : 0
+        anchors.top: parent.top
+        height: visible
+            ? Math.max(theme.cardHeaderHeight, headerRow.implicitHeight + 16)
+            : 0
 
         Rectangle {
             anchors.left: parent.left
             anchors.right: parent.right
             anchors.bottom: parent.bottom
-            visible: root.headerDividerVisible
+            visible: root.headerVisible
             height: 1
             color: root.strokeColor
         }
@@ -49,11 +68,11 @@ Rectangle {
         Row {
             id: headerRow
             anchors.fill: parent
-            anchors.leftMargin: 14
-            anchors.rightMargin: 14
-            anchors.topMargin: 8
-            anchors.bottomMargin: 8
-            spacing: 12
+            anchors.leftMargin: theme.cardPadding
+            anchors.rightMargin: theme.cardPadding
+            anchors.topMargin: theme.spacingSm
+            anchors.bottomMargin: theme.spacingSm
+            spacing: theme.spacingSm + 4
 
             Column {
                 width: Math.max(0, parent.width - actionSlot.width - parent.spacing)
@@ -65,7 +84,7 @@ Rectangle {
                     text: root.eyebrow
                     color: Design.ink2(theme)
                     font.family: Design.mono(theme)
-                    font.pixelSize: 9
+                    font.pixelSize: theme.fontMicro
                     font.weight: Font.DemiBold
                     font.capitalization: Font.AllUppercase
                     font.letterSpacing: 1.2
@@ -77,9 +96,9 @@ Rectangle {
                     width: parent.width
                     text: root.title
                     color: Design.ink(theme)
-                    font.family: Design.serif(theme)
-                    font.pixelSize: 14
-                    font.weight: Font.Medium
+                    font.family: Design.sans()
+                    font.pixelSize: theme.fontBodyStrong
+                    font.weight: Font.DemiBold
                     font.letterSpacing: 0.2
                     elide: Text.ElideRight
                 }
@@ -91,7 +110,7 @@ Rectangle {
                     text: root.subtitle
                     color: Design.ink2(theme)
                     font.family: Design.sans()
-                    font.pixelSize: 12
+                    font.pixelSize: theme.fontBody
                     wrapMode: Text.WordWrap
                 }
             }
@@ -111,19 +130,26 @@ Rectangle {
         }
     }
 
+    // Body -----------------------------------------------------------------
+    //
+    // bodyContent is anchored top/left/right only — its height flows from
+    // childrenRect. That lets root.implicitHeight pull a concrete value up
+    // through the layout system. When a parent forces the card taller (e.g.
+    // Layout.fillHeight so cards in a row share a height), the card frame
+    // extends but bodyContent stays at content height; any extra vertical
+    // space renders as the card fill color at the bottom.
+    //
+    // A content child that wants to occupy the full card area can position
+    // itself relative to `root` (Card) rather than bodyContent.
     Item {
-        id: bodyFrame
+        id: bodyContent
         anchors.top: root.headerVisible ? header.bottom : parent.top
         anchors.left: parent.left
         anchors.right: parent.right
-        anchors.bottom: parent.bottom
-
-        Item {
-            id: body
-            anchors.fill: parent
-            anchors.margins: root.bodyPadding
-            implicitWidth: childrenRect.width
-            implicitHeight: childrenRect.height
-        }
+        anchors.leftMargin: root.innerPadding
+        anchors.rightMargin: root.innerPadding
+        anchors.topMargin: root.innerPadding
+        implicitHeight: childrenRect.height
+        implicitWidth: childrenRect.width
     }
 }
