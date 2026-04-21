@@ -127,6 +127,8 @@ CREATE TABLE journal_entries (
     proceeds REAL,
     gain_loss REAL,
     description TEXT,
+    at_category TEXT,
+    at_kennzahl INTEGER,
     created_at TEXT NOT NULL
 );
 
@@ -185,7 +187,13 @@ def _normalize_engine_entries(entries):
             {key: _json_decimal(value) for key, value in entry.items() if key != "id"}
             for entry in entries
         ],
-        key=lambda row: (row["occurred_at"], row["entry_type"], row["wallet_id"], row["description"]),
+        key=lambda row: (
+            row["occurred_at"],
+            row["entry_type"],
+            row["wallet_id"],
+            row.get("at_category", ""),
+            row["description"],
+        ),
     )
 
 
@@ -312,11 +320,11 @@ class ReviewRegressionTest(unittest.TestCase):
         conn.commit()
         conn.close()
 
-    def _assert_austrian_unsupported(self, payload):
-        self.assertEqual(payload.get("kind"), "error")
-        self.assertEqual(payload["error"]["code"], "unsupported")
-        self.assertEqual(payload["error"]["details"]["tax_country"], "at")
-        self.assertIn("bitcoinaustria/rp2", payload["error"]["hint"])
+    def _assert_austrian_policy(self, payload):
+        """AT profiles inherit defaults from rp2's `AT` country plugin."""
+        self.assertEqual(payload["data"]["tax_country"], "at")
+        self.assertEqual(payload["data"]["fiat_currency"], "EUR")
+        self.assertEqual(payload["data"]["gains_algorithm"], "MOVING_AVERAGE_AT")
 
     def test_command_needs_db_skips_static_command_surfaces(self):
         self.assertFalse(command_needs_db(Namespace(command="backends", backends_command="kinds")))
@@ -1195,6 +1203,203 @@ class ReviewRegressionTest(unittest.TestCase):
             manual_pair_records=[],
         )
 
+    def _direct_austrian_engine_inputs(self):
+        profile = {
+            "id": "profile-at",
+            "workspace_id": "workspace-main",
+            "label": "FixtureAustrian",
+            "fiat_currency": "EUR",
+            "tax_country": "at",
+            "tax_long_term_days": 9223372036854775807,
+            "gains_algorithm": "MOVING_AVERAGE_AT",
+        }
+        wallet_refs_by_id = {
+            "wallet-a": {
+                "id": "wallet-a",
+                "label": "Vienna",
+                "wallet_account_id": "account-treasury",
+                "account_code": "treasury",
+                "account_label": "Treasury",
+            },
+            "wallet-b": {
+                "id": "wallet-b",
+                "label": "Liquid",
+                "wallet_account_id": "account-treasury",
+                "account_code": "treasury",
+                "account_label": "Treasury",
+            },
+        }
+        rows = [
+            {
+                "id": "alt-buy-1",
+                "wallet_id": "wallet-a",
+                "wallet_label": "Vienna",
+                "wallet_account_id": "account-treasury",
+                "account_code": "treasury",
+                "account_label": "Treasury",
+                "occurred_at": "2020-05-01T10:00:00Z",
+                "direction": "inbound",
+                "asset": "BTC",
+                "amount": 50_000_000_000,
+                "fee": 0,
+                "fiat_rate": 9000,
+                "fiat_value": 4500,
+                "kind": "deposit",
+                "description": "Vienna Alt buy",
+                "note": None,
+                "external_id": "alt-buy-1",
+                "created_at": "2020-05-01T10:00:00Z",
+            },
+            {
+                "id": "neu-buy-1",
+                "wallet_id": "wallet-a",
+                "wallet_label": "Vienna",
+                "wallet_account_id": "account-treasury",
+                "account_code": "treasury",
+                "account_label": "Treasury",
+                "occurred_at": "2024-06-01T10:00:00Z",
+                "direction": "inbound",
+                "asset": "BTC",
+                "amount": 100_000_000_000,
+                "fee": 0,
+                "fiat_rate": 30000,
+                "fiat_value": 30000,
+                "kind": "deposit",
+                "description": "Vienna Neu buy",
+                "note": None,
+                "external_id": "neu-buy-1",
+                "created_at": "2024-06-01T10:00:00Z",
+            },
+            {
+                "id": "neu-sell-1",
+                "wallet_id": "wallet-a",
+                "wallet_label": "Vienna",
+                "wallet_account_id": "account-treasury",
+                "account_code": "treasury",
+                "account_label": "Treasury",
+                "occurred_at": "2025-03-01T09:00:00Z",
+                "direction": "outbound",
+                "asset": "BTC",
+                "amount": 30_000_000_000,
+                "fee": 0,
+                "fiat_rate": 50000,
+                "fiat_value": 15000,
+                "kind": "withdrawal",
+                "description": "Vienna Neu sell",
+                "note": None,
+                "external_id": "neu-sell-1",
+                "created_at": "2025-03-01T09:00:00Z",
+            },
+        ]
+        return profile, TaxEngineLedgerInputs(
+            rows=rows,
+            wallet_refs_by_id=wallet_refs_by_id,
+            manual_pair_records=[],
+        )
+
+    def _direct_austrian_cross_asset_swap_inputs(self):
+        profile = {
+            "id": "profile-at",
+            "workspace_id": "workspace-main",
+            "label": "FixtureAustrianSwap",
+            "fiat_currency": "EUR",
+            "tax_country": "at",
+            "tax_long_term_days": 9223372036854775807,
+            "gains_algorithm": "MOVING_AVERAGE_AT",
+        }
+        wallet_refs_by_id = {
+            "wallet-a": {
+                "id": "wallet-a",
+                "label": "Vienna",
+                "wallet_account_id": "account-treasury",
+                "account_code": "treasury",
+                "account_label": "Treasury",
+            },
+            "wallet-b": {
+                "id": "wallet-b",
+                "label": "Liquid",
+                "wallet_account_id": "account-treasury",
+                "account_code": "treasury",
+                "account_label": "Treasury",
+            },
+        }
+        rows = [
+            {
+                "id": "neu-buy-1",
+                "wallet_id": "wallet-a",
+                "wallet_label": "Vienna",
+                "wallet_account_id": "account-treasury",
+                "account_code": "treasury",
+                "account_label": "Treasury",
+                "occurred_at": "2024-06-01T10:00:00Z",
+                "direction": "inbound",
+                "asset": "BTC",
+                "amount": 100_000_000_000,
+                "fee": 0,
+                "fiat_rate": 30000,
+                "fiat_value": 30000,
+                "kind": "deposit",
+                "description": "Vienna Neu buy",
+                "note": None,
+                "external_id": "neu-buy-1",
+                "created_at": "2024-06-01T10:00:00Z",
+            },
+            {
+                "id": "swap-out-1",
+                "wallet_id": "wallet-a",
+                "wallet_label": "Vienna",
+                "wallet_account_id": "account-treasury",
+                "account_code": "treasury",
+                "account_label": "Treasury",
+                "occurred_at": "2025-03-01T09:00:00Z",
+                "direction": "outbound",
+                "asset": "BTC",
+                "amount": 50_000_000_000,
+                "fee": 0,
+                "fiat_rate": 50000,
+                "fiat_value": 25000,
+                "kind": "withdrawal",
+                "description": "Peg-out BTC->LBTC",
+                "note": None,
+                "external_id": "swap-1-out",
+                "created_at": "2025-03-01T09:00:00Z",
+            },
+            {
+                "id": "swap-in-1",
+                "wallet_id": "wallet-b",
+                "wallet_label": "Liquid",
+                "wallet_account_id": "account-treasury",
+                "account_code": "treasury",
+                "account_label": "Treasury",
+                "occurred_at": "2025-03-01T09:00:00Z",
+                "direction": "inbound",
+                "asset": "LBTC",
+                "amount": 50_000_000_000,
+                "fee": 0,
+                "fiat_rate": 50000,
+                "fiat_value": 25000,
+                "kind": "deposit",
+                "description": "Peg-in BTC->LBTC",
+                "note": None,
+                "external_id": "swap-1-in",
+                "created_at": "2025-03-01T09:00:00Z",
+            },
+        ]
+        manual_pairs = [
+            {
+                "id": "mp-at-swap-1",
+                "out_transaction_id": "swap-out-1",
+                "in_transaction_id": "swap-in-1",
+                "policy": "taxable",
+                "kind": "swap",
+            },
+        ]
+        return profile, TaxEngineLedgerInputs(
+            rows=rows,
+            wallet_refs_by_id=wallet_refs_by_id,
+            manual_pair_records=manual_pairs,
+        )
+
     def _direct_missing_quarantine_engine_inputs(self):
         profile = {
             "id": "profile-missing-price",
@@ -1764,21 +1969,113 @@ class ReviewRegressionTest(unittest.TestCase):
         expected = self._load_fixture("generic_rp2_engine_snapshot.json")
         self.assertEqual(actual, expected)
 
-    def test_build_tax_engine_rejects_austrian_profile(self):
+    def test_austrian_rp2_engine_snapshot_matches_fixture(self):
+        """End-to-end: AT profile produces rp2-AT-marked notes, moving-average disposal math, and Alt/Neu classification."""
+        profile, inputs = self._direct_austrian_engine_inputs()
+        actual = self._direct_engine_snapshot(profile, inputs)
+        expected = self._load_fixture("austrian_rp2_engine_snapshot.json")
+        self.assertEqual(actual, expected)
+
+    def test_austrian_rp2_engine_emits_income_entry_for_staking_receipt(self):
         profile = {
-            "id": "profile-austrian-disabled",
+            "id": "profile-at-income",
             "workspace_id": "workspace-main",
-            "label": "FixtureAustrianDisabled",
+            "label": "FixtureAustrianIncome",
             "fiat_currency": "EUR",
             "tax_country": "at",
             "tax_long_term_days": 365,
-            "gains_algorithm": "FIFO",
+            "gains_algorithm": "moving_average_at",
         }
-        with self.assertRaises(AppError) as exc:
-            build_tax_engine(profile)
-        self.assertEqual(exc.exception.code, "unsupported")
-        self.assertEqual(exc.exception.details["tax_country"], "at")
-        self.assertIn("bitcoinaustria/rp2", exc.exception.hint)
+        inputs = TaxEngineLedgerInputs(
+            rows=[
+                {
+                    "id": "staking-receipt-1",
+                    "wallet_id": "wallet-austrian",
+                    "wallet_label": "AustrianIncome",
+                    "wallet_account_id": "account-treasury",
+                    "account_code": "treasury",
+                    "account_label": "Treasury",
+                    "occurred_at": "2024-01-01T00:00:00Z",
+                    "direction": "inbound",
+                    "asset": "BTC",
+                    "amount": 100_000_000,
+                    "fee": 0,
+                    "fiat_rate": 40_000,
+                    "fiat_value": 40,
+                    "kind": "staking",
+                    "description": "Staking reward",
+                    "note": None,
+                    "external_id": "staking-receipt-1",
+                    "created_at": "2024-01-01T00:00:00Z",
+                }
+            ],
+            wallet_refs_by_id={
+                "wallet-austrian": {
+                    "id": "wallet-austrian",
+                    "label": "AustrianIncome",
+                    "wallet_account_id": "account-treasury",
+                    "account_code": "treasury",
+                    "account_label": "Treasury",
+                }
+            },
+            manual_pair_records=[],
+        )
+        actual = self._direct_engine_snapshot(profile, inputs)
+        self.assertEqual(actual["quarantines"], [])
+        self.assertEqual(
+            [entry["entry_type"] for entry in actual["entries"]],
+            ["acquisition", "income"],
+        )
+        income_entry = next(entry for entry in actual["entries"] if entry["entry_type"] == "income")
+        self.assertEqual(income_entry["quantity"], 0.001)
+        self.assertEqual(income_entry["fiat_value"], 40.0)
+        self.assertEqual(income_entry["gain_loss"], 40.0)
+        self.assertEqual(income_entry["at_category"], "income_capital_yield")
+        self.assertEqual(income_entry["at_kennzahl"], 175)
+        self.assertEqual(
+            actual["wallet_holdings"],
+            [
+                {
+                    "wallet_id": "wallet-austrian",
+                    "wallet_label": "AustrianIncome",
+                    "account_code": "treasury",
+                    "asset": "BTC",
+                    "quantity": 0.001,
+                    "cost_basis": 40.0,
+                }
+            ],
+        )
+
+    def test_austrian_rp2_cross_asset_swap_is_quarantined(self):
+        """End-to-end: AT profile quarantines Neu cross-asset swap pairs (Option C)."""
+        profile, inputs = self._direct_austrian_cross_asset_swap_inputs()
+        actual = self._direct_engine_snapshot(profile, inputs)
+        expected = self._load_fixture("austrian_rp2_cross_asset_swap_snapshot.json")
+        self.assertEqual(actual, expected)
+
+    def test_build_tax_engine_accepts_austrian_profile_and_routes_to_rp2_at(self):
+        profile = {
+            "id": "profile-at",
+            "workspace_id": "workspace-main",
+            "label": "FixtureAustrian",
+            "fiat_currency": "EUR",
+            "tax_country": "at",
+            "tax_long_term_days": 365,
+            "gains_algorithm": "moving_average_at",
+        }
+        engine = build_tax_engine(profile)
+        self.assertIsNotNone(engine)
+        # Policy should reflect rp2's AT plugin — moving_average_at default,
+        # English fallback generators, and Austrian accounting methods.
+        from kassiber.tax_policy import build_tax_policy
+
+        policy = build_tax_policy(profile)
+        self.assertEqual(policy.tax_country, "at")
+        self.assertEqual(policy.fiat_currency, "EUR")
+        self.assertEqual(policy.default_accounting_method, "moving_average_at")
+        self.assertIn("moving_average_at", policy.accounting_methods)
+        self.assertEqual(policy.generation_language, "en")
+        self.assertEqual(policy.report_generators, ("open_positions",))
 
     def test_generic_rp2_engine_quarantines_unfunded_transfer(self):
         profile, _ = self._direct_transfer_engine_inputs()
@@ -2111,7 +2408,7 @@ class ReviewRegressionTest(unittest.TestCase):
         self.assertEqual(payload["data"]["env_file"], str(expected_root / "config" / "backends.env"))
         self.assertEqual(payload["data"]["default_backend"], "mempool")
 
-    def test_profiles_create_rejects_austrian_tax_country(self):
+    def test_profiles_create_accepts_austrian_tax_country(self):
         payload, result = self._run_json("init")
         self._assert_ok(payload, result, "init")
         payload, result = self._run_json("workspaces", "create", "Main")
@@ -2119,29 +2416,28 @@ class ReviewRegressionTest(unittest.TestCase):
         payload, result = self._run_json(
             "profiles", "create",
             "--workspace", "Main",
-            "--fiat-currency", "USD",
             "--tax-country", "at",
-            "--tax-long-term-days", "999",
-            "--gains-algorithm", "HIFO",
+            "--gains-algorithm", "MOVING_AVERAGE_AT",
             "Austrian",
         )
-        self.assertNotEqual(result.returncode, 0, msg=payload)
-        self._assert_austrian_unsupported(payload)
+        self._assert_ok(payload, result, "profiles.create")
+        self._assert_austrian_policy(payload)
 
-    def test_profiles_set_rejects_switching_to_austrian_tax_country(self):
+    def test_profiles_set_accepts_switching_to_austrian_tax_country(self):
         self._bootstrap_profile()
         payload, result = self._run_json(
             "profiles", "set",
             "--workspace", "Main",
             "--profile", "Default",
             "--tax-country", "at",
+            "--gains-algorithm", "MOVING_AVERAGE_AT",
         )
-        self.assertNotEqual(result.returncode, 0, msg=payload)
-        self._assert_austrian_unsupported(payload)
+        self._assert_ok(payload, result, "profiles.set")
+        self._assert_austrian_policy(payload)
 
-    def test_legacy_austrian_profile_journals_process_fails_fast(self):
-        self._bootstrap_wallet(label="LegacyAT")
-        json_file = self.case_dir / "legacy-austrian-import.json"
+    def test_austrian_profile_journals_process_succeeds(self):
+        self._bootstrap_wallet(label="AustrianJournal")
+        json_file = self.case_dir / "austrian-import.json"
         json_file.write_text(
             json.dumps(
                 [
@@ -2152,7 +2448,7 @@ class ReviewRegressionTest(unittest.TestCase):
                         "amount": "0.001",
                         "fee": "0",
                         "kind": "buy",
-                        "txid": "legacy-at-demo",
+                        "txid": "at-demo",
                         "fiat_value": "40",
                     }
                 ]
@@ -2163,63 +2459,143 @@ class ReviewRegressionTest(unittest.TestCase):
             "wallets", "import-json",
             "--workspace", "Main",
             "--profile", "Default",
-            "--wallet", "LegacyAT",
+            "--wallet", "AustrianJournal",
             "--file", str(json_file),
         )
         self._assert_ok(payload, result, "wallets.import-json")
         self._set_profile_tax_country("Default", "at")
-
         payload, result = self._run_json(
-            "journals", "process",
+            "profiles", "set",
             "--workspace", "Main",
             "--profile", "Default",
+            "--gains-algorithm", "MOVING_AVERAGE_AT",
         )
-        self.assertNotEqual(result.returncode, 0, msg=payload)
-        self._assert_austrian_unsupported(payload)
+        self._assert_ok(payload, result, "profiles.set")
 
-    def test_legacy_austrian_profile_reports_fail_fast_even_with_fresh_generic_journals(self):
-        self._bootstrap_wallet(label="LegacyReport")
-        json_file = self.case_dir / "legacy-austrian-report-import.json"
-        json_file.write_text(
-            json.dumps(
-                [
-                    {
-                        "date": "2024-01-01",
-                        "direction": "inbound",
-                        "asset": "BTC",
-                        "amount": "0.001",
-                        "fee": "0",
-                        "kind": "buy",
-                        "txid": "legacy-at-report-demo",
-                        "fiat_value": "40",
-                    }
-                ]
-            ),
-            encoding="utf-8",
-        )
-        payload, result = self._run_json(
-            "wallets", "import-json",
-            "--workspace", "Main",
-            "--profile", "Default",
-            "--wallet", "LegacyReport",
-            "--file", str(json_file),
-        )
-        self._assert_ok(payload, result, "wallets.import-json")
         payload, result = self._run_json(
             "journals", "process",
             "--workspace", "Main",
             "--profile", "Default",
         )
         self._assert_ok(payload, result, "journals.process")
+
+    def test_austrian_profile_reports_capital_gains_succeeds(self):
+        self._bootstrap_wallet(label="AustrianReport")
+        json_file = self.case_dir / "austrian-report-import.json"
+        json_file.write_text(
+            json.dumps(
+                [
+                    {
+                        "date": "2024-01-01",
+                        "direction": "inbound",
+                        "asset": "BTC",
+                        "amount": "0.001",
+                        "fee": "0",
+                        "kind": "buy",
+                        "txid": "at-report-demo",
+                        "fiat_value": "40",
+                    },
+                    {
+                        "date": "2024-06-01",
+                        "direction": "outbound",
+                        "asset": "BTC",
+                        "amount": "0.0005",
+                        "fee": "0",
+                        "kind": "sell",
+                        "txid": "at-report-demo-sell",
+                        "fiat_value": "30",
+                    }
+                ]
+            ),
+            encoding="utf-8",
+        )
+        payload, result = self._run_json(
+            "wallets", "import-json",
+            "--workspace", "Main",
+            "--profile", "Default",
+            "--wallet", "AustrianReport",
+            "--file", str(json_file),
+        )
+        self._assert_ok(payload, result, "wallets.import-json")
         self._set_profile_tax_country("Default", "at")
+        payload, result = self._run_json(
+            "profiles", "set",
+            "--workspace", "Main",
+            "--profile", "Default",
+            "--gains-algorithm", "MOVING_AVERAGE_AT",
+        )
+        self._assert_ok(payload, result, "profiles.set")
+        payload, result = self._run_json(
+            "journals", "process",
+            "--workspace", "Main",
+            "--profile", "Default",
+        )
+        self._assert_ok(payload, result, "journals.process")
 
         payload, result = self._run_json(
             "reports", "capital-gains",
             "--workspace", "Main",
             "--profile", "Default",
         )
-        self.assertNotEqual(result.returncode, 0, msg=payload)
-        self._assert_austrian_unsupported(payload)
+        self._assert_ok(payload, result, "reports.capital-gains")
+        self.assertEqual(len(payload["data"]), 1)
+        self.assertEqual(payload["data"][0]["at_category"], "neu_gain")
+        self.assertEqual(payload["data"][0]["at_kennzahl"], 174)
+
+    def test_austrian_profile_reports_staking_receipt_as_income(self):
+        self._bootstrap_wallet(label="AustrianIncome")
+        json_file = self.case_dir / "austrian-income-import.json"
+        json_file.write_text(
+            json.dumps(
+                [
+                    {
+                        "date": "2024-01-01",
+                        "direction": "inbound",
+                        "asset": "BTC",
+                        "amount": "0.001",
+                        "fee": "0",
+                        "kind": "staking",
+                        "txid": "at-staking-demo",
+                        "fiat_value": "40",
+                    }
+                ]
+            ),
+            encoding="utf-8",
+        )
+        payload, result = self._run_json(
+            "wallets", "import-json",
+            "--workspace", "Main",
+            "--profile", "Default",
+            "--wallet", "AustrianIncome",
+            "--file", str(json_file),
+        )
+        self._assert_ok(payload, result, "wallets.import-json")
+        self._set_profile_tax_country("Default", "at")
+        payload, result = self._run_json(
+            "profiles", "set",
+            "--workspace", "Main",
+            "--profile", "Default",
+            "--gains-algorithm", "MOVING_AVERAGE_AT",
+        )
+        self._assert_ok(payload, result, "profiles.set")
+        payload, result = self._run_json(
+            "journals", "process",
+            "--workspace", "Main",
+            "--profile", "Default",
+        )
+        self._assert_ok(payload, result, "journals.process")
+
+        payload, result = self._run_json(
+            "reports", "capital-gains",
+            "--workspace", "Main",
+            "--profile", "Default",
+        )
+        self._assert_ok(payload, result, "reports.capital-gains")
+        self.assertEqual(len(payload["data"]), 1)
+        self.assertEqual(payload["data"][0]["entry_type"], "income")
+        self.assertEqual(payload["data"][0]["at_category"], "income_capital_yield")
+        self.assertEqual(payload["data"][0]["at_kennzahl"], 175)
+        self.assertEqual(payload["data"][0]["gain_loss"], 40.0)
 
     def test_attachments_verify_reports_missing_file(self):
         self._bootstrap_wallet(label="Attachable")
@@ -2380,7 +2756,7 @@ class ReviewRegressionTest(unittest.TestCase):
             INSERT INTO tags VALUES('tag', 'ws', 'pf', 'important', 'Important', '2024-01-01T00:00:00Z');
             INSERT INTO transactions VALUES('tx', 'ws', 'pf', 'wal', 'ext', 'fp', '2024-01-01T00:00:00Z', 'inbound', 'BTC', 1.0, 0.0, 'USD', 10000, 10000, 'deposit', 'desc', NULL, NULL, 0, '{}', '2024-01-01T00:00:00Z');
             INSERT INTO transaction_tags VALUES('tx', 'tag');
-            INSERT INTO journal_entries VALUES('je', 'ws', 'pf', 'tx', 'wal', 'acct', '2024-01-01T00:00:00Z', 'acquisition', 'BTC', 1.0, 10000, 10000, NULL, NULL, NULL, 'desc', '2024-01-01T00:00:00Z');
+            INSERT INTO journal_entries VALUES('je', 'ws', 'pf', 'tx', 'wal', 'acct', '2024-01-01T00:00:00Z', 'acquisition', 'BTC', 1.0, 10000, 10000, NULL, NULL, NULL, 'desc', NULL, NULL, '2024-01-01T00:00:00Z');
             INSERT INTO journal_quarantines VALUES('tx', 'ws', 'pf', 'reason', '{}', '2024-01-01T00:00:00Z');
             """
         )
