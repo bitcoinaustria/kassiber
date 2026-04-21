@@ -15,7 +15,7 @@ authors = [
 dependencies = [
   "embit>=0.8.0",
   "PySide6>=6.7,<7",
-  "rp2 @ git+https://github.com/bitcoinaustria/rp2.git@2fc8592cd952f7aa64669a8ffbd1476dfc48abf9",
+  "rp2 @ git+https://github.com/bitcoinaustria/rp2.git@b66bd060fa26a0e3a3e0aed1169059529da75bb6",
 ]
 
 [project.scripts]

@@ -148,8 +148,8 @@ top of the monolith.
 - [ ] Replace Option C (quarantine-on-cross-asset-Neu-swap) with Option A
   (topological two-pass compute) so `carried_basis_fiat` is populated
   automatically; see [docs/austrian-handoff.md](docs/austrian-handoff.md)
-- [ ] Add E 1kv CSV/PDF export path on top of rp2's `at.tax_report_at`
-  generator
+- [ ] Add E 1kv CSV/PDF export path on top of Kassiber's persisted
+  Austrian disposal buckets / Kennzahl mapping
 
 ### 0.5e - Rates and journal follow-through
 

@@ -127,6 +127,8 @@ CREATE TABLE journal_entries (
     proceeds REAL,
     gain_loss REAL,
     description TEXT,
+    at_category TEXT,
+    at_kennzahl INTEGER,
     created_at TEXT NOT NULL
 );
 
@@ -185,7 +187,13 @@ def _normalize_engine_entries(entries):
             {key: _json_decimal(value) for key, value in entry.items() if key != "id"}
             for entry in entries
         ],
-        key=lambda row: (row["occurred_at"], row["entry_type"], row["wallet_id"], row["description"]),
+        key=lambda row: (
+            row["occurred_at"],
+            row["entry_type"],
+            row["wallet_id"],
+            row.get("at_category", ""),
+            row["description"],
+        ),
     )
 
 
@@ -1988,7 +1996,7 @@ class ReviewRegressionTest(unittest.TestCase):
         engine = build_tax_engine(profile)
         self.assertIsNotNone(engine)
         # Policy should reflect rp2's AT plugin — moving_average_at default,
-        # de_AT language, AT-specific reports.
+        # English fallback generators, and Austrian accounting methods.
         from kassiber.tax_policy import build_tax_policy
 
         policy = build_tax_policy(profile)
@@ -1996,8 +2004,8 @@ class ReviewRegressionTest(unittest.TestCase):
         self.assertEqual(policy.fiat_currency, "EUR")
         self.assertEqual(policy.default_accounting_method, "moving_average_at")
         self.assertIn("moving_average_at", policy.accounting_methods)
-        self.assertEqual(policy.generation_language, "de_AT")
-        self.assertIn("at.tax_report_at", policy.report_generators)
+        self.assertEqual(policy.generation_language, "en")
+        self.assertEqual(policy.report_generators, ("open_positions",))
 
     def test_generic_rp2_engine_quarantines_unfunded_transfer(self):
         profile, _ = self._direct_transfer_engine_inputs()
@@ -2416,6 +2424,16 @@ class ReviewRegressionTest(unittest.TestCase):
                         "kind": "buy",
                         "txid": "at-report-demo",
                         "fiat_value": "40",
+                    },
+                    {
+                        "date": "2024-06-01",
+                        "direction": "outbound",
+                        "asset": "BTC",
+                        "amount": "0.0005",
+                        "fee": "0",
+                        "kind": "sell",
+                        "txid": "at-report-demo-sell",
+                        "fiat_value": "30",
                     }
                 ]
             ),
@@ -2450,6 +2468,9 @@ class ReviewRegressionTest(unittest.TestCase):
             "--profile", "Default",
         )
         self._assert_ok(payload, result, "reports.capital-gains")
+        self.assertEqual(len(payload["data"]), 1)
+        self.assertEqual(payload["data"][0]["at_category"], "neu_gain")
+        self.assertEqual(payload["data"][0]["at_kennzahl"], 174)
 
     def test_attachments_verify_reports_missing_file(self):
         self._bootstrap_wallet(label="Attachable")
@@ -2610,7 +2631,7 @@ class ReviewRegressionTest(unittest.TestCase):
             INSERT INTO tags VALUES('tag', 'ws', 'pf', 'important', 'Important', '2024-01-01T00:00:00Z');
             INSERT INTO transactions VALUES('tx', 'ws', 'pf', 'wal', 'ext', 'fp', '2024-01-01T00:00:00Z', 'inbound', 'BTC', 1.0, 0.0, 'USD', 10000, 10000, 'deposit', 'desc', NULL, NULL, 0, '{}', '2024-01-01T00:00:00Z');
             INSERT INTO transaction_tags VALUES('tx', 'tag');
-            INSERT INTO journal_entries VALUES('je', 'ws', 'pf', 'tx', 'wal', 'acct', '2024-01-01T00:00:00Z', 'acquisition', 'BTC', 1.0, 10000, 10000, NULL, NULL, NULL, 'desc', '2024-01-01T00:00:00Z');
+            INSERT INTO journal_entries VALUES('je', 'ws', 'pf', 'tx', 'wal', 'acct', '2024-01-01T00:00:00Z', 'acquisition', 'BTC', 1.0, 10000, 10000, NULL, NULL, NULL, 'desc', NULL, NULL, '2024-01-01T00:00:00Z');
             INSERT INTO journal_quarantines VALUES('tx', 'ws', 'pf', 'reason', '{}', '2024-01-01T00:00:00Z');
             """
         )

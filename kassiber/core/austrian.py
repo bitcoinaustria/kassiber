@@ -37,6 +37,18 @@ REGIME_NEU: Literal["neu"] = "neu"
 AT_SWAP_QUARANTINE_REASON = "at_swap_basis_carry_unresolved"
 AT_SWAP_TWO_PASS_REASON_CODE = "needs_two_pass_compute"
 
+# Kassiber owns the presentation-layer mapping from RP2's semantic Austrian
+# disposal categories onto FinanzOnline / BMF form codes.
+AT_CATEGORY_TO_KENNZAHL: dict[str, int | None] = {
+    "income_general": 172,
+    "income_capital_yield": 175,
+    "neu_gain": 174,
+    "neu_loss": 176,
+    "neu_swap": None,
+    "alt_spekulation": 801,
+    "alt_taxfree": None,
+}
+
 
 def _row_value(row: Mapping[str, Any], key: str, default: Any = None) -> Any:
     if hasattr(row, "keys") and key in row.keys():
@@ -125,7 +137,14 @@ def resolve_pool_id(wallet_id: Optional[str]) -> str:
     return str(wallet_id)
 
 
+def kennzahl_for_disposal_category(category: Optional[str]) -> int | None:
+    if category is None:
+        return None
+    return AT_CATEGORY_TO_KENNZAHL.get(str(category))
+
+
 __all__ = [
+    "AT_CATEGORY_TO_KENNZAHL",
     "AT_NEU_CUTOFF",
     "AT_SWAP_QUARANTINE_REASON",
     "AT_SWAP_TWO_PASS_REASON_CODE",
@@ -133,5 +152,6 @@ __all__ = [
     "REGIME_NEU",
     "infer_outbound_regimes",
     "infer_regime_from_timestamp",
+    "kennzahl_for_disposal_category",
     "resolve_pool_id",
 ]

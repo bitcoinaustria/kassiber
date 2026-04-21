@@ -19,6 +19,7 @@ from ..austrian import (
     AT_SWAP_TWO_PASS_REASON_CODE,
     REGIME_NEU,
     infer_outbound_regimes,
+    kennzahl_for_disposal_category,
 )
 from ..tax_events import NormalizedTaxAssetInputs, build_tax_quarantine, normalize_tax_asset_inputs
 from .base import TaxEngineLedgerInputs, TaxEngineLedgerResult
@@ -74,6 +75,39 @@ def _rp2_decimal(value: Any):
     return modules["RP2Decimal"](str(value))
 
 
+def _load_at_country_module():
+    try:
+        return import_module("rp2.plugin.country.at")
+    except ModuleNotFoundError as exc:
+        raise AppError(
+            "Austrian tax support requires rp2 with the `at` country plugin.",
+            code="unsupported",
+            hint=(
+                "Install the Kassiber-maintained rp2 fork from `bitcoinaustria/rp2` "
+                "(Phase 9+ Austrian support)."
+            ),
+            details={"missing_module": "rp2.plugin.country.at"},
+        ) from exc
+
+
+def _classify_at_disposal(gain_loss: Any) -> tuple[str, int | None]:
+    at_module = _load_at_country_module()
+    try:
+        category = at_module.classify_disposal(gain_loss)
+    except AttributeError as exc:
+        raise AppError(
+            "Austrian tax support requires rp2's `classify_disposal` API.",
+            code="unsupported",
+            hint=(
+                "Update the Kassiber rp2 pin to a Phase 9+ build from "
+                "`bitcoinaustria/rp2`."
+            ),
+            details={"missing_symbol": "rp2.plugin.country.at.classify_disposal"},
+        ) from exc
+    category_value = str(getattr(category, "value", category))
+    return category_value, kennzahl_for_disposal_category(category_value)
+
+
 def _compose_event_notes(event: Any) -> str:
     """Serialize typed Austrian markers plus human description into rp2 notes.
 
@@ -126,19 +160,7 @@ def _make_rp2_country(profile: Mapping[str, Any]):
     except ValueError as exc:
         raise AppError(str(exc)) from exc
     if policy.tax_country == "at":
-        try:
-            at_module = import_module("rp2.plugin.country.at")
-        except ModuleNotFoundError as exc:
-            raise AppError(
-                "Austrian tax support requires rp2 with the `at` country plugin.",
-                code="unsupported",
-                hint=(
-                    "Install the Kassiber-maintained rp2 fork (>= 1.7.2 with the AT plugin) from "
-                    "`bitcoinaustria/rp2`."
-                ),
-                details={"missing_module": "rp2.plugin.country.at"},
-            ) from exc
-        return at_module.AT()
+        return _load_at_country_module().AT()
     currency_code = policy.fiat_currency
 
     class KassiberCountry(AbstractCountry):
@@ -476,6 +498,8 @@ def _rp2_asset_state(profile, normalized_inputs: NormalizedTaxAssetInputs, confi
 
 
 def _append_rp2_journal_entries(entries, computed_data, wallet_refs_by_label, profile, row_by_id, intra_audit):
+    tax_country = _profile_str(profile, "tax_country").lower()
+
     def _wallet_for(transaction):
         label = getattr(transaction, "exchange", None) or getattr(transaction, "from_exchange", None)
         ref = wallet_refs_by_label.get(label)
@@ -526,8 +550,17 @@ def _append_rp2_journal_entries(entries, computed_data, wallet_refs_by_label, pr
             entry_type = "fee"
         else:
             entry_type = "disposal"
+        at_category = None
+        at_kennzahl = None
+        event_key: Any = taxable_event.internal_id
+        if tax_country == "at":
+            at_category, at_kennzahl = _classify_at_disposal(gain_loss)
+            # One taxable event can split across multiple Austrian semantic
+            # buckets when RP2 matches against heterogeneous acquired lots, so
+            # keep separate journal rows per category.
+            event_key = (taxable_event.internal_id, at_category)
         event = realized_by_event.setdefault(
-            taxable_event.internal_id,
+            event_key,
             {
                 "transaction_id": taxable_event.unique_id,
                 "wallet": wallet,
@@ -542,6 +575,8 @@ def _append_rp2_journal_entries(entries, computed_data, wallet_refs_by_label, pr
                 "description": taxable_event.notes or (
                     row_by_id[taxable_event.unique_id]["description"] if taxable_event.unique_id in row_by_id else "Outbound transaction"
                 ),
+                "at_category": at_category,
+                "at_kennzahl": at_kennzahl,
             },
         )
         event["quantity"] += dec(gain_loss.crypto_amount)
@@ -554,26 +589,28 @@ def _append_rp2_journal_entries(entries, computed_data, wallet_refs_by_label, pr
         proceeds = event["proceeds"]
         cost_basis = event["cost_basis"]
         gain_loss = event["gain_loss"]
-        entries.append(
-            {
-                "id": str(uuid.uuid4()),
-                "workspace_id": profile["workspace_id"],
-                "profile_id": profile["id"],
-                "transaction_id": event["transaction_id"],
-                "wallet_id": wallet["id"],
-                "account_id": wallet["wallet_account_id"],
-                "occurred_at": event["occurred_at"],
-                "entry_type": event["entry_type"],
-                "asset": event["asset"],
-                "quantity": -event["quantity"],
-                "fiat_value": proceeds,
-                "unit_cost": Decimal("0"),
-                "cost_basis": cost_basis,
-                "proceeds": proceeds,
-                "gain_loss": gain_loss,
-                "description": description,
-            }
-        )
+        entry = {
+            "id": str(uuid.uuid4()),
+            "workspace_id": profile["workspace_id"],
+            "profile_id": profile["id"],
+            "transaction_id": event["transaction_id"],
+            "wallet_id": wallet["id"],
+            "account_id": wallet["wallet_account_id"],
+            "occurred_at": event["occurred_at"],
+            "entry_type": event["entry_type"],
+            "asset": event["asset"],
+            "quantity": -event["quantity"],
+            "fiat_value": proceeds,
+            "unit_cost": Decimal("0"),
+            "cost_basis": cost_basis,
+            "proceeds": proceeds,
+            "gain_loss": gain_loss,
+            "description": description,
+        }
+        if event.get("at_category") is not None:
+            entry["at_category"] = event["at_category"]
+            entry["at_kennzahl"] = event["at_kennzahl"]
+        entries.append(entry)
 
     for audit in intra_audit:
         from_wallet = wallet_refs_by_label[audit["from_wallet_label"]]

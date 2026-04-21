@@ -68,8 +68,8 @@ def _load_rp2_austrian_country():
             "Austrian tax support requires rp2 with the `at` country plugin.",
             code="unsupported",
             hint=(
-                "Install the Kassiber-maintained rp2 fork (>= 1.7.2 with the AT plugin) from "
-                "`bitcoinaustria/rp2`."
+                "Install the Kassiber-maintained rp2 fork from `bitcoinaustria/rp2` "
+                "(Phase 9+ Austrian support)."
             ),
             details={"missing_module": "rp2.plugin.country.at"},
         ) from exc

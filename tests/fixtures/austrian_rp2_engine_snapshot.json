@@ -48,6 +48,8 @@
     {
       "account_id": "account-treasury",
       "asset": "BTC",
+      "at_category": "neu_gain",
+      "at_kennzahl": 174,
       "cost_basis": 9000.0,
       "description": "at_regime=neu at_pool=wallet-a Vienna Neu sell",
       "entry_type": "disposal",

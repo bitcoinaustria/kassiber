@@ -16,7 +16,7 @@
   - [kassiber/backends.py](kassiber/backends.py) — dotenv (`config/backends.env`) seed + DB overlay for named sync backends, plus CRUD helpers.
   - [kassiber/cli/handlers.py](kassiber/cli/handlers.py) — remaining CLI command handlers and compatibility-layer imports while deeper decomposition continues.
   - [kassiber/core/attachments.py](kassiber/core/attachments.py) — transaction attachment storage, URL-reference handling, integrity verification, and orphan-file GC for the managed attachment tree.
-  - [kassiber/core/engines/__init__.py](kassiber/core/engines/__init__.py) — tax-engine interface/resolver. Both the generic RP2 path and the Austrian (§ 27b EStG) path route through `GenericRP2TaxEngine`; AT profiles surface rp2's `rp2.plugin.country.at.AT` plugin directly so accounting methods, reports, and `de_AT` defaults come from the plugin rather than a Kassiber-side shadow country.
+  - [kassiber/core/engines/__init__.py](kassiber/core/engines/__init__.py) — tax-engine interface/resolver. Both the generic RP2 path and the Austrian (§ 27b EStG) path route through `GenericRP2TaxEngine`; AT profiles surface rp2's `rp2.plugin.country.at.AT` plugin directly so accounting methods and engine semantics come from rp2, while Kassiber keeps Austrian disposal bucketing / Kennzahl mapping on its side.
   - [kassiber/core/tax_events.py](kassiber/core/tax_events.py) — in-memory normalization seam between raw transaction rows and tax-engine inputs, including early quarantine classification for under-specified tax semantics.
   - [kassiber/core/sync.py](kassiber/core/sync.py) — wallet sync orchestration above backend-specific transport details.
   - [kassiber/core/sync_backends.py](kassiber/core/sync_backends.py) — descriptor target discovery plus `esplora`, `electrum`, and `bitcoinrpc` live-sync adapters.
@@ -96,7 +96,7 @@ List endpoints with `--limit` also accept `--cursor`. The cursor is an opaque ba
 - Liquid peg-in/peg-out detection must not lean on hardcoded federation addresses (per-claim tweaked, federation keys rotate). Use the manual pair CLI or non-address heuristics (time + amount + direction inversion + same-profile constraint) instead.
 - Per-wallet portfolio rows show that wallet's residual quantity at the asset's average residual basis — an allocation, not a physical-lot answer.
 - Supported lot selection: `FIFO`, `LIFO`, `HIFO`, `LOFO`.
-- Profiles support `generic` and `at` (Austrian, § 27b EStG) tax policies. AT profiles delegate all plugin-level defaults to `rp2.plugin.country.at.AT` (accounting methods, reports, `de_AT` language, `moving_average_at` default). Typed Austrian fields on `NormalizedTaxEvent` (`at_regime`, `at_pool`, `at_swap_link`, `carried_basis_fiat`) are Kassiber's internal source of truth; the rp2 adapter serializes them into rp2's `notes` wire format. See [docs/austrian-handoff.md](docs/austrian-handoff.md) for the full contract and v1 swap-basis-carry scope (Option C quarantine).
+- Profiles support `generic` and `at` (Austrian, § 27b EStG) tax policies. AT profiles delegate engine defaults to `rp2.plugin.country.at.AT` (`moving_average_at`, accepted accounting methods, `open_positions`, English fallback), while Kassiber consumes rp2's `classify_disposal()` API to persist Austrian semantic buckets and current Kennzahl mappings. Typed Austrian fields on `NormalizedTaxEvent` (`at_regime`, `at_pool`, `at_swap_link`, `carried_basis_fiat`) are Kassiber's internal source of truth for the marker wire format. See [docs/austrian-handoff.md](docs/austrian-handoff.md) for the full contract and v1 swap-basis-carry scope (Option C quarantine).
 - Journals must be reprocessed after any transaction, metadata, or exclusion change before reports are trusted.
 - Transactions without usable fiat pricing are quarantined during journal processing instead of receiving zero-basis tax treatment.
 
@@ -107,7 +107,7 @@ List endpoints with `--limit` also accept `--cursor`. The cursor is an opaque ba
 - Keep `--machine` output deterministic — add a `kind` to every new envelope.
 - Keep envelope error shapes consistent: use `AppError(code=..., hint=..., retryable=..., details=...)`.
 - Per-asset pooling is intentional so RP2 `IntraTransaction` works across wallets; per-wallet output remains via `BalanceSet`. Do not regress to per-wallet RP2 calls without thinking through the transfer story first.
-- Austrian tax semantics live on the rp2 side (plugin: `rp2.plugin.country.at`). Kassiber emits typed markers and carries basis across swaps; it does not implement Alt/Neu classification or moving-average math itself beyond what's documented in [docs/austrian-handoff.md](docs/austrian-handoff.md).
+- Austrian tax semantics live on the rp2 side (plugin: `rp2.plugin.country.at`). Kassiber emits typed markers, carries basis across swaps, and maps rp2's disposal categories onto current Austrian report buckets / Kennzahlen; it does not re-implement Alt/Neu classification or moving-average math beyond the documented marker/quarantine contract in [docs/austrian-handoff.md](docs/austrian-handoff.md).
 - Preserve the default `mempool.space` Esplora backend unless there is a strong reason to change it.
 - Prefer additive schema changes that work with `CREATE TABLE IF NOT EXISTS`.
 - Prefer lightweight compatibility migrations for existing SQLite databases when adding profile fields.
