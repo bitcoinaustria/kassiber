@@ -6,6 +6,7 @@ import "Design.js" as Design
 Button {
     id: control
     property bool active: false
+    property bool interactive: true
     property string tone: "ink"
     property bool mono: true
 
@@ -18,7 +19,8 @@ Button {
     bottomPadding: 0
     implicitHeight: 26
     implicitWidth: contentText.implicitWidth + leftPadding + rightPadding
-    hoverEnabled: true
+    enabled: control.interactive
+    hoverEnabled: control.interactive
 
     contentItem: Text {
         id: contentText
@@ -34,11 +36,13 @@ Button {
     }
 
     background: Rectangle {
-        color: control.active ? control.toneSpec.fg : (control.hovered ? Design.paperAlt(theme) : "transparent")
+        color: control.active
+            ? control.toneSpec.fg
+            : ((control.interactive && control.hovered) ? Design.paperAlt(theme) : "transparent")
         radius: height / 2
         border.color: control.toneSpec.border
         border.width: 1
-        opacity: control.enabled ? 1.0 : 0.45
+        opacity: control.interactive ? 1.0 : 0.8
 
         Behavior on color {
             ColorAnimation { duration: 120 }

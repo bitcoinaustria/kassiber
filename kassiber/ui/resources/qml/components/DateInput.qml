@@ -5,6 +5,7 @@ import "Design.js" as Design
 
 Item {
     id: root
+    property bool interactive: false
     property string label: ""
     property string value: ""
     property string placeholderText: "yyyy-mm-dd"
@@ -37,8 +38,14 @@ Item {
             height: 36
             padding: 0
             flat: true
-            hoverEnabled: true
-            onClicked: root.activated()
+            enabled: root.interactive
+            hoverEnabled: root.interactive
+            opacity: root.interactive ? 1.0 : 0.85
+            onClicked: {
+                if (root.interactive) {
+                    root.activated()
+                }
+            }
 
             contentItem: Item {
                 anchors.fill: parent
@@ -81,7 +88,7 @@ Item {
 
             background: Rectangle {
                 color: Design.paperAlt(theme)
-                border.color: field.hovered
+                border.color: (root.interactive && field.hovered)
                     ? Design.ink(theme)
                     : Design.line(theme)
                 border.width: 1

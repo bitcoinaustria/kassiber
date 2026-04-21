@@ -272,7 +272,7 @@ Item {
                     Layout.preferredWidth: 1
                     title: "Transactions"
                     subtitle: {
-                        var n = root.transactionRows.length
+                        var n = transactionsVM ? transactionsVM.totalCount : root.transactionRows.length
                         return n === 0 ? "No transactions yet"
                             : n === 1 ? "1 entry"
                             : n + " entries"
@@ -396,8 +396,8 @@ Item {
                                     TypeBadge {
                                         Layout.preferredWidth: 74
                                         Layout.alignment: Qt.AlignLeft | Qt.AlignVCenter
-                                        label: modelData["kind_label"] || ""
-                                        tone: modelData["type_tone"] || ""
+                                        label: modelData["type_label"] || modelData["kind_label"] || ""
+                                        tone: modelData["type_badge_tone"] || ""
                                     }
 
                                     Text {

@@ -22,6 +22,33 @@ _REPORT_SPECS = (
     ("balance-history", "Balance History", "Balance-over-time curve for the active profile."),
 )
 
+_TRANSACTION_TYPE_LABELS = {
+    "consolidation": "Consolidation",
+    "deposit": "Income",
+    "expense": "Expense",
+    "fee": "Fee",
+    "income": "Income",
+    "lightning_received": "Income",
+    "lightning_sent": "Expense",
+    "melt": "Melt",
+    "mint": "Mint",
+    "move": "Transfer",
+    "payment": "Expense",
+    "rebalance": "Rebalance",
+    "receive": "Income",
+    "received": "Income",
+    "send": "Expense",
+    "sent": "Expense",
+    "swap": "Swap",
+    "swap_in": "Swap",
+    "swap_out": "Swap",
+    "transfer": "Transfer",
+    "transfer_fee": "Fee",
+    "transfer_in": "Transfer",
+    "transfer_out": "Transfer",
+    "withdrawal": "Expense",
+}
+
 
 def _format_count(value: int) -> str:
     return f"{int(value):,}"
@@ -35,6 +62,16 @@ def _format_timestamp(value: str | None, empty: str = "Not yet") -> str:
     except ValueError:
         return str(value)
     return dt.astimezone(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+
+
+def _format_day(value: str | None, empty: str = "--") -> str:
+    if not value:
+        return empty
+    try:
+        dt = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+    except ValueError:
+        return str(value)
+    return dt.astimezone(timezone.utc).strftime("%Y-%m-%d")
 
 
 def _format_btc_msat(value: int | float | Decimal | None) -> str:
@@ -65,13 +102,111 @@ def _format_signed_sats(value: int | float | Decimal | None) -> str:
     return "0"
 
 
-def _transaction_tone(direction: str, kind: str) -> str:
-    normalized = (kind or direction or "").lower()
-    if normalized in {"in", "deposit", "income", "receive", "mint"}:
+def _titleize_token(value: str | None, empty: str = "Activity") -> str:
+    token = str(value or "").strip().replace("_", " ").replace("-", " ")
+    return token.title() if token else empty
+
+
+def _transaction_type_label(direction: str, kind: str) -> str:
+    normalized_kind = str(kind or "").strip().lower()
+    if normalized_kind in _TRANSACTION_TYPE_LABELS:
+        return _TRANSACTION_TYPE_LABELS[normalized_kind]
+    if "fee" in normalized_kind:
+        return "Fee"
+    if normalized_kind.startswith("swap"):
+        return "Swap"
+    if normalized_kind.startswith("transfer"):
+        return "Transfer"
+    normalized_direction = str(direction or "").strip().lower()
+    if normalized_direction in {"in", "inbound", "receive", "received"}:
+        return "Income"
+    if normalized_direction in {"out", "outbound", "send", "sent"}:
+        return "Expense"
+    return _titleize_token(kind or direction)
+
+
+def _amount_tone(amount_msat: int) -> str:
+    if amount_msat > 0:
         return "positive"
-    if normalized in {"swap", "move", "transfer", "rebalance"}:
-        return "neutral"
-    return "negative"
+    if amount_msat < 0:
+        return "negative"
+    return "neutral"
+
+
+def _signed_amount_for_display(amount_msat: int, direction: str | None) -> int:
+    normalized_direction = str(direction or "").strip().lower()
+    if normalized_direction in {"out", "outbound", "send", "sent"}:
+        return -abs(amount_msat)
+    if normalized_direction in {"in", "inbound", "receive", "received"}:
+        return abs(amount_msat)
+    return amount_msat
+
+
+def _transaction_badge_tone(type_label: str) -> str:
+    normalized = str(type_label or "").strip().lower()
+    if normalized in {"income", "expense", "transfer", "swap", "consolidation", "rebalance", "mint", "melt", "fee"}:
+        return type_label
+    if normalized == "positive":
+        return "Income"
+    if normalized == "negative":
+        return "Expense"
+    if normalized == "neutral":
+        return "Transfer"
+    return "muted"
+
+
+def _report_header_eyebrow(tax_country: str, fiat_currency: str) -> str:
+    country_label = "GENERIC POLICY" if tax_country == "generic" else f"{tax_country.upper()} POLICY"
+    return f"REPORT  |  {country_label}  |  {fiat_currency}"
+
+
+def _report_preview_subtitle(
+    supports_runtime_reports: bool,
+    processed_fresh: bool,
+    quarantine_count: int,
+    status_body: str,
+) -> str:
+    if not supports_runtime_reports:
+        return "Computed capital gains preview is unavailable for this tax policy. Recent local inputs are shown instead."
+    if quarantine_count:
+        return "Recent local inputs are visible below, but quarantines still block a trustworthy computed preview."
+    if processed_fresh:
+        return "Recent local inputs feeding the current read-only report surface."
+    return status_body
+
+
+def _report_preview_title(preview_rows: list[dict[str, Any]]) -> str:
+    return "Recent transaction inputs" if preview_rows else "Preview unavailable"
+
+
+def _report_empty_hint(preview_rows: list[dict[str, Any]], status_body: str) -> str:
+    if preview_rows:
+        return ""
+    return status_body
+
+
+def _transaction_limit() -> int:
+    return 200
+
+
+def _transaction_history_label(total_count: int, visible_count: int) -> str:
+    if total_count <= 0:
+        return "LOCAL SNAPSHOT"
+    if total_count > visible_count:
+        return f"LATEST {visible_count} OF {total_count}"
+    return "LOCAL SNAPSHOT"
+
+
+def _transaction_filter_options(items: list[dict[str, Any]]) -> list[str]:
+    seen = set()
+    output = []
+    for item in items:
+        label = str(item.get("type_label") or "").strip()
+        if not label or label in seen:
+            continue
+        seen.add(label)
+        output.append(label)
+    return output
 
 
 def _connection_status(wallet: dict[str, Any], transaction_count: int) -> tuple[str, str]:
@@ -203,6 +338,7 @@ def _build_transaction_items(conn: sqlite3.Connection, profile_id: str, fiat_cur
         SELECT
             t.id,
             t.occurred_at,
+            a.label AS account_label,
             w.label AS wallet_label,
             t.direction,
             t.asset,
@@ -216,48 +352,59 @@ def _build_transaction_items(conn: sqlite3.Connection, profile_id: str, fiat_cur
             COALESCE(GROUP_CONCAT(tags.code, ', '), '') AS tags
         FROM transactions t
         JOIN wallets w ON w.id = t.wallet_id
+        LEFT JOIN accounts a ON a.id = w.account_id
         LEFT JOIN transaction_tags tt ON tt.transaction_id = t.id
         LEFT JOIN tags ON tags.id = tt.tag_id
         WHERE t.profile_id = ? AND t.excluded = 0
         GROUP BY t.id
         ORDER BY t.occurred_at DESC, t.created_at DESC, t.id DESC
-        LIMIT 18
+        LIMIT ?
         """,
-        (fiat_currency, profile_id),
+        (fiat_currency, profile_id, _transaction_limit()),
     ).fetchall()
     items = []
     for row in rows:
-        kind_label = row["kind"] or row["direction"].replace("_", " ").title()
-        tags = row["tags"] or "No tags"
         amount_msat = int(row["amount"] or 0)
+        signed_amount_msat = _signed_amount_for_display(amount_msat, row["direction"])
+        type_label = _transaction_type_label(row["direction"], row["kind"])
+        event_label = _titleize_token(row["kind"] or row["direction"])
+        tags = row["tags"] or "No tags"
+        account_label = row["account_label"] or row["wallet_label"] or "Unassigned"
         items.append(
             {
                 "id": row["id"],
-                "title": kind_label,
-                "kind_label": kind_label,
+                "title": event_label,
+                "kind_label": type_label,
+                "type_label": type_label,
+                "event_label": event_label,
+                "type_badge_tone": _transaction_badge_tone(type_label),
+                "type_tone": _amount_tone(signed_amount_msat),
+                "account_label": account_label,
                 "wallet": row["wallet_label"],
                 "occurred_at": row["occurred_at"],
                 "occurred_at_label": _format_timestamp(row["occurred_at"]),
+                "occurred_on_label": _format_day(row["occurred_at"]),
                 "asset": row["asset"],
-                "amount": amount_msat,
-                "amount_msat": amount_msat,
-                "amount_sats": _msat_to_sats(amount_msat),
-                "amount_label": _format_btc_msat(amount_msat),
-                "amount_sats_signed_label": _format_signed_sats(amount_msat),
+                "amount": signed_amount_msat,
+                "amount_msat": signed_amount_msat,
+                "amount_sats": _msat_to_sats(signed_amount_msat),
+                "amount_label": _format_btc_msat(signed_amount_msat),
+                "amount_sats_signed_label": _format_signed_sats(signed_amount_msat),
                 "fee_label": _format_btc_msat(row["fee"]),
                 "fee_sats_label": _format_signed_sats(row["fee"]),
                 "fiat_value": row["fiat_value"] or 0,
                 "fiat_label": _format_fiat(row["fiat_value"], row["fiat_currency"]),
                 "direction": row["direction"],
-                "type_tone": _transaction_tone(row["direction"], row["kind"]),
                 "counterparty": row["description"] or row["note"] or row["wallet_label"],
                 "description": row["description"] or "No description captured.",
                 "note": row["note"] or "No note attached.",
                 "tags": tags,
                 "tag_label": tags.split(",")[0].strip() if tags else "No tags",
-                "subtitle": f"{row['wallet_label']}  |  {row['asset']}",
+                "subtitle": f"{account_label}  |  {row['wallet_label']}  |  {row['asset']}",
                 "detail_rows": [
                     {"label": "Occurred", "value": _format_timestamp(row["occurred_at"])},
+                    {"label": "Event", "value": event_label},
+                    {"label": "Account", "value": account_label},
                     {"label": "Wallet", "value": row["wallet_label"]},
                     {"label": "Direction", "value": row["direction"].replace("_", " ").title()},
                     {"label": "Amount", "value": _format_btc_msat(row["amount"])},
@@ -324,12 +471,15 @@ def _build_report_section(
     preview_rows = [
         {
             "occurred": item.get("occurred_at_label", ""),
+            "occurred_on_label": item.get("occurred_on_label", ""),
             "wallet": item.get("wallet", ""),
+            "account_label": item.get("account_label", ""),
             "kind_label": item.get("kind_label", ""),
-            "kind_tone": item.get("type_tone", "neutral"),
+            "type_label": item.get("type_label", ""),
+            "type_badge_tone": item.get("type_badge_tone", "muted"),
             "amount_label": item.get("amount_label", ""),
             "fiat_label": item.get("fiat_label", ""),
-            "tags": item.get("tags", ""),
+            "tag_label": item.get("tag_label", ""),
         }
         for item in transactions[:6]
     ]
@@ -340,6 +490,7 @@ def _build_report_section(
         "LOFO": "Lowest-in, first-out",
     }
     return {
+        "header_eyebrow": _report_header_eyebrow(tax_country, fiat_currency),
         "status_title": status_title,
         "status_body": status_body,
         "status_tone": status_tone,
@@ -370,6 +521,14 @@ def _build_report_section(
                 "detail": f"{fiat_currency} profile policy",
             },
         ],
+        "preview_title": _report_preview_title(preview_rows),
+        "preview_subtitle": _report_preview_subtitle(
+            supports_runtime_reports,
+            processed_fresh,
+            counts["quarantines"],
+            status_body,
+        ),
+        "preview_empty_hint": _report_empty_hint(preview_rows, status_body),
         "method_options": [
             {
                 "id": algorithm.lower(),
@@ -528,8 +687,18 @@ def collect_ui_snapshot(
         "welcome": welcome,
         "overview": {"metrics": [], "highlights": []},
         "connections": {"items": []},
-        "transactions": {"items": []},
-        "reports": {"status_title": "", "status_body": "", "status_tone": "warn", "items": [], "summary_cards": []},
+        "transactions": {"items": [], "total_count": 0, "history_label": "LOCAL SNAPSHOT", "filter_options": []},
+        "reports": {
+            "header_eyebrow": "REPORT  |  GENERIC POLICY  |  EUR",
+            "status_title": "",
+            "status_body": "",
+            "status_tone": "warn",
+            "items": [],
+            "summary_cards": [],
+            "preview_title": "Preview unavailable",
+            "preview_subtitle": "",
+            "preview_empty_hint": "",
+        },
         "settings": _build_settings_section(status, None),
     }
     explicit_scope = bool(workspace_ref or profile_ref)
@@ -608,7 +777,12 @@ def collect_ui_snapshot(
         ],
     }
     snapshot["connections"] = {"items": connections}
-    snapshot["transactions"] = {"items": transactions}
+    snapshot["transactions"] = {
+        "items": transactions,
+        "total_count": counts["transactions"],
+        "history_label": _transaction_history_label(counts["transactions"], len(transactions)),
+        "filter_options": _transaction_filter_options(transactions),
+    }
     snapshot["reports"] = reports
     snapshot["settings"] = _build_settings_section(status, profile_details)
     return snapshot

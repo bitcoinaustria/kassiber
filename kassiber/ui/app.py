@@ -103,6 +103,8 @@ def _apply_preview_scene(snapshot: dict[str, Any], preview_scene: str) -> str:
         "overview": "overview",
         "overview-empty": "overview",
         "overview-data": "overview",
+        "add-connection-picker": "overview",
+        "add-connection-xpub": "overview",
         "transactions": "transactions",
         "tax": "reports",
         "reports": "reports",
@@ -120,7 +122,12 @@ def _apply_preview_scene(snapshot: dict[str, Any], preview_scene: str) -> str:
         shell["connection_count"] = 0
         snapshot["shell"] = shell
         snapshot["connections"] = {"items": []}
-        snapshot["transactions"] = {"items": []}
+        snapshot["transactions"] = {
+            "items": [],
+            "total_count": 0,
+            "history_label": "LOCAL SNAPSHOT",
+            "filter_options": [],
+        }
 
     return page
 

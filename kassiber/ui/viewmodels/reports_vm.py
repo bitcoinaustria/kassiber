@@ -16,6 +16,10 @@ class ReportsViewModel(QObject):
         return self._snapshot.get("reports") or {}
 
     @Property(str, notify=snapshotChanged)
+    def headerEyebrow(self) -> str:
+        return self._reports().get("header_eyebrow", "")
+
+    @Property(str, notify=snapshotChanged)
     def statusTitle(self) -> str:
         return self._reports().get("status_title", "")
 
@@ -34,6 +38,18 @@ class ReportsViewModel(QObject):
     @Property("QVariantList", notify=snapshotChanged)
     def summaryCards(self):
         return list(self._reports().get("summary_cards") or [])
+
+    @Property(str, notify=snapshotChanged)
+    def previewTitle(self) -> str:
+        return self._reports().get("preview_title", "")
+
+    @Property(str, notify=snapshotChanged)
+    def previewSubtitle(self) -> str:
+        return self._reports().get("preview_subtitle", "")
+
+    @Property(str, notify=snapshotChanged)
+    def previewEmptyHint(self) -> str:
+        return self._reports().get("preview_empty_hint", "")
 
     @Property("QVariantList", notify=snapshotChanged)
     def methodOptions(self):
