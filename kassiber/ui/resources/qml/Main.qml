@@ -4,17 +4,25 @@ import QtQuick.Layouts 1.15
 
 import "components"
 import "dialogs"
+import "pages"
 
 ApplicationWindow {
     id: root
     objectName: "mainWindow"
+    readonly property bool previewSceneMode: (uiPreviewPage || "") !== ""
+    readonly property bool captureMode: !!uiCaptureMode
+    readonly property bool standaloneWelcomeMode: dashboardVM.currentPage === "welcome" && (!dashboardVM.hasProfile || previewSceneMode)
+    property bool hideSensitivePreview: false
+    property string previewLanguage: "EN"
+    property bool previewDialogBootstrapped: false
+
     visible: false
     title: dashboardVM.windowTitle
     width: windowState.width > 0 ? windowState.width : 1240
     height: windowState.height > 0 ? windowState.height : 820
-    minimumWidth: 980
-    minimumHeight: 640
-    color: theme.bg
+    minimumWidth: 1060
+    minimumHeight: 700
+    color: standaloneWelcomeMode ? theme.warmBg : theme.bg
 
     AddConnectionDialog {
         id: addConnectionDialog
@@ -24,281 +32,305 @@ ApplicationWindow {
         id: settingsDialog
     }
 
+    Connections {
+        target: dashboardVM
+        function onPageChanged() {
+            if (addConnectionDialog.opened) {
+                addConnectionDialog.close()
+            }
+        }
+    }
+
+    onVisibleChanged: {
+        if (!visible || previewDialogBootstrapped) {
+            return
+        }
+        previewDialogBootstrapped = true
+        if (uiPreviewPage === "add-connection-picker") {
+            addConnectionDialog.openPicker()
+        } else if (uiPreviewPage === "add-connection-xpub") {
+            addConnectionDialog.openForKind("xpub", true)
+        }
+    }
+
     Popup {
         id: projectPopup
-        width: 300
-        x: root.width - width - theme.spacingLg
-        y: theme.spacingLg + 56
-        padding: theme.spacingMd
+        width: 360
+        x: root.width - width - 18
+        y: 52
+        padding: 0
         modal: false
         focus: true
         closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
         background: Rectangle {
-            color: theme.card
-            radius: theme.radiusLg
-            border.color: theme.cardBorder
+            color: theme.paper
+            border.color: theme.ink
             border.width: 1
         }
 
         ColumnLayout {
             anchors.fill: parent
-            spacing: theme.spacingSm
-
-            Text {
-                text: "Current project"
-                color: theme.ink
-                font.family: theme.displayFont
-                font.pixelSize: 18
-            }
-
-            Text {
-                text: dashboardVM.projectLabel
-                color: theme.inkMuted
-                font.family: theme.bodyFont
-                font.pixelSize: 13
-            }
-
-            Repeater {
-                model: dashboardVM.availableProfiles
-                delegate: Rectangle {
-                    Layout.fillWidth: true
-                    height: 40
-                    radius: theme.radiusMd
-                    color: "transparent"
-                    border.color: theme.cardBorder
-                    border.width: 1
-
-                    Text {
-                        anchors.fill: parent
-                        anchors.leftMargin: theme.spacingMd
-                        anchors.rightMargin: theme.spacingMd
-                        verticalAlignment: Text.AlignVCenter
-                        text: modelData["label"] + (modelData["current"] === "yes" ? " (current)" : "")
-                        color: theme.ink
-                        font.family: theme.bodyFont
-                        font.pixelSize: 13
-                        elide: Text.ElideRight
-                    }
-                }
-            }
-
-            Text {
-                Layout.fillWidth: true
-                wrapMode: Text.WordWrap
-                text: "Profile switching stays read-only in Phase 1. Editing and management land later."
-                color: theme.inkMuted
-                font.family: theme.bodyFont
-                font.pixelSize: 12
-            }
-        }
-    }
-
-    ColumnLayout {
-        anchors.fill: parent
-        anchors.margins: theme.spacingLg
-        spacing: theme.spacingLg
-
-        RowLayout {
-            Layout.fillWidth: true
-            spacing: theme.spacingMd
+            spacing: 0
 
             Rectangle {
-                width: 42
-                height: 42
-                radius: 21
-                color: theme.accent
+                Layout.fillWidth: true
+                height: 40
+                color: "transparent"
+                border.color: theme.line
+                border.width: 0
 
-                Text {
-                    anchors.centerIn: parent
-                    text: "K"
-                    color: "#FFFFFF"
-                    font.family: theme.displayFont
-                    font.pixelSize: 22
-                    font.bold: true
+                Rectangle {
+                    anchors.left: parent.left
+                    anchors.right: parent.right
+                    anchors.bottom: parent.bottom
+                    height: 1
+                    color: theme.line
+                }
+
+                RowLayout {
+                    anchors.fill: parent
+                    anchors.leftMargin: 14
+                    anchors.rightMargin: 14
+
+                    Text {
+                        text: "Switch profile"
+                        color: theme.ink3
+                        font.family: theme.monoFont
+                        font.pixelSize: 9
+                        font.bold: true
+                        font.letterSpacing: 1.4
+                    }
+
+                    Item {
+                        Layout.fillWidth: true
+                    }
+
+                    Text {
+                        text: "MANAGE \u2192"
+                        color: theme.accent
+                        font.family: theme.monoFont
+                        font.pixelSize: 9
+                        font.bold: true
+                        font.letterSpacing: 1.4
+                    }
                 }
             }
 
             ColumnLayout {
-                spacing: 2
-
-                Text {
-                    text: "Kassiber"
-                    color: theme.ink
-                    font.family: theme.displayFont
-                    font.pixelSize: 26
-                    font.bold: true
-                }
-
-                Text {
-                    text: dashboardVM.phaseSummary
-                    color: theme.inkMuted
-                    font.family: theme.bodyFont
-                    font.pixelSize: 13
-                }
-            }
-
-            Item {
                 Layout.fillWidth: true
-            }
+                spacing: 0
 
-            Button {
-                text: dashboardVM.projectLabel
-                onClicked: projectPopup.open()
-                contentItem: Text {
-                    text: parent.text
-                    color: theme.ink
-                    font.family: theme.bodyFont
-                    font.pixelSize: 13
-                    horizontalAlignment: Text.AlignHCenter
-                    verticalAlignment: Text.AlignVCenter
-                    elide: Text.ElideRight
-                }
-                background: Rectangle {
-                    color: theme.card
-                    radius: theme.radiusLg
-                    border.color: theme.chipBorder
-                    border.width: 1
-                }
-                implicitWidth: 240
-                implicitHeight: 42
-            }
-        }
+                Repeater {
+                    model: dashboardVM.availableProfiles
 
-        Item {
-            Layout.fillWidth: true
-            Layout.fillHeight: true
-
-            Rectangle {
-                anchors.centerIn: parent
-                width: Math.min(parent.width - theme.spacingXl, 680)
-                height: 360
-                color: theme.card
-                radius: theme.radiusLg
-                border.color: theme.cardBorder
-                border.width: 1
-
-                ColumnLayout {
-                    anchors.fill: parent
-                    anchors.margins: theme.spacingXl
-                    spacing: theme.spacingMd
-
-                    Rectangle {
-                        Layout.alignment: Qt.AlignHCenter
-                        width: 64
-                        height: 64
-                        radius: 32
-                        color: "transparent"
-                        border.color: theme.chipBorder
-                        border.width: 1
-
-                        Text {
-                            anchors.centerIn: parent
-                            text: connectionsVM.isEmpty ? "+" : "i"
-                            color: theme.accent
-                            font.family: theme.displayFont
-                            font.pixelSize: 28
-                            font.bold: true
-                        }
-                    }
-
-                    Text {
-                        Layout.alignment: Qt.AlignHCenter
-                        text: dashboardVM.shellTitle
-                        color: theme.ink
-                        font.family: theme.displayFont
-                        font.pixelSize: 28
-                        font.bold: true
-                    }
-
-                    Text {
+                    Button {
                         Layout.fillWidth: true
-                        horizontalAlignment: Text.AlignHCenter
-                        wrapMode: Text.WordWrap
-                        text: dashboardVM.shellBody
-                        color: theme.inkMuted
-                        font.family: theme.bodyFont
-                        font.pixelSize: 15
-                    }
+                        implicitHeight: 56
+                        flat: true
 
-                    PrimaryButton {
-                        Layout.alignment: Qt.AlignHCenter
-                        text: connectionsVM.ctaLabel
-                        enabled: connectionsVM.canOpenAddConnection
-                        onClicked: addConnectionDialog.open()
-                    }
+                        contentItem: RowLayout {
+                            spacing: 10
 
-                    Text {
-                        Layout.alignment: Qt.AlignHCenter
-                        text: connectionsVM.emptyBadge + "  |  " + connectionsVM.connectionCount + " wallet(s)"
-                        color: theme.inkMuted
-                        font.family: theme.bodyFont
-                        font.pixelSize: 12
-                    }
+                            Rectangle {
+                                width: 8
+                                height: 8
+                                radius: 4
+                                color: modelData["current"] === "yes" ? theme.accent : "transparent"
+                                border.color: modelData["current"] === "yes" ? theme.accent : theme.line
+                                border.width: 1
+                            }
 
-                    Repeater {
-                        model: dashboardVM.notices
-                        delegate: Rectangle {
-                            Layout.fillWidth: true
-                            radius: theme.radiusMd
-                            color: "#FAF7F0"
-                            border.color: theme.cardBorder
-                            border.width: 1
-                            implicitHeight: noticeText.implicitHeight + theme.spacingMd
+                            ColumnLayout {
+                                Layout.fillWidth: true
+                                spacing: 2
 
-                            Text {
-                                id: noticeText
-                                anchors.fill: parent
-                                anchors.margins: theme.spacingSm
-                                wrapMode: Text.WordWrap
-                                text: modelData
-                                color: theme.inkMuted
-                                font.family: theme.bodyFont
-                                font.pixelSize: 12
+                                Text {
+                                    Layout.fillWidth: true
+                                    text: modelData["label"] || ""
+                                    color: theme.ink
+                                    font.family: theme.serifFont
+                                    font.pixelSize: 15
+                                    elide: Text.ElideRight
+                                }
+
+                                Text {
+                                    Layout.fillWidth: true
+                                    text: (modelData["tax_country"] || "").toUpperCase() + "  \u00b7  " + (modelData["gains_algorithm"] || "")
+                                    color: theme.ink3
+                                    font.family: theme.monoFont
+                                    font.pixelSize: 10
+                                    elide: Text.ElideRight
+                                }
+                            }
+                        }
+
+                        background: Rectangle {
+                            color: modelData["current"] === "yes" ? theme.paper2 : "transparent"
+                            border.color: theme.line
+                            border.width: 0
+
+                            Rectangle {
+                                visible: index > 0
+                                anchors.left: parent.left
+                                anchors.right: parent.right
+                                anchors.top: parent.top
+                                height: 1
+                                color: theme.line
                             }
                         }
                     }
                 }
             }
         }
+    }
+
+    Rectangle {
+        visible: previewSceneMode && !captureMode
+        z: 20
+        x: 12
+        y: 12
+        color: theme.paper2
+        border.color: theme.ink
+        border.width: 1
 
         RowLayout {
+            anchors.fill: parent
+            anchors.margins: 6
+            spacing: 4
+
+            Text {
+                text: "SCENE"
+                color: theme.ink3
+                font.family: theme.monoFont
+                font.pixelSize: 9
+                font.letterSpacing: 1.0
+            }
+
+            Repeater {
+                model: [
+                    { "id": "welcome", "label": "Welcome" },
+                    { "id": "overview-empty", "label": "Overview \u00b7 empty" },
+                    { "id": "overview-data", "label": "Overview \u00b7 data" },
+                    { "id": "transactions", "label": "Transactions" },
+                    { "id": "tax", "label": "Tax \u00b7 capital gains" },
+                    { "id": "connection-detail", "label": "Connection detail" },
+                    { "id": "profiles", "label": "Profiles" }
+                ]
+
+                Button {
+                    flat: true
+                    leftPadding: 8
+                    rightPadding: 8
+                    topPadding: 3
+                    bottomPadding: 3
+                    onClicked: dashboardVM.selectPage(modelData["id"])
+
+                    contentItem: Text {
+                        text: modelData["label"]
+                        color: {
+                            var current = dashboardVM.currentPage
+                            var wanted = modelData["id"]
+                            var active = current === wanted
+                            if ((wanted === "overview-empty" || wanted === "overview-data") && current === "overview") {
+                                active = true
+                            }
+                            if (wanted === "tax" && current === "reports") {
+                                active = true
+                            }
+                            return active ? theme.paper : theme.ink
+                        }
+                        font.family: theme.monoFont
+                        font.pixelSize: 10
+                        horizontalAlignment: Text.AlignHCenter
+                        verticalAlignment: Text.AlignVCenter
+                    }
+
+                    background: Rectangle {
+                        color: {
+                            var current = dashboardVM.currentPage
+                            var wanted = modelData["id"]
+                            var active = current === wanted
+                            if ((wanted === "overview-empty" || wanted === "overview-data") && current === "overview") {
+                                active = true
+                            }
+                            if (wanted === "tax" && current === "reports") {
+                                active = true
+                            }
+                            return active ? theme.ink : "transparent"
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    WelcomePage {
+        anchors.fill: parent
+        visible: root.standaloneWelcomeMode
+    }
+
+    ColumnLayout {
+        anchors.fill: parent
+        spacing: 0
+        visible: !root.standaloneWelcomeMode
+
+        AppHeader {
             Layout.fillWidth: true
-            spacing: theme.spacingMd
+            currentRoute: dashboardVM.currentPage
+            workspaceLabel: dashboardVM.currentWorkspaceLabel
+            profileLabel: dashboardVM.currentProfileLabel
+            currentLang: root.previewLanguage
+            hideSensitive: root.hideSensitivePreview
+            showLang: true
+            onRouteSelected: dashboardVM.selectPage(id)
+            onWorkspaceClicked: projectPopup.open()
+            onLangSelected: root.previewLanguage = code
+            onHideSensitiveToggled: root.hideSensitivePreview = !root.hideSensitivePreview
+            onSettingsClicked: settingsDialog.open()
+        }
 
-            Text {
-                text: settingsVM.versionText
-                color: theme.inkMuted
-                font.family: theme.bodyFont
-                font.pixelSize: 12
-            }
+        Rectangle {
+            Layout.fillWidth: true
+            Layout.fillHeight: true
+            color: theme.paper
 
-            Text {
-                text: dashboardVM.footerSummary
-                color: theme.inkMuted
-                font.family: theme.bodyFont
-                font.pixelSize: 12
-            }
+            StackLayout {
+                anchors.fill: parent
+                anchors.margins: 0
+                currentIndex: dashboardVM.pageIndex
 
-            Item {
-                Layout.fillWidth: true
-            }
+                WelcomePage {
+                }
 
-            ToolButton {
-                text: "Settings"
-                onClicked: settingsDialog.open()
-            }
+                OverviewPage {
+                    hideSensitive: root.hideSensitivePreview
+                    onRequestAddConnection: addConnectionDialog.open()
+                }
 
-            ToolButton {
-                text: "GitHub"
-            }
+                ConnectionDetailPage {
+                    onRequestAddConnection: addConnectionDialog.open()
+                }
 
-            ToolButton {
-                text: "Nostr"
-            }
+                TransactionsPage {
+                }
 
-            ToolButton {
-                text: "Support the App"
+                ReportsPage {
+                    hideSensitive: root.hideSensitivePreview
+                    onRequestBack: dashboardVM.selectPage("overview")
+                }
+
+                SettingsPage {
+                }
+
+                ProfilesPage {
+                    onRequestBack: dashboardVM.selectPage("overview")
+                }
             }
+        }
+
+        AppFooter {
+            Layout.fillWidth: true
+            versionText: settingsVM.versionText
         }
     }
 }
