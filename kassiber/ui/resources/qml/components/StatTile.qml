@@ -1,5 +1,6 @@
 import QtQuick 2.15
 import QtQuick.Layouts 1.15
+import Qt5Compat.GraphicalEffects
 
 import "Design.js" as Design
 
@@ -12,6 +13,7 @@ Rectangle {
     property string sub: ""
     property color valueColor: Design.ink(theme)
     property int paddingAmount: theme.cardPadding
+    property bool blurred: false
 
     implicitWidth: Math.max(160, column.implicitWidth + paddingAmount * 2)
     implicitHeight: column.implicitHeight + paddingAmount * 2
@@ -49,7 +51,9 @@ Rectangle {
             font.pixelSize: theme.fontHeadingMd
             font.letterSpacing: -0.2
             elide: Text.ElideRight
-            textFormat: Text.StyledText
+            textFormat: Text.PlainText
+            layer.enabled: root.blurred
+            layer.effect: FastBlur { radius: 56 }
         }
 
         Text {
@@ -60,7 +64,7 @@ Rectangle {
             font.family: Design.mono(theme)
             font.pixelSize: theme.fontCaption
             font.letterSpacing: 0.5
-            elide: Text.ElideRight
+            wrapMode: Text.WordWrap
         }
     }
 }

@@ -14,6 +14,8 @@ Dialog {
     width: 600
     padding: 0
     standardButtons: Dialog.NoButton
+    anchors.centerIn: parent
+    closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
 
     property var mockBackends: [
         { name: "mempool.space",      url: "https://mempool.space/api",            net: "BTC",    health: "#893,014 \u00b7 2m", on: true  },

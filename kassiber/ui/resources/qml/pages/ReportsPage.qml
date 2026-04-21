@@ -12,12 +12,24 @@ Item {
 
     signal requestBack()
 
-    readonly property var reportItems: reportsVM ? reportsVM.items : []
-    readonly property var summaryCards: reportsVM ? reportsVM.summaryCards : []
     readonly property var methodOptions: reportsVM ? reportsVM.methodOptions : []
-    readonly property var policyRows: reportsVM ? reportsVM.policyRows : []
-    readonly property var previewRows: reportsVM ? reportsVM.previewRows : []
     readonly property var exportRows: reportsVM ? reportsVM.exportFormats : []
+    readonly property var yearOptions: ["2023", "2024", "2025", "2026"]
+    property string selectedYear: "2025"
+
+    readonly property var policyToggles: [
+        { label: "Treat internal transfers as non-taxable", enabled: true },
+        { label: "Apply 27.5% KESt flat rate", enabled: true },
+        { label: "Include Lightning channel fees as cost", enabled: true },
+        { label: "Aggregate lots per UTXO set", enabled: false }
+    ]
+
+    readonly property var summaryTiles: [
+        { label: "Proceeds", tone: "neutral", detail: "5 disposals" },
+        { label: "Cost basis", tone: "neutral", detail: "FIFO" },
+        { label: "Net gain", tone: "ok", detail: root.selectedYear + " tax year" },
+        { label: "KESt 27.5%", tone: "warn", detail: "Estimated liability" }
+    ]
 
     function toneColor(tone) {
         if (tone === "ok") return theme.positive
@@ -34,6 +46,10 @@ Item {
             width: root.width
             spacing: theme.gridGap
 
+            // ------------------------------------------------------------------
+            // Header
+            // ------------------------------------------------------------------
+
             RowLayout {
                 Layout.fillWidth: true
                 Layout.leftMargin: theme.pagePadding
@@ -46,18 +62,17 @@ Item {
 
                     Text {
                         Layout.fillWidth: true
-                        text: "Reports"
+                        text: "REPORT  \u00b7  \u00a727A ESTG  \u00b7  AUSTRIA"
                         color: Design.ink3(theme)
                         font.family: Design.mono(theme)
                         font.pixelSize: 10
                         font.weight: Font.DemiBold
-                        font.capitalization: Font.AllUppercase
                         font.letterSpacing: 1.4
                     }
 
                     Text {
                         Layout.fillWidth: true
-                        text: reportsVM ? reportsVM.statusTitle : "Read-only report surface"
+                        text: "Capital gains"
                         color: Design.ink(theme)
                         font.family: Design.serif(theme)
                         font.pixelSize: 28
@@ -65,119 +80,102 @@ Item {
                         font.letterSpacing: -0.2
                         wrapMode: Text.WordWrap
                     }
-
-                    Text {
-                        Layout.fillWidth: true
-                        text: reportsVM ? reportsVM.statusBody : ""
-                        color: Design.ink2(theme)
-                        font.family: Design.sans()
-                        font.pixelSize: 13
-                        wrapMode: Text.WordWrap
-                    }
                 }
-
-                ActionButton {
-                    variant: "ghost"
-                    size: "sm"
-                    text: "\u2190 Back"
-                    onClicked: root.requestBack()
-                }
-            }
-
-            Card {
-                Layout.fillWidth: true
-                Layout.leftMargin: theme.pagePadding
-                Layout.rightMargin: theme.pagePadding
-                title: "Status"
 
                 ColumnLayout {
-                    anchors.left: parent.left
-                    anchors.right: parent.right
-                    anchors.top: parent.top
-                    spacing: theme.spacingSm
+                    Layout.alignment: Qt.AlignTop | Qt.AlignRight
+                    spacing: 6
 
                     Text {
-                        Layout.fillWidth: true
-                        text: reportsVM ? reportsVM.statusTitle : ""
-                        color: root.toneColor(reportsVM ? reportsVM.statusTone : "")
-                        font.family: Design.sans()
-                        font.pixelSize: theme.fontHeadingSm
+                        Layout.alignment: Qt.AlignRight
+                        text: "STEP 1 / 2"
+                        color: Design.ink3(theme)
+                        font.family: Design.mono(theme)
+                        font.pixelSize: 10
                         font.weight: Font.DemiBold
-                        wrapMode: Text.WordWrap
+                        font.letterSpacing: 1.4
                     }
 
-                    Text {
-                        Layout.fillWidth: true
-                        text: reportsVM ? reportsVM.statusBody : ""
-                        color: Design.ink2(theme)
-                        font.family: Design.sans()
-                        font.pixelSize: theme.fontBody
-                        wrapMode: Text.WordWrap
-                    }
-                }
-            }
-
-            GridLayout {
-                Layout.fillWidth: true
-                Layout.leftMargin: theme.pagePadding
-                Layout.rightMargin: theme.pagePadding
-                columns: 4
-                columnSpacing: theme.gridGap
-                rowSpacing: theme.gridGap
-
-                Repeater {
-                    model: root.summaryCards
-
-                    delegate: StatTile {
-                        Layout.fillWidth: true
-                        label: modelData["label"] || ""
-                        value: root.hideSensitive ? "\u2022 \u2022 \u2022 \u2022" : (modelData["value"] || "")
-                        sub: modelData["detail"] || ""
-                        valueColor: root.toneColor(modelData["tone"] || "")
+                    ActionButton {
+                        Layout.alignment: Qt.AlignRight
+                        variant: "ghost"
+                        size: "sm"
+                        text: "\u2190 Back"
+                        onClicked: root.requestBack()
                     }
                 }
             }
 
-            GridLayout {
+            // ------------------------------------------------------------------
+            // Main: 2-column split (left controls / right preview)
+            // ------------------------------------------------------------------
+
+            RowLayout {
                 Layout.fillWidth: true
                 Layout.leftMargin: theme.pagePadding
                 Layout.rightMargin: theme.pagePadding
-                columns: 2
-                columnSpacing: theme.gridGap
-                rowSpacing: theme.gridGap
+                Layout.bottomMargin: theme.pagePadding
+                spacing: theme.gridGap
 
-                Card {
-                    Layout.fillWidth: true
-                    title: "Available reports"
-                    subtitle: "Current desktop routes stay read-only and reflect the active profile policy."
+                // ---------- LEFT COLUMN: controls ----------
+                ColumnLayout {
+                    Layout.preferredWidth: 300
+                    Layout.alignment: Qt.AlignTop
+                    spacing: theme.gridGap
 
-                    ColumnLayout {
-                        anchors.left: parent.left
-                        anchors.right: parent.right
-                        anchors.top: parent.top
-                        spacing: theme.spacingSm
+                    // Reporting period
+                    Card {
+                        Layout.fillWidth: true
+                        title: "Reporting period"
 
-                        Repeater {
-                            model: root.reportItems
+                        ColumnLayout {
+                            anchors.left: parent.left
+                            anchors.right: parent.right
+                            anchors.top: parent.top
+                            spacing: theme.spacingSm + 2
 
-                            delegate: ReportTile {
+                            Flow {
                                 Layout.fillWidth: true
-                                title: modelData["label"] || ""
-                                subtitle: modelData["summary"] || ""
-                                detail: modelData["status"] || ""
-                                iconGlyph: (modelData["status_tone"] || "") === "ok" ? "\u2713" : "!"
+                                spacing: theme.spacingXs
+
+                                Repeater {
+                                    model: root.yearOptions
+
+                                    Pill {
+                                        text: modelData
+                                        active: root.selectedYear === modelData
+                                        tone: root.selectedYear === modelData ? "ink" : "muted"
+                                        onClicked: root.selectedYear = modelData
+                                    }
+                                }
+                            }
+
+                            RowLayout {
+                                Layout.fillWidth: true
+                                Layout.topMargin: theme.spacingXs
+                                spacing: theme.spacingSm
+
+                                DateInput {
+                                    Layout.fillWidth: true
+                                    Layout.preferredWidth: 1
+                                    label: "FROM"
+                                    value: root.selectedYear + "-01-01"
+                                }
+
+                                DateInput {
+                                    Layout.fillWidth: true
+                                    Layout.preferredWidth: 1
+                                    label: "TO"
+                                    value: root.selectedYear + "-12-31"
+                                }
                             }
                         }
                     }
-                }
 
-                ColumnLayout {
-                    Layout.fillWidth: true
-                    spacing: theme.gridGap
-
+                    // Cost-basis method
                     Card {
                         Layout.fillWidth: true
-                        title: "Lot method"
+                        title: "Cost-basis method"
 
                         ColumnLayout {
                             anchors.left: parent.left
@@ -198,201 +196,111 @@ Item {
                         }
                     }
 
+                    // Policy
                     Card {
                         Layout.fillWidth: true
-                        title: "Policy notes"
+                        title: "Policy"
 
                         ColumnLayout {
                             anchors.left: parent.left
                             anchors.right: parent.right
                             anchors.top: parent.top
-                            spacing: theme.spacingSm
+                            spacing: theme.spacingSm + 2
 
                             Repeater {
-                                model: root.policyRows
+                                model: root.policyToggles
 
-                                delegate: Rectangle {
+                                delegate: ToggleSwitch {
                                     Layout.fillWidth: true
-                                    implicitHeight: policyColumn.implicitHeight + theme.spacingSm + 4
-                                    color: "transparent"
-
-                                    Rectangle {
-                                        visible: index > 0
-                                        anchors.left: parent.left
-                                        anchors.right: parent.right
-                                        anchors.top: parent.top
-                                        height: 1
-                                        color: Design.line(theme)
-                                    }
-
-                                    ColumnLayout {
-                                        id: policyColumn
-                                        anchors.left: parent.left
-                                        anchors.right: parent.right
-                                        anchors.top: parent.top
-                                        anchors.margins: theme.spacingSm + 2
-                                        spacing: 2
-
-                                        Text {
-                                            Layout.fillWidth: true
-                                            text: modelData["label"] || ""
-                                            color: Design.ink3(theme)
-                                            font.family: Design.mono(theme)
-                                            font.pixelSize: theme.fontCaption
-                                            font.letterSpacing: 1.1
-                                        }
-
-                                        Text {
-                                            Layout.fillWidth: true
-                                            text: modelData["detail"] || ""
-                                            color: Design.ink(theme)
-                                            font.family: Design.sans()
-                                            font.pixelSize: theme.fontBody
-                                            wrapMode: Text.WordWrap
-                                        }
-                                    }
+                                    text: modelData["label"] || ""
+                                    checked: !!modelData["enabled"]
                                 }
                             }
                         }
                     }
-                }
-            }
 
-            Card {
-                Layout.fillWidth: true
-                Layout.leftMargin: theme.pagePadding
-                Layout.rightMargin: theme.pagePadding
-                title: "Recent report inputs"
-                subtitle: "Recent non-excluded transactions from the active profile."
-
-                ColumnLayout {
-                    anchors.left: parent.left
-                    anchors.right: parent.right
-                    anchors.top: parent.top
-                    spacing: 0
-
-                    Rectangle {
+                    // Generate preview
+                    ActionButton {
                         Layout.fillWidth: true
-                        visible: root.previewRows.length === 0
-                        implicitHeight: emptyText.implicitHeight + theme.cardPadding
-                        color: "transparent"
-
-                        Text {
-                            id: emptyText
-                            anchors.fill: parent
-                            anchors.margins: theme.spacingSm + 2
-                            text: "No recent transactions are available for the report preview yet."
-                            color: Design.ink2(theme)
-                            font.family: Design.sans()
-                            font.pixelSize: theme.fontBody
-                            wrapMode: Text.WordWrap
-                        }
-                    }
-
-                    Repeater {
-                        model: root.previewRows
-
-                        delegate: Rectangle {
-                            Layout.fillWidth: true
-                            visible: root.previewRows.length > 0
-                            implicitHeight: previewRow.implicitHeight + theme.spacingSm + 4
-                            color: "transparent"
-
-                            Rectangle {
-                                visible: index > 0
-                                anchors.left: parent.left
-                                anchors.right: parent.right
-                                anchors.top: parent.top
-                                height: 1
-                                color: Design.line(theme)
-                            }
-
-                            RowLayout {
-                                id: previewRow
-                                anchors.left: parent.left
-                                anchors.right: parent.right
-                                anchors.top: parent.top
-                                anchors.margins: theme.spacingSm + 2
-                                spacing: theme.spacingSm + 4
-
-                                Text {
-                                    Layout.preferredWidth: 120
-                                    text: modelData["occurred"] || ""
-                                    color: Design.ink3(theme)
-                                    font.family: Design.mono(theme)
-                                    font.pixelSize: theme.fontCaption
-                                    wrapMode: Text.WordWrap
-                                }
-
-                                TypeBadge {
-                                    Layout.alignment: Qt.AlignTop
-                                    label: modelData["kind_label"] || ""
-                                    tone: modelData["kind_tone"] || ""
-                                }
-
-                                ColumnLayout {
-                                    Layout.fillWidth: true
-                                    spacing: 2
-
-                                    Text {
-                                        Layout.fillWidth: true
-                                        text: modelData["wallet"] || ""
-                                        color: Design.ink(theme)
-                                        font.family: Design.sans()
-                                        font.pixelSize: theme.fontBodyStrong
-                                        elide: Text.ElideRight
-                                    }
-
-                                    Text {
-                                        Layout.fillWidth: true
-                                        text: modelData["tags"] || ""
-                                        color: Design.ink2(theme)
-                                        font.family: Design.sans()
-                                        font.pixelSize: theme.fontBodySmall
-                                        elide: Text.ElideRight
-                                    }
-                                }
-
-                                KV {
-                                    label: "Amount"
-                                    value: root.hideSensitive ? "\u2022 \u2022 \u2022 \u2022" : (modelData["amount_label"] || "")
-                                    mono: true
-                                }
-
-                                KV {
-                                    label: "Fiat"
-                                    value: root.hideSensitive ? "\u2022 \u2022 \u2022 \u2022" : (modelData["fiat_label"] || "")
-                                    mono: true
-                                }
-                            }
-                        }
+                        variant: "primary"
+                        size: "lg"
+                        text: "\u2192  Generate preview"
+                        enabled: false
                     }
                 }
-            }
 
-            Card {
-                Layout.fillWidth: true
-                Layout.leftMargin: theme.pagePadding
-                Layout.rightMargin: theme.pagePadding
-                Layout.bottomMargin: theme.pagePadding
-                title: "Export surfaces"
-                subtitle: "Presentation of the current report output formats; wiring lands later."
-
-                Flow {
-                    anchors.left: parent.left
-                    anchors.right: parent.right
-                    anchors.top: parent.top
+                // ---------- RIGHT COLUMN: preview ----------
+                ColumnLayout {
+                    Layout.fillWidth: true
+                    Layout.alignment: Qt.AlignTop
                     spacing: theme.gridGap
 
-                    Repeater {
-                        model: root.exportRows
+                    // Summary tiles
+                    GridLayout {
+                        Layout.fillWidth: true
+                        columns: Math.max(1, Math.min(4, Math.floor(width / 200)))
+                        columnSpacing: theme.gridGap
+                        rowSpacing: theme.gridGap
 
-                        delegate: ExportFormat {
-                            width: 220
-                            formatName: modelData["label"] || ""
-                            subtitle: modelData["summary"] || ""
-                            detail: modelData["detail"] || ""
-                            primary: !!modelData["primary"]
+                        Repeater {
+                            model: root.summaryTiles
+
+                            delegate: StatTile {
+                                Layout.fillWidth: true
+                                Layout.fillHeight: true
+                                Layout.preferredWidth: 1
+                                label: modelData["label"] || ""
+                                value: "\u2014"
+                                sub: modelData["detail"] || ""
+                                valueColor: Design.ink3(theme)
+                                blurred: root.hideSensitive
+                            }
+                        }
+                    }
+
+                    // Disposed lots table (placeholder)
+                    Card {
+                        Layout.fillWidth: true
+                        title: "Disposed lots \u00b7 " + root.selectedYear
+                        subtitle: "AT tax processing not yet available."
+
+                        Rectangle {
+                            anchors.left: parent.left
+                            anchors.right: parent.right
+                            anchors.top: parent.top
+                            implicitHeight: 260
+                            color: "transparent"
+
+                            Text {
+                                anchors.centerIn: parent
+                                text: "DATA UNAVAILABLE"
+                                color: Design.ink3(theme)
+                                font.family: Design.mono(theme)
+                                font.pixelSize: theme.fontCaption
+                                font.weight: Font.DemiBold
+                                font.letterSpacing: 1.4
+                            }
+                        }
+                    }
+
+                    // Export tiles
+                    GridLayout {
+                        Layout.fillWidth: true
+                        columns: width < 700 ? 1 : 3
+                        columnSpacing: theme.gridGap
+                        rowSpacing: theme.gridGap
+
+                        Repeater {
+                            model: root.exportRows
+
+                            delegate: ExportFormat {
+                                Layout.fillWidth: true
+                                Layout.preferredWidth: 1
+                                formatName: modelData["label"] || ""
+                                subtitle: modelData["summary"] || ""
+                                detail: modelData["detail"] || ""
+                                primary: !!modelData["primary"]
+                            }
                         }
                     }
                 }

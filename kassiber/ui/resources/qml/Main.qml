@@ -31,6 +31,15 @@ ApplicationWindow {
         id: settingsDialog
     }
 
+    Connections {
+        target: dashboardVM
+        function onPageChanged() {
+            if (addConnectionDialog.opened) {
+                addConnectionDialog.close()
+            }
+        }
+    }
+
     Popup {
         id: projectPopup
         width: 360
@@ -255,10 +264,11 @@ ApplicationWindow {
         AppHeader {
             Layout.fillWidth: true
             currentRoute: dashboardVM.currentPage
-            workspaceLabel: dashboardVM.projectSummary
-            profileLabel: ""
+            workspaceLabel: dashboardVM.currentWorkspaceLabel
+            profileLabel: dashboardVM.currentProfileLabel
             currentLang: root.previewLanguage
             hideSensitive: root.hideSensitivePreview
+            showLang: true
             onRouteSelected: dashboardVM.selectPage(id)
             onWorkspaceClicked: projectPopup.open()
             onLangSelected: root.previewLanguage = code

@@ -30,6 +30,6 @@ Column {
         font.family: root.mono ? Design.mono(theme) : Design.sans()
         font.pixelSize: root.valueFontSize
         elide: Text.ElideRight
-        textFormat: Text.StyledText
+        textFormat: Text.PlainText
     }
 }

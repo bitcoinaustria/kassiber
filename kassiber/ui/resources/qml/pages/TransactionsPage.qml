@@ -1,6 +1,7 @@
 import QtQuick 2.15
 import QtQuick.Controls 2.15
 import QtQuick.Layouts 1.15
+import Qt5Compat.GraphicalEffects
 
 import "../components"
 import "../components/Design.js" as Design
@@ -64,17 +65,12 @@ Item {
         return Design.ink3(theme)
     }
 
-    ScrollView {
+    ColumnLayout {
         anchors.fill: parent
-        clip: true
-        ScrollBar.horizontal.policy: ScrollBar.AlwaysOff
-
-        ColumnLayout {
-            width: root.width
-            spacing: theme.gridGap
+        spacing: theme.gridGap
 
             // ------------------------------------------------------------------
-            // Header: eyebrow + title (left), action cluster (right)
+            // Header: eyebrow + title (left), action cluster (right)   [fixed]
             // ------------------------------------------------------------------
 
             RowLayout {
@@ -144,7 +140,7 @@ Item {
             }
 
             // ------------------------------------------------------------------
-            // Filter strip (outlined bar: search + type pills)
+            // Filter strip (outlined bar: search + type pills)          [fixed]
             // ------------------------------------------------------------------
 
             Rectangle {
@@ -197,174 +193,175 @@ Item {
                 }
             }
 
-            // ------------------------------------------------------------------
-            // Table
-            // ------------------------------------------------------------------
+        // ------------------------------------------------------------------
+        // Table                                         [list scrolls, header sticky]
+        // ------------------------------------------------------------------
 
-            Card {
-                Layout.fillWidth: true
-                Layout.leftMargin: theme.pagePadding
-                Layout.rightMargin: theme.pagePadding
-                Layout.bottomMargin: theme.pagePadding
-                pad: false
+        ListView {
+            id: txList
+            Layout.fillWidth: true
+            Layout.fillHeight: true
+            Layout.leftMargin: theme.pagePadding
+            Layout.rightMargin: theme.pagePadding
+            Layout.bottomMargin: theme.pagePadding
+            clip: true
+            boundsBehavior: Flickable.StopAtBounds
 
-                ColumnLayout {
+            model: root.mockTransactions
+            headerPositioning: ListView.OverlayHeader
+
+            ScrollBar.vertical: ScrollBar {
+                policy: ScrollBar.AsNeeded
+            }
+
+            header: Rectangle {
+                width: txList.width
+                height: theme.rowHeightDefault
+                color: Design.paper(theme)
+                z: 2
+
+                Rectangle {
                     anchors.left: parent.left
                     anchors.right: parent.right
-                    anchors.top: parent.top
-                    spacing: 0
+                    anchors.bottom: parent.bottom
+                    height: 1
+                    color: Design.ink(theme)
+                }
 
-                    // ----- Header row -----
-                    Rectangle {
-                        Layout.fillWidth: true
-                        Layout.preferredHeight: theme.rowHeightDefault
-                        color: Design.paper(theme)
+                RowLayout {
+                    anchors.fill: parent
+                    anchors.leftMargin: theme.cardPadding
+                    anchors.rightMargin: theme.cardPadding
+                    spacing: theme.spacingSm + 4
+
+                    Text { Layout.preferredWidth: root.colDate;    text: "DATE \u00b7 TIME"; color: Design.ink3(theme); font.family: Design.sans(); font.pixelSize: theme.fontMicro; font.weight: Font.DemiBold; font.letterSpacing: 1.2 }
+                    Text { Layout.preferredWidth: root.colType;    text: "TYPE";             color: Design.ink3(theme); font.family: Design.sans(); font.pixelSize: theme.fontMicro; font.weight: Font.DemiBold; font.letterSpacing: 1.2 }
+                    Text { Layout.preferredWidth: root.colAccount; text: "ACCOUNT";          color: Design.ink3(theme); font.family: Design.sans(); font.pixelSize: theme.fontMicro; font.weight: Font.DemiBold; font.letterSpacing: 1.2 }
+                    Text { Layout.fillWidth: true;                 text: "COUNTERPARTY";     color: Design.ink3(theme); font.family: Design.sans(); font.pixelSize: theme.fontMicro; font.weight: Font.DemiBold; font.letterSpacing: 1.2 }
+                    Text { Layout.preferredWidth: root.colTag;     text: "TAG";              color: Design.ink3(theme); font.family: Design.sans(); font.pixelSize: theme.fontMicro; font.weight: Font.DemiBold; font.letterSpacing: 1.2 }
+                    Text { Layout.preferredWidth: root.colSats;    text: "SATS";             color: Design.ink3(theme); font.family: Design.sans(); font.pixelSize: theme.fontMicro; font.weight: Font.DemiBold; font.letterSpacing: 1.2; horizontalAlignment: Text.AlignRight }
+                    Text { Layout.preferredWidth: root.colRate;    text: "BTC/EUR RATE";     color: Design.ink3(theme); font.family: Design.sans(); font.pixelSize: theme.fontMicro; font.weight: Font.DemiBold; font.letterSpacing: 1.2; horizontalAlignment: Text.AlignRight }
+                    Text { Layout.preferredWidth: root.colEur;     text: "EUR";              color: Design.ink3(theme); font.family: Design.sans(); font.pixelSize: theme.fontMicro; font.weight: Font.DemiBold; font.letterSpacing: 1.2; horizontalAlignment: Text.AlignRight }
+                    Text { Layout.preferredWidth: root.colConf;    text: "CONF";             color: Design.ink3(theme); font.family: Design.sans(); font.pixelSize: theme.fontMicro; font.weight: Font.DemiBold; font.letterSpacing: 1.2; horizontalAlignment: Text.AlignRight }
+                }
+            }
+
+            delegate: Rectangle {
+                width: txList.width
+                height: theme.rowHeightDefault
+                color: "transparent"
+
+                Rectangle {
+                    anchors.left: parent.left
+                    anchors.right: parent.right
+                    anchors.bottom: parent.bottom
+                    height: 1
+                    color: Design.line(theme)
+                }
+
+                RowLayout {
+                    anchors.fill: parent
+                    anchors.leftMargin: theme.cardPadding
+                    anchors.rightMargin: theme.cardPadding
+                    spacing: theme.spacingSm + 4
+
+                    Text {
+                        Layout.preferredWidth: root.colDate
+                        text: modelData.date
+                        color: Design.ink2(theme)
+                        font.family: Design.mono(theme)
+                        font.pixelSize: theme.fontBodySmall
+                    }
+
+                    // Type badge (outlined, tone-colored)
+                    Item {
+                        Layout.preferredWidth: root.colType
+                        Layout.preferredHeight: 18
 
                         Rectangle {
-                            anchors.left: parent.left
-                            anchors.right: parent.right
-                            anchors.bottom: parent.bottom
-                            height: 1
-                            color: Design.ink(theme)
-                        }
+                            anchors.verticalCenter: parent.verticalCenter
+                            width: typeText.implicitWidth + 12
+                            height: typeText.implicitHeight + 4
+                            color: "transparent"
+                            border.color: root.typeColor(modelData.type)
+                            border.width: 1
 
-                        RowLayout {
-                            anchors.fill: parent
-                            anchors.leftMargin: theme.cardPadding
-                            anchors.rightMargin: theme.cardPadding
-                            spacing: theme.spacingSm + 4
-
-                            Text { Layout.preferredWidth: root.colDate;    text: "DATE \u00b7 TIME"; color: Design.ink3(theme); font.family: Design.sans(); font.pixelSize: theme.fontMicro; font.weight: Font.DemiBold; font.letterSpacing: 1.2 }
-                            Text { Layout.preferredWidth: root.colType;    text: "TYPE";             color: Design.ink3(theme); font.family: Design.sans(); font.pixelSize: theme.fontMicro; font.weight: Font.DemiBold; font.letterSpacing: 1.2 }
-                            Text { Layout.preferredWidth: root.colAccount; text: "ACCOUNT";          color: Design.ink3(theme); font.family: Design.sans(); font.pixelSize: theme.fontMicro; font.weight: Font.DemiBold; font.letterSpacing: 1.2 }
-                            Text { Layout.fillWidth: true;                 text: "COUNTERPARTY";     color: Design.ink3(theme); font.family: Design.sans(); font.pixelSize: theme.fontMicro; font.weight: Font.DemiBold; font.letterSpacing: 1.2 }
-                            Text { Layout.preferredWidth: root.colTag;     text: "TAG";              color: Design.ink3(theme); font.family: Design.sans(); font.pixelSize: theme.fontMicro; font.weight: Font.DemiBold; font.letterSpacing: 1.2 }
-                            Text { Layout.preferredWidth: root.colSats;    text: "SATS";             color: Design.ink3(theme); font.family: Design.sans(); font.pixelSize: theme.fontMicro; font.weight: Font.DemiBold; font.letterSpacing: 1.2; horizontalAlignment: Text.AlignRight }
-                            Text { Layout.preferredWidth: root.colRate;    text: "BTC/EUR RATE";     color: Design.ink3(theme); font.family: Design.sans(); font.pixelSize: theme.fontMicro; font.weight: Font.DemiBold; font.letterSpacing: 1.2; horizontalAlignment: Text.AlignRight }
-                            Text { Layout.preferredWidth: root.colEur;     text: "EUR";              color: Design.ink3(theme); font.family: Design.sans(); font.pixelSize: theme.fontMicro; font.weight: Font.DemiBold; font.letterSpacing: 1.2; horizontalAlignment: Text.AlignRight }
-                            Text { Layout.preferredWidth: root.colConf;    text: "CONF";             color: Design.ink3(theme); font.family: Design.sans(); font.pixelSize: theme.fontMicro; font.weight: Font.DemiBold; font.letterSpacing: 1.2; horizontalAlignment: Text.AlignRight }
+                            Text {
+                                id: typeText
+                                anchors.centerIn: parent
+                                text: modelData.type.toUpperCase()
+                                color: root.typeColor(modelData.type)
+                                font.family: Design.mono(theme)
+                                font.pixelSize: theme.fontMicro
+                                font.letterSpacing: 1.0
+                                font.weight: Font.DemiBold
+                            }
                         }
                     }
 
-                    // ----- Body rows -----
-                    Repeater {
-                        model: root.mockTransactions
+                    Text {
+                        Layout.preferredWidth: root.colAccount
+                        text: modelData.account
+                        color: Design.ink(theme)
+                        font.family: Design.sans()
+                        font.pixelSize: theme.fontBody
+                        elide: Text.ElideRight
+                    }
 
-                        delegate: Rectangle {
-                            Layout.fillWidth: true
-                            Layout.preferredHeight: theme.rowHeightDefault
-                            color: "transparent"
+                    Text {
+                        Layout.fillWidth: true
+                        text: modelData.counter
+                        color: Design.ink(theme)
+                        font.family: Design.sans()
+                        font.pixelSize: theme.fontBody
+                        elide: Text.ElideRight
+                    }
 
-                            Rectangle {
-                                anchors.left: parent.left
-                                anchors.right: parent.right
-                                anchors.bottom: parent.bottom
-                                height: 1
-                                color: Design.line(theme)
-                            }
+                    // Tag chip
+                    TagChip {
+                        Layout.preferredWidth: root.colTag
+                        Layout.alignment: Qt.AlignVCenter
+                        label: modelData.tag
+                    }
 
-                            RowLayout {
-                                anchors.fill: parent
-                                anchors.leftMargin: theme.cardPadding
-                                anchors.rightMargin: theme.cardPadding
-                                spacing: theme.spacingSm + 4
+                    Text {
+                        Layout.preferredWidth: root.colSats
+                        text: modelData.sats
+                        color: modelData.sats.indexOf("+") === 0 ? theme.positive : Design.ink(theme)
+                        font.family: Design.mono(theme)
+                        font.pixelSize: theme.fontBodySmall
+                        horizontalAlignment: Text.AlignRight
+                        layer.enabled: root.hideSensitive
+                        layer.effect: FastBlur { radius: 48 }
+                    }
 
-                                Text {
-                                    Layout.preferredWidth: root.colDate
-                                    text: modelData.date
-                                    color: Design.ink2(theme)
-                                    font.family: Design.mono(theme)
-                                    font.pixelSize: theme.fontBodySmall
-                                }
+                    Text {
+                        Layout.preferredWidth: root.colRate
+                        text: modelData.rate
+                        color: Design.ink3(theme)
+                        font.family: Design.mono(theme)
+                        font.pixelSize: theme.fontBodySmall
+                        horizontalAlignment: Text.AlignRight
+                    }
 
-                                // Type badge (outlined, tone-colored)
-                                Item {
-                                    Layout.preferredWidth: root.colType
-                                    Layout.preferredHeight: 18
+                    Text {
+                        Layout.preferredWidth: root.colEur
+                        text: modelData.eur
+                        color: Design.ink2(theme)
+                        font.family: Design.mono(theme)
+                        font.pixelSize: theme.fontBodySmall
+                        horizontalAlignment: Text.AlignRight
+                        layer.enabled: root.hideSensitive
+                        layer.effect: FastBlur { radius: 48 }
+                    }
 
-                                    Rectangle {
-                                        anchors.verticalCenter: parent.verticalCenter
-                                        width: typeText.implicitWidth + 12
-                                        height: typeText.implicitHeight + 4
-                                        color: "transparent"
-                                        border.color: root.typeColor(modelData.type)
-                                        border.width: 1
-
-                                        Text {
-                                            id: typeText
-                                            anchors.centerIn: parent
-                                            text: modelData.type.toUpperCase()
-                                            color: root.typeColor(modelData.type)
-                                            font.family: Design.mono(theme)
-                                            font.pixelSize: theme.fontMicro
-                                            font.letterSpacing: 1.0
-                                            font.weight: Font.DemiBold
-                                        }
-                                    }
-                                }
-
-                                Text {
-                                    Layout.preferredWidth: root.colAccount
-                                    text: modelData.account
-                                    color: Design.ink(theme)
-                                    font.family: Design.sans()
-                                    font.pixelSize: theme.fontBody
-                                    elide: Text.ElideRight
-                                }
-
-                                Text {
-                                    Layout.fillWidth: true
-                                    text: modelData.counter
-                                    color: Design.ink(theme)
-                                    font.family: Design.sans()
-                                    font.pixelSize: theme.fontBody
-                                    elide: Text.ElideRight
-                                }
-
-                                // Tag chip
-                                TagChip {
-                                    Layout.preferredWidth: root.colTag
-                                    Layout.alignment: Qt.AlignVCenter
-                                    label: modelData.tag
-                                }
-
-                                Text {
-                                    Layout.preferredWidth: root.colSats
-                                    text: root.hideSensitive ? "\u2022 \u2022 \u2022 \u2022" : modelData.sats
-                                    color: modelData.sats.indexOf("+") === 0 ? theme.positive : Design.ink(theme)
-                                    font.family: Design.mono(theme)
-                                    font.pixelSize: theme.fontBodySmall
-                                    horizontalAlignment: Text.AlignRight
-                                }
-
-                                Text {
-                                    Layout.preferredWidth: root.colRate
-                                    text: modelData.rate
-                                    color: Design.ink3(theme)
-                                    font.family: Design.mono(theme)
-                                    font.pixelSize: theme.fontBodySmall
-                                    horizontalAlignment: Text.AlignRight
-                                }
-
-                                Text {
-                                    Layout.preferredWidth: root.colEur
-                                    text: root.hideSensitive ? "\u2022 \u2022 \u2022 \u2022" : modelData.eur
-                                    color: Design.ink2(theme)
-                                    font.family: Design.mono(theme)
-                                    font.pixelSize: theme.fontBodySmall
-                                    horizontalAlignment: Text.AlignRight
-                                }
-
-                                Text {
-                                    Layout.preferredWidth: root.colConf
-                                    text: modelData.conf
-                                    color: Design.ink3(theme)
-                                    font.family: Design.mono(theme)
-                                    font.pixelSize: theme.fontBodySmall
-                                    horizontalAlignment: Text.AlignRight
-                                }
-                            }
-                        }
+                    Text {
+                        Layout.preferredWidth: root.colConf
+                        text: modelData.conf
+                        color: Design.ink3(theme)
+                        font.family: Design.mono(theme)
+                        font.pixelSize: theme.fontBodySmall
+                        horizontalAlignment: Text.AlignRight
                     }
                 }
             }
