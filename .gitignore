@@ -13,3 +13,9 @@ dist/
 .claude/settings.local.json
 .kassiber-test/
 log/
+/temp
+/docs/design/review-reference/
+/docs/design/review/generated/
+/docs/design/review/reference/
+/docs/design/review/index.html
+/docs/design/review/manifest.json

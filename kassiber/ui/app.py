@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 from typing import Any
 
@@ -12,7 +13,7 @@ from .dashboard import collect_ui_snapshot
 def _import_qt():
     try:
         from PySide6.QtCore import QUrl
-        from PySide6.QtGui import QGuiApplication
+        from PySide6.QtGui import QFontDatabase, QGuiApplication
         from PySide6.QtQml import QQmlApplicationEngine
         from PySide6.QtQuickControls2 import QQuickStyle
     except Exception as exc:  # pragma: no cover - local Qt install dependent
@@ -21,7 +22,23 @@ def _import_qt():
             code="ui_unavailable",
             hint="Reinstall Kassiber so the desktop dependency set is available, or use `kassiber --machine ui`.",
         ) from exc
-    return QUrl, QGuiApplication, QQmlApplicationEngine, QQuickStyle
+    return QUrl, QFontDatabase, QGuiApplication, QQmlApplicationEngine, QQuickStyle
+
+
+def _register_bundled_fonts(font_database) -> None:
+    """Register every .ttf under resources/fonts/ with QFontDatabase.
+
+    Silently skips missing or unreadable files; system-installed fonts still
+    work as a fallback via the theme.py family names.
+    """
+    fonts_dir = Path(__file__).resolve().parent / "resources" / "fonts"
+    if not fonts_dir.exists():
+        return
+    for ttf in fonts_dir.rglob("*.ttf"):
+        try:
+            font_database.addApplicationFont(str(ttf))
+        except Exception:
+            continue
 
 
 def _default_window_state() -> dict[str, int]:
@@ -54,6 +71,8 @@ def _read_window_state(settings_path: Path) -> dict[str, int]:
 
 
 def _write_window_state(settings_path: Path, window) -> None:
+    if (os.environ.get("KASSIBER_UI_DISABLE_STATE_WRITE") or "").strip().lower() in {"1", "true", "yes", "on"}:
+        return
     payload = _load_settings_blob(settings_path)
     ui_section = dict(payload.get("ui")) if isinstance(payload.get("ui"), dict) else {}
     ui_section["window"] = {
@@ -63,11 +82,54 @@ def _write_window_state(settings_path: Path, window) -> None:
         "height": int(window.property("height")),
     }
     payload["ui"] = ui_section
-    settings_path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    try:
+        settings_path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    except OSError:
+        # Best-effort persistence only; screenshot/offscreen flows may not have permission.
+        return
 
 
 def _qml_path() -> Path:
     return Path(__file__).resolve().parent / "resources" / "qml" / "Main.qml"
+
+
+def _apply_preview_scene(snapshot: dict[str, Any], preview_scene: str) -> str:
+    scene = str(preview_scene or "").strip().lower()
+    if not scene:
+        return ""
+
+    page_map = {
+        "welcome": "welcome",
+        "overview": "overview",
+        "overview-empty": "overview",
+        "overview-data": "overview",
+        "add-connection-picker": "overview",
+        "add-connection-xpub": "overview",
+        "transactions": "transactions",
+        "tax": "reports",
+        "reports": "reports",
+        "tax-capital-gains": "reports",
+        "connection-detail": "connection-detail",
+        "settings": "settings",
+        "profiles": "profiles",
+    }
+    page = page_map.get(scene, scene)
+
+    if scene == "overview-empty":
+        shell = dict(snapshot.get("shell") or {})
+        shell["is_empty"] = True
+        shell["has_data"] = False
+        shell["connection_count"] = 0
+        snapshot["shell"] = shell
+        snapshot["connections"] = {"items": []}
+        snapshot["transactions"] = {
+            "items": [],
+            "total_count": 0,
+            "history_label": "LOCAL SNAPSHOT",
+            "filter_options": [],
+        }
+
+    return page
 
 
 def build_application(
@@ -77,11 +139,13 @@ def build_application(
     workspace_ref: str | None = None,
     profile_ref: str | None = None,
 ):
-    QUrl, QGuiApplication, QQmlApplicationEngine, QQuickStyle = _import_qt()
+    QUrl, QFontDatabase, QGuiApplication, QQmlApplicationEngine, QQuickStyle = _import_qt()
     from .theme import Theme
     from .viewmodels.connections_vm import ConnectionsViewModel
     from .viewmodels.dashboard_vm import DashboardViewModel
+    from .viewmodels.reports_vm import ReportsViewModel
     from .viewmodels.settings_vm import SettingsViewModel
+    from .viewmodels.transactions_vm import TransactionsViewModel
 
     snapshot = collect_ui_snapshot(
         conn,
@@ -90,6 +154,12 @@ def build_application(
         workspace_ref=workspace_ref,
         profile_ref=profile_ref,
     )
+    preview_scene = (os.environ.get("KASSIBER_UI_PREVIEW_PAGE") or "").strip()
+    capture_mode = (os.environ.get("KASSIBER_UI_CAPTURE") or "").strip().lower() in {"1", "true", "yes", "on"}
+    disable_state_write = capture_mode or (
+        (os.environ.get("KASSIBER_UI_DISABLE_STATE_WRITE") or "").strip().lower() in {"1", "true", "yes", "on"}
+    )
+    preview_page = _apply_preview_scene(snapshot, preview_scene)
     settings_path = resolve_settings_path(data_root)
     window_state = _read_window_state(settings_path)
 
@@ -97,26 +167,39 @@ def build_application(
     app = QGuiApplication.instance() or QGuiApplication(["kassiber"])
     app.setApplicationName("Kassiber")
     app.setApplicationDisplayName("Kassiber")
+    _register_bundled_fonts(QFontDatabase)
 
     dashboard_vm = DashboardViewModel(snapshot)
+    if preview_page:
+        dashboard_vm.selectPage(preview_page)
     connections_vm = ConnectionsViewModel(snapshot)
+    transactions_vm = TransactionsViewModel(snapshot)
+    reports_vm = ReportsViewModel(snapshot)
     settings_vm = SettingsViewModel(snapshot)
     theme = Theme()
 
     engine = QQmlApplicationEngine()
     dashboard_vm.setParent(engine)
     connections_vm.setParent(engine)
+    transactions_vm.setParent(engine)
+    reports_vm.setParent(engine)
     settings_vm.setParent(engine)
     theme.setParent(engine)
     context = engine.rootContext()
     context.setContextProperty("dashboardVM", dashboard_vm)
     context.setContextProperty("connectionsVM", connections_vm)
+    context.setContextProperty("transactionsVM", transactions_vm)
+    context.setContextProperty("reportsVM", reports_vm)
     context.setContextProperty("settingsVM", settings_vm)
     context.setContextProperty("theme", theme)
     context.setContextProperty("windowState", window_state)
+    context.setContextProperty("uiPreviewPage", preview_scene)
+    context.setContextProperty("uiCaptureMode", capture_mode)
     engine._kassiber_refs = {
         "dashboard_vm": dashboard_vm,
         "connections_vm": connections_vm,
+        "transactions_vm": transactions_vm,
+        "reports_vm": reports_vm,
         "settings_vm": settings_vm,
         "theme": theme,
     }
@@ -134,7 +217,8 @@ def build_application(
     if window_state["height"] > 0:
         window.setProperty("height", window_state["height"])
     window.setProperty("visible", True)
-    app.aboutToQuit.connect(lambda: _write_window_state(settings_path, window))
+    if not disable_state_write:
+        app.aboutToQuit.connect(lambda: _write_window_state(settings_path, window))
     return app, engine, window
 
 

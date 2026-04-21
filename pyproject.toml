@@ -31,6 +31,10 @@ include = ["kassiber*"]
 [tool.setuptools.package-data]
 "kassiber.ui" = [
   "resources/qml/*.qml",
+  "resources/qml/pages/*.qml",
   "resources/qml/components/*.qml",
+  "resources/qml/components/*.js",
   "resources/qml/dialogs/*.qml",
+  "resources/fonts/*.ttf",
+  "resources/fonts/*/*.ttf",
 ]
