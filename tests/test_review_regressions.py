@@ -1976,6 +1976,76 @@ class ReviewRegressionTest(unittest.TestCase):
         expected = self._load_fixture("austrian_rp2_engine_snapshot.json")
         self.assertEqual(actual, expected)
 
+    def test_austrian_rp2_engine_emits_income_entry_for_staking_receipt(self):
+        profile = {
+            "id": "profile-at-income",
+            "workspace_id": "workspace-main",
+            "label": "FixtureAustrianIncome",
+            "fiat_currency": "EUR",
+            "tax_country": "at",
+            "tax_long_term_days": 365,
+            "gains_algorithm": "moving_average_at",
+        }
+        inputs = TaxEngineLedgerInputs(
+            rows=[
+                {
+                    "id": "staking-receipt-1",
+                    "wallet_id": "wallet-austrian",
+                    "wallet_label": "AustrianIncome",
+                    "wallet_account_id": "account-treasury",
+                    "account_code": "treasury",
+                    "account_label": "Treasury",
+                    "occurred_at": "2024-01-01T00:00:00Z",
+                    "direction": "inbound",
+                    "asset": "BTC",
+                    "amount": 100_000_000,
+                    "fee": 0,
+                    "fiat_rate": 40_000,
+                    "fiat_value": 40,
+                    "kind": "staking",
+                    "description": "Staking reward",
+                    "note": None,
+                    "external_id": "staking-receipt-1",
+                    "created_at": "2024-01-01T00:00:00Z",
+                }
+            ],
+            wallet_refs_by_id={
+                "wallet-austrian": {
+                    "id": "wallet-austrian",
+                    "label": "AustrianIncome",
+                    "wallet_account_id": "account-treasury",
+                    "account_code": "treasury",
+                    "account_label": "Treasury",
+                }
+            },
+            manual_pair_records=[],
+        )
+        actual = self._direct_engine_snapshot(profile, inputs)
+        self.assertEqual(actual["quarantines"], [])
+        self.assertEqual(
+            [entry["entry_type"] for entry in actual["entries"]],
+            ["acquisition", "income"],
+        )
+        income_entry = next(entry for entry in actual["entries"] if entry["entry_type"] == "income")
+        self.assertEqual(income_entry["quantity"], 0.001)
+        self.assertEqual(income_entry["fiat_value"], 40.0)
+        self.assertEqual(income_entry["gain_loss"], 40.0)
+        self.assertEqual(income_entry["at_category"], "income_capital_yield")
+        self.assertEqual(income_entry["at_kennzahl"], 175)
+        self.assertEqual(
+            actual["wallet_holdings"],
+            [
+                {
+                    "wallet_id": "wallet-austrian",
+                    "wallet_label": "AustrianIncome",
+                    "account_code": "treasury",
+                    "asset": "BTC",
+                    "quantity": 0.001,
+                    "cost_basis": 40.0,
+                }
+            ],
+        )
+
     def test_austrian_rp2_cross_asset_swap_is_quarantined(self):
         """End-to-end: AT profile quarantines Neu cross-asset swap pairs (Option C)."""
         profile, inputs = self._direct_austrian_cross_asset_swap_inputs()
@@ -2471,6 +2541,61 @@ class ReviewRegressionTest(unittest.TestCase):
         self.assertEqual(len(payload["data"]), 1)
         self.assertEqual(payload["data"][0]["at_category"], "neu_gain")
         self.assertEqual(payload["data"][0]["at_kennzahl"], 174)
+
+    def test_austrian_profile_reports_staking_receipt_as_income(self):
+        self._bootstrap_wallet(label="AustrianIncome")
+        json_file = self.case_dir / "austrian-income-import.json"
+        json_file.write_text(
+            json.dumps(
+                [
+                    {
+                        "date": "2024-01-01",
+                        "direction": "inbound",
+                        "asset": "BTC",
+                        "amount": "0.001",
+                        "fee": "0",
+                        "kind": "staking",
+                        "txid": "at-staking-demo",
+                        "fiat_value": "40",
+                    }
+                ]
+            ),
+            encoding="utf-8",
+        )
+        payload, result = self._run_json(
+            "wallets", "import-json",
+            "--workspace", "Main",
+            "--profile", "Default",
+            "--wallet", "AustrianIncome",
+            "--file", str(json_file),
+        )
+        self._assert_ok(payload, result, "wallets.import-json")
+        self._set_profile_tax_country("Default", "at")
+        payload, result = self._run_json(
+            "profiles", "set",
+            "--workspace", "Main",
+            "--profile", "Default",
+            "--gains-algorithm", "MOVING_AVERAGE_AT",
+        )
+        self._assert_ok(payload, result, "profiles.set")
+        payload, result = self._run_json(
+            "journals", "process",
+            "--workspace", "Main",
+            "--profile", "Default",
+        )
+        self._assert_ok(payload, result, "journals.process")
+
+        payload, result = self._run_json(
+            "reports", "capital-gains",
+            "--workspace", "Main",
+            "--profile", "Default",
+        )
+        self._assert_ok(payload, result, "reports.capital-gains")
+        self.assertEqual(len(payload["data"]), 1)
+        self.assertEqual(payload["data"][0]["entry_type"], "income")
+        self.assertEqual(payload["data"][0]["at_category"], "income_capital_yield")
+        self.assertEqual(payload["data"][0]["at_kennzahl"], 175)
+        self.assertEqual(payload["data"][0]["gain_loss"], 40.0)
 
     def test_attachments_verify_reports_missing_file(self):
         self._bootstrap_wallet(label="Attachable")

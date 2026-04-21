@@ -126,7 +126,7 @@ def report_capital_gains(conn, workspace_ref, profile_ref, hooks: ReportHooks):
             je.at_kennzahl
         FROM journal_entries je
         JOIN wallets w ON w.id = je.wallet_id
-        WHERE je.profile_id = ? AND je.entry_type IN ('disposal', 'fee', 'transfer_fee')
+        WHERE je.profile_id = ? AND je.entry_type IN ('disposal', 'fee', 'transfer_fee', 'income')
         ORDER BY je.occurred_at ASC, je.created_at ASC, je.id ASC
         """,
         (profile["id"],),
