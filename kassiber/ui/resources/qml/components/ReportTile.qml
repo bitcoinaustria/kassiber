@@ -10,10 +10,11 @@ Button {
     property string subtitle: ""
     property string detail: ""
     property string iconGlyph: "\u2197"
+    property bool interactive: false
 
     flat: true
     padding: 0
-    hoverEnabled: true
+    hoverEnabled: root.interactive
     implicitHeight: 98
 
     contentItem: RowLayout {
@@ -71,6 +72,7 @@ Button {
         }
 
         Text {
+            visible: root.interactive
             text: "\u2197"
             color: Design.ink3(theme)
             font.family: Design.mono(theme)
@@ -80,7 +82,7 @@ Button {
     }
 
     background: Rectangle {
-        color: root.hovered ? Design.paper(theme) : Design.paperAlt(theme)
+        color: (root.interactive && root.hovered) ? Design.paper(theme) : Design.paperAlt(theme)
         border.color: Design.line(theme)
         border.width: 1
         radius: 0

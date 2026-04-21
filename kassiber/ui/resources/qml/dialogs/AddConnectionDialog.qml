@@ -14,6 +14,8 @@ Dialog {
     width: 760
     padding: 0
     standardButtons: Dialog.NoButton
+    anchors.centerIn: parent
+    closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
 
     readonly property var sections: [
         {
@@ -210,6 +212,8 @@ Dialog {
 
                                 KindPickerRow {
                                     Layout.fillWidth: true
+                                    Layout.preferredWidth: 1
+                                    Layout.preferredHeight: 60
                                     connectionName: modelData.name
                                     description: modelData.desc
                                     onClicked: root.kindPicked(modelData.id)

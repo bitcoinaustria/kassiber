@@ -8,6 +8,7 @@ import "Design.js" as Design
 Rectangle {
     id: root
     property bool selected: false
+    property bool interactive: false
     property string label: ""
     property string description: ""
 
@@ -22,6 +23,8 @@ Rectangle {
 
     MouseArea {
         anchors.fill: parent
+        visible: root.interactive
+        enabled: root.interactive
         cursorShape: Qt.PointingHandCursor
         onClicked: root.activated()
     }

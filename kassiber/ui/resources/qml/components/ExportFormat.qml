@@ -11,10 +11,11 @@ Button {
     property string subtitle: ""
     property string detail: ""
     property bool primary: false
+    property bool interactive: false
 
     flat: true
     padding: 0
-    hoverEnabled: true
+    hoverEnabled: root.interactive
     implicitHeight: column.implicitHeight + theme.cardPadding * 2
 
     contentItem: Item {
@@ -24,7 +25,7 @@ Button {
     background: Rectangle {
         color: root.primary
             ? Design.ink(theme)
-            : (root.hovered ? Design.paper(theme) : Design.paperAlt(theme))
+            : ((root.interactive && root.hovered) ? Design.paper(theme) : Design.paperAlt(theme))
         border.color: root.primary ? Design.ink(theme) : Design.line(theme)
         border.width: 1
         radius: theme.radiusSm
@@ -44,7 +45,7 @@ Button {
                 spacing: theme.spacingSm
 
                 Text {
-                    width: parent.width - arrow.implicitWidth - parent.spacing
+                    width: parent.width - (arrow.visible ? arrow.implicitWidth + parent.spacing : 0)
                     text: root.formatName
                     color: root.primary ? Design.paper(theme) : Design.ink(theme)
                     font.family: Design.sans()
@@ -55,6 +56,7 @@ Button {
 
                 Text {
                     id: arrow
+                    visible: root.interactive
                     text: "\u2913"
                     color: root.primary ? Design.paper(theme) : Design.ink2(theme)
                     font.family: Design.mono(theme)

@@ -16,6 +16,7 @@ Item {
     property string profileLabel: "Alice"
     property string currentLang: "EN"
     property bool hideSensitive: false
+    property bool showLang: false
 
     signal routeSelected(string id)
     signal workspaceClicked()
@@ -155,6 +156,7 @@ Item {
 
             Row {
                 spacing: 0
+                visible: root.showLang
 
                 Repeater {
                     model: ["EN", "DE"]

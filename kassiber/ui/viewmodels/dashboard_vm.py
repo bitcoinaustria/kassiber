@@ -152,6 +152,18 @@ class DashboardViewModel(QObject):
             f"{self._shell().get('current_profile_label', '')}"
         )
 
+    @Property(str, notify=snapshotChanged)
+    def currentWorkspaceLabel(self) -> str:
+        if not self.hasProfile:
+            return "Kassiber"
+        return self._shell().get("current_workspace_label", "") or ""
+
+    @Property(str, notify=snapshotChanged)
+    def currentProfileLabel(self) -> str:
+        if not self.hasProfile:
+            return ""
+        return self._shell().get("current_profile_label", "") or ""
+
     @Property("QVariantList", notify=snapshotChanged)
     def availableProfiles(self):
         return list(self._snapshot.get("profiles") or [])

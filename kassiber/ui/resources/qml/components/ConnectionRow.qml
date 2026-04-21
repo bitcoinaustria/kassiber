@@ -1,5 +1,6 @@
 import QtQuick 2.15
 import QtQuick.Controls 2.15
+import Qt5Compat.GraphicalEffects
 
 import "Design.js" as Design
 
@@ -48,10 +49,12 @@ Button {
             anchors.right: dot.left
             anchors.verticalCenter: parent.verticalCenter
             anchors.rightMargin: 6
-            text: root.hideSensitive ? "\u2022 \u2022 \u2022 \u2022" : root.balanceLabel
+            text: root.balanceLabel
             color: Design.ink(theme)
             font.family: Design.mono(theme)
             font.pixelSize: 11
+            layer.enabled: root.hideSensitive
+            layer.effect: FastBlur { radius: 48 }
         }
 
         StatusDot {
