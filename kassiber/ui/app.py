@@ -13,7 +13,7 @@ from .dashboard import collect_ui_snapshot
 def _import_qt():
     try:
         from PySide6.QtCore import QUrl
-        from PySide6.QtGui import QGuiApplication
+        from PySide6.QtGui import QFontDatabase, QGuiApplication
         from PySide6.QtQml import QQmlApplicationEngine
         from PySide6.QtQuickControls2 import QQuickStyle
     except Exception as exc:  # pragma: no cover - local Qt install dependent
@@ -22,7 +22,23 @@ def _import_qt():
             code="ui_unavailable",
             hint="Reinstall Kassiber so the desktop dependency set is available, or use `kassiber --machine ui`.",
         ) from exc
-    return QUrl, QGuiApplication, QQmlApplicationEngine, QQuickStyle
+    return QUrl, QFontDatabase, QGuiApplication, QQmlApplicationEngine, QQuickStyle
+
+
+def _register_bundled_fonts(font_database) -> None:
+    """Register every .ttf under resources/fonts/ with QFontDatabase.
+
+    Silently skips missing or unreadable files; system-installed fonts still
+    work as a fallback via the theme.py family names.
+    """
+    fonts_dir = Path(__file__).resolve().parent / "resources" / "fonts"
+    if not fonts_dir.exists():
+        return
+    for ttf in fonts_dir.rglob("*.ttf"):
+        try:
+            font_database.addApplicationFont(str(ttf))
+        except Exception:
+            continue
 
 
 def _default_window_state() -> dict[str, int]:
@@ -91,6 +107,7 @@ def _apply_preview_scene(snapshot: dict[str, Any], preview_scene: str) -> str:
         "tax-capital-gains": "reports",
         "connection-detail": "connection-detail",
         "settings": "settings",
+        "profiles": "profiles",
     }
     page = page_map.get(scene, scene)
 
@@ -113,7 +130,7 @@ def build_application(
     workspace_ref: str | None = None,
     profile_ref: str | None = None,
 ):
-    QUrl, QGuiApplication, QQmlApplicationEngine, QQuickStyle = _import_qt()
+    QUrl, QFontDatabase, QGuiApplication, QQmlApplicationEngine, QQuickStyle = _import_qt()
     from .theme import Theme
     from .viewmodels.connections_vm import ConnectionsViewModel
     from .viewmodels.dashboard_vm import DashboardViewModel
@@ -138,6 +155,7 @@ def build_application(
     app = QGuiApplication.instance() or QGuiApplication(["kassiber"])
     app.setApplicationName("Kassiber")
     app.setApplicationDisplayName("Kassiber")
+    _register_bundled_fonts(QFontDatabase)
 
     dashboard_vm = DashboardViewModel(snapshot)
     if preview_page:

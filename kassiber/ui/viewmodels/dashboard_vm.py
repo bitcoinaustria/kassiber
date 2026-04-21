@@ -19,6 +19,7 @@ class DashboardViewModel(QObject):
             "transactions",
             "reports",
             "settings",
+            "profiles",
         ]
         self._current_page = "overview" if self.hasProfile else "welcome"
 

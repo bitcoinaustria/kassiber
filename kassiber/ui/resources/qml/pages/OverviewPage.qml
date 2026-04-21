@@ -3,892 +3,702 @@ import QtQuick.Controls 2.15
 import QtQuick.Layouts 1.15
 
 import "../components"
+import "../components/Design.js" as Design
 
-ScrollView {
+// Static Overview (populated). No business logic; no view-model bindings.
+// Every card in a row is Layout.fillHeight so they share the row's max
+// implicitHeight. Cards carry Layout.minimumWidth so content never clips when
+// the window narrows. Spacing/typography flow from theme semantic tokens.
+Item {
     id: root
+
+    property bool hideSensitive: false
+
     signal requestAddConnection()
-    clip: true
 
-    readonly property var connections: connectionsVM.items || []
-    readonly property var transactions: transactionsVM.items || []
-    readonly property var metrics: dashboardVM.overviewMetrics || []
-    readonly property var highlights: dashboardVM.overviewHighlights || []
-    readonly property var reportTiles: reportsVM.items || []
-    readonly property real pageWidth: Math.max(availableWidth, 980)
-    readonly property bool wideLayout: pageWidth >= 1260
-    readonly property bool midLayout: pageWidth >= 1080
-    readonly property var balanceSeries: buildBalanceSeries()
+    // ---------------------------------------------------------------------
+    // Mock data
+    // ---------------------------------------------------------------------
 
-    function limitItems(items, count) {
-        var out = []
-        if (!items) {
-            return out
-        }
-        for (var i = 0; i < items.length && i < count; ++i) {
-            out.push(items[i])
-        }
-        return out
-    }
+    readonly property var mockConnections: [
+        { id: "c1", label: "Cold Storage",       balance: "1.2481", tone: "ok" },
+        { id: "c2", label: "Multisig 2/3 Vault", balance: "3.0814", tone: "ok" },
+        { id: "c3", label: "Home Node (CLN)",    balance: "0.0482", tone: "warn" },
+        { id: "c4", label: "Alby Hub",           balance: "0.0021", tone: "idle" },
+        { id: "c5", label: "minibits.cash",      balance: "0.0002", tone: "ok" }
+    ]
 
-    function metricByLabel(label) {
-        for (var i = 0; i < metrics.length; ++i) {
-            if (metrics[i]["label"] === label) {
-                return metrics[i]
-            }
-        }
-        return {}
-    }
+    readonly property var mockFilterRanges: [
+        { id: "1w",  label: "1W"  },
+        { id: "mtd", label: "MTD" },
+        { id: "1m",  label: "1M"  },
+        { id: "qtd", label: "QTD" },
+        { id: "lq",  label: "LQ"  },
+        { id: "ytd", label: "YTD" }
+    ]
 
-    function highlightByTitle(title) {
-        for (var i = 0; i < highlights.length; ++i) {
-            if (highlights[i]["title"] === title) {
-                return highlights[i]
-            }
-        }
-        return {}
-    }
+    readonly property var mockChartRanges: [
+        { id: "d",   label: "D"   },
+        { id: "w",   label: "W"   },
+        { id: "m",   label: "M"   },
+        { id: "ytd", label: "YTD" },
+        { id: "1y",  label: "1Y"  },
+        { id: "5y",  label: "5Y"  },
+        { id: "all", label: "ALL" }
+    ]
 
-    function totalBalanceMsat() {
-        var total = 0
-        for (var i = 0; i < connections.length; ++i) {
-            total += Number(connections[i]["balance_msat"] || 0)
-        }
-        return total
-    }
+    readonly property var mockChartCurrencies: [
+        { id: "btc", label: "\u20bf" },
+        { id: "eur", label: "EUR" }
+    ]
 
-    function totalBalanceBtc() {
-        return (totalBalanceMsat() / 100000000000.0).toFixed(8)
-    }
+    readonly property var mockBalanceSeries: [
+        0.8, 1.1, 1.6, 1.55, 2.2, 2.4, 2.8, 3.1, 3.6, 4.0, 4.3, 4.38
+    ]
 
-    function totalTransactionFiat() {
-        var total = 0
-        for (var i = 0; i < transactions.length; ++i) {
-            total += Math.abs(Number(transactions[i]["fiat_value"] || 0))
-        }
-        return total
-    }
+    readonly property var mockTransactions: [
+        { date: "04-18", type: "Income",   counter: "Invoice \u00b7 ACME GmbH",      sats: "+ 2,450,000",      eur: "+ \u20ac1,749.79" },
+        { date: "04-17", type: "Expense",  counter: "Server rental \u00b7 Hetzner",  sats: "\u2212 120,431",    eur: "\u2212 \u20ac86.00" },
+        { date: "04-16", type: "Transfer", counter: "Internal transfer",              sats: "\u2212 50,000,000", eur: "\u2212 \u20ac35,710.09" },
+        { date: "04-15", type: "Income",   counter: "Client payment \u00b7 LN",      sats: "+ 92,808",          eur: "+ \u20ac66.27" },
+        { date: "04-14", type: "Expense",  counter: "Equipment \u00b7 BitcoinStore", sats: "\u2212 890,210",    eur: "\u2212 \u20ac635.71" },
+        { date: "04-12", type: "Income",   counter: "Sale \u00b7 Consulting",        sats: "+ 3,800,000",       eur: "+ \u20ac2,713.97" }
+    ]
 
-    function currencyLabel() {
-        var profile = String((highlightByTitle("Profile")["value"] || "EUR").split("|")[0] || "EUR")
-        return profile.trim() || "EUR"
-    }
-
-    function totalFiatLabel() {
-        return currencyLabel() + " " + Number(totalTransactionFiat()).toLocaleString(Qt.locale("de_AT"), "f", 2)
-    }
-
-    function reportStatus() {
-        return reportsVM.statusTitle || "Needs journals"
-    }
-
-    function reportStatusBody() {
-        return reportsVM.statusBody || ""
-    }
-
-    function buildBalanceSeries() {
-        var samples = []
-        var running = 0
-        for (var i = transactions.length - 1; i >= 0; --i) {
-            running += Number(transactions[i]["amount_msat"] || transactions[i]["amount"] || 0) / 100000000000.0
-            if (running < 0) {
-                running = 0
-            }
-            samples.push(running)
-        }
-        if (!samples.length) {
-            return [0.08, 0.11, 0.13, 0.16, 0.18, 0.24, 0.28, 0.32, 0.34, 0.39, 0.44, 0.48]
-        }
-        if (samples.length === 1) {
-            return [
-                samples[0] * 0.35, samples[0] * 0.4, samples[0] * 0.45, samples[0] * 0.5,
-                samples[0] * 0.58, samples[0] * 0.65, samples[0] * 0.72, samples[0] * 0.78,
-                samples[0] * 0.84, samples[0] * 0.9, samples[0] * 0.95, samples[0]
+    readonly property var mockBalanceRows: [
+        {
+            label: "Assets", subtitle: "Resources owned",
+            total: "4.38 007 404", negative: false,
+            children: [
+                { label: "On-chain holdings",  value: "4.32 953 372" },
+                { label: "Lightning channels", value: "0.04 821 309" },
+                { label: "Cashu (ecash)",      value: "0.00 019 823" },
+                { label: "NWC balances",       value: "0.00 213 500" }
             ]
-        }
+        },
+        { label: "Income",      subtitle: "Money earned",           total: "0.75 520 000", negative: false, children: [] },
+        { label: "Expenses",    subtitle: "Money spent",            total: "0.02 812 410", negative: true,  children: [] },
+        { label: "Liabilities", subtitle: "Debts and obligations",  total: "0.00 000 000", negative: false, children: [] },
+        { label: "Equity",      subtitle: "Owner contributions",    total: "3.60 000 000", negative: false, children: [] }
+    ]
 
-        var out = []
-        var buckets = 12
-        for (var bucket = 0; bucket < buckets; ++bucket) {
-            var position = bucket * (samples.length - 1) / (buckets - 1)
-            var lower = Math.floor(position)
-            var upper = Math.min(samples.length - 1, Math.ceil(position))
-            var fraction = position - lower
-            out.push(samples[lower] * (1 - fraction) + samples[upper] * fraction)
-        }
-        return out
-    }
+    // Track expanded Balance parent rows by label
+    property var expandedBalanceLabels: ["Assets"]
 
-    function formatSignedFiat(value) {
-        var numeric = Number(value || 0)
-        var amount = Qt.locale("de_AT").toString(Math.abs(numeric), "f", 2)
-        if (numeric > 0) {
-            return "+ " + amount
+    readonly property var mockReportTiles: [
+        {
+            title: "Capital gains",
+            subtitle: "FIFO \u00b7 EUR \u00b7 \u00a727a EStG",
+            detail: "YTD realized: + \u20ac 42,118.92",
+            icon: "\u2197"
+        },
+        {
+            title: "Journal entries",
+            subtitle: "Debit / credit \u00b7 double-entry",
+            detail: "32 entries \u00b7 YTD",
+            icon: "\u2261"
+        },
+        {
+            title: "Balance sheet",
+            subtitle: "Assets \u00b7 Liabilities \u00b7 Equity",
+            detail: "As of 2026-04-18",
+            icon: "\u25ad"
         }
-        if (numeric < 0) {
-            return "- " + amount
-        }
-        return amount
-    }
+    ]
 
-    function typeColor(tone) {
-        if (tone === "ok" || tone === "income") {
-            return theme.ok
-        }
-        if (tone === "warn" || tone === "expense") {
-            return theme.accent
-        }
-        return theme.ink2
-    }
+    // Local static state
+    property string chartCurrency: "btc"
+    property string chartRange: "ytd"
+    property string filterRange: "ytd"
 
-    function badgeColor(kind) {
-        var normalized = String(kind || "").toLowerCase()
-        if (normalized.indexOf("descriptor") >= 0) {
-            return theme.pillIndigo
-        }
-        if (normalized.indexOf("xpub") >= 0 || normalized.indexOf("electrum") >= 0) {
-            return theme.pillTeal
-        }
-        if (normalized.indexOf("rpc") >= 0 || normalized.indexOf("esplora") >= 0) {
-            return theme.pillOlive
-        }
-        if (normalized.indexOf("ln") >= 0) {
-            return theme.pillAmber
-        }
-        return theme.pillGreen
-    }
+    // Minimum widths so the layout degrades gracefully when the window narrows
+    readonly property int balanceFiatMinWidth: 540
+    readonly property int connectionsMinWidth: 220
+    readonly property int filtersMinWidth: 240
+    readonly property int transactionsMinWidth: 540
+    readonly property int balancesMinWidth: 360
+    readonly property int reportTileMinWidth: 260
 
-    function balanceRows() {
-        return [
-            {
-                "label": "Assets",
-                "sub": "Resources owned",
-                "value": totalBalanceBtc() + " BTC",
-                "children": limitItems(connections, 4)
-            },
-            {
-                "label": "Transactions",
-                "sub": "Imported history",
-                "value": (metricByLabel("Transactions")["value"] || "0") + " rows",
-                "children": []
-            },
-            {
-                "label": "Journal entries",
-                "sub": "Processed lots",
-                "value": metricByLabel("Journal entries")["value"] || "0",
-                "children": []
-            },
-            {
-                "label": "Quarantines",
-                "sub": "Needs review",
-                "value": metricByLabel("Quarantines")["value"] || "0",
-                "children": []
-            }
-        ]
-    }
+    // ---------------------------------------------------------------------
+    // Layout
+    // ---------------------------------------------------------------------
 
-    ScrollBar.horizontal.policy: ScrollBar.AlwaysOff
+    ScrollView {
+        anchors.fill: parent
+        clip: true
+        ScrollBar.horizontal.policy: ScrollBar.AlwaysOff
 
-    Item {
-        width: root.availableWidth
-        implicitHeight: dashboardVM.hasData ? contentColumn.implicitHeight : emptyShell.implicitHeight
+        ColumnLayout {
+            width: root.width
+            spacing: theme.gridGap
 
-        Column {
-            id: contentColumn
-            visible: dashboardVM.hasData
-            width: parent.width
-            spacing: 10
+            // -----------------------------------------------------------------
+            // Row 1 — Balance over time | Connections | Filters | Fiat · EUR
+            // -----------------------------------------------------------------
 
             GridLayout {
-                width: parent.width
-                columns: wideLayout ? 12 : (midLayout ? 6 : 1)
-                columnSpacing: 10
-                rowSpacing: 10
+                Layout.fillWidth: true
+                Layout.leftMargin: theme.pagePadding
+                Layout.rightMargin: theme.pagePadding
+                Layout.topMargin: theme.pagePadding
+                columns: 4
+                columnSpacing: theme.gridGap
+                rowSpacing: theme.gridGap
 
+                // ----- Balance over time -----
                 Card {
                     Layout.fillWidth: true
-                    Layout.columnSpan: wideLayout ? 4 : (midLayout ? 6 : 1)
-                    eyebrow: "Overview"
+                    Layout.fillHeight: true
+                    Layout.horizontalStretchFactor: 16
+                    Layout.minimumWidth: 360
                     title: "Balance over time"
+
                     action: Component {
                         Row {
-                            spacing: 4
+                            spacing: theme.spacingSm - 2
 
-                            Pill {
-                                text: "BTC"
-                                active: true
+                            SegmentedControl {
+                                anchors.verticalCenter: parent.verticalCenter
+                                model: root.mockChartCurrencies
+                                currentId: root.chartCurrency
+                                itemHeight: theme.controlHeightSm
+                                fontPixelSize: theme.fontCaption
+                                onActivated: root.chartCurrency = id
                             }
 
-                            Pill {
-                                text: currencyLabel()
-                                active: false
-                                tone: "muted"
+                            Button {
+                                anchors.verticalCenter: parent.verticalCenter
+                                flat: true
+                                padding: 0
+                                implicitWidth: theme.controlHeightSm - 2
+                                implicitHeight: theme.controlHeightSm - 2
+
+                                contentItem: Text {
+                                    anchors.fill: parent
+                                    text: "\u21f1"
+                                    color: Design.ink2(theme)
+                                    font.family: Design.mono(theme)
+                                    font.pixelSize: theme.fontCaption
+                                    horizontalAlignment: Text.AlignHCenter
+                                    verticalAlignment: Text.AlignVCenter
+                                }
+
+                                background: Rectangle {
+                                    color: "transparent"
+                                    border.color: Design.line(theme)
+                                    border.width: 1
+                                }
                             }
                         }
                     }
 
-                    Column {
-                        width: parent.width
-                        spacing: 8
+                    ColumnLayout {
+                        anchors.left: parent.left
+                        anchors.right: parent.right
+                        anchors.top: parent.top
+                        spacing: theme.gridGap
 
-                        Canvas {
-                            id: chartCanvas
-                            width: parent.width
-                            height: 180
-                            property var points: root.balanceSeries
-
-                            onPointsChanged: requestPaint()
-
-                            onPaint: {
-                                var ctx = getContext("2d")
-                                ctx.reset()
-
-                                var padLeft = 42
-                                var padRight = 12
-                                var padTop = 12
-                                var padBottom = 22
-                                var plotWidth = width - padLeft - padRight
-                                var plotHeight = height - padTop - padBottom
-                                var maxValue = 0
-                                var i
-
-                                for (i = 0; i < points.length; ++i) {
-                                    if (points[i] > maxValue) {
-                                        maxValue = points[i]
-                                    }
-                                }
-                                if (maxValue <= 0) {
-                                    maxValue = 1
-                                }
-                                maxValue *= 1.15
-
-                                ctx.strokeStyle = theme.line
-                                ctx.lineWidth = 1
-                                ctx.setLineDash([2, 3])
-                                for (i = 0; i < 5; ++i) {
-                                    var y = padTop + (plotHeight * i / 4)
-                                    ctx.beginPath()
-                                    ctx.moveTo(padLeft, y)
-                                    ctx.lineTo(width - padRight, y)
-                                    ctx.stroke()
-                                }
-
-                                ctx.setLineDash([])
-                                if (points.length < 2) {
-                                    return
-                                }
-
-                                function pointX(index) {
-                                    return padLeft + plotWidth * index / (points.length - 1)
-                                }
-
-                                function pointY(value) {
-                                    return padTop + plotHeight - (value / maxValue) * plotHeight
-                                }
-
-                                ctx.beginPath()
-                                for (i = 0; i < points.length; ++i) {
-                                    var x = pointX(i)
-                                    var y2 = pointY(points[i])
-                                    if (i === 0) {
-                                        ctx.moveTo(x, y2)
-                                    } else {
-                                        ctx.lineTo(x, y2)
-                                    }
-                                }
-
-                                ctx.lineTo(pointX(points.length - 1), height - padBottom)
-                                ctx.lineTo(pointX(0), height - padBottom)
-                                ctx.closePath()
-                                ctx.fillStyle = Qt.rgba(0.54, 0.12, 0.17, 0.08)
-                                ctx.fill()
-
-                                ctx.beginPath()
-                                for (i = 0; i < points.length; ++i) {
-                                    var x2 = pointX(i)
-                                    var y3 = pointY(points[i])
-                                    if (i === 0) {
-                                        ctx.moveTo(x2, y3)
-                                    } else {
-                                        ctx.lineTo(x2, y3)
-                                    }
-                                }
-                                ctx.strokeStyle = theme.accent
-                                ctx.lineWidth = 1.5
-                                ctx.stroke()
-
-                                ctx.fillStyle = theme.paper2
-                                ctx.strokeStyle = theme.accent
-                                ctx.lineWidth = 1
-                                for (i = 0; i < points.length; ++i) {
-                                    var cx = pointX(i)
-                                    var cy = pointY(points[i])
-                                    ctx.beginPath()
-                                    ctx.arc(cx, cy, 2.5, 0, Math.PI * 2)
-                                    ctx.fill()
-                                    ctx.stroke()
-                                }
-                            }
+                        BalanceChart {
+                            Layout.fillWidth: true
+                            Layout.preferredHeight: 160
+                            series: root.mockBalanceSeries
+                            currency: root.chartCurrency
                         }
 
-                        Row {
-                            spacing: 22
+                        SegmentedControl {
+                            Layout.fillWidth: true
+                            model: root.mockChartRanges
+                            currentId: root.chartRange
+                            itemHeight: theme.controlHeightMd
+                            fillWidth: true
+                            borderOuter: false
+                            onActivated: root.chartRange = id
+                        }
 
-                            Column {
-                                spacing: 2
+                        RowLayout {
+                            Layout.fillWidth: true
+                            spacing: theme.spacingSm + 6
 
-                                Text {
-                                    text: "Current"
-                                    color: theme.ink3
-                                    font.family: theme.sansFont
-                                    font.pixelSize: 10
-                                    font.bold: true
-                                    font.capitalization: Font.AllUppercase
-                                    font.letterSpacing: 1.1
-                                }
-
-                                Text {
-                                    text: totalBalanceBtc() + " BTC"
-                                    color: theme.ink
-                                    font.family: theme.monoFont
-                                    font.pixelSize: 13
-                                }
+                            KV {
+                                label: "Current"
+                                value: root.hideSensitive
+                                    ? "\u2022 \u2022 \u2022 \u2022"
+                                    : (root.chartCurrency === "eur"
+                                        ? "\u20ac 312,842.77"
+                                        : "4.38000181 \u20bf")
                             }
 
-                            Column {
-                                spacing: 2
-
-                                Text {
-                                    text: "Delta YTD"
-                                    color: theme.ink3
-                                    font.family: theme.sansFont
-                                    font.pixelSize: 10
-                                    font.bold: true
-                                    font.capitalization: Font.AllUppercase
-                                    font.letterSpacing: 1.1
-                                }
-
-                                Text {
-                                    text: "+" + (balanceSeries.length ? balanceSeries[balanceSeries.length - 1] - balanceSeries[0] : 0).toFixed(8) + " BTC"
-                                    color: theme.ok
-                                    font.family: theme.monoFont
-                                    font.pixelSize: 13
-                                }
+                            KV {
+                                label: "\u0394 YTD"
+                                value: root.chartCurrency === "eur"
+                                    ? "+ \u20ac 118,420.50"
+                                    : "+ 1.88000000 \u20bf"
+                                valueColor: theme.positive
                             }
 
-                            Column {
-                                spacing: 2
-
-                                Text {
-                                    text: "Delta 30D"
-                                    color: theme.ink3
-                                    font.family: theme.sansFont
-                                    font.pixelSize: 10
-                                    font.bold: true
-                                    font.capitalization: Font.AllUppercase
-                                    font.letterSpacing: 1.1
-                                }
-
-                                Text {
-                                    text: (balanceSeries.length > 2 ? balanceSeries[balanceSeries.length - 1] - balanceSeries[Math.max(0, balanceSeries.length - 3)] : 0).toFixed(8) + " BTC"
-                                    color: theme.accent
-                                    font.family: theme.monoFont
-                                    font.pixelSize: 13
-                                }
+                            KV {
+                                label: "\u0394 30d"
+                                value: root.chartCurrency === "eur"
+                                    ? "\u2212 \u20ac 1,890.20"
+                                    : "\u2212 0.03 \u20bf"
+                                valueColor: Design.accent(theme)
                             }
+
+                            Item { Layout.fillWidth: true }
                         }
                     }
                 }
 
+                // ----- Connections (pad=false, footer anchored to bottom) -----
                 Card {
                     Layout.fillWidth: true
-                    Layout.columnSpan: wideLayout ? 3 : (midLayout ? 3 : 1)
+                    Layout.fillHeight: true
+                    Layout.horizontalStretchFactor: 10
+                    Layout.minimumWidth: root.connectionsMinWidth
                     title: "Connections"
-                    action: Component {
-                        Text {
-                            text: connections.length
-                            color: theme.ink3
-                            font.family: theme.monoFont
-                            font.pixelSize: 10
-                        }
-                    }
                     pad: false
 
-                    Column {
-                        width: parent.width
+                    action: Component {
+                        Row {
+                            spacing: theme.spacingSm - 2
+
+                            Text {
+                                anchors.verticalCenter: parent.verticalCenter
+                                text: String(root.mockConnections.length)
+                                color: Design.ink3(theme)
+                                font.family: Design.mono(theme)
+                                font.pixelSize: theme.fontMicro
+                                font.letterSpacing: 0.8
+                            }
+
+                            Button {
+                                anchors.verticalCenter: parent.verticalCenter
+                                flat: true
+                                padding: 0
+                                implicitWidth: theme.controlHeightSm - 2
+                                implicitHeight: theme.controlHeightSm - 2
+
+                                contentItem: Text {
+                                    anchors.fill: parent
+                                    text: "\u21bb"
+                                    color: Design.ink2(theme)
+                                    font.family: Design.mono(theme)
+                                    font.pixelSize: theme.fontCaption
+                                    horizontalAlignment: Text.AlignHCenter
+                                    verticalAlignment: Text.AlignVCenter
+                                }
+
+                                background: Rectangle {
+                                    color: "transparent"
+                                    border.color: Design.line(theme)
+                                    border.width: 1
+                                }
+                            }
+                        }
+                    }
+
+                    // Connections body: list rows + footer all as direct
+                    // ColumnLayout children. ColumnLayout.implicitHeight flows
+                    // up through the Card, so the "Add connection" row is
+                    // always a real child of the card rather than an absolutely-
+                    // positioned sibling.
+                    ColumnLayout {
+                        anchors.left: parent.left
+                        anchors.right: parent.right
+                        anchors.top: parent.top
+                        spacing: 0
 
                         Repeater {
-                            model: root.connections
+                            model: root.mockConnections
 
-                            Rectangle {
-                                width: parent.width
-                                height: 62
-                                color: "transparent"
-                                border.width: 0
-
-                                Rectangle {
-                                    visible: index > 0
-                                    anchors.left: parent.left
-                                    anchors.right: parent.right
-                                    anchors.top: parent.top
-                                    height: 1
-                                    color: theme.line
-                                }
-
-                                MouseArea {
-                                    anchors.fill: parent
-                                    hoverEnabled: true
-                                    onClicked: {
-                                        connectionsVM.selectConnection(modelData["id"])
-                                        dashboardVM.selectPage("connection-detail")
-                                    }
-                                }
-
-                                Row {
-                                    anchors.fill: parent
-                                    anchors.leftMargin: 14
-                                    anchors.rightMargin: 14
-                                    spacing: 10
-
-                                    Rectangle {
-                                        width: 24
-                                        height: 24
-                                        anchors.verticalCenter: parent.verticalCenter
-                                        color: badgeColor(modelData["kind"])
-                                        radius: 2
-
-                                        Text {
-                                            anchors.centerIn: parent
-                                            text: String(modelData["kind"] || "").substring(0, 2).toUpperCase()
-                                            color: theme.paper2
-                                            font.family: theme.monoFont
-                                            font.pixelSize: 9
-                                            font.bold: true
-                                        }
-                                    }
-
-                                    Column {
-                                        width: parent.width - 70
-                                        anchors.verticalCenter: parent.verticalCenter
-                                        spacing: 2
-
-                                        Text {
-                                            width: parent.width
-                                            text: modelData["label"]
-                                            color: theme.ink
-                                            font.family: theme.sansFont
-                                            font.pixelSize: 12
-                                            font.bold: true
-                                            elide: Text.ElideRight
-                                        }
-
-                                        Text {
-                                            width: parent.width
-                                            text: (modelData["kind"] || "") + "  |  " + (modelData["transaction_count_label"] || "0")
-                                            color: theme.ink3
-                                            font.family: theme.monoFont
-                                            font.pixelSize: 10
-                                            elide: Text.ElideRight
-                                        }
-                                    }
-
-                                    Rectangle {
-                                        width: 7
-                                        height: 7
-                                        radius: 4
-                                        anchors.verticalCenter: parent.verticalCenter
-                                        color: modelData["status_tone"] === "ok" ? theme.ok : theme.warn
-                                    }
-                                }
+                            ConnectionRow {
+                                Layout.fillWidth: true
+                                Layout.preferredHeight: theme.rowHeightCompact + 2
+                                connectionLabel: modelData.label
+                                balanceLabel: modelData.balance
+                                statusTone: modelData.tone
+                                borderTop: index > 0
+                                hideSensitive: root.hideSensitive
                             }
                         }
 
                         Rectangle {
-                            width: parent.width
-                            height: 48
-                            color: theme.paper
-                            border.width: 0
+                            Layout.fillWidth: true
+                            Layout.preferredHeight: theme.rowHeightCompact + 2
+                            color: Design.paper(theme)
 
                             Rectangle {
                                 anchors.left: parent.left
                                 anchors.right: parent.right
                                 anchors.top: parent.top
                                 height: 1
-                                color: theme.line
+                                color: Design.line(theme)
                             }
 
-                            MouseArea {
+                            Button {
                                 anchors.fill: parent
+                                flat: true
+                                padding: 0
+                                hoverEnabled: true
                                 onClicked: root.requestAddConnection()
-                            }
 
-                            Row {
-                                anchors.fill: parent
-                                anchors.leftMargin: 14
-                                anchors.rightMargin: 14
-                                spacing: 8
-
-                                Rectangle {
-                                    width: 24
-                                    height: 24
-                                    anchors.verticalCenter: parent.verticalCenter
-                                    color: "transparent"
-                                    border.color: theme.ink2
-                                    border.width: 1
-                                    radius: 2
+                                contentItem: Row {
+                                    anchors.centerIn: parent
+                                    spacing: theme.spacingSm
 
                                     Text {
-                                        anchors.centerIn: parent
+                                        anchors.verticalCenter: parent.verticalCenter
                                         text: "+"
-                                        color: theme.ink2
-                                        font.family: theme.monoFont
-                                        font.pixelSize: 12
+                                        color: Design.ink2(theme)
+                                        font.family: Design.mono(theme)
+                                        font.pixelSize: theme.fontBody
+                                    }
+
+                                    Text {
+                                        anchors.verticalCenter: parent.verticalCenter
+                                        text: "Add connection"
+                                        color: Design.ink(theme)
+                                        font.family: Design.sans()
+                                        font.pixelSize: theme.fontBody
+                                        font.weight: Font.Medium
                                     }
                                 }
 
-                                Text {
-                                    anchors.verticalCenter: parent.verticalCenter
-                                    text: "Add connection"
-                                    color: theme.ink
-                                    font.family: theme.sansFont
-                                    font.pixelSize: 12
-                                    font.bold: true
-                                }
-
-                                Text {
-                                    anchors.verticalCenter: parent.verticalCenter
-                                    text: "watch-only"
-                                    color: theme.ink3
-                                    font.family: theme.monoFont
-                                    font.pixelSize: 10
-                                }
+                                background: Rectangle { color: "transparent" }
                             }
                         }
                     }
                 }
 
+                // ----- Filters -----
                 Card {
                     Layout.fillWidth: true
-                    Layout.columnSpan: wideLayout ? 2 : (midLayout ? 3 : 1)
+                    Layout.fillHeight: true
+                    Layout.horizontalStretchFactor: 10
+                    Layout.minimumWidth: root.filtersMinWidth
                     title: "Filters"
+
                     action: Component {
                         Text {
-                            text: "RESET"
-                            color: theme.ink2
-                            font.family: theme.monoFont
-                            font.pixelSize: 10
-                            font.letterSpacing: 1.0
+                            text: "\u21ba RESET"
+                            color: Design.ink2(theme)
+                            font.family: Design.mono(theme)
+                            font.pixelSize: theme.fontCaption
+                            font.letterSpacing: 0.8
                         }
                     }
 
-                    Column {
-                        width: parent.width
-                        spacing: 10
+                    ColumnLayout {
+                        anchors.left: parent.left
+                        anchors.right: parent.right
+                        anchors.top: parent.top
+                        spacing: theme.gridGap
 
-                        Row {
-                            spacing: 6
+                        RowLayout {
+                            Layout.fillWidth: true
+                            spacing: theme.spacingSm - 2
 
-                            InputField {
-                                width: (parent.width - 6) / 2
+                            DateInput {
+                                Layout.fillWidth: true
                                 label: "From"
-                                mono: true
-                                text: "2026-01-01"
-                                readOnly: true
+                                value: "2026-01-01"
                             }
 
-                            InputField {
-                                width: (parent.width - 6) / 2
+                            DateInput {
+                                Layout.fillWidth: true
                                 label: "To"
-                                mono: true
-                                text: "2026-04-19"
-                                readOnly: true
+                                value: "2026-04-18"
                             }
                         }
 
                         Flow {
-                            width: parent.width
-                            spacing: 4
+                            Layout.fillWidth: true
+                            spacing: theme.spacingXs
 
                             Repeater {
-                                model: ["1W", "MTD", "1M", "QTD", "LQ", "YTD"]
+                                model: root.mockFilterRanges
 
                                 Pill {
-                                    text: modelData
-                                    active: modelData === "YTD"
-                                    tone: modelData === "YTD" ? "ink" : "muted"
+                                    text: modelData.label
+                                    active: root.filterRange === modelData.id
+                                    tone: root.filterRange === modelData.id ? "ink" : "muted"
+                                    onClicked: root.filterRange = modelData.id
                                 }
                             }
                         }
 
-                        InputField {
-                            width: parent.width
-                            label: "Account"
-                            text: "All accounts"
-                            rightText: "v"
-                            readOnly: true
-                        }
-                    }
-                }
+                        Column {
+                            Layout.fillWidth: true
+                            spacing: theme.spacingSm - 2
 
-                Card {
-                    Layout.fillWidth: true
-                    Layout.columnSpan: wideLayout ? 3 : (midLayout ? 6 : 1)
-                    title: "Profile \u00b7 " + currencyLabel()
+                            Text {
+                                text: "ACCOUNT"
+                                color: Design.ink3(theme)
+                                font.family: Design.sans()
+                                font.pixelSize: theme.fontCaption
+                                font.weight: Font.DemiBold
+                                font.letterSpacing: 1.4
+                            }
 
-                    GridLayout {
-                        width: parent.width
-                        columns: 2
-                        columnSpacing: 10
-                        rowSpacing: 10
-
-                        Item {
-                            Layout.columnSpan: 2
-                            implicitHeight: 54
-
-                            Column {
-                                spacing: 2
+                            Rectangle {
+                                width: parent.width
+                                height: theme.controlHeightLg - 2
+                                color: Design.paperAlt(theme)
+                                border.color: Design.line(theme)
+                                border.width: 1
 
                                 Text {
-                                    text: totalFiatLabel()
-                                    color: theme.ink
-                                    font.family: theme.serifFont
-                                    font.pixelSize: 28
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    anchors.left: parent.left
+                                    anchors.leftMargin: theme.spacingSm + 2
+                                    text: "All accounts"
+                                    color: Design.ink(theme)
+                                    font.family: Design.sans()
+                                    font.pixelSize: theme.fontBody
                                 }
 
                                 Text {
-                                    text: reportStatus()
-                                    color: reportsVM.statusTone === "ok" ? theme.ok : theme.warn
-                                    font.family: theme.monoFont
-                                    font.pixelSize: 10
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    anchors.right: parent.right
+                                    anchors.rightMargin: theme.spacingSm + 2
+                                    text: "\u25be"
+                                    color: Design.ink3(theme)
+                                    font.family: Design.mono(theme)
+                                    font.pixelSize: theme.fontCaption
                                 }
-                            }
-                        }
-
-                        Column {
-                            spacing: 2
-
-                            Text {
-                                text: "Connections"
-                                color: theme.ink3
-                                font.family: theme.sansFont
-                                font.pixelSize: 10
-                                font.bold: true
-                                font.capitalization: Font.AllUppercase
-                                font.letterSpacing: 1.1
-                            }
-
-                            Text {
-                                text: metricByLabel("Connections")["value"] || "0"
-                                color: theme.ink
-                                font.family: theme.monoFont
-                                font.pixelSize: 13
-                            }
-                        }
-
-                        Column {
-                            spacing: 2
-
-                            Text {
-                                text: "Transactions"
-                                color: theme.ink3
-                                font.family: theme.sansFont
-                                font.pixelSize: 10
-                                font.bold: true
-                                font.capitalization: Font.AllUppercase
-                                font.letterSpacing: 1.1
-                            }
-
-                            Text {
-                                text: metricByLabel("Transactions")["value"] || "0"
-                                color: theme.ink
-                                font.family: theme.monoFont
-                                font.pixelSize: 13
-                            }
-                        }
-
-                        Column {
-                            spacing: 2
-
-                            Text {
-                                text: "Report state"
-                                color: theme.ink3
-                                font.family: theme.sansFont
-                                font.pixelSize: 10
-                                font.bold: true
-                                font.capitalization: Font.AllUppercase
-                                font.letterSpacing: 1.1
-                            }
-
-                            Text {
-                                text: highlightByTitle("Report readiness")["value"] || reportStatus()
-                                color: theme.ink
-                                font.family: theme.monoFont
-                                font.pixelSize: 13
-                            }
-                        }
-
-                        Column {
-                            spacing: 2
-
-                            Text {
-                                text: "Latest activity"
-                                color: theme.ink3
-                                font.family: theme.sansFont
-                                font.pixelSize: 10
-                                font.bold: true
-                                font.capitalization: Font.AllUppercase
-                                font.letterSpacing: 1.1
-                            }
-
-                            Text {
-                                text: highlightByTitle("Latest activity")["value"] || "No imported data"
-                                color: theme.ink
-                                font.family: theme.monoFont
-                                font.pixelSize: 13
                             }
                         }
                     }
                 }
 
+                // ----- Fiat \u00b7 EUR -----
                 Card {
                     Layout.fillWidth: true
-                    Layout.columnSpan: wideLayout ? 7 : (midLayout ? 6 : 1)
+                    Layout.fillHeight: true
+                    Layout.horizontalStretchFactor: 11
+                    Layout.minimumWidth: 220
+                    title: "Fiat \u00b7 EUR"
+
+                    ColumnLayout {
+                        anchors.left: parent.left
+                        anchors.right: parent.right
+                        anchors.top: parent.top
+                        spacing: theme.spacingSm + 4
+
+                        Column {
+                            Layout.fillWidth: true
+                            spacing: 2
+
+                            Text {
+                                text: "CURRENT BTC/EUR"
+                                color: Design.ink3(theme)
+                                font.family: Design.mono(theme)
+                                font.pixelSize: theme.fontMicro
+                                font.letterSpacing: 1.2
+                            }
+
+                            Text {
+                                text: root.hideSensitive ? "\u2022 \u2022 \u2022 \u2022" : "\u20ac 71,420.18"
+                                color: Design.ink(theme)
+                                font.family: Design.sans()
+                                font.pixelSize: theme.fontHeadingXl
+                                font.letterSpacing: -0.2
+                            }
+
+                            Text {
+                                text: "+ 1.42 %  \u00b7  24h"
+                                color: theme.positive
+                                font.family: Design.mono(theme)
+                                font.pixelSize: theme.fontCaption
+                            }
+                        }
+
+                        Rule { Layout.fillWidth: true }
+
+                        GridLayout {
+                            Layout.fillWidth: true
+                            columns: 2
+                            columnSpacing: theme.gridGap
+                            rowSpacing: theme.gridGap
+
+                            KV {
+                                label: "Cost basis"
+                                value: root.hideSensitive ? "\u2022 \u2022 \u2022 \u2022" : "\u20ac 198,502.40"
+                                mono: false
+                            }
+                            KV {
+                                label: "Market value"
+                                value: root.hideSensitive ? "\u2022 \u2022 \u2022 \u2022" : "\u20ac 312,842.77"
+                                mono: false
+                            }
+                            KV {
+                                label: "Unrealized P/L"
+                                value: root.hideSensitive ? "\u2022 \u2022 \u2022 \u2022" : "+ \u20ac 114,340.37"
+                                valueColor: theme.positive
+                                mono: false
+                            }
+                            KV {
+                                label: "Realized YTD"
+                                value: root.hideSensitive ? "\u2022 \u2022 \u2022 \u2022" : "+ \u20ac 42,118.92"
+                                valueColor: theme.positive
+                                mono: false
+                            }
+                        }
+                    }
+                }
+            }
+
+            // -----------------------------------------------------------------
+            // Row 2 — Transactions preview | Balances
+            // -----------------------------------------------------------------
+
+            GridLayout {
+                Layout.fillWidth: true
+                Layout.leftMargin: theme.pagePadding
+                Layout.rightMargin: theme.pagePadding
+                columns: 2
+                columnSpacing: theme.gridGap
+                rowSpacing: theme.gridGap
+
+                // ----- Transactions preview -----
+                Card {
+                    Layout.fillWidth: true
+                    Layout.fillHeight: true
+                    Layout.horizontalStretchFactor: 16
+                    Layout.minimumWidth: root.transactionsMinWidth
                     title: "Transactions"
-                    action: Component {
-                        Text {
-                            text: "OPEN ALL \u2192"
-                            color: theme.ink
-                            font.family: theme.monoFont
-                            font.pixelSize: 10
-                            font.letterSpacing: 1.0
-                        }
-                    }
                     pad: false
 
-                    Column {
-                        width: parent.width
+                    action: Component {
+                        Row {
+                            spacing: theme.spacingSm + 4
+
+                            Text {
+                                anchors.verticalCenter: parent.verticalCenter
+                                text: String(root.mockTransactions.length) + " ENTRIES"
+                                color: Design.ink3(theme)
+                                font.family: Design.mono(theme)
+                                font.pixelSize: theme.fontCaption
+                                font.letterSpacing: 0.8
+                            }
+
+                            Text {
+                                anchors.verticalCenter: parent.verticalCenter
+                                text: "OPEN ALL \u2192"
+                                color: Design.ink(theme)
+                                font.family: Design.mono(theme)
+                                font.pixelSize: theme.fontCaption
+                                font.letterSpacing: 1.0
+                            }
+                        }
+                    }
+
+                    ColumnLayout {
+                        anchors.left: parent.left
+                        anchors.right: parent.right
+                        anchors.top: parent.top
+                        spacing: 0
 
                         Rectangle {
-                            width: parent.width
-                            height: 34
-                            color: theme.paper
-                            border.width: 0
-
-                            Row {
-                                anchors.fill: parent
-                                anchors.leftMargin: 14
-                                anchors.rightMargin: 14
-                                spacing: 0
-
-                                Repeater {
-                                    model: [
-                                        { "label": "Date", "width": 98 },
-                                        { "label": "Type", "width": 84 },
-                                        { "label": "Counterparty", "width": 0, "fill": true },
-                                        { "label": "Sats", "width": 110, "alignRight": true },
-                                        { "label": currencyLabel(), "width": 110, "alignRight": true }
-                                    ]
-
-                                    Text {
-                                        width: modelData["fill"] ? parent.width - 98 - 84 - 110 - 110 : modelData["width"]
-                                        height: parent.height
-                                        verticalAlignment: Text.AlignVCenter
-                                        text: modelData["label"]
-                                        color: theme.ink3
-                                        font.family: theme.sansFont
-                                        font.pixelSize: 9
-                                        font.bold: true
-                                        font.capitalization: Font.AllUppercase
-                                        font.letterSpacing: 1.2
-                                        horizontalAlignment: modelData["alignRight"] ? Text.AlignRight : Text.AlignLeft
-                                    }
-                                }
-                            }
+                            Layout.fillWidth: true
+                            Layout.preferredHeight: theme.rowHeightDefault - 6
+                            color: "transparent"
 
                             Rectangle {
                                 anchors.left: parent.left
                                 anchors.right: parent.right
                                 anchors.bottom: parent.bottom
                                 height: 1
-                                color: theme.ink
+                                color: Design.line(theme)
+                            }
+
+                            RowLayout {
+                                anchors.fill: parent
+                                anchors.leftMargin: theme.cardPadding
+                                anchors.rightMargin: theme.cardPadding
+                                spacing: theme.spacingSm + 4
+
+                                Text { Layout.preferredWidth: 50;  text: "DATE";         color: Design.ink3(theme); font.family: Design.sans(); font.pixelSize: theme.fontMicro; font.weight: Font.DemiBold; font.letterSpacing: 1.2 }
+                                Text { Layout.preferredWidth: 80;  text: "TYPE";         color: Design.ink3(theme); font.family: Design.sans(); font.pixelSize: theme.fontMicro; font.weight: Font.DemiBold; font.letterSpacing: 1.2 }
+                                Text { Layout.fillWidth: true;     text: "COUNTERPARTY"; color: Design.ink3(theme); font.family: Design.sans(); font.pixelSize: theme.fontMicro; font.weight: Font.DemiBold; font.letterSpacing: 1.2 }
+                                Text { Layout.preferredWidth: 130; text: "SATS";         color: Design.ink3(theme); font.family: Design.sans(); font.pixelSize: theme.fontMicro; font.weight: Font.DemiBold; font.letterSpacing: 1.2; horizontalAlignment: Text.AlignRight }
+                                Text { Layout.preferredWidth: 110; text: "\u20ac";       color: Design.ink3(theme); font.family: Design.sans(); font.pixelSize: theme.fontMicro; font.weight: Font.DemiBold; font.letterSpacing: 1.2; horizontalAlignment: Text.AlignRight }
                             }
                         }
 
                         Repeater {
-                            model: root.limitItems(root.transactions, 6)
+                            model: root.mockTransactions
 
-                            Rectangle {
-                                width: parent.width
-                                height: 40
+                            delegate: Rectangle {
+                                Layout.fillWidth: true
+                                Layout.preferredHeight: theme.rowHeightCompact
                                 color: "transparent"
-                                border.width: 0
 
                                 Rectangle {
                                     anchors.left: parent.left
                                     anchors.right: parent.right
                                     anchors.bottom: parent.bottom
                                     height: 1
-                                    color: theme.line
+                                    color: Design.line(theme)
                                 }
 
-                                Row {
+                                RowLayout {
                                     anchors.fill: parent
-                                    anchors.leftMargin: 14
-                                    anchors.rightMargin: 14
-                                    spacing: 0
+                                    anchors.leftMargin: theme.cardPadding
+                                    anchors.rightMargin: theme.cardPadding
+                                    spacing: theme.spacingSm + 4
 
                                     Text {
-                                        width: 98
-                                        height: parent.height
-                                        verticalAlignment: Text.AlignVCenter
-                                        text: String(modelData["occurred_at_label"] || "").replace(" UTC", "")
-                                        color: theme.ink2
-                                        font.family: theme.monoFont
-                                        font.pixelSize: 11
+                                        Layout.preferredWidth: 50
+                                        text: modelData.date
+                                        color: Design.ink2(theme)
+                                        font.family: Design.mono(theme)
+                                        font.pixelSize: theme.fontBodySmall
                                     }
 
                                     Text {
-                                        width: 84
-                                        height: parent.height
-                                        verticalAlignment: Text.AlignVCenter
-                                        text: modelData["kind_label"] || modelData["title"] || ""
-                                        color: typeColor(modelData["type_tone"])
-                                        font.family: theme.monoFont
-                                        font.pixelSize: 10
-                                        font.capitalization: Font.AllUppercase
-                                        font.letterSpacing: 0.8
+                                        Layout.preferredWidth: 80
+                                        text: modelData.type.toUpperCase()
+                                        font.family: Design.mono(theme)
+                                        font.pixelSize: theme.fontMicro
+                                        font.letterSpacing: 1.0
+                                        color: {
+                                            if (modelData.type === "Income") return theme.typeIncome
+                                            if (modelData.type === "Expense") return theme.typeExpense
+                                            if (modelData.type === "Transfer") return theme.typeTransfer
+                                            if (modelData.type === "Swap") return theme.typeSwap
+                                            if (modelData.type === "Mint") return theme.typeMint
+                                            if (modelData.type === "Melt") return theme.typeMelt
+                                            if (modelData.type === "Fee") return theme.typeFee
+                                            return Design.ink2(theme)
+                                        }
                                     }
 
                                     Text {
-                                        width: parent.width - 98 - 84 - 110 - 110
-                                        height: parent.height
-                                        verticalAlignment: Text.AlignVCenter
-                                        text: modelData["counterparty"] || modelData["wallet"] || ""
-                                        color: theme.ink
-                                        font.family: theme.sansFont
-                                        font.pixelSize: 12
+                                        Layout.fillWidth: true
+                                        text: modelData.counter
+                                        color: Design.ink(theme)
+                                        font.family: Design.sans()
+                                        font.pixelSize: theme.fontBody
                                         elide: Text.ElideRight
                                     }
 
                                     Text {
-                                        width: 110
-                                        height: parent.height
-                                        verticalAlignment: Text.AlignVCenter
+                                        Layout.preferredWidth: 130
+                                        text: root.hideSensitive ? "\u2022 \u2022 \u2022 \u2022" : modelData.sats
+                                        color: modelData.sats.indexOf("+") === 0 ? theme.positive : Design.ink(theme)
+                                        font.family: Design.mono(theme)
+                                        font.pixelSize: theme.fontBodySmall
                                         horizontalAlignment: Text.AlignRight
-                                        text: modelData["amount_sats_signed_label"] || ""
-                                        color: Number(modelData["amount_sats"] || 0) >= 0 ? theme.ok : theme.accent
-                                        font.family: theme.monoFont
-                                        font.pixelSize: 11
                                     }
 
                                     Text {
-                                        width: 110
-                                        height: parent.height
-                                        verticalAlignment: Text.AlignVCenter
+                                        Layout.preferredWidth: 110
+                                        text: root.hideSensitive ? "\u2022 \u2022 \u2022 \u2022" : modelData.eur
+                                        color: Design.ink2(theme)
+                                        font.family: Design.mono(theme)
+                                        font.pixelSize: theme.fontBodySmall
                                         horizontalAlignment: Text.AlignRight
-                                        text: formatSignedFiat(modelData["fiat_value"])
-                                        color: Number(modelData["fiat_value"] || 0) >= 0 ? theme.ok : theme.ink2
-                                        font.family: theme.monoFont
-                                        font.pixelSize: 11
                                     }
                                 }
                             }
@@ -896,258 +706,75 @@ ScrollView {
                     }
                 }
 
+                // ----- Balances -----
                 Card {
                     Layout.fillWidth: true
-                    Layout.columnSpan: wideLayout ? 5 : (midLayout ? 6 : 1)
+                    Layout.fillHeight: true
+                    Layout.horizontalStretchFactor: 15
+                    Layout.minimumWidth: root.balancesMinWidth
                     title: "Balances"
 
-                    Column {
-                        width: parent.width
+                    ColumnLayout {
+                        anchors.left: parent.left
+                        anchors.right: parent.right
+                        anchors.top: parent.top
                         spacing: 0
 
                         Repeater {
-                            model: root.balanceRows()
+                            model: root.mockBalanceRows
 
-                            Column {
-                                width: parent.width
-
-                                Rectangle {
-                                    width: parent.width
-                                    height: 40
-                                    color: "transparent"
-                                    border.width: 0
-
-                                    Rectangle {
-                                        visible: index < root.balanceRows().length - 1 || (modelData["children"] && modelData["children"].length > 0)
-                                        anchors.left: parent.left
-                                        anchors.right: parent.right
-                                        anchors.bottom: parent.bottom
-                                        height: 1
-                                        color: theme.line
+                            BalanceRow {
+                                Layout.fillWidth: true
+                                label: modelData.label
+                                subtitle: modelData.subtitle
+                                totalLabel: modelData.total
+                                negative: modelData.negative
+                                bottomBorder: index < root.mockBalanceRows.length - 1
+                                hideSensitive: root.hideSensitive
+                                children_: modelData.children
+                                expanded: root.expandedBalanceLabels.indexOf(modelData.label) !== -1
+                                onToggled: {
+                                    var current = root.expandedBalanceLabels.slice()
+                                    var idx = current.indexOf(modelData.label)
+                                    if (idx === -1) {
+                                        current.push(modelData.label)
+                                    } else {
+                                        current.splice(idx, 1)
                                     }
-
-                                    Row {
-                                        anchors.fill: parent
-                                        spacing: 10
-
-                                        Column {
-                                            width: parent.width - 160
-                                            anchors.verticalCenter: parent.verticalCenter
-                                            spacing: 1
-
-                                            Text {
-                                                text: modelData["label"]
-                                                color: theme.ink
-                                                font.family: theme.serifFont
-                                                font.pixelSize: 15
-                                            }
-
-                                            Text {
-                                                text: modelData["sub"]
-                                                color: theme.ink3
-                                                font.family: theme.sansFont
-                                                font.pixelSize: 11
-                                            }
-                                        }
-
-                                        Text {
-                                            width: 150
-                                            anchors.verticalCenter: parent.verticalCenter
-                                            horizontalAlignment: Text.AlignRight
-                                            text: modelData["value"]
-                                            color: modelData["label"] === "Quarantines" ? theme.accent : theme.ink
-                                            font.family: theme.monoFont
-                                            font.pixelSize: 12
-                                        }
-                                    }
-                                }
-
-                                Repeater {
-                                    model: modelData["children"] || []
-
-                                    Rectangle {
-                                        width: parent.width
-                                        height: 30
-                                        color: "transparent"
-                                        border.width: 0
-
-                                        Rectangle {
-                                            anchors.left: parent.left
-                                            anchors.right: parent.right
-                                            anchors.bottom: parent.bottom
-                                            height: 1
-                                            color: theme.line
-                                            opacity: 0.5
-                                        }
-
-                                        Row {
-                                            anchors.fill: parent
-                                            anchors.leftMargin: 18
-                                            spacing: 8
-
-                                            Text {
-                                                width: parent.width - 148
-                                                anchors.verticalCenter: parent.verticalCenter
-                                                text: "\u2192 " + (modelData["label"] || "")
-                                                color: theme.ink2
-                                                font.family: theme.sansFont
-                                                font.pixelSize: 11
-                                                elide: Text.ElideRight
-                                            }
-
-                                            Text {
-                                                width: 140
-                                                anchors.verticalCenter: parent.verticalCenter
-                                                horizontalAlignment: Text.AlignRight
-                                                text: modelData["balance_label"] || modelData["balance_short"] || ""
-                                                color: theme.ink2
-                                                font.family: theme.monoFont
-                                                font.pixelSize: 11
-                                            }
-                                        }
-                                    }
+                                    root.expandedBalanceLabels = current
                                 }
                             }
                         }
                     }
                 }
             }
+
+            // -----------------------------------------------------------------
+            // Row 3 — Report tiles
+            // -----------------------------------------------------------------
 
             GridLayout {
-                width: parent.width
-                columns: wideLayout ? 3 : 1
-                columnSpacing: 10
-                rowSpacing: 10
+                Layout.fillWidth: true
+                Layout.leftMargin: theme.pagePadding
+                Layout.rightMargin: theme.pagePadding
+                Layout.bottomMargin: theme.pagePadding
+                columns: 3
+                columnSpacing: theme.gridGap
+                rowSpacing: theme.gridGap
 
                 Repeater {
-                    model: root.limitItems(root.reportTiles, 3)
+                    model: root.mockReportTiles
 
-                    Rectangle {
+                    ReportTile {
                         Layout.fillWidth: true
-                        Layout.columnSpan: 1
-                        implicitHeight: 92
-                        color: theme.paper2
-                        border.color: theme.line
-                        border.width: 1
-
-                        MouseArea {
-                            anchors.fill: parent
-                            hoverEnabled: true
-                            onClicked: dashboardVM.selectPage("reports")
-                        }
-
-                        Row {
-                            anchors.fill: parent
-                            anchors.margins: 16
-                            spacing: 14
-
-                            Rectangle {
-                                width: 34
-                                height: 34
-                                color: "transparent"
-                                border.color: theme.ink
-                                border.width: 1
-
-                                Text {
-                                    anchors.centerIn: parent
-                                    text: index === 0 ? "\u2197" : (index === 1 ? "\u2261" : "\u25ad")
-                                    color: theme.ink
-                                    font.family: theme.serifFont
-                                    font.pixelSize: 18
-                                }
-                            }
-
-                            Column {
-                                width: parent.width - 60
-                                anchors.verticalCenter: parent.verticalCenter
-                                spacing: 3
-
-                                Text {
-                                    width: parent.width
-                                    text: modelData["label"] || ""
-                                    color: theme.ink
-                                    font.family: theme.serifFont
-                                    font.pixelSize: 18
-                                    elide: Text.ElideRight
-                                }
-
-                                Text {
-                                    width: parent.width
-                                    text: modelData["summary"] || ""
-                                    color: theme.ink3
-                                    font.family: theme.sansFont
-                                    font.pixelSize: 11
-                                    elide: Text.ElideRight
-                                }
-
-                                Text {
-                                    width: parent.width
-                                    text: modelData["status"] || ""
-                                    color: modelData["status_tone"] === "ok" ? theme.ok : theme.warn
-                                    font.family: theme.monoFont
-                                    font.pixelSize: 11
-                                    elide: Text.ElideRight
-                                }
-                            }
-                        }
+                        Layout.fillHeight: true
+                        Layout.minimumWidth: root.reportTileMinWidth
+                        title: modelData.title
+                        subtitle: modelData.subtitle
+                        detail: modelData.detail
+                        iconGlyph: modelData.icon
                     }
                 }
-            }
-        }
-
-        Column {
-            id: emptyShell
-            visible: !dashboardVM.hasData
-            width: Math.min(parent.width, 620)
-            anchors.horizontalCenter: parent.horizontalCenter
-            anchors.top: parent.top
-            anchors.topMargin: 110
-            spacing: 20
-
-            Grid {
-                anchors.horizontalCenter: parent.horizontalCenter
-                columns: 4
-                columnSpacing: 6
-                rowSpacing: 6
-
-                Repeater {
-                    model: 12
-
-                    Rectangle {
-                        width: 40
-                        height: 28
-                        color: "transparent"
-                        border.color: theme.line2
-                        border.width: 1
-                        opacity: 0.45
-                    }
-                }
-            }
-
-            Text {
-                width: parent.width
-                text: dashboardVM.shellTitle
-                color: theme.ink
-                font.family: theme.serifFont
-                font.pixelSize: 36
-                horizontalAlignment: Text.AlignHCenter
-            }
-
-            Text {
-                width: parent.width
-                text: dashboardVM.shellBody
-                color: theme.ink2
-                font.family: theme.sansFont
-                font.pixelSize: 14
-                wrapMode: Text.WordWrap
-                lineHeight: 1.5
-                horizontalAlignment: Text.AlignHCenter
-            }
-
-            PrimaryButton {
-                anchors.horizontalCenter: parent.horizontalCenter
-                text: connectionsVM.ctaLabel
-                onClicked: root.requestAddConnection()
             }
         }
     }
