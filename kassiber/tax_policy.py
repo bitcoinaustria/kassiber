@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+from importlib import import_module
 
 from .errors import AppError
 
@@ -8,8 +9,7 @@ AUSTRIAN_TAX_COUNTRY = "at"
 DEFAULT_LONG_TERM_DAYS = 365
 DEFAULT_REPORT_GENERATORS = ("open_positions", "rp2_full_report")
 DEFAULT_ACCOUNTING_METHODS = ("fifo", "lifo", "hifo", "lofo")
-AUSTRIAN_ACCOUNTING_METHODS = ("fifo",)
-ACTIVE_TAX_COUNTRIES = (DEFAULT_TAX_COUNTRY,)
+ACTIVE_TAX_COUNTRIES = (DEFAULT_TAX_COUNTRY, AUSTRIAN_TAX_COUNTRY)
 
 
 @dataclass(frozen=True)
@@ -60,17 +60,32 @@ def build_generic_policy(profile):
     )
 
 
+def _load_rp2_austrian_country():
+    try:
+        module = import_module("rp2.plugin.country.at")
+    except ModuleNotFoundError as exc:
+        raise AppError(
+            "Austrian tax support requires rp2 with the `at` country plugin.",
+            code="unsupported",
+            hint=(
+                "Install the Kassiber-maintained rp2 fork from `bitcoinaustria/rp2` "
+                "(Phase 9+ Austrian support)."
+            ),
+            details={"missing_module": "rp2.plugin.country.at"},
+        ) from exc
+    return module.AT()
+
+
 def build_austrian_policy(profile):
-    # Keep legacy Austrian profiles readable until the RP2-backed path lands.
-    long_term_days = int(profile_value(profile, "tax_long_term_days", DEFAULT_LONG_TERM_DAYS) or DEFAULT_LONG_TERM_DAYS)
-    if long_term_days < 0:
-        raise ValueError("tax_long_term_days cannot be negative")
+    country = _load_rp2_austrian_country()
     return TaxPolicy(
         tax_country=AUSTRIAN_TAX_COUNTRY,
-        fiat_currency="EUR",
-        long_term_days=DEFAULT_LONG_TERM_DAYS,
-        accounting_methods=AUSTRIAN_ACCOUNTING_METHODS,
-        report_generators=DEFAULT_REPORT_GENERATORS,
+        fiat_currency=country.currency_iso_code.upper(),
+        long_term_days=country.get_long_term_capital_gain_period(),
+        accounting_methods=tuple(sorted(country.get_accounting_methods())),
+        report_generators=tuple(sorted(country.get_report_generators())),
+        default_accounting_method=country.get_default_accounting_method(),
+        generation_language=country.get_default_generation_language(),
     )
 
 
@@ -84,17 +99,6 @@ def require_tax_country_supported_for_profile_mutation(value):
     country = normalize_tax_country(value)
     if country in ACTIVE_TAX_COUNTRIES:
         return country
-    if country == AUSTRIAN_TAX_COUNTRY:
-        raise AppError(
-            "Austrian tax profiles are currently unavailable in Kassiber.",
-            code="unsupported",
-            hint=(
-                "Use `--tax-country generic` for the active RP2-backed path. "
-                "Future Austrian support will land through the Kassiber-maintained RP2 fork at "
-                "`bitcoinaustria/rp2`."
-            ),
-            details={"tax_country": country, "planned_engine": "bitcoinaustria/rp2"},
-        )
     raise AppError(
         f"Unsupported tax country '{value}'",
         code="validation",
@@ -104,19 +108,8 @@ def require_tax_country_supported_for_profile_mutation(value):
 
 def require_tax_processing_supported(profile):
     country = normalize_tax_country(profile_value(profile, "tax_country"))
-    if country == DEFAULT_TAX_COUNTRY:
+    if country in ACTIVE_TAX_COUNTRIES:
         return
-    if country == AUSTRIAN_TAX_COUNTRY:
-        raise AppError(
-            "Austrian tax processing is currently unavailable in Kassiber.",
-            code="unsupported",
-            hint=(
-                "Use `tax_country=generic` for the active RP2-backed path. "
-                "Future Austrian support will land through the Kassiber-maintained RP2 fork at "
-                "`bitcoinaustria/rp2`."
-            ),
-            details={"tax_country": country, "planned_engine": "bitcoinaustria/rp2"},
-        )
     raise AppError(
         f"Unsupported tax country '{country}'",
         code="validation",

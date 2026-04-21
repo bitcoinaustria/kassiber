@@ -67,7 +67,7 @@ dependencies = [
 requires-dist = [
     { name = "embit", specifier = ">=0.8.0" },
     { name = "pyside6", specifier = ">=6.7,<7" },
-    { name = "rp2", specifier = ">=1.7.2" },
+    { name = "rp2", git = "https://github.com/bitcoinaustria/rp2.git?rev=b66bd060fa26a0e3a3e0aed1169059529da75bb6" },
 ]
 
 [[package]]
@@ -295,7 +295,7 @@ wheels = [
 [[package]]
 name = "rp2"
 version = "1.7.2"
-source = { registry = "https://pypi.org/simple" }
+source = { git = "https://github.com/bitcoinaustria/rp2.git?rev=b66bd060fa26a0e3a3e0aed1169059529da75bb6#b66bd060fa26a0e3a3e0aed1169059529da75bb6" }
 dependencies = [
     { name = "babel" },
     { name = "jsonschema" },
@@ -303,10 +303,7 @@ dependencies = [
     { name = "pycountry" },
     { name = "pyexcel-ezodf" },
     { name = "python-dateutil" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/c8/8a/abb46aef46ef2d05e43642d3873104325a681403ab9857d428eda83abcbd/rp2-1.7.2.tar.gz", hash = "sha256:c373ddade7e450bccb7f7410b56e6614d1cfabec2d32cb12a2f35b64504d4008", size = 6910309, upload-time = "2025-02-15T21:56:36.328Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/72/4e/a02e38561e38d6e019f55c2f2d31e8044928c26fd4c5bc642cc916e081db/rp2-1.7.2-py3-none-any.whl", hash = "sha256:7d8b7d6455e045d9ac2c7f8a78d066a1dc1782043fcf83bb47c0a882ceca2cd0", size = 557224, upload-time = "2025-02-15T21:56:33.763Z" },
+    { name = "tzdata" },
 ]
 
 [[package]]
@@ -459,4 +456,13 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/72/94/1a15dd82efb362ac84269196e94cf00f187f7ed21c242792a923cdb1c61f/typing_extensions-4.15.0.tar.gz", hash = "sha256:0cea48d173cc12fa28ecabc3b837ea3cf6f38c6d1136f85cbaaf598984861466", size = 109391, upload-time = "2025-08-25T13:49:26.313Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/18/67/36e9267722cc04a6b9f15c7f3441c2363321a3ea07da7ae0c0707beb2a9c/typing_extensions-4.15.0-py3-none-any.whl", hash = "sha256:f0fa19c6845758ab08074a0cfa8b7aecb71c999ca73d62883bc25cc018c4e548", size = 44614, upload-time = "2025-08-25T13:49:24.86Z" },
+]
+
+[[package]]
+name = "tzdata"
+version = "2026.1"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/19/f5/cd531b2d15a671a40c0f66cf06bc3570a12cd56eef98960068ebbad1bf5a/tzdata-2026.1.tar.gz", hash = "sha256:67658a1903c75917309e753fdc349ac0efd8c27db7a0cb406a25be4840f87f98", size = 197639, upload-time = "2026-04-03T11:25:22.002Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/b0/70/d460bd685a170790ec89317e9bd33047988e4bce507b831f5db771e142de/tzdata-2026.1-py2.py3-none-any.whl", hash = "sha256:4b1d2be7ac37ceafd7327b961aa3a54e467efbdb563a23655fbfe0d39cfc42a9", size = 348952, upload-time = "2026-04-03T11:25:20.313Z" },
 ]

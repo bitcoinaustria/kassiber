@@ -1,0 +1,81 @@
+{
+  "account_holdings": [
+    {
+      "account_code": "treasury",
+      "account_id": "account-treasury",
+      "account_label": "Treasury",
+      "asset": "BTC",
+      "cost_basis": 30000.0,
+      "quantity": 1.0
+    }
+  ],
+  "cross_asset_pairs": [
+    {
+      "in_asset": "LBTC",
+      "in_id": "swap-in-1",
+      "kind": "swap",
+      "out_asset": "BTC",
+      "out_id": "swap-out-1",
+      "pair_id": "mp-at-swap-1",
+      "policy": "taxable"
+    }
+  ],
+  "entries": [
+    {
+      "account_id": "account-treasury",
+      "asset": "BTC",
+      "cost_basis": null,
+      "description": "at_regime=neu at_pool=wallet-a Vienna Neu buy",
+      "entry_type": "acquisition",
+      "fiat_value": 30000.0,
+      "gain_loss": null,
+      "occurred_at": "2024-06-01T10:00:00Z",
+      "proceeds": null,
+      "profile_id": "profile-at",
+      "quantity": 1.0,
+      "transaction_id": "neu-buy-1",
+      "unit_cost": 30000.0,
+      "wallet_id": "wallet-a",
+      "workspace_id": "workspace-main"
+    }
+  ],
+  "intra_audit": [],
+  "quarantines": [
+    {
+      "detail": {
+        "at_swap_link": "mp-at-swap-1",
+        "incoming_asset": "LBTC",
+        "out_amount": 50000000000.0,
+        "outgoing_asset": "BTC",
+        "reason_code": "needs_two_pass_compute"
+      },
+      "profile_id": "profile-at",
+      "reason": "at_swap_basis_carry_unresolved",
+      "transaction_id": "swap-in-1",
+      "workspace_id": "workspace-main"
+    },
+    {
+      "detail": {
+        "at_swap_link": "mp-at-swap-1",
+        "incoming_asset": "LBTC",
+        "out_amount": 50000000000.0,
+        "outgoing_asset": "BTC",
+        "reason_code": "needs_two_pass_compute"
+      },
+      "profile_id": "profile-at",
+      "reason": "at_swap_basis_carry_unresolved",
+      "transaction_id": "swap-out-1",
+      "workspace_id": "workspace-main"
+    }
+  ],
+  "wallet_holdings": [
+    {
+      "account_code": "treasury",
+      "asset": "BTC",
+      "cost_basis": 30000.0,
+      "quantity": 1.0,
+      "wallet_id": "wallet-a",
+      "wallet_label": "Vienna"
+    }
+  ]
+}

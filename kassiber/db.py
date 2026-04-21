@@ -152,6 +152,8 @@ CREATE TABLE IF NOT EXISTS journal_entries (
     proceeds REAL,
     gain_loss REAL,
     description TEXT,
+    at_category TEXT,
+    at_kennzahl INTEGER,
     created_at TEXT NOT NULL
 );
 
@@ -401,6 +403,8 @@ def ensure_schema_compat(conn):
     ensure_column(conn, "profiles", "tax_country", f"TEXT NOT NULL DEFAULT '{DEFAULT_TAX_COUNTRY}'")
     ensure_column(conn, "profiles", "tax_long_term_days", f"INTEGER NOT NULL DEFAULT {DEFAULT_LONG_TERM_DAYS}")
     ensure_column(conn, "backends", "batch_size", "INTEGER")
+    ensure_column(conn, "journal_entries", "at_category", "TEXT")
+    ensure_column(conn, "journal_entries", "at_kennzahl", "INTEGER")
     _migrate_msat_columns(conn)
 
 
@@ -488,13 +492,16 @@ def _migrate_msat_columns(conn):
                     proceeds REAL,
                     gain_loss REAL,
                     description TEXT,
+                    at_category TEXT,
+                    at_kennzahl INTEGER,
                     created_at TEXT NOT NULL
                 );
                 INSERT INTO journal_entries__msat_new SELECT
                     id, workspace_id, profile_id, transaction_id, wallet_id, account_id,
                     occurred_at, entry_type, asset,
                     CAST(ROUND(quantity * 100000000000.0) AS INTEGER),
-                    fiat_value, unit_cost, cost_basis, proceeds, gain_loss, description, created_at
+                    fiat_value, unit_cost, cost_basis, proceeds, gain_loss, description,
+                    at_category, at_kennzahl, created_at
                 FROM journal_entries;
                 DROP TABLE journal_entries;
                 ALTER TABLE journal_entries__msat_new RENAME TO journal_entries;

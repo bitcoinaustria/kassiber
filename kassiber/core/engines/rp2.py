@@ -14,10 +14,39 @@ from ...errors import AppError
 from ...msat import dec
 from ...tax_policy import build_tax_policy
 from ...transfers import apply_manual_pairs, detect_intra_transfers
+from ..austrian import (
+    AT_SWAP_QUARANTINE_REASON,
+    AT_SWAP_TWO_PASS_REASON_CODE,
+    REGIME_NEU,
+    infer_outbound_regimes,
+    kennzahl_for_disposal_category,
+)
 from ..tax_events import NormalizedTaxAssetInputs, build_tax_quarantine, normalize_tax_asset_inputs
 from .base import TaxEngineLedgerInputs, TaxEngineLedgerResult
 
 _RP2_MODULES = None
+_RP2_EARN_TRANSACTION_TYPES = {
+    "airdrop",
+    "hardfork",
+    "income",
+    "interest",
+    "mining",
+    "staking",
+    "wages",
+}
+_RP2_INBOUND_KIND_TO_TRANSACTION_TYPE = {
+    "airdrop": "AIRDROP",
+    "hardfork": "HARDFORK",
+    "hard_fork": "HARDFORK",
+    "income": "INCOME",
+    "interest": "INTEREST",
+    "lending_interest": "INTEREST",
+    "mining": "MINING",
+    "mining_reward": "MINING",
+    "routing_income": "INCOME",
+    "staking": "STAKING",
+    "wages": "WAGES",
+}
 
 
 @dataclass(frozen=True)
@@ -68,12 +97,113 @@ def _rp2_decimal(value: Any):
     return modules["RP2Decimal"](str(value))
 
 
+def _load_at_country_module():
+    try:
+        return import_module("rp2.plugin.country.at")
+    except ModuleNotFoundError as exc:
+        raise AppError(
+            "Austrian tax support requires rp2 with the `at` country plugin.",
+            code="unsupported",
+            hint=(
+                "Install the Kassiber-maintained rp2 fork from `bitcoinaustria/rp2` "
+                "(Phase 9+ Austrian support)."
+            ),
+            details={"missing_module": "rp2.plugin.country.at"},
+        ) from exc
+
+
+def _classify_at_disposal(gain_loss: Any) -> tuple[str, int | None]:
+    at_module = _load_at_country_module()
+    try:
+        category = at_module.classify_disposal(gain_loss)
+    except AttributeError as exc:
+        raise AppError(
+            "Austrian tax support requires rp2's `classify_disposal` API.",
+            code="unsupported",
+            hint=(
+                "Update the Kassiber rp2 pin to a Phase 9+ build from "
+                "`bitcoinaustria/rp2`."
+            ),
+            details={"missing_symbol": "rp2.plugin.country.at.classify_disposal"},
+        ) from exc
+    category_value = str(getattr(category, "value", category))
+    return category_value, kennzahl_for_disposal_category(category_value)
+
+
+def _compose_event_notes(event: Any) -> str:
+    """Serialize typed Austrian markers plus human description into rp2 notes.
+
+    Markers come first in a fixed order (regime, pool, swap_link) so downstream
+    diffs are stable; free-form description follows. Absent markers produce no
+    token — the rp2 AT plugin treats "absent" and "empty value" differently
+    (empty `at_swap_link=` raises RP2ValueError), so we never emit a bare
+    `key=` token.
+    """
+    tokens: list[str] = []
+    regime = getattr(event, "at_regime", None)
+    if regime:
+        tokens.append(f"at_regime={regime}")
+    pool = getattr(event, "at_pool", None)
+    if pool:
+        tokens.append(f"at_pool={pool}")
+    swap_link = getattr(event, "at_swap_link", None)
+    if swap_link:
+        tokens.append(f"at_swap_link={swap_link}")
+    description = getattr(event, "description", "") or ""
+    if description:
+        tokens.append(description)
+    return " ".join(tokens)
+
+
+def _profile_str(profile: Mapping[str, Any], key: str) -> str:
+    if hasattr(profile, "keys") and key in profile.keys():
+        value = profile[key]
+        if value is None:
+            return ""
+        return str(value).strip()
+    return ""
+
+
+def _normalized_event_kind(event: Any) -> str:
+    raw_row = getattr(event, "raw_row", None) or {}
+    kind = raw_row["kind"] if hasattr(raw_row, "keys") and "kind" in raw_row.keys() else None
+    if kind is None:
+        return ""
+    return str(kind).strip().lower().replace("-", "_").replace(" ", "_")
+
+
+def _rp2_in_transaction_type(event: Any) -> str:
+    kind = _normalized_event_kind(event)
+    return _RP2_INBOUND_KIND_TO_TRANSACTION_TYPE.get(kind, "BUY")
+
+
+def _is_rp2_earn_transaction_type(transaction_type: Any) -> bool:
+    checker = getattr(transaction_type, "is_earn_type", None)
+    if callable(checker):
+        return bool(checker())
+    value = getattr(transaction_type, "value", transaction_type)
+    return str(value or "").strip().lower() in _RP2_EARN_TRANSACTION_TYPES
+
+
+def _compose_transfer_notes(transfer: Any) -> str:
+    tokens: list[str] = []
+    pool = getattr(transfer, "at_pool", None)
+    if pool:
+        tokens.append(f"at_pool={pool}")
+    description = getattr(transfer, "description", "") or ""
+    if description:
+        tokens.append(description)
+    return " ".join(tokens)
+
+
 def _make_rp2_country(profile: Mapping[str, Any]):
     AbstractCountry = _get_rp2_modules()["AbstractCountry"]
     try:
         policy = build_tax_policy(profile)
     except ValueError as exc:
         raise AppError(str(exc)) from exc
+    if policy.tax_country == "at":
+        return _load_at_country_module().AT()
     currency_code = policy.fiat_currency
 
     class KassiberCountry(AbstractCountry):
@@ -276,7 +406,7 @@ def _rp2_asset_state(profile, normalized_inputs: NormalizedTaxAssetInputs, confi
                     crypto_received=_rp2_decimal(transfer.received),
                     row=row_index,
                     unique_id=transfer.out_transaction_id,
-                    notes=transfer.description,
+                    notes=_compose_transfer_notes(transfer),
                 )
             )
             row_index += 1
@@ -304,6 +434,7 @@ def _rp2_asset_state(profile, normalized_inputs: NormalizedTaxAssetInputs, confi
         event = events_by_id[item_id]
         if event.direction == "inbound":
             total_available += event.amount
+            basis = event.carried_basis_fiat if event.carried_basis_fiat is not None else event.fiat_value
             in_set.add_entry(
                 InTransaction(
                     configuration=configuration,
@@ -311,15 +442,15 @@ def _rp2_asset_state(profile, normalized_inputs: NormalizedTaxAssetInputs, confi
                     asset=asset,
                     exchange=event.wallet_label,
                     holder=holder,
-                    transaction_type="BUY",
+                    transaction_type=_rp2_in_transaction_type(event),
                     spot_price=_rp2_decimal(event.spot_price),
                     crypto_in=_rp2_decimal(event.amount),
                     fiat_in_no_fee=_rp2_decimal(event.fiat_value),
-                    fiat_in_with_fee=_rp2_decimal(event.fiat_value),
+                    fiat_in_with_fee=_rp2_decimal(basis),
                     fiat_fee=_rp2_decimal(0),
                     row=row_index,
                     unique_id=event.transaction_id,
-                    notes=event.description,
+                    notes=_compose_event_notes(event),
                 )
             )
             priced_available += event.amount
@@ -374,7 +505,7 @@ def _rp2_asset_state(profile, normalized_inputs: NormalizedTaxAssetInputs, confi
                 fiat_fee=_rp2_decimal(event.fee * event.spot_price),
                 row=row_index,
                 unique_id=event.transaction_id,
-                notes=event.description,
+                notes=_compose_event_notes(event),
             )
         )
         total_available -= needed
@@ -410,6 +541,8 @@ def _rp2_asset_state(profile, normalized_inputs: NormalizedTaxAssetInputs, confi
 
 
 def _append_rp2_journal_entries(entries, computed_data, wallet_refs_by_label, profile, row_by_id, intra_audit):
+    tax_country = _profile_str(profile, "tax_country").lower()
+
     def _wallet_for(transaction):
         label = getattr(transaction, "exchange", None) or getattr(transaction, "from_exchange", None)
         ref = wallet_refs_by_label.get(label)
@@ -449,19 +582,31 @@ def _append_rp2_journal_entries(entries, computed_data, wallet_refs_by_label, pr
     for gain_loss in computed_data.gain_loss_set:
         taxable_event = gain_loss.taxable_event
         wallet = _wallet_for(taxable_event)
+        is_earn = _is_rp2_earn_transaction_type(taxable_event.transaction_type)
         is_intra = (
             taxable_event.unique_id in audit_by_out_id
             and taxable_event.asset == computed_data.asset
             and taxable_event.transaction_type.value.lower() == "move"
         )
-        if is_intra:
+        if is_earn:
+            entry_type = "income"
+        elif is_intra:
             entry_type = "transfer_fee"
         elif taxable_event.transaction_type.value == "FEE":
             entry_type = "fee"
         else:
             entry_type = "disposal"
+        at_category = None
+        at_kennzahl = None
+        event_key: Any = taxable_event.internal_id
+        if tax_country == "at":
+            at_category, at_kennzahl = _classify_at_disposal(gain_loss)
+            # One taxable event can split across multiple Austrian semantic
+            # buckets when RP2 matches against heterogeneous acquired lots, so
+            # keep separate journal rows per category.
+            event_key = (taxable_event.internal_id, at_category)
         event = realized_by_event.setdefault(
-            taxable_event.internal_id,
+            event_key,
             {
                 "transaction_id": taxable_event.unique_id,
                 "wallet": wallet,
@@ -476,6 +621,8 @@ def _append_rp2_journal_entries(entries, computed_data, wallet_refs_by_label, pr
                 "description": taxable_event.notes or (
                     row_by_id[taxable_event.unique_id]["description"] if taxable_event.unique_id in row_by_id else "Outbound transaction"
                 ),
+                "at_category": at_category,
+                "at_kennzahl": at_kennzahl,
             },
         )
         event["quantity"] += dec(gain_loss.crypto_amount)
@@ -488,26 +635,29 @@ def _append_rp2_journal_entries(entries, computed_data, wallet_refs_by_label, pr
         proceeds = event["proceeds"]
         cost_basis = event["cost_basis"]
         gain_loss = event["gain_loss"]
-        entries.append(
-            {
-                "id": str(uuid.uuid4()),
-                "workspace_id": profile["workspace_id"],
-                "profile_id": profile["id"],
-                "transaction_id": event["transaction_id"],
-                "wallet_id": wallet["id"],
-                "account_id": wallet["wallet_account_id"],
-                "occurred_at": event["occurred_at"],
-                "entry_type": event["entry_type"],
-                "asset": event["asset"],
-                "quantity": -event["quantity"],
-                "fiat_value": proceeds,
-                "unit_cost": Decimal("0"),
-                "cost_basis": cost_basis,
-                "proceeds": proceeds,
-                "gain_loss": gain_loss,
-                "description": description,
-            }
-        )
+        quantity = event["quantity"] if event["entry_type"] == "income" else -event["quantity"]
+        entry = {
+            "id": str(uuid.uuid4()),
+            "workspace_id": profile["workspace_id"],
+            "profile_id": profile["id"],
+            "transaction_id": event["transaction_id"],
+            "wallet_id": wallet["id"],
+            "account_id": wallet["wallet_account_id"],
+            "occurred_at": event["occurred_at"],
+            "entry_type": event["entry_type"],
+            "asset": event["asset"],
+            "quantity": quantity,
+            "fiat_value": proceeds,
+            "unit_cost": Decimal("0"),
+            "cost_basis": cost_basis,
+            "proceeds": proceeds,
+            "gain_loss": gain_loss,
+            "description": description,
+        }
+        if event.get("at_category") is not None:
+            entry["at_category"] = event["at_category"]
+            entry["at_kennzahl"] = event["at_kennzahl"]
+        entries.append(entry)
 
     for audit in intra_audit:
         from_wallet = wallet_refs_by_label[audit["from_wallet_label"]]
@@ -633,8 +783,15 @@ class GenericRP2TaxEngine:
                 auto_pairs,
                 inputs.manual_pair_records,
             )
+            swap_link_by_row_id, quarantined_row_ids, swap_quarantines = self._classify_at_cross_asset_pairs(
+                cross_asset_pairs,
+                inputs.rows,
+            )
+            quarantines.extend(swap_quarantines)
             rows_by_asset = defaultdict(list)
             for row in inputs.rows:
+                if row["id"] in quarantined_row_ids:
+                    continue
                 rows_by_asset[row["asset"]].append(row)
             pairs_by_asset = defaultdict(list)
             for pair in all_pairs:
@@ -647,6 +804,7 @@ class GenericRP2TaxEngine:
                     asset_rows,
                     inputs.wallet_refs_by_id,
                     pairs_by_asset.get(asset, []),
+                    at_swap_link_by_row_id=swap_link_by_row_id,
                 )
                 asset_result = self._process_asset(
                     normalized_inputs,
@@ -670,6 +828,87 @@ class GenericRP2TaxEngine:
             account_holdings=dict(account_holdings),
             wallet_holdings=dict(wallet_holdings),
         )
+
+    def _classify_at_cross_asset_pairs(
+        self,
+        cross_asset_pairs: list[dict[str, Any]],
+        rows: Iterable[Mapping[str, Any]],
+    ) -> tuple[dict[str, str], set[str], list[dict[str, Any]]]:
+        """Decide which cross-asset pairs are AT Neu swaps and quarantine them.
+
+        v1 handling (Option C from the handoff contract):
+
+        - Profile is AT + outgoing leg is Neu → quarantine both legs with
+          reason ``at_swap_basis_carry_unresolved``. The legs do not reach
+          rp2 for this pass; the quarantine surfaces in
+          ``journals process`` output so operators can resolve the basis
+          carry (manual override or future two-pass compute).
+        - Profile is AT + outgoing leg is Alt → let both legs flow through
+          as normal SELL + BUY. rp2's AT plugin ignores ``at_swap_link``
+          for Alt because Altvermögen swaps realize under § 31 EStG.
+        - Profile is not AT → no tagging, no quarantine. Cross-asset pairs
+          remain audit-only metadata as today.
+
+        Returns ``(swap_link_by_row_id, quarantined_row_ids, quarantines)``.
+        """
+        tax_country = _profile_str(self.profile, "tax_country").lower()
+        if tax_country != "at" or not cross_asset_pairs:
+            return {}, set(), []
+        rows_by_id = {row["id"]: row for row in rows}
+        rows_by_asset = defaultdict(list)
+        for row in rows:
+            rows_by_asset[row["asset"]].append(row)
+        outbound_regimes_by_row_id: dict[str, str] = {}
+        for asset_rows in rows_by_asset.values():
+            outbound_regimes_by_row_id.update(infer_outbound_regimes(asset_rows))
+        swap_link_by_row_id: dict[str, str] = {}
+        quarantined_row_ids: set[str] = set()
+        quarantines: list[dict[str, Any]] = []
+        for pair in cross_asset_pairs:
+            out_id = pair["out_id"]
+            in_id = pair["in_id"]
+            out_row = rows_by_id.get(out_id)
+            in_row = rows_by_id.get(in_id)
+            if out_row is None or in_row is None:
+                continue
+            regime = outbound_regimes_by_row_id.get(out_id, REGIME_NEU)
+            if regime != REGIME_NEU:
+                # Alt swaps realize. rp2 ignores at_swap_link for Alt, but we
+                # deliberately do NOT set it so the lot-pairing audit trail
+                # reflects a normal disposal + acquisition rather than a
+                # tagged-but-ignored swap.
+                continue
+            # TODO(austrian): replace Option C (quarantine) with Option A
+            # (topological two-pass compute) so we can seed the incoming
+            # leg's carried_basis_fiat from the outgoing asset's pool
+            # average. See docs/austrian-handoff.md for the design.
+            pair_id = pair.get("pair_id") or f"{out_id}->{in_id}"
+            swap_detail = {
+                "outgoing_asset": pair["out_asset"],
+                "incoming_asset": pair["in_asset"],
+                "out_amount": float(out_row["amount"]) if out_row["amount"] is not None else None,
+                "at_swap_link": pair_id,
+                "reason_code": AT_SWAP_TWO_PASS_REASON_CODE,
+            }
+            quarantines.append(
+                build_tax_quarantine(
+                    self.profile,
+                    out_row,
+                    AT_SWAP_QUARANTINE_REASON,
+                    swap_detail,
+                )
+            )
+            quarantines.append(
+                build_tax_quarantine(
+                    self.profile,
+                    in_row,
+                    AT_SWAP_QUARANTINE_REASON,
+                    swap_detail,
+                )
+            )
+            quarantined_row_ids.add(out_id)
+            quarantined_row_ids.add(in_id)
+        return swap_link_by_row_id, quarantined_row_ids, quarantines
 
     def _process_asset(
         self,
