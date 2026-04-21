@@ -97,6 +97,19 @@ def _sample_descriptor_pair():
     )
 
 
+def _sample_multisig_branch_descriptor():
+    from embit import bip32
+
+    keys = []
+    for marker in range(1, 5):
+        root = bip32.HDKey.from_seed(bytes([marker]) * 64)
+        account = root.derive("m/48h/0h/0h/2h")
+        keys.append(
+            f"[{root.my_fingerprint.hex()}/48h/0h/0h/2h]{account.to_public().to_base58()}/<0;1>/*"
+        )
+    return "wsh(\n  sortedmulti(\n    2,\n    " + ",\n    ".join(keys) + "\n  )\n)\n"
+
+
 def _run(data_root, *args):
     """Invoke `python -m kassiber --data-root DATA --machine ARGS...`.
 
@@ -173,6 +186,9 @@ class CliSmokeTest(unittest.TestCase):
             cls.sample_derivation_root,
             cls.sample_fingerprint,
         ) = _sample_descriptor_pair()
+        cls.sample_multisig_descriptor_pretty = _sample_multisig_branch_descriptor()
+        cls.multisig_descriptor_file = Path(cls._tmp.name) / "multisig-descriptor.txt"
+        cls.multisig_descriptor_file.write_text(cls.sample_multisig_descriptor_pretty, encoding="utf-8")
 
     @classmethod
     def tearDownClass(cls):
@@ -342,6 +358,32 @@ class CliSmokeTest(unittest.TestCase):
         self.assertEqual(len(change_only), 1)
         self.assertEqual(change_only[0]["branch_label"], "change")
         self.assertEqual(change_only[0]["derivation_path"], f"{self.sample_derivation_root}/1/1")
+
+    def test_03b_descriptor_file_accepts_pretty_printed_multisig(self):
+        payload = self._cli(
+            "wallets", "create",
+            "--workspace", "Main",
+            "--profile", "Default",
+            "--label", "Pretty Vault",
+            "--kind", "descriptor",
+            "--descriptor-file", str(self.multisig_descriptor_file),
+            "--gap-limit", "5",
+        )
+        self._assert_kind(payload, "wallets.create")
+
+        payload = self._cli(
+            "wallets", "derive",
+            "--workspace", "Main",
+            "--profile", "Default",
+            "--wallet", "Pretty Vault",
+            "--count", "1",
+        )
+        self._assert_kind(payload, "wallets.derive")
+        rows = payload["data"]
+        self.assertEqual(len(rows), 2)
+        self.assertEqual(rows[0]["branch_label"], "receive")
+        self.assertEqual(rows[1]["branch_label"], "change")
+        self.assertEqual(len(rows[0]["key_origins"]), 4)
 
     def test_04_phoenix_import(self):
         payload = self._cli(
