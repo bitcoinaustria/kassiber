@@ -11,6 +11,7 @@ dist/
 .live-data/
 .live-data2/
 .claude/settings.local.json
+.claude/worktrees/
 .kassiber-test/
 log/
 /temp
