@@ -67,7 +67,7 @@ dependencies = [
 requires-dist = [
     { name = "embit", specifier = ">=0.8.0" },
     { name = "pyside6", specifier = ">=6.7,<7" },
-    { name = "rp2", git = "https://github.com/bitcoinaustria/rp2.git?rev=a8c5fa4240d766752787197eb3f50f0765ca3df4" },
+    { name = "rp2", git = "https://github.com/bitcoinaustria/rp2.git?rev=23c944962c775667794b19d66e785058d7aaf599" },
 ]
 
 [[package]]
@@ -295,7 +295,7 @@ wheels = [
 [[package]]
 name = "rp2"
 version = "1.7.2"
-source = { git = "https://github.com/bitcoinaustria/rp2.git?rev=a8c5fa4240d766752787197eb3f50f0765ca3df4#a8c5fa4240d766752787197eb3f50f0765ca3df4" }
+source = { git = "https://github.com/bitcoinaustria/rp2.git?rev=23c944962c775667794b19d66e785058d7aaf599#23c944962c775667794b19d66e785058d7aaf599" }
 dependencies = [
     { name = "babel" },
     { name = "jsonschema" },
