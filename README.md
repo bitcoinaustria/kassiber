@@ -118,6 +118,8 @@ Process journals and run reports:
 # If you have BTC <-> LBTC peg-ins / peg-outs or submarine swaps,
 # pair those legs first with `kassiber transfers pair`.
 python3 -m kassiber journals process
+python3 -m kassiber reports summary
+python3 -m kassiber reports tax-summary
 python3 -m kassiber reports balance-sheet
 python3 -m kassiber reports capital-gains
 python3 -m kassiber ui

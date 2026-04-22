@@ -21,7 +21,8 @@ class TaxEngineLedgerResult:
     tables. ``intra_audit`` contains the same-asset transfer audit trail used by
     the current generic RP2 path. ``cross_asset_pairs`` carries manual
     cross-asset pair metadata for envelope/report consumers without feeding
-    those pairs into RP2.
+    those pairs into RP2. ``tax_summary`` carries RP2 yearly gain/loss summary
+    rows before report-layer totals are added.
 
     ``account_holdings`` keys are ``(account_id, account_code, account_label,
     asset)`` tuples. ``wallet_holdings`` keys are ``(wallet_id, wallet_label,
@@ -33,6 +34,7 @@ class TaxEngineLedgerResult:
     quarantines: list[dict[str, Any]]
     intra_audit: list[dict[str, Any]]
     cross_asset_pairs: list[dict[str, Any]]
+    tax_summary: list[dict[str, Any]]
     account_holdings: dict[tuple[Any, ...], dict[str, Any]]
     wallet_holdings: dict[tuple[Any, ...], dict[str, Any]]
 

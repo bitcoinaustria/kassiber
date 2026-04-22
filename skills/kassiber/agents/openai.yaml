@@ -1,4 +1,4 @@
 interface:
   display_name: "Kassiber"
   short_description: "Help with Kassiber CLI accounting workflows"
-  default_prompt: "Use $kassiber to inspect Kassiber state, manage wallets, process journals, or generate reports."
+  default_prompt: "Use $kassiber to inspect Kassiber state, manage wallets, process journals, or generate reports. Prefer exact CLI rollups over hand calculations."

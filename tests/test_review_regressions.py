@@ -10,6 +10,7 @@ from decimal import Decimal
 from pathlib import Path
 
 from kassiber.cli.main import command_needs_db
+from kassiber.cli.handlers import _audit_transaction_refs
 from kassiber.core.engines import TaxEngineLedgerInputs, build_tax_engine
 from kassiber.errors import AppError
 
@@ -174,6 +175,16 @@ _CROSS_LBTC_CSV = """date,txid,direction,asset,amount,fee,fiat_rate,description
 2026-04-15T10:30:00Z,cross-in-leg,inbound,LBTC,0.10000000,0,82000,Peg-in receive
 """
 
+_MIXED_DISPOSALS_BTC_CSV = """date,txid,direction,asset,amount,fee,fiat_rate,description
+2026-01-01T10:00:00Z,btc-buy,inbound,BTC,0.10000000,0,50000,BTC buy
+2026-02-01T10:00:00Z,btc-sell,outbound,BTC,0.05000000,0,60000,BTC sell
+"""
+
+_MIXED_DISPOSALS_LBTC_CSV = """date,txid,direction,asset,amount,fee,fiat_rate,description
+2026-01-05T10:00:00Z,lbtc-buy,inbound,LBTC,0.20000000,0,40000,LBTC buy
+2026-02-05T10:00:00Z,lbtc-sell,outbound,LBTC,0.10000000,0,45000,LBTC sell
+"""
+
 
 def _json_decimal(value):
     if isinstance(value, Decimal):
@@ -326,6 +337,11 @@ class ReviewRegressionTest(unittest.TestCase):
         self.assertEqual(payload["data"]["fiat_currency"], "EUR")
         self.assertEqual(payload["data"]["gains_algorithm"], "MOVING_AVERAGE_AT")
 
+    def _write_case_file(self, name, contents):
+        path = self.case_dir / name
+        path.write_text(contents, encoding="utf-8")
+        return path
+
     def test_command_needs_db_skips_static_command_surfaces(self):
         self.assertFalse(command_needs_db(Namespace(command="backends", backends_command="kinds")))
         self.assertFalse(command_needs_db(Namespace(command="wallets", wallets_command="kinds")))
@@ -358,6 +374,113 @@ class ReviewRegressionTest(unittest.TestCase):
         self.assertEqual(payload.get("kind"), "error")
         self.assertEqual(payload["error"]["code"], "validation")
         self.assertEqual(payload["error"]["hint"], "Use a smaller --limit; max page size is 1000.")
+
+    def test_audit_transaction_refs_chunks_large_input(self):
+        class _Cursor:
+            def __init__(self, rows):
+                self._rows = rows
+
+            def fetchall(self):
+                return self._rows
+
+        class _Conn:
+            def __init__(self):
+                self.calls = []
+
+            def execute(self, query, params):
+                self.calls.append(len(params))
+                rows = [
+                    {
+                        "id": tx_id,
+                        "external_id": f"ext-{tx_id}",
+                        "occurred_at": "2026-01-01T00:00:00Z",
+                        "asset": "BTC",
+                        "wallet": "Wallet",
+                    }
+                    for tx_id in params[1:]
+                ]
+                return _Cursor(rows)
+
+        conn = _Conn()
+        refs = _audit_transaction_refs(conn, "profile-1", [f"tx-{index}" for index in range(1200)])
+        self.assertEqual(len(refs), 1200)
+        self.assertEqual(conn.calls, [401, 401, 401])
+
+    def test_reports_summary_plain_output_is_human_readable(self):
+        self._bootstrap_profile()
+        payload, result = self._run_json(
+            "wallets", "create",
+            "--workspace", "Main",
+            "--profile", "Default",
+            "--label", "BTC",
+            "--kind", "custom",
+        )
+        self._assert_ok(payload, result, "wallets.create")
+
+        btc_csv = self._write_case_file("summary-plain-btc.csv", _MIXED_DISPOSALS_BTC_CSV)
+        payload, result = self._run_json(
+            "wallets", "import-csv",
+            "--workspace", "Main",
+            "--profile", "Default",
+            "--wallet", "BTC",
+            "--file", str(btc_csv),
+        )
+        self._assert_ok(payload, result, "wallets.import-csv")
+        payload, result = self._run_json("journals", "process", "--workspace", "Main", "--profile", "Default")
+        self._assert_ok(payload, result, "journals.process")
+
+        result = self._run_cli("reports", "summary", "--workspace", "Main", "--profile", "Default")
+        self.assertEqual(result.returncode, 0, msg=result.stderr)
+        self.assertIn("Kassiber Summary Report - Default", result.stdout)
+        self.assertIn("Financial Summary", result.stdout)
+        self.assertIn("Asset Flow", result.stdout)
+        self.assertNotIn("{'wallets_in_scope':", result.stdout)
+        self.assertNotIn("{'cost_basis':", result.stdout)
+
+    def test_tax_summary_total_rows_leave_quantity_blank_for_mixed_assets(self):
+        self._bootstrap_profile()
+        for label in ("BTC", "LBTC"):
+            payload, result = self._run_json(
+                "wallets", "create",
+                "--workspace", "Main",
+                "--profile", "Default",
+                "--label", label,
+                "--kind", "custom",
+            )
+            self._assert_ok(payload, result, "wallets.create")
+
+        btc_csv = self._write_case_file("mixed-btc.csv", _MIXED_DISPOSALS_BTC_CSV)
+        lbtc_csv = self._write_case_file("mixed-lbtc.csv", _MIXED_DISPOSALS_LBTC_CSV)
+        payload, result = self._run_json(
+            "wallets", "import-csv",
+            "--workspace", "Main",
+            "--profile", "Default",
+            "--wallet", "BTC",
+            "--file", str(btc_csv),
+        )
+        self._assert_ok(payload, result, "wallets.import-csv")
+        payload, result = self._run_json(
+            "wallets", "import-csv",
+            "--workspace", "Main",
+            "--profile", "Default",
+            "--wallet", "LBTC",
+            "--file", str(lbtc_csv),
+        )
+        self._assert_ok(payload, result, "wallets.import-csv")
+        payload, result = self._run_json("journals", "process", "--workspace", "Main", "--profile", "Default")
+        self._assert_ok(payload, result, "journals.process")
+
+        payload, result = self._run_json("reports", "tax-summary", "--workspace", "Main", "--profile", "Default")
+        self._assert_ok(payload, result, "reports.tax-summary")
+        rows = payload["data"]
+        detail_rows = [row for row in rows if row["row_type"] == "detail"]
+        self.assertEqual({row["asset"] for row in detail_rows}, {"BTC", "LBTC"})
+        year_total = next(row for row in rows if row["row_type"] == "year_total")
+        grand_total = next(row for row in rows if row["row_type"] == "grand_total")
+        self.assertIsNone(year_total["quantity"])
+        self.assertIsNone(year_total["quantity_msat"])
+        self.assertIsNone(grand_total["quantity"])
+        self.assertIsNone(grand_total["quantity_msat"])
 
     def test_accounts_create_and_wallet_binding(self):
         self._bootstrap_profile()
