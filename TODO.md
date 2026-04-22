@@ -193,6 +193,14 @@ over the shared core after the extraction work is done.
 - [ ] Better cross-asset transfer accounting beyond audit metadata
 - [ ] Revisit per-wallet basis attribution if a jurisdiction ever needs
   physical-lot answers
+- [ ] Adopt a project-bundle storage layout: one SQLite DB per project with
+  project-local blobs, exports, logs, and no active top-level wallet side tree
+- [ ] Move backend definitions and default-backend selection into the project
+  DB; keep dotenv files as bootstrap/dev overrides rather than the canonical
+  storage path
+- [ ] Split wallet descriptor and other sensitive config out of the generic
+  `wallets.config_json` blob into typed project-local tables plus OS keychain
+  references where appropriate
 - [ ] At-rest encryption / OS keychain integration
 - [x] Kassiber skill bundle for agents (`skills/kassiber`)
 - [ ] Optional server/REST mode, still local-first and opt-in

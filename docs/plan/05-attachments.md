@@ -1,6 +1,6 @@
 # Transaction Attachments
 
-**Status:** Historical design note. Attachments have since shipped, but the implementation landed with a simpler CLI and storage layout than this draft describes. Treat `README.md`, `AGENTS.md`, and `kassiber/core/attachments.py` as the source of truth for current behavior until this plan doc is fully reconciled.
+**Status:** Historical design note. Attachments have since shipped, but the implementation landed with a simpler CLI and storage layout than this draft describes. Treat `README.md`, `AGENTS.md`, and `kassiber/core/attachments.py` as the source of truth for current behavior until this plan doc is fully reconciled. Long-term attachment layout should follow the project-bundle storage target in `03-storage-conventions.md`.
 **Scope:** CLI in Phase 0.5, UI drag-drop in Phase 3.
 **Purpose:** Let users tag a receipt PDF (or other file) or a drive link to any transaction. Supports audit trails, personal bookkeeping, and Finanzamt backup.
 
@@ -45,10 +45,10 @@ Migration file: `core/migrations/002_add_transaction_attachments.sql` (or whatev
 
 ### File storage layout
 
-Content-addressed directory under the data root:
+Content-addressed directory under the project bundle:
 
 ```
-~/.kassiber/data/attachments/
+~/.kassiber/projects/<project>/blobs/attachments/
   ab/
     ab2341c9e7...f3.pdf
   cd/
@@ -82,8 +82,8 @@ Just a string. No fetching, no caching, no link-checking. Opening the URL is the
 | User detaches an attachment | Delete the row. GC happens later. |
 | Transaction is deleted | `ON DELETE CASCADE` removes attachment rows. File stays on disk until GC. |
 | User runs `kassiber attachments gc` | Walk the store; for each file, check if any row references the sha256; if none, delete the file. Print summary. |
-| User runs `kassiber backup create` | Archive DB + `attachments/` directory together in a tar |
-| User restores a backup | Archive unpacks to a fresh `~/.kassiber/data/` atomically (via temp dir + rename) |
+| User runs `kassiber backup create` | Archive the whole project bundle, including DB + `blobs/attachments/` |
+| User restores a backup | Archive unpacks to a fresh project directory atomically (via temp dir + rename) |
 | Maximum attachment size | 50 MB per file for MVP; configurable later via `ui:max_attachment_mb` in settings. Hard limit 500 MB (reject with error). |
 | Allowed MIME types | Not restricted. Detected via python-magic or `mimetypes` stdlib; stored but not gatekeeping. |
 
@@ -157,7 +157,7 @@ Orphan cleanup is **not automatic** because:
 
 What GC does:
 1. Build set of referenced sha256s from `transaction_attachments WHERE kind='file'`
-2. Walk `attachments/` directory
+2. Walk `blobs/attachments/` directory
 3. For each file whose sha256 is not in the set, delete it
 4. Report count and bytes freed
 
@@ -169,8 +169,8 @@ Runtime on a 10k-attachment store: <5 seconds. Acceptable as a manual action.
 
 ```
 kassiber.sqlite3           # via sqlite3 .backup to ensure WAL-safe copy
-attachments/               # entire directory tree
-config/                    # backends.env + settings.json
+blobs/attachments/         # entire directory tree
+app.json                   # launcher/UI prefs if explicitly included
 _backup_metadata.json      # version, created_at, hostname
 ```
 
@@ -178,7 +178,7 @@ Restore:
 1. Validate archive structure and metadata
 2. Refuse if schema_version in archive > schema_version the running code supports
 3. Unpack into a temp directory
-4. Atomic swap: rename current `~/.kassiber/data/` to a timestamped backup dir; rename temp to `~/.kassiber/data/`
+4. Atomic swap: rename the current project directory to a timestamped backup dir; rename temp to the project path
 5. Restart any UI worker threads with fresh connections
 6. On any failure: leave original data intact, log error
 
@@ -196,5 +196,5 @@ Restore:
 
 - **Versioning of attachments.** If the user attaches a replacement invoice, they detach the old and attach the new. No history.
 - **Searching inside attachments.** No OCR, no full-text index.
-- **Cloud backup integration.** The user can sync `~/.kassiber/` with their own tool.
+- **Cloud backup integration.** The user can sync the project bundle with their own tool.
 - **Signing / timestamping attachments.** Future feature; keep the data model additive-compatible.
