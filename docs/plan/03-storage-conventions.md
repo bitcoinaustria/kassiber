@@ -93,20 +93,27 @@ and UI worker can cooperate across processes.
 
 | Actor | Mode | Held for |
 |---|---|---|
-| Any CLI command or UI worker performing a read/write operation on the DB or blob store | Shared | The operation itself (one query, one transaction, one blob read, or one short batched transaction) — **not** the full connection lifetime |
+| Any CLI command or UI worker performing a read/write operation on the DB or blob store | Shared | **One logical unit of work** — a single CLI command's full execution, a single view-model refresh, one editor save, one report build, one batched sync transaction — **not** one SQL statement, and **not** the full connection lifetime |
 | `backup_worker` producing an archive | Exclusive | DB snapshot + blob/export copy + manifest write |
 | Restore / Reset / project delete | Exclusive | Staging + swap + generation bump |
 | `kassiber attachments gc` | Exclusive | Full scan + delete pass |
 
 Rules:
 
-- The shared lock is **per-operation, not per-connection**. A long-lived
-  connection (the desktop window's bootstrap connection; a CLI session
-  that issues many queries) stays open between operations but does not
-  pin shared for its entire lifetime. Each operation re-acquires shared,
-  does its work, and releases. This is what lets backup, restore, and
-  reset slot between operations instead of requiring the UI to shut
-  down first.
+- The shared lock is **per-logical-operation, not per-connection and
+  not per-SQL-statement**. "Operation" here is one logical unit of
+  user-visible work: a CLI command's full execution, a view-model's
+  complete refresh, one editor save, one report build, one batched
+  sync transaction. Shared is held across every DB query and blob
+  read that makes up that unit, so a Reset or Restore cannot slot
+  in between two repo calls inside the same refresh and produce a
+  mixed-generation snapshot. A long-lived connection (the desktop
+  window's bootstrap connection; a CLI session) stays open between
+  operations but does not pin shared for its entire lifetime: each
+  new operation re-acquires shared, does its work, and releases.
+  This is what lets backup, restore, and reset slot *between* logical
+  operations instead of requiring the UI to shut down first — while
+  still preventing them from interleaving *within* one.
 - Exclusive-mode holders try `LOCK_EX | LOCK_NB` with a short
   spin-and-retry (default 5 s, configurable). If the exclusive lock
   cannot be acquired in time, the operation aborts with a clear
@@ -122,20 +129,25 @@ Rules:
 
 ### Connection lifetime
 
-Connections are session-scoped; the bundle-level lock is per-operation.
-These two lifetimes must not be confused.
+Connections are session-scoped; the bundle-level lock is
+per-logical-operation. These two lifetimes must not be confused.
 
-- Opening a connection does **not** take the bundle-level shared lock.
-  The DB file handle is kept open for as long as the session runs (the
-  whole UI lifetime for the desktop dashboard; a single CLI invocation
-  for one-shot commands).
-- Every operation on that connection takes shared, checks the
-  generation (see below), does work, releases shared.
-- POSIX `rename()` does not invalidate open file descriptors: without a
-  generation check, a UI connection opened before a restore swap would
-  silently read and write the displaced old bundle through its stale
-  fd. The generation check below is what makes a session-scoped
-  connection safe across restore.
+- Opening a connection does **not** take the bundle-level shared
+  lock. The DB file handle is kept open for as long as the session
+  runs (the whole UI lifetime for the desktop dashboard; a single
+  CLI invocation for one-shot commands).
+- Every logical operation on that connection takes shared at the
+  start of the unit of work (command dispatch, view-model refresh
+  start, editor save begin, report build begin), checks the
+  generation (see below), performs the unit's full body — which
+  may be many DB queries and blob reads — then releases shared.
+  Shared is **not** released between intermediate queries that
+  belong to the same logical unit.
+- POSIX `rename()` does not invalidate open file descriptors:
+  without a generation check, a UI connection opened before a
+  restore swap would silently read and write the displaced old
+  bundle through its stale fd. The generation check below is what
+  makes a session-scoped connection safe across restore.
 
 ### Generation token
 
@@ -1068,13 +1080,22 @@ bundle intact or completes into a clean empty bundle on recovery.
 
 ### Purge flow (also crash-safe)
 
-Purge is the irreversible counterpart to Reset: Reset first, then
-delete every `~/.kassiber/projects/<project>.restore-backup-*/`
-directory for this project so no recovery copy remains on disk.
-Every post-confirmation crash must result in the purge completing
-on the next launch — a Purge interrupted in a window where the
-intent is not yet durable is a privacy failure, because the user
-chose irreversibility and expected all recovery copies to be gone.
+Purge is the irreversible counterpart to Reset: Reset first (so the
+staged-swap machinery handles the live bundle atomically), then
+delete the now-empty canonical project bundle **and** every
+`~/.kassiber/projects/<project>.restore-backup-*/` directory for
+this project so no recovery copy and no empty-shell bundle remain
+on disk. Every post-confirmation crash must result in the purge
+completing on the next launch — a Purge interrupted in a window
+where the intent is not yet durable is a privacy failure, because
+the user chose irreversibility and expected the project to be gone.
+
+Purge must delete the canonical bundle too, not just the recovery
+copies. Reset leaves a fresh empty bundle at
+`~/.kassiber/projects/<project>/`; if Purge only removed the
+`.restore-backup-*` copies, the project name would stay occupied
+under an empty bundle, contradicting the Settings copy that
+promises irreversible deletion.
 
 The purge journal is therefore written **before** the Reset phase
 runs, not after. Its on-disk presence is what binds subsequent
@@ -1087,8 +1108,10 @@ never reaches that point.
    existing `<project>.restore-backup-*/` directory for this
    project. Choose the Reset phase's `reset_backup_path` name
    (timestamp-based, unique) now, up front — the list of
-   directories Purge intends to delete is `existing backups ∪
-   { reset_backup_path }`.
+   directories Purge intends to delete is
+   `existing backups ∪ { reset_backup_path } ∪ { canonical project path }`.
+   The canonical path is listed last so it is deleted only after
+   all recovery copies are gone.
 3. **Persist the purge journal before anything else touches disk.**
    Write
    `~/.kassiber/projects/<project>.purge-journal.json` via the
@@ -1105,15 +1128,19 @@ never reaches that point.
      "pending_purge_targets": [
        "<existing .restore-backup-*>",
        "...",
-       "<reset_backup_path>"
+       "<reset_backup_path>",
+       "<project>"
      ],
      "state":                "reset-pending"
    }
    ```
 
-   From this point on, the user's purge intent is durable. Any
-   crash after this fsync is recovered by the Purge-journal
-   recovery rules below, not by the Reset-journal rules.
+   `pending_purge_targets` always ends with the canonical project
+   path (`"<project>"`, resolved relative to
+   `~/.kassiber/projects/`). From this point on, the user's purge
+   intent is durable. Any crash after this fsync is recovered by
+   the Purge-journal recovery rules below, not by the Reset-journal
+   rules.
 4. Run the Reset phase. Reset uses its own separate Reset journal
    as documented under `Reset follows the same pattern`, but with
    `reset_backup_path` and `reset_staging_path` set to the names
@@ -1122,14 +1149,19 @@ never reaches that point.
 5. When Reset commits (its journal reaches `completed` and is
    deleted), update the purge journal's `state` to `"purging"`,
    `fsync` the journal, `fsync` `~/.kassiber/projects/`.
-6. For each directory in `pending_purge_targets`:
-   a. `rm -r <target>`, then `fsync` `~/.kassiber/projects/`.
+6. For each directory in `pending_purge_targets`, in order:
+   a. `rm -r <target>` (the canonical project path is deleted last
+      because it appears last in the list; every `.restore-backup-*`
+      copy goes first). `fsync` `~/.kassiber/projects/` after the
+      removal.
    b. Rewrite the journal with that entry removed from
       `pending_purge_targets` via the temp-file-plus-rename
       pattern, `fsync` the journal, `fsync`
       `~/.kassiber/projects/`. The journal shrinks monotonically;
       on any crash the remaining entries are exactly the
       directories still on disk.
+   When this loop finishes, both the canonical project path and
+   every recovery copy are gone. The project name is free for reuse.
 7. When `pending_purge_targets` is empty, set
    `state: "completed"`, fsync the journal, fsync
    `~/.kassiber/projects/`.
@@ -1143,14 +1175,14 @@ overrides any Reset-journal state: the user asked for purge, so
 recovery will always complete the purge, not stop at "Reset
 finished."
 
-| Journal `state` | Canonical `.generation` | `reset_backup_path` / `reset_staging_path` | Action |
+| Journal `state` | Canonical `<project>/` | `reset_backup_path` / `reset_staging_path` | Action |
 |---|---|---|---|
-| reset-pending | source | neither exists yet | Reset phase never started. Acquire exclusive and run the full Reset flow now using `reset_backup_path` / `reset_staging_path` from the journal, flip the journal to `purging`, then proceed with step 6. |
-| reset-pending | source | reset_staging_path exists, reset_backup_path absent | Reset was mid-stage when the process died. Drive Reset forward from whichever step matches its own reset-journal (if present) or start Reset fresh (if not). Flip purge journal to `purging` once Reset commits. |
-| reset-pending | source | reset_backup_path exists (Reset's rollback ran) | Reset aborted before committing. Complete the Reset now from scratch (same `reset_backup_path` may or may not be reusable — if it exists, pick a new timestamp suffix and update the purge journal's `reset_backup_path` + `pending_purge_targets` accordingly). |
-| reset-pending | target | reset_backup_path exists, reset_staging_path absent | Reset committed; the state transition to `purging` was lost. Flip the purge journal to `purging`, continue with step 6. |
-| purging | target | reset_backup_path may or may not still be listed | Continue step 6 over the remaining `pending_purge_targets`. For each target not present on disk, drop it from the journal. |
-| completed | target | any | Delete the journal, `fsync` `~/.kassiber/projects/`. |
+| reset-pending | exists, `.generation` == source | neither exists yet | Reset phase never started. Acquire exclusive and run the full Reset flow now using `reset_backup_path` / `reset_staging_path` from the journal, flip the journal to `purging`, then proceed with step 6. |
+| reset-pending | exists, `.generation` == source | reset_staging_path exists, reset_backup_path absent | Reset was mid-stage when the process died. Drive Reset forward from whichever step matches its own reset-journal (if present) or start Reset fresh (if not). Flip purge journal to `purging` once Reset commits. |
+| reset-pending | exists, `.generation` == source | reset_backup_path exists (Reset's rollback ran) | Reset aborted before committing. Complete the Reset now from scratch (same `reset_backup_path` may or may not be reusable — if it exists, pick a new timestamp suffix and update the purge journal's `reset_backup_path` + `pending_purge_targets` accordingly). |
+| reset-pending | exists, `.generation` == target | reset_backup_path exists, reset_staging_path absent | Reset committed; the state transition to `purging` was lost. Flip the purge journal to `purging`, continue with step 6. |
+| purging | exists, `.generation` == target, OR absent (already deleted in step 6) | reset_backup_path may or may not still be listed | Continue step 6 over the remaining `pending_purge_targets`. For each target not present on disk, drop it from the journal. The canonical path may already be gone if the last step 6a ran; that is fine — drop it from the list like any other missing target. |
+| completed | absent | any | Delete the journal, `fsync` `~/.kassiber/projects/`. |
 | any other combination | — | — | Refuse auto-recovery; surface the journal contents plus observed filesystem state; block the project from opening until the operator reconciles manually. |
 
 The purge journal is the only durable authority on purge intent.
