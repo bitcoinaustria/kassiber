@@ -60,6 +60,7 @@ kassiber --format plain reports balance-sheet
 Use this first for "what are the totals?" style questions:
 
 ```bash
+kassiber reports summary
 kassiber --machine reports summary
 kassiber --machine reports summary --wallet satoshi-liquid
 ```
@@ -93,6 +94,8 @@ The command emits:
 - RP2 yearly detail rows grouped by `year`, `asset`, `transaction_type`, and capital-gains type
 - a `year_total` row for each year
 - a final `grand_total` row
+
+Total rows only emit quantity when the grouped rows all belong to the same asset. Mixed-asset totals leave quantity blank because cross-asset crypto amounts are not additive.
 
 Prefer these rows over summing `capital-gains` output manually.
 
