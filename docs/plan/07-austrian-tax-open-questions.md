@@ -1,6 +1,6 @@
 # Austrian Tax — Open Questions (Live Backlog)
 
-This document catalogues tax questions where **BMF has not published a clear position** or where authoritative sources disagree. It is planning input for the future Austrian RP2-backed path; Kassiber does not apply these defaults today. For each:
+This document catalogues tax questions where **BMF has not published a clear position** or where authoritative sources disagree. It is planning input for the current Austrian RP2-backed path as coverage expands; Kassiber should not silently apply unresolved defaults today. For each:
 
 - A default behavior the engine applies
 - The evidence informing that default
@@ -230,7 +230,7 @@ This is a pure pooling rule.
 
 **What would change the default.** A BMF clarification on cross-provider offset handling.
 
-**Planned engine behavior.** This is not fully supported in MVP because Kassiber does not yet persist provider domicile / withheld-KESt metadata in a structured way. Until that metadata exists, the future Austrian output should treat provider-withheld tax as outside the supported automation boundary and surface a warning or quarantine as appropriate.
+**Planned engine behavior.** This is not fully supported in MVP because Kassiber does not yet persist provider domicile / withheld-KESt metadata in a structured way. Until that metadata exists, Austrian output should treat provider-withheld tax as outside the supported automation boundary and surface a warning or quarantine as appropriate.
 
 **Status.** Open. Priority: medium for users with multiple domestic providers.
 

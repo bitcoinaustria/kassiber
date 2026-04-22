@@ -13,22 +13,23 @@ A **local-first Bitcoin accounting CLI**, written in Python.
 - Entry point: `kassiber/cli/main.py` (via `kassiber/__main__.py`)
 - Phase 0 core extraction is green: the old `app.py` monolith has been split into reusable `kassiber.core` modules plus a dedicated CLI layer
 - Storage: SQLite at `~/.kassiber/data/kassiber.sqlite3`, integer msat amounts (never float)
-- Tax engine: [RP2](https://github.com/eprbell/rp2), with `generic` as the only active Kassiber tax-processing mode today and future Austrian support planned through [bitcoinaustria/rp2](https://github.com/bitcoinaustria/rp2)
+- Tax engine: [RP2](https://github.com/eprbell/rp2), with both `generic` and `at` profiles running through `kassiber/core/engines/rp2.py`; Austrian semantics come from [bitcoinaustria/rp2](https://github.com/bitcoinaustria/rp2), while Kassiber keeps normalization, provenance, and report mapping
 - External I/O: Esplora / Electrum / Bitcoin Core RPC; CoinGecko for rates; Phoenix/BTCPay/BIP329 importers
 - Test contract: `tests/test_cli_smoke.py` pins the machine-readable JSON envelope emitted by every CLI command — this is the reliable seam the whole plan hangs on
 - Data model: workspaces → profiles → accounts → wallets → transactions, with journal_entries, journal_quarantines, transaction_pairs, tags, bip329_labels, backends, rates_cache
 
 ## What we're building
 
-Three concurrent tracks, all grounded in a single library refactor:
+A few concurrent tracks, all grounded in a single library refactor:
 
 1. **Phase 0 — Core extraction.** Carve a reusable `kassiber.core` library out of `app.py`. CLI becomes a thin translator. Precondition for everything else. See `02-core-extraction.md`.
 2. **Desktop UI.** PySide6 + QML application that imports `kassiber.core` directly. Clams-inspired layout. See `04-desktop-ui.md`.
-3. **Future Austrian tax support on top of RP2.** Kassiber keeps the normalization/provenance layer and local-first workflow, while Austrian tax semantics move into a Kassiber-maintained RP2 fork / plugin path. See `06-austrian-tax-engine.md`.
+3. **Austrian tax support on top of RP2.** Kassiber keeps the normalization/provenance layer and local-first workflow, while Austrian tax semantics live in the Kassiber-maintained RP2 fork / plugin path. Remaining work is mostly around exports, review UX, and broader coverage. See `06-austrian-tax-engine.md`.
 
-Plus one small new feature with cross-cutting impact:
+Plus two smaller cross-cutting feature tracks:
 
 4. **Transaction attachments** — tag a receipt PDF or drive link to any transaction. Useful beyond tax (audit, bookkeeping). See `05-attachments.md`.
+5. **External-document reconciliation** — local ingestion, matching, review, and tax normalization for BTC-linked invoices, receipts, and related business documents, without turning Kassiber into an invoicing tool. See `08-external-document-reconciliation.md`.
 
 ## Design constraints (from the project owner)
 
@@ -61,14 +62,14 @@ Plus one small new feature with cross-cutting impact:
 | Phase | Scope | Rough effort |
 |---|---|---|
 | **0** | Library extraction: `kassiber.core`, `kassiber.cli`. Smoke tests stay green. | Done |
-| **0.5** | Austrian RP2-fork/plugin integration + E 1kv report + attachments feature. CLI-only for all of it. | 7–10 days |
+| **0.5** | Austrian RP2 integration, attachments, and rates/journal follow-through. E 1kv export remains pending. | Mostly done |
 | **1** | PySide6 app shell, empty state matching Clams screenshot 2 | 2 days |
 | **2** | Read-only dashboard: six tiles wired to `core/` | 4–6 days |
 | **3** | Add Connection modal, sync action with progress, CSV import, attachment drag-drop | 4–5 days |
 | **4** | Welcome wizard, Settings dialog, briefcase packaging for macOS | 3–4 days |
 | **5+** | Tile drag/resize, tag management UI, dark mode, Linux/Windows builds, code-signing | TBD |
 
-**MVP surface (end of Phase 4):** single-user desktop app plus CLI, SQLite-backed, attachments on transactions, backup/restore, with Austrian tax support only after the RP2-fork path is implemented.
+**MVP surface (end of Phase 4):** single-user desktop app plus CLI, SQLite-backed, attachments on transactions, backup/restore, with Austrian tax processing through RP2 and accountant-reviewed Austrian export work still to follow.
 
 ## Document index
 
@@ -82,10 +83,11 @@ Plus one small new feature with cross-cutting impact:
 | [05-attachments.md](./05-attachments.md) | Transaction attachments: schema, storage, CLI, UI, backup. |
 | [06-austrian-tax-engine.md](./06-austrian-tax-engine.md) | Austrian RP2-backed tax support, data model, E 1kv report layout. |
 | [07-austrian-tax-open-questions.md](./07-austrian-tax-open-questions.md) | Live backlog of genuinely unsettled AT tax questions. |
+| [08-external-document-reconciliation.md](./08-external-document-reconciliation.md) | Scope boundary and architecture for external business documents, matching, and tax normalization. |
 
 ## What this plan is not
 
-- **Not legal or tax advice.** Future Austrian output should ship behind a disclaimer and review gate once the RP2-backed path exists.
+- **Not legal or tax advice.** Austrian export output should ship behind a disclaimer and review gate.
 - **Not a commitment to dates.** Effort estimates are for sequencing, not scheduling.
 - **Not final on report aesthetics.** E 1kv output will evolve with user's Steuerberater feedback.
 - **Not a hidden schema redesign.** Phase 0 keeps today's runtime/bootstrap contract, `TEXT` IDs, scope fields, and machine envelope shape unless a later doc calls out a deliberate migration.
@@ -103,4 +105,4 @@ Plus one small new feature with cross-cutting impact:
 
 ## Next action
 
-RP2 fork integration kickoff. Recommended: keep Kassiber-side work focused on normalization, provenance capture, transfer preparation, and report integration while Austrian tax semantics move into `bitcoinaustria/rp2`. Until then, `generic` remains the only supported tax-processing mode. Details in `06-austrian-tax-engine.md`.
+Keep Kassiber-side work focused on accountant-facing exports and external-document reconciliation while RP2 continues to own tax semantics and computation. Details in `06-austrian-tax-engine.md` and `08-external-document-reconciliation.md`.

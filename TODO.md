@@ -134,10 +134,6 @@ top of the monolith.
 
 ### 0.5d - Austrian tax support
 
-- [x] Remove the Kassiber-side Austrian engine and make `generic` the only
-  active processing path for now
-- [x] Fail fast for Austrian profiles until a real RP2-backed
-  implementation exists
 - [x] Fork RP2 to `bitcoinaustria/rp2` so Austrian tax logic can live in the
   tax engine rather than expanding Kassiber-side tax math
 - [x] Add Austrian country / accounting / report plugins in the RP2 fork
@@ -157,6 +153,11 @@ top of the monolith.
   current behavior without breaking the smoke contract
 - [x] Add explicit per-event overrides only after the core engine boundary
   is stable
+
+### 0.5f - External document reconciliation groundwork
+
+- [ ] Add [docs/plan/08-external-document-reconciliation.md](docs/plan/08-external-document-reconciliation.md) follow-through in code and schema rather than letting merchant/invoice scope drift ad hoc
+- [ ] Keep BTCPay file import conservative (`deposit` / `withdrawal`) until a confirmed document match or explicit review step reclassifies the transaction
 
 ## Phase 1 - Desktop App
 
@@ -180,7 +181,14 @@ over the shared core after the extraction work is done.
 - [ ] Custom CSV mapping DSL for arbitrary wallet exports
 - [ ] Rates/account adjustment surface
 - [ ] Per-profile Tor proxy configuration
-- [ ] BTCPay Greenfield API-backed sync/import flow
+- [ ] BTCPay Greenfield API-backed provenance import with stable invoice/payment ids and raw payload snapshots
+- [ ] External document records for invoices, receipts, contracts, and related BTC-linked business evidence
+- [ ] Many-to-many document/payment links with allocations and reconciliation state
+- [ ] Deterministic matching rules before any AI assistance
+- [ ] Review/confirmation workflow for proposed matches and commercial annotations
+- [ ] Split commercial annotations from RP2-facing tax primitives during journal preparation
+- [ ] Accountant-facing export of matched BTC subledger rows with document references
+- [ ] Opt-in local AI extraction and tie-breaking only after deterministic matching is solid
 - [ ] Richer transfer pairing for multi-leg self-transfers
 - [ ] Better cross-asset transfer accounting beyond audit metadata
 - [ ] Revisit per-wallet basis attribution if a jurisdiction ever needs
