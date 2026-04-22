@@ -50,22 +50,42 @@ Content-addressed directory under the project bundle:
 ```
 ~/.kassiber/projects/<project>/blobs/attachments/
   ab/
-    ab2341c9e7...f3.pdf
+    ab2341c9e7f3...        # on-disk name is the sha256, no extension
   cd/
-    cd5e9a1b34...7f.jpg
+    cd5e9a1b347f...
   ...
 ```
 
 Rules:
-- Filename on disk is `<sha256>.<ext>`, where the extension is preserved from the upload when known
-- The first two hex chars of the sha256 form the subdirectory, keeping any one directory from growing unbounded
-- Identical files (same sha256) are stored once; the DB row captures the user-facing filename + note per attachment
-- On attach: compute sha256 of the source file, copy (not move) into the store if not already present
-- On detach: decrement a logical reference count. If no remaining `transaction_attachments` row points at this sha256, the file becomes eligible for GC. Do GC on `kassiber vacuum` or an explicit `kassiber attachments gc` command — not inline (simpler, safer).
+- **Filename on disk is `<sha256>`** — no extension, no decoration. The
+  sha256 is the full on-disk identity. User-facing filenames (and their
+  extensions) are preserved only in the `transaction_attachments` DB
+  row; on-disk blob naming is purely content-addressed.
+- Why extensionless: if the same bytes are attached twice under
+  different filenames (`invoice.pdf` once, `invoice.bin` once), both
+  attachments share the single on-disk blob. Any scheme that bakes an
+  extension into the on-disk filename either picks a winner (lossy) or
+  stores the blob twice (breaks dedup). Backup and restore also rely
+  on being able to locate a blob by its sha256 alone — putting the
+  extension in the DB row keeps blob identity decoupled from user
+  metadata.
+- The first two hex chars of the sha256 form the subdirectory, keeping
+  any one directory from growing unbounded.
+- Identical files (same sha256) are stored once; the DB row captures
+  the user-facing filename + note per attachment.
+- On attach: compute sha256 of the source file, copy (not move) into
+  the store if not already present. Write the blob first, `fsync`, then
+  commit the DB row — content-first ordering that backup relies on
+  (see `03-storage-conventions.md`).
+- On detach: delete the DB row; the on-disk blob is not removed
+  inline. GC happens on an explicit `kassiber attachments gc`
+  command — simpler, safer, and backup excludes un-GC'd orphan blobs
+  from archives so the "keep the blob for later" choice does not
+  leak deleted documents into future backups.
 
 Why content-addressed:
 - Deduplication: same invoice attached to two related transactions costs one copy on disk
-- Integrity: re-computing sha256 on read detects tampering
+- Integrity: re-computing sha256 on read detects tampering; trivial verification because the on-disk filename IS the expected hash
 - Rename-safe: the user-facing filename is metadata, not the storage key
 
 ### URL attachments
@@ -82,8 +102,8 @@ Just a string. No fetching, no caching, no link-checking. Opening the URL is the
 | User detaches an attachment | Delete the row. GC happens later. |
 | Transaction is deleted | `ON DELETE CASCADE` removes attachment rows. File stays on disk until GC. |
 | User runs `kassiber attachments gc` | Walk the store; for each file, check if any row references the sha256; if none, delete the file. Print summary. |
-| User runs `kassiber backup create` | Archive the whole project bundle, including DB + `blobs/attachments/` |
-| User restores a backup | Archive unpacks to a fresh project directory atomically (via temp dir + rename) |
+| User runs `kassiber backup create` | MVP scope: produce an archive containing DB + only the attachment blobs the DB still references (orphans excluded) + exports + manifest, via the canonical Backup flow in `03-storage-conventions.md`. Attach-plan does not restate the archive format here; see that doc for the single source of truth. |
+| User restores a backup | Not in MVP. Both in-place Restore and Install-bundle-as-new-project are deferred until an authenticated bundle format lands — see `MVP does not ship in-place restore` in `03-storage-conventions.md`. Restoring an archive today is not supported inside Kassiber. |
 | Maximum attachment size | 50 MB per file for MVP; configurable later via `ui:max_attachment_mb` in settings. Hard limit 500 MB (reject with error). |
 | Allowed MIME types | Not restricted. Detected via python-magic or `mimetypes` stdlib; stored but not gatekeeping. |
 
@@ -163,25 +183,67 @@ What GC does:
 
 Runtime on a 10k-attachment store: <5 seconds. Acceptable as a manual action.
 
-## Backup + restore
+## Backup (MVP); install-bundle and in-place restore (deferred)
 
-Attachments travel inside the project bundle. The canonical bundle manifest,
-the schema_version gate, and the atomic-swap restore flow live in
-`03-storage-conventions.md` — this doc no longer restates them so the two
-cannot drift.
+Attachments travel inside the project bundle. The canonical bundle
+manifest, the schema gate, and every flow that reads or writes the
+bundle live in `03-storage-conventions.md` — this doc no longer
+restates them so the two cannot drift. In MVP the only active
+archive flow is **Backup**. Both archive consumers — Install bundle
+as new project, and the in-place Restore — are documented there but
+deferred until an authenticated bundle format lands.
 
 Attachment-specific notes:
 
-- `blobs/attachments/` is part of the bundle; the content-addressed layout
-  described above is exactly what gets archived.
-- `kassiber attachments gc` must not run while a bundle archive is being
-  produced. The worker that drives `Backup Data` takes a lock that blocks
-  GC until archival completes, so the archive cannot observe a half-freed
-  tree.
-- On restore, the DB rows are authoritative for "what attachments exist."
-  If the archive is missing a blob the DB still references, the UI should
-  surface a broken-attachment warning on that row rather than silently
-  degrade it.
+- `blobs/attachments/` is part of the bundle; the content-addressed
+  layout described above is exactly what gets archived.
+- **Content-first ordering.** Attach-file must write the blob to
+  disk (under its final extensionless `<sha256>` path — see File
+  storage layout above) and fsync both the file and its containing
+  subdirectory before it commits the DB row that references it.
+  This guarantees that any attachment row visible in a consistent
+  DB snapshot has its blob durably on disk by the time a concurrent
+  backup reads `blobs/attachments/<xx>/<sha256>`. Without the
+  subdirectory fsync, a crash between write and commit could leave
+  a ghost directory entry whose contents were never persisted.
+- **Project-wide locking.** `attachments gc` and Backup take the
+  project-wide exclusive lock defined under
+  `Interprocess coordination` in `03-storage-conventions.md`, and
+  mutually exclude each other. Attach-file, detach, and transaction
+  delete take the shared lock — they may run alongside readers but
+  cannot run while Backup or GC holds exclusive. There is no
+  concurrent blob deletion during Backup, because GC is the only
+  path that removes blobs and GC cannot coexist with Backup. (When
+  in-place Restore and Install-bundle eventually ship, they join
+  this set as additional exclusive-mode ops — Install-bundle
+  against its own global `~/.kassiber/.import.lock`, in-place
+  Restore against the project lock.)
+- **Manifest-verified consistency, hashed not just listed.** The
+  archive's `_bundle_manifest.json` enumerates every blob the
+  snapshot DB references as `{sha256, path}`. When the deferred
+  archive-consumption flows ship, they verify by recomputing the
+  sha256 of each unpacked blob and refusing the archive if any
+  hash does not match its manifest entry. Presence at the right
+  path is necessary but not sufficient; corrupted or bit-rotted
+  bytes at the right filename still reject. This is a corruption
+  guard, not a tamper guard — the manifest lives inside the
+  archive, so a forger can rewrite both the blobs and the manifest.
+  That is exactly why neither Install-bundle nor in-place Restore
+  ships in MVP.
+- **Orphan blobs are excluded from backups.** Backup copies only the
+  blobs the DB snapshot still references, not the full
+  `blobs/attachments/` tree. An attachment the user detached — but
+  that `kassiber attachments gc` has not yet reclaimed from live disk —
+  does not ride along into the archive. That closes an otherwise
+  silent data-retention leak: a document the user thought they removed
+  would otherwise follow every subsequent backup to their accountant,
+  another machine, or off-site storage. Live disk may still hold the
+  orphan blob until the next GC, which is a user-visible housekeeping
+  choice, not a data-retention failure.
+- **Broken-blob surfacing.** If a live bundle ever does reference a blob
+  that is missing (recovered-by-hand archive, external tampering,
+  filesystem damage), the UI surfaces a broken-attachment warning on
+  that row rather than silently degrading it.
 
 ## Implementation touchpoints
 
