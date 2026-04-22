@@ -1,6 +1,6 @@
 # Austrian Tax Support On RP2 — Design
 
-**Status:** Kassiber-side Austrian tax processing has been removed. `generic` is the only active tax-processing mode in Kassiber today. This document describes the future Austrian path in the Kassiber-maintained RP2 fork at `https://github.com/bitcoinaustria/rp2`, where Austrian output should remain explicitly review-gated once it exists again.
+**Status:** Austrian tax processing is active again through the shared RP2 adapter in `kassiber/core/engines/rp2.py`, using `rp2.plugin.country.at.AT` from the Kassiber-maintained fork at `https://github.com/bitcoinaustria/rp2`. This document captures the current architecture plus the remaining Austrian backlog, especially E 1kv export and review UX. See `docs/austrian-handoff.md` for the current marker / carry-basis contract.
 **Module:** RP2 fork plugins for Austrian country / accounting / reports, integrated from Kassiber through `kassiber/core/engines/rp2.py`
 **Report:** Planned E 1kv export layered on top of the shared journal/report pipeline and backed by RP2-fork output.
 **Legal gate:** Output requires Steuerberater review before filing. A disclaimer surfaces on first use and on every report.
@@ -39,7 +39,7 @@ Phase 0.5 therefore introduces `kassiber/core/tax_events.py`:
 - Output: typed `NormalizedTaxEvent` records for the engine.
 - Rule: if the normalizer cannot prove the event type with acceptable confidence, it emits an ambiguous event and the engine quarantines it.
 
-This layer is shared by both the generic RP2 path and the future Austrian RP2-fork path, so the Austrian work improves the generic engine boundary instead of forking the ingestion story.
+This layer is shared by both the generic and Austrian RP2-backed paths, so the Austrian work improves the generic engine boundary instead of forking the ingestion story.
 
 ## Legal framework (sources)
 
@@ -206,7 +206,7 @@ class TaxEngine(Protocol):
     def build_ledger_state(self, inputs: TaxEngineLedgerInputs) -> TaxEngineLedgerResult: ...
 ```
 
-The future Austrian RP2-backed path should fit this same boundary. Austrian-specific summaries such as E 1kv totals belong in a reporting layer built from the shared journal state, not in a separate Kassiber-only tax engine return type.
+The Austrian RP2-backed path should keep fitting this same boundary. Austrian-specific summaries such as E 1kv totals belong in a reporting layer built from the shared journal state, not in a separate Kassiber-only tax engine return type.
 
 ## RP2 fork requirements
 
@@ -271,38 +271,43 @@ First use of `at` policy shows a one-time modal:
 >
 > The output is designed to support your preparation of the E 1kv form but must be reviewed by a Steuerberater before filing.
 >
-> Kassiber maintains a list of genuinely unsettled questions in the Austrian crypto tax landscape (see `docs/plan/07-austrian-tax-open-questions.md`). Those notes are planning input for the future RP2-backed Austrian path; Kassiber does not apply them today.
+> Kassiber maintains a list of genuinely unsettled questions in the Austrian crypto tax landscape (see `docs/plan/07-austrian-tax-open-questions.md`). Those notes are planning input for the current RP2-backed Austrian path; unresolved cases should surface as review notes, warnings, or quarantines rather than silent guesses.
 
 A footer on every E 1kv PDF repeats the Steuerberater-review gate and lists any open-question defaults used in that report.
 
-## Policy registration target
+## Current policy registration
 
 ```python
 # kassiber/tax_policy.py
 def build_austrian_policy(profile):
+    country = _load_rp2_austrian_country()
     return TaxPolicy(
         tax_country="at",
-        fiat_currency="EUR",
-        long_term_days=365,  # preserved field shape for future Austrian RP2 integration
-        accounting_methods=("fifo",),
-        report_generators=("open_positions", "rp2_full_report"),
+        fiat_currency=country.currency_iso_code.upper(),
+        long_term_days=country.get_long_term_capital_gain_period(),
+        accounting_methods=tuple(sorted(country.get_accounting_methods())),
+        report_generators=tuple(sorted(country.get_report_generators())),
+        default_accounting_method=country.get_default_accounting_method(),
+        generation_language=country.get_default_generation_language(),
     )
 
 
 # kassiber/core/engines/__init__.py
 def build_tax_engine(profile):
-    return RP2BackedTaxEngine(profile)
+    return GenericRP2TaxEngine(profile)
 ```
 
-The target state is one RP2-backed adapter in Kassiber. Austrian profile selection still happens from Kassiber profiles, but the adapter should choose Austrian country, accounting, and report plugins in the RP2 fork rather than a Kassiber-side Austrian ledger builder.
+The current state is one shared RP2-backed adapter in Kassiber. Austrian profile selection still happens from Kassiber profiles, but the adapter chooses Austrian country, accounting, and report plugins in the RP2 fork rather than a Kassiber-side Austrian ledger builder.
 
 ## Testing
 
-Current coverage in `tests/test_review_regressions.py` verifies the fail-fast behavior for Austrian profiles and should grow into the parity suite for the future RP2-backed path:
+Current coverage in `tests/test_review_regressions.py`, `tests/test_austrian_classification.py`, and the Austrian snapshot fixtures exercises the live RP2-backed path and should keep growing into the broader parity suite:
 
-- new profile creation or profile switches to `tax_country="at"` are rejected as unsupported
-- legacy Austrian profiles fail fast for `journals process`
-- legacy Austrian profiles fail fast for report commands even if stale journal data already exists
+- Austrian profiles process successfully through rp2's `AT` plugin
+- disposal categories and Kennzahl mappings round-trip into persisted journal/report rows
+- Neu cross-asset `--policy carrying-value` pairs carry basis when data is sufficient and quarantine when it is not
+- income-like Austrian receipts such as staking produce both acquisition and income entries
+- the shared normalization seam still quarantines unresolved Austrian inputs instead of guessing
 
 The scenarios below remain the desired target suite as provenance support expands:
 

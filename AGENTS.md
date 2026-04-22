@@ -5,6 +5,7 @@
 - Kassiber is a local-first Bitcoin accounting CLI.
 - The CLI entrypoint lives in [kassiber/cli/main.py](kassiber/cli/main.py). The remaining command implementation surface lives in [kassiber/cli/handlers.py](kassiber/cli/handlers.py).
 - Desktop planning is captured in [docs/plan/00-overview.md](docs/plan/00-overview.md), [docs/plan/01-stack-decision.md](docs/plan/01-stack-decision.md), and [docs/plan/04-desktop-ui.md](docs/plan/04-desktop-ui.md).
+- External-document reconciliation scope and architecture are captured in [docs/plan/08-external-document-reconciliation.md](docs/plan/08-external-document-reconciliation.md).
 - The Phase 1 desktop shell lives in [kassiber/ui/dashboard.py](kassiber/ui/dashboard.py), [kassiber/ui/app.py](kassiber/ui/app.py), and [kassiber/ui/viewmodels/](kassiber/ui/viewmodels/).
 - Supporting modules (bottom-up — no back-edges into the CLI layer):
   - [kassiber/errors.py](kassiber/errors.py) — `AppError` typed exception carrying `code`, `hint`, `details`, `retryable`.
@@ -28,7 +29,8 @@
 - Third-party dependency and license notes are tracked in [THIRD_PARTY_LICENSES.md](THIRD_PARTY_LICENSES.md).
 - In-flight and deferred work is tracked in [TODO.md](TODO.md) — it is the
   current execution backlog for core extraction, attachments, tax-engine
-  cleanup, Austrian tax support, and the later desktop UI work.
+  cleanup, Austrian tax support, external-document reconciliation, and the
+  later desktop UI work.
 
 Phase 0 core extraction is green: the CLI/runtime surface is split out of
 the old `kassiber/app.py` monolith, the smoke suite passes, and future
@@ -84,7 +86,7 @@ List endpoints with `--limit` also accept `--cursor`. The cursor is an opaque ba
 
 ## Tax engine
 
-- The tax engine now goes through `kassiber/core/engines.build_tax_engine(...)`; today only the generic path runs through `kassiber/core/engines/rp2.py`.
+- The tax engine now goes through `kassiber/core/engines.build_tax_engine(...)`; both `generic` and `at` profiles route through `kassiber/core/engines/rp2.py`, with Austrian profiles selecting `rp2.plugin.country.at.AT` through the shared seam.
 - Journal processing first normalizes raw transaction rows into in-memory tax events via `kassiber/core/tax_events.py`; raw `transactions` rows remain the source of truth and no derived regime state is persisted back onto them.
 - Under-specified tax semantics that used to fall through raw-row handling should quarantine at the normalization boundary instead of being guessed. That includes malformed same-asset transfers, missing required pricing, and unsupported tax directions.
 - The generic RP2 engine now owns the per-profile journal orchestration behind the engine seam: transfer detection, manual-pair application, per-asset grouping, normalized event preparation, and holdings aggregation all live in `kassiber/core/engines/rp2.py`, while CLI handlers only load rows and persist the resulting journal state.
@@ -103,10 +105,13 @@ List endpoints with `--limit` also accept `--cursor`. The cursor is an opaque ba
 ## Working rules
 
 - Keep the project local-first.
+- Keep Kassiber as the BTC-side subledger and reconciliation layer; invoice issuance, VAT workflow, and the company general ledger stay outside Kassiber.
+- For merchant and document-linked flows, keep provenance capture, commercial matching, and RP2-facing tax normalization as separate layers.
 - Prefer standard-library solutions unless a dependency clearly buys a lot.
 - Keep `--machine` output deterministic — add a `kind` to every new envelope.
 - Keep envelope error shapes consistent: use `AppError(code=..., hint=..., retryable=..., details=...)`.
 - Per-asset pooling is intentional so RP2 `IntraTransaction` works across wallets; per-wallet output remains via `BalanceSet`. Do not regress to per-wallet RP2 calls without thinking through the transfer story first.
+- RP2 owns tax primitives and computation; do not push invoice, ERP, or broader business-workflow concepts into RP2 unless the tax math itself truly requires them.
 - Austrian tax semantics live on the rp2 side (plugin: `rp2.plugin.country.at`). Kassiber emits typed markers, carries basis across swaps, and maps rp2's disposal categories onto current Austrian report buckets / Kennzahlen; it does not re-implement Alt/Neu classification or moving-average math beyond the documented marker/quarantine contract in [docs/austrian-handoff.md](docs/austrian-handoff.md).
 - Preserve the default `mempool.space` Esplora backend unless there is a strong reason to change it.
 - Prefer additive schema changes that work with `CREATE TABLE IF NOT EXISTS`.

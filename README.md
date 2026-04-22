@@ -37,6 +37,12 @@ Today:
 
 The intended split is simple: Kassiber prepares and explains; RP2 computes.
 
+Kassiber is also the planned home for external-document reconciliation around
+Bitcoin payments: BTCPay provenance, local document matching, review, and
+tax-normalization decisions. Invoice issuing, VAT workflows, and the merchant
+general ledger stay outside Kassiber. See
+[docs/plan/08-external-document-reconciliation.md](docs/plan/08-external-document-reconciliation.md).
+
 ## Local state
 
 By default Kassiber stores state under `~/.kassiber/`:
@@ -132,6 +138,7 @@ Planning and architecture docs:
 - [docs/plan/00-overview.md](docs/plan/00-overview.md)
 - [docs/plan/04-desktop-ui.md](docs/plan/04-desktop-ui.md)
 - [docs/plan/06-austrian-tax-engine.md](docs/plan/06-austrian-tax-engine.md)
+- [docs/plan/08-external-document-reconciliation.md](docs/plan/08-external-document-reconciliation.md)
 
 Contributor docs:
 
@@ -144,8 +151,8 @@ Contributor docs:
 
 Notable gaps today:
 
-- Austrian tax processing is unavailable until the Kassiber-side integration lands
 - Austrian E 1kv export is not shipped yet
+- BTCPay API-backed provenance import is not implemented yet; file imports remain the current path
 - descriptor/xpub live sync through `bitcoinrpc` is not implemented yet
 - some Lightning node adapters are declared but do not sync yet
 - `custom` wallet import mapping is not implemented yet
