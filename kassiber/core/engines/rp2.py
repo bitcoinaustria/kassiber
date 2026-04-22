@@ -955,9 +955,20 @@ class GenericRP2TaxEngine:
             # (e.g. Austrian `at_swap_link` marker must appear on two different assets)
             # that Kassiber's annotator structurally cannot detect — a paired leg that
             # was never imported can't be annotated, so only a post-hoc scan sees it.
+            # `validate_input_data` was added in bitcoinaustria/rp2 PR #4. If an older rp2
+            # is installed (editable checkout, stale `uv sync`), fall through with a clear
+            # upgrade hint rather than a confusing generic failure.
+            validator = getattr(configuration.country, "validate_input_data", None)
+            if validator is None:
+                raise AppError(
+                    "Installed rp2 is missing `AbstractCountry.validate_input_data`. "
+                    "Cross-asset swap-link validation requires bitcoinaustria/rp2 PR #4 or later.",
+                    code="unsupported",
+                    hint="Run `uv sync --refresh-package rp2` (or reinstall rp2 from the pin in pyproject.toml).",
+                )
             input_data_list = [prepared.input_data for _, prepared in prepared_by_asset if prepared.input_data is not None]
             try:
-                configuration.country.validate_input_data(input_data_list)
+                validator(input_data_list)
             except Exception as exc:
                 raise AppError(
                     f"RP2 cross-asset input validation failed: {exc}",
