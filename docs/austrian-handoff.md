@@ -111,8 +111,9 @@ For every cross-asset pair under an AT profile:
 
 The two-pass implementation works as follows:
 
-1. Walk all AT events across all assets in timestamp order, maintaining a
-   running pool state keyed by `(asset, pool_id)`.
+1. Walk all AT events plus same-asset transfer moves across all assets in
+   timestamp order, maintaining a running pool state keyed by
+   `(asset, pool_id)`.
 2. For each matched Neu cross-asset carrying-value pair, look up
    `avg = pool_avg_by(out_asset, out_pool)` at the swap timestamp.
 3. Set `carried_basis_fiat = outgoing_amount * avg` on the incoming
@@ -137,7 +138,6 @@ failure mode:
 
 Those quarantines are no longer the default Austrian swap path; they are
 only the safety net when the swap cannot be annotated correctly.
-legs (wrong).
 
 ## Disambiguation rule
 

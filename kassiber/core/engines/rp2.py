@@ -18,7 +18,6 @@ from ..austrian import (
     AT_SWAP_QUARANTINE_REASON,
     REGIME_NEU,
     infer_regime_from_timestamp,
-    infer_outbound_regimes,
     kennzahl_for_disposal_category,
     resolve_pool_id,
 )
@@ -65,6 +64,15 @@ class _RP2AssetState:
     quarantines: list[dict[str, Any]]
     intra_audit: list[dict[str, Any]]
     balance_set: Any | None
+
+
+@dataclass(frozen=True)
+class _ATPrepassOp:
+    kind: str
+    sort_key: tuple[str, str, str]
+    row: Mapping[str, Any] | None = None
+    out_row: Mapping[str, Any] | None = None
+    in_row: Mapping[str, Any] | None = None
 
 
 def _get_rp2_modules() -> dict[str, Any]:
@@ -197,14 +205,13 @@ def _compose_transfer_notes(transfer: Any) -> str:
     return " ".join(tokens)
 
 
-def _row_sort_key(row: Mapping[str, Any], delayed_inbound_ids: set[str]) -> tuple[str, int, str, str]:
-    """Mirror SQL ordering, but force swap out-legs before matched in-legs."""
+def _row_sort_key(row: Mapping[str, Any]) -> tuple[str, str, str]:
+    """Mirror SQLite ordering for rows consumed by the Austrian pre-pass."""
     created_at = ""
     if hasattr(row, "keys") and "created_at" in row.keys() and row["created_at"] is not None:
         created_at = str(row["created_at"])
     return (
         str(row["occurred_at"]),
-        1 if str(row["id"]) in delayed_inbound_ids else 0,
         created_at,
         str(row["id"]),
     )
@@ -822,7 +829,13 @@ class GenericRP2TaxEngine:
                 auto_pairs,
                 inputs.manual_pair_records,
             )
-            swap_link_by_row_id, carried_basis_by_row_id, quarantined_row_ids, swap_quarantines = self._annotate_at_cross_asset_pairs(
+            (
+                at_regime_by_row_id,
+                swap_link_by_row_id,
+                carried_basis_by_row_id,
+                quarantined_row_ids,
+                swap_quarantines,
+            ) = self._annotate_at_cross_asset_pairs(
                 cross_asset_pairs,
                 inputs.rows,
                 all_pairs,
@@ -844,6 +857,7 @@ class GenericRP2TaxEngine:
                     asset_rows,
                     inputs.wallet_refs_by_id,
                     pairs_by_asset.get(asset, []),
+                    at_regime_by_row_id=at_regime_by_row_id,
                     at_swap_link_by_row_id=swap_link_by_row_id,
                     at_carried_basis_by_row_id=carried_basis_by_row_id,
                 )
@@ -875,39 +889,27 @@ class GenericRP2TaxEngine:
         cross_asset_pairs: list[dict[str, Any]],
         rows: Iterable[Mapping[str, Any]],
         intra_pairs: Iterable[Mapping[str, Any]],
-    ) -> tuple[dict[str, str], dict[str, Decimal], set[str], list[dict[str, Any]]]:
+    ) -> tuple[dict[str, str], dict[str, str], dict[str, Decimal], set[str], list[dict[str, Any]]]:
         """Annotate AT cross-asset carrying-value swaps for rp2.
 
         Cross-asset pairs stay audit-only unless the profile is Austrian and
         the operator explicitly paired them with ``policy=carrying-value``.
-        For those pairs, Kassiber computes the outgoing pool average in a
-        pre-pass and seeds the incoming leg's carried basis for rp2's
-        ``moving_average_at`` path. The logic is asset-agnostic, so both
-        BTC->LBTC and LBTC->BTC are supported.
+        For those pairs, Kassiber walks the same timestamp-ordered stream of
+        raw rows plus same-asset transfers that the journal path relies on,
+        so Neu pool state moves forward consistently across transfer hops and
+        same-timestamp swap chains.
         """
         tax_country = _profile_str(self.profile, "tax_country").lower()
         if tax_country != "at" or not cross_asset_pairs:
-            return {}, {}, set(), []
-        rows_by_id = {row["id"]: row for row in rows}
-        transfer_row_ids = {
-            str(pair["out"]["id"])
-            for pair in intra_pairs
-        } | {
-            str(pair["in"]["id"])
-            for pair in intra_pairs
-        }
-        rows_by_asset = defaultdict(list)
-        for row in rows:
-            if str(row["id"]) in transfer_row_ids:
-                continue
-            rows_by_asset[row["asset"]].append(row)
-        outbound_regimes_by_row_id: dict[str, str] = {}
-        for asset_rows in rows_by_asset.values():
-            outbound_regimes_by_row_id.update(infer_outbound_regimes(asset_rows))
+            return {}, {}, {}, set(), []
+        rows_by_id = {str(row["id"]): row for row in rows}
+        at_regime_by_row_id: dict[str, str] = {}
         swap_link_by_row_id: dict[str, str] = {}
         carried_basis_by_row_id: dict[str, Decimal] = {}
         quarantined_row_ids: set[str] = set()
         quarantines: list[dict[str, Any]] = []
+        alt_available_by_asset = defaultdict(lambda: Decimal("0"))
+        pool_state = defaultdict(lambda: {"quantity": Decimal("0"), "cost_basis": Decimal("0")})
         carrying_pairs_by_out_id: dict[str, dict[str, Any]] = {}
         carrying_pairs_by_in_id: dict[str, dict[str, Any]] = {}
         for pair in cross_asset_pairs:
@@ -919,26 +921,98 @@ class GenericRP2TaxEngine:
             in_row = rows_by_id.get(in_id)
             if out_row is None or in_row is None:
                 continue
-            regime = outbound_regimes_by_row_id.get(out_id, REGIME_NEU)
-            if regime != REGIME_NEU:
-                continue
             pair_id = str(pair.get("pair_id") or f"{out_id}->{in_id}")
             enriched_pair = {
                 **pair,
                 "pair_id": pair_id,
                 "out_row": out_row,
                 "in_row": in_row,
+                "status": "pending",
             }
             carrying_pairs_by_out_id[out_id] = enriched_pair
             carrying_pairs_by_in_id[in_id] = enriched_pair
 
-        if not carrying_pairs_by_out_id:
-            return {}, {}, set(), []
+        def _pool_key(row: Mapping[str, Any]) -> tuple[str, str]:
+            return (str(row["asset"]), resolve_pool_id(row["wallet_id"]))
 
-        pool_state = defaultdict(lambda: {"quantity": Decimal("0"), "cost_basis": Decimal("0")})
-        delayed_inbound_ids = set(carrying_pairs_by_in_id)
+        def _current_regime(row: Mapping[str, Any]) -> str:
+            asset = str(row["asset"])
+            regime = infer_regime_from_timestamp(str(row["occurred_at"]))
+            if regime == REGIME_NEU and alt_available_by_asset[asset] > 0:
+                if pool_state[_pool_key(row)]["quantity"] <= 0:
+                    regime = "alt"
+            return regime
 
-        def _quarantine_pair(pair: Mapping[str, Any], out_amount: Decimal, reason_code: str) -> None:
+        def _deplete_neu_pool(row: Mapping[str, Any], quantity: Decimal) -> Decimal | None:
+            if quantity <= 0:
+                return Decimal("0")
+            state = pool_state[_pool_key(row)]
+            if state["quantity"] <= 0 or state["quantity"] < quantity or state["cost_basis"] <= 0:
+                return None
+            pool_average = state["cost_basis"] / state["quantity"]
+            state["quantity"] -= quantity
+            state["cost_basis"] -= quantity * pool_average
+            return pool_average
+
+        def _apply_normal_inbound(row: Mapping[str, Any], *, basis_override: Decimal | None = None) -> bool:
+            asset = str(row["asset"])
+            amount = msat_to_btc(row["amount"]) or Decimal("0")
+            if amount <= 0:
+                return True
+            if infer_regime_from_timestamp(str(row["occurred_at"])) != REGIME_NEU:
+                alt_available_by_asset[asset] += amount
+                return True
+            basis = basis_override
+            if basis is None:
+                spot_price = _spot_price_from_row(row, amount)
+                basis = _basis_from_row(row, amount, spot_price)
+            if basis is None:
+                return True
+            state = pool_state[_pool_key(row)]
+            state["quantity"] += amount
+            state["cost_basis"] += basis
+            return True
+
+        def _apply_normal_outbound(row: Mapping[str, Any], regime: str) -> bool:
+            asset = str(row["asset"])
+            amount = msat_to_btc(row["amount"]) or Decimal("0")
+            fee = msat_to_btc(row["fee"]) or Decimal("0")
+            needed = amount + fee
+            if needed <= 0:
+                return True
+            if regime != REGIME_NEU:
+                if alt_available_by_asset[asset] < needed:
+                    return False
+                alt_available_by_asset[asset] -= needed
+                return True
+            return _deplete_neu_pool(row, needed) is not None
+
+        def _apply_transfer_op(out_row: Mapping[str, Any], in_row: Mapping[str, Any]) -> bool:
+            asset = str(out_row["asset"])
+            sent = (msat_to_btc(out_row["amount"]) or Decimal("0")) + (msat_to_btc(out_row["fee"]) or Decimal("0"))
+            received = msat_to_btc(in_row["amount"]) or Decimal("0")
+            if sent < received:
+                return True
+            regime = _current_regime(out_row)
+            if regime != REGIME_NEU:
+                if alt_available_by_asset[asset] < sent:
+                    return False
+                alt_available_by_asset[asset] -= sent
+                alt_available_by_asset[asset] += received
+                return True
+            pool_average = _deplete_neu_pool(out_row, sent)
+            if pool_average is None:
+                return False
+            if received > 0:
+                destination_state = pool_state[_pool_key(in_row)]
+                destination_state["quantity"] += received
+                destination_state["cost_basis"] += received * pool_average
+            return True
+
+        def _quarantine_pair(pair: dict[str, Any], reason_code: str) -> None:
+            if pair["status"] == "quarantined":
+                return
+            out_amount = msat_to_btc(pair["out_row"]["amount"]) or Decimal("0")
             swap_detail = {
                 "outgoing_asset": pair["out_asset"],
                 "incoming_asset": pair["in_asset"],
@@ -964,80 +1038,120 @@ class GenericRP2TaxEngine:
             )
             quarantined_row_ids.add(str(pair["out_id"]))
             quarantined_row_ids.add(str(pair["in_id"]))
+            pair["status"] = "quarantined"
 
-        ordered_rows = sorted(
-            (
-                row
-                for row in rows
-                if str(row["id"]) not in transfer_row_ids
-            ),
-            key=lambda row: _row_sort_key(row, delayed_inbound_ids),
-        )
-
-        for row in ordered_rows:
+        def _apply_row_op(row: Mapping[str, Any]) -> bool:
             row_id = str(row["id"])
             if row_id in quarantined_row_ids:
-                continue
+                return True
             direction = str(row["direction"]).strip().lower()
-            amount = msat_to_btc(row["amount"]) or Decimal("0")
-            fee = msat_to_btc(row["fee"]) or Decimal("0")
-            pool_key = (str(row["asset"]), resolve_pool_id(row["wallet_id"]))
+            carry_pair = carrying_pairs_by_out_id.get(row_id) or carrying_pairs_by_in_id.get(row_id)
 
             if direction == "inbound":
-                pair = carrying_pairs_by_in_id.get(row_id)
-                if pair is not None:
-                    carried_basis = carried_basis_by_row_id.get(row_id)
-                    if carried_basis is None:
-                        continue
-                    pool_state[pool_key]["quantity"] += amount
-                    pool_state[pool_key]["cost_basis"] += carried_basis
-                    continue
-                if infer_regime_from_timestamp(str(row["occurred_at"])) != REGIME_NEU:
-                    continue
-                spot_price = _spot_price_from_row(row, amount)
-                basis = _basis_from_row(row, amount, spot_price)
-                if basis is None:
-                    continue
-                pool_state[pool_key]["quantity"] += amount
-                pool_state[pool_key]["cost_basis"] += basis
-                continue
+                if carry_pair is None or carry_pair["status"] == "normal":
+                    return _apply_normal_inbound(row)
+                if carry_pair["status"] == "quarantined":
+                    return True
+                if carry_pair["status"] != "carried":
+                    return False
+                carried_basis = carried_basis_by_row_id.get(row_id)
+                if carried_basis is None:
+                    return False
+                return _apply_normal_inbound(row, basis_override=carried_basis)
 
             if direction != "outbound":
-                continue
-            regime = outbound_regimes_by_row_id.get(
-                row_id,
-                infer_regime_from_timestamp(str(row["occurred_at"])),
-            )
+                return True
+
+            regime = _current_regime(row)
+            at_regime_by_row_id[row_id] = regime
+            if carry_pair is None or carry_pair["status"] == "normal":
+                return _apply_normal_outbound(row, regime)
+            if carry_pair["status"] == "quarantined":
+                return True
             if regime != REGIME_NEU:
+                carry_pair["status"] = "normal"
+                return _apply_normal_outbound(row, regime)
+
+            amount = msat_to_btc(row["amount"]) or Decimal("0")
+            fee = msat_to_btc(row["fee"]) or Decimal("0")
+            out_spot_price = _spot_price_from_row(row, amount if amount > 0 else fee)
+            in_amount = msat_to_btc(carry_pair["in_row"]["amount"]) or Decimal("0")
+            in_spot_price = _spot_price_from_row(carry_pair["in_row"], in_amount)
+            if out_spot_price is None or in_spot_price is None:
+                _quarantine_pair(carry_pair, "missing_spot_price")
+                return True
+
+            pool_average = _deplete_neu_pool(row, amount + fee)
+            if pool_average is None:
+                return False
+
+            carried_basis_by_row_id[str(carry_pair["in_id"])] = amount * pool_average
+            swap_link_by_row_id[str(carry_pair["out_id"])] = carry_pair["pair_id"]
+            swap_link_by_row_id[str(carry_pair["in_id"])] = carry_pair["pair_id"]
+            carry_pair["status"] = "carried"
+            return True
+
+        transfer_row_ids: set[str] = set()
+        ordered_ops: list[_ATPrepassOp] = []
+        for pair in intra_pairs:
+            out_row = pair["out"]
+            in_row = pair["in"]
+            transfer_row_ids.add(str(out_row["id"]))
+            transfer_row_ids.add(str(in_row["id"]))
+            ordered_ops.append(
+                _ATPrepassOp(
+                    kind="transfer",
+                    sort_key=_row_sort_key(out_row),
+                    out_row=out_row,
+                    in_row=in_row,
+                )
+            )
+        for row in rows:
+            if str(row["id"]) in transfer_row_ids:
                 continue
-            needed = amount + fee
-            if needed <= 0:
-                continue
-            pair = carrying_pairs_by_out_id.get(row_id)
-            if pair is not None:
-                out_spot_price = _spot_price_from_row(row, amount if amount > 0 else fee)
-                in_amount = msat_to_btc(pair["in_row"]["amount"]) or Decimal("0")
-                in_spot_price = _spot_price_from_row(pair["in_row"], in_amount)
-                if out_spot_price is None or in_spot_price is None:
-                    _quarantine_pair(pair, amount, "missing_spot_price")
+            ordered_ops.append(
+                _ATPrepassOp(
+                    kind="row",
+                    sort_key=_row_sort_key(row),
+                    row=row,
+                )
+            )
+        ordered_ops.sort(key=lambda op: op.sort_key)
+
+        index = 0
+        while index < len(ordered_ops):
+            occurred_at = ordered_ops[index].sort_key[0]
+            pending_ops: list[_ATPrepassOp] = []
+            while index < len(ordered_ops) and ordered_ops[index].sort_key[0] == occurred_at:
+                pending_ops.append(ordered_ops[index])
+                index += 1
+
+            while pending_ops:
+                progressed = False
+                next_pending: list[_ATPrepassOp] = []
+                for op in pending_ops:
+                    if op.kind == "transfer":
+                        applied = _apply_transfer_op(op.out_row, op.in_row)
+                    else:
+                        applied = _apply_row_op(op.row)
+                    if applied:
+                        progressed = True
+                    else:
+                        next_pending.append(op)
+                if not next_pending or not progressed:
+                    pending_ops = next_pending
+                    break
+                pending_ops = next_pending
+
+            for op in pending_ops:
+                if op.kind != "row":
                     continue
-            state = pool_state[pool_key]
-            quantity = state["quantity"]
-            cost_basis = state["cost_basis"]
-            if quantity <= 0 or quantity < needed or cost_basis <= 0:
-                if pair is None:
-                    continue
-                _quarantine_pair(pair, amount, "missing_pool_average")
-                continue
-            pool_average = cost_basis / quantity
-            state["quantity"] -= needed
-            state["cost_basis"] -= needed * pool_average
-            if pair is None:
-                continue
-            carried_basis_by_row_id[str(pair["in_id"])] = amount * pool_average
-            swap_link_by_row_id[str(pair["out_id"])] = pair["pair_id"]
-            swap_link_by_row_id[str(pair["in_id"])] = pair["pair_id"]
-        return swap_link_by_row_id, carried_basis_by_row_id, quarantined_row_ids, quarantines
+                row_id = str(op.row["id"])
+                pair = carrying_pairs_by_out_id.get(row_id) or carrying_pairs_by_in_id.get(row_id)
+                if pair is not None and pair["status"] == "pending":
+                    _quarantine_pair(pair, "missing_pool_average")
+
+        return at_regime_by_row_id, swap_link_by_row_id, carried_basis_by_row_id, quarantined_row_ids, quarantines
 
     def _process_asset(
         self,

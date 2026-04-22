@@ -30,12 +30,10 @@ AT_NEU_CUTOFF = datetime(2021, 3, 1, 0, 0, 0, tzinfo=ZoneInfo("Europe/Vienna"))
 REGIME_ALT: Literal["alt"] = "alt"
 REGIME_NEU: Literal["neu"] = "neu"
 
-# Quarantine reason emitted when a Neu cross-asset swap cannot have its
-# carried basis computed in a single normalization pass. The engine adds
-# a `reason_code` in the detail to distinguish v1 skip-reasons from other
-# swap validation problems that might share the same reason in the future.
+# Quarantine reason emitted when a Neu cross-asset swap cannot be fed into
+# rp2 safely. The engine adds a `reason_code` in the detail so callers can
+# distinguish missing pricing from source-pool-state failures.
 AT_SWAP_QUARANTINE_REASON = "at_swap_basis_carry_unresolved"
-AT_SWAP_TWO_PASS_REASON_CODE = "needs_two_pass_compute"
 
 # Kassiber owns the presentation-layer mapping from RP2's semantic Austrian
 # disposal categories onto FinanzOnline / BMF form codes.
@@ -147,7 +145,6 @@ __all__ = [
     "AT_CATEGORY_TO_KENNZAHL",
     "AT_NEU_CUTOFF",
     "AT_SWAP_QUARANTINE_REASON",
-    "AT_SWAP_TWO_PASS_REASON_CODE",
     "REGIME_ALT",
     "REGIME_NEU",
     "infer_outbound_regimes",
