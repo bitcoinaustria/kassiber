@@ -29,6 +29,12 @@ Generic wallet imports accept JSON arrays or CSV files with these fields:
 
 If imported transactions do not carry `fiat_rate` or `fiat_value`, `journals process` first tries to backfill pricing from the local rates cache. Transactions only quarantine if pricing is still missing after that.
 
+For inbound transactions, explicit earn-like `kind` values such as `income`,
+`interest`, `staking`, `mining`, `airdrop`, `hardfork`, `wages`,
+`lending_interest`, and `routing_income` are preserved and later promoted into
+RP2 earn-like receipts during journal processing. Unlabeled inbound rows stay
+conservative and process as acquisitions.
+
 ## BTCPay
 
 Import directly into an existing wallet:
@@ -43,8 +49,12 @@ python3 -m kassiber wallets import-btcpay \
 Behavior:
 
 - transaction rows become Kassiber transactions
+- imported rows keep conservative transport kinds (`deposit` / `withdrawal`) and do not become `income` automatically
 - `Comment` becomes the transaction note if the note is empty
 - `Labels` become Kassiber tags
+
+BTCPay Greenfield / API-backed provenance import is planned; file import is the
+current path.
 
 You can also create a wallet whose source file is a BTCPay export:
 

@@ -246,7 +246,7 @@ This is the biggest single chunk.
 - Add `core/tax_events.py` as the bridge between raw transactions and tax-engine input
 - Normalize raw transactions + transfer-pair state + explicit annotations into typed tax events
 - Quarantine ambiguous events instead of guessing at mining / inheritance / routing income / swap semantics
-- Keep this seam shared so both the generic RP2 path and the future Austrian RP2-fork path consume the same normalized input contract
+- Keep this seam shared so both the generic and Austrian RP2-backed paths consume the same normalized input contract
 
 ### Wave 5 — reports (1 day)
 
