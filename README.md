@@ -48,10 +48,15 @@ general ledger stay outside Kassiber. See
 By default Kassiber stores state under `~/.kassiber/`:
 
 - `data/kassiber.sqlite3` for SQLite data
-- `config/backends.env` for backend config
+- `config/backends.env` for optional backend bootstrap overrides
 - `config/settings.json` for the managed path manifest and UI state
 - `exports/` for generated report files
 - `attachments/` for managed attachment blobs
+
+Backend definitions and the stored default backend now live canonically in
+SQLite. `backends.env` is still accepted as a bootstrap/compatibility path,
+but once Kassiber seeds those values into the DB it no longer treats the
+dotenv file as the long-term source of truth.
 
 Use `kassiber status` to see the active paths. `--data-root` and `--env-file` let you override them.
 

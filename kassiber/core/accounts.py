@@ -334,7 +334,9 @@ def list_backend_kinds():
 
 def get_backend_details(conn, runtime_config, name):
     try:
-        return get_db_backend(conn, name)
+        payload = get_db_backend(conn, name)
+        payload["is_default"] = payload["name"] == runtime_config["default_backend"]
+        return payload
     except AppError as exc:
         if exc.code != "not_found":
             raise

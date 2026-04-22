@@ -574,7 +574,7 @@ class ReviewRegressionTest(unittest.TestCase):
         conn.close()
         self.assertTrue(json.loads(stored)["altbestand"])
 
-    def test_custom_env_file_backend_overlay_and_default_roundtrip(self):
+    def test_custom_env_file_backend_bootstrap_persists_into_db(self):
         env_file = self.case_dir / "custom-backends.env"
         env_file.write_text(
             "\n".join(
@@ -599,7 +599,7 @@ class ReviewRegressionTest(unittest.TestCase):
             "backends", "get", "alpha",
         )
         self._assert_ok(payload, result, "backends.get")
-        self.assertEqual(payload["data"]["source"], str(env_file))
+        self.assertEqual(payload["data"]["source"], "database")
         self.assertTrue(payload["data"]["is_default"])
         self.assertEqual(payload["data"]["url"], "https://alpha.example/api")
 
@@ -610,7 +610,18 @@ class ReviewRegressionTest(unittest.TestCase):
             "--url", "ssl://alpha-override.example:50002",
             "--batch-size", "25",
         )
-        self._assert_ok(payload, result, "backends.create")
+        self.assertEqual(result.returncode, 1, msg=payload)
+        self.assertEqual(payload.get("kind"), "error")
+        self.assertEqual(payload["error"]["code"], "conflict")
+
+        payload, result = self._run_json(
+            "--env-file", str(env_file),
+            "backends", "update", "alpha",
+            "--kind", "electrum",
+            "--url", "ssl://alpha-override.example:50002",
+            "--batch-size", "25",
+        )
+        self._assert_ok(payload, result, "backends.update")
         self.assertEqual(payload["data"]["source"], "database")
         self.assertEqual(payload["data"]["url"], "ssl://alpha-override.example:50002")
 
@@ -655,6 +666,16 @@ class ReviewRegressionTest(unittest.TestCase):
         self._assert_ok(payload, result, "backends.clear-default")
         self.assertEqual(payload["data"]["default_backend"], "alpha")
         self.assertTrue(payload["data"]["cleared"])
+
+        env_file.unlink()
+
+        payload, result = self._run_json(
+            "--env-file", str(env_file),
+            "backends", "get", "alpha",
+        )
+        self._assert_ok(payload, result, "backends.get")
+        self.assertEqual(payload["data"]["source"], "database")
+        self.assertEqual(payload["data"]["url"], "ssl://alpha-override.example:50002")
 
         payload, result = self._run_json(
             "--env-file", str(env_file),

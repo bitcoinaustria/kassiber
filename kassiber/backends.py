@@ -1,16 +1,18 @@
-"""Backend (chain-indexer endpoint) discovery, storage, and merging.
+"""Backend (chain-indexer endpoint) discovery, storage, and bootstrap.
 
 A "backend" in kassiber is a pointer to an external blockchain indexer
-(esplora, a mempool-compatible API, an Electrum server, a liquid-esplora instance,
-etc.) that wallets use to sync transactions. Backends live in two
-places, and this module reconciles them:
+(esplora, a mempool-compatible API, an Electrum server, a liquid-esplora
+instance, etc.) that wallets use to sync transactions. The SQLite
+`backends` table is the canonical storage path. Environment / dotenv
+configuration now plays a narrower role:
 
-1. **Environment / dotenv config** — the built-in `mempool` default plus any
-   `KASSIBER_BACKEND_<NAME>_<FIELD>` variables. Loaded by
+1. **Bootstrap / compatibility seed** — built-in defaults plus any
+   `KASSIBER_BACKEND_<NAME>_<FIELD>` variables loaded by
    `load_runtime_config`.
-2. **Database** — user-created rows in the `backends` table, plus an
-   optional stored `default_backend` setting override. Merged on top of
-   env by `merge_db_backends` so DB CRUD wins.
+2. **Database** — canonical rows in the `backends` table plus the stored
+   default-backend settings. `seed_db_backends` copies non-ephemeral
+   bootstrap config into SQLite when it is missing, and `merge_db_backends`
+   then rebuilds the runtime view from SQLite.
 
 `resolve_backend(runtime_config, name)` is the single entry point used
 by sync code to fetch the selected backend dict. CRUD helpers
@@ -74,6 +76,8 @@ DEFAULT_BACKENDS = {
 
 BACKEND_KINDS = {"esplora", "mempool", "electrum", "liquid-esplora", "custom"}
 DEFAULT_ENV_FILENAME = "backends.env"
+DEFAULT_BACKEND_SETTING = "default_backend"
+BOOTSTRAP_DEFAULT_BACKEND_SETTING = "bootstrap_default_backend"
 
 
 def resolve_effective_env_file(env_file=None, data_root=None):
@@ -122,11 +126,12 @@ def load_dotenv_file(path):
 
 
 def load_runtime_config(env_file):
-    """Build the runtime backend config from env / dotenv file only (no DB).
+    """Build the bootstrap backend config from env / dotenv only.
 
     Returns a dict with `env_file`, `env_file_exists`, `default_backend`,
-    and `backends` (a name->config dict). Call `merge_db_backends` on
-    top to pull in DB-sourced overrides.
+    `default_backend_source`, and `backends` (a name->config dict). Call
+    `seed_db_backends` and `merge_db_backends` on top to canonicalize the
+    runtime view through SQLite.
 
     Supports both `KASSIBER_BACKEND_*` and the legacy `SATBOOKS_BACKEND_*`
     prefixes so pre-rename configs keep working.
@@ -163,6 +168,11 @@ def load_runtime_config(env_file):
         or merged_env.get("SATBOOKS_DEFAULT_BACKEND")
         or "mempool"
     ).strip().lower() or "mempool"
+    default_backend_source = "built-in default"
+    if "KASSIBER_DEFAULT_BACKEND" in file_env or "SATBOOKS_DEFAULT_BACKEND" in file_env:
+        default_backend_source = str(env_path)
+    if "KASSIBER_DEFAULT_BACKEND" in os.environ or "SATBOOKS_DEFAULT_BACKEND" in os.environ:
+        default_backend_source = "environment"
     if default_backend not in backends:
         raise AppError(
             f"Default backend '{default_backend}' is not defined. Add KASSIBER_BACKEND_{default_backend.upper()}_KIND and _URL to {env_path}."
@@ -174,6 +184,7 @@ def load_runtime_config(env_file):
         "env_file": str(env_path),
         "env_file_exists": env_path.exists(),
         "default_backend": default_backend,
+        "default_backend_source": default_backend_source,
         "backends": backends,
     }
 
@@ -228,6 +239,88 @@ def list_backends(runtime_config):
     return rows
 
 
+def _available_backend_names(conn):
+    rows = conn.execute("SELECT name FROM backends ORDER BY name ASC").fetchall()
+    return {row["name"] for row in rows}
+
+
+def _fallback_backend_name(names):
+    if "mempool" in names:
+        return "mempool"
+    if names:
+        return sorted(names)[0]
+    raise AppError(
+        "No backends are configured",
+        code="config_error",
+        hint="Create a backend with `kassiber backends create`, or seed one through your dotenv bootstrap config.",
+    )
+
+
+def _seedable_runtime_backend(name, backend):
+    if backend.get("source") == "environment":
+        return None
+    return {
+        "name": name,
+        "kind": backend_value(backend, "kind"),
+        "chain": backend_value(backend, "chain"),
+        "network": backend_value(backend, "network"),
+        "url": backend_value(backend, "url"),
+        "auth_header": backend_value(backend, "auth_header"),
+        "token": backend_value(backend, "token"),
+        "batch_size": parse_int(backend_value(backend, "batch_size"), None),
+        "timeout": parse_int(backend_value(backend, "timeout"), None),
+        "tor_proxy": backend_value(backend, "tor_proxy"),
+    }
+
+
+def seed_db_backends(conn, runtime_config):
+    """Copy built-in / dotenv bootstrap backends into SQLite when absent.
+
+    SQLite remains the canonical storage path, so built-ins and dotenv-backed
+    definitions are persisted on first use. Process-level environment-only
+    overrides stay ephemeral and are not auto-written into the database.
+    """
+    existing_names = _available_backend_names(conn)
+    for name, backend in sorted(runtime_config["backends"].items()):
+        if name in existing_names:
+            continue
+        payload = _seedable_runtime_backend(name, backend)
+        if payload is None:
+            continue
+        create_db_backend(
+            conn,
+            payload["name"],
+            payload["kind"],
+            payload["url"],
+            chain=payload["chain"],
+            network=payload["network"],
+            auth_header=payload["auth_header"],
+            token=payload["token"],
+            batch_size=payload["batch_size"],
+            timeout=payload["timeout"],
+            tor_proxy=payload["tor_proxy"],
+        )
+        existing_names.add(name)
+
+    changed = False
+    bootstrap_default = get_setting(conn, BOOTSTRAP_DEFAULT_BACKEND_SETTING)
+    if not bootstrap_default:
+        candidate = runtime_config["default_backend"]
+        if candidate not in existing_names:
+            candidate = _fallback_backend_name(existing_names)
+        set_setting(conn, BOOTSTRAP_DEFAULT_BACKEND_SETTING, candidate)
+        bootstrap_default = candidate
+        changed = True
+
+    stored_default = get_setting(conn, DEFAULT_BACKEND_SETTING)
+    if not stored_default:
+        set_setting(conn, DEFAULT_BACKEND_SETTING, bootstrap_default)
+        changed = True
+    if changed:
+        conn.commit()
+    return runtime_config
+
+
 def _backend_row_to_dict(row):
     return {
         "name": row["name"],
@@ -266,12 +359,12 @@ def get_db_backend(conn, name):
 
 
 def merge_db_backends(conn, runtime_config):
-    """Overlay DB-backed backends and the stored default on an env-only config.
+    """Overlay SQLite-backed backends and the stored default on bootstrap config.
 
-    Mutates and returns `runtime_config`. DB rows overwrite any env-named
-    backend with the same name. A `default_backend` setting in the
-    `settings` table, if present, also overrides the env default — and
-    raises if it names a backend that isn't configured anywhere.
+    Mutates and returns `runtime_config`. DB rows overwrite any bootstrap
+    backend with the same name. A stored `default_backend` setting, if
+    present, also overrides the bootstrap default — and raises if it names a
+    backend that is not available in the merged runtime view.
     """
     rows = conn.execute("SELECT * FROM backends").fetchall()
     for row in rows:
@@ -289,7 +382,7 @@ def merge_db_backends(conn, runtime_config):
             "tor_proxy": row["tor_proxy"] or "",
             "source": "database",
         }
-    override = get_setting(conn, "default_backend")
+    override = get_setting(conn, DEFAULT_BACKEND_SETTING)
     if override:
         if override not in runtime_config["backends"]:
             raise AppError(
@@ -451,7 +544,7 @@ def delete_db_backend(conn, name):
             code="not_found",
             hint="Only DB-backed backends can be deleted; env-sourced backends are removed from your .env file instead.",
         )
-    if get_setting(conn, "default_backend") == name:
+    if get_setting(conn, DEFAULT_BACKEND_SETTING) == name:
         raise AppError(
             f"Backend '{name}' is the stored default; clear it with `kassiber backends clear-default` first",
             code="conflict",
@@ -470,19 +563,27 @@ def set_default_backend(conn, runtime_config, name):
             code="not_found",
             hint="Use `kassiber backends list` to see available backends.",
         )
-    set_setting(conn, "default_backend", name)
+    row = conn.execute("SELECT 1 FROM backends WHERE name = ?", (name,)).fetchone()
+    if not row:
+        raise AppError(
+            f"Backend '{name}' only exists as an environment override and cannot be stored as the canonical default",
+            code="conflict",
+            hint="Create or import that backend into SQLite first, then run `kassiber backends set-default` again.",
+        )
+    set_setting(conn, DEFAULT_BACKEND_SETTING, name)
     conn.commit()
     runtime_config["default_backend"] = name
     return {"default_backend": name}
 
 
 def clear_default_backend(conn, runtime_config):
-    """Remove the stored `default_backend` override; revert to env default."""
-    row = conn.execute("SELECT value FROM settings WHERE key = 'default_backend'").fetchone()
-    if row:
-        conn.execute("DELETE FROM settings WHERE key = 'default_backend'")
-        conn.commit()
-    # Reload runtime default from env
-    env_default = load_runtime_config(runtime_config["env_file"])["default_backend"]
-    runtime_config["default_backend"] = env_default
-    return {"default_backend": env_default, "cleared": True}
+    """Reset the stored default to the bootstrap SQLite default."""
+    available_names = _available_backend_names(conn)
+    default_name = get_setting(conn, BOOTSTRAP_DEFAULT_BACKEND_SETTING)
+    if default_name not in available_names:
+        default_name = _fallback_backend_name(available_names)
+        set_setting(conn, BOOTSTRAP_DEFAULT_BACKEND_SETTING, default_name)
+    set_setting(conn, DEFAULT_BACKEND_SETTING, default_name)
+    conn.commit()
+    runtime_config["default_backend"] = default_name
+    return {"default_backend": default_name, "cleared": True}

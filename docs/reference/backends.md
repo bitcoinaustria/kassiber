@@ -2,12 +2,15 @@
 
 Kassiber syncs wallets through named backends. A backend is a pointer to an external indexer or node that Kassiber uses to discover transactions and balances.
 
-Backends come from two places:
+Backends are stored canonically in SQLite.
 
-- `~/.kassiber/config/backends.env` or your chosen `--env-file`
-- the `backends` table in SQLite, which overlays the dotenv seed
+- `~/.kassiber/config/backends.env` or your chosen `--env-file` is still
+  accepted as a bootstrap / compatibility input
+- the `backends` table in SQLite is the long-term source of truth
 
-Backends defined in the database win over the dotenv seed.
+Built-in defaults and dotenv-defined backends are seeded into SQLite when the
+runtime first sees them. Environment-only overrides stay ephemeral unless you
+explicitly create the backend through the CLI.
 
 ## Built-in defaults
 
@@ -28,7 +31,7 @@ python3 -m kassiber backends list
 python3 -m kassiber backends get mempool
 ```
 
-Create and manage DB-backed backends:
+Create and manage SQLite-backed backends:
 
 ```bash
 python3 -m kassiber backends create myelectrum --kind electrum --url ssl://index.bitcoin-austria.at:50002
@@ -73,7 +76,8 @@ KASSIBER_BACKEND_CORE_COOKIEFILE=~/.bitcoin/.cookie
 KASSIBER_BACKEND_CORE_WALLETPREFIX=kassiber
 ```
 
-See [.env.example](../../.env.example) for a fuller template.
+See [.env.example](../../.env.example) for a fuller template. Once bootstrapped,
+use the `backends` CLI to inspect or edit the canonical SQLite rows.
 
 ## Supported backend kinds
 

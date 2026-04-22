@@ -7,7 +7,12 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from .. import __version__
-from ..backends import load_runtime_config, merge_db_backends, resolve_effective_env_file
+from ..backends import (
+    load_runtime_config,
+    merge_db_backends,
+    resolve_effective_env_file,
+    seed_db_backends,
+)
 from ..db import (
     DEFAULT_DATA_ROOT,
     ensure_data_root,
@@ -96,6 +101,7 @@ def bootstrap_runtime(args, needs_db=True):
     try:
         if needs_db:
             conn = open_db(paths.data_root)
+            seed_db_backends(conn, args.runtime_config)
             merge_db_backends(conn, args.runtime_config)
         return RuntimeState(paths=paths, runtime_config=args.runtime_config, conn=conn)
     except Exception:
