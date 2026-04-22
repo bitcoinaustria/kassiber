@@ -193,8 +193,10 @@ over the shared core after the extraction work is done.
 - [ ] Better cross-asset transfer accounting beyond audit metadata
 - [ ] Revisit per-wallet basis attribution if a jurisdiction ever needs
   physical-lot answers
-- [ ] Adopt a project-bundle storage layout: one SQLite DB per project with
-  project-local blobs, exports, logs, and no active top-level wallet side tree
+- [ ] Adopt a per-project storage layout: one SQLite DB per project,
+  minimal global app state, and no active top-level wallet side tree
+- [ ] Keep transaction document links in the project DB; only add managed
+  copied-file storage if a concrete offline/self-contained workflow needs it
 - [ ] Move backend definitions and default-backend selection into the project
   DB; keep dotenv files as bootstrap/dev overrides rather than the canonical
   storage path
