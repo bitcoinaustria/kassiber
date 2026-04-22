@@ -18,7 +18,7 @@ All `scripts/` paths in this skill are relative to the directory containing this
 5. Use `--format plain` when the user wants report output shown in the terminal. Let Kassiber format financial values; do not recompute or restyle them.
 6. Use `--format csv --output <path>` for spreadsheet-style exports.
 7. Never perform your own arithmetic on Kassiber financial values. Do not sum, subtract, average, or convert amounts from raw JSON when Kassiber already has a command or output format for the answer.
-8. Processing order is: wallet sync or import -> `kassiber rates sync` when pricing is needed -> `kassiber journals process` -> reports.
+8. Processing order is: wallet sync or import -> review likely transfer / swap pairs when relevant -> `kassiber rates sync` when pricing is needed -> `kassiber journals process` -> reports.
 9. Re-run `kassiber journals process` after any transaction import, transfer pairing, note or tag change, exclusion change, or rate override before trusting reports.
 10. Do not confuse `kassiber init` with onboarding. It only creates the local state tree; workspace, profile, account, and wallet records are created with their own commands.
 11. Prefer explicit workspace and profile flags until context is verified; use `kassiber context show` or `kassiber status` before assuming the active scope.
@@ -29,11 +29,12 @@ All `scripts/` paths in this skill are relative to the directory containing this
 ## Gotchas
 
 - Empty or stale reports usually mean journals have not been processed since the last change.
+- Reports do not auto-pair BTC ↔ LBTC peg-ins / peg-outs or submarine swaps. If the user has cross-asset swap activity, inspect for likely pairs and use `kassiber transfers pair` before trusting reports.
 - `--machine` implies JSON mode. Use it alone or with `--format json`; do not combine it with any other explicit `--format` value.
 - Quarantined transactions are omitted from accurate downstream reporting until resolved or excluded.
 - Paginated list commands keep rows under command-specific keys such as `.data.records` and `.data.events`. Do not assume every list response uses the same field name.
 - For paginated responses like `journals events list` and `metadata records list`, always follow `next_cursor` until it is `null`.
-- Austrian tax processing is currently unavailable in Kassiber. Point Austrian tax questions to the planned RP2-fork integration rather than implying Kassiber computes Austrian results today.
+- Cross-asset `--policy carrying-value` pairing is Austrian-only right now. For other tax countries, BTC ↔ LBTC swaps still need `--policy taxable` and remain on the normal SELL + BUY path.
 - `kassiber status` may resolve to a legacy XDG path on machines with older state trees. Use status output, not assumptions, to find the live database.
 - Kassiber already has `reports export-pdf`; do not invent Clams-style custom render scripts unless the user specifically wants a custom format beyond the built-in export.
 

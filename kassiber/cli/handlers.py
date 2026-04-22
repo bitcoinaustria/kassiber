@@ -326,8 +326,11 @@ def create_transaction_pair(
     in_row = resolve_transaction(conn, profile["id"], in_ref, direction="inbound")
     if out_row["id"] == in_row["id"]:
         raise AppError("--tx-out and --tx-in must reference different transactions", code="validation")
-    if out_row["wallet_id"] == in_row["wallet_id"]:
-        raise AppError("Pair legs must be in different wallets", code="validation")
+    if out_row["wallet_id"] == in_row["wallet_id"] and out_row["asset"] == in_row["asset"]:
+        raise AppError(
+            "Same-wallet pairs must be cross-asset swaps; same-asset legs should stay unpaired or use different wallets.",
+            code="validation",
+        )
     if out_row["asset"] == in_row["asset"] and policy == "taxable":
         raise AppError(
             f"Same-asset taxable pairs are not supported yet "
@@ -338,13 +341,15 @@ def create_transaction_pair(
             hint="Re-run with --policy carrying-value, or omit the pair entirely to preserve taxable SELL + BUY behavior.",
         )
     if out_row["asset"] != in_row["asset"] and policy == "carrying-value":
-        raise AppError(
-            f"Cross-asset carrying-value pairs are not yet supported "
-            f"(out={out_row['asset']}, in={in_row['asset']}). "
-            f"Use --policy taxable for now; carrying-value support is tracked in TODO.md.",
-            code="validation",
-            hint="Re-run with --policy taxable, or pair two same-asset transactions.",
-        )
+        tax_country = str(profile["tax_country"] or "").strip().lower()
+        if tax_country != "at":
+            raise AppError(
+                f"Cross-asset carrying-value pairs are only supported for Austrian profiles right now "
+                f"(out={out_row['asset']}, in={in_row['asset']}). "
+                f"Use --policy taxable for other tax countries.",
+                code="validation",
+                hint="Re-run with --policy taxable, or use an Austrian profile for cross-asset carrying-value swaps.",
+            )
     existing = conn.execute(
         """
         SELECT id FROM transaction_pairs

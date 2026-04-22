@@ -75,6 +75,11 @@ _CROSS_BTC_CSV = """date,txid,direction,asset,amount,fee,fiat_rate,description
 2026-04-15T10:00:00Z,cross-out-leg,outbound,BTC,0.10000000,0.0001,82000,Peg-in to Liquid
 """
 
+_CROSS_BTC_AT_CSV = """date,txid,direction,asset,amount,fee,fiat_rate,description
+2026-04-01T10:00:00Z,cross-fund-1,inbound,BTC,0.10010000,0,80000,BTC acquisition with fee buffer
+2026-04-15T10:00:00Z,cross-out-leg,outbound,BTC,0.10000000,0.0001,82000,Peg-in to Liquid
+"""
+
 _CROSS_LBTC_CSV = """date,txid,direction,asset,amount,fee,fiat_rate,description
 2026-04-15T10:30:00Z,cross-in-leg,inbound,LBTC,0.10000000,0,82000,Peg-in receive
 """
@@ -176,6 +181,8 @@ class CliSmokeTest(unittest.TestCase):
         cls.manual_to_csv.write_text(_MANUAL_TO_CSV, encoding="utf-8")
         cls.cross_btc_csv = Path(cls._tmp.name) / "cross-btc.csv"
         cls.cross_btc_csv.write_text(_CROSS_BTC_CSV, encoding="utf-8")
+        cls.cross_btc_at_csv = Path(cls._tmp.name) / "cross-btc-at.csv"
+        cls.cross_btc_at_csv.write_text(_CROSS_BTC_AT_CSV, encoding="utf-8")
         cls.cross_lbtc_csv = Path(cls._tmp.name) / "cross-lbtc.csv"
         cls.cross_lbtc_csv.write_text(_CROSS_LBTC_CSV, encoding="utf-8")
         cls.attachment_file = Path(cls._tmp.name) / "attachment-note.txt"
@@ -1112,6 +1119,62 @@ class CliSmokeTest(unittest.TestCase):
         # so transfers_detected stays 0 and cross_asset_pairs reports 1.
         self.assertEqual(data["transfers_detected"], 0)
         self.assertEqual(data["cross_asset_pairs"], 1)
+
+    def test_16_austrian_cross_asset_carrying_value_accepts_same_wallet(self):
+        workspace = "CrossAssetAT"
+        self._cli("init")
+        payload = self._cli("workspaces", "create", workspace)
+        self._assert_kind(payload, "workspaces.create")
+        payload = self._cli(
+            "profiles", "create",
+            "--workspace", workspace,
+            "--fiat-currency", "EUR",
+            "--tax-country", "at",
+            "CrossAssetProfile",
+        )
+        self._assert_kind(payload, "profiles.create")
+        self._cli(
+            "wallets", "create",
+            "--workspace", workspace,
+            "--profile", "CrossAssetProfile",
+            "--label", "Unified",
+            "--kind", "custom",
+        )
+        self._cli(
+            "wallets", "import-csv",
+            "--workspace", workspace,
+            "--profile", "CrossAssetProfile",
+            "--wallet", "Unified",
+            "--file", str(self.cross_btc_at_csv),
+        )
+        self._cli(
+            "wallets", "import-csv",
+            "--workspace", workspace,
+            "--profile", "CrossAssetProfile",
+            "--wallet", "Unified",
+            "--file", str(self.cross_lbtc_csv),
+        )
+
+        payload = self._cli(
+            "transfers", "pair",
+            "--workspace", workspace,
+            "--profile", "CrossAssetProfile",
+            "--tx-out", "cross-out-leg",
+            "--tx-in", "cross-in-leg",
+            "--kind", "peg-in",
+            "--policy", "carrying-value",
+        )
+        self._assert_kind(payload, "transfers.pair")
+        self.assertEqual(payload["data"]["policy"], "carrying-value")
+
+        payload = self._cli(
+            "journals", "process",
+            "--workspace", workspace,
+            "--profile", "CrossAssetProfile",
+        )
+        data = payload["data"]
+        self.assertEqual(data["cross_asset_pairs"], 1)
+        self.assertEqual(data["quarantined"], 0)
 
 
 if __name__ == "__main__":
