@@ -1,9 +1,8 @@
+import json
 import unittest
 from decimal import Decimal
 
 from kassiber.core.austrian import (
-    AT_SWAP_QUARANTINE_REASON,
-    AT_SWAP_TWO_PASS_REASON_CODE,
     REGIME_ALT,
     REGIME_NEU,
     infer_outbound_regimes,
@@ -199,9 +198,9 @@ class AustrianNormalizationTest(unittest.TestCase):
 class AtCrossAssetSwapEngineTest(unittest.TestCase):
     """End-to-end engine-level handling of AT cross-asset swap pairs.
 
-    The engine is exercised via its private classifier because the full
-    rp2 integration requires a sqlite-backed profile. The classifier is
-    the seam where v1's quarantine decision is made.
+    The engine is exercised via its private pre-pass because the full
+    rp2 integration requires a sqlite-backed profile. The pre-pass is
+    the seam where swap carry annotations and fallback quarantines are decided.
     """
 
     def setUp(self):
@@ -209,7 +208,7 @@ class AtCrossAssetSwapEngineTest(unittest.TestCase):
 
         self.GenericRP2TaxEngine = GenericRP2TaxEngine
 
-    def _make_row(self, tx_id, asset, direction, amount, occurred_at):
+    def _make_row(self, tx_id, asset, direction, amount, occurred_at, *, wallet_id="wallet-a", fiat_rate=None):
         return {
             "id": tx_id,
             "asset": asset,
@@ -217,45 +216,46 @@ class AtCrossAssetSwapEngineTest(unittest.TestCase):
             "amount": amount,
             "occurred_at": occurred_at,
             "fee": 0,
-            "fiat_rate": 50000 if asset == "BTC" else 3000,
+            "fiat_rate": (50000 if asset == "BTC" else 3000) if fiat_rate is None else fiat_rate,
             "fiat_value": None,
-            "wallet_id": "wallet-a",
+            "wallet_id": wallet_id,
             "kind": "deposit" if direction == "inbound" else "withdrawal",
             "description": tx_id,
             "note": None,
             "external_id": tx_id,
         }
 
-    def test_neu_cross_asset_swap_gets_quarantined(self):
+    def test_neu_cross_asset_swap_gets_annotations_and_carried_basis(self):
         profile = {"id": "p1", "workspace_id": "w1", "tax_country": "at"}
         engine = self.GenericRP2TaxEngine(profile)
         rows = [
-            self._make_row("out-1", "BTC", "outbound", 1, "2025-06-01T00:00:00Z"),
-            self._make_row("in-1", "LBTC", "inbound", 1, "2025-06-01T00:00:00Z"),
+            self._make_row("buy-1", "BTC", "inbound", 100_000_000_000, "2025-05-01T00:00:00Z"),
+            self._make_row("out-1", "BTC", "outbound", 50_000_000_000, "2025-06-01T00:00:00Z"),
+            self._make_row("in-1", "LBTC", "inbound", 50_000_000_000, "2025-06-01T00:00:00Z", wallet_id="wallet-b", fiat_rate=50_000),
         ]
         pairs = [
             {
                 "pair_id": "mp-1",
                 "kind": "swap",
-                "policy": "taxable",
+                "policy": "carrying-value",
                 "out_id": "out-1",
                 "in_id": "in-1",
                 "out_asset": "BTC",
                 "in_asset": "LBTC",
             }
         ]
-        swap_map, quarantined, quarantines = engine._classify_at_cross_asset_pairs(pairs, rows)
-        self.assertEqual(quarantined, {"out-1", "in-1"})
-        self.assertEqual(len(quarantines), 2)
-        for q in quarantines:
-            self.assertEqual(q["reason"], AT_SWAP_QUARANTINE_REASON)
-            import json
-
-            detail = json.loads(q["detail_json"])
-            self.assertEqual(detail["reason_code"], AT_SWAP_TWO_PASS_REASON_CODE)
-            self.assertEqual(detail["at_swap_link"], "mp-1")
-            self.assertEqual(detail["outgoing_asset"], "BTC")
-            self.assertEqual(detail["incoming_asset"], "LBTC")
+        regime_map, swap_map, carried_map, quarantined, quarantines = engine._annotate_at_cross_asset_pairs(pairs, rows, [])
+        self.assertEqual(regime_map, {"out-1": REGIME_NEU})
+        self.assertEqual(
+            swap_map,
+            {
+                "out-1": "mp-1",
+                "in-1": "mp-1",
+            },
+        )
+        self.assertEqual(carried_map, {"in-1": Decimal("25000.0")})
+        self.assertEqual(quarantined, set())
+        self.assertEqual(quarantines, [])
 
     def test_alt_cross_asset_swap_realizes_without_quarantine(self):
         profile = {"id": "p1", "workspace_id": "w1", "tax_country": "at"}
@@ -263,21 +263,55 @@ class AtCrossAssetSwapEngineTest(unittest.TestCase):
         rows = [
             self._make_row("buy-alt", "BTC", "inbound", 1, "2020-06-01T00:00:00Z"),
             self._make_row("out-1", "BTC", "outbound", 1, "2025-06-01T00:00:00Z"),
-            self._make_row("in-1", "LBTC", "inbound", 1, "2025-06-01T00:00:00Z"),
+            self._make_row("in-1", "LBTC", "inbound", 1, "2025-06-01T00:00:00Z", wallet_id="wallet-b"),
         ]
         pairs = [
             {
                 "pair_id": "mp-1",
                 "kind": "swap",
-                "policy": "taxable",
+                "policy": "carrying-value",
                 "out_id": "out-1",
                 "in_id": "in-1",
                 "out_asset": "BTC",
                 "in_asset": "LBTC",
             }
         ]
-        swap_map, quarantined, quarantines = engine._classify_at_cross_asset_pairs(pairs, rows)
+        regime_map, swap_map, carried_map, quarantined, quarantines = engine._annotate_at_cross_asset_pairs(pairs, rows, [])
+        self.assertEqual(regime_map, {"out-1": REGIME_ALT})
         self.assertEqual(swap_map, {})
+        self.assertEqual(carried_map, {})
+        self.assertEqual(quarantined, set())
+        self.assertEqual(quarantines, [])
+
+    def test_reverse_direction_neu_cross_asset_swap_is_supported(self):
+        profile = {"id": "p1", "workspace_id": "w1", "tax_country": "at"}
+        engine = self.GenericRP2TaxEngine(profile)
+        rows = [
+            self._make_row("buy-1", "LBTC", "inbound", 100_000_000_000, "2025-05-01T00:00:00Z", fiat_rate=50_000),
+            self._make_row("out-1", "LBTC", "outbound", 50_000_000_000, "2025-06-01T00:00:00Z", fiat_rate=50_000),
+            self._make_row("in-1", "BTC", "inbound", 50_000_000_000, "2025-06-01T00:00:00Z", wallet_id="wallet-b"),
+        ]
+        pairs = [
+            {
+                "pair_id": "mp-1",
+                "kind": "swap",
+                "policy": "carrying-value",
+                "out_id": "out-1",
+                "in_id": "in-1",
+                "out_asset": "LBTC",
+                "in_asset": "BTC",
+            }
+        ]
+        regime_map, swap_map, carried_map, quarantined, quarantines = engine._annotate_at_cross_asset_pairs(pairs, rows, [])
+        self.assertEqual(regime_map, {"out-1": REGIME_NEU})
+        self.assertEqual(
+            swap_map,
+            {
+                "out-1": "mp-1",
+                "in-1": "mp-1",
+            },
+        )
+        self.assertEqual(carried_map, {"in-1": Decimal("25000.0")})
         self.assertEqual(quarantined, set())
         self.assertEqual(quarantines, [])
 
@@ -286,7 +320,33 @@ class AtCrossAssetSwapEngineTest(unittest.TestCase):
         engine = self.GenericRP2TaxEngine(profile)
         rows = [
             self._make_row("out-1", "BTC", "outbound", 1, "2025-06-01T00:00:00Z"),
-            self._make_row("in-1", "LBTC", "inbound", 1, "2025-06-01T00:00:00Z"),
+            self._make_row("in-1", "LBTC", "inbound", 1, "2025-06-01T00:00:00Z", wallet_id="wallet-b"),
+        ]
+        pairs = [
+            {
+                "pair_id": "mp-1",
+                "kind": "swap",
+                "policy": "carrying-value",
+                "out_id": "out-1",
+                "in_id": "in-1",
+                "out_asset": "BTC",
+                "in_asset": "LBTC",
+            }
+        ]
+        regime_map, swap_map, carried_map, quarantined, quarantines = engine._annotate_at_cross_asset_pairs(pairs, rows, [])
+        self.assertEqual(regime_map, {})
+        self.assertEqual(swap_map, {})
+        self.assertEqual(carried_map, {})
+        self.assertEqual(quarantined, set())
+        self.assertEqual(quarantines, [])
+
+    def test_taxable_cross_asset_pair_stays_unannotated_for_at(self):
+        profile = {"id": "p1", "workspace_id": "w1", "tax_country": "at"}
+        engine = self.GenericRP2TaxEngine(profile)
+        rows = [
+            self._make_row("buy-1", "BTC", "inbound", 100_000_000_000, "2025-05-01T00:00:00Z"),
+            self._make_row("out-1", "BTC", "outbound", 50_000_000_000, "2025-06-01T00:00:00Z"),
+            self._make_row("in-1", "LBTC", "inbound", 50_000_000_000, "2025-06-01T00:00:00Z", wallet_id="wallet-b", fiat_rate=50_000),
         ]
         pairs = [
             {
@@ -299,9 +359,154 @@ class AtCrossAssetSwapEngineTest(unittest.TestCase):
                 "in_asset": "LBTC",
             }
         ]
-        swap_map, quarantined, quarantines = engine._classify_at_cross_asset_pairs(pairs, rows)
+        regime_map, swap_map, carried_map, quarantined, quarantines = engine._annotate_at_cross_asset_pairs(pairs, rows, [])
+        self.assertEqual(regime_map, {"out-1": REGIME_NEU})
+        self.assertEqual(swap_map, {})
+        self.assertEqual(carried_map, {})
         self.assertEqual(quarantined, set())
         self.assertEqual(quarantines, [])
+
+    def test_transfer_then_swap_uses_destination_wallet_pool(self):
+        profile = {"id": "p1", "workspace_id": "w1", "tax_country": "at"}
+        engine = self.GenericRP2TaxEngine(profile)
+        rows = [
+            self._make_row("buy-1", "BTC", "inbound", 100_000_000_000, "2025-01-01T00:00:00Z"),
+            self._make_row("move-out", "BTC", "outbound", 50_000_000_000, "2025-02-01T00:00:00Z"),
+            self._make_row("move-in", "BTC", "inbound", 50_000_000_000, "2025-02-01T00:00:00Z", wallet_id="wallet-b"),
+            self._make_row("swap-out", "BTC", "outbound", 50_000_000_000, "2025-03-01T00:00:00Z", wallet_id="wallet-b", fiat_rate=60_000),
+            self._make_row("swap-in", "LBTC", "inbound", 50_000_000_000, "2025-03-01T00:00:00Z", wallet_id="wallet-c", fiat_rate=60_000),
+        ]
+        pairs = [
+            {
+                "pair_id": "mp-1",
+                "kind": "swap",
+                "policy": "carrying-value",
+                "out_id": "swap-out",
+                "in_id": "swap-in",
+                "out_asset": "BTC",
+                "in_asset": "LBTC",
+            }
+        ]
+        intra_pairs = [{"out": rows[1], "in": rows[2]}]
+        regime_map, swap_map, carried_map, quarantined, quarantines = engine._annotate_at_cross_asset_pairs(
+            pairs,
+            rows,
+            intra_pairs,
+        )
+        self.assertEqual(regime_map["swap-out"], REGIME_NEU)
+        self.assertEqual(swap_map, {"swap-out": "mp-1", "swap-in": "mp-1"})
+        self.assertEqual(carried_map, {"swap-in": Decimal("25000.0")})
+        self.assertEqual(quarantined, set())
+        self.assertEqual(quarantines, [])
+
+    def test_same_timestamp_swap_chain_is_topologically_resolved(self):
+        profile = {"id": "p1", "workspace_id": "w1", "tax_country": "at"}
+        engine = self.GenericRP2TaxEngine(profile)
+        rows = [
+            self._make_row("buy-1", "BTC", "inbound", 100_000_000_000, "2025-01-01T00:00:00Z"),
+            self._make_row("m-btc-out", "BTC", "outbound", 100_000_000_000, "2025-03-01T00:00:00Z", fiat_rate=60_000),
+            self._make_row("z-lbtc-in", "LBTC", "inbound", 100_000_000_000, "2025-03-01T00:00:00Z", wallet_id="wallet-b", fiat_rate=60_000),
+            self._make_row("a-lbtc-out", "LBTC", "outbound", 100_000_000_000, "2025-03-01T00:00:00Z", wallet_id="wallet-b", fiat_rate=60_000),
+            self._make_row("b-xyz-in", "XYZ", "inbound", 100_000_000_000, "2025-03-01T00:00:00Z", wallet_id="wallet-c", fiat_rate=60_000),
+        ]
+        pairs = [
+            {
+                "pair_id": "mp-1",
+                "kind": "swap",
+                "policy": "carrying-value",
+                "out_id": "m-btc-out",
+                "in_id": "z-lbtc-in",
+                "out_asset": "BTC",
+                "in_asset": "LBTC",
+            },
+            {
+                "pair_id": "mp-2",
+                "kind": "swap",
+                "policy": "carrying-value",
+                "out_id": "a-lbtc-out",
+                "in_id": "b-xyz-in",
+                "out_asset": "LBTC",
+                "in_asset": "XYZ",
+            },
+        ]
+        regime_map, swap_map, carried_map, quarantined, quarantines = engine._annotate_at_cross_asset_pairs(pairs, rows, [])
+        self.assertEqual(regime_map["m-btc-out"], REGIME_NEU)
+        self.assertEqual(regime_map["a-lbtc-out"], REGIME_NEU)
+        self.assertEqual(
+            swap_map,
+            {
+                "m-btc-out": "mp-1",
+                "z-lbtc-in": "mp-1",
+                "a-lbtc-out": "mp-2",
+                "b-xyz-in": "mp-2",
+            },
+        )
+        self.assertEqual(
+            carried_map,
+            {
+                "z-lbtc-in": Decimal("50000.0"),
+                "b-xyz-in": Decimal("50000.0"),
+            },
+        )
+        self.assertEqual(quarantined, set())
+        self.assertEqual(quarantines, [])
+
+    def test_missing_pool_average_quarantines_pair(self):
+        profile = {"id": "p1", "workspace_id": "w1", "tax_country": "at"}
+        engine = self.GenericRP2TaxEngine(profile)
+        rows = [
+            self._make_row("out-1", "BTC", "outbound", 50_000_000_000, "2025-06-01T00:00:00Z", fiat_rate=50_000),
+            self._make_row("in-1", "LBTC", "inbound", 50_000_000_000, "2025-06-01T00:00:00Z", wallet_id="wallet-b", fiat_rate=50_000),
+        ]
+        pairs = [
+            {
+                "pair_id": "mp-1",
+                "kind": "swap",
+                "policy": "carrying-value",
+                "out_id": "out-1",
+                "in_id": "in-1",
+                "out_asset": "BTC",
+                "in_asset": "LBTC",
+            }
+        ]
+        regime_map, swap_map, carried_map, quarantined, quarantines = engine._annotate_at_cross_asset_pairs(pairs, rows, [])
+        self.assertEqual(regime_map, {"out-1": REGIME_NEU})
+        self.assertEqual(swap_map, {})
+        self.assertEqual(carried_map, {})
+        self.assertEqual(quarantined, {"out-1", "in-1"})
+        self.assertEqual(len(quarantines), 2)
+        for quarantine in quarantines:
+            detail = json.loads(quarantine["detail_json"])
+            self.assertEqual(detail["reason_code"], "missing_pool_average")
+
+    def test_missing_spot_price_quarantines_pair(self):
+        profile = {"id": "p1", "workspace_id": "w1", "tax_country": "at"}
+        engine = self.GenericRP2TaxEngine(profile)
+        rows = [
+            self._make_row("buy-1", "BTC", "inbound", 100_000_000_000, "2025-05-01T00:00:00Z"),
+            self._make_row("out-1", "BTC", "outbound", 50_000_000_000, "2025-06-01T00:00:00Z", fiat_rate=0),
+            self._make_row("in-1", "LBTC", "inbound", 50_000_000_000, "2025-06-01T00:00:00Z", wallet_id="wallet-b", fiat_rate=50_000),
+        ]
+        pairs = [
+            {
+                "pair_id": "mp-1",
+                "kind": "swap",
+                "policy": "carrying-value",
+                "out_id": "out-1",
+                "in_id": "in-1",
+                "out_asset": "BTC",
+                "in_asset": "LBTC",
+            }
+        ]
+        regime_map, swap_map, carried_map, quarantined, quarantines = engine._annotate_at_cross_asset_pairs(pairs, rows, [])
+        self.assertEqual(regime_map, {"out-1": REGIME_NEU})
+        self.assertEqual(swap_map, {})
+        self.assertEqual(carried_map, {})
+        self.assertEqual(quarantined, {"out-1", "in-1"})
+        self.assertEqual(len(quarantines), 2)
+        for quarantine in quarantines:
+            detail = json.loads(quarantine["detail_json"])
+            self.assertEqual(detail["reason_code"], "missing_spot_price")
 
 
 if __name__ == "__main__":

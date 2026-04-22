@@ -12,6 +12,11 @@ kassiber rates sync
 kassiber journals process
 ```
 
+If the wallet activity includes BTC ↔ LBTC peg-ins / peg-outs or
+submarine swaps, inspect for likely outbound / inbound pairs and pair
+them before `journals process`. Reports do not discover those pairs on
+their own.
+
 Re-run `kassiber journals process` after:
 
 - imports
@@ -89,4 +94,9 @@ kassiber transfers pair --tx-out <txid-or-external-id> --tx-in <txid-or-external
 kassiber transfers unpair --pair-id <pair-id>
 ```
 
-Same-asset carrying-value pairs are supported. Cross-asset pairs are audit metadata only unless the CLI gains more explicit support.
+Same-asset carrying-value pairs are supported. Cross-asset `--policy carrying-value` pairs are supported for Austrian profiles and feed the swap-basis-carry path; cross-asset `--policy taxable` pairs stay on the normal SELL + BUY path.
+
+Auto-detection is intentionally conservative: Kassiber only auto-pairs
+same-asset cross-wallet transfers that share the same `external_id`.
+For BTC ↔ LBTC swaps, the operator or AI helper must identify the pair
+and call `kassiber transfers pair` explicitly.
