@@ -28,7 +28,7 @@ A few concurrent tracks, all grounded in a single library refactor:
 
 Plus two smaller cross-cutting feature tracks:
 
-4. **Transaction attachments** — tag a receipt PDF or drive link to any transaction. Useful beyond tax (audit, bookkeeping). See `05-attachments.md`.
+4. **Transaction links / attachments** — start with a few external document links per transaction; copied local files can remain a later extension if needed. See `05-attachments.md`.
 5. **External-document reconciliation** — local ingestion, matching, review, and tax normalization for BTC-linked invoices, receipts, and related business documents, without turning Kassiber into an invoicing tool. See `08-external-document-reconciliation.md`.
 
 ## Design constraints (from the project owner)
@@ -65,11 +65,11 @@ Plus two smaller cross-cutting feature tracks:
 | **0.5** | Austrian RP2 integration, attachments, and rates/journal follow-through. E 1kv export remains pending. | Mostly done |
 | **1** | PySide6 app shell, empty state matching the approved reference state | 2 days |
 | **2** | Read-only dashboard: six tiles wired to `core/` | 4–6 days |
-| **3** | Add Connection modal, sync action with progress, CSV import, attachment drag-drop | 4–5 days |
+| **3** | Add Connection modal, sync action with progress, CSV import, transaction links | 4–5 days |
 | **4** | Welcome wizard, Settings dialog, briefcase packaging for macOS | 3–4 days |
 | **5+** | Tile drag/resize, tag management UI, dark mode, Linux/Windows builds, code-signing | TBD |
 
-**MVP surface (end of Phase 4):** single-user desktop app plus CLI, SQLite-backed, attachments on transactions, and — conditional on the "backend definitions move into the project DB" migration landing first (see `TODO.md` and `03-storage-conventions.md`'s `Preconditions before bundle backup / install-bundle can ship`) — backup-only project archives. Both archive consumers (in-place restore and install-bundle-as-new-project) are deferred until an authenticated bundle format lands; MVP produces archives but does not consume them, so a forged archive cannot become a project. Austrian tax processing through RP2, plus accountant-reviewed Austrian export work, still to follow.
+**MVP surface (end of Phase 4):** single-user desktop app plus CLI, SQLite-backed, with one project DB per project, transaction-level document links stored in that DB, and simple project snapshot/export behavior. Austrian tax processing through RP2, plus accountant-reviewed Austrian export work, still to follow.
 
 ## Document index
 
@@ -80,7 +80,7 @@ Plus two smaller cross-cutting feature tracks:
 | [02-core-extraction.md](./02-core-extraction.md) | Phase 0 refactor. Module map, migration approach, success criteria. |
 | [03-storage-conventions.md](./03-storage-conventions.md) | SQLite discipline: WAL, FKs, migrations, repository pattern. |
 | [04-desktop-ui.md](./04-desktop-ui.md) | Phases 1–4 UI spec. Tile-by-tile. QML conventions. Threading. |
-| [05-attachments.md](./05-attachments.md) | Transaction attachments: schema, storage, CLI, UI, backup. |
+| [05-attachments.md](./05-attachments.md) | Transaction links first, with copied-file attachments as later optional work. |
 | [06-austrian-tax-engine.md](./06-austrian-tax-engine.md) | Austrian RP2-backed tax support, data model, E 1kv report layout. |
 | [07-austrian-tax-open-questions.md](./07-austrian-tax-open-questions.md) | Live backlog of genuinely unsettled AT tax questions. |
 | [08-external-document-reconciliation.md](./08-external-document-reconciliation.md) | Scope boundary and architecture for external business documents, matching, and tax normalization. |

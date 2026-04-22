@@ -257,7 +257,9 @@ No tile drag-resize in MVP. That's a Phase 5+ item.
 
 ## Phase 3 — Connections, sync, attachments (4–5 days)
 
-**Goal:** Users can add connections, trigger sync with progress feedback, import CSVs, and attach receipt PDFs or drive links to any transaction.
+**Goal:** Users can add connections, trigger sync with progress feedback,
+import CSVs, and attach one or more document links to any transaction. Copied
+local files, if kept, are a separate follow-up from the link-first storage MVP.
 
 ### Add Connection modal
 
@@ -292,11 +294,10 @@ Matches the approved connection-flow reference state.
 - Opened by clicking a row in Transactions tile
 - Shows: full timestamp, msat amount, fiat at time, wallet, kind, labels (BIP329), tags, counterparties (if known), pairing info (if part of a self-transfer pair)
 - **Attachments section** (see `05-attachments.md`):
-  - Drag-drop zone: drop a PDF/image to attach as file
-  - "Add URL" button to paste a drive link
-  - Existing attachments render as chips with filename + note; click opens in system handler (Finder/Preview for files, browser for URLs)
-  - Remove button per chip
-- Save button commits tag changes; attachments persist immediately on drop/add
+  - "Add link" button with URL, optional title, optional note
+  - Existing links render as chips/list rows; click opens in the browser
+  - Remove button per row
+- Save button commits tag changes; links persist immediately when added
 
 ### Wallet Detail dialog
 
@@ -309,8 +310,8 @@ Matches the approved connection-flow reference state.
 - [ ] Adding an xpub wallet syncs its transactions and updates all tiles
 - [ ] Importing a Phoenix CSV creates a virtual wallet with all rows
 - [ ] Sync shows live progress in the bottom banner
-- [ ] Dropping a PDF onto a transaction creates an attachment and the file lands in the active project's `blobs/attachments/` tree (`~/.kassiber/projects/<project>/blobs/attachments/`, per `03-storage-conventions.md` and `05-attachments.md`)
-- [ ] Adding a drive URL to a transaction persists and reopens on click
+- [ ] Adding one or more document links to a transaction persists and reopens on click
+- [ ] If copied-file attachments remain in the product, they are a separate feature from the link-first storage MVP
 
 ---
 
@@ -331,59 +332,16 @@ Matches the approved settings reference.
 
 - "Hide sensitive data" toggle
 - "Download logs" button — zips the active project's `logs/*.jsonl` (`~/.kassiber/projects/<project>/logs/`) from the last 14 days via `backup_worker` and opens a file-save dialog
-- "Backup Data" button — archives the active project bundle per the canonical manifest in `03-storage-conventions.md` via `backup_worker`. DB copied through `sqlite3 .backup` for WAL safety; keychain-backed secrets are referenced by the bundle but travel separately once keychain integration lands (see Portability scope in `03-storage-conventions.md` and today's plaintext caveat in `SECURITY.md`)
-- **No archive-consumption button in MVP.** Both `Install bundle as new project` and in-place `Restore from backup` are deferred until an authenticated bundle format lands — see `MVP does not ship in-place restore` and `Install bundle as new project (deferred — not MVP)` in `03-storage-conventions.md`. MVP ships Backup-only: the produced archive is a disaster-recovery artifact that lives on disk for future use, not something the desktop app can consume back into a project. Cross-machine migration and "restore over a corrupted project" both wait for the authentication story.
-  - The full UX for the eventual Install-bundle button (file picker, staged install with the install-journal recovery pass, `.imported` sentinel that locks every secret-bearing row, a separate explicit Adopt action that requires re-entering each secret) is specified in `03-storage-conventions.md` so it is reviewed and ready to ship in lockstep with authentication.
-  - **Backup itself is also gated.** The `Backup Data` button must not ship until the "backend definitions move into the project DB" migration tracked in `TODO.md` lands. Until then, today's plaintext `config/backends.env` is not in the bundle contract; shipping backup now would either drop backend config on round-trip or smuggle plaintext secrets into every archive. See `Preconditions before bundle backup / install-bundle can ship` in `03-storage-conventions.md`.
-- **Two distinct destructive actions — don't conflate them.** The
-  Settings dialog offers "Reset project" and "Purge project" side by
-  side. Reset is recoverable; Purge is not. The difference must be
-  explicit in the triple-confirm UX, not buried in release notes.
-
-- "Reset project" button (amber/red, recoverable) — triple-confirm,
-  then runs the canonical reset flow in
-  `03-storage-conventions.md` (the same journaled staged-swap
-  pattern as Restore). Reset does **not** delete the live bundle in
-  place. It acquires the project-wide exclusive lock, writes a
-  reset journal, stages an empty replacement bundle with the bumped
-  `.generation`, renames the live bundle aside to
-  `~/.kassiber/projects/<project>.restore-backup-<UTC-timestamp>/`
-  (with parent-directory fsyncs for durability), swaps the empty
-  staging directory into the canonical path, marks the journal
-  `completed`, and releases. Returns to the Welcome wizard.
-  - Confirmation dialog must state plainly:
-    "Your existing project — including attachments, exports, and
-    today's plaintext secrets — will be moved to
-    `~/.kassiber/projects/<project>.restore-backup-<UTC-timestamp>/`
-    so you can recover it. Nothing is deleted. Use **Purge project**
-    to remove the data for good."
-  - An interrupted Reset is reconciled by the same startup-recovery
-    table as Restore.
-  - Does not touch sibling project bundles or the global
-    `~/.kassiber/app.json`; a nuclear "wipe all projects" is out of
-    MVP scope.
-
-- "Purge project" button (red, irreversible) — quadruple-confirm
-  (typed project name, then triple-confirm). Runs the canonical
-  **Purge flow** defined in `03-storage-conventions.md`: Reset
-  first, then journaled deletion of every
-  `~/.kassiber/projects/<project>.restore-backup-*/` directory for
-  this project. The deletion phase is covered by a purge journal
-  and a startup recovery pass — a crash during deletion resumes
-  the remaining targets on next launch rather than silently leaving
-  recovery copies behind. Returns to the Welcome wizard.
-  - Confirmation dialog must state plainly:
-    "This will delete your current project **and every existing
-    recovery backup for it**. Attachments, exports, and today's
-    plaintext secrets will be unrecoverable from within Kassiber.
-    OS-level disk recovery tools may still be able to retrieve
-    fragments; if you need to defeat those, encrypt the disk or
-    securely wipe the filesystem separately."
-  - Purge does not promise forensic-grade erasure — see the same
-    caveat in `03-storage-conventions.md`. Secure-wipe integration
-    (per-file shredding on supported filesystems) is a later item.
-  - Like Reset, Purge does not touch sibling project bundles or
-    global app state.
+- "Backup Data" button — exports the current project snapshot via `sqlite3 .backup`
+  or `Connection.backup()`. In the simplified MVP, the portable unit is the
+  project DB. If later phases add project-local copied files under `blobs/`,
+  they can be included then as an additive extension.
+- **No live restore/import button in this PR.** If project import or restore
+  lands later, start with the simpler rule that the project is closed first.
+- "Reset project" button (red, destructive) — confirm, remove or replace the
+  current project, then return to the Welcome wizard. The exact recovery/wipe
+  protocol is a separate follow-up; the storage layout should not be blocked on
+  it.
 - Future section (not MVP): "Tax country" dropdown — switching it re-runs journal computation once the UI exposes the already-landed Austrian RP2 plugin / fork integration
 
 ### Packaging
@@ -397,12 +355,10 @@ Matches the approved settings reference.
 ### Done when
 
 - [ ] Fresh install (empty `~/.kassiber`) shows Welcome, completes to main window
-- [ ] Settings dialog matches the approved settings reference layout and all MVP buttons work (Backup Data is present only if the backend-storage migration has landed; Install-bundle and Restore remain deferred in MVP — see below)
+- [ ] Settings dialog matches the approved settings reference layout and the storage-related buttons stay simple
 - [ ] `briefcase build macOS` produces a `.app` that launches
-- [ ] Reset project runs the journaled staged-swap flow and returns the user to Welcome; a mid-Reset kill is reconciled by the next launch's recovery pass
+- [ ] Reset project returns the user to Welcome
 - [ ] Launching `.app` from Finder works on a fresh machine without Python preinstalled
-
-**Archive-round-trip acceptance is deferred.** A full "Backup + Install-bundle round-trips" gate cannot be a Phase 4 acceptance criterion because install-bundle is not MVP and Backup itself is gated behind the backend-storage migration tracked in `TODO.md`. When those prerequisites land (authenticated bundle format + backend-definitions-in-project-DB migration), the Phase 4 checklist grows a dedicated "Backup + Install-bundle round-trip" criterion at that time.
 
 ---
 
