@@ -68,7 +68,7 @@ Raw facts from outside or below the ledger:
 
 - BTCPay invoice / payment ids
 - raw BTCPay payload snapshots
-- file paths, hashes, and attachment metadata
+- references to Kassiber attachment records for stored files and URLs
 - external references such as invoice numbers or payment hashes
 
 This layer answers: "Where did this fact come from?"
@@ -175,12 +175,22 @@ report packaging or accounting export but not tax math, keep it in Kassiber.
 The exact schema can evolve, but the shape should stay additive and
 many-to-many:
 
+These tables should sit alongside Kassiber's existing `transactions` and
+`attachments` tables. `external_documents` should reuse the shipped
+`attachments` store for the actual file / URL payloads so verify / GC ownership
+stays in one place.
+
 - `external_documents`
   One row per external invoice, receipt, contract, or similar business
-  document. Holds origin, hashes, extracted fields, and reconciliation status.
+  document. Holds document-level metadata, extracted fields, origin, and
+  reconciliation status. It does not introduce a second blob store.
+- `external_document_attachments`
+  Join table linking `external_documents` to existing `attachments` rows, so
+  one business document can reference one or more stored files / URLs.
 - `document_payment_links`
-  The allocation table between documents and transactions. Must support one
-  document paid by many transactions and one transaction settling many
+  The allocation table between documents and transactions
+  (`document_payment_links.transaction_id -> transactions.id`). Must support
+  one document paid by many transactions and one transaction settling many
   documents.
 - `match_suggestions`
   Proposed matches, their confidence, explanation, and generation method.
