@@ -1329,24 +1329,30 @@ def _journal_processing_status(conn, profile):
 
 
 def _audit_transaction_refs(conn, profile_id, transaction_ids):
-    ids = [str(value) for value in transaction_ids if value]
+    ids = list(dict.fromkeys(str(value) for value in transaction_ids if value))
     if not ids:
         return {}
-    placeholders = ", ".join("?" for _ in ids)
-    rows = conn.execute(
-        f"""
-        SELECT
-            t.id,
-            t.external_id,
-            t.occurred_at,
-            t.asset,
-            w.label AS wallet
-        FROM transactions t
-        JOIN wallets w ON w.id = t.wallet_id
-        WHERE t.profile_id = ? AND t.id IN ({placeholders})
-        """,
-        [profile_id, *ids],
-    ).fetchall()
+    rows = []
+    chunk_size = 400
+    for start in range(0, len(ids), chunk_size):
+        chunk = ids[start : start + chunk_size]
+        placeholders = ", ".join("?" for _ in chunk)
+        rows.extend(
+            conn.execute(
+                f"""
+                SELECT
+                    t.id,
+                    t.external_id,
+                    t.occurred_at,
+                    t.asset,
+                    w.label AS wallet
+                FROM transactions t
+                JOIN wallets w ON w.id = t.wallet_id
+                WHERE t.profile_id = ? AND t.id IN ({placeholders})
+                """,
+                [profile_id, *chunk],
+            ).fetchall()
+        )
     return {str(row["id"]): dict(row) for row in rows}
 
 

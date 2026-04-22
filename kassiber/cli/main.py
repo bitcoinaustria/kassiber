@@ -1154,6 +1154,19 @@ def dispatch(conn: sqlite3.Connection | None, args: argparse.Namespace) -> Any:
     if args.command == "reports":
         report_hooks = _report_hooks()
         if args.reports_command == "summary":
+            if args.format in {"table", "plain"}:
+                return emit(
+                    args,
+                    "\n".join(
+                        core_reports.build_summary_report_lines(
+                            conn,
+                            args.workspace,
+                            args.profile,
+                            report_hooks,
+                            wallet_ref=args.wallet,
+                        )
+                    ),
+                )
             return emit(
                 args,
                 core_reports.report_summary(
