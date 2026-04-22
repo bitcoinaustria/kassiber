@@ -509,5 +509,126 @@ class AtCrossAssetSwapEngineTest(unittest.TestCase):
             self.assertEqual(detail["reason_code"], "missing_spot_price")
 
 
+class ATCrossAssetValidationWiringTest(unittest.TestCase):
+    """Pin that ``GenericRP2TaxEngine.build_ledger_state`` runs the country's cross-asset
+    validator between the parse and compute phases — the new backstop that catches
+    orphan ``at_swap_link`` markers Kassiber's annotator structurally cannot detect
+    (a paired leg that was never imported can't be annotated).
+    """
+
+    def setUp(self):
+        from kassiber.core.engines.base import TaxEngineLedgerInputs
+        from kassiber.core.engines.rp2 import GenericRP2TaxEngine
+
+        self.GenericRP2TaxEngine = GenericRP2TaxEngine
+        self.TaxEngineLedgerInputs = TaxEngineLedgerInputs
+
+    def _profile(self):
+        return {
+            "id": "p1",
+            "workspace_id": "w1",
+            "label": "holder1",
+            "tax_country": "at",
+            "gains_algorithm": "moving_average_at",
+        }
+
+    def _wallet_refs(self):
+        return {
+            "wallet-a": {
+                "id": "wallet-a",
+                "label": "wallet-a",
+                "wallet_account_id": "acct-1",
+                "account_code": "A",
+                "account_label": "Account A",
+            },
+            "wallet-b": {
+                "id": "wallet-b",
+                "label": "wallet-b",
+                "wallet_account_id": "acct-1",
+                "account_code": "A",
+                "account_label": "Account A",
+            },
+        }
+
+    def _inbound_row(self, tx_id, wallet_id, asset, amount, occurred_at, *, fiat_rate=50_000):
+        return {
+            "id": tx_id,
+            "wallet_id": wallet_id,
+            "wallet_label": wallet_id,
+            "asset": asset,
+            "direction": "inbound",
+            "amount": amount,
+            "fee": 0,
+            "fiat_rate": fiat_rate,
+            "fiat_value": None,
+            "kind": "deposit",
+            "description": tx_id,
+            "note": None,
+            "external_id": tx_id,
+            "occurred_at": occurred_at,
+        }
+
+    def _build_inputs(self):
+        rows = [
+            self._inbound_row("buy-btc", "wallet-a", "BTC", 100_000_000_000, "2025-05-01T00:00:00Z"),
+            self._inbound_row("buy-eur", "wallet-b", "ETH", 1_000_000_000_000_000_000, "2025-05-02T00:00:00Z", fiat_rate=3_000),
+        ]
+        return self.TaxEngineLedgerInputs(
+            rows=rows,
+            wallet_refs_by_id=self._wallet_refs(),
+            manual_pair_records=[],
+        )
+
+    def test_validator_is_called_once_with_every_non_empty_input_data(self):
+        # Two assets with non-empty inventory → validator sees two InputData objects, once.
+        engine = self.GenericRP2TaxEngine(self._profile())
+        inputs = self._build_inputs()
+
+        # Spy by patching the AT country's method at class level. build_tax_policy builds a
+        # fresh `rp2.plugin.country.at.AT` on every call, so patching the class affects the
+        # instance used by `_rp2_configuration`.
+        from rp2.plugin.country.at import AT
+
+        calls: list[list[object]] = []
+        original = AT.validate_input_data
+
+        def spy(self, input_data_list):
+            calls.append(list(input_data_list))
+            return original(self, input_data_list)
+
+        AT.validate_input_data = spy  # type: ignore[assignment]
+        try:
+            engine.build_ledger_state(inputs)
+        finally:
+            AT.validate_input_data = original  # type: ignore[assignment]
+
+        self.assertEqual(len(calls), 1, "validator must be called exactly once per build_ledger_state")
+        self.assertEqual(len(calls[0]), 2, "validator must receive one InputData per non-empty asset")
+        seen_assets = {getattr(input_data, "asset", None) for input_data in calls[0]}
+        self.assertEqual(seen_assets, {"BTC", "ETH"})
+
+    def test_validator_failure_surfaces_as_apperror_with_code(self):
+        from kassiber.errors import AppError
+        from rp2.plugin.country.at import AT
+        from rp2.rp2_error import RP2ValueError
+
+        engine = self.GenericRP2TaxEngine(self._profile())
+        inputs = self._build_inputs()
+
+        def failing(self, input_data_list):
+            raise RP2ValueError("Unpaired `at_swap_link=orphan` marker")
+
+        original = AT.validate_input_data
+        AT.validate_input_data = failing  # type: ignore[assignment]
+        try:
+            with self.assertRaises(AppError) as ctx:
+                engine.build_ledger_state(inputs)
+        finally:
+            AT.validate_input_data = original  # type: ignore[assignment]
+
+        self.assertEqual(ctx.exception.code, "rp2_input_validation")
+        self.assertIn("at_swap_link=orphan", str(ctx.exception))
+
+
 if __name__ == "__main__":
     unittest.main()

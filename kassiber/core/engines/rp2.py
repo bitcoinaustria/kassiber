@@ -68,6 +68,21 @@ class _RP2AssetState:
 
 
 @dataclass(frozen=True)
+class _RP2PreparedInput:
+    """Output of the parse phase — carries the per-asset RP2 ``InputData`` plus the
+    quarantines/audit accumulated while building the transaction sets. ``input_data`` is
+    ``None`` when the asset has no acquisitions (nothing to compute). Kept separate from
+    ``_RP2AssetState`` so cross-asset validation can run over every asset's ``InputData``
+    before any ``compute_tax`` call — the whole point of splitting prepare from compute.
+    """
+
+    asset: str
+    input_data: Any | None
+    quarantines: list[dict[str, Any]]
+    intra_audit: list[dict[str, Any]]
+
+
+@dataclass(frozen=True)
 class _ATPrepassOp:
     kind: str
     sort_key: tuple[str, str, str]
@@ -382,8 +397,14 @@ def _rows_by_transaction_id(normalized_inputs: NormalizedTaxAssetInputs) -> dict
     return rows_by_id
 
 
-def _rp2_asset_state(profile, normalized_inputs: NormalizedTaxAssetInputs, configuration) -> _RP2AssetState:
-    """Build RP2 ``ComputedData`` for one asset across every wallet in the profile."""
+def _prepare_rp2_asset_input(profile, normalized_inputs: NormalizedTaxAssetInputs, configuration) -> _RP2PreparedInput:
+    """Build RP2 ``InputData`` for one asset without running ``compute_tax``.
+
+    Splitting the parse and compute phases lets the caller run the country's cross-asset
+    validator (e.g. Austrian `at_swap_link` pairing) against every asset's ``InputData``
+    before any per-asset accounting happens — the validator cannot see other assets from
+    inside a single ``compute_tax`` call.
+    """
 
     modules = _get_rp2_modules()
     TransactionSet = modules["TransactionSet"]
@@ -391,8 +412,6 @@ def _rp2_asset_state(profile, normalized_inputs: NormalizedTaxAssetInputs, confi
     OutTransaction = modules["OutTransaction"]
     IntraTransaction = modules["IntraTransaction"]
     InputData = modules["InputData"]
-    BalanceSet = modules["BalanceSet"]
-    compute_tax = modules["compute_tax"]
     asset = normalized_inputs.asset
     in_set = TransactionSet(configuration, "IN", asset)
     out_set = TransactionSet(configuration, "OUT", asset)
@@ -560,11 +579,11 @@ def _rp2_asset_state(profile, normalized_inputs: NormalizedTaxAssetInputs, confi
         row_index += 1
 
     if in_set.count == 0:
-        return _RP2AssetState(
-            computed_data=None,
+        return _RP2PreparedInput(
+            asset=asset,
+            input_data=None,
             quarantines=quarantines,
             intra_audit=intra_audit,
-            balance_set=None,
         )
     input_data = InputData(
         asset=asset,
@@ -572,19 +591,52 @@ def _rp2_asset_state(profile, normalized_inputs: NormalizedTaxAssetInputs, confi
         unfiltered_out_transaction_set=out_set,
         unfiltered_intra_transaction_set=intra_set,
     )
-    try:
-        computed_data = compute_tax(configuration, _build_rp2_accounting_engine(profile), input_data)
-    except Exception as exc:
-        raise AppError(f"RP2 tax calculation failed for asset '{asset}': {exc}") from exc
-    from datetime import date as _date
-
-    balance_set = BalanceSet(configuration, input_data, _date.max)
-    return _RP2AssetState(
-        computed_data=computed_data,
+    return _RP2PreparedInput(
+        asset=asset,
+        input_data=input_data,
         quarantines=quarantines,
         intra_audit=intra_audit,
+    )
+
+
+def _rp2_asset_state_from_prepared(prepared: _RP2PreparedInput, profile, configuration) -> _RP2AssetState:
+    """Run ``compute_tax`` + ``BalanceSet`` on a prepared input. No-op when there are no
+    acquisitions (``prepared.input_data is None``)."""
+
+    if prepared.input_data is None:
+        return _RP2AssetState(
+            computed_data=None,
+            quarantines=prepared.quarantines,
+            intra_audit=prepared.intra_audit,
+            balance_set=None,
+        )
+    modules = _get_rp2_modules()
+    compute_tax = modules["compute_tax"]
+    BalanceSet = modules["BalanceSet"]
+    try:
+        computed_data = compute_tax(configuration, _build_rp2_accounting_engine(profile), prepared.input_data)
+    except Exception as exc:
+        raise AppError(f"RP2 tax calculation failed for asset '{prepared.asset}': {exc}") from exc
+    from datetime import date as _date
+
+    balance_set = BalanceSet(configuration, prepared.input_data, _date.max)
+    return _RP2AssetState(
+        computed_data=computed_data,
+        quarantines=prepared.quarantines,
+        intra_audit=prepared.intra_audit,
         balance_set=balance_set,
     )
+
+
+def _rp2_asset_state(profile, normalized_inputs: NormalizedTaxAssetInputs, configuration) -> _RP2AssetState:
+    """Legacy single-call orchestrator: prepare then compute. Preserved for callers that
+    don't need to run cross-asset validation between the two phases (all current direct
+    callers). ``GenericRP2TaxEngine.build_ledger_state`` drives prepare/validate/compute
+    explicitly and does not go through here.
+    """
+
+    prepared = _prepare_rp2_asset_input(profile, normalized_inputs, configuration)
+    return _rp2_asset_state_from_prepared(prepared, profile, configuration)
 
 
 def _append_rp2_journal_entries(entries, computed_data, wallet_refs_by_label, profile, row_by_id, intra_audit):
@@ -881,6 +933,10 @@ class GenericRP2TaxEngine:
             for pair in all_pairs:
                 pairs_by_asset[pair["out"]["asset"]].append(pair)
 
+            # Phase 1: normalize + build RP2 `InputData` for every asset. No `compute_tax`
+            # runs here so the country's cross-asset validator can see every asset's
+            # markers before any accounting.
+            prepared_by_asset: list[tuple[NormalizedTaxAssetInputs, _RP2PreparedInput]] = []
             for asset, asset_rows in rows_by_asset.items():
                 normalized_inputs = normalize_tax_asset_inputs(
                     self.profile,
@@ -892,7 +948,26 @@ class GenericRP2TaxEngine:
                     at_swap_link_by_row_id=swap_link_by_row_id,
                     at_carried_basis_by_row_id=carried_basis_by_row_id,
                 )
+                prepared = _prepare_rp2_asset_input(self.profile, normalized_inputs, configuration)
+                prepared_by_asset.append((normalized_inputs, prepared))
+
+            # Phase 2: cross-asset validation via the country hook. Catches invariants
+            # (e.g. Austrian `at_swap_link` marker must appear on two different assets)
+            # that Kassiber's annotator structurally cannot detect — a paired leg that
+            # was never imported can't be annotated, so only a post-hoc scan sees it.
+            input_data_list = [prepared.input_data for _, prepared in prepared_by_asset if prepared.input_data is not None]
+            try:
+                configuration.country.validate_input_data(input_data_list)
+            except Exception as exc:
+                raise AppError(
+                    f"RP2 cross-asset input validation failed: {exc}",
+                    code="rp2_input_validation",
+                ) from exc
+
+            # Phase 3: compute tax + assemble per-asset results.
+            for normalized_inputs, prepared in prepared_by_asset:
                 asset_result = self._process_asset(
+                    prepared,
                     normalized_inputs,
                     wallet_refs_by_label,
                     configuration,
@@ -1188,13 +1263,14 @@ class GenericRP2TaxEngine:
 
     def _process_asset(
         self,
+        prepared: _RP2PreparedInput,
         normalized_inputs: NormalizedTaxAssetInputs,
         wallet_refs_by_label: Mapping[str, Mapping[str, Any]],
         configuration: Any,
     ) -> _RP2AssetResult:
-        asset_state = _rp2_asset_state(
+        asset_state = _rp2_asset_state_from_prepared(
+            prepared,
             self.profile,
-            normalized_inputs,
             configuration,
         )
         if asset_state.computed_data is None:
