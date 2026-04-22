@@ -188,13 +188,85 @@ Writing typed wrappers is more code than `conn.execute(sql).fetchall()`. That's 
 
 ## Backup and restore
 
-- **Backup**: `python -c "import sqlite3; sqlite3.connect(src).backup(sqlite3.connect(dst))"` or `sqlite3 <src> ".backup <dst>"`. This is the **only** safe way to copy a WAL database — a raw file copy can miss checkpoints.
-- **Bundle scope**: project backup archives the whole project bundle — DB
-  plus blobs, logs, and any project-scoped exports that should travel with
-  the bookkeeping state.
-- **Restore**: stop the UI, replace the project directory from the archive,
-  restart. CLI commands should refuse to run if the schema_version is newer
-  than the code knows about.
+This section is the canonical bundle manifest. Other docs (notably
+`05-attachments.md` and `04-desktop-ui.md`) must reference this section
+rather than restate a narrower archive layout — partial restatements are
+how manifests drift.
+
+Implementation status: the project-bundle migration and the OS keychain
+integration described below are both unimplemented. See `TODO.md` and
+`SECURITY.md` for current runtime behavior. This section describes the
+end-state contract so later work has one target to hit.
+
+### Bundle contents (inside the archive)
+
+- `kassiber.sqlite3` — copied via `sqlite3 .backup` or
+  `Connection.backup()` so the WAL and SHM files are consistent. A raw
+  file copy of a WAL database can miss checkpoints and is not allowed.
+- `blobs/attachments/` — content-addressed attachment store
+  (see `05-attachments.md` for the internal layout)
+- `blobs/imports/` — managed copies of import sources, when present
+- `exports/` — project-local reports and PDFs that should travel with
+  the bookkeeping state
+- `logs/` — project-scoped CLI and UI logs
+- `_bundle_manifest.json` — archive version, created_at, source hostname,
+  DB `schema_version`, and the list of keychain key ids the DB references
+  so a cross-machine restore can enumerate what needs re-pairing. The
+  manifest is an archive-only artifact; the live project directory does
+  not carry a copy.
+
+### Outside the archive (by design)
+
+- **OS keychain entries** referenced by wallet/backend rows in the DB.
+  The bundle carries the *references*, not the secret material. Until OS
+  keychain integration lands (see `SECURITY.md` and `TODO.md`), sensitive
+  fields still live in the DB / `backends.env` and travel with the bundle
+  as plaintext — i.e. today's bundle is effectively a secret-bearing
+  archive and should be treated as such.
+- **Global app state** under `~/.kassiber/` — launcher preferences,
+  recent-project pointers, and global keychain references. That state
+  belongs to the install, not to any one project.
+
+### Portability scope
+
+- **Same-machine, same user account:** the bundle alone is sufficient.
+  Keychain references resolve against the existing OS keychain; backends
+  and wallets light up transparently after restore. Today, with no
+  keychain integration yet, this path is effectively "restore a plaintext
+  bundle on the same machine."
+- **Cross-machine or cross-account (end state):** the bundle restores the
+  accounting state, but any row that depends on a keychain-backed secret
+  re-opens in a locked state. The user must re-pair each via the same
+  flow used at initial setup. The UI enumerates the expected keys from
+  `_bundle_manifest.json` so re-pairing is deterministic and no wallet
+  is silently missed. This flow cannot be built until keychain
+  integration lands.
+- A backup is **not** an offsite key escrow. Users who want their secrets
+  to travel with the bundle must export them through an explicit secret
+  export flow (not in MVP).
+
+### Restore flow
+
+1. Validate archive structure and `_bundle_manifest.json`.
+2. Refuse if the bundle's `schema_version` is newer than the running
+   code supports.
+3. Unpack into a sibling temp directory under `~/.kassiber/projects/`.
+4. Stop any UI workers or CLI processes holding an open connection to
+   the active project DB.
+5. Atomic swap: rename the current project directory to a timestamped
+   backup dir, then rename the temp directory into place.
+6. Restart workers with fresh connections. Resolve keychain references;
+   for any that fail, surface a locked state to the UI so the user can
+   re-pair.
+7. On any failure, leave the original project directory intact and log
+   the error.
+
+### MVP vs later
+
+- MVP: the bundle format above, same-machine restore, and the
+  schema_version gate.
+- Later (post-keychain-integration): the per-wallet locked state and the
+  rebind wizard described in Portability scope.
 
 ## Backends, descriptors, and secrets
 
@@ -205,7 +277,9 @@ Writing typed wrappers is more code than `conn.execute(sql).fetchall()`. That's 
   the wallet definition, not an external sidecar file once imported.
 - **Secrets do not belong in JSON settings files.** Backend tokens,
   auth headers, RPC credentials, and any sensitive descriptor material
-  should migrate toward OS keychain references.
+  should migrate toward OS keychain references. Secrets therefore live
+  outside the project bundle; see the Portability scope under
+  `Backup and restore` for how cross-machine restores rebind them.
 - **Optional env files are bootstrap-only.** Keep dotenv overrides for
   development or operator-managed installs, but do not treat them as the
   canonical long-term storage story.

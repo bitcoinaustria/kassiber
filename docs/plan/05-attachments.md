@@ -165,22 +165,23 @@ Runtime on a 10k-attachment store: <5 seconds. Acceptable as a manual action.
 
 ## Backup + restore
 
-`kassiber backup create <path>` produces a `.kassiber.tar` containing:
+Attachments travel inside the project bundle. The canonical bundle manifest,
+the schema_version gate, and the atomic-swap restore flow live in
+`03-storage-conventions.md` — this doc no longer restates them so the two
+cannot drift.
 
-```
-kassiber.sqlite3           # via sqlite3 .backup to ensure WAL-safe copy
-blobs/attachments/         # entire directory tree
-app.json                   # launcher/UI prefs if explicitly included
-_backup_metadata.json      # version, created_at, hostname
-```
+Attachment-specific notes:
 
-Restore:
-1. Validate archive structure and metadata
-2. Refuse if schema_version in archive > schema_version the running code supports
-3. Unpack into a temp directory
-4. Atomic swap: rename the current project directory to a timestamped backup dir; rename temp to the project path
-5. Restart any UI worker threads with fresh connections
-6. On any failure: leave original data intact, log error
+- `blobs/attachments/` is part of the bundle; the content-addressed layout
+  described above is exactly what gets archived.
+- `kassiber attachments gc` must not run while a bundle archive is being
+  produced. The worker that drives `Backup Data` takes a lock that blocks
+  GC until archival completes, so the archive cannot observe a half-freed
+  tree.
+- On restore, the DB rows are authoritative for "what attachments exist."
+  If the archive is missing a blob the DB still references, the UI should
+  surface a broken-attachment warning on that row rather than silently
+  degrade it.
 
 ## Implementation touchpoints
 

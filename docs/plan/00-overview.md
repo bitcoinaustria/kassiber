@@ -12,7 +12,7 @@ A **local-first Bitcoin accounting CLI**, written in Python.
 
 - Entry point: `kassiber/cli/main.py` (via `kassiber/__main__.py`)
 - Phase 0 core extraction is green: the old `app.py` monolith has been split into reusable `kassiber.core` modules plus a dedicated CLI layer
-- Storage: SQLite at `~/.kassiber/data/kassiber.sqlite3`, integer msat amounts (never float)
+- Storage: SQLite — today at `~/.kassiber/data/kassiber.sqlite3`, moving to per-project bundles at `~/.kassiber/projects/<project>/kassiber.sqlite3` as the target end state (see `03-storage-conventions.md`); integer msat amounts (never float)
 - Tax engine: [RP2](https://github.com/eprbell/rp2), with both `generic` and `at` profiles running through `kassiber/core/engines/rp2.py`; Austrian semantics come from [bitcoinaustria/rp2](https://github.com/bitcoinaustria/rp2), while Kassiber keeps normalization, provenance, and report mapping
 - External I/O: Esplora / Electrum / Bitcoin Core RPC; CoinGecko for rates; Phoenix/BTCPay/BIP329 importers
 - Test contract: `tests/test_cli_smoke.py` pins the machine-readable JSON envelope emitted by every CLI command — this is the reliable seam the whole plan hangs on
