@@ -52,7 +52,7 @@ Kassiber is currently in **dev mode**: renaming commands, breaking flags, and re
   - attachments
   - metadata (notes, tags, inclusion)
   - journals (RP2 processing + quarantine)
-  - reports (balance-sheet, portfolio-summary, capital-gains, journal-entries, balance-history)
+  - reports (summary, tax-summary, balance-sheet, portfolio-summary, capital-gains, journal-entries, balance-history, export-pdf)
   - rates (local cache + CoinGecko sync + manual override)
   - ui (PySide6 + QML Phase 1 app shell over the local store)
 - Every command accepts `--format {table,plain,json,csv}`, `--output <path>`, `--machine` (= `--format json`), and `--debug`.
@@ -75,9 +75,9 @@ Kassiber is currently in **dev mode**: renaming commands, breaking flags, and re
 - `attachments {add,list,remove,verify,gc}`
 - `metadata records {list,get,note {set,clear},tag {add,remove},excluded {set,clear}}`
 - `metadata bip329 {import,list,export}`
-- `journals {process,list,quarantined,events {list,get},quarantine {show,clear,resolve {price-override,exclude}}}`
+- `journals {process,list,transfers {list},quarantined,events {list,get},quarantine {show,clear,resolve {price-override,exclude}}}`
 - `transfers {pair,list,unpair}`
-- `reports {balance-sheet,portfolio-summary,capital-gains,journal-entries,balance-history}`
+- `reports {summary,tax-summary,balance-sheet,portfolio-summary,capital-gains,journal-entries,balance-history,export-pdf}`
 - `rates {pairs,sync,latest,range,set}`
 
 ## Pagination
@@ -167,6 +167,9 @@ uv run python -m kassiber profiles create --help
 uv run python -m kassiber metadata records --help
 uv run python -m kassiber attachments list --help
 uv run python -m kassiber journals events --help
+uv run python -m kassiber journals transfers list --help
+uv run python -m kassiber reports summary --help
+uv run python -m kassiber reports tax-summary --help
 uv run python -m kassiber reports balance-history --help
 uv run python -m kassiber rates --help
 uv run python -m kassiber ui --help
@@ -179,7 +182,7 @@ uv run python -m kassiber ui --help
   - import priced CSV, BTCPay CSV, or Phoenix CSV
   - import BIP329 JSONL
   - process journals
-  - run each report, including `reports balance-history --interval month`
+  - run each report, including `reports summary`, `reports tax-summary`, and `reports balance-history --interval month`
   - exercise the rates cache: `rates pairs`, `rates set BTC-USD <ts> <rate>`, `rates latest BTC-USD`, `rates range BTC-USD --start <ts>`; optionally `rates sync --pair BTC-USD --days 7` when network access is acceptable
 
 ## Known gaps

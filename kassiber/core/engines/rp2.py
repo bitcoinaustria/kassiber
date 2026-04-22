@@ -11,7 +11,7 @@ from importlib import import_module
 from typing import Any, Iterable, Iterator, Mapping
 
 from ...errors import AppError
-from ...msat import dec, msat_to_btc
+from ...msat import btc_to_msat, dec, msat_to_btc
 from ...tax_policy import build_tax_policy
 from ...transfers import apply_manual_pairs, detect_intra_transfers
 from ..austrian import (
@@ -54,6 +54,7 @@ class _RP2AssetResult:
     entries: list[dict[str, Any]]
     quarantines: list[dict[str, Any]]
     intra_audit: list[dict[str, Any]]
+    tax_summary: list[dict[str, Any]]
     account_holdings: dict[tuple[Any, ...], dict[str, Any]]
     wallet_holdings: dict[tuple[Any, ...], dict[str, Any]]
 
@@ -794,6 +795,34 @@ def _accumulate_asset_holdings(account_holdings, wallet_holdings, computed_data,
         wallet_holdings[wallet_key]["cost_basis"] += cost_basis
 
 
+def _build_tax_summary_rows(computed_data):
+    rows = []
+    for yearly in sorted(
+        computed_data.yearly_gain_loss_list,
+        key=lambda row: (
+            row.year,
+            row.asset,
+            getattr(row.transaction_type, "value", row.transaction_type),
+            row.is_long_term_capital_gains,
+        ),
+    ):
+        quantity = dec(yearly.crypto_amount)
+        rows.append(
+            {
+                "year": int(yearly.year),
+                "asset": yearly.asset,
+                "transaction_type": str(getattr(yearly.transaction_type, "value", yearly.transaction_type)).lower(),
+                "capital_gains_type": "long" if yearly.is_long_term_capital_gains else "short",
+                "quantity": float(quantity),
+                "quantity_msat": btc_to_msat(quantity),
+                "proceeds": float(dec(yearly.fiat_amount)),
+                "cost_basis": float(dec(yearly.fiat_cost_basis)),
+                "gain_loss": float(dec(yearly.fiat_gain_loss)),
+            }
+        )
+    return rows
+
+
 class GenericRP2TaxEngine:
     """Current generic RP2-backed implementation behind the engine seam."""
 
@@ -807,6 +836,7 @@ class GenericRP2TaxEngine:
                 quarantines=[],
                 intra_audit=[],
                 cross_asset_pairs=[],
+                tax_summary=[],
                 account_holdings={},
                 wallet_holdings={},
             )
@@ -819,6 +849,7 @@ class GenericRP2TaxEngine:
         account_holdings = defaultdict(lambda: {"quantity": Decimal("0"), "cost_basis": Decimal("0")})
         wallet_holdings = defaultdict(lambda: {"quantity": Decimal("0"), "cost_basis": Decimal("0")})
         cross_asset_pairs: list[dict[str, Any]] = []
+        tax_summary_all: list[dict[str, Any]] = []
         with _rp2_configuration(self.profile, wallet_labels, assets) as configuration:
             wallet_refs_by_label = {
                 ref["label"]: ref for ref in inputs.wallet_refs_by_id.values()
@@ -868,6 +899,7 @@ class GenericRP2TaxEngine:
                 )
                 quarantines.extend(asset_result.quarantines)
                 intra_audit_all.extend(asset_result.intra_audit)
+                tax_summary_all.extend(asset_result.tax_summary)
                 entries.extend(asset_result.entries)
                 for key, totals in asset_result.account_holdings.items():
                     account_holdings[key]["quantity"] += totals["quantity"]
@@ -880,6 +912,7 @@ class GenericRP2TaxEngine:
             quarantines=quarantines,
             intra_audit=intra_audit_all,
             cross_asset_pairs=cross_asset_pairs,
+            tax_summary=tax_summary_all,
             account_holdings=dict(account_holdings),
             wallet_holdings=dict(wallet_holdings),
         )
@@ -1169,6 +1202,7 @@ class GenericRP2TaxEngine:
                 entries=[],
                 quarantines=asset_state.quarantines,
                 intra_audit=asset_state.intra_audit,
+                tax_summary=[],
                 account_holdings={},
                 wallet_holdings={},
             )
@@ -1194,6 +1228,7 @@ class GenericRP2TaxEngine:
             entries=entries,
             quarantines=asset_state.quarantines,
             intra_audit=asset_state.intra_audit,
+            tax_summary=_build_tax_summary_rows(asset_state.computed_data),
             account_holdings=dict(account_holdings),
             wallet_holdings=dict(wallet_holdings),
         )
