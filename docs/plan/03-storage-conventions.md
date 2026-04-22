@@ -1,224 +1,245 @@
 # Storage Conventions
 
+**Status note:** Current runtime behavior still uses the app-wide state root
+described in `README.md` and `AGENTS.md`. This doc describes the **target**
+storage direction after the planned project migration lands, so later work has
+one clear end state instead of a mix of app-global and project-local data.
+
 **Engine:** SQLite (stdlib `sqlite3`).
-**Path:** `~/.kassiber/data/kassiber.sqlite3` (resolved via the existing `--data-root` / settings-manifest flow).
+**Path:** `~/.kassiber/projects/<project>/kassiber.sqlite3`, with a small
+global app config under `~/.kassiber/`.
 **Mode:** WAL for concurrent CLI + UI access.
 **ORM:** None. Plain SQL + dataclass returns through a small repository layer.
 
-This doc codifies how we use SQLite so CLI and UI can share one database without stepping on each other, and so future sessions (or another contributor) don't reinvent the discipline.
+This doc pins the small part we actually need: what a project is, where it
+lives, and how much machinery we are deliberately *not* standardizing yet.
 
 ## Why SQLite (brief)
 
 Decided in a separate discussion. Summary:
 
 - Embedded, in Python stdlib, zero shipped dependency
-- ACID + WAL for concurrent reads during writes — exactly what CLI + UI coexistence needs
-- All query shapes in kassiber are relational (joins, date ranges, account rollups) — SQL is the right language
-- Scale fits comfortably (realistic max ~100k transactions over a decade; SQLite handles millions)
-- Backup = file copy (matches the simplified local export behavior)
-- One of the most security-audited pieces of software on the planet
-- INTEGER is int64 → msat amounts fit with no float precision hazard
+- ACID + WAL for concurrent reads during writes
+- All query shapes in Kassiber are relational
+- Scale fits comfortably
+- Backup can be a snapshot of one file
+- Security posture is well understood
+- INTEGER is int64, so msat amounts fit with no float precision hazard
+
+## Project boundary
+
+- **One DB per project.** A project is the unit of storage, backup,
+  import/export, and deletion.
+- **Not one DB per wallet.** Kassiber's accounting and tax logic spans
+  wallets.
+- **Not one giant DB for the whole machine.** Separate projects should not
+  silently share accounting state.
+- **Minimal global app state.** `~/.kassiber/` outside `projects/` should only
+  hold launcher/UI preferences, recent-project pointers, and other install-wide
+  metadata.
+- **Project-local first.** If something belongs to the user's bookkeeping, it
+  should live in the project or be an explicit external reference recorded by
+  the project.
 
 ## Connection opening — mandatory pragmas
 
-Every connection opened by the canonical DB bootstrap (`db.py::open_db()` during Phase 0, later possibly re-exported as `core.db.open_db()`) runs:
+Every connection opened by the canonical DB bootstrap runs:
 
 ```sql
 PRAGMA journal_mode = WAL;           -- concurrent reads during writes
 PRAGMA synchronous = NORMAL;         -- fsync on commit boundary only; WAL-safe
-PRAGMA foreign_keys = ON;            -- SQLite disables FKs by default; this enables
-PRAGMA busy_timeout = 5000;          -- 5s wait on a locked write before ETIMEDOUT
-PRAGMA temp_store = MEMORY;          -- temp tables/sorts in RAM, not /tmp
+PRAGMA foreign_keys = ON;            -- SQLite disables FKs by default
+PRAGMA busy_timeout = 5000;          -- wait up to 5s on a locked write
+PRAGMA temp_store = MEMORY;          -- temp tables/sorts in RAM
 ```
 
 Notes:
 
-- `foreign_keys = ON` is **per-connection** in SQLite, not a DB-level flag. This is the #1 footgun with SQLite. Every connection must set it.
-- `journal_mode = WAL` is persistent once set, but setting it on every connection is cheap and self-healing if someone opens the file with a tool that reverts it.
-- `synchronous = NORMAL` under WAL is safe and fast. `FULL` is overkill; `OFF` risks corruption on power loss.
-- `busy_timeout = 5000` means a writer waits up to 5 seconds for another writer to finish. For CLI sync (one transaction per batch) + UI (mostly reads + occasional small writes) this is plenty.
+- `foreign_keys = ON` is **per-connection** in SQLite, not a DB-level flag.
+- `journal_mode = WAL` is persistent once set, but setting it on every
+  connection is cheap and self-healing.
+- `synchronous = NORMAL` under WAL is the right default here.
+- `busy_timeout = 5000` is enough for short UI writes and batched sync work.
 
 ## Concurrency model
 
 - **Multiple readers, single writer** at a time (SQLite's WAL invariant).
-- CLI and UI can both run simultaneously. UI reads are cheap and don't block a concurrent CLI sync. If both try to write at the same moment, one waits up to 5s.
-- In practice, the UI writes tiny (add a wallet, attach a receipt, set a tag) and CLI sync writes in short batched transactions. Contention is imperceptible.
-- For long-running work (a full esplora sync of a large wallet), `core.sync` breaks the work into transactions of a few hundred inserts each and yields between batches. This keeps the writer-lock window short.
+- CLI and UI can both run simultaneously.
+- Normal reads and writes should rely on SQLite WAL, not a second,
+  application-wide lock wrapped around every operation.
+- For long-running sync/import work, write in short batches so the writer-lock
+  window stays small.
+
+## Project-level operations (MVP)
+
+Keep whole-project coordination simpler than normal query lifecycle management.
+
+- Ordinary reads and writes should not need an extra project-wide lock.
+- Whole-project operations such as backup export, reset, or delete may use one
+  coarse project lock or may simply require the project to be closed first.
+- This doc does **not** pin hot in-place restore, generation tokens, session
+  invalidation, or crash-recovery journals.
+- "Import as a new project" is a simpler future direction than "replace the
+  currently open project while the app stays alive."
 
 ## Schema migrations
 
-**Tool:** plain numbered SQL files, runner in `core/migrations/runner.py`. No Alembic, no yoyo. Vibecoding with Claude should prefer tools that are one-page-of-code simple.
+**Tool:** plain numbered SQL files, runner in `core/migrations/runner.py`.
+No Alembic, no yoyo.
 
-```
+```text
 kassiber/core/migrations/
   runner.py
   001_initial.sql
-  002_add_transaction_attachments.sql
-  003_add_wallet_altbestand.sql
-  ...
+  002_add_transaction_links.sql
+  003_...
 ```
 
 ### Runner contract
 
 ```python
 def apply_pending_migrations(conn: sqlite3.Connection) -> list[int]:
-    """Applies any migrations whose version > schema_version table max.
-    Returns applied versions in order."""
+    """Apply migrations whose version is greater than the current max."""
 ```
 
-- Connection is already opened with standard pragmas.
-- Each migration runs in its own transaction; partial application is impossible.
-- After success, the runner inserts into `schema_version (version, applied_at)`.
-- `open_db()` remains the canonical entrypoint and is responsible for leaving the DB usable for both reads and writes on every invocation.
-- During the transition away from embedded schema DDL, `open_db()` may still call today's compatibility helpers (`SCHEMA`, `ensure_schema_compat`, msat migration) before or after the SQL-file runner. The rule is behavioral compatibility, not a flag day.
-- The migration runner is invoked from the canonical bootstrap path, not only from write commands, so older databases never fail on read-only commands.
-- First-run bootstrap: if `schema_version` table doesn't exist, create it, then treat every file as pending.
+- Connection is already opened with the standard pragmas.
+- Each migration runs in its own transaction.
+- After success, the runner inserts into `schema_version(version, applied_at)`.
+- `open_db()` remains the canonical entrypoint.
+- The migration runner is invoked from the canonical bootstrap path, not only
+  from write commands.
+- First-run bootstrap: if `schema_version` doesn't exist, create it and treat
+  every file as pending.
 
 ### Migration file rules
 
-- **Filename is the version.** `001_`, `002_`, ... zero-padded for sort stability.
-- **One change per file.** Easier to bisect when something goes wrong.
-- **Idempotent-if-possible**, but not required. The runner prevents double-apply; we don't also need `CREATE TABLE IF NOT EXISTS` everywhere.
+- **Filename is the version.** `001_`, `002_`, ...
+- **One change per file.**
 - **Never edit an applied migration.** Write a new one that fixes it.
-- **No data migrations that can't be re-run.** If data fix is inherently one-shot, put it in a commented section with explicit guidance.
-
-### Example
-
-`002_add_transaction_attachments.sql`:
-
-```sql
-CREATE TABLE transaction_attachments (
-    id          INTEGER PRIMARY KEY AUTOINCREMENT,
-    tx_id       TEXT NOT NULL REFERENCES transactions(id) ON DELETE CASCADE,
-    kind        TEXT NOT NULL CHECK (kind IN ('file', 'url')),
-    sha256      TEXT,
-    filename    TEXT,
-    mime        TEXT,
-    size_bytes  INTEGER,
-    url         TEXT,
-    note        TEXT NOT NULL DEFAULT '',
-    created_at  TEXT NOT NULL
-);
-
-CREATE INDEX idx_attachments_tx ON transaction_attachments(tx_id);
-```
+- **Keep data migrations boring.** Prefer straightforward SQL and small Python
+  helpers over framework magic.
 
 ## Repository pattern
 
-**What it is:** a thin module per domain with functions that translate SQL rows into typed Python values. Not an ORM; just boundaries.
-
-**What it is not:** active-record objects with `save()` methods, lazy relationships, or query builders.
-
-### Example: `core/repo/wallets.py`
+Repository functions should be small and typed, not generic data mappers.
 
 ```python
-from dataclasses import dataclass
-from sqlite3 import Connection
-
-@dataclass(frozen=True)
-class Wallet:
+@dataclass
+class WalletSummary:
     id: str
-    workspace_id: str
-    profile_id: str
-    account_id: str | None
-    label: str
+    name: str
     kind: str
-    config_json: str
-    created_at: str
+    tx_count: int
+    balance_sat: int
 
-def list_wallets(conn: Connection, *, profile_id: str, account_id: str | None = None) -> list[Wallet]:
-    sql = """SELECT id, workspace_id, profile_id, account_id, label, kind, config_json, created_at
-             FROM wallets
-             WHERE profile_id = ?
-               AND (? IS NULL OR account_id = ?)
-             ORDER BY label"""
-    rows = conn.execute(sql, (profile_id, account_id, account_id)).fetchall()
-    return [Wallet(
-        id=r[0], workspace_id=r[1], profile_id=r[2], account_id=r[3],
-        label=r[4], kind=r[5], config_json=r[6], created_at=r[7],
-    ) for r in rows]
 
-def get_wallet(conn: Connection, wallet_id: str) -> Wallet | None: ...
-def insert_wallet(conn: Connection, *, workspace_id: str, profile_id: str, label: str, kind: str, config_json: str = "{}") -> Wallet: ...
-def update_wallet(conn: Connection, wallet_id: str, **fields) -> Wallet: ...
-def delete_wallet(conn: Connection, wallet_id: str) -> None: ...
+def list_wallet_summaries(conn: sqlite3.Connection, *, project_id: str) -> list[WalletSummary]:
+    ...
 ```
 
-Domain helpers can project additional convenience fields from `config_json` (for example wallet-level tax provenance) without pretending the raw schema is different from what Kassiber stores today.
+Rules:
 
-### Principles
+- SQL lives close to the function that uses it.
+- Return dataclasses or small typed dicts, not raw tuples.
+- Avoid "generic repository base classes."
+- Prefer explicit joins and projections over hidden ORM behavior.
 
-1. **Plain SQL, never `sqlite3.Row` leaks.** Translate in the repo.
-2. **Frozen dataclasses** for query results. Cheap, immutable, easy to serialize.
-3. **Functions, not classes.** No `WalletRepository` object. Just `repo.wallets.list_wallets(conn, ...)`.
-4. **One repo module per domain table (or tight cluster).** `repo.wallets`, `repo.accounts`, `repo.transactions`, `repo.attachments`, etc.
-5. **Write paths return the created/updated object** (or None for deletes). Saves callers a second fetch.
-6. **Keep complex joins in domain modules**, not in repos. The repo is CRUD-shaped; domain modules orchestrate.
+## Backup and project portability
 
-### Trade-off accepted
+This PR only needs to pin the storage unit, not a full archive protocol.
 
-Writing typed wrappers is more code than `conn.execute(sql).fetchall()`. That's deliberate:
+### MVP sketch
 
-- The UI calls `repo.wallets.list_wallets(...)` and gets a typed `list[Wallet]` it can bind to a QML ListView
-- Claude writes against clean interfaces rather than hunting through SQL strings in app.py
-- Tests stub the repo if needed (rare — SQLite in-memory is usually fine)
-- Swapping storage later (unlikely) touches repo modules only
+- One project = one SQLite DB at
+  `~/.kassiber/projects/<project>/kassiber.sqlite3`
+- Minimal global app state at `~/.kassiber/app.json`
+- Per-transaction links live in the DB and therefore already travel with the
+  project snapshot
+- Project-local copied files are optional later work, not something this PR
+  needs to standardize in detail
 
-## Backup and restore
+### Backup
 
-- **Backup**: `python -c "import sqlite3; sqlite3.connect(src).backup(sqlite3.connect(dst))"` or `sqlite3 <src> ".backup <dst>"`. This is the **only** safe way to copy a WAL database — a raw file copy can miss checkpoints.
-- **Attachments** (see `05-attachments.md`) are bundled alongside the `.sqlite3` in a tar archive: `kassiber backup create /path/to/archive.kassiber.tar`.
-- **Restore**: stop the UI, replace the DB file and attachments directory from the archive, restart. CLI commands should refuse to run if the schema_version is newer than the code knows about.
+- Back up a project by taking a SQLite snapshot via `Connection.backup()` or
+  `sqlite3 .backup`.
+- Because link/reference metadata lives in the DB, a DB snapshot already
+  preserves the main user-facing attachment data for the simpler MVP.
+- If later phases add project-local copied files, those can live beside the DB
+  under `blobs/` and be included then.
+
+### Restore / import
+
+- Do **not** design hot in-place restore in this PR.
+- A future restore/import flow may simply require the project to be closed
+  first.
+- "Import as new project" is a simpler and safer first step than "replace the
+  currently-open project while the UI stays alive."
+- No generation tokens, staged swap journals, manifest/authentication protocol,
+  or crash-recovery matrix are required to choose the basic cross-platform
+  layout.
+
+## Backends, descriptors, and secrets
+
+Keep the storage-layout decision separate from the final secret-sealing
+mechanism.
+
+- The project should become the unit of storage instead of splitting active
+  state across the DB plus unrelated global side files.
+- Moving backend definitions closer to the project is still the right
+  direction.
+- But this PR should **not** try to promise both effortless cross-platform
+  portability and machine-bound OS-keychain rebinding in one shot.
+- First make the project boundary clear; then pick the secret-storage strategy
+  deliberately in a follow-up.
 
 ## Encryption
 
-Not in scope for MVP. Options considered for later:
+Today's runtime has **no** encryption at rest. The DB and related files are
+plain files on disk.
 
-| Option | Effort | Trade-off |
-|---|---|---|
-| OS disk encryption (FileVault, LUKS, BitLocker) | zero | Free, effective against laptop theft; nothing the app does |
-| SQLCipher | medium | Drop-in API for Python via `pysqlcipher3`; adds native build dep; encrypts DB only, not attachments |
-| Encrypt whole `~/.kassiber/data/` at app level | high | Password prompt on launch; kassiber owns keys; complex key-rotation story |
-
-For now: rely on OS-level disk encryption. Revisit if we ship to users other than the project owner.
+If cross-platform portability is the primary product requirement, a portable
+encrypted project/backup format is a better fit than machine-specific keychain
+references. If passphrase-free local UX is the priority, OS-keychain
+integration is a better fit. This PR does not need to settle that tradeoff.
 
 ## What not to do
 
-- **No ORM.** SQLAlchemy's ergonomics don't win back the cost of magic + vocabulary. Plain SQL is readable by any Python dev in one look.
-- **No `detect_types=sqlite3.PARSE_DECLTYPES`.** It silently rewrites values (e.g., TIMESTAMP strings become `datetime` objects) and surprises readers. We do explicit conversions in the repo.
-- **No `row_factory` global changes outside `open_conn`.** If a command needs `sqlite3.Row` temporarily, set it on that local cursor.
-- **No auto-commit in the middle of a domain operation.** Use `with conn:` blocks to scope transactions around domain functions.
-- **No connection pooling.** Each CLI invocation opens one connection; the UI keeps one long-lived connection on the main thread plus per-worker connections in QThreads.
-- **No `PRAGMA journal_mode = MEMORY` or `OFF`.** Corruption risk. Smoke-test speed is fine under WAL.
-- **No stray DDL in random call sites.** During the migration transition, `db.py` remains the canonical place that can still contain bootstrap DDL/compatibility logic. Once the runner fully replaces it, new DDL belongs in migration SQL files, not scattered around the codebase.
+- Do not split one logical project across multiple writable roots unless there
+  is a very strong reason.
+- Do not put active accounting state in global app config.
+- Do not over-design live restore before the product even needs it.
+- Do not make the attachment story more complex than the real use case.
 
 ## Storage layout summary
 
-```
+```text
 ~/.kassiber/
-  config/
-    settings.json          # schema_version, paths manifest (already exists)
-    backends.env           # sync backend definitions (already exists)
-  data/
-    kassiber.sqlite3       # primary DB
-    kassiber.sqlite3-wal   # WAL file (transient)
-    kassiber.sqlite3-shm   # shared-memory file (transient)
-    attachments/
-      <sha256[:2]>/
-        <sha256>.<ext>     # content-addressed, see 05-attachments.md
-  exports/                  # reports, PDFs (user-facing outputs)
-  logs/                     # (new) rotated logs for Download logs button
+  app.json                        # global UI prefs + recent projects only
+  projects/
+    <project>/
+      kassiber.sqlite3            # primary DB
+      kassiber.sqlite3-wal        # WAL file (transient)
+      kassiber.sqlite3-shm        # shared-memory file (transient)
+      exports/                    # optional project-local reports
+      logs/                       # optional project-local logs
+      blobs/                      # only if later phases need copied local files
 ```
 
 ## Observability
 
-- Every CLI command logs to `~/.kassiber/logs/cli-<date>.jsonl` (one line per command invocation: command name, args, exit code, duration, AppError kind if any)
-- UI logs to `~/.kassiber/logs/ui-<date>.jsonl`
-- **Never** log secret values (xpubs, macaroons, descriptors with private keys). The logger has a blacklist.
-- The Settings → Download logs button zips the last 14 days of logs for the user to share.
+- Project logs should live beside the project DB under
+  `~/.kassiber/projects/<project>/logs/`.
+- Keep the logging contract simple: structured events, no raw argv, and redact
+  secret-bearing fields by default.
+- The Settings → Download logs flow can zip recent project logs without
+  becoming part of the storage-layout debate.
 
 ## References
 
-- [SQLite WAL docs](https://www.sqlite.org/wal.html)
-- [PRAGMA foreign_keys](https://www.sqlite.org/foreignkeys.html#fk_enable)
-- [sqlite3 .backup API](https://docs.python.org/3/library/sqlite3.html#sqlite3.Connection.backup)
+- `README.md`
+- `AGENTS.md`
+- `docs/plan/00-overview.md`
+- `docs/plan/04-desktop-ui.md`
+- `docs/plan/05-attachments.md`
+- `SECURITY.md`
+- `TODO.md`

@@ -16,7 +16,7 @@ This doc specifies the desktop UI through MVP (end of Phase 4). Post-MVP items a
   3. Open the DB through the canonical bootstrap path and ensure pending migrations / compatibility fixes are applied
   4. If no profile exists or `ui.first_run == True`, show Welcome wizard (Phase 4)
   5. Otherwise, show main window
-- Closes cleanly on window close. Persists window geometry + tile-hide flags to `~/.kassiber/config/settings.json` under a `ui:` subkey.
+- Closes cleanly on window close. Persists window geometry + tile-hide flags to the global `~/.kassiber/app.json` (UI prefs and recent-project pointers; per the global-app-state boundary in `03-storage-conventions.md`) under a `ui:` subkey. Today's runtime writes these to `~/.kassiber/config/settings.json`; the migration to `app.json` is part of the project-bundle rollout.
 
 ## Source layout
 
@@ -257,7 +257,9 @@ No tile drag-resize in MVP. That's a Phase 5+ item.
 
 ## Phase 3 — Connections, sync, attachments (4–5 days)
 
-**Goal:** Users can add connections, trigger sync with progress feedback, import CSVs, and attach receipt PDFs or drive links to any transaction.
+**Goal:** Users can add connections, trigger sync with progress feedback,
+import CSVs, and attach one or more document links to any transaction. Copied
+local files, if kept, are a separate follow-up from the link-first storage MVP.
 
 ### Add Connection modal
 
@@ -292,11 +294,10 @@ Matches the approved connection-flow reference state.
 - Opened by clicking a row in Transactions tile
 - Shows: full timestamp, msat amount, fiat at time, wallet, kind, labels (BIP329), tags, counterparties (if known), pairing info (if part of a self-transfer pair)
 - **Attachments section** (see `05-attachments.md`):
-  - Drag-drop zone: drop a PDF/image to attach as file
-  - "Add URL" button to paste a drive link
-  - Existing attachments render as chips with filename + note; click opens in system handler (Finder/Preview for files, browser for URLs)
-  - Remove button per chip
-- Save button commits tag changes; attachments persist immediately on drop/add
+  - "Add link" button with URL, optional title, optional note
+  - Existing links render as chips/list rows; click opens in the browser
+  - Remove button per row
+- Save button commits tag changes; links persist immediately when added
 
 ### Wallet Detail dialog
 
@@ -309,8 +310,8 @@ Matches the approved connection-flow reference state.
 - [ ] Adding an xpub wallet syncs its transactions and updates all tiles
 - [ ] Importing a Phoenix CSV creates a virtual wallet with all rows
 - [ ] Sync shows live progress in the bottom banner
-- [ ] Dropping a PDF onto a transaction creates an attachment and the file lands in `~/.kassiber/attachments/`
-- [ ] Adding a drive URL to a transaction persists and reopens on click
+- [ ] Adding one or more document links to a transaction persists and reopens on click
+- [ ] If copied-file attachments remain in the product, they are a separate feature from the link-first storage MVP
 
 ---
 
@@ -330,10 +331,17 @@ Matches the approved connection-flow reference state.
 Matches the approved settings reference.
 
 - "Hide sensitive data" toggle
-- "Download logs" button — zips `~/.kassiber/logs/*.jsonl` from last 14 days via `backup_worker` and opens a file-save dialog
-- "Backup Data" button — creates `.kassiber.tar` archive (DB via `sqlite3 .backup` + attachments dir) via `backup_worker`
-- "Restore from backup" button — confirmation dialog, then unpack archive and replace live DB (after stopping any worker)
-- "Reset app" button (red, destructive) — triple-confirm, then wipes `~/.kassiber/data/` and returns to Welcome wizard
+- "Download logs" button — zips the active project's `logs/*.jsonl` (`~/.kassiber/projects/<project>/logs/`) from the last 14 days via `backup_worker` and opens a file-save dialog
+- "Backup Data" button — exports the current project snapshot via `sqlite3 .backup`
+  or `Connection.backup()`. In the simplified MVP, the portable unit is the
+  project DB. If later phases add project-local copied files under `blobs/`,
+  they can be included then as an additive extension.
+- **No live restore/import button in this PR.** If project import or restore
+  lands later, start with the simpler rule that the project is closed first.
+- "Reset project" button (red, destructive) — confirm, remove or replace the
+  current project, then return to the Welcome wizard. The exact recovery/wipe
+  protocol is a separate follow-up; the storage layout should not be blocked on
+  it.
 - Future section (not MVP): "Tax country" dropdown — switching it re-runs journal computation once the UI exposes the already-landed Austrian RP2 plugin / fork integration
 
 ### Packaging
@@ -347,10 +355,9 @@ Matches the approved settings reference.
 ### Done when
 
 - [ ] Fresh install (empty `~/.kassiber`) shows Welcome, completes to main window
-- [ ] Settings dialog matches the approved settings reference layout and all buttons work
+- [ ] Settings dialog matches the approved settings reference layout and the storage-related buttons stay simple
 - [ ] `briefcase build macOS` produces a `.app` that launches
-- [ ] Backup + Restore round-trips cleanly (DB identical, attachments present)
-- [ ] Reset app returns the user to Welcome
+- [ ] Reset project returns the user to Welcome
 - [ ] Launching `.app` from Finder works on a fresh machine without Python preinstalled
 
 ---
