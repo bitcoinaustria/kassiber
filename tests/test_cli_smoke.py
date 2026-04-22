@@ -554,6 +554,8 @@ class CliSmokeTest(unittest.TestCase):
 
     def test_07_all_reports_succeed(self):
         for report, kind in [
+            ("summary", "reports.summary"),
+            ("tax-summary", "reports.tax-summary"),
             ("balance-sheet", "reports.balance-sheet"),
             ("portfolio-summary", "reports.portfolio-summary"),
             ("capital-gains", "reports.capital-gains"),
@@ -572,6 +574,27 @@ class CliSmokeTest(unittest.TestCase):
             "--interval", "month",
         )
         self._assert_kind(payload, "reports.balance-history")
+
+    def test_07b_summary_report_rollups(self):
+        payload = self._cli(
+            "reports", "summary",
+            "--workspace", "Main",
+            "--profile", "Default",
+        )
+        self._assert_kind(payload, "reports.summary")
+        data = payload["data"]
+        self.assertEqual(data["workspace"], "Main")
+        self.assertEqual(data["profile"], "Default")
+        self.assertIsNone(data["wallet"])
+        self.assertEqual(data["metrics"]["wallets_in_scope"], 3)
+        self.assertEqual(data["metrics"]["active_transactions"], 4)
+        self.assertEqual(data["metrics"]["journal_entries"], 4)
+        self.assertEqual(data["metrics"]["quarantines"], 0)
+        self.assertEqual(len(data["asset_flow"]), 1)
+        flow = data["asset_flow"][0]
+        self.assertEqual(flow["asset"], "BTC")
+        self.assertEqual(flow["fee_amount_msat"], 1800000)
+        self.assertAlmostEqual(float(flow["fee_amount"]), 0.000018, places=8)
 
     def test_07a_export_pdf_report(self):
         pdf_path = Path(self._tmp.name) / "kassiber-report.pdf"
@@ -783,6 +806,22 @@ class CliSmokeTest(unittest.TestCase):
         self.assertAlmostEqual(float(out_entry["quantity"]), -0.501, places=8)
         self.assertAlmostEqual(float(in_entry["quantity"]), 0.5, places=8)
 
+        payload = self._cli(
+            "journals", "transfers", "list",
+            "--workspace", "Main",
+            "--profile", "Transfer",
+        )
+        self._assert_kind(payload, "journals.transfers.list")
+        audit = payload["data"]
+        self.assertEqual(audit["summary"]["same_asset_transfers"], 1)
+        self.assertEqual(audit["summary"]["cross_asset_pairs"], 0)
+        transfer_row = audit["same_asset_transfers"][0]
+        self.assertEqual(transfer_row["from_wallet"], "Cold")
+        self.assertEqual(transfer_row["to_wallet"], "Hot")
+        self.assertEqual(transfer_row["sent_msat"], 50100000000)
+        self.assertEqual(transfer_row["received_msat"], 50000000000)
+        self.assertEqual(transfer_row["fee_msat"], 100000000)
+
         # Only the 0.001 BTC network fee is realized as a taxable disposal.
         payload = self._cli(
             "reports", "capital-gains",
@@ -824,6 +863,35 @@ class CliSmokeTest(unittest.TestCase):
         btc_rows = [r for r in payload["data"] if r.get("asset") == "BTC"]
         total_qty = sum(float(r["quantity"]) for r in btc_rows)
         self.assertAlmostEqual(total_qty, 0.999, places=8)
+
+        payload = self._cli(
+            "reports", "summary",
+            "--workspace", "Main",
+            "--profile", "Transfer",
+            "--wallet", "Hot",
+        )
+        self._assert_kind(payload, "reports.summary")
+        summary = payload["data"]
+        self.assertEqual(summary["wallet"], "Hot")
+        self.assertEqual(summary["metrics"]["wallets_in_scope"], 1)
+        self.assertEqual(summary["metrics"]["active_transactions"], 1)
+        self.assertEqual(summary["asset_flow"][0]["fee_amount_msat"], 0)
+
+        payload = self._cli(
+            "reports", "tax-summary",
+            "--workspace", "Main",
+            "--profile", "Transfer",
+        )
+        self._assert_kind(payload, "reports.tax-summary")
+        rows = payload["data"]
+        detail_rows = [row for row in rows if row["row_type"] == "detail"]
+        self.assertEqual(len(detail_rows), 1)
+        self.assertEqual(detail_rows[0]["transaction_type"], "move")
+        self.assertEqual(detail_rows[0]["quantity_msat"], 100000000)
+        self.assertAlmostEqual(float(detail_rows[0]["gain_loss"]), 5.0, places=4)
+        grand_total = next(row for row in rows if row["row_type"] == "grand_total")
+        self.assertEqual(grand_total["quantity_msat"], 100000000)
+        self.assertAlmostEqual(float(grand_total["gain_loss"]), 5.0, places=4)
 
     def test_13a_intra_transfer_fiat_value_spot_price(self):
         payload = self._cli(
@@ -1119,6 +1187,21 @@ class CliSmokeTest(unittest.TestCase):
         # so transfers_detected stays 0 and cross_asset_pairs reports 1.
         self.assertEqual(data["transfers_detected"], 0)
         self.assertEqual(data["cross_asset_pairs"], 1)
+
+        payload = self._cli(
+            "journals", "transfers", "list",
+            "--workspace", "Main",
+            "--profile", "CrossAsset",
+        )
+        self._assert_kind(payload, "journals.transfers.list")
+        audit = payload["data"]
+        self.assertEqual(audit["summary"]["same_asset_transfers"], 0)
+        self.assertEqual(audit["summary"]["cross_asset_pairs"], 1)
+        pair = audit["cross_asset_pairs"][0]
+        self.assertEqual(pair["kind"], "peg-in")
+        self.assertEqual(pair["policy"], "taxable")
+        self.assertEqual(pair["out_wallet"], "OnchainBTC")
+        self.assertEqual(pair["in_wallet"], "Liquid")
 
     def test_16_austrian_cross_asset_carrying_value_accepts_same_wallet(self):
         workspace = "CrossAssetAT"

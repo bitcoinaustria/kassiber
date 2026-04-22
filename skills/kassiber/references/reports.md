@@ -8,6 +8,8 @@ Preferred defaults:
 
 - `--format plain` for display reports
 - `--format csv --output <path>` for export-style reports
+- `--machine reports summary` for exact rollups that should be quoted back without hand math
+- `--machine reports tax-summary` for exact yearly gain/loss buckets and totals from RP2
 - `reports export-pdf` only when the user explicitly asks for a PDF
 
 `--machine`, `--format`, and `--output` are global flags and belong before the subcommand tree. Examples:
@@ -53,11 +55,49 @@ Some machine-readable list responses are paginated and keep rows under command-s
 kassiber --format plain reports balance-sheet
 ```
 
+## Summary
+
+Use this first for "what are the totals?" style questions:
+
+```bash
+kassiber reports summary
+kassiber --machine reports summary
+kassiber --machine reports summary --wallet satoshi-liquid
+```
+
+This report is the safest source for:
+
+- fee totals
+- transaction counts
+- priced vs quarantined counts
+- holdings cost basis / market value / unrealized PnL
+- realized proceeds / cost basis / gain-loss
+
+Prefer the exact fields Kassiber returns. If the payload includes both BTC and `*_msat`, quote those values directly instead of converting them yourself.
+
 ## Portfolio summary
 
 ```bash
 kassiber --format plain reports portfolio-summary
 ```
+
+## Tax summary
+
+Use this for yearly gain/loss buckets and totals:
+
+```bash
+kassiber --machine reports tax-summary
+```
+
+The command emits:
+
+- RP2 yearly detail rows grouped by `year`, `asset`, `transaction_type`, and capital-gains type
+- a `year_total` row for each year
+- a final `grand_total` row
+
+Total rows only emit quantity when the grouped rows all belong to the same asset. Mixed-asset totals leave quantity blank because cross-asset crypto amounts are not additive.
+
+Prefer these rows over summing `capital-gains` output manually.
 
 ## Capital gains
 

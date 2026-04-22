@@ -8,7 +8,7 @@ from decimal import Decimal
 from typing import Any, Callable, Mapping, Sequence
 
 from ..errors import AppError
-from ..msat import dec, msat_to_btc
+from ..msat import btc_to_msat, dec, msat_to_btc
 from ..tax_policy import require_tax_processing_supported
 
 INTERVAL_CHOICES = ("hour", "day", "week", "month")
@@ -353,14 +353,14 @@ def _aggregate_balance_rows_from_portfolio(portfolio_rows):
     ]
 
 
-def _pdf_scope_wallets(conn, workspace_ref, profile_ref, hooks: ReportHooks, wallet=None):
+def _scope_wallets(conn, workspace_ref, profile_ref, hooks: ReportHooks, wallet=None):
     wallets = hooks.list_wallets(conn, workspace_ref, profile_ref)
     if wallet is None:
         return wallets
     return [row for row in wallets if row["id"] == wallet["id"]]
 
 
-def _pdf_report_query_rows(conn, profile, wallet=None):
+def _report_query_rows(conn, profile, wallet=None):
     tx_filters = ["t.profile_id = ?"]
     tx_params = [profile["id"]]
     if wallet:
@@ -500,12 +500,314 @@ def _pdf_report_query_rows(conn, profile, wallet=None):
     }
 
 
+def _summary_rollups(balance_rows, capital_rows):
+    return {
+        "holdings": {
+            "cost_basis": float(sum(float(row["cost_basis"]) for row in balance_rows)),
+            "market_value": float(sum(float(row["market_value"]) for row in balance_rows)),
+            "unrealized_pnl": float(sum(float(row["unrealized_pnl"]) for row in balance_rows)),
+        },
+        "realized": {
+            "proceeds": float(sum(float(row["proceeds"]) for row in capital_rows)),
+            "cost_basis": float(sum(float(row["cost_basis"]) for row in capital_rows)),
+            "gain_loss": float(sum(float(row["gain_loss"]) for row in capital_rows)),
+        },
+    }
+
+
+def _summary_flow_rows(rows):
+    return [
+        {
+            "asset": row["asset"],
+            "tx_count": int(row["tx_count"] or 0),
+            "inbound_count": int(row["inbound_count"] or 0),
+            "outbound_count": int(row["outbound_count"] or 0),
+            "inbound_amount": float(msat_to_btc(row["inbound_amount"] or 0)),
+            "inbound_amount_msat": int(row["inbound_amount"] or 0),
+            "outbound_amount": float(msat_to_btc(row["outbound_amount"] or 0)),
+            "outbound_amount_msat": int(row["outbound_amount"] or 0),
+            "fee_amount": float(msat_to_btc(row["fee_amount"] or 0)),
+            "fee_amount_msat": int(row["fee_amount"] or 0),
+        }
+        for row in rows
+    ]
+
+
+def _build_summary_context(conn, workspace_ref, profile_ref, hooks: ReportHooks, wallet_ref=None):
+    workspace, profile = _resolve_report_scope(conn, workspace_ref, profile_ref, hooks)
+    wallet = hooks.resolve_wallet(conn, profile["id"], wallet_ref) if wallet_ref else None
+    hooks.require_processed_journals(conn, profile)
+
+    scope_wallets = _scope_wallets(conn, workspace["id"], profile["id"], hooks, wallet=wallet)
+    portfolio_rows = report_portfolio_summary(conn, workspace["id"], profile["id"], hooks)
+    if wallet:
+        portfolio_rows = [row for row in portfolio_rows if row["wallet"] == wallet["label"]]
+    balance_rows = _aggregate_balance_rows_from_portfolio(portfolio_rows)
+
+    capital_rows = report_capital_gains(conn, workspace["id"], profile["id"], hooks)
+    if wallet:
+        capital_rows = [row for row in capital_rows if row["wallet"] == wallet["label"]]
+
+    query_rows = _report_query_rows(conn, profile, wallet=wallet)
+    summary = query_rows["summary"]
+    rollups = _summary_rollups(balance_rows, capital_rows)
+
+    return {
+        "workspace": workspace,
+        "profile": profile,
+        "wallet": wallet,
+        "scope_wallets": scope_wallets,
+        "portfolio_rows": portfolio_rows,
+        "balance_rows": balance_rows,
+        "capital_rows": capital_rows,
+        "query_rows": query_rows,
+        "summary": summary,
+        "rollups": rollups,
+    }
+
+
+def report_summary(conn, workspace_ref, profile_ref, hooks: ReportHooks, wallet_ref=None):
+    context = _build_summary_context(conn, workspace_ref, profile_ref, hooks, wallet_ref=wallet_ref)
+    workspace = context["workspace"]
+    profile = context["profile"]
+    wallet = context["wallet"]
+    scope_wallets = context["scope_wallets"]
+    query_rows = context["query_rows"]
+    summary = context["summary"]
+    rollups = context["rollups"]
+
+    return {
+        "workspace": workspace["label"],
+        "profile": profile["label"],
+        "wallet": wallet["label"] if wallet else None,
+        "fiat_currency": profile["fiat_currency"],
+        "tax_country": profile["tax_country"],
+        "tax_long_term_days": int(profile["tax_long_term_days"] or 0),
+        "gains_algorithm": profile["gains_algorithm"],
+        "last_processed_at": profile["last_processed_at"],
+        "processed_tx_count": int(profile["last_processed_tx_count"] or 0),
+        "metrics": {
+            "wallets_in_scope": len(scope_wallets),
+            "assets_in_scope": int(summary["asset_count"] or 0),
+            "active_transactions": int(summary["active_transactions"] or 0),
+            "excluded_transactions": int(summary["excluded_transactions"] or 0),
+            "inbound_transactions": int(summary["inbound_transactions"] or 0),
+            "outbound_transactions": int(summary["outbound_transactions"] or 0),
+            "journal_entries": int(query_rows["journal_entries"] or 0),
+            "quarantines": int(query_rows["quarantines"] or 0),
+            "priced_transactions": int(summary["priced_transactions"] or 0),
+            "transactions_with_notes": int(summary["noted_transactions"] or 0),
+            "transactions_with_tags": int(query_rows["tagged_transactions"] or 0),
+            "first_transaction_at": summary["first_transaction_at"],
+            "last_transaction_at": summary["last_transaction_at"],
+        },
+        "holdings": rollups["holdings"],
+        "realized": rollups["realized"],
+        "asset_flow": _summary_flow_rows(query_rows["flow_by_asset"]),
+    }
+
+
+def build_summary_report_lines(conn, workspace_ref, profile_ref, hooks: ReportHooks, wallet_ref=None):
+    context = _build_summary_context(conn, workspace_ref, profile_ref, hooks, wallet_ref=wallet_ref)
+    workspace = context["workspace"]
+    profile = context["profile"]
+    wallet = context["wallet"]
+    scope_wallets = context["scope_wallets"]
+    query_rows = context["query_rows"]
+    summary = context["summary"]
+    rollups = context["rollups"]
+
+    title_scope = wallet["label"] if wallet else profile["label"]
+    title = f"Kassiber Summary Report - {title_scope}"
+    lines = [title, "=" * len(title), ""]
+    lines.extend(
+        _report_kv_lines(
+            [
+                ("Workspace", workspace["label"]),
+                ("Profile", profile["label"]),
+                ("Wallet scope", wallet["label"] if wallet else "All wallets"),
+                ("Fiat currency", profile["fiat_currency"]),
+                ("Tax country", profile["tax_country"]),
+                ("Tax long-term days", profile["tax_long_term_days"]),
+                ("Gains algorithm", profile["gains_algorithm"]),
+                ("Last processed at", profile["last_processed_at"] or ""),
+                ("Processed tx count", _report_count(profile["last_processed_tx_count"])),
+            ]
+        )
+    )
+
+    lines.extend(["", "Activity", "--------"])
+    lines.extend(
+        _report_kv_lines(
+            [
+                ("Wallets in scope", _report_count(len(scope_wallets))),
+                ("Assets in scope", _report_count(summary["asset_count"])),
+                ("Transactions (active)", _report_count(summary["active_transactions"])),
+                ("Transactions (excluded)", _report_count(summary["excluded_transactions"])),
+                ("Inbound transactions", _report_count(summary["inbound_transactions"])),
+                ("Outbound transactions", _report_count(summary["outbound_transactions"])),
+                ("Journal entries", _report_count(query_rows["journal_entries"])),
+                ("Quarantines", _report_count(query_rows["quarantines"])),
+                ("Priced transactions", _report_count(summary["priced_transactions"])),
+                ("Transactions with notes", _report_count(summary["noted_transactions"])),
+                ("Transactions with tags", _report_count(query_rows["tagged_transactions"])),
+                ("First transaction", summary["first_transaction_at"] or ""),
+                ("Last transaction", summary["last_transaction_at"] or ""),
+            ]
+        )
+    )
+
+    lines.extend(["", "Financial Summary", "-----------------"])
+    lines.extend(
+        _report_kv_lines(
+            [
+                ("Holdings cost basis", _report_fiat(rollups["holdings"]["cost_basis"])),
+                ("Holdings market value", _report_fiat(rollups["holdings"]["market_value"])),
+                ("Unrealized PnL", _report_fiat(rollups["holdings"]["unrealized_pnl"])),
+                ("Realized proceeds", _report_fiat(rollups["realized"]["proceeds"])),
+                ("Realized cost basis", _report_fiat(rollups["realized"]["cost_basis"])),
+                ("Realized gain/loss", _report_fiat(rollups["realized"]["gain_loss"])),
+            ]
+        )
+    )
+
+    lines.extend(["", "Asset Flow", "----------"])
+    asset_flow_rows = [
+        [
+            row["asset"],
+            _report_count(row["tx_count"]),
+            _report_count(row["inbound_count"]),
+            _report_count(row["outbound_count"]),
+            _report_btc(msat_to_btc(row["inbound_amount"] or 0)),
+            _report_btc(msat_to_btc(row["outbound_amount"] or 0)),
+            _report_btc(msat_to_btc(row["fee_amount"] or 0)),
+        ]
+        for row in query_rows["flow_by_asset"]
+    ]
+    if asset_flow_rows:
+        lines.extend(
+            hooks.format_table(
+                ["Asset", "Tx", "In", "Out", "Inbound", "Outbound", "Fees"],
+                asset_flow_rows,
+                [6, 6, 6, 6, 14, 14, 14],
+                align_right={1, 2, 3, 4, 5, 6},
+            )
+        )
+    else:
+        lines.append("No active transactions in scope.")
+    return lines
+
+
+def _tax_summary_total_row(
+    row_type,
+    *,
+    year=None,
+    asset="",
+    quantity: Decimal | None = None,
+    proceeds=Decimal("0"),
+    cost_basis=Decimal("0"),
+    gain_loss=Decimal("0"),
+):
+    return {
+        "row_type": row_type,
+        "year": year,
+        "asset": asset,
+        "transaction_type": "",
+        "capital_gains_type": "",
+        "quantity": float(quantity) if quantity is not None else None,
+        "quantity_msat": btc_to_msat(quantity) if quantity is not None else None,
+        "proceeds": float(proceeds),
+        "cost_basis": float(cost_basis),
+        "gain_loss": float(gain_loss),
+    }
+
+
+def report_tax_summary(conn, workspace_ref, profile_ref, hooks: ReportHooks):
+    _, profile = _resolve_report_scope(conn, workspace_ref, profile_ref, hooks)
+    hooks.require_processed_journals(conn, profile)
+    state = hooks.build_ledger_state(conn, profile)
+    detail_rows = sorted(
+        state["tax_summary"],
+        key=lambda row: (
+            int(row["year"]),
+            row["asset"],
+            row["transaction_type"],
+            row["capital_gains_type"],
+        ),
+    )
+    if not detail_rows:
+        return []
+
+    grouped_by_year = defaultdict(
+        lambda: {
+            "assets": set(),
+            "quantity": Decimal("0"),
+            "proceeds": Decimal("0"),
+            "cost_basis": Decimal("0"),
+            "gain_loss": Decimal("0"),
+        }
+    )
+    grand = {
+        "assets": set(),
+        "quantity": Decimal("0"),
+        "proceeds": Decimal("0"),
+        "cost_basis": Decimal("0"),
+        "gain_loss": Decimal("0"),
+    }
+    grouped_rows = defaultdict(list)
+    for row in detail_rows:
+        quantity = dec(row["quantity"])
+        proceeds = dec(row["proceeds"])
+        cost_basis = dec(row["cost_basis"])
+        gain_loss = dec(row["gain_loss"])
+        year = int(row["year"])
+        grouped_rows[year].append({"row_type": "detail", **row})
+        grouped_by_year[year]["assets"].add(row["asset"])
+        grouped_by_year[year]["quantity"] += quantity
+        grouped_by_year[year]["proceeds"] += proceeds
+        grouped_by_year[year]["cost_basis"] += cost_basis
+        grouped_by_year[year]["gain_loss"] += gain_loss
+        grand["assets"].add(row["asset"])
+        grand["quantity"] += quantity
+        grand["proceeds"] += proceeds
+        grand["cost_basis"] += cost_basis
+        grand["gain_loss"] += gain_loss
+
+    rows = []
+    for year in sorted(grouped_rows):
+        year_asset = next(iter(grouped_by_year[year]["assets"])) if len(grouped_by_year[year]["assets"]) == 1 else ""
+        year_quantity = grouped_by_year[year]["quantity"] if year_asset else None
+        rows.extend(grouped_rows[year])
+        rows.append(
+            _tax_summary_total_row(
+                "year_total",
+                year=year,
+                asset=year_asset,
+                quantity=year_quantity,
+                proceeds=grouped_by_year[year]["proceeds"],
+                cost_basis=grouped_by_year[year]["cost_basis"],
+                gain_loss=grouped_by_year[year]["gain_loss"],
+            )
+        )
+    rows.append(
+        _tax_summary_total_row(
+            "grand_total",
+            asset=next(iter(grand["assets"])) if len(grand["assets"]) == 1 else "",
+            quantity=grand["quantity"] if len(grand["assets"]) == 1 else None,
+            proceeds=grand["proceeds"],
+            cost_basis=grand["cost_basis"],
+            gain_loss=grand["gain_loss"],
+        )
+    )
+    return rows
+
+
 def build_pdf_report_lines(conn, workspace_ref, profile_ref, hooks: ReportHooks, wallet_ref=None, history_limit=None):
     workspace, profile = _resolve_report_scope(conn, workspace_ref, profile_ref, hooks)
     wallet = hooks.resolve_wallet(conn, profile["id"], wallet_ref) if wallet_ref else None
     hooks.require_processed_journals(conn, profile)
 
-    scope_wallets = _pdf_scope_wallets(conn, workspace["id"], profile["id"], hooks, wallet=wallet)
+    scope_wallets = _scope_wallets(conn, workspace["id"], profile["id"], hooks, wallet=wallet)
     portfolio_rows = report_portfolio_summary(conn, workspace["id"], profile["id"], hooks)
     if wallet:
         portfolio_rows = [row for row in portfolio_rows if row["wallet"] == wallet["label"]]
@@ -525,15 +827,16 @@ def build_pdf_report_lines(conn, workspace_ref, profile_ref, hooks: ReportHooks,
     if history_limit is not None and int(history_limit) > 0:
         history_rows = history_rows[-int(history_limit) :]
 
-    query_rows = _pdf_report_query_rows(conn, profile, wallet=wallet)
+    query_rows = _report_query_rows(conn, profile, wallet=wallet)
     summary = query_rows["summary"]
 
-    holdings_cost_basis = sum(float(row["cost_basis"]) for row in balance_rows)
-    holdings_market_value = sum(float(row["market_value"]) for row in balance_rows)
-    holdings_unrealized = sum(float(row["unrealized_pnl"]) for row in balance_rows)
-    realized_proceeds = sum(float(row["proceeds"]) for row in capital_rows)
-    realized_cost_basis = sum(float(row["cost_basis"]) for row in capital_rows)
-    realized_gain_loss = sum(float(row["gain_loss"]) for row in capital_rows)
+    rollups = _summary_rollups(balance_rows, capital_rows)
+    holdings_cost_basis = rollups["holdings"]["cost_basis"]
+    holdings_market_value = rollups["holdings"]["market_value"]
+    holdings_unrealized = rollups["holdings"]["unrealized_pnl"]
+    realized_proceeds = rollups["realized"]["proceeds"]
+    realized_cost_basis = rollups["realized"]["cost_basis"]
+    realized_gain_loss = rollups["realized"]["gain_loss"]
 
     title_scope = wallet["label"] if wallet else profile["label"]
     title = f"Kassiber PDF Report - {title_scope}"
@@ -855,4 +1158,7 @@ __all__ = [
     "report_capital_gains",
     "report_journal_entries",
     "report_portfolio_summary",
+    "build_summary_report_lines",
+    "report_summary",
+    "report_tax_summary",
 ]

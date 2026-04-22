@@ -33,6 +33,7 @@ from .handlers import (
     emit,
     get_journal_event,
     import_into_wallet,
+    inspect_transfer_audit,
     list_journal_entries,
     list_journal_events,
     list_quarantines,
@@ -456,6 +457,12 @@ def build_parser() -> argparse.ArgumentParser:
     journals_quarantined.add_argument("--workspace")
     journals_quarantined.add_argument("--profile")
 
+    journals_transfers = journals_sub.add_parser("transfers")
+    journal_transfers_sub = journals_transfers.add_subparsers(dest="journal_transfers_command", required=True)
+    journal_transfers_list = journal_transfers_sub.add_parser("list")
+    journal_transfers_list.add_argument("--workspace")
+    journal_transfers_list.add_argument("--profile")
+
     journals_events = journals_sub.add_parser("events")
     events_sub = journals_events.add_subparsers(dest="events_command", required=True)
     events_list = events_sub.add_parser("list")
@@ -522,10 +529,12 @@ def build_parser() -> argparse.ArgumentParser:
 
     reports = sub.add_parser("reports")
     reports_sub = reports.add_subparsers(dest="reports_command", required=True)
-    for report_name in ["balance-sheet", "portfolio-summary", "capital-gains", "journal-entries"]:
+    for report_name in ["summary", "tax-summary", "balance-sheet", "portfolio-summary", "capital-gains", "journal-entries"]:
         report = reports_sub.add_parser(report_name)
         report.add_argument("--workspace")
         report.add_argument("--profile")
+        if report_name == "summary":
+            report.add_argument("--wallet")
 
     balance_history = reports_sub.add_parser("balance-history")
     balance_history.add_argument("--workspace")
@@ -1070,6 +1079,9 @@ def dispatch(conn: sqlite3.Connection | None, args: argparse.Namespace) -> Any:
             return emit(args, process_journals(conn, args.workspace, args.profile))
         if args.journals_command == "list":
             return emit(args, list_journal_entries(conn, args.workspace, args.profile, args.limit))
+        if args.journals_command == "transfers":
+            if args.journal_transfers_command == "list":
+                return emit(args, inspect_transfer_audit(conn, args.workspace, args.profile))
         if args.journals_command == "events":
             if args.events_command == "list":
                 return emit(
@@ -1141,6 +1153,40 @@ def dispatch(conn: sqlite3.Connection | None, args: argparse.Namespace) -> Any:
             )
     if args.command == "reports":
         report_hooks = _report_hooks()
+        if args.reports_command == "summary":
+            if args.format in {"table", "plain"}:
+                return emit(
+                    args,
+                    "\n".join(
+                        core_reports.build_summary_report_lines(
+                            conn,
+                            args.workspace,
+                            args.profile,
+                            report_hooks,
+                            wallet_ref=args.wallet,
+                        )
+                    ),
+                )
+            return emit(
+                args,
+                core_reports.report_summary(
+                    conn,
+                    args.workspace,
+                    args.profile,
+                    report_hooks,
+                    wallet_ref=args.wallet,
+                ),
+            )
+        if args.reports_command == "tax-summary":
+            return emit(
+                args,
+                core_reports.report_tax_summary(
+                    conn,
+                    args.workspace,
+                    args.profile,
+                    report_hooks,
+                ),
+            )
         if args.reports_command == "balance-sheet":
             return emit(
                 args,
