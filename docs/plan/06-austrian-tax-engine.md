@@ -15,8 +15,8 @@ Kassiber should be the local-first Bitcoin accounting product on top of the tax 
 
 Austria still requires capabilities that stock RP2 does not yet model cleanly:
 
-1. **Cost basis from 2023-01-01 requires gleitender Durchschnittspreis** (moving average). RP2 has no moving-average engine — all its accounting methods are lot-tracking.
-2. **Crypto-to-crypto swaps are non-taxable for Neuvermögen** under §27b Abs 3 Z 2 EStG, with basis carrying to the new asset. RP2 treats every disposal as taxable.
+1. **Cost basis from 2023-01-01 requires gleitender Durchschnittspreis** (moving average). Stock RP2 has no moving-average engine — all its accounting methods are lot-tracking — so the Austrian path lives on the Kassiber-maintained fork.
+2. **Crypto-to-crypto swaps are non-taxable for Neuvermögen** under §27b Abs 3 Z 2 EStG, with basis carrying to the new asset. The Kassiber-maintained RP2 fork now supports this through `at_swap_link`, but Kassiber still has to pair the legs and seed the incoming carried basis correctly.
 3. **Regime classification is by acquisition date, not holding period.** Coins acquired on/before 2021-02-28 are Altvermögen (old regime); after are Neuvermögen (new regime). RP2's `long_term_days` is a days-threshold, not a calendar cutoff.
 
 Additionally, the Altvermögen rules themselves involve a 1-year Spekulationsfrist that resembles RP2's long-term threshold but only applies to the Altvermögen tranche and expires via swap, which adds state RP2 doesn't track.

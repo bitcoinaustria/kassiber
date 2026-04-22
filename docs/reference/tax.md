@@ -37,6 +37,10 @@ After any transaction change, metadata change, exclusion change, transfer pair c
 
 Cross-wallet self-transfers are auto-detected when both legs share the same on-chain `txid`.
 
+Reports do not auto-detect or auto-pair cross-asset swaps. If you have
+BTC ↔ LBTC peg-ins / peg-outs or submarine swaps, pair those legs before
+trusting `journals process` and downstream reports.
+
 When that signal is missing, you can pair them manually:
 
 ```bash
@@ -54,8 +58,11 @@ Current rules:
 
 - same-asset manual pairs support `--policy carrying-value`
 - same-asset `--policy taxable` is rejected; leave those legs unpaired if you want normal SELL + BUY treatment
-- cross-asset pairs are stored as audit metadata only
-- cross-asset carrying-value is not supported yet
+- cross-asset pairs are always stored for audit
+- cross-asset `--policy carrying-value` is supported for Austrian (`tax_country=at`) profiles and feeds the swap-basis-carry path
+- cross-asset `--policy taxable` keeps the normal SELL + BUY treatment
+- non-Austrian profiles still reject cross-asset `--policy carrying-value`
+- cross-asset swaps are never auto-paired from time / amount heuristics during report generation; use `transfers pair` when those links matter for tax treatment
 
 Manual pairs override auto-detection.
 

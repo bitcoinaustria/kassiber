@@ -33,7 +33,7 @@ Today:
 
 - the `generic` tax policy runs through RP2
 - the `at` tax policy runs through RP2's Austrian plugin plus Kassiber-side category/Kennzahl mapping
-- Neu cross-asset swaps are still quarantined in v1 until Kassiber grows the two-pass basis-carry upgrade
+- Austrian cross-asset swaps paired with `--policy carrying-value` now carry basis through Kassiber's two-pass handoff into RP2; generic cross-asset pairs still stay on the normal SELL + BUY path
 
 The intended split is simple: Kassiber prepares and explains; RP2 computes.
 
@@ -109,6 +109,8 @@ python3 -m kassiber wallets sync --wallet donations
 Process journals and run reports:
 
 ```bash
+# If you have BTC <-> LBTC peg-ins / peg-outs or submarine swaps,
+# pair those legs first with `kassiber transfers pair`.
 python3 -m kassiber journals process
 python3 -m kassiber reports balance-sheet
 python3 -m kassiber reports capital-gains

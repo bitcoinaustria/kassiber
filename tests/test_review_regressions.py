@@ -1390,7 +1390,7 @@ class ReviewRegressionTest(unittest.TestCase):
                 "id": "mp-at-swap-1",
                 "out_transaction_id": "swap-out-1",
                 "in_transaction_id": "swap-in-1",
-                "policy": "taxable",
+                "policy": "carrying-value",
                 "kind": "swap",
             },
         ]
@@ -2046,8 +2046,8 @@ class ReviewRegressionTest(unittest.TestCase):
             ],
         )
 
-    def test_austrian_rp2_cross_asset_swap_is_quarantined(self):
-        """End-to-end: AT profile quarantines Neu cross-asset swap pairs (Option C)."""
+    def test_austrian_rp2_cross_asset_swap_carries_basis(self):
+        """End-to-end: AT profile carries basis across matched Neu cross-asset swaps."""
         profile, inputs = self._direct_austrian_cross_asset_swap_inputs()
         actual = self._direct_engine_snapshot(profile, inputs)
         expected = self._load_fixture("austrian_rp2_cross_asset_swap_snapshot.json")
