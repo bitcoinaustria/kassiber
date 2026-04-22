@@ -69,7 +69,7 @@ Plus two smaller cross-cutting feature tracks:
 | **4** | Welcome wizard, Settings dialog, briefcase packaging for macOS | 3–4 days |
 | **5+** | Tile drag/resize, tag management UI, dark mode, Linux/Windows builds, code-signing | TBD |
 
-**MVP surface (end of Phase 4):** single-user desktop app plus CLI, SQLite-backed, attachments on transactions, backup/restore, with Austrian tax processing through RP2 and accountant-reviewed Austrian export work still to follow.
+**MVP surface (end of Phase 4):** single-user desktop app plus CLI, SQLite-backed, attachments on transactions, and — conditional on the "backend definitions move into the project DB" migration landing first (see `TODO.md` and `03-storage-conventions.md`'s `Preconditions before bundle backup / install-bundle can ship`) — backup-only project archives. Both archive consumers (in-place restore and install-bundle-as-new-project) are deferred until an authenticated bundle format lands; MVP produces archives but does not consume them, so a forged archive cannot become a project. Austrian tax processing through RP2, plus accountant-reviewed Austrian export work, still to follow.
 
 ## Document index
 

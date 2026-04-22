@@ -100,6 +100,23 @@ RPC credentials, backend tokens — are sealed by default and unlocked
 on demand, without the user managing a separate passphrase. Until that
 lands, treat the data directory and backend config file as sensitive material.
 
+### Backup archives are not authenticated
+
+The planned project-bundle backup format (see
+`docs/plan/03-storage-conventions.md`) does **not** authenticate archive
+contents. The manifest lives inside the archive, so hash-matching on
+restore proves an archive is internally consistent — it does not prove
+an archive came from you. A deliberately forged backup can be restored
+without any documented check failing. Restore's pre-swap verification
+is a corruption guard, not a trust root.
+
+If you move bundles across trust boundaries (cloud storage, email, a
+friend's USB stick) and care whether the bundle you restored is the
+bundle you made, verify the archive out of band — e.g. publish the
+known-good sha256 of the tarball through a channel the attacker does
+not control, and compare it before restoring. Detached HMAC or
+signature support is on the future work list but not in MVP.
+
 ## Caveats
 
 - **Secrets on the command line end up in shell history.** `backends
