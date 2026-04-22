@@ -629,6 +629,35 @@ class ATCrossAssetValidationWiringTest(unittest.TestCase):
         self.assertEqual(ctx.exception.code, "rp2_input_validation")
         self.assertIn("at_swap_link=orphan", str(ctx.exception))
 
+    def test_missing_validator_surfaces_as_unsupported_apperror(self):
+        # Protects developers who updated pyproject.toml but haven't re-synced: `AT` from a
+        # stale rp2 pin has no `validate_input_data`. The compat guard must raise a clear
+        # upgrade hint, not a generic `rp2_input_validation` wrapped AttributeError.
+        from kassiber.errors import AppError
+        from rp2.abstract_country import AbstractCountry
+        from rp2.plugin.country.at import AT
+
+        engine = self.GenericRP2TaxEngine(self._profile())
+        inputs = self._build_inputs()
+
+        original_at = AT.__dict__.get("validate_input_data")
+        original_abstract = AbstractCountry.__dict__.get("validate_input_data")
+        if original_at is not None:
+            delattr(AT, "validate_input_data")
+        if original_abstract is not None:
+            delattr(AbstractCountry, "validate_input_data")
+        try:
+            with self.assertRaises(AppError) as ctx:
+                engine.build_ledger_state(inputs)
+        finally:
+            if original_abstract is not None:
+                AbstractCountry.validate_input_data = original_abstract  # type: ignore[assignment]
+            if original_at is not None:
+                AT.validate_input_data = original_at  # type: ignore[assignment]
+
+        self.assertEqual(ctx.exception.code, "unsupported")
+        self.assertIn("PR #4", str(ctx.exception))
+
 
 if __name__ == "__main__":
     unittest.main()
