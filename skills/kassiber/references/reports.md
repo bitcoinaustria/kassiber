@@ -38,6 +38,11 @@ If pricing looks incomplete, sync rates and then re-run:
 kassiber journals process
 ```
 
+If the user has BTC ↔ LBTC peg-ins / peg-outs or submarine swaps, do not
+jump straight from import/sync to reports. Pair those swap legs first:
+reports consume the current journal state and do not auto-detect
+cross-asset swaps during report generation.
+
 ## Pagination
 
 Some machine-readable list responses are paginated and keep rows under command-specific keys such as `.data.records` or `.data.events`. When `next_cursor` is present, keep requesting more pages until it becomes `null`.

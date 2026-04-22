@@ -92,42 +92,52 @@ outgoing Neu leg and depletes the pool at its running average. The
 into rp2's `InTransaction` as `fiat_in_with_fee = outgoing_amount * pool_avg_at_swap_time`
 so the destination asset's pool inherits the carried basis.
 
-### v1 scope (Option C — quarantine)
+### Current scope (Option A — topological two-pass)
 
 For every cross-asset pair under an AT profile:
 
-- **Outgoing leg is Alt (acquired on/before 2021-02-28 Vienna):** the
-  pair realizes. Both legs flow through as normal SELL + BUY. rp2's AT
-  plugin ignores `at_swap_link` for Alt, so we deliberately do not
-  emit it either — the lot-pairing audit trail reflects a real
-  disposal and acquisition, not a tagged-but-ignored swap.
-- **Outgoing leg is Neu:** both legs are **quarantined** with reason
-  `at_swap_basis_carry_unresolved` and detail
-  `{outgoing_asset, incoming_asset, out_amount, at_swap_link, reason_code: "needs_two_pass_compute"}`.
-  The legs are excluded from the per-asset normalization pass, so
-  no `OutTransaction` or `InTransaction` reaches rp2 for either side.
-  Operators resolve the quarantine manually (override or exclusion)
-  until Option A lands.
+- **`policy=taxable`:** the pair remains a normal SELL + BUY. Kassiber
+  records the audit link in `cross_asset_pairs`, but does not emit
+  `at_swap_link` or `carried_basis_fiat`.
+- **`policy=carrying-value` + outgoing leg is Alt (acquired on/before
+  2021-02-28 Vienna):** the pair still realizes. rp2's AT plugin ignores
+  `at_swap_link` for Alt, so Kassiber deliberately does not emit it
+  either — the lot-pairing audit trail reflects a real disposal and
+  acquisition, not a tagged-but-ignored swap.
+- **`policy=carrying-value` + outgoing leg is Neu:** Kassiber annotates
+  both legs with `at_swap_link=<pair_id>` and computes the incoming
+  leg's `carried_basis_fiat` via a chronological pre-pass before the
+  per-asset rp2 loop runs.
 
-### v2 upgrade path (Option A — topological two-pass)
+The two-pass implementation works as follows:
 
-The planned upgrade reshapes `compute_tax` to honor a topological order
-over cross-asset swaps so the outgoing asset's pool average is available
-when the incoming leg is being built:
+1. Walk all AT events plus same-asset transfer moves across all assets in
+   timestamp order, maintaining a running pool state keyed by
+   `(asset, pool_id)`.
+2. For each matched Neu cross-asset carrying-value pair, look up
+   `avg = pool_avg_by(out_asset, out_pool)` at the swap timestamp.
+3. Set `carried_basis_fiat = outgoing_amount * avg` on the incoming
+   `NormalizedTaxEvent`, then let both legs flow through the existing
+   per-asset `normalize_tax_asset_inputs` + rp2 compute loop.
 
-1. Pre-pass: walk all AT events across all assets in timestamp order,
-   maintaining a `pool_avg_by(asset, pool_id)` running state.
-2. For each cross-asset swap, look up
-   `avg = pool_avg_by(out_asset, out_pool)` at the swap timestamp and
-   populate `carried_basis_fiat = out_amount * avg` on the incoming
-   `NormalizedTaxEvent`.
-3. Feed the fully annotated events into the existing per-asset
-   `normalize_tax_asset_inputs` + rp2 compute loop.
+This is direction-agnostic: both BTC->LBTC peg-ins and LBTC->BTC
+peg-outs use the same handoff.
 
-The quarantine site in `GenericRP2TaxEngine._classify_at_cross_asset_pairs`
-carries a `TODO` comment pointing here; lifting the quarantine without
-implementing the two-pass would silently produce zero-basis incoming
-legs (wrong).
+### Fallback quarantines
+
+Kassiber still quarantines both legs when a carrying-value swap cannot be
+fed into rp2 safely. The current reason is
+`at_swap_basis_carry_unresolved`, with `reason_code` indicating the
+failure mode:
+
+- `missing_spot_price`: one or both legs lack the price data rp2 still
+  needs on the raw event.
+- `missing_pool_average`: Kassiber cannot derive a valid source-pool
+  average at the swap timestamp (for example, insufficient Neu inventory
+  in that pool).
+
+Those quarantines are no longer the default Austrian swap path; they are
+only the safety net when the swap cannot be annotated correctly.
 
 ## Disambiguation rule
 

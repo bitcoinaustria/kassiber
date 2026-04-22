@@ -5,8 +5,16 @@
       "account_id": "account-treasury",
       "account_label": "Treasury",
       "asset": "BTC",
-      "cost_basis": 30000.0,
-      "quantity": 1.0
+      "cost_basis": 15000.0,
+      "quantity": 0.5
+    },
+    {
+      "account_code": "treasury",
+      "account_id": "account-treasury",
+      "account_label": "Treasury",
+      "asset": "LBTC",
+      "cost_basis": 15000.0,
+      "quantity": 0.5
     }
   ],
   "cross_asset_pairs": [
@@ -17,7 +25,7 @@
       "out_asset": "BTC",
       "out_id": "swap-out-1",
       "pair_id": "mp-at-swap-1",
-      "policy": "taxable"
+      "policy": "carrying-value"
     }
   ],
   "entries": [
@@ -37,45 +45,62 @@
       "unit_cost": 30000.0,
       "wallet_id": "wallet-a",
       "workspace_id": "workspace-main"
-    }
-  ],
-  "intra_audit": [],
-  "quarantines": [
+    },
     {
-      "detail": {
-        "at_swap_link": "mp-at-swap-1",
-        "incoming_asset": "LBTC",
-        "out_amount": 50000000000.0,
-        "outgoing_asset": "BTC",
-        "reason_code": "needs_two_pass_compute"
-      },
+      "account_id": "account-treasury",
+      "asset": "LBTC",
+      "cost_basis": null,
+      "description": "at_regime=neu at_pool=wallet-b at_swap_link=mp-at-swap-1 Peg-in BTC->LBTC",
+      "entry_type": "acquisition",
+      "fiat_value": 15000.0,
+      "gain_loss": null,
+      "occurred_at": "2025-03-01T09:00:00Z",
+      "proceeds": null,
       "profile_id": "profile-at",
-      "reason": "at_swap_basis_carry_unresolved",
+      "quantity": 0.5,
       "transaction_id": "swap-in-1",
+      "unit_cost": 30000.0,
+      "wallet_id": "wallet-b",
       "workspace_id": "workspace-main"
     },
     {
-      "detail": {
-        "at_swap_link": "mp-at-swap-1",
-        "incoming_asset": "LBTC",
-        "out_amount": 50000000000.0,
-        "outgoing_asset": "BTC",
-        "reason_code": "needs_two_pass_compute"
-      },
+      "account_id": "account-treasury",
+      "asset": "BTC",
+      "at_category": "neu_swap",
+      "at_kennzahl": null,
+      "cost_basis": 25000.0,
+      "description": "at_regime=neu at_pool=wallet-a at_swap_link=mp-at-swap-1 Peg-out BTC->LBTC",
+      "entry_type": "disposal",
+      "fiat_value": 25000.0,
+      "gain_loss": 0.0,
+      "occurred_at": "2025-03-01T09:00:00Z",
+      "proceeds": 25000.0,
       "profile_id": "profile-at",
-      "reason": "at_swap_basis_carry_unresolved",
+      "quantity": -0.5,
       "transaction_id": "swap-out-1",
+      "unit_cost": 0.0,
+      "wallet_id": "wallet-a",
       "workspace_id": "workspace-main"
     }
   ],
+  "intra_audit": [],
+  "quarantines": [],
   "wallet_holdings": [
     {
       "account_code": "treasury",
       "asset": "BTC",
-      "cost_basis": 30000.0,
-      "quantity": 1.0,
+      "cost_basis": 15000.0,
+      "quantity": 0.5,
       "wallet_id": "wallet-a",
       "wallet_label": "Vienna"
+    },
+    {
+      "account_code": "treasury",
+      "asset": "LBTC",
+      "cost_basis": 15000.0,
+      "quantity": 0.5,
+      "wallet_id": "wallet-b",
+      "wallet_label": "Liquid"
     }
   ]
 }

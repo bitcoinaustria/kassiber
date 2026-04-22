@@ -145,7 +145,7 @@ top of the monolith.
   transfer preparation feeding the RP2-backed Austrian path
 - [x] Re-enable Austrian profiles now that the RP2-backed path is wired,
   tested, and documented
-- [ ] Replace Option C (quarantine-on-cross-asset-Neu-swap) with Option A
+- [x] Replace Option C (quarantine-on-cross-asset-Neu-swap) with Option A
   (topological two-pass compute) so `carried_basis_fiat` is populated
   automatically; see [docs/austrian-handoff.md](docs/austrian-handoff.md)
 - [ ] Add E 1kv CSV/PDF export path on top of Kassiber's persisted
