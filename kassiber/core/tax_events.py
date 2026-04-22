@@ -121,6 +121,7 @@ def normalize_tax_asset_inputs(
     rows: Sequence[Mapping[str, Any]],
     wallet_refs_by_id: Mapping[str, Mapping[str, Any]],
     intra_pairs: Sequence[Mapping[str, Any]],
+    at_regime_by_row_id: Optional[Mapping[str, AtRegime]] = None,
     at_swap_link_by_row_id: Optional[Mapping[str, str]] = None,
     at_carried_basis_by_row_id: Optional[Mapping[str, Decimal]] = None,
 ) -> NormalizedTaxAssetInputs:
@@ -128,6 +129,7 @@ def normalize_tax_asset_inputs(
     if hasattr(profile, "keys") and "tax_country" in profile.keys():
         tax_country = str(profile["tax_country"] or "").strip().lower()
     is_at = tax_country == "at"
+    regime_map = at_regime_by_row_id or {}
     swap_link_map = at_swap_link_by_row_id or {}
     carried_basis_map = at_carried_basis_by_row_id or {}
     outbound_regimes = infer_outbound_regimes(rows) if is_at else {}
@@ -292,7 +294,10 @@ def normalize_tax_asset_inputs(
             if direction == "inbound":
                 at_regime = infer_regime_from_timestamp(row["occurred_at"])
             else:
-                at_regime = outbound_regimes.get(row["id"], infer_regime_from_timestamp(row["occurred_at"]))
+                at_regime = regime_map.get(
+                    row["id"],
+                    outbound_regimes.get(row["id"], infer_regime_from_timestamp(row["occurred_at"])),
+                )
             linked = swap_link_map.get(row["id"])
             if linked:
                 at_swap_link = linked
