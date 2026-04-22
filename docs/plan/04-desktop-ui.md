@@ -228,7 +228,7 @@ Artifacts from each design session live under `docs/design/phase-<n>/` alongside
 - Static card with two links:
   - "Capital Gains Report" — opens file-save dialog, writes CSV via `core.reports.capital_gains.to_csv(...)`
   - "Journal Entries Export" — same pattern for `core.reports.journal_entries.to_csv(...)`
-- Will grow an "Austrian E 1kv (PDF)" link only after Austrian support lands through the RP2 fork path (see `06-austrian-tax-engine.md`)
+- Will grow an "Austrian E 1kv (PDF)" link once the Austrian export path lands on top of the already-active RP2 fork integration (see `06-austrian-tax-engine.md`)
 
 ### Layout
 
@@ -319,7 +319,7 @@ Matches the approved connection-flow reference state.
 
 - Shown on first run (no profile in DB, or `ui.first_run` flag unset)
 - Matches the approved welcome reference: title, logo, name input, "Let's go!" CTA
-- Optional second step: fiat currency (USD / EUR / …), with `generic` as the only active tax-processing mode until Austrian RP2 support ships
+- Optional second step: fiat currency (USD / EUR / …), with `generic` as the initial default even though Austrian RP2 support is already available at the CLI/core layer
 - On completion: creates default workspace + profile, stores `ui.first_run = False`
 
 ### Settings dialog
@@ -331,7 +331,7 @@ Matches the approved settings reference.
 - "Backup Data" button — creates `.kassiber.tar` archive (DB via `sqlite3 .backup` + attachments dir) via `backup_worker`
 - "Restore from backup" button — confirmation dialog, then unpack archive and replace live DB (after stopping any worker)
 - "Reset app" button (red, destructive) — triple-confirm, then wipes `~/.kassiber/data/` and returns to Welcome wizard
-- Future section (not MVP): "Tax country" dropdown — switching it re-runs journal computation once the Austrian RP2 plugin / fork integration exists
+- Future section (not MVP): "Tax country" dropdown — switching it re-runs journal computation once the UI exposes the already-landed Austrian RP2 plugin / fork integration
 
 ### Packaging
 

@@ -13,7 +13,7 @@ Profiles carry tax defaults through:
 Current policies:
 
 - `generic` -> RP2-backed lot accounting
-- `at` -> recognized for legacy profiles, but tax processing is currently unavailable in Kassiber and is planned through the Kassiber-maintained RP2 fork at [bitcoinaustria/rp2](https://github.com/bitcoinaustria/rp2)
+- `at` -> RP2-backed Austrian accounting through the Kassiber-maintained fork at [bitcoinaustria/rp2](https://github.com/bitcoinaustria/rp2), with Kassiber-side normalization and current disposal-category / Kennzahl mapping
 
 ## Journal processing
 
@@ -25,10 +25,11 @@ python3 -m kassiber journals process
 
 Important behavior:
 
-- generic lot accounting currently runs through RP2
-- `generic` is the only active tax-processing mode today
+- both `generic` and `at` policies currently run through RP2
+- `at` profiles use rp2's Austrian country plugin while Kassiber keeps the normalization, provenance, transfer-preparation, and current report-mapping layer
 - cost basis is pooled per asset across all wallets in a profile
 - self-transfers between user-owned wallets become RP2 `IntraTransaction` moves when Kassiber can prove the relationship
+- explicit inbound `kind` values such as `income`, `interest`, `staking`, `mining`, `airdrop`, `hardfork`, `wages`, `lending_interest`, and `routing_income` are promoted into RP2 earn-like receipts; unlabeled inbound rows stay conservative and process as `BUY`
 - missing or ambiguous tax inputs quarantine instead of being silently guessed
 
 After any transaction change, metadata change, exclusion change, transfer pair change, or quarantine resolution, journals must be reprocessed before reports are trusted again.
@@ -112,12 +113,12 @@ Reports still use stored transaction and journal pricing rather than querying th
 
 ## Austrian notes
 
-Kassiber does not currently compute Austrian tax results itself.
-
 Current Austrian status:
 
-- Austrian tax processing is unavailable in Kassiber today
-- `journals process` and report commands fail fast for Austrian profiles
-- future Austrian support is planned through the Kassiber-maintained RP2 fork, while Kassiber keeps normalization, provenance capture, transfer preparation, and review UX
+- Austrian profiles process through rp2's `AT` country plugin via the shared RP2 adapter
+- Kassiber keeps normalization, provenance capture, transfer preparation, cross-asset carry wiring, and current disposal-category / Kennzahl mapping
+- Austrian cross-asset `--policy carrying-value` pairs are supported and feed Kassiber's swap-basis-carry path before RP2
+- Austrian E 1kv export is not shipped yet
+- Austrian output should remain review-gated; Kassiber is not tax advice
 
-See [../plan/06-austrian-tax-engine.md](../plan/06-austrian-tax-engine.md) for the design direction.
+See [../plan/06-austrian-tax-engine.md](../plan/06-austrian-tax-engine.md) for the broader design and remaining Austrian backlog, plus [../austrian-handoff.md](../austrian-handoff.md) for the current marker / carry-basis contract.
