@@ -46,3 +46,4 @@ See the plan docs for the fuller desktop direction:
 
 - [../plan/01-stack-decision.md](../plan/01-stack-decision.md)
 - [../plan/04-desktop-ui.md](../plan/04-desktop-ui.md)
+- [../design/README.md](../design/README.md)

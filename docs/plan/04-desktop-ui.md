@@ -131,11 +131,14 @@ Workflow:
 1. Open a Claude Design session per phase (Phase 2 dashboard tiles, Phase 3 Add Connection + Transaction Detail + Wallet Detail dialogs, Phase 4 Welcome wizard + Settings).
 2. Feed it the approved reference screenshots + the theme tokens from `theme.py` above.
 3. Iterate on visuals — layout, copy, pill colors, empty-state framing — until acceptable.
-4. Export the HTML prototype + take screenshots. These become the Phase spec that the QML implementer (Claude Code) translates into `resources/qml/tiles/*.qml` and `resources/qml/dialogs/*.qml`.
+4. Freeze the accepted screen states as screenshots at explicit desktop widths. If Claude Design exports `.jsx`, treat those files as reference evidence only and use the screenshots as the visual source of truth.
+5. Create a per-screen spec under `docs/design/phase-<n>/<screen>/` using the repo workflow in `docs/design/README.md`.
+6. Implement a **static** QML pass from that spec using mock data only.
+7. Capture a screenshot review against the frozen references before wiring any real runtime behavior.
 
-What this *doesn't* do: generate QML. HTML → QML is a manual translation step. Claude Design is a design-spec tool, not a codegen tool. Its output is the visual contract; QML is still written by hand (or by Claude Code consuming the screenshots). The reference-specific tradeoffs from `01-stack-decision.md` (pastel-fill pills vs outlined pills, drop-shadow depth, serif weight) are best resolved in Claude Design before committing them to QML properties.
+What this *doesn't* do: generate QML. HTML / JSX → QML is a manual translation step. Claude Design is a design-spec tool, not a codegen tool. Its output is the visual contract; QML is still written by hand (or by Claude Code consuming the screenshots + screen spec). The reference-specific tradeoffs from `01-stack-decision.md` (pastel-fill pills vs outlined pills, drop-shadow depth, serif weight) are best resolved in Claude Design before committing them to QML properties.
 
-Artifacts from each design session live under `docs/design/phase-<n>/` alongside the screenshots — not checked into `resources/` since they're not runtime assets.
+Artifacts from each design session live under `docs/design/phase-<n>/<screen>/` alongside the frozen screenshots and screenshot-review notes — not checked into `resources/` since they're not runtime assets.
 
 ---
 
