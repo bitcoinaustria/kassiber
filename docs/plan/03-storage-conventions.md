@@ -1,7 +1,14 @@
 # Storage Conventions
 
+**Status note:** Current runtime behavior still uses the app-wide state root
+described in `README.md` and `AGENTS.md`. This doc describes the **target**
+storage direction after the planned project-bundle migration lands, so later
+storage work has one clear end state instead of a mix of app-global and
+project-local data.
+
 **Engine:** SQLite (stdlib `sqlite3`).
-**Path:** `~/.kassiber/data/kassiber.sqlite3` (resolved via the existing `--data-root` / settings-manifest flow).
+**Path:** `~/.kassiber/projects/<project>/kassiber.sqlite3`, with a small
+global app config under `~/.kassiber/`.
 **Mode:** WAL for concurrent CLI + UI access.
 **ORM:** None. Plain SQL + dataclass returns through a small repository layer.
 
@@ -18,6 +25,21 @@ Decided in a separate discussion. Summary:
 - Backup = file copy (matches the simplified local export behavior)
 - One of the most security-audited pieces of software on the planet
 - INTEGER is int64 → msat amounts fit with no float precision hazard
+
+## Project bundle boundary
+
+- **One DB per project bundle.** A project is the unit of portability,
+  backup/restore, deletion, and archival.
+- **Not one DB per wallet.** Kassiber's tax and accounting logic spans
+  wallets, so the bundle needs to hold the whole reporting unit.
+- **Not one giant DB for the whole machine.** Separate projects should not
+  silently share accounting state, backend config, or attachments.
+- **Project-local first.** If workspaces and profiles remain in the domain
+  model, they live inside one project bundle and never span bundle
+  boundaries.
+- **Minimal global app state.** `~/.kassiber/` outside `projects/` should
+  only hold launcher/UI preferences, recent-project pointers, and keychain
+  references — not active accounting state.
 
 ## Connection opening — mandatory pragmas
 
@@ -167,8 +189,29 @@ Writing typed wrappers is more code than `conn.execute(sql).fetchall()`. That's 
 ## Backup and restore
 
 - **Backup**: `python -c "import sqlite3; sqlite3.connect(src).backup(sqlite3.connect(dst))"` or `sqlite3 <src> ".backup <dst>"`. This is the **only** safe way to copy a WAL database — a raw file copy can miss checkpoints.
-- **Attachments** (see `05-attachments.md`) are bundled alongside the `.sqlite3` in a tar archive: `kassiber backup create /path/to/archive.kassiber.tar`.
-- **Restore**: stop the UI, replace the DB file and attachments directory from the archive, restart. CLI commands should refuse to run if the schema_version is newer than the code knows about.
+- **Bundle scope**: project backup archives the whole project bundle — DB
+  plus blobs, logs, and any project-scoped exports that should travel with
+  the bookkeeping state.
+- **Restore**: stop the UI, replace the project directory from the archive,
+  restart. CLI commands should refuse to run if the schema_version is newer
+  than the code knows about.
+
+## Backends, descriptors, and secrets
+
+- **Backend definitions belong in the project DB.** URLs, names, chain,
+  network, timeout, batch size, and default backend selection are
+  project-local state.
+- **Wallet descriptors belong in the project DB.** The descriptor is part of
+  the wallet definition, not an external sidecar file once imported.
+- **Secrets do not belong in JSON settings files.** Backend tokens,
+  auth headers, RPC credentials, and any sensitive descriptor material
+  should migrate toward OS keychain references.
+- **Optional env files are bootstrap-only.** Keep dotenv overrides for
+  development or operator-managed installs, but do not treat them as the
+  canonical long-term storage story.
+- **One source of truth per concern.** No active top-level `wallets/` tree,
+  no second DB beside the canonical project DB, and no hidden config split
+  between JSON and dotenv without an explicit precedence story.
 
 ## Encryption
 
@@ -178,7 +221,7 @@ Not in scope for MVP. Options considered for later:
 |---|---|---|
 | OS disk encryption (FileVault, LUKS, BitLocker) | zero | Free, effective against laptop theft; nothing the app does |
 | SQLCipher | medium | Drop-in API for Python via `pysqlcipher3`; adds native build dep; encrypts DB only, not attachments |
-| Encrypt whole `~/.kassiber/data/` at app level | high | Password prompt on launch; kassiber owns keys; complex key-rotation story |
+| Encrypt whole project bundle at app level | high | Password prompt on launch; kassiber owns keys; complex key-rotation story |
 
 For now: rely on OS-level disk encryption. Revisit if we ship to users other than the project owner.
 
@@ -196,26 +239,35 @@ For now: rely on OS-level disk encryption. Revisit if we ship to users other tha
 
 ```
 ~/.kassiber/
-  config/
-    settings.json          # schema_version, paths manifest (already exists)
-    backends.env           # sync backend definitions (already exists)
-  data/
-    kassiber.sqlite3       # primary DB
-    kassiber.sqlite3-wal   # WAL file (transient)
-    kassiber.sqlite3-shm   # shared-memory file (transient)
-    attachments/
-      <sha256[:2]>/
-        <sha256>.<ext>     # content-addressed, see 05-attachments.md
-  exports/                  # reports, PDFs (user-facing outputs)
-  logs/                     # (new) rotated logs for Download logs button
+  app.json                  # global UI prefs + recent projects only
+  projects/
+    project-satoshi/
+      kassiber.sqlite3      # primary DB
+      kassiber.sqlite3-wal  # WAL file (transient)
+      kassiber.sqlite3-shm  # shared-memory file (transient)
+      blobs/
+        attachments/
+          <sha256[:2]>/
+            <sha256>.<ext>  # content-addressed, see 05-attachments.md
+        imports/
+          <sha256[:2]>/
+            <sha256>.<ext>  # optional managed copies of import sources
+      exports/              # project-local reports and PDFs
+      logs/                 # project-local logs and diagnostics
+      tmp/                  # safe scratch space for restore/export work
 ```
 
 ## Observability
 
-- Every CLI command logs to `~/.kassiber/logs/cli-<date>.jsonl` (one line per command invocation: command name, args, exit code, duration, AppError kind if any)
-- UI logs to `~/.kassiber/logs/ui-<date>.jsonl`
+- Every project-scoped CLI command logs to
+  `~/.kassiber/projects/<project>/logs/cli-<date>.jsonl` (one line per
+  command invocation: command name, args, exit code, duration, AppError kind
+  if any)
+- Project UI logs live beside the project DB under
+  `~/.kassiber/projects/<project>/logs/ui-<date>.jsonl`
 - **Never** log secret values (xpubs, macaroons, descriptors with private keys). The logger has a blacklist.
-- The Settings → Download logs button zips the last 14 days of logs for the user to share.
+- The Settings → Download logs button zips the last 14 days of project logs
+  for the user to share.
 
 ## References
 
