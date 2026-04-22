@@ -1229,6 +1229,7 @@ def build_ledger_state(conn, profile):
         "quarantines": engine_state.quarantines,
         "intra_audit": engine_state.intra_audit,
         "cross_asset_pairs": engine_state.cross_asset_pairs,
+        "tax_summary": engine_state.tax_summary,
         "account_holdings": engine_state.account_holdings,
         "wallet_holdings": engine_state.wallet_holdings,
         "latest_rates": rates,
@@ -1310,6 +1311,126 @@ def process_journals(conn, workspace_ref, profile_ref):
         "processed_at": created_at,
     }
     return result
+
+
+def _journal_processing_status(conn, profile):
+    current_count = conn.execute(
+        "SELECT COUNT(*) AS count FROM transactions WHERE profile_id = ? AND excluded = 0",
+        (profile["id"],),
+    ).fetchone()["count"]
+    return {
+        "last_processed_at": profile["last_processed_at"],
+        "last_processed_tx_count": int(profile["last_processed_tx_count"] or 0),
+        "current_active_tx_count": int(current_count or 0),
+        "processed_journals_current": bool(
+            profile["last_processed_at"] and current_count == profile["last_processed_tx_count"]
+        ),
+    }
+
+
+def _audit_transaction_refs(conn, profile_id, transaction_ids):
+    ids = [str(value) for value in transaction_ids if value]
+    if not ids:
+        return {}
+    placeholders = ", ".join("?" for _ in ids)
+    rows = conn.execute(
+        f"""
+        SELECT
+            t.id,
+            t.external_id,
+            t.occurred_at,
+            t.asset,
+            w.label AS wallet
+        FROM transactions t
+        JOIN wallets w ON w.id = t.wallet_id
+        WHERE t.profile_id = ? AND t.id IN ({placeholders})
+        """,
+        [profile_id, *ids],
+    ).fetchall()
+    return {str(row["id"]): dict(row) for row in rows}
+
+
+def _serialize_intra_audit(rows):
+    return [
+        {
+            "out_id": row["out_id"],
+            "in_id": row["in_id"],
+            "external_id": row["external_id"],
+            "occurred_at": row["occurred_at"],
+            "asset": row["asset"],
+            "from_wallet": row["from_wallet_label"],
+            "to_wallet": row["to_wallet_label"],
+            "sent": float(dec(row["crypto_sent"])),
+            "sent_msat": btc_to_msat(dec(row["crypto_sent"])),
+            "received": float(dec(row["crypto_received"])),
+            "received_msat": btc_to_msat(dec(row["crypto_received"])),
+            "fee": float(dec(row["crypto_fee"])),
+            "fee_msat": btc_to_msat(dec(row["crypto_fee"])),
+            "spot_price": float(dec(row["spot_price"])),
+        }
+        for row in sorted(
+            rows,
+            key=lambda item: (item["occurred_at"], item["out_id"], item["in_id"]),
+        )
+    ]
+
+
+def _serialize_cross_asset_pairs(rows, refs_by_id):
+    serialized = []
+    for row in sorted(
+        rows,
+        key=lambda item: (
+            refs_by_id.get(str(item["out_id"]), {}).get("occurred_at", ""),
+            str(item.get("pair_id") or ""),
+            str(item["out_id"]),
+            str(item["in_id"]),
+        ),
+    ):
+        out_ref = refs_by_id.get(str(row["out_id"]), {})
+        in_ref = refs_by_id.get(str(row["in_id"]), {})
+        serialized.append(
+            {
+                "pair_id": row.get("pair_id"),
+                "kind": row.get("kind"),
+                "policy": row.get("policy"),
+                "out_id": row["out_id"],
+                "out_asset": row["out_asset"],
+                "out_wallet": out_ref.get("wallet"),
+                "out_external_id": out_ref.get("external_id"),
+                "out_occurred_at": out_ref.get("occurred_at"),
+                "in_id": row["in_id"],
+                "in_asset": row["in_asset"],
+                "in_wallet": in_ref.get("wallet"),
+                "in_external_id": in_ref.get("external_id"),
+                "in_occurred_at": in_ref.get("occurred_at"),
+            }
+        )
+    return serialized
+
+
+def inspect_transfer_audit(conn, workspace_ref, profile_ref):
+    _, profile = resolve_scope(conn, workspace_ref, profile_ref)
+    require_tax_processing_supported(profile)
+    state = build_ledger_state(conn, profile)
+    tx_refs = _audit_transaction_refs(
+        conn,
+        profile["id"],
+        [row["out_id"] for row in state["cross_asset_pairs"]]
+        + [row["in_id"] for row in state["cross_asset_pairs"]],
+    )
+    intra_transfers = _serialize_intra_audit(state["intra_audit"])
+    cross_asset_pairs = _serialize_cross_asset_pairs(state["cross_asset_pairs"], tx_refs)
+    return {
+        "profile": profile["label"],
+        "processing": _journal_processing_status(conn, profile),
+        "summary": {
+            "same_asset_transfers": len(intra_transfers),
+            "cross_asset_pairs": len(cross_asset_pairs),
+            "quarantines": len(state["quarantines"]),
+        },
+        "same_asset_transfers": intra_transfers,
+        "cross_asset_pairs": cross_asset_pairs,
+    }
 
 
 DEFAULT_EVENTS_LIMIT = 100
