@@ -16,7 +16,7 @@ This doc specifies the desktop UI through MVP (end of Phase 4). Post-MVP items a
   3. Open the DB through the canonical bootstrap path and ensure pending migrations / compatibility fixes are applied
   4. If no profile exists or `ui.first_run == True`, show Welcome wizard (Phase 4)
   5. Otherwise, show main window
-- Closes cleanly on window close. Persists window geometry + tile-hide flags to `~/.kassiber/config/settings.json` under a `ui:` subkey.
+- Closes cleanly on window close. Persists window geometry + tile-hide flags to the global `~/.kassiber/app.json` (UI prefs and recent-project pointers; per the global-app-state boundary in `03-storage-conventions.md`) under a `ui:` subkey. Today's runtime writes these to `~/.kassiber/config/settings.json`; the migration to `app.json` is part of the project-bundle rollout.
 
 ## Source layout
 
@@ -309,7 +309,7 @@ Matches the approved connection-flow reference state.
 - [ ] Adding an xpub wallet syncs its transactions and updates all tiles
 - [ ] Importing a Phoenix CSV creates a virtual wallet with all rows
 - [ ] Sync shows live progress in the bottom banner
-- [ ] Dropping a PDF onto a transaction creates an attachment and the file lands in `~/.kassiber/attachments/`
+- [ ] Dropping a PDF onto a transaction creates an attachment and the file lands in the active project's `blobs/attachments/` tree (`~/.kassiber/projects/<project>/blobs/attachments/`, per `03-storage-conventions.md` and `05-attachments.md`)
 - [ ] Adding a drive URL to a transaction persists and reopens on click
 
 ---
@@ -330,10 +330,10 @@ Matches the approved connection-flow reference state.
 Matches the approved settings reference.
 
 - "Hide sensitive data" toggle
-- "Download logs" button — zips `~/.kassiber/logs/*.jsonl` from last 14 days via `backup_worker` and opens a file-save dialog
-- "Backup Data" button — creates `.kassiber.tar` archive (DB via `sqlite3 .backup` + attachments dir) via `backup_worker`
-- "Restore from backup" button — confirmation dialog, then unpack archive and replace live DB (after stopping any worker)
-- "Reset app" button (red, destructive) — triple-confirm, then wipes `~/.kassiber/data/` and returns to Welcome wizard
+- "Download logs" button — zips the active project's `logs/*.jsonl` (`~/.kassiber/projects/<project>/logs/`) from the last 14 days via `backup_worker` and opens a file-save dialog
+- "Backup Data" button — archives the active project bundle per the canonical manifest in `03-storage-conventions.md` via `backup_worker`. DB copied through `sqlite3 .backup` for WAL safety; keychain-backed secrets are referenced by the bundle but travel separately once keychain integration lands (see Portability scope in `03-storage-conventions.md` and today's plaintext caveat in `SECURITY.md`)
+- "Restore from backup" button — confirmation dialog, then runs the restore flow defined in `03-storage-conventions.md`: validate manifest, gate on `schema_version`, unpack to a sibling temp dir, stop workers, atomic-swap into place, restart with fresh connections. Rows whose secrets live in the OS keychain re-open in a "locked" state on cross-machine restore and prompt re-pairing (post-keychain-integration)
+- "Reset app" button (red, destructive) — triple-confirm, then deletes the active project bundle at `~/.kassiber/projects/<project>/` and returns to the Welcome wizard. Does not touch sibling project bundles or the global `~/.kassiber/app.json`; a nuclear "wipe all projects" is out of MVP scope
 - Future section (not MVP): "Tax country" dropdown — switching it re-runs journal computation once the UI exposes the already-landed Austrian RP2 plugin / fork integration
 
 ### Packaging
