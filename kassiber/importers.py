@@ -92,11 +92,30 @@ def parse_btcpay_amount(amount_text, currency=None):
 
 
 def parse_btcpay_labels(value):
-    """Split a BTCPay `Labels` cell (list or comma-delimited string) into a list."""
+    """Normalize BTCPay labels from CSV, JSON export, or Greenfield shapes."""
     if value is None or value == "":
         return []
+    labels = []
+    if isinstance(value, dict):
+        for key, item in value.items():
+            text = item.get("text") if isinstance(item, dict) else item
+            if text is None and key:
+                text = key
+            if text is None:
+                continue
+            label = str(text).strip()
+            if label:
+                labels.append(label)
+        return labels
     if isinstance(value, list):
-        return [str(item).strip() for item in value if str(item).strip()]
+        for item in value:
+            text = item.get("text") if isinstance(item, dict) else item
+            if text is None:
+                continue
+            label = str(text).strip()
+            if label:
+                labels.append(label)
+        return labels
     return [part.strip() for part in str(value).split(",") if part.strip()]
 
 

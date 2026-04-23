@@ -100,11 +100,15 @@ Important runtime rules:
 
 ## Supported backend kinds
 
-Current sync backends:
+Current backend kinds:
 
+- `mempool`
 - `esplora`
 - `electrum`
 - `bitcoinrpc`
+- `btcpay`
+- `liquid-esplora`
+- `custom`
 
 Common fields:
 
@@ -126,6 +130,10 @@ Bitcoin Core-specific fields:
 - `COOKIEFILE`
 - `WALLETPREFIX`
 
+BTCPay-specific fields:
+
+- `TOKEN`
+
 Note: `bitcoinrpc` support is currently partial. Kassiber can use it for Bitcoin address-based wallets, but descriptor- and xpub-backed live sync still require Esplora or Electrum.
 
 The backend CLI now accepts the common backend-specific knobs directly:
@@ -133,6 +141,15 @@ The backend CLI now accepts the common backend-specific knobs directly:
 - `--insecure` for Electrum TLS bypass testing against servers you control
 - `--cookiefile` or `--username` / `--password` for Bitcoin Core RPC auth
 - `--wallet-prefix` for Bitcoin Core watch-only wallet naming
+
+### BTCPay Greenfield API
+
+Use this to pull confirmed on-chain wallet transactions directly from a BTCPay server instead of exporting CSV or JSON from the UI.
+
+- create a backend with `--kind btcpay`, `--url https://btcpay.example.com`, and `--token <greenfield-api-key>`
+- run `python3 -m kassiber wallets sync-btcpay --wallet <label> --backend <btcpay-backend> --store-id <store-id>`
+- Kassiber requests confirmed rows only, then normalizes them through the existing BTCPay import pipeline so comments become notes and labels become tags
+- the Greenfield wallet-transaction endpoint currently requires the `btcpay.store.canmodifystoresettings` permission on the API key
 
 ## Notes by backend type
 
