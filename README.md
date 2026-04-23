@@ -1,5 +1,7 @@
 # Kassiber
 
+![Kassiber banner](docs/assets/readme-banner.png)
+
 Kassiber is an open-source, local-first Bitcoin accounting CLI with an early desktop shell.
 
 It keeps your accounting state on your machine, syncs from Bitcoin-native sources, and processes journals locally before generating reports. The cloud-SaaS model is the thing Kassiber is trying to avoid.
@@ -83,6 +85,26 @@ reporting can still break holdings and activity down by wallet and account.
 If you use multiple BTCPay stores, only model them as multiple Kassiber wallets
 when they are actually different underlying wallets. If two stores point at the
 same wallet, creating both in Kassiber would duplicate holdings.
+
+## AI assistance
+
+Kassiber ships with a repo-local AI skill in [`skills/kassiber/`](skills/kassiber/)
+for coding and terminal assistants. It helps an assistant use the Kassiber CLI
+safely for onboarding, imports, journal processing, reports, metadata cleanup,
+and troubleshooting.
+
+AI is optional. Kassiber's core accounting flow does not depend on a model, and
+future AI-assisted features such as OCR, extraction, and reconciliation
+suggestions should stay review-gated.
+
+If you use AI with Kassiber, treat prompts as sensitive accounting data. Local
+inference is the recommended default. [Ollama](https://ollama.com/) is a good
+fit for local models, and if remote inference is needed, prefer a provider with
+documented encrypted inference such as
+[Maple Proxy](https://blog.trymaple.ai/maple-proxy-documentation/).
+
+See [docs/reference/ai.md](docs/reference/ai.md) for setup notes, example
+prompts, and privacy guidance.
 
 ## Local state
 
@@ -176,6 +198,7 @@ python3 -m kassiber ui
 
 Reference docs:
 
+- [docs/reference/ai.md](docs/reference/ai.md)
 - [docs/reference/backends.md](docs/reference/backends.md)
 - [docs/reference/imports.md](docs/reference/imports.md)
 - [docs/reference/tax.md](docs/reference/tax.md)
