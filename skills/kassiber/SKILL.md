@@ -52,10 +52,15 @@ Kassiber organizes data as:
 
 Related notes:
 
+- `workspace` is the top-level container for an organization, person, or set of books.
+- `profile` is one accounting and tax scope inside a workspace.
+- `wallet` is a transaction source that Kassiber syncs or imports; map it to the real underlying wallet, not every external store or export.
+- `account` is a reporting and ledger bucket that wallets can belong to.
 - `backends` define sync transport endpoints.
 - `metadata` covers notes, tags, exclusions, and BIP329 labels.
 - `attachments` are managed separately from wallet config and transaction rows.
 - Cost basis is pooled per asset across all wallets in a profile.
+- If multiple BTCPay stores point at the same real wallet, keep them in one Kassiber wallet or holdings will be duplicated.
 
 ## Workflow Routing
 
