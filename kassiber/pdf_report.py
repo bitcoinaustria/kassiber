@@ -25,26 +25,16 @@ LINE_HEIGHT = 11
 MAX_LINE_CHARS = 138
 LINES_PER_PAGE = int((PAGE_HEIGHT - TOP_MARGIN - BOTTOM_MARGIN) / LINE_HEIGHT)
 
-BODY_FONT_CANDIDATES = (
-    "Helvetica",
-    "Arial",
-    "Avenir Next",
-    "Avenir",
-    "PT Sans",
-    "DejaVu Sans",
-    "Liberation Sans",
-)
-MONO_FONT_CANDIDATES = (
-    "Menlo",
-    "Consolas",
-    "PT Mono",
-    "DejaVu Sans Mono",
-    "Liberation Mono",
-    "Courier New",
-    "Monaco",
-)
 TABLE_RULE_RE = re.compile(r"^\s*-+(?:\s{2,}-+)+\s*$")
 NUMERIC_CELL_RE = re.compile(r"^[+-]?(?:\d[\d,]*)?(?:\.\d+)?$")
+PDF_PAGE_RE = re.compile(rb"/Type /Page\b")
+PDF_FONT_DIR = Path(__file__).resolve().parent / "ui" / "resources" / "fonts" / "pdf"
+PDF_FONT_FILES = {
+    "body_regular": "OpenSans-Regular.ttf",
+    "body_bold": "OpenSans-Bold.ttf",
+    "mono_regular": "RobotoMono-Regular.ttf",
+}
+_QT_PDF_FONT_FAMILIES = None
 
 
 def _ascii_text(value):
@@ -304,11 +294,37 @@ def _parse_report_lines(title, lines):
     return [section for section in sections if section["heading"] or section["blocks"]]
 
 
-def _preferred_font_family(candidates, available):
-    for family in candidates:
-        if family in available:
-            return family
-    return candidates[-1]
+def _bundled_pdf_font_path(key):
+    return PDF_FONT_DIR / PDF_FONT_FILES[key]
+
+
+def _count_pdf_pages(path):
+    return len(PDF_PAGE_RE.findall(path.read_bytes()))
+
+
+def _load_bundled_pdf_font_families(qfont_database):
+    global _QT_PDF_FONT_FAMILIES
+    if _QT_PDF_FONT_FAMILIES is not None:
+        return _QT_PDF_FONT_FAMILIES
+
+    loaded = {}
+    for key in PDF_FONT_FILES:
+        font_path = _bundled_pdf_font_path(key)
+        if not font_path.exists():
+            raise RuntimeError(f"Bundled PDF font is missing: {font_path}")
+        font_id = qfont_database.addApplicationFont(str(font_path))
+        if font_id < 0:
+            raise RuntimeError(f"Failed to load bundled PDF font: {font_path}")
+        families = qfont_database.applicationFontFamilies(font_id)
+        if not families:
+            raise RuntimeError(f"Bundled PDF font did not register a family: {font_path}")
+        loaded[key] = families[0]
+
+    _QT_PDF_FONT_FAMILIES = {
+        "body": loaded["body_regular"],
+        "mono": loaded["mono_regular"],
+    }
+    return _QT_PDF_FONT_FAMILIES
 
 
 def _build_report_html(title, lines, body_font_family, mono_font_family):
@@ -374,8 +390,9 @@ def _build_report_html(title, lines, body_font_family, mono_font_family):
 
 
 def _write_qt_text_pdf(file_path, title, lines):
-    from PySide6.QtCore import QMarginsF
+    from PySide6.QtCore import QMarginsF, QSizeF
     from PySide6.QtGui import (
+        QFont,
         QGuiApplication,
         QFontDatabase,
         QPageLayout,
@@ -392,15 +409,9 @@ def _write_qt_text_pdf(file_path, title, lines):
         os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
         app = QGuiApplication(["kassiber-pdf"])
 
-    available_fonts = set(QFontDatabase.families())
-    body_font_family = _preferred_font_family(BODY_FONT_CANDIDATES, available_fonts)
-    mono_font_family = _preferred_font_family(MONO_FONT_CANDIDATES, available_fonts)
+    font_families = _load_bundled_pdf_font_families(QFontDatabase)
 
-    html = _build_report_html(title, lines, body_font_family, mono_font_family)
-    document = QTextDocument()
-    document.setDocumentMargin(0)
-    document.setHtml(html)
-
+    html = _build_report_html(title, lines, font_families["body"], font_families["mono"])
     writer = QPdfWriter(str(path))
     writer.setPageLayout(
         QPageLayout(
@@ -412,10 +423,16 @@ def _write_qt_text_pdf(file_path, title, lines):
     writer.setTitle(title)
     writer.setCreator("kassiber pdf report")
 
+    document = QTextDocument()
+    document.setDocumentMargin(0)
+    document.setDefaultFont(QFont(font_families["body"]))
+    document.setPageSize(QSizeF(writer.width(), writer.height()))
+    document.setHtml(html)
     document.print_(writer)
+    page_count = _count_pdf_pages(path)
     return {
         "file": str(path.resolve()),
-        "pages": int(document.pageCount()),
+        "pages": page_count,
         "bytes": path.stat().st_size,
         "title": title,
     }
@@ -424,6 +441,5 @@ def _write_qt_text_pdf(file_path, title, lines):
 def write_text_pdf(file_path, title, lines):
     try:
         return _write_qt_text_pdf(file_path, title, lines)
-    except ImportError:
+    except (ImportError, RuntimeError):
         return _legacy_write_text_pdf(file_path, title, lines)
-

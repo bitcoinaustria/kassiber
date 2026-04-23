@@ -36,5 +36,7 @@ include = ["kassiber*"]
   "resources/qml/components/*.js",
   "resources/qml/dialogs/*.qml",
   "resources/fonts/*.ttf",
+  "resources/fonts/*.txt",
   "resources/fonts/*/*.ttf",
+  "resources/fonts/*/*.txt",
 ]

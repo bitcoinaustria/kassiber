@@ -14,6 +14,15 @@ Kassiber currently depends directly on the Kassiber-maintained [RP2 fork](https:
 | `embit` | `>=0.8.0` | Bitcoin/Liquid descriptor parsing, script derivation, Liquid confidential output handling | MIT |
 | `PySide6` | `>=6.7,<7` | PySide6 + QML desktop UI shell and future desktop flows | LGPL-3.0-only |
 
+## Bundled font assets
+
+Kassiber also bundles a small fixed font set for deterministic Qt PDF exports.
+
+| Asset | Role | License |
+| --- | --- | --- |
+| `Open Sans` | Sans-serif body and heading font for styled PDF report exports | OFL-1.1 |
+| `Roboto Mono` | Monospace numeric/report table font for styled PDF report exports | OFL-1.1 |
+
 ## Notable downstream license note
 
 In the current tested RP2 install path, one runtime dependency worth calling out explicitly is:
