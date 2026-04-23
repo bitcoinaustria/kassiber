@@ -9,6 +9,7 @@ from typing import Any, Sequence
 
 from .handlers import (
     APP_NAME,
+    BACKEND_CLEAR_FIELD_ALIASES,
     BACKEND_KINDS,
     DEFAULT_DATA_ROOT,
     DEFAULT_ENV_FILENAME,
@@ -74,6 +75,18 @@ def _backend_extra_config(args: argparse.Namespace) -> dict[str, object] | None:
     if getattr(args, "wallet_prefix", None) is not None:
         config["walletprefix"] = args.wallet_prefix
     return config or None
+
+
+def _normalized_backend_clear_fields(values: Sequence[str] | None) -> list[str]:
+    cleared = []
+    seen = set()
+    for value in values or ():
+        normalized = BACKEND_CLEAR_FIELD_ALIASES[value]
+        if normalized in seen:
+            continue
+        seen.add(normalized)
+        cleared.append(normalized)
+    return cleared
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -159,6 +172,7 @@ def build_parser() -> argparse.ArgumentParser:
     backends_update.add_argument("--password")
     backends_update.add_argument("--wallet-prefix")
     backends_update.add_argument("--notes")
+    backends_update.add_argument("--clear", action="append", choices=sorted(BACKEND_CLEAR_FIELD_ALIASES))
 
     backends_delete = backends_sub.add_parser("delete")
     backends_delete.add_argument("name")
@@ -688,6 +702,7 @@ def dispatch(conn: sqlite3.Connection | None, args: argparse.Namespace) -> Any:
                 "tor_proxy": args.tor_proxy,
                 "config": _backend_extra_config(args),
                 "notes": args.notes,
+                "clear": _normalized_backend_clear_fields(args.clear),
             }
             return emit(args, core_accounts.update_backend(conn, args.name, updates))
         if args.backends_command == "delete":

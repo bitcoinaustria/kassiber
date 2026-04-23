@@ -8,6 +8,7 @@ import unittest
 from argparse import Namespace
 from decimal import Decimal
 from pathlib import Path
+from unittest.mock import patch
 
 from kassiber.cli.main import command_needs_db
 from kassiber.cli.handlers import _audit_transaction_refs
@@ -813,6 +814,66 @@ class ReviewRegressionTest(unittest.TestCase):
         self.assertEqual(backend["cookiefile"], str(cookie_file))
         self.assertEqual(backend["walletprefix"], "review-core")
 
+    def test_deleted_bootstrap_backend_stays_deleted_across_restarts(self):
+        payload, result = self._run_json("init")
+        self._assert_ok(payload, result, "init")
+
+        payload, result = self._run_json("backends", "delete", "fulcrum")
+        self._assert_ok(payload, result, "backends.delete")
+        self.assertTrue(payload["data"]["deleted"])
+
+        payload, result = self._run_json("backends", "list")
+        self._assert_ok(payload, result, "backends.list")
+        rows = {row["name"]: row for row in payload["data"]}
+        self.assertNotIn("fulcrum", rows)
+
+        runtime = self._bootstrap_runtime_state()
+        self.assertNotIn("fulcrum", runtime.runtime_config["backends"])
+
+        payload, result = self._run_json("backends", "get", "fulcrum")
+        self.assertEqual(result.returncode, 1, msg=payload)
+        self.assertEqual(payload.get("kind"), "error")
+        self.assertEqual(payload["error"]["code"], "not_found")
+
+    def test_process_environment_backend_override_wins_over_seeded_db_value(self):
+        payload, result = self._run_json("init")
+        self._assert_ok(payload, result, "init")
+
+        payload, result = self._run_json(
+            "backends",
+            "update",
+            "mempool",
+            "--url",
+            "https://db.example/api",
+            "--batch-size",
+            "25",
+        )
+        self._assert_ok(payload, result, "backends.update")
+
+        env = {
+            **os.environ,
+            "KASSIBER_BACKEND_MEMPOOL_URL": "https://env.example/api",
+            "KASSIBER_DEFAULT_BACKEND": "fulcrum",
+        }
+        payload, result = self._run_json("backends", "get", "mempool", env=env)
+        self._assert_ok(payload, result, "backends.get")
+        self.assertEqual(payload["data"]["url"], "https://env.example/api")
+        self.assertEqual(payload["data"]["source"], "environment")
+
+        with patch.dict(
+            os.environ,
+            {
+                "KASSIBER_BACKEND_MEMPOOL_URL": "https://env.example/api",
+                "KASSIBER_DEFAULT_BACKEND": "fulcrum",
+            },
+            clear=False,
+        ):
+            runtime = self._bootstrap_runtime_state()
+            backend = runtime.runtime_config["backends"]["mempool"]
+            self.assertEqual(runtime.runtime_config["default_backend"], "fulcrum")
+            self.assertEqual(backend["url"], "https://env.example/api")
+            self.assertEqual(backend["batch_size"], 25)
+
     def test_electrum_insecure_backend_bootstrap_persists_into_runtime_config(self):
         env_file = self.case_dir / "electrum-insecure.env"
         env_file.write_text(
@@ -868,6 +929,78 @@ class ReviewRegressionTest(unittest.TestCase):
         self.assertEqual(payload["data"]["cookiefile"], str(cookie_file))
         self.assertEqual(payload["data"]["walletprefix"], "cli-core")
         self.assertTrue(payload["data"]["has_cookiefile"])
+
+    def test_backends_update_clear_removes_stored_credentials(self):
+        payload, result = self._run_json("init")
+        self._assert_ok(payload, result, "init")
+
+        cookie_file = self.case_dir / ".clear-cookie"
+        cookie_file.write_text("rpcuser:rpcpass\n", encoding="utf-8")
+
+        payload, result = self._run_json(
+            "backends",
+            "create",
+            "clear-core",
+            "--kind",
+            "bitcoinrpc",
+            "--url",
+            "http://127.0.0.1:8332",
+            "--auth-header",
+            "Bearer keep-me",
+            "--token",
+            "secret-token",
+            "--cookiefile",
+            str(cookie_file),
+            "--username",
+            "rpcuser",
+            "--password",
+            "rpcpass",
+            "--wallet-prefix",
+            "clear-core",
+        )
+        self._assert_ok(payload, result, "backends.create")
+
+        payload, result = self._run_json(
+            "backends",
+            "update",
+            "clear-core",
+            "--clear",
+            "auth-header",
+            "--clear",
+            "token",
+            "--clear",
+            "cookiefile",
+            "--clear",
+            "username",
+            "--clear",
+            "password",
+            "--clear",
+            "wallet-prefix",
+        )
+        self._assert_ok(payload, result, "backends.update")
+        self.assertFalse(payload["data"]["has_auth_header"])
+        self.assertFalse(payload["data"]["has_token"])
+        self.assertFalse(payload["data"]["has_cookiefile"])
+        self.assertFalse(payload["data"]["has_username"])
+        self.assertFalse(payload["data"]["has_password"])
+        self.assertNotIn("cookiefile", payload["data"])
+        self.assertNotIn("username", payload["data"])
+        self.assertNotIn("password", payload["data"])
+        self.assertNotIn("walletprefix", payload["data"])
+
+        db_path = self.data_root / "kassiber.sqlite3"
+        conn = sqlite3.connect(db_path)
+        row = conn.execute(
+            "SELECT auth_header, token, config_json FROM backends WHERE name = 'clear-core'"
+        ).fetchone()
+        conn.close()
+        self.assertIsNone(row[0])
+        self.assertIsNone(row[1])
+        stored_config = json.loads(row[2])
+        self.assertNotIn("cookiefile", stored_config)
+        self.assertNotIn("username", stored_config)
+        self.assertNotIn("password", stored_config)
+        self.assertNotIn("walletprefix", stored_config)
 
     def test_backend_outputs_redact_secret_values_but_keep_presence_flags(self):
         payload, result = self._run_json("init")

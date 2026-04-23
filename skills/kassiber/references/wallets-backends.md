@@ -21,8 +21,14 @@ Common backend operations:
 ```bash
 kassiber backends create my-esplora --kind esplora --url https://example.invalid/api
 kassiber backends update my-esplora --url https://new.example.invalid/api
+kassiber backends update core --clear username --clear password --clear cookiefile
 kassiber backends set-default my-esplora
 ```
+
+Behavior to remember:
+
+- deleting a bootstrap-backed backend is durable; Kassiber will not silently recreate it on the next startup
+- process-level `KASSIBER_BACKEND_*` overrides still win for the current process over the stored SQLite row
 
 Built-in defaults often include:
 

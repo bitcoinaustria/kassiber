@@ -41,6 +41,7 @@ Create and manage SQLite-backed backends:
 ```bash
 python3 -m kassiber backends create myelectrum --kind electrum --url ssl://index.bitcoin-austria.at:50002
 python3 -m kassiber backends update myelectrum --batch-size 50 --timeout 60
+python3 -m kassiber backends update core --clear username --clear password --clear cookiefile
 python3 -m kassiber backends create core --kind bitcoinrpc --url http://127.0.0.1:8332 --cookiefile ~/.bitcoin/.cookie --wallet-prefix kassiber
 python3 -m kassiber backends set-default myelectrum
 python3 -m kassiber backends clear-default
@@ -84,6 +85,12 @@ KASSIBER_BACKEND_CORE_WALLETPREFIX=kassiber
 
 See [.env.example](../../.env.example) for a fuller template. Once bootstrapped,
 use the `backends` CLI to inspect or edit the canonical SQLite rows.
+
+Important runtime rules:
+
+- deleting a bootstrap-backed backend through `backends delete` is durable; Kassiber records that explicit deletion and will not silently re-seed that name on the next startup
+- process-level `KASSIBER_BACKEND_*` overrides still win for the current process even when a backend has already been seeded into SQLite
+- config-backed auth fields can be scrubbed with `backends update --clear ...`; clearing removes the stored key from SQLite instead of leaving the old value behind
 
 ## Supported backend kinds
 

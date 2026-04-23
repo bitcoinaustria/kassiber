@@ -81,6 +81,7 @@ BACKEND_KINDS = {"bitcoinrpc", "custom", "electrum", "esplora", "liquid-esplora"
 DEFAULT_ENV_FILENAME = "backends.env"
 DEFAULT_BACKEND_SETTING = "default_backend"
 BOOTSTRAP_DEFAULT_BACKEND_SETTING = "bootstrap_default_backend"
+BOOTSTRAP_BACKEND_TOMBSTONES_SETTING = "bootstrap_backend_tombstones"
 BACKEND_DB_FIELDS = {
     "name",
     "kind",
@@ -100,6 +101,18 @@ BACKEND_DB_FIELDS = {
 BACKEND_RUNTIME_METADATA_FIELDS = {"config", "is_default", "source"}
 BACKEND_RESERVED_FIELDS = BACKEND_DB_FIELDS | BACKEND_RUNTIME_METADATA_FIELDS
 BACKEND_BOOLEAN_CONFIG_FIELDS = {"insecure"}
+BACKEND_CONFIG_FIELDS = {"cookiefile", "insecure", "password", "username", "walletprefix"}
+BACKEND_CLEAR_FIELD_ALIASES = {
+    "auth-header": "auth_header",
+    "token": "token",
+    "tor-proxy": "tor_proxy",
+    "notes": "notes",
+    "insecure": "insecure",
+    "cookiefile": "cookiefile",
+    "username": "username",
+    "password": "password",
+    "wallet-prefix": "walletprefix",
+}
 BACKEND_OUTPUT_PRESENCE_FIELDS = {
     "auth_header": "has_auth_header",
     "token": "has_token",
@@ -169,6 +182,7 @@ def load_runtime_config(env_file):
     env_path = Path(env_file).expanduser()
     file_env = load_dotenv_file(env_path)
     merged_env = {**file_env, **os.environ}
+    process_env_overrides = {"backends": {}, "default_backend": False}
     backends = {name: dict(config) for name, config in DEFAULT_BACKENDS.items()}
     for prefix in ("SATBOOKS_BACKEND_", "KASSIBER_BACKEND_"):
         for key, value in merged_env.items():
@@ -193,6 +207,8 @@ def load_runtime_config(env_file):
             )
             backends[backend_name][field_name] = value.strip()
             backends[backend_name]["source"] = f"{env_path}" if key in file_env else "environment"
+            if key in os.environ:
+                process_env_overrides["backends"].setdefault(backend_name, set()).add(field_name)
     default_backend = (
         merged_env.get("KASSIBER_DEFAULT_BACKEND")
         or merged_env.get("SATBOOKS_DEFAULT_BACKEND")
@@ -203,6 +219,7 @@ def load_runtime_config(env_file):
         default_backend_source = str(env_path)
     if "KASSIBER_DEFAULT_BACKEND" in os.environ or "SATBOOKS_DEFAULT_BACKEND" in os.environ:
         default_backend_source = "environment"
+        process_env_overrides["default_backend"] = True
     if default_backend not in backends:
         raise AppError(
             f"Default backend '{default_backend}' is not defined. Add KASSIBER_BACKEND_{default_backend.upper()}_KIND and _URL to {env_path}."
@@ -215,6 +232,13 @@ def load_runtime_config(env_file):
         "env_file_exists": env_path.exists(),
         "default_backend": default_backend,
         "default_backend_source": default_backend_source,
+        "process_env_overrides": {
+            "backends": {
+                name: sorted(fields)
+                for name, fields in process_env_overrides["backends"].items()
+            },
+            "default_backend": process_env_overrides["default_backend"],
+        },
         "backends": backends,
     }
 
@@ -308,6 +332,30 @@ def _extract_backend_config(backend):
     )
 
 
+def _normalize_backend_config_patch(config):
+    cleaned = {}
+    cleared = set()
+    for raw_key, raw_value in (config or {}).items():
+        key = str_or_none(raw_key)
+        if key is None:
+            continue
+        key = key.lower()
+        if key in BACKEND_RESERVED_FIELDS:
+            continue
+        if key in BACKEND_BOOLEAN_CONFIG_FIELDS:
+            if str_or_none(raw_value) is None:
+                cleared.add(key)
+                continue
+            cleaned[key] = parse_bool(raw_value)
+            continue
+        value = str_or_none(raw_value)
+        if value is None:
+            cleared.add(key)
+            continue
+        cleaned[key] = value
+    return cleaned, cleared
+
+
 def redact_backend_url(url):
     value = str_or_none(url)
     if value is None:
@@ -344,6 +392,36 @@ def redact_backend_for_output(backend):
 def _available_backend_names(conn):
     rows = conn.execute("SELECT name FROM backends ORDER BY name ASC").fetchall()
     return {row["name"] for row in rows}
+
+
+def _load_bootstrap_backend_tombstones(conn):
+    raw = get_setting(conn, BOOTSTRAP_BACKEND_TOMBSTONES_SETTING)
+    if not raw:
+        return set()
+    try:
+        payload = json.loads(raw)
+    except (TypeError, ValueError, json.JSONDecodeError):
+        return set()
+    if not isinstance(payload, list):
+        return set()
+    return {
+        name
+        for name in (str_or_none(item) for item in payload)
+        if name is not None
+    }
+
+
+def _save_bootstrap_backend_tombstones(conn, names):
+    set_setting(conn, BOOTSTRAP_BACKEND_TOMBSTONES_SETTING, json.dumps(sorted(names)))
+
+
+def _process_env_backend_fields(runtime_config, name):
+    backends = runtime_config.get("process_env_overrides", {}).get("backends", {})
+    return set(backends.get(name, ()))
+
+
+def _process_env_default_backend_override(runtime_config):
+    return bool(runtime_config.get("process_env_overrides", {}).get("default_backend"))
 
 
 def _fallback_backend_name(names):
@@ -384,8 +462,11 @@ def seed_db_backends(conn, runtime_config):
     overrides stay ephemeral and are not auto-written into the database.
     """
     existing_names = _available_backend_names(conn)
+    tombstones = _load_bootstrap_backend_tombstones(conn)
     for name, backend in sorted(runtime_config["backends"].items()):
         if name in existing_names:
+            continue
+        if name in tombstones:
             continue
         payload = _seedable_runtime_backend(name, backend)
         if payload is None:
@@ -472,10 +553,32 @@ def merge_db_backends(conn, runtime_config):
     present, also overrides the bootstrap default — and raises if it names a
     backend that is not available in the merged runtime view.
     """
+    tombstones = _load_bootstrap_backend_tombstones(conn)
+    for name in list(runtime_config["backends"]):
+        if name in tombstones and not _process_env_backend_fields(runtime_config, name):
+            runtime_config["backends"].pop(name, None)
     rows = conn.execute("SELECT * FROM backends").fetchall()
     for row in rows:
         name = row["name"].lower()
-        runtime_config["backends"][name] = _backend_row_to_dict(row)
+        db_backend = _backend_row_to_dict(row)
+        env_fields = _process_env_backend_fields(runtime_config, name)
+        if not env_fields:
+            runtime_config["backends"][name] = db_backend
+            continue
+        env_backend = runtime_config["backends"].get(name, {})
+        merged = dict(db_backend)
+        for field in env_fields:
+            merged[field] = env_backend.get(field, "")
+        merged["source"] = "environment"
+        runtime_config["backends"][name] = merged
+    if _process_env_default_backend_override(runtime_config):
+        if runtime_config["default_backend"] not in runtime_config["backends"]:
+            raise AppError(
+                f"Environment default backend '{runtime_config['default_backend']}' is not configured",
+                code="config_error",
+                hint="Define that backend in the current process or remove the env override.",
+            )
+        return runtime_config
     override = get_setting(conn, DEFAULT_BACKEND_SETTING)
     if override:
         if override not in runtime_config["backends"]:
@@ -559,6 +662,10 @@ def create_db_backend(
             ts,
         ),
     )
+    tombstones = _load_bootstrap_backend_tombstones(conn)
+    if name in tombstones:
+        tombstones.remove(name)
+        _save_bootstrap_backend_tombstones(conn, tombstones)
     conn.commit()
     return get_db_backend(conn, name)
 
@@ -578,11 +685,29 @@ def update_db_backend(conn, name, updates):
             code="not_found",
             hint="Only DB-backed backends can be updated. Use `kassiber backends create` first.",
         )
-    if all(v is None for v in updates.values()):
+    clear_fields = set(updates.get("clear") or [])
+    if all(v is None for key, v in updates.items() if key != "clear") and not clear_fields:
         raise AppError(
             "backends update requires at least one field to change",
             code="validation",
-            hint="Pass one or more of --kind, --url, --chain, --network, --auth-header, --token, --batch-size, --timeout, --tor-proxy, --insecure, --cookiefile, --username, --password, --wallet-prefix, --notes",
+            hint="Pass one or more of --kind, --url, --chain, --network, --auth-header, --token, --batch-size, --timeout, --tor-proxy, --insecure, --cookiefile, --username, --password, --wallet-prefix, --notes, or --clear <field>",
+        )
+    unsupported_clear_fields = clear_fields - set(BACKEND_CLEAR_FIELD_ALIASES.values())
+    if unsupported_clear_fields:
+        raise AppError(
+            f"Unsupported backend clear field(s): {', '.join(sorted(unsupported_clear_fields))}",
+            code="validation",
+            hint=f"Choose one of: {', '.join(sorted(BACKEND_CLEAR_FIELD_ALIASES))}",
+        )
+    conflicting_clear_fields = [
+        field
+        for field in ("auth_header", "token", "tor_proxy", "notes")
+        if field in clear_fields and updates.get(field) is not None
+    ]
+    if conflicting_clear_fields:
+        raise AppError(
+            f"Cannot set and clear backend field(s) in the same update: {', '.join(sorted(conflicting_clear_fields))}",
+            code="validation",
         )
 
     new_kind = updates.get("kind")
@@ -608,21 +733,40 @@ def update_db_backend(conn, name, updates):
         raise AppError("Backend timeout must be positive", code="validation")
     new_config = updates.get("config")
     merged_config = _load_backend_config(row["config_json"])
+    config_patch, config_clears = _normalize_backend_config_patch(new_config)
+    for field in clear_fields & BACKEND_CONFIG_FIELDS:
+        config_clears.add(field)
     if new_config is not None:
-        merged_config.update(_normalize_backend_config(new_config))
+        conflicting = set(config_patch) & config_clears
+        if conflicting:
+            raise AppError(
+                f"Cannot set and clear backend config field(s) in the same update: {', '.join(sorted(conflicting))}",
+                code="validation",
+            )
+    for field in config_clears:
+        merged_config.pop(field, None)
+    merged_config.update(config_patch)
 
     merged = {
         "kind": new_kind if new_kind is not None else row["kind"],
         "url": new_url if new_url is not None else row["url"],
         "chain": new_chain if new_chain is not None else row["chain"],
         "network": new_network if new_network is not None else row["network"],
-        "auth_header": updates.get("auth_header") if updates.get("auth_header") is not None else row["auth_header"],
-        "token": updates.get("token") if updates.get("token") is not None else row["token"],
+        "auth_header": None if "auth_header" in clear_fields else (
+            updates.get("auth_header") if updates.get("auth_header") is not None else row["auth_header"]
+        ),
+        "token": None if "token" in clear_fields else (
+            updates.get("token") if updates.get("token") is not None else row["token"]
+        ),
         "batch_size": new_batch_size if new_batch_size is not None else row["batch_size"],
         "timeout": new_timeout if new_timeout is not None else row["timeout"],
-        "tor_proxy": updates.get("tor_proxy") if updates.get("tor_proxy") is not None else row["tor_proxy"],
+        "tor_proxy": None if "tor_proxy" in clear_fields else (
+            updates.get("tor_proxy") if updates.get("tor_proxy") is not None else row["tor_proxy"]
+        ),
         "config_json": json.dumps(merged_config, sort_keys=True),
-        "notes": updates.get("notes") if updates.get("notes") is not None else row["notes"],
+        "notes": None if "notes" in clear_fields else (
+            updates.get("notes") if updates.get("notes") is not None else row["notes"]
+        ),
     }
 
     conn.execute(
@@ -667,6 +811,9 @@ def delete_db_backend(conn, name):
             code="conflict",
         )
     conn.execute("DELETE FROM backends WHERE name = ?", (name,))
+    tombstones = _load_bootstrap_backend_tombstones(conn)
+    tombstones.add(name)
+    _save_bootstrap_backend_tombstones(conn, tombstones)
     conn.commit()
     return {"name": name, "deleted": True}
 

@@ -354,6 +354,14 @@ def list_backend_kinds():
 
 
 def get_backend_details(conn, runtime_config, name):
+    normalized_name = str(name).strip().lower()
+    backend = runtime_config["backends"].get(normalized_name)
+    if backend:
+        payload = dict(backend)
+        payload.setdefault("name", normalized_name)
+        payload.setdefault("notes", "")
+        payload["is_default"] = normalized_name == runtime_config["default_backend"]
+        return redact_backend_for_output(payload)
     try:
         payload = get_db_backend(conn, name)
         payload["is_default"] = payload["name"] == runtime_config["default_backend"]
@@ -361,27 +369,7 @@ def get_backend_details(conn, runtime_config, name):
     except AppError as exc:
         if exc.code != "not_found":
             raise
-        normalized_name = str(name).strip().lower()
-        backend = runtime_config["backends"].get(normalized_name)
-        if not backend:
-            raise
-        return redact_backend_for_output(
-            {
-                "name": normalized_name,
-                "kind": backend.get("kind", ""),
-                "chain": backend.get("chain", ""),
-                "network": backend.get("network", ""),
-                "url": backend.get("url", ""),
-                "batch_size": backend.get("batch_size"),
-                "auth_header": backend.get("auth_header", ""),
-                "token": backend.get("token", ""),
-                "timeout": backend.get("timeout"),
-                "tor_proxy": backend.get("tor_proxy", ""),
-                "notes": "",
-                "source": backend.get("source", ""),
-                "is_default": normalized_name == runtime_config["default_backend"],
-            }
-        )
+        raise
 
 
 def create_backend(
