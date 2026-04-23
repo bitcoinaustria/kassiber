@@ -65,7 +65,7 @@ reports are fully offline.
 
 - `~/.kassiber/data/kassiber.sqlite3` — default SQLite DB. Contains
   descriptors, xpubs, addresses, transactions, metadata, rates cache,
-  and backend overlay.
+  backend definitions/defaults, and any stored backend credentials.
 - `~/.kassiber/config/backends.env` — default backend config file. May contain
   Bitcoin Core RPC credentials and backend tokens.
 - `~/.kassiber/config/settings.json` — managed state manifest for the active
@@ -100,17 +100,39 @@ RPC credentials, backend tokens — are sealed by default and unlocked
 on demand, without the user managing a separate passphrase. Until that
 lands, treat the data directory and backend config file as sensitive material.
 
+## Safe-to-record CLI output
+
+Normal `backends ...` and `wallets ...` success output now follows a narrow
+safe-to-record contract for secret-bearing config values:
+
+- backend inspection output now uses an allowlisted safe view: raw credential
+  values and unknown backend config keys are suppressed, while credential
+  presence is exposed through `has_*` flags
+- wallet inspection output now uses an allowlisted safe view: raw descriptor
+  material and unknown wallet config keys are suppressed, while callers
+  should rely on state flags such as `descriptor`, `change_descriptor`, and
+  `descriptor_state` instead
+- backend URLs shown in output drop embedded credentials and query strings
+
+This contract is intentionally narrow. It does **not** mean every CLI surface
+is safe to paste into a hosted model, issue tracker, or shared log. Addresses,
+notes, file paths, backend names, and other operational metadata may still be
+sensitive.
+
 ## Caveats
 
 - **Secrets on the command line end up in shell history.** `backends
-  create --token ...` and `--auth-header ...` write credentials into
-  `~/.zsh_history` / `~/.bash_history`. Prefer `~/.kassiber/config/backends.env`
-  (or another `--env-file`) or environment
+  create --token ...`, `--auth-header ...`, and `--password ...` write
+  credentials into `~/.zsh_history` / `~/.bash_history`. Prefer
+  `~/.kassiber/config/backends.env` (or another `--env-file`) or environment
   variables for anything sensitive.
-- **`--debug` and `--machine` output can leak secrets.** Debug stack
-  traces and machine envelopes include backend URLs, tokens, and —
-  for Liquid descriptor wallets — private SLIP77 blinding keys. Redact
-  before pasting into issues, screenshots, or logs.
+- **`--debug` is outside the safe-to-record contract.** Debug stack traces,
+  exception context, and future diagnostics may still include sensitive local
+  state. Review before pasting into issues, screenshots, or logs.
+- **Normal machine output still carries sensitive operational metadata.**
+  Success envelopes now redact secret-bearing backend and wallet config
+  values, but addresses, paths, notes, and infrastructure choices can still
+  be sensitive in hosted-model transcripts or shared logs.
 - **Cross-wallet linkability.** Running `wallets sync` for several
   wallets in one session ties them to the same IP + timing +
   `User-Agent` at the backend. Per-wallet sync calls are not per-wallet

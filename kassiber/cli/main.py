@@ -9,6 +9,7 @@ from typing import Any, Sequence
 
 from .handlers import (
     APP_NAME,
+    BACKEND_CLEAR_FIELD_ALIASES,
     BACKEND_KINDS,
     DEFAULT_DATA_ROOT,
     DEFAULT_ENV_FILENAME,
@@ -59,6 +60,33 @@ from ..core.runtime import bootstrap_runtime, close_runtime, emit_error, resolve
 from ..errors import AppError
 from ..tax_policy import supported_tax_countries
 from ..ui.dashboard import collect_ui_snapshot
+
+
+def _backend_extra_config(args: argparse.Namespace) -> dict[str, object] | None:
+    config = {}
+    if getattr(args, "insecure", None) is not None:
+        config["insecure"] = args.insecure
+    if getattr(args, "cookiefile", None) is not None:
+        config["cookiefile"] = args.cookiefile
+    if getattr(args, "username", None) is not None:
+        config["username"] = args.username
+    if getattr(args, "password", None) is not None:
+        config["password"] = args.password
+    if getattr(args, "wallet_prefix", None) is not None:
+        config["walletprefix"] = args.wallet_prefix
+    return config or None
+
+
+def _normalized_backend_clear_fields(values: Sequence[str] | None) -> list[str]:
+    cleared = []
+    seen = set()
+    for value in values or ():
+        normalized = BACKEND_CLEAR_FIELD_ALIASES[value]
+        if normalized in seen:
+            continue
+        seen.add(normalized)
+        cleared.append(normalized)
+    return cleared
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -120,6 +148,11 @@ def build_parser() -> argparse.ArgumentParser:
     backends_create.add_argument("--batch-size", type=int)
     backends_create.add_argument("--timeout", type=int)
     backends_create.add_argument("--tor-proxy")
+    backends_create.add_argument("--insecure")
+    backends_create.add_argument("--cookiefile")
+    backends_create.add_argument("--username")
+    backends_create.add_argument("--password")
+    backends_create.add_argument("--wallet-prefix")
     backends_create.add_argument("--notes")
 
     backends_update = backends_sub.add_parser("update")
@@ -133,7 +166,13 @@ def build_parser() -> argparse.ArgumentParser:
     backends_update.add_argument("--batch-size", type=int)
     backends_update.add_argument("--timeout", type=int)
     backends_update.add_argument("--tor-proxy")
+    backends_update.add_argument("--insecure")
+    backends_update.add_argument("--cookiefile")
+    backends_update.add_argument("--username")
+    backends_update.add_argument("--password")
+    backends_update.add_argument("--wallet-prefix")
     backends_update.add_argument("--notes")
+    backends_update.add_argument("--clear", action="append", choices=sorted(BACKEND_CLEAR_FIELD_ALIASES))
 
     backends_delete = backends_sub.add_parser("delete")
     backends_delete.add_argument("name")
@@ -646,6 +685,7 @@ def dispatch(conn: sqlite3.Connection | None, args: argparse.Namespace) -> Any:
                     batch_size=args.batch_size,
                     timeout=args.timeout,
                     tor_proxy=args.tor_proxy,
+                    config=_backend_extra_config(args),
                     notes=args.notes,
                 ),
             )
@@ -660,7 +700,9 @@ def dispatch(conn: sqlite3.Connection | None, args: argparse.Namespace) -> Any:
                 "batch_size": args.batch_size,
                 "timeout": args.timeout,
                 "tor_proxy": args.tor_proxy,
+                "config": _backend_extra_config(args),
                 "notes": args.notes,
+                "clear": _normalized_backend_clear_fields(args.clear),
             }
             return emit(args, core_accounts.update_backend(conn, args.name, updates))
         if args.backends_command == "delete":
@@ -1283,6 +1325,19 @@ def command_needs_db(args: argparse.Namespace) -> bool:
     return True
 
 
+def command_persists_bootstrap(args: argparse.Namespace) -> bool:
+    if args.command == "init":
+        return True
+    if args.command == "backends" and getattr(args, "backends_command", None) in {
+        "update",
+        "delete",
+        "set-default",
+        "clear-default",
+    }:
+        return True
+    return False
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
@@ -1296,7 +1351,11 @@ def main(argv: Sequence[str] | None = None) -> int:
         return 1
 
     try:
-        runtime = bootstrap_runtime(args, needs_db=command_needs_db(args))
+        runtime = bootstrap_runtime(
+            args,
+            needs_db=command_needs_db(args),
+            persist_bootstrap=command_persists_bootstrap(args),
+        )
         dispatch(runtime.conn, args)
         return 0
     except AppError as exc:

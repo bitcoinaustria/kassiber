@@ -16,6 +16,7 @@ from urllib import request as urlrequest
 
 from .. import __version__
 from ..backends import (
+    BACKEND_CLEAR_FIELD_ALIASES,
     BACKEND_KINDS,
     DEFAULT_ENV_FILENAME,
     DEFAULT_BACKENDS,

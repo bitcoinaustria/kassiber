@@ -38,6 +38,7 @@ Plus two smaller cross-cutting feature tracks:
 | Pre-release, no users but self | No backwards compatibility burden; freely rename/remove commands; keep docs in sync |
 | Bitcoin-only product focus | No altcoin zoo complexity; Liquid L-BTC in scope; no hardcoded Liquid federation addresses |
 | Solo maintainer + AI-assisted (vibecoded) | Stack must be in Claude's fluent zone. One language beats two. Conventional patterns beat exotic ones. |
+| Hosted-agent CLI use until the GUI is ready | Normal success envelopes should stay safe-to-record for secret-bearing backend and wallet config values; later follow-ups can move secret enrollment into local-only flows and keychain-backed refs |
 | "Make cybersecurity guys happy" | Minimize attack surface. No bundled Chromium. No Node at runtime. Audit-friendly deps. |
 | No Node in the shipped product | Excludes Electron, NW.js. Node as a dev-time build tool would be tolerable but unnecessary. |
 | Maintainable architecture over speed | Willing to rewrite. Willing to refactor. Willing to delete. |
