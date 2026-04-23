@@ -12,6 +12,7 @@ into modules.
 
 import json
 import os
+import re
 import subprocess
 import sys
 import tempfile
@@ -616,6 +617,33 @@ class CliSmokeTest(unittest.TestCase):
         header = payload_bytes[:8]
         self.assertTrue(header.startswith(b"%PDF-1.4"))
         self.assertRegex(payload_bytes, rb"/MediaBox \[0 0 842(?:\.0+)? 595(?:\.0+)?\]")
+
+    def test_07aa_pdf_writer_reports_actual_page_count(self):
+        from kassiber.pdf_report import write_text_pdf
+
+        pdf_path = Path(self._tmp.name) / "kassiber-report-multipage.pdf"
+        lines = ["Synthetic Report", "================", ""]
+        for section in range(10):
+            lines.extend(["", f"Section {section}", "-----------------"])
+            lines.append("Date        Wallet          Dir  Asset        Amount           Fee  Description")
+            lines.append(
+                "----------  --------------  ---  ------  ------------  ------------  ----------------------------"
+            )
+            for index in range(45):
+                lines.append(
+                    f"2025-01-{(index % 28) + 1:02d}  Wallet-{section:02d}      out  BTC      "
+                    f"{index * 0.12345678:,.8f}    0.00001000  Example row {index}"
+                )
+
+        result = write_text_pdf(str(pdf_path), "Synthetic Report", lines)
+        payload_bytes = pdf_path.read_bytes()
+        actual_pages = len(re.findall(rb"/Type /Page\b", payload_bytes))
+
+        self.assertTrue(pdf_path.exists())
+        self.assertGreater(result["pages"], 1)
+        self.assertEqual(result["pages"], actual_pages)
+        self.assertTrue(b"OpenSans" in payload_bytes or b"Open Sans" in payload_bytes)
+        self.assertTrue(b"RobotoMono" in payload_bytes or b"Roboto Mono" in payload_bytes)
 
     def test_08_capital_gains_msat_and_counts(self):
         payload = self._cli(
