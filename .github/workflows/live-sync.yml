@@ -1,0 +1,35 @@
+name: live-sync
+
+on:
+  workflow_dispatch:
+    inputs:
+      bitcoind_image:
+        description: "Bitcoin Core Docker image for regtest"
+        default: "bitcoin/bitcoin:28.1"
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  bitcoin-regtest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+
+      - name: Sync dependencies
+        run: uv sync --frozen
+
+      - name: Run Bitcoin regtest live sync
+        env:
+          KASSIBER_BITCOIND_IMAGE: ${{ inputs.bitcoind_image }}
+        run: scripts/live-sync-tests.sh --pull-images --require-bitcoin-regtest

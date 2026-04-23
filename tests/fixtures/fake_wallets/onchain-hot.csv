@@ -1,0 +1,4 @@
+date,txid,direction,asset,amount,fee,fiat_rate,description
+2026-01-10T10:00:00Z,demo-self-transfer-1,inbound,BTC,0.25000000,0,62000,Receive from cold wallet
+2026-03-01T12:00:00Z,demo-hot-spend-1,outbound,BTC,0.05000000,0.00005000,75000,On-chain sale or spend
+2026-04-01T09:00:00Z,demo-peg-out-in-1,inbound,BTC,0.10000000,0,72000,Peg-out receive on-chain

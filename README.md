@@ -206,6 +206,7 @@ Reference docs:
 - [docs/reference/backends.md](docs/reference/backends.md)
 - [docs/reference/imports.md](docs/reference/imports.md)
 - [docs/reference/tax.md](docs/reference/tax.md)
+- [docs/reference/testing.md](docs/reference/testing.md)
 - [docs/reference/machine-output.md](docs/reference/machine-output.md)
 - [docs/reference/desktop.md](docs/reference/desktop.md)
 

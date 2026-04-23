@@ -207,6 +207,10 @@ over the shared core after the extraction work is done.
 - [x] Keep normal backend and wallet success output safe-to-record for
   secret-bearing config values by redacting raw credentials and raw descriptor
   material while preserving presence / state flags
+- [x] Add opt-in local live-sync tests for Bitcoin Core regtest and local
+  Liquid Esplora/Electrum backends, plus a deterministic fake BTC/LBTC wallet
+  fixture with swap pairs; keep loopback-only guards so descriptor scripts are
+  not accidentally sent to public infrastructure
 - [ ] Finish the project-local part of backend storage once the per-project
   DB layout lands
 - [ ] Extend the safe-to-record contract beyond normal success output to
