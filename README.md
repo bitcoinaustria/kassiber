@@ -6,6 +6,12 @@ It keeps your accounting state on your machine, syncs from Bitcoin-native source
 
 Before pointing Kassiber at real wallets, read [SECURITY.md](SECURITY.md). It covers backend visibility, external requests, and current caveats such as missing at-rest encryption and incomplete Tor support.
 
+Normal `backends ...` and `wallets ...` success output now follows a narrow
+safe-to-record contract for secret-bearing config values: raw backend
+credentials and raw descriptor material are redacted from those inspection
+responses. This is not a general privacy guarantee; addresses, paths, notes,
+and `--debug` output can still be sensitive.
+
 ## What Kassiber does
 
 - keeps a local SQLite system of record

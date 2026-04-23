@@ -8,7 +8,7 @@ from ..backends import (
     create_db_backend as _create_db_backend,
     delete_db_backend as _delete_db_backend,
     get_db_backend,
-    list_backends as _list_backends,
+    redact_backend_for_output,
     set_default_backend as _set_default_backend,
     update_db_backend as _update_db_backend,
 )
@@ -325,7 +325,28 @@ def list_accounts(conn, workspace_ref, profile_ref):
 
 
 def list_backends(runtime_config):
-    return _list_backends(runtime_config)
+    rows = []
+    for name, backend in sorted(runtime_config["backends"].items()):
+        row = redact_backend_for_output(
+            {
+                "name": name,
+                "kind": backend.get("kind", ""),
+                "chain": backend.get("chain", ""),
+                "network": backend.get("network", ""),
+                "url": backend.get("url", ""),
+                "batch_size": backend.get("batch_size", ""),
+                "default": "yes" if name == runtime_config["default_backend"] else "",
+                "source": backend.get("source", ""),
+                "auth_header": backend.get("auth_header", ""),
+                "token": backend.get("token", ""),
+                "cookiefile": backend.get("cookiefile", ""),
+                "username": backend.get("username", ""),
+                "password": backend.get("password", ""),
+            }
+        )
+        row.pop("cookiefile", None)
+        rows.append(row)
+    return rows
 
 
 def list_backend_kinds():
@@ -336,7 +357,7 @@ def get_backend_details(conn, runtime_config, name):
     try:
         payload = get_db_backend(conn, name)
         payload["is_default"] = payload["name"] == runtime_config["default_backend"]
-        return payload
+        return redact_backend_for_output(payload)
     except AppError as exc:
         if exc.code != "not_found":
             raise
@@ -344,21 +365,23 @@ def get_backend_details(conn, runtime_config, name):
         backend = runtime_config["backends"].get(normalized_name)
         if not backend:
             raise
-        return {
-            "name": normalized_name,
-            "kind": backend.get("kind", ""),
-            "chain": backend.get("chain", ""),
-            "network": backend.get("network", ""),
-            "url": backend.get("url", ""),
-            "batch_size": backend.get("batch_size"),
-            "auth_header": backend.get("auth_header", ""),
-            "token": backend.get("token", ""),
-            "timeout": backend.get("timeout"),
-            "tor_proxy": backend.get("tor_proxy", ""),
-            "notes": "",
-            "source": backend.get("source", ""),
-            "is_default": normalized_name == runtime_config["default_backend"],
-        }
+        return redact_backend_for_output(
+            {
+                "name": normalized_name,
+                "kind": backend.get("kind", ""),
+                "chain": backend.get("chain", ""),
+                "network": backend.get("network", ""),
+                "url": backend.get("url", ""),
+                "batch_size": backend.get("batch_size"),
+                "auth_header": backend.get("auth_header", ""),
+                "token": backend.get("token", ""),
+                "timeout": backend.get("timeout"),
+                "tor_proxy": backend.get("tor_proxy", ""),
+                "notes": "",
+                "source": backend.get("source", ""),
+                "is_default": normalized_name == runtime_config["default_backend"],
+            }
+        )
 
 
 def create_backend(
@@ -376,25 +399,27 @@ def create_backend(
     config=None,
     notes=None,
 ):
-    return _create_db_backend(
-        conn,
-        name,
-        kind,
-        url,
-        chain=chain,
-        network=network,
-        auth_header=auth_header,
-        token=token,
-        batch_size=batch_size,
-        timeout=timeout,
-        tor_proxy=tor_proxy,
-        config=config,
-        notes=notes,
+    return redact_backend_for_output(
+        _create_db_backend(
+            conn,
+            name,
+            kind,
+            url,
+            chain=chain,
+            network=network,
+            auth_header=auth_header,
+            token=token,
+            batch_size=batch_size,
+            timeout=timeout,
+            tor_proxy=tor_proxy,
+            config=config,
+            notes=notes,
+        )
     )
 
 
 def update_backend(conn, name, updates):
-    return _update_db_backend(conn, name, updates)
+    return redact_backend_for_output(_update_db_backend(conn, name, updates))
 
 
 def delete_backend(conn, name):

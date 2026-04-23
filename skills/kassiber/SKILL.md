@@ -28,6 +28,7 @@ All `scripts/` paths in this skill are relative to the directory containing this
 15. For Liquid descriptor wallets, require an explicit backend and private blinding keys. If either is missing, stop and fix that before sync.
 16. If a BTCPay or CSV export belongs to the same real wallet as an existing Kassiber wallet, import it into that wallet instead of creating a duplicate wallet record.
 17. On errors, inspect the machine envelope first. Kassiber success responses are `{kind, schema_version, data}` and errors use `kind: "error"` with structured fields.
+18. Treat normal `backends ...` and `wallets ...` success output as safe-to-record only for secret-bearing config values. Do not ask users to paste raw backend credentials or raw private descriptor material into chat just because `backends get` or `wallets get` redacts it.
 
 ## Gotchas
 
@@ -35,6 +36,7 @@ All `scripts/` paths in this skill are relative to the directory containing this
 - Reports do not auto-pair BTC ↔ LBTC peg-ins / peg-outs or submarine swaps. If the user has cross-asset swap activity, inspect for likely pairs and use `kassiber transfers pair` before trusting reports.
 - Use `kassiber --machine journals transfers list` when you need the exact transfer / swap links Kassiber computed. Do not infer them from `journals process` counts alone.
 - `--machine` implies JSON mode. Use it alone or with `--format json`; do not combine it with any other explicit `--format` value.
+- `backends get/list` and `wallets get/create/update` redact secret-bearing values on purpose. Look for presence and state flags instead of expecting raw credentials or raw descriptors back.
 - Quarantined transactions are omitted from accurate downstream reporting until resolved or excluded.
 - Paginated list commands keep rows under command-specific keys such as `.data.records` and `.data.events`. Do not assume every list response uses the same field name.
 - For paginated responses like `journals events list` and `metadata records list`, always follow `next_cursor` until it is `null`.

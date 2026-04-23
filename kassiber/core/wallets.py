@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import uuid
 from pathlib import Path
 
@@ -35,6 +36,20 @@ WALLET_KINDS = [
     "river",
     "custom",
 ]
+REDACTED_CONFIG_VALUE = "[redacted]"
+WALLET_SENSITIVE_CONFIG_TOKENS = {
+    "auth",
+    "blinding",
+    "cookie",
+    "descriptor",
+    "password",
+    "private",
+    "secret",
+    "seed",
+    "slip77",
+    "token",
+    "xprv",
+}
 
 
 def normalize_wallet_kind(value):
@@ -58,6 +73,29 @@ def normalize_addresses(values):
         seen.add(address)
         output.append(address)
     return output
+
+
+def _wallet_config_key_is_sensitive(key):
+    parts = [
+        part
+        for part in re.split(r"[^a-z0-9]+", str(key or "").strip().lower())
+        if part
+    ]
+    return any(part in WALLET_SENSITIVE_CONFIG_TOKENS for part in parts)
+
+
+def redact_wallet_config_for_output(value):
+    if isinstance(value, dict):
+        redacted = {}
+        for key, item in value.items():
+            if _wallet_config_key_is_sensitive(key):
+                redacted[key] = REDACTED_CONFIG_VALUE
+            else:
+                redacted[key] = redact_wallet_config_for_output(item)
+        return redacted
+    if isinstance(value, list):
+        return [redact_wallet_config_for_output(item) for item in value]
+    return value
 
 
 def read_text_argument(value, file_path, label):
@@ -194,7 +232,8 @@ def create_wallet(conn, workspace_ref, profile_ref, label, kind, account_ref=Non
         ),
     )
     conn.commit()
-    return conn.execute("SELECT * FROM wallets WHERE id = ?", (wallet_id,)).fetchone()
+    created = fetch_wallet_with_account(conn, wallet_id)
+    return wallet_row_to_dict(created)
 
 
 def _wallet_descriptor_state(config):
@@ -322,6 +361,7 @@ def list_wallet_kinds():
 def wallet_row_to_dict(row):
     config = json.loads(row["config_json"] or "{}")
     descriptor_state, chain, network = _wallet_descriptor_state(config)
+    safe_config = redact_wallet_config_for_output(config)
     return {
         "id": row["id"],
         "workspace_id": row["workspace_id"],
@@ -342,7 +382,7 @@ def wallet_row_to_dict(row):
         "policy_asset": config.get("policy_asset"),
         "source_file": config.get("source_file", ""),
         "source_format": config.get("source_format", ""),
-        "config": config,
+        "config": safe_config,
         "created_at": row["created_at"],
     }
 

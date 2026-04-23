@@ -28,6 +28,7 @@ directly, since env-sourced and DB-sourced dicts differ slightly.
 import json
 import os
 from pathlib import Path
+from urllib.parse import urlsplit, urlunsplit
 
 from .db import (
     DEFAULT_CONFIG_DIRNAME,
@@ -99,6 +100,14 @@ BACKEND_DB_FIELDS = {
 BACKEND_RUNTIME_METADATA_FIELDS = {"config", "is_default", "source"}
 BACKEND_RESERVED_FIELDS = BACKEND_DB_FIELDS | BACKEND_RUNTIME_METADATA_FIELDS
 BACKEND_BOOLEAN_CONFIG_FIELDS = {"insecure"}
+BACKEND_OUTPUT_PRESENCE_FIELDS = {
+    "auth_header": "has_auth_header",
+    "token": "has_token",
+    "cookiefile": "has_cookiefile",
+    "username": "has_username",
+    "password": "has_password",
+}
+BACKEND_OUTPUT_REDACTED_FIELDS = {"auth_header", "token", "username", "password"}
 
 
 def resolve_effective_env_file(env_file=None, data_root=None):
@@ -297,6 +306,39 @@ def _extract_backend_config(backend):
             if key not in BACKEND_RESERVED_FIELDS
         }
     )
+
+
+def redact_backend_url(url):
+    value = str_or_none(url)
+    if value is None:
+        return ""
+    try:
+        parts = urlsplit(value)
+    except ValueError:
+        return value
+    if not parts.scheme or not parts.netloc:
+        return value
+    hostname = parts.hostname or ""
+    if not hostname:
+        return value
+    host = hostname
+    if ":" in host and not host.startswith("["):
+        host = f"[{host}]"
+    if parts.port is not None:
+        host = f"{host}:{parts.port}"
+    if parts.username or parts.password:
+        host = f"<redacted>@{host}"
+    return urlunsplit((parts.scheme, host, parts.path, "", ""))
+
+
+def redact_backend_for_output(backend):
+    payload = dict(backend)
+    payload["url"] = redact_backend_url(payload.get("url"))
+    for field, flag in BACKEND_OUTPUT_PRESENCE_FIELDS.items():
+        payload[flag] = bool(str_or_none(payload.get(field)))
+    for field in BACKEND_OUTPUT_REDACTED_FIELDS:
+        payload.pop(field, None)
+    return payload
 
 
 def _available_backend_names(conn):

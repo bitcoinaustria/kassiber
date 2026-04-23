@@ -31,6 +31,11 @@ python3 -m kassiber backends list
 python3 -m kassiber backends get mempool
 ```
 
+Those inspection commands follow Kassiber's safe-to-record contract for
+secret-bearing values: raw credentials are redacted, and presence is exposed
+through `has_*` flags instead. If a backend URL contains embedded credentials
+or query tokens, the displayed URL is sanitized before it is emitted.
+
 Create and manage SQLite-backed backends:
 
 ```bash
@@ -188,5 +193,6 @@ For Liquid:
 - descriptor sync leaks more wallet structure than fixed-address sync
 - `tor_proxy` is stored but not wired yet; route the whole process externally if needed
 - backend credentials in CLI flags can land in shell history
+- `backends get` / `list` are safe-to-record only for secret-bearing config values; other metadata may still be sensitive
 
 See [SECURITY.md](../../SECURITY.md) for the current privacy model and outbound request inventory.

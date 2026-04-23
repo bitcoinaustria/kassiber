@@ -176,6 +176,21 @@ _CROSS_LBTC_CSV = """date,txid,direction,asset,amount,fee,fiat_rate,description
 2026-04-15T10:30:00Z,cross-in-leg,inbound,LBTC,0.10000000,0,82000,Peg-in receive
 """
 
+
+def _sample_descriptor_pair():
+    from embit import bip32
+
+    seed = bytes.fromhex("000102030405060708090a0b0c0d0e0f" * 4)
+    root = bip32.HDKey.from_seed(seed)
+    account = root.derive("m/84h/0h/0h")
+    xpub = account.to_public().to_base58()
+    fingerprint = root.my_fingerprint.hex()
+    origin = f"[{fingerprint}/84h/0h/0h]"
+    return (
+        f"wpkh({origin}{xpub}/0/*)",
+        f"wpkh({origin}{xpub}/1/*)",
+    )
+
 _MIXED_DISPOSALS_BTC_CSV = """date,txid,direction,asset,amount,fee,fiat_rate,description
 2026-01-01T10:00:00Z,btc-buy,inbound,BTC,0.10000000,0,50000,BTC buy
 2026-02-01T10:00:00Z,btc-sell,outbound,BTC,0.05000000,0,60000,BTC sell
@@ -587,6 +602,62 @@ class ReviewRegressionTest(unittest.TestCase):
         conn.close()
         self.assertTrue(json.loads(stored)["altbestand"])
 
+    def test_wallet_outputs_redact_descriptor_material_but_keep_state_flags(self):
+        self._bootstrap_profile()
+        descriptor, change_descriptor = _sample_descriptor_pair()
+
+        payload, result = self._run_json(
+            "wallets",
+            "create",
+            "--workspace",
+            "Main",
+            "--profile",
+            "Default",
+            "--label",
+            "Vault",
+            "--kind",
+            "descriptor",
+            "--descriptor",
+            descriptor,
+            "--change-descriptor",
+            change_descriptor,
+            "--gap-limit",
+            "5",
+        )
+        self._assert_ok(payload, result, "wallets.create")
+        self.assertTrue(payload["data"]["descriptor"])
+        self.assertTrue(payload["data"]["change_descriptor"])
+        self.assertEqual(payload["data"]["config"]["descriptor"], "[redacted]")
+        self.assertEqual(payload["data"]["config"]["change_descriptor"], "[redacted]")
+        self.assertNotIn("config_json", payload["data"])
+
+        payload, result = self._run_json(
+            "wallets",
+            "get",
+            "--workspace",
+            "Main",
+            "--profile",
+            "Default",
+            "--wallet",
+            "Vault",
+        )
+        self._assert_ok(payload, result, "wallets.get")
+        self.assertTrue(payload["data"]["descriptor"])
+        self.assertTrue(payload["data"]["change_descriptor"])
+        self.assertEqual(payload["data"]["descriptor_state"], "bitcoin:main")
+        self.assertEqual(payload["data"]["config"]["descriptor"], "[redacted]")
+        self.assertEqual(payload["data"]["config"]["change_descriptor"], "[redacted]")
+
+        db_path = self.data_root / "kassiber.sqlite3"
+        conn = sqlite3.connect(db_path)
+        stored = conn.execute(
+            "SELECT config_json FROM wallets WHERE label = 'Vault'"
+        ).fetchone()[0]
+        conn.close()
+        stored_config = json.loads(stored)
+        self.assertEqual(stored_config["descriptor"], descriptor)
+        self.assertEqual(stored_config["change_descriptor"], change_descriptor)
+
     def test_custom_env_file_backend_bootstrap_persists_into_db(self):
         env_file = self.case_dir / "custom-backends.env"
         env_file.write_text(
@@ -796,6 +867,78 @@ class ReviewRegressionTest(unittest.TestCase):
         self.assertEqual(payload["data"]["kind"], "bitcoinrpc")
         self.assertEqual(payload["data"]["cookiefile"], str(cookie_file))
         self.assertEqual(payload["data"]["walletprefix"], "cli-core")
+        self.assertTrue(payload["data"]["has_cookiefile"])
+
+    def test_backend_outputs_redact_secret_values_but_keep_presence_flags(self):
+        payload, result = self._run_json("init")
+        self._assert_ok(payload, result, "init")
+
+        payload, result = self._run_json(
+            "backends",
+            "create",
+            "secure-core",
+            "--kind",
+            "bitcoinrpc",
+            "--url",
+            "http://rpcuser:rpcpass@127.0.0.1:8332/wallet/review?session=topsecret",
+            "--username",
+            "rpcuser",
+            "--password",
+            "rpcpass",
+            "--auth-header",
+            "Bearer secret-header",
+            "--token",
+            "secret-token",
+        )
+        self._assert_ok(payload, result, "backends.create")
+        self.assertEqual(payload["data"]["url"], "http://<redacted>@127.0.0.1:8332/wallet/review")
+        self.assertTrue(payload["data"]["has_auth_header"])
+        self.assertTrue(payload["data"]["has_token"])
+        self.assertTrue(payload["data"]["has_username"])
+        self.assertTrue(payload["data"]["has_password"])
+        self.assertNotIn("auth_header", payload["data"])
+        self.assertNotIn("token", payload["data"])
+        self.assertNotIn("username", payload["data"])
+        self.assertNotIn("password", payload["data"])
+
+        payload, result = self._run_json("backends", "get", "secure-core")
+        self._assert_ok(payload, result, "backends.get")
+        self.assertEqual(payload["data"]["url"], "http://<redacted>@127.0.0.1:8332/wallet/review")
+        self.assertTrue(payload["data"]["has_auth_header"])
+        self.assertTrue(payload["data"]["has_token"])
+        self.assertTrue(payload["data"]["has_username"])
+        self.assertTrue(payload["data"]["has_password"])
+        self.assertNotIn("auth_header", payload["data"])
+        self.assertNotIn("token", payload["data"])
+        self.assertNotIn("username", payload["data"])
+        self.assertNotIn("password", payload["data"])
+
+        payload, result = self._run_json("backends", "list")
+        self._assert_ok(payload, result, "backends.list")
+        rows = {row["name"]: row for row in payload["data"]}
+        self.assertEqual(rows["secure-core"]["url"], "http://<redacted>@127.0.0.1:8332/wallet/review")
+        self.assertTrue(rows["secure-core"]["has_auth_header"])
+        self.assertTrue(rows["secure-core"]["has_token"])
+        self.assertTrue(rows["secure-core"]["has_username"])
+        self.assertTrue(rows["secure-core"]["has_password"])
+        self.assertNotIn("auth_header", rows["secure-core"])
+        self.assertNotIn("token", rows["secure-core"])
+
+        db_path = self.data_root / "kassiber.sqlite3"
+        conn = sqlite3.connect(db_path)
+        row = conn.execute(
+            "SELECT url, auth_header, token, config_json FROM backends WHERE name = 'secure-core'"
+        ).fetchone()
+        conn.close()
+        self.assertEqual(
+            row[0],
+            "http://rpcuser:rpcpass@127.0.0.1:8332/wallet/review?session=topsecret",
+        )
+        self.assertEqual(row[1], "Bearer secret-header")
+        self.assertEqual(row[2], "secret-token")
+        stored_config = json.loads(row[3])
+        self.assertEqual(stored_config["username"], "rpcuser")
+        self.assertEqual(stored_config["password"], "rpcpass")
 
     def test_metadata_record_mutations_roundtrip_and_invalidate_journals(self):
         self._bootstrap_wallet(label="Meta")
