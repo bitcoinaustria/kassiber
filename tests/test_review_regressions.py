@@ -929,6 +929,80 @@ class ReviewRegressionTest(unittest.TestCase):
             self.assertEqual(backend["url"], "https://env.example/api")
             self.assertEqual(backend["batch_size"], 25)
 
+    def test_process_environment_default_can_target_seeded_sqlite_backend(self):
+        env_file = self.case_dir / "bitcoincore.env"
+        env_file.write_text(
+            "\n".join(
+                [
+                    "KASSIBER_BACKEND_BITCOINCORE_KIND=bitcoinrpc",
+                    "KASSIBER_BACKEND_BITCOINCORE_URL=http://127.0.0.1:8332",
+                    "KASSIBER_DEFAULT_BACKEND=bitcoincore",
+                ]
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+
+        payload, result = self._run_json("--env-file", str(env_file), "init")
+        self._assert_ok(payload, result, "init")
+
+        env_file.unlink()
+
+        with patch.dict(
+            os.environ,
+            {"KASSIBER_DEFAULT_BACKEND": "bitcoincore"},
+            clear=False,
+        ):
+            runtime = self._bootstrap_runtime_state(env_file=env_file)
+            self.assertEqual(runtime.runtime_config["default_backend"], "bitcoincore")
+            self.assertIn("bitcoincore", runtime.runtime_config["backends"])
+            self.assertEqual(
+                runtime.runtime_config["backends"]["bitcoincore"]["source"],
+                "database",
+            )
+
+    def test_process_only_backend_fields_do_not_block_bootstrap_seed(self):
+        env_file = self.case_dir / "bitcoincore.env"
+        env_file.write_text(
+            "\n".join(
+                [
+                    "KASSIBER_BACKEND_BITCOINCORE_KIND=bitcoinrpc",
+                    "KASSIBER_BACKEND_BITCOINCORE_URL=http://127.0.0.1:8332",
+                    "KASSIBER_DEFAULT_BACKEND=bitcoincore",
+                ]
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+
+        with patch.dict(
+            os.environ,
+            {"KASSIBER_BACKEND_BITCOINCORE_TIMEOUT": "45"},
+            clear=False,
+        ):
+            runtime = self._bootstrap_runtime_state(env_file=env_file, persist_bootstrap=True)
+            self.assertEqual(runtime.runtime_config["default_backend"], "bitcoincore")
+            self.assertEqual(runtime.runtime_config["backends"]["bitcoincore"]["timeout"], "45")
+
+        db_path = self.data_root / "kassiber.sqlite3"
+        conn = sqlite3.connect(db_path)
+        backend_row = conn.execute(
+            "SELECT name, timeout FROM backends WHERE name = 'bitcoincore'"
+        ).fetchone()
+        bootstrap_default = conn.execute(
+            "SELECT value FROM settings WHERE key = 'bootstrap_default_backend'"
+        ).fetchone()
+        stored_default = conn.execute(
+            "SELECT value FROM settings WHERE key = 'default_backend'"
+        ).fetchone()
+        conn.close()
+
+        self.assertIsNotNone(backend_row)
+        self.assertEqual(backend_row[0], "bitcoincore")
+        self.assertIsNone(backend_row[1])
+        self.assertEqual(bootstrap_default[0], "bitcoincore")
+        self.assertEqual(stored_default[0], "bitcoincore")
+
     def test_read_only_backend_get_does_not_import_bootstrap_config_into_sqlite(self):
         env_file = self.case_dir / "readonly-alpha.env"
         env_file.write_text(

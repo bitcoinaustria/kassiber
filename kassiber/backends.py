@@ -199,25 +199,10 @@ def load_dotenv_file(path):
     return values
 
 
-def load_runtime_config(env_file):
-    """Build the bootstrap backend config from env / dotenv only.
-
-    Returns a dict with `env_file`, `env_file_exists`, `default_backend`,
-    `default_backend_source`, and `backends` (a name->config dict). Call
-    `seed_db_backends` and `merge_db_backends` on top to canonicalize the
-    runtime view through SQLite.
-
-    Supports both `KASSIBER_BACKEND_*` and the legacy `SATBOOKS_BACKEND_*`
-    prefixes so pre-rename configs keep working.
-    """
-    env_path = Path(env_file).expanduser()
-    file_env = load_dotenv_file(env_path)
-    merged_env = {**file_env, **os.environ}
-    process_env_overrides = {"backends": {}, "default_backend": False}
-    dotenv_backends = set()
-    backends = {name: dict(config) for name, config in DEFAULT_BACKENDS.items()}
+def _apply_backend_env_values(backends, env_values, source_label, *, override_existing_source):
+    names = set()
     for prefix in ("SATBOOKS_BACKEND_", "KASSIBER_BACKEND_"):
-        for key, value in merged_env.items():
+        for key, value in env_values.items():
             if not key.startswith(prefix):
                 continue
             suffix = key[len(prefix):]
@@ -228,35 +213,82 @@ def load_runtime_config(env_file):
             field_name = _canonicalize_backend_field_name(field_name)
             if not backend_name or not field_name:
                 continue
-            backends.setdefault(
-                backend_name,
-                {
+            if backend_name not in backends:
+                backends[backend_name] = {
                     "name": backend_name,
                     "kind": "",
                     "url": "",
-                    "source": f"{env_path}" if key in file_env else "environment",
-                },
-            )
+                    "source": source_label,
+                }
+            elif override_existing_source:
+                backends[backend_name]["source"] = source_label
             backends[backend_name][field_name] = value.strip()
-            backends[backend_name]["source"] = f"{env_path}" if key in file_env else "environment"
-            if key in file_env:
-                dotenv_backends.add(backend_name)
-            if key in os.environ:
-                process_env_overrides["backends"].setdefault(backend_name, set()).add(field_name)
-    default_backend = (
-        merged_env.get("KASSIBER_DEFAULT_BACKEND")
-        or merged_env.get("SATBOOKS_DEFAULT_BACKEND")
+            names.add(backend_name)
+    return names
+
+
+def load_runtime_config(env_file):
+    """Build the bootstrap backend config from env / dotenv only.
+
+    Returns a dict with `env_file`, `env_file_exists`, `default_backend`,
+    `bootstrap_default_backend`, `default_backend_source`, and `backends`
+    (a name->config dict). Call `seed_db_backends` and `merge_db_backends`
+    on top to canonicalize the runtime view through SQLite.
+
+    Supports both `KASSIBER_BACKEND_*` and the legacy `SATBOOKS_BACKEND_*`
+    prefixes so pre-rename configs keep working.
+    """
+    env_path = Path(env_file).expanduser()
+    file_env = load_dotenv_file(env_path)
+    process_env_overrides = {"backends": {}, "default_backend": False}
+    bootstrap_backends = {name: dict(config) for name, config in DEFAULT_BACKENDS.items()}
+    dotenv_backends = _apply_backend_env_values(
+        bootstrap_backends,
+        file_env,
+        str(env_path),
+        override_existing_source=True,
+    )
+    backends = {name: dict(config) for name, config in bootstrap_backends.items()}
+    _apply_backend_env_values(
+        backends,
+        os.environ,
+        "environment",
+        override_existing_source=False,
+    )
+    for prefix in ("SATBOOKS_BACKEND_", "KASSIBER_BACKEND_"):
+        for key in os.environ:
+            if not key.startswith(prefix):
+                continue
+            suffix = key[len(prefix):]
+            if "_" not in suffix:
+                continue
+            backend_name, field_name = suffix.split("_", 1)
+            backend_name = backend_name.lower()
+            field_name = _canonicalize_backend_field_name(field_name)
+            if not backend_name or not field_name:
+                continue
+            process_env_overrides["backends"].setdefault(backend_name, set()).add(field_name)
+
+    bootstrap_default_backend = (
+        file_env.get("KASSIBER_DEFAULT_BACKEND")
+        or file_env.get("SATBOOKS_DEFAULT_BACKEND")
         or "mempool"
     ).strip().lower() or "mempool"
+    default_backend = bootstrap_default_backend
     default_backend_source = "built-in default"
     if "KASSIBER_DEFAULT_BACKEND" in file_env or "SATBOOKS_DEFAULT_BACKEND" in file_env:
         default_backend_source = str(env_path)
     if "KASSIBER_DEFAULT_BACKEND" in os.environ or "SATBOOKS_DEFAULT_BACKEND" in os.environ:
+        default_backend = (
+            os.environ.get("KASSIBER_DEFAULT_BACKEND")
+            or os.environ.get("SATBOOKS_DEFAULT_BACKEND")
+            or bootstrap_default_backend
+        ).strip().lower() or bootstrap_default_backend
         default_backend_source = "environment"
         process_env_overrides["default_backend"] = True
-    if default_backend not in backends:
+    if bootstrap_default_backend not in bootstrap_backends:
         raise AppError(
-            f"Default backend '{default_backend}' is not defined. Add KASSIBER_BACKEND_{default_backend.upper()}_KIND and _URL to {env_path}."
+            f"Default backend '{bootstrap_default_backend}' is not defined. Add KASSIBER_BACKEND_{bootstrap_default_backend.upper()}_KIND and _URL to {env_path}."
         )
     for name, backend in backends.items():
         if not backend.get("kind") or not backend.get("url"):
@@ -265,7 +297,9 @@ def load_runtime_config(env_file):
         "env_file": str(env_path),
         "env_file_exists": env_path.exists(),
         "default_backend": default_backend,
+        "bootstrap_default_backend": bootstrap_default_backend,
         "default_backend_source": default_backend_source,
+        "bootstrap_backends": bootstrap_backends,
         "dotenv_backends": sorted(dotenv_backends),
         "process_env_overrides": {
             "backends": {
@@ -594,7 +628,7 @@ def seed_db_backends(conn, runtime_config):
             _save_bootstrap_backend_tombstones(conn, tombstones)
             changed = True
 
-        for name, backend in sorted(runtime_config["backends"].items()):
+        for name, backend in sorted(runtime_config["bootstrap_backends"].items()):
             if name in tombstones:
                 continue
             payload = _seedable_runtime_backend(name, backend)
@@ -606,7 +640,7 @@ def seed_db_backends(conn, runtime_config):
         existing_names = _available_backend_names(conn)
         bootstrap_default = get_setting(conn, BOOTSTRAP_DEFAULT_BACKEND_SETTING)
         if not bootstrap_default:
-            candidate = runtime_config["default_backend"]
+            candidate = runtime_config["bootstrap_default_backend"]
             if candidate not in existing_names:
                 candidate = _fallback_backend_name(existing_names)
             set_setting(conn, BOOTSTRAP_DEFAULT_BACKEND_SETTING, candidate)
