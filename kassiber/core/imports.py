@@ -14,7 +14,7 @@ from ..envelope import json_ready
 from ..errors import AppError
 from ..importers import is_btcpay_format, is_phoenix_format, load_import_records
 from ..msat import btc_to_msat, dec
-from ..time_utils import now_iso, parse_timestamp
+from ..time_utils import UNKNOWN_OCCURRED_AT, now_iso, parse_timestamp
 from ..util import str_or_none
 from ..wallet_descriptors import normalize_asset_code
 
@@ -60,6 +60,74 @@ def make_transaction_fingerprint(wallet_id, external_id, occurred_at, direction,
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
 
+def _find_existing_transaction(
+    conn: sqlite3.Connection,
+    wallet_id: str,
+    normalized: Mapping[str, Any],
+    fingerprint: str,
+):
+    existing = conn.execute(
+        """
+        SELECT id, fingerprint, occurred_at, confirmed_at, fiat_rate, fiat_value,
+               kind, description, counterparty, raw_json
+        FROM transactions
+        WHERE fingerprint = ?
+        """,
+        (fingerprint,),
+    ).fetchone()
+    if existing or not normalized["external_id"]:
+        return existing
+    return conn.execute(
+        """
+        SELECT id, fingerprint, occurred_at, confirmed_at, fiat_rate, fiat_value,
+               kind, description, counterparty, raw_json
+        FROM transactions
+        WHERE wallet_id = ?
+          AND external_id = ?
+          AND direction = ?
+          AND asset = ?
+          AND amount = ?
+          AND fee = ?
+        ORDER BY created_at DESC
+        LIMIT 1
+        """,
+        (
+            wallet_id,
+            normalized["external_id"],
+            normalized["direction"],
+            normalized["asset"],
+            btc_to_msat(normalized["amount"]),
+            btc_to_msat(normalized["fee"]),
+        ),
+    ).fetchone()
+
+
+def _transaction_merge_updates(existing: Mapping[str, Any], normalized: Mapping[str, Any], fingerprint: str):
+    updates = {}
+    if existing["fingerprint"] != fingerprint:
+        updates["fingerprint"] = fingerprint
+    if (
+        existing["occurred_at"] == UNKNOWN_OCCURRED_AT
+        and normalized["occurred_at"] != UNKNOWN_OCCURRED_AT
+    ):
+        updates["occurred_at"] = normalized["occurred_at"]
+    if existing["confirmed_at"] in (None, "") and normalized["confirmed_at"] is not None:
+        updates["confirmed_at"] = normalized["confirmed_at"]
+    if existing["fiat_rate"] is None and normalized["fiat_rate"] is not None:
+        updates["fiat_rate"] = float(normalized["fiat_rate"])
+    if existing["fiat_value"] is None and normalized["fiat_value"] is not None:
+        updates["fiat_value"] = float(normalized["fiat_value"])
+    if not existing["kind"] and normalized["kind"]:
+        updates["kind"] = normalized["kind"]
+    if not existing["description"] and normalized["description"]:
+        updates["description"] = normalized["description"]
+    if not existing["counterparty"] and normalized["counterparty"]:
+        updates["counterparty"] = normalized["counterparty"]
+    if updates and normalized["raw_json"] and normalized["raw_json"] != existing["raw_json"]:
+        updates["raw_json"] = normalized["raw_json"]
+    return updates
+
+
 def normalize_import_record(record: ImportRow) -> dict[str, Any]:
     raw_amount = dec(record.get("amount"))
     direction = normalize_import_direction(record.get("direction"), raw_amount)
@@ -76,9 +144,13 @@ def normalize_import_record(record: ImportRow) -> dict[str, Any]:
         raw_json = json.dumps(json_ready(record), sort_keys=True)
     elif not isinstance(raw_json, str):
         raw_json = json.dumps(json_ready(raw_json), sort_keys=True)
+    confirmed_at = record.get("confirmed_at")
+    if confirmed_at in (None, ""):
+        confirmed_at = None
     return {
         "external_id": str(record.get("txid") or record.get("id") or ""),
         "occurred_at": parse_timestamp(record.get("occurred_at") or record.get("timestamp") or record.get("date")),
+        "confirmed_at": parse_timestamp(confirmed_at) if confirmed_at is not None else None,
         "direction": direction,
         "asset": normalize_asset_code(record.get("asset") or "BTC"),
         "amount": amount,
@@ -113,11 +185,15 @@ def insert_wallet_records(
             normalized["amount"],
             normalized["fee"],
         )
-        exists = conn.execute(
-            "SELECT 1 FROM transactions WHERE fingerprint = ?",
-            (fingerprint,),
-        ).fetchone()
-        if exists:
+        existing = _find_existing_transaction(conn, wallet["id"], normalized, fingerprint)
+        if existing:
+            updates = _transaction_merge_updates(existing, normalized, fingerprint)
+            if updates:
+                assignments = ", ".join(f"{column} = ?" for column in updates)
+                conn.execute(
+                    f"UPDATE transactions SET {assignments} WHERE id = ?",
+                    (*updates.values(), existing["id"]),
+                )
             skipped += 1
             continue
         tx_id = str(uuid.uuid4())
@@ -125,9 +201,9 @@ def insert_wallet_records(
             """
             INSERT INTO transactions(
                 id, workspace_id, profile_id, wallet_id, external_id, fingerprint,
-                occurred_at, direction, asset, amount, fee, fiat_currency,
+                occurred_at, confirmed_at, direction, asset, amount, fee, fiat_currency,
                 fiat_rate, fiat_value, kind, description, counterparty, raw_json, created_at
-            ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 tx_id,
@@ -137,6 +213,7 @@ def insert_wallet_records(
                 normalized["external_id"] or None,
                 fingerprint,
                 normalized["occurred_at"],
+                normalized["confirmed_at"],
                 normalized["direction"],
                 normalized["asset"],
                 btc_to_msat(normalized["amount"]),

@@ -6,6 +6,8 @@ from kassiber.core.sync_backends import (
     bitcoinrpc_sync_adapter,
     electrum_sync_adapter,
     esplora_sync_adapter,
+    record_from_bitcoin_esplora_tx,
+    record_from_bitcoinrpc_details,
     scriptpubkey_scripthash,
 )
 from kassiber.errors import AppError
@@ -78,6 +80,7 @@ class SyncBackendsTest(unittest.TestCase):
         self.assertEqual(records[0]["asset"], "BTC")
         self.assertAlmostEqual(float(records[0]["amount"]), 0.00012345, places=12)
         self.assertEqual(records[0]["occurred_at"], timestamp_to_iso(1_700_000_000))
+        self.assertEqual(records[0]["confirmed_at"], timestamp_to_iso(1_700_000_000))
 
     def test_electrum_sync_adapter_returns_record_shape(self):
         target = {"address": "bc1qe1", "script_pubkey": "0014deadbeef"}
@@ -143,6 +146,7 @@ class SyncBackendsTest(unittest.TestCase):
         self.assertEqual(records[0]["asset"], "BTC")
         self.assertAlmostEqual(float(records[0]["amount"]), 0.00012345, places=12)
         self.assertEqual(records[0]["occurred_at"], timestamp_to_iso(1_700_000_000))
+        self.assertEqual(records[0]["confirmed_at"], timestamp_to_iso(1_700_000_000))
 
     def test_bitcoinrpc_sync_adapter_returns_record_and_meta_shape(self):
         target = {"address": "bc1qcore", "script_pubkey": "0014core"}
@@ -202,6 +206,29 @@ class SyncBackendsTest(unittest.TestCase):
         self.assertEqual(records[0]["asset"], "BTC")
         self.assertAlmostEqual(float(records[0]["amount"]), 0.001, places=12)
         self.assertEqual(records[0]["occurred_at"], timestamp_to_iso(1_700_000_000))
+        self.assertEqual(records[0]["confirmed_at"], timestamp_to_iso(1_700_000_000))
+
+    def test_esplora_mempool_record_leaves_confirmed_at_empty(self):
+        tracked_script = "0014watch"
+        tx = {
+            "txid": "44" * 32,
+            "fee": 100,
+            "vin": [],
+            "vout": [{"scriptpubkey": tracked_script, "value": 10_000}],
+            "status": {"confirmed": False},
+        }
+        record = record_from_bitcoin_esplora_tx(tx, {tracked_script: {"address": "bc1qwatch"}}, "esplora")
+        self.assertEqual(record["occurred_at"], timestamp_to_iso(None))
+        self.assertIsNone(record["confirmed_at"])
+
+    def test_bitcoinrpc_unconfirmed_record_leaves_confirmed_at_empty(self):
+        record = record_from_bitcoinrpc_details(
+            "55" * 32,
+            [{"category": "receive", "amount": 0.001, "fee": 0, "time": 1_700_000_000}],
+            "core",
+        )
+        self.assertEqual(record["occurred_at"], timestamp_to_iso(1_700_000_000))
+        self.assertIsNone(record["confirmed_at"])
 
 
 if __name__ == "__main__":
