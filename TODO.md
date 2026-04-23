@@ -181,7 +181,8 @@ over the shared core after the extraction work is done.
 - [ ] Custom CSV mapping DSL for arbitrary wallet exports
 - [ ] Rates/account adjustment surface
 - [ ] Per-profile Tor proxy configuration
-- [ ] BTCPay Greenfield API-backed provenance import with stable invoice/payment ids and raw payload snapshots
+- [ ] Attach optional BTCPay `InvoiceId` / payment metadata to rows synced via `wallets sync-btcpay`
+- [ ] Persist optional BTCPay raw payload snapshots only if a concrete reconciliation workflow needs them
 - [ ] External document records for invoices, receipts, contracts, and related BTC-linked business evidence
 - [ ] Many-to-many document/payment links with allocations and reconciliation state
 - [ ] Deterministic matching rules before any AI assistance
