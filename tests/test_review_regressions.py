@@ -2725,6 +2725,116 @@ class ReviewRegressionTest(unittest.TestCase):
             server.server_close()
             server_thread.join(timeout=5)
 
+    def test_btcpay_sync_requires_explicit_marker_not_generic_config_keys(self):
+        self._bootstrap_profile()
+        generic_config = json.dumps(
+            {
+                "backend": "btcpay1",
+                "store_id": "STORE1",
+                "payment_method_id": "BTC-CHAIN",
+            }
+        )
+        payload, result = self._run_json(
+            "wallets", "create",
+            "--workspace", "Main",
+            "--profile", "Default",
+            "--label", "GenericKeys",
+            "--kind", "custom",
+            "--config", generic_config,
+        )
+        self._assert_ok(payload, result, "wallets.create")
+        self.assertNotIn("sync_source", payload["data"]["config"])
+
+        payload, result = self._run_json(
+            "wallets", "sync",
+            "--workspace", "Main",
+            "--profile", "Default",
+            "--wallet", "GenericKeys",
+        )
+        self._assert_ok(payload, result, "wallets.sync")
+        self.assertEqual(
+            payload["data"],
+            [
+                {
+                    "wallet": "GenericKeys",
+                    "status": "skipped",
+                    "reason": "no file source, descriptor, or backend addresses configured",
+                }
+            ],
+        )
+
+        payload, result = self._run_json(
+            "wallets", "create",
+            "--workspace", "Main",
+            "--profile", "Default",
+            "--label", "BTCPayFlags",
+            "--kind", "custom",
+            "--backend", "btcpay1",
+            "--store-id", "STORE2",
+        )
+        self._assert_ok(payload, result, "wallets.create")
+        self.assertEqual(
+            payload["data"]["config"],
+            {
+                "backend": "btcpay1",
+                "sync_source": "btcpay",
+                "store_id": "STORE2",
+                "payment_method_id": "BTC-CHAIN",
+            },
+        )
+
+        payload, result = self._run_json(
+            "wallets", "update",
+            "--workspace", "Main",
+            "--profile", "Default",
+            "--wallet", "GenericKeys",
+            "--store-id", "STORE3",
+        )
+        self._assert_ok(payload, result, "wallets.update")
+        self.assertEqual(
+            payload["data"]["config"],
+            {
+                "backend": "btcpay1",
+                "sync_source": "btcpay",
+                "store_id": "STORE3",
+                "payment_method_id": "BTC-CHAIN",
+            },
+        )
+
+    def test_btcpay_sync_rejects_explicit_blank_payment_method_id(self):
+        self._bootstrap_wallet(label="BTCPayBlank", kind="custom")
+        payload, result = self._run_json(
+            "backends", "create",
+            "btcpay1",
+            "--kind", "btcpay",
+            "--url", "http://127.0.0.1:9",
+            "--token", "testkey",
+        )
+        self._assert_ok(payload, result, "backends.create")
+
+        payload, result = self._run_json(
+            "wallets", "sync-btcpay",
+            "--workspace", "Main",
+            "--profile", "Default",
+            "--wallet", "BTCPayBlank",
+            "--backend", "btcpay1",
+            "--store-id", "STORE1",
+            "--payment-method-id", "",
+        )
+        self.assertNotEqual(result.returncode, 0)
+        self.assertEqual(payload["kind"], "error")
+        self.assertEqual(payload["error"]["code"], "validation")
+        self.assertIn("payment method id cannot be empty", payload["error"]["message"])
+
+        payload, result = self._run_json(
+            "wallets", "get",
+            "--workspace", "Main",
+            "--profile", "Default",
+            "--wallet", "BTCPayBlank",
+        )
+        self._assert_ok(payload, result, "wallets.get")
+        self.assertEqual(payload["data"]["config"], {})
+
     def test_btcpay_sync_surfaces_auth_failure_envelope(self):
         class Handler(BaseHTTPRequestHandler):
             def do_GET(self):

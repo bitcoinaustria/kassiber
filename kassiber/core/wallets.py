@@ -141,11 +141,11 @@ def wallet_btcpay_sync_config(config):
     if not isinstance(config, dict):
         return None
     sync_source = str_or_none(config.get("sync_source"))
+    if sync_source is None:
+        return None
     store_id = str_or_none(config.get("store_id"))
     payment_method_id = str_or_none(config.get("payment_method_id"))
-    if sync_source is None and store_id is None and payment_method_id is None:
-        return None
-    normalized_source = (sync_source or BTCPAY_SYNC_SOURCE).strip().lower()
+    normalized_source = sync_source.strip().lower()
     if normalized_source != BTCPAY_SYNC_SOURCE:
         raise AppError(
             f"Unsupported wallet sync source '{normalized_source}'",
@@ -170,6 +170,20 @@ def wallet_btcpay_sync_config(config):
         "store_id": store_id,
         "payment_method_id": payment_method_id or BTCPAY_DEFAULT_PAYMENT_METHOD_ID,
     }
+
+
+def normalize_btcpay_store_id(value):
+    store_id = str_or_none(value)
+    if store_id is None:
+        raise AppError("BTCPay store id cannot be empty", code="validation")
+    return store_id
+
+
+def normalize_btcpay_payment_method_id(value):
+    payment_method_id = str_or_none(value)
+    if payment_method_id is None:
+        raise AppError("BTCPay payment method id cannot be empty", code="validation")
+    return payment_method_id
 
 
 def parse_wallet_config(args):
@@ -214,16 +228,17 @@ def parse_wallet_config(args):
         config["source_file"] = os.path.abspath(args.source_file)
     if getattr(args, "source_format", None):
         config["source_format"] = args.source_format
+    has_btcpay_flag = False
     if getattr(args, "store_id", None) is not None:
-        store_id = str_or_none(args.store_id)
-        if store_id is None:
-            raise AppError("BTCPay store id cannot be empty", code="validation")
-        config["store_id"] = store_id
-    if getattr(args, "payment_method_id", None):
-        payment_method_id = str(args.payment_method_id).strip()
-        if not payment_method_id:
-            raise AppError("BTCPay payment method id cannot be empty", code="validation")
-        config["payment_method_id"] = payment_method_id
+        config["store_id"] = normalize_btcpay_store_id(args.store_id)
+        has_btcpay_flag = True
+    if getattr(args, "payment_method_id", None) is not None:
+        config["payment_method_id"] = normalize_btcpay_payment_method_id(
+            args.payment_method_id
+        )
+        has_btcpay_flag = True
+    if has_btcpay_flag:
+        config["sync_source"] = BTCPAY_SYNC_SOURCE
     chain, network = wallet_live_chain_config(config)
     if chain:
         config["chain"] = chain
@@ -532,6 +547,8 @@ __all__ = [
     "list_wallets",
     "load_wallet_descriptor_plan_from_config",
     "normalize_addresses",
+    "normalize_btcpay_payment_method_id",
+    "normalize_btcpay_store_id",
     "normalize_wallet_kind",
     "parse_wallet_config",
     "read_text_argument",

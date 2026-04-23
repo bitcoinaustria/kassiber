@@ -821,6 +821,10 @@ def sync_btcpay_into_wallet(
     payment_method_id,
     page_size,
 ):
+    store_id = core_wallets.normalize_btcpay_store_id(store_id)
+    payment_method_id = core_wallets.normalize_btcpay_payment_method_id(
+        payment_method_id
+    )
     _, profile = resolve_scope(conn, workspace_ref, profile_ref)
     wallet = resolve_wallet(conn, profile["id"], wallet_ref)
     backend = resolve_backend(runtime_config, backend_name)
