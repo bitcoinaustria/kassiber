@@ -1231,8 +1231,17 @@ def auto_price_transactions_from_rates_cache(conn, profile):
         rate = dec(cached_rate["rate"])
         fiat_value = rate * msat_to_btc(row["amount"]) if row["amount"] > 0 else None
         conn.execute(
-            "UPDATE transactions SET fiat_rate = ?, fiat_value = ? WHERE id = ?",
-            (float(rate), float(fiat_value) if fiat_value is not None else None, row["id"]),
+            """
+            UPDATE transactions
+            SET fiat_rate = ?, fiat_value = ?, fiat_price_source = ?
+            WHERE id = ?
+            """,
+            (
+                float(rate),
+                float(fiat_value) if fiat_value is not None else None,
+                "rates_cache",
+                row["id"],
+            ),
         )
         auto_priced += 1
     return auto_priced
@@ -1841,10 +1850,15 @@ def resolve_quarantine_price_override(
     if new_value is not None and new_value < 0:
         raise AppError("--fiat-value must not be negative", code="validation")
     conn.execute(
-        "UPDATE transactions SET fiat_rate = ?, fiat_value = ? WHERE id = ?",
+        """
+        UPDATE transactions
+        SET fiat_rate = ?, fiat_value = ?, fiat_price_source = ?
+        WHERE id = ?
+        """,
         (
             float(new_rate) if new_rate is not None else None,
             float(new_value) if new_value is not None else None,
+            "manual",
             tx["id"],
         ),
     )

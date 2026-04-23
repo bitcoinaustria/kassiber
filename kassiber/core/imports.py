@@ -20,6 +20,8 @@ from ..wallet_descriptors import normalize_asset_code
 
 INBOUND_DIRECTIONS = {"in", "inbound", "receive", "received", "deposit", "credit", "buy"}
 OUTBOUND_DIRECTIONS = {"out", "outbound", "send", "sent", "withdrawal", "withdraw", "debit", "sell"}
+FIAT_PRICE_SOURCE_IMPORT = "import"
+FIAT_PRICE_SOURCE_RATES_CACHE = "rates_cache"
 
 ImportRow = Mapping[str, Any]
 TagRow = Mapping[str, Any]
@@ -69,6 +71,7 @@ def _find_existing_transaction(
     existing = conn.execute(
         """
         SELECT id, fingerprint, occurred_at, confirmed_at, fiat_rate, fiat_value,
+               fiat_price_source,
                kind, description, counterparty, raw_json
         FROM transactions
         WHERE fingerprint = ?
@@ -80,6 +83,7 @@ def _find_existing_transaction(
     return conn.execute(
         """
         SELECT id, fingerprint, occurred_at, confirmed_at, fiat_rate, fiat_value,
+               fiat_price_source,
                kind, description, counterparty, raw_json
         FROM transactions
         WHERE wallet_id = ?
@@ -104,19 +108,40 @@ def _find_existing_transaction(
 
 def _transaction_merge_updates(existing: Mapping[str, Any], normalized: Mapping[str, Any], fingerprint: str):
     updates = {}
-    if existing["fingerprint"] != fingerprint:
-        updates["fingerprint"] = fingerprint
     if (
         existing["occurred_at"] == UNKNOWN_OCCURRED_AT
         and normalized["occurred_at"] != UNKNOWN_OCCURRED_AT
     ):
         updates["occurred_at"] = normalized["occurred_at"]
-    if existing["confirmed_at"] in (None, "") and normalized["confirmed_at"] is not None:
+    stored_occurred_at = updates.get("occurred_at", existing["occurred_at"])
+    if existing["fingerprint"] != fingerprint and stored_occurred_at == normalized["occurred_at"]:
+        updates["fingerprint"] = fingerprint
+
+    confirmed_at_added = (
+        existing["confirmed_at"] in (None, "")
+        and normalized["confirmed_at"] is not None
+    )
+    if confirmed_at_added:
         updates["confirmed_at"] = normalized["confirmed_at"]
-    if existing["fiat_rate"] is None and normalized["fiat_rate"] is not None:
-        updates["fiat_rate"] = float(normalized["fiat_rate"])
-    if existing["fiat_value"] is None and normalized["fiat_value"] is not None:
-        updates["fiat_value"] = float(normalized["fiat_value"])
+
+    has_existing_price = existing["fiat_rate"] is not None or existing["fiat_value"] is not None
+    has_import_price = normalized["fiat_price_source"] == FIAT_PRICE_SOURCE_IMPORT
+    if has_import_price and (
+        existing["fiat_price_source"] == FIAT_PRICE_SOURCE_RATES_CACHE
+        or not has_existing_price
+    ):
+        updates["fiat_rate"] = (
+            float(normalized["fiat_rate"]) if normalized["fiat_rate"] is not None else None
+        )
+        updates["fiat_value"] = (
+            float(normalized["fiat_value"]) if normalized["fiat_value"] is not None else None
+        )
+        updates["fiat_price_source"] = FIAT_PRICE_SOURCE_IMPORT
+    elif confirmed_at_added and existing["fiat_price_source"] == FIAT_PRICE_SOURCE_RATES_CACHE:
+        updates["fiat_rate"] = None
+        updates["fiat_value"] = None
+        updates["fiat_price_source"] = None
+
     if not existing["kind"] and normalized["kind"]:
         updates["kind"] = normalized["kind"]
     if not existing["description"] and normalized["description"]:
@@ -135,6 +160,7 @@ def normalize_import_record(record: ImportRow) -> dict[str, Any]:
     fee = abs(dec(record.get("fee"), "0"))
     fiat_rate = record.get("fiat_rate")
     fiat_value = record.get("fiat_value")
+    has_import_price = fiat_rate not in (None, "") or fiat_value not in (None, "")
     rate = dec(fiat_rate) if fiat_rate not in (None, "") else None
     value = dec(fiat_value) if fiat_value not in (None, "") else None
     if value is None and rate is not None:
@@ -157,6 +183,7 @@ def normalize_import_record(record: ImportRow) -> dict[str, Any]:
         "fee": fee,
         "fiat_rate": rate,
         "fiat_value": value,
+        "fiat_price_source": FIAT_PRICE_SOURCE_IMPORT if has_import_price else None,
         "kind": record.get("kind"),
         "description": record.get("description"),
         "counterparty": record.get("counterparty"),
@@ -202,8 +229,9 @@ def insert_wallet_records(
             INSERT INTO transactions(
                 id, workspace_id, profile_id, wallet_id, external_id, fingerprint,
                 occurred_at, confirmed_at, direction, asset, amount, fee, fiat_currency,
-                fiat_rate, fiat_value, kind, description, counterparty, raw_json, created_at
-            ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                fiat_rate, fiat_value, fiat_price_source, kind, description,
+                counterparty, raw_json, created_at
+            ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 tx_id,
@@ -221,6 +249,7 @@ def insert_wallet_records(
                 profile["fiat_currency"],
                 float(normalized["fiat_rate"]) if normalized["fiat_rate"] is not None else None,
                 float(normalized["fiat_value"]) if normalized["fiat_value"] is not None else None,
+                normalized["fiat_price_source"],
                 normalized["kind"],
                 normalized["description"],
                 normalized["counterparty"],

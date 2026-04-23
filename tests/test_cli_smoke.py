@@ -933,6 +933,240 @@ class CliSmokeTest(unittest.TestCase):
         self.assertEqual(record["occurred_at"], "2024-05-10T12:00:00Z")
         self.assertEqual(record["confirmed_at"], "2024-05-10T12:00:00Z")
 
+    def test_11d_confirmed_at_merge_reprices_cache_derived_values(self):
+        workspace = "ConfirmedRepriceSpace"
+        profile = "ConfirmedRepriceDefault"
+        self._assert_kind(self._cli("workspaces", "create", workspace), "workspaces.create")
+        self._assert_kind(
+            self._cli("profiles", "create", "--workspace", workspace, profile),
+            "profiles.create",
+        )
+        payload = self._cli(
+            "wallets", "create",
+            "--workspace", workspace,
+            "--profile", profile,
+            "--label", "ConfirmedReprice",
+            "--kind", "custom",
+        )
+        self._assert_kind(payload, "wallets.create")
+
+        first_csv = Path(self._tmp.name) / "confirmed-reprice-first.csv"
+        first_csv.write_text(
+            "date,txid,direction,asset,amount,fee,description\n"
+            "2024-05-09T09:00:00Z,confirmed-reprice-1,inbound,BTC,0.01000000,0,First unconfirmed copy\n",
+            encoding="utf-8",
+        )
+        second_csv = Path(self._tmp.name) / "confirmed-reprice-second.csv"
+        second_csv.write_text(
+            "date,confirmed_at,txid,direction,asset,amount,fee,description\n"
+            "2024-05-09T09:00:00Z,2024-05-10T12:00:00Z,confirmed-reprice-1,inbound,BTC,0.01000000,0,Confirmed copy\n",
+            encoding="utf-8",
+        )
+
+        self._cli("rates", "set", "BTC-USD", "2024-05-09T00:00:00Z", "60000")
+        self._cli("rates", "set", "BTC-USD", "2024-05-10T00:00:00Z", "62000")
+
+        payload = self._cli(
+            "wallets", "import-csv",
+            "--workspace", workspace,
+            "--profile", profile,
+            "--wallet", "ConfirmedReprice",
+            "--file", str(first_csv),
+        )
+        self._assert_kind(payload, "wallets.import-csv")
+        self.assertEqual(payload["data"]["imported"], 1)
+
+        payload = self._cli("journals", "process", "--workspace", workspace, "--profile", profile)
+        self._assert_kind(payload, "journals.process")
+        self.assertEqual(payload["data"]["auto_priced"], 1)
+
+        conn = sqlite3.connect(self.data_root / "kassiber.sqlite3")
+        conn.row_factory = sqlite3.Row
+        row = conn.execute(
+            "SELECT fiat_rate, fiat_value, fiat_price_source FROM transactions WHERE external_id = 'confirmed-reprice-1'"
+        ).fetchone()
+        conn.close()
+        self.assertAlmostEqual(row["fiat_rate"], 60000.0, places=4)
+        self.assertAlmostEqual(row["fiat_value"], 600.0, places=4)
+        self.assertEqual(row["fiat_price_source"], "rates_cache")
+
+        payload = self._cli(
+            "wallets", "import-csv",
+            "--workspace", workspace,
+            "--profile", profile,
+            "--wallet", "ConfirmedReprice",
+            "--file", str(second_csv),
+        )
+        self._assert_kind(payload, "wallets.import-csv")
+        self.assertEqual(payload["data"]["imported"], 0)
+        self.assertEqual(payload["data"]["skipped"], 1)
+
+        payload = self._cli("journals", "process", "--workspace", workspace, "--profile", profile)
+        self._assert_kind(payload, "journals.process")
+        self.assertEqual(payload["data"]["auto_priced"], 1)
+
+        payload = self._cli(
+            "transactions",
+            "list",
+            "--workspace", workspace,
+            "--profile", profile,
+            "--wallet", "ConfirmedReprice",
+        )
+        self._assert_kind(payload, "transactions.list")
+        record = payload["data"][0]
+        self.assertEqual(record["confirmed_at"], "2024-05-10T12:00:00Z")
+        self.assertAlmostEqual(float(record["fiat_rate"]), 62000.0, places=4)
+        self.assertAlmostEqual(float(record["fiat_value"]), 620.0, places=4)
+
+    def test_11e_repeat_import_does_not_desync_fingerprint(self):
+        workspace = "FingerprintMergeSpace"
+        profile = "FingerprintMergeDefault"
+        self._assert_kind(self._cli("workspaces", "create", workspace), "workspaces.create")
+        self._assert_kind(
+            self._cli("profiles", "create", "--workspace", workspace, profile),
+            "profiles.create",
+        )
+        payload = self._cli(
+            "wallets", "create",
+            "--workspace", workspace,
+            "--profile", profile,
+            "--label", "FingerprintMerge",
+            "--kind", "custom",
+        )
+        self._assert_kind(payload, "wallets.create")
+
+        first_csv = Path(self._tmp.name) / "fingerprint-merge-first.csv"
+        first_csv.write_text(
+            "date,txid,direction,asset,amount,fee,description\n"
+            "2024-05-09T09:00:00Z,fingerprint-merge-1,inbound,BTC,0.01000000,0,First copy\n",
+            encoding="utf-8",
+        )
+        second_csv = Path(self._tmp.name) / "fingerprint-merge-second.csv"
+        second_csv.write_text(
+            "date,txid,direction,asset,amount,fee,description\n"
+            "2024-05-10T09:00:00Z,fingerprint-merge-1,inbound,BTC,0.01000000,0,Conflicting timestamp copy\n",
+            encoding="utf-8",
+        )
+
+        payload = self._cli(
+            "wallets", "import-csv",
+            "--workspace", workspace,
+            "--profile", profile,
+            "--wallet", "FingerprintMerge",
+            "--file", str(first_csv),
+        )
+        self._assert_kind(payload, "wallets.import-csv")
+        self.assertEqual(payload["data"]["imported"], 1)
+
+        conn = sqlite3.connect(self.data_root / "kassiber.sqlite3")
+        conn.row_factory = sqlite3.Row
+        before = conn.execute(
+            "SELECT occurred_at, fingerprint FROM transactions WHERE external_id = 'fingerprint-merge-1'"
+        ).fetchone()
+        conn.close()
+
+        payload = self._cli(
+            "wallets", "import-csv",
+            "--workspace", workspace,
+            "--profile", profile,
+            "--wallet", "FingerprintMerge",
+            "--file", str(second_csv),
+        )
+        self._assert_kind(payload, "wallets.import-csv")
+        self.assertEqual(payload["data"]["imported"], 0)
+        self.assertEqual(payload["data"]["skipped"], 1)
+
+        conn = sqlite3.connect(self.data_root / "kassiber.sqlite3")
+        conn.row_factory = sqlite3.Row
+        count = conn.execute(
+            "SELECT COUNT(*) AS n FROM transactions WHERE external_id = 'fingerprint-merge-1'"
+        ).fetchone()
+        after = conn.execute(
+            "SELECT occurred_at, fingerprint FROM transactions WHERE external_id = 'fingerprint-merge-1'"
+        ).fetchone()
+        conn.close()
+
+        self.assertEqual(count["n"], 1)
+        self.assertEqual(after["occurred_at"], before["occurred_at"])
+        self.assertEqual(after["fingerprint"], before["fingerprint"])
+
+    def test_11f_confirmed_at_merge_preserves_imported_price(self):
+        workspace = "ConfirmedImportedPriceSpace"
+        profile = "ConfirmedImportedPriceDefault"
+        self._assert_kind(self._cli("workspaces", "create", workspace), "workspaces.create")
+        self._assert_kind(
+            self._cli("profiles", "create", "--workspace", workspace, profile),
+            "profiles.create",
+        )
+        payload = self._cli(
+            "wallets", "create",
+            "--workspace", workspace,
+            "--profile", profile,
+            "--label", "ConfirmedImportedPrice",
+            "--kind", "custom",
+        )
+        self._assert_kind(payload, "wallets.create")
+
+        first_csv = Path(self._tmp.name) / "confirmed-imported-price-first.csv"
+        first_csv.write_text(
+            "date,txid,direction,asset,amount,fee,fiat_rate,description\n"
+            "2024-05-09T09:00:00Z,confirmed-imported-price-1,inbound,BTC,0.01000000,0,60000,Imported price\n",
+            encoding="utf-8",
+        )
+        second_csv = Path(self._tmp.name) / "confirmed-imported-price-second.csv"
+        second_csv.write_text(
+            "date,confirmed_at,txid,direction,asset,amount,fee,description\n"
+            "2024-05-09T09:00:00Z,2024-05-10T12:00:00Z,confirmed-imported-price-1,inbound,BTC,0.01000000,0,Confirmed copy\n",
+            encoding="utf-8",
+        )
+
+        self._cli("rates", "set", "BTC-USD", "2024-05-10T00:00:00Z", "62000")
+
+        payload = self._cli(
+            "wallets", "import-csv",
+            "--workspace", workspace,
+            "--profile", profile,
+            "--wallet", "ConfirmedImportedPrice",
+            "--file", str(first_csv),
+        )
+        self._assert_kind(payload, "wallets.import-csv")
+        self.assertEqual(payload["data"]["imported"], 1)
+
+        payload = self._cli("journals", "process", "--workspace", workspace, "--profile", profile)
+        self._assert_kind(payload, "journals.process")
+        self.assertEqual(payload["data"]["auto_priced"], 0)
+
+        payload = self._cli(
+            "wallets", "import-csv",
+            "--workspace", workspace,
+            "--profile", profile,
+            "--wallet", "ConfirmedImportedPrice",
+            "--file", str(second_csv),
+        )
+        self._assert_kind(payload, "wallets.import-csv")
+        self.assertEqual(payload["data"]["imported"], 0)
+        self.assertEqual(payload["data"]["skipped"], 1)
+
+        payload = self._cli("journals", "process", "--workspace", workspace, "--profile", profile)
+        self._assert_kind(payload, "journals.process")
+        self.assertEqual(payload["data"]["auto_priced"], 0)
+
+        conn = sqlite3.connect(self.data_root / "kassiber.sqlite3")
+        conn.row_factory = sqlite3.Row
+        row = conn.execute(
+            """
+            SELECT confirmed_at, fiat_rate, fiat_value, fiat_price_source
+            FROM transactions
+            WHERE external_id = 'confirmed-imported-price-1'
+            """
+        ).fetchone()
+        conn.close()
+
+        self.assertEqual(row["confirmed_at"], "2024-05-10T12:00:00Z")
+        self.assertAlmostEqual(row["fiat_rate"], 60000.0, places=4)
+        self.assertAlmostEqual(row["fiat_value"], 600.0, places=4)
+        self.assertEqual(row["fiat_price_source"], "import")
+
     def test_12_error_envelope_shape(self):
         # bad pair syntax (no hyphen) → validation error envelope
         payload, code = _run(

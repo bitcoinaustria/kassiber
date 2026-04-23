@@ -111,6 +111,7 @@ CREATE TABLE IF NOT EXISTS transactions (
     fiat_currency TEXT,
     fiat_rate REAL,
     fiat_value REAL,
+    fiat_price_source TEXT,
     kind TEXT,
     description TEXT,
     counterparty TEXT,
@@ -409,6 +410,7 @@ def ensure_schema_compat(conn):
     ensure_column(conn, "journal_entries", "at_category", "TEXT")
     ensure_column(conn, "journal_entries", "at_kennzahl", "INTEGER")
     ensure_column(conn, "transactions", "confirmed_at", "TEXT")
+    ensure_column(conn, "transactions", "fiat_price_source", "TEXT")
     _migrate_msat_columns(conn)
 
 
@@ -455,6 +457,7 @@ def _migrate_msat_columns(conn):
                     fiat_currency TEXT,
                     fiat_rate REAL,
                     fiat_value REAL,
+                    fiat_price_source TEXT,
                     kind TEXT,
                     description TEXT,
                     counterparty TEXT,
@@ -468,7 +471,7 @@ def _migrate_msat_columns(conn):
                     occurred_at, confirmed_at, direction, asset,
                     CAST(ROUND(amount * 100000000000.0) AS INTEGER),
                     CAST(ROUND(fee * 100000000000.0) AS INTEGER),
-                    fiat_currency, fiat_rate, fiat_value,
+                    fiat_currency, fiat_rate, fiat_value, fiat_price_source,
                     kind, description, counterparty, note, excluded, raw_json, created_at
                 FROM transactions;
                 DROP TABLE transactions;
