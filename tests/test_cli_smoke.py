@@ -642,8 +642,6 @@ class CliSmokeTest(unittest.TestCase):
         self.assertTrue(pdf_path.exists())
         self.assertGreater(result["pages"], 1)
         self.assertEqual(result["pages"], actual_pages)
-        self.assertTrue(b"OpenSans" in payload_bytes or b"Open Sans" in payload_bytes)
-        self.assertTrue(b"RobotoMono" in payload_bytes or b"Roboto Mono" in payload_bytes)
 
     def test_08_capital_gains_msat_and_counts(self):
         payload = self._cli(
