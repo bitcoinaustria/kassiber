@@ -71,6 +71,8 @@ kassiber journals quarantined
 kassiber journals quarantine show --transaction <transaction-id>
 ```
 
+`journals quarantined` currently has no pagination or `--limit`.
+
 Resolve when the user has enough information:
 
 ```bash
@@ -103,3 +105,13 @@ Auto-detection is intentionally conservative: Kassiber only auto-pairs
 same-asset cross-wallet transfers that share the same `external_id`.
 For BTC ↔ LBTC swaps, the operator or AI helper must identify the pair
 and call `kassiber transfers pair` explicitly.
+
+If `kassiber --machine journals transfers list` reports
+`summary.cross_asset_pairs: 0`, no cross-asset swap pair is active yet.
+Do not describe Austrian carry-value as already paired, already reflected in
+holdings, or already visible in reports until a pair exists and journals are
+reprocessed.
+
+Timing and amount similarity can help identify candidate peg-ins / peg-outs,
+but those heuristics are only for review. They do not create a pair on their
+own.
