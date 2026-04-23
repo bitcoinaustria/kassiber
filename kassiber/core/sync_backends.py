@@ -655,9 +655,11 @@ def record_from_bitcoin_esplora_tx(tx, tracked_scripts, backend_name):
         kind = "withdrawal" if amount > 0 else "fee"
     block_time = (tx.get("status") or {}).get("block_time")
     occurred_at = timestamp_to_iso(block_time)
+    confirmed_at = timestamp_to_iso(block_time, default=None)
     return {
         "txid": tx.get("txid"),
         "occurred_at": occurred_at,
+        "confirmed_at": confirmed_at,
         "direction": direction,
         "asset": "BTC",
         "amount": amount,
@@ -716,6 +718,7 @@ def record_components_from_liquid_tx(
     policy_asset_id,
     prev_tx_lookup,
     raw_json_context=None,
+    confirmed_at=None,
 ):
     net_sats = defaultdict(int)
     fee_sats = defaultdict(int)
@@ -771,6 +774,11 @@ def record_components_from_liquid_tx(
             {
                 "txid": txid,
                 "occurred_at": occurred_at,
+                "confirmed_at": (
+                    confirmed_at
+                    if confirmed_at is not None
+                    else (None if occurred_at == UNKNOWN_OCCURRED_AT else occurred_at)
+                ),
                 "direction": direction,
                 "asset": asset_code,
                 "amount": amount,
@@ -842,6 +850,7 @@ def esplora_records_for_wallet(backend, sync_state: WalletSyncState):
                     sync_state.policy_asset_id,
                     liquid_tx_lookup,
                     {"tx": tx, "raw_hex": raw_hex},
+                    confirmed_at=timestamp_to_iso((tx.get("status") or {}).get("block_time"), default=None),
                 )
             )
         else:
@@ -988,12 +997,15 @@ def record_from_bitcoinrpc_details(txid, details, backend_name):
     amount_total = Decimal("0")
     fee_total = Decimal("0")
     occurred_at = UNKNOWN_OCCURRED_AT
+    confirmed_at = None
     for detail in details:
         category = str(detail.get("category") or "").lower()
         if category in {"orphan", "immature"}:
             continue
         amount_total += dec(detail.get("amount"), "0")
         fee_total += abs(dec(detail.get("fee"), "0"))
+        if detail.get("blocktime") not in (None, "", 0, "0"):
+            confirmed_at = timestamp_to_iso(detail.get("blocktime"), default=None)
         occurred_at = timestamp_to_iso(detail.get("blocktime") or detail.get("time"), default=occurred_at)
     if amount_total == 0 and fee_total == 0:
         return None
@@ -1013,6 +1025,7 @@ def record_from_bitcoinrpc_details(txid, details, backend_name):
     return {
         "txid": txid,
         "occurred_at": occurred_at,
+        "confirmed_at": confirmed_at,
         "direction": direction,
         "asset": "BTC",
         "amount": amount,
@@ -1177,9 +1190,11 @@ def record_from_electrum_tx(txid, tx, height, tracked_scripts, backend_name, tx_
         fee = sats_to_btc(fee_sats)
         kind = "withdrawal" if amount > 0 else "fee"
     occurred_at = timestamp_to_iso(height)
+    confirmed_at = None if occurred_at == UNKNOWN_OCCURRED_AT else occurred_at
     return {
         "txid": txid,
         "occurred_at": occurred_at,
+        "confirmed_at": confirmed_at,
         "direction": direction,
         "asset": "BTC",
         "amount": amount,
@@ -1320,6 +1335,7 @@ def electrum_records_for_wallet(backend, sync_state: WalletSyncState):
                         sync_state.policy_asset_id,
                         lambda prev_txid: lookup(prev_txid)["decoded"],
                         {"history": history, "raw_hex": current_tx["raw_hex"]},
+                        confirmed_at=None if occurred_at == UNKNOWN_OCCURRED_AT else occurred_at,
                     )
                 )
                 continue

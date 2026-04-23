@@ -814,6 +814,7 @@ def list_transactions(conn, workspace_ref, profile_ref, wallet_ref=None, limit=1
             t.id,
             COALESCE(t.external_id, '') AS external_id,
             t.occurred_at,
+            t.confirmed_at,
             w.label AS wallet,
             t.direction,
             t.asset,
@@ -1198,6 +1199,7 @@ def auto_price_transactions_from_rates_cache(conn, profile):
     tx_rows = conn.execute(
         """
         SELECT id, occurred_at, asset, amount, fiat_currency, fiat_rate, fiat_value
+             , confirmed_at
         FROM transactions
         WHERE profile_id = ? AND excluded = 0 AND fiat_rate IS NULL AND fiat_value IS NULL
         ORDER BY occurred_at ASC, created_at ASC, id ASC
@@ -1209,14 +1211,24 @@ def auto_price_transactions_from_rates_cache(conn, profile):
         pair = _transaction_rate_pair(row["asset"], row["fiat_currency"] or profile["fiat_currency"])
         if pair is None:
             continue
-        cached_rate = get_cached_rate_at_or_before(conn, pair, row["occurred_at"])
+        pricing_at = row["confirmed_at"] or row["occurred_at"]
+        cached_rate = get_cached_rate_at_or_before(conn, pair, pricing_at)
         if cached_rate is None:
             continue
         rate = dec(cached_rate["rate"])
         fiat_value = rate * msat_to_btc(row["amount"]) if row["amount"] > 0 else None
         conn.execute(
-            "UPDATE transactions SET fiat_rate = ?, fiat_value = ? WHERE id = ?",
-            (float(rate), float(fiat_value) if fiat_value is not None else None, row["id"]),
+            """
+            UPDATE transactions
+            SET fiat_rate = ?, fiat_value = ?, fiat_price_source = ?
+            WHERE id = ?
+            """,
+            (
+                float(rate),
+                float(fiat_value) if fiat_value is not None else None,
+                "rates_cache",
+                row["id"],
+            ),
         )
         auto_priced += 1
     return auto_priced
@@ -1709,6 +1721,7 @@ def list_quarantines(conn, workspace_ref, profile_ref):
             q.transaction_id,
             t.external_id,
             t.occurred_at,
+            t.confirmed_at,
             w.label AS wallet,
             t.asset,
             t.amount,
@@ -1731,6 +1744,7 @@ def list_quarantines(conn, workspace_ref, profile_ref):
                 "transaction_id": row["transaction_id"],
                 "external_id": row["external_id"] or "",
                 "occurred_at": row["occurred_at"],
+                "confirmed_at": row["confirmed_at"],
                 "wallet": row["wallet"],
                 "asset": row["asset"],
                 "amount": float(msat_to_btc(row["amount"])),
@@ -1750,7 +1764,7 @@ def show_quarantine(conn, workspace_ref, profile_ref, tx_ref):
     row = conn.execute(
         """
         SELECT q.transaction_id, q.reason, q.detail_json, q.created_at,
-               w.label AS wallet, t.external_id, t.occurred_at, t.asset,
+               w.label AS wallet, t.external_id, t.occurred_at, t.confirmed_at, t.asset,
                t.amount, t.fee, t.fiat_rate, t.fiat_value, t.direction, t.excluded
         FROM journal_quarantines q
         JOIN transactions t ON t.id = q.transaction_id
@@ -1770,6 +1784,7 @@ def show_quarantine(conn, workspace_ref, profile_ref, tx_ref):
         "external_id": row["external_id"] or "",
         "wallet": row["wallet"],
         "occurred_at": row["occurred_at"],
+        "confirmed_at": row["confirmed_at"],
         "direction": row["direction"],
         "asset": row["asset"],
         "amount": float(msat_to_btc(row["amount"])),
@@ -1822,10 +1837,15 @@ def resolve_quarantine_price_override(
     if new_value is not None and new_value < 0:
         raise AppError("--fiat-value must not be negative", code="validation")
     conn.execute(
-        "UPDATE transactions SET fiat_rate = ?, fiat_value = ? WHERE id = ?",
+        """
+        UPDATE transactions
+        SET fiat_rate = ?, fiat_value = ?, fiat_price_source = ?
+        WHERE id = ?
+        """,
         (
             float(new_rate) if new_rate is not None else None,
             float(new_value) if new_value is not None else None,
+            "manual",
             tx["id"],
         ),
     )

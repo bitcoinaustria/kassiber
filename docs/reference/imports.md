@@ -14,6 +14,7 @@ Kassiber can ingest transactions and metadata from several sources. Imported dat
 Generic wallet imports accept JSON arrays or CSV files with these fields:
 
 - `occurred_at`
+- `confirmed_at` (optional)
 - `txid` or `id`
 - `direction`
 - `asset`
@@ -27,7 +28,7 @@ Generic wallet imports accept JSON arrays or CSV files with these fields:
 
 `amount` should be positive. If you pass a negative amount, Kassiber normalizes it and infers direction when possible.
 
-If imported transactions do not carry `fiat_rate` or `fiat_value`, `journals process` first tries to backfill pricing from the local rates cache. Transactions only quarantine if pricing is still missing after that.
+If imported transactions do not carry `fiat_rate` or `fiat_value`, `journals process` first tries to backfill pricing from the local rates cache. When `confirmed_at` is present, Kassiber prices from that timestamp; otherwise it falls back to `occurred_at`. Transactions only quarantine if pricing is still missing after that.
 
 For inbound transactions, explicit earn-like `kind` values such as `income`,
 `interest`, `staking`, `mining`, `airdrop`, `hardfork`, `wages`,
@@ -62,7 +63,7 @@ python3 -m kassiber wallets sync-btcpay \
   --store-id <store-id>
 ```
 
-That API-backed path reuses the same BTCPay normalization and metadata rules as the file import, but only imports confirmed rows from the remote wallet history.
+That API-backed path reuses the same BTCPay normalization and metadata rules as the file import, but only imports confirmed rows from the remote wallet history and records their confirmation timestamp for later rate lookup.
 
 You can also create a wallet whose source file is a BTCPay export:
 

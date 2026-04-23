@@ -103,6 +103,7 @@ CREATE TABLE IF NOT EXISTS transactions (
     external_id TEXT,
     fingerprint TEXT NOT NULL UNIQUE,
     occurred_at TEXT NOT NULL,
+    confirmed_at TEXT,
     direction TEXT NOT NULL,
     asset TEXT NOT NULL,
     amount INTEGER NOT NULL,
@@ -110,6 +111,7 @@ CREATE TABLE IF NOT EXISTS transactions (
     fiat_currency TEXT,
     fiat_rate REAL,
     fiat_value REAL,
+    fiat_price_source TEXT,
     kind TEXT,
     description TEXT,
     counterparty TEXT,
@@ -407,6 +409,8 @@ def ensure_schema_compat(conn):
     ensure_column(conn, "backends", "config_json", "TEXT NOT NULL DEFAULT '{}'")
     ensure_column(conn, "journal_entries", "at_category", "TEXT")
     ensure_column(conn, "journal_entries", "at_kennzahl", "INTEGER")
+    ensure_column(conn, "transactions", "confirmed_at", "TEXT")
+    ensure_column(conn, "transactions", "fiat_price_source", "TEXT")
     _migrate_msat_columns(conn)
 
 
@@ -445,6 +449,7 @@ def _migrate_msat_columns(conn):
                     external_id TEXT,
                     fingerprint TEXT NOT NULL UNIQUE,
                     occurred_at TEXT NOT NULL,
+                    confirmed_at TEXT,
                     direction TEXT NOT NULL,
                     asset TEXT NOT NULL,
                     amount INTEGER NOT NULL,
@@ -452,6 +457,7 @@ def _migrate_msat_columns(conn):
                     fiat_currency TEXT,
                     fiat_rate REAL,
                     fiat_value REAL,
+                    fiat_price_source TEXT,
                     kind TEXT,
                     description TEXT,
                     counterparty TEXT,
@@ -462,10 +468,10 @@ def _migrate_msat_columns(conn):
                 );
                 INSERT INTO transactions__msat_new SELECT
                     id, workspace_id, profile_id, wallet_id, external_id, fingerprint,
-                    occurred_at, direction, asset,
+                    occurred_at, confirmed_at, direction, asset,
                     CAST(ROUND(amount * 100000000000.0) AS INTEGER),
                     CAST(ROUND(fee * 100000000000.0) AS INTEGER),
-                    fiat_currency, fiat_rate, fiat_value,
+                    fiat_currency, fiat_rate, fiat_value, fiat_price_source,
                     kind, description, counterparty, note, excluded, raw_json, created_at
                 FROM transactions;
                 DROP TABLE transactions;
