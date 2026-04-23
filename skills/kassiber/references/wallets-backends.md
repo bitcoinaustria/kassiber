@@ -12,13 +12,25 @@ kassiber backends kinds
 kassiber backends get liquid
 ```
 
+These inspection commands follow the same safe-to-record contract as the main
+CLI docs: backend inspection returns an allowlisted safe view, raw backend
+credential values and unknown config keys are suppressed, and presence is
+exposed through `has_*` flags instead.
+
 Common backend operations:
 
 ```bash
 kassiber backends create my-esplora --kind esplora --url https://example.invalid/api
 kassiber backends update my-esplora --url https://new.example.invalid/api
+kassiber backends update core --clear username --clear password --clear cookiefile
 kassiber backends set-default my-esplora
 ```
+
+Behavior to remember:
+
+- read-only commands keep bootstrap-backed config in memory only; `kassiber init` and backend mutation commands that need canonical bootstrap rows are the explicit bootstrap-import flows
+- deleting a bootstrap-backed backend suppresses the built-in/default bootstrap copy, but a backend present in the current `backends.env` file is treated as an explicit restore signal
+- process-level `KASSIBER_BACKEND_*` overrides still win for the current process over the stored SQLite row
 
 Built-in defaults often include:
 
@@ -88,6 +100,11 @@ kassiber wallets get --wallet satoshi-liquid
 kassiber wallets derive --wallet satoshi-liquid --count 5
 kassiber wallets sync --wallet satoshi-liquid
 ```
+
+`kassiber wallets get` returns an allowlisted safe config view. Use
+`descriptor`, `change_descriptor`, and `descriptor_state` to confirm wallet
+state instead of expecting the raw descriptor back or arbitrary config keys
+to be echoed.
 
 ## Imports
 

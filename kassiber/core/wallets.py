@@ -35,6 +35,19 @@ WALLET_KINDS = [
     "river",
     "custom",
 ]
+REDACTED_CONFIG_VALUE = "[redacted]"
+WALLET_SAFE_CONFIG_FIELDS = (
+    "addresses",
+    "backend",
+    "chain",
+    "network",
+    "gap_limit",
+    "policy_asset",
+    "source_file",
+    "source_format",
+    "altbestand",
+)
+WALLET_REDACTED_CONFIG_FIELDS = ("descriptor", "change_descriptor")
 
 
 def normalize_wallet_kind(value):
@@ -58,6 +71,22 @@ def normalize_addresses(values):
         seen.add(address)
         output.append(address)
     return output
+
+
+def redact_wallet_config_for_output(value):
+    if not isinstance(value, dict):
+        return {}
+    safe = {}
+    if "addresses" in value:
+        safe["addresses"] = normalize_addresses(value.get("addresses"))
+    for field in WALLET_SAFE_CONFIG_FIELDS:
+        if field == "addresses" or field not in value:
+            continue
+        safe[field] = value[field]
+    for field in WALLET_REDACTED_CONFIG_FIELDS:
+        if field in value:
+            safe[field] = REDACTED_CONFIG_VALUE
+    return safe
 
 
 def read_text_argument(value, file_path, label):
@@ -194,7 +223,8 @@ def create_wallet(conn, workspace_ref, profile_ref, label, kind, account_ref=Non
         ),
     )
     conn.commit()
-    return conn.execute("SELECT * FROM wallets WHERE id = ?", (wallet_id,)).fetchone()
+    created = fetch_wallet_with_account(conn, wallet_id)
+    return wallet_row_to_dict(created)
 
 
 def _wallet_descriptor_state(config):
@@ -322,6 +352,7 @@ def list_wallet_kinds():
 def wallet_row_to_dict(row):
     config = json.loads(row["config_json"] or "{}")
     descriptor_state, chain, network = _wallet_descriptor_state(config)
+    safe_config = redact_wallet_config_for_output(config)
     return {
         "id": row["id"],
         "workspace_id": row["workspace_id"],
@@ -342,7 +373,7 @@ def wallet_row_to_dict(row):
         "policy_asset": config.get("policy_asset"),
         "source_file": config.get("source_file", ""),
         "source_format": config.get("source_format", ""),
-        "config": config,
+        "config": safe_config,
         "created_at": row["created_at"],
     }
 

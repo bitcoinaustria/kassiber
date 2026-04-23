@@ -2,12 +2,17 @@
 
 Kassiber syncs wallets through named backends. A backend is a pointer to an external indexer or node that Kassiber uses to discover transactions and balances.
 
-Backends come from two places:
+Backends are stored canonically in SQLite.
 
-- `~/.kassiber/config/backends.env` or your chosen `--env-file`
-- the `backends` table in SQLite, which overlays the dotenv seed
+- `~/.kassiber/config/backends.env` or your chosen `--env-file` is still
+  accepted as a bootstrap / compatibility input
+- the `backends` table in SQLite is the long-term source of truth
 
-Backends defined in the database win over the dotenv seed.
+Built-in defaults and dotenv-defined backends are imported into SQLite during
+explicit bootstrap-import flows such as `kassiber init` or backend mutation
+commands that need a canonical SQLite row. Read-only commands keep that
+bootstrap config in memory only. Environment-only overrides stay ephemeral
+unless you explicitly create the backend through the CLI.
 
 ## Built-in defaults
 
@@ -28,11 +33,20 @@ python3 -m kassiber backends list
 python3 -m kassiber backends get mempool
 ```
 
-Create and manage DB-backed backends:
+Those inspection commands follow Kassiber's safe-to-record contract for
+secret-bearing values: backend inspection returns an allowlisted safe view,
+raw credentials and unknown config keys are suppressed, and credential
+presence is exposed through `has_*` flags instead. If a backend URL contains
+embedded credentials or query tokens, the displayed URL is sanitized before
+it is emitted.
+
+Create and manage SQLite-backed backends:
 
 ```bash
 python3 -m kassiber backends create myelectrum --kind electrum --url ssl://index.bitcoin-austria.at:50002
 python3 -m kassiber backends update myelectrum --batch-size 50 --timeout 60
+python3 -m kassiber backends update core --clear username --clear password --clear cookiefile
+python3 -m kassiber backends create core --kind bitcoinrpc --url http://127.0.0.1:8332 --cookiefile ~/.bitcoin/.cookie --wallet-prefix kassiber
 python3 -m kassiber backends set-default myelectrum
 python3 -m kassiber backends clear-default
 python3 -m kassiber backends delete myelectrum
@@ -73,7 +87,16 @@ KASSIBER_BACKEND_CORE_COOKIEFILE=~/.bitcoin/.cookie
 KASSIBER_BACKEND_CORE_WALLETPREFIX=kassiber
 ```
 
-See [.env.example](../../.env.example) for a fuller template.
+See [.env.example](../../.env.example) for a fuller template. Once imported,
+use the `backends` CLI to inspect or edit the canonical SQLite rows.
+
+Important runtime rules:
+
+- read-only commands like `status`, `backends list`, and `backends get` do not import bootstrap-backed config into SQLite; `kassiber init` and backend mutation commands that need canonical bootstrap rows are the explicit bootstrap-import flows
+- deleting a bootstrap-backed backend suppresses the built-in/default bootstrap copy, but a backend currently present in `backends.env` is treated as an explicit restore signal and will appear in the runtime view again
+- `backends delete` refuses to remove a backend while any wallet still references it; repoint those wallets first
+- process-level `KASSIBER_BACKEND_*` overrides still win for the current process even when a backend has already been imported into SQLite
+- config-backed auth fields can be scrubbed with `backends update --clear ...`; clearing removes the stored key from SQLite instead of leaving the old value behind
 
 ## Supported backend kinds
 
@@ -103,7 +126,13 @@ Bitcoin Core-specific fields:
 - `COOKIEFILE`
 - `WALLETPREFIX`
 
-Note: `bitcoinrpc` support is currently partial. Kassiber can use it for Bitcoin address-based wallets, but descriptor- and xpub-backed live sync still require Esplora or Electrum. The `backends create --kind ...` CLI choices also do not yet expose `bitcoinrpc`, so define it through `backends.env`.
+Note: `bitcoinrpc` support is currently partial. Kassiber can use it for Bitcoin address-based wallets, but descriptor- and xpub-backed live sync still require Esplora or Electrum.
+
+The backend CLI now accepts the common backend-specific knobs directly:
+
+- `--insecure` for Electrum TLS bypass testing against servers you control
+- `--cookiefile` or `--username` / `--password` for Bitcoin Core RPC auth
+- `--wallet-prefix` for Bitcoin Core watch-only wallet naming
 
 ## Notes by backend type
 
@@ -177,5 +206,6 @@ For Liquid:
 - descriptor sync leaks more wallet structure than fixed-address sync
 - `tor_proxy` is stored but not wired yet; route the whole process externally if needed
 - backend credentials in CLI flags can land in shell history
+- `backends get` / `list` are safe-to-record only for secret-bearing config values; other metadata may still be sensitive
 
 See [SECURITY.md](../../SECURITY.md) for the current privacy model and outbound request inventory.

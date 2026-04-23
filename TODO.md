@@ -197,13 +197,25 @@ over the shared core after the extraction work is done.
   minimal global app state, and no active top-level wallet side tree
 - [ ] Keep transaction document links in the project DB; only add managed
   copied-file storage if a concrete offline/self-contained workflow needs it
-- [ ] Move backend definitions and default-backend selection into the project
-  DB; keep dotenv files as bootstrap/dev overrides rather than the canonical
-  storage path
+- [x] Keep backend definitions and default-backend selection canonical in
+  SQLite; dotenv files now bootstrap older/new stores instead of serving as
+  the long-term storage path
+- [x] Keep normal backend and wallet success output safe-to-record for
+  secret-bearing config values by redacting raw credentials and raw descriptor
+  material while preserving presence / state flags
+- [ ] Finish the project-local part of backend storage once the per-project
+  DB layout lands
+- [ ] Extend the safe-to-record contract beyond normal success output to
+  `--debug`, error surfaces, and downloadable logs
+- [ ] Replace plaintext secret enrollment through CLI args / dotenv with
+  local-only secret capture flows or secret refs so hosted agents do not need
+  raw values in prompts or command strings
 - [ ] Split wallet descriptor and other sensitive config out of the generic
   `wallets.config_json` blob into typed project-local tables plus OS keychain
   references where appropriate
-- [ ] At-rest encryption / OS keychain integration
+- [ ] Seal backend credentials, private descriptors, and blinding keys behind
+  OS keychain-backed secret refs instead of leaving raw values in plaintext
+  SQLite / dotenv storage
 - [x] Kassiber skill bundle for agents (`skills/kassiber`)
 - [ ] Optional server/REST mode, still local-first and opt-in
 
@@ -213,7 +225,9 @@ over the shared core after the extraction work is done.
   is rejected cleanly
 - [ ] Keep the machine envelope boundary centralized and explicit
 - [ ] Keep docs and examples Bitcoin-only
-- [ ] Add a narrow docs-drift check for shared command / verification surfaces so `README.md`, `AGENTS.md`, and `skills/kassiber/` do not quietly diverge
+- [ ] Add a narrow docs-drift check for shared command / verification /
+  safe-to-record surfaces so `README.md`, `AGENTS.md`, `SECURITY.md`, and
+  `skills/kassiber/` do not quietly diverge
 
 ## Verification checklist
 

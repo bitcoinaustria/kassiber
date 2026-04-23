@@ -8,10 +8,12 @@ import unittest
 from argparse import Namespace
 from decimal import Decimal
 from pathlib import Path
+from unittest.mock import patch
 
 from kassiber.cli.main import command_needs_db
 from kassiber.cli.handlers import _audit_transaction_refs
 from kassiber.core.engines import TaxEngineLedgerInputs, build_tax_engine
+from kassiber.core.runtime import bootstrap_runtime, close_runtime
 from kassiber.errors import AppError
 
 
@@ -175,6 +177,21 @@ _CROSS_LBTC_CSV = """date,txid,direction,asset,amount,fee,fiat_rate,description
 2026-04-15T10:30:00Z,cross-in-leg,inbound,LBTC,0.10000000,0,82000,Peg-in receive
 """
 
+
+def _sample_descriptor_pair():
+    from embit import bip32
+
+    seed = bytes.fromhex("000102030405060708090a0b0c0d0e0f" * 4)
+    root = bip32.HDKey.from_seed(seed)
+    account = root.derive("m/84h/0h/0h")
+    xpub = account.to_public().to_base58()
+    fingerprint = root.my_fingerprint.hex()
+    origin = f"[{fingerprint}/84h/0h/0h]"
+    return (
+        f"wpkh({origin}{xpub}/0/*)",
+        f"wpkh({origin}{xpub}/1/*)",
+    )
+
 _MIXED_DISPOSALS_BTC_CSV = """date,txid,direction,asset,amount,fee,fiat_rate,description
 2026-01-01T10:00:00Z,btc-buy,inbound,BTC,0.10000000,0,50000,BTC buy
 2026-02-01T10:00:00Z,btc-sell,outbound,BTC,0.05000000,0,60000,BTC sell
@@ -294,6 +311,18 @@ class ReviewRegressionTest(unittest.TestCase):
     def _assert_ok(self, payload, result, kind):
         self.assertEqual(result.returncode, 0, msg=f"{payload!r}")
         self.assertEqual(payload.get("kind"), kind)
+
+    def _bootstrap_runtime_state(self, *, env_file=None, persist_bootstrap=False):
+        args = Namespace(
+            data_root=str(self.data_root),
+            env_file=str(env_file) if env_file is not None else None,
+            machine=True,
+            format="json",
+            debug=False,
+        )
+        runtime = bootstrap_runtime(args, needs_db=True, persist_bootstrap=persist_bootstrap)
+        self.addCleanup(close_runtime, runtime)
+        return runtime
 
     def _load_fixture(self, name):
         return json.loads((FIXTURES / name).read_text(encoding="utf-8"))
@@ -594,7 +623,69 @@ class ReviewRegressionTest(unittest.TestCase):
         conn.close()
         self.assertTrue(json.loads(stored)["altbestand"])
 
-    def test_custom_env_file_backend_overlay_and_default_roundtrip(self):
+    def test_wallet_outputs_redact_descriptor_material_but_keep_state_flags(self):
+        self._bootstrap_profile()
+        descriptor, change_descriptor = _sample_descriptor_pair()
+
+        payload, result = self._run_json(
+            "wallets",
+            "create",
+            "--workspace",
+            "Main",
+            "--profile",
+            "Default",
+            "--label",
+            "Vault",
+            "--kind",
+            "descriptor",
+            "--config",
+            json.dumps({"mnemonic": "seed words", "api_key": "leak-me"}),
+            "--descriptor",
+            descriptor,
+            "--change-descriptor",
+            change_descriptor,
+            "--gap-limit",
+            "5",
+        )
+        self._assert_ok(payload, result, "wallets.create")
+        self.assertTrue(payload["data"]["descriptor"])
+        self.assertTrue(payload["data"]["change_descriptor"])
+        self.assertEqual(payload["data"]["config"]["descriptor"], "[redacted]")
+        self.assertEqual(payload["data"]["config"]["change_descriptor"], "[redacted]")
+        self.assertNotIn("mnemonic", payload["data"]["config"])
+        self.assertNotIn("api_key", payload["data"]["config"])
+        self.assertNotIn("config_json", payload["data"])
+
+        payload, result = self._run_json(
+            "wallets",
+            "get",
+            "--workspace",
+            "Main",
+            "--profile",
+            "Default",
+            "--wallet",
+            "Vault",
+        )
+        self._assert_ok(payload, result, "wallets.get")
+        self.assertTrue(payload["data"]["descriptor"])
+        self.assertTrue(payload["data"]["change_descriptor"])
+        self.assertEqual(payload["data"]["descriptor_state"], "bitcoin:main")
+        self.assertEqual(payload["data"]["config"]["descriptor"], "[redacted]")
+        self.assertEqual(payload["data"]["config"]["change_descriptor"], "[redacted]")
+        self.assertNotIn("mnemonic", payload["data"]["config"])
+        self.assertNotIn("api_key", payload["data"]["config"])
+
+        db_path = self.data_root / "kassiber.sqlite3"
+        conn = sqlite3.connect(db_path)
+        stored = conn.execute(
+            "SELECT config_json FROM wallets WHERE label = 'Vault'"
+        ).fetchone()[0]
+        conn.close()
+        stored_config = json.loads(stored)
+        self.assertEqual(stored_config["descriptor"], descriptor)
+        self.assertEqual(stored_config["change_descriptor"], change_descriptor)
+
+    def test_custom_env_file_backend_bootstrap_persists_into_db(self):
         env_file = self.case_dir / "custom-backends.env"
         env_file.write_text(
             "\n".join(
@@ -619,7 +710,7 @@ class ReviewRegressionTest(unittest.TestCase):
             "backends", "get", "alpha",
         )
         self._assert_ok(payload, result, "backends.get")
-        self.assertEqual(payload["data"]["source"], str(env_file))
+        self.assertEqual(payload["data"]["source"], "database")
         self.assertTrue(payload["data"]["is_default"])
         self.assertEqual(payload["data"]["url"], "https://alpha.example/api")
 
@@ -630,7 +721,18 @@ class ReviewRegressionTest(unittest.TestCase):
             "--url", "ssl://alpha-override.example:50002",
             "--batch-size", "25",
         )
-        self._assert_ok(payload, result, "backends.create")
+        self.assertEqual(result.returncode, 1, msg=payload)
+        self.assertEqual(payload.get("kind"), "error")
+        self.assertEqual(payload["error"]["code"], "conflict")
+
+        payload, result = self._run_json(
+            "--env-file", str(env_file),
+            "backends", "update", "alpha",
+            "--kind", "electrum",
+            "--url", "ssl://alpha-override.example:50002",
+            "--batch-size", "25",
+        )
+        self._assert_ok(payload, result, "backends.update")
         self.assertEqual(payload["data"]["source"], "database")
         self.assertEqual(payload["data"]["url"], "ssl://alpha-override.example:50002")
 
@@ -676,6 +778,16 @@ class ReviewRegressionTest(unittest.TestCase):
         self.assertEqual(payload["data"]["default_backend"], "alpha")
         self.assertTrue(payload["data"]["cleared"])
 
+        env_file.unlink()
+
+        payload, result = self._run_json(
+            "--env-file", str(env_file),
+            "backends", "get", "alpha",
+        )
+        self._assert_ok(payload, result, "backends.get")
+        self.assertEqual(payload["data"]["source"], "database")
+        self.assertEqual(payload["data"]["url"], "ssl://alpha-override.example:50002")
+
         payload, result = self._run_json(
             "--env-file", str(env_file),
             "status",
@@ -683,6 +795,526 @@ class ReviewRegressionTest(unittest.TestCase):
         self._assert_ok(payload, result, "status")
         self.assertEqual(payload["data"]["default_backend"], "alpha")
         self.assertEqual(payload["data"]["env_file"], str(env_file))
+
+    def test_bitcoinrpc_backend_bootstrap_persists_cookiefile_and_wallet_prefix(self):
+        env_file = self.case_dir / "bitcoinrpc.env"
+        cookie_file = self.case_dir / ".cookie"
+        cookie_file.write_text("rpcuser:rpcpass\n", encoding="utf-8")
+        env_file.write_text(
+            "\n".join(
+                [
+                    "KASSIBER_BACKEND_CORE_KIND=bitcoinrpc",
+                    "KASSIBER_BACKEND_CORE_URL=http://127.0.0.1:8332",
+                    f"KASSIBER_BACKEND_CORE_COOKIEFILE={cookie_file}",
+                    "KASSIBER_BACKEND_CORE_WALLETPREFIX=review-core",
+                    "KASSIBER_DEFAULT_BACKEND=core",
+                ]
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+
+        payload, result = self._run_json("--env-file", str(env_file), "init")
+        self._assert_ok(payload, result, "init")
+
+        payload, result = self._run_json("--env-file", str(env_file), "backends", "get", "core")
+        self._assert_ok(payload, result, "backends.get")
+        self.assertEqual(payload["data"]["kind"], "bitcoinrpc")
+        self.assertEqual(payload["data"]["walletprefix"], "review-core")
+        self.assertTrue(payload["data"]["has_cookiefile"])
+        self.assertNotIn("cookiefile", payload["data"])
+        self.assertTrue(payload["data"]["is_default"])
+
+        env_file.unlink()
+
+        payload, result = self._run_json("--env-file", str(env_file), "backends", "get", "core")
+        self._assert_ok(payload, result, "backends.get")
+        self.assertEqual(payload["data"]["kind"], "bitcoinrpc")
+        self.assertEqual(payload["data"]["walletprefix"], "review-core")
+        self.assertTrue(payload["data"]["has_cookiefile"])
+        self.assertNotIn("cookiefile", payload["data"])
+        self.assertTrue(payload["data"]["is_default"])
+
+        runtime = self._bootstrap_runtime_state(env_file=env_file)
+        backend = runtime.runtime_config["backends"]["core"]
+        self.assertEqual(runtime.runtime_config["default_backend"], "core")
+        self.assertEqual(backend["kind"], "bitcoinrpc")
+        self.assertEqual(backend["cookiefile"], str(cookie_file))
+        self.assertEqual(backend["walletprefix"], "review-core")
+
+    def test_deleted_bootstrap_backend_stays_deleted_across_restarts(self):
+        payload, result = self._run_json("init")
+        self._assert_ok(payload, result, "init")
+
+        payload, result = self._run_json("backends", "delete", "fulcrum")
+        self._assert_ok(payload, result, "backends.delete")
+        self.assertTrue(payload["data"]["deleted"])
+
+        payload, result = self._run_json("backends", "list")
+        self._assert_ok(payload, result, "backends.list")
+        rows = {row["name"]: row for row in payload["data"]}
+        self.assertNotIn("fulcrum", rows)
+
+        runtime = self._bootstrap_runtime_state()
+        self.assertNotIn("fulcrum", runtime.runtime_config["backends"])
+
+        payload, result = self._run_json("backends", "get", "fulcrum")
+        self.assertEqual(result.returncode, 1, msg=payload)
+        self.assertEqual(payload.get("kind"), "error")
+        self.assertEqual(payload["error"]["code"], "not_found")
+
+    def test_current_dotenv_backend_restores_deleted_name(self):
+        env_file = self.case_dir / "restore-alpha.env"
+        env_file.write_text(
+            "\n".join(
+                [
+                    "KASSIBER_BACKEND_ALPHA_KIND=electrum",
+                    "KASSIBER_BACKEND_ALPHA_URL=ssl://alpha.example:50002",
+                    "KASSIBER_DEFAULT_BACKEND=alpha",
+                ]
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+
+        payload, result = self._run_json("--env-file", str(env_file), "init")
+        self._assert_ok(payload, result, "init")
+
+        payload, result = self._run_json("--env-file", str(env_file), "backends", "set-default", "mempool")
+        self._assert_ok(payload, result, "backends.set-default")
+
+        payload, result = self._run_json("--env-file", str(env_file), "backends", "delete", "alpha")
+        self._assert_ok(payload, result, "backends.delete")
+        self.assertTrue(payload["data"]["deleted"])
+
+        db_path = self.data_root / "kassiber.sqlite3"
+        conn = sqlite3.connect(db_path)
+        row = conn.execute("SELECT name FROM backends WHERE name = 'alpha'").fetchone()
+        conn.close()
+        self.assertIsNone(row)
+
+        payload, result = self._run_json("--env-file", str(env_file), "backends", "get", "alpha")
+        self._assert_ok(payload, result, "backends.get")
+        self.assertEqual(payload["data"]["source"], str(env_file))
+
+        conn = sqlite3.connect(db_path)
+        row = conn.execute("SELECT name FROM backends WHERE name = 'alpha'").fetchone()
+        conn.close()
+        self.assertIsNone(row)
+
+        payload, result = self._run_json("--env-file", str(env_file), "init")
+        self._assert_ok(payload, result, "init")
+
+        conn = sqlite3.connect(db_path)
+        row = conn.execute("SELECT name FROM backends WHERE name = 'alpha'").fetchone()
+        conn.close()
+        self.assertIsNotNone(row)
+
+    def test_process_environment_backend_override_wins_over_seeded_db_value(self):
+        payload, result = self._run_json("init")
+        self._assert_ok(payload, result, "init")
+
+        payload, result = self._run_json(
+            "backends",
+            "update",
+            "mempool",
+            "--url",
+            "https://db.example/api",
+            "--batch-size",
+            "25",
+        )
+        self._assert_ok(payload, result, "backends.update")
+
+        env = {
+            **os.environ,
+            "KASSIBER_BACKEND_MEMPOOL_URL": "https://env.example/api",
+            "KASSIBER_DEFAULT_BACKEND": "fulcrum",
+        }
+        payload, result = self._run_json("backends", "get", "mempool", env=env)
+        self._assert_ok(payload, result, "backends.get")
+        self.assertEqual(payload["data"]["url"], "https://env.example/api")
+        self.assertEqual(payload["data"]["source"], "environment")
+
+        with patch.dict(
+            os.environ,
+            {
+                "KASSIBER_BACKEND_MEMPOOL_URL": "https://env.example/api",
+                "KASSIBER_DEFAULT_BACKEND": "fulcrum",
+            },
+            clear=False,
+        ):
+            runtime = self._bootstrap_runtime_state()
+            backend = runtime.runtime_config["backends"]["mempool"]
+            self.assertEqual(runtime.runtime_config["default_backend"], "fulcrum")
+            self.assertEqual(backend["url"], "https://env.example/api")
+            self.assertEqual(backend["batch_size"], 25)
+
+    def test_process_environment_default_can_target_seeded_sqlite_backend(self):
+        env_file = self.case_dir / "bitcoincore.env"
+        env_file.write_text(
+            "\n".join(
+                [
+                    "KASSIBER_BACKEND_BITCOINCORE_KIND=bitcoinrpc",
+                    "KASSIBER_BACKEND_BITCOINCORE_URL=http://127.0.0.1:8332",
+                    "KASSIBER_DEFAULT_BACKEND=bitcoincore",
+                ]
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+
+        payload, result = self._run_json("--env-file", str(env_file), "init")
+        self._assert_ok(payload, result, "init")
+
+        env_file.unlink()
+
+        with patch.dict(
+            os.environ,
+            {"KASSIBER_DEFAULT_BACKEND": "bitcoincore"},
+            clear=False,
+        ):
+            runtime = self._bootstrap_runtime_state(env_file=env_file)
+            self.assertEqual(runtime.runtime_config["default_backend"], "bitcoincore")
+            self.assertIn("bitcoincore", runtime.runtime_config["backends"])
+            self.assertEqual(
+                runtime.runtime_config["backends"]["bitcoincore"]["source"],
+                "database",
+            )
+
+    def test_process_only_backend_fields_do_not_block_bootstrap_seed(self):
+        env_file = self.case_dir / "bitcoincore.env"
+        env_file.write_text(
+            "\n".join(
+                [
+                    "KASSIBER_BACKEND_BITCOINCORE_KIND=bitcoinrpc",
+                    "KASSIBER_BACKEND_BITCOINCORE_URL=http://127.0.0.1:8332",
+                    "KASSIBER_DEFAULT_BACKEND=bitcoincore",
+                ]
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+
+        with patch.dict(
+            os.environ,
+            {"KASSIBER_BACKEND_BITCOINCORE_TIMEOUT": "45"},
+            clear=False,
+        ):
+            runtime = self._bootstrap_runtime_state(env_file=env_file, persist_bootstrap=True)
+            self.assertEqual(runtime.runtime_config["default_backend"], "bitcoincore")
+            self.assertEqual(runtime.runtime_config["backends"]["bitcoincore"]["timeout"], "45")
+
+        db_path = self.data_root / "kassiber.sqlite3"
+        conn = sqlite3.connect(db_path)
+        backend_row = conn.execute(
+            "SELECT name, timeout FROM backends WHERE name = 'bitcoincore'"
+        ).fetchone()
+        bootstrap_default = conn.execute(
+            "SELECT value FROM settings WHERE key = 'bootstrap_default_backend'"
+        ).fetchone()
+        stored_default = conn.execute(
+            "SELECT value FROM settings WHERE key = 'default_backend'"
+        ).fetchone()
+        conn.close()
+
+        self.assertIsNotNone(backend_row)
+        self.assertEqual(backend_row[0], "bitcoincore")
+        self.assertIsNone(backend_row[1])
+        self.assertEqual(bootstrap_default[0], "bitcoincore")
+        self.assertEqual(stored_default[0], "bitcoincore")
+
+    def test_read_only_backend_get_does_not_import_bootstrap_config_into_sqlite(self):
+        env_file = self.case_dir / "readonly-alpha.env"
+        env_file.write_text(
+            "\n".join(
+                [
+                    "KASSIBER_BACKEND_ALPHA_KIND=electrum",
+                    "KASSIBER_BACKEND_ALPHA_URL=ssl://alpha.example:50002",
+                    "KASSIBER_DEFAULT_BACKEND=alpha",
+                ]
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+
+        payload, result = self._run_json("--env-file", str(env_file), "backends", "get", "alpha")
+        self._assert_ok(payload, result, "backends.get")
+        self.assertEqual(payload["data"]["source"], str(env_file))
+        self.assertTrue(payload["data"]["is_default"])
+
+        db_path = self.data_root / "kassiber.sqlite3"
+        conn = sqlite3.connect(db_path)
+        backend_count = conn.execute("SELECT COUNT(*) FROM backends").fetchone()[0]
+        default_backend = conn.execute(
+            "SELECT value FROM settings WHERE key = 'default_backend'"
+        ).fetchone()
+        bootstrap_default = conn.execute(
+            "SELECT value FROM settings WHERE key = 'bootstrap_default_backend'"
+        ).fetchone()
+        conn.close()
+        self.assertEqual(backend_count, 0)
+        self.assertIsNone(default_backend)
+        self.assertIsNone(bootstrap_default)
+
+    def test_electrum_insecure_backend_bootstrap_persists_into_runtime_config(self):
+        env_file = self.case_dir / "electrum-insecure.env"
+        env_file.write_text(
+            "\n".join(
+                [
+                    "KASSIBER_BACKEND_ALPHA_KIND=electrum",
+                    "KASSIBER_BACKEND_ALPHA_URL=ssl://alpha.example:50002",
+                    "KASSIBER_BACKEND_ALPHA_INSECURE=1",
+                    "KASSIBER_DEFAULT_BACKEND=alpha",
+                ]
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+
+        payload, result = self._run_json("--env-file", str(env_file), "init")
+        self._assert_ok(payload, result, "init")
+
+        payload, result = self._run_json("--env-file", str(env_file), "backends", "get", "alpha")
+        self._assert_ok(payload, result, "backends.get")
+        self.assertIs(payload["data"]["insecure"], True)
+        self.assertTrue(payload["data"]["is_default"])
+
+        env_file.unlink()
+
+        runtime = self._bootstrap_runtime_state(env_file=env_file)
+        backend = runtime.runtime_config["backends"]["alpha"]
+        self.assertEqual(runtime.runtime_config["default_backend"], "alpha")
+        self.assertIs(backend["insecure"], True)
+
+    def test_backends_create_bitcoinrpc_supports_cookiefile_and_wallet_prefix(self):
+        payload, result = self._run_json("init")
+        self._assert_ok(payload, result, "init")
+
+        cookie_file = self.case_dir / ".cli-cookie"
+        cookie_file.write_text("rpcuser:rpcpass\n", encoding="utf-8")
+
+        payload, result = self._run_json(
+            "backends",
+            "create",
+            "core",
+            "--kind",
+            "bitcoinrpc",
+            "--url",
+            "http://127.0.0.1:8332",
+            "--cookiefile",
+            str(cookie_file),
+            "--wallet-prefix",
+            "cli-core",
+        )
+        self._assert_ok(payload, result, "backends.create")
+        self.assertEqual(payload["data"]["kind"], "bitcoinrpc")
+        self.assertEqual(payload["data"]["walletprefix"], "cli-core")
+        self.assertTrue(payload["data"]["has_cookiefile"])
+        self.assertNotIn("cookiefile", payload["data"])
+
+    def test_backends_update_clear_removes_stored_credentials(self):
+        payload, result = self._run_json("init")
+        self._assert_ok(payload, result, "init")
+
+        cookie_file = self.case_dir / ".clear-cookie"
+        cookie_file.write_text("rpcuser:rpcpass\n", encoding="utf-8")
+
+        payload, result = self._run_json(
+            "backends",
+            "create",
+            "clear-core",
+            "--kind",
+            "bitcoinrpc",
+            "--url",
+            "http://127.0.0.1:8332",
+            "--auth-header",
+            "Bearer keep-me",
+            "--token",
+            "secret-token",
+            "--cookiefile",
+            str(cookie_file),
+            "--username",
+            "rpcuser",
+            "--password",
+            "rpcpass",
+            "--wallet-prefix",
+            "clear-core",
+        )
+        self._assert_ok(payload, result, "backends.create")
+
+        payload, result = self._run_json(
+            "backends",
+            "update",
+            "clear-core",
+            "--clear",
+            "auth-header",
+            "--clear",
+            "token",
+            "--clear",
+            "cookiefile",
+            "--clear",
+            "username",
+            "--clear",
+            "password",
+            "--clear",
+            "wallet-prefix",
+        )
+        self._assert_ok(payload, result, "backends.update")
+        self.assertFalse(payload["data"]["has_auth_header"])
+        self.assertFalse(payload["data"]["has_token"])
+        self.assertFalse(payload["data"]["has_cookiefile"])
+        self.assertFalse(payload["data"]["has_username"])
+        self.assertFalse(payload["data"]["has_password"])
+        self.assertNotIn("cookiefile", payload["data"])
+        self.assertNotIn("username", payload["data"])
+        self.assertNotIn("password", payload["data"])
+        self.assertNotIn("walletprefix", payload["data"])
+
+        db_path = self.data_root / "kassiber.sqlite3"
+        conn = sqlite3.connect(db_path)
+        row = conn.execute(
+            "SELECT auth_header, token, config_json FROM backends WHERE name = 'clear-core'"
+        ).fetchone()
+        conn.close()
+        self.assertIsNone(row[0])
+        self.assertIsNone(row[1])
+        stored_config = json.loads(row[2])
+        self.assertNotIn("cookiefile", stored_config)
+        self.assertNotIn("username", stored_config)
+        self.assertNotIn("password", stored_config)
+        self.assertNotIn("walletprefix", stored_config)
+
+    def test_backend_outputs_redact_secret_values_but_keep_presence_flags(self):
+        payload, result = self._run_json("init")
+        self._assert_ok(payload, result, "init")
+
+        payload, result = self._run_json(
+            "backends",
+            "create",
+            "secure-core",
+            "--kind",
+            "bitcoinrpc",
+            "--url",
+            "http://rpcuser:rpcpass@127.0.0.1:8332/wallet/review?session=topsecret",
+            "--username",
+            "rpcuser",
+            "--password",
+            "rpcpass",
+            "--auth-header",
+            "Bearer secret-header",
+            "--token",
+            "secret-token",
+        )
+        self._assert_ok(payload, result, "backends.create")
+        self.assertEqual(payload["data"]["url"], "http://<redacted>@127.0.0.1:8332/wallet/review")
+        self.assertTrue(payload["data"]["has_auth_header"])
+        self.assertTrue(payload["data"]["has_token"])
+        self.assertTrue(payload["data"]["has_username"])
+        self.assertTrue(payload["data"]["has_password"])
+        self.assertNotIn("auth_header", payload["data"])
+        self.assertNotIn("token", payload["data"])
+        self.assertNotIn("username", payload["data"])
+        self.assertNotIn("password", payload["data"])
+
+        payload, result = self._run_json("backends", "get", "secure-core")
+        self._assert_ok(payload, result, "backends.get")
+        self.assertEqual(payload["data"]["url"], "http://<redacted>@127.0.0.1:8332/wallet/review")
+        self.assertTrue(payload["data"]["has_auth_header"])
+        self.assertTrue(payload["data"]["has_token"])
+        self.assertTrue(payload["data"]["has_username"])
+        self.assertTrue(payload["data"]["has_password"])
+        self.assertNotIn("auth_header", payload["data"])
+        self.assertNotIn("token", payload["data"])
+        self.assertNotIn("username", payload["data"])
+        self.assertNotIn("password", payload["data"])
+
+        payload, result = self._run_json("backends", "list")
+        self._assert_ok(payload, result, "backends.list")
+        rows = {row["name"]: row for row in payload["data"]}
+        self.assertEqual(rows["secure-core"]["url"], "http://<redacted>@127.0.0.1:8332/wallet/review")
+        self.assertTrue(rows["secure-core"]["has_auth_header"])
+        self.assertTrue(rows["secure-core"]["has_token"])
+        self.assertTrue(rows["secure-core"]["has_username"])
+        self.assertTrue(rows["secure-core"]["has_password"])
+        self.assertNotIn("auth_header", rows["secure-core"])
+        self.assertNotIn("token", rows["secure-core"])
+
+        db_path = self.data_root / "kassiber.sqlite3"
+        conn = sqlite3.connect(db_path)
+        row = conn.execute(
+            "SELECT url, auth_header, token, config_json FROM backends WHERE name = 'secure-core'"
+        ).fetchone()
+        conn.close()
+        self.assertEqual(
+            row[0],
+            "http://rpcuser:rpcpass@127.0.0.1:8332/wallet/review?session=topsecret",
+        )
+        self.assertEqual(row[1], "Bearer secret-header")
+        self.assertEqual(row[2], "secret-token")
+        stored_config = json.loads(row[3])
+        self.assertEqual(stored_config["username"], "rpcuser")
+        self.assertEqual(stored_config["password"], "rpcpass")
+
+    def test_backend_outputs_hide_alias_credentials_and_unknown_config(self):
+        env_file = self.case_dir / "backend-aliases.env"
+        env_file.write_text(
+            "\n".join(
+                [
+                    "KASSIBER_BACKEND_CORE_KIND=bitcoinrpc",
+                    "KASSIBER_BACKEND_CORE_URL=http://127.0.0.1:8332",
+                    "KASSIBER_BACKEND_CORE_RPCUSER=rpcuser",
+                    "KASSIBER_BACKEND_CORE_RPCPASSWORD=rpcpass",
+                    "KASSIBER_BACKEND_CORE_API_KEY=leak-me",
+                    "KASSIBER_DEFAULT_BACKEND=core",
+                ]
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+
+        payload, result = self._run_json("--env-file", str(env_file), "init")
+        self._assert_ok(payload, result, "init")
+        env_file.unlink()
+
+        payload, result = self._run_json("--env-file", str(env_file), "backends", "get", "core")
+        self._assert_ok(payload, result, "backends.get")
+        self.assertTrue(payload["data"]["has_username"])
+        self.assertTrue(payload["data"]["has_password"])
+        self.assertNotIn("username", payload["data"])
+        self.assertNotIn("password", payload["data"])
+        self.assertNotIn("rpcuser", payload["data"])
+        self.assertNotIn("rpcpassword", payload["data"])
+        self.assertNotIn("api_key", payload["data"])
+
+    def test_backends_delete_refuses_when_wallets_reference_backend(self):
+        self._bootstrap_profile()
+
+        payload, result = self._run_json(
+            "wallets",
+            "create",
+            "--workspace",
+            "Main",
+            "--profile",
+            "Default",
+            "--label",
+            "Tracked",
+            "--kind",
+            "address",
+            "--backend",
+            "mempool",
+            "--address",
+            "bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq",
+        )
+        self._assert_ok(payload, result, "wallets.create")
+
+        payload, result = self._run_json("backends", "set-default", "fulcrum")
+        self._assert_ok(payload, result, "backends.set-default")
+
+        payload, result = self._run_json("backends", "delete", "mempool")
+        self.assertEqual(result.returncode, 1, msg=payload)
+        self.assertEqual(payload.get("kind"), "error")
+        self.assertEqual(payload["error"]["code"], "conflict")
+        self.assertIn("Main/Default/Tracked", payload["error"]["hint"])
 
     def test_metadata_record_mutations_roundtrip_and_invalidate_journals(self):
         self._bootstrap_wallet(label="Meta")
