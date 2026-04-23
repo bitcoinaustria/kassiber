@@ -102,6 +102,14 @@ BACKEND_RUNTIME_METADATA_FIELDS = {"config", "is_default", "source"}
 BACKEND_RESERVED_FIELDS = BACKEND_DB_FIELDS | BACKEND_RUNTIME_METADATA_FIELDS
 BACKEND_BOOLEAN_CONFIG_FIELDS = {"insecure"}
 BACKEND_CONFIG_FIELDS = {"cookiefile", "insecure", "password", "username", "walletprefix"}
+BACKEND_CONFIG_KEY_ALIASES = {
+    "cookie_file": "cookiefile",
+    "rpcpassword": "password",
+    "rpc_password": "password",
+    "rpcuser": "username",
+    "rpc_user": "username",
+    "wallet_prefix": "walletprefix",
+}
 BACKEND_CLEAR_FIELD_ALIASES = {
     "auth-header": "auth_header",
     "token": "token",
@@ -114,13 +122,36 @@ BACKEND_CLEAR_FIELD_ALIASES = {
     "wallet-prefix": "walletprefix",
 }
 BACKEND_OUTPUT_PRESENCE_FIELDS = {
-    "auth_header": "has_auth_header",
-    "token": "has_token",
-    "cookiefile": "has_cookiefile",
-    "username": "has_username",
-    "password": "has_password",
+    "has_auth_header": ("auth_header",),
+    "has_token": ("token",),
+    "has_cookiefile": ("cookiefile", "cookie_file"),
+    "has_username": ("username", "rpcuser", "rpc_user"),
+    "has_password": ("password", "rpcpassword", "rpc_password"),
 }
-BACKEND_OUTPUT_REDACTED_FIELDS = {"auth_header", "token", "username", "password"}
+BACKEND_SAFE_OUTPUT_FIELDS = (
+    "name",
+    "kind",
+    "chain",
+    "network",
+    "batch_size",
+    "timeout",
+    "tor_proxy",
+    "notes",
+    "source",
+    "created_at",
+    "updated_at",
+    "default",
+    "is_default",
+)
+BACKEND_SAFE_CONFIG_OUTPUT_FIELDS = ("insecure", "walletprefix")
+
+
+def _canonicalize_backend_field_name(field_name):
+    key = str_or_none(field_name)
+    if key is None:
+        return None
+    key = key.lower().replace("-", "_")
+    return BACKEND_CONFIG_KEY_ALIASES.get(key, key)
 
 
 def resolve_effective_env_file(env_file=None, data_root=None):
@@ -194,7 +225,7 @@ def load_runtime_config(env_file):
                 continue
             backend_name, field_name = suffix.split("_", 1)
             backend_name = backend_name.lower()
-            field_name = field_name.lower()
+            field_name = _canonicalize_backend_field_name(field_name)
             if not backend_name or not field_name:
                 continue
             backends.setdefault(
@@ -310,10 +341,9 @@ def _load_backend_config(raw_config):
 def _normalize_backend_config(config):
     cleaned = {}
     for raw_key, raw_value in (config or {}).items():
-        key = str_or_none(raw_key)
+        key = _canonicalize_backend_field_name(raw_key)
         if key is None:
             continue
-        key = key.lower()
         if key in BACKEND_RESERVED_FIELDS:
             continue
         if key in BACKEND_BOOLEAN_CONFIG_FIELDS:
@@ -340,10 +370,9 @@ def _normalize_backend_config_patch(config):
     cleaned = {}
     cleared = set()
     for raw_key, raw_value in (config or {}).items():
-        key = str_or_none(raw_key)
+        key = _canonicalize_backend_field_name(raw_key)
         if key is None:
             continue
-        key = key.lower()
         if key in BACKEND_RESERVED_FIELDS:
             continue
         if key in BACKEND_BOOLEAN_CONFIG_FIELDS:
@@ -384,18 +413,59 @@ def redact_backend_url(url):
 
 
 def redact_backend_for_output(backend):
-    payload = dict(backend)
-    payload["url"] = redact_backend_url(payload.get("url"))
-    for field, flag in BACKEND_OUTPUT_PRESENCE_FIELDS.items():
-        payload[flag] = bool(str_or_none(payload.get(field)))
-    for field in BACKEND_OUTPUT_REDACTED_FIELDS:
-        payload.pop(field, None)
+    payload = {}
+    for field in BACKEND_SAFE_OUTPUT_FIELDS:
+        if field in backend:
+            payload[field] = backend[field]
+    if "url" in backend:
+        payload["url"] = redact_backend_url(backend.get("url"))
+    for field in BACKEND_SAFE_CONFIG_OUTPUT_FIELDS:
+        if field not in backend:
+            continue
+        if field in BACKEND_BOOLEAN_CONFIG_FIELDS:
+            value = backend.get(field)
+            try:
+                payload[field] = value if isinstance(value, bool) else parse_bool(value)
+            except AppError:
+                payload[field] = value
+            continue
+        value = str_or_none(backend.get(field))
+        if value is not None:
+            payload[field] = value
+    for flag, keys in BACKEND_OUTPUT_PRESENCE_FIELDS.items():
+        payload[flag] = any(str_or_none(backend.get(key)) is not None for key in keys)
     return payload
 
 
 def _available_backend_names(conn):
     rows = conn.execute("SELECT name FROM backends ORDER BY name ASC").fetchall()
     return {row["name"] for row in rows}
+
+
+def _wallet_backend_references(conn, backend_name):
+    rows = conn.execute(
+        """
+        SELECT
+            w.label AS wallet_label,
+            p.label AS profile_label,
+            ws.label AS workspace_label,
+            w.config_json
+        FROM wallets w
+        JOIN profiles p ON p.id = w.profile_id
+        JOIN workspaces ws ON ws.id = w.workspace_id
+        ORDER BY ws.label ASC, p.label ASC, w.label ASC
+        """
+    ).fetchall()
+    matches = []
+    for row in rows:
+        try:
+            config = json.loads(row["config_json"] or "{}")
+        except (TypeError, ValueError, json.JSONDecodeError):
+            continue
+        if str_or_none(config.get("backend")) != backend_name:
+            continue
+        matches.append(f"{row['workspace_label']}/{row['profile_label']}/{row['wallet_label']}")
+    return matches
 
 
 def _load_bootstrap_backend_tombstones(conn):
@@ -857,6 +927,14 @@ def delete_db_backend(conn, name):
         raise AppError(
             f"Backend '{name}' is the stored default; clear it with `kassiber backends clear-default` first",
             code="conflict",
+        )
+    wallet_refs = _wallet_backend_references(conn, name)
+    if wallet_refs:
+        raise AppError(
+            f"Backend '{name}' is still referenced by wallet configuration",
+            code="conflict",
+            hint=f"Repoint or update these wallets first: {', '.join(wallet_refs[:5])}",
+            details={"wallet_refs": wallet_refs},
         )
     conn.execute("DELETE FROM backends WHERE name = ?", (name,))
     tombstones = _load_bootstrap_backend_tombstones(conn)

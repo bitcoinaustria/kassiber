@@ -13,8 +13,9 @@ kassiber backends get liquid
 ```
 
 These inspection commands follow the same safe-to-record contract as the main
-CLI docs: raw backend credential values are redacted, and presence is exposed
-through `has_*` flags instead.
+CLI docs: backend inspection returns an allowlisted safe view, raw backend
+credential values and unknown config keys are suppressed, and presence is
+exposed through `has_*` flags instead.
 
 Common backend operations:
 
@@ -100,9 +101,10 @@ kassiber wallets derive --wallet satoshi-liquid --count 5
 kassiber wallets sync --wallet satoshi-liquid
 ```
 
-`kassiber wallets get` redacts raw descriptor material in the returned config.
-Use `descriptor`, `change_descriptor`, and `descriptor_state` to confirm
-wallet state instead of expecting the raw descriptor back.
+`kassiber wallets get` returns an allowlisted safe config view. Use
+`descriptor`, `change_descriptor`, and `descriptor_state` to confirm wallet
+state instead of expecting the raw descriptor back or arbitrary config keys
+to be echoed.
 
 ## Imports
 

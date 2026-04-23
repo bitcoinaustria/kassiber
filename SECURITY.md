@@ -105,11 +105,13 @@ lands, treat the data directory and backend config file as sensitive material.
 Normal `backends ...` and `wallets ...` success output now follows a narrow
 safe-to-record contract for secret-bearing config values:
 
-- raw backend credentials such as `auth_header`, `token`, and `password` are
-  redacted from normal inspection output and replaced with presence flags
-- raw wallet descriptor material is redacted from normal wallet inspection
-  output; callers should rely on state flags such as `descriptor`,
-  `change_descriptor`, and `descriptor_state` instead
+- backend inspection output now uses an allowlisted safe view: raw credential
+  values and unknown backend config keys are suppressed, while credential
+  presence is exposed through `has_*` flags
+- wallet inspection output now uses an allowlisted safe view: raw descriptor
+  material and unknown wallet config keys are suppressed, while callers
+  should rely on state flags such as `descriptor`, `change_descriptor`, and
+  `descriptor_state` instead
 - backend URLs shown in output drop embedded credentials and query strings
 
 This contract is intentionally narrow. It does **not** mean every CLI surface

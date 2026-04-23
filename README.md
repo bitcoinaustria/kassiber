@@ -7,10 +7,12 @@ It keeps your accounting state on your machine, syncs from Bitcoin-native source
 Before pointing Kassiber at real wallets, read [SECURITY.md](SECURITY.md). It covers backend visibility, external requests, and current caveats such as missing at-rest encryption and incomplete Tor support.
 
 Normal `backends ...` and `wallets ...` success output now follows a narrow
-safe-to-record contract for secret-bearing config values: raw backend
-credentials and raw descriptor material are redacted from those inspection
-responses. This is not a general privacy guarantee; addresses, paths, notes,
-and `--debug` output can still be sensitive.
+safe-to-record contract for secret-bearing config values: backend inspection
+returns an allowlisted safe view plus `has_*` flags for credential presence,
+and wallet inspection returns allowlisted safe config plus descriptor state
+flags without echoing raw descriptor material or arbitrary config keys. This
+is not a general privacy guarantee; addresses, paths, notes, and `--debug`
+output can still be sensitive.
 
 ## What Kassiber does
 
@@ -61,8 +63,9 @@ By default Kassiber stores state under `~/.kassiber/`:
 
 Backend definitions and the stored default backend now live canonically in
 SQLite. `backends.env` is still accepted as a bootstrap/compatibility path,
-but once Kassiber seeds those values into the DB it no longer treats the
-dotenv file as the long-term source of truth.
+but Kassiber only imports that bootstrap config into SQLite during explicit
+bootstrap-import flows such as `kassiber init`; once imported, the DB is the
+long-term source of truth.
 
 Use `kassiber status` to see the active paths. `--data-root` and `--env-file` let you override them.
 

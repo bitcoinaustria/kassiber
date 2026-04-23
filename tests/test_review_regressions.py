@@ -618,6 +618,8 @@ class ReviewRegressionTest(unittest.TestCase):
             "Vault",
             "--kind",
             "descriptor",
+            "--config",
+            json.dumps({"mnemonic": "seed words", "api_key": "leak-me"}),
             "--descriptor",
             descriptor,
             "--change-descriptor",
@@ -630,6 +632,8 @@ class ReviewRegressionTest(unittest.TestCase):
         self.assertTrue(payload["data"]["change_descriptor"])
         self.assertEqual(payload["data"]["config"]["descriptor"], "[redacted]")
         self.assertEqual(payload["data"]["config"]["change_descriptor"], "[redacted]")
+        self.assertNotIn("mnemonic", payload["data"]["config"])
+        self.assertNotIn("api_key", payload["data"]["config"])
         self.assertNotIn("config_json", payload["data"])
 
         payload, result = self._run_json(
@@ -648,6 +652,8 @@ class ReviewRegressionTest(unittest.TestCase):
         self.assertEqual(payload["data"]["descriptor_state"], "bitcoin:main")
         self.assertEqual(payload["data"]["config"]["descriptor"], "[redacted]")
         self.assertEqual(payload["data"]["config"]["change_descriptor"], "[redacted]")
+        self.assertNotIn("mnemonic", payload["data"]["config"])
+        self.assertNotIn("api_key", payload["data"]["config"])
 
         db_path = self.data_root / "kassiber.sqlite3"
         conn = sqlite3.connect(db_path)
@@ -794,8 +800,9 @@ class ReviewRegressionTest(unittest.TestCase):
         payload, result = self._run_json("--env-file", str(env_file), "backends", "get", "core")
         self._assert_ok(payload, result, "backends.get")
         self.assertEqual(payload["data"]["kind"], "bitcoinrpc")
-        self.assertEqual(payload["data"]["cookiefile"], str(cookie_file))
         self.assertEqual(payload["data"]["walletprefix"], "review-core")
+        self.assertTrue(payload["data"]["has_cookiefile"])
+        self.assertNotIn("cookiefile", payload["data"])
         self.assertTrue(payload["data"]["is_default"])
 
         env_file.unlink()
@@ -803,8 +810,9 @@ class ReviewRegressionTest(unittest.TestCase):
         payload, result = self._run_json("--env-file", str(env_file), "backends", "get", "core")
         self._assert_ok(payload, result, "backends.get")
         self.assertEqual(payload["data"]["kind"], "bitcoinrpc")
-        self.assertEqual(payload["data"]["cookiefile"], str(cookie_file))
         self.assertEqual(payload["data"]["walletprefix"], "review-core")
+        self.assertTrue(payload["data"]["has_cookiefile"])
+        self.assertNotIn("cookiefile", payload["data"])
         self.assertTrue(payload["data"]["is_default"])
 
         runtime = self._bootstrap_runtime_state(env_file=env_file)
@@ -1006,9 +1014,9 @@ class ReviewRegressionTest(unittest.TestCase):
         )
         self._assert_ok(payload, result, "backends.create")
         self.assertEqual(payload["data"]["kind"], "bitcoinrpc")
-        self.assertEqual(payload["data"]["cookiefile"], str(cookie_file))
         self.assertEqual(payload["data"]["walletprefix"], "cli-core")
         self.assertTrue(payload["data"]["has_cookiefile"])
+        self.assertNotIn("cookiefile", payload["data"])
 
     def test_backends_update_clear_removes_stored_credentials(self):
         payload, result = self._run_json("init")
@@ -1152,6 +1160,67 @@ class ReviewRegressionTest(unittest.TestCase):
         stored_config = json.loads(row[3])
         self.assertEqual(stored_config["username"], "rpcuser")
         self.assertEqual(stored_config["password"], "rpcpass")
+
+    def test_backend_outputs_hide_alias_credentials_and_unknown_config(self):
+        env_file = self.case_dir / "backend-aliases.env"
+        env_file.write_text(
+            "\n".join(
+                [
+                    "KASSIBER_BACKEND_CORE_KIND=bitcoinrpc",
+                    "KASSIBER_BACKEND_CORE_URL=http://127.0.0.1:8332",
+                    "KASSIBER_BACKEND_CORE_RPCUSER=rpcuser",
+                    "KASSIBER_BACKEND_CORE_RPCPASSWORD=rpcpass",
+                    "KASSIBER_BACKEND_CORE_API_KEY=leak-me",
+                    "KASSIBER_DEFAULT_BACKEND=core",
+                ]
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+
+        payload, result = self._run_json("--env-file", str(env_file), "init")
+        self._assert_ok(payload, result, "init")
+        env_file.unlink()
+
+        payload, result = self._run_json("--env-file", str(env_file), "backends", "get", "core")
+        self._assert_ok(payload, result, "backends.get")
+        self.assertTrue(payload["data"]["has_username"])
+        self.assertTrue(payload["data"]["has_password"])
+        self.assertNotIn("username", payload["data"])
+        self.assertNotIn("password", payload["data"])
+        self.assertNotIn("rpcuser", payload["data"])
+        self.assertNotIn("rpcpassword", payload["data"])
+        self.assertNotIn("api_key", payload["data"])
+
+    def test_backends_delete_refuses_when_wallets_reference_backend(self):
+        self._bootstrap_profile()
+
+        payload, result = self._run_json(
+            "wallets",
+            "create",
+            "--workspace",
+            "Main",
+            "--profile",
+            "Default",
+            "--label",
+            "Tracked",
+            "--kind",
+            "address",
+            "--backend",
+            "mempool",
+            "--address",
+            "bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq",
+        )
+        self._assert_ok(payload, result, "wallets.create")
+
+        payload, result = self._run_json("backends", "set-default", "fulcrum")
+        self._assert_ok(payload, result, "backends.set-default")
+
+        payload, result = self._run_json("backends", "delete", "mempool")
+        self.assertEqual(result.returncode, 1, msg=payload)
+        self.assertEqual(payload.get("kind"), "error")
+        self.assertEqual(payload["error"]["code"], "conflict")
+        self.assertIn("Main/Default/Tracked", payload["error"]["hint"])
 
     def test_metadata_record_mutations_roundtrip_and_invalidate_journals(self):
         self._bootstrap_wallet(label="Meta")

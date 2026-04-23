@@ -49,12 +49,12 @@ Errors emit:
 Normal success envelopes now follow a narrow safe-to-record contract for
 secret-bearing backend and wallet config values.
 
-- `backends list/get/create/update` redact raw credential values such as
-  `auth_header`, `token`, and `password`, and expose presence through
-  `has_*` flags instead
-- `wallets get/create/update` redact raw descriptor material inside the
-  returned config while preserving state flags such as `descriptor`,
-  `change_descriptor`, and `descriptor_state`
+- `backends list/get/create/update` emit an allowlisted safe backend view,
+  suppress raw credential fields and unknown config keys, and expose
+  credential presence through `has_*` flags instead
+- `wallets get/create/update` emit an allowlisted safe wallet config view,
+  suppress unknown config keys, and preserve state flags such as
+  `descriptor`, `change_descriptor`, and `descriptor_state`
 - backend URLs in machine output drop embedded credentials and query strings
 
 This contract is intentionally narrow. Addresses, notes, file paths, backend

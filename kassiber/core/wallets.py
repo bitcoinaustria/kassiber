@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import json
 import os
-import re
 import uuid
 from pathlib import Path
 
@@ -37,19 +36,18 @@ WALLET_KINDS = [
     "custom",
 ]
 REDACTED_CONFIG_VALUE = "[redacted]"
-WALLET_SENSITIVE_CONFIG_TOKENS = {
-    "auth",
-    "blinding",
-    "cookie",
-    "descriptor",
-    "password",
-    "private",
-    "secret",
-    "seed",
-    "slip77",
-    "token",
-    "xprv",
-}
+WALLET_SAFE_CONFIG_FIELDS = (
+    "addresses",
+    "backend",
+    "chain",
+    "network",
+    "gap_limit",
+    "policy_asset",
+    "source_file",
+    "source_format",
+    "altbestand",
+)
+WALLET_REDACTED_CONFIG_FIELDS = ("descriptor", "change_descriptor")
 
 
 def normalize_wallet_kind(value):
@@ -75,27 +73,20 @@ def normalize_addresses(values):
     return output
 
 
-def _wallet_config_key_is_sensitive(key):
-    parts = [
-        part
-        for part in re.split(r"[^a-z0-9]+", str(key or "").strip().lower())
-        if part
-    ]
-    return any(part in WALLET_SENSITIVE_CONFIG_TOKENS for part in parts)
-
-
 def redact_wallet_config_for_output(value):
-    if isinstance(value, dict):
-        redacted = {}
-        for key, item in value.items():
-            if _wallet_config_key_is_sensitive(key):
-                redacted[key] = REDACTED_CONFIG_VALUE
-            else:
-                redacted[key] = redact_wallet_config_for_output(item)
-        return redacted
-    if isinstance(value, list):
-        return [redact_wallet_config_for_output(item) for item in value]
-    return value
+    if not isinstance(value, dict):
+        return {}
+    safe = {}
+    if "addresses" in value:
+        safe["addresses"] = normalize_addresses(value.get("addresses"))
+    for field in WALLET_SAFE_CONFIG_FIELDS:
+        if field == "addresses" or field not in value:
+            continue
+        safe[field] = value[field]
+    for field in WALLET_REDACTED_CONFIG_FIELDS:
+        if field in value:
+            safe[field] = REDACTED_CONFIG_VALUE
+    return safe
 
 
 def read_text_argument(value, file_path, label):
