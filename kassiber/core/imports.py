@@ -162,6 +162,25 @@ def insert_wallet_records(
     }
 
 
+def import_records_into_wallet(
+    conn: sqlite3.Connection,
+    profile: Mapping[str, Any],
+    wallet: Mapping[str, Any],
+    records: Sequence[ImportRow],
+    source_label: str,
+    hooks: ImportCoordinatorHooks,
+    *,
+    apply_btcpay: bool = False,
+    apply_phoenix: bool = False,
+) -> dict[str, Any]:
+    outcome = insert_wallet_records(conn, profile, wallet, records, source_label, hooks)
+    if apply_btcpay:
+        outcome.update(apply_btcpay_metadata(conn, profile, wallet, records, hooks))
+    if apply_phoenix:
+        outcome.update(apply_phoenix_metadata(conn, profile, wallet, records, hooks))
+    return outcome
+
+
 def apply_phoenix_metadata(
     conn: sqlite3.Connection,
     profile: Mapping[str, Any],
@@ -285,11 +304,16 @@ def import_file_into_wallet(
     hooks: ImportCoordinatorHooks,
 ) -> dict[str, Any]:
     records = load_import_records(file_path, input_format)
-    outcome = insert_wallet_records(conn, profile, wallet, records, f"file:{input_format}", hooks)
-    if is_btcpay_format(input_format):
-        outcome.update(apply_btcpay_metadata(conn, profile, wallet, records, hooks))
-    if is_phoenix_format(input_format):
-        outcome.update(apply_phoenix_metadata(conn, profile, wallet, records, hooks))
+    outcome = import_records_into_wallet(
+        conn,
+        profile,
+        wallet,
+        records,
+        f"file:{input_format}",
+        hooks,
+        apply_btcpay=is_btcpay_format(input_format),
+        apply_phoenix=is_phoenix_format(input_format),
+    )
     outcome["input_format"] = input_format
     outcome["file"] = os.path.abspath(file_path)
     return outcome
@@ -300,6 +324,7 @@ __all__ = [
     "apply_btcpay_metadata",
     "apply_phoenix_metadata",
     "import_file_into_wallet",
+    "import_records_into_wallet",
     "insert_wallet_records",
     "make_transaction_fingerprint",
     "normalize_import_direction",

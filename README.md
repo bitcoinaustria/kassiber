@@ -20,6 +20,7 @@ output can still be sensitive.
 - supports multiple workspaces, profiles, accounts, and wallets
 - syncs from `esplora` and `electrum`, plus `bitcoinrpc` for address-based Bitcoin wallets
 - imports generic CSV/JSON, BTCPay exports, Phoenix exports, and BIP329 labels
+- pulls confirmed BTCPay on-chain wallet history directly from a BTCPay server via the Greenfield API
 - stores notes, tags, exclusions, transfer pairs, and attachments
 - processes journals explicitly before reports are trusted
 - exposes every command through a deterministic JSON envelope
@@ -200,7 +201,7 @@ Contributor docs:
 Notable gaps today:
 
 - Austrian E 1kv export is not shipped yet
-- BTCPay API-backed provenance import is not implemented yet; file imports remain the current path
+- full BTCPay invoice/payment provenance ingest is not implemented yet; `wallets sync-btcpay` currently pulls confirmed on-chain wallet history plus comments/labels
 - descriptor/xpub live sync through `bitcoinrpc` is not implemented yet
 - some Lightning node adapters are declared but do not sync yet
 - `custom` wallet import mapping is not implemented yet

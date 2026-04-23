@@ -47,7 +47,7 @@ Dialog {
         {
             label: "Services \u00b7 Merchant",
             items: [
-                { id: "btcpay", name: "BTCPay Server", desc: "Merchant API \u00b7 store read-key" },
+                { id: "btcpay", name: "BTCPay Server", desc: "Merchant API \u00b7 store settings key" },
                 { id: "cashu",  name: "Cashu",         desc: "Ecash mint wallet" }
             ]
         },

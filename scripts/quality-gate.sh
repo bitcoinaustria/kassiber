@@ -45,6 +45,7 @@ py -m kassiber --help >/dev/null
 py -m kassiber --machine status >/dev/null
 py -m kassiber backends list >/dev/null
 py -m kassiber wallets kinds >/dev/null
+py -m kassiber wallets sync-btcpay --help >/dev/null
 py -m kassiber profiles create --help >/dev/null
 py -m kassiber metadata records --help >/dev/null
 py -m kassiber attachments list --help >/dev/null
