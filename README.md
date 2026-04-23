@@ -2,7 +2,7 @@
 
 Kassiber is an open-source, local-first Bitcoin accounting CLI with an early desktop shell.
 
-It keeps your accounting state on your machine, syncs from Bitcoin-native sources, and processes journals locally before generating reports. The cloud-SaaS model is the thing Kassiber is trying to avoid.
+It keeps your accounting state on your machine, syncs from Bitcoin-native sources, and processes journals locally before generating reports. Built from scratch, it takes early visual cues from Clams and other tools in the space without inheriting the cloud trust model.
 
 Before pointing Kassiber at real wallets, read [SECURITY.md](SECURITY.md). It covers backend visibility, external requests, and current caveats such as missing at-rest encryption and incomplete Tor support.
 

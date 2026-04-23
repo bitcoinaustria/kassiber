@@ -40,7 +40,7 @@ Python-only stack. QML declarative layout, Python signals/slots for logic. Qt's 
 
 **Cost of visual approximation**
 
-Items that are one-liners in CSS and multi-line components in QML: pastel-filled filter pills, soft `box-shadow` on cards, gridstack-style drag/resize tile handles. The approximation we accept for v1:
+Items that are one-liners in CSS and multi-line components in QML: pastel-filled filter pills, soft `box-shadow` on cards, grid-style drag/resize tile handles. The approximation we accept for v1:
 
 - Same palette, same typography (bundle the serif + mono fonts as Qt resources)
 - White rounded cards with a simpler single-shadow layer
