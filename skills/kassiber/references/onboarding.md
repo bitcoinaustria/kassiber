@@ -59,11 +59,12 @@ Profiles carry tax defaults:
 - `--tax-long-term-days`
 - `--gains-algorithm {FIFO,LIFO,HIFO,LOFO}`
 
-Creating a profile also creates default accounts:
+Creating a profile creates one default wallet/reporting bucket:
 
 - `treasury`
-- `fees`
-- `external`
+
+Accounts are not a double-entry chart of accounts today. `fees` and `external`
+are not automatic counterpart destinations.
 
 ## Paths
 

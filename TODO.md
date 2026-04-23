@@ -137,7 +137,7 @@ top of the monolith.
 - [x] Fork RP2 to `bitcoinaustria/rp2` so Austrian tax logic can live in the
   tax engine rather than expanding Kassiber-side tax math
 - [x] Add Austrian country / accounting / report plugins in the RP2 fork
-- [x] Keep Kassiber-side normalization, provenance capture, and multi-account
+- [x] Keep Kassiber-side normalization, provenance capture, and wallet-bucket
   transfer preparation feeding the RP2-backed Austrian path
 - [x] Re-enable Austrian profiles now that the RP2-backed path is wired,
   tested, and documented
@@ -180,7 +180,10 @@ over the shared core after the extraction work is done.
 ## Later backlog
 
 - [ ] Custom CSV mapping DSL for arbitrary wallet exports
-- [ ] Rates/account adjustment surface
+- [ ] Rates/manual adjustment surface
+- [ ] Full double-entry account model only if a future ledger design needs it:
+  explicit counterpart postings, account-type rollups, adjustments, and
+  migrations; current `accounts` are wallet/reporting buckets
 - [ ] Per-profile Tor proxy configuration
 - [ ] Extend BTCPay Greenfield sync beyond confirmed wallet history with stable invoice/payment ids and raw payload snapshots
 - [ ] External document records for invoices, receipts, contracts, and related BTC-linked business evidence

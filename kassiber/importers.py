@@ -137,6 +137,7 @@ def normalize_btcpay_record(record):
     return {
         "txid": txid,
         "occurred_at": timestamp,
+        "confirmed_at": sanitized_record.get("confirmed_at") or sanitized_record.get("ConfirmedAt"),
         "direction": "outbound" if amount < 0 else "inbound",
         "asset": currency,
         "amount": abs(amount),

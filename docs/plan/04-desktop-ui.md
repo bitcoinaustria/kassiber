@@ -3,7 +3,7 @@
 **Stack:** PySide6 + QML (see `01-stack-decision.md`).
 **Packaging:** `briefcase`, macOS first, Linux second.
 **Launch:** `kassiber ui` subcommand.
-**Reference:** Clams.tech old desktop UI (screenshots provided by project owner).
+**Reference:** Approved UI screenshots provided by the project owner.
 
 This doc specifies the desktop UI through MVP (end of Phase 4). Post-MVP items are listed at the end.
 
@@ -129,14 +129,14 @@ Each phase that introduces new screens (2 onwards) should start with visual mock
 Workflow:
 
 1. Open a Claude Design session per phase (Phase 2 dashboard tiles, Phase 3 Add Connection + Transaction Detail + Wallet Detail dialogs, Phase 4 Welcome wizard + Settings).
-2. Feed it the Clams reference screenshots + the theme tokens from `theme.py` above.
+2. Feed it the approved reference screenshots + the theme tokens from `theme.py` above.
 3. Iterate on visuals — layout, copy, pill colors, empty-state framing — until acceptable.
 4. Freeze the accepted screen states as screenshots at explicit desktop widths. If Claude Design exports `.jsx`, treat those files as reference evidence only and use the screenshots as the visual source of truth.
 5. Create a per-screen spec under `docs/design/phase-<n>/<screen>/` using the repo workflow in `docs/design/README.md`.
 6. Implement a **static** QML pass from that spec using mock data only.
 7. Capture a screenshot review against the frozen references before wiring any real runtime behavior.
 
-What this *doesn't* do: generate QML. HTML / JSX → QML is a manual translation step. Claude Design is a design-spec tool, not a codegen tool. Its output is the visual contract; QML is still written by hand (or by Claude Code consuming the screenshots + screen spec). The Clams-fidelity tradeoffs from `01-stack-decision.md` (pastel-fill pills vs outlined pills, drop-shadow depth, serif weight) are best resolved in Claude Design before committing them to QML properties.
+What this *doesn't* do: generate QML. HTML / JSX → QML is a manual translation step. Claude Design is a design-spec tool, not a codegen tool. Its output is the visual contract; QML is still written by hand (or by Claude Code consuming the screenshots + screen spec). The reference-specific tradeoffs from `01-stack-decision.md` (pastel-fill pills vs outlined pills, drop-shadow depth, serif weight) are best resolved in Claude Design before committing them to QML properties.
 
 Artifacts from each design session live under `docs/design/phase-<n>/<screen>/` alongside the frozen screenshots and screenshot-review notes — not checked into `resources/` since they're not runtime assets.
 
@@ -144,7 +144,7 @@ Artifacts from each design session live under `docs/design/phase-<n>/<screen>/` 
 
 ## Phase 1 — App shell (2 days)
 
-**Goal:** Window opens, frame matches Clams screenshot 2, empty state shows with a functional `+ Add Connection` CTA that opens a placeholder modal.
+**Goal:** Window opens, frame matches the approved empty-state reference, and shows a functional `+ Add Connection` CTA that opens a placeholder modal.
 
 ### Included
 
@@ -195,7 +195,7 @@ Artifacts from each design session live under `docs/design/phase-<n>/<screen>/` 
 
 - Date range inputs: two date-pickers ("From", "To")
 - Quick-select pills: "One week", "Month to date", "Last month", "Current quarter", "Last quarter", "Year to date" — each colored per theme `pill_*` tokens
-- Account dropdown: lists all accounts from `core.accounts.list_accounts(conn)`
+- Bucket dropdown: lists wallet/reporting buckets from `core.accounts.list_accounts(conn)`
 - Tag dropdown: lists all tags from `core.tags.list_tags(conn)`
 - "Reset" button clears all filters
 - Filter state is exposed as view-model properties that other tiles observe
@@ -221,10 +221,10 @@ Artifacts from each design session live under `docs/design/phase-<n>/<screen>/` 
 
 ### Tile 6 — Balances
 
-- Account-type rollups: Assets, Income, Expenses, Liabilities, Equity
-- Chevron expands to show sub-accounts under Income and Expenses
+- Wallet/reporting bucket rollups using the same grouping as `reports balance-sheet`
 - Sats displayed with 8-decimal grouping and B symbol per the mockup
-- Values come from `core.reports.balances(conn, *, as_of=filters.to_date, account_id=filters.account_id)`
+- Values come from the processed journal state through `core.reports.report_balance_sheet(...)`
+- `account_type` is descriptive metadata in the current bucket model; it does not drive double-entry Assets / Income / Expenses / Liabilities / Equity rollups yet
 
 ### Tile 7 — Exports
 
@@ -263,7 +263,7 @@ local files, if kept, are a separate follow-up from the link-first storage MVP.
 
 ### Add Connection modal
 
-Matches screenshot 3.
+Matches the approved connection-flow reference state.
 
 - 7 kind tiles: Core Lightning, LND, NWC, XPub, Descriptor, Import, Cashu
 - Only the kinds kassiber already supports open a real form:
@@ -317,18 +317,18 @@ Matches screenshot 3.
 
 ## Phase 4 — Onboarding, settings, packaging (3–4 days)
 
-**Goal:** A first-time user experience matching screenshot 1, full Settings dialog matching screenshot 5, and a working signed macOS `.app` bundle.
+**Goal:** A first-time user experience matching the approved welcome reference, a full Settings dialog matching the approved settings reference, and a working signed macOS `.app` bundle.
 
 ### Welcome wizard
 
 - Shown on first run (no profile in DB, or `ui.first_run` flag unset)
-- Matches screenshot 1: Welcome title, logo, name input, "Let's go!" CTA
+- Matches the approved welcome reference: title, logo, name input, "Let's go!" CTA
 - Optional second step: fiat currency (USD / EUR / …), with `generic` as the initial default even though Austrian RP2 support is already available at the CLI/core layer
 - On completion: creates default workspace + profile, stores `ui.first_run = False`
 
 ### Settings dialog
 
-Matches screenshot 5.
+Matches the approved settings reference.
 
 - "Hide sensitive data" toggle
 - "Download logs" button — zips the active project's `logs/*.jsonl` (`~/.kassiber/projects/<project>/logs/`) from the last 14 days via `backup_worker` and opens a file-save dialog
@@ -355,7 +355,7 @@ Matches screenshot 5.
 ### Done when
 
 - [ ] Fresh install (empty `~/.kassiber`) shows Welcome, completes to main window
-- [ ] Settings dialog matches screenshot 5 layout and the storage-related buttons stay simple
+- [ ] Settings dialog matches the approved settings reference layout and the storage-related buttons stay simple
 - [ ] `briefcase build macOS` produces a `.app` that launches
 - [ ] Reset project returns the user to Welcome
 - [ ] Launching `.app` from Finder works on a fresh machine without Python preinstalled
@@ -366,7 +366,7 @@ Matches screenshot 5.
 
 Ordered roughly by value. Not committed.
 
-1. Tile drag/resize — matches Clams gridstack feel; persist layout per profile
+1. Tile drag/resize — dashboard tile movement and resize affordances; persist layout per profile
 2. Tag management UI — create, rename, delete, bulk-apply tags
 3. Dark mode — theme.py has dual palettes; QML reads the active one
 4. Chart interactivity — zoom, pan, crosshair in Balance Over Time

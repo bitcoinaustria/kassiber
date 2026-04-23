@@ -43,7 +43,7 @@ from ..core import sync as core_sync
 from ..core import sync_backends as core_sync_backends
 from ..core import wallets as core_wallets
 from ..core.engines import TaxEngineLedgerInputs, build_tax_engine
-from ..core.repo import current_context_snapshot
+from ..core.repo import current_context_snapshot, resolve_account
 from ..core.runtime import (
     build_status_payload,
 )
@@ -219,20 +219,6 @@ def resolve_scope(conn, workspace_ref=None, profile_ref=None):
     workspace = resolve_workspace(conn, workspace_ref)
     profile = resolve_profile(conn, workspace["id"], profile_ref)
     return workspace, profile
-
-
-def resolve_account(conn, profile_id, ref):
-    row = conn.execute(
-        """
-        SELECT * FROM accounts
-        WHERE profile_id = ? AND (id = ? OR lower(code) = lower(?) OR lower(label) = lower(?))
-        LIMIT 1
-        """,
-        (profile_id, ref, ref, ref),
-    ).fetchone()
-    if not row:
-        raise AppError(f"Account '{ref}' not found")
-    return row
 
 
 def resolve_wallet(conn, profile_id, ref):
@@ -641,6 +627,7 @@ def _attachment_hooks():
 def _report_hooks():
     return core_reports.ReportHooks(
         resolve_scope=resolve_scope,
+        resolve_account=resolve_account,
         resolve_wallet=resolve_wallet,
         require_processed_journals=require_processed_journals,
         build_ledger_state=build_ledger_state,
@@ -910,6 +897,7 @@ def list_transactions(conn, workspace_ref, profile_ref, wallet_ref=None, limit=1
             t.id,
             COALESCE(t.external_id, '') AS external_id,
             t.occurred_at,
+            t.confirmed_at,
             w.label AS wallet,
             t.direction,
             t.asset,
@@ -1294,6 +1282,7 @@ def auto_price_transactions_from_rates_cache(conn, profile):
     tx_rows = conn.execute(
         """
         SELECT id, occurred_at, asset, amount, fiat_currency, fiat_rate, fiat_value
+             , confirmed_at
         FROM transactions
         WHERE profile_id = ? AND excluded = 0 AND fiat_rate IS NULL AND fiat_value IS NULL
         ORDER BY occurred_at ASC, created_at ASC, id ASC
@@ -1305,14 +1294,24 @@ def auto_price_transactions_from_rates_cache(conn, profile):
         pair = _transaction_rate_pair(row["asset"], row["fiat_currency"] or profile["fiat_currency"])
         if pair is None:
             continue
-        cached_rate = get_cached_rate_at_or_before(conn, pair, row["occurred_at"])
+        pricing_at = row["confirmed_at"] or row["occurred_at"]
+        cached_rate = get_cached_rate_at_or_before(conn, pair, pricing_at)
         if cached_rate is None:
             continue
         rate = dec(cached_rate["rate"])
         fiat_value = rate * msat_to_btc(row["amount"]) if row["amount"] > 0 else None
         conn.execute(
-            "UPDATE transactions SET fiat_rate = ?, fiat_value = ? WHERE id = ?",
-            (float(rate), float(fiat_value) if fiat_value is not None else None, row["id"]),
+            """
+            UPDATE transactions
+            SET fiat_rate = ?, fiat_value = ?, fiat_price_source = ?
+            WHERE id = ?
+            """,
+            (
+                float(rate),
+                float(fiat_value) if fiat_value is not None else None,
+                "rates_cache",
+                row["id"],
+            ),
         )
         auto_priced += 1
     return auto_priced
@@ -1805,6 +1804,7 @@ def list_quarantines(conn, workspace_ref, profile_ref):
             q.transaction_id,
             t.external_id,
             t.occurred_at,
+            t.confirmed_at,
             w.label AS wallet,
             t.asset,
             t.amount,
@@ -1827,6 +1827,7 @@ def list_quarantines(conn, workspace_ref, profile_ref):
                 "transaction_id": row["transaction_id"],
                 "external_id": row["external_id"] or "",
                 "occurred_at": row["occurred_at"],
+                "confirmed_at": row["confirmed_at"],
                 "wallet": row["wallet"],
                 "asset": row["asset"],
                 "amount": float(msat_to_btc(row["amount"])),
@@ -1846,7 +1847,7 @@ def show_quarantine(conn, workspace_ref, profile_ref, tx_ref):
     row = conn.execute(
         """
         SELECT q.transaction_id, q.reason, q.detail_json, q.created_at,
-               w.label AS wallet, t.external_id, t.occurred_at, t.asset,
+               w.label AS wallet, t.external_id, t.occurred_at, t.confirmed_at, t.asset,
                t.amount, t.fee, t.fiat_rate, t.fiat_value, t.direction, t.excluded
         FROM journal_quarantines q
         JOIN transactions t ON t.id = q.transaction_id
@@ -1866,6 +1867,7 @@ def show_quarantine(conn, workspace_ref, profile_ref, tx_ref):
         "external_id": row["external_id"] or "",
         "wallet": row["wallet"],
         "occurred_at": row["occurred_at"],
+        "confirmed_at": row["confirmed_at"],
         "direction": row["direction"],
         "asset": row["asset"],
         "amount": float(msat_to_btc(row["amount"])),
@@ -1918,10 +1920,15 @@ def resolve_quarantine_price_override(
     if new_value is not None and new_value < 0:
         raise AppError("--fiat-value must not be negative", code="validation")
     conn.execute(
-        "UPDATE transactions SET fiat_rate = ?, fiat_value = ? WHERE id = ?",
+        """
+        UPDATE transactions
+        SET fiat_rate = ?, fiat_value = ?, fiat_price_source = ?
+        WHERE id = ?
+        """,
         (
             float(new_rate) if new_rate is not None else None,
             float(new_value) if new_value is not None else None,
+            "manual",
             tx["id"],
         ),
     )

@@ -98,7 +98,7 @@ Quarantine causes typically include:
 
 ## Rates and tax input quality
 
-If transactions do not already include usable fiat pricing, Kassiber first tries to fill them from the local rates cache during journal processing.
+If transactions do not already include usable fiat pricing, Kassiber first tries to fill them from the local rates cache during journal processing. When a transaction has a known `confirmed_at` timestamp, Kassiber prices from that confirmation time; otherwise it falls back to `occurred_at`.
 
 Useful commands:
 

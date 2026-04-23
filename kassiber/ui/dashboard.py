@@ -319,7 +319,7 @@ def _build_connection_items(
                 "created_at": wallet.get("created_at", ""),
                 "created_at_label": _format_timestamp(wallet.get("created_at")),
                 "detail_rows": [
-                    {"label": "Account", "value": wallet.get("account", "") or "Unassigned"},
+                    {"label": "Bucket", "value": wallet.get("account", "") or "Unassigned"},
                     {"label": "Backend", "value": backend_value},
                     {"label": "Balance", "value": _format_btc_msat(balance_msat)},
                     {"label": "Reference", "value": reference_value},
@@ -404,7 +404,7 @@ def _build_transaction_items(conn: sqlite3.Connection, profile_id: str, fiat_cur
                 "detail_rows": [
                     {"label": "Occurred", "value": _format_timestamp(row["occurred_at"])},
                     {"label": "Event", "value": event_label},
-                    {"label": "Account", "value": account_label},
+                    {"label": "Bucket", "value": account_label},
                     {"label": "Wallet", "value": row["wallet_label"]},
                     {"label": "Direction", "value": row["direction"].replace("_", " ").title()},
                     {"label": "Amount", "value": _format_btc_msat(row["amount"])},

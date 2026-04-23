@@ -160,6 +160,7 @@ def _to_record(tx, payment_method_id):
     csv_shaped = {
         "TransactionId": tx.get("transactionHash") or "",
         "Timestamp": occurred_at,
+        "confirmed_at": occurred_at,
         "Currency": currency,
         "Amount": str(tx.get("amount") if tx.get("amount") is not None else "0"),
         "Comment": tx.get("comment") or "",

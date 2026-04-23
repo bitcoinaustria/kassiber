@@ -5,6 +5,7 @@
       "amount": 0.01,
       "amount_msat": 1000000000,
       "asset": "BTC",
+      "confirmed_at": null,
       "detail": {
         "asset": "BTC",
         "direction": "inbound",

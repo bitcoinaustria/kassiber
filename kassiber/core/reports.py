@@ -14,6 +14,7 @@ from ..tax_policy import require_tax_processing_supported
 INTERVAL_CHOICES = ("hour", "day", "week", "month")
 
 ScopeResolver = Callable[[sqlite3.Connection, str | None, str | None], tuple[Mapping[str, Any], Mapping[str, Any]]]
+AccountResolver = Callable[[sqlite3.Connection, str, str], Mapping[str, Any]]
 WalletResolver = Callable[[sqlite3.Connection, str, str], Mapping[str, Any]]
 RequireProcessedJournals = Callable[[sqlite3.Connection, Mapping[str, Any]], None]
 BuildLedgerState = Callable[[sqlite3.Connection, Mapping[str, Any]], Mapping[str, Any]]
@@ -29,6 +30,7 @@ WriteTextPdf = Callable[[str, str, Sequence[str]], Mapping[str, Any]]
 @dataclass(frozen=True)
 class ReportHooks:
     resolve_scope: ScopeResolver
+    resolve_account: AccountResolver
     resolve_wallet: WalletResolver
     require_processed_journals: RequireProcessedJournals
     build_ledger_state: BuildLedgerState
@@ -219,8 +221,9 @@ def report_balance_history(
         sql += " AND je.wallet_id = ?"
         params.append(wallet["id"])
     if account_ref:
-        sql += " AND (a.code = ? OR a.label = ? OR a.id = ?)"
-        params.extend([account_ref, account_ref, account_ref])
+        account = hooks.resolve_account(conn, profile["id"], account_ref)
+        sql += " AND je.account_id = ?"
+        params.append(account["id"])
     if asset:
         sql += " AND je.asset = ?"
         params.append(asset)
@@ -975,7 +978,7 @@ def build_pdf_report_lines(conn, workspace_ref, profile_ref, hooks: ReportHooks,
     if balance_table_rows:
         lines.extend(
             hooks.format_table(
-                ["Account", "Asset", "Quantity", "Cost Basis", "Market Value", "Unrealized"],
+                ["Bucket", "Asset", "Quantity", "Cost Basis", "Market Value", "Unrealized"],
                 balance_table_rows,
                 [16, 6, 14, 14, 14, 14],
                 align_right={2, 3, 4, 5},
@@ -1001,7 +1004,7 @@ def build_pdf_report_lines(conn, workspace_ref, profile_ref, hooks: ReportHooks,
     if portfolio_table_rows:
         lines.extend(
             hooks.format_table(
-                ["Wallet", "Account", "Asset", "Quantity", "Avg Cost", "Cost Basis", "Market", "Unreal."],
+                ["Wallet", "Bucket", "Asset", "Quantity", "Avg Cost", "Cost Basis", "Market", "Unreal."],
                 portfolio_table_rows,
                 [16, 12, 6, 12, 12, 12, 12, 12],
                 align_right={3, 4, 5, 6, 7},

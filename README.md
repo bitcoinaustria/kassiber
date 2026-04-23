@@ -1,8 +1,10 @@
 # Kassiber
 
+![Kassiber banner](docs/assets/readme-banner.png)
+
 Kassiber is an open-source, local-first Bitcoin accounting CLI with an early desktop shell.
 
-It keeps your accounting state on your machine, syncs from Bitcoin-native sources, and processes journals locally before generating reports. The cloud-SaaS model is the thing Kassiber is trying to avoid.
+It keeps your accounting state on your machine, syncs from Bitcoin-native sources, and processes journals locally before generating reports. Built from scratch, it takes early visual cues from Clams and other tools in the space without inheriting the cloud trust model.
 
 Before pointing Kassiber at real wallets, read [SECURITY.md](SECURITY.md). It covers backend visibility, external requests, and current caveats such as missing at-rest encryption and incomplete Tor support.
 
@@ -17,7 +19,7 @@ output can still be sensitive.
 ## What Kassiber does
 
 - keeps a local SQLite system of record
-- supports multiple workspaces, profiles, accounts, and wallets
+- supports multiple workspaces, profiles, wallet buckets, and wallets
 - syncs from `esplora` and `electrum`, plus `bitcoinrpc` for address-based Bitcoin wallets and confirmed BTCPay Greenfield wallet history
 - imports generic CSV/JSON, BTCPay exports, Phoenix exports, and BIP329 labels
 - pulls confirmed BTCPay on-chain wallet history directly from a BTCPay server via the Greenfield API
@@ -59,7 +61,7 @@ Kassiber's model is:
 ```text
 workspace
 `-- profile
-    |-- account(s)
+    |-- account bucket(s)
     `-- wallet(s)
 
 wallets -> transactions -> journals -> reports
@@ -68,10 +70,10 @@ wallets -> transactions -> journals -> reports
 - `workspace`: the top-level container for an organization, person, or set of books
 - `profile`: one accounting and tax scope inside a workspace
 - `wallet`: a transaction source that Kassiber syncs or imports
-- `account`: a reporting and ledger bucket that wallets can belong to
+- `account`: a wallet/reporting bucket that wallets can belong to
 
 In practice, a workspace might be an association, with one profile for its BTC
-books, accounts such as `events`, `memberships`, and `store`, and wallets
+books, buckets such as `events`, `memberships`, and `store`, and wallets
 mapped to the real underlying wallet sources that actually hold or receive
 funds.
 
@@ -79,6 +81,10 @@ Transactions flow in from wallets, journals process those transactions into
 tax and accounting state, and reports read from the processed journal state.
 Cost basis is pooled per asset across all wallets in a profile, even though
 reporting can still break holdings and activity down by wallet and account.
+Kassiber accounts are not a double-entry chart of accounts today: fees and
+external counterparties are not posted automatically to separate account rows,
+and the `account_type` / `asset` fields are descriptive bucket metadata rather
+than report rollup rules.
 
 If you use multiple BTCPay stores, only model them as multiple Kassiber wallets
 when they are actually different underlying wallets. If two stores point at the
@@ -88,6 +94,26 @@ BTCPay-backed wallets now persist their `backend` / `store_id` /
 `payment_method_id` config on the wallet itself, so later `wallets sync`,
 `wallets sync --all`, and future GUI flows can reuse the same source without
 retyping `--store-id`.
+
+## AI assistance
+
+Kassiber ships with a repo-local AI skill in [`skills/kassiber/`](skills/kassiber/)
+for coding and terminal assistants. It helps an assistant use the Kassiber CLI
+safely for onboarding, imports, journal processing, reports, metadata cleanup,
+and troubleshooting.
+
+AI is optional. Kassiber's core accounting flow does not depend on a model, and
+future AI-assisted features such as OCR, extraction, and reconciliation
+suggestions should stay review-gated.
+
+If you use AI with Kassiber, treat prompts as sensitive accounting data. Local
+inference is the recommended default. [Ollama](https://ollama.com/) is a good
+fit for local models, and if remote inference is needed, prefer a provider with
+documented encrypted inference such as
+[Maple Proxy](https://blog.trymaple.ai/maple-proxy-documentation/).
+
+See [docs/reference/ai.md](docs/reference/ai.md) for setup notes, example
+prompts, and privacy guidance.
 
 ## Local state
 
@@ -181,6 +207,7 @@ python3 -m kassiber ui
 
 Reference docs:
 
+- [docs/reference/ai.md](docs/reference/ai.md)
 - [docs/reference/backends.md](docs/reference/backends.md)
 - [docs/reference/imports.md](docs/reference/imports.md)
 - [docs/reference/tax.md](docs/reference/tax.md)

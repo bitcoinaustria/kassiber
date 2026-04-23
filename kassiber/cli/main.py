@@ -95,7 +95,7 @@ def _normalized_backend_clear_fields(values: Sequence[str] | None) -> list[str]:
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog=APP_NAME,
-        description="Open-source, local-first Bitcoin accounting CLI with multi-account and multi-wallet support.",
+        description="Open-source, local-first Bitcoin accounting CLI with wallet buckets and multi-wallet support.",
     )
     parser.add_argument("--data-root", default=DEFAULT_DATA_ROOT, help="Data directory for the local SQLite store")
     parser.add_argument(
@@ -231,7 +231,10 @@ def build_parser() -> argparse.ArgumentParser:
     profiles_set.add_argument("--tax-long-term-days", type=int)
     profiles_set.add_argument("--gains-algorithm", choices=list(RP2_ACCOUNTING_METHODS))
 
-    accounts = sub.add_parser("accounts")
+    accounts = sub.add_parser(
+        "accounts",
+        description="Manage wallet/reporting buckets. These are not double-entry chart-of-accounts records.",
+    )
     accounts_sub = accounts.add_subparsers(dest="accounts_command", required=True)
     accounts_list = accounts_sub.add_parser("list")
     accounts_list.add_argument("--workspace")
@@ -241,8 +244,15 @@ def build_parser() -> argparse.ArgumentParser:
     accounts_create.add_argument("--profile")
     accounts_create.add_argument("--code", required=True)
     accounts_create.add_argument("--label", required=True)
-    accounts_create.add_argument("--type", required=True)
-    accounts_create.add_argument("--asset")
+    accounts_create.add_argument(
+        "--type",
+        required=True,
+        help="Descriptive bucket type; reports do not use this for double-entry rollups.",
+    )
+    accounts_create.add_argument(
+        "--asset",
+        help="Optional descriptive asset hint; wallet and transaction assets are not constrained by it.",
+    )
 
     wallets = sub.add_parser("wallets")
     wallets_sub = wallets.add_subparsers(dest="wallets_command", required=True)
@@ -254,7 +264,7 @@ def build_parser() -> argparse.ArgumentParser:
     wallets_create.add_argument("--profile")
     wallets_create.add_argument("--label", required=True)
     wallets_create.add_argument("--kind", required=True)
-    wallets_create.add_argument("--account")
+    wallets_create.add_argument("--account", help="Wallet/reporting bucket code, id, or unique label")
     wallets_create.add_argument("--backend")
     wallets_create.add_argument("--chain", choices=["bitcoin", "liquid"])
     wallets_create.add_argument("--network")
@@ -284,7 +294,7 @@ def build_parser() -> argparse.ArgumentParser:
     wallets_update.add_argument("--profile")
     wallets_update.add_argument("--wallet", required=True)
     wallets_update.add_argument("--label")
-    wallets_update.add_argument("--account")
+    wallets_update.add_argument("--account", help="Wallet/reporting bucket code, id, or unique label")
     wallets_update.add_argument("--backend")
     wallets_update.add_argument("--chain", choices=["bitcoin", "liquid"])
     wallets_update.add_argument("--network")

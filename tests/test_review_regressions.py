@@ -560,7 +560,7 @@ class ReviewRegressionTest(unittest.TestCase):
         self._assert_ok(payload, result, "accounts.list")
         self.assertEqual(
             [row["code"] for row in payload["data"]],
-            ["cash-ops", "external", "fees", "treasury"],
+            ["cash-ops", "treasury"],
         )
 
         payload, result = self._run_json(
