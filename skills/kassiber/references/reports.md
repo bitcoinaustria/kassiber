@@ -34,6 +34,14 @@ kassiber rates sync --pair BTC-EUR --days 30
 kassiber rates set BTC-EUR 2025-01-01T00:00:00Z 95000
 ```
 
+`rates range --start/--end` expects RFC3339 UTC strings, not Unix epoch
+timestamps.
+
+Kassiber's rate cache currently supports `BTC-USD` and `BTC-EUR`. Liquid
+Bitcoin uses Kassiber's BTC alias path for fiat pricing, so missing spot prices
+on LBTC rows usually mean the relevant BTC sample was unavailable at or before
+that timestamp.
+
 If pricing looks incomplete, sync rates and then re-run:
 
 ```bash
@@ -44,6 +52,24 @@ If the user has BTC ↔ LBTC peg-ins / peg-outs or submarine swaps, do not
 jump straight from import/sync to reports. Pair those swap legs first:
 reports consume the current journal state and do not auto-detect
 cross-asset swaps during report generation.
+
+Do not infer the covered history window from `samples` or `days` alone.
+Verify actual coverage with `kassiber rates range` around the missing
+transaction timestamps. Upstream sources can cap the returned history even when
+the sync request asks for more.
+
+## Processed vs Raw
+
+Reports read processed journal state, not raw wallet sync totals.
+
+- quarantined transactions are omitted from processed holdings and gains
+- `reports balance-sheet` and `reports portfolio-summary` are the authoritative
+  holdings views
+- `transactions list` can help estimate raw in/out movement, but that netting
+  is only a diagnostic and must not be described as a Kassiber holding
+- do not say a BTC ↔ LBTC swap already rolled into reports unless
+  `journals transfers list` shows the pair or you just created the pair and
+  re-ran `journals process`
 
 ## Pagination
 
@@ -80,6 +106,12 @@ Prefer the exact fields Kassiber returns. If the payload includes both BTC and `
 ```bash
 kassiber --format plain reports portfolio-summary
 ```
+
+When a user asks "what assets do I have?" or "do I still have Liquid balance?",
+answer from `reports balance-sheet` or `reports portfolio-summary` first. If
+quarantines mean the processed answer differs from raw wallet movement, say so
+explicitly and keep any raw transaction-net estimate clearly labeled as an
+approximation.
 
 ## Tax summary
 
