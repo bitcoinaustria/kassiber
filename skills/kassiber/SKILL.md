@@ -41,6 +41,7 @@ All `scripts/` paths in this skill are relative to the directory containing this
 28. Never claim a BTC ↔ LBTC swap is already paired, carrying-value, or reflected in reports unless `kassiber --machine journals transfers list` shows the pair or `kassiber transfers pair` just succeeded and you reprocessed journals.
 29. When quarantines remain, distinguish processed holdings from raw transaction-net estimates. Reports show processed journal state only; any netting from `transactions list` must be labeled as an approximate diagnostic rather than a Kassiber holding.
 30. For rate coverage, do not infer the covered time window from `samples` or `days` alone. Use `kassiber rates range` with RFC3339 timestamps around the missing transactions.
+31. Treat Kassiber accounts as wallet/reporting buckets. Do not recommend double-entry charts of accounts, automatic fee expense postings, or external equity counterpart accounts unless the product gains an explicit ledger model.
 
 ## Gotchas
 
@@ -60,23 +61,25 @@ All `scripts/` paths in this skill are relative to the directory containing this
 - Large `rates sync --days ...` requests may still yield limited history because the upstream source can cap the returned window. Verify actual coverage with `rates range` instead of hand-mathing sample counts.
 - If a skill reference lookup fails, the most common mistake is resolving `references/...` from repo root instead of `<skill-dir>/references/...`.
 - Kassiber already has `reports export-pdf`; do not invent bespoke render scripts unless the user specifically wants a custom format beyond the built-in export.
+- Accounts are not a double-entry chart of accounts today. `account_type` and `asset` are descriptive bucket metadata; fees and external counterparties do not auto-post to separate accounts.
 
 ## Data Model
 
 Kassiber organizes data as:
 
-`workspace -> profile -> accounts + wallets -> transactions -> journals -> reports`
+`workspace -> profile -> account buckets + wallets -> transactions -> journals -> reports`
 
 Related notes:
 
 - `workspace` is the top-level container for an organization, person, or set of books.
 - `profile` is one accounting and tax scope inside a workspace.
 - `wallet` is a transaction source that Kassiber syncs or imports; map it to the real underlying wallet, not every external store or export.
-- `account` is a reporting and ledger bucket that wallets can belong to.
+- `account` is a wallet/reporting bucket that wallets can belong to.
 - `backends` define sync transport endpoints.
 - `metadata` covers notes, tags, exclusions, and BIP329 labels.
 - `attachments` are managed separately from wallet config and transaction rows.
 - Cost basis is pooled per asset across all wallets in a profile.
+- Balance-sheet output groups holdings by the wallet's assigned bucket, not by account-type rollups or counterpart postings.
 - If multiple BTCPay stores point at the same real wallet, keep them in one Kassiber wallet or holdings will be duplicated.
 
 ## Workflow Routing

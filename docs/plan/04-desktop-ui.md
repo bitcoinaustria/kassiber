@@ -221,10 +221,10 @@ Artifacts from each design session live under `docs/design/phase-<n>/<screen>/` 
 
 ### Tile 6 — Balances
 
-- Account-type rollups: Assets, Income, Expenses, Liabilities, Equity
-- Chevron expands to show sub-accounts under Income and Expenses
+- Wallet/reporting bucket rollups using the same grouping as `reports balance-sheet`
 - Sats displayed with 8-decimal grouping and B symbol per the mockup
-- Values come from `core.reports.balances(conn, *, as_of=filters.to_date, account_id=filters.account_id)`
+- Values come from the processed journal state through `core.reports.report_balance_sheet(...)`
+- `account_type` is descriptive metadata in the current bucket model; it does not drive double-entry Assets / Income / Expenses / Liabilities / Equity rollups yet
 
 ### Tile 7 — Exports
 

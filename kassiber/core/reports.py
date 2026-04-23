@@ -14,6 +14,7 @@ from ..tax_policy import require_tax_processing_supported
 INTERVAL_CHOICES = ("hour", "day", "week", "month")
 
 ScopeResolver = Callable[[sqlite3.Connection, str | None, str | None], tuple[Mapping[str, Any], Mapping[str, Any]]]
+AccountResolver = Callable[[sqlite3.Connection, str, str], Mapping[str, Any]]
 WalletResolver = Callable[[sqlite3.Connection, str, str], Mapping[str, Any]]
 RequireProcessedJournals = Callable[[sqlite3.Connection, Mapping[str, Any]], None]
 BuildLedgerState = Callable[[sqlite3.Connection, Mapping[str, Any]], Mapping[str, Any]]
@@ -29,6 +30,7 @@ WriteTextPdf = Callable[[str, str, Sequence[str]], Mapping[str, Any]]
 @dataclass(frozen=True)
 class ReportHooks:
     resolve_scope: ScopeResolver
+    resolve_account: AccountResolver
     resolve_wallet: WalletResolver
     require_processed_journals: RequireProcessedJournals
     build_ledger_state: BuildLedgerState
@@ -219,8 +221,9 @@ def report_balance_history(
         sql += " AND je.wallet_id = ?"
         params.append(wallet["id"])
     if account_ref:
-        sql += " AND (a.code = ? OR a.label = ? OR a.id = ?)"
-        params.extend([account_ref, account_ref, account_ref])
+        account = hooks.resolve_account(conn, profile["id"], account_ref)
+        sql += " AND je.account_id = ?"
+        params.append(account["id"])
     if asset:
         sql += " AND je.asset = ?"
         params.append(asset)

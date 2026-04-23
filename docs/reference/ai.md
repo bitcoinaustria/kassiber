@@ -98,7 +98,12 @@ skill:
 - "Use the Kassiber skill to inspect my current workspace and profile, list my wallets, and tell me whether journals need to be reprocessed before I trust the reports."
 - "Use the Kassiber skill to import this Phoenix CSV into my existing wallet, re-run journals, and show me the summary report."
 - "Use the Kassiber skill to find quarantined journal events, explain what is missing, and suggest the smallest fix."
-- "Use the Kassiber skill to compare wallet balances, account allocations, and portfolio output for this profile without doing your own arithmetic."
+- "Use the Kassiber skill to compare wallet balances, bucket allocations, and portfolio output for this profile without doing your own arithmetic."
+
+Kassiber accounts are wallet/reporting buckets in the current product. AI
+assistants should not recommend double-entry charts of accounts, automatic fee
+expense postings, or external counterparty equity accounts unless a future
+ledger design explicitly adds those behaviors.
 
 ## Planned AI-assisted workflows
 

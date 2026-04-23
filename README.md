@@ -19,7 +19,7 @@ output can still be sensitive.
 ## What Kassiber does
 
 - keeps a local SQLite system of record
-- supports multiple workspaces, profiles, accounts, and wallets
+- supports multiple workspaces, profiles, wallet buckets, and wallets
 - syncs from `esplora` and `electrum`, plus `bitcoinrpc` for address-based Bitcoin wallets
 - imports generic CSV/JSON, BTCPay exports, Phoenix exports, and BIP329 labels
 - pulls confirmed BTCPay on-chain wallet history directly from a BTCPay server via the Greenfield API
@@ -61,7 +61,7 @@ Kassiber's model is:
 ```text
 workspace
 `-- profile
-    |-- account(s)
+    |-- account bucket(s)
     `-- wallet(s)
 
 wallets -> transactions -> journals -> reports
@@ -70,10 +70,10 @@ wallets -> transactions -> journals -> reports
 - `workspace`: the top-level container for an organization, person, or set of books
 - `profile`: one accounting and tax scope inside a workspace
 - `wallet`: a transaction source that Kassiber syncs or imports
-- `account`: a reporting and ledger bucket that wallets can belong to
+- `account`: a wallet/reporting bucket that wallets can belong to
 
 In practice, a workspace might be an association, with one profile for its BTC
-books, accounts such as `events`, `memberships`, and `store`, and wallets
+books, buckets such as `events`, `memberships`, and `store`, and wallets
 mapped to the real underlying wallet sources that actually hold or receive
 funds.
 
@@ -81,6 +81,10 @@ Transactions flow in from wallets, journals process those transactions into
 tax and accounting state, and reports read from the processed journal state.
 Cost basis is pooled per asset across all wallets in a profile, even though
 reporting can still break holdings and activity down by wallet and account.
+Kassiber accounts are not a double-entry chart of accounts today: fees and
+external counterparties are not posted automatically to separate account rows,
+and the `account_type` / `asset` fields are descriptive bucket metadata rather
+than report rollup rules.
 
 If you use multiple BTCPay stores, only model them as multiple Kassiber wallets
 when they are actually different underlying wallets. If two stores point at the

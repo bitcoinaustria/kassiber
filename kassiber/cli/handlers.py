@@ -43,7 +43,7 @@ from ..core import sync as core_sync
 from ..core import sync_backends as core_sync_backends
 from ..core import wallets as core_wallets
 from ..core.engines import TaxEngineLedgerInputs, build_tax_engine
-from ..core.repo import current_context_snapshot
+from ..core.repo import current_context_snapshot, resolve_account
 from ..core.runtime import (
     build_status_payload,
 )
@@ -219,20 +219,6 @@ def resolve_scope(conn, workspace_ref=None, profile_ref=None):
     workspace = resolve_workspace(conn, workspace_ref)
     profile = resolve_profile(conn, workspace["id"], profile_ref)
     return workspace, profile
-
-
-def resolve_account(conn, profile_id, ref):
-    row = conn.execute(
-        """
-        SELECT * FROM accounts
-        WHERE profile_id = ? AND (id = ? OR lower(code) = lower(?) OR lower(label) = lower(?))
-        LIMIT 1
-        """,
-        (profile_id, ref, ref, ref),
-    ).fetchone()
-    if not row:
-        raise AppError(f"Account '{ref}' not found")
-    return row
 
 
 def resolve_wallet(conn, profile_id, ref):
@@ -641,6 +627,7 @@ def _attachment_hooks():
 def _report_hooks():
     return core_reports.ReportHooks(
         resolve_scope=resolve_scope,
+        resolve_account=resolve_account,
         resolve_wallet=resolve_wallet,
         require_processed_journals=require_processed_journals,
         build_ledger_state=build_ledger_state,

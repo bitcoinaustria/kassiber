@@ -180,6 +180,9 @@ over the shared core after the extraction work is done.
 
 - [ ] Custom CSV mapping DSL for arbitrary wallet exports
 - [ ] Rates/account adjustment surface
+- [ ] Full double-entry account model only if a future ledger design needs it:
+  explicit counterpart postings, account-type rollups, adjustments, and
+  migrations; current `accounts` are wallet/reporting buckets
 - [ ] Per-profile Tor proxy configuration
 - [ ] Attach optional BTCPay `InvoiceId` / payment metadata to rows synced via `wallets sync-btcpay`
 - [ ] Persist optional BTCPay raw payload snapshots only if a concrete reconciliation workflow needs them
