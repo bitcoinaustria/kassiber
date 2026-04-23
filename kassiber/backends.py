@@ -25,6 +25,7 @@ Call sites should treat backend dicts as opaque — read values with
 directly, since env-sourced and DB-sourced dicts differ slightly.
 """
 
+import json
 import os
 from pathlib import Path
 
@@ -40,6 +41,7 @@ from .time_utils import now_iso
 from .util import (
     normalize_chain_value,
     normalize_network_value,
+    parse_bool,
     parse_int,
     str_or_none,
 )
@@ -74,10 +76,29 @@ DEFAULT_BACKENDS = {
     },
 }
 
-BACKEND_KINDS = {"esplora", "mempool", "electrum", "liquid-esplora", "custom"}
+BACKEND_KINDS = {"bitcoinrpc", "custom", "electrum", "esplora", "liquid-esplora", "mempool"}
 DEFAULT_ENV_FILENAME = "backends.env"
 DEFAULT_BACKEND_SETTING = "default_backend"
 BOOTSTRAP_DEFAULT_BACKEND_SETTING = "bootstrap_default_backend"
+BACKEND_DB_FIELDS = {
+    "name",
+    "kind",
+    "chain",
+    "network",
+    "url",
+    "auth_header",
+    "token",
+    "batch_size",
+    "timeout",
+    "tor_proxy",
+    "config_json",
+    "notes",
+    "created_at",
+    "updated_at",
+}
+BACKEND_RUNTIME_METADATA_FIELDS = {"config", "is_default", "source"}
+BACKEND_RESERVED_FIELDS = BACKEND_DB_FIELDS | BACKEND_RUNTIME_METADATA_FIELDS
+BACKEND_BOOLEAN_CONFIG_FIELDS = {"insecure"}
 
 
 def resolve_effective_env_file(env_file=None, data_root=None):
@@ -239,6 +260,45 @@ def list_backends(runtime_config):
     return rows
 
 
+def _load_backend_config(raw_config):
+    if raw_config in (None, ""):
+        return {}
+    try:
+        payload = json.loads(raw_config)
+    except (TypeError, ValueError, json.JSONDecodeError):
+        return {}
+    return payload if isinstance(payload, dict) else {}
+
+
+def _normalize_backend_config(config):
+    cleaned = {}
+    for raw_key, raw_value in (config or {}).items():
+        key = str_or_none(raw_key)
+        if key is None:
+            continue
+        key = key.lower()
+        if key in BACKEND_RESERVED_FIELDS:
+            continue
+        if key in BACKEND_BOOLEAN_CONFIG_FIELDS:
+            cleaned[key] = parse_bool(raw_value)
+            continue
+        value = str_or_none(raw_value)
+        if value is None:
+            continue
+        cleaned[key] = value
+    return cleaned
+
+
+def _extract_backend_config(backend):
+    return _normalize_backend_config(
+        {
+            key: value
+            for key, value in backend.items()
+            if key not in BACKEND_RESERVED_FIELDS
+        }
+    )
+
+
 def _available_backend_names(conn):
     rows = conn.execute("SELECT name FROM backends ORDER BY name ASC").fetchall()
     return {row["name"] for row in rows}
@@ -270,6 +330,7 @@ def _seedable_runtime_backend(name, backend):
         "batch_size": parse_int(backend_value(backend, "batch_size"), None),
         "timeout": parse_int(backend_value(backend, "timeout"), None),
         "tor_proxy": backend_value(backend, "tor_proxy"),
+        "config": _extract_backend_config(backend),
     }
 
 
@@ -299,6 +360,7 @@ def seed_db_backends(conn, runtime_config):
             batch_size=payload["batch_size"],
             timeout=payload["timeout"],
             tor_proxy=payload["tor_proxy"],
+            config=payload["config"],
         )
         existing_names.add(name)
 
@@ -322,7 +384,7 @@ def seed_db_backends(conn, runtime_config):
 
 
 def _backend_row_to_dict(row):
-    return {
+    payload = {
         "name": row["name"],
         "kind": row["kind"],
         "chain": row["chain"] or "",
@@ -338,6 +400,8 @@ def _backend_row_to_dict(row):
         "created_at": row["created_at"],
         "updated_at": row["updated_at"],
     }
+    payload.update(_load_backend_config(row["config_json"]))
+    return payload
 
 
 def list_db_backends(conn):
@@ -369,19 +433,7 @@ def merge_db_backends(conn, runtime_config):
     rows = conn.execute("SELECT * FROM backends").fetchall()
     for row in rows:
         name = row["name"].lower()
-        runtime_config["backends"][name] = {
-            "name": name,
-            "kind": row["kind"],
-            "chain": row["chain"] or "",
-            "network": row["network"] or "",
-            "url": row["url"],
-            "batch_size": row["batch_size"],
-            "auth_header": row["auth_header"] or "",
-            "token": row["token"] or "",
-            "timeout": str(row["timeout"]) if row["timeout"] is not None else "",
-            "tor_proxy": row["tor_proxy"] or "",
-            "source": "database",
-        }
+        runtime_config["backends"][name] = _backend_row_to_dict(row)
     override = get_setting(conn, DEFAULT_BACKEND_SETTING)
     if override:
         if override not in runtime_config["backends"]:
@@ -416,6 +468,7 @@ def create_db_backend(
     batch_size=None,
     timeout=None,
     tor_proxy=None,
+    config=None,
     notes=None,
 ):
     """Insert a new backend row. Raises on name conflict or invalid kind/url."""
@@ -433,6 +486,7 @@ def create_db_backend(
         raise AppError("Backend batch size must be positive", code="validation")
     if timeout is not None and timeout <= 0:
         raise AppError("Backend timeout must be positive", code="validation")
+    normalized_config = _normalize_backend_config(config)
     existing = conn.execute("SELECT 1 FROM backends WHERE name = ?", (name,)).fetchone()
     if existing:
         raise AppError(
@@ -443,10 +497,25 @@ def create_db_backend(
     ts = now_iso()
     conn.execute(
         """
-        INSERT INTO backends(name, kind, chain, network, url, auth_header, token, batch_size, timeout, tor_proxy, notes, created_at, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO backends(name, kind, chain, network, url, auth_header, token, batch_size, timeout, tor_proxy, config_json, notes, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
-        (name, kind, chain, network, url.strip(), auth_header, token, batch_size, timeout, tor_proxy, notes, ts, ts),
+        (
+            name,
+            kind,
+            chain,
+            network,
+            url.strip(),
+            auth_header,
+            token,
+            batch_size,
+            timeout,
+            tor_proxy,
+            json.dumps(normalized_config, sort_keys=True),
+            notes,
+            ts,
+            ts,
+        ),
     )
     conn.commit()
     return get_db_backend(conn, name)
@@ -471,7 +540,7 @@ def update_db_backend(conn, name, updates):
         raise AppError(
             "backends update requires at least one field to change",
             code="validation",
-            hint="Pass one or more of --kind, --url, --chain, --network, --auth-header, --token, --batch-size, --timeout, --tor-proxy, --notes",
+            hint="Pass one or more of --kind, --url, --chain, --network, --auth-header, --token, --batch-size, --timeout, --tor-proxy, --insecure, --cookiefile, --username, --password, --wallet-prefix, --notes",
         )
 
     new_kind = updates.get("kind")
@@ -495,6 +564,10 @@ def update_db_backend(conn, name, updates):
     new_timeout = updates.get("timeout")
     if new_timeout is not None and new_timeout <= 0:
         raise AppError("Backend timeout must be positive", code="validation")
+    new_config = updates.get("config")
+    merged_config = _load_backend_config(row["config_json"])
+    if new_config is not None:
+        merged_config.update(_normalize_backend_config(new_config))
 
     merged = {
         "kind": new_kind if new_kind is not None else row["kind"],
@@ -506,13 +579,14 @@ def update_db_backend(conn, name, updates):
         "batch_size": new_batch_size if new_batch_size is not None else row["batch_size"],
         "timeout": new_timeout if new_timeout is not None else row["timeout"],
         "tor_proxy": updates.get("tor_proxy") if updates.get("tor_proxy") is not None else row["tor_proxy"],
+        "config_json": json.dumps(merged_config, sort_keys=True),
         "notes": updates.get("notes") if updates.get("notes") is not None else row["notes"],
     }
 
     conn.execute(
         """
         UPDATE backends
-        SET kind = ?, url = ?, chain = ?, network = ?, auth_header = ?, token = ?, batch_size = ?, timeout = ?, tor_proxy = ?, notes = ?, updated_at = ?
+        SET kind = ?, url = ?, chain = ?, network = ?, auth_header = ?, token = ?, batch_size = ?, timeout = ?, tor_proxy = ?, config_json = ?, notes = ?, updated_at = ?
         WHERE name = ?
         """,
         (
@@ -525,6 +599,7 @@ def update_db_backend(conn, name, updates):
             merged["batch_size"],
             merged["timeout"],
             merged["tor_proxy"],
+            merged["config_json"],
             merged["notes"],
             now_iso(),
             name,

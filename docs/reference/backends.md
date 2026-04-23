@@ -36,6 +36,7 @@ Create and manage SQLite-backed backends:
 ```bash
 python3 -m kassiber backends create myelectrum --kind electrum --url ssl://index.bitcoin-austria.at:50002
 python3 -m kassiber backends update myelectrum --batch-size 50 --timeout 60
+python3 -m kassiber backends create core --kind bitcoinrpc --url http://127.0.0.1:8332 --cookiefile ~/.bitcoin/.cookie --wallet-prefix kassiber
 python3 -m kassiber backends set-default myelectrum
 python3 -m kassiber backends clear-default
 python3 -m kassiber backends delete myelectrum
@@ -107,7 +108,13 @@ Bitcoin Core-specific fields:
 - `COOKIEFILE`
 - `WALLETPREFIX`
 
-Note: `bitcoinrpc` support is currently partial. Kassiber can use it for Bitcoin address-based wallets, but descriptor- and xpub-backed live sync still require Esplora or Electrum. The `backends create --kind ...` CLI choices also do not yet expose `bitcoinrpc`, so define it through `backends.env`.
+Note: `bitcoinrpc` support is currently partial. Kassiber can use it for Bitcoin address-based wallets, but descriptor- and xpub-backed live sync still require Esplora or Electrum.
+
+The backend CLI now accepts the common backend-specific knobs directly:
+
+- `--insecure` for Electrum TLS bypass testing against servers you control
+- `--cookiefile` or `--username` / `--password` for Bitcoin Core RPC auth
+- `--wallet-prefix` for Bitcoin Core watch-only wallet naming
 
 ## Notes by backend type
 

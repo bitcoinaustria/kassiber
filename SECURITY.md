@@ -65,7 +65,7 @@ reports are fully offline.
 
 - `~/.kassiber/data/kassiber.sqlite3` — default SQLite DB. Contains
   descriptors, xpubs, addresses, transactions, metadata, rates cache,
-  and backend overlay.
+  backend definitions/defaults, and any stored backend credentials.
 - `~/.kassiber/config/backends.env` — default backend config file. May contain
   Bitcoin Core RPC credentials and backend tokens.
 - `~/.kassiber/config/settings.json` — managed state manifest for the active
@@ -103,9 +103,9 @@ lands, treat the data directory and backend config file as sensitive material.
 ## Caveats
 
 - **Secrets on the command line end up in shell history.** `backends
-  create --token ...` and `--auth-header ...` write credentials into
-  `~/.zsh_history` / `~/.bash_history`. Prefer `~/.kassiber/config/backends.env`
-  (or another `--env-file`) or environment
+  create --token ...`, `--auth-header ...`, and `--password ...` write
+  credentials into `~/.zsh_history` / `~/.bash_history`. Prefer
+  `~/.kassiber/config/backends.env` (or another `--env-file`) or environment
   variables for anything sensitive.
 - **`--debug` and `--machine` output can leak secrets.** Debug stack
   traces and machine envelopes include backend URLs, tokens, and —

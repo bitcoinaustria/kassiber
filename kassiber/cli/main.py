@@ -61,6 +61,21 @@ from ..tax_policy import supported_tax_countries
 from ..ui.dashboard import collect_ui_snapshot
 
 
+def _backend_extra_config(args: argparse.Namespace) -> dict[str, object] | None:
+    config = {}
+    if getattr(args, "insecure", None) is not None:
+        config["insecure"] = args.insecure
+    if getattr(args, "cookiefile", None) is not None:
+        config["cookiefile"] = args.cookiefile
+    if getattr(args, "username", None) is not None:
+        config["username"] = args.username
+    if getattr(args, "password", None) is not None:
+        config["password"] = args.password
+    if getattr(args, "wallet_prefix", None) is not None:
+        config["walletprefix"] = args.wallet_prefix
+    return config or None
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog=APP_NAME,
@@ -120,6 +135,11 @@ def build_parser() -> argparse.ArgumentParser:
     backends_create.add_argument("--batch-size", type=int)
     backends_create.add_argument("--timeout", type=int)
     backends_create.add_argument("--tor-proxy")
+    backends_create.add_argument("--insecure")
+    backends_create.add_argument("--cookiefile")
+    backends_create.add_argument("--username")
+    backends_create.add_argument("--password")
+    backends_create.add_argument("--wallet-prefix")
     backends_create.add_argument("--notes")
 
     backends_update = backends_sub.add_parser("update")
@@ -133,6 +153,11 @@ def build_parser() -> argparse.ArgumentParser:
     backends_update.add_argument("--batch-size", type=int)
     backends_update.add_argument("--timeout", type=int)
     backends_update.add_argument("--tor-proxy")
+    backends_update.add_argument("--insecure")
+    backends_update.add_argument("--cookiefile")
+    backends_update.add_argument("--username")
+    backends_update.add_argument("--password")
+    backends_update.add_argument("--wallet-prefix")
     backends_update.add_argument("--notes")
 
     backends_delete = backends_sub.add_parser("delete")
@@ -646,6 +671,7 @@ def dispatch(conn: sqlite3.Connection | None, args: argparse.Namespace) -> Any:
                     batch_size=args.batch_size,
                     timeout=args.timeout,
                     tor_proxy=args.tor_proxy,
+                    config=_backend_extra_config(args),
                     notes=args.notes,
                 ),
             )
@@ -660,6 +686,7 @@ def dispatch(conn: sqlite3.Connection | None, args: argparse.Namespace) -> Any:
                 "batch_size": args.batch_size,
                 "timeout": args.timeout,
                 "tor_proxy": args.tor_proxy,
+                "config": _backend_extra_config(args),
                 "notes": args.notes,
             }
             return emit(args, core_accounts.update_backend(conn, args.name, updates))

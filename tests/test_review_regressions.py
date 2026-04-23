@@ -12,6 +12,7 @@ from pathlib import Path
 from kassiber.cli.main import command_needs_db
 from kassiber.cli.handlers import _audit_transaction_refs
 from kassiber.core.engines import TaxEngineLedgerInputs, build_tax_engine
+from kassiber.core.runtime import bootstrap_runtime, close_runtime
 from kassiber.errors import AppError
 
 
@@ -294,6 +295,18 @@ class ReviewRegressionTest(unittest.TestCase):
     def _assert_ok(self, payload, result, kind):
         self.assertEqual(result.returncode, 0, msg=f"{payload!r}")
         self.assertEqual(payload.get("kind"), kind)
+
+    def _bootstrap_runtime_state(self, *, env_file=None):
+        args = Namespace(
+            data_root=str(self.data_root),
+            env_file=str(env_file) if env_file is not None else None,
+            machine=True,
+            format="json",
+            debug=False,
+        )
+        runtime = bootstrap_runtime(args, needs_db=True)
+        self.addCleanup(close_runtime, runtime)
+        return runtime
 
     def _load_fixture(self, name):
         return json.loads((FIXTURES / name).read_text(encoding="utf-8"))
@@ -684,6 +697,105 @@ class ReviewRegressionTest(unittest.TestCase):
         self._assert_ok(payload, result, "status")
         self.assertEqual(payload["data"]["default_backend"], "alpha")
         self.assertEqual(payload["data"]["env_file"], str(env_file))
+
+    def test_bitcoinrpc_backend_bootstrap_persists_cookiefile_and_wallet_prefix(self):
+        env_file = self.case_dir / "bitcoinrpc.env"
+        cookie_file = self.case_dir / ".cookie"
+        cookie_file.write_text("rpcuser:rpcpass\n", encoding="utf-8")
+        env_file.write_text(
+            "\n".join(
+                [
+                    "KASSIBER_BACKEND_CORE_KIND=bitcoinrpc",
+                    "KASSIBER_BACKEND_CORE_URL=http://127.0.0.1:8332",
+                    f"KASSIBER_BACKEND_CORE_COOKIEFILE={cookie_file}",
+                    "KASSIBER_BACKEND_CORE_WALLETPREFIX=review-core",
+                    "KASSIBER_DEFAULT_BACKEND=core",
+                ]
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+
+        payload, result = self._run_json("--env-file", str(env_file), "init")
+        self._assert_ok(payload, result, "init")
+
+        payload, result = self._run_json("--env-file", str(env_file), "backends", "get", "core")
+        self._assert_ok(payload, result, "backends.get")
+        self.assertEqual(payload["data"]["kind"], "bitcoinrpc")
+        self.assertEqual(payload["data"]["cookiefile"], str(cookie_file))
+        self.assertEqual(payload["data"]["walletprefix"], "review-core")
+        self.assertTrue(payload["data"]["is_default"])
+
+        env_file.unlink()
+
+        payload, result = self._run_json("--env-file", str(env_file), "backends", "get", "core")
+        self._assert_ok(payload, result, "backends.get")
+        self.assertEqual(payload["data"]["kind"], "bitcoinrpc")
+        self.assertEqual(payload["data"]["cookiefile"], str(cookie_file))
+        self.assertEqual(payload["data"]["walletprefix"], "review-core")
+        self.assertTrue(payload["data"]["is_default"])
+
+        runtime = self._bootstrap_runtime_state(env_file=env_file)
+        backend = runtime.runtime_config["backends"]["core"]
+        self.assertEqual(runtime.runtime_config["default_backend"], "core")
+        self.assertEqual(backend["kind"], "bitcoinrpc")
+        self.assertEqual(backend["cookiefile"], str(cookie_file))
+        self.assertEqual(backend["walletprefix"], "review-core")
+
+    def test_electrum_insecure_backend_bootstrap_persists_into_runtime_config(self):
+        env_file = self.case_dir / "electrum-insecure.env"
+        env_file.write_text(
+            "\n".join(
+                [
+                    "KASSIBER_BACKEND_ALPHA_KIND=electrum",
+                    "KASSIBER_BACKEND_ALPHA_URL=ssl://alpha.example:50002",
+                    "KASSIBER_BACKEND_ALPHA_INSECURE=1",
+                    "KASSIBER_DEFAULT_BACKEND=alpha",
+                ]
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+
+        payload, result = self._run_json("--env-file", str(env_file), "init")
+        self._assert_ok(payload, result, "init")
+
+        payload, result = self._run_json("--env-file", str(env_file), "backends", "get", "alpha")
+        self._assert_ok(payload, result, "backends.get")
+        self.assertIs(payload["data"]["insecure"], True)
+        self.assertTrue(payload["data"]["is_default"])
+
+        env_file.unlink()
+
+        runtime = self._bootstrap_runtime_state(env_file=env_file)
+        backend = runtime.runtime_config["backends"]["alpha"]
+        self.assertEqual(runtime.runtime_config["default_backend"], "alpha")
+        self.assertIs(backend["insecure"], True)
+
+    def test_backends_create_bitcoinrpc_supports_cookiefile_and_wallet_prefix(self):
+        payload, result = self._run_json("init")
+        self._assert_ok(payload, result, "init")
+
+        cookie_file = self.case_dir / ".cli-cookie"
+        cookie_file.write_text("rpcuser:rpcpass\n", encoding="utf-8")
+
+        payload, result = self._run_json(
+            "backends",
+            "create",
+            "core",
+            "--kind",
+            "bitcoinrpc",
+            "--url",
+            "http://127.0.0.1:8332",
+            "--cookiefile",
+            str(cookie_file),
+            "--wallet-prefix",
+            "cli-core",
+        )
+        self._assert_ok(payload, result, "backends.create")
+        self.assertEqual(payload["data"]["kind"], "bitcoinrpc")
+        self.assertEqual(payload["data"]["cookiefile"], str(cookie_file))
+        self.assertEqual(payload["data"]["walletprefix"], "cli-core")
 
     def test_metadata_record_mutations_roundtrip_and_invalidate_journals(self):
         self._bootstrap_wallet(label="Meta")

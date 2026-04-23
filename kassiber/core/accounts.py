@@ -373,6 +373,7 @@ def create_backend(
     batch_size=None,
     timeout=None,
     tor_proxy=None,
+    config=None,
     notes=None,
 ):
     return _create_db_backend(
@@ -387,6 +388,7 @@ def create_backend(
         batch_size=batch_size,
         timeout=timeout,
         tor_proxy=tor_proxy,
+        config=config,
         notes=notes,
     )
 
