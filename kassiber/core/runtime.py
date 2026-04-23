@@ -86,7 +86,7 @@ def ensure_runtime_layout(paths):
     return paths
 
 
-def bootstrap_runtime(args, needs_db=True):
+def bootstrap_runtime(args, needs_db=True, persist_bootstrap=False):
     paths = ensure_runtime_layout(
         resolve_runtime_paths(
             getattr(args, "data_root", None),
@@ -101,7 +101,8 @@ def bootstrap_runtime(args, needs_db=True):
     try:
         if needs_db:
             conn = open_db(paths.data_root)
-            seed_db_backends(conn, args.runtime_config)
+            if persist_bootstrap:
+                seed_db_backends(conn, args.runtime_config)
             merge_db_backends(conn, args.runtime_config)
         return RuntimeState(paths=paths, runtime_config=args.runtime_config, conn=conn)
     except Exception:

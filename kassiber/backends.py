@@ -11,8 +11,8 @@ configuration now plays a narrower role:
    `load_runtime_config`.
 2. **Database** — canonical rows in the `backends` table plus the stored
    default-backend settings. `seed_db_backends` copies non-ephemeral
-   bootstrap config into SQLite when it is missing, and `merge_db_backends`
-   then rebuilds the runtime view from SQLite.
+   bootstrap config into SQLite during explicit bootstrap-import flows, and
+   `merge_db_backends` then rebuilds the runtime view from SQLite.
 
 `resolve_backend(runtime_config, name)` is the single entry point used
 by sync code to fetch the selected backend dict. CRUD helpers
@@ -183,6 +183,7 @@ def load_runtime_config(env_file):
     file_env = load_dotenv_file(env_path)
     merged_env = {**file_env, **os.environ}
     process_env_overrides = {"backends": {}, "default_backend": False}
+    dotenv_backends = set()
     backends = {name: dict(config) for name, config in DEFAULT_BACKENDS.items()}
     for prefix in ("SATBOOKS_BACKEND_", "KASSIBER_BACKEND_"):
         for key, value in merged_env.items():
@@ -207,6 +208,8 @@ def load_runtime_config(env_file):
             )
             backends[backend_name][field_name] = value.strip()
             backends[backend_name]["source"] = f"{env_path}" if key in file_env else "environment"
+            if key in file_env:
+                dotenv_backends.add(backend_name)
             if key in os.environ:
                 process_env_overrides["backends"].setdefault(backend_name, set()).add(field_name)
     default_backend = (
@@ -232,6 +235,7 @@ def load_runtime_config(env_file):
         "env_file_exists": env_path.exists(),
         "default_backend": default_backend,
         "default_backend_source": default_backend_source,
+        "dotenv_backends": sorted(dotenv_backends),
         "process_env_overrides": {
             "backends": {
                 name: sorted(fields)
@@ -420,6 +424,10 @@ def _process_env_backend_fields(runtime_config, name):
     return set(backends.get(name, ()))
 
 
+def _dotenv_backend_names(runtime_config):
+    return set(runtime_config.get("dotenv_backends", ()))
+
+
 def _process_env_default_backend_override(runtime_config):
     return bool(runtime_config.get("process_env_overrides", {}).get("default_backend"))
 
@@ -454,55 +462,95 @@ def _seedable_runtime_backend(name, backend):
     }
 
 
+def _insert_seed_backend(conn, payload):
+    kind = _validate_backend_kind(payload["kind"])
+    url = payload["url"]
+    if not url or not url.strip():
+        raise AppError("Backend url is required", code="validation")
+    chain = payload["chain"]
+    if chain:
+        chain = normalize_chain_value(chain)
+    network = payload["network"]
+    if network:
+        network = normalize_network_value(chain, network)
+    batch_size = payload["batch_size"]
+    if batch_size is not None and batch_size <= 0:
+        raise AppError("Backend batch size must be positive", code="validation")
+    timeout = payload["timeout"]
+    if timeout is not None and timeout <= 0:
+        raise AppError("Backend timeout must be positive", code="validation")
+    ts = now_iso()
+    cursor = conn.execute(
+        """
+        INSERT INTO backends(name, kind, chain, network, url, auth_header, token, batch_size, timeout, tor_proxy, config_json, notes, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(name) DO NOTHING
+        """,
+        (
+            payload["name"],
+            kind,
+            chain,
+            network,
+            url.strip(),
+            payload["auth_header"],
+            payload["token"],
+            batch_size,
+            timeout,
+            payload["tor_proxy"],
+            json.dumps(_normalize_backend_config(payload["config"]), sort_keys=True),
+            None,
+            ts,
+            ts,
+        ),
+    )
+    return cursor.rowcount > 0
+
+
 def seed_db_backends(conn, runtime_config):
-    """Copy built-in / dotenv bootstrap backends into SQLite when absent.
+    """Persist built-in / dotenv bootstrap backends during explicit import flows.
 
     SQLite remains the canonical storage path, so built-ins and dotenv-backed
-    definitions are persisted on first use. Process-level environment-only
-    overrides stay ephemeral and are not auto-written into the database.
+    definitions can be copied into SQLite when the caller explicitly asks for
+    bootstrap import. Process-level environment-only overrides stay ephemeral
+    and are not auto-written into the database.
     """
-    existing_names = _available_backend_names(conn)
-    tombstones = _load_bootstrap_backend_tombstones(conn)
-    for name, backend in sorted(runtime_config["backends"].items()):
-        if name in existing_names:
-            continue
-        if name in tombstones:
-            continue
-        payload = _seedable_runtime_backend(name, backend)
-        if payload is None:
-            continue
-        create_db_backend(
-            conn,
-            payload["name"],
-            payload["kind"],
-            payload["url"],
-            chain=payload["chain"],
-            network=payload["network"],
-            auth_header=payload["auth_header"],
-            token=payload["token"],
-            batch_size=payload["batch_size"],
-            timeout=payload["timeout"],
-            tor_proxy=payload["tor_proxy"],
-            config=payload["config"],
-        )
-        existing_names.add(name)
+    try:
+        conn.execute("BEGIN IMMEDIATE")
+        changed = False
+        tombstones = _load_bootstrap_backend_tombstones(conn)
+        resurrected = tombstones & _dotenv_backend_names(runtime_config)
+        if resurrected:
+            tombstones -= resurrected
+            _save_bootstrap_backend_tombstones(conn, tombstones)
+            changed = True
 
-    changed = False
-    bootstrap_default = get_setting(conn, BOOTSTRAP_DEFAULT_BACKEND_SETTING)
-    if not bootstrap_default:
-        candidate = runtime_config["default_backend"]
-        if candidate not in existing_names:
-            candidate = _fallback_backend_name(existing_names)
-        set_setting(conn, BOOTSTRAP_DEFAULT_BACKEND_SETTING, candidate)
-        bootstrap_default = candidate
-        changed = True
+        for name, backend in sorted(runtime_config["backends"].items()):
+            if name in tombstones:
+                continue
+            payload = _seedable_runtime_backend(name, backend)
+            if payload is None:
+                continue
+            if _insert_seed_backend(conn, payload):
+                changed = True
 
-    stored_default = get_setting(conn, DEFAULT_BACKEND_SETTING)
-    if not stored_default:
-        set_setting(conn, DEFAULT_BACKEND_SETTING, bootstrap_default)
-        changed = True
-    if changed:
+        existing_names = _available_backend_names(conn)
+        bootstrap_default = get_setting(conn, BOOTSTRAP_DEFAULT_BACKEND_SETTING)
+        if not bootstrap_default:
+            candidate = runtime_config["default_backend"]
+            if candidate not in existing_names:
+                candidate = _fallback_backend_name(existing_names)
+            set_setting(conn, BOOTSTRAP_DEFAULT_BACKEND_SETTING, candidate)
+            bootstrap_default = candidate
+            changed = True
+
+        stored_default = get_setting(conn, DEFAULT_BACKEND_SETTING)
+        if not stored_default:
+            set_setting(conn, DEFAULT_BACKEND_SETTING, bootstrap_default)
+            changed = True
         conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
     return runtime_config
 
 
@@ -553,7 +601,7 @@ def merge_db_backends(conn, runtime_config):
     present, also overrides the bootstrap default — and raises if it names a
     backend that is not available in the merged runtime view.
     """
-    tombstones = _load_bootstrap_backend_tombstones(conn)
+    tombstones = _load_bootstrap_backend_tombstones(conn) - _dotenv_backend_names(runtime_config)
     for name in list(runtime_config["backends"]):
         if name in tombstones and not _process_env_backend_fields(runtime_config, name):
             runtime_config["backends"].pop(name, None)

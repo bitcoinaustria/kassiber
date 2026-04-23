@@ -312,7 +312,7 @@ class ReviewRegressionTest(unittest.TestCase):
         self.assertEqual(result.returncode, 0, msg=f"{payload!r}")
         self.assertEqual(payload.get("kind"), kind)
 
-    def _bootstrap_runtime_state(self, *, env_file=None):
+    def _bootstrap_runtime_state(self, *, env_file=None, persist_bootstrap=False):
         args = Namespace(
             data_root=str(self.data_root),
             env_file=str(env_file) if env_file is not None else None,
@@ -320,7 +320,7 @@ class ReviewRegressionTest(unittest.TestCase):
             format="json",
             debug=False,
         )
-        runtime = bootstrap_runtime(args, needs_db=True)
+        runtime = bootstrap_runtime(args, needs_db=True, persist_bootstrap=persist_bootstrap)
         self.addCleanup(close_runtime, runtime)
         return runtime
 
@@ -835,6 +835,53 @@ class ReviewRegressionTest(unittest.TestCase):
         self.assertEqual(payload.get("kind"), "error")
         self.assertEqual(payload["error"]["code"], "not_found")
 
+    def test_current_dotenv_backend_restores_deleted_name(self):
+        env_file = self.case_dir / "restore-alpha.env"
+        env_file.write_text(
+            "\n".join(
+                [
+                    "KASSIBER_BACKEND_ALPHA_KIND=electrum",
+                    "KASSIBER_BACKEND_ALPHA_URL=ssl://alpha.example:50002",
+                    "KASSIBER_DEFAULT_BACKEND=alpha",
+                ]
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+
+        payload, result = self._run_json("--env-file", str(env_file), "init")
+        self._assert_ok(payload, result, "init")
+
+        payload, result = self._run_json("--env-file", str(env_file), "backends", "set-default", "mempool")
+        self._assert_ok(payload, result, "backends.set-default")
+
+        payload, result = self._run_json("--env-file", str(env_file), "backends", "delete", "alpha")
+        self._assert_ok(payload, result, "backends.delete")
+        self.assertTrue(payload["data"]["deleted"])
+
+        db_path = self.data_root / "kassiber.sqlite3"
+        conn = sqlite3.connect(db_path)
+        row = conn.execute("SELECT name FROM backends WHERE name = 'alpha'").fetchone()
+        conn.close()
+        self.assertIsNone(row)
+
+        payload, result = self._run_json("--env-file", str(env_file), "backends", "get", "alpha")
+        self._assert_ok(payload, result, "backends.get")
+        self.assertEqual(payload["data"]["source"], str(env_file))
+
+        conn = sqlite3.connect(db_path)
+        row = conn.execute("SELECT name FROM backends WHERE name = 'alpha'").fetchone()
+        conn.close()
+        self.assertIsNone(row)
+
+        payload, result = self._run_json("--env-file", str(env_file), "init")
+        self._assert_ok(payload, result, "init")
+
+        conn = sqlite3.connect(db_path)
+        row = conn.execute("SELECT name FROM backends WHERE name = 'alpha'").fetchone()
+        conn.close()
+        self.assertIsNotNone(row)
+
     def test_process_environment_backend_override_wins_over_seeded_db_value(self):
         payload, result = self._run_json("init")
         self._assert_ok(payload, result, "init")
@@ -873,6 +920,39 @@ class ReviewRegressionTest(unittest.TestCase):
             self.assertEqual(runtime.runtime_config["default_backend"], "fulcrum")
             self.assertEqual(backend["url"], "https://env.example/api")
             self.assertEqual(backend["batch_size"], 25)
+
+    def test_read_only_backend_get_does_not_import_bootstrap_config_into_sqlite(self):
+        env_file = self.case_dir / "readonly-alpha.env"
+        env_file.write_text(
+            "\n".join(
+                [
+                    "KASSIBER_BACKEND_ALPHA_KIND=electrum",
+                    "KASSIBER_BACKEND_ALPHA_URL=ssl://alpha.example:50002",
+                    "KASSIBER_DEFAULT_BACKEND=alpha",
+                ]
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+
+        payload, result = self._run_json("--env-file", str(env_file), "backends", "get", "alpha")
+        self._assert_ok(payload, result, "backends.get")
+        self.assertEqual(payload["data"]["source"], str(env_file))
+        self.assertTrue(payload["data"]["is_default"])
+
+        db_path = self.data_root / "kassiber.sqlite3"
+        conn = sqlite3.connect(db_path)
+        backend_count = conn.execute("SELECT COUNT(*) FROM backends").fetchone()[0]
+        default_backend = conn.execute(
+            "SELECT value FROM settings WHERE key = 'default_backend'"
+        ).fetchone()
+        bootstrap_default = conn.execute(
+            "SELECT value FROM settings WHERE key = 'bootstrap_default_backend'"
+        ).fetchone()
+        conn.close()
+        self.assertEqual(backend_count, 0)
+        self.assertIsNone(default_backend)
+        self.assertIsNone(bootstrap_default)
 
     def test_electrum_insecure_backend_bootstrap_persists_into_runtime_config(self):
         env_file = self.case_dir / "electrum-insecure.env"

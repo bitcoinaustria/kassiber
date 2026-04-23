@@ -8,9 +8,11 @@ Backends are stored canonically in SQLite.
   accepted as a bootstrap / compatibility input
 - the `backends` table in SQLite is the long-term source of truth
 
-Built-in defaults and dotenv-defined backends are seeded into SQLite when the
-runtime first sees them. Environment-only overrides stay ephemeral unless you
-explicitly create the backend through the CLI.
+Built-in defaults and dotenv-defined backends are imported into SQLite during
+explicit bootstrap-import flows such as `kassiber init` or backend mutation
+commands that need a canonical SQLite row. Read-only commands keep that
+bootstrap config in memory only. Environment-only overrides stay ephemeral
+unless you explicitly create the backend through the CLI.
 
 ## Built-in defaults
 
@@ -83,13 +85,14 @@ KASSIBER_BACKEND_CORE_COOKIEFILE=~/.bitcoin/.cookie
 KASSIBER_BACKEND_CORE_WALLETPREFIX=kassiber
 ```
 
-See [.env.example](../../.env.example) for a fuller template. Once bootstrapped,
+See [.env.example](../../.env.example) for a fuller template. Once imported,
 use the `backends` CLI to inspect or edit the canonical SQLite rows.
 
 Important runtime rules:
 
-- deleting a bootstrap-backed backend through `backends delete` is durable; Kassiber records that explicit deletion and will not silently re-seed that name on the next startup
-- process-level `KASSIBER_BACKEND_*` overrides still win for the current process even when a backend has already been seeded into SQLite
+- read-only commands like `status`, `backends list`, and `backends get` do not import bootstrap-backed config into SQLite; `kassiber init` and backend mutation commands that need canonical bootstrap rows are the explicit bootstrap-import flows
+- deleting a bootstrap-backed backend suppresses the built-in/default bootstrap copy, but a backend currently present in `backends.env` is treated as an explicit restore signal and will appear in the runtime view again
+- process-level `KASSIBER_BACKEND_*` overrides still win for the current process even when a backend has already been imported into SQLite
 - config-backed auth fields can be scrubbed with `backends update --clear ...`; clearing removes the stored key from SQLite instead of leaving the old value behind
 
 ## Supported backend kinds

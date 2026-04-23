@@ -1325,6 +1325,19 @@ def command_needs_db(args: argparse.Namespace) -> bool:
     return True
 
 
+def command_persists_bootstrap(args: argparse.Namespace) -> bool:
+    if args.command == "init":
+        return True
+    if args.command == "backends" and getattr(args, "backends_command", None) in {
+        "update",
+        "delete",
+        "set-default",
+        "clear-default",
+    }:
+        return True
+    return False
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
@@ -1338,7 +1351,11 @@ def main(argv: Sequence[str] | None = None) -> int:
         return 1
 
     try:
-        runtime = bootstrap_runtime(args, needs_db=command_needs_db(args))
+        runtime = bootstrap_runtime(
+            args,
+            needs_db=command_needs_db(args),
+            persist_bootstrap=command_persists_bootstrap(args),
+        )
         dispatch(runtime.conn, args)
         return 0
     except AppError as exc:

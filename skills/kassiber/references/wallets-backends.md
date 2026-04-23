@@ -27,7 +27,8 @@ kassiber backends set-default my-esplora
 
 Behavior to remember:
 
-- deleting a bootstrap-backed backend is durable; Kassiber will not silently recreate it on the next startup
+- read-only commands keep bootstrap-backed config in memory only; `kassiber init` and backend mutation commands that need canonical bootstrap rows are the explicit bootstrap-import flows
+- deleting a bootstrap-backed backend suppresses the built-in/default bootstrap copy, but a backend present in the current `backends.env` file is treated as an explicit restore signal
 - process-level `KASSIBER_BACKEND_*` overrides still win for the current process over the stored SQLite row
 
 Built-in defaults often include:
