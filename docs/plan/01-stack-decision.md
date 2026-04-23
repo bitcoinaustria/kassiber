@@ -6,7 +6,7 @@
 
 ## Context
 
-Kassiber today is a Python CLI. The product owner wants a desktop UI inspired by the old Clams.tech desktop app (cream/red palette, white tiled dashboard, serif + mono typography) without compromising on the project's constraints:
+Kassiber today is a Python CLI. The product owner wants a desktop UI shaped by approved reference screenshots (warm neutral palette, white tiled dashboard, serif + mono typography) without compromising on the project's constraints:
 
 - Solo maintainer + AI-assisted development (the author does not read source directly; models write, author vibes)
 - "Make cybersecurity people happy" — minimal attack surface, auditable dependency graph
@@ -33,14 +33,14 @@ Python-only stack. QML declarative layout, Python signals/slots for logic. Qt's 
 - **Accessibility and native feel** on each OS come for free (menu bar on macOS, Wayland on Linux, etc.).
 
 **Cons**
-- **UI styling is more verbose than CSS.** Qt uses a different styling model from the web. See the "pixel-perfect Clams look" discussion below.
+- **UI styling is more verbose than CSS.** Qt uses a different styling model from the web. See the visual-fidelity discussion below.
 - **Custom component look-and-feel** requires more code than equivalent Tailwind/shadcn in a web stack. Filter-pill fills, soft card shadows, and dashboard tile resize handles all take extra work.
 - **Smaller component ecosystem** than the web world. Qt has a rich built-in set, but "pretty" third-party widget libraries are fewer.
 - **Bundle size** ≈ 80–120 MB fully packaged. Not small, not large.
 
-**Cost of Clams-aesthetic approximation**
+**Cost of visual approximation**
 
-Items that are one-liners in CSS and multi-line components in QML: pastel-filled filter pills, soft `box-shadow` on cards, gridstack-style drag/resize tile handles. The approximation we accept for v1:
+Items that are one-liners in CSS and multi-line components in QML: pastel-filled filter pills, soft `box-shadow` on cards, grid-style drag/resize tile handles. The approximation we accept for v1:
 
 - Same palette, same typography (bundle the serif + mono fonts as Qt resources)
 - White rounded cards with a simpler single-shadow layer
@@ -48,14 +48,14 @@ Items that are one-liners in CSS and multi-line components in QML: pastel-filled
 - Fixed tile layout (no drag/resize) for MVP; drag/resize is a Phase 5+ item
 - Logo and icons via embedded SVGs
 
-Result: ~85–95% of the Clams feel at ~40% of the styling effort. A Clams user recognizes it; a designer sees Qt's bones rather than the web's.
+Result: strong visual continuity with the approved references at a fraction of the styling effort. A designer still sees Qt's bones rather than the web's.
 
 ### B. Tauri 2 + SvelteKit + Python sidecar (honest second place)
 
 Tauri (Rust) hosts a system webview; SvelteKit frontend compiled to a static bundle; Python kassiber runs as a sidecar invoked with JSON envelope IPC.
 
 **Pros**
-- Pixel-perfect Clams aesthetic is trivial — it's the same tech Clams itself uses.
+- Browser-native visual fidelity is simpler — the stack is built for CSS-first interfaces.
 - Svelte is arguably Claude's single strongest UI target by training-data density.
 - Tauri is the current best-in-class security posture for webview-based desktop apps.
 - Node is build-time-only, not shipped.
@@ -69,7 +69,7 @@ Tauri (Rust) hosts a system webview; SvelteKit frontend compiled to a static bun
 - **Mobile upside is zero** for this product (constraint: no mobile).
 - **Reproducible builds** would earn Tauri points but are not a priority for this phase.
 
-**Why rejected:** The two-language cost is a permanent tax paid in exchange for a one-time aesthetic win. For a solo vibecoder who doesn't read the code, that tax is significant — every change potentially needs coordination across languages, and Claude's quality is more consistent when staying in one ecosystem. We accept "Qt-flavored Clams" to keep the project in one language.
+**Why rejected:** The two-language cost is a permanent tax paid in exchange for a one-time aesthetic win. For a solo vibecoder who doesn't read the code, that tax is significant — every change potentially needs coordination across languages, and Claude's quality is more consistent when staying in one ecosystem. We accept a Qt-native approximation of the approved visual direction to keep the project in one language.
 
 ### C. Tauri + Leptos / Dioxus (Rust frontend) — rejected earlier
 
@@ -97,7 +97,7 @@ Bundled Chromium + Node runtime. Rejected up front.
 
 **PySide6 + QML.**
 
-The driving factor is: for a solo AI-assisted project, **one language beats two every time**, as long as the single-language option can meet the UX bar. Qt can meet the UX bar for a Clams-inspired accounting UI. It cannot match every web-native aesthetic detail, but the approximation is good enough that the product owner recognizes the look-and-feel target from Phase 2 onward.
+The driving factor is: for a solo AI-assisted project, **one language beats two every time**, as long as the single-language option can meet the UX bar. Qt can meet the UX bar for this accounting UI. It cannot match every web-native aesthetic detail, but the approximation is good enough to preserve the intended look-and-feel direction from Phase 2 onward.
 
 ## Consequences
 
@@ -132,4 +132,4 @@ Otherwise, stay the course.
 - [PySide6 documentation](https://doc.qt.io/qtforpython-6/)
 - [briefcase — BeeWare packaging tool](https://briefcase.readthedocs.io/)
 - [QtCharts module](https://doc.qt.io/qt-6/qtcharts-index.html)
-- [Clams.tech GitHub](https://github.com/clams-tech) — reference for the target aesthetic
+- Project-approved UI reference screenshots (kept outside the repo)

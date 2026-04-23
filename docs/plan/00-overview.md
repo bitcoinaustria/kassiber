@@ -23,7 +23,7 @@ A **local-first Bitcoin accounting CLI**, written in Python.
 A few concurrent tracks, all grounded in a single library refactor:
 
 1. **Phase 0 — Core extraction.** Carve a reusable `kassiber.core` library out of `app.py`. CLI becomes a thin translator. Precondition for everything else. See `02-core-extraction.md`.
-2. **Desktop UI.** PySide6 + QML application that imports `kassiber.core` directly. Clams-inspired layout. See `04-desktop-ui.md`.
+2. **Desktop UI.** PySide6 + QML application that imports `kassiber.core` directly. Warm, document-oriented desktop layout guided by project-approved reference screenshots. See `04-desktop-ui.md`.
 3. **Austrian tax support on top of RP2.** Kassiber keeps the normalization/provenance layer and local-first workflow, while Austrian tax semantics live in the Kassiber-maintained RP2 fork / plugin path. Remaining work is mostly around exports, review UX, and broader coverage. See `06-austrian-tax-engine.md`.
 
 Plus two smaller cross-cutting feature tracks:
@@ -49,7 +49,7 @@ Plus two smaller cross-cutting feature tracks:
 
 **PySide6 + QML.** Python everywhere, native widgets, no webview, no Node in any form, direct `import kassiber.core` from the UI. QtCharts for the balance chart. `briefcase` for packaging.
 
-**Honest second place:** Tauri + SvelteKit + Python sidecar. Ruled out for this project because two-language maintenance costs more than pixel-perfect Clams aesthetic is worth.
+**Honest second place:** Tauri + SvelteKit + Python sidecar. Ruled out for this project because two-language maintenance costs more than browser-native visual fidelity is worth.
 
 ## Target platforms
 
@@ -64,7 +64,7 @@ Plus two smaller cross-cutting feature tracks:
 |---|---|---|
 | **0** | Library extraction: `kassiber.core`, `kassiber.cli`. Smoke tests stay green. | Done |
 | **0.5** | Austrian RP2 integration, attachments, and rates/journal follow-through. E 1kv export remains pending. | Mostly done |
-| **1** | PySide6 app shell, empty state matching Clams screenshot 2 | 2 days |
+| **1** | PySide6 app shell, empty state matching the approved reference state | 2 days |
 | **2** | Read-only dashboard: six tiles wired to `core/` | 4–6 days |
 | **3** | Add Connection modal, sync action with progress, CSV import, transaction links | 4–5 days |
 | **4** | Welcome wizard, Settings dialog, briefcase packaging for macOS | 3–4 days |

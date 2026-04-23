@@ -5,7 +5,7 @@ description: Use this skill when the user wants to use the Kassiber CLI for loca
 
 # Kassiber
 
-Use this skill for Kassiber CLI workflows. Kassiber is close in shape to Clams, but the command surface is different enough that agents should not guess flags or reuse Clams commands.
+Use this skill for Kassiber CLI workflows. Kassiber has its own command surface, so agents should not guess flags or reuse commands from analogous tools.
 
 All `scripts/` paths in this skill are relative to the directory containing this `SKILL.md` file. Resolve `<skill-dir>` first, then use paths like `<skill-dir>/scripts/verify-state.sh`.
 
@@ -42,7 +42,7 @@ All `scripts/` paths in this skill are relative to the directory containing this
 - For paginated responses like `journals events list` and `metadata records list`, always follow `next_cursor` until it is `null`.
 - Cross-asset `--policy carrying-value` pairing is Austrian-only right now. For other tax countries, BTC ↔ LBTC swaps still need `--policy taxable` and remain on the normal SELL + BUY path.
 - `kassiber status` may resolve to a legacy XDG path on machines with older state trees. Use status output, not assumptions, to find the live database.
-- Kassiber already has `reports export-pdf`; do not invent Clams-style custom render scripts unless the user specifically wants a custom format beyond the built-in export.
+- Kassiber already has `reports export-pdf`; do not invent bespoke render scripts unless the user specifically wants a custom format beyond the built-in export.
 
 ## Data Model
 
