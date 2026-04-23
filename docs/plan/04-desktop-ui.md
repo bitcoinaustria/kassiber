@@ -195,7 +195,7 @@ Artifacts from each design session live under `docs/design/phase-<n>/<screen>/` 
 
 - Date range inputs: two date-pickers ("From", "To")
 - Quick-select pills: "One week", "Month to date", "Last month", "Current quarter", "Last quarter", "Year to date" — each colored per theme `pill_*` tokens
-- Account dropdown: lists all accounts from `core.accounts.list_accounts(conn)`
+- Bucket dropdown: lists wallet/reporting buckets from `core.accounts.list_accounts(conn)`
 - Tag dropdown: lists all tags from `core.tags.list_tags(conn)`
 - "Reset" button clears all filters
 - Filter state is exposed as view-model properties that other tiles observe
@@ -221,10 +221,10 @@ Artifacts from each design session live under `docs/design/phase-<n>/<screen>/` 
 
 ### Tile 6 — Balances
 
-- Account-type rollups: Assets, Income, Expenses, Liabilities, Equity
-- Chevron expands to show sub-accounts under Income and Expenses
+- Wallet/reporting bucket rollups using the same grouping as `reports balance-sheet`
 - Sats displayed with 8-decimal grouping and B symbol per the mockup
-- Values come from `core.reports.balances(conn, *, as_of=filters.to_date, account_id=filters.account_id)`
+- Values come from the processed journal state through `core.reports.report_balance_sheet(...)`
+- `account_type` is descriptive metadata in the current bucket model; it does not drive double-entry Assets / Income / Expenses / Liabilities / Equity rollups yet
 
 ### Tile 7 — Exports
 

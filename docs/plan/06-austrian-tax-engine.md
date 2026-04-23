@@ -374,7 +374,7 @@ The scenarios below remain the desired target suite as provenance support expand
 2. Keep `kassiber/core/engines/base.py` limited to `TaxEngineLedgerInputs` / `TaxEngineLedgerResult` and `build_ledger_state(...)`
 3. Keep `kassiber/core/engines/rp2.py` as the only long-term tax-engine adapter in Kassiber
 4. Implement Austrian country / accounting / report plugins in `bitcoinaustria/rp2`
-5. Use Kassiber's transfer detection, manual pairing, and multi-account preparation to feed the Austrian RP2 path clean inputs
+5. Use Kassiber's transfer detection, manual pairing, and wallet-bucket preparation to feed the Austrian RP2 path clean inputs
 6. Add Austrian-specific report/export code on top of the shared journal output, likely under `kassiber/core/reports.py` or a dedicated report helper once the shape is stable
 7. Add any explicit tax-annotation storage only if the normalizer cannot derive legally defensible semantics from existing provenance
 8. Expand regression coverage from the current fail-fast checks to the scenario suite above and use it as the parity gate for re-enabling Austrian profiles

@@ -448,7 +448,7 @@ Item {
                     Layout.fillHeight: true
                     Layout.preferredWidth: 1
                     title: "Balances"
-                    subtitle: "Account-level balances not wired yet."
+                    subtitle: "Wallet bucket balances not wired yet."
 
                     Rectangle {
                         anchors.left: parent.left
@@ -495,7 +495,7 @@ Item {
                     Layout.fillWidth: true
                     Layout.preferredWidth: 1
                     title: "Journal entries"
-                    subtitle: "Debit / credit \u00b7 double-entry"
+                    subtitle: "Processed tax journal"
                     detail: {
                         var entries = reportsVM ? reportsVM.summaryCards : []
                         for (var i = 0; i < entries.length; i++) {

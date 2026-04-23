@@ -169,7 +169,7 @@ Item {
                     Layout.preferredWidth: 360
                     Layout.maximumWidth: 480
                     text: root.searchQuery
-                    placeholderText: "Search counterparty, tag, account..."
+                    placeholderText: "Search counterparty, tag, bucket..."
                     onTextChanged: root.searchQuery = text
                 }
 
@@ -235,7 +235,7 @@ Item {
 
                     Text { Layout.preferredWidth: root.colDate; text: "DATE"; color: Design.ink3(theme); font.family: Design.sans(); font.pixelSize: theme.fontMicro; font.weight: Font.DemiBold; font.letterSpacing: 1.2 }
                     Text { Layout.preferredWidth: root.colType; text: "TYPE"; color: Design.ink3(theme); font.family: Design.sans(); font.pixelSize: theme.fontMicro; font.weight: Font.DemiBold; font.letterSpacing: 1.2 }
-                    Text { Layout.preferredWidth: root.colAccount; text: "ACCOUNT"; color: Design.ink3(theme); font.family: Design.sans(); font.pixelSize: theme.fontMicro; font.weight: Font.DemiBold; font.letterSpacing: 1.2 }
+                    Text { Layout.preferredWidth: root.colAccount; text: "BUCKET"; color: Design.ink3(theme); font.family: Design.sans(); font.pixelSize: theme.fontMicro; font.weight: Font.DemiBold; font.letterSpacing: 1.2 }
                     Text { Layout.fillWidth: true; text: "COUNTERPARTY"; color: Design.ink3(theme); font.family: Design.sans(); font.pixelSize: theme.fontMicro; font.weight: Font.DemiBold; font.letterSpacing: 1.2 }
                     Text { Layout.preferredWidth: root.colTag; text: "TAG"; color: Design.ink3(theme); font.family: Design.sans(); font.pixelSize: theme.fontMicro; font.weight: Font.DemiBold; font.letterSpacing: 1.2 }
                     Text { Layout.preferredWidth: root.colSats; text: "SATS"; color: Design.ink3(theme); font.family: Design.sans(); font.pixelSize: theme.fontMicro; font.weight: Font.DemiBold; font.letterSpacing: 1.2; horizontalAlignment: Text.AlignRight }

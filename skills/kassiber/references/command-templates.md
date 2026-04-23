@@ -66,7 +66,7 @@ Bitcoin descriptor template:
 kassiber wallets create \
   --label <wallet-label> \
   --kind descriptor \
-  --account <account-name> \
+  --account <bucket-code> \
   --backend mempool \
   --descriptor-file <receive-descriptor-file> \
   --change-descriptor-file <change-descriptor-file>
@@ -78,7 +78,7 @@ Liquid descriptor template:
 kassiber wallets create \
   --label <wallet-label> \
   --kind descriptor \
-  --account <account-name> \
+  --account <bucket-code> \
   --backend liquid \
   --chain liquid \
   --network liquidv1 \

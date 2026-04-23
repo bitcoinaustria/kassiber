@@ -11,7 +11,7 @@ Button {
     property string role: "Owner"
     property string lastOpened: ""
     property string taxPolicy: ""
-    property int accountsCount: 0
+    property int bucketsCount: 0
     property int walletsCount: 0
     property bool active: false
 
@@ -137,7 +137,7 @@ Button {
                     spacing: 2
 
                     Text {
-                        text: "ACCOUNTS"
+                        text: "BUCKETS"
                         color: Design.ink3(theme)
                         font.family: Design.mono(theme)
                         font.pixelSize: theme.fontMicro
@@ -145,7 +145,7 @@ Button {
                     }
 
                     Text {
-                        text: String(root.accountsCount)
+                        text: String(root.bucketsCount)
                         color: Design.ink(theme)
                         font.family: Design.mono(theme)
                         font.pixelSize: theme.fontBodySmall

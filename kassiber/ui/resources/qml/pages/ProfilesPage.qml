@@ -20,23 +20,23 @@ Item {
             id: "w1", name: "My Books", kind: "Personal",
             currency: "EUR", jurisdiction: "Austria", created: "2024-03-12",
             profiles: [
-                { id: "p1", name: "Alice",                role: "Owner", taxPolicy: "Private \u00b7 \u00a727b EStG \u00b7 1 year spec.", accounts: 4, wallets: 5, lastOpened: "Just now" },
-                { id: "p2", name: "Alice \u00b7 Self-employed", role: "Owner", taxPolicy: "Self-employed \u00b7 FIFO \u00b7 full income tax", accounts: 3, wallets: 2, lastOpened: "3 days ago" }
+                { id: "p1", name: "Alice",                role: "Owner", taxPolicy: "Private \u00b7 \u00a727b EStG \u00b7 1 year spec.", buckets: 4, wallets: 5, lastOpened: "Just now" },
+                { id: "p2", name: "Alice \u00b7 Self-employed", role: "Owner", taxPolicy: "Self-employed \u00b7 FIFO \u00b7 full income tax", buckets: 3, wallets: 2, lastOpened: "3 days ago" }
             ]
         },
         {
             id: "w2", name: "Hyperion OG", kind: "Business",
             currency: "EUR", jurisdiction: "Austria", created: "2024-09-01",
             profiles: [
-                { id: "p3", name: "Hyperion OG \u00b7 Operating", role: "Treasurer", taxPolicy: "Business \u00b7 FIFO \u00b7 K\u00f6St + KESt split",   accounts: 6, wallets: 8, lastOpened: "Yesterday" },
-                { id: "p4", name: "Hyperion OG \u00b7 Treasury",  role: "Treasurer", taxPolicy: "Business \u00b7 FIFO \u00b7 long-term hold",           accounts: 2, wallets: 3, lastOpened: "1 week ago" }
+                { id: "p3", name: "Hyperion OG \u00b7 Operating", role: "Treasurer", taxPolicy: "Business \u00b7 FIFO \u00b7 K\u00f6St + KESt split",   buckets: 6, wallets: 8, lastOpened: "Yesterday" },
+                { id: "p4", name: "Hyperion OG \u00b7 Treasury",  role: "Treasurer", taxPolicy: "Business \u00b7 FIFO \u00b7 long-term hold",           buckets: 2, wallets: 3, lastOpened: "1 week ago" }
             ]
         },
         {
             id: "w3", name: "Family", kind: "Household",
             currency: "EUR", jurisdiction: "Austria", created: "2025-02-18",
             profiles: [
-                { id: "p5", name: "Household", role: "Owner", taxPolicy: "Private \u00b7 shared \u00b7 1 year spec.", accounts: 2, wallets: 3, lastOpened: "2 weeks ago" }
+                { id: "p5", name: "Household", role: "Owner", taxPolicy: "Private \u00b7 shared \u00b7 1 year spec.", buckets: 2, wallets: 3, lastOpened: "2 weeks ago" }
             ]
         }
     ]
@@ -92,7 +92,7 @@ Item {
                     Text {
                         Layout.fillWidth: true
                         Layout.maximumWidth: 640
-                        text: "Each profile keeps its own books, tax policy, accounts and wallets. " +
+                        text: "Each profile keeps its own books, tax policy, wallet buckets and wallets. " +
                               "Nothing is shared across profiles \u2014 switching reloads the ledger in read-only mode."
                         color: Design.ink2(theme)
                         font.family: Design.sans()
@@ -195,7 +195,7 @@ Item {
                                 role: modelData.role
                                 lastOpened: modelData.lastOpened
                                 taxPolicy: modelData.taxPolicy
-                                accountsCount: modelData.accounts
+                                bucketsCount: modelData.buckets
                                 walletsCount: modelData.wallets
                                 active: root.activeProfileId === modelData.id
                                 onClicked: root.activeProfileId = modelData.id

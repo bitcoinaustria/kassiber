@@ -36,10 +36,11 @@ RP2_ACCOUNTING_METHODS = (
     "MOVING_AVERAGE",
     "MOVING_AVERAGE_AT",
 )
+# Accounts are wallet/reporting buckets today, not double-entry destinations.
+# Keep the new-profile seed deliberately small so defaults do not imply
+# automatic fee or external-counterparty postings.
 _DEFAULT_ACCOUNTS = (
     ("treasury", "Treasury", "asset", "BTC"),
-    ("fees", "Fees", "expense", "BTC"),
-    ("external", "External", "equity", None),
 )
 
 

@@ -16,7 +16,7 @@ A **local-first Bitcoin accounting CLI**, written in Python.
 - Tax engine: [RP2](https://github.com/eprbell/rp2), with both `generic` and `at` profiles running through `kassiber/core/engines/rp2.py`; Austrian semantics come from [bitcoinaustria/rp2](https://github.com/bitcoinaustria/rp2), while Kassiber keeps normalization, provenance, and report mapping
 - External I/O: Esplora / Electrum / Bitcoin Core RPC; CoinGecko for rates; Phoenix/BTCPay/BIP329 importers
 - Test contract: `tests/test_cli_smoke.py` pins the machine-readable JSON envelope emitted by every CLI command — this is the reliable seam the whole plan hangs on
-- Data model: workspaces → profiles → accounts → wallets → transactions, with journal_entries, journal_quarantines, transaction_pairs, tags, bip329_labels, backends, rates_cache
+- Data model: workspaces → profiles → account buckets → wallets → transactions, with journal_entries, journal_quarantines, transaction_pairs, tags, bip329_labels, backends, rates_cache
 
 ## What we're building
 

@@ -30,7 +30,7 @@ It should be thought of as a thin local UI over the same core functionality the 
 
 Use the CLI for the real workflow:
 
-- creating workspaces, profiles, accounts, wallets
+- creating workspaces, profiles, wallet/reporting buckets, wallets
 - syncing transactions
 - imports
 - journal processing
