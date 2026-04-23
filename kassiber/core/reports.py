@@ -978,7 +978,7 @@ def build_pdf_report_lines(conn, workspace_ref, profile_ref, hooks: ReportHooks,
     if balance_table_rows:
         lines.extend(
             hooks.format_table(
-                ["Account", "Asset", "Quantity", "Cost Basis", "Market Value", "Unrealized"],
+                ["Bucket", "Asset", "Quantity", "Cost Basis", "Market Value", "Unrealized"],
                 balance_table_rows,
                 [16, 6, 14, 14, 14, 14],
                 align_right={2, 3, 4, 5},
@@ -1004,7 +1004,7 @@ def build_pdf_report_lines(conn, workspace_ref, profile_ref, hooks: ReportHooks,
     if portfolio_table_rows:
         lines.extend(
             hooks.format_table(
-                ["Wallet", "Account", "Asset", "Quantity", "Avg Cost", "Cost Basis", "Market", "Unreal."],
+                ["Wallet", "Bucket", "Asset", "Quantity", "Avg Cost", "Cost Basis", "Market", "Unreal."],
                 portfolio_table_rows,
                 [16, 12, 6, 12, 12, 12, 12, 12],
                 align_right={3, 4, 5, 6, 7},

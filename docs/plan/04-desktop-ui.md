@@ -195,7 +195,7 @@ Artifacts from each design session live under `docs/design/phase-<n>/<screen>/` 
 
 - Date range inputs: two date-pickers ("From", "To")
 - Quick-select pills: "One week", "Month to date", "Last month", "Current quarter", "Last quarter", "Year to date" — each colored per theme `pill_*` tokens
-- Account dropdown: lists all accounts from `core.accounts.list_accounts(conn)`
+- Bucket dropdown: lists wallet/reporting buckets from `core.accounts.list_accounts(conn)`
 - Tag dropdown: lists all tags from `core.tags.list_tags(conn)`
 - "Reset" button clears all filters
 - Filter state is exposed as view-model properties that other tiles observe

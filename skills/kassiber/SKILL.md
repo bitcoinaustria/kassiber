@@ -100,7 +100,7 @@ Related notes:
 | Cost basis, unrealized gains, portfolio value, average cost, wallet allocation | `portfolio-summary` |
 | Realized gains/losses, disposals, tax reporting, capital gains | `capital-gains` |
 | Yearly gain/loss buckets, long vs short summary, tax totals by year | `tax-summary` |
-| Current balances by account, asset, or wallet | `balance-sheet` |
+| Current balances by bucket, asset, or wallet | `balance-sheet` |
 | Balance changes over time, trends, history | `balance-history` |
 | Raw ledger export, journal rows, bookkeeping output | `journal-entries` |
 | Exact rollups: fees, counts, totals, realized/unrealized summary | `summary` |

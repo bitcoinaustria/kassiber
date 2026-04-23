@@ -448,7 +448,7 @@ Item {
                     Layout.fillHeight: true
                     Layout.preferredWidth: 1
                     title: "Balances"
-                    subtitle: "Account-level balances not wired yet."
+                    subtitle: "Wallet bucket balances not wired yet."
 
                     Rectangle {
                         anchors.left: parent.left

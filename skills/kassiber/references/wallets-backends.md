@@ -103,7 +103,7 @@ kassiber wallets create \
   --change-descriptor-file /path/to/change.desc
 ```
 
-If the user wants a custom account like `project-satoshi`, create that account first and then reference it with `--account`.
+If the user wants a custom wallet/reporting bucket like `project-satoshi`, create that bucket with `accounts create` first and then reference it with `--account`.
 
 Liquid requirements:
 
@@ -129,7 +129,7 @@ Bitcoin descriptor wallet:
 kassiber wallets create \
   --label <wallet-label> \
   --kind descriptor \
-  --account <account-name> \
+  --account <bucket-code> \
   --backend mempool \
   --descriptor-file <receive-descriptor-file> \
   --change-descriptor-file <change-descriptor-file>
@@ -141,7 +141,7 @@ Liquid descriptor wallet:
 kassiber wallets create \
   --label <wallet-label> \
   --kind descriptor \
-  --account <account-name> \
+  --account <bucket-code> \
   --backend liquid \
   --chain liquid \
   --network liquidv1 \
