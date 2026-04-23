@@ -20,6 +20,7 @@ output can still be sensitive.
 - supports multiple workspaces, profiles, accounts, and wallets
 - syncs from `esplora` and `electrum`, plus `bitcoinrpc` for address-based Bitcoin wallets
 - imports generic CSV/JSON, BTCPay exports, Phoenix exports, and BIP329 labels
+- pulls BTCPay on-chain wallet history directly from a BTCPay server via the Greenfield API
 - stores notes, tags, exclusions, transfer pairs, and attachments
 - processes journals explicitly before reports are trusted
 - exposes every command through a deterministic JSON envelope

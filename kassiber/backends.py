@@ -77,7 +77,7 @@ DEFAULT_BACKENDS = {
     },
 }
 
-BACKEND_KINDS = {"bitcoinrpc", "custom", "electrum", "esplora", "liquid-esplora", "mempool"}
+BACKEND_KINDS = {"bitcoinrpc", "btcpay", "custom", "electrum", "esplora", "liquid-esplora", "mempool"}
 DEFAULT_ENV_FILENAME = "backends.env"
 DEFAULT_BACKEND_SETTING = "default_backend"
 BOOTSTRAP_DEFAULT_BACKEND_SETTING = "bootstrap_default_backend"

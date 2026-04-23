@@ -53,8 +53,16 @@ Behavior:
 - `Comment` becomes the transaction note if the note is empty
 - `Labels` become Kassiber tags
 
-BTCPay Greenfield / API-backed provenance import is planned; file import is the
-current path.
+You can also pull the same on-chain wallet history directly from a BTCPay server:
+
+```bash
+python3 -m kassiber wallets sync-btcpay \
+  --wallet btcpay \
+  --backend btcpay-prod \
+  --store-id <store-id>
+```
+
+That API-backed path reuses the same BTCPay normalization and metadata rules as the file import.
 
 You can also create a wallet whose source file is a BTCPay export:
 

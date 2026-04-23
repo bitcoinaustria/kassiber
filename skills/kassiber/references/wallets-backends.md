@@ -114,6 +114,7 @@ BTCPay:
 
 ```bash
 kassiber wallets import-btcpay --wallet btcpay --file /path/to/export.csv --input-format csv
+kassiber wallets sync-btcpay --wallet btcpay --backend btcpay-prod --store-id <store-id>
 ```
 
 Phoenix:
