@@ -758,15 +758,15 @@ def sync_btcpay_into_wallet(
         page_size=page_size,
     )
     hooks = _import_coordinator_hooks()
-    outcome = core_imports.insert_wallet_records(
+    outcome = core_imports.import_records_into_wallet(
         conn,
         profile,
         wallet,
         records,
         f"btcpay:{backend['name']}:{store_id}",
         hooks,
+        apply_btcpay=True,
     )
-    outcome.update(core_imports.apply_btcpay_metadata(conn, profile, wallet, records, hooks))
     outcome["backend"] = backend["name"]
     outcome["backend_kind"] = kind
     outcome["backend_url"] = redact_backend_url(backend["url"])

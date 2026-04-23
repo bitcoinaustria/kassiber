@@ -18,7 +18,7 @@ from urllib import request as urlrequest
 
 from .backends import backend_timeout, backend_value
 from .errors import AppError
-from .importers import normalize_btcpay_record
+from .importers import normalize_btcpay_record, parse_btcpay_labels
 
 
 DEFAULT_PAYMENT_METHOD_ID = "BTC-CHAIN"
@@ -157,27 +157,13 @@ def _to_record(tx, payment_method_id):
     if timestamp is None:
         raise AppError("BTCPay transaction is missing 'timestamp'", code="protocol_error")
     occurred_at = _unix_to_iso(timestamp)
-    labels_raw = tx.get("labels")
-    label_names = []
-    if isinstance(labels_raw, dict):
-        for key, item in labels_raw.items():
-            text = item.get("text") if isinstance(item, dict) else item
-            if text is None and key:
-                text = key
-            if text:
-                label_names.append(str(text))
-    elif isinstance(labels_raw, list):
-        for item in labels_raw:
-            text = item.get("text") if isinstance(item, dict) else item
-            if text:
-                label_names.append(str(text))
     csv_shaped = {
         "TransactionId": tx.get("transactionHash") or "",
         "Timestamp": occurred_at,
         "Currency": currency,
         "Amount": str(tx.get("amount") if tx.get("amount") is not None else "0"),
         "Comment": tx.get("comment") or "",
-        "Labels": label_names,
+        "Labels": parse_btcpay_labels(tx.get("labels")),
     }
     return normalize_btcpay_record(csv_shaped)
 

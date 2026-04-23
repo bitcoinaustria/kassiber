@@ -2387,6 +2387,48 @@ class ReviewRegressionTest(unittest.TestCase):
         self.assertEqual(payload["data"]["input_format"], "btcpay_csv")
         self.assertEqual(payload["data"]["imported"], 1)
 
+    def test_btcpay_import_json_accepts_object_label_shape(self):
+        self._bootstrap_wallet(label="BTCPayJSON")
+        btcpay_json = self.case_dir / "btcpay.json"
+        btcpay_json.write_text(
+            json.dumps(
+                [
+                    {
+                        "TransactionId": "tx-json-1",
+                        "Timestamp": "2024-01-01T00:00:00Z",
+                        "Currency": "BTC",
+                        "Amount": "0.001 BTC",
+                        "Comment": "seeded",
+                        "Labels": {
+                            "merchant": {"type": "invoice", "text": "merchant"},
+                            "fallback-label": {},
+                        },
+                    }
+                ]
+            ),
+            encoding="utf-8",
+        )
+        payload, result = self._run_json(
+            "wallets",
+            "import-btcpay",
+            "--workspace",
+            "Main",
+            "--profile",
+            "Default",
+            "--wallet",
+            "BTCPayJSON",
+            "--file",
+            str(btcpay_json),
+            "--format",
+            "json",
+        )
+        self._assert_ok(payload, result, "wallets.import-btcpay")
+        self.assertEqual(payload["data"]["input_format"], "btcpay_json")
+        self.assertEqual(payload["data"]["imported"], 1)
+        self.assertEqual(payload["data"]["btcpay_notes_set"], 1)
+        self.assertEqual(payload["data"]["btcpay_tags_added"], 2)
+        self.assertEqual(payload["data"]["btcpay_tags_created"], 2)
+
     def test_btcpay_sync_greenfield_api_pages_and_sets_metadata(self):
         page_one = [
             {
