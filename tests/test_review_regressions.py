@@ -437,6 +437,26 @@ class ReviewRegressionTest(unittest.TestCase):
         self.assertNotIn("{'wallets_in_scope':", result.stdout)
         self.assertNotIn("{'cost_basis':", result.stdout)
 
+    def test_pdf_export_bundled_fonts_are_packaged_and_loadable(self):
+        from kassiber import pdf_report
+
+        for key in pdf_report.PDF_FONT_FILES:
+            self.assertTrue(pdf_report._bundled_pdf_font_path(key).exists())
+
+        os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+        try:
+            from PySide6.QtGui import QFontDatabase, QGuiApplication
+        except ImportError as exc:
+            self.skipTest(f"PySide6 QtGui unavailable in this environment: {exc}")
+
+        _app = QGuiApplication.instance() or QGuiApplication(["kassiber-font-test"])
+        families = pdf_report._load_bundled_pdf_font_families(QFontDatabase)
+
+        self.assertIn("body", families)
+        self.assertIn("mono", families)
+        self.assertTrue(families["body"])
+        self.assertTrue(families["mono"])
+
     def test_tax_summary_total_rows_leave_quantity_blank_for_mixed_assets(self):
         self._bootstrap_profile()
         for label in ("BTC", "LBTC"):
