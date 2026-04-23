@@ -9,6 +9,7 @@ from typing import Any, Callable, Mapping, MutableMapping, Sequence
 
 from ..errors import AppError
 from ..util import str_or_none
+from .wallets import wallet_btcpay_sync_config
 
 WalletRow = Mapping[str, Any]
 ProfileRow = Mapping[str, Any]
@@ -26,6 +27,10 @@ NormalizeAddresses = Callable[[Any], Sequence[str]]
 BackendAdapter = Callable[
     [Mapping[str, Any], WalletRow, "WalletSyncState"],
     tuple[Sequence[BackendRecord], Mapping[str, Any]],
+]
+SyncBTCPayWallet = Callable[
+    [sqlite3.Connection, RuntimeConfig, ProfileRow, WalletRow],
+    SyncOutcome,
 ]
 
 
@@ -48,6 +53,7 @@ class WalletSyncHooks:
     resolve_sync_state: ResolveSyncState
     normalize_addresses: NormalizeAddresses
     backend_adapters: Mapping[str, BackendAdapter]
+    sync_btcpay_wallet: SyncBTCPayWallet | None = None
 
 
 def normalize_backend_kind(kind: Any) -> str:
@@ -121,10 +127,17 @@ def sync_wallets(
     results = []
     for wallet in wallets:
         config = json.loads(wallet["config_json"] or "{}")
+        btcpay_config = wallet_btcpay_sync_config(config)
         source_file = config.get("source_file")
         source_format = config.get("source_format")
         addresses = hooks.normalize_addresses(config.get("addresses"))
         has_descriptor = bool(str_or_none(config.get("descriptor")))
+        if btcpay_config:
+            if hooks.sync_btcpay_wallet is None:
+                raise AppError("BTCPay wallet sync is not configured for this runtime")
+            outcome = hooks.sync_btcpay_wallet(conn, runtime_config, profile, wallet)
+            results.append({"wallet": wallet["label"], "status": "synced", **outcome})
+            continue
         if source_file and source_format:
             outcome = hooks.import_file(conn, profile, wallet, source_file, source_format)
             results.append({"wallet": wallet["label"], "status": "synced", **outcome})

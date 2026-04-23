@@ -18,7 +18,7 @@ output can still be sensitive.
 
 - keeps a local SQLite system of record
 - supports multiple workspaces, profiles, accounts, and wallets
-- syncs from `esplora` and `electrum`, plus `bitcoinrpc` for address-based Bitcoin wallets
+- syncs from `esplora` and `electrum`, plus `bitcoinrpc` for address-based Bitcoin wallets and confirmed BTCPay Greenfield wallet history
 - imports generic CSV/JSON, BTCPay exports, Phoenix exports, and BIP329 labels
 - pulls confirmed BTCPay on-chain wallet history directly from a BTCPay server via the Greenfield API
 - stores notes, tags, exclusions, transfer pairs, and attachments
@@ -83,6 +83,11 @@ reporting can still break holdings and activity down by wallet and account.
 If you use multiple BTCPay stores, only model them as multiple Kassiber wallets
 when they are actually different underlying wallets. If two stores point at the
 same wallet, creating both in Kassiber would duplicate holdings.
+
+BTCPay-backed wallets now persist their `backend` / `store_id` /
+`payment_method_id` config on the wallet itself, so later `wallets sync`,
+`wallets sync --all`, and future GUI flows can reuse the same source without
+retyping `--store-id`.
 
 ## Local state
 
@@ -201,7 +206,7 @@ Contributor docs:
 Notable gaps today:
 
 - Austrian E 1kv export is not shipped yet
-- full BTCPay invoice/payment provenance ingest is not implemented yet; `wallets sync-btcpay` currently pulls confirmed on-chain wallet history plus comments/labels
+- full BTCPay invoice/payment provenance ingest is not implemented yet; BTCPay sync currently covers confirmed on-chain wallet history plus comments/labels
 - descriptor/xpub live sync through `bitcoinrpc` is not implemented yet
 - some Lightning node adapters are declared but do not sync yet
 - `custom` wallet import mapping is not implemented yet

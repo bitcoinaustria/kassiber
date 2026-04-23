@@ -115,8 +115,14 @@ BTCPay:
 ```bash
 kassiber wallets import-btcpay --wallet btcpay --file /path/to/export.csv --input-format csv
 kassiber backends create btcpay-prod --kind btcpay --url https://btcpay.example.com --token <api-key>
-kassiber wallets sync-btcpay --wallet btcpay --backend btcpay-prod --store-id <store-id>
+kassiber wallets create --label btcpay-shop --kind custom --backend btcpay-prod --store-id <store-id>
+kassiber wallets sync --wallet btcpay-shop
+kassiber wallets sync-btcpay --wallet btcpay-shop --backend btcpay-prod --store-id <store-id>
 ```
+
+`wallets sync-btcpay` keeps the old explicit shape, but it now stores the same
+BTCPay backend/store config on the wallet so later `wallets sync` and
+`wallets sync --all` can reuse it.
 
 Phoenix:
 
@@ -132,6 +138,7 @@ kassiber wallets import-csv --wallet wallet-name --file /path/to/data.csv
 ```
 
 Do not create a second wallet for a BTCPay or Phoenix export when it belongs to a wallet already tracked in Kassiber.
+Do not create one Kassiber wallet per BTCPay store if multiple stores share the same underlying wallet balance.
 
 ## Austrian profiles
 
