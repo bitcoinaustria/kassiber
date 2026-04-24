@@ -4133,7 +4133,7 @@ class ReviewRegressionTest(unittest.TestCase):
         )
         self._assert_ok(payload, result, "reports.austrian-tax-summary")
         self.assertEqual(payload["data"]["form"], "E 1kv")
-        self.assertEqual(payload["data"]["year"], 2024)
+        self.assertEqual(payload["data"]["tax_year"], 2024)
         self.assertEqual(payload["data"]["sections"]["2.1"]["totals"]["amount_eur_cents"], 800)
 
         csv_file = self.case_dir / "austrian-e1kv.csv"
@@ -4198,6 +4198,117 @@ class ReviewRegressionTest(unittest.TestCase):
         self.assertIn('name="Sections"', workbook_xml)
         self.assertIn("at-e1kv-staking", shared_strings)
         self.assertIn("Form amount EUR", shared_strings)
+        self.assertIn(
+            "AT-E1KV-KENNZAHL-REPROCESS",
+            {assumption["code"] for assumption in report["assumptions"]},
+        )
+
+    def test_austrian_e1kv_reports_loss_as_positive_kz176(self):
+        payload, result = self._run_json("init")
+        self._assert_ok(payload, result, "init")
+        payload, result = self._run_json("workspaces", "create", "Main")
+        self._assert_ok(payload, result, "workspaces.create")
+        payload, result = self._run_json(
+            "profiles", "create",
+            "--workspace", "Main",
+            "--fiat-currency", "EUR",
+            "--tax-country", "at",
+            "Default",
+        )
+        self._assert_ok(payload, result, "profiles.create")
+        payload, result = self._run_json(
+            "wallets", "create",
+            "--workspace", "Main",
+            "--profile", "Default",
+            "--label", "AustrianLoss",
+            "--kind", "custom",
+        )
+        self._assert_ok(payload, result, "wallets.create")
+        json_file = self.case_dir / "austrian-loss-import.json"
+        json_file.write_text(
+            json.dumps(
+                [
+                    {
+                        "date": "2024-02-01",
+                        "direction": "inbound",
+                        "asset": "BTC",
+                        "amount": "0.001",
+                        "fee": "0",
+                        "kind": "buy",
+                        "txid": "at-loss-buy",
+                        "fiat_value": "80",
+                    },
+                    {
+                        "date": "2024-08-01",
+                        "direction": "outbound",
+                        "asset": "BTC",
+                        "amount": "0.0005",
+                        "fee": "0",
+                        "kind": "sell",
+                        "txid": "at-loss-sell",
+                        "fiat_value": "30",
+                    },
+                ]
+            ),
+            encoding="utf-8",
+        )
+        payload, result = self._run_json(
+            "wallets", "import-json",
+            "--workspace", "Main",
+            "--profile", "Default",
+            "--wallet", "AustrianLoss",
+            "--file", str(json_file),
+        )
+        self._assert_ok(payload, result, "wallets.import-json")
+        payload, result = self._run_json(
+            "journals", "process",
+            "--workspace", "Main",
+            "--profile", "Default",
+        )
+        self._assert_ok(payload, result, "journals.process")
+
+        payload, result = self._run_json(
+            "reports", "austrian-e1kv",
+            "--workspace", "Main",
+            "--profile", "Default",
+            "--year", "2024",
+        )
+        self._assert_ok(payload, result, "reports.austrian-e1kv")
+        report = payload["data"]
+        summary_by_kennzahl = {row["kennzahl"]: row for row in report["summary_rows"]}
+        # Basis 40 EUR, proceeds 30 EUR → loss 10 EUR. KZ 176 reports abs value.
+        self.assertEqual(summary_by_kennzahl[176]["amount_eur_cents"], 1000)
+        self.assertEqual(summary_by_kennzahl[174]["amount_eur_cents"], 0)
+        rows_by_tx = {row["tx_id"]: row for row in report["rows"]}
+        loss_row = rows_by_tx["at-loss-sell"]
+        self.assertEqual(loss_row["kennzahl"], 176)
+        self.assertEqual(loss_row["gain_loss_eur_cents"], -1000)
+        self.assertEqual(loss_row["form_amount_eur_cents"], 1000)
+        self.assertEqual(report["sections"]["1.1"]["totals"]["gain_loss_eur_cents"], -1000)
+
+    def test_austrian_e1kv_rejects_non_austrian_profile(self):
+        payload, result = self._run_json("init")
+        self._assert_ok(payload, result, "init")
+        payload, result = self._run_json("workspaces", "create", "Main")
+        self._assert_ok(payload, result, "workspaces.create")
+        payload, result = self._run_json(
+            "profiles", "create",
+            "--workspace", "Main",
+            "--fiat-currency", "USD",
+            "--tax-country", "generic",
+            "Generic",
+        )
+        self._assert_ok(payload, result, "profiles.create")
+        payload, result = self._run_json(
+            "reports", "austrian-e1kv",
+            "--workspace", "Main",
+            "--profile", "Generic",
+            "--year", "2024",
+        )
+        self.assertEqual(result.returncode, 1, msg=payload)
+        self.assertEqual(payload.get("kind"), "error")
+        self.assertEqual(payload["error"]["code"], "validation")
+        self.assertIn("Austrian", payload["error"]["message"])
 
     def test_attachments_verify_reports_missing_file(self):
         self._bootstrap_wallet(label="Attachable")

@@ -1358,12 +1358,12 @@ def dispatch(conn: sqlite3.Connection | None, args: argparse.Namespace) -> Any:
                         )
                     ),
                 )
-            report = core_reports.report_austrian_tax_summary(
+            report = core_reports.report_austrian_e1kv(
                 conn,
                 args.workspace,
                 args.profile,
                 report_hooks,
-                year=args.year,
+                tax_year=args.year,
             )
             if args.format == "csv":
                 return emit(args, report["summary_rows"])
@@ -1440,13 +1440,13 @@ def dispatch(conn: sqlite3.Connection | None, args: argparse.Namespace) -> Any:
         if args.reports_command == "export-austrian":
             return emit(
                 args,
-                core_reports.export_austrian_pdf_report(
+                core_reports.export_austrian_e1kv_pdf_report(
                     conn,
                     args.workspace,
                     args.profile,
                     args.file,
                     report_hooks,
-                    year=args.year,
+                    tax_year=args.year,
                 ),
             )
         if args.reports_command == "export-austrian-e1kv-xlsx":
