@@ -413,6 +413,10 @@ def _write_qt_text_pdf(file_path, title, lines):
 
     html = _build_report_html(title, lines, font_families["body"], font_families["mono"])
     writer = QPdfWriter(str(path))
+    # QPdfWriter defaults to 1200 DPI. QTextDocument lays out against the
+    # writer's device dimensions, so using the default makes report content
+    # render as a tiny block in the corner of an A4 page.
+    writer.setResolution(96)
     writer.setPageLayout(
         QPageLayout(
             QPageSize(QPageSize.PageSizeId.A4),

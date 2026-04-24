@@ -47,6 +47,11 @@ AUSTRIAN_E1KV_CATEGORY_LABELS = {
     "alt_spekulation": "Altbestand innerhalb Spekulationsfrist",
     "alt_taxfree": "Altbestand ausserhalb Spekulationsfrist",
 }
+AUSTRIAN_E1KV_SECTION_TITLES = {
+    172: "2. Steuerpflichtige laufende Einkuenfte aus Kryptowaehrungen",
+    174: "1.1. Realisierte Wertsteigerungen aus Kryptowaehrungen",
+    176: "1.1. Realisierte Wertverluste aus Kryptowaehrungen",
+}
 
 ScopeResolver = Callable[[sqlite3.Connection, str | None, str | None], tuple[Mapping[str, Any], Mapping[str, Any]]]
 AccountResolver = Callable[[sqlite3.Connection, str, str], Mapping[str, Any]]
@@ -1159,37 +1164,62 @@ def _build_austrian_e1kv_report_lines(conn, workspace_ref, profile_ref, hooks: R
         )
     )
 
+    lines.extend(["", "I. Uebersicht", "------------"])
+    for row in report["summary_rows"]:
+        section_title = AUSTRIAN_E1KV_SECTION_TITLES.get(row["kennzahl"], row["label"])
+        lines.append(f"{section_title}: {_report_eur_cents(row['amount_eur_cents'])} EUR")
+
     lines.extend(["", "Assumptions", "-----------"])
     for assumption in report["assumptions"]:
         lines.append(f"{assumption['code']}: {assumption['message']}")
 
-    lines.extend(["", "Transaction Detail", "------------------"])
-    detail_rows = [
-        [
-            row["date"],
-            row["wallet"],
-            row["asset"],
-            row["kind"],
-            row["at_category_label"] or row["at_category"],
-            _report_btc(row["quantity"]),
-            str(row["kennzahl"] or ""),
-            _report_eur_cents(row["cost_basis_eur_cents"]),
-            _report_eur_cents(row["proceeds_eur_cents"]),
-            _report_eur_cents(row["gain_loss_eur_cents"]),
-        ]
-        for row in report["rows"]
-    ]
-    if detail_rows:
+    lines.extend(["", "II. Transactions", "----------------"])
+    if not report["rows"]:
+        lines.append("No Austrian report rows in scope.")
+    for kennzahl in AUSTRIAN_E1KV_SUPPORTED_KENNZAHL_ORDER:
+        section_rows = [row for row in report["rows"] if row["kennzahl"] == kennzahl]
+        if not section_rows:
+            continue
+        lines.extend(["", AUSTRIAN_E1KV_SECTION_TITLES[kennzahl], "-" * len(AUSTRIAN_E1KV_SECTION_TITLES[kennzahl])])
+        if kennzahl == 172:
+            lines.extend(
+                hooks.format_table(
+                    ["Date", "Tx ID", "Kind", "Category", "Amount EUR"],
+                    [
+                        [
+                            row["date"],
+                            row["tx_id"],
+                            row["kind"],
+                            row["at_category_label"] or row["at_category"],
+                            _report_eur_cents(row["form_amount_eur_cents"]),
+                        ]
+                        for row in section_rows
+                    ],
+                    [10, 24, 16, 34, 14],
+                    align_right={4},
+                )
+            )
+            continue
         lines.extend(
             hooks.format_table(
-                ["Date", "Wallet", "Asset", "Kind", "Category", "Qty", "KZ", "Basis", "Proceeds", "Gain/Loss"],
-                detail_rows,
-                [10, 14, 6, 14, 22, 12, 5, 12, 12, 12],
-                align_right={5, 6, 7, 8, 9},
+                ["Date", "Tx ID", "Proceeds EUR", "Basis EUR", "Gain/Loss EUR"],
+                [
+                    [
+                        row["date"],
+                        row["tx_id"],
+                        _report_eur_cents(row["proceeds_eur_cents"]),
+                        _report_eur_cents(row["cost_basis_eur_cents"]),
+                        _report_eur_cents(row["gain_loss_eur_cents"]),
+                    ]
+                    for row in section_rows
+                ],
+                [10, 28, 14, 14, 15],
+                align_right={2, 3, 4},
             )
         )
-    else:
-        lines.append("No Austrian report rows in scope.")
+    if report["rows"]:
+        lines.append("")
+        lines.append("Full transaction detail, quantities, unit prices, notes, and row-level Kennzahlen are included in the XLSX/CSV export.")
 
     lines.extend(["", "Data Quality", "------------"])
     quarantines = report["data_quality"]["quarantines"]
