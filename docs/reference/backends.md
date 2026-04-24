@@ -1,6 +1,6 @@
 # Backends Reference
 
-Kassiber syncs wallets through named backends. A backend is a pointer to an external indexer or node that Kassiber uses to discover transactions and balances.
+Kassiber syncs wallets through named backends. A backend is a pointer to an external indexer, node, or BTCPay server that Kassiber uses to discover transactions and balances.
 
 Backends are stored canonically in SQLite.
 
@@ -147,11 +147,22 @@ The backend CLI now accepts the common backend-specific knobs directly:
 Use this to pull confirmed on-chain wallet transactions directly from a BTCPay server instead of exporting CSV or JSON from the UI.
 
 - create a backend with `--kind btcpay`, `--url https://btcpay.example.com`, and `--token <greenfield-api-key>`
-- run `python3 -m kassiber wallets sync-btcpay --wallet <label> --backend <btcpay-backend> --store-id <store-id>`
+- store the BTCPay wallet config on the wallet with `wallets create/update --backend <btcpay-backend> --store-id <store-id>`
+- `wallets sync-btcpay --wallet <label> --backend <btcpay-backend> --store-id <store-id>` keeps the legacy one-off CLI shape and now stores that config on the wallet too
+- once the config is stored, `wallets sync --wallet <label>` and `wallets sync --all` reuse it automatically
+- use one Kassiber wallet per real underlying wallet / BTCPay-backed balance source; if multiple BTCPay stores point at the same underlying wallet balance, keep them on one Kassiber wallet or holdings will be duplicated
 - Kassiber requests confirmed rows only, then normalizes them through the existing BTCPay import pipeline so comments become notes and labels become tags
 - the Greenfield wallet-transaction endpoint currently requires the `btcpay.store.canmodifystoresettings` permission on the API key
 
 ## Notes by backend type
+
+### BTCPay
+
+Use this when a BTCPay store is the authoritative transaction source for a real wallet balance.
+
+- best fit for merchant stores where BTCPay comments/labels are part of the local bookkeeping story
+- current sync is confirmed-only and reuses the BTCPay import pipeline so comments become notes and labels become tags
+- this is not full invoice/payment provenance yet; stable invoice ids and raw payload snapshots are still later work
 
 ### Esplora
 

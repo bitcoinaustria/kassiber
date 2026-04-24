@@ -36,6 +36,8 @@ WALLET_KINDS = [
     "custom",
 ]
 REDACTED_CONFIG_VALUE = "[redacted]"
+BTCPAY_SYNC_SOURCE = "btcpay"
+BTCPAY_DEFAULT_PAYMENT_METHOD_ID = "BTC-CHAIN"
 WALLET_SAFE_CONFIG_FIELDS = (
     "addresses",
     "backend",
@@ -43,6 +45,9 @@ WALLET_SAFE_CONFIG_FIELDS = (
     "network",
     "gap_limit",
     "policy_asset",
+    "sync_source",
+    "store_id",
+    "payment_method_id",
     "source_file",
     "source_format",
     "altbestand",
@@ -132,6 +137,55 @@ def wallet_policy_asset_id(config, chain, network):
     return ""
 
 
+def wallet_btcpay_sync_config(config):
+    if not isinstance(config, dict):
+        return None
+    sync_source = str_or_none(config.get("sync_source"))
+    if sync_source is None:
+        return None
+    store_id = str_or_none(config.get("store_id"))
+    payment_method_id = str_or_none(config.get("payment_method_id"))
+    normalized_source = sync_source.strip().lower()
+    if normalized_source != BTCPAY_SYNC_SOURCE:
+        raise AppError(
+            f"Unsupported wallet sync source '{normalized_source}'",
+            code="validation",
+            hint=f"Supported sync sources: {BTCPAY_SYNC_SOURCE}",
+        )
+    backend = str_or_none(config.get("backend"))
+    if backend is None:
+        raise AppError(
+            "BTCPay-backed wallets require a named --backend",
+            code="validation",
+            hint="Set --backend to a btcpay backend before syncing the wallet.",
+        )
+    if store_id is None:
+        raise AppError(
+            "BTCPay-backed wallets require --store-id",
+            code="validation",
+        )
+    return {
+        "sync_source": BTCPAY_SYNC_SOURCE,
+        "backend": backend.lower(),
+        "store_id": store_id,
+        "payment_method_id": payment_method_id or BTCPAY_DEFAULT_PAYMENT_METHOD_ID,
+    }
+
+
+def normalize_btcpay_store_id(value):
+    store_id = str_or_none(value)
+    if store_id is None:
+        raise AppError("BTCPay store id cannot be empty", code="validation")
+    return store_id
+
+
+def normalize_btcpay_payment_method_id(value):
+    payment_method_id = str_or_none(value)
+    if payment_method_id is None:
+        raise AppError("BTCPay payment method id cannot be empty", code="validation")
+    return payment_method_id
+
+
 def parse_wallet_config(args):
     config = {}
     if getattr(args, "config", None):
@@ -174,10 +228,24 @@ def parse_wallet_config(args):
         config["source_file"] = os.path.abspath(args.source_file)
     if getattr(args, "source_format", None):
         config["source_format"] = args.source_format
+    has_btcpay_flag = False
+    if getattr(args, "store_id", None) is not None:
+        config["store_id"] = normalize_btcpay_store_id(args.store_id)
+        has_btcpay_flag = True
+    if getattr(args, "payment_method_id", None) is not None:
+        config["payment_method_id"] = normalize_btcpay_payment_method_id(
+            args.payment_method_id
+        )
+        has_btcpay_flag = True
+    if has_btcpay_flag:
+        config["sync_source"] = BTCPAY_SYNC_SOURCE
     chain, network = wallet_live_chain_config(config)
     if chain:
         config["chain"] = chain
         config["network"] = network
+    btcpay_config = wallet_btcpay_sync_config(config)
+    if btcpay_config:
+        config.update(btcpay_config)
     return config
 
 
@@ -205,6 +273,9 @@ def create_wallet(conn, workspace_ref, profile_ref, label, kind, account_ref=Non
     if chain and network:
         config["chain"] = chain
         config["network"] = network
+    btcpay_config = wallet_btcpay_sync_config(config)
+    if btcpay_config:
+        config.update(btcpay_config)
     wallet_id = str(uuid.uuid4())
     conn.execute(
         """
@@ -424,6 +495,9 @@ def update_wallet(conn, workspace_ref, profile_ref, wallet_ref, updates):
     if chain:
         config["chain"] = chain
         config["network"] = network
+    btcpay_config = wallet_btcpay_sync_config(config)
+    if btcpay_config:
+        config.update(btcpay_config)
 
     conn.execute(
         """
@@ -462,6 +536,8 @@ def delete_wallet(conn, workspace_ref, profile_ref, wallet_ref, cascade=False):
 
 
 __all__ = [
+    "BTCPAY_DEFAULT_PAYMENT_METHOD_ID",
+    "BTCPAY_SYNC_SOURCE",
     "WALLET_KINDS",
     "WALLET_KIND_CATALOG",
     "create_wallet",
@@ -471,10 +547,13 @@ __all__ = [
     "list_wallets",
     "load_wallet_descriptor_plan_from_config",
     "normalize_addresses",
+    "normalize_btcpay_payment_method_id",
+    "normalize_btcpay_store_id",
     "normalize_wallet_kind",
     "parse_wallet_config",
     "read_text_argument",
     "update_wallet",
+    "wallet_btcpay_sync_config",
     "wallet_live_chain_config",
     "wallet_policy_asset_id",
     "wallet_row_to_dict",

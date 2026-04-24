@@ -667,14 +667,35 @@ def _import_file_for_sync(conn, profile, wallet, file_path, input_format):
     )
 
 
-def _insert_records_for_sync(conn, profile, wallet, records, source_label):
-    return core_imports.insert_wallet_records(
+def _import_records_for_sync(
+    conn,
+    profile,
+    wallet,
+    records,
+    source_label,
+    *,
+    apply_btcpay=False,
+    apply_phoenix=False,
+):
+    return core_imports.import_records_into_wallet(
         conn,
         profile,
         wallet,
         records,
         source_label,
         _import_coordinator_hooks(),
+        apply_btcpay=apply_btcpay,
+        apply_phoenix=apply_phoenix,
+    )
+
+
+def _insert_records_for_sync(conn, profile, wallet, records, source_label):
+    return _import_records_for_sync(
+        conn,
+        profile,
+        wallet,
+        records,
+        source_label,
     )
 
 
@@ -686,6 +707,7 @@ def _wallet_sync_hooks():
         resolve_sync_state=core_sync_backends.resolve_wallet_sync_targets,
         normalize_addresses=core_wallets.normalize_addresses,
         backend_adapters=core_sync_backends.SYNC_BACKEND_ADAPTERS,
+        sync_btcpay_wallet=sync_configured_btcpay_wallet,
     )
 
 
@@ -717,6 +739,64 @@ def sync_wallet(conn, runtime_config, workspace_ref, profile_ref, wallet_ref=Non
     )
 
 
+def _sync_btcpay_wallet(
+    conn,
+    runtime_config,
+    profile,
+    wallet,
+    *,
+    page_size=BTCPAY_DEFAULT_PAGE_SIZE,
+):
+    config = json.loads(wallet["config_json"] or "{}")
+    btcpay_config = core_wallets.wallet_btcpay_sync_config(config)
+    if btcpay_config is None:
+        raise AppError(
+            f"Wallet '{wallet['label']}' does not have BTCPay sync configured",
+            code="validation",
+            hint="Run `kassiber wallets sync-btcpay --wallet ... --backend ... --store-id ...` first, or store the config with `wallets update`.",
+        )
+    backend = resolve_backend(runtime_config, btcpay_config["backend"])
+    kind = core_sync.normalize_backend_kind(backend["kind"])
+    if kind != "btcpay":
+        raise AppError(
+            f"Backend '{backend['name']}' has kind '{backend['kind']}', expected 'btcpay'",
+            code="validation",
+            hint="Create a BTCPay backend with `kassiber backends create --kind btcpay --url <server> --token <api-key>`.",
+        )
+    records = fetch_btcpay_records(
+        backend,
+        store_id=btcpay_config["store_id"],
+        payment_method_id=btcpay_config["payment_method_id"],
+        page_size=page_size,
+    )
+    outcome = _import_records_for_sync(
+        conn,
+        profile,
+        wallet,
+        records,
+        f"btcpay:{backend['name']}:{btcpay_config['store_id']}",
+        apply_btcpay=True,
+    )
+    outcome["backend"] = backend["name"]
+    outcome["backend_kind"] = kind
+    outcome["backend_url"] = redact_backend_url(backend["url"])
+    outcome["store_id"] = btcpay_config["store_id"]
+    outcome["payment_method_id"] = btcpay_config["payment_method_id"]
+    outcome["page_size"] = page_size
+    outcome["fetched"] = len(records)
+    return outcome
+
+
+def sync_configured_btcpay_wallet(conn, runtime_config, profile, wallet):
+    return _sync_btcpay_wallet(
+        conn,
+        runtime_config,
+        profile,
+        wallet,
+        page_size=BTCPAY_DEFAULT_PAGE_SIZE,
+    )
+
+
 def sync_btcpay_into_wallet(
     conn,
     runtime_config,
@@ -728,6 +808,10 @@ def sync_btcpay_into_wallet(
     payment_method_id,
     page_size,
 ):
+    store_id = core_wallets.normalize_btcpay_store_id(store_id)
+    payment_method_id = core_wallets.normalize_btcpay_payment_method_id(
+        payment_method_id
+    )
     _, profile = resolve_scope(conn, workspace_ref, profile_ref)
     wallet = resolve_wallet(conn, profile["id"], wallet_ref)
     backend = resolve_backend(runtime_config, backend_name)
@@ -738,30 +822,29 @@ def sync_btcpay_into_wallet(
             code="validation",
             hint="Create a BTCPay backend with `kassiber backends create --kind btcpay --url <server> --token <api-key>`.",
         )
-    records = fetch_btcpay_records(
-        backend,
-        store_id=store_id,
-        payment_method_id=payment_method_id,
-        page_size=page_size,
-    )
-    hooks = _import_coordinator_hooks()
-    outcome = core_imports.import_records_into_wallet(
+    core_wallets.update_wallet(
         conn,
+        workspace_ref,
+        profile_ref,
+        wallet_ref,
+        {
+            "config": {
+                "backend": backend_name,
+                "store_id": store_id,
+                "payment_method_id": payment_method_id,
+                "sync_source": core_wallets.BTCPAY_SYNC_SOURCE,
+            },
+            "clear": [],
+        },
+    )
+    wallet = resolve_wallet(conn, profile["id"], wallet["id"])
+    return _sync_btcpay_wallet(
+        conn,
+        runtime_config,
         profile,
         wallet,
-        records,
-        f"btcpay:{backend['name']}:{store_id}",
-        hooks,
-        apply_btcpay=True,
+        page_size=page_size,
     )
-    outcome["backend"] = backend["name"]
-    outcome["backend_kind"] = kind
-    outcome["backend_url"] = redact_backend_url(backend["url"])
-    outcome["store_id"] = store_id
-    outcome["payment_method_id"] = payment_method_id
-    outcome["page_size"] = page_size
-    outcome["fetched"] = len(records)
-    return outcome
 
 
 def resolve_descriptor_branch_index(plan, branch):

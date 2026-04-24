@@ -275,6 +275,8 @@ def build_parser() -> argparse.ArgumentParser:
     wallets_create.add_argument("--change-descriptor-file")
     wallets_create.add_argument("--gap-limit", type=int)
     wallets_create.add_argument("--policy-asset")
+    wallets_create.add_argument("--store-id")
+    wallets_create.add_argument("--payment-method-id")
     wallets_create.add_argument("--config")
     wallets_create.add_argument("--config-file")
     wallets_create.add_argument("--source-file")
@@ -298,6 +300,8 @@ def build_parser() -> argparse.ArgumentParser:
     wallets_update.add_argument("--network")
     wallets_update.add_argument("--gap-limit", type=int)
     wallets_update.add_argument("--policy-asset")
+    wallets_update.add_argument("--store-id")
+    wallets_update.add_argument("--payment-method-id")
     wallets_update.add_argument("--config")
     wallets_update.add_argument("--config-file")
     wallets_update.add_argument("--clear", action="append", default=[], metavar="FIELD", help="Clear a config field (repeatable)")
@@ -862,6 +866,20 @@ def dispatch(conn: sqlite3.Connection | None, args: argparse.Namespace) -> Any:
                 config_updates["gap_limit"] = args.gap_limit
             if args.policy_asset:
                 config_updates["policy_asset"] = normalize_asset_code(args.policy_asset)
+            has_btcpay_flag = False
+            if args.store_id is not None:
+                config_updates["store_id"] = core_wallets.normalize_btcpay_store_id(
+                    args.store_id
+                )
+                has_btcpay_flag = True
+            if args.payment_method_id is not None:
+                payment_method_id = core_wallets.normalize_btcpay_payment_method_id(
+                    args.payment_method_id
+                )
+                config_updates["payment_method_id"] = payment_method_id
+                has_btcpay_flag = True
+            if has_btcpay_flag:
+                config_updates["sync_source"] = core_wallets.BTCPAY_SYNC_SOURCE
             updates = {
                 "label": args.label,
                 "account": args.account,

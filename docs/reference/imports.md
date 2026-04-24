@@ -6,6 +6,7 @@ Kassiber can ingest transactions and metadata from several sources. Imported dat
 
 - generic JSON / CSV transaction files
 - BTCPay CSV / JSON exports
+- BTCPay Greenfield confirmed wallet history
 - Phoenix CSV exports
 - BIP329 JSONL labels
 
@@ -54,16 +55,36 @@ Behavior:
 - `Comment` becomes the transaction note if the note is empty
 - `Labels` become Kassiber tags
 
-You can also pull confirmed on-chain wallet history directly from a BTCPay server:
+You can also sync confirmed on-chain wallet history directly from a BTCPay store:
 
 ```bash
+python3 -m kassiber backends create btcpay-prod \
+  --kind btcpay \
+  --url https://btcpay.example.com \
+  --token <api-key>
+
+python3 -m kassiber wallets create \
+  --label btcpay-shop \
+  --kind custom \
+  --backend btcpay-prod \
+  --store-id <store-id>
+
+python3 -m kassiber wallets sync --wallet btcpay-shop
+
 python3 -m kassiber wallets sync-btcpay \
-  --wallet btcpay \
+  --wallet btcpay-shop \
   --backend btcpay-prod \
   --store-id <store-id>
 ```
 
-That API-backed path reuses the same BTCPay normalization and metadata rules as the file import, but only imports confirmed rows from the remote wallet history and records their confirmation timestamp for later rate lookup.
+That API-backed path reuses the same BTCPay normalization and metadata rules as the file import, but only imports confirmed rows from the remote wallet history and records their confirmation timestamp for later rate lookup. `wallets sync-btcpay --wallet ... --backend ... --store-id ...` still works too. It stores the same BTCPay config on the wallet and runs the sync immediately, so later `wallets sync` or `wallets sync --all` calls can reuse that wallet config.
+
+Current BTCPay modeling:
+
+- use one Kassiber wallet per real underlying wallet / store-backed balance source
+- multiple BTCPay stores are fine when they point at different underlying wallets
+- if multiple stores point at the same underlying wallet balance, keep them on one Kassiber wallet or holdings will be duplicated
+- the API-backed path is still confirmed-only and is not full invoice/payment provenance yet
 
 You can also create a wallet whose source file is a BTCPay export:
 

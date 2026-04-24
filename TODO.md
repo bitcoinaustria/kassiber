@@ -157,6 +157,7 @@ top of the monolith.
 ### 0.5f - External document reconciliation groundwork
 
 - [ ] Add [docs/plan/08-external-document-reconciliation.md](docs/plan/08-external-document-reconciliation.md) follow-through in code and schema rather than letting merchant/invoice scope drift ad hoc
+- [x] Persist BTCPay confirmed wallet-sync config on wallets so `wallets sync` / `wallets sync --all` can reuse store-backed sources without retyping `--store-id`
 - [ ] Keep BTCPay file import conservative (`deposit` / `withdrawal`) until a confirmed document match or explicit review step reclassifies the transaction
 
 ## Phase 1 - Desktop App
@@ -184,8 +185,7 @@ over the shared core after the extraction work is done.
   explicit counterpart postings, account-type rollups, adjustments, and
   migrations; current `accounts` are wallet/reporting buckets
 - [ ] Per-profile Tor proxy configuration
-- [ ] Attach optional BTCPay `InvoiceId` / payment metadata to rows synced via `wallets sync-btcpay`
-- [ ] Persist optional BTCPay raw payload snapshots only if a concrete reconciliation workflow needs them
+- [ ] Extend BTCPay Greenfield sync beyond confirmed wallet history with stable invoice/payment ids and raw payload snapshots
 - [ ] External document records for invoices, receipts, contracts, and related BTC-linked business evidence
 - [ ] Many-to-many document/payment links with allocations and reconciliation state
 - [ ] Deterministic matching rules before any AI assistance

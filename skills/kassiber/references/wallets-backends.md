@@ -178,8 +178,14 @@ BTCPay:
 ```bash
 kassiber wallets import-btcpay --wallet btcpay --file /path/to/export.csv --input-format csv
 kassiber backends create btcpay-prod --kind btcpay --url https://btcpay.example.com --token "$BTCPAY_TOKEN"
-kassiber wallets sync-btcpay --wallet btcpay --backend btcpay-prod --store-id <store-id>
+kassiber wallets create --label btcpay-shop --kind custom --backend btcpay-prod --store-id <store-id>
+kassiber wallets sync --wallet btcpay-shop
+kassiber wallets sync-btcpay --wallet btcpay-shop --backend btcpay-prod --store-id <store-id>
 ```
+
+`wallets sync-btcpay` keeps the old explicit shape, but it now stores the same
+BTCPay backend/store config on the wallet so later `wallets sync` and
+`wallets sync --all` can reuse it.
 
 Do not ask users to paste raw BTCPay API tokens into chat. Prefer a local shell
 variable such as `BTCPAY_TOKEN`, a local `backends.env` entry, or a command
@@ -192,6 +198,12 @@ kassiber backends create <btcpay-backend-name> \
   --kind btcpay \
   --url <btcpay-base-url> \
   --token "$BTCPAY_TOKEN"
+kassiber wallets create \
+  --label <wallet-label> \
+  --kind custom \
+  --backend <btcpay-backend-name> \
+  --store-id <btcpay-store-id>
+kassiber wallets sync --wallet <wallet-label>
 kassiber wallets sync-btcpay \
   --wallet <wallet-label> \
   --backend <btcpay-backend-name> \
@@ -212,6 +224,7 @@ kassiber wallets import-csv --wallet wallet-name --file /path/to/data.csv
 ```
 
 Do not create a second wallet for a BTCPay or Phoenix export when it belongs to a wallet already tracked in Kassiber.
+Do not create one Kassiber wallet per BTCPay store if multiple stores share the same underlying wallet balance.
 
 ## Austrian profiles
 
