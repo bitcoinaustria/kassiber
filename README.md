@@ -238,7 +238,7 @@ Contributor docs:
 
 Notable gaps today:
 
-- Austrian E 1kv CSV/PDF/XLSX export is review-gated and currently targets the ausländisch / self-custody Kennzahlen; the PDF/JSON output includes Steuerbericht-style sections 1.1-4.5 with unsupported placeholders, while domestic-provider withheld KESt metadata is not modeled yet
+- Austrian E 1kv CSV/PDF/XLSX export is review-gated and currently targets the ausländisch / self-custody Kennzahlen; the PDF/JSON output includes Steuerbericht-style sections 1.1-4.5 with unsupported placeholders, and the XLSX uses an `Übersicht`, numbered section tabs, and `Erläuterungen zum Steuerreport`, while domestic-provider withheld KESt metadata is not modeled yet
 - full BTCPay invoice/payment provenance ingest is not implemented yet; BTCPay sync currently covers confirmed on-chain wallet history plus comments/labels
 - descriptor/xpub live sync through `bitcoinrpc` is not implemented yet
 - some Lightning node adapters are declared but do not sync yet

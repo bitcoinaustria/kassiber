@@ -133,6 +133,8 @@ Implemented surfaces:
   styled workbook handoff
 - Steuerbericht-style sections 1.1-4.5 in the structured output and PDF, with
   unsupported sections rendered as explicit zero-value placeholders
+- CoinTracking-style XLSX workbook layout with `Übersicht`, separate numbered
+  section tabs including `3.3.`, and `Erläuterungen zum Steuerreport`
 - CLI/PDF/XLSX review gate and current ausländisch / self-custody assumption
 - regression coverage for JSON, CSV, PDF, and XLSX generation
 
@@ -143,8 +145,10 @@ tax_year,date,tx_id,transaction_id,wallet,asset,kind,entry_type,at_category,at_c
 ```
 
 PDF uses Kassiber's existing line-oriented PDF writer. XLSX uses XlsxWriter as
-a small write-only dependency. Both exports repeat the Steuerberater-review gate
-and list the invoked assumptions / open-question defaults.
+a small write-only dependency and lays out the workbook as an overview, numbered
+tax-section sheets, and an explanatory notes sheet. Both exports repeat the
+Steuerberater-review gate and list the invoked assumptions / open-question
+defaults.
 
 ## Test Direction
 

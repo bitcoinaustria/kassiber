@@ -61,6 +61,7 @@ AUSTRIAN_TAX_SECTION_ORDER = (
     "2.2",
     "3.1",
     "3.2",
+    "3.3",
     "4.1",
     "4.2",
     "4.3",
@@ -110,6 +111,12 @@ AUSTRIAN_TAX_SECTION_METADATA = {
         "supported": False,
         "kennzahlen": (),
     },
+    "3.3": {
+        "label": "Nicht steuerbare Steuergebuehren und Rueckerstattungen",
+        "law": "",
+        "supported": False,
+        "kennzahlen": (),
+    },
     "4.1": {
         "label": "Eingegangene Spenden und Schenkungen",
         "law": "",
@@ -147,7 +154,7 @@ AUSTRIAN_TAX_SECTION_GROUPS = (
         ("1.1", "1.2", "1.3"),
     ),
     ("2. Steuerpflichtige laufende Einkuenfte", ("2.1", "2.2")),
-    ("3. Nicht steuerbare Einkuenfte", ("3.1", "3.2")),
+    ("3. Nicht steuerbare Einkuenfte", ("3.1", "3.2", "3.3")),
     ("4. Sonstige Ein- und Ausgaenge", ("4.1", "4.2", "4.3", "4.4", "4.5")),
 )
 
@@ -1576,97 +1583,584 @@ def export_austrian_e1kv_pdf_report(conn, workspace_ref, profile_ref, file_path,
     return written
 
 
-def _write_xlsx_sheet(workbook, sheet_name, columns, rows, formats):
+AUSTRIAN_E1KV_XLSX_SHEETS = (
+    "Übersicht",
+    "1.1.",
+    "1.2.",
+    "1.3.",
+    "2.1.",
+    "2.2.",
+    "3.1.",
+    "3.2.",
+    "3.3.",
+    "4.1.",
+    "4.2.",
+    "4.3.",
+    "4.4.",
+    "4.5.",
+    "Erläuterungen zum Steuerreport",
+)
+
+AUSTRIAN_E1KV_XLSX_TITLES = {
+    "1.1": "1.1. Steuerpflichtige Einkünfte aus dem An- und Verkauf von Kryptowährungen gem. § 27b Abs 3 EStG",
+    "1.2": "1.2. Steuerpflichtige Einkünfte aus Margin, Derivaten und Futures",
+    "1.3": "1.3. Steuerpflichtige Einkünfte aus NFT-Spekulationsgeschäften",
+    "2.1": "2.1. Steuerpflichtige laufende Einkünfte aus der Überlassung von Kryptowährungen",
+    "2.2": "2.2. Steuerpflichtige laufende Einkünfte aus Leistungen zur Transaktionsverarbeitung",
+    "3.1": "3.1. Nicht steuerbare Einkünfte aus Spekulationsgeschäften mit Kryptowährungen und NFTs",
+    "3.2": "3.2. Nicht steuerbare Einkünfte gem. § 27b Abs 2 Z 2 Satz 2 EStG",
+    "3.3": "3.3. Nicht steuerbare Steuergebühren und Rückerstattungen",
+    "4.1": "4.1. Eingegangene Spenden/Trinkgeld",
+    "4.2": "4.2. Ausgegangene Spenden/Schenkungen",
+    "4.3": "4.3. Gestohlene, gehackte und verlorene Coins",
+    "4.4": "4.4. Mining (kommerziell)",
+    "4.5": "4.5. Minting",
+}
+
+AUSTRIAN_E1KV_XLSX_DISPOSAL_HEADERS = (
+    "Börse",
+    "Anlage",
+    "Anzahl",
+    "Erwerbsdatum",
+    "Verkaufsdatum",
+    "Kauf/Eingang bei",
+    "Typ",
+    "Kostenbasis in EUR",
+    "Erlös in EUR",
+    "Gewinn/Verlust in EUR",
+)
+AUSTRIAN_E1KV_XLSX_HOLDING_HEADERS = (
+    "Börse",
+    "Anlage",
+    "Anzahl",
+    "Erwerbsdatum",
+    "Verkaufsdatum",
+    "Kauf/Eingang bei",
+    "Haltedauer in Tagen",
+    "Typ",
+    "Kostenbasis in EUR",
+    "Erlös in EUR",
+    "Gewinn/Verlust in EUR",
+)
+AUSTRIAN_E1KV_XLSX_INCOME_HEADERS = (
+    "Börse",
+    "Typ",
+    "Datum des Eingangs",
+    "Anzahl",
+    "Währung",
+    "Hinweis",
+    "Wert in EUR zum Zeitpunkt des Eingangs",
+)
+AUSTRIAN_E1KV_XLSX_MARGIN_HEADERS = (
+    "Börse",
+    "Typ",
+    "Datum",
+    "Anzahl",
+    "Währung",
+    "Gesamt",
+)
+AUSTRIAN_E1KV_XLSX_FEE_HEADERS = (
+    "Börse",
+    "Datum der Gebühr",
+    "Anzahl",
+    "Währung",
+    "Erlös in EUR",
+    "Anzahl",
+    "Währung",
+    "Hinweis",
+)
+AUSTRIAN_E1KV_XLSX_OUTGOING_HEADERS = (
+    "Börse",
+    "Typ",
+    "Datum der Auszahlung",
+    "Anzahl",
+    "Währung",
+    "Hinweis",
+    "Kostenbasis in EUR",
+    "Wert bei Auszahlung in EUR",
+)
+
+
+def _austrian_e1kv_xlsx_formats(workbook):
+    return {
+        "overview_title": workbook.add_format(
+            {"bold": True, "font_size": 16, "valign": "vcenter"}
+        ),
+        "overview_group": workbook.add_format(
+            {"bold": True, "font_size": 12, "valign": "vcenter"}
+        ),
+        "overview_section": workbook.add_format(
+            {"bold": True, "font_size": 11, "valign": "vcenter"}
+        ),
+        "overview_label": workbook.add_format({"font_size": 11, "valign": "vcenter"}),
+        "overview_money": workbook.add_format(
+            {"font_size": 11, "valign": "vcenter", "num_format": "#,##0.00"}
+        ),
+        "overview_currency": workbook.add_format({"font_size": 11, "valign": "vcenter"}),
+        "overview_total_label": workbook.add_format(
+            {"bold": True, "font_size": 11, "valign": "vcenter"}
+        ),
+        "overview_total_money": workbook.add_format(
+            {"bold": True, "font_size": 11, "valign": "vcenter", "num_format": "#,##0.00"}
+        ),
+        "detail_title": workbook.add_format(
+            {"bold": True, "font_size": 13, "align": "center", "valign": "vcenter", "text_wrap": True}
+        ),
+        "header": workbook.add_format(
+            {"bold": True, "font_size": 11, "valign": "top", "text_wrap": True}
+        ),
+        "text": workbook.add_format({"font_size": 11, "valign": "top", "text_wrap": True}),
+        "int": workbook.add_format({"font_size": 11, "valign": "top", "num_format": "0"}),
+        "quantity": workbook.add_format(
+            {"font_size": 11, "valign": "top", "num_format": "0.00000000"}
+        ),
+        "money": workbook.add_format(
+            {"font_size": 11, "valign": "top", "num_format": "#,##0.00"}
+        ),
+        "total_label": workbook.add_format(
+            {"bold": True, "font_size": 11, "valign": "vcenter", "text_wrap": True}
+        ),
+        "total_money": workbook.add_format(
+            {"bold": True, "font_size": 11, "valign": "vcenter", "num_format": "#,##0.00"}
+        ),
+        "explanation_title": workbook.add_format(
+            {"bold": True, "font_size": 16, "valign": "vcenter"}
+        ),
+        "explanation_heading": workbook.add_format(
+            {"bold": True, "font_size": 12, "valign": "top"}
+        ),
+        "explanation_text": workbook.add_format(
+            {"font_size": 11, "valign": "top", "text_wrap": True}
+        ),
+    }
+
+
+def _xlsx_write_value(worksheet, row_index, column_index, value, cell_format):
+    if value is None or value == "":
+        worksheet.write_blank(row_index, column_index, None, cell_format)
+    elif isinstance(value, bool):
+        worksheet.write_boolean(row_index, column_index, value, cell_format)
+    elif isinstance(value, (int, float, Decimal)):
+        worksheet.write_number(row_index, column_index, float(value), cell_format)
+    else:
+        worksheet.write_string(row_index, column_index, str(value), cell_format)
+
+
+def _austrian_e1kv_xlsx_hint(row):
+    tx_id = str(row.get("tx_id") or "")
+    note = str(row.get("note") or "")
+    return tx_id or note
+
+
+def _austrian_e1kv_xlsx_category(row):
+    return row.get("at_category_label") or row.get("at_category") or row.get("kind") or ""
+
+
+def _austrian_e1kv_xlsx_disposal_values(row, include_holding_days=False):
+    values = [
+        row.get("wallet") or "",
+        row.get("asset") or "",
+        row.get("quantity"),
+        "",
+        row.get("date") or "",
+        "",
+    ]
+    if include_holding_days:
+        values.append(row.get("holding_period_days"))
+    values.extend(
+        [
+            _austrian_e1kv_xlsx_category(row),
+            _xlsx_eur_from_cents(row.get("cost_basis_eur_cents")),
+            _xlsx_eur_from_cents(row.get("proceeds_eur_cents")),
+            _xlsx_eur_from_cents(row.get("gain_loss_eur_cents")),
+        ]
+    )
+    return values
+
+
+def _austrian_e1kv_xlsx_income_values(row):
+    return [
+        row.get("wallet") or "",
+        row.get("kind") or row.get("entry_type") or "",
+        row.get("date") or "",
+        row.get("quantity"),
+        row.get("asset") or "",
+        _austrian_e1kv_xlsx_hint(row),
+        _xlsx_eur_from_cents(row.get("form_amount_eur_cents")),
+    ]
+
+
+def _austrian_e1kv_xlsx_write_total_row(worksheet, row_index, label, value, value_column, formats):
+    if value_column > 0:
+        worksheet.merge_range(row_index, 0, row_index, value_column - 1, label, formats["total_label"])
+    else:
+        worksheet.write_string(row_index, 0, label, formats["total_label"])
+    _xlsx_write_value(worksheet, row_index, value_column, value, formats["total_money"])
+
+
+def _austrian_e1kv_xlsx_write_detail_sheet(
+    workbook,
+    sheet_name,
+    title,
+    headers,
+    rows,
+    row_format_names,
+    total_rows,
+    value_column,
+    formats,
+    column_widths,
+):
     worksheet = workbook.add_worksheet(sheet_name)
-    worksheet.freeze_panes(1, 0)
-    worksheet.set_tab_color("#0b6252")
+    worksheet.set_landscape()
+    worksheet.fit_to_pages(1, 0)
+    worksheet.set_margins(left=0.35, right=0.35, top=0.5, bottom=0.5)
 
-    for column_index, (header, _key, _fmt, _transform, width) in enumerate(columns):
-        worksheet.write(0, column_index, header, formats["header"])
+    last_column = len(headers) - 1
+    worksheet.set_row(0, 31)
+    worksheet.merge_range(0, 0, 0, last_column, title, formats["detail_title"])
+    worksheet.set_row(1, 34)
+    for column_index, header in enumerate(headers):
+        width = column_widths[column_index] if column_index < len(column_widths) else 16
         worksheet.set_column(column_index, column_index, width)
+        worksheet.write_string(1, column_index, header, formats["header"])
 
-    for row_index, row in enumerate(rows, start=1):
-        for column_index, (_header, key, format_name, transform, _width) in enumerate(columns):
-            value = row.get(key) if key else row
-            if transform:
-                value = transform(value)
-            cell_format = formats.get(format_name, formats["text"])
-            if value is None:
-                worksheet.write_blank(row_index, column_index, None, cell_format)
-            elif isinstance(value, bool):
-                worksheet.write_boolean(row_index, column_index, value, cell_format)
-            elif isinstance(value, (int, float, Decimal)):
-                worksheet.write_number(row_index, column_index, float(value), cell_format)
-            else:
-                worksheet.write_string(row_index, column_index, str(value), cell_format)
+    row_index = 2
+    if rows:
+        for values in rows:
+            worksheet.set_row(row_index, 22)
+            for column_index, value in enumerate(values):
+                format_name = row_format_names[column_index] if column_index < len(row_format_names) else "text"
+                _xlsx_write_value(worksheet, row_index, column_index, value, formats[format_name])
+            row_index += 1
+    else:
+        worksheet.set_row(row_index, 20)
+        for column_index in range(len(headers)):
+            worksheet.write_blank(row_index, column_index, None, formats["text"])
+        row_index += 1
 
-    if columns:
-        worksheet.autofilter(0, 0, max(len(rows), 1), len(columns) - 1)
+    row_index += 1
+    for label, value in total_rows:
+        worksheet.set_row(row_index, 22)
+        _austrian_e1kv_xlsx_write_total_row(
+            worksheet,
+            row_index,
+            label,
+            value,
+            value_column,
+            formats,
+        )
+        row_index += 1
     return worksheet
 
 
-def _austrian_e1kv_quality_rows(report):
-    rows = []
-    for row in report["data_quality"]["quarantines"]:
-        rows.append(
-            {
-                "type": "quarantine",
-                "reason": row["reason"],
-                "count": row["count"],
-                "tx_id": "",
-                "at_category": "",
-                "stored_kennzahl": "",
-                "export_kennzahl": "",
-            }
-        )
-    for row in report["data_quality"]["kennzahl_mismatches"]:
-        rows.append(
-            {
-                "type": "kennzahl_mismatch",
-                "reason": "",
-                "count": "",
-                "tx_id": row["tx_id"],
-                "at_category": row["at_category"],
-                "stored_kennzahl": row["stored_kennzahl"],
-                "export_kennzahl": row["export_kennzahl"],
-            }
-        )
-    if not rows:
-        rows.append(
-            {
-                "type": "status",
-                "reason": "No quarantined transactions or stale Kennzahl mismatches in scope.",
-                "count": "",
-                "tx_id": "",
-                "at_category": "",
-                "stored_kennzahl": "",
-                "export_kennzahl": "",
-            }
-        )
-    return rows
+def _austrian_e1kv_xlsx_write_overview(report, workbook, formats):
+    worksheet = workbook.add_worksheet("Übersicht")
+    worksheet.set_column(0, 0, 72)
+    worksheet.set_column(1, 1, 20)
+    worksheet.set_column(2, 2, 8)
+    worksheet.set_margins(left=0.35, right=0.35, top=0.5, bottom=0.5)
+
+    worksheet.set_row(0, 28)
+    worksheet.merge_range(0, 0, 0, 2, "I. Übersicht", formats["overview_title"])
+    row_index = 2
+
+    def write_heading(text):
+        nonlocal row_index
+        worksheet.set_row(row_index, 25)
+        worksheet.merge_range(row_index, 0, row_index, 2, text, formats["overview_group"])
+        row_index += 2
+
+    def write_section(text):
+        nonlocal row_index
+        worksheet.set_row(row_index, 25)
+        worksheet.merge_range(row_index, 0, row_index, 2, text, formats["overview_section"])
+        row_index += 1
+
+    def write_amount(label, cents, total=False):
+        nonlocal row_index
+        label_format = formats["overview_total_label"] if total else formats["overview_label"]
+        value_format = formats["overview_total_money"] if total else formats["overview_money"]
+        worksheet.set_row(row_index, 25)
+        worksheet.write_string(row_index, 0, label, label_format)
+        worksheet.write_number(row_index, 1, float(_eur_from_cents(cents)), value_format)
+        worksheet.write_string(row_index, 2, "EUR", formats["overview_currency"])
+        row_index += 1
+
+    sections = report["sections"]
+    split_11 = _austrian_disposal_split(sections["1.1"]["detail_rows"])
+
+    write_heading("1. Steuerpflichtige Einkünfte aus dem Handel mit Kryptowährungen")
+    write_section("1.1. Steuerpflichtige Einkünfte aus dem An- und Verkauf von Kryptowährungen")
+    write_amount("Veräußerungspreis", split_11["gains_proceeds"])
+    write_amount("Anschaffungskosten", split_11["gains_cost_basis"])
+    write_amount("Veräußerungsgewinn", split_11["gains_amount"], total=True)
+    row_index += 1
+    write_amount("Veräußerungspreis", split_11["losses_proceeds"])
+    write_amount("Anschaffungskosten", split_11["losses_cost_basis"])
+    write_amount("Veräußerungsverlust", split_11["losses_amount"], total=True)
+    row_index += 1
+    write_section("1.2. Steuerpflichtige Einkünfte aus Margin, Derivaten und Futures")
+    write_amount("Gewinne aus Margin, Derivaten und Futures", 0, total=True)
+    write_amount("Verluste aus Margin, Derivaten und Futures", 0, total=True)
+    row_index += 1
+    write_section("1.3. Steuerpflichtige Einkünfte aus NFT-Spekulationsgeschäften")
+    write_amount("Summe Einkünfte aus NFT-Spekulationsgeschäften", 0, total=True)
+    row_index += 1
+
+    write_heading("2. Steuerpflichtige laufende Einkünfte")
+    write_section("2.1. Einkünfte aus der Überlassung von Kryptowährungen")
+    write_amount("Summe laufende Einkünfte", sections["2.1"]["totals"]["amount_eur_cents"], total=True)
+    row_index += 1
+    write_section("2.2. Einkünfte aus Leistungen zur Transaktionsverarbeitung")
+    write_amount("Summe laufende Einkünfte", sections["2.2"]["totals"]["amount_eur_cents"], total=True)
+    row_index += 1
+
+    write_heading("3. Nicht steuerbare Einkünfte")
+    write_section("3.1. Nicht steuerbare Einkünfte aus Spekulationsgeschäften")
+    write_amount("Summe nicht steuerbare Einkünfte", sections["3.1"]["totals"]["amount_eur_cents"], total=True)
+    row_index += 1
+    write_section("3.2. Nicht steuerbare Einkünfte gem. § 27b Abs 2 Z 2 Satz 2 EStG")
+    write_amount("Summe nicht steuerbare Einkünfte", 0, total=True)
+    row_index += 1
+    write_section("3.3. Nicht steuerbare Steuergebühren und Rückerstattungen")
+    write_amount("Summe entrichtete Steuergebühren", 0, total=True)
+    write_amount("Summe Rückerstattungen", 0, total=True)
+    row_index += 1
+
+    write_heading("4. Sonstige Ein- und Ausgänge")
+    write_section("4.1. Eingegangene Spenden/Trinkgeld")
+    write_amount("Summe Spenden/Trinkgeld", 0, total=True)
+    row_index += 1
+    write_section("4.2. Ausgegangene Spenden/Schenkungen")
+    write_amount("Summe Spenden", 0, total=True)
+    write_amount("Summe Schenkungen", 0, total=True)
+    row_index += 1
+    write_section("4.3. Gestohlene, gehackte und verlorene Coins")
+    write_amount("Summe gestohlen/gehackt/Betrug", 0, total=True)
+    write_amount("Summe Verlust", 0, total=True)
+    row_index += 1
+    write_section("4.4. Mining (kommerziell)")
+    write_amount("Summe Mining", 0, total=True)
+    row_index += 1
+    write_section("4.5. Minting")
+    write_amount("Summe Minting", 0, total=True)
+    return worksheet
 
 
-def _austrian_e1kv_section_rows(report):
-    rows = []
-    for section_id in report["section_order"]:
-        section = report["sections"][section_id]
-        totals = section["totals"]
-        rows.append(
-            {
-                "section_id": section_id,
-                "label": section["label"],
-                "law": section["law"],
-                "supported": section["supported"],
-                "status": section["status"],
-                "kennzahlen": ", ".join(str(value) for value in section["kennzahlen"]),
-                "row_count": totals["row_count"],
-                "amount_eur_cents": totals["amount_eur_cents"],
-                "proceeds_eur_cents": totals["proceeds_eur_cents"],
-                "cost_basis_eur_cents": totals["cost_basis_eur_cents"],
-                "gain_loss_eur_cents": totals["gain_loss_eur_cents"],
-            }
+def _austrian_e1kv_xlsx_write_explanations(report, workbook, formats):
+    worksheet = workbook.add_worksheet("Erläuterungen zum Steuerreport")
+    worksheet.set_column(0, 0, 105)
+    worksheet.set_margins(left=0.35, right=0.35, top=0.5, bottom=0.5)
+
+    rows = [
+        ("Erläuterungen zum Steuerreport", "explanation_title"),
+        ("", "explanation_text"),
+        ("Berichtsumfang", "explanation_heading"),
+        (
+            "Dieser XLSX-Export ist als jährliche Arbeitsunterlage für die österreichische "
+            "E 1kv-Prüfung aufgebaut. Die Übersicht fasst die Beträge zusammen; die "
+            "nummerierten Blätter enthalten die dazugehörigen Detailzeilen oder explizite "
+            "Null-Platzhalter für noch nicht modellierte Bereiche.",
+            "explanation_text",
+        ),
+        ("Prüfung", "explanation_heading"),
+        (report["review_gate"], "explanation_text"),
+        ("Aktuelle Kassiber-Annahmen", "explanation_heading"),
+    ]
+    rows.extend((f"{row['code']}: {row['message']}", "explanation_text") for row in report["assumptions"])
+    rows.extend(
+        [
+            ("Datenqualität", "explanation_heading"),
+            (
+                f"Quarantäne-Gründe im Jahr: {len(report['data_quality']['quarantines'])}; "
+                f"abweichende gespeicherte Kennzahlen: {len(report['data_quality']['kennzahl_mismatches'])}. "
+                "Quarantinierte Transaktionen bleiben außerhalb dieser Arbeitsmappe, bis sie aufgelöst sind.",
+                "explanation_text",
+            ),
+            ("Nicht modellierte Blätter", "explanation_heading"),
+            (
+                "Margin/Derivate/Futures, NFT-Spekulationsgeschäfte, Steuergebühren, "
+                "Spenden/Schenkungen, verlorene Coins, kommerzielles Mining und Minting "
+                "werden heute als leere Nullabschnitte dargestellt, weil Kassiber dafür "
+                "noch keine strukturierten Steuerereignisse speichert.",
+                "explanation_text",
+            ),
+        ]
+    )
+    for row_index, (text, format_name) in enumerate(rows):
+        worksheet.set_row(row_index, 26 if format_name.endswith("heading") or format_name.endswith("title") else 46)
+        if text:
+            worksheet.write_string(row_index, 0, text, formats[format_name])
+        else:
+            worksheet.write_blank(row_index, 0, None, formats[format_name])
+    return worksheet
+
+
+def _austrian_e1kv_xlsx_write_section_sheets(report, workbook, formats):
+    sections = report["sections"]
+    split_11 = _austrian_disposal_split(sections["1.1"]["detail_rows"])
+    disposal_formats = ("text", "text", "quantity", "text", "text", "text", "text", "money", "money", "money")
+    holding_formats = (
+        "text",
+        "text",
+        "quantity",
+        "text",
+        "text",
+        "text",
+        "int",
+        "text",
+        "money",
+        "money",
+        "money",
+    )
+    income_formats = ("text", "text", "text", "quantity", "text", "text", "money")
+    margin_formats = ("text", "text", "text", "quantity", "text", "money")
+    fee_formats = ("text", "text", "quantity", "text", "money", "quantity", "text", "text")
+    outgoing_formats = ("text", "text", "text", "quantity", "text", "text", "money", "money")
+
+    _austrian_e1kv_xlsx_write_detail_sheet(
+        workbook,
+        "1.1.",
+        AUSTRIAN_E1KV_XLSX_TITLES["1.1"],
+        AUSTRIAN_E1KV_XLSX_DISPOSAL_HEADERS,
+        [_austrian_e1kv_xlsx_disposal_values(row) for row in sections["1.1"]["detail_rows"]],
+        disposal_formats,
+        [
+            ("Summe Einkünfte realisierten Wertsteigerungen", _xlsx_eur_from_cents(split_11["gains_amount"])),
+            ("Summe realisierte Wertverluste", _xlsx_eur_from_cents(split_11["losses_amount"])),
+        ],
+        9,
+        formats,
+        (18, 12, 14, 15, 15, 18, 24, 18, 18, 20),
+    )
+    _austrian_e1kv_xlsx_write_detail_sheet(
+        workbook,
+        "1.2.",
+        AUSTRIAN_E1KV_XLSX_TITLES["1.2"],
+        AUSTRIAN_E1KV_XLSX_MARGIN_HEADERS,
+        [],
+        margin_formats,
+        [
+            ("Summe Gewinne aus Margin, Derivaten, Futures", 0.0),
+            ("Summe Verluste aus Margin, Derivaten, Futures", 0.0),
+        ],
+        5,
+        formats,
+        (18, 22, 16, 14, 12, 18),
+    )
+    _austrian_e1kv_xlsx_write_detail_sheet(
+        workbook,
+        "1.3.",
+        AUSTRIAN_E1KV_XLSX_TITLES["1.3"],
+        AUSTRIAN_E1KV_XLSX_HOLDING_HEADERS,
+        [],
+        holding_formats,
+        [("Summe Einkünfte aus NFT-Spekulationsgeschäften", 0.0)],
+        10,
+        formats,
+        (18, 12, 14, 15, 15, 18, 16, 24, 18, 18, 20),
+    )
+    for section_id in ("2.1", "2.2"):
+        _austrian_e1kv_xlsx_write_detail_sheet(
+            workbook,
+            f"{section_id}.",
+            AUSTRIAN_E1KV_XLSX_TITLES[section_id],
+            AUSTRIAN_E1KV_XLSX_INCOME_HEADERS,
+            [_austrian_e1kv_xlsx_income_values(row) for row in sections[section_id]["detail_rows"]],
+            income_formats,
+            [("Summe laufende Einkünfte", _xlsx_eur_from_cents(sections[section_id]["totals"]["amount_eur_cents"]))],
+            6,
+            formats,
+            (18, 24, 18, 14, 12, 36, 24),
         )
-    return rows
+    _austrian_e1kv_xlsx_write_detail_sheet(
+        workbook,
+        "3.1.",
+        AUSTRIAN_E1KV_XLSX_TITLES["3.1"],
+        AUSTRIAN_E1KV_XLSX_HOLDING_HEADERS,
+        [_austrian_e1kv_xlsx_disposal_values(row, include_holding_days=True) for row in sections["3.1"]["detail_rows"]],
+        holding_formats,
+        [("Summe nicht steuerbare Einkünfte", _xlsx_eur_from_cents(sections["3.1"]["totals"]["amount_eur_cents"]))],
+        10,
+        formats,
+        (18, 12, 14, 15, 15, 18, 16, 24, 18, 18, 20),
+    )
+    _austrian_e1kv_xlsx_write_detail_sheet(
+        workbook,
+        "3.2.",
+        AUSTRIAN_E1KV_XLSX_TITLES["3.2"],
+        AUSTRIAN_E1KV_XLSX_INCOME_HEADERS,
+        [],
+        income_formats,
+        [("Summe nicht steuerbare Einkünfte", 0.0)],
+        6,
+        formats,
+        (18, 24, 18, 14, 12, 36, 24),
+    )
+    _austrian_e1kv_xlsx_write_detail_sheet(
+        workbook,
+        "3.3.",
+        AUSTRIAN_E1KV_XLSX_TITLES["3.3"],
+        AUSTRIAN_E1KV_XLSX_FEE_HEADERS,
+        [],
+        fee_formats,
+        [
+            ("Summe entrichtete Steuergebühren", 0.0),
+            ("Summe der Rückerstattungen", 0.0),
+        ],
+        4,
+        formats,
+        (18, 18, 14, 12, 18, 14, 12, 32),
+    )
+    _austrian_e1kv_xlsx_write_detail_sheet(
+        workbook,
+        "4.1.",
+        AUSTRIAN_E1KV_XLSX_TITLES["4.1"],
+        AUSTRIAN_E1KV_XLSX_INCOME_HEADERS,
+        [],
+        income_formats,
+        [("Summe Spenden/Trinkgeld", 0.0)],
+        6,
+        formats,
+        (18, 24, 18, 14, 12, 36, 24),
+    )
+    _austrian_e1kv_xlsx_write_detail_sheet(
+        workbook,
+        "4.2.",
+        AUSTRIAN_E1KV_XLSX_TITLES["4.2"],
+        AUSTRIAN_E1KV_XLSX_OUTGOING_HEADERS,
+        [],
+        outgoing_formats,
+        [("Summe Spenden", 0.0), ("Summe Schenkungen", 0.0)],
+        7,
+        formats,
+        (18, 22, 18, 14, 12, 36, 18, 24),
+    )
+    _austrian_e1kv_xlsx_write_detail_sheet(
+        workbook,
+        "4.3.",
+        AUSTRIAN_E1KV_XLSX_TITLES["4.3"],
+        AUSTRIAN_E1KV_XLSX_OUTGOING_HEADERS,
+        [],
+        outgoing_formats,
+        [("Summe gestohlen/gehackt/Betrug", 0.0), ("Summe Verlust", 0.0)],
+        7,
+        formats,
+        (18, 22, 18, 14, 12, 36, 18, 24),
+    )
+    for section_id, total_label in (("4.4", "Summe Mining"), ("4.5", "Summe Minting")):
+        _austrian_e1kv_xlsx_write_detail_sheet(
+            workbook,
+            f"{section_id}.",
+            AUSTRIAN_E1KV_XLSX_TITLES[section_id],
+            AUSTRIAN_E1KV_XLSX_INCOME_HEADERS,
+            [],
+            income_formats,
+            [(total_label, 0.0)],
+            6,
+            formats,
+            (18, 24, 18, 14, 12, 36, 24),
+        )
 
 
 def export_austrian_e1kv_xlsx_report(conn, workspace_ref, profile_ref, file_path, hooks: ReportHooks, tax_year=None):
@@ -1685,142 +2179,17 @@ def export_austrian_e1kv_xlsx_report(conn, workspace_ref, profile_ref, file_path
             "comments": AUSTRIAN_E1KV_REVIEW_GATE,
         }
     )
-    formats = {
-        "title": workbook.add_format(
-            {"bold": True, "font_size": 16, "font_color": "#0b6252", "bottom": 2, "bottom_color": "#0b6252"}
-        ),
-        "header": workbook.add_format(
-            {"bold": True, "bg_color": "#edf4f2", "font_color": "#203136", "border": 1, "border_color": "#d6e2de"}
-        ),
-        "text": workbook.add_format({"border": 1, "border_color": "#e3ece8", "valign": "top"}),
-        "wrap": workbook.add_format({"border": 1, "border_color": "#e3ece8", "valign": "top", "text_wrap": True}),
-        "int": workbook.add_format({"border": 1, "border_color": "#e3ece8", "num_format": "0"}),
-        "money": workbook.add_format(
-            {"border": 1, "border_color": "#e3ece8", "num_format": '#,##0.00;[Red]-#,##0.00'}
-        ),
-        "btc": workbook.add_format({"border": 1, "border_color": "#e3ece8", "num_format": "0.00000000"}),
-    }
-
-    summary = workbook.add_worksheet("Summary")
-    summary.set_tab_color("#0b6252")
-    summary.write(0, 0, "Kassiber Austrian E 1kv Report", formats["title"])
-    summary.write(2, 0, "Workspace", formats["header"])
-    summary.write(2, 1, report["workspace"], formats["text"])
-    summary.write(3, 0, "Profile", formats["header"])
-    summary.write(3, 1, report["profile"], formats["text"])
-    summary.write(4, 0, "Tax year", formats["header"])
-    summary.write(4, 1, report["tax_year"], formats["int"])
-    summary.write(5, 0, "Form section", formats["header"])
-    summary.write(5, 1, report["form_section"], formats["text"])
-    summary.write(6, 0, "Review gate", formats["header"])
-    summary.write(6, 1, report["review_gate"], formats["wrap"])
-    summary.write(8, 0, "FinanzOnline Kennzahlen", formats["title"])
-    summary_columns = [
-        ("Kennzahl", "kennzahl", "int", None, 10),
-        ("Description", "label", "wrap", None, 62),
-        ("Rows", "row_count", "int", None, 10),
-        ("Amount EUR", "amount_eur_cents", "money", _xlsx_eur_from_cents, 16),
-    ]
-    for column_index, (header, _key, _fmt, _transform, width) in enumerate(summary_columns):
-        summary.write(10, column_index, header, formats["header"])
-        summary.set_column(column_index, column_index, width)
-    for row_index, row in enumerate(report["summary_rows"], start=11):
-        for column_index, (_header, key, format_name, transform, _width) in enumerate(summary_columns):
-            value = row.get(key)
-            if transform:
-                value = transform(value)
-            if isinstance(value, (int, float, Decimal)):
-                summary.write_number(row_index, column_index, float(value), formats[format_name])
-            else:
-                summary.write_string(row_index, column_index, str(value or ""), formats[format_name])
-    summary.autofilter(10, 0, max(11, 10 + len(report["summary_rows"])), len(summary_columns) - 1)
-    summary.set_column(0, 0, 18)
-    summary.set_column(1, 1, 96)
-    summary.freeze_panes(9, 0)
-
-    _write_xlsx_sheet(
-        workbook,
-        "Sections",
-        [
-            ("Section", "section_id", "text", None, 10),
-            ("Label", "label", "wrap", None, 64),
-            ("Law", "law", "wrap", None, 24),
-            ("Supported", "supported", "text", None, 12),
-            ("Status", "status", "text", None, 16),
-            ("Kennzahlen", "kennzahlen", "text", None, 16),
-            ("Rows", "row_count", "int", None, 10),
-            ("Amount EUR", "amount_eur_cents", "money", _xlsx_eur_from_cents, 16),
-            ("Proceeds EUR", "proceeds_eur_cents", "money", _xlsx_eur_from_cents, 16),
-            ("Cost basis EUR", "cost_basis_eur_cents", "money", _xlsx_eur_from_cents, 16),
-            ("Gain/Loss EUR", "gain_loss_eur_cents", "money", _xlsx_eur_from_cents, 16),
-        ],
-        _austrian_e1kv_section_rows(report),
-        formats,
-    )
-    _write_xlsx_sheet(
-        workbook,
-        "Transactions",
-        [
-            ("Tax year", "tax_year", "int", None, 10),
-            ("Date", "date", "text", None, 12),
-            ("Tx ID", "tx_id", "text", None, 24),
-            ("Wallet", "wallet", "text", None, 18),
-            ("Asset", "asset", "text", None, 8),
-            ("Kind", "kind", "text", None, 16),
-            ("Entry type", "entry_type", "text", None, 14),
-            ("AT category", "at_category", "text", None, 20),
-            ("Category label", "at_category_label", "wrap", None, 34),
-            ("Regime", "at_regime", "text", None, 10),
-            ("Quantity BTC", "quantity", "btc", None, 14),
-            ("Quantity msat", "qty_msat", "int", None, 16),
-            ("Price EUR", "price_eur_cents", "money", _xlsx_eur_from_cents, 14),
-            ("Cost basis EUR", "cost_basis_eur_cents", "money", _xlsx_eur_from_cents, 16),
-            ("Proceeds EUR", "proceeds_eur_cents", "money", _xlsx_eur_from_cents, 16),
-            ("Gain/Loss EUR", "gain_loss_eur_cents", "money", _xlsx_eur_from_cents, 16),
-            ("Income EUR", "income_eur_cents", "money", _xlsx_eur_from_cents, 14),
-            ("Form amount EUR", "form_amount_eur_cents", "money", _xlsx_eur_from_cents, 18),
-            ("Kennzahl", "kennzahl", "int", None, 10),
-            ("Stored Kennzahl", "stored_kennzahl", "int", None, 16),
-            ("Form section", "form_section", "wrap", None, 34),
-            ("Note", "note", "wrap", None, 40),
-        ],
-        report["rows"],
-        formats,
-    )
-    _write_xlsx_sheet(
-        workbook,
-        "Assumptions",
-        [
-            ("Code", "code", "text", None, 26),
-            ("Severity", "severity", "text", None, 12),
-            ("Message", "message", "wrap", None, 96),
-        ],
-        report["assumptions"],
-        formats,
-    )
-    _write_xlsx_sheet(
-        workbook,
-        "Data Quality",
-        [
-            ("Type", "type", "text", None, 20),
-            ("Reason", "reason", "wrap", None, 64),
-            ("Count", "count", "int", None, 10),
-            ("Tx ID", "tx_id", "text", None, 24),
-            ("AT category", "at_category", "text", None, 22),
-            ("Stored Kennzahl", "stored_kennzahl", "int", None, 16),
-            ("Export Kennzahl", "export_kennzahl", "int", None, 16),
-        ],
-        _austrian_e1kv_quality_rows(report),
-        formats,
-    )
+    formats = _austrian_e1kv_xlsx_formats(workbook)
+    _austrian_e1kv_xlsx_write_overview(report, workbook, formats)
+    _austrian_e1kv_xlsx_write_section_sheets(report, workbook, formats)
+    _austrian_e1kv_xlsx_write_explanations(report, workbook, formats)
     workbook.close()
-    sheets = ["Summary", "Sections", "Transactions", "Assumptions", "Data Quality"]
     return {
         "file": str(path.resolve()),
         "bytes": path.stat().st_size,
         "form": report["form"],
         "tax_year": report["tax_year"],
-        "sheets": sheets,
+        "sheets": list(AUSTRIAN_E1KV_XLSX_SHEETS),
         "rows": len(report["rows"]),
         "summary_rows": len(report["summary_rows"]),
     }

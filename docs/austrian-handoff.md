@@ -97,6 +97,8 @@ friendlier `reports austrian-tax-summary` and `reports export-austrian`
 aliases use the same builder and data. The structured output includes
 Steuerbericht-style sections 1.1-4.5, with unsupported areas rendered
 as explicit zero-value placeholders instead of being silently omitted.
+The XLSX handoff follows the same section set with an overview sheet,
+numbered tabs, and an explanatory notes sheet.
 
 One taxable event can split across multiple gain/loss rows in rp2, so
 Kassiber groups Austrian realized journal rows by `(taxable_event,

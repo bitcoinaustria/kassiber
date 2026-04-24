@@ -158,8 +158,8 @@ details, Steuerbericht-style sections 1.1-4.5, and quarantine/data-quality
 notes. `reports austrian-tax-summary` and `reports export-austrian` are aliases
 for the same annual Austrian handoff. The CSV output contains the row-level
 detail table. The PDF repeats the review gate and assumptions. The XLSX workbook
-contains separate summary, section, transaction, assumption, and data-quality
-sheets with accountant-friendly formatting.
+uses an accountant-facing `Übersicht` sheet, separate numbered section tabs
+including `3.3.`, and `Erläuterungen zum Steuerreport`.
 
 Do not hand-fill domestic-provider or withheld-KESt fields from Kassiber
 output today; Kassiber does not yet store the metadata needed for 171, 173, or

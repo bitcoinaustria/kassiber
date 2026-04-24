@@ -139,5 +139,8 @@ them. The structured JSON/PDF report includes Steuerbericht-style sections
 1.1-4.5 so unsupported areas such as margin/derivatives, NFTs, gifts, lost
 coins, commercial mining, and minting are visible as zero-value placeholders
 instead of disappearing from the handoff.
+The XLSX export mirrors that structure as an accountant-facing workbook with
+an `Übersicht` sheet, separate numbered tabs such as `1.1.`, `2.1.`, and
+`3.3.`, plus an `Erläuterungen zum Steuerreport` notes sheet.
 
 See [../plan/06-austrian-tax-engine.md](../plan/06-austrian-tax-engine.md) for the broader design and remaining Austrian backlog, plus [../austrian-handoff.md](../austrian-handoff.md) for the current marker / carry-basis contract.

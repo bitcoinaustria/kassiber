@@ -4118,6 +4118,7 @@ class ReviewRegressionTest(unittest.TestCase):
         self.assertEqual(report["kennzahl_totals"]["172"]["amount_eur_cents"], 800)
         self.assertIn("2.1", report["sections"])
         self.assertEqual(report["sections"]["2.1"]["totals"]["amount_eur_cents"], 800)
+        self.assertEqual(report["sections"]["3.3"]["status"], "not_modelled")
         self.assertEqual(report["sections"]["4.4"]["status"], "not_modelled")
         rows_by_tx = {row["tx_id"]: row for row in report["rows"]}
         self.assertEqual(rows_by_tx["at-e1kv-staking"]["kennzahl"], 172)
@@ -4186,18 +4187,39 @@ class ReviewRegressionTest(unittest.TestCase):
         )
         self._assert_ok(payload, result, "reports.export-austrian-e1kv-xlsx")
         self.assertEqual(payload["data"]["form"], "E 1kv")
-        self.assertEqual(payload["data"]["sheets"], ["Summary", "Sections", "Transactions", "Assumptions", "Data Quality"])
-        self.assertIn("Transactions", payload["data"]["sheets"])
+        self.assertEqual(
+            payload["data"]["sheets"],
+            [
+                "Übersicht",
+                "1.1.",
+                "1.2.",
+                "1.3.",
+                "2.1.",
+                "2.2.",
+                "3.1.",
+                "3.2.",
+                "3.3.",
+                "4.1.",
+                "4.2.",
+                "4.3.",
+                "4.4.",
+                "4.5.",
+                "Erläuterungen zum Steuerreport",
+            ],
+        )
+        self.assertIn("2.1.", payload["data"]["sheets"])
         self.assertGreater(xlsx_file.stat().st_size, 0)
         with zipfile.ZipFile(xlsx_file) as workbook:
             names = set(workbook.namelist())
             self.assertIn("xl/workbook.xml", names)
             workbook_xml = workbook.read("xl/workbook.xml").decode("utf-8")
             shared_strings = workbook.read("xl/sharedStrings.xml").decode("utf-8")
-        self.assertIn('name="Transactions"', workbook_xml)
-        self.assertIn('name="Sections"', workbook_xml)
+        self.assertIn('name="Übersicht"', workbook_xml)
+        self.assertIn('name="1.1."', workbook_xml)
+        self.assertIn('name="3.3."', workbook_xml)
+        self.assertIn('name="Erläuterungen zum Steuerreport"', workbook_xml)
         self.assertIn("at-e1kv-staking", shared_strings)
-        self.assertIn("Form amount EUR", shared_strings)
+        self.assertIn("Summe laufende Einkünfte", shared_strings)
         self.assertIn(
             "AT-E1KV-KENNZAHL-REPROCESS",
             {assumption["code"] for assumption in report["assumptions"]},
