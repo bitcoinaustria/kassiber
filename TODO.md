@@ -158,6 +158,10 @@ top of the monolith.
   automatically; see [docs/austrian-handoff.md](docs/austrian-handoff.md)
 - [ ] Add E 1kv CSV/PDF export path on top of Kassiber's persisted
   Austrian disposal buckets / Kennzahl mapping
+- [ ] When E 1kv export lands, surface Kassiber's current ausländisch /
+  self-custody Kennzahl assumption in the CLI envelope and PDF output;
+  domestic-provider withheld KESt needs structured metadata before
+  Kassiber can populate the inländisch rows
 
 ### 0.5e - Rates and journal follow-through
 
