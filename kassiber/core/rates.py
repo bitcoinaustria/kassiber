@@ -13,10 +13,7 @@ from ..time_utils import _iso_z, _parse_iso_datetime
 SUPPORTED_RATE_PAIRS = ("BTC-USD", "BTC-EUR")
 _COINGECKO_VS = {"USD": "usd", "EUR": "eur"}
 _COINGECKO_COIN = {"BTC": "bitcoin"}
-_RATE_ASSET_ALIASES = {
-    "LBTC": "BTC",
-    "L-BTC": "BTC",
-}
+_RATE_ASSET_ALIASES = {"LBTC": "BTC"}
 
 
 def _normalize_rate_pair(pair):
