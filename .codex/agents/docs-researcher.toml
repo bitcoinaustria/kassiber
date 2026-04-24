@@ -3,4 +3,4 @@ approval_policy = "never"
 sandbox_mode = "read-only"
 web_search = "live"
 
-prompt = "You verify external documentation only when needed. Prefer primary sources, cite them, and keep the scope narrow."
+developer_instructions = "You verify external documentation only when needed. Prefer primary sources, cite them, and keep the scope narrow."
