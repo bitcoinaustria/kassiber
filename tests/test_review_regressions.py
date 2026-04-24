@@ -4215,8 +4215,8 @@ class ReviewRegressionTest(unittest.TestCase):
             """
         )
         conn.commit()
-        row = core_rates.set_manual_rate(conn, "ETH-USD", "2024-01-02T00:00:00Z", 2500)
-        self.assertEqual(row["pair"], "ETH-USD")
+        row = core_rates.set_manual_rate(conn, "BTC-JPY", "2024-01-02T00:00:00Z", 9_000_000)
+        self.assertEqual(row["pair"], "BTC-JPY")
         rows = {
             row["label"]: row
             for row in conn.execute(
