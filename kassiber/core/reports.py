@@ -1393,6 +1393,18 @@ def _austrian_e1kv_mismatches(rows):
     return mismatches
 
 
+def _austrian_e1kv_mismatch_table_rows(report):
+    return [
+        [
+            row["tx_id"],
+            AUSTRIAN_E1KV_CATEGORY_LABELS.get(row["at_category"], row["at_category"]),
+            row["stored_kennzahl"],
+            row["export_kennzahl"],
+        ]
+        for row in report["data_quality"]["kennzahl_mismatches"]
+    ]
+
+
 def report_austrian_e1kv(conn, workspace_ref, profile_ref, hooks: ReportHooks, tax_year=None):
     workspace, profile = _resolve_report_scope(conn, workspace_ref, profile_ref, hooks)
     _require_austrian_e1kv_profile(profile)
@@ -1516,6 +1528,12 @@ def _build_austrian_e1kv_report_lines(conn, workspace_ref, profile_ref, hooks: R
         lines.append("No quarantined transactions in scope.")
     if mismatches:
         lines.append("Some rows had stale stored Kennzahlen; the export used the current category mapping.")
+        lines.extend(
+            _markdown_table_lines(
+                ["Tx ID", "Category", "Stored KZ", "Export KZ"],
+                _austrian_e1kv_mismatch_table_rows(report),
+            )
+        )
     else:
         lines.append("Stored Kennzahlen match the current export mapping.")
 
@@ -2071,6 +2089,21 @@ def _austrian_e1kv_xlsx_write_explanations(report, workbook, formats):
                 "Quarantinierte Transaktionen bleiben außerhalb dieser Arbeitsmappe, bis sie aufgelöst sind.",
                 "explanation_text",
             ),
+        ]
+    )
+    mismatches = _austrian_e1kv_mismatch_table_rows(report)
+    if mismatches:
+        rows.append(("Kennzahl-Abweichungen", "explanation_heading"))
+        rows.append(("Transaktion | Kategorie | gespeichert | Export", "explanation_text"))
+        rows.extend(
+            (
+                f"{tx_id} | {category} | {stored_kennzahl} | {export_kennzahl}",
+                "explanation_text",
+            )
+            for tx_id, category, stored_kennzahl, export_kennzahl in mismatches
+        )
+    rows.extend(
+        [
             ("Nicht modellierte Blätter", "explanation_heading"),
             (
                 "Margin/Derivate/Futures, NFT-Spekulationsgeschäfte, Steuergebühren, "
@@ -2200,6 +2233,19 @@ def _austrian_e1kv_explanation_csv_rows(report):
                 f"abweichende gespeicherte Kennzahlen: {len(report['data_quality']['kennzahl_mismatches'])}. "
                 "Quarantinierte Transaktionen bleiben außerhalb dieses Bundles, bis sie aufgelöst sind."
             ],
+        ]
+    )
+    mismatches = _austrian_e1kv_mismatch_table_rows(report)
+    if mismatches:
+        rows.extend(
+            [
+                ["Kennzahl-Abweichungen"],
+                ["Transaktion", "Kategorie", "Gespeicherte KZ", "Export KZ"],
+                *mismatches,
+            ]
+        )
+    rows.extend(
+        [
             ["Nicht modellierte Dateien"],
             [
                 "Margin/Derivate/Futures, NFT-Spekulationsgeschäfte, Steuergebühren, "

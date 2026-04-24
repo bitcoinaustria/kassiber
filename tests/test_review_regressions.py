@@ -4096,6 +4096,23 @@ class ReviewRegressionTest(unittest.TestCase):
             "--profile", "Default",
         )
         self._assert_ok(payload, result, "journals.process")
+        db = sqlite3.connect(self.data_root / "kassiber.sqlite3")
+        try:
+            cursor = db.execute(
+                """
+                UPDATE journal_entries
+                SET at_kennzahl = 175
+                WHERE at_category = 'income_capital_yield'
+                  AND transaction_id = (
+                    SELECT id FROM transactions WHERE external_id = ?
+                  )
+                """,
+                ("at-e1kv-staking",),
+            )
+            self.assertEqual(cursor.rowcount, 1)
+            db.commit()
+        finally:
+            db.close()
 
         payload, result = self._run_json(
             "reports", "austrian-e1kv",
@@ -4122,9 +4139,21 @@ class ReviewRegressionTest(unittest.TestCase):
         self.assertEqual(report["sections"]["4.4"]["status"], "not_modelled")
         rows_by_tx = {row["tx_id"]: row for row in report["rows"]}
         self.assertEqual(rows_by_tx["at-e1kv-staking"]["kennzahl"], 172)
+        self.assertEqual(rows_by_tx["at-e1kv-staking"]["stored_kennzahl"], 175)
         self.assertEqual(rows_by_tx["at-e1kv-staking"]["income_eur_cents"], 800)
         self.assertEqual(rows_by_tx["at-e1kv-sell"]["kennzahl"], 174)
         self.assertEqual(rows_by_tx["at-e1kv-sell"]["gain_loss_eur_cents"], 1000)
+        self.assertEqual(
+            report["data_quality"]["kennzahl_mismatches"],
+            [
+                {
+                    "tx_id": "at-e1kv-staking",
+                    "at_category": "income_capital_yield",
+                    "stored_kennzahl": 175,
+                    "export_kennzahl": 172,
+                }
+            ],
+        )
 
         payload, result = self._run_json(
             "reports", "austrian-tax-summary",
@@ -4176,6 +4205,9 @@ class ReviewRegressionTest(unittest.TestCase):
         self.assertIn("II. Detail Sections", plain_result.stdout)
         self.assertIn("3.3. Nicht steuerbare Steuergebühren und Rückerstattungen", plain_result.stdout)
         self.assertIn("Summe laufende Einkünfte", plain_result.stdout)
+        self.assertIn("Some rows had stale stored Kennzahlen", plain_result.stdout)
+        self.assertIn("| at-e1kv-staking |", plain_result.stdout)
+        self.assertIn("| 175 | 172 |", plain_result.stdout)
 
         alias_pdf_file = self.case_dir / "austrian-alias.pdf"
         payload, result = self._run_json(
@@ -4232,6 +4264,8 @@ class ReviewRegressionTest(unittest.TestCase):
         self.assertIn('name="Erläuterungen zum Steuerreport"', workbook_xml)
         self.assertIn("at-e1kv-staking", shared_strings)
         self.assertIn("Summe laufende Einkünfte", shared_strings)
+        self.assertIn("Kennzahl-Abweichungen", shared_strings)
+        self.assertIn("Transaktion | Kategorie | gespeichert | Export", shared_strings)
         self.assertIn(
             "AT-E1KV-KENNZAHL-REPROCESS",
             {assumption["code"] for assumption in report["assumptions"]},
@@ -4263,7 +4297,10 @@ class ReviewRegressionTest(unittest.TestCase):
         self.assertIn("at-e1kv-staking", section_21_text)
         self.assertIn("Summe laufende Einkünfte", section_21_text)
         self.assertIn("Summe entrichtete Steuergebühren", section_33_csv.read_text(encoding="utf-8"))
-        self.assertIn("AT-E1KV-KENNZAHL-REPROCESS", notes_csv.read_text(encoding="utf-8"))
+        notes_text = notes_csv.read_text(encoding="utf-8")
+        self.assertIn("AT-E1KV-KENNZAHL-REPROCESS", notes_text)
+        self.assertIn("Kennzahl-Abweichungen", notes_text)
+        self.assertIn("at-e1kv-staking", notes_text)
 
     def test_austrian_e1kv_reports_loss_as_positive_kz176(self):
         payload, result = self._run_json("init")
