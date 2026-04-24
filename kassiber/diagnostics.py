@@ -26,7 +26,7 @@ PUBLIC_SAFE_NOTICE = (
 )
 DIAGNOSTICS_SUBDIR = Path("exports") / "diagnostics"
 
-_SENSITIVE_KEY_PARTS = (
+_SENSITIVE_KEY_TOKENS = {
     "address",
     "amount",
     "auth",
@@ -77,7 +77,16 @@ _SENSITIVE_KEY_PARTS = (
     "value",
     "wallet",
     "workspace",
-)
+}
+_SENSITIVE_EXACT_KEYS = {
+    "account",
+    "asset",
+    "backend",
+    "pair_id",
+    "tag",
+    "transaction",
+    "type",
+}
 _SAFE_ENUM_KEYS = {
     "all",
     "chain",
@@ -92,7 +101,6 @@ _SAFE_ENUM_KEYS = {
     "policy",
     "save",
     "sync_all",
-    "type",
 }
 _SKIP_ARG_KEYS = {
     "command",
@@ -106,10 +114,18 @@ _PATHISH_RE = re.compile(
     r"(?P<path>(?:/[A-Za-z0-9_.@+-][^\s'\":)]*)|(?:[A-Za-z]:\\[^\s'\":)]+))"
 )
 _URL_RE = re.compile(r"\b[a-z][a-z0-9+.-]*://[^\s'\"<>]+", re.IGNORECASE)
+_TIMESTAMP_RE = re.compile(
+    r"\b\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:Z|[+-]\d{2}:\d{2})?\b",
+    re.IGNORECASE,
+)
 _HEX64_RE = re.compile(r"\b[0-9a-fA-F]{64}\b")
-_XPUB_RE = re.compile(r"\b(?:xpub|ypub|zpub|tpub|upub|vpub|Ypub|Zpub|Vpub)[A-Za-z0-9]{20,}\b")
+_XPUB_RE = re.compile(r"\b(?:xpub|ypub|zpub|tpub|upub|vpub)[A-Za-z0-9]{20,}\b", re.IGNORECASE)
 _BECH32_RE = re.compile(r"\b(?:bc1|tb1|bcrt1|lq1|ex1)[0-9a-z]{8,90}\b", re.IGNORECASE)
-_NUMBER_RE = re.compile(r"(?<![A-Za-z0-9_])[-+]?\d+\.\d+(?![A-Za-z0-9_])")
+_AMOUNT_UNIT_RE = re.compile(
+    r"(?<![A-Za-z0-9_])[-+]?\d+(?:\.\d+)?\s*(?:msat|sats?|btc|lbtc|usd|eur)\b",
+    re.IGNORECASE,
+)
+_NUMBER_RE = re.compile(r"(?<![A-Za-z_])[-+]?\d+(?:\.\d+)?(?![A-Za-z_])")
 
 
 @dataclass(frozen=True)
@@ -201,7 +217,7 @@ def write_error_diagnostics(
             data_root=getattr(args, "data_root", None),
         )
         if result:
-            location = result.relative_path or "the requested path"
+            location = result.relative_path or str(result.path)
             print(f"diagnostics: wrote public report to {location}", file=sys.stderr)
         return result
     except Exception as write_error:  # pragma: no cover - best-effort error path
@@ -284,14 +300,14 @@ def _argument_summary(args: Any) -> list[dict[str, Any]]:
 def _argument_value_class(key: str, value: Any) -> dict[str, Any]:
     if isinstance(value, bool):
         return {"value_class": "boolean", "value": value}
+    if _is_sensitive_key(key):
+        return {"value_class": "redacted"}
     if key in _SAFE_ENUM_KEYS and isinstance(value, str):
         return {"value_class": "enum", "value": sanitize_text(value)}
     if isinstance(value, (int, float)):
         return {"value_class": "number"}
     if isinstance(value, (list, tuple, set)):
         return {"value_class": "list", "items": len(value)}
-    if _is_sensitive_key(key):
-        return {"value_class": "redacted"}
     return {"value_class": "text", "value": sanitize_text(str(value))}
 
 
@@ -644,10 +660,12 @@ def sanitize_text(value: Any) -> str | None:
         return None
     text = str(value)
     text = _URL_RE.sub("<url>", text)
+    text = _TIMESTAMP_RE.sub("<timestamp>", text)
     text = _HEX64_RE.sub("<hex64>", text)
     text = _XPUB_RE.sub("<xpub>", text)
     text = _BECH32_RE.sub("<address>", text)
     text = _PATHISH_RE.sub("<path>", text)
+    text = _AMOUNT_UNIT_RE.sub("<amount>", text)
     text = _NUMBER_RE.sub("<number>", text)
     return text
 
@@ -723,7 +741,10 @@ def _backend_locality(url: Any) -> str:
 
 def _is_sensitive_key(key: str) -> bool:
     lowered = key.lower().replace("-", "_")
-    return any(part in lowered for part in _SENSITIVE_KEY_PARTS)
+    if lowered in _SENSITIVE_EXACT_KEYS:
+        return True
+    tokens = {part for part in lowered.split("_") if part}
+    return bool(tokens & _SENSITIVE_KEY_TOKENS)
 
 
 def _diagnostics_filename(generated_at: Any) -> str:

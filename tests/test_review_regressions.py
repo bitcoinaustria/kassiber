@@ -379,6 +379,9 @@ class ReviewRegressionTest(unittest.TestCase):
         self.assertFalse(command_needs_db(Namespace(command="wallets", wallets_command="kinds")))
         self.assertTrue(command_needs_db(Namespace(command="diagnostics", diagnostics_command="collect")))
         self.assertTrue(command_needs_db(Namespace(command="status")))
+        self.assertTrue(command_needs_db(Namespace(command="backends", backends_command="list")))
+        self.assertTrue(command_needs_db(Namespace(command="backends", backends_command="get")))
+        self.assertTrue(command_needs_db(Namespace(command="rates", rates_command="pairs")))
 
     def test_public_diagnostics_collect_omits_sensitive_state(self):
         sensitive_txid = "a" * 64
@@ -493,9 +496,61 @@ class ReviewRegressionTest(unittest.TestCase):
         self.assertEqual(report["error"]["code"], "validation")
         self.assertIn("stack", report)
         self.assertNotIn(str(self.data_root), json.dumps(report, sort_keys=True))
-        self.assertTrue(command_needs_db(Namespace(command="backends", backends_command="list")))
-        self.assertTrue(command_needs_db(Namespace(command="backends", backends_command="get")))
-        self.assertTrue(command_needs_db(Namespace(command="rates", rates_command="pairs")))
+
+        custom_path = self.case_dir / "custom-diagnostics.json"
+        result = self._run_cli(
+            "--diagnostics-out", str(custom_path),
+            "rates", "range", "BTC-USD",
+            "--start", "still-not-a-date",
+            machine=True,
+        )
+        self.assertNotEqual(result.returncode, 0)
+        self.assertTrue(custom_path.exists())
+        self.assertIn(str(custom_path), result.stderr)
+
+    def test_public_diagnostics_sanitizes_xpubs_integer_amounts_and_argument_text(self):
+        from argparse import Namespace
+
+        from kassiber.diagnostics import collect_public_diagnostics, sanitize_text
+
+        sample_upub = "Upub" + ("A" * 80)
+        sanitized = sanitize_text(
+            f"descriptor={sample_upub} amount=12345 sat fee=2500msat timestamp=2026-04-24T09:00:00Z"
+        )
+        self.assertNotIn(sample_upub, sanitized)
+        self.assertNotIn("12345", sanitized)
+        self.assertNotIn("2500", sanitized)
+        self.assertNotIn("2026", sanitized)
+        self.assertNotIn("09:00", sanitized)
+
+        args = Namespace(
+            command="metadata",
+            metadata_command="records",
+            records_command="list",
+            format="json",
+            machine=True,
+            debug=False,
+            save=False,
+            tag="private-tax-review",
+            backend="secret-backend",
+            account="private-account",
+            type="private-type",
+            asset="PRIVATEASSET",
+            provider="public-provider",
+            trend="weekly",
+        )
+        report = collect_public_diagnostics(None, args)
+        values = {
+            item["name"]: item
+            for item in report["invocation"]["provided_arguments"]
+        }
+        self.assertEqual(values["tag"]["value_class"], "redacted")
+        self.assertEqual(values["backend"]["value_class"], "redacted")
+        self.assertEqual(values["account"]["value_class"], "redacted")
+        self.assertEqual(values["type"]["value_class"], "redacted")
+        self.assertEqual(values["asset"]["value_class"], "redacted")
+        self.assertEqual(values["provider"]["value"], "public-provider")
+        self.assertEqual(values["trend"]["value"], "weekly")
 
     def test_metadata_limit_errors_keep_cursor_hint(self):
         self._bootstrap_wallet()

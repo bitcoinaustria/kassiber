@@ -54,13 +54,16 @@ Errors emit:
   "kind": "diagnostics.collect",
   "schema_version": 1,
   "data": {
-    "report_schema_version": 1,
-    "public_safe": true,
-    "environment": {},
-    "invocation": {},
-    "storage": {},
-    "state": {},
-    "checks": {}
+    "report": {
+      "report_schema_version": 1,
+      "public_safe": true,
+      "environment": {},
+      "invocation": {},
+      "storage": {},
+      "state": {},
+      "checks": {}
+    },
+    "saved": null
   }
 }
 ```

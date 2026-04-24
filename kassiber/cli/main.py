@@ -1403,26 +1403,20 @@ def dispatch(conn: sqlite3.Connection | None, args: argparse.Namespace) -> Any:
                 args,
                 runtime_config=getattr(args, "runtime_config", None),
             )
+            saved_payload = None
             if args.save:
                 saved = save_public_diagnostics_report(
                     report,
                     target="auto",
                     data_root=args.data_root,
                 )
-                return emit(
-                    args,
-                    {
-                        "report": report,
-                        "saved": {
-                            "target": saved.target,
-                            "relative_path": saved.relative_path,
-                            "filename": saved.path.name,
-                        }
-                        if saved
-                        else None,
-                    },
-                )
-            return emit(args, report)
+                if saved:
+                    saved_payload = {
+                        "target": saved.target,
+                        "relative_path": saved.relative_path,
+                        "filename": saved.path.name,
+                    }
+            return emit(args, {"report": report, "saved": saved_payload})
     raise AppError("Unknown command")
 
 
