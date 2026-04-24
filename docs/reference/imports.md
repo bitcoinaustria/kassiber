@@ -29,7 +29,7 @@ Generic wallet imports accept JSON arrays or CSV files with these fields:
 
 `amount` should be positive. If you pass a negative amount, Kassiber normalizes it and infers direction when possible.
 
-If imported transactions do not carry `fiat_rate` or `fiat_value`, `journals process` first tries to backfill pricing from the local rates cache. When `confirmed_at` is present, Kassiber prices from that timestamp; otherwise it falls back to `occurred_at`. Transactions only quarantine if pricing is still missing after that.
+If imported transactions do not carry `fiat_rate` or `fiat_value`, `journals process` first tries to backfill pricing from the local rates cache. When `confirmed_at` is present, Kassiber prices from that timestamp; otherwise it falls back to `occurred_at`. Liquid Bitcoin import spellings such as `L-BTC` are normalized to `LBTC` and use the BTC fiat rate because L-BTC is pegged one-to-one with BTC. Transactions only quarantine if pricing is still missing after that.
 
 For inbound transactions, explicit earn-like `kind` values such as `income`,
 `interest`, `staking`, `mining`, `airdrop`, `hardfork`, `wages`,

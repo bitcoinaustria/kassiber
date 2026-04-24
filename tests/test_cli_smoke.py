@@ -39,6 +39,10 @@ _CONFIRMED_PRICING_CSV = """date,confirmed_at,txid,direction,asset,amount,fee,de
 2024-05-09T09:00:00Z,2024-05-10T12:00:00Z,confirmed-price-1,inbound,BTC,0.01000000,0,Confirmed price sample
 """
 
+_L_BTC_CONFIRMED_PRICING_CSV = """date,confirmed_at,txid,direction,asset,amount,fee,description
+2024-05-09T09:00:00Z,2024-05-10T12:00:00Z,lbtc-confirmed-price-1,inbound,L-BTC,0.01000000,0,Liquid confirmed price sample
+"""
+
 # Cross-wallet self-transfer scenario: cold wallet receives 1 BTC, then sends
 # 0.5 BTC + 0.001 BTC network fee to the hot wallet. The same on-chain txid
 # appears in both wallet exports, which is the trigger for IntraTransaction
@@ -175,6 +179,8 @@ class CliSmokeTest(unittest.TestCase):
         cls.cache_pricing_csv.write_text(_CACHE_PRICING_CSV, encoding="utf-8")
         cls.confirmed_pricing_csv = Path(cls._tmp.name) / "confirmed-pricing.csv"
         cls.confirmed_pricing_csv.write_text(_CONFIRMED_PRICING_CSV, encoding="utf-8")
+        cls.lbtc_confirmed_pricing_csv = Path(cls._tmp.name) / "lbtc-confirmed-pricing.csv"
+        cls.lbtc_confirmed_pricing_csv.write_text(_L_BTC_CONFIRMED_PRICING_CSV, encoding="utf-8")
         cls.cold_transfer_csv = Path(cls._tmp.name) / "cold-transfer.csv"
         cls.cold_transfer_csv.write_text(_COLD_TRANSFER_CSV, encoding="utf-8")
         cls.hot_transfer_csv = Path(cls._tmp.name) / "hot-transfer.csv"
@@ -807,6 +813,57 @@ class CliSmokeTest(unittest.TestCase):
         )
         self._assert_kind(payload, "transactions.list")
         record = payload["data"][0]
+        self.assertEqual(record["confirmed_at"], "2024-05-10T12:00:00Z")
+        self.assertAlmostEqual(float(record["fiat_rate"]), 62000.0, places=4)
+        self.assertAlmostEqual(float(record["fiat_value"]), 620.0, places=4)
+
+    def test_11aa_lbtc_pricing_uses_btc_rate_at_confirmed_at(self):
+        workspace = "LiquidConfirmedPricing"
+        profile = "LiquidConfirmedPricingDefault"
+        self._assert_kind(self._cli("workspaces", "create", workspace), "workspaces.create")
+        self._assert_kind(
+            self._cli("profiles", "create", "--workspace", workspace, profile),
+            "profiles.create",
+        )
+        payload = self._cli(
+            "wallets", "create",
+            "--workspace", workspace,
+            "--profile", profile,
+            "--label", "LiquidConfirmedPriced",
+            "--kind", "custom",
+        )
+        self._assert_kind(payload, "wallets.create")
+
+        payload = self._cli(
+            "wallets", "import-csv",
+            "--workspace", workspace,
+            "--profile", profile,
+            "--wallet", "LiquidConfirmedPriced",
+            "--file", str(self.lbtc_confirmed_pricing_csv),
+        )
+        self._assert_kind(payload, "wallets.import-csv")
+        self.assertEqual(payload["data"]["imported"], 1)
+
+        self._cli("rates", "set", "BTC-USD", "2024-05-09T00:00:00Z", "60000")
+        self._cli("rates", "set", "BTC-USD", "2024-05-10T00:00:00Z", "62000")
+
+        payload = self._cli(
+            "journals", "process",
+            "--workspace", workspace,
+            "--profile", profile,
+        )
+        self._assert_kind(payload, "journals.process")
+        self.assertEqual(payload["data"]["auto_priced"], 1)
+
+        payload = self._cli(
+            "transactions", "list",
+            "--workspace", workspace,
+            "--profile", profile,
+            "--wallet", "LiquidConfirmedPriced",
+        )
+        self._assert_kind(payload, "transactions.list")
+        record = payload["data"][0]
+        self.assertEqual(record["asset"], "LBTC")
         self.assertEqual(record["confirmed_at"], "2024-05-10T12:00:00Z")
         self.assertAlmostEqual(float(record["fiat_rate"]), 62000.0, places=4)
         self.assertAlmostEqual(float(record["fiat_value"]), 620.0, places=4)

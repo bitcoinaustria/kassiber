@@ -1020,18 +1020,7 @@ def _rate_pair_parts(pair):
 
 
 def _transaction_rate_pair(asset, fiat_currency):
-    asset_code = str(asset or "").strip().upper()
-    fiat_code = str(fiat_currency or "").strip().upper()
-    if not asset_code or not fiat_code:
-        return None
-    asset_aliases = {
-        "LBTC": "BTC",
-    }
-    asset_code = asset_aliases.get(asset_code, asset_code)
-    pair = f"{asset_code}-{fiat_code}"
-    if pair not in SUPPORTED_RATE_PAIRS:
-        return None
-    return pair
+    return core_rates.transaction_rate_pair(asset, fiat_currency)
 
 
 def upsert_rate(conn, pair, timestamp, rate, source, fetched_at=None):

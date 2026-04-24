@@ -13,6 +13,10 @@ from ..time_utils import _iso_z, _parse_iso_datetime
 SUPPORTED_RATE_PAIRS = ("BTC-USD", "BTC-EUR")
 _COINGECKO_VS = {"USD": "usd", "EUR": "eur"}
 _COINGECKO_COIN = {"BTC": "bitcoin"}
+_RATE_ASSET_ALIASES = {
+    "LBTC": "BTC",
+    "L-BTC": "BTC",
+}
 
 
 def _normalize_rate_pair(pair):
@@ -52,8 +56,7 @@ def transaction_rate_pair(asset, fiat_currency):
     fiat_code = str(fiat_currency or "").strip().upper()
     if not asset_code or not fiat_code:
         return None
-    asset_aliases = {"LBTC": "BTC"}
-    asset_code = asset_aliases.get(asset_code, asset_code)
+    asset_code = _RATE_ASSET_ALIASES.get(asset_code, asset_code)
     pair = f"{asset_code}-{fiat_code}"
     if pair not in SUPPORTED_RATE_PAIRS:
         return None
