@@ -136,6 +136,8 @@ def normalize_asset_code(value):
     lowered = text.lower()
     if len(lowered) == 64 and all(char in "0123456789abcdef" for char in lowered):
         return lowered
+    if lowered in {"l-btc", "lbtc"}:
+        return "LBTC"
     return text.upper()
 
 
