@@ -26,6 +26,7 @@ import sqlite3
 from pathlib import Path
 
 from .tax_policy import DEFAULT_LONG_TERM_DAYS, DEFAULT_TAX_COUNTRY
+from .wallet_descriptors import LIQUID_POLICY_ASSET_IDS
 
 
 APP_NAME = "kassiber"
@@ -412,6 +413,7 @@ def ensure_schema_compat(conn):
     ensure_column(conn, "transactions", "confirmed_at", "TEXT")
     ensure_column(conn, "transactions", "fiat_price_source", "TEXT")
     _migrate_msat_columns(conn)
+    _backfill_liquid_asset_codes(conn)
 
 
 def _column_is_real(conn, table_name, column_name):
@@ -521,3 +523,28 @@ def _migrate_msat_columns(conn):
         raise
     finally:
         conn.execute(f"PRAGMA foreign_keys = {'ON' if previous_fk_state else 'OFF'}")
+
+
+def _backfill_liquid_asset_codes(conn):
+    """Heal Liquid transactions whose asset was stored as a raw policy-asset hex.
+
+    Early Liquid descriptor wallets could be created with a symbolic ``policy_asset``
+    (e.g. ``L-BTC``), which made the sync decoder leave the 64-char hex asset id on
+    each record instead of normalizing to ``LBTC`` — auto-pricing then skipped them
+    because the fiat-rate alias is keyed on ``LBTC``. Rewrite the hex to ``LBTC`` and
+    invalidate the affected profiles so the next ``journals process`` reprocesses.
+    """
+    policy_asset_hexes = tuple(sorted({value.lower() for value in LIQUID_POLICY_ASSET_IDS.values() if value}))
+    if not policy_asset_hexes:
+        return
+    placeholders = ",".join("?" for _ in policy_asset_hexes)
+    cursor = conn.execute(
+        f"UPDATE transactions SET asset = 'LBTC' WHERE lower(asset) IN ({placeholders})",
+        policy_asset_hexes,
+    )
+    if cursor.rowcount and cursor.rowcount > 0:
+        conn.execute(
+            "UPDATE profiles SET last_processed_at = NULL, last_processed_tx_count = 0 "
+            "WHERE id IN (SELECT DISTINCT profile_id FROM transactions WHERE asset = 'LBTC')"
+        )
+    conn.commit()

@@ -132,7 +132,14 @@ def load_wallet_descriptor_plan_from_config(config):
 def wallet_policy_asset_id(config, chain, network):
     explicit = str_or_none(config.get("policy_asset"))
     if explicit:
-        return normalize_asset_code(explicit)
+        normalized = normalize_asset_code(explicit)
+        # Liquid sync compares the hex asset id from each output against this
+        # value, so resolve a symbolic LBTC to the network's hex policy asset.
+        if normalized == "LBTC" and chain == "liquid":
+            resolved = default_policy_asset_id(network)
+            if resolved:
+                return normalize_asset_code(resolved)
+        return normalized
     if chain == "liquid":
         return normalize_asset_code(default_policy_asset_id(network))
     return ""

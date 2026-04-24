@@ -1,5 +1,7 @@
 import json
+import tempfile
 import unittest
+from pathlib import Path
 from unittest.mock import patch
 
 from kassiber.core.sync import WalletSyncState
@@ -10,6 +12,8 @@ from kassiber.core.sync_backends import (
     scriptpubkey_scripthash,
     validate_backend_for_wallet,
 )
+from kassiber.core.wallets import wallet_policy_asset_id
+from kassiber.db import open_db
 from kassiber.time_utils import timestamp_to_iso
 from kassiber.wallet_descriptors import default_policy_asset_id
 
@@ -339,6 +343,130 @@ class LiquidElectrumSyncTest(unittest.TestCase):
                 [("blockchain.block.header", [123])],
             ],
         )
+
+
+class LiquidPolicyAssetResolutionTest(unittest.TestCase):
+    def test_symbolic_lbtc_resolves_to_network_hex_on_liquid(self):
+        hex_id = default_policy_asset_id("liquidv1")
+        for symbolic in ("L-BTC", "l-btc", "LBTC", "lbtc"):
+            with self.subTest(symbolic=symbolic):
+                resolved = wallet_policy_asset_id(
+                    {"policy_asset": symbolic}, "liquid", "liquidv1"
+                )
+                self.assertEqual(resolved, hex_id)
+
+    def test_explicit_hex_policy_asset_is_preserved(self):
+        hex_id = default_policy_asset_id("liquidv1")
+        resolved = wallet_policy_asset_id(
+            {"policy_asset": hex_id}, "liquid", "liquidv1"
+        )
+        self.assertEqual(resolved, hex_id)
+
+    def test_symbolic_policy_asset_on_non_liquid_chain_is_left_alone(self):
+        resolved = wallet_policy_asset_id(
+            {"policy_asset": "LBTC"}, "bitcoin", "main"
+        )
+        self.assertEqual(resolved, "LBTC")
+
+    def test_missing_policy_asset_falls_back_to_network_hex(self):
+        hex_id = default_policy_asset_id("liquidv1")
+        resolved = wallet_policy_asset_id({}, "liquid", "liquidv1")
+        self.assertEqual(resolved, hex_id)
+
+
+class LiquidAssetBackfillTest(unittest.TestCase):
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory(prefix="kassiber-liquid-asset-backfill-")
+        self.addCleanup(self._tmp.cleanup)
+        self.data_root = Path(self._tmp.name) / "data"
+
+    def _seed_minimal_schema(self, conn):
+        now = "2026-04-20T00:00:00Z"
+        conn.execute(
+            "INSERT INTO workspaces (id, label, created_at) VALUES (?, ?, ?)",
+            ("ws-1", "ws", now),
+        )
+        conn.execute(
+            "INSERT INTO profiles (id, workspace_id, label, created_at, last_processed_at, last_processed_tx_count) "
+            "VALUES (?, ?, ?, ?, ?, ?)",
+            ("prof-1", "ws-1", "main", now, "2026-04-21T00:00:00Z", 12),
+        )
+        conn.execute(
+            "INSERT INTO wallets (id, workspace_id, profile_id, label, kind, config_json, created_at) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?)",
+            ("wal-1", "ws-1", "prof-1", "Liquid", "descriptor", "{}", now),
+        )
+        conn.commit()
+
+    def _insert_tx(self, conn, tx_id, asset):
+        conn.execute(
+            "INSERT INTO transactions ("
+            "id, workspace_id, profile_id, wallet_id, fingerprint, occurred_at, "
+            "direction, asset, amount, fee, created_at"
+            ") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (
+                tx_id,
+                "ws-1",
+                "prof-1",
+                "wal-1",
+                f"fp-{tx_id}",
+                "2026-04-15T12:00:00Z",
+                "inbound",
+                asset,
+                1_000,
+                0,
+                "2026-04-15T12:00:00Z",
+            ),
+        )
+        conn.commit()
+
+    def test_open_db_rewrites_liquid_hex_to_lbtc(self):
+        hex_id = default_policy_asset_id("liquidv1")
+        conn = open_db(str(self.data_root))
+        try:
+            self._seed_minimal_schema(conn)
+            self._insert_tx(conn, "tx-hex", hex_id)
+            self._insert_tx(conn, "tx-btc", "BTC")
+        finally:
+            conn.close()
+
+        # Re-open to trigger ensure_schema_compat → _backfill_liquid_asset_codes.
+        conn = open_db(str(self.data_root))
+        try:
+            assets = {
+                row["id"]: row["asset"]
+                for row in conn.execute("SELECT id, asset FROM transactions").fetchall()
+            }
+            self.assertEqual(assets["tx-hex"], "LBTC")
+            self.assertEqual(assets["tx-btc"], "BTC")
+            profile = conn.execute(
+                "SELECT last_processed_at, last_processed_tx_count FROM profiles WHERE id = ?",
+                ("prof-1",),
+            ).fetchone()
+            self.assertIsNone(profile["last_processed_at"])
+            self.assertEqual(profile["last_processed_tx_count"], 0)
+        finally:
+            conn.close()
+
+    def test_backfill_is_idempotent(self):
+        conn = open_db(str(self.data_root))
+        try:
+            self._seed_minimal_schema(conn)
+            self._insert_tx(conn, "tx-btc", "BTC")
+        finally:
+            conn.close()
+
+        # Second open: no hex rows, profile should stay as-is.
+        conn = open_db(str(self.data_root))
+        try:
+            profile = conn.execute(
+                "SELECT last_processed_at, last_processed_tx_count FROM profiles WHERE id = ?",
+                ("prof-1",),
+            ).fetchone()
+            self.assertEqual(profile["last_processed_at"], "2026-04-21T00:00:00Z")
+            self.assertEqual(profile["last_processed_tx_count"], 12)
+        finally:
+            conn.close()
 
 
 if __name__ == "__main__":
