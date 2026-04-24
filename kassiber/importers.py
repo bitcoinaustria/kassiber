@@ -34,6 +34,7 @@ a validation envelope rather than a bare `ValueError` / `KeyError`.
 
 import csv
 import json
+import os
 from decimal import Decimal
 
 from .envelope import json_ready
@@ -54,6 +55,12 @@ def load_import_records(file_path, input_format):
     return already-normalized records ready for
     `normalize_import_record`.
     """
+    if not os.path.exists(file_path):
+        raise AppError(
+            f"Import file not found: {file_path}",
+            code="not_found",
+            hint="Check the wallet source_file or pass an existing --file path.",
+        )
     if input_format == "json":
         with open(file_path, "r", encoding="utf-8") as handle:
             payload = json.load(handle)

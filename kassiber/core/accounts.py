@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import sqlite3
 import uuid
 
 from ..backends import (
@@ -65,10 +66,17 @@ def normalize_code(value):
 
 def create_workspace(conn, label):
     workspace_id = str(uuid.uuid4())
-    conn.execute(
-        "INSERT INTO workspaces(id, label, created_at) VALUES(?, ?, ?)",
-        (workspace_id, label, now_iso()),
-    )
+    try:
+        conn.execute(
+            "INSERT INTO workspaces(id, label, created_at) VALUES(?, ?, ?)",
+            (workspace_id, label, now_iso()),
+        )
+    except sqlite3.IntegrityError as exc:
+        raise AppError(
+            f"Workspace '{label}' already exists",
+            code="conflict",
+            hint="Choose a different workspace label or use the existing workspace.",
+        ) from exc
     set_setting(conn, "context_workspace", workspace_id)
     # A new workspace does not have a compatible current profile yet.
     set_setting(conn, "context_profile", "")
@@ -141,23 +149,30 @@ def create_profile(
         raise AppError(str(exc)) from exc
     normalized_algo = _normalized_profile_algorithm(gains_algorithm, policy)
     profile_id = str(uuid.uuid4())
-    conn.execute(
-        """
-        INSERT INTO profiles(
-            id, workspace_id, label, fiat_currency, tax_country, tax_long_term_days, gains_algorithm, created_at
-        ) VALUES(?, ?, ?, ?, ?, ?, ?, ?)
-        """,
-        (
-            profile_id,
-            workspace["id"],
-            label,
-            policy.fiat_currency,
-            policy.tax_country,
-            policy.long_term_days,
-            normalized_algo,
-            now_iso(),
-        ),
-    )
+    try:
+        conn.execute(
+            """
+            INSERT INTO profiles(
+                id, workspace_id, label, fiat_currency, tax_country, tax_long_term_days, gains_algorithm, created_at
+            ) VALUES(?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                profile_id,
+                workspace["id"],
+                label,
+                policy.fiat_currency,
+                policy.tax_country,
+                policy.long_term_days,
+                normalized_algo,
+                now_iso(),
+            ),
+        )
+    except sqlite3.IntegrityError as exc:
+        raise AppError(
+            f"Profile '{label}' already exists in workspace '{workspace['label']}'",
+            code="conflict",
+            hint="Choose a different profile label or update the existing profile.",
+        ) from exc
     ensure_default_accounts(conn, workspace["id"], profile_id)
     set_setting(conn, "context_workspace", workspace["id"])
     set_setting(conn, "context_profile", profile_id)
@@ -291,22 +306,29 @@ def create_account(conn, workspace_ref, profile_ref, code, label, account_type, 
             f"Unsupported account type '{account_type}'. Supported: {', '.join(sorted(ACCOUNT_TYPES))}"
         )
     account_id = str(uuid.uuid4())
-    conn.execute(
-        """
-        INSERT INTO accounts(id, workspace_id, profile_id, code, label, account_type, asset, created_at)
-        VALUES(?, ?, ?, ?, ?, ?, ?, ?)
-        """,
-        (
-            account_id,
-            workspace["id"],
-            profile["id"],
-            code,
-            label,
-            account_type,
-            normalize_asset_code(asset) if asset else None,
-            now_iso(),
-        ),
-    )
+    try:
+        conn.execute(
+            """
+            INSERT INTO accounts(id, workspace_id, profile_id, code, label, account_type, asset, created_at)
+            VALUES(?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                account_id,
+                workspace["id"],
+                profile["id"],
+                code,
+                label,
+                account_type,
+                normalize_asset_code(asset) if asset else None,
+                now_iso(),
+            ),
+        )
+    except sqlite3.IntegrityError as exc:
+        raise AppError(
+            f"Account '{code}' already exists in profile '{profile['label']}'",
+            code="conflict",
+            hint="Choose a different account code or update the existing account.",
+        ) from exc
     conn.commit()
     return conn.execute("SELECT * FROM accounts WHERE id = ?", (account_id,)).fetchone()
 

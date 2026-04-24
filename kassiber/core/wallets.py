@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import sqlite3
 import uuid
 from pathlib import Path
 
@@ -253,49 +254,79 @@ def create_wallet(conn, workspace_ref, profile_ref, label, kind, account_ref=Non
     workspace, profile = resolve_scope(conn, workspace_ref, profile_ref)
     account = resolve_account(conn, profile["id"], account_ref or "treasury")
     normalized_kind = normalize_wallet_kind(kind)
-    config = config or {}
+    config = _validated_wallet_config(normalized_kind, config or {})
+    wallet_id = str(uuid.uuid4())
+    try:
+        conn.execute(
+            """
+            INSERT INTO wallets(id, workspace_id, profile_id, account_id, label, kind, config_json, created_at)
+            VALUES(?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                wallet_id,
+                workspace["id"],
+                profile["id"],
+                account["id"],
+                label,
+                normalized_kind,
+                json.dumps(config, sort_keys=True),
+                now_iso(),
+            ),
+        )
+    except sqlite3.IntegrityError as exc:
+        raise AppError(
+            f"Wallet '{label}' already exists in profile '{profile['label']}'",
+            code="conflict",
+            hint="Choose a different wallet label or update the existing wallet.",
+        ) from exc
+    conn.commit()
+    created = fetch_wallet_with_account(conn, wallet_id)
+    return wallet_row_to_dict(created)
+
+
+def _validated_wallet_config(normalized_kind, config):
+    config = dict(config or {})
     descriptor_plan = load_wallet_descriptor_plan_from_config(config) if config.get("descriptor") else None
     chain, network = wallet_live_chain_config(config)
     if normalized_kind == "address" and not config.get("addresses") and not config.get("source_file"):
-        raise AppError("Address wallets require at least one --address or a file-based source")
+        raise AppError(
+            "Address wallets require at least one --address or a file-based source",
+            code="validation",
+        )
     if normalized_kind == "descriptor" and descriptor_plan is None and not config.get("source_file"):
-        raise AppError("Descriptor wallets require --descriptor/--descriptor-file or a file-based source")
+        raise AppError(
+            "Descriptor wallets require --descriptor/--descriptor-file or a file-based source",
+            code="validation",
+        )
     if chain == "liquid" and descriptor_plan is None and not config.get("source_file"):
-        raise AppError("Liquid live sync currently requires a descriptor with private blinding keys")
+        raise AppError(
+            "Liquid live sync currently requires a descriptor with private blinding keys",
+            code="validation",
+        )
     if descriptor_plan and descriptor_plan.chain == "liquid":
         if not liquid_plan_can_unblind(descriptor_plan):
-            raise AppError("Liquid descriptor wallets require private blinding keys for full sync and fee accounting")
+            raise AppError(
+                "Liquid descriptor wallets require private blinding keys for full sync and fee accounting",
+                code="validation",
+            )
         if not config.get("backend") and not config.get("source_file"):
-            raise AppError("Liquid descriptor wallets require an explicit --backend; no public Liquid default is built in")
+            raise AppError(
+                "Liquid descriptor wallets require an explicit --backend; no public Liquid default is built in",
+                code="validation",
+            )
         config["policy_asset"] = wallet_policy_asset_id(config, descriptor_plan.chain, descriptor_plan.network)
     elif chain == "liquid" and not config.get("backend") and not config.get("source_file"):
-        raise AppError("Liquid wallets require an explicit --backend; no public Liquid default is built in")
+        raise AppError(
+            "Liquid wallets require an explicit --backend; no public Liquid default is built in",
+            code="validation",
+        )
     if chain and network:
         config["chain"] = chain
         config["network"] = network
     btcpay_config = wallet_btcpay_sync_config(config)
     if btcpay_config:
         config.update(btcpay_config)
-    wallet_id = str(uuid.uuid4())
-    conn.execute(
-        """
-        INSERT INTO wallets(id, workspace_id, profile_id, account_id, label, kind, config_json, created_at)
-        VALUES(?, ?, ?, ?, ?, ?, ?, ?)
-        """,
-        (
-            wallet_id,
-            workspace["id"],
-            profile["id"],
-            account["id"],
-            label,
-            normalized_kind,
-            json.dumps(config, sort_keys=True),
-            now_iso(),
-        ),
-    )
-    conn.commit()
-    created = fetch_wallet_with_account(conn, wallet_id)
-    return wallet_row_to_dict(created)
+    return config
 
 
 def _wallet_descriptor_state(config):
@@ -484,6 +515,12 @@ def update_wallet(conn, workspace_ref, profile_ref, wallet_ref, updates):
     # Preserve legacy Austrian provenance metadata until a deliberate migration removes it.
     config = json.loads(wallet["config_json"] or "{}")
     for field in clear_fields:
+        if field not in config:
+            raise AppError(
+                f"Wallet config field '{field}' is not set",
+                code="validation",
+                hint="Use `wallets get` to inspect clearable config fields before clearing.",
+            )
         config.pop(field, None)
     for key, value in config_updates.items():
         if value is None:
@@ -491,22 +528,23 @@ def update_wallet(conn, workspace_ref, profile_ref, wallet_ref, updates):
         else:
             config[key] = value
 
-    chain, network = wallet_live_chain_config(config)
-    if chain:
-        config["chain"] = chain
-        config["network"] = network
-    btcpay_config = wallet_btcpay_sync_config(config)
-    if btcpay_config:
-        config.update(btcpay_config)
+    config = _validated_wallet_config(wallet["kind"], config)
 
-    conn.execute(
-        """
-        UPDATE wallets
-        SET label = ?, account_id = ?, config_json = ?
-        WHERE id = ?
-        """,
-        (label_value, account_id, json.dumps(config, sort_keys=True), wallet["id"]),
-    )
+    try:
+        conn.execute(
+            """
+            UPDATE wallets
+            SET label = ?, account_id = ?, config_json = ?
+            WHERE id = ?
+            """,
+            (label_value, account_id, json.dumps(config, sort_keys=True), wallet["id"]),
+        )
+    except sqlite3.IntegrityError as exc:
+        raise AppError(
+            f"Wallet '{label_value}' already exists in profile '{profile['label']}'",
+            code="conflict",
+            hint="Choose a different wallet label.",
+        ) from exc
     invalidate_journals(conn, profile["id"])
     conn.commit()
     updated = fetch_wallet_with_account(conn, wallet["id"])

@@ -295,13 +295,29 @@ def remove_attachment(
         raise AppError(f"Attachment '{attachment_id}' not found", code="not_found")
     attachments_root = _attachments_root(data_root)
     attachment = _attachment_row_to_dict(row, attachments_root)
-    deleted_file = False
     stored_path, _ = _resolve_stored_path(attachments_root, attachment["stored_relpath"])
-    if stored_path and stored_path.exists():
-        stored_path.unlink()
-        deleted_file = True
-        _prune_empty_dirs(attachments_root, stored_path)
-    conn.execute("DELETE FROM attachments WHERE id = ?", (attachment_id,))
+    deleted_file = False
+    conn.execute("SAVEPOINT attachment_remove")
+    try:
+        conn.execute("DELETE FROM attachments WHERE id = ?", (attachment_id,))
+        if stored_path and stored_path.exists():
+            stored_path.unlink()
+            deleted_file = True
+            _prune_empty_dirs(attachments_root, stored_path)
+        conn.execute("RELEASE SAVEPOINT attachment_remove")
+    except OSError as exc:
+        conn.execute("ROLLBACK TO SAVEPOINT attachment_remove")
+        conn.execute("RELEASE SAVEPOINT attachment_remove")
+        raise AppError(
+            f"Could not delete attachment file '{attachment['stored_relpath']}': {exc}",
+            code="filesystem_error",
+            hint="Fix the local file permissions and retry `attachments remove`.",
+            retryable=True,
+        ) from exc
+    except Exception:
+        conn.execute("ROLLBACK TO SAVEPOINT attachment_remove")
+        conn.execute("RELEASE SAVEPOINT attachment_remove")
+        raise
     conn.commit()
     attachment["removed"] = True
     attachment["deleted_file"] = deleted_file

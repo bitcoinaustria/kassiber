@@ -378,6 +378,17 @@ def build_parser() -> argparse.ArgumentParser:
     tx_list.add_argument("--workspace")
     tx_list.add_argument("--profile")
     tx_list.add_argument("--wallet")
+    tx_list.add_argument("--direction", choices=("inbound", "outbound"))
+    tx_list.add_argument("--asset")
+    tx_list.add_argument("--start", help="RFC3339 lower bound (inclusive) on occurred_at")
+    tx_list.add_argument("--end", help="RFC3339 upper bound (inclusive) on occurred_at")
+    tx_list.add_argument("--cursor", help="Opaque pagination cursor from a previous response")
+    tx_list.add_argument(
+        "--sort",
+        choices=("occurred-at", "amount", "fiat-value", "fee"),
+        default="occurred-at",
+    )
+    tx_list.add_argument("--order", choices=("asc", "desc"), default="desc")
     tx_list.add_argument("--limit", type=int, default=100)
 
     attachments = sub.add_parser("attachments")
@@ -454,6 +465,7 @@ def build_parser() -> argparse.ArgumentParser:
     bip329_list.add_argument("--workspace")
     bip329_list.add_argument("--profile")
     bip329_list.add_argument("--wallet")
+    bip329_list.add_argument("--cursor")
     bip329_list.add_argument("--limit", type=int, default=core_metadata.DEFAULT_RECORDS_LIMIT)
     bip329_export = bip329_sub.add_parser("export")
     bip329_export.add_argument("--workspace")
@@ -535,6 +547,7 @@ def build_parser() -> argparse.ArgumentParser:
     journals_list = journals_sub.add_parser("list")
     journals_list.add_argument("--workspace")
     journals_list.add_argument("--profile")
+    journals_list.add_argument("--cursor", help="Opaque pagination cursor from a previous response")
     journals_list.add_argument("--limit", type=int, default=200)
     journals_quarantined = journals_sub.add_parser("quarantined")
     journals_quarantined.add_argument("--workspace")
@@ -689,6 +702,7 @@ def build_parser() -> argparse.ArgumentParser:
     rates_range.add_argument("pair")
     rates_range.add_argument("--start")
     rates_range.add_argument("--end")
+    rates_range.add_argument("--order", choices=("asc", "desc"), default="asc")
     rates_range.add_argument("--limit", type=int)
 
     rates_set = rates_sub.add_parser("set")
@@ -1016,7 +1030,25 @@ def dispatch(conn: sqlite3.Connection | None, args: argparse.Namespace) -> Any:
             )
     if args.command == "transactions":
         if args.transactions_command == "list":
-            return emit(args, list_transactions(conn, args.workspace, args.profile, args.wallet, args.limit))
+            transactions_payload, transactions_meta = list_transactions(
+                conn,
+                args.workspace,
+                args.profile,
+                args.wallet,
+                args.limit,
+                direction=args.direction,
+                asset=args.asset,
+                start=args.start,
+                end=args.end,
+                cursor=args.cursor,
+                sort=args.sort,
+                order=args.order,
+            )
+            return emit(
+                args,
+                transactions_payload,
+                envelope_meta=transactions_meta,
+            )
     if args.command == "attachments":
         attachment_hooks = _attachment_hooks()
         if args.attachments_command == "add":
@@ -1128,11 +1160,19 @@ def dispatch(conn: sqlite3.Connection | None, args: argparse.Namespace) -> Any:
                     ),
                 )
             if args.bip329_command == "list":
+                bip329_payload, bip329_meta = core_metadata.list_bip329_labels(
+                    conn,
+                    args.workspace,
+                    args.profile,
+                    metadata_hooks,
+                    wallet_ref=args.wallet,
+                    cursor=args.cursor,
+                    limit=args.limit,
+                )
                 return emit(
                     args,
-                    core_metadata.list_bip329_labels(
-                        conn, args.workspace, args.profile, metadata_hooks, wallet_ref=args.wallet, limit=args.limit
-                    ),
+                    bip329_payload,
+                    envelope_meta=bip329_meta,
                 )
             if args.bip329_command == "export":
                 return emit(
@@ -1236,7 +1276,15 @@ def dispatch(conn: sqlite3.Connection | None, args: argparse.Namespace) -> Any:
         if args.journals_command == "process":
             return emit(args, process_journals(conn, args.workspace, args.profile))
         if args.journals_command == "list":
-            return emit(args, list_journal_entries(conn, args.workspace, args.profile, args.limit))
+            journal_entries_payload, journal_entries_meta = list_journal_entries(
+                conn,
+                args.workspace,
+                args.profile,
+                args.limit,
+                cursor=args.cursor,
+                return_meta=True,
+            )
+            return emit(args, journal_entries_payload, envelope_meta=journal_entries_meta)
         if args.journals_command == "transfers":
             if args.journal_transfers_command == "list":
                 return emit(args, inspect_transfer_audit(conn, args.workspace, args.profile))
@@ -1516,6 +1564,7 @@ def dispatch(conn: sqlite3.Connection | None, args: argparse.Namespace) -> Any:
                     args.pair,
                     start=args.start,
                     end=args.end,
+                    order=args.order,
                     limit=args.limit,
                 ),
             )

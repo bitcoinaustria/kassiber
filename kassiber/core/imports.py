@@ -198,6 +198,8 @@ def insert_wallet_records(
     records: Sequence[ImportRow],
     source_label: str,
     hooks: ImportCoordinatorHooks,
+    *,
+    commit: bool = True,
 ) -> dict[str, Any]:
     imported = 0
     skipped = 0
@@ -259,7 +261,8 @@ def insert_wallet_records(
         )
         imported += 1
     hooks.invalidate_journals(conn, profile["id"])
-    conn.commit()
+    if commit:
+        conn.commit()
     return {
         "wallet": wallet["label"],
         "source": source_label,
@@ -278,12 +281,23 @@ def import_records_into_wallet(
     *,
     apply_btcpay: bool = False,
     apply_phoenix: bool = False,
+    commit: bool = True,
 ) -> dict[str, Any]:
-    outcome = insert_wallet_records(conn, profile, wallet, records, source_label, hooks)
+    outcome = insert_wallet_records(
+        conn,
+        profile,
+        wallet,
+        records,
+        source_label,
+        hooks,
+        commit=False,
+    )
     if apply_btcpay:
-        outcome.update(apply_btcpay_metadata(conn, profile, wallet, records, hooks))
+        outcome.update(apply_btcpay_metadata(conn, profile, wallet, records, hooks, commit=False))
     if apply_phoenix:
-        outcome.update(apply_phoenix_metadata(conn, profile, wallet, records, hooks))
+        outcome.update(apply_phoenix_metadata(conn, profile, wallet, records, hooks, commit=False))
+    if commit:
+        conn.commit()
     return outcome
 
 
@@ -293,6 +307,8 @@ def apply_phoenix_metadata(
     wallet: Mapping[str, Any],
     records: Sequence[ImportRow],
     hooks: ImportCoordinatorHooks,
+    *,
+    commit: bool = True,
 ) -> dict[str, int]:
     notes_set = 0
     tags_added = 0
@@ -338,7 +354,8 @@ def apply_phoenix_metadata(
             )
             if conn.total_changes > before:
                 tags_added += 1
-    conn.commit()
+    if commit:
+        conn.commit()
     return {
         "phoenix_notes_set": notes_set,
         "phoenix_tags_added": tags_added,
@@ -352,6 +369,8 @@ def apply_btcpay_metadata(
     wallet: Mapping[str, Any],
     records: Sequence[ImportRow],
     hooks: ImportCoordinatorHooks,
+    *,
+    commit: bool = True,
 ) -> dict[str, int]:
     notes_set = 0
     tags_added = 0
@@ -393,7 +412,8 @@ def apply_btcpay_metadata(
             )
             if conn.total_changes > before:
                 tags_added += 1
-    conn.commit()
+    if commit:
+        conn.commit()
     return {
         "btcpay_notes_set": notes_set,
         "btcpay_tags_added": tags_added,
@@ -408,6 +428,8 @@ def import_file_into_wallet(
     file_path: str,
     input_format: str,
     hooks: ImportCoordinatorHooks,
+    *,
+    commit: bool = True,
 ) -> dict[str, Any]:
     records = load_import_records(file_path, input_format)
     outcome = import_records_into_wallet(
@@ -419,6 +441,7 @@ def import_file_into_wallet(
         hooks,
         apply_btcpay=is_btcpay_format(input_format),
         apply_phoenix=is_phoenix_format(input_format),
+        commit=commit,
     )
     outcome["input_format"] = input_format
     outcome["file"] = os.path.abspath(file_path)

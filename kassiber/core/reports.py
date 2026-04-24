@@ -295,7 +295,7 @@ def report_capital_gains(conn, workspace_ref, profile_ref, hooks: ReportHooks):
 def report_journal_entries(conn, workspace_ref, profile_ref, hooks: ReportHooks):
     _, profile = _resolve_report_scope(conn, workspace_ref, profile_ref, hooks)
     hooks.require_processed_journals(conn, profile)
-    return hooks.list_journal_entries(conn, profile["workspace_id"], profile["id"], limit=1000)
+    return hooks.list_journal_entries(conn, profile["workspace_id"], profile["id"], limit=None)
 
 
 def _floor_to_interval(dt, interval):
@@ -2299,6 +2299,8 @@ def export_austrian_e1kv_csv_bundle(conn, workspace_ref, profile_ref, dir_path, 
 def build_pdf_report_lines(conn, workspace_ref, profile_ref, hooks: ReportHooks, wallet_ref=None, history_limit=None):
     workspace, profile = _resolve_report_scope(conn, workspace_ref, profile_ref, hooks)
     wallet = hooks.resolve_wallet(conn, profile["id"], wallet_ref) if wallet_ref else None
+    if history_limit is not None and int(history_limit) < 0:
+        raise AppError("--history-limit must be zero or positive", code="validation")
     hooks.require_processed_journals(conn, profile)
 
     scope_wallets = _scope_wallets(conn, workspace["id"], profile["id"], hooks, wallet=wallet)

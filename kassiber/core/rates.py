@@ -130,8 +130,16 @@ def get_latest_rate(conn, pair):
     }
 
 
-def get_rate_range(conn, pair, start=None, end=None, limit=None):
+def get_rate_range(conn, pair, start=None, end=None, order="asc", limit=None):
     normalized = _normalize_rate_pair(pair)
+    effective_limit = None
+    if limit is not None:
+        effective_limit = int(limit)
+        if effective_limit <= 0:
+            raise AppError("--limit must be positive", code="validation")
+    if order not in {"asc", "desc"}:
+        raise AppError("--order must be asc or desc", code="validation")
+    order_sql = order.upper()
     sql = "SELECT pair, timestamp, rate, source, fetched_at FROM rates_cache WHERE pair = ?"
     params = [normalized]
     if start:
@@ -142,10 +150,15 @@ def get_rate_range(conn, pair, start=None, end=None, limit=None):
         end_dt = _parse_iso_datetime(end, "end")
         sql += " AND timestamp <= ?"
         params.append(_iso_z(end_dt))
-    sql += " ORDER BY timestamp ASC"
-    if limit:
+    sql += (
+        f" ORDER BY timestamp {order_sql},"
+        " CASE WHEN source = 'manual' THEN 0 ELSE 1 END ASC,"
+        " fetched_at DESC,"
+        " source ASC"
+    )
+    if effective_limit is not None:
         sql += " LIMIT ?"
-        params.append(int(limit))
+        params.append(effective_limit)
     rows = conn.execute(sql, params).fetchall()
     return [
         {
@@ -183,6 +196,21 @@ def get_cached_rate_at_or_before(conn, pair, occurred_at):
         "source": row["source"],
         "fetched_at": row["fetched_at"],
     }
+
+
+def _invalidate_profile_journals_for_pair(conn, pair):
+    normalized = _normalize_rate_pair(pair)
+    if normalized not in SUPPORTED_RATE_PAIRS:
+        return
+    _, fiat = rate_pair_parts(normalized)
+    conn.execute(
+        """
+        UPDATE profiles
+        SET last_processed_at = NULL, last_processed_tx_count = 0
+        WHERE upper(fiat_currency) = ?
+        """,
+        (fiat.upper(),),
+    )
 
 
 def list_cached_pairs(conn):
@@ -281,6 +309,8 @@ def sync_rates(conn, pair=None, days=30, source="coingecko"):
             code="validation",
             hint="Supported sources: coingecko",
         )
+    if int(days) <= 0:
+        raise AppError("--days must be positive", code="validation")
     if pair:
         pairs = [require_supported_pair(pair)]
     else:
@@ -293,6 +323,7 @@ def sync_rates(conn, pair=None, days=30, source="coingecko"):
         for timestamp, rate in samples:
             upsert_rate(conn, normalized_pair, timestamp, rate, source, fetched_at=fetched_at)
             inserted += 1
+        _invalidate_profile_journals_for_pair(conn, normalized_pair)
         conn.commit()
         summary.append(
             {
@@ -315,6 +346,7 @@ def set_manual_rate(conn, pair, timestamp, rate, source="manual"):
     if value <= 0:
         raise AppError("Rate must be positive", code="validation")
     row = upsert_rate(conn, normalized, timestamp, value, source)
+    _invalidate_profile_journals_for_pair(conn, normalized)
     conn.commit()
     return row
 

@@ -9,12 +9,31 @@ Use this skill for Kassiber CLI workflows. Kassiber has its own command surface,
 
 All `scripts/` paths in this skill are relative to the directory containing this `SKILL.md` file. Resolve `<skill-dir>` first, then use paths like `<skill-dir>/scripts/verify-state.sh`.
 
+Kassiber accounts are wallet/reporting buckets, not a double-entry chart of accounts. Keep explanations simple unless the user explicitly asks for accounting theory.
+
+## Fast Paths
+
+Use these without opening extra references when the request clearly matches:
+
+| User asks for... | First command |
+|---|---|
+| Sync project/current wallets | `kassiber --machine wallets sync --all` |
+| Current balances by account, bucket, asset, or wallet | `kassiber --format plain reports balance-sheet` |
+| Exact summary totals, counts, fees, PnL | `kassiber --machine reports summary` |
+| Rebuild stale reports after imports/metadata/rates | `kassiber --machine journals process` |
+| Largest inbound transactions | `kassiber --machine transactions list --direction inbound --sort amount --order desc --limit 10` |
+| Largest outbound transactions | `kassiber --machine transactions list --direction outbound --sort amount --order desc --limit 10` |
+| Smallest inbound transactions | `kassiber --machine transactions list --direction inbound --sort amount --order asc --limit 10` |
+| Smallest outbound transactions | `kassiber --machine transactions list --direction outbound --sort amount --order asc --limit 10` |
+
+If a fast-path command returns a structured error, inspect the envelope and take the hinted next step. For example, stale reports usually mean running `kassiber --machine journals process` once, then retrying the same report.
+
 ## Rules
 
 1. Prefer `kassiber` when it is on `PATH`. If it is not, fall back to `uv run kassiber` or `uv run python -m kassiber` from the Kassiber repo root.
 2. When falling back from `kassiber` to `uv run kassiber` or `uv run python -m kassiber`, keep the subcommand, flags, and operands identical. Only the launcher changes.
 3. When the chat includes pasted Kassiber output or docs, identify the live user request separately from the quoted material before running commands.
-4. Always read the relevant reference file before running a non-trivial Kassiber command. Do not guess flags from memory when a reference exists.
+4. Use fast paths for common workflows. Read the relevant reference file only when command shape is unclear, the action mutates durable config, secrets are involved, or the request is outside the fast-path table.
 5. Before concluding a reference is missing, verify that you resolved it from `<skill-dir>` rather than the repo root or the current working directory.
 6. If a Kassiber command fails with `unrecognized arguments`, stop and check `--help` or [references/command-templates.md](references/command-templates.md) before retrying. Do not keep guessing positional versus flagged forms.
 7. `--machine`, `--format`, and `--output` are global flags and must come before the subcommand tree, for example `kassiber --format plain reports balance-sheet`.
@@ -22,27 +41,29 @@ All `scripts/` paths in this skill are relative to the directory containing this
 9. Use `--format plain` when the user wants report output shown in the terminal. Let Kassiber format financial values; do not recompute or restyle them.
 10. Use `--format csv --output <path>` for spreadsheet-style exports.
 11. Never perform your own arithmetic on Kassiber financial values. Do not sum, subtract, average, or convert amounts from raw JSON when Kassiber already has a command or output format for the answer.
-12. For rollups like totals, fees, counts, realized gains, unrealized PnL, or "give me the summary", use `kassiber --machine reports summary` first. Quote Kassiber's returned fields directly.
-13. If Kassiber returns both BTC and `*_msat` fields, quote those fields as-is. Never derive one from the other in your response.
-14. If the exact answer is not exposed by an existing Kassiber command, say that the CLI surface is missing it and stop there instead of approximating.
-15. Processing order is: wallet sync or import -> review likely transfer / swap pairs when relevant -> `kassiber rates sync` when pricing is needed -> `kassiber journals process` -> reports.
-16. Re-run `kassiber journals process` after any transaction import, transfer pairing, note or tag change, exclusion change, or rate override before trusting reports.
-17. Do not confuse `kassiber init` with onboarding. It only creates the local state tree; workspace, profile, account, and wallet records are created with their own commands.
-18. Prefer explicit workspace and profile flags until context is verified; use `kassiber context show` or `kassiber status` before assuming the active scope.
-19. For Liquid descriptor wallets, require an explicit backend and private blinding keys. If either is missing, stop and fix that before sync.
-20. If the user already provided a secret-bearing descriptor or token, do not ask them to paste it again and do not quote it back in summaries. Use a local file or direct CLI input once, then rely on allowlisted safe views after creation.
-21. For wallet-connection setup, ask for the wallet or backend type if it is unclear, but otherwise assume a mainnet connection. Only ask about network when the user explicitly says testnet, signet, regtest, or another non-mainnet environment.
-22. For secret-bearing wallet or backend setup, prefer giving the user a paste-ready local command template with placeholders to fill in on their machine instead of collecting descriptors, API tokens, or cookie values in chat.
-23. If a BTCPay or CSV export belongs to the same real wallet as an existing Kassiber wallet, import it into that wallet instead of creating a duplicate wallet record.
-24. On errors, inspect the machine envelope first. Kassiber success responses are `{kind, schema_version, data}` and errors use `kind: "error"` with structured fields.
-25. Treat normal `backends ...` and `wallets ...` success output as safe-to-record only for secret-bearing config values. Do not ask users to paste raw backend credentials, raw private descriptor material, or suppressed config blobs into chat just because `backends get` or `wallets get` returns an allowlisted safe view.
-26. For BTCPay and other secret-bearing backends, do not ask users to paste raw API tokens into chat. Prefer a local shell variable, a local `backends.env` entry, or a command they run locally with the secret substituted on their machine.
-27. Do not persist backend or wallet config changes just to work around a sync failure unless the user requested that mutation or explicitly agrees after you explain the tradeoff. `wallets update --backend ...`, `--gap-limit`, and `backends set-default` change durable state.
-28. Never claim a BTC ↔ LBTC swap is already paired, carrying-value, or reflected in reports unless `kassiber --machine journals transfers list` shows the pair or `kassiber transfers pair` just succeeded and you reprocessed journals.
-29. When quarantines remain, distinguish processed holdings from raw transaction-net estimates. Reports show processed journal state only; any netting from `transactions list` must be labeled as an approximate diagnostic rather than a Kassiber holding.
-30. For rate coverage, do not infer the covered time window from `samples` or `days` alone. Use `kassiber rates range` with RFC3339 timestamps around the missing transactions.
-31. Treat Kassiber accounts as wallet/reporting buckets. Do not recommend double-entry charts of accounts, automatic fee expense postings, or external equity counterpart accounts unless the product gains an explicit ledger model.
-32. For planning or codebase work, treat `TODO.md` as the executable backlog and `docs/plan/` as orientation/guardrails. Verify current behavior against code before acting on a plan doc.
+12. For current balances by account, bucket, asset, or wallet, use `kassiber --format plain reports balance-sheet` first. Do not detour through `reports summary`.
+13. For rollups like totals, fees, counts, realized gains, unrealized PnL, or "give me the summary", use `kassiber --machine reports summary` first. Quote Kassiber's returned fields directly.
+14. If Kassiber returns both BTC and `*_msat` fields, quote those fields as-is. Never derive one from the other in your response.
+15. If the exact answer is not exposed by an existing Kassiber command, say that the CLI surface is missing it and stop there instead of approximating.
+16. For "largest transaction", "smallest transaction", biggest inbound/outbound, or similar raw transaction rankings, use `kassiber --machine transactions list --sort amount --order desc|asc --direction inbound|outbound --limit <n>` so SQLite ranks the full dataset before limiting. Amounts are unsigned and direction is a separate field, so "largest inbound" and "largest outbound" both use `--order desc`; "smallest" uses `--order asc`. Do not fetch the default recent page and sort it client-side. If a machine response includes `next_cursor`, keep following it only when the user asked for the full list; a correctly sorted first row is already the largest/smallest row for top-N questions.
+17. Processing order is: wallet sync or import -> review likely transfer / swap pairs when relevant -> `kassiber rates sync` when pricing is needed -> `kassiber journals process` -> reports.
+18. Re-run `kassiber journals process` after any transaction import, transfer pairing, note or tag change, exclusion change, rate sync, or rate override before trusting reports.
+19. Do not confuse `kassiber init` with onboarding. It only creates the local state tree; workspace, profile, account, and wallet records are created with their own commands.
+20. Prefer explicit workspace and profile flags until context is verified; use `kassiber context show` or `kassiber status` before assuming the active scope.
+21. For Liquid descriptor wallets, require an explicit backend and private blinding keys. If either is missing, stop and fix that before sync.
+22. If the user already provided a secret-bearing descriptor or token, do not ask them to paste it again and do not quote it back in summaries. Use a local file or direct CLI input once, then rely on allowlisted safe views after creation.
+23. For wallet-connection setup, ask for the wallet or backend type if it is unclear, but otherwise assume a mainnet connection. Only ask about network when the user explicitly says testnet, signet, regtest, or another non-mainnet environment.
+24. For secret-bearing wallet or backend setup, prefer giving the user a paste-ready local command template with placeholders to fill in on their machine instead of collecting descriptors, API tokens, or cookie values in chat.
+25. If a BTCPay or CSV export belongs to the same real wallet as an existing Kassiber wallet, import it into that wallet instead of creating a duplicate wallet record.
+26. On errors, inspect the machine envelope first. Kassiber success responses are `{kind, schema_version, data}` and errors use `kind: "error"` with structured fields.
+27. Treat normal `backends ...` and `wallets ...` success output as safe-to-record only for secret-bearing config values. Do not ask users to paste raw backend credentials, raw private descriptor material, or suppressed config blobs into chat just because `backends get` or `wallets get` returns an allowlisted safe view.
+28. For BTCPay and other secret-bearing backends, do not ask users to paste raw API tokens into chat. Prefer a local shell variable, a local `backends.env` entry, or a command they run locally with the secret substituted on their machine.
+29. Do not persist backend or wallet config changes just to work around a sync failure unless the user requested that mutation or explicitly agrees after you explain the tradeoff. `wallets update --backend ...`, `--gap-limit`, and `backends set-default` change durable state.
+30. Never claim a BTC ↔ LBTC swap is already paired, carrying-value, or reflected in reports unless `kassiber --machine journals transfers list` shows the pair or `kassiber transfers pair` just succeeded and you reprocessed journals.
+31. When quarantines remain, distinguish processed holdings from raw transaction-net estimates. Reports show processed journal state only; any netting from `transactions list` must be labeled as an approximate diagnostic rather than a Kassiber holding.
+32. For rate coverage, do not infer the covered time window from `samples` or `days` alone. Use `kassiber rates range` with RFC3339 timestamps around the missing transactions.
+33. Treat Kassiber accounts as wallet/reporting buckets. Do not recommend double-entry charts of accounts, automatic fee expense postings, or external equity counterpart accounts unless the product gains an explicit ledger model.
+34. For planning or codebase work, treat `TODO.md` as the executable backlog and `docs/plan/` as orientation/guardrails. Verify current behavior against code before acting on a plan doc.
 
 ## Gotchas
 
@@ -50,12 +71,12 @@ All `scripts/` paths in this skill are relative to the directory containing this
 - Reports do not auto-pair BTC ↔ LBTC peg-ins / peg-outs or submarine swaps. If the user has cross-asset swap activity, inspect for likely pairs and use `kassiber transfers pair` before trusting reports.
 - Use `kassiber --machine journals transfers list` when you need the exact transfer / swap links Kassiber computed. Do not infer them from `journals process` counts alone.
 - `--machine` implies JSON mode. Use it alone or with `--format json`; do not combine it with any other explicit `--format` value.
-- `wallets sync` uses `--wallet <label-or-id>` or `--all`; `transactions` needs the `list` subcommand; `journals quarantined` has no `--limit`; `rates range --start/--end` expect RFC3339 UTC strings.
+- `wallets sync` uses either `--wallet <label-or-id>` or `--all`, never both; `transactions` needs the `list` subcommand and ranks raw rows with `--sort amount --order asc|desc`; `journals quarantined` has no `--limit`; `rates range --start/--end` expect RFC3339 UTC strings and supports `--order asc|desc`.
 - `backends get/list` and `wallets get/create/update` intentionally return allowlisted safe views. Look for presence and state flags instead of expecting raw credentials, raw descriptors, or arbitrary config keys back.
 - For new wallet connections, default to mainnet unless the user says otherwise, and hand back a paste-ready local command template rather than asking them to type secrets into chat.
 - Quarantined transactions are omitted from accurate downstream reporting until resolved or excluded.
 - Paginated list commands keep rows under command-specific keys such as `.data.records` and `.data.events`. Do not assume every list response uses the same field name.
-- For paginated responses like `journals events list` and `metadata records list`, always follow `next_cursor` until it is `null`.
+- Follow `next_cursor` only when the user asks for all/full/export/audit output. For top-N, largest/smallest, or summary questions, stop after the correctly sorted first page.
 - Cross-asset `--policy carrying-value` pairing is Austrian-only right now. Outside Austrian profiles, BTC ↔ LBTC manual pairs still stay on the normal SELL + BUY path, so do not describe them as carrying-value.
 - `kassiber status` may resolve to a legacy XDG path on machines with older state trees. Use status output, not assumptions, to find the live database.
 - If `journals transfers list` reports `cross_asset_pairs: 0`, no cross-asset swap pair is active yet. Do not describe Austrian carry-value as already applied until that changes.

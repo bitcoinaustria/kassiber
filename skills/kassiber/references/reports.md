@@ -8,6 +8,7 @@ Preferred defaults:
 
 - `--format plain` for display reports
 - `--format csv --output <path>` for export-style reports
+- `--format plain reports balance-sheet` for current balances by account, bucket, asset, or wallet
 - `--machine reports summary` for exact rollups that should be quoted back without hand math
 - `--machine reports tax-summary` for exact yearly gain/loss buckets and totals from RP2
 - `--machine reports austrian-e1kv --year <YYYY>` for the Austrian E 1kv handoff envelope
@@ -30,7 +31,7 @@ Rates are cached locally and help fill missing pricing during journal processing
 ```bash
 kassiber rates pairs
 kassiber rates latest BTC-EUR
-kassiber rates range BTC-EUR --start 2025-01-01T00:00:00Z --end 2025-01-31T23:59:59Z
+kassiber rates range BTC-EUR --start 2025-01-01T00:00:00Z --end 2025-01-31T23:59:59Z --order asc
 kassiber rates sync --pair BTC-EUR --days 30
 kassiber rates set BTC-EUR 2025-01-01T00:00:00Z 95000
 ```
@@ -46,8 +47,12 @@ that timestamp.
 If pricing looks incomplete, sync rates and then re-run:
 
 ```bash
+kassiber rates sync --pair BTC-EUR --days 30
 kassiber journals process
 ```
+
+Rate sync and manual rate overrides mark matching profiles' journals stale.
+Re-run `journals process` before trusting reports after any rate change.
 
 If the user has BTC ↔ LBTC peg-ins / peg-outs or submarine swaps, do not
 jump straight from import/sync to reports. Pair those swap legs first:
@@ -74,9 +79,12 @@ Reports read processed journal state, not raw wallet sync totals.
 
 ## Pagination
 
-Some machine-readable list responses are paginated and keep rows under command-specific keys such as `.data.records` or `.data.events`. When `next_cursor` is present, keep requesting more pages until it becomes `null`.
+Some machine-readable list responses are paginated and keep rows under command-specific keys such as `.data.records` or `.data.events`. Follow `next_cursor` only when the user asked for all/full/export/audit output. For summary, top-N, largest, or smallest questions, use the sorted first page and stop.
 
 ## Balance sheet
+
+Use this first for current balances by account, bucket, asset, or wallet. Do
+not run `reports summary` first for balance questions.
 
 ```bash
 kassiber --format plain reports balance-sheet

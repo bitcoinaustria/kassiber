@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import base64
+import binascii
 import json
 import os
 import sqlite3
@@ -23,8 +25,8 @@ NowIso = Callable[[], str]
 InvalidateJournals = Callable[[sqlite3.Connection, str], None]
 ParseIsoDateTime = Callable[[str, str], Any]
 IsoFormatter = Callable[[Any], str]
-EncodeCursor = Callable[[Mapping[str, Any]], str]
-DecodeCursor = Callable[[str | None], Mapping[str, str] | None]
+EncodeCursor = Callable[[Mapping[str, Any], Mapping[str, Any]], str]
+DecodeCursor = Callable[[str | None, Mapping[str, Any]], Mapping[str, str] | None]
 
 
 @dataclass(frozen=True)
@@ -86,13 +88,21 @@ def set_transaction_excluded(conn, workspace_ref, profile_ref, tx_ref, excluded,
 def create_tag(conn, workspace_ref, profile_ref, code, label, hooks: MetadataHooks):
     workspace, profile = hooks.resolve_scope(conn, workspace_ref, profile_ref)
     tag_id = str(uuid.uuid4())
-    conn.execute(
-        """
-        INSERT INTO tags(id, workspace_id, profile_id, code, label, created_at)
-        VALUES(?, ?, ?, ?, ?, ?)
-        """,
-        (tag_id, workspace["id"], profile["id"], hooks.normalize_code(code), label, hooks.now_iso()),
-    )
+    normalized_code = hooks.normalize_code(code)
+    try:
+        conn.execute(
+            """
+            INSERT INTO tags(id, workspace_id, profile_id, code, label, created_at)
+            VALUES(?, ?, ?, ?, ?, ?)
+            """,
+            (tag_id, workspace["id"], profile["id"], normalized_code, label, hooks.now_iso()),
+        )
+    except sqlite3.IntegrityError as exc:
+        raise AppError(
+            f"Tag '{normalized_code}' already exists",
+            code="conflict",
+            hint="Choose a different tag code or use the existing tag.",
+        ) from exc
     conn.commit()
     return conn.execute("SELECT * FROM tags WHERE id = ?", (tag_id,)).fetchone()
 
@@ -186,7 +196,7 @@ def list_transaction_records(
     cursor=None,
     limit=None,
 ):
-    _, profile = hooks.resolve_scope(conn, workspace_ref, profile_ref)
+    workspace, profile = hooks.resolve_scope(conn, workspace_ref, profile_ref)
     effective_limit = limit if limit is not None else DEFAULT_RECORDS_LIMIT
     if effective_limit <= 0:
         raise AppError("--limit must be positive", code="validation")
@@ -202,14 +212,18 @@ def list_transaction_records(
     start_ts = hooks.iso_z(hooks.parse_iso_datetime(start, "start")) if start else None
     end_ts = hooks.iso_z(hooks.parse_iso_datetime(end, "end")) if end else None
 
+    wallet_id = ""
+    tag_id = ""
     if wallet:
         wallet_row = hooks.resolve_wallet(conn, profile["id"], wallet)
+        wallet_id = wallet_row["id"]
         where.append("t.wallet_id = ?")
-        params.append(wallet_row["id"])
+        params.append(wallet_id)
     if tag:
         tag_row = hooks.resolve_tag(conn, profile["id"], tag)
+        tag_id = tag_row["id"]
         where.append("EXISTS (SELECT 1 FROM transaction_tags tt WHERE tt.transaction_id = t.id AND tt.tag_id = ?)")
-        params.append(tag_row["id"])
+        params.append(tag_id)
     if has_note is True:
         where.append("t.note IS NOT NULL AND t.note != ''")
     elif has_note is False:
@@ -225,7 +239,17 @@ def list_transaction_records(
         where.append("t.occurred_at <= ?")
         params.append(end_ts)
 
-    cursor_data = hooks.decode_cursor(cursor)
+    cursor_filters = {
+        "workspace_id": workspace["id"],
+        "profile_id": profile["id"],
+        "wallet_id": wallet_id,
+        "tag_id": tag_id,
+        "has_note": has_note,
+        "excluded": excluded,
+        "start": start_ts or "",
+        "end": end_ts or "",
+    }
+    cursor_data = hooks.decode_cursor(cursor, cursor_filters)
     if cursor_data:
         where.append(
             "(t.occurred_at < ? OR "
@@ -290,7 +314,7 @@ def list_transaction_records(
                 "tags": _tags_for_transaction(conn, row["id"]),
             }
         )
-    next_cursor = hooks.encode_cursor(page[-1]) if has_more and page else None
+    next_cursor = hooks.encode_cursor(page[-1], cursor_filters) if has_more and page else None
     return {
         "records": records,
         "next_cursor": next_cursor,
@@ -408,8 +432,45 @@ def import_bip329_labels(conn, workspace_ref, profile_ref, file_path, hooks: Met
     }
 
 
-def list_bip329_labels(conn, workspace_ref, profile_ref, hooks: MetadataHooks, wallet_ref=None, limit=None):
-    _, profile = hooks.resolve_scope(conn, workspace_ref, profile_ref)
+def _encode_bip329_cursor(row, filters):
+    token = json.dumps(
+        {"created_at": row["created_at"], "filters": filters, "id": row["_id"]},
+        separators=(",", ":"),
+        sort_keys=True,
+    )
+    return base64.urlsafe_b64encode(token.encode("utf-8")).decode("ascii").rstrip("=")
+
+
+def _decode_bip329_cursor(cursor, filters):
+    if not cursor:
+        return None
+    try:
+        padding = "=" * (-len(cursor) % 4)
+        decoded = base64.urlsafe_b64decode(cursor + padding).decode("utf-8")
+        payload = json.loads(decoded)
+        if not payload.get("created_at") or not payload.get("id"):
+            raise ValueError("missing cursor fields")
+        if payload.get("filters") != filters:
+            raise ValueError("cursor filter mismatch")
+        return payload
+    except (ValueError, UnicodeDecodeError, binascii.Error, json.JSONDecodeError) as exc:
+        raise AppError(
+            f"Invalid cursor: {cursor}",
+            code="validation",
+            hint="Pass the exact next_cursor value from the previous response; do not modify it or change filters.",
+        ) from exc
+
+
+def list_bip329_labels(
+    conn,
+    workspace_ref,
+    profile_ref,
+    hooks: MetadataHooks,
+    wallet_ref=None,
+    cursor=None,
+    limit=None,
+):
+    workspace, profile = hooks.resolve_scope(conn, workspace_ref, profile_ref)
     effective_limit = limit if limit is not None else DEFAULT_RECORDS_LIMIT
     if effective_limit <= 0:
         raise AppError("--limit must be positive", code="validation")
@@ -420,14 +481,25 @@ def list_bip329_labels(conn, workspace_ref, profile_ref, hooks: MetadataHooks, w
             hint=f"Use a smaller --limit; max page size is {MAX_RECORDS_LIMIT}.",
         )
     wallet = hooks.resolve_wallet(conn, profile["id"], wallet_ref) if wallet_ref else None
+    cursor_filters = {
+        "workspace_id": workspace["id"],
+        "profile_id": profile["id"],
+        "wallet_id": wallet["id"] if wallet else "",
+    }
     wallet_clause = "AND wallet_id = ?" if wallet else ""
     params = [profile["id"]]
     if wallet:
         params.append(wallet["id"])
-    params.append(effective_limit)
+    cursor_data = _decode_bip329_cursor(cursor, cursor_filters)
+    cursor_clause = ""
+    if cursor_data:
+        cursor_clause = "AND (created_at < ? OR (created_at = ? AND id < ?))"
+        params.extend([cursor_data["created_at"], cursor_data["created_at"], cursor_data["id"]])
+    params.append(effective_limit + 1)
     rows = conn.execute(
         f"""
         SELECT
+            id AS _id,
             record_type AS type,
             ref,
             COALESCE(label, '') AS label,
@@ -439,13 +511,25 @@ def list_bip329_labels(conn, workspace_ref, profile_ref, hooks: MetadataHooks, w
             END AS spendable,
             created_at
         FROM bip329_labels
-        WHERE profile_id = ? {wallet_clause}
-        ORDER BY created_at DESC
+        WHERE profile_id = ? {wallet_clause} {cursor_clause}
+        ORDER BY created_at DESC, id DESC
         LIMIT ?
         """,
         params,
     ).fetchall()
-    return [dict(row) for row in rows]
+    has_more = len(rows) > effective_limit
+    page = rows[:effective_limit]
+    labels = []
+    for row in page:
+        record = dict(row)
+        record.pop("_id", None)
+        labels.append(record)
+    next_cursor = _encode_bip329_cursor(page[-1], cursor_filters) if has_more and page else None
+    return labels, {
+        "next_cursor": next_cursor,
+        "has_more": has_more,
+        "limit": effective_limit,
+    }
 
 
 def export_bip329_labels(conn, workspace_ref, profile_ref, file_path, hooks: MetadataHooks, wallet_ref=None):
