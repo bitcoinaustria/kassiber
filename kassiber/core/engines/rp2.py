@@ -131,7 +131,7 @@ def _load_at_country_module():
             code="unsupported",
             hint=(
                 "Install the Kassiber-maintained rp2 fork from `bitcoinaustria/rp2` "
-                "(Phase 9+ Austrian support)."
+                "with the Austrian country plugin."
             ),
             details={"missing_module": "rp2.plugin.country.at"},
         ) from exc
@@ -146,8 +146,8 @@ def _classify_at_disposal(gain_loss: Any) -> tuple[str, int | None]:
             "Austrian tax support requires rp2's `classify_disposal` API.",
             code="unsupported",
             hint=(
-                "Update the Kassiber rp2 pin to a Phase 9+ build from "
-                "`bitcoinaustria/rp2`."
+                "Update the Kassiber rp2 pin to a build from `bitcoinaustria/rp2` "
+                "that exposes `rp2.plugin.country.at.classify_disposal`."
             ),
             details={"missing_symbol": "rp2.plugin.country.at.classify_disposal"},
         ) from exc

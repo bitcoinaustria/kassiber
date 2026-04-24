@@ -146,7 +146,7 @@ class DashboardViewModel(QObject):
     @Property(str, notify=snapshotChanged)
     def projectSummary(self) -> str:
         if not self.hasProfile:
-            return "Phase 1 app shell"
+            return "Desktop shell"
         return (
             f"{self._shell().get('current_workspace_label', '')} / "
             f"{self._shell().get('current_profile_label', '')}"

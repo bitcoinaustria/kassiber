@@ -167,7 +167,7 @@ def _report_preview_subtitle(
     status_body: str,
 ) -> str:
     if not supports_runtime_reports:
-        return "Computed capital gains preview is unavailable for this tax policy. Recent local inputs are shown instead."
+        return "Computed desktop preview is not wired for this tax policy yet. Recent local inputs are shown instead."
     if quarantine_count:
         return "Recent local inputs are visible below, but quarantines still block a trustworthy computed preview."
     if processed_fresh:
@@ -430,10 +430,10 @@ def _build_report_section(
     )
     supports_runtime_reports = tax_country == "generic"
     if not supports_runtime_reports:
-        status_title = "Report preview unavailable"
+        status_title = "Desktop preview not wired yet"
         status_body = (
-            f"{tax_country.upper()} tax processing is not available in Kassiber yet. "
-            "This desktop surface only shows readiness and profile policy metadata."
+            f"{tax_country.upper()} tax processing runs through the CLI/core engine, "
+            "but this desktop surface only shows readiness and profile policy metadata for now."
         )
         status_tone = "warn"
     elif counts["quarantines"]:
@@ -655,12 +655,12 @@ def _empty_shell(notices: list[str] | None = None) -> dict[str, Any]:
         "is_empty": True,
         "empty_state_title": "Create a profile in the CLI first",
         "empty_state_body": (
-            "Kassiber's Phase 1 desktop shell is ready, but it still depends on the existing "
+            "Kassiber's desktop shell is ready, but it still depends on the existing "
             "workspace/profile setup from the CLI."
         ),
-        "placeholder_title": "Dashboard coming next",
+        "placeholder_title": "Dashboard snapshot ready",
         "placeholder_body": (
-            "The PySide6 shell is in place. Read-only dashboard tiles land in Phase 2."
+            "The PySide6 shell is in place. Live actions still happen through the CLI while desktop wiring continues."
         ),
         "notices": notices or [],
     }
@@ -720,7 +720,7 @@ def collect_ui_snapshot(
     transactions = _build_transaction_items(conn, profile["id"], profile_details["fiat_currency"])
     reports = _build_report_section(profile_details, counts, transactions)
     notices = [
-        "The Add Connection modal is a Phase 1 placeholder. Use the CLI for wallet creation and sync today.",
+        "The Add Connection modal is a placeholder preview. Use the CLI for wallet creation and sync today.",
     ]
     if connection_count:
         notices.append("Connections already exist. This shell now exposes read-only mockup routes while the tile-level dashboard fills in.")

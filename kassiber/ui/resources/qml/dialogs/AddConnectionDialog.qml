@@ -691,7 +691,7 @@ Dialog {
 
                 Text {
                     Layout.fillWidth: true
-                    text: "Phase 1 shell preview only. Wallet creation and sync still happen through the CLI today."
+                    text: "Desktop preview only. Wallet creation and sync still happen through the CLI today."
                     color: Design.ink3(theme)
                     font.family: Design.mono(theme)
                     font.pixelSize: theme.fontCaption

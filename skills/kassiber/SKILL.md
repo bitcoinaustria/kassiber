@@ -42,6 +42,7 @@ All `scripts/` paths in this skill are relative to the directory containing this
 29. When quarantines remain, distinguish processed holdings from raw transaction-net estimates. Reports show processed journal state only; any netting from `transactions list` must be labeled as an approximate diagnostic rather than a Kassiber holding.
 30. For rate coverage, do not infer the covered time window from `samples` or `days` alone. Use `kassiber rates range` with RFC3339 timestamps around the missing transactions.
 31. Treat Kassiber accounts as wallet/reporting buckets. Do not recommend double-entry charts of accounts, automatic fee expense postings, or external equity counterpart accounts unless the product gains an explicit ledger model.
+32. For planning or codebase work, treat `TODO.md` as the executable backlog and `docs/plan/` as orientation/guardrails. Verify current behavior against code before acting on a plan doc.
 
 ## Gotchas
 

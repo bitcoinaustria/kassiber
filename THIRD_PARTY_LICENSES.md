@@ -10,7 +10,7 @@ Kassiber currently depends directly on the Kassiber-maintained [RP2 fork](https:
 
 | Package | Version policy | Role | License |
 | --- | --- | --- | --- |
-| `rp2` | `git+https://github.com/bitcoinaustria/rp2.git@a8c5fa4240d766752787197eb3f50f0765ca3df4` | Tax engine used by journal processing and tax-aware reports | Apache-2.0 |
+| `rp2` | `git+https://github.com/bitcoinaustria/rp2.git@23c944962c775667794b19d66e785058d7aaf599` | Tax engine used by journal processing and tax-aware reports | Apache-2.0 |
 | `embit` | `>=0.8.0` | Bitcoin/Liquid descriptor parsing, script derivation, Liquid confidential output handling | MIT |
 | `PySide6` | `>=6.7,<7` | PySide6 + QML desktop UI shell and future desktop flows | LGPL-3.0-only |
 

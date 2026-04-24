@@ -6,7 +6,7 @@
 - The CLI entrypoint lives in [kassiber/cli/main.py](kassiber/cli/main.py). The remaining command implementation surface lives in [kassiber/cli/handlers.py](kassiber/cli/handlers.py).
 - Desktop planning is captured in [docs/plan/00-overview.md](docs/plan/00-overview.md), [docs/plan/01-stack-decision.md](docs/plan/01-stack-decision.md), and [docs/plan/04-desktop-ui.md](docs/plan/04-desktop-ui.md).
 - External-document reconciliation scope and architecture are captured in [docs/plan/08-external-document-reconciliation.md](docs/plan/08-external-document-reconciliation.md).
-- The Phase 1 desktop shell lives in [kassiber/ui/dashboard.py](kassiber/ui/dashboard.py), [kassiber/ui/app.py](kassiber/ui/app.py), and [kassiber/ui/viewmodels/](kassiber/ui/viewmodels/).
+- The desktop shell lives in [kassiber/ui/dashboard.py](kassiber/ui/dashboard.py), [kassiber/ui/app.py](kassiber/ui/app.py), and [kassiber/ui/viewmodels/](kassiber/ui/viewmodels/).
 - Supporting modules (bottom-up — no back-edges into the CLI layer):
   - [kassiber/errors.py](kassiber/errors.py) — `AppError` typed exception carrying `code`, `hint`, `details`, `retryable`.
   - [kassiber/time_utils.py](kassiber/time_utils.py) — timestamp parsing + RFC3339 formatting and `UNKNOWN_OCCURRED_AT`.
@@ -29,9 +29,8 @@
 - User-facing behavior is documented in [README.md](README.md).
 - Third-party dependency and license notes are tracked in [THIRD_PARTY_LICENSES.md](THIRD_PARTY_LICENSES.md).
 - In-flight and deferred work is tracked in [TODO.md](TODO.md) — it is the
-  current execution backlog for core extraction, attachments, tax-engine
-  cleanup, Austrian tax support, external-document reconciliation, and the
-  later desktop UI work.
+  current execution backlog. Plan docs under [docs/plan/](docs/plan/) are
+  orientation and product guardrails, not the task source of truth.
 
 Phase 0 core extraction is green: the CLI/runtime surface is split out of
 the old `kassiber/app.py` monolith, the smoke suite passes, and future
@@ -55,7 +54,7 @@ Kassiber is currently in **dev mode**: renaming commands, breaking flags, and re
   - journals (RP2 processing + quarantine)
   - reports (summary, tax-summary, balance-sheet, portfolio-summary, capital-gains, journal-entries, balance-history, export-pdf)
   - rates (local cache + CoinGecko sync + manual override)
-  - ui (PySide6 + QML Phase 1 app shell over the local store)
+  - ui (PySide6 + QML desktop shell over the local store)
 - Every command accepts `--format {table,plain,json,csv}`, `--output <path>`, `--machine` (= `--format json`), and `--debug`.
 - Successful responses use `{kind, schema_version, data}`. Errors use `{kind: "error", schema_version, error: {code, message, hint, details, retryable, debug}}`.
 - Live sync kinds implemented: `esplora`, `electrum`, `bitcoinrpc`. BTCPay Greenfield confirmed on-chain wallet history sync is available through wallet config and `wallets sync-btcpay`.
@@ -106,6 +105,9 @@ List endpoints with `--limit` also accept `--cursor`. The cursor is an opaque ba
 ## Working rules
 
 - Keep the project local-first.
+- Treat code, README, AGENTS.md, and TODO.md as current truth. Treat
+  `docs/plan/` as concise guardrails; if code and plans drift, inspect code and
+  update the docs in the same change.
 - Keep Kassiber as the BTC-side subledger and reconciliation layer; invoice issuance, VAT workflow, and the company general ledger stay outside Kassiber.
 - For merchant and document-linked flows, keep provenance capture, commercial matching, and RP2-facing tax normalization as separate layers.
 - Prefer standard-library solutions unless a dependency clearly buys a lot.
