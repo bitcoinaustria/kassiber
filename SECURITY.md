@@ -119,6 +119,16 @@ is safe to paste into a hosted model, issue tracker, or shared log. Addresses,
 notes, file paths, backend names, and other operational metadata may still be
 sensitive.
 
+`kassiber diagnostics collect` is a separate public bug-report surface. Its
+report is designed to be postable publicly: it includes version/platform data,
+command shape, sanitized error context, stack module/function/line frames, DB
+health, and aggregate state counts. It omits raw txids, addresses, descriptors,
+xpubs, labels, notes, exact amounts, exact rates, backend hostnames, local
+paths, raw config, raw API payloads, imported rows, and stack locals. `--save`
+writes the artifact under `exports/diagnostics/` in the active Kassiber state
+root. `--diagnostics-out auto` writes the same public report when a command
+fails.
+
 ## Caveats
 
 - **Secrets on the command line end up in shell history.** `backends
@@ -127,8 +137,9 @@ sensitive.
   `~/.kassiber/config/backends.env` (or another `--env-file`) or environment
   variables for anything sensitive.
 - **`--debug` is outside the safe-to-record contract.** Debug stack traces,
-  exception context, and future diagnostics may still include sensitive local
-  state. Review before pasting into issues, screenshots, or logs.
+  exception context, and any future private logs may still include sensitive
+  local state. Review before pasting into issues, screenshots, or logs. Use
+  `diagnostics collect` or `--diagnostics-out auto` for public bug reports.
 - **Normal machine output still carries sensitive operational metadata.**
   Success envelopes now redact secret-bearing backend and wallet config
   values, but addresses, paths, notes, and infrastructure choices can still

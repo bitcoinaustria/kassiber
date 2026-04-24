@@ -225,8 +225,11 @@ over the shared core after the extraction work is done.
   material while preserving presence / state flags
 - [ ] Finish the project-local part of backend storage once the per-project
   DB layout lands
-- [ ] Extend the safe-to-record contract beyond normal success output to
-  `--debug`, error surfaces, and downloadable logs
+- [x] Add public-safe diagnostics reports for bug reports, with aggregate
+  state shape, sanitized error context, and optional `exports/diagnostics/`
+  artifacts
+- [ ] Keep private `--debug` traces and any future downloadable logs separate
+  from the public diagnostics contract
 - [ ] Replace plaintext secret enrollment through CLI args / dotenv with
   local-only secret capture flows or secret refs so hosted agents do not need
   raw values in prompts or command strings

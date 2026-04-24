@@ -78,6 +78,7 @@ _KIND_SUBCOMMAND_ATTRS = (
     "records_note_command",
     "reports_command",
     "rates_command",
+    "diagnostics_command",
 )
 
 

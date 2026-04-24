@@ -60,6 +60,11 @@ from ..core import rates as core_rates
 from ..core import reports as core_reports
 from ..core import wallets as core_wallets
 from ..core.runtime import bootstrap_runtime, close_runtime, emit_error, resolve_output_format
+from ..diagnostics import (
+    collect_public_diagnostics,
+    save_public_diagnostics_report,
+    write_error_diagnostics,
+)
 from ..errors import AppError
 from ..tax_policy import supported_tax_countries
 from ..ui.dashboard import collect_ui_snapshot
@@ -123,6 +128,11 @@ def build_parser() -> argparse.ArgumentParser:
         "--debug",
         action="store_true",
         help="Print a full traceback on error for diagnostics",
+    )
+    parser.add_argument(
+        "--diagnostics-out",
+        metavar="PATH|auto",
+        help="On error, write a public-safe diagnostics report to PATH, or use 'auto' for exports/diagnostics",
     )
     sub = parser.add_subparsers(dest="command", required=True)
 
@@ -652,6 +662,15 @@ def build_parser() -> argparse.ArgumentParser:
     rates_set.add_argument("timestamp")
     rates_set.add_argument("rate")
     rates_set.add_argument("--source", default="manual")
+
+    diagnostics = sub.add_parser("diagnostics")
+    diagnostics_sub = diagnostics.add_subparsers(dest="diagnostics_command", required=True)
+    diagnostics_collect = diagnostics_sub.add_parser("collect")
+    diagnostics_collect.add_argument(
+        "--save",
+        action="store_true",
+        help="Also write the report under exports/diagnostics in the active Kassiber state root",
+    )
 
     return parser
 
@@ -1377,6 +1396,33 @@ def dispatch(conn: sqlite3.Connection | None, args: argparse.Namespace) -> Any:
                     conn, args.pair, args.timestamp, args.rate, source=args.source
                 ),
             )
+    if args.command == "diagnostics":
+        if args.diagnostics_command == "collect":
+            report = collect_public_diagnostics(
+                conn,
+                args,
+                runtime_config=getattr(args, "runtime_config", None),
+            )
+            if args.save:
+                saved = save_public_diagnostics_report(
+                    report,
+                    target="auto",
+                    data_root=args.data_root,
+                )
+                return emit(
+                    args,
+                    {
+                        "report": report,
+                        "saved": {
+                            "target": saved.target,
+                            "relative_path": saved.relative_path,
+                            "filename": saved.path.name,
+                        }
+                        if saved
+                        else None,
+                    },
+                )
+            return emit(args, report)
     raise AppError("Unknown command")
 
 
@@ -1426,6 +1472,13 @@ def main(argv: Sequence[str] | None = None) -> int:
         if args.debug:
             debug_text = traceback.format_exc()
             sys.stderr.write(debug_text)
+        write_error_diagnostics(
+            args,
+            runtime,
+            exc,
+            stack=traceback.extract_tb(exc.__traceback__),
+            unhandled=False,
+        )
         emit_error(args, exc, debug_text=debug_text)
         return 1
     except Exception as exc:
@@ -1433,6 +1486,13 @@ def main(argv: Sequence[str] | None = None) -> int:
         if args.debug:
             sys.stderr.write(debug_text)
         wrapped = AppError(str(exc) or exc.__class__.__name__, code="internal_error")
+        write_error_diagnostics(
+            args,
+            runtime,
+            exc,
+            stack=traceback.extract_tb(exc.__traceback__),
+            unhandled=True,
+        )
         emit_error(args, wrapped, debug_text=debug_text if args.debug else None)
         return 1
     finally:

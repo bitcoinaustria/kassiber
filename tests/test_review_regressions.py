@@ -377,7 +377,122 @@ class ReviewRegressionTest(unittest.TestCase):
     def test_command_needs_db_skips_static_command_surfaces(self):
         self.assertFalse(command_needs_db(Namespace(command="backends", backends_command="kinds")))
         self.assertFalse(command_needs_db(Namespace(command="wallets", wallets_command="kinds")))
+        self.assertTrue(command_needs_db(Namespace(command="diagnostics", diagnostics_command="collect")))
         self.assertTrue(command_needs_db(Namespace(command="status")))
+
+    def test_public_diagnostics_collect_omits_sensitive_state(self):
+        sensitive_txid = "a" * 64
+        sensitive_address = "bc1qprivatebugreportaddress000000000000000000000000"
+        sensitive_description = "Sensitive coffee at Alice"
+        sensitive_note = "Internal treasury note"
+        sensitive_csv = self._write_case_file(
+            "sensitive.csv",
+            "\n".join(
+                [
+                    "date,txid,direction,asset,amount,fee,fiat_rate,description",
+                    f"2026-04-24T09:00:00Z,{sensitive_txid},inbound,BTC,0.12345678,0.00001234,65432.10,{sensitive_description}",
+                ]
+            )
+            + "\n",
+        )
+
+        payload, result = self._run_json("init")
+        self._assert_ok(payload, result, "init")
+        payload, result = self._run_json("workspaces", "create", "SecretCo Books")
+        self._assert_ok(payload, result, "workspaces.create")
+        payload, result = self._run_json(
+            "profiles", "create", "--workspace", "SecretCo Books", "PrivateTax"
+        )
+        self._assert_ok(payload, result, "profiles.create")
+        payload, result = self._run_json(
+            "backends", "create", "secret-backend",
+            "--kind", "electrum",
+            "--url", "ssl://user:pass@node.private.example:50002/wallet?token=supersecret",
+            "--token", "supersecret-token",
+            "--notes", "private infrastructure",
+        )
+        self._assert_ok(payload, result, "backends.create")
+        payload, result = self._run_json(
+            "wallets", "create",
+            "--workspace", "SecretCo Books",
+            "--profile", "PrivateTax",
+            "--label", "Cold Wallet Private",
+            "--kind", "address",
+            "--backend", "secret-backend",
+            "--address", sensitive_address,
+        )
+        self._assert_ok(payload, result, "wallets.create")
+        payload, result = self._run_json(
+            "wallets", "import-csv",
+            "--workspace", "SecretCo Books",
+            "--profile", "PrivateTax",
+            "--wallet", "Cold Wallet Private",
+            "--file", str(sensitive_csv),
+        )
+        self._assert_ok(payload, result, "wallets.import-csv")
+        payload, result = self._run_json(
+            "metadata", "records", "note", "set",
+            "--workspace", "SecretCo Books",
+            "--profile", "PrivateTax",
+            "--transaction", sensitive_txid,
+            "--note", sensitive_note,
+        )
+        self._assert_ok(payload, result, "metadata.records.note.set")
+
+        payload, result = self._run_json("diagnostics", "collect", "--save")
+        self._assert_ok(payload, result, "diagnostics.collect")
+        data = payload["data"]
+        report = data["report"]
+        self.assertTrue(report["public_safe"])
+        self.assertEqual(data["saved"]["relative_path"].split("/")[0:2], ["exports", "diagnostics"])
+        report_path = self.data_root.parent / data["saved"]["relative_path"]
+        self.assertTrue(report_path.exists())
+
+        combined = json.dumps(payload, sort_keys=True) + report_path.read_text(encoding="utf-8")
+        leaked_values = [
+            str(self.data_root),
+            "SecretCo",
+            "PrivateTax",
+            "Cold Wallet",
+            "secret-backend",
+            "node.private.example",
+            "supersecret",
+            sensitive_txid,
+            sensitive_address,
+            "0.12345678",
+            "0.00001234",
+            "65432.10",
+            sensitive_description,
+            sensitive_note,
+        ]
+        for leaked in leaked_values:
+            self.assertNotIn(leaked, combined)
+        self.assertEqual(report["state"]["transactions"]["total"], 1)
+        self.assertEqual(report["state"]["wallets"]["total"], 1)
+        self.assertEqual(report["state"]["backends"]["credential_presence"]["token"], 1)
+
+    def test_diagnostics_out_auto_writes_public_error_report(self):
+        payload, result = self._run_json("init")
+        self._assert_ok(payload, result, "init")
+
+        result = self._run_cli(
+            "--diagnostics-out", "auto",
+            "rates", "range", "BTC-USD",
+            "--start", "not-a-date",
+            machine=True,
+        )
+        self.assertNotEqual(result.returncode, 0)
+        error_payload = json.loads(result.stdout)
+        self.assertEqual(error_payload["kind"], "error")
+        diagnostics_dir = self.data_root.parent / "exports" / "diagnostics"
+        reports = sorted(diagnostics_dir.glob("kassiber-diagnostics-*.json"))
+        self.assertEqual(len(reports), 1)
+        report = json.loads(reports[0].read_text(encoding="utf-8"))
+        self.assertTrue(report["public_safe"])
+        self.assertEqual(report["invocation"]["command_path"], ["rates", "range"])
+        self.assertEqual(report["error"]["code"], "validation")
+        self.assertIn("stack", report)
+        self.assertNotIn(str(self.data_root), json.dumps(report, sort_keys=True))
         self.assertTrue(command_needs_db(Namespace(command="backends", backends_command="list")))
         self.assertTrue(command_needs_db(Namespace(command="backends", backends_command="get")))
         self.assertTrue(command_needs_db(Namespace(command="rates", rates_command="pairs")))

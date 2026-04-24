@@ -54,8 +54,9 @@ Kassiber is currently in **dev mode**: renaming commands, breaking flags, and re
   - journals (RP2 processing + quarantine)
   - reports (summary, tax-summary, balance-sheet, portfolio-summary, capital-gains, journal-entries, balance-history, export-pdf)
   - rates (local cache + CoinGecko sync + manual override)
+  - diagnostics (public-safe bug-report collection)
   - ui (PySide6 + QML desktop shell over the local store)
-- Every command accepts `--format {table,plain,json,csv}`, `--output <path>`, `--machine` (= `--format json`), and `--debug`.
+- Every command accepts `--format {table,plain,json,csv}`, `--output <path>`, `--machine` (= `--format json`), `--debug`, and `--diagnostics-out <path|auto>`.
 - Successful responses use `{kind, schema_version, data}`. Errors use `{kind: "error", schema_version, error: {code, message, hint, details, retryable, debug}}`.
 - Live sync kinds implemented: `esplora`, `electrum`, `bitcoinrpc`. BTCPay Greenfield confirmed on-chain wallet history sync is available through wallet config and `wallets sync-btcpay`.
 - BIP329 records are stored in SQLite and transaction labels are bridged into Kassiber tags.
@@ -79,6 +80,7 @@ Kassiber is currently in **dev mode**: renaming commands, breaking flags, and re
 - `transfers {pair,list,unpair}`
 - `reports {summary,tax-summary,balance-sheet,portfolio-summary,capital-gains,journal-entries,balance-history,export-pdf}`
 - `rates {pairs,sync,latest,range,set}`
+- `diagnostics {collect}`
 
 ## Pagination
 
@@ -176,6 +178,7 @@ uv run python -m kassiber reports summary --help
 uv run python -m kassiber reports tax-summary --help
 uv run python -m kassiber reports balance-history --help
 uv run python -m kassiber rates --help
+uv run python -m kassiber diagnostics collect --help
 uv run python -m kassiber ui --help
 ```
 
