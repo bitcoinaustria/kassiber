@@ -78,7 +78,7 @@ Current Kassiber mapping:
 | `AtDisposalCategory` | Kassiber `at_category` | Current Kennzahl |
 | --- | --- | --- |
 | `INCOME_GENERAL` | `income_general` | `172` |
-| `INCOME_CAPITAL_YIELD` | `income_capital_yield` | `175` |
+| `INCOME_CAPITAL_YIELD` | `income_capital_yield` | `172` |
 | `NEU_GAIN` | `neu_gain` | `174` |
 | `NEU_LOSS` | `neu_loss` | `176` |
 | `NEU_SWAP` | `neu_swap` | none |
@@ -88,9 +88,19 @@ Current Kassiber mapping:
 This mapping targets the current ausländisch / self-custody slice of
 E 1kv. Kassiber does not yet persist structured domestic-provider
 withheld-KESt metadata, so it cannot populate domestic-provider
-Kennzahlen such as 171/173 or the inländisch half of 175. CLI/PDF E 1kv
+Kennzahlen such as 171, 173, or 175. CLI/PDF E 1kv
 exports must surface that assumption until the data model can represent
 withheld tax.
+
+`kassiber reports austrian-e1kv` is the canonical annual export. The
+friendlier `reports austrian-tax-summary` and `reports export-austrian`
+aliases use the same builder and data. The structured output includes
+Steuerbericht-style sections 1.1-4.5, with unsupported areas rendered
+as explicit zero-value placeholders instead of being silently omitted.
+The XLSX handoff follows the same section set with an overview sheet,
+numbered tabs, and an explanatory notes sheet. The CSV bundle mirrors that
+layout as separate files because the sections do not all share one table
+schema.
 
 One taxable event can split across multiple gain/loss rows in rp2, so
 Kassiber groups Austrian realized journal rows by `(taxable_event,

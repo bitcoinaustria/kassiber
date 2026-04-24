@@ -1,6 +1,7 @@
 # Austrian Tax Support On RP2
 
-**Status:** Active RP2-backed processing; E 1kv export still planned.
+**Status:** Active RP2-backed processing; review-gated E 1kv CSV/PDF/XLSX export
+is implemented for the current ausländisch / self-custody slice.
 **Current source of truth:** `docs/austrian-handoff.md`,
 `kassiber/core/tax_events.py`, `kassiber/core/engines/rp2.py`,
 `kassiber/core/austrian.py`, `tests/test_review_regressions.py`, and TODO.md.
@@ -18,7 +19,7 @@ Kassiber owns:
 - transfer and manual pair preparation
 - tax-input normalization and quarantine UX
 - persisted journal/report rows and desktop/CLI presentation
-- Austrian report packaging such as E 1kv once implemented
+- Austrian report packaging such as E 1kv
 
 RP2 / `bitcoinaustria/rp2` owns:
 
@@ -86,15 +87,15 @@ engine type.
 
 Presentation-layer mapping lives in `kassiber/core/austrian.py`.
 
-E 1kv export should be built from these persisted journal rows plus profile and
-quarantine state. Preferred location for the first implementation:
+E 1kv export is built from these persisted journal rows plus profile and
+quarantine state. The first implementation lives in the report builder module:
 
 ```text
-kassiber/core/reports/e1kv.py
+kassiber/core/reports.py
 ```
 
-If `core/reports.py` remains a single module at that point, add a focused helper
-there first and split only when it removes real complexity.
+Split it into `kassiber/core/reports/e1kv.py` only when that removes real
+complexity.
 
 ## Possible Future Annotation Table
 
@@ -115,27 +116,44 @@ For new Austrian report-specific persisted money amounts, prefer integer
 eurocents and define the rounding boundary explicitly. Existing transaction and
 journal fiat columns are still `REAL`.
 
-## E 1kv Export Target
+## E 1kv Export
 
-Still missing:
+Implemented surfaces:
 
-- CSV export
-- PDF export
-- golden tests
-- disclaimer/review gate
+- `reports austrian-e1kv --year <YYYY>` for structured JSON/plain output
+- `reports austrian-tax-summary --year <YYYY>` as a friendlier alias for the
+  same structured annual handoff
+- `--format csv --output <path> reports austrian-e1kv --year <YYYY>` for
+  row-level CSV
+- `reports export-austrian-e1kv-csv --year <YYYY> --dir <path>` for the
+  section-by-section CSV bundle
+- `reports export-austrian-e1kv-pdf --year <YYYY> --file <path>` for the
+  PDF handoff
+- `reports export-austrian --year <YYYY> --file <path>` as a friendlier alias
+  for the same PDF handoff
+- `reports export-austrian-e1kv-xlsx --year <YYYY> --file <path>` for the
+  styled workbook handoff
+- Steuerbericht-style sections 1.1-4.5 in the structured output and PDF, with
+  unsupported sections rendered as explicit zero-value placeholders
+- CoinTracking-style XLSX workbook and CSV bundle layout with `Übersicht`,
+  separate numbered section tabs/files including `3.3.`, and `Erläuterungen
+  zum Steuerreport`
+- CLI/PDF/XLSX/CSV-bundle review gate and current ausländisch / self-custody assumption
+- regression coverage for JSON, CSV, PDF, and XLSX generation
 
-CSV should contain one row per relevant journal entry:
+CSV contains one row per relevant Austrian journal entry:
 
 ```text
-date,tx_id,wallet,kind,at_regime,qty_msat,price_eur_cents,cost_basis_eur_cents,proceeds_eur_cents,gain_loss_eur_cents,income_eur_cents,holding_period_days,kennzahl,note
+tax_year,date,tx_id,transaction_id,wallet,asset,kind,entry_type,at_category,at_category_label,at_regime,qty_msat,quantity,price_eur_cents,cost_basis_eur_cents,proceeds_eur_cents,gain_loss_eur_cents,income_eur_cents,form_amount_eur_cents,holding_period_days,kennzahl,stored_kennzahl,form_section,note
 ```
 
-PDF likely uses `reportlab`, but that dependency is not currently in
-`pyproject.toml`. Adding it requires README and `THIRD_PARTY_LICENSES.md`
-updates in the same change.
-
-The PDF footer must repeat the Steuerberater-review gate and list any invoked
-open-question defaults from `07-austrian-tax-open-questions.md`.
+PDF uses Kassiber's existing line-oriented PDF writer. XLSX uses XlsxWriter as
+a small write-only dependency and lays out the workbook as an overview, numbered
+tax-section sheets, and an explanatory notes sheet. The CSV bundle uses the
+same overview, numbered section files, and explanatory notes layout so sections
+with different headers do not collapse into a single lossy table. The exports
+repeat the Steuerberater-review gate and list the invoked assumptions /
+open-question defaults.
 
 ## Test Direction
 
@@ -147,7 +165,7 @@ Keep growing coverage around:
 - staking/income-like receipts
 - missing-price and ambiguous-semantics quarantines
 - Alt/Neu classification edges
-- E 1kv CSV/PDF golden output once the export exists
+- E 1kv CSV/PDF/XLSX output
 
 The existing regression and snapshot tests are the gate; expand them rather than
 adding unpinned behavior.

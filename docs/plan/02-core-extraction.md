@@ -81,7 +81,7 @@ Open work is tracked in `TODO.md`, not here. The important follow-ups are:
 - finish project-local storage migration when the project-bundle design lands
 - keep long-running desktop work in worker threads with dedicated SQLite
   connections
-- add Austrian E 1kv export on top of the persisted journal/report state
+- harden Austrian E 1kv export as practitioner feedback arrives
 - add external-document reconciliation without pushing invoice/VAT/general
   ledger concepts into RP2
 

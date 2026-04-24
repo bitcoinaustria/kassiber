@@ -6,6 +6,7 @@ import sys
 import tempfile
 import threading
 import unittest
+import zipfile
 from argparse import Namespace
 from decimal import Decimal
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -3530,7 +3531,7 @@ class ReviewRegressionTest(unittest.TestCase):
         self.assertEqual(income_entry["fiat_value"], 40.0)
         self.assertEqual(income_entry["gain_loss"], 40.0)
         self.assertEqual(income_entry["at_category"], "income_capital_yield")
-        self.assertEqual(income_entry["at_kennzahl"], 175)
+        self.assertEqual(income_entry["at_kennzahl"], 172)
         self.assertEqual(
             actual["wallet_holdings"],
             [
@@ -4189,8 +4190,394 @@ class ReviewRegressionTest(unittest.TestCase):
         self.assertEqual(len(payload["data"]), 1)
         self.assertEqual(payload["data"][0]["entry_type"], "income")
         self.assertEqual(payload["data"][0]["at_category"], "income_capital_yield")
-        self.assertEqual(payload["data"][0]["at_kennzahl"], 175)
+        self.assertEqual(payload["data"][0]["at_kennzahl"], 172)
         self.assertEqual(payload["data"][0]["gain_loss"], 40.0)
+
+    def test_austrian_e1kv_report_exports_summary_csv_pdf_and_xlsx(self):
+        payload, result = self._run_json("init")
+        self._assert_ok(payload, result, "init")
+        payload, result = self._run_json("workspaces", "create", "Main")
+        self._assert_ok(payload, result, "workspaces.create")
+        payload, result = self._run_json(
+            "profiles", "create",
+            "--workspace", "Main",
+            "--fiat-currency", "EUR",
+            "--tax-country", "at",
+            "Default",
+        )
+        self._assert_ok(payload, result, "profiles.create")
+        payload, result = self._run_json(
+            "wallets", "create",
+            "--workspace", "Main",
+            "--profile", "Default",
+            "--label", "AustrianE1kv",
+            "--kind", "custom",
+        )
+        self._assert_ok(payload, result, "wallets.create")
+        json_file = self.case_dir / "austrian-e1kv-import.json"
+        json_file.write_text(
+            json.dumps(
+                [
+                    {
+                        "date": "2024-01-01",
+                        "direction": "inbound",
+                        "asset": "BTC",
+                        "amount": "0.001",
+                        "fee": "0",
+                        "kind": "buy",
+                        "txid": "at-e1kv-buy",
+                        "fiat_value": "40",
+                    },
+                    {
+                        "date": "2024-06-01",
+                        "direction": "outbound",
+                        "asset": "BTC",
+                        "amount": "0.0005",
+                        "fee": "0",
+                        "kind": "sell",
+                        "txid": "at-e1kv-sell",
+                        "fiat_value": "30",
+                    },
+                    {
+                        "date": "2024-07-01",
+                        "direction": "inbound",
+                        "asset": "BTC",
+                        "amount": "0.0002",
+                        "fee": "0",
+                        "kind": "staking",
+                        "txid": "at-e1kv-staking",
+                        "fiat_value": "8",
+                    },
+                ]
+            ),
+            encoding="utf-8",
+        )
+        payload, result = self._run_json(
+            "wallets", "import-json",
+            "--workspace", "Main",
+            "--profile", "Default",
+            "--wallet", "AustrianE1kv",
+            "--file", str(json_file),
+        )
+        self._assert_ok(payload, result, "wallets.import-json")
+        payload, result = self._run_json(
+            "journals", "process",
+            "--workspace", "Main",
+            "--profile", "Default",
+        )
+        self._assert_ok(payload, result, "journals.process")
+        db = sqlite3.connect(self.data_root / "kassiber.sqlite3")
+        try:
+            cursor = db.execute(
+                """
+                UPDATE journal_entries
+                SET at_kennzahl = 175
+                WHERE at_category = 'income_capital_yield'
+                  AND transaction_id = (
+                    SELECT id FROM transactions WHERE external_id = ?
+                  )
+                """,
+                ("at-e1kv-staking",),
+            )
+            self.assertEqual(cursor.rowcount, 1)
+            db.commit()
+        finally:
+            db.close()
+
+        payload, result = self._run_json(
+            "reports", "austrian-e1kv",
+            "--workspace", "Main",
+            "--profile", "Default",
+            "--year", "2024",
+        )
+        self._assert_ok(payload, result, "reports.austrian-e1kv")
+        report = payload["data"]
+        self.assertEqual(report["form"], "E 1kv")
+        self.assertEqual(report["tax_year"], 2024)
+        self.assertIn(
+            "AT-E1KV-FOREIGN-SELF-CUSTODY",
+            {assumption["code"] for assumption in report["assumptions"]},
+        )
+        summary_by_kennzahl = {row["kennzahl"]: row for row in report["summary_rows"]}
+        self.assertEqual(summary_by_kennzahl[172]["amount_eur_cents"], 800)
+        self.assertEqual(summary_by_kennzahl[174]["amount_eur_cents"], 1000)
+        self.assertEqual(summary_by_kennzahl[176]["amount_eur_cents"], 0)
+        self.assertEqual(report["kennzahl_totals"]["172"]["amount_eur_cents"], 800)
+        self.assertIn("2.1", report["sections"])
+        self.assertEqual(report["sections"]["2.1"]["totals"]["amount_eur_cents"], 800)
+        self.assertEqual(report["sections"]["3.3"]["status"], "not_modelled")
+        self.assertEqual(report["sections"]["4.4"]["status"], "not_modelled")
+        rows_by_tx = {row["tx_id"]: row for row in report["rows"]}
+        self.assertEqual(rows_by_tx["at-e1kv-staking"]["kennzahl"], 172)
+        self.assertEqual(rows_by_tx["at-e1kv-staking"]["stored_kennzahl"], 175)
+        self.assertEqual(rows_by_tx["at-e1kv-staking"]["income_eur_cents"], 800)
+        self.assertEqual(rows_by_tx["at-e1kv-sell"]["kennzahl"], 174)
+        self.assertEqual(rows_by_tx["at-e1kv-sell"]["gain_loss_eur_cents"], 1000)
+        self.assertEqual(
+            report["data_quality"]["kennzahl_mismatches"],
+            [
+                {
+                    "tx_id": "at-e1kv-staking",
+                    "at_category": "income_capital_yield",
+                    "stored_kennzahl": 175,
+                    "export_kennzahl": 172,
+                }
+            ],
+        )
+
+        payload, result = self._run_json(
+            "reports", "austrian-tax-summary",
+            "--workspace", "Main",
+            "--profile", "Default",
+            "--year", "2024",
+        )
+        self._assert_ok(payload, result, "reports.austrian-tax-summary")
+        self.assertEqual(payload["data"]["form"], "E 1kv")
+        self.assertEqual(payload["data"]["tax_year"], 2024)
+        self.assertEqual(payload["data"]["sections"]["2.1"]["totals"]["amount_eur_cents"], 800)
+
+        csv_file = self.case_dir / "austrian-e1kv.csv"
+        result = self._run_cli(
+            "--format", "csv",
+            "reports", "austrian-e1kv",
+            "--workspace", "Main",
+            "--profile", "Default",
+            "--year", "2024",
+            output=csv_file,
+        )
+        self.assertEqual(result.returncode, 0, msg=result.stderr)
+        csv_text = csv_file.read_text(encoding="utf-8")
+        self.assertIn("form_amount_eur_cents", csv_text.splitlines()[0])
+        self.assertIn("at-e1kv-staking", csv_text)
+        self.assertIn(",172,", csv_text)
+
+        pdf_file = self.case_dir / "austrian-e1kv.pdf"
+        payload, result = self._run_json(
+            "reports", "export-austrian-e1kv-pdf",
+            "--workspace", "Main",
+            "--profile", "Default",
+            "--year", "2024",
+            "--file", str(pdf_file),
+        )
+        self._assert_ok(payload, result, "reports.export-austrian-e1kv-pdf")
+        self.assertEqual(payload["data"]["form"], "E 1kv")
+        self.assertGreater(payload["data"]["pages"], 0)
+        self.assertGreater(pdf_file.stat().st_size, 0)
+
+        plain_result = self._run_cli(
+            "--format", "plain",
+            "reports", "austrian-e1kv",
+            "--workspace", "Main",
+            "--profile", "Default",
+            "--year", "2024",
+        )
+        self.assertEqual(plain_result.returncode, 0, msg=plain_result.stderr)
+        self.assertIn("II. Detail Sections", plain_result.stdout)
+        self.assertIn("3.3. Nicht steuerbare Steuergebühren und Rückerstattungen", plain_result.stdout)
+        self.assertIn("Summe laufende Einkünfte", plain_result.stdout)
+        self.assertIn("Some rows had stale stored Kennzahlen", plain_result.stdout)
+        self.assertIn("| at-e1kv-staking |", plain_result.stdout)
+        self.assertIn("| 175 | 172 |", plain_result.stdout)
+
+        alias_pdf_file = self.case_dir / "austrian-alias.pdf"
+        payload, result = self._run_json(
+            "reports", "export-austrian",
+            "--workspace", "Main",
+            "--profile", "Default",
+            "--year", "2024",
+            "--file", str(alias_pdf_file),
+        )
+        self._assert_ok(payload, result, "reports.export-austrian")
+        self.assertEqual(payload["data"]["form"], "E 1kv")
+        self.assertGreater(alias_pdf_file.stat().st_size, 0)
+
+        xlsx_file = self.case_dir / "austrian-e1kv.xlsx"
+        payload, result = self._run_json(
+            "reports", "export-austrian-e1kv-xlsx",
+            "--workspace", "Main",
+            "--profile", "Default",
+            "--year", "2024",
+            "--file", str(xlsx_file),
+        )
+        self._assert_ok(payload, result, "reports.export-austrian-e1kv-xlsx")
+        self.assertEqual(payload["data"]["form"], "E 1kv")
+        self.assertEqual(
+            payload["data"]["sheets"],
+            [
+                "Übersicht",
+                "1.1.",
+                "1.2.",
+                "1.3.",
+                "2.1.",
+                "2.2.",
+                "3.1.",
+                "3.2.",
+                "3.3.",
+                "4.1.",
+                "4.2.",
+                "4.3.",
+                "4.4.",
+                "4.5.",
+                "Erläuterungen zum Steuerreport",
+            ],
+        )
+        self.assertIn("2.1.", payload["data"]["sheets"])
+        self.assertGreater(xlsx_file.stat().st_size, 0)
+        with zipfile.ZipFile(xlsx_file) as workbook:
+            names = set(workbook.namelist())
+            self.assertIn("xl/workbook.xml", names)
+            workbook_xml = workbook.read("xl/workbook.xml").decode("utf-8")
+            shared_strings = workbook.read("xl/sharedStrings.xml").decode("utf-8")
+        self.assertIn('name="Übersicht"', workbook_xml)
+        self.assertIn('name="1.1."', workbook_xml)
+        self.assertIn('name="3.3."', workbook_xml)
+        self.assertIn('name="Erläuterungen zum Steuerreport"', workbook_xml)
+        self.assertIn("at-e1kv-staking", shared_strings)
+        self.assertIn("Summe laufende Einkünfte", shared_strings)
+        self.assertIn("Kennzahl-Abweichungen", shared_strings)
+        self.assertIn("Transaktion | Kategorie | gespeichert | Export", shared_strings)
+        self.assertIn(
+            "AT-E1KV-KENNZAHL-REPROCESS",
+            {assumption["code"] for assumption in report["assumptions"]},
+        )
+
+        csv_bundle_dir = self.case_dir / "austrian-e1kv-csv"
+        payload, result = self._run_json(
+            "reports", "export-austrian-e1kv-csv",
+            "--workspace", "Main",
+            "--profile", "Default",
+            "--year", "2024",
+            "--dir", str(csv_bundle_dir),
+        )
+        self._assert_ok(payload, result, "reports.export-austrian-e1kv-csv")
+        self.assertEqual(payload["data"]["form"], "E 1kv")
+        self.assertIn("Übersicht", payload["data"]["sheets"])
+        self.assertIn("3.3.", payload["data"]["sheets"])
+        self.assertEqual(len(payload["data"]["files"]), 15)
+        overview_csv = csv_bundle_dir / "00_uebersicht.csv"
+        section_21_csv = csv_bundle_dir / "04_2.1.csv"
+        section_33_csv = csv_bundle_dir / "08_3.3.csv"
+        notes_csv = csv_bundle_dir / "99_erlaeuterungen_zum_steuerreport.csv"
+        self.assertTrue(overview_csv.exists())
+        self.assertTrue(section_21_csv.exists())
+        self.assertTrue(section_33_csv.exists())
+        self.assertTrue(notes_csv.exists())
+        self.assertIn("2.1. Einkünfte aus der Überlassung", overview_csv.read_text(encoding="utf-8"))
+        section_21_text = section_21_csv.read_text(encoding="utf-8")
+        self.assertIn("at-e1kv-staking", section_21_text)
+        self.assertIn("Summe laufende Einkünfte", section_21_text)
+        self.assertIn("Summe entrichtete Steuergebühren", section_33_csv.read_text(encoding="utf-8"))
+        notes_text = notes_csv.read_text(encoding="utf-8")
+        self.assertIn("AT-E1KV-KENNZAHL-REPROCESS", notes_text)
+        self.assertIn("Kennzahl-Abweichungen", notes_text)
+        self.assertIn("at-e1kv-staking", notes_text)
+
+    def test_austrian_e1kv_reports_loss_as_positive_kz176(self):
+        payload, result = self._run_json("init")
+        self._assert_ok(payload, result, "init")
+        payload, result = self._run_json("workspaces", "create", "Main")
+        self._assert_ok(payload, result, "workspaces.create")
+        payload, result = self._run_json(
+            "profiles", "create",
+            "--workspace", "Main",
+            "--fiat-currency", "EUR",
+            "--tax-country", "at",
+            "Default",
+        )
+        self._assert_ok(payload, result, "profiles.create")
+        payload, result = self._run_json(
+            "wallets", "create",
+            "--workspace", "Main",
+            "--profile", "Default",
+            "--label", "AustrianLoss",
+            "--kind", "custom",
+        )
+        self._assert_ok(payload, result, "wallets.create")
+        json_file = self.case_dir / "austrian-loss-import.json"
+        json_file.write_text(
+            json.dumps(
+                [
+                    {
+                        "date": "2024-02-01",
+                        "direction": "inbound",
+                        "asset": "BTC",
+                        "amount": "0.001",
+                        "fee": "0",
+                        "kind": "buy",
+                        "txid": "at-loss-buy",
+                        "fiat_value": "80",
+                    },
+                    {
+                        "date": "2024-08-01",
+                        "direction": "outbound",
+                        "asset": "BTC",
+                        "amount": "0.0005",
+                        "fee": "0",
+                        "kind": "sell",
+                        "txid": "at-loss-sell",
+                        "fiat_value": "30",
+                    },
+                ]
+            ),
+            encoding="utf-8",
+        )
+        payload, result = self._run_json(
+            "wallets", "import-json",
+            "--workspace", "Main",
+            "--profile", "Default",
+            "--wallet", "AustrianLoss",
+            "--file", str(json_file),
+        )
+        self._assert_ok(payload, result, "wallets.import-json")
+        payload, result = self._run_json(
+            "journals", "process",
+            "--workspace", "Main",
+            "--profile", "Default",
+        )
+        self._assert_ok(payload, result, "journals.process")
+
+        payload, result = self._run_json(
+            "reports", "austrian-e1kv",
+            "--workspace", "Main",
+            "--profile", "Default",
+            "--year", "2024",
+        )
+        self._assert_ok(payload, result, "reports.austrian-e1kv")
+        report = payload["data"]
+        summary_by_kennzahl = {row["kennzahl"]: row for row in report["summary_rows"]}
+        # Basis 40 EUR, proceeds 30 EUR → loss 10 EUR. KZ 176 reports abs value.
+        self.assertEqual(summary_by_kennzahl[176]["amount_eur_cents"], 1000)
+        self.assertEqual(summary_by_kennzahl[174]["amount_eur_cents"], 0)
+        rows_by_tx = {row["tx_id"]: row for row in report["rows"]}
+        loss_row = rows_by_tx["at-loss-sell"]
+        self.assertEqual(loss_row["kennzahl"], 176)
+        self.assertEqual(loss_row["gain_loss_eur_cents"], -1000)
+        self.assertEqual(loss_row["form_amount_eur_cents"], 1000)
+        self.assertEqual(report["sections"]["1.1"]["totals"]["gain_loss_eur_cents"], -1000)
+
+    def test_austrian_e1kv_rejects_non_austrian_profile(self):
+        payload, result = self._run_json("init")
+        self._assert_ok(payload, result, "init")
+        payload, result = self._run_json("workspaces", "create", "Main")
+        self._assert_ok(payload, result, "workspaces.create")
+        payload, result = self._run_json(
+            "profiles", "create",
+            "--workspace", "Main",
+            "--fiat-currency", "USD",
+            "--tax-country", "generic",
+            "Generic",
+        )
+        self._assert_ok(payload, result, "profiles.create")
+        payload, result = self._run_json(
+            "reports", "austrian-e1kv",
+            "--workspace", "Main",
+            "--profile", "Generic",
+            "--year", "2024",
+        )
+        self.assertEqual(result.returncode, 1, msg=payload)
+        self.assertEqual(payload.get("kind"), "error")
+        self.assertEqual(payload["error"]["code"], "validation")
+        self.assertIn("Austrian", payload["error"]["message"])
 
     def test_attachments_verify_reports_missing_file(self):
         self._bootstrap_wallet(label="Attachable")

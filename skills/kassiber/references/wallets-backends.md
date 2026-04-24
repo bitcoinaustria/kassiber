@@ -237,7 +237,11 @@ is supported through the Kassiber-maintained RP2 fork at
 Current limits to mention:
 
 - Austrian cross-asset `--policy carrying-value` pairing is supported.
-- Austrian E 1kv export is not shipped yet.
+- Austrian E 1kv export is available through `reports austrian-e1kv`,
+  `reports austrian-tax-summary`, `reports export-austrian`,
+  `reports export-austrian-e1kv-pdf`, `reports export-austrian-e1kv-xlsx`,
+  and `reports export-austrian-e1kv-csv`, but domestic-provider withheld KESt
+  metadata is not modeled yet.
 - If the installed `rp2` environment lacks `rp2.plugin.country.at`, stop and
   fix the environment instead of guessing.
 

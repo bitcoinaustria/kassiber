@@ -52,7 +52,7 @@ Kassiber is currently in **dev mode**: renaming commands, breaking flags, and re
   - attachments
   - metadata (notes, tags, inclusion)
   - journals (RP2 processing + quarantine)
-  - reports (summary, tax-summary, balance-sheet, portfolio-summary, capital-gains, journal-entries, balance-history, export-pdf)
+  - reports (summary, tax-summary, balance-sheet, portfolio-summary, capital-gains, journal-entries, balance-history, austrian-e1kv, austrian-tax-summary, export-pdf, export-austrian, export-austrian-e1kv-pdf, export-austrian-e1kv-xlsx, export-austrian-e1kv-csv)
   - rates (local cache + CoinGecko sync + manual override)
   - diagnostics (public-safe bug-report collection)
   - ui (PySide6 + QML desktop shell over the local store)
@@ -78,7 +78,7 @@ Kassiber is currently in **dev mode**: renaming commands, breaking flags, and re
 - `metadata bip329 {import,list,export}`
 - `journals {process,list,transfers {list},quarantined,events {list,get},quarantine {show,clear,resolve {price-override,exclude}}}`
 - `transfers {pair,list,unpair}`
-- `reports {summary,tax-summary,balance-sheet,portfolio-summary,capital-gains,journal-entries,balance-history,export-pdf}`
+- `reports {summary,tax-summary,balance-sheet,portfolio-summary,capital-gains,journal-entries,balance-history,austrian-e1kv,austrian-tax-summary,export-pdf,export-austrian,export-austrian-e1kv-pdf,export-austrian-e1kv-xlsx,export-austrian-e1kv-csv}`
 - `rates {pairs,sync,latest,range,set}`
 - `diagnostics {collect}`
 
@@ -176,6 +176,11 @@ uv run python -m kassiber journals events --help
 uv run python -m kassiber journals transfers list --help
 uv run python -m kassiber reports summary --help
 uv run python -m kassiber reports tax-summary --help
+uv run python -m kassiber reports austrian-e1kv --help
+uv run python -m kassiber reports austrian-tax-summary --help
+uv run python -m kassiber reports export-austrian --help
+uv run python -m kassiber reports export-austrian-e1kv-xlsx --help
+uv run python -m kassiber reports export-austrian-e1kv-csv --help
 uv run python -m kassiber reports balance-history --help
 uv run python -m kassiber rates --help
 uv run python -m kassiber diagnostics collect --help

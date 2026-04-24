@@ -26,6 +26,8 @@ MAX_LINE_CHARS = 138
 LINES_PER_PAGE = int((PAGE_HEIGHT - TOP_MARGIN - BOTTOM_MARGIN) / LINE_HEIGHT)
 
 TABLE_RULE_RE = re.compile(r"^\s*-+(?:\s{2,}-+)+\s*$")
+PIPE_TABLE_RE = re.compile(r"^\s*\|.*\|\s*$")
+PIPE_TABLE_SEPARATOR_CELL_RE = re.compile(r"^:?-{3,}:?$")
 NUMERIC_CELL_RE = re.compile(r"^[+-]?(?:\d[\d,]*)?(?:\.\d+)?$")
 PDF_PAGE_RE = re.compile(rb"/Type /Page\b")
 PDF_FONT_DIR = Path(__file__).resolve().parent / "ui" / "resources" / "fonts" / "pdf"
@@ -210,6 +212,22 @@ def _slice_table_row(line, spans):
     return cells
 
 
+def _split_pipe_table_row(line):
+    stripped = line.strip()
+    if stripped.startswith("|"):
+        stripped = stripped[1:]
+    if stripped.endswith("|"):
+        stripped = stripped[:-1]
+    return [cell.strip() for cell in stripped.split("|")]
+
+
+def _is_pipe_table_separator(line):
+    if not PIPE_TABLE_RE.match(line or ""):
+        return False
+    cells = _split_pipe_table_row(line)
+    return bool(cells) and all(PIPE_TABLE_SEPARATOR_CELL_RE.fullmatch(cell) for cell in cells)
+
+
 def _is_numeric_cell(value):
     return bool(value) and bool(NUMERIC_CELL_RE.fullmatch(value.replace("%", "")))
 
@@ -242,6 +260,22 @@ def _parse_report_lines(title, lines):
             current = {"heading": line.strip(), "blocks": []}
             sections.append(current)
             index += 2
+            continue
+        if index + 1 < len(entries) and PIPE_TABLE_RE.match(line or "") and _is_pipe_table_separator(entries[index + 1]):
+            headers = _split_pipe_table_row(line)
+            rows = []
+            index += 2
+            while index < len(entries) and PIPE_TABLE_RE.match(entries[index] or ""):
+                rows.append(_split_pipe_table_row(entries[index]))
+                index += 1
+            current["blocks"].append(
+                {
+                    "kind": "table",
+                    "headers": headers,
+                    "rows": rows,
+                    "numeric_columns": _numeric_table_columns(headers, rows),
+                }
+            )
             continue
         if index + 1 < len(entries) and TABLE_RULE_RE.match(entries[index + 1]):
             spans = _table_column_spans(entries[index + 1])
@@ -338,11 +372,11 @@ def _build_report_html(title, lines, body_font_family, mono_font_family):
         "div.cover { margin-bottom: 14pt; padding-bottom: 8pt; border-bottom: 2px solid #0b6252; }",
         "div.subtitle { color: #597277; font-size: 9pt; }",
         "table.kv { width: 100%; border-collapse: collapse; margin: 4pt 0 10pt 0; }",
-        "table.kv td.label { width: 34%; font-weight: bold; color: #496166; padding: 3pt 10pt 3pt 0; border-bottom: 1px solid #e7eeeb; }",
-        "table.kv td.value { padding: 3pt 0 3pt 10pt; border-bottom: 1px solid #e7eeeb; }",
+        "table.kv td.label { width: 140pt; font-weight: bold; color: #496166; padding: 3pt 18pt 3pt 0; border-bottom: 1px solid #e7eeeb; white-space: nowrap; }",
+        "table.kv td.value { padding: 3pt 0 3pt 14pt; border-bottom: 1px solid #e7eeeb; }",
         "table.report { width: 100%; border-collapse: collapse; margin: 6pt 0 12pt 0; }",
-        "table.report th { background-color: #edf4f2; color: #203136; font-weight: bold; padding: 5pt 6pt; border: 1px solid #d6e2de; }",
-        "table.report td { padding: 4pt 6pt; border: 1px solid #e3ece8; vertical-align: top; }",
+        "table.report th { background-color: #edf4f2; color: #203136; font-weight: bold; padding: 6pt 8pt; border: 1px solid #d6e2de; white-space: normal; word-wrap: break-word; }",
+        "table.report td { padding: 5pt 8pt; border: 1px solid #e3ece8; vertical-align: top; white-space: normal; word-wrap: break-word; overflow-wrap: anywhere; }",
         "table.report td.numeric, table.report th.numeric { text-align: right; }",
         f"table.report td.numeric {{ font-family: '{html_escape(mono_font_family)}'; }}",
         "p.note { margin: 0 0 8pt 0; color: #43555a; }",
@@ -357,10 +391,10 @@ def _build_report_html(title, lines, body_font_family, mono_font_family):
             if block["kind"] == "key_value":
                 parts.append("<table class='kv'>")
                 for label, value in block["pairs"]:
-                    value_html = html_escape(value) if value else "&nbsp;"
+                    value_html = f"&nbsp;&nbsp;{html_escape(value)}" if value else "&nbsp;"
                     parts.append(
                         "<tr>"
-                        f"<td class='label'>{html_escape(label)}</td>"
+                        f"<td class='label'>{html_escape(label)}:&nbsp;</td>"
                         f"<td class='value'>{value_html}</td>"
                         "</tr>"
                     )
@@ -413,6 +447,10 @@ def _write_qt_text_pdf(file_path, title, lines):
 
     html = _build_report_html(title, lines, font_families["body"], font_families["mono"])
     writer = QPdfWriter(str(path))
+    # QPdfWriter defaults to 1200 DPI. QTextDocument lays out against the
+    # writer's device dimensions, so using the default makes report content
+    # render as a tiny block in the corner of an A4 page.
+    writer.setResolution(96)
     writer.setPageLayout(
         QPageLayout(
             QPageSize(QPageSize.PageSizeId.A4),

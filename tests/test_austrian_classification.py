@@ -114,7 +114,7 @@ class AustrianKennzahlMappingTest(unittest.TestCase):
 
     def test_maps_known_categories(self):
         self.assertEqual(kennzahl_for_disposal_category("income_general"), 172)
-        self.assertEqual(kennzahl_for_disposal_category("income_capital_yield"), 175)
+        self.assertEqual(kennzahl_for_disposal_category("income_capital_yield"), 172)
         self.assertEqual(kennzahl_for_disposal_category("neu_gain"), 174)
         self.assertEqual(kennzahl_for_disposal_category("neu_loss"), 176)
         self.assertEqual(kennzahl_for_disposal_category("alt_spekulation"), 801)
