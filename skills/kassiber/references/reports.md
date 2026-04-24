@@ -48,10 +48,10 @@ If pricing looks incomplete, sync rates and then re-run:
 kassiber journals process
 ```
 
-If the user has BTC ↔ LBTC peg-ins / peg-outs or submarine swaps, do not
-jump straight from import/sync to reports. Pair those swap legs first:
-reports consume the current journal state and do not auto-detect
-cross-asset swaps during report generation.
+If the user has BTC ↔ LBTC peg-ins / peg-outs, submarine swaps, or Boltz
+chain-swaps (`--kind chain-swap`), do not jump straight from import/sync to
+reports. Pair those swap legs first: reports consume the current journal
+state and do not auto-detect cross-asset swaps during report generation.
 
 Do not infer the covered history window from `samples` or `days` alone.
 Verify actual coverage with `kassiber rates range` around the missing

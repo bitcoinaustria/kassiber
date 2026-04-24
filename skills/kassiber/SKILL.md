@@ -46,7 +46,7 @@ All `scripts/` paths in this skill are relative to the directory containing this
 ## Gotchas
 
 - Empty or stale reports usually mean journals have not been processed since the last change.
-- Reports do not auto-pair BTC ↔ LBTC peg-ins / peg-outs or submarine swaps. If the user has cross-asset swap activity, inspect for likely pairs and use `kassiber transfers pair` before trusting reports.
+- Reports do not auto-pair BTC ↔ LBTC peg-ins / peg-outs, submarine swaps, or Boltz chain-swaps (`--kind chain-swap`). If the user has cross-asset swap activity, inspect for likely pairs and use `kassiber transfers pair` before trusting reports.
 - Use `kassiber --machine journals transfers list` when you need the exact transfer / swap links Kassiber computed. Do not infer them from `journals process` counts alone.
 - `--machine` implies JSON mode. Use it alone or with `--format json`; do not combine it with any other explicit `--format` value.
 - `wallets sync` uses `--wallet <label-or-id>` or `--all`; `transactions` needs the `list` subcommand; `journals quarantined` has no `--limit`; `rates range --start/--end` expect RFC3339 UTC strings.

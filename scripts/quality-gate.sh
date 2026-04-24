@@ -39,12 +39,13 @@ run py -m py_compile kassiber/*.py kassiber/ui/*.py kassiber/ui/viewmodels/*.py
 run py -m unittest tests.test_sync_backends -v
 run py -m unittest tests.test_liquid_electrum_sync -v
 run py -m unittest tests.test_fake_wallet_fixture -v
+run py -m unittest tests.test_boltz_swap_fixture -v
 run py -m unittest tests.test_cli_smoke -v
 run py -m unittest tests.test_review_regressions -v
 
 echo
-echo "> py -m unittest tests.test_live_sync_regtest -v (live tests disabled)"
-KASSIBER_LIVE_SYNC_TESTS=0 py -m unittest tests.test_live_sync_regtest -v
+echo "> py -m unittest tests.test_live_sync_bitcoin tests.test_live_sync_liquid -v (live tests disabled)"
+KASSIBER_LIVE_SYNC_TESTS=0 py -m unittest tests.test_live_sync_bitcoin tests.test_live_sync_liquid -v
 
 echo
 echo "> CLI help smoke"

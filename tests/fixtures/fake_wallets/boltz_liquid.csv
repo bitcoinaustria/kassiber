@@ -1,0 +1,3 @@
+date,txid,direction,asset,amount,fee,fiat_rate,description
+2026-05-10T14:05:00Z,boltz-fwd-lbtc-in-1,inbound,LBTC,0.09850000,0,82000,Forward chain-swap claim: receive LBTC from Boltz
+2026-05-15T10:55:00Z,boltz-rev-lbtc-out-1,outbound,LBTC,0.05000000,0.00000500,84000,Reverse chain-swap lock: send LBTC to Boltz

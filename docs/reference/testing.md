@@ -1,13 +1,23 @@
 # Testing
 
-Kassiber has two testing layers:
+Kassiber's tests are split into three layers that correspond to what each one
+actually catches:
 
-- the normal quality gate, which is deterministic and does not need live chain
-  services
-- opt-in live sync tests, which use generated wallets and local regtest
-  backends to exercise real wallet discovery and sync
+1. **Fixture layer** (every PR, no infra): CLI-driven fake-wallet demos plus
+   engine-level snapshot regressions. Fast, deterministic, zero containers.
+2. **Live regtest layer** (opt-in, nightly in CI): session-scoped Bitcoin Core
+   and Liquid (Elements + electrs-liquid) regtest stacks that exercise the
+   real sync protocol paths end-to-end.
+3. **Manual compatibility checks** (ad-hoc, developer-run): pointing Kassiber
+   at a self-hosted signet / non-mainnet instance to verify external wallet
+   interop. Not automated — public signet/testnet Electrum servers leak
+   watched scripts to whoever runs them, so that path stays off the
+   automated gate.
 
-## Baseline Gate
+All three layers stay on loopback-only infrastructure. The automated layers
+never contact a public chain or indexer.
+
+## Baseline Gate (layer 1)
 
 Run the baseline gate before pushing code or docs:
 
@@ -15,143 +25,155 @@ Run the baseline gate before pushing code or docs:
 ./scripts/quality-gate.sh
 ```
 
-The gate compiles the Python modules, runs the CLI smoke/regression suites,
-runs the sync backend unit suites, and imports the live-sync test module with
-live tests disabled. It should not contact public Bitcoin, Liquid, OpenAI, or
-other external services.
+The gate compiles the Python modules, runs the CLI smoke / regression /
+fake-wallet / Boltz-swap suites, the sync-backend unit suites, and imports
+the live-sync test modules with live tests disabled. It does not contact any
+external service.
 
-## Live Sync Tests
+Two fake-wallet demos drive the fixture layer:
 
-Prerequisites for the Bitcoin regtest live sync path:
+- `scripts/seed-fake-wallets.sh` seeds a BTC + LBTC workspace with a
+  self-transfer, a Liquid federation peg-in, and a matching peg-out. Use this
+  when you want a deterministic accounting demo or UI dataset.
+- `scripts/seed-boltz-swaps.sh` seeds a BTC + LBTC workspace with a full
+  Boltz chain-swap round trip (forward BTC -> LBTC and reverse LBTC -> BTC)
+  with the service-fee spread baked into the amounts and both legs paired
+  with `--kind chain-swap --policy taxable`. Use this when you need to
+  exercise the cross-asset pairing path without running live chains.
 
-- Docker installed
-- Docker Desktop or the Docker daemon running
-- the `docker` CLI reachable from the shell that runs the test script
-- permission to pull `bitcoin/bitcoin:28.1`, or that image already present
-  locally
+Both scripts create a fresh `--data-root` by default and emit the final
+`reports summary` envelope to stdout on success.
 
-Live sync tests are skipped unless explicitly enabled:
+## Live Regtest Layer (layer 2)
 
-```bash
-scripts/live-sync-tests.sh
-```
-
-The on-chain test starts a local Bitcoin Core regtest node in Docker, creates a
-real Core wallet, mines private regtest blocks, sends funds to a generated
-address, creates a Kassiber address wallet, and syncs through the real
-`bitcoinrpc` backend. It then runs a second sync to prove idempotency.
-
-By default the script will not pull Docker images. Pre-pull the image yourself
-or allow a pull:
+Layer 2 is opt-in. Enable it with `KASSIBER_LIVE_SYNC_TESTS=1` and run:
 
 ```bash
-docker pull bitcoin/bitcoin:28.1
-scripts/live-sync-tests.sh
-
-# or
-scripts/live-sync-tests.sh --pull-images
+scripts/live-sync-tests.sh                     # both Bitcoin and Liquid
+scripts/live-sync-tests.sh --suite bitcoin     # Bitcoin only
+scripts/live-sync-tests.sh --suite liquid      # Liquid only
 ```
 
-You can override the image:
+Each suite brings up its own Docker containers, shares them across the
+module's test methods via `setUpModule` / `tearDownModule`, and gives every
+test a fresh Kassiber `--data-root`. Session-scoped startup keeps a full
+live-sync run to roughly one Docker pull + one daemon start per chain, not
+per test.
+
+### Privacy posture (important)
+
+- All Docker port binds use `127.0.0.1::<container-port>` so the daemons are
+  reachable only over loopback on the host.
+- `rpcallowip` is scoped to the Docker bridge range
+  (`172.16.0.0/12`) rather than `0.0.0.0/0`.
+- RPC credentials are randomized per session (not hardcoded).
+- Descriptor material is generated inside the regtest container and written
+  to files under the test's temporary data root.
+- The Liquid test resolves the elementsregtest policy asset id from the
+  running daemon at runtime instead of hardcoding one that only matches a
+  specific genesis config.
+
+### Bitcoin regtest
+
+`tests/test_live_sync_bitcoin.py` drives:
+
+1. Start one `bitcoin/bitcoin:28.1` container on an ephemeral loopback port.
+2. Create a miner wallet, mine 101 blocks, mint a watch address.
+3. `kassiber wallets create --kind address --backend bitcoinrpc`, then
+   `kassiber wallets sync`.
+4. Assert the synced transaction matches what we broadcast, then sync again
+   and assert idempotency (`imported=0`, `skipped=1`).
+
+Override the image when you want a different Core version:
 
 ```bash
-KASSIBER_BITCOIND_IMAGE=bitcoin/bitcoin:28.1 scripts/live-sync-tests.sh
+KASSIBER_BITCOIND_IMAGE=bitcoin/bitcoin:27.1 \
+  scripts/live-sync-tests.sh --suite bitcoin --pull-images
 ```
 
-The generated wallet material, RPC credentials, blocks, and SQLite data live in
-temporary local directories. The test talks to `127.0.0.1` only.
+### Liquid regtest
 
-Docker must be reachable by the process that runs the script. If Docker is
-installed but not running, or if a sandboxed tool cannot see the Docker daemon
-socket, the live test is reported as skipped. To prove the Bitcoin regtest path
-really ran, require it:
+`tests/test_live_sync_liquid.py` drives a two-container stack on a dedicated
+Docker bridge network:
+
+1. `ghcr.io/vulpemventures/elements` running `-chain=elementsregtest`.
+2. `ghcr.io/vulpemventures/electrs-liquid` providing an Electrum TCP
+   endpoint on ephemeral loopback.
+
+The test creates a descriptor wallet inside elementsd, exports the
+`ct(slip77(...), elwpkh(...))` external + internal descriptors (splitting
+the unified `<0;1>` form when present, with fresh `getdescriptorinfo`
+checksums), writes them to files, and hands them to
+`kassiber wallets create --kind descriptor`. It then funds the first
+derived address, mines one block, and asserts Kassiber's Liquid Electrum
+sync unblinds the amount and reports the transaction as `LBTC`.
+
+Override the images when you want different builds:
 
 ```bash
-scripts/live-sync-tests.sh --pull-images --require-bitcoin-regtest
+KASSIBER_ELEMENTSD_IMAGE=ghcr.io/vulpemventures/elements:23.2.1 \
+KASSIBER_ELECTRS_LIQUID_IMAGE=ghcr.io/vulpemventures/electrs-liquid:latest \
+  scripts/live-sync-tests.sh --suite liquid --pull-images
 ```
 
-The same required Bitcoin regtest path is also available as a manual GitHub
-Actions workflow named `live-sync`. Trigger it from the GitHub Actions tab when
-you want CI to pull the Bitcoin Core image and prove the Docker-backed sync path
-works without adding that cost to every PR run.
+Extra daemon args can be appended with
+`KASSIBER_ELEMENTSD_EXTRA_ARGS` and `KASSIBER_ELECTRS_LIQUID_EXTRA_ARGS`.
 
-## Fake Wallet Demo
+### Skip vs. fail
 
-For deterministic manual and UI testing without chain services, seed a local
-demo project:
+By default, "Docker unreachable" and "image not present" are reported as
+skipped tests. Turn them into hard failures when you want to prove the path
+really ran:
 
 ```bash
-scripts/seed-fake-wallets.sh
+scripts/live-sync-tests.sh --suite bitcoin --pull-images --require-bitcoin-regtest
+scripts/live-sync-tests.sh --suite liquid  --pull-images --require-liquid-regtest
 ```
 
-The script creates a fresh data root by default, imports fixture CSV files from
-`tests/fixtures/fake_wallets/`, pairs one BTC -> LBTC peg-in and one LBTC -> BTC
-peg-out, tags and annotates the review-relevant records, processes journals,
-and emits the final `reports summary` machine envelope to stdout. The fixture
-contains:
+### Log capture on failure
 
-- a cold on-chain BTC wallet with an acquisition, a self-transfer, and a peg-in
-- a hot on-chain BTC wallet with the matching self-transfer receive, a spend,
-  and a peg-out receive
-- a Liquid wallet with the peg-in receive, peg-out send, and a Liquid spend
-- metadata tags for `swap`, `peg-in`, `peg-out`, `self-transfer`, and `spend`
-  plus notes on the swap, spend, and self-transfer records
+The live test base classes dump the recent `docker logs` output from every
+container that was part of the stack when a test fails. That output goes to
+stderr along with the test id so a CI failure is debuggable without
+re-running.
 
-Use an explicit data root when you want to inspect it afterwards:
+## CI Topology
+
+- **`ci` workflow (fast lane)**: runs `scripts/quality-gate.sh` on every
+  pull request and on pushes to `main`. Layer 1 only.
+- **`live-sync` workflow (slow lane)**: daily at 05:00 UTC on `main`, plus
+  manual dispatch with a suite selector. Layer 2 only. Each chain runs as
+  its own job so Bitcoin and Liquid failures stay independent.
+
+The daily cadence keeps layer 2 out of the per-PR loop (Docker pulls alone
+are a few minutes per job) while still catching regressions within a day.
+Drop to weekly later if the signal-to-noise ratio holds.
+
+## Chain-Swap Demo (Boltz)
+
+Boltz offers BTC <-> LBTC **chain swaps** (onchain atomic swaps between the
+two chains) in addition to their Lightning submarine swaps. From Kassiber's
+point of view, a chain swap is two independent transactions on two different
+chains with a direction inversion plus the Boltz service-fee spread. There
+is nothing Boltz-specific for the sync path to learn, so testing focuses on
+the accounting pipeline:
 
 ```bash
-scripts/seed-fake-wallets.sh --data-root /tmp/kassiber-demo/data
-python3 -m kassiber --data-root /tmp/kassiber-demo/data reports balance-sheet
-python3 -m kassiber --data-root /tmp/kassiber-demo/data journals transfers list
-python3 -m kassiber --data-root /tmp/kassiber-demo/data metadata records list --tag swap
+scripts/seed-boltz-swaps.sh --data-root /tmp/kassiber-boltz/data
+python3 -m kassiber --data-root /tmp/kassiber-boltz/data journals transfers list
 ```
 
-This fixture is not a live-chain test. It is a local accounting demo that gives
-the test suite and desktop work a stable BTC/LBTC swap scenario.
-
-## Liquid Live Sync
-
-Liquid live sync in Kassiber currently requires an Esplora-compatible or
-Electrum backend so outputs can be fetched and unblinded from descriptor
-context. Running a full Liquid regtest stack plus an indexer is more
-environment-specific than Bitcoin Core, so the test is parameterized and
-skipped until you point it at a local backend.
-
-Required environment:
-
-```bash
-KASSIBER_LIVE_SYNC_TESTS=1
-KASSIBER_LIVE_LIQUID_BACKEND_URL=http://127.0.0.1:3001
-KASSIBER_LIVE_LIQUID_BACKEND_KIND=esplora
-KASSIBER_LIVE_LIQUID_NETWORK=elementsregtest
-KASSIBER_LIVE_LIQUID_DESCRIPTOR_FILE=/path/to/receive.desc
-KASSIBER_LIVE_LIQUID_CHANGE_DESCRIPTOR_FILE=/path/to/change.desc
-```
-
-For a local Electrum-compatible backend, use:
-
-```bash
-KASSIBER_LIVE_LIQUID_BACKEND_URL=tcp://127.0.0.1:50001
-KASSIBER_LIVE_LIQUID_BACKEND_KIND=electrum
-KASSIBER_LIVE_LIQUID_BATCH_SIZE=10
-```
-
-The Liquid test refuses non-loopback backend URLs. That keeps accidental public
-backend queries out of the live test path, where descriptor-derived scripts
-would otherwise leak to the queried server. Descriptor files are read locally
-and normal Kassiber command output redacts raw descriptor material.
-
-Set `KASSIBER_LIVE_LIQUID_ALLOW_EMPTY=1` only when you want to verify
-connectivity and descriptor discovery against an unfunded local wallet. Without
-that flag, the test expects at least one imported or already-known record.
+The fixture pairs each leg with `--kind chain-swap --policy taxable`, which
+is the correct posture for generic (non-Austrian) profiles today — Austrian
+profiles can use `--policy carrying-value` to carry basis across the swap.
 
 ## Regtest, Signet, And Privacy
 
-Regtest is the default for live tests because it is local, deterministic, fast,
-and does not reveal wallet structure or timing to public infrastructure.
+Regtest is the default for automated live tests because it is local,
+deterministic, fast, and does not reveal wallet structure or timing to
+public infrastructure.
 
-Signet is useful for manual compatibility checks against external software, but
-it is not part of the automated live-sync gate: querying public signet
-Electrum/Esplora servers leaks scripts to those servers. If you need a signet
-run, point Kassiber at infrastructure you control and keep the descriptor and
-backend credentials local.
+Signet and mutinynet both look tempting for compatibility checks, but both
+leak watched scripts to any Electrum/Esplora server you query that you do
+not run yourself. If you need a signet run, point Kassiber at infrastructure
+you control and keep the descriptor and backend credentials local.

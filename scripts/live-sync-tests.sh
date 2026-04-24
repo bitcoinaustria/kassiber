@@ -6,32 +6,46 @@ cd "$ROOT"
 
 usage() {
   cat <<'USAGE'
-Usage: scripts/live-sync-tests.sh [--pull-images] [--require-bitcoin-regtest] [--require-liquid]
+Usage: scripts/live-sync-tests.sh [--suite bitcoin|liquid|all]
+                                  [--pull-images]
+                                  [--require-bitcoin-regtest]
+                                  [--require-liquid-regtest]
 
-Runs opt-in live wallet-sync integration tests.
+Runs opt-in live wallet-sync integration tests against local Bitcoin Core and
+Liquid (Elements + electrs-liquid) regtest stacks.
 
-By default Docker images must already exist locally so this script does not
-pull from a registry. Pass --pull-images to allow Docker to fetch missing
-images before running the tests.
+  --suite              Which test suite to run. Default: all.
+                       - bitcoin : tests.test_live_sync_bitcoin
+                       - liquid  : tests.test_live_sync_liquid
+                       - all     : both suites
+  --pull-images        Allow Docker to pull missing images (KASSIBER_LIVE_SYNC_PULL=1).
+  --require-bitcoin-regtest
+                       Fail (instead of skip) if Bitcoin regtest cannot start.
+  --require-liquid-regtest
+                       Fail (instead of skip) if Liquid regtest cannot start.
 
-By default unavailable live services are reported as skipped tests. Use
---require-bitcoin-regtest when you want the Bitcoin Core regtest Docker path to
-fail instead of skip if Docker is unavailable or the image is missing. Use
---require-liquid when you have configured a local Liquid backend and want that
-path to fail instead of skip.
+By default Docker images must already exist locally and unavailable live
+services are reported as skipped tests. Both defaults flip when the matching
+flags are passed.
 USAGE
 }
 
+SUITE="all"
+
 while [ $# -gt 0 ]; do
   case "$1" in
+    --suite)
+      SUITE="${2:?--suite needs a value (bitcoin|liquid|all)}"
+      shift
+      ;;
     --pull-images)
       export KASSIBER_LIVE_SYNC_PULL=1
       ;;
     --require-bitcoin-regtest)
       export KASSIBER_REQUIRE_BITCOIN_REGTEST=1
       ;;
-    --require-liquid)
-      export KASSIBER_REQUIRE_LIQUID_LIVE=1
+    --require-liquid-regtest|--require-liquid)
+      export KASSIBER_REQUIRE_LIQUID_REGTEST=1
       ;;
     --help|-h)
       usage
@@ -46,17 +60,35 @@ while [ $# -gt 0 ]; do
   shift
 done
 
+case "$SUITE" in
+  bitcoin|liquid|all) ;;
+  *)
+    echo "Unknown --suite value: $SUITE (expected bitcoin, liquid, or all)" >&2
+    exit 2
+    ;;
+esac
+
 export KASSIBER_LIVE_SYNC_TESTS=1
 export PYTHONPYCACHEPREFIX="${PYTHONPYCACHEPREFIX:-/tmp/kassiber-pyc}"
 export UV_CACHE_DIR="${UV_CACHE_DIR:-/tmp/kassiber-uv-cache}"
 
+PY=()
 if [ -n "${VIRTUAL_ENV:-}" ] && command -v python3 >/dev/null 2>&1; then
-  python3 -m unittest tests.test_live_sync_regtest -v
+  PY=(python3)
 elif [ -x "$ROOT/.venv/bin/python" ]; then
-  "$ROOT/.venv/bin/python" -m unittest tests.test_live_sync_regtest -v
+  PY=("$ROOT/.venv/bin/python")
 elif command -v uv >/dev/null 2>&1; then
-  uv run python -m unittest tests.test_live_sync_regtest -v
+  PY=(uv run python)
 else
   echo "live sync tests require an activated virtualenv, 'uv' on PATH, or a repo-local .venv" >&2
   exit 2
 fi
+
+TARGETS=()
+case "$SUITE" in
+  bitcoin) TARGETS=(tests.test_live_sync_bitcoin) ;;
+  liquid)  TARGETS=(tests.test_live_sync_liquid) ;;
+  all)     TARGETS=(tests.test_live_sync_bitcoin tests.test_live_sync_liquid) ;;
+esac
+
+"${PY[@]}" -m unittest "${TARGETS[@]}" -v

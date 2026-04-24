@@ -3,18 +3,43 @@ name: live-sync
 on:
   workflow_dispatch:
     inputs:
-      bitcoind_image:
-        description: "Bitcoin Core Docker image for regtest"
-        default: "bitcoin/bitcoin:28.1"
+      suite:
+        description: "Which live-sync suite to run"
+        default: "all"
         required: true
+        type: choice
+        options:
+          - all
+          - bitcoin
+          - liquid
+      bitcoind_image:
+        description: "Bitcoin Core Docker image"
+        default: "bitcoin/bitcoin:28.1"
+        required: false
+      elementsd_image:
+        description: "Elements Core Docker image"
+        default: "ghcr.io/vulpemventures/elements:23.2.1"
+        required: false
+      electrs_liquid_image:
+        description: "electrs-liquid Docker image"
+        default: "ghcr.io/vulpemventures/electrs-liquid:latest"
+        required: false
+  schedule:
+    # Daily at 05:00 UTC. Keep this off-peak for the ubuntu-latest fleet.
+    - cron: "0 5 * * *"
 
 permissions:
   contents: read
 
+concurrency:
+  group: live-sync-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
   bitcoin-regtest:
+    if: ${{ github.event_name == 'schedule' || inputs.suite == 'all' || inputs.suite == 'bitcoin' }}
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
 
@@ -31,5 +56,29 @@ jobs:
 
       - name: Run Bitcoin regtest live sync
         env:
-          KASSIBER_BITCOIND_IMAGE: ${{ inputs.bitcoind_image }}
-        run: scripts/live-sync-tests.sh --pull-images --require-bitcoin-regtest
+          KASSIBER_BITCOIND_IMAGE: ${{ inputs.bitcoind_image || 'bitcoin/bitcoin:28.1' }}
+        run: scripts/live-sync-tests.sh --suite bitcoin --pull-images --require-bitcoin-regtest
+
+  liquid-regtest:
+    if: ${{ github.event_name == 'schedule' || inputs.suite == 'all' || inputs.suite == 'liquid' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+
+      - name: Sync dependencies
+        run: uv sync --frozen
+
+      - name: Run Liquid regtest live sync
+        env:
+          KASSIBER_ELEMENTSD_IMAGE: ${{ inputs.elementsd_image || 'ghcr.io/vulpemventures/elements:23.2.1' }}
+          KASSIBER_ELECTRS_LIQUID_IMAGE: ${{ inputs.electrs_liquid_image || 'ghcr.io/vulpemventures/electrs-liquid:latest' }}
+        run: scripts/live-sync-tests.sh --suite liquid --pull-images --require-liquid-regtest

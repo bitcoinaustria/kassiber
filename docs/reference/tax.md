@@ -39,8 +39,9 @@ After any transaction change, metadata change, exclusion change, transfer pair c
 Cross-wallet self-transfers are auto-detected when both legs share the same on-chain `txid`.
 
 Reports do not auto-detect or auto-pair cross-asset swaps. If you have
-BTC ↔ LBTC peg-ins / peg-outs or submarine swaps, pair those legs before
-trusting `journals process` and downstream reports.
+BTC ↔ LBTC peg-ins / peg-outs, submarine swaps, or Boltz chain-swaps
+(`--kind chain-swap`), pair those legs before trusting `journals process`
+and downstream reports.
 
 When that signal is missing, you can pair them manually:
 
