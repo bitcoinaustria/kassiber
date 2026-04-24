@@ -112,8 +112,8 @@ Read-only readiness and preview surface. Reports remain trustworthy only after
 `journals process` has run and quarantines are resolved or intentionally
 excluded.
 
-Generic reports are already CLI-backed. Austrian tax processing exists in core;
-E 1kv export is still planned.
+Generic reports are already CLI-backed. Austrian tax processing and the
+review-gated E 1kv CLI/PDF export exist in core.
 
 ### Settings
 
@@ -163,8 +163,8 @@ requires = [
 ]
 ```
 
-Add `reportlab` only when E 1kv PDF export lands and the dependency docs are
-updated.
+E 1kv PDF export uses the existing line-oriented PDF writer, so no `reportlab`
+dependency is needed right now.
 
 ## Out Of Scope
 

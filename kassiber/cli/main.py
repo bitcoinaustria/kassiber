@@ -609,6 +609,11 @@ def build_parser() -> argparse.ArgumentParser:
         if report_name == "summary":
             report.add_argument("--wallet")
 
+    austrian_e1kv = reports_sub.add_parser("austrian-e1kv")
+    austrian_e1kv.add_argument("--workspace")
+    austrian_e1kv.add_argument("--profile")
+    austrian_e1kv.add_argument("--year", type=int, required=True, help="Four-digit tax year")
+
     balance_history = reports_sub.add_parser("balance-history")
     balance_history.add_argument("--workspace")
     balance_history.add_argument("--profile")
@@ -625,6 +630,12 @@ def build_parser() -> argparse.ArgumentParser:
     export_pdf.add_argument("--wallet")
     export_pdf.add_argument("--file", required=True)
     export_pdf.add_argument("--history-limit", type=int, default=0)
+
+    export_austrian_e1kv_pdf = reports_sub.add_parser("export-austrian-e1kv-pdf")
+    export_austrian_e1kv_pdf.add_argument("--workspace")
+    export_austrian_e1kv_pdf.add_argument("--profile")
+    export_austrian_e1kv_pdf.add_argument("--year", type=int, required=True, help="Four-digit tax year")
+    export_austrian_e1kv_pdf.add_argument("--file", required=True)
 
     rates = sub.add_parser("rates")
     rates_sub = rates.add_subparsers(dest="rates_command", required=True)
@@ -1292,6 +1303,30 @@ def dispatch(conn: sqlite3.Connection | None, args: argparse.Namespace) -> Any:
                     report_hooks,
                 ),
             )
+        if args.reports_command == "austrian-e1kv":
+            if args.format in {"table", "plain"}:
+                return emit(
+                    args,
+                    "\n".join(
+                        core_reports.build_austrian_e1kv_report_lines(
+                            conn,
+                            args.workspace,
+                            args.profile,
+                            report_hooks,
+                            tax_year=args.year,
+                        )
+                    ),
+                )
+            report = core_reports.report_austrian_e1kv(
+                conn,
+                args.workspace,
+                args.profile,
+                report_hooks,
+                tax_year=args.year,
+            )
+            if args.format == "csv":
+                return emit(args, report["rows"])
+            return emit(args, report)
         if args.reports_command == "balance-sheet":
             return emit(
                 args,
@@ -1347,6 +1382,18 @@ def dispatch(conn: sqlite3.Connection | None, args: argparse.Namespace) -> Any:
                     report_hooks,
                     wallet_ref=args.wallet,
                     history_limit=args.history_limit,
+                ),
+            )
+        if args.reports_command == "export-austrian-e1kv-pdf":
+            return emit(
+                args,
+                core_reports.export_austrian_e1kv_pdf_report(
+                    conn,
+                    args.workspace,
+                    args.profile,
+                    args.file,
+                    report_hooks,
+                    tax_year=args.year,
                 ),
             )
     if args.command == "rates":

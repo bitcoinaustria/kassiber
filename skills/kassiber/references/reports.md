@@ -10,6 +10,7 @@ Preferred defaults:
 - `--format csv --output <path>` for export-style reports
 - `--machine reports summary` for exact rollups that should be quoted back without hand math
 - `--machine reports tax-summary` for exact yearly gain/loss buckets and totals from RP2
+- `--machine reports austrian-e1kv --year <YYYY>` for the Austrian E 1kv handoff envelope
 - `reports export-pdf` only when the user explicitly asks for a PDF
 
 `--machine`, `--format`, and `--output` are global flags and belong before the subcommand tree. Examples:
@@ -136,6 +137,26 @@ Prefer these rows over summing `capital-gains` output manually.
 ```bash
 kassiber --format csv --output capital-gains.csv reports capital-gains
 ```
+
+## Austrian E 1kv
+
+Use this only for Austrian (`tax_country=at`, `fiat_currency=EUR`) profiles
+after `journals process`:
+
+```bash
+kassiber --machine reports austrian-e1kv --year 2024
+kassiber --format csv --output e1kv-2024.csv reports austrian-e1kv --year 2024
+kassiber reports export-austrian-e1kv-pdf --year 2024 --file e1kv-2024.pdf
+```
+
+The JSON envelope includes the review gate, the current ausländisch /
+self-custody Kennzahl assumption, FinanzOnline summary rows, row-level
+details, and quarantine/data-quality notes. The CSV output contains the
+row-level detail table. The PDF repeats the review gate and assumptions.
+
+Do not hand-fill domestic-provider or withheld-KESt fields from Kassiber
+output today; Kassiber does not yet store the metadata needed for 171, 173, or
+175.
 
 ## Journal entries
 

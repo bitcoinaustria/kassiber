@@ -39,7 +39,7 @@ AT_SWAP_QUARANTINE_REASON = "at_swap_basis_carry_unresolved"
 # disposal categories onto FinanzOnline / BMF form codes.
 AT_CATEGORY_TO_KENNZAHL: dict[str, int | None] = {
     "income_general": 172,
-    "income_capital_yield": 175,
+    "income_capital_yield": 172,
     "neu_gain": 174,
     "neu_loss": 176,
     "neu_swap": None,

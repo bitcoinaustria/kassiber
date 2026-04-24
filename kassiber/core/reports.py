@@ -4,14 +4,48 @@ import sqlite3
 from collections import defaultdict
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
-from decimal import Decimal
+from decimal import Decimal, ROUND_HALF_UP
 from typing import Any, Callable, Mapping, Sequence
 
+from .austrian import kennzahl_for_disposal_category
 from ..errors import AppError
 from ..msat import btc_to_msat, dec, msat_to_btc
 from ..tax_policy import require_tax_processing_supported
 
 INTERVAL_CHOICES = ("hour", "day", "week", "month")
+EUR_CENT = Decimal("0.01")
+
+AUSTRIAN_E1KV_REVIEW_GATE = (
+    "Review this Austrian E 1kv export with a Steuerberater before filing; "
+    "Kassiber is not tax advice."
+)
+AUSTRIAN_E1KV_SELF_CUSTODY_ASSUMPTION = (
+    "Kassiber currently maps crypto rows to the auslaendisch / self-custody "
+    "E 1kv Kennzahlen 172, 174, and 176. It does not populate domestic-provider "
+    "or withheld-KESt fields because that metadata is not stored yet."
+)
+AUSTRIAN_E1KV_DETAIL_LIMITATION = (
+    "Lot acquisition dates and holding-period day counts are not persisted in "
+    "journal rows; the export relies on RP2's Austrian category classification "
+    "and Kassiber's journal amounts."
+)
+AUSTRIAN_E1KV_FORM_SECTION = "E 1kv 1.3.5 Einkuenfte aus Kryptowaehrungen"
+AUSTRIAN_E1KV_KENNZAHL_LABELS = {
+    172: "Auslaendische laufende Einkuenfte aus Kryptowaehrungen",
+    174: "Auslaendische Ueberschuesse aus realisierten Wertsteigerungen",
+    176: "Auslaendische realisierte Wertverluste",
+    801: "Spekulationsgeschaefte Altbestand (outside E 1kv)",
+}
+AUSTRIAN_E1KV_SUPPORTED_KENNZAHL_ORDER = (172, 174, 176)
+AUSTRIAN_E1KV_CATEGORY_LABELS = {
+    "income_general": "Laufende Einkuenfte aus Kryptowaehrungen",
+    "income_capital_yield": "Laufende Einkuenfte aus Ueberlassung von Kryptowaehrungen",
+    "neu_gain": "Realisierte Wertsteigerung Neuvermoegen",
+    "neu_loss": "Realisierter Wertverlust Neuvermoegen",
+    "neu_swap": "Krypto-zu-Krypto Tausch mit Buchwertfortfuehrung",
+    "alt_spekulation": "Altbestand innerhalb Spekulationsfrist",
+    "alt_taxfree": "Altbestand ausserhalb Spekulationsfrist",
+}
 
 ScopeResolver = Callable[[sqlite3.Connection, str | None, str | None], tuple[Mapping[str, Any], Mapping[str, Any]]]
 AccountResolver = Callable[[sqlite3.Connection, str, str], Mapping[str, Any]]
@@ -805,6 +839,401 @@ def report_tax_summary(conn, workspace_ref, profile_ref, hooks: ReportHooks):
     return rows
 
 
+def _require_austrian_e1kv_profile(profile):
+    tax_country = str(profile["tax_country"] or "").strip().lower()
+    if tax_country != "at":
+        raise AppError(
+            "Austrian E 1kv export requires an Austrian tax profile",
+            code="validation",
+            hint="Use `profiles set --tax-country at --fiat-currency EUR` and re-run `journals process` first.",
+            details={"tax_country": profile["tax_country"]},
+        )
+    fiat_currency = str(profile["fiat_currency"] or "").strip().upper()
+    if fiat_currency != "EUR":
+        raise AppError(
+            "Austrian E 1kv export requires EUR journal amounts",
+            code="validation",
+            hint="Use an Austrian profile with --fiat-currency EUR and re-run `journals process`.",
+            details={"fiat_currency": profile["fiat_currency"]},
+        )
+
+
+def _normalize_tax_year(year):
+    if year is None:
+        raise AppError("--year is required for Austrian E 1kv export", code="validation")
+    try:
+        normalized = int(year)
+    except (TypeError, ValueError) as exc:
+        raise AppError("--year must be a four-digit tax year", code="validation") from exc
+    if normalized < 2009 or normalized > 2100:
+        raise AppError("--year must be a plausible four-digit tax year", code="validation")
+    return normalized
+
+
+def _eur_cents(value):
+    if value is None:
+        return None
+    rounded = dec(value).quantize(EUR_CENT, rounding=ROUND_HALF_UP)
+    return int(rounded * 100)
+
+
+def _eur_from_cents(cents):
+    return Decimal(int(cents or 0)) / Decimal("100")
+
+
+def _report_eur_cents(cents):
+    return _report_fiat(_eur_from_cents(cents))
+
+
+def _at_regime_from_category(category):
+    if not category:
+        return ""
+    if str(category).startswith("neu_"):
+        return "neu"
+    if str(category).startswith("alt_"):
+        return "alt"
+    if str(category).startswith("income_"):
+        return "income"
+    return ""
+
+
+def _austrian_e1kv_form_amount(row, kennzahl):
+    gain_loss = dec(row["gain_loss"] or 0)
+    if kennzahl == 176:
+        return abs(gain_loss)
+    if str(row["entry_type"]) == "income":
+        return gain_loss if gain_loss != 0 else dec(row["fiat_value"] or 0)
+    if kennzahl in {172, 174, 801}:
+        return gain_loss
+    return Decimal("0")
+
+
+def _austrian_e1kv_detail_row(row):
+    category = row["at_category"]
+    kennzahl = kennzahl_for_disposal_category(category)
+    quantity_msat = abs(int(row["quantity"] or 0))
+    quantity = msat_to_btc(quantity_msat)
+    proceeds = dec(row["proceeds"] or 0)
+    cost_basis = dec(row["cost_basis"] or 0)
+    gain_loss = dec(row["gain_loss"] or 0)
+    income = gain_loss if str(row["entry_type"]) == "income" else Decimal("0")
+    price_basis = income if str(row["entry_type"]) == "income" else proceeds
+    price = price_basis / quantity if quantity else None
+    form_amount = _austrian_e1kv_form_amount(row, kennzahl)
+    occurred_at = str(row["occurred_at"])
+    note = row["transaction_note"] or row["description"] or ""
+    return {
+        "tax_year": int(occurred_at[:4]),
+        "date": occurred_at[:10],
+        "tx_id": row["transaction_external_id"] or row["transaction_id"],
+        "transaction_id": row["transaction_id"],
+        "wallet": row["wallet"],
+        "asset": row["asset"],
+        "kind": row["transaction_kind"] or row["entry_type"],
+        "entry_type": row["entry_type"],
+        "at_category": category,
+        "at_category_label": AUSTRIAN_E1KV_CATEGORY_LABELS.get(category, ""),
+        "at_regime": _at_regime_from_category(category),
+        "qty_msat": quantity_msat,
+        "quantity": float(quantity),
+        "price_eur_cents": _eur_cents(price),
+        "cost_basis_eur_cents": _eur_cents(cost_basis),
+        "proceeds_eur_cents": _eur_cents(proceeds),
+        "gain_loss_eur_cents": _eur_cents(gain_loss),
+        "income_eur_cents": _eur_cents(income),
+        "form_amount_eur_cents": _eur_cents(form_amount),
+        "holding_period_days": None,
+        "kennzahl": kennzahl,
+        "stored_kennzahl": row["at_kennzahl"],
+        "form_section": AUSTRIAN_E1KV_FORM_SECTION if kennzahl in {172, 174, 176} else "",
+        "note": note,
+    }
+
+
+def _austrian_e1kv_rows(conn, profile, tax_year):
+    where = ["je.profile_id = ?", "je.at_category IS NOT NULL"]
+    params: list[Any] = [profile["id"]]
+    if tax_year is not None:
+        where.append("substr(je.occurred_at, 1, 4) = ?")
+        params.append(str(tax_year))
+    rows = conn.execute(
+        f"""
+        SELECT
+            je.occurred_at,
+            je.transaction_id,
+            je.entry_type,
+            je.asset,
+            je.quantity,
+            je.fiat_value,
+            COALESCE(je.cost_basis, 0) AS cost_basis,
+            COALESCE(je.proceeds, 0) AS proceeds,
+            COALESCE(je.gain_loss, 0) AS gain_loss,
+            COALESCE(je.description, '') AS description,
+            je.at_category,
+            je.at_kennzahl,
+            w.label AS wallet,
+            t.external_id AS transaction_external_id,
+            t.kind AS transaction_kind,
+            t.note AS transaction_note
+        FROM journal_entries je
+        JOIN wallets w ON w.id = je.wallet_id
+        LEFT JOIN transactions t ON t.id = je.transaction_id
+        WHERE {' AND '.join(where)}
+        ORDER BY je.occurred_at ASC, je.created_at ASC, je.id ASC
+        """,
+        params,
+    ).fetchall()
+    return [_austrian_e1kv_detail_row(row) for row in rows]
+
+
+def _austrian_e1kv_quarantines(conn, profile, tax_year):
+    where = ["jq.profile_id = ?"]
+    params: list[Any] = [profile["id"]]
+    if tax_year is not None:
+        where.append("substr(t.occurred_at, 1, 4) = ?")
+        params.append(str(tax_year))
+    return [
+        {"reason": row["reason"], "count": int(row["count"] or 0)}
+        for row in conn.execute(
+            f"""
+            SELECT jq.reason, COUNT(*) AS count
+            FROM journal_quarantines jq
+            JOIN transactions t ON t.id = jq.transaction_id
+            WHERE {' AND '.join(where)}
+            GROUP BY jq.reason
+            ORDER BY count DESC, jq.reason ASC
+            """,
+            params,
+        ).fetchall()
+    ]
+
+
+def _austrian_e1kv_summary_rows(rows):
+    totals = defaultdict(lambda: {"amount": 0, "count": 0})
+    for row in rows:
+        kennzahl = row["kennzahl"]
+        if kennzahl is None:
+            continue
+        totals[kennzahl]["amount"] += int(row["form_amount_eur_cents"] or 0)
+        totals[kennzahl]["count"] += 1
+
+    codes = list(AUSTRIAN_E1KV_SUPPORTED_KENNZAHL_ORDER)
+    for code in sorted(code for code in totals if code not in codes):
+        codes.append(code)
+
+    return [
+        {
+            "kennzahl": code,
+            "label": AUSTRIAN_E1KV_KENNZAHL_LABELS.get(code, ""),
+            "row_count": totals[code]["count"],
+            "amount_eur_cents": totals[code]["amount"],
+            "amount": float(_eur_from_cents(totals[code]["amount"])),
+        }
+        for code in codes
+    ]
+
+
+def _austrian_e1kv_assumptions(rows):
+    assumptions = [
+        {
+            "code": "AT-E1KV-FOREIGN-SELF-CUSTODY",
+            "severity": "review",
+            "message": AUSTRIAN_E1KV_SELF_CUSTODY_ASSUMPTION,
+        },
+        {
+            "code": "AT-E1KV-DETAIL-LIMITATION",
+            "severity": "review",
+            "message": AUSTRIAN_E1KV_DETAIL_LIMITATION,
+        },
+    ]
+    if any(str(row["asset"]).upper() == "LBTC" for row in rows):
+        assumptions.append(
+            {
+                "code": "AT-002",
+                "severity": "review",
+                "message": "L-BTC is treated as Kryptowaehrung like BTC for this report period.",
+            }
+        )
+    if any(str(row["kind"]).lower() == "routing_income" for row in rows):
+        assumptions.append(
+            {
+                "code": "AT-001",
+                "severity": "review",
+                "message": "Lightning routing fees are treated as laufende Einkuenfte at fair market value.",
+            }
+        )
+    assumptions.append(
+        {
+            "code": "AT-REVIEW-GATE",
+            "severity": "review",
+            "message": AUSTRIAN_E1KV_REVIEW_GATE,
+        }
+    )
+    return assumptions
+
+
+def _austrian_e1kv_mismatches(rows):
+    mismatches = []
+    for row in rows:
+        stored = row["stored_kennzahl"]
+        current = row["kennzahl"]
+        if stored is not None and current is not None and int(stored) != int(current):
+            mismatches.append(
+                {
+                    "tx_id": row["tx_id"],
+                    "at_category": row["at_category"],
+                    "stored_kennzahl": stored,
+                    "export_kennzahl": current,
+                }
+            )
+    return mismatches
+
+
+def report_austrian_e1kv(conn, workspace_ref, profile_ref, hooks: ReportHooks, tax_year=None):
+    workspace, profile = _resolve_report_scope(conn, workspace_ref, profile_ref, hooks)
+    _require_austrian_e1kv_profile(profile)
+    hooks.require_processed_journals(conn, profile)
+    normalized_year = _normalize_tax_year(tax_year)
+    rows = _austrian_e1kv_rows(conn, profile, normalized_year)
+    quarantines = _austrian_e1kv_quarantines(conn, profile, normalized_year)
+    return {
+        "workspace": workspace["label"],
+        "profile": profile["label"],
+        "tax_year": normalized_year,
+        "fiat_currency": profile["fiat_currency"],
+        "tax_country": profile["tax_country"],
+        "form": "E 1kv",
+        "form_section": AUSTRIAN_E1KV_FORM_SECTION,
+        "review_gate": AUSTRIAN_E1KV_REVIEW_GATE,
+        "assumptions": _austrian_e1kv_assumptions(rows),
+        "summary_rows": _austrian_e1kv_summary_rows(rows),
+        "rows": rows,
+        "data_quality": {
+            "quarantines": quarantines,
+            "kennzahl_mismatches": _austrian_e1kv_mismatches(rows),
+        },
+    }
+
+
+def _build_austrian_e1kv_report_lines(conn, workspace_ref, profile_ref, hooks: ReportHooks, tax_year=None):
+    report = report_austrian_e1kv(conn, workspace_ref, profile_ref, hooks, tax_year=tax_year)
+    scope = str(report["tax_year"])
+    title = f"Kassiber Austrian E 1kv Report - {report['profile']} ({scope})"
+    lines = [title, "=" * len(title), ""]
+    lines.extend(
+        _report_kv_lines(
+            [
+                ("Workspace", report["workspace"]),
+                ("Profile", report["profile"]),
+                ("Tax year", scope),
+                ("Fiat currency", report["fiat_currency"]),
+                ("Tax country", report["tax_country"]),
+                ("Form", report["form"]),
+                ("Section", report["form_section"]),
+            ]
+        )
+    )
+
+    lines.extend(["", "FinanzOnline Kennzahlen", "-----------------------"])
+    lines.extend(
+        hooks.format_table(
+            ["KZ", "Description", "Rows", "Amount EUR"],
+            [
+                [
+                    str(row["kennzahl"]),
+                    row["label"],
+                    _report_count(row["row_count"]),
+                    _report_eur_cents(row["amount_eur_cents"]),
+                ]
+                for row in report["summary_rows"]
+            ],
+            [5, 56, 8, 14],
+            align_right={2, 3},
+        )
+    )
+
+    lines.extend(["", "Assumptions", "-----------"])
+    for assumption in report["assumptions"]:
+        lines.append(f"{assumption['code']}: {assumption['message']}")
+
+    lines.extend(["", "Transaction Detail", "------------------"])
+    detail_rows = [
+        [
+            row["date"],
+            row["wallet"],
+            row["asset"],
+            row["kind"],
+            row["at_category_label"] or row["at_category"],
+            _report_btc(row["quantity"]),
+            str(row["kennzahl"] or ""),
+            _report_eur_cents(row["cost_basis_eur_cents"]),
+            _report_eur_cents(row["proceeds_eur_cents"]),
+            _report_eur_cents(row["gain_loss_eur_cents"]),
+        ]
+        for row in report["rows"]
+    ]
+    if detail_rows:
+        lines.extend(
+            hooks.format_table(
+                ["Date", "Wallet", "Asset", "Kind", "Category", "Qty", "KZ", "Basis", "Proceeds", "Gain/Loss"],
+                detail_rows,
+                [10, 14, 6, 14, 22, 12, 5, 12, 12, 12],
+                align_right={5, 6, 7, 8, 9},
+            )
+        )
+    else:
+        lines.append("No Austrian report rows in scope.")
+
+    lines.extend(["", "Data Quality", "------------"])
+    quarantines = report["data_quality"]["quarantines"]
+    mismatches = report["data_quality"]["kennzahl_mismatches"]
+    if quarantines:
+        lines.append("Quarantined transactions remain outside this export:")
+        lines.extend(
+            hooks.format_table(
+                ["Reason", "Count"],
+                [[row["reason"], _report_count(row["count"])] for row in quarantines],
+                [32, 8],
+                align_right={1},
+            )
+        )
+    else:
+        lines.append("No quarantined transactions in scope.")
+    if mismatches:
+        lines.append("Some rows had stale stored Kennzahlen; the export used the current category mapping.")
+    else:
+        lines.append("Stored Kennzahlen match the current export mapping.")
+
+    lines.extend(["", "Review Footer", "-------------", AUSTRIAN_E1KV_REVIEW_GATE])
+    return title, lines, report
+
+
+def build_austrian_e1kv_report_lines(conn, workspace_ref, profile_ref, hooks: ReportHooks, tax_year=None):
+    _, lines, _ = _build_austrian_e1kv_report_lines(
+        conn,
+        workspace_ref,
+        profile_ref,
+        hooks,
+        tax_year=tax_year,
+    )
+    return lines
+
+
+def export_austrian_e1kv_pdf_report(conn, workspace_ref, profile_ref, file_path, hooks: ReportHooks, tax_year=None):
+    title, lines, report = _build_austrian_e1kv_report_lines(
+        conn,
+        workspace_ref,
+        profile_ref,
+        hooks,
+        tax_year=tax_year,
+    )
+    written = dict(hooks.write_text_pdf(file_path, title, lines))
+    written["tax_year"] = report["tax_year"]
+    written["form"] = report["form"]
+    written["assumptions"] = report["assumptions"]
+    return written
+
+
 def build_pdf_report_lines(conn, workspace_ref, profile_ref, hooks: ReportHooks, wallet_ref=None, history_limit=None):
     workspace, profile = _resolve_report_scope(conn, workspace_ref, profile_ref, hooks)
     wallet = hooks.resolve_wallet(conn, profile["id"], wallet_ref) if wallet_ref else None
@@ -1154,8 +1583,11 @@ def export_pdf_report(conn, workspace_ref, profile_ref, file_path, hooks: Report
 __all__ = [
     "INTERVAL_CHOICES",
     "ReportHooks",
+    "build_austrian_e1kv_report_lines",
     "build_pdf_report_lines",
+    "export_austrian_e1kv_pdf_report",
     "export_pdf_report",
+    "report_austrian_e1kv",
     "report_balance_history",
     "report_balance_sheet",
     "report_capital_gains",

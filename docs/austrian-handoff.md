@@ -78,7 +78,7 @@ Current Kassiber mapping:
 | `AtDisposalCategory` | Kassiber `at_category` | Current Kennzahl |
 | --- | --- | --- |
 | `INCOME_GENERAL` | `income_general` | `172` |
-| `INCOME_CAPITAL_YIELD` | `income_capital_yield` | `175` |
+| `INCOME_CAPITAL_YIELD` | `income_capital_yield` | `172` |
 | `NEU_GAIN` | `neu_gain` | `174` |
 | `NEU_LOSS` | `neu_loss` | `176` |
 | `NEU_SWAP` | `neu_swap` | none |
@@ -88,7 +88,7 @@ Current Kassiber mapping:
 This mapping targets the current ausländisch / self-custody slice of
 E 1kv. Kassiber does not yet persist structured domestic-provider
 withheld-KESt metadata, so it cannot populate domestic-provider
-Kennzahlen such as 171/173 or the inländisch half of 175. CLI/PDF E 1kv
+Kennzahlen such as 171, 173, or 175. CLI/PDF E 1kv
 exports must surface that assumption until the data model can represent
 withheld tax.
 
