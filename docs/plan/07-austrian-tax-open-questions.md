@@ -105,9 +105,12 @@ lending, yield, liquidity-pool, or other DeFi arrangements, receipt can be
 taxable laufende Einkünfte under § 27b Abs 2 Z 1 EStG even if the provider
 calls it staking.
 
-Kassiber should not treat the word `staking` alone as enough provenance for
-either side of that line. Until imports capture product mechanics explicitly,
-review staking-labelled rows before relying on the E 1kv handoff.
+Current Kassiber imports still promote explicit `staking` rows into the
+income-like RP2 path, so this is an open classification gap rather than a
+settled behavior guarantee. Kassiber should not keep treating the word
+`staking` alone as enough provenance for either side of that line once imports
+capture product mechanics explicitly. Until then, review staking-labelled rows
+before relying on the E 1kv handoff.
 
 Reference: BMF, [Steuerliche Behandlung von Kryptowährungen](https://www.bmf.gv.at/themen/steuern/sparen-veranlagen/steuerliche-behandlung-von-kryptowaehrungen.html).
 
