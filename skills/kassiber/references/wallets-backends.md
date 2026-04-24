@@ -159,6 +159,7 @@ kassiber wallets list
 kassiber wallets get --wallet satoshi-liquid
 kassiber wallets derive --wallet satoshi-liquid --count 5
 kassiber wallets sync --wallet satoshi-liquid
+kassiber --machine wallets sync --all
 ```
 
 `kassiber wallets get` returns an allowlisted safe config view. Use
@@ -166,8 +167,10 @@ kassiber wallets sync --wallet satoshi-liquid
 state instead of expecting the raw descriptor back or arbitrary config keys
 to be echoed.
 
-`wallets sync` takes `--wallet <label-or-id>` or `--all`; the wallet is not a
-positional argument.
+`wallets sync` takes either `--wallet <label-or-id>` or `--all`, never both;
+the wallet is not a positional argument.
+For "sync the project wallets" or "sync current wallets", use `--all` directly
+unless the user names a single wallet.
 
 ## Imports
 

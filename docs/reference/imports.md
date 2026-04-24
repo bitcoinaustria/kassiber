@@ -148,6 +148,19 @@ python3 -m kassiber metadata records tag add --transaction <ID> --tag tax-lot
 python3 -m kassiber metadata records excluded set --transaction <ID>
 ```
 
+For raw transaction ranking, sort in Kassiber before applying `--limit`:
+
+```bash
+# largest inbound and outbound rows
+python3 -m kassiber --machine transactions list --direction inbound --sort amount --order desc --limit 10
+python3 -m kassiber --machine transactions list --direction outbound --sort amount --order desc --limit 10
+# smallest outbound rows
+python3 -m kassiber --machine transactions list --direction outbound --sort amount --order asc --limit 10
+```
+
+Machine output includes `has_more` and `next_cursor` when the matching row set
+continues beyond the current page.
+
 Attachments can be added after import:
 
 ```bash

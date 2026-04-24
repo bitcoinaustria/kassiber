@@ -17,6 +17,21 @@ kassiber --format csv --output capital-gains.csv reports capital-gains
 
 Do not append `--machine` or `--format` after the subcommand tree.
 
+## Fast paths
+
+Common requests should not require exploratory commands:
+
+```bash
+# sync every wallet in the current scope
+kassiber --machine wallets sync --all
+
+# current balances by account/bucket/asset/wallet
+kassiber --format plain reports balance-sheet
+
+# stale report repair
+kassiber --machine journals process
+```
+
 ## Backends
 
 ```bash
@@ -106,7 +121,14 @@ kassiber wallets sync-btcpay \
 ```bash
 kassiber --machine transactions list
 kassiber --machine transactions list --limit 100 --cursor <cursor>
+kassiber --machine transactions list --direction inbound --sort amount --order desc --limit 10
+kassiber --machine transactions list --direction outbound --sort amount --order desc --limit 10
+kassiber --machine transactions list --direction inbound --sort amount --order asc --limit 10
+kassiber --machine transactions list --direction outbound --sort amount --order asc --limit 10
 ```
+
+Use `--order desc` for largest rows and `--order asc` for smallest rows.
+Do not fetch the default recent page and sort it client-side.
 
 ## Journals
 

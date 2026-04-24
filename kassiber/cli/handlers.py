@@ -7,12 +7,9 @@ import sqlite3
 import sys
 import uuid
 from collections import defaultdict
-from datetime import datetime, timezone
 from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 from functools import lru_cache
 from pathlib import Path
-from urllib import error as urlerror
-from urllib import request as urlrequest
 
 from .. import __version__
 from ..backends import (
@@ -168,23 +165,6 @@ def normalize_addresses(values):
     return output
 
 
-def http_get_json(url, timeout=30):
-    request = urlrequest.Request(
-        url,
-        headers={
-            "Accept": "application/json",
-            "User-Agent": f"{APP_NAME}/{__version__}",
-        },
-    )
-    try:
-        with urlrequest.urlopen(request, timeout=timeout) as response:
-            return json.loads(response.read().decode("utf-8"))
-    except urlerror.HTTPError as exc:
-        detail = exc.read().decode("utf-8", errors="replace")
-        raise AppError(f"HTTP {exc.code} from backend for {url}: {detail[:200]}") from exc
-    except urlerror.URLError as exc:
-        raise AppError(f"Failed to reach backend {url}: {exc.reason}") from exc
-
 def resolve_workspace(conn, ref=None):
     ref = ref or get_setting(conn, "context_workspace")
     if not ref:
@@ -238,16 +218,30 @@ def resolve_wallet(conn, profile_id, ref):
 
 
 def resolve_transaction(conn, profile_id, ref, direction=None):
-    query = [
-        "SELECT * FROM transactions WHERE profile_id = ?",
-    ]
-    params = [profile_id]
+    id_query = ["SELECT * FROM transactions WHERE profile_id = ? AND id = ?"]
+    id_params = [profile_id, ref]
     if direction is not None:
-        query.append("AND direction = ?")
-        params.append(direction)
-    query.append("AND (id = ? OR external_id = ?) LIMIT 1")
-    params.extend([ref, ref])
-    row = conn.execute(" ".join(query), tuple(params)).fetchone()
+        id_query.append("AND direction = ?")
+        id_params.append(direction)
+    row = conn.execute(" ".join(id_query), tuple(id_params)).fetchone()
+    if row:
+        return row
+
+    external_query = ["SELECT * FROM transactions WHERE profile_id = ? AND external_id = ?"]
+    external_params = [profile_id, ref]
+    if direction is not None:
+        external_query.append("AND direction = ?")
+        external_params.append(direction)
+    external_query.append("ORDER BY occurred_at DESC, created_at DESC, id DESC LIMIT 2")
+    rows = conn.execute(" ".join(external_query), tuple(external_params)).fetchall()
+    if len(rows) > 1:
+        direction_hint = f" {direction}" if direction else ""
+        raise AppError(
+            f"Transaction external_id '{ref}' matches multiple{direction_hint} transactions",
+            code="ambiguous_reference",
+            hint="Use the Kassiber transaction id from `transactions list` or narrow the command to an unambiguous row.",
+        )
+    row = rows[0] if rows else None
     if not row:
         if direction is None:
             raise AppError(f"Transaction '{ref}' not found")
@@ -656,7 +650,7 @@ def _import_coordinator_hooks():
     )
 
 
-def _import_file_for_sync(conn, profile, wallet, file_path, input_format):
+def _import_file_for_sync(conn, profile, wallet, file_path, input_format, *, commit=True):
     return core_imports.import_file_into_wallet(
         conn,
         profile,
@@ -664,6 +658,7 @@ def _import_file_for_sync(conn, profile, wallet, file_path, input_format):
         file_path,
         input_format,
         _import_coordinator_hooks(),
+        commit=commit,
     )
 
 
@@ -676,6 +671,7 @@ def _import_records_for_sync(
     *,
     apply_btcpay=False,
     apply_phoenix=False,
+    commit=True,
 ):
     return core_imports.import_records_into_wallet(
         conn,
@@ -686,28 +682,50 @@ def _import_records_for_sync(
         _import_coordinator_hooks(),
         apply_btcpay=apply_btcpay,
         apply_phoenix=apply_phoenix,
+        commit=commit,
     )
 
 
-def _insert_records_for_sync(conn, profile, wallet, records, source_label):
+def _insert_records_for_sync(conn, profile, wallet, records, source_label, *, commit=True):
     return _import_records_for_sync(
         conn,
         profile,
         wallet,
         records,
         source_label,
+        commit=commit,
     )
 
 
-def _wallet_sync_hooks():
+def _wallet_sync_hooks(commit=True):
     return core_sync.WalletSyncHooks(
-        import_file=_import_file_for_sync,
-        insert_records=_insert_records_for_sync,
+        import_file=lambda conn, profile, wallet, file_path, input_format: _import_file_for_sync(
+            conn,
+            profile,
+            wallet,
+            file_path,
+            input_format,
+            commit=commit,
+        ),
+        insert_records=lambda conn, profile, wallet, records, source_label: _insert_records_for_sync(
+            conn,
+            profile,
+            wallet,
+            records,
+            source_label,
+            commit=commit,
+        ),
         resolve_backend=resolve_backend,
         resolve_sync_state=core_sync_backends.resolve_wallet_sync_targets,
         normalize_addresses=core_wallets.normalize_addresses,
         backend_adapters=core_sync_backends.SYNC_BACKEND_ADAPTERS,
-        sync_btcpay_wallet=sync_configured_btcpay_wallet,
+        sync_btcpay_wallet=lambda conn, runtime_config, profile, wallet: sync_configured_btcpay_wallet(
+            conn,
+            runtime_config,
+            profile,
+            wallet,
+            commit=commit,
+        ),
     )
 
 
@@ -724,19 +742,52 @@ def sync_wallet_from_backend(conn, runtime_config, workspace_ref, profile_ref, w
 
 def sync_wallet(conn, runtime_config, workspace_ref, profile_ref, wallet_ref=None, sync_all=False):
     _, profile = resolve_scope(conn, workspace_ref, profile_ref)
+    if sync_all and wallet_ref:
+        raise AppError("--wallet and --all are mutually exclusive", code="validation")
     if sync_all:
         wallets = conn.execute("SELECT * FROM wallets WHERE profile_id = ? ORDER BY label ASC", (profile["id"],)).fetchall()
+        results = []
+        for idx, wallet in enumerate(wallets):
+            savepoint = f"wallet_sync_{idx}"
+            conn.execute(f"SAVEPOINT {savepoint}")
+            try:
+                results.extend(
+                    core_sync.sync_wallets(
+                        conn,
+                        runtime_config,
+                        profile,
+                        [wallet],
+                        _wallet_sync_hooks(commit=False),
+                    )
+                )
+            except AppError as exc:
+                conn.execute(f"ROLLBACK TO SAVEPOINT {savepoint}")
+                conn.execute(f"RELEASE SAVEPOINT {savepoint}")
+                results.append(
+                    {
+                        "wallet": wallet["label"],
+                        "status": "error",
+                        "code": exc.code,
+                        "message": str(exc),
+                        "hint": exc.hint or "",
+                        "retryable": bool(exc.retryable),
+                    }
+                )
+            else:
+                conn.execute(f"RELEASE SAVEPOINT {savepoint}")
+                conn.commit()
+        return results
     else:
         if not wallet_ref:
             raise AppError("Provide --wallet or use --all")
         wallets = [resolve_wallet(conn, profile["id"], wallet_ref)]
-    return core_sync.sync_wallets(
-        conn,
-        runtime_config,
-        profile,
-        wallets,
-        _wallet_sync_hooks(),
-    )
+        return core_sync.sync_wallets(
+            conn,
+            runtime_config,
+            profile,
+            wallets,
+            _wallet_sync_hooks(),
+        )
 
 
 def _sync_btcpay_wallet(
@@ -746,6 +797,7 @@ def _sync_btcpay_wallet(
     wallet,
     *,
     page_size=BTCPAY_DEFAULT_PAGE_SIZE,
+    commit=True,
 ):
     config = json.loads(wallet["config_json"] or "{}")
     btcpay_config = core_wallets.wallet_btcpay_sync_config(config)
@@ -776,6 +828,7 @@ def _sync_btcpay_wallet(
         records,
         f"btcpay:{backend['name']}:{btcpay_config['store_id']}",
         apply_btcpay=True,
+        commit=commit,
     )
     outcome["backend"] = backend["name"]
     outcome["backend_kind"] = kind
@@ -787,13 +840,14 @@ def _sync_btcpay_wallet(
     return outcome
 
 
-def sync_configured_btcpay_wallet(conn, runtime_config, profile, wallet):
+def sync_configured_btcpay_wallet(conn, runtime_config, profile, wallet, *, commit=True):
     return _sync_btcpay_wallet(
         conn,
         runtime_config,
         profile,
         wallet,
         page_size=BTCPAY_DEFAULT_PAGE_SIZE,
+        commit=commit,
     )
 
 
@@ -882,15 +936,202 @@ def derive_wallet_targets(conn, workspace_ref, profile_ref, wallet_ref, branch=N
     ]
 
 
-def list_transactions(conn, workspace_ref, profile_ref, wallet_ref=None, limit=100):
-    _, profile = resolve_scope(conn, workspace_ref, profile_ref)
+TRANSACTION_SORT_COLUMNS = {
+    "occurred-at": "t.occurred_at",
+    "amount": "t.amount",
+    "fiat-value": "COALESCE(t.fiat_value, 0)",
+    "fee": "t.fee",
+}
+MAX_TRANSACTION_PAGE_SIZE = 1000
+
+
+def _transaction_cursor_filters(
+    workspace_id,
+    profile_id,
+    wallet_id=None,
+    direction=None,
+    asset=None,
+    start_ts=None,
+    end_ts=None,
+):
+    return {
+        "workspace_id": workspace_id,
+        "profile_id": profile_id,
+        "wallet_id": wallet_id or "",
+        "direction": direction or "",
+        "asset": asset.upper() if asset else "",
+        "start": start_ts or "",
+        "end": end_ts or "",
+    }
+
+
+def _decode_transaction_cursor(cursor, sort, order, filters):
+    if not cursor:
+        return None
+    try:
+        padding = "=" * (-len(cursor) % 4)
+        decoded = base64.urlsafe_b64decode(cursor + padding).decode("utf-8")
+        payload = json.loads(decoded)
+        if payload.get("sort") != sort or payload.get("order") != order:
+            raise ValueError("cursor sort/order mismatch")
+        if payload.get("filters") != filters:
+            raise ValueError("cursor filter mismatch")
+        required = {"sort", "order", "filters", "value", "occurred_at", "created_at", "id"}
+        if not required.issubset(payload):
+            raise ValueError("missing cursor fields")
+        return payload
+    except (ValueError, UnicodeDecodeError, binascii.Error, json.JSONDecodeError) as exc:
+        raise AppError(
+            f"Invalid cursor: {cursor}",
+            code="validation",
+            hint="Pass the exact next_cursor value from the previous response; do not modify it or change filters.",
+        ) from exc
+
+
+def _transaction_cursor_value(row, sort):
+    if sort == "occurred-at":
+        return row["occurred_at"]
+    if sort == "amount":
+        return int(row["amount"])
+    if sort == "fee":
+        return int(row["fee"])
+    if sort == "fiat-value":
+        return float(row["fiat_value"] or 0)
+    raise AppError(
+        f"Unsupported transaction sort: {sort}",
+        code="validation",
+        hint="Use one of: occurred-at, amount, fiat-value, fee.",
+    )
+
+
+def _encode_transaction_cursor(row, sort, order, filters):
+    payload = {
+        "sort": sort,
+        "order": order,
+        "filters": filters,
+        "value": _transaction_cursor_value(row, sort),
+        "occurred_at": row["occurred_at"],
+        "created_at": row["_created_at"],
+        "id": row["id"],
+    }
+    token = json.dumps(payload, separators=(",", ":"), sort_keys=True)
+    return base64.urlsafe_b64encode(token.encode("utf-8")).decode("ascii").rstrip("=")
+
+
+def list_transactions(
+    conn,
+    workspace_ref,
+    profile_ref,
+    wallet_ref=None,
+    limit=100,
+    *,
+    direction=None,
+    asset=None,
+    start=None,
+    end=None,
+    cursor=None,
+    sort="occurred-at",
+    order="desc",
+):
+    workspace, profile = resolve_scope(conn, workspace_ref, profile_ref)
+    if limit <= 0:
+        raise AppError("--limit must be positive", code="validation")
+    if limit > MAX_TRANSACTION_PAGE_SIZE:
+        raise AppError(
+            f"--limit cannot exceed {MAX_TRANSACTION_PAGE_SIZE}",
+            code="validation",
+            hint=f"Use cursor-based pagination instead of larger limits; max page size is {MAX_TRANSACTION_PAGE_SIZE}.",
+        )
+    if direction and direction not in {"inbound", "outbound"}:
+        raise AppError("--direction must be inbound or outbound", code="validation")
+    sort_column = TRANSACTION_SORT_COLUMNS.get(sort)
+    if not sort_column:
+        raise AppError(
+            f"Unsupported transaction sort: {sort}",
+            code="validation",
+            hint="Use one of: occurred-at, amount, fiat-value, fee.",
+        )
+    if order not in {"asc", "desc"}:
+        raise AppError("--order must be asc or desc", code="validation")
+    order_sql = order.upper()
+    if sort == "occurred-at":
+        order_by = f"t.occurred_at {order_sql}, t.created_at {order_sql}, t.id {order_sql}"
+    else:
+        order_by = f"{sort_column} {order_sql}, t.occurred_at DESC, t.created_at DESC, t.id DESC"
+
     params = [profile["id"]]
-    wallet_clause = ""
+    filters = ["t.profile_id = ?"]
+    start_ts = _iso_z(_parse_iso_datetime(start, "start")) if start else None
+    end_ts = _iso_z(_parse_iso_datetime(end, "end")) if end else None
+    wallet_id = ""
     if wallet_ref:
         wallet = resolve_wallet(conn, profile["id"], wallet_ref)
-        wallet_clause = "AND t.wallet_id = ?"
-        params.append(wallet["id"])
-    params.append(limit)
+        wallet_id = wallet["id"]
+        filters.append("t.wallet_id = ?")
+        params.append(wallet_id)
+    if direction:
+        filters.append("t.direction = ?")
+        params.append(direction)
+    if asset:
+        filters.append("upper(t.asset) = ?")
+        params.append(asset.upper())
+    if start_ts:
+        filters.append("t.occurred_at >= ?")
+        params.append(start_ts)
+    if end_ts:
+        filters.append("t.occurred_at <= ?")
+        params.append(end_ts)
+
+    cursor_filters = _transaction_cursor_filters(
+        workspace["id"],
+        profile["id"],
+        wallet_id,
+        direction,
+        asset,
+        start_ts,
+        end_ts,
+    )
+    cursor_data = _decode_transaction_cursor(cursor, sort, order, cursor_filters)
+    if cursor_data:
+        if sort == "occurred-at":
+            op = ">" if order == "asc" else "<"
+            filters.append(
+                f"(t.occurred_at {op} ? OR "
+                f"(t.occurred_at = ? AND t.created_at {op} ?) OR "
+                f"(t.occurred_at = ? AND t.created_at = ? AND t.id {op} ?))"
+            )
+            params.extend(
+                [
+                    cursor_data["occurred_at"],
+                    cursor_data["occurred_at"],
+                    cursor_data["created_at"],
+                    cursor_data["occurred_at"],
+                    cursor_data["created_at"],
+                    cursor_data["id"],
+                ]
+            )
+        else:
+            primary_op = ">" if order == "asc" else "<"
+            filters.append(
+                f"({sort_column} {primary_op} ? OR "
+                f"({sort_column} = ? AND "
+                "(t.occurred_at < ? OR "
+                "(t.occurred_at = ? AND t.created_at < ?) OR "
+                "(t.occurred_at = ? AND t.created_at = ? AND t.id < ?))))"
+            )
+            params.extend(
+                [
+                    cursor_data["value"],
+                    cursor_data["value"],
+                    cursor_data["occurred_at"],
+                    cursor_data["occurred_at"],
+                    cursor_data["created_at"],
+                    cursor_data["occurred_at"],
+                    cursor_data["created_at"],
+                    cursor_data["id"],
+                ]
+            )
+    params.append(limit + 1)
     rows = conn.execute(
         f"""
         SELECT
@@ -898,6 +1139,7 @@ def list_transactions(conn, workspace_ref, profile_ref, wallet_ref=None, limit=1
             COALESCE(t.external_id, '') AS external_id,
             t.occurred_at,
             t.confirmed_at,
+            t.created_at AS _created_at,
             w.label AS wallet,
             t.direction,
             t.asset,
@@ -908,28 +1150,52 @@ def list_transactions(conn, workspace_ref, profile_ref, wallet_ref=None, limit=1
             COALESCE(t.kind, '') AS kind,
             COALESCE(t.description, '') AS description,
             COALESCE(t.note, '') AS note,
-            CASE WHEN t.excluded = 1 THEN 'yes' ELSE '' END AS excluded,
-            COALESCE(GROUP_CONCAT(tags.code, ','), '') AS tags
+            t.excluded
         FROM transactions t
         JOIN wallets w ON w.id = t.wallet_id
-        LEFT JOIN transaction_tags tt ON tt.transaction_id = t.id
-        LEFT JOIN tags ON tags.id = tt.tag_id
-        WHERE t.profile_id = ? {wallet_clause}
-        GROUP BY t.id
-        ORDER BY t.occurred_at DESC, t.created_at DESC
+        WHERE {' AND '.join(filters)}
+        ORDER BY {order_by}
         LIMIT ?
         """,
         params,
     ).fetchall()
+    has_more = len(rows) > limit
+    page = rows[:limit]
+    tags_by_transaction = {row["id"]: [] for row in page}
+    if page:
+        placeholders = ", ".join("?" for _ in page)
+        for tag in conn.execute(
+            f"""
+            SELECT tt.transaction_id, tags.code, tags.label
+            FROM transaction_tags tt
+            JOIN tags ON tags.id = tt.tag_id
+            WHERE tt.transaction_id IN ({placeholders})
+            ORDER BY tt.transaction_id ASC, tags.code ASC
+            """,
+            [row["id"] for row in page],
+        ).fetchall():
+            tags_by_transaction.setdefault(tag["transaction_id"], []).append(
+                {"code": tag["code"], "label": tag["label"]}
+            )
     results = []
-    for row in rows:
+    for row in page:
         record = dict(row)
+        record.pop("_created_at", None)
         record["amount_msat"] = int(record["amount"])
         record["amount"] = float(msat_to_btc(record["amount"]))
         record["fee_msat"] = int(record["fee"])
         record["fee"] = float(msat_to_btc(record["fee"]))
+        record["excluded"] = bool(record["excluded"])
+        record["tags"] = tags_by_transaction.get(record["id"], [])
         results.append(record)
-    return results
+    next_cursor = _encode_transaction_cursor(page[-1], sort, order, cursor_filters) if has_more and page else None
+    return results, {
+        "next_cursor": next_cursor,
+        "has_more": has_more,
+        "limit": limit,
+        "sort": sort,
+        "order": order,
+    }
 
 
 def available_quantity(lots):
@@ -980,293 +1246,6 @@ def latest_rates_for_profile(conn, profile_id):
     return rates
 
 
-# -- rates cache -------------------------------------------------------------
-
-SUPPORTED_RATE_PAIRS = ("BTC-USD", "BTC-EUR")
-_COINGECKO_VS = {"USD": "usd", "EUR": "eur"}
-_COINGECKO_COIN = {"BTC": "bitcoin"}
-
-
-def _normalize_rate_pair(pair):
-    if not pair:
-        raise AppError("Pair is required", code="validation")
-    raw = pair.strip().upper().replace("/", "-")
-    if "-" not in raw:
-        raise AppError(
-            f"Invalid pair '{pair}'",
-            code="validation",
-            hint="Use <ASSET>-<FIAT>, e.g. BTC-USD",
-        )
-    asset, _, fiat = raw.partition("-")
-    if not asset or not fiat:
-        raise AppError(f"Invalid pair '{pair}'", code="validation")
-    return f"{asset}-{fiat}"
-
-
-def _require_supported_pair(pair):
-    normalized = _normalize_rate_pair(pair)
-    if normalized not in SUPPORTED_RATE_PAIRS:
-        raise AppError(
-            f"Pair '{normalized}' is not supported",
-            code="validation",
-            hint=f"Supported pairs: {', '.join(SUPPORTED_RATE_PAIRS)}",
-        )
-    return normalized
-
-
-def _rate_pair_parts(pair):
-    asset, _, fiat = pair.partition("-")
-    return asset, fiat
-
-
-def _transaction_rate_pair(asset, fiat_currency):
-    return core_rates.transaction_rate_pair(asset, fiat_currency)
-
-
-def upsert_rate(conn, pair, timestamp, rate, source, fetched_at=None):
-    normalized = _normalize_rate_pair(pair)
-    ts = _iso_z(_parse_iso_datetime(timestamp, "rate_timestamp"))
-    fetched = fetched_at or _iso_z(datetime.now(timezone.utc))
-    conn.execute(
-        """
-        INSERT INTO rates_cache(pair, timestamp, rate, source, fetched_at)
-        VALUES (?, ?, ?, ?, ?)
-        ON CONFLICT(pair, timestamp, source) DO UPDATE SET
-            rate = excluded.rate,
-            fetched_at = excluded.fetched_at
-        """,
-        (normalized, ts, float(rate), source, fetched),
-    )
-    return {
-        "pair": normalized,
-        "timestamp": ts,
-        "rate": float(rate),
-        "source": source,
-        "fetched_at": fetched,
-    }
-
-
-def get_latest_rate(conn, pair):
-    normalized = _normalize_rate_pair(pair)
-    row = conn.execute(
-        """
-        SELECT pair, timestamp, rate, source, fetched_at
-        FROM rates_cache
-        WHERE pair = ?
-        ORDER BY timestamp DESC,
-                 CASE WHEN source = 'manual' THEN 0 ELSE 1 END ASC,
-                 fetched_at DESC
-        LIMIT 1
-        """,
-        (normalized,),
-    ).fetchone()
-    if not row:
-        raise AppError(
-            f"No cached rate for pair '{normalized}'",
-            code="not_found",
-            hint="Run `kassiber rates sync` first",
-        )
-    return {
-        "pair": row["pair"],
-        "timestamp": row["timestamp"],
-        "rate": row["rate"],
-        "source": row["source"],
-        "fetched_at": row["fetched_at"],
-    }
-
-
-def get_rate_range(conn, pair, start=None, end=None, limit=None):
-    normalized = _normalize_rate_pair(pair)
-    sql = "SELECT pair, timestamp, rate, source, fetched_at FROM rates_cache WHERE pair = ?"
-    params = [normalized]
-    if start:
-        start_dt = _parse_iso_datetime(start, "start")
-        sql += " AND timestamp >= ?"
-        params.append(_iso_z(start_dt))
-    if end:
-        end_dt = _parse_iso_datetime(end, "end")
-        sql += " AND timestamp <= ?"
-        params.append(_iso_z(end_dt))
-    sql += " ORDER BY timestamp ASC"
-    if limit:
-        sql += " LIMIT ?"
-        params.append(int(limit))
-    rows = conn.execute(sql, params).fetchall()
-    return [
-        {
-            "pair": r["pair"],
-            "timestamp": r["timestamp"],
-            "rate": r["rate"],
-            "source": r["source"],
-            "fetched_at": r["fetched_at"],
-        }
-        for r in rows
-    ]
-
-
-def get_cached_rate_at_or_before(conn, pair, occurred_at):
-    normalized = _require_supported_pair(pair)
-    occurred_ts = _iso_z(_parse_iso_datetime(occurred_at, "occurred_at"))
-    row = conn.execute(
-        """
-        SELECT pair, timestamp, rate, source, fetched_at
-        FROM rates_cache
-        WHERE pair = ? AND timestamp <= ?
-        ORDER BY timestamp DESC,
-                 CASE WHEN source = 'manual' THEN 0 ELSE 1 END ASC,
-                 fetched_at DESC
-        LIMIT 1
-        """,
-        (normalized, occurred_ts),
-    ).fetchone()
-    if not row:
-        return None
-    return {
-        "pair": row["pair"],
-        "timestamp": row["timestamp"],
-        "rate": row["rate"],
-        "source": row["source"],
-        "fetched_at": row["fetched_at"],
-    }
-
-
-def list_cached_pairs(conn):
-    rows = conn.execute(
-        """
-        SELECT pair,
-               COUNT(*) AS sample_count,
-               MIN(timestamp) AS first_timestamp,
-               MAX(timestamp) AS last_timestamp
-        FROM rates_cache
-        GROUP BY pair
-        ORDER BY pair ASC
-        """
-    ).fetchall()
-    known = {p: None for p in SUPPORTED_RATE_PAIRS}
-    for row in rows:
-        known[row["pair"]] = {
-            "sample_count": int(row["sample_count"]),
-            "first_timestamp": row["first_timestamp"],
-            "last_timestamp": row["last_timestamp"],
-        }
-    result = []
-    for pair in SUPPORTED_RATE_PAIRS:
-        detail = known.get(pair)
-        result.append(
-            {
-                "pair": pair,
-                "supported": True,
-                "cached": detail is not None,
-                "sample_count": detail["sample_count"] if detail else 0,
-                "first_timestamp": detail["first_timestamp"] if detail else None,
-                "last_timestamp": detail["last_timestamp"] if detail else None,
-            }
-        )
-    # Report any non-canonical pairs cached from manual `rates set`.
-    for pair, detail in known.items():
-        if pair in SUPPORTED_RATE_PAIRS:
-            continue
-        if detail is None:
-            continue
-        result.append(
-            {
-                "pair": pair,
-                "supported": False,
-                "cached": True,
-                "sample_count": detail["sample_count"],
-                "first_timestamp": detail["first_timestamp"],
-                "last_timestamp": detail["last_timestamp"],
-            }
-        )
-    return result
-
-
-def _coingecko_market_chart(coin_id, vs, days):
-    url = (
-        "https://api.coingecko.com/api/v3/coins/"
-        f"{coin_id}/market_chart?vs_currency={vs}&days={int(days)}"
-    )
-    payload = http_get_json(url, timeout=30)
-    prices = payload.get("prices") if isinstance(payload, dict) else None
-    if not isinstance(prices, list):
-        raise AppError(
-            "CoinGecko response did not contain a prices array",
-            code="upstream_error",
-            retryable=True,
-        )
-    out = []
-    for entry in prices:
-        if not isinstance(entry, list) or len(entry) < 2:
-            continue
-        ms, value = entry[0], entry[1]
-        try:
-            ts = datetime.fromtimestamp(float(ms) / 1000.0, tz=timezone.utc)
-            rate = float(value)
-        except (TypeError, ValueError):
-            continue
-        out.append((_iso_z(ts.replace(microsecond=0)), rate))
-    return out
-
-
-def fetch_rates_coingecko(pair, days=30):
-    normalized = _require_supported_pair(pair)
-    asset, fiat = _rate_pair_parts(normalized)
-    coin_id = _COINGECKO_COIN.get(asset)
-    vs = _COINGECKO_VS.get(fiat)
-    if not coin_id or not vs:
-        raise AppError(
-            f"Pair '{normalized}' has no CoinGecko mapping",
-            code="validation",
-            hint=f"Supported pairs: {', '.join(SUPPORTED_RATE_PAIRS)}",
-        )
-    return _coingecko_market_chart(coin_id, vs, days)
-
-
-def sync_rates(conn, pair=None, days=30, source="coingecko"):
-    if source != "coingecko":
-        raise AppError(
-            f"Unknown rate source '{source}'",
-            code="validation",
-            hint="Supported sources: coingecko",
-        )
-    if pair:
-        pairs = [_require_supported_pair(pair)]
-    else:
-        pairs = list(SUPPORTED_RATE_PAIRS)
-    fetched_at = _iso_z(datetime.now(timezone.utc))
-    summary = []
-    for p in pairs:
-        samples = fetch_rates_coingecko(p, days=days)
-        inserted = 0
-        for ts, rate in samples:
-            upsert_rate(conn, p, ts, rate, source, fetched_at=fetched_at)
-            inserted += 1
-        conn.commit()
-        summary.append(
-            {
-                "pair": p,
-                "source": source,
-                "samples": inserted,
-                "days": int(days),
-                "fetched_at": fetched_at,
-            }
-        )
-    return summary
-
-
-def set_manual_rate(conn, pair, timestamp, rate, source="manual"):
-    normalized = _normalize_rate_pair(pair)
-    try:
-        value = float(rate)
-    except (TypeError, ValueError) as exc:
-        raise AppError(f"Invalid rate '{rate}'", code="validation") from exc
-    if value <= 0:
-        raise AppError("Rate must be positive", code="validation")
-    row = upsert_rate(conn, normalized, timestamp, value, source)
-    conn.commit()
-    return row
-
-
 def auto_price_transactions_from_rates_cache(conn, profile):
     tx_rows = conn.execute(
         """
@@ -1280,11 +1259,11 @@ def auto_price_transactions_from_rates_cache(conn, profile):
     ).fetchall()
     auto_priced = 0
     for row in tx_rows:
-        pair = _transaction_rate_pair(row["asset"], row["fiat_currency"] or profile["fiat_currency"])
+        pair = core_rates.transaction_rate_pair(row["asset"], row["fiat_currency"] or profile["fiat_currency"])
         if pair is None:
             continue
         pricing_at = row["confirmed_at"] or row["occurred_at"]
-        cached_rate = get_cached_rate_at_or_before(conn, pair, pricing_at)
+        cached_rate = core_rates.get_cached_rate_at_or_before(conn, pair, pricing_at)
         if cached_rate is None:
             continue
         rate = dec(cached_rate["rate"])
@@ -1568,24 +1547,63 @@ DEFAULT_EVENTS_LIMIT = 100
 MAX_EVENTS_LIMIT = 1000
 
 
-def _encode_event_cursor(row):
-    token = f"{row['occurred_at']}|{row['created_at']}|{row['id']}"
+def _journal_cursor_filters(
+    workspace_id,
+    profile_id,
+    wallet_id=None,
+    account_id=None,
+    asset=None,
+    entry_type=None,
+    start_ts=None,
+    end_ts=None,
+):
+    return {
+        "workspace_id": workspace_id,
+        "profile_id": profile_id,
+        "wallet_id": wallet_id or "",
+        "account_id": account_id or "",
+        "asset": asset.upper() if asset else "",
+        "entry_type": entry_type.lower() if entry_type else "",
+        "start": start_ts or "",
+        "end": end_ts or "",
+    }
+
+
+def _cursor_created_at(row):
+    if "created_at" in row.keys():
+        return row["created_at"]
+    return row["_created_at"]
+
+
+def _encode_event_cursor(row, filters):
+    payload = {
+        "filters": filters,
+        "occurred_at": row["occurred_at"],
+        "created_at": _cursor_created_at(row),
+        "id": row["id"],
+    }
+    token = json.dumps(payload, separators=(",", ":"), sort_keys=True)
     return base64.urlsafe_b64encode(token.encode("utf-8")).decode("ascii").rstrip("=")
 
 
-def _decode_event_cursor(cursor):
+def _decode_event_cursor(cursor, filters):
     if not cursor:
         return None
     try:
         padding = "=" * (-len(cursor) % 4)
         decoded = base64.urlsafe_b64decode(cursor + padding).decode("utf-8")
-        occurred_at, created_at, event_id = decoded.split("|", 2)
-        return {"occurred_at": occurred_at, "created_at": created_at, "id": event_id}
-    except (ValueError, UnicodeDecodeError, binascii.Error) as exc:
+        payload = json.loads(decoded)
+        required = {"filters", "occurred_at", "created_at", "id"}
+        if not required.issubset(payload):
+            raise ValueError("missing cursor fields")
+        if payload.get("filters") != filters:
+            raise ValueError("cursor filter mismatch")
+        return payload
+    except (ValueError, UnicodeDecodeError, binascii.Error, json.JSONDecodeError) as exc:
         raise AppError(
             f"Invalid cursor: {cursor}",
             code="validation",
-            hint="Pass the exact next_cursor value from the previous response; do not modify it.",
+            hint="Pass the exact next_cursor value from the previous response; do not modify it or change filters.",
         ) from exc
 
 
@@ -1602,7 +1620,7 @@ def list_journal_events(
     cursor=None,
     limit=None,
 ):
-    _, profile = resolve_scope(conn, workspace_ref, profile_ref)
+    workspace, profile = resolve_scope(conn, workspace_ref, profile_ref)
     effective_limit = limit if limit is not None else DEFAULT_EVENTS_LIMIT
     if effective_limit <= 0:
         raise AppError("--limit must be positive", code="validation")
@@ -1618,14 +1636,18 @@ def list_journal_events(
     start_ts = _iso_z(_parse_iso_datetime(start, "start")) if start else None
     end_ts = _iso_z(_parse_iso_datetime(end, "end")) if end else None
 
+    wallet_id = ""
+    account_id = ""
     if wallet:
         wallet_row = resolve_wallet(conn, profile["id"], wallet)
+        wallet_id = wallet_row["id"]
         where.append("je.wallet_id = ?")
-        params.append(wallet_row["id"])
+        params.append(wallet_id)
     if account:
         account_row = resolve_account(conn, profile["id"], account)
+        account_id = account_row["id"]
         where.append("je.account_id = ?")
-        params.append(account_row["id"])
+        params.append(account_id)
     if asset:
         where.append("upper(je.asset) = ?")
         params.append(asset.upper())
@@ -1639,7 +1661,17 @@ def list_journal_events(
         where.append("je.occurred_at <= ?")
         params.append(end_ts)
 
-    cursor_data = _decode_event_cursor(cursor)
+    cursor_filters = _journal_cursor_filters(
+        workspace["id"],
+        profile["id"],
+        wallet_id,
+        account_id,
+        asset,
+        entry_type,
+        start_ts,
+        end_ts,
+    )
+    cursor_data = _decode_event_cursor(cursor, cursor_filters)
     if cursor_data:
         where.append(
             "(je.occurred_at < ? OR "
@@ -1701,7 +1733,7 @@ def list_journal_events(
         if event.get("at_kennzahl") is None:
             event.pop("at_kennzahl", None)
         events.append(event)
-    next_cursor = _encode_event_cursor(page[-1]) if has_more and page else None
+    next_cursor = _encode_event_cursor(page[-1], cursor_filters) if has_more and page else None
 
     return {
         "events": events,
@@ -1744,13 +1776,40 @@ def get_journal_event(conn, workspace_ref, profile_ref, event_id):
     return event
 
 
-def list_journal_entries(conn, workspace_ref, profile_ref, limit=200):
-    _, profile = resolve_scope(conn, workspace_ref, profile_ref)
+def list_journal_entries(conn, workspace_ref, profile_ref, limit=200, cursor=None, return_meta=False):
+    workspace, profile = resolve_scope(conn, workspace_ref, profile_ref)
+    if limit is not None and limit <= 0:
+        raise AppError("--limit must be positive", code="validation")
+    limit_clause = ""
+    params = [profile["id"]]
+    cursor_clause = ""
+    cursor_filters = _journal_cursor_filters(workspace["id"], profile["id"])
+    cursor_data = _decode_event_cursor(cursor, cursor_filters)
+    if cursor_data:
+        cursor_clause = (
+            "AND (je.occurred_at < ? OR "
+            "(je.occurred_at = ? AND je.created_at < ?) OR "
+            "(je.occurred_at = ? AND je.created_at = ? AND je.id < ?))"
+        )
+        params.extend(
+            [
+                cursor_data["occurred_at"],
+                cursor_data["occurred_at"],
+                cursor_data["created_at"],
+                cursor_data["occurred_at"],
+                cursor_data["created_at"],
+                cursor_data["id"],
+            ]
+        )
+    if limit is not None:
+        limit_clause = "LIMIT ?"
+        params.append(limit + 1)
     rows = conn.execute(
-        """
+        f"""
         SELECT
             je.id,
             je.occurred_at,
+            je.created_at AS _created_at,
             w.label AS wallet,
             COALESCE(a.code, '') AS account,
             je.entry_type,
@@ -1766,15 +1825,18 @@ def list_journal_entries(conn, workspace_ref, profile_ref, limit=200):
         FROM journal_entries je
         JOIN wallets w ON w.id = je.wallet_id
         LEFT JOIN accounts a ON a.id = je.account_id
-        WHERE je.profile_id = ?
+        WHERE je.profile_id = ? {cursor_clause}
         ORDER BY je.occurred_at DESC, je.created_at DESC, je.id DESC
-        LIMIT ?
+        {limit_clause}
         """,
-        (profile["id"], limit),
+        params,
     ).fetchall()
+    has_more = bool(limit is not None and len(rows) > limit)
+    page = rows[:limit] if limit is not None else rows
     results = []
-    for row in rows:
+    for row in page:
         entry = dict(row)
+        entry.pop("_created_at", None)
         entry["quantity_msat"] = int(entry["quantity"])
         entry["quantity"] = float(msat_to_btc(entry["quantity"]))
         if entry.get("at_category") is None:
@@ -1782,7 +1844,21 @@ def list_journal_entries(conn, workspace_ref, profile_ref, limit=200):
         if entry.get("at_kennzahl") is None:
             entry.pop("at_kennzahl", None)
         results.append(entry)
-    return results
+    meta = {
+        "next_cursor": _encode_event_cursor(
+            {
+                "occurred_at": page[-1]["occurred_at"],
+                "created_at": page[-1]["_created_at"],
+                "id": page[-1]["id"],
+            },
+            cursor_filters,
+        )
+        if has_more and page
+        else None,
+        "has_more": has_more,
+        "limit": limit,
+    }
+    return (results, meta) if return_meta else results
 
 
 def list_quarantines(conn, workspace_ref, profile_ref):

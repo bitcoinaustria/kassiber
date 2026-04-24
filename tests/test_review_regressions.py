@@ -14,7 +14,9 @@ from unittest.mock import patch
 from urllib.parse import parse_qs, urlparse
 
 from kassiber.cli.main import command_needs_db
-from kassiber.cli.handlers import _audit_transaction_refs
+from kassiber.cli.handlers import _attachment_hooks, _audit_transaction_refs
+from kassiber.core import attachments as core_attachments
+from kassiber.core import rates as core_rates
 from kassiber.core.engines import TaxEngineLedgerInputs, build_tax_engine
 from kassiber.core.runtime import bootstrap_runtime, close_runtime
 from kassiber.errors import AppError
@@ -576,6 +578,345 @@ class ReviewRegressionTest(unittest.TestCase):
         self.assertEqual(payload.get("kind"), "error")
         self.assertEqual(payload["error"]["code"], "validation")
         self.assertEqual(payload["error"]["hint"], "Use a smaller --limit; max page size is 1000.")
+
+    def test_cli_numeric_limits_reject_non_positive_values(self):
+        self._bootstrap_wallet()
+
+        checks = [
+            (
+                "transactions",
+                "list",
+                "--workspace",
+                "Main",
+                "--profile",
+                "Default",
+                "--limit",
+                "0",
+            ),
+            (
+                "transactions",
+                "list",
+                "--workspace",
+                "Main",
+                "--profile",
+                "Default",
+                "--limit",
+                "1001",
+            ),
+            (
+                "journals",
+                "list",
+                "--workspace",
+                "Main",
+                "--profile",
+                "Default",
+                "--limit",
+                "0",
+            ),
+            ("rates", "range", "BTC-USD", "--limit", "0"),
+            ("rates", "sync", "--days", "0"),
+            (
+                "reports",
+                "export-pdf",
+                "--workspace",
+                "Main",
+                "--profile",
+                "Default",
+                "--file",
+                str(self.case_dir / "bad-history-limit.pdf"),
+                "--history-limit",
+                "-1",
+            ),
+        ]
+        for args in checks:
+            with self.subTest(args=args):
+                payload, result = self._run_json(*args)
+                self.assertEqual(result.returncode, 1, msg=payload)
+                self.assertEqual(payload.get("kind"), "error")
+                self.assertEqual(payload["error"]["code"], "validation")
+
+    def test_wallets_sync_rejects_wallet_and_all_together(self):
+        self._bootstrap_wallet(label="SyncFlags")
+        payload, result = self._run_json(
+            "wallets",
+            "sync",
+            "--workspace",
+            "Main",
+            "--profile",
+            "Default",
+            "--wallet",
+            "SyncFlags",
+            "--all",
+        )
+        self.assertEqual(result.returncode, 1, msg=payload)
+        self.assertEqual(payload.get("kind"), "error")
+        self.assertEqual(payload["error"]["code"], "validation")
+
+    def test_missing_import_file_returns_not_found(self):
+        self._bootstrap_wallet(label="MissingImport")
+        payload, result = self._run_json(
+            "wallets",
+            "import-json",
+            "--workspace",
+            "Main",
+            "--profile",
+            "Default",
+            "--wallet",
+            "MissingImport",
+            "--file",
+            str(self.case_dir / "missing.json"),
+        )
+        self.assertEqual(result.returncode, 1, msg=payload)
+        self.assertEqual(payload.get("kind"), "error")
+        self.assertEqual(payload["error"]["code"], "not_found")
+
+    def test_wallets_sync_all_reports_per_wallet_file_errors(self):
+        self._bootstrap_profile()
+        good_file = self.case_dir / "good-wallet.json"
+        good_file.write_text(
+            json.dumps(
+                [
+                    {
+                        "date": "2024-01-01",
+                        "direction": "inbound",
+                        "asset": "BTC",
+                        "amount": "0.001",
+                        "fee": "0",
+                        "txid": "good-sync",
+                    }
+                ]
+            ),
+            encoding="utf-8",
+        )
+        for label, source_file in (
+            ("GoodSync", good_file),
+            ("BadSync", self.case_dir / "missing-wallet.json"),
+        ):
+            payload, result = self._run_json(
+                "wallets",
+                "create",
+                "--workspace",
+                "Main",
+                "--profile",
+                "Default",
+                "--label",
+                label,
+                "--kind",
+                "custom",
+                "--source-file",
+                str(source_file),
+                "--source-format",
+                "json",
+            )
+            self._assert_ok(payload, result, "wallets.create")
+
+        payload, result = self._run_json(
+            "wallets",
+            "sync",
+            "--workspace",
+            "Main",
+            "--profile",
+            "Default",
+            "--all",
+        )
+        self._assert_ok(payload, result, "wallets.sync")
+        by_wallet = {row["wallet"]: row for row in payload["data"]}
+        self.assertEqual(by_wallet["GoodSync"]["status"], "synced")
+        self.assertEqual(by_wallet["GoodSync"]["imported"], 1)
+        self.assertEqual(by_wallet["BadSync"]["status"], "error")
+        self.assertEqual(by_wallet["BadSync"]["code"], "not_found")
+
+    def test_wallets_sync_all_rolls_back_failed_wallet_imports(self):
+        self._bootstrap_profile()
+        bad_file = self.case_dir / "bad-partial-wallet.json"
+        bad_file.write_text(
+            json.dumps(
+                [
+                    {
+                        "date": "2024-01-01",
+                        "direction": "inbound",
+                        "asset": "BTC",
+                        "amount": "0.001",
+                        "fee": "0",
+                        "txid": "bad-first-row",
+                    },
+                    {
+                        "date": "2024-01-02",
+                        "direction": "sideways",
+                        "asset": "BTC",
+                        "amount": "0.002",
+                        "fee": "0",
+                        "txid": "bad-second-row",
+                    },
+                ]
+            ),
+            encoding="utf-8",
+        )
+        good_file = self.case_dir / "good-after-bad-wallet.json"
+        good_file.write_text(
+            json.dumps(
+                [
+                    {
+                        "date": "2024-01-03",
+                        "direction": "inbound",
+                        "asset": "BTC",
+                        "amount": "0.003",
+                        "fee": "0",
+                        "txid": "good-after-bad",
+                    }
+                ]
+            ),
+            encoding="utf-8",
+        )
+        for label, source_file in (("A-BadPartial", bad_file), ("B-GoodAfterBad", good_file)):
+            payload, result = self._run_json(
+                "wallets",
+                "create",
+                "--workspace",
+                "Main",
+                "--profile",
+                "Default",
+                "--label",
+                label,
+                "--kind",
+                "custom",
+                "--source-file",
+                str(source_file),
+                "--source-format",
+                "json",
+            )
+            self._assert_ok(payload, result, "wallets.create")
+
+        payload, result = self._run_json(
+            "wallets",
+            "sync",
+            "--workspace",
+            "Main",
+            "--profile",
+            "Default",
+            "--all",
+        )
+        self._assert_ok(payload, result, "wallets.sync")
+        by_wallet = {row["wallet"]: row for row in payload["data"]}
+        self.assertEqual(by_wallet["A-BadPartial"]["status"], "error")
+        self.assertEqual(by_wallet["B-GoodAfterBad"]["status"], "synced")
+
+        conn = sqlite3.connect(self.data_root / "kassiber.sqlite3")
+        rows = conn.execute(
+            """
+            SELECT w.label, COUNT(t.id)
+            FROM wallets w
+            LEFT JOIN transactions t ON t.wallet_id = w.id
+            WHERE w.label IN ('A-BadPartial', 'B-GoodAfterBad')
+            GROUP BY w.label
+            ORDER BY w.label
+            """
+        ).fetchall()
+        conn.close()
+        counts = {label: count for label, count in rows}
+        self.assertEqual(counts["A-BadPartial"], 0)
+        self.assertEqual(counts["B-GoodAfterBad"], 1)
+
+    def test_duplicate_creates_return_conflict_envelopes(self):
+        self._bootstrap_wallet(label="UniqueWallet")
+        payload, result = self._run_json("workspaces", "create", "Main")
+        self.assertEqual(result.returncode, 1, msg=payload)
+        self.assertEqual(payload.get("kind"), "error")
+        self.assertEqual(payload["error"]["code"], "conflict")
+
+        payload, result = self._run_json(
+            "profiles",
+            "create",
+            "--workspace",
+            "Main",
+            "Default",
+        )
+        self.assertEqual(result.returncode, 1, msg=payload)
+        self.assertEqual(payload.get("kind"), "error")
+        self.assertEqual(payload["error"]["code"], "conflict")
+
+        payload, result = self._run_json(
+            "wallets",
+            "create",
+            "--workspace",
+            "Main",
+            "--profile",
+            "Default",
+            "--label",
+            "UniqueWallet",
+            "--kind",
+            "phoenix",
+        )
+        self.assertEqual(result.returncode, 1, msg=payload)
+        self.assertEqual(payload.get("kind"), "error")
+        self.assertEqual(payload["error"]["code"], "conflict")
+
+        payload, result = self._run_json(
+            "metadata",
+            "tags",
+            "create",
+            "--workspace",
+            "Main",
+            "--profile",
+            "Default",
+            "--code",
+            "review",
+            "--label",
+            "Review",
+        )
+        self._assert_ok(payload, result, "metadata.tags.create")
+        payload, result = self._run_json(
+            "metadata",
+            "tags",
+            "create",
+            "--workspace",
+            "Main",
+            "--profile",
+            "Default",
+            "--code",
+            "review",
+            "--label",
+            "Review again",
+        )
+        self.assertEqual(result.returncode, 1, msg=payload)
+        self.assertEqual(payload.get("kind"), "error")
+        self.assertEqual(payload["error"]["code"], "conflict")
+
+    def test_wallet_update_rejects_clearing_required_or_unknown_config(self):
+        self._bootstrap_profile()
+        payload, result = self._run_json(
+            "wallets",
+            "create",
+            "--workspace",
+            "Main",
+            "--profile",
+            "Default",
+            "--label",
+            "AddressWallet",
+            "--kind",
+            "address",
+            "--address",
+            "bc1qexampleaddress",
+        )
+        self._assert_ok(payload, result, "wallets.create")
+
+        for field in ("addresses", "not-a-field"):
+            with self.subTest(field=field):
+                payload, result = self._run_json(
+                    "wallets",
+                    "update",
+                    "--workspace",
+                    "Main",
+                    "--profile",
+                    "Default",
+                    "--wallet",
+                    "AddressWallet",
+                    "--clear",
+                    field,
+                )
+                self.assertEqual(result.returncode, 1, msg=payload)
+                self.assertEqual(payload.get("kind"), "error")
+                self.assertEqual(payload["error"]["code"], "validation")
 
     def test_audit_transaction_refs_chunks_large_input(self):
         class _Cursor:
@@ -1825,6 +2166,174 @@ class ReviewRegressionTest(unittest.TestCase):
         self.assertEqual(payload["error"]["code"], "validation")
         self.assertIn("Pass the exact next_cursor value", payload["error"]["hint"])
 
+    def test_bip329_list_exposes_cursor_pagination(self):
+        self._bootstrap_wallet(label="Bip329Page")
+        bip329_file = self.case_dir / "many-labels.jsonl"
+        bip329_file.write_text(
+            "\n".join(
+                json.dumps({"type": "tx", "ref": f"label-{idx:03d}", "label": f"Label {idx:03d}"})
+                for idx in range(101)
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        payload, result = self._run_json(
+            "metadata",
+            "bip329",
+            "import",
+            "--workspace",
+            "Main",
+            "--profile",
+            "Default",
+            "--wallet",
+            "Bip329Page",
+            "--file",
+            str(bip329_file),
+        )
+        self._assert_ok(payload, result, "metadata.bip329.import")
+
+        payload, result = self._run_json(
+            "metadata",
+            "bip329",
+            "list",
+            "--workspace",
+            "Main",
+            "--profile",
+            "Default",
+            "--wallet",
+            "Bip329Page",
+            "--limit",
+            "100",
+        )
+        self._assert_ok(payload, result, "metadata.bip329.list")
+        self.assertEqual(len(payload["data"]), 100)
+        self.assertTrue(payload["has_more"])
+        self.assertTrue(payload["next_cursor"])
+        first_cursor = payload["next_cursor"]
+
+        payload, result = self._run_json(
+            "metadata",
+            "bip329",
+            "list",
+            "--workspace",
+            "Main",
+            "--profile",
+            "Default",
+            "--limit",
+            "100",
+            "--cursor",
+            first_cursor,
+        )
+        self.assertEqual(result.returncode, 1, msg=payload)
+        self.assertEqual(payload.get("kind"), "error")
+        self.assertEqual(payload["error"]["code"], "validation")
+
+        payload, result = self._run_json(
+            "metadata",
+            "bip329",
+            "list",
+            "--workspace",
+            "Main",
+            "--profile",
+            "Default",
+            "--limit",
+            "100",
+        )
+        self._assert_ok(payload, result, "metadata.bip329.list")
+        self.assertTrue(payload["next_cursor"])
+        profile_cursor = payload["next_cursor"]
+        payload, result = self._run_json(
+            "profiles",
+            "create",
+            "--workspace",
+            "Main",
+            "Other",
+        )
+        self._assert_ok(payload, result, "profiles.create")
+        payload, result = self._run_json(
+            "metadata",
+            "bip329",
+            "list",
+            "--workspace",
+            "Main",
+            "--profile",
+            "Other",
+            "--limit",
+            "100",
+            "--cursor",
+            profile_cursor,
+        )
+        self.assertEqual(result.returncode, 1, msg=payload)
+        self.assertEqual(payload.get("kind"), "error")
+        self.assertEqual(payload["error"]["code"], "validation")
+
+        payload, result = self._run_json(
+            "metadata",
+            "bip329",
+            "list",
+            "--workspace",
+            "Main",
+            "--profile",
+            "Default",
+            "--wallet",
+            "Bip329Page",
+            "--limit",
+            "100",
+            "--cursor",
+            first_cursor,
+        )
+        self._assert_ok(payload, result, "metadata.bip329.list")
+        self.assertEqual(len(payload["data"]), 1)
+        self.assertFalse(payload["has_more"])
+        self.assertIsNone(payload["next_cursor"])
+
+    def test_external_id_transaction_resolution_rejects_ambiguous_rows(self):
+        self._bootstrap_wallet(label="WalletA")
+        payload, result = self._run_json(
+            "wallets",
+            "create",
+            "--workspace",
+            "Main",
+            "--profile",
+            "Default",
+            "--label",
+            "WalletB",
+            "--kind",
+            "phoenix",
+        )
+        self._assert_ok(payload, result, "wallets.create")
+        self._insert_transaction(
+            wallet_label="WalletA",
+            tx_id="shared-out",
+            external_id="shared-chain-tx",
+            occurred_at="2024-05-01T12:00:00Z",
+            amount_msat=100_000_000,
+            direction="outbound",
+        )
+        self._insert_transaction(
+            wallet_label="WalletB",
+            tx_id="shared-in",
+            external_id="shared-chain-tx",
+            occurred_at="2024-05-01T12:02:00Z",
+            amount_msat=99_000_000,
+            direction="inbound",
+        )
+
+        payload, result = self._run_json(
+            "metadata",
+            "records",
+            "get",
+            "--workspace",
+            "Main",
+            "--profile",
+            "Default",
+            "--transaction",
+            "shared-chain-tx",
+        )
+        self.assertEqual(result.returncode, 1, msg=payload)
+        self.assertEqual(payload.get("kind"), "error")
+        self.assertEqual(payload["error"]["code"], "ambiguous_reference")
+
     def test_journal_events_cursor_roundtrip(self):
         self._bootstrap_wallet(label="Events")
         payload, result = self._run_json(
@@ -1883,6 +2392,34 @@ class ReviewRegressionTest(unittest.TestCase):
         self.assertEqual([row["transaction_id"] for row in second_page["events"]], ["event-1"])
         self.assertFalse(second_page["has_more"])
         self.assertIsNone(second_page["next_cursor"])
+
+        payload, result = self._run_json(
+            "journals", "list",
+            "--workspace", "Main",
+            "--profile", "Default",
+            "--limit", "2",
+        )
+        self._assert_ok(payload, result, "journals.list")
+        self.assertTrue(payload["next_cursor"])
+        journal_cursor = payload["next_cursor"]
+        payload, result = self._run_json(
+            "profiles",
+            "create",
+            "--workspace",
+            "Main",
+            "Other",
+        )
+        self._assert_ok(payload, result, "profiles.create")
+        payload, result = self._run_json(
+            "journals", "list",
+            "--workspace", "Main",
+            "--profile", "Other",
+            "--limit", "2",
+            "--cursor", journal_cursor,
+        )
+        self.assertEqual(result.returncode, 1, msg=payload)
+        self.assertEqual(payload.get("kind"), "error")
+        self.assertEqual(payload["error"]["code"], "validation")
 
     def test_bip329_import_list_export_bridges_transaction_tags(self):
         self._bootstrap_wallet(label="Labels")
@@ -2010,7 +2547,17 @@ class ReviewRegressionTest(unittest.TestCase):
             ],
         )
 
-    def _insert_transaction(self, *, wallet_label, tx_id, occurred_at, amount_msat, direction="inbound", asset="BTC"):
+    def _insert_transaction(
+        self,
+        *,
+        wallet_label,
+        tx_id,
+        occurred_at,
+        amount_msat,
+        direction="inbound",
+        asset="BTC",
+        external_id=None,
+    ):
         db_path = self.data_root / "kassiber.sqlite3"
         conn = sqlite3.connect(db_path)
         conn.row_factory = sqlite3.Row
@@ -2035,7 +2582,7 @@ class ReviewRegressionTest(unittest.TestCase):
                 profile["workspace_id"],
                 profile["id"],
                 wallet["id"],
-                tx_id,
+                external_id or tx_id,
                 f"fp-{tx_id}",
                 occurred_at,
                 direction,
@@ -3146,6 +3693,384 @@ class ReviewRegressionTest(unittest.TestCase):
         self.assertEqual(record["amount_msat"], 100_000_000)
         self.assertEqual(record["fee_msat"], 0)
 
+    def test_transactions_list_machine_output_uses_typed_metadata(self):
+        self._bootstrap_wallet(label="One")
+        self._insert_transaction(
+            wallet_label="One",
+            tx_id="typed-metadata",
+            occurred_at="2024-01-01T00:00:00Z",
+            amount_msat=100_000_000,
+        )
+        for code in ("zeta", "alpha"):
+            payload, result = self._run_json(
+                "metadata",
+                "tags",
+                "create",
+                "--workspace",
+                "Main",
+                "--profile",
+                "Default",
+                "--code",
+                code,
+                "--label",
+                code.title(),
+            )
+            self._assert_ok(payload, result, "metadata.tags.create")
+            payload, result = self._run_json(
+                "metadata",
+                "tags",
+                "add",
+                "--workspace",
+                "Main",
+                "--profile",
+                "Default",
+                "--transaction",
+                "typed-metadata",
+                "--tag",
+                code,
+            )
+            self._assert_ok(payload, result, "metadata.tags.add")
+        payload, result = self._run_json(
+            "metadata",
+            "exclude",
+            "--workspace",
+            "Main",
+            "--profile",
+            "Default",
+            "--transaction",
+            "typed-metadata",
+        )
+        self._assert_ok(payload, result, "metadata.exclude")
+
+        payload, result = self._run_json(
+            "transactions",
+            "list",
+            "--workspace",
+            "Main",
+            "--profile",
+            "Default",
+        )
+        self._assert_ok(payload, result, "transactions.list")
+        record = payload["data"][0]
+        self.assertTrue(record["excluded"])
+        self.assertEqual(
+            record["tags"],
+            [
+                {"code": "alpha", "label": "Alpha"},
+                {"code": "zeta", "label": "Zeta"},
+            ],
+        )
+
+    def test_transactions_list_sorts_before_applying_limit(self):
+        self._bootstrap_wallet(label="Ranked")
+        for idx in range(101):
+            self._insert_transaction(
+                wallet_label="Ranked",
+                tx_id=f"recent-in-{idx:03d}",
+                occurred_at="2024-06-01T00:00:00Z",
+                amount_msat=100_000_000 + idx,
+                direction="inbound",
+            )
+            self._insert_transaction(
+                wallet_label="Ranked",
+                tx_id=f"recent-out-{idx:03d}",
+                occurred_at="2024-06-01T00:00:00Z",
+                amount_msat=100_000_000 + idx,
+                direction="outbound",
+            )
+        self._insert_transaction(
+            wallet_label="Ranked",
+            tx_id="old-largest-inbound",
+            occurred_at="2024-01-01T00:00:00Z",
+            amount_msat=9_000_000_000,
+            direction="inbound",
+        )
+        self._insert_transaction(
+            wallet_label="Ranked",
+            tx_id="old-largest-outbound",
+            occurred_at="2024-01-01T00:00:00Z",
+            amount_msat=8_000_000_000,
+            direction="outbound",
+        )
+        self._insert_transaction(
+            wallet_label="Ranked",
+            tx_id="old-smallest-outbound",
+            occurred_at="2024-01-01T00:00:00Z",
+            amount_msat=1,
+            direction="outbound",
+        )
+
+        payload, result = self._run_json(
+            "transactions", "list",
+            "--workspace", "Main",
+            "--profile", "Default",
+            "--direction", "inbound",
+            "--sort", "amount",
+            "--order", "desc",
+            "--limit", "1",
+        )
+        self._assert_ok(payload, result, "transactions.list")
+        self.assertEqual(payload["data"][0]["id"], "old-largest-inbound")
+        self.assertEqual(payload["data"][0]["amount_msat"], 9_000_000_000)
+        self.assertTrue(payload["has_more"])
+        self.assertTrue(payload["next_cursor"])
+
+        payload, result = self._run_json(
+            "transactions", "list",
+            "--workspace", "Main",
+            "--profile", "Default",
+            "--direction", "inbound",
+            "--sort", "amount",
+            "--order", "desc",
+            "--limit", "1",
+            "--cursor", payload["next_cursor"],
+        )
+        self._assert_ok(payload, result, "transactions.list")
+        self.assertEqual(payload["data"][0]["id"], "recent-in-100")
+
+        payload, result = self._run_json(
+            "transactions", "list",
+            "--workspace", "Main",
+            "--profile", "Default",
+            "--direction", "outbound",
+            "--sort", "amount",
+            "--order", "desc",
+            "--limit", "1",
+        )
+        self._assert_ok(payload, result, "transactions.list")
+        self.assertEqual(payload["data"][0]["id"], "old-largest-outbound")
+        self.assertEqual(payload["data"][0]["amount_msat"], 8_000_000_000)
+
+        payload, result = self._run_json(
+            "transactions",
+            "list",
+            "--workspace",
+            "Main",
+            "--profile",
+            "Default",
+            "--cursor",
+            "not-a-real-cursor",
+        )
+        self.assertEqual(result.returncode, 1, msg=payload)
+        self.assertEqual(payload.get("kind"), "error")
+        self.assertEqual(payload["error"]["code"], "validation")
+
+        payload, result = self._run_json(
+            "transactions", "list",
+            "--workspace", "Main",
+            "--profile", "Default",
+            "--direction", "outbound",
+            "--sort", "amount",
+            "--order", "asc",
+            "--limit", "1",
+        )
+        self._assert_ok(payload, result, "transactions.list")
+        self.assertEqual(payload["data"][0]["id"], "old-smallest-outbound")
+        self.assertEqual(payload["data"][0]["amount_msat"], 1)
+
+    def test_transactions_list_filters_and_rejects_cursor_filter_changes(self):
+        self._bootstrap_wallet(label="Filtered")
+        self._insert_transaction(
+            wallet_label="Filtered",
+            tx_id="btc-early",
+            occurred_at="2024-01-01T00:00:00Z",
+            amount_msat=100_000_000,
+            asset="BTC",
+        )
+        self._insert_transaction(
+            wallet_label="Filtered",
+            tx_id="lbtc-middle",
+            occurred_at="2024-02-01T00:00:00Z",
+            amount_msat=200_000_000,
+            asset="LBTC",
+        )
+        self._insert_transaction(
+            wallet_label="Filtered",
+            tx_id="btc-late",
+            occurred_at="2024-03-01T00:00:00Z",
+            amount_msat=300_000_000,
+            asset="BTC",
+        )
+
+        payload, result = self._run_json(
+            "transactions",
+            "list",
+            "--workspace",
+            "Main",
+            "--profile",
+            "Default",
+            "--asset",
+            "BTC",
+            "--start",
+            "2024-02-15T00:00:00Z",
+            "--end",
+            "2024-03-31T23:59:59Z",
+        )
+        self._assert_ok(payload, result, "transactions.list")
+        self.assertEqual([row["id"] for row in payload["data"]], ["btc-late"])
+
+        payload, result = self._run_json(
+            "transactions",
+            "list",
+            "--workspace",
+            "Main",
+            "--profile",
+            "Default",
+            "--asset",
+            "BTC",
+            "--limit",
+            "1",
+        )
+        self._assert_ok(payload, result, "transactions.list")
+        self.assertTrue(payload["next_cursor"])
+        first_cursor = payload["next_cursor"]
+        payload, result = self._run_json(
+            "transactions",
+            "list",
+            "--workspace",
+            "Main",
+            "--profile",
+            "Default",
+            "--asset",
+            "LBTC",
+            "--limit",
+            "1",
+            "--cursor",
+            first_cursor,
+        )
+        self.assertEqual(result.returncode, 1, msg=payload)
+        self.assertEqual(payload.get("kind"), "error")
+        self.assertEqual(payload["error"]["code"], "validation")
+
+        payload, result = self._run_json(
+            "profiles",
+            "create",
+            "--workspace",
+            "Main",
+            "Other",
+        )
+        self._assert_ok(payload, result, "profiles.create")
+        payload, result = self._run_json(
+            "transactions",
+            "list",
+            "--workspace",
+            "Main",
+            "--profile",
+            "Other",
+            "--asset",
+            "BTC",
+            "--limit",
+            "1",
+            "--cursor",
+            first_cursor,
+        )
+        self.assertEqual(result.returncode, 1, msg=payload)
+        self.assertEqual(payload.get("kind"), "error")
+        self.assertEqual(payload["error"]["code"], "validation")
+
+    def test_report_journal_entries_is_not_truncated_to_internal_page_size(self):
+        self._bootstrap_wallet(label="Ledger")
+        self._insert_transaction(
+            wallet_label="Ledger",
+            tx_id="ledger-source",
+            occurred_at="2024-01-01T00:00:00Z",
+            amount_msat=100_000_000,
+        )
+        db_path = self.data_root / "kassiber.sqlite3"
+        conn = sqlite3.connect(db_path)
+        conn.row_factory = sqlite3.Row
+        profile = conn.execute(
+            "SELECT id, workspace_id FROM profiles WHERE label = 'Default'"
+        ).fetchone()
+        wallet = conn.execute("SELECT id FROM wallets WHERE label = 'Ledger'").fetchone()
+        rows = [
+            (
+                f"journal-{idx:04d}",
+                profile["workspace_id"],
+                profile["id"],
+                "ledger-source",
+                wallet["id"],
+                None,
+                "2024-01-01T00:00:00Z",
+                "deposit",
+                "BTC",
+                100_000,
+                1.0,
+                1.0,
+                1.0,
+                0.0,
+                0.0,
+                f"journal row {idx:04d}",
+                None,
+                None,
+                f"2024-01-01T00:00:{idx % 60:02d}Z",
+            )
+            for idx in range(1001)
+        ]
+        conn.executemany(
+            """
+            INSERT INTO journal_entries(
+                id, workspace_id, profile_id, transaction_id, wallet_id, account_id,
+                occurred_at, entry_type, asset, quantity, fiat_value, unit_cost,
+                cost_basis, proceeds, gain_loss, description, at_category,
+                at_kennzahl, created_at
+            ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            rows,
+        )
+        conn.execute(
+            """
+            UPDATE profiles
+            SET last_processed_at = ?, last_processed_tx_count = 1
+            WHERE id = ?
+            """,
+            ("2024-01-01T00:00:00Z", profile["id"]),
+        )
+        conn.commit()
+        conn.close()
+
+        payload, result = self._run_json(
+            "journals",
+            "list",
+            "--workspace",
+            "Main",
+            "--profile",
+            "Default",
+            "--limit",
+            "1000",
+        )
+        self._assert_ok(payload, result, "journals.list")
+        self.assertEqual(len(payload["data"]), 1000)
+        self.assertTrue(payload["has_more"])
+        self.assertTrue(payload["next_cursor"])
+
+        payload, result = self._run_json(
+            "journals",
+            "list",
+            "--workspace",
+            "Main",
+            "--profile",
+            "Default",
+            "--limit",
+            "1000",
+            "--cursor",
+            payload["next_cursor"],
+        )
+        self._assert_ok(payload, result, "journals.list")
+        self.assertEqual(len(payload["data"]), 1)
+        self.assertFalse(payload["has_more"])
+
+        payload, result = self._run_json(
+            "reports",
+            "journal-entries",
+            "--workspace",
+            "Main",
+            "--profile",
+            "Default",
+        )
+        self._assert_ok(payload, result, "reports.journal-entries")
+        self.assertEqual(len(payload["data"]), 1001)
+
     def test_rates_latest_prefers_manual_override_at_same_timestamp(self):
         payload, result = self._run_json(
             "rates", "set", "BTC-USD", "2024-05-01T00:00:00Z", "60000", "--source", "coingecko"
@@ -3159,6 +4084,150 @@ class ReviewRegressionTest(unittest.TestCase):
         self._assert_ok(payload, result, "rates.latest")
         self.assertEqual(payload["data"]["source"], "manual")
         self.assertAlmostEqual(payload["data"]["rate"], 65000.0, places=4)
+
+    def test_rates_range_uses_deterministic_order(self):
+        for source, rate in (("coingecko", "60000"), ("manual", "65000")):
+            payload, result = self._run_json(
+                "rates",
+                "set",
+                "BTC-USD",
+                "2024-05-02T00:00:00Z",
+                rate,
+                "--source",
+                source,
+            )
+            self._assert_ok(payload, result, "rates.set")
+        payload, result = self._run_json(
+            "rates", "set", "BTC-USD", "2024-05-01T00:00:00Z", "55000"
+        )
+        self._assert_ok(payload, result, "rates.set")
+
+        payload, result = self._run_json(
+            "rates",
+            "range",
+            "BTC-USD",
+            "--order",
+            "desc",
+            "--limit",
+            "2",
+        )
+        self._assert_ok(payload, result, "rates.range")
+        self.assertEqual(
+            [(row["timestamp"], row["source"], row["rate"]) for row in payload["data"]],
+            [
+                ("2024-05-02T00:00:00Z", "manual", 65000.0),
+                ("2024-05-02T00:00:00Z", "coingecko", 60000.0),
+            ],
+        )
+
+    def test_rates_set_invalidates_processed_journals(self):
+        self._bootstrap_wallet(label="RateInvalidation")
+        self._insert_transaction(
+            wallet_label="RateInvalidation",
+            tx_id="needs-rate",
+            occurred_at="2024-05-01T12:00:00Z",
+            amount_msat=100_000_000,
+        )
+        payload, result = self._run_json(
+            "journals",
+            "process",
+            "--workspace",
+            "Main",
+            "--profile",
+            "Default",
+        )
+        self._assert_ok(payload, result, "journals.process")
+
+        payload, result = self._run_json(
+            "profiles",
+            "get",
+            "--workspace",
+            "Main",
+            "--profile",
+            "Default",
+        )
+        self._assert_ok(payload, result, "profiles.get")
+        self.assertTrue(payload["data"]["last_processed_at"])
+
+        payload, result = self._run_json(
+            "rates", "set", "BTC-USD", "2024-05-01T00:00:00Z", "60000"
+        )
+        self._assert_ok(payload, result, "rates.set")
+
+        payload, result = self._run_json(
+            "profiles",
+            "get",
+            "--workspace",
+            "Main",
+            "--profile",
+            "Default",
+        )
+        self._assert_ok(payload, result, "profiles.get")
+        self.assertIsNone(payload["data"]["last_processed_at"])
+        self.assertEqual(payload["data"]["last_processed_tx_count"], 0)
+
+    def test_rates_sync_invalidates_matching_fiat_profiles(self):
+        self._bootstrap_profile()
+        payload, result = self._run_json(
+            "profiles",
+            "create",
+            "--workspace",
+            "Main",
+            "--fiat-currency",
+            "EUR",
+            "Euro",
+        )
+        self._assert_ok(payload, result, "profiles.create")
+
+        conn = sqlite3.connect(self.data_root / "kassiber.sqlite3")
+        conn.row_factory = sqlite3.Row
+        conn.execute(
+            """
+            UPDATE profiles
+            SET last_processed_at = '2024-01-01T00:00:00Z',
+                last_processed_tx_count = 7
+            """
+        )
+        conn.commit()
+        with patch.object(
+            core_rates,
+            "fetch_rates_coingecko",
+            return_value=[("2024-01-01T00:00:00Z", 60000.0)],
+        ):
+            summary = core_rates.sync_rates(conn, pair="BTC-EUR", days=1)
+        self.assertEqual(summary[0]["pair"], "BTC-EUR")
+        rows = {
+            row["label"]: row
+            for row in conn.execute(
+                "SELECT label, last_processed_at, last_processed_tx_count FROM profiles"
+            ).fetchall()
+        }
+        self.assertEqual(rows["Default"]["last_processed_at"], "2024-01-01T00:00:00Z")
+        self.assertEqual(rows["Default"]["last_processed_tx_count"], 7)
+        self.assertIsNone(rows["Euro"]["last_processed_at"])
+        self.assertEqual(rows["Euro"]["last_processed_tx_count"], 0)
+
+        conn.execute(
+            """
+            UPDATE profiles
+            SET last_processed_at = '2024-01-02T00:00:00Z',
+                last_processed_tx_count = 9
+            """
+        )
+        conn.commit()
+        row = core_rates.set_manual_rate(conn, "ETH-USD", "2024-01-02T00:00:00Z", 2500)
+        self.assertEqual(row["pair"], "ETH-USD")
+        rows = {
+            row["label"]: row
+            for row in conn.execute(
+                "SELECT label, last_processed_at, last_processed_tx_count FROM profiles"
+            ).fetchall()
+        }
+        conn.close()
+        self.assertEqual(rows["Default"]["last_processed_at"], "2024-01-02T00:00:00Z")
+        self.assertEqual(rows["Default"]["last_processed_tx_count"], 9)
+        self.assertEqual(rows["Euro"]["last_processed_at"], "2024-01-02T00:00:00Z")
+        self.assertEqual(rows["Euro"]["last_processed_tx_count"], 9)
 
     def test_journals_process_autopriced_from_cached_rate(self):
         self._bootstrap_wallet(label="CacheA")
@@ -4315,6 +5384,51 @@ class ReviewRegressionTest(unittest.TestCase):
         self.assertTrue(payload["data"]["removed"])
         self.assertFalse(payload["data"]["deleted_file"])
         self.assertTrue(external_path.exists())
+
+    def test_attachments_remove_keeps_row_when_file_delete_fails(self):
+        self._bootstrap_wallet(label="AttachRollback")
+        self._insert_transaction(
+            wallet_label="AttachRollback",
+            tx_id="attach-rollback",
+            occurred_at="2024-01-01T00:00:00Z",
+            amount_msat=100_000_000,
+        )
+        attachment_file = self.case_dir / "rollback-receipt.txt"
+        attachment_file.write_text("rollback\n", encoding="utf-8")
+        payload, result = self._run_json(
+            "attachments",
+            "add",
+            "--workspace",
+            "Main",
+            "--profile",
+            "Default",
+            "--transaction",
+            "attach-rollback",
+            "--file",
+            str(attachment_file),
+        )
+        self._assert_ok(payload, result, "attachments.add")
+        attachment_id = payload["data"]["id"]
+        stored_path = self.case_dir / "attachments" / payload["data"]["stored_relpath"]
+        self.assertTrue(stored_path.exists())
+
+        conn = sqlite3.connect(self.data_root / "kassiber.sqlite3")
+        conn.row_factory = sqlite3.Row
+        with patch("pathlib.Path.unlink", side_effect=PermissionError("blocked")):
+            with self.assertRaises(AppError) as ctx:
+                core_attachments.remove_attachment(
+                    conn,
+                    str(self.data_root),
+                    "Main",
+                    "Default",
+                    attachment_id,
+                    _attachment_hooks(),
+                )
+        self.assertEqual(ctx.exception.code, "filesystem_error")
+        row = conn.execute("SELECT id FROM attachments WHERE id = ?", (attachment_id,)).fetchone()
+        conn.close()
+        self.assertIsNotNone(row)
+        self.assertTrue(stored_path.exists())
 
     def test_attachments_gc_removes_orphan_files(self):
         payload, result = self._run_json("init")
