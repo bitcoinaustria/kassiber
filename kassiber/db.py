@@ -532,19 +532,30 @@ def _backfill_liquid_asset_codes(conn):
     (e.g. ``L-BTC``), which made the sync decoder leave the 64-char hex asset id on
     each record instead of normalizing to ``LBTC`` — auto-pricing then skipped them
     because the fiat-rate alias is keyed on ``LBTC``. Rewrite the hex to ``LBTC`` and
-    invalidate the affected profiles so the next ``journals process`` reprocesses.
+    invalidate only the profiles that owned hex rows so the next ``journals process``
+    reprices them, leaving untouched any profile that already had clean ``LBTC`` data.
     """
     policy_asset_hexes = tuple(sorted({value.lower() for value in LIQUID_POLICY_ASSET_IDS.values() if value}))
     if not policy_asset_hexes:
         return
     placeholders = ",".join("?" for _ in policy_asset_hexes)
-    cursor = conn.execute(
+    affected_profile_ids = [
+        row[0]
+        for row in conn.execute(
+            f"SELECT DISTINCT profile_id FROM transactions WHERE lower(asset) IN ({placeholders})",
+            policy_asset_hexes,
+        ).fetchall()
+    ]
+    if not affected_profile_ids:
+        return
+    conn.execute(
         f"UPDATE transactions SET asset = 'LBTC' WHERE lower(asset) IN ({placeholders})",
         policy_asset_hexes,
     )
-    if cursor.rowcount and cursor.rowcount > 0:
-        conn.execute(
-            "UPDATE profiles SET last_processed_at = NULL, last_processed_tx_count = 0 "
-            "WHERE id IN (SELECT DISTINCT profile_id FROM transactions WHERE asset = 'LBTC')"
-        )
+    profile_placeholders = ",".join("?" for _ in affected_profile_ids)
+    conn.execute(
+        f"UPDATE profiles SET last_processed_at = NULL, last_processed_tx_count = 0 "
+        f"WHERE id IN ({profile_placeholders})",
+        affected_profile_ids,
+    )
     conn.commit()

@@ -468,6 +468,65 @@ class LiquidAssetBackfillTest(unittest.TestCase):
         finally:
             conn.close()
 
+    def test_backfill_leaves_unaffected_profiles_alone(self):
+        hex_id = default_policy_asset_id("liquidv1")
+        conn = open_db(str(self.data_root))
+        try:
+            self._seed_minimal_schema(conn)
+            now = "2026-04-20T00:00:00Z"
+            conn.execute(
+                "INSERT INTO profiles (id, workspace_id, label, created_at, last_processed_at, last_processed_tx_count) "
+                "VALUES (?, ?, ?, ?, ?, ?)",
+                ("prof-2", "ws-1", "clean", now, "2026-04-21T00:00:00Z", 7),
+            )
+            conn.execute(
+                "INSERT INTO wallets (id, workspace_id, profile_id, label, kind, config_json, created_at) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?)",
+                ("wal-2", "ws-1", "prof-2", "Clean", "descriptor", "{}", now),
+            )
+            conn.commit()
+            self._insert_tx(conn, "tx-hex", hex_id)
+            conn.execute(
+                "INSERT INTO transactions ("
+                "id, workspace_id, profile_id, wallet_id, fingerprint, occurred_at, "
+                "direction, asset, amount, fee, created_at"
+                ") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (
+                    "tx-clean",
+                    "ws-1",
+                    "prof-2",
+                    "wal-2",
+                    "fp-clean",
+                    "2026-04-15T12:00:00Z",
+                    "inbound",
+                    "LBTC",
+                    1_000,
+                    0,
+                    "2026-04-15T12:00:00Z",
+                ),
+            )
+            conn.commit()
+        finally:
+            conn.close()
+
+        # Re-open: only prof-1 (which owned the hex row) should be invalidated.
+        conn = open_db(str(self.data_root))
+        try:
+            prof_1 = conn.execute(
+                "SELECT last_processed_at, last_processed_tx_count FROM profiles WHERE id = ?",
+                ("prof-1",),
+            ).fetchone()
+            prof_2 = conn.execute(
+                "SELECT last_processed_at, last_processed_tx_count FROM profiles WHERE id = ?",
+                ("prof-2",),
+            ).fetchone()
+            self.assertIsNone(prof_1["last_processed_at"])
+            self.assertEqual(prof_1["last_processed_tx_count"], 0)
+            self.assertEqual(prof_2["last_processed_at"], "2026-04-21T00:00:00Z")
+            self.assertEqual(prof_2["last_processed_tx_count"], 7)
+        finally:
+            conn.close()
+
 
 if __name__ == "__main__":
     unittest.main()
