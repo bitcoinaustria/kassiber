@@ -17,9 +17,16 @@ rp2 reads three markers from `InTransaction.notes` / `OutTransaction.notes`:
 | `at_swap_link=<id>` | non-empty id required | Neu outgoing leg: zero-gain + pool depletes at avg. Alt: marker ignored. Empty id → rp2 raises `RP2ValueError` |
 
 Multiple markers can coexist on the same `notes` separated by any of
-` \t\n,`. Free-form description can follow the markers but must not be
-the protocol — typed fields on `NormalizedTaxEvent` are the source of
-truth inside Kassiber; the adapter serializes them at the rp2 boundary.
+` \t\n,`. rp2 parses markers as exact tokens, so unrelated free-form
+text like `prefixed_at_swap_link=...` does not trigger swap handling.
+Free-form description can follow the markers but must not be the
+protocol — typed fields on `NormalizedTaxEvent` are the source of truth
+inside Kassiber; the adapter serializes them at the rp2 boundary.
+
+Kassiber must emit `at_swap_link` only for cross-asset `SELL` disposals
+whose paired incoming leg is present. rp2 rejects empty swap ids,
+duplicate/conflicting markers, same-asset swap links, orphan swap links,
+and `at_swap_link` markers on non-`SELL` disposals.
 
 ## Typed source of truth on the Kassiber side
 
@@ -34,7 +41,7 @@ swap legs.
 | `at_regime` | `"alt" | "neu" | None` | Inbound rows: direct from the 2021-03-01 Europe/Vienna acquisition cutoff. Outbound rows: same cutoff by default, but post-cutoff disposals fall back to `alt` when only Alt inventory remains in scope. Future: explicit row annotations. |
 | `at_pool` | `str | None` | v1: wallet_id. Future: configurable per profile. |
 | `at_swap_link` | `str | None` | Engine classifier tags both legs of a Neu cross-asset pair with the pair id. |
-| `carried_basis_fiat` | `Decimal | None` | Incoming leg of a Neu swap. v1: unset (quarantined). Future: Option A two-pass compute. |
+| `carried_basis_fiat` | `Decimal | None` | Incoming leg of a Neu swap. Current path: Option A topological two-pass compute; unset only when the swap is not carrying-value or was quarantined. |
 
 ## Receipt and disposal bucketing contract
 
@@ -77,6 +84,13 @@ Current Kassiber mapping:
 | `NEU_SWAP` | `neu_swap` | none |
 | `ALT_SPEKULATION` | `alt_spekulation` | `801` |
 | `ALT_TAXFREE` | `alt_taxfree` | none |
+
+This mapping targets the current ausländisch / self-custody slice of
+E 1kv. Kassiber does not yet persist structured domestic-provider
+withheld-KESt metadata, so it cannot populate domestic-provider
+Kennzahlen such as 171/173 or the inländisch half of 175. CLI/PDF E 1kv
+exports must surface that assumption until the data model can represent
+withheld tax.
 
 One taxable event can split across multiple gain/loss rows in rp2, so
 Kassiber groups Austrian realized journal rows by `(taxable_event,

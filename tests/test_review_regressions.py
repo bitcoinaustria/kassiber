@@ -2367,6 +2367,54 @@ class ReviewRegressionTest(unittest.TestCase):
             ),
         }
 
+    def _direct_austrian_single_wallet_inputs(self, rows):
+        profile = {
+            "id": "profile-at-direct",
+            "workspace_id": "workspace-main",
+            "label": "FixtureAustrianDirect",
+            "fiat_currency": "EUR",
+            "tax_country": "at",
+            "tax_long_term_days": 365,
+            "gains_algorithm": "moving_average_at",
+        }
+        wallet_ref = {
+            "id": "wallet-austrian",
+            "label": "AustrianDirect",
+            "wallet_account_id": "account-treasury",
+            "account_code": "treasury",
+            "account_label": "Treasury",
+        }
+        normalized_rows = []
+        for row in rows:
+            occurred_at = row["occurred_at"]
+            normalized_rows.append(
+                {
+                    "id": row["id"],
+                    "wallet_id": wallet_ref["id"],
+                    "wallet_label": wallet_ref["label"],
+                    "wallet_account_id": wallet_ref["wallet_account_id"],
+                    "account_code": wallet_ref["account_code"],
+                    "account_label": wallet_ref["account_label"],
+                    "occurred_at": occurred_at,
+                    "direction": row["direction"],
+                    "asset": row.get("asset", "BTC"),
+                    "amount": row["amount"],
+                    "fee": row.get("fee", 0),
+                    "fiat_rate": row.get("fiat_rate"),
+                    "fiat_value": row.get("fiat_value"),
+                    "kind": row["kind"],
+                    "description": row.get("description", row["id"]),
+                    "note": None,
+                    "external_id": row["id"],
+                    "created_at": occurred_at,
+                }
+            )
+        return profile, TaxEngineLedgerInputs(
+            rows=normalized_rows,
+            wallet_refs_by_id={wallet_ref["id"]: wallet_ref},
+            manual_pair_records=[],
+        )
+
     def test_btcpay_import_machine_mode_keeps_json_envelope(self):
         self._bootstrap_wallet(label="BTCPay")
         btcpay_csv = self.case_dir / "btcpay.csv"
@@ -3326,6 +3374,102 @@ class ReviewRegressionTest(unittest.TestCase):
                 }
             ],
         )
+
+    def test_austrian_rp2_engine_emits_income_entry_for_mining_receipt_and_later_disposal(self):
+        profile, inputs = self._direct_austrian_single_wallet_inputs(
+            [
+                {
+                    "id": "mining-receipt-1",
+                    "occurred_at": "2024-01-01T00:00:00Z",
+                    "direction": "inbound",
+                    "amount": 100_000_000,
+                    "fiat_value": 40,
+                    "kind": "mining",
+                    "description": "Mining reward",
+                },
+                {
+                    "id": "mining-disposal-1",
+                    "occurred_at": "2024-06-01T00:00:00Z",
+                    "direction": "outbound",
+                    "amount": 50_000_000,
+                    "fiat_value": 25,
+                    "kind": "sell",
+                    "description": "Sell mined sats",
+                },
+            ]
+        )
+        actual = self._direct_engine_snapshot(profile, inputs)
+        self.assertEqual(actual["quarantines"], [])
+        income_entry = next(entry for entry in actual["entries"] if entry["entry_type"] == "income")
+        self.assertEqual(income_entry["at_category"], "income_general")
+        self.assertEqual(income_entry["at_kennzahl"], 172)
+        disposal_entry = next(entry for entry in actual["entries"] if entry["entry_type"] == "disposal")
+        self.assertEqual(disposal_entry["at_category"], "neu_gain")
+        self.assertEqual(disposal_entry["at_kennzahl"], 174)
+
+    def test_austrian_rp2_engine_emits_income_entry_for_routing_income(self):
+        profile, inputs = self._direct_austrian_single_wallet_inputs(
+            [
+                {
+                    "id": "routing-income-1",
+                    "occurred_at": "2024-01-01T00:00:00Z",
+                    "direction": "inbound",
+                    "amount": 10_000,
+                    "fiat_value": 0.004,
+                    "kind": "routing_income",
+                    "description": "Lightning routing fee",
+                },
+            ]
+        )
+        actual = self._direct_engine_snapshot(profile, inputs)
+        self.assertEqual(actual["quarantines"], [])
+        income_entry = next(entry for entry in actual["entries"] if entry["entry_type"] == "income")
+        self.assertEqual(income_entry["at_category"], "income_general")
+        self.assertEqual(income_entry["at_kennzahl"], 172)
+
+    def test_austrian_rp2_engine_preserves_neu_gain_and_loss_rows_for_same_year_offset(self):
+        profile, inputs = self._direct_austrian_single_wallet_inputs(
+            [
+                {
+                    "id": "buy-low-1",
+                    "occurred_at": "2024-01-01T00:00:00Z",
+                    "direction": "inbound",
+                    "amount": 100_000_000,
+                    "fiat_value": 20,
+                    "kind": "buy",
+                },
+                {
+                    "id": "sell-gain-1",
+                    "occurred_at": "2024-02-01T00:00:00Z",
+                    "direction": "outbound",
+                    "amount": 50_000_000,
+                    "fiat_value": 30,
+                    "kind": "sell",
+                },
+                {
+                    "id": "buy-high-1",
+                    "occurred_at": "2024-03-01T00:00:00Z",
+                    "direction": "inbound",
+                    "amount": 100_000_000,
+                    "fiat_value": 100,
+                    "kind": "buy",
+                },
+                {
+                    "id": "sell-loss-1",
+                    "occurred_at": "2024-04-01T00:00:00Z",
+                    "direction": "outbound",
+                    "amount": 50_000_000,
+                    "fiat_value": 20,
+                    "kind": "sell",
+                },
+            ]
+        )
+        actual = self._direct_engine_snapshot(profile, inputs)
+        self.assertEqual(actual["quarantines"], [])
+        disposal_entries = [entry for entry in actual["entries"] if entry["entry_type"] == "disposal"]
+        self.assertEqual([entry["at_category"] for entry in disposal_entries], ["neu_gain", "neu_loss"])
+        self.assertEqual([entry["at_kennzahl"] for entry in disposal_entries], [174, 176])
+        self.assertGreater(sum(entry["gain_loss"] for entry in disposal_entries), 0)
 
     def test_austrian_rp2_cross_asset_swap_carries_basis(self):
         """End-to-end: AT profile carries basis across matched Neu cross-asset swaps."""

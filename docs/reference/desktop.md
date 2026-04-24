@@ -12,7 +12,7 @@ python3 -m kassiber ui
 
 The desktop app is still early. Today it mainly provides:
 
-- the Phase 1 shell and frame
+- the desktop shell and frame
 - empty state
 - project/profile surface
 - placeholder settings and add-connection dialogs

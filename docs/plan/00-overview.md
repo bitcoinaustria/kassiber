@@ -1,109 +1,98 @@
-# Kassiber Desktop + Austrian Tax Plan — Overview
+# Kassiber Plan Overview
 
-**Status:** Draft for cross-check. Decisions captured here are what the plan is built on; disagreement is welcome.
+**Status:** Living architecture map.
+**Current source of truth:** code, README, AGENTS.md, and TODO.md.
+**Rule for agents:** if this document and code disagree, inspect code and update
+the docs in the same change.
 
-**Scope of this doc:** Context, goals, constraints, and the roadmap stitching the other docs together. Each sibling doc is self-contained.
+## Product
 
----
+Kassiber is a local-first Bitcoin accounting CLI with an early PySide6/QML
+desktop shell.
 
-## What kassiber is today
+It owns wallet sync/import, local storage, provenance, metadata, attachments,
+transfer pairing, review/quarantine workflows, CLI/desktop UX, and
+accountant-facing BTC subledger exports.
 
-A **local-first Bitcoin accounting CLI**, written in Python.
+RP2 owns tax computation. Kassiber prepares and explains; RP2 computes.
 
-- Entry point: `kassiber/cli/main.py` (via `kassiber/__main__.py`)
-- Phase 0 core extraction is green: the old `app.py` monolith has been split into reusable `kassiber.core` modules plus a dedicated CLI layer
-- Storage: SQLite — today at `~/.kassiber/data/kassiber.sqlite3`, moving to per-project bundles at `~/.kassiber/projects/<project>/kassiber.sqlite3` as the target end state (see `03-storage-conventions.md`); integer msat amounts (never float)
-- Tax engine: [RP2](https://github.com/eprbell/rp2), with both `generic` and `at` profiles running through `kassiber/core/engines/rp2.py`; Austrian semantics come from [bitcoinaustria/rp2](https://github.com/bitcoinaustria/rp2), while Kassiber keeps normalization, provenance, and report mapping
-- External I/O: Esplora / Electrum / Bitcoin Core RPC; CoinGecko for rates; Phoenix/BTCPay/BIP329 importers
-- Test contract: `tests/test_cli_smoke.py` pins the machine-readable JSON envelope emitted by every CLI command — this is the reliable seam the whole plan hangs on
-- Data model: workspaces → profiles → account buckets → wallets → transactions, with journal_entries, journal_quarantines, transaction_pairs, tags, bip329_labels, backends, rates_cache
+Out of scope unless a future design says otherwise:
 
-## What we're building
+- invoicing
+- VAT/RKSV
+- company general ledger
+- remote multi-user service
+- mobile
+- broad altcoin product scope
 
-A few concurrent tracks, all grounded in a single library refactor:
+## Current Architecture
 
-1. **Phase 0 — Core extraction.** Carve a reusable `kassiber.core` library out of `app.py`. CLI becomes a thin translator. Precondition for everything else. See `02-core-extraction.md`.
-2. **Desktop UI.** PySide6 + QML application that imports `kassiber.core` directly. Warm, document-oriented desktop layout guided by project-approved reference screenshots. See `04-desktop-ui.md`.
-3. **Austrian tax support on top of RP2.** Kassiber keeps the normalization/provenance layer and local-first workflow, while Austrian tax semantics live in the Kassiber-maintained RP2 fork / plugin path. Remaining work is mostly around exports, review UX, and broader coverage. See `06-austrian-tax-engine.md`.
+- CLI entrypoint: `kassiber/cli/main.py`
+- remaining CLI helper surface: `kassiber/cli/handlers.py`
+- shared runtime/core: `kassiber/core/`
+- desktop shell: `kassiber/ui/`
+- storage: SQLite under current app-wide `~/.kassiber/` state root
+- target storage direction: one DB per project under `~/.kassiber/projects/`
+- tax engine: RP2 fork at `bitcoinaustria/rp2`
+- machine envelope: `{kind, schema_version, data}` for success, structured
+  `error` envelope for failure
 
-Plus two smaller cross-cutting feature tracks:
+## Product Invariants
 
-4. **Transaction links / attachments** — start with a few external document links per transaction; copied local files can remain a later extension if needed. See `05-attachments.md`.
-5. **External-document reconciliation** — local ingestion, matching, review, and tax normalization for BTC-linked invoices, receipts, and related business documents, without turning Kassiber into an invoicing tool. See `08-external-document-reconciliation.md`.
+- local-first by default
+- CLI stays first-class
+- no bundled Chromium and no Node runtime
+- Bitcoin-first; L-BTC is in scope
+- BTC amounts are integer msat
+- reports are trusted only after journal processing
+- ambiguous tax semantics quarantine instead of being guessed
+- secret-bearing success output stays redacted/safe for agents
+- docs and command behavior move together
 
-## Design constraints (from the project owner)
+## Track Status
 
-| Constraint | Implication |
-|---|---|
-| Pre-release, no users but self | No backwards compatibility burden; freely rename/remove commands; keep docs in sync |
-| Bitcoin-only product focus | No altcoin zoo complexity; Liquid L-BTC in scope; no hardcoded Liquid federation addresses |
-| Solo maintainer + AI-assisted (vibecoded) | Stack must be in Claude's fluent zone. One language beats two. Conventional patterns beat exotic ones. |
-| Hosted-agent CLI use until the GUI is ready | Normal success envelopes should stay safe-to-record for secret-bearing backend and wallet config values; later follow-ups can move secret enrollment into local-only flows and keychain-backed refs |
-| "Make cybersecurity guys happy" | Minimize attack surface. No bundled Chromium. No Node at runtime. Audit-friendly deps. |
-| No Node in the shipped product | Excludes Electron, NW.js. Node as a dev-time build tool would be tolerable but unnecessary. |
-| Maintainable architecture over speed | Willing to rewrite. Willing to refactor. Willing to delete. |
-| CLI stays first-class | UI and CLI are peers over the same library. CLI ships first, UI catches up. |
-| No mobile for now | Removes Tauri's mobile advantage as a tiebreaker |
-
-## Stack decision (summary — detail in 01)
-
-**PySide6 + QML.** Python everywhere, native widgets, no webview, no Node in any form, direct `import kassiber.core` from the UI. QtCharts for the balance chart. `briefcase` for packaging.
-
-**Honest second place:** Tauri + SvelteKit + Python sidecar. Ruled out for this project because two-language maintenance costs more than browser-native visual fidelity is worth.
-
-## Target platforms
-
-- **v1:** macOS (matches the reference screenshots)
-- **v1.1:** Linux (briefcase supports it cheaply once the macOS path works)
-- **Later:** Windows (briefcase supports it; no user demand yet)
-- **Never planned:** mobile
-
-## Roadmap
-
-| Phase | Scope | Rough effort |
+| Track | Status | Current direction |
 |---|---|---|
-| **0** | Library extraction: `kassiber.core`, `kassiber.cli`. Smoke tests stay green. | Done |
-| **0.5** | Austrian RP2 integration, attachments, and rates/journal follow-through. E 1kv export remains pending. | Mostly done |
-| **1** | PySide6 app shell, empty state matching the approved reference state | 2 days |
-| **2** | Read-only dashboard: six tiles wired to `core/` | 4–6 days |
-| **3** | Add Connection modal, sync action with progress, CSV import, transaction links | 4–5 days |
-| **4** | Welcome wizard, Settings dialog, briefcase packaging for macOS | 3–4 days |
-| **5+** | Tile drag/resize, tag management UI, dark mode, Linux/Windows builds, code-signing | TBD |
+| Core extraction | Landed | keep logic in shared core, not CLI/UI copies |
+| Attachments | Landed | use shipped `attachments`; keep links/file blobs bounded |
+| Austrian RP2 path | Active | processing works; E 1kv export pending |
+| Desktop UI | In progress | routed read-only shell exists; live workers/actions pending |
+| Project storage | Target-state | app-wide to per-project migration still needs a focused plan |
+| External documents | Design | reconcile BTC evidence without becoming ERP/invoicing |
+| Packaging | Planned | Briefcase intended; macOS `.app` not proven yet |
 
-**MVP surface (end of Phase 4):** single-user desktop app plus CLI, SQLite-backed, with one project DB per project, transaction-level document links stored in that DB, and simple project snapshot/export behavior. Austrian tax processing through RP2, plus accountant-reviewed Austrian export work, still to follow.
+## Stack
 
-## Document index
+Desktop: PySide6 + QML.
 
-| Doc | Scope |
-|---|---|
-| [00-overview.md](./00-overview.md) | This doc. Context, constraints, roadmap. |
-| [01-stack-decision.md](./01-stack-decision.md) | ADR for PySide6 + QML. Alternatives and their rejections. |
-| [02-core-extraction.md](./02-core-extraction.md) | Phase 0 refactor. Module map, migration approach, success criteria. |
-| [03-storage-conventions.md](./03-storage-conventions.md) | SQLite discipline: WAL, FKs, migrations, repository pattern. |
-| [04-desktop-ui.md](./04-desktop-ui.md) | Phases 1–4 UI spec. Tile-by-tile. QML conventions. Threading. |
-| [05-attachments.md](./05-attachments.md) | Transaction links first, with copied-file attachments as later optional work. |
-| [06-austrian-tax-engine.md](./06-austrian-tax-engine.md) | Austrian RP2-backed tax support, data model, E 1kv report layout. |
-| [07-austrian-tax-open-questions.md](./07-austrian-tax-open-questions.md) | Live backlog of genuinely unsettled AT tax questions. |
-| [08-external-document-reconciliation.md](./08-external-document-reconciliation.md) | Scope boundary and architecture for external business documents, matching, and tax normalization. |
+Why: one Python runtime, direct core imports, no webview, no Node runtime, and
+good enough visual fidelity for an accounting workbench.
 
-## What this plan is not
+Use current QML `Canvas` charting while it is enough. Prefer Qt Graphs over
+QtCharts for richer future charting.
 
-- **Not legal or tax advice.** Austrian export output should ship behind a disclaimer and review gate.
-- **Not a commitment to dates.** Effort estimates are for sequencing, not scheduling.
-- **Not final on report aesthetics.** E 1kv output will evolve with user's Steuerberater feedback.
-- **Not a hidden schema redesign.** Phase 0 keeps today's runtime/bootstrap contract, `TEXT` IDs, scope fields, and machine envelope shape unless a later doc calls out a deliberate migration.
-- **Not a rewrite.** The refactor in Phase 0 is mechanical, not a re-architecture. Pure logic moves; behavior identical (smoke tests prove it).
+## Doc Index
 
-## Known risks
+- `01-stack-decision.md`: desktop stack ADR
+- `02-core-extraction.md`: archived Phase 0 extraction reference
+- `03-storage-conventions.md`: project-bundle storage target
+- `04-desktop-ui.md`: desktop implementation guide
+- `05-attachments.md`: attachment/link boundary
+- `06-austrian-tax-engine.md`: Austrian RP2 boundary and E 1kv direction
+- `07-austrian-tax-open-questions.md`: unresolved AT assumptions and review gates
+- `08-external-document-reconciliation.md`: BTC-side evidence/reconciliation boundary
 
-| Risk | Mitigation |
-|---|---|
-| RP2 single-maintainer stagnation | Kassiber now has a maintained fork at `bitcoinaustria/rp2`; keep the integration isolated behind `core/engines/rp2.py` and upstream what we can |
-| Austrian BMF guidance evolves | Keep Kassiber-side provenance / normalization flexible and implement Austrian tax semantics in the RP2 fork where they belong |
-| app.py extraction breaks the envelope | Smoke tests are extensive enough to catch it; extract one command at a time |
-| PySide6 LGPL license surprises | LGPL is fine for a freely distributed app; no Qt commercial license needed |
-| Solo vibecoding drift | Each phase has concrete success criteria (smoke green, tile renders real data, packaged `.app` launches) |
+## Highest-Risk Drift Points
 
-## Next action
+- treating historical phase lists as live work
+- implementing schema sketches without checking shipped tables
+- describing target project storage as current behavior
+- expanding Kassiber into invoicing/VAT/general-ledger territory
+- adding Austrian tax math in Kassiber instead of RP2
+- relying on VCS-pinned RP2 for packaged builds without testing
+- forgetting to re-run journals after metadata, pricing, pairing, or exclusion
+  changes
 
-Keep Kassiber-side work focused on accountant-facing exports and external-document reconciliation while RP2 continues to own tax semantics and computation. Details in `06-austrian-tax-engine.md` and `08-external-document-reconciliation.md`.
+## Next Executable Work
+
+Use `TODO.md`. This overview is for orientation, not task assignment.

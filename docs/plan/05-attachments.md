@@ -1,133 +1,67 @@
 # Transaction Attachments
 
-**Status:** Current code already supports copied local files and URL attachments.
-For the project-storage MVP, this plan intentionally optimizes for the simpler
-case we actually seem to need most often: a few external links per transaction.
-Treat `README.md`, `AGENTS.md`, and `kassiber/core/attachments.py` as the
-source of truth for current shipped behavior.
+**Status:** Shipped behavior plus project-storage guidance.
+**Current source of truth:** `kassiber/core/attachments.py`, `kassiber/db.py`,
+README, AGENTS.md, and TODO.md.
 
-**Scope:** Link-first MVP sketch for project-local storage planning.
-**Purpose:** Let users attach one or more Drive, Dropbox, Nextcloud, or other
-document links to a transaction without forcing Kassiber to become a blob-store
-product first.
+## Current Behavior
 
-## MVP direction
+Kassiber already supports transaction attachments:
 
-A transaction can have zero or more external links.
+- copied local files stored under the managed attachments root
+- URL attachments stored as literal strings
+- add/list/remove/verify/gc CLI commands
+- no URL fetching, indexing, OCR, preview generation, or health checking
 
-- The link itself lives in the project DB.
-- Kassiber does not fetch, cache, or mirror the target file.
-- Backup stays simple because the relevant metadata is already in SQLite.
-- If copied local files become a real product need later, add them as a separate
-  layer instead of pre-designing that machinery now.
+## Product Boundary
 
-## User stories
+For the project-bundle MVP, optimize for external document links first. Links
+are enough for many invoice/contract/accountant-reference workflows and keep
+backup simple because metadata lives in SQLite.
 
-1. As a self-employed user, I want to attach the Google Drive link for an invoice
-   to the BTC transaction that paid it.
-2. As a business user, I want a few document links on a transaction: invoice,
-   contract, and email thread.
-3. As a tax filer, I want my accountant to see the references behind a
-   transaction without me re-explaining where each document lives.
+Copied-file attachments can remain supported, but do not expand them into a
+document-management system unless a concrete offline/self-contained evidence
+workflow needs it.
 
-## Data model sketch
+## Rules
 
-### New table: `transaction_links`
+- A transaction can have zero or more attachments.
+- URL attachments are references only; Kassiber does not fetch or mirror them.
+- File attachments are copied into managed local storage and tracked by hash.
+- Deleting a transaction deletes attachment rows via FK behavior.
+- Backup must account for the DB plus any managed copied files.
+- Logs should avoid full secret-bearing URLs.
 
-```sql
-CREATE TABLE transaction_links (
-    id          INTEGER PRIMARY KEY AUTOINCREMENT,
-    tx_id       TEXT    NOT NULL REFERENCES transactions(id) ON DELETE CASCADE,
-    url         TEXT    NOT NULL,
-    title       TEXT    NOT NULL DEFAULT '',
-    note        TEXT    NOT NULL DEFAULT '',
-    sort_order  INTEGER NOT NULL DEFAULT 0,
-    created_at  TEXT    NOT NULL
-);
+## Schema Direction
 
-CREATE INDEX idx_transaction_links_tx
-    ON transaction_links(tx_id, sort_order, id);
-```
+The shipped `attachments` table is the default primitive for files and URLs.
 
-Why a dedicated table:
+Do **not** add a separate `transaction_links` table just because an older sketch
+mentioned it. Add one only if a future project-bundle migration deliberately
+splits link references from managed file attachments.
 
-- Multiple links per transaction stay simple.
-- Ordering is explicit.
-- We avoid baking file/blob assumptions into the schema.
-- A later copied-file feature can be additive instead of distorting the link
-  model.
-
-## Behavior rules
-
-| Situation | Behavior |
-|---|---|
-| User adds a link | Insert a row in `transaction_links` |
-| User adds the same link twice | Allowed; Kassiber does not silently deduplicate user intent |
-| User deletes a link | Delete the row |
-| Transaction is deleted | `ON DELETE CASCADE` removes its links |
-| User opens a link | Pass it to the OS/browser via the normal URL handler |
-| User backs up a project | A SQLite snapshot already includes all transaction links |
-
-Rules:
-
-- No fetching.
-- No link validation beyond basic UI sanity checks.
-- No background health checks.
-- No Drive API integration in the storage MVP.
-
-## CLI / UI sketch
-
-### CLI
-
-```text
-kassiber transaction-links add    --transaction <tx-id> --url <url> [--title "..."] [--note "..."]
-kassiber transaction-links list   --transaction <tx-id>
-kassiber transaction-links remove --link <id>
-```
-
-### UI
-
-Transaction detail view:
-
-- "Add link" button
-- Small form: URL, optional title, optional note
-- Flat list of links under the transaction
-- Click opens the URL in the system handler
-
-## Backup and portability
-
-- The portable unit is still the project DB.
-- Because the links are stored in SQLite, they automatically ride along with a
-  DB snapshot.
-- The linked files themselves stay where the user already keeps them. Kassiber
-  records references, not mirrored copies.
-
-## Future copied-file option
-
-If offline/self-contained evidence becomes a concrete requirement later, add a
-separate copied-file feature under the project directory, for example:
+If copied project-local files become central to backups, keep them under the
+project directory, for example:
 
 ```text
 ~/.kassiber/projects/<project>/blobs/attachments/
 ```
 
-That should be a later, additive feature with its own real product case behind
-it. The link-first MVP should not pre-commit Kassiber to GC logic, manifests,
-hash trees, restore journals, or blob-verification protocols.
+## UI Direction
 
-## Privacy and security
+Transaction detail should eventually expose:
 
-- Kassiber does not fetch linked URLs.
-- Link metadata lives in the local project DB like other transaction metadata.
-- The security of the underlying document stays with the external system that
-  hosts it.
-- Logging should avoid dumping full secret-bearing URLs if a service uses
-  embedded access tokens in the query string.
+- Add URL
+- Add file, if retained in desktop MVP
+- list existing attachments
+- open URL/file through the OS handler
+- remove attachment
+- verify copied files where useful
 
-## Non-goals
+## Non-Goals
 
-- Mirroring external documents locally
-- OCR, indexing, or preview generation
-- Drive API sync
-- Background "broken link" monitoring
-- Designing a full copied-file attachment subsystem in this PR
+- mirroring cloud documents
+- Drive/Dropbox/Nextcloud API sync
+- OCR/indexing/preview generation
+- background broken-link monitoring
+- a second blob store for external-document reconciliation

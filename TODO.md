@@ -12,6 +12,18 @@ Current direction:
 4. Keep desktop work layered on the shared core rather than reintroducing
    monoliths or duplicate logic
 
+Backlog contract:
+
+- `TODO.md` is the executable backlog and progress tracker.
+- `docs/plan/` records goal state, architecture guardrails, and product
+  boundaries; do not use plan docs as task lists.
+- Active TODO items should keep the next actionable step and a concrete
+  completion condition clear enough for agents to continue without guessing.
+- When behavior moves, update the nearest current-truth doc, tests when needed,
+  and the affected TODO item in the same change.
+- If code and a plan doc disagree, trust the code, then update the plan doc so
+  the drift does not survive.
+
 ## Rules for every session
 
 Use `./scripts/quality-gate.sh` before calling work ready to push. It wraps the baseline compile, smoke, regression, and CLI help checks so humans and agents use the same verification path.
@@ -146,6 +158,10 @@ top of the monolith.
   automatically; see [docs/austrian-handoff.md](docs/austrian-handoff.md)
 - [ ] Add E 1kv CSV/PDF export path on top of Kassiber's persisted
   Austrian disposal buckets / Kennzahl mapping
+- [ ] When E 1kv export lands, surface Kassiber's current ausländisch /
+  self-custody Kennzahl assumption in the CLI envelope and PDF output;
+  domestic-provider withheld KESt needs structured metadata before
+  Kassiber can populate the inländisch rows
 
 ### 0.5e - Rates and journal follow-through
 

@@ -3,6 +3,8 @@ import unittest
 from decimal import Decimal
 
 from kassiber.core.austrian import (
+    AT_CATEGORY_TO_KENNZAHL,
+    AT_NEU_CUTOFF,
     REGIME_ALT,
     REGIME_NEU,
     infer_outbound_regimes,
@@ -97,6 +99,19 @@ class InferOutboundRegimesTest(unittest.TestCase):
 
 
 class AustrianKennzahlMappingTest(unittest.TestCase):
+    def test_neu_cutoff_matches_rp2_fork_contract(self):
+        from rp2.plugin.country.at import AT_NEU_CUTOFF as RP2_AT_NEU_CUTOFF
+
+        self.assertEqual(AT_NEU_CUTOFF, RP2_AT_NEU_CUTOFF)
+
+    def test_kennzahl_mapping_covers_every_rp2_category(self):
+        from rp2.plugin.country.at import AtDisposalCategory
+
+        self.assertEqual(
+            set(AT_CATEGORY_TO_KENNZAHL),
+            {category.value for category in AtDisposalCategory},
+        )
+
     def test_maps_known_categories(self):
         self.assertEqual(kennzahl_for_disposal_category("income_general"), 172)
         self.assertEqual(kennzahl_for_disposal_category("income_capital_yield"), 175)
