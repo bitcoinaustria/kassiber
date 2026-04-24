@@ -98,7 +98,9 @@ aliases use the same builder and data. The structured output includes
 Steuerbericht-style sections 1.1-4.5, with unsupported areas rendered
 as explicit zero-value placeholders instead of being silently omitted.
 The XLSX handoff follows the same section set with an overview sheet,
-numbered tabs, and an explanatory notes sheet.
+numbered tabs, and an explanatory notes sheet. The CSV bundle mirrors that
+layout as separate files because the sections do not all share one table
+schema.
 
 One taxable event can split across multiple gain/loss rows in rp2, so
 Kassiber groups Austrian realized journal rows by `(taxable_event,

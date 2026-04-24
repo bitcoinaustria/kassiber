@@ -150,6 +150,7 @@ kassiber --format csv --output e1kv-2024.csv reports austrian-e1kv --year 2024
 kassiber reports export-austrian-e1kv-pdf --year 2024 --file e1kv-2024.pdf
 kassiber reports export-austrian --year 2024 --file austria-2024.pdf
 kassiber reports export-austrian-e1kv-xlsx --year 2024 --file e1kv-2024.xlsx
+kassiber reports export-austrian-e1kv-csv --year 2024 --dir e1kv-2024-csv
 ```
 
 The JSON envelope includes the review gate, the current ausländisch /
@@ -159,7 +160,8 @@ notes. `reports austrian-tax-summary` and `reports export-austrian` are aliases
 for the same annual Austrian handoff. The CSV output contains the row-level
 detail table. The PDF repeats the review gate and assumptions. The XLSX workbook
 uses an accountant-facing `Übersicht` sheet, separate numbered section tabs
-including `3.3.`, and `Erläuterungen zum Steuerreport`.
+including `3.3.`, and `Erläuterungen zum Steuerreport`. The CSV bundle mirrors
+that layout as separate files so each section keeps its own table shape.
 
 Do not hand-fill domestic-provider or withheld-KESt fields from Kassiber
 output today; Kassiber does not yet store the metadata needed for 171, 173, or

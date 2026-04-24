@@ -118,7 +118,7 @@ Current Austrian status:
 - Austrian profiles process through rp2's `AT` country plugin via the shared RP2 adapter
 - Kassiber keeps normalization, provenance capture, transfer preparation, cross-asset carry wiring, and current disposal-category / Kennzahl mapping
 - Austrian cross-asset `--policy carrying-value` pairs are supported and feed Kassiber's swap-basis-carry path before RP2
-- Austrian E 1kv export is available through `reports austrian-e1kv`, `reports export-austrian-e1kv-pdf`, and `reports export-austrian-e1kv-xlsx`; `reports austrian-tax-summary` and `reports export-austrian` are friendlier aliases for the same annual Austrian handoff
+- Austrian E 1kv export is available through `reports austrian-e1kv`, `reports export-austrian-e1kv-pdf`, `reports export-austrian-e1kv-xlsx`, and `reports export-austrian-e1kv-csv`; `reports austrian-tax-summary` and `reports export-austrian` are friendlier aliases for the same annual Austrian handoff
 - Austrian output should remain review-gated; Kassiber is not tax advice
 
 The E 1kv export is annual and review-oriented:
@@ -130,6 +130,7 @@ python3 -m kassiber --format csv --output e1kv-2024.csv reports austrian-e1kv --
 python3 -m kassiber reports export-austrian-e1kv-pdf --year 2024 --file e1kv-2024.pdf
 python3 -m kassiber reports export-austrian --year 2024 --file austria-2024.pdf
 python3 -m kassiber reports export-austrian-e1kv-xlsx --year 2024 --file e1kv-2024.xlsx
+python3 -m kassiber reports export-austrian-e1kv-csv --year 2024 --dir e1kv-2024-csv
 ```
 
 Kassiber currently maps crypto rows to the ausländisch / self-custody
@@ -142,5 +143,8 @@ instead of disappearing from the handoff.
 The XLSX export mirrors that structure as an accountant-facing workbook with
 an `Übersicht` sheet, separate numbered tabs such as `1.1.`, `2.1.`, and
 `3.3.`, plus an `Erläuterungen zum Steuerreport` notes sheet.
+The CSV bundle mirrors the same layout as separate files so each section can
+keep its own table headers instead of flattening every section into one lossy
+CSV shape.
 
 See [../plan/06-austrian-tax-engine.md](../plan/06-austrian-tax-engine.md) for the broader design and remaining Austrian backlog, plus [../austrian-handoff.md](../austrian-handoff.md) for the current marker / carry-basis contract.

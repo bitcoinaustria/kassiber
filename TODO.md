@@ -158,8 +158,8 @@ top of the monolith.
   automatically; see [docs/austrian-handoff.md](docs/austrian-handoff.md)
 - [x] Add E 1kv CSV/PDF/XLSX export path on top of Kassiber's persisted
   Austrian disposal buckets / Kennzahl mapping, including structured
-  Steuerbericht-style sections and `reports austrian-tax-summary` /
-  `reports export-austrian` aliases
+  Steuerbericht-style sections, a section-by-section CSV bundle, and
+  `reports austrian-tax-summary` / `reports export-austrian` aliases
 - [x] When E 1kv export lands, surface Kassiber's current ausländisch /
   self-custody Kennzahl assumption in the CLI envelope and PDF/XLSX output;
   domestic-provider withheld KESt needs structured metadata before

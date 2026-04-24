@@ -4165,6 +4165,18 @@ class ReviewRegressionTest(unittest.TestCase):
         self.assertGreater(payload["data"]["pages"], 0)
         self.assertGreater(pdf_file.stat().st_size, 0)
 
+        plain_result = self._run_cli(
+            "--format", "plain",
+            "reports", "austrian-e1kv",
+            "--workspace", "Main",
+            "--profile", "Default",
+            "--year", "2024",
+        )
+        self.assertEqual(plain_result.returncode, 0, msg=plain_result.stderr)
+        self.assertIn("II. Detail Sections", plain_result.stdout)
+        self.assertIn("3.3. Nicht steuerbare Steuergebühren und Rückerstattungen", plain_result.stdout)
+        self.assertIn("Summe laufende Einkünfte", plain_result.stdout)
+
         alias_pdf_file = self.case_dir / "austrian-alias.pdf"
         payload, result = self._run_json(
             "reports", "export-austrian",
@@ -4224,6 +4236,34 @@ class ReviewRegressionTest(unittest.TestCase):
             "AT-E1KV-KENNZAHL-REPROCESS",
             {assumption["code"] for assumption in report["assumptions"]},
         )
+
+        csv_bundle_dir = self.case_dir / "austrian-e1kv-csv"
+        payload, result = self._run_json(
+            "reports", "export-austrian-e1kv-csv",
+            "--workspace", "Main",
+            "--profile", "Default",
+            "--year", "2024",
+            "--dir", str(csv_bundle_dir),
+        )
+        self._assert_ok(payload, result, "reports.export-austrian-e1kv-csv")
+        self.assertEqual(payload["data"]["form"], "E 1kv")
+        self.assertIn("Übersicht", payload["data"]["sheets"])
+        self.assertIn("3.3.", payload["data"]["sheets"])
+        self.assertEqual(len(payload["data"]["files"]), 15)
+        overview_csv = csv_bundle_dir / "00_uebersicht.csv"
+        section_21_csv = csv_bundle_dir / "04_2.1.csv"
+        section_33_csv = csv_bundle_dir / "08_3.3.csv"
+        notes_csv = csv_bundle_dir / "99_erlaeuterungen_zum_steuerreport.csv"
+        self.assertTrue(overview_csv.exists())
+        self.assertTrue(section_21_csv.exists())
+        self.assertTrue(section_33_csv.exists())
+        self.assertTrue(notes_csv.exists())
+        self.assertIn("2.1. Einkünfte aus der Überlassung", overview_csv.read_text(encoding="utf-8"))
+        section_21_text = section_21_csv.read_text(encoding="utf-8")
+        self.assertIn("at-e1kv-staking", section_21_text)
+        self.assertIn("Summe laufende Einkünfte", section_21_text)
+        self.assertIn("Summe entrichtete Steuergebühren", section_33_csv.read_text(encoding="utf-8"))
+        self.assertIn("AT-E1KV-KENNZAHL-REPROCESS", notes_csv.read_text(encoding="utf-8"))
 
     def test_austrian_e1kv_reports_loss_as_positive_kz176(self):
         payload, result = self._run_json("init")
