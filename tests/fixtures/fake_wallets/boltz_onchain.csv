@@ -1,0 +1,4 @@
+date,txid,direction,asset,amount,fee,fiat_rate,description
+2026-05-01T10:00:00Z,boltz-funding-1,inbound,BTC,1.00000000,0,80000,Initial funding of the Boltz demo hot wallet
+2026-05-10T14:00:00Z,boltz-fwd-btc-out-1,outbound,BTC,0.10000000,0.00003000,82000,Forward chain-swap lock: send BTC to Boltz
+2026-05-15T11:00:00Z,boltz-rev-btc-in-1,inbound,BTC,0.04925000,0,84000,Reverse chain-swap claim: receive BTC from Boltz

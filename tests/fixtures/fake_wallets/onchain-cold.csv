@@ -1,0 +1,4 @@
+date,txid,direction,asset,amount,fee,fiat_rate,description
+2026-01-05T09:00:00Z,demo-cold-fund-1,inbound,BTC,0.75000000,0,60000,Cold wallet acquisition
+2026-01-10T10:00:00Z,demo-self-transfer-1,outbound,BTC,0.25000000,0.00020000,62000,Move funds to hot wallet
+2026-02-01T10:00:00Z,demo-peg-in-out-1,outbound,BTC,0.20000000,0.00010000,70000,Peg-in to Liquid

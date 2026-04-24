@@ -207,6 +207,32 @@ over the shared core after the extraction work is done.
 - [x] Keep normal backend and wallet success output safe-to-record for
   secret-bearing config values by redacting raw credentials and raw descriptor
   material while preserving presence / state flags
+- [x] Add opt-in local live-sync tests for Bitcoin Core regtest and local
+  Liquid Esplora/Electrum backends, plus a deterministic fake BTC/LBTC wallet
+  fixture with swap pairs; keep loopback-only guards so descriptor scripts are
+  not accidentally sent to public infrastructure
+- [x] Automate the Liquid live-sync test with a seamless elementsd +
+  electrs-liquid regtest stack; session-scoped across the module, with
+  randomized RPC creds and `rpcallowip` scoped to the Docker bridge
+- [x] Model Boltz BTC <-> LBTC chain swaps as a dedicated
+  `--kind chain-swap` transfer-pair kind with a forward + reverse fixture
+  exercising the service-fee spread end to end through the CLI
+- [ ] Add a live-layer reorg test (invalidate block, re-sync, assert no
+  phantom / duplicate rows) on both Bitcoin and Liquid regtest
+- [ ] Add a live-layer gap-limit escalation test (fund past the default
+  gap, assert descriptor discovery reaches the funded index)
+- [ ] Add a zero-conf / "reckless" swap live test (broadcast the lock leg
+  without mining, sync, assert the mempool leg is omitted; mine; re-sync;
+  assert it is picked up and pair succeeds)
+- [ ] Broaden the live descriptor-type matrix to cover `wpkh`, `tr`, and
+  `ct(slip77(...), eltr(...))` in addition to the current
+  `ct(slip77(...), elwpkh(...))` baseline
+- [ ] Pin regtest Docker images by digest (`image@sha256:...`) and add a
+  small helper that bumps the digest + re-runs the suite in one command
+- [ ] Explore a real Boltz-backend regtest integration (boltz-backend + CLN
+  + the two chains + both indexers) once the fixture-level coverage feels
+  limiting; defer until there is concrete evidence it catches regressions
+  the fixture path cannot
 - [ ] Finish the project-local part of backend storage once the per-project
   DB layout lands
 - [ ] Extend the safe-to-record contract beyond normal success output to

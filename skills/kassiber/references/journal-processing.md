@@ -97,6 +97,11 @@ kassiber transfers pair --tx-out <txid-or-external-id> --tx-in <txid-or-external
 kassiber transfers unpair --pair-id <pair-id>
 ```
 
+Supported `--kind` values: `manual`, `peg-in` / `peg-out` (Liquid federation
+pegs), `submarine-swap` (Boltz-style LN <-> onchain), and `chain-swap` (Boltz
+BTC <-> LBTC atomic chain swap). Pick the kind that matches the underlying
+semantics so reports and audit output carry the right label.
+
 Use `journals transfers list` to inspect the current computed transfer audit directly. It surfaces same-asset transfer matches with exact sent / received / fee amounts, plus any stored cross-asset pair links, so you do not need to infer pairing from `journals process` counts or from journal rows.
 
 Same-asset carrying-value pairs are supported. Cross-asset `--policy carrying-value` pairs are supported for Austrian profiles and feed the swap-basis-carry path; cross-asset `--policy taxable` pairs stay on the normal SELL + BUY path.

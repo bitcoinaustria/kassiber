@@ -193,8 +193,9 @@ python3 -m kassiber wallets sync --wallet donations
 Process journals and run reports:
 
 ```bash
-# If you have BTC <-> LBTC peg-ins / peg-outs or submarine swaps,
-# pair those legs first with `kassiber transfers pair`.
+# If you have BTC <-> LBTC peg-ins / peg-outs, submarine swaps, or Boltz
+# chain swaps (`--kind chain-swap`), pair those legs first with
+# `kassiber transfers pair`.
 python3 -m kassiber journals process
 python3 -m kassiber reports summary
 python3 -m kassiber reports tax-summary
@@ -211,6 +212,7 @@ Reference docs:
 - [docs/reference/backends.md](docs/reference/backends.md)
 - [docs/reference/imports.md](docs/reference/imports.md)
 - [docs/reference/tax.md](docs/reference/tax.md)
+- [docs/reference/testing.md](docs/reference/testing.md)
 - [docs/reference/machine-output.md](docs/reference/machine-output.md)
 - [docs/reference/desktop.md](docs/reference/desktop.md)
 

@@ -1,0 +1,4 @@
+date,txid,direction,asset,amount,fee,fiat_rate,description
+2026-02-01T10:20:00Z,demo-peg-in-in-1,inbound,LBTC,0.20000000,0,70000,Peg-in receive on Liquid
+2026-04-01T08:30:00Z,demo-peg-out-out-1,outbound,LBTC,0.10000000,0.00002000,72000,Peg-out to on-chain wallet
+2026-04-20T12:00:00Z,demo-liquid-spend-1,outbound,LBTC,0.03000000,0.00001000,73000,Liquid sale or spend

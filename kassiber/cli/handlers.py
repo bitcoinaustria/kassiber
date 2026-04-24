@@ -276,7 +276,7 @@ def invalidate_journals(conn, profile_id):
     )
 
 
-TRANSFER_PAIR_KINDS = ("manual", "peg-in", "peg-out", "submarine-swap")
+TRANSFER_PAIR_KINDS = ("manual", "peg-in", "peg-out", "submarine-swap", "chain-swap")
 TRANSFER_PAIR_POLICIES = ("carrying-value", "taxable")
 
 

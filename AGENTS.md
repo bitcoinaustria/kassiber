@@ -139,6 +139,8 @@ List endpoints with `--limit` also accept `--cursor`. The cursor is an opaque ba
 
 All commands below assume project dependencies are installed — either via `uv sync` (then prefix with `uv run`) or via `pip install -e .` inside an activated venv (then use `python3` directly). The examples use `uv run python` because it works without pre-activation; swap in `python3` when working inside an activated venv. For the baseline push/PR pass, use `./scripts/quality-gate.sh` as the single trusted entrypoint; the commands below are the underlying pieces.
 
+For the full testing story — baseline gate, opt-in live Bitcoin + Liquid regtest layer, privacy posture, Boltz chain-swap fixture — see [docs/reference/testing.md](docs/reference/testing.md).
+
 - Compile check:
 
 ```bash
@@ -200,4 +202,4 @@ uv run python -m kassiber ui --help
 - No BTCPay invoice/payment provenance ingest yet beyond confirmed on-chain wallet history plus comment/label carry-through from wallet-configured BTCPay sync.
 - No Lightning node adapters yet (`coreln`, `lnd`, `nwc` kinds are declared but do not sync).
 - No REST/server mode or multi-user auth yet.
-- Generic cross-asset carrying-value is still unsupported: outside Austrian profiles, BTC ↔ LBTC peg-ins/peg-outs and submarine swaps remain audit-linked SELL + BUY pairs rather than a cost-basis-carry primitive.
+- Generic cross-asset carrying-value is still unsupported: outside Austrian profiles, BTC ↔ LBTC peg-ins/peg-outs, submarine swaps, and Boltz chain-swaps (`--kind chain-swap`) remain audit-linked SELL + BUY pairs rather than a cost-basis-carry primitive.
