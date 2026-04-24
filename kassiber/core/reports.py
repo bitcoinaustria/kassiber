@@ -371,6 +371,20 @@ def _report_count(value):
     return f"{int(value or 0):,}"
 
 
+def _markdown_table_cell(value):
+    return str(value if value is not None else "").replace("|", "/").replace("\n", " ")
+
+
+def _markdown_table_lines(headers, rows):
+    lines = [
+        "| " + " | ".join(_markdown_table_cell(header) for header in headers) + " |",
+        "| " + " | ".join("---" for _header in headers) + " |",
+    ]
+    for row in rows:
+        lines.append("| " + " | ".join(_markdown_table_cell(cell) for cell in row) + " |")
+    return lines
+
+
 def _aggregate_balance_rows_from_portfolio(portfolio_rows):
     grouped = {}
     for row in portfolio_rows:
@@ -1148,7 +1162,7 @@ def _build_austrian_e1kv_report_lines(conn, workspace_ref, profile_ref, hooks: R
 
     lines.extend(["", "FinanzOnline Kennzahlen", "-----------------------"])
     lines.extend(
-        hooks.format_table(
+        _markdown_table_lines(
             ["KZ", "Description", "Rows", "Amount EUR"],
             [
                 [
@@ -1159,8 +1173,6 @@ def _build_austrian_e1kv_report_lines(conn, workspace_ref, profile_ref, hooks: R
                 ]
                 for row in report["summary_rows"]
             ],
-            [5, 56, 8, 14],
-            align_right={2, 3},
         )
     )
 
@@ -1183,7 +1195,7 @@ def _build_austrian_e1kv_report_lines(conn, workspace_ref, profile_ref, hooks: R
         lines.extend(["", AUSTRIAN_E1KV_SECTION_TITLES[kennzahl], "-" * len(AUSTRIAN_E1KV_SECTION_TITLES[kennzahl])])
         if kennzahl == 172:
             lines.extend(
-                hooks.format_table(
+                _markdown_table_lines(
                     ["Date", "Tx ID", "Kind", "Category", "Amount EUR"],
                     [
                         [
@@ -1195,13 +1207,11 @@ def _build_austrian_e1kv_report_lines(conn, workspace_ref, profile_ref, hooks: R
                         ]
                         for row in section_rows
                     ],
-                    [10, 24, 16, 34, 14],
-                    align_right={4},
                 )
             )
             continue
         lines.extend(
-            hooks.format_table(
+            _markdown_table_lines(
                 ["Date", "Tx ID", "Proceeds EUR", "Basis EUR", "Gain/Loss EUR"],
                 [
                     [
@@ -1213,8 +1223,6 @@ def _build_austrian_e1kv_report_lines(conn, workspace_ref, profile_ref, hooks: R
                     ]
                     for row in section_rows
                 ],
-                [10, 28, 14, 14, 15],
-                align_right={2, 3, 4},
             )
         )
     if report["rows"]:
