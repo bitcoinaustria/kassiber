@@ -347,6 +347,28 @@ class ReviewRegressionTest(unittest.TestCase):
         )
         self._assert_ok(payload, result, "wallets.create")
 
+    def _bootstrap_austrian_e1kv_wallet(self, label="AustrianE1kv"):
+        payload, result = self._run_json("init")
+        self._assert_ok(payload, result, "init")
+        payload, result = self._run_json("workspaces", "create", "Main")
+        self._assert_ok(payload, result, "workspaces.create")
+        payload, result = self._run_json(
+            "profiles", "create",
+            "--workspace", "Main",
+            "--fiat-currency", "EUR",
+            "--tax-country", "at",
+            "Default",
+        )
+        self._assert_ok(payload, result, "profiles.create")
+        payload, result = self._run_json(
+            "wallets", "create",
+            "--workspace", "Main",
+            "--profile", "Default",
+            "--label", label,
+            "--kind", "custom",
+        )
+        self._assert_ok(payload, result, "wallets.create")
+
     def _bootstrap_profile(self, profile_label="Default"):
         payload, result = self._run_json("init")
         self._assert_ok(payload, result, "init")
@@ -4362,7 +4384,11 @@ class ReviewRegressionTest(unittest.TestCase):
         self._assert_ok(payload, result, "reports.export-austrian-e1kv-pdf")
         self.assertEqual(payload["data"]["form"], "E 1kv")
         self.assertGreater(payload["data"]["pages"], 0)
-        self.assertGreater(pdf_file.stat().st_size, 0)
+        pdf_bytes = pdf_file.read_bytes()
+        self.assertTrue(pdf_bytes.startswith(b"%PDF"))
+        self.assertGreater(len(pdf_bytes), 0)
+        self.assertIn("Kassiber Austrian E 1kv", payload["data"]["title"])
+        self.assertIn(b"Kassiber Austrian E 1kv", pdf_bytes)
 
         plain_result = self._run_cli(
             "--format", "plain",
@@ -4454,6 +4480,27 @@ class ReviewRegressionTest(unittest.TestCase):
         self.assertIn("Übersicht", payload["data"]["sheets"])
         self.assertIn("3.3.", payload["data"]["sheets"])
         self.assertEqual(len(payload["data"]["files"]), 15)
+        expected_bundle_filenames = [
+            "00_uebersicht.csv",
+            "01_1.1.csv",
+            "02_1.2.csv",
+            "03_1.3.csv",
+            "04_2.1.csv",
+            "05_2.2.csv",
+            "06_3.1.csv",
+            "07_3.2.csv",
+            "08_3.3.csv",
+            "09_4.1.csv",
+            "10_4.2.csv",
+            "11_4.3.csv",
+            "12_4.4.csv",
+            "13_4.5.csv",
+            "99_erlaeuterungen_zum_steuerreport.csv",
+        ]
+        self.assertEqual(
+            [Path(file["file"]).name for file in payload["data"]["files"]],
+            expected_bundle_filenames,
+        )
         overview_csv = csv_bundle_dir / "00_uebersicht.csv"
         section_21_csv = csv_bundle_dir / "04_2.1.csv"
         section_33_csv = csv_bundle_dir / "08_3.3.csv"
@@ -4471,6 +4518,142 @@ class ReviewRegressionTest(unittest.TestCase):
         self.assertIn("AT-E1KV-KENNZAHL-REPROCESS", notes_text)
         self.assertIn("Kennzahl-Abweichungen", notes_text)
         self.assertIn("at-e1kv-staking", notes_text)
+
+    def test_austrian_e1kv_empty_year_keeps_unsupported_placeholders(self):
+        self._bootstrap_austrian_e1kv_wallet(label="AustrianEmpty")
+        payload, result = self._run_json(
+            "journals", "process",
+            "--workspace", "Main",
+            "--profile", "Default",
+        )
+        self._assert_ok(payload, result, "journals.process")
+
+        payload, result = self._run_json(
+            "reports", "austrian-e1kv",
+            "--workspace", "Main",
+            "--profile", "Default",
+            "--year", "2024",
+        )
+        self._assert_ok(payload, result, "reports.austrian-e1kv")
+        report = payload["data"]
+        self.assertEqual(report["rows"], [])
+        self.assertEqual(report["data_quality"]["quarantines"], [])
+        self.assertEqual(report["sections"]["1.2"]["status"], "not_modelled")
+        self.assertEqual(report["sections"]["3.3"]["status"], "not_modelled")
+        self.assertEqual(report["sections"]["4.5"]["status"], "not_modelled")
+        self.assertEqual(report["sections"]["1.2"]["totals"]["amount_eur_cents"], 0)
+        self.assertEqual(report["sections"]["3.3"]["detail_rows"], [])
+        self.assertEqual(report["sections"]["4.5"]["detail_rows"], [])
+
+        plain_result = self._run_cli(
+            "--format", "plain",
+            "reports", "austrian-e1kv",
+            "--workspace", "Main",
+            "--profile", "Default",
+            "--year", "2024",
+        )
+        self.assertEqual(plain_result.returncode, 0, msg=plain_result.stderr)
+        self.assertIn("1.2. Steuerpflichtige Einkünfte aus Margin", plain_result.stdout)
+        self.assertIn("3.3. Nicht steuerbare Steuergebühren und Rückerstattungen", plain_result.stdout)
+        self.assertIn("4.5. Minting", plain_result.stdout)
+        self.assertIn("No rows in scope.", plain_result.stdout)
+
+        csv_bundle_dir = self.case_dir / "austrian-empty-e1kv-csv"
+        payload, result = self._run_json(
+            "reports", "export-austrian-e1kv-csv",
+            "--workspace", "Main",
+            "--profile", "Default",
+            "--year", "2024",
+            "--dir", str(csv_bundle_dir),
+        )
+        self._assert_ok(payload, result, "reports.export-austrian-e1kv-csv")
+        self.assertEqual(len(payload["data"]["files"]), 15)
+        self.assertIn(
+            "No rows in scope.",
+            (csv_bundle_dir / "02_1.2.csv").read_text(encoding="utf-8"),
+        )
+        self.assertIn(
+            "Summe der Rückerstattungen",
+            (csv_bundle_dir / "08_3.3.csv").read_text(encoding="utf-8"),
+        )
+        self.assertIn(
+            "Summe Minting",
+            (csv_bundle_dir / "13_4.5.csv").read_text(encoding="utf-8"),
+        )
+
+    def test_austrian_e1kv_quarantined_rows_stay_out_but_counts_visible(self):
+        self._bootstrap_austrian_e1kv_wallet(label="AustrianQuarantine")
+        json_file = self.case_dir / "austrian-e1kv-quarantine-import.json"
+        json_file.write_text(
+            json.dumps(
+                [
+                    {
+                        "date": "2024-01-01",
+                        "direction": "inbound",
+                        "asset": "BTC",
+                        "amount": "0.001",
+                        "fee": "0",
+                        "kind": "buy",
+                        "txid": "at-e1kv-quarantine-buy",
+                        "fiat_value": "40",
+                    },
+                    {
+                        "date": "2024-06-01",
+                        "direction": "outbound",
+                        "asset": "BTC",
+                        "amount": "0.0005",
+                        "fee": "0",
+                        "kind": "sell",
+                        "txid": "at-e1kv-quarantine-sell",
+                    },
+                ]
+            ),
+            encoding="utf-8",
+        )
+        payload, result = self._run_json(
+            "wallets", "import-json",
+            "--workspace", "Main",
+            "--profile", "Default",
+            "--wallet", "AustrianQuarantine",
+            "--file", str(json_file),
+        )
+        self._assert_ok(payload, result, "wallets.import-json")
+        payload, result = self._run_json(
+            "journals", "process",
+            "--workspace", "Main",
+            "--profile", "Default",
+        )
+        self._assert_ok(payload, result, "journals.process")
+        self.assertEqual(payload["data"]["quarantined"], 1)
+
+        payload, result = self._run_json(
+            "reports", "austrian-e1kv",
+            "--workspace", "Main",
+            "--profile", "Default",
+            "--year", "2024",
+        )
+        self._assert_ok(payload, result, "reports.austrian-e1kv")
+        report = payload["data"]
+        self.assertNotIn(
+            "at-e1kv-quarantine-sell",
+            {row["tx_id"] for row in report["rows"]},
+        )
+        self.assertEqual(
+            report["data_quality"]["quarantines"],
+            [{"reason": "missing_spot_price", "count": 1}],
+        )
+
+        plain_result = self._run_cli(
+            "--format", "plain",
+            "reports", "austrian-e1kv",
+            "--workspace", "Main",
+            "--profile", "Default",
+            "--year", "2024",
+        )
+        self.assertEqual(plain_result.returncode, 0, msg=plain_result.stderr)
+        self.assertIn("Quarantined transactions remain outside this export", plain_result.stdout)
+        self.assertIn("missing_spot_price", plain_result.stdout)
+        self.assertNotIn("at-e1kv-quarantine-sell", plain_result.stdout)
 
     def test_austrian_e1kv_reports_loss_as_positive_kz176(self):
         payload, result = self._run_json("init")
