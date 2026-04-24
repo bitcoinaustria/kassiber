@@ -5,6 +5,7 @@ from collections import defaultdict
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal, ROUND_HALF_UP
+from pathlib import Path
 from typing import Any, Callable, Mapping, Sequence
 
 from .austrian import kennzahl_for_disposal_category
@@ -881,6 +882,12 @@ def _eur_from_cents(cents):
     return Decimal(int(cents or 0)) / Decimal("100")
 
 
+def _xlsx_eur_from_cents(cents):
+    if cents is None:
+        return None
+    return float(_eur_from_cents(cents))
+
+
 def _report_eur_cents(cents):
     return _report_fiat(_eur_from_cents(cents))
 
@@ -1232,6 +1239,213 @@ def export_austrian_e1kv_pdf_report(conn, workspace_ref, profile_ref, file_path,
     written["form"] = report["form"]
     written["assumptions"] = report["assumptions"]
     return written
+
+
+def _write_xlsx_sheet(workbook, sheet_name, columns, rows, formats):
+    worksheet = workbook.add_worksheet(sheet_name)
+    worksheet.freeze_panes(1, 0)
+    worksheet.set_tab_color("#0b6252")
+
+    for column_index, (header, _key, _fmt, _transform, width) in enumerate(columns):
+        worksheet.write(0, column_index, header, formats["header"])
+        worksheet.set_column(column_index, column_index, width)
+
+    for row_index, row in enumerate(rows, start=1):
+        for column_index, (_header, key, format_name, transform, _width) in enumerate(columns):
+            value = row.get(key) if key else row
+            if transform:
+                value = transform(value)
+            cell_format = formats.get(format_name, formats["text"])
+            if value is None:
+                worksheet.write_blank(row_index, column_index, None, cell_format)
+            elif isinstance(value, bool):
+                worksheet.write_boolean(row_index, column_index, value, cell_format)
+            elif isinstance(value, (int, float, Decimal)):
+                worksheet.write_number(row_index, column_index, float(value), cell_format)
+            else:
+                worksheet.write_string(row_index, column_index, str(value), cell_format)
+
+    if columns:
+        worksheet.autofilter(0, 0, max(len(rows), 1), len(columns) - 1)
+    return worksheet
+
+
+def _austrian_e1kv_quality_rows(report):
+    rows = []
+    for row in report["data_quality"]["quarantines"]:
+        rows.append(
+            {
+                "type": "quarantine",
+                "reason": row["reason"],
+                "count": row["count"],
+                "tx_id": "",
+                "at_category": "",
+                "stored_kennzahl": "",
+                "export_kennzahl": "",
+            }
+        )
+    for row in report["data_quality"]["kennzahl_mismatches"]:
+        rows.append(
+            {
+                "type": "kennzahl_mismatch",
+                "reason": "",
+                "count": "",
+                "tx_id": row["tx_id"],
+                "at_category": row["at_category"],
+                "stored_kennzahl": row["stored_kennzahl"],
+                "export_kennzahl": row["export_kennzahl"],
+            }
+        )
+    if not rows:
+        rows.append(
+            {
+                "type": "status",
+                "reason": "No quarantined transactions or stale Kennzahl mismatches in scope.",
+                "count": "",
+                "tx_id": "",
+                "at_category": "",
+                "stored_kennzahl": "",
+                "export_kennzahl": "",
+            }
+        )
+    return rows
+
+
+def export_austrian_e1kv_xlsx_report(conn, workspace_ref, profile_ref, file_path, hooks: ReportHooks, tax_year=None):
+    import xlsxwriter
+
+    report = report_austrian_e1kv(conn, workspace_ref, profile_ref, hooks, tax_year=tax_year)
+    path = Path(file_path).expanduser()
+    path.parent.mkdir(parents=True, exist_ok=True)
+
+    workbook = xlsxwriter.Workbook(str(path))
+    workbook.set_properties(
+        {
+            "title": f"Kassiber Austrian E 1kv Report - {report['profile']} ({report['tax_year']})",
+            "subject": "Austrian E 1kv cryptocurrency tax handoff",
+            "author": "Kassiber",
+            "comments": AUSTRIAN_E1KV_REVIEW_GATE,
+        }
+    )
+    formats = {
+        "title": workbook.add_format(
+            {"bold": True, "font_size": 16, "font_color": "#0b6252", "bottom": 2, "bottom_color": "#0b6252"}
+        ),
+        "header": workbook.add_format(
+            {"bold": True, "bg_color": "#edf4f2", "font_color": "#203136", "border": 1, "border_color": "#d6e2de"}
+        ),
+        "text": workbook.add_format({"border": 1, "border_color": "#e3ece8", "valign": "top"}),
+        "wrap": workbook.add_format({"border": 1, "border_color": "#e3ece8", "valign": "top", "text_wrap": True}),
+        "int": workbook.add_format({"border": 1, "border_color": "#e3ece8", "num_format": "0"}),
+        "money": workbook.add_format(
+            {"border": 1, "border_color": "#e3ece8", "num_format": '#,##0.00;[Red]-#,##0.00'}
+        ),
+        "btc": workbook.add_format({"border": 1, "border_color": "#e3ece8", "num_format": "0.00000000"}),
+    }
+
+    summary = workbook.add_worksheet("Summary")
+    summary.set_tab_color("#0b6252")
+    summary.write(0, 0, "Kassiber Austrian E 1kv Report", formats["title"])
+    summary.write(2, 0, "Workspace", formats["header"])
+    summary.write(2, 1, report["workspace"], formats["text"])
+    summary.write(3, 0, "Profile", formats["header"])
+    summary.write(3, 1, report["profile"], formats["text"])
+    summary.write(4, 0, "Tax year", formats["header"])
+    summary.write(4, 1, report["tax_year"], formats["int"])
+    summary.write(5, 0, "Form section", formats["header"])
+    summary.write(5, 1, report["form_section"], formats["text"])
+    summary.write(6, 0, "Review gate", formats["header"])
+    summary.write(6, 1, report["review_gate"], formats["wrap"])
+    summary.write(8, 0, "FinanzOnline Kennzahlen", formats["title"])
+    summary_columns = [
+        ("Kennzahl", "kennzahl", "int", None, 10),
+        ("Description", "label", "wrap", None, 62),
+        ("Rows", "row_count", "int", None, 10),
+        ("Amount EUR", "amount_eur_cents", "money", _xlsx_eur_from_cents, 16),
+    ]
+    for column_index, (header, _key, _fmt, _transform, width) in enumerate(summary_columns):
+        summary.write(10, column_index, header, formats["header"])
+        summary.set_column(column_index, column_index, width)
+    for row_index, row in enumerate(report["summary_rows"], start=11):
+        for column_index, (_header, key, format_name, transform, _width) in enumerate(summary_columns):
+            value = row.get(key)
+            if transform:
+                value = transform(value)
+            if isinstance(value, (int, float, Decimal)):
+                summary.write_number(row_index, column_index, float(value), formats[format_name])
+            else:
+                summary.write_string(row_index, column_index, str(value or ""), formats[format_name])
+    summary.autofilter(10, 0, max(11, 10 + len(report["summary_rows"])), len(summary_columns) - 1)
+    summary.set_column(0, 0, 18)
+    summary.set_column(1, 1, 96)
+    summary.freeze_panes(9, 0)
+
+    _write_xlsx_sheet(
+        workbook,
+        "Transactions",
+        [
+            ("Tax year", "tax_year", "int", None, 10),
+            ("Date", "date", "text", None, 12),
+            ("Tx ID", "tx_id", "text", None, 24),
+            ("Wallet", "wallet", "text", None, 18),
+            ("Asset", "asset", "text", None, 8),
+            ("Kind", "kind", "text", None, 16),
+            ("Entry type", "entry_type", "text", None, 14),
+            ("AT category", "at_category", "text", None, 20),
+            ("Category label", "at_category_label", "wrap", None, 34),
+            ("Regime", "at_regime", "text", None, 10),
+            ("Quantity BTC", "quantity", "btc", None, 14),
+            ("Quantity msat", "qty_msat", "int", None, 16),
+            ("Price EUR", "price_eur_cents", "money", _xlsx_eur_from_cents, 14),
+            ("Cost basis EUR", "cost_basis_eur_cents", "money", _xlsx_eur_from_cents, 16),
+            ("Proceeds EUR", "proceeds_eur_cents", "money", _xlsx_eur_from_cents, 16),
+            ("Gain/Loss EUR", "gain_loss_eur_cents", "money", _xlsx_eur_from_cents, 16),
+            ("Income EUR", "income_eur_cents", "money", _xlsx_eur_from_cents, 14),
+            ("Form amount EUR", "form_amount_eur_cents", "money", _xlsx_eur_from_cents, 18),
+            ("Kennzahl", "kennzahl", "int", None, 10),
+            ("Stored Kennzahl", "stored_kennzahl", "int", None, 16),
+            ("Form section", "form_section", "wrap", None, 34),
+            ("Note", "note", "wrap", None, 40),
+        ],
+        report["rows"],
+        formats,
+    )
+    _write_xlsx_sheet(
+        workbook,
+        "Assumptions",
+        [
+            ("Code", "code", "text", None, 26),
+            ("Severity", "severity", "text", None, 12),
+            ("Message", "message", "wrap", None, 96),
+        ],
+        report["assumptions"],
+        formats,
+    )
+    _write_xlsx_sheet(
+        workbook,
+        "Data Quality",
+        [
+            ("Type", "type", "text", None, 20),
+            ("Reason", "reason", "wrap", None, 64),
+            ("Count", "count", "int", None, 10),
+            ("Tx ID", "tx_id", "text", None, 24),
+            ("AT category", "at_category", "text", None, 22),
+            ("Stored Kennzahl", "stored_kennzahl", "int", None, 16),
+            ("Export Kennzahl", "export_kennzahl", "int", None, 16),
+        ],
+        _austrian_e1kv_quality_rows(report),
+        formats,
+    )
+    workbook.close()
+    return {
+        "file": str(path.resolve()),
+        "bytes": path.stat().st_size,
+        "form": report["form"],
+        "tax_year": report["tax_year"],
+        "sheets": ["Summary", "Transactions", "Assumptions", "Data Quality"],
+        "rows": len(report["rows"]),
+        "summary_rows": len(report["summary_rows"]),
+    }
 
 
 def build_pdf_report_lines(conn, workspace_ref, profile_ref, hooks: ReportHooks, wallet_ref=None, history_limit=None):
@@ -1586,6 +1800,7 @@ __all__ = [
     "build_austrian_e1kv_report_lines",
     "build_pdf_report_lines",
     "export_austrian_e1kv_pdf_report",
+    "export_austrian_e1kv_xlsx_report",
     "export_pdf_report",
     "report_austrian_e1kv",
     "report_balance_history",

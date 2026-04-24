@@ -156,10 +156,10 @@ top of the monolith.
 - [x] Replace Option C (quarantine-on-cross-asset-Neu-swap) with Option A
   (topological two-pass compute) so `carried_basis_fiat` is populated
   automatically; see [docs/austrian-handoff.md](docs/austrian-handoff.md)
-- [x] Add E 1kv CSV/PDF export path on top of Kassiber's persisted
+- [x] Add E 1kv CSV/PDF/XLSX export path on top of Kassiber's persisted
   Austrian disposal buckets / Kennzahl mapping
 - [x] When E 1kv export lands, surface Kassiber's current ausländisch /
-  self-custody Kennzahl assumption in the CLI envelope and PDF output;
+  self-custody Kennzahl assumption in the CLI envelope and PDF/XLSX output;
   domestic-provider withheld KESt needs structured metadata before
   Kassiber can populate the inländisch rows
 

@@ -55,7 +55,7 @@ Out of scope unless a future design says otherwise:
 |---|---|---|
 | Core extraction | Landed | keep logic in shared core, not CLI/UI copies |
 | Attachments | Landed | use shipped `attachments`; keep links/file blobs bounded |
-| Austrian RP2 path | Active | processing and review-gated E 1kv export work; domestic-provider KESt metadata pending |
+| Austrian RP2 path | Active | processing and review-gated E 1kv PDF/XLSX export work; domestic-provider KESt metadata pending |
 | Desktop UI | In progress | routed read-only shell exists; live workers/actions pending |
 | Project storage | Target-state | app-wide to per-project migration still needs a focused plan |
 | External documents | Design | reconcile BTC evidence without becoming ERP/invoicing |

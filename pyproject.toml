@@ -16,6 +16,7 @@ dependencies = [
   "embit>=0.8.0",
   "PySide6>=6.7,<7",
   "rp2 @ git+https://github.com/bitcoinaustria/rp2.git@23c944962c775667794b19d66e785058d7aaf599",
+  "XlsxWriter>=3.2,<4",
 ]
 
 [project.scripts]

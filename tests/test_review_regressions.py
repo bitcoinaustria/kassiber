@@ -6,6 +6,7 @@ import sys
 import tempfile
 import threading
 import unittest
+import zipfile
 from argparse import Namespace
 from decimal import Decimal
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -4022,7 +4023,7 @@ class ReviewRegressionTest(unittest.TestCase):
         self.assertEqual(payload["data"][0]["at_kennzahl"], 172)
         self.assertEqual(payload["data"][0]["gain_loss"], 40.0)
 
-    def test_austrian_e1kv_report_exports_summary_csv_and_pdf(self):
+    def test_austrian_e1kv_report_exports_summary_csv_pdf_and_xlsx(self):
         payload, result = self._run_json("init")
         self._assert_ok(payload, result, "init")
         payload, result = self._run_json("workspaces", "create", "Main")
@@ -4147,6 +4148,28 @@ class ReviewRegressionTest(unittest.TestCase):
         self.assertEqual(payload["data"]["form"], "E 1kv")
         self.assertGreater(payload["data"]["pages"], 0)
         self.assertGreater(pdf_file.stat().st_size, 0)
+
+        xlsx_file = self.case_dir / "austrian-e1kv.xlsx"
+        payload, result = self._run_json(
+            "reports", "export-austrian-e1kv-xlsx",
+            "--workspace", "Main",
+            "--profile", "Default",
+            "--year", "2024",
+            "--file", str(xlsx_file),
+        )
+        self._assert_ok(payload, result, "reports.export-austrian-e1kv-xlsx")
+        self.assertEqual(payload["data"]["form"], "E 1kv")
+        self.assertEqual(payload["data"]["sheets"], ["Summary", "Transactions", "Assumptions", "Data Quality"])
+        self.assertIn("Transactions", payload["data"]["sheets"])
+        self.assertGreater(xlsx_file.stat().st_size, 0)
+        with zipfile.ZipFile(xlsx_file) as workbook:
+            names = set(workbook.namelist())
+            self.assertIn("xl/workbook.xml", names)
+            workbook_xml = workbook.read("xl/workbook.xml").decode("utf-8")
+            shared_strings = workbook.read("xl/sharedStrings.xml").decode("utf-8")
+        self.assertIn('name="Transactions"', workbook_xml)
+        self.assertIn("at-e1kv-staking", shared_strings)
+        self.assertIn("Form amount EUR", shared_strings)
 
     def test_attachments_verify_reports_missing_file(self):
         self._bootstrap_wallet(label="Attachable")

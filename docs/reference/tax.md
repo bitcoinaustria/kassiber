@@ -118,7 +118,7 @@ Current Austrian status:
 - Austrian profiles process through rp2's `AT` country plugin via the shared RP2 adapter
 - Kassiber keeps normalization, provenance capture, transfer preparation, cross-asset carry wiring, and current disposal-category / Kennzahl mapping
 - Austrian cross-asset `--policy carrying-value` pairs are supported and feed Kassiber's swap-basis-carry path before RP2
-- Austrian E 1kv export is available through `reports austrian-e1kv` and `reports export-austrian-e1kv-pdf`
+- Austrian E 1kv export is available through `reports austrian-e1kv`, `reports export-austrian-e1kv-pdf`, and `reports export-austrian-e1kv-xlsx`
 - Austrian output should remain review-gated; Kassiber is not tax advice
 
 The E 1kv export is annual and review-oriented:
@@ -127,6 +127,7 @@ The E 1kv export is annual and review-oriented:
 python3 -m kassiber --machine reports austrian-e1kv --year 2024
 python3 -m kassiber --format csv --output e1kv-2024.csv reports austrian-e1kv --year 2024
 python3 -m kassiber reports export-austrian-e1kv-pdf --year 2024 --file e1kv-2024.pdf
+python3 -m kassiber reports export-austrian-e1kv-xlsx --year 2024 --file e1kv-2024.xlsx
 ```
 
 Kassiber currently maps crypto rows to the ausländisch / self-custody

@@ -113,7 +113,7 @@ Read-only readiness and preview surface. Reports remain trustworthy only after
 excluded.
 
 Generic reports are already CLI-backed. Austrian tax processing and the
-review-gated E 1kv CLI/PDF export exist in core.
+review-gated E 1kv CLI/PDF/XLSX export exist in core.
 
 ### Settings
 
@@ -164,7 +164,7 @@ requires = [
 ```
 
 E 1kv PDF export uses the existing line-oriented PDF writer, so no `reportlab`
-dependency is needed right now.
+dependency is needed. Styled E 1kv workbook export uses XlsxWriter.
 
 ## Out Of Scope
 

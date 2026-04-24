@@ -8,8 +8,8 @@ assumptions.
 defaults.
 
 These defaults are planning inputs and report-review notes, not tax advice.
-`reports austrian-e1kv` and the E 1kv PDF export surface invoked defaults so a
-Steuerberater can review them.
+`reports austrian-e1kv` and the E 1kv PDF/XLSX exports surface invoked defaults
+so a Steuerberater can review them.
 
 ## Defaults Summary
 

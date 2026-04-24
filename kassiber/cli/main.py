@@ -637,6 +637,12 @@ def build_parser() -> argparse.ArgumentParser:
     export_austrian_e1kv_pdf.add_argument("--year", type=int, required=True, help="Four-digit tax year")
     export_austrian_e1kv_pdf.add_argument("--file", required=True)
 
+    export_austrian_e1kv_xlsx = reports_sub.add_parser("export-austrian-e1kv-xlsx")
+    export_austrian_e1kv_xlsx.add_argument("--workspace")
+    export_austrian_e1kv_xlsx.add_argument("--profile")
+    export_austrian_e1kv_xlsx.add_argument("--year", type=int, required=True, help="Four-digit tax year")
+    export_austrian_e1kv_xlsx.add_argument("--file", required=True)
+
     rates = sub.add_parser("rates")
     rates_sub = rates.add_subparsers(dest="rates_command", required=True)
 
@@ -1388,6 +1394,18 @@ def dispatch(conn: sqlite3.Connection | None, args: argparse.Namespace) -> Any:
             return emit(
                 args,
                 core_reports.export_austrian_e1kv_pdf_report(
+                    conn,
+                    args.workspace,
+                    args.profile,
+                    args.file,
+                    report_hooks,
+                    tax_year=args.year,
+                ),
+            )
+        if args.reports_command == "export-austrian-e1kv-xlsx":
+            return emit(
+                args,
+                core_reports.export_austrian_e1kv_xlsx_report(
                     conn,
                     args.workspace,
                     args.profile,

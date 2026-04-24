@@ -1,6 +1,6 @@
 # Austrian Tax Support On RP2
 
-**Status:** Active RP2-backed processing; review-gated E 1kv CSV/PDF export
+**Status:** Active RP2-backed processing; review-gated E 1kv CSV/PDF/XLSX export
 is implemented for the current ausländisch / self-custody slice.
 **Current source of truth:** `docs/austrian-handoff.md`,
 `kassiber/core/tax_events.py`, `kassiber/core/engines/rp2.py`,
@@ -125,8 +125,10 @@ Implemented surfaces:
   row-level CSV
 - `reports export-austrian-e1kv-pdf --year <YYYY> --file <path>` for the
   PDF handoff
-- CLI/PDF review gate and current ausländisch / self-custody assumption
-- regression coverage for JSON, CSV, and PDF generation
+- `reports export-austrian-e1kv-xlsx --year <YYYY> --file <path>` for the
+  styled workbook handoff
+- CLI/PDF/XLSX review gate and current ausländisch / self-custody assumption
+- regression coverage for JSON, CSV, PDF, and XLSX generation
 
 CSV contains one row per relevant Austrian journal entry:
 
@@ -134,9 +136,9 @@ CSV contains one row per relevant Austrian journal entry:
 tax_year,date,tx_id,transaction_id,wallet,asset,kind,entry_type,at_category,at_category_label,at_regime,qty_msat,quantity,price_eur_cents,cost_basis_eur_cents,proceeds_eur_cents,gain_loss_eur_cents,income_eur_cents,form_amount_eur_cents,holding_period_days,kennzahl,stored_kennzahl,form_section,note
 ```
 
-PDF uses Kassiber's existing line-oriented PDF writer, so no new runtime
-dependency is needed. The PDF repeats the Steuerberater-review gate and lists
-the invoked assumptions / open-question defaults.
+PDF uses Kassiber's existing line-oriented PDF writer. XLSX uses XlsxWriter as
+a small write-only dependency. Both exports repeat the Steuerberater-review gate
+and list the invoked assumptions / open-question defaults.
 
 ## Test Direction
 
@@ -148,7 +150,7 @@ Keep growing coverage around:
 - staking/income-like receipts
 - missing-price and ambiguous-semantics quarantines
 - Alt/Neu classification edges
-- E 1kv CSV/PDF output
+- E 1kv CSV/PDF/XLSX output
 
 The existing regression and snapshot tests are the gate; expand them rather than
 adding unpinned behavior.
