@@ -614,6 +614,11 @@ def build_parser() -> argparse.ArgumentParser:
     austrian_e1kv.add_argument("--profile")
     austrian_e1kv.add_argument("--year", type=int, required=True, help="Four-digit tax year")
 
+    austrian_tax_summary = reports_sub.add_parser("austrian-tax-summary")
+    austrian_tax_summary.add_argument("--workspace")
+    austrian_tax_summary.add_argument("--profile")
+    austrian_tax_summary.add_argument("--year", type=int, required=True, help="Four-digit tax year")
+
     balance_history = reports_sub.add_parser("balance-history")
     balance_history.add_argument("--workspace")
     balance_history.add_argument("--profile")
@@ -636,6 +641,12 @@ def build_parser() -> argparse.ArgumentParser:
     export_austrian_e1kv_pdf.add_argument("--profile")
     export_austrian_e1kv_pdf.add_argument("--year", type=int, required=True, help="Four-digit tax year")
     export_austrian_e1kv_pdf.add_argument("--file", required=True)
+
+    export_austrian = reports_sub.add_parser("export-austrian")
+    export_austrian.add_argument("--workspace")
+    export_austrian.add_argument("--profile")
+    export_austrian.add_argument("--year", type=int, required=True, help="Four-digit tax year")
+    export_austrian.add_argument("--file", required=True)
 
     export_austrian_e1kv_xlsx = reports_sub.add_parser("export-austrian-e1kv-xlsx")
     export_austrian_e1kv_xlsx.add_argument("--workspace")
@@ -1333,6 +1344,30 @@ def dispatch(conn: sqlite3.Connection | None, args: argparse.Namespace) -> Any:
             if args.format == "csv":
                 return emit(args, report["rows"])
             return emit(args, report)
+        if args.reports_command == "austrian-tax-summary":
+            if args.format in {"table", "plain"}:
+                return emit(
+                    args,
+                    "\n".join(
+                        core_reports.build_austrian_e1kv_report_lines(
+                            conn,
+                            args.workspace,
+                            args.profile,
+                            report_hooks,
+                            tax_year=args.year,
+                        )
+                    ),
+                )
+            report = core_reports.report_austrian_tax_summary(
+                conn,
+                args.workspace,
+                args.profile,
+                report_hooks,
+                year=args.year,
+            )
+            if args.format == "csv":
+                return emit(args, report["summary_rows"])
+            return emit(args, report)
         if args.reports_command == "balance-sheet":
             return emit(
                 args,
@@ -1400,6 +1435,18 @@ def dispatch(conn: sqlite3.Connection | None, args: argparse.Namespace) -> Any:
                     args.file,
                     report_hooks,
                     tax_year=args.year,
+                ),
+            )
+        if args.reports_command == "export-austrian":
+            return emit(
+                args,
+                core_reports.export_austrian_pdf_report(
+                    conn,
+                    args.workspace,
+                    args.profile,
+                    args.file,
+                    report_hooks,
+                    year=args.year,
                 ),
             )
         if args.reports_command == "export-austrian-e1kv-xlsx":

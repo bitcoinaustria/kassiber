@@ -47,11 +47,103 @@ AUSTRIAN_E1KV_CATEGORY_LABELS = {
     "alt_spekulation": "Altbestand innerhalb Spekulationsfrist",
     "alt_taxfree": "Altbestand ausserhalb Spekulationsfrist",
 }
-AUSTRIAN_E1KV_SECTION_TITLES = {
-    172: "2. Steuerpflichtige laufende Einkuenfte aus Kryptowaehrungen",
-    174: "1.1. Realisierte Wertsteigerungen aus Kryptowaehrungen",
-    176: "1.1. Realisierte Wertverluste aus Kryptowaehrungen",
+AUSTRIAN_TAX_SECTION_ORDER = (
+    "1.1",
+    "1.2",
+    "1.3",
+    "2.1",
+    "2.2",
+    "3.1",
+    "3.2",
+    "4.1",
+    "4.2",
+    "4.3",
+    "4.4",
+    "4.5",
+)
+AUSTRIAN_TAX_SECTION_METADATA = {
+    "1.1": {
+        "label": "Steuerpflichtige Einkuenfte aus dem Handel mit Kryptowaehrungen",
+        "law": "27b Abs 3 EStG",
+        "supported": True,
+        "kennzahlen": (174, 176),
+    },
+    "1.2": {
+        "label": "Steuerpflichtige Einkuenfte aus Margin, Derivaten und Futures",
+        "law": "27 Z 4 EStG",
+        "supported": False,
+        "kennzahlen": (),
+    },
+    "1.3": {
+        "label": "Steuerpflichtige Einkuenfte aus NFT-Spekulationsgeschaeften",
+        "law": "31 EStG",
+        "supported": False,
+        "kennzahlen": (),
+    },
+    "2.1": {
+        "label": "Steuerpflichtige laufende Einkuenfte aus der Ueberlassung von Kryptowaehrungen",
+        "law": "27b Abs 2 Z 1 EStG",
+        "supported": True,
+        "kennzahlen": (172,),
+    },
+    "2.2": {
+        "label": "Steuerpflichtige laufende Einkuenfte aus Leistungen zur Transaktionsverarbeitung",
+        "law": "27b Abs 2 Z 2 EStG",
+        "supported": True,
+        "kennzahlen": (172,),
+    },
+    "3.1": {
+        "label": "Nicht steuerbare Einkuenfte aus Spekulationsgeschaeften mit Kryptowaehrungen",
+        "law": "27b Abs 3 EStG Altvermoegen",
+        "supported": True,
+        "kennzahlen": (801,),
+    },
+    "3.2": {
+        "label": "Nicht steuerbare Einkuenfte mit Bewertung 0",
+        "law": "27b Abs 2 Z 2 Satz 2 EStG",
+        "supported": False,
+        "kennzahlen": (),
+    },
+    "4.1": {
+        "label": "Eingegangene Spenden und Schenkungen",
+        "law": "",
+        "supported": False,
+        "kennzahlen": (),
+    },
+    "4.2": {
+        "label": "Ausgegangene Spenden und Schenkungen",
+        "law": "",
+        "supported": False,
+        "kennzahlen": (),
+    },
+    "4.3": {
+        "label": "Verlorene und gestohlene Coins",
+        "law": "",
+        "supported": False,
+        "kennzahlen": (),
+    },
+    "4.4": {
+        "label": "Mining gewerblich",
+        "law": "",
+        "supported": False,
+        "kennzahlen": (),
+    },
+    "4.5": {
+        "label": "Minting",
+        "law": "",
+        "supported": False,
+        "kennzahlen": (),
+    },
 }
+AUSTRIAN_TAX_SECTION_GROUPS = (
+    (
+        "1. Steuerpflichtige Einkuenfte aus dem Handel mit Kryptowaehrungen",
+        ("1.1", "1.2", "1.3"),
+    ),
+    ("2. Steuerpflichtige laufende Einkuenfte", ("2.1", "2.2")),
+    ("3. Nicht steuerbare Einkuenfte", ("3.1", "3.2")),
+    ("4. Sonstige Ein- und Ausgaenge", ("4.1", "4.2", "4.3", "4.4", "4.5")),
+)
 
 ScopeResolver = Callable[[sqlite3.Connection, str | None, str | None], tuple[Mapping[str, Any], Mapping[str, Any]]]
 AccountResolver = Callable[[sqlite3.Connection, str, str], Mapping[str, Any]]
@@ -1059,6 +1151,136 @@ def _austrian_e1kv_summary_rows(rows):
     ]
 
 
+def _austrian_e1kv_kennzahl_totals(summary_rows):
+    return {
+        str(row["kennzahl"]): {
+            "label": row["label"],
+            "row_count": row["row_count"],
+            "amount_eur_cents": row["amount_eur_cents"],
+            "amount": row["amount"],
+        }
+        for row in summary_rows
+    }
+
+
+def _austrian_tax_empty_section(section_id):
+    metadata = AUSTRIAN_TAX_SECTION_METADATA[section_id]
+    return {
+        "section_id": section_id,
+        "label": metadata["label"],
+        "law": metadata["law"],
+        "supported": bool(metadata["supported"]),
+        "status": "supported" if metadata["supported"] else "not_modelled",
+        "kennzahlen": list(metadata["kennzahlen"]),
+        "totals": {
+            "row_count": 0,
+            "quantity_msat": 0,
+            "amount_eur_cents": 0,
+            "proceeds_eur_cents": 0,
+            "cost_basis_eur_cents": 0,
+            "gain_loss_eur_cents": 0,
+            "income_eur_cents": 0,
+            "amount": 0.0,
+            "proceeds": 0.0,
+            "cost_basis": 0.0,
+            "gain_loss": 0.0,
+            "income": 0.0,
+        },
+        "detail_rows": [],
+    }
+
+
+def _austrian_tax_section_id(row):
+    category = row["at_category"]
+    if category in {"neu_gain", "neu_loss", "neu_swap"}:
+        return "1.1"
+    if category == "income_capital_yield":
+        return "2.1"
+    if category == "income_general":
+        return "2.2"
+    if category in {"alt_spekulation", "alt_taxfree"}:
+        return "3.1"
+    return None
+
+
+def _austrian_tax_refresh_section_amounts(section):
+    totals = section["totals"]
+    totals["amount"] = float(_eur_from_cents(totals["amount_eur_cents"]))
+    totals["proceeds"] = float(_eur_from_cents(totals["proceeds_eur_cents"]))
+    totals["cost_basis"] = float(_eur_from_cents(totals["cost_basis_eur_cents"]))
+    totals["gain_loss"] = float(_eur_from_cents(totals["gain_loss_eur_cents"]))
+    totals["income"] = float(_eur_from_cents(totals["income_eur_cents"]))
+
+
+def _austrian_tax_sections(rows):
+    sections = {
+        section_id: _austrian_tax_empty_section(section_id)
+        for section_id in AUSTRIAN_TAX_SECTION_ORDER
+    }
+    for row in rows:
+        section_id = _austrian_tax_section_id(row)
+        if section_id is None:
+            continue
+        section = sections[section_id]
+        totals = section["totals"]
+        section["detail_rows"].append(row)
+        totals["row_count"] += 1
+        totals["quantity_msat"] += int(row["qty_msat"] or 0)
+        totals["amount_eur_cents"] += int(row["form_amount_eur_cents"] or 0)
+        totals["proceeds_eur_cents"] += int(row["proceeds_eur_cents"] or 0)
+        totals["cost_basis_eur_cents"] += int(row["cost_basis_eur_cents"] or 0)
+        totals["gain_loss_eur_cents"] += int(row["gain_loss_eur_cents"] or 0)
+        totals["income_eur_cents"] += int(row["income_eur_cents"] or 0)
+    for section in sections.values():
+        _austrian_tax_refresh_section_amounts(section)
+    return sections
+
+
+def _austrian_tax_years_covered(rows):
+    return sorted({int(row["tax_year"]) for row in rows if row.get("tax_year") is not None})
+
+
+def _austrian_section_title(section_id, section):
+    law = f" ({section['law']})" if section["law"] else ""
+    return f"{section_id}. {section['label']}{law}"
+
+
+def _austrian_section_amount(section):
+    return _report_eur_cents(section["totals"]["amount_eur_cents"])
+
+
+def _austrian_unsupported_section_lines(section_id, section):
+    title = _austrian_section_title(section_id, section)
+    return [
+        title,
+        "-" * len(title),
+        "Status: not modelled in Kassiber yet; placeholder total is 0.00 EUR.",
+        "Amount: 0.00 EUR",
+        "",
+    ]
+
+
+def _austrian_disposal_split(rows):
+    split = {
+        "gains_proceeds": 0,
+        "gains_cost_basis": 0,
+        "gains_amount": 0,
+        "losses_proceeds": 0,
+        "losses_cost_basis": 0,
+        "losses_amount": 0,
+    }
+    for row in rows:
+        if row["kennzahl"] == 176:
+            split["losses_proceeds"] += int(row["proceeds_eur_cents"] or 0)
+            split["losses_cost_basis"] += int(row["cost_basis_eur_cents"] or 0)
+            split["losses_amount"] += int(row["form_amount_eur_cents"] or 0)
+        elif row["kennzahl"] == 174:
+            split["gains_proceeds"] += int(row["proceeds_eur_cents"] or 0)
+            split["gains_cost_basis"] += int(row["cost_basis_eur_cents"] or 0)
+            split["gains_amount"] += int(row["form_amount_eur_cents"] or 0)
+    return split
+
+
 def _austrian_e1kv_assumptions(rows):
     assumptions = [
         {
@@ -1122,17 +1344,23 @@ def report_austrian_e1kv(conn, workspace_ref, profile_ref, hooks: ReportHooks, t
     normalized_year = _normalize_tax_year(tax_year)
     rows = _austrian_e1kv_rows(conn, profile, normalized_year)
     quarantines = _austrian_e1kv_quarantines(conn, profile, normalized_year)
+    summary_rows = _austrian_e1kv_summary_rows(rows)
     return {
         "workspace": workspace["label"],
         "profile": profile["label"],
         "tax_year": normalized_year,
+        "year": normalized_year,
+        "years_covered": _austrian_tax_years_covered(rows),
         "fiat_currency": profile["fiat_currency"],
         "tax_country": profile["tax_country"],
         "form": "E 1kv",
         "form_section": AUSTRIAN_E1KV_FORM_SECTION,
         "review_gate": AUSTRIAN_E1KV_REVIEW_GATE,
         "assumptions": _austrian_e1kv_assumptions(rows),
-        "summary_rows": _austrian_e1kv_summary_rows(rows),
+        "summary_rows": summary_rows,
+        "kennzahl_totals": _austrian_e1kv_kennzahl_totals(summary_rows),
+        "section_order": list(AUSTRIAN_TAX_SECTION_ORDER),
+        "sections": _austrian_tax_sections(rows),
         "rows": rows,
         "data_quality": {
             "quarantines": quarantines,
@@ -1141,10 +1369,14 @@ def report_austrian_e1kv(conn, workspace_ref, profile_ref, hooks: ReportHooks, t
     }
 
 
+def report_austrian_tax_summary(conn, workspace_ref, profile_ref, hooks: ReportHooks, year=None):
+    return report_austrian_e1kv(conn, workspace_ref, profile_ref, hooks, tax_year=year)
+
+
 def _build_austrian_e1kv_report_lines(conn, workspace_ref, profile_ref, hooks: ReportHooks, tax_year=None):
     report = report_austrian_e1kv(conn, workspace_ref, profile_ref, hooks, tax_year=tax_year)
     scope = str(report["tax_year"])
-    title = f"Kassiber Austrian E 1kv Report - {report['profile']} ({scope})"
+    title = f"Kassiber Austrian E 1kv / Steuerbericht - {report['profile']} ({scope})"
     lines = [title, "=" * len(title), ""]
     lines.extend(
         _report_kv_lines(
@@ -1159,6 +1391,10 @@ def _build_austrian_e1kv_report_lines(conn, workspace_ref, profile_ref, hooks: R
             ]
         )
     )
+
+    lines.extend(["", "Hinweise zum Berichtsumfang", "---------------------------"])
+    for assumption in report["assumptions"]:
+        lines.append(f"{assumption['code']}: {assumption['message']}")
 
     lines.extend(["", "FinanzOnline Kennzahlen", "-----------------------"])
     lines.extend(
@@ -1177,32 +1413,100 @@ def _build_austrian_e1kv_report_lines(conn, workspace_ref, profile_ref, hooks: R
     )
 
     lines.extend(["", "I. Uebersicht", "------------"])
-    for row in report["summary_rows"]:
-        section_title = AUSTRIAN_E1KV_SECTION_TITLES.get(row["kennzahl"], row["label"])
-        lines.append(f"{section_title}: {_report_eur_cents(row['amount_eur_cents'])} EUR")
+    sections = report["sections"]
+    for group_title, section_ids in AUSTRIAN_TAX_SECTION_GROUPS:
+        lines.extend(["", group_title, "-" * len(group_title)])
+        for section_id in section_ids:
+            section = sections[section_id]
+            if not section["supported"]:
+                lines.extend(_austrian_unsupported_section_lines(section_id, section))
+                continue
 
-    lines.extend(["", "Assumptions", "-----------"])
-    for assumption in report["assumptions"]:
-        lines.append(f"{assumption['code']}: {assumption['message']}")
+            title_line = _austrian_section_title(section_id, section)
+            lines.extend([title_line, "-" * len(title_line)])
+            if section_id == "1.1":
+                split = _austrian_disposal_split(section["detail_rows"])
+                lines.extend(
+                    _report_kv_lines(
+                        [
+                            (
+                                "Verkaufserloese Gewinne",
+                                f"{_report_eur_cents(split['gains_proceeds'])} EUR",
+                            ),
+                            (
+                                "Anschaffungskosten Gewinne",
+                                f"{_report_eur_cents(split['gains_cost_basis'])} EUR",
+                            ),
+                            (
+                                "KZ 174 Wertsteigerungen",
+                                f"{_report_eur_cents(split['gains_amount'])} EUR",
+                            ),
+                            (
+                                "Verkaufserloese Verluste",
+                                f"{_report_eur_cents(split['losses_proceeds'])} EUR",
+                            ),
+                            (
+                                "Anschaffungskosten Verluste",
+                                f"{_report_eur_cents(split['losses_cost_basis'])} EUR",
+                            ),
+                            (
+                                "KZ 176 Wertverluste",
+                                f"{_report_eur_cents(split['losses_amount'])} EUR",
+                            ),
+                        ],
+                        label_width=34,
+                    )
+                )
+            elif section_id in {"2.1", "2.2"}:
+                lines.extend(
+                    _report_kv_lines(
+                        [
+                            (
+                                "KZ 172 laufende Einkuenfte",
+                                f"{_austrian_section_amount(section)} EUR",
+                            ),
+                            ("Rows", _report_count(section["totals"]["row_count"])),
+                        ],
+                        label_width=34,
+                    )
+                )
+            elif section_id == "3.1":
+                lines.extend(
+                    _report_kv_lines(
+                        [
+                            ("Informational amount", f"{_austrian_section_amount(section)} EUR"),
+                            ("Rows", _report_count(section["totals"]["row_count"])),
+                        ],
+                        label_width=34,
+                    )
+                )
+                lines.append(
+                    "Altbestand rows are included for review context and are outside "
+                    "the current E 1kv Kennzahlen 172/174/176."
+                )
+            lines.append("")
 
     lines.extend(["", "II. Transactions", "----------------"])
     if not report["rows"]:
         lines.append("No Austrian report rows in scope.")
-    for kennzahl in AUSTRIAN_E1KV_SUPPORTED_KENNZAHL_ORDER:
-        section_rows = [row for row in report["rows"] if row["kennzahl"] == kennzahl]
+    for section_id in ("1.1", "2.1", "2.2", "3.1"):
+        section = sections[section_id]
+        section_rows = section["detail_rows"]
         if not section_rows:
             continue
-        lines.extend(["", AUSTRIAN_E1KV_SECTION_TITLES[kennzahl], "-" * len(AUSTRIAN_E1KV_SECTION_TITLES[kennzahl])])
-        if kennzahl == 172:
+        section_title = _austrian_section_title(section_id, section)
+        lines.extend(["", section_title, "-" * len(section_title)])
+        if section_id in {"2.1", "2.2"}:
             lines.extend(
                 _markdown_table_lines(
-                    ["Date", "Tx ID", "Kind", "Category", "Amount EUR"],
+                    ["Date", "Tx ID", "Kind", "Category", "KZ", "Amount EUR"],
                     [
                         [
                             row["date"],
                             row["tx_id"],
                             row["kind"],
                             row["at_category_label"] or row["at_category"],
+                            row["kennzahl"] or "",
                             _report_eur_cents(row["form_amount_eur_cents"]),
                         ]
                         for row in section_rows
@@ -1212,11 +1516,21 @@ def _build_austrian_e1kv_report_lines(conn, workspace_ref, profile_ref, hooks: R
             continue
         lines.extend(
             _markdown_table_lines(
-                ["Date", "Tx ID", "Proceeds EUR", "Basis EUR", "Gain/Loss EUR"],
+                [
+                    "Date",
+                    "Tx ID",
+                    "Category",
+                    "KZ",
+                    "Proceeds EUR",
+                    "Basis EUR",
+                    "Gain/Loss EUR",
+                ],
                 [
                     [
                         row["date"],
                         row["tx_id"],
+                        row["at_category_label"] or row["at_category"],
+                        row["kennzahl"] or "",
                         _report_eur_cents(row["proceeds_eur_cents"]),
                         _report_eur_cents(row["cost_basis_eur_cents"]),
                         _report_eur_cents(row["gain_loss_eur_cents"]),
@@ -1277,6 +1591,10 @@ def export_austrian_e1kv_pdf_report(conn, workspace_ref, profile_ref, file_path,
     written["form"] = report["form"]
     written["assumptions"] = report["assumptions"]
     return written
+
+
+def export_austrian_pdf_report(conn, workspace_ref, profile_ref, file_path, hooks: ReportHooks, year=None):
+    return export_austrian_e1kv_pdf_report(conn, workspace_ref, profile_ref, file_path, hooks, tax_year=year)
 
 
 def _write_xlsx_sheet(workbook, sheet_name, columns, rows, formats):
@@ -1344,6 +1662,29 @@ def _austrian_e1kv_quality_rows(report):
                 "at_category": "",
                 "stored_kennzahl": "",
                 "export_kennzahl": "",
+            }
+        )
+    return rows
+
+
+def _austrian_e1kv_section_rows(report):
+    rows = []
+    for section_id in report["section_order"]:
+        section = report["sections"][section_id]
+        totals = section["totals"]
+        rows.append(
+            {
+                "section_id": section_id,
+                "label": section["label"],
+                "law": section["law"],
+                "supported": section["supported"],
+                "status": section["status"],
+                "kennzahlen": ", ".join(str(value) for value in section["kennzahlen"]),
+                "row_count": totals["row_count"],
+                "amount_eur_cents": totals["amount_eur_cents"],
+                "proceeds_eur_cents": totals["proceeds_eur_cents"],
+                "cost_basis_eur_cents": totals["cost_basis_eur_cents"],
+                "gain_loss_eur_cents": totals["gain_loss_eur_cents"],
             }
         )
     return rows
@@ -1420,6 +1761,25 @@ def export_austrian_e1kv_xlsx_report(conn, workspace_ref, profile_ref, file_path
 
     _write_xlsx_sheet(
         workbook,
+        "Sections",
+        [
+            ("Section", "section_id", "text", None, 10),
+            ("Label", "label", "wrap", None, 64),
+            ("Law", "law", "wrap", None, 24),
+            ("Supported", "supported", "text", None, 12),
+            ("Status", "status", "text", None, 16),
+            ("Kennzahlen", "kennzahlen", "text", None, 16),
+            ("Rows", "row_count", "int", None, 10),
+            ("Amount EUR", "amount_eur_cents", "money", _xlsx_eur_from_cents, 16),
+            ("Proceeds EUR", "proceeds_eur_cents", "money", _xlsx_eur_from_cents, 16),
+            ("Cost basis EUR", "cost_basis_eur_cents", "money", _xlsx_eur_from_cents, 16),
+            ("Gain/Loss EUR", "gain_loss_eur_cents", "money", _xlsx_eur_from_cents, 16),
+        ],
+        _austrian_e1kv_section_rows(report),
+        formats,
+    )
+    _write_xlsx_sheet(
+        workbook,
         "Transactions",
         [
             ("Tax year", "tax_year", "int", None, 10),
@@ -1475,12 +1835,13 @@ def export_austrian_e1kv_xlsx_report(conn, workspace_ref, profile_ref, file_path
         formats,
     )
     workbook.close()
+    sheets = ["Summary", "Sections", "Transactions", "Assumptions", "Data Quality"]
     return {
         "file": str(path.resolve()),
         "bytes": path.stat().st_size,
         "form": report["form"],
         "tax_year": report["tax_year"],
-        "sheets": ["Summary", "Transactions", "Assumptions", "Data Quality"],
+        "sheets": sheets,
         "rows": len(report["rows"]),
         "summary_rows": len(report["summary_rows"]),
     }
@@ -1837,10 +2198,12 @@ __all__ = [
     "ReportHooks",
     "build_austrian_e1kv_report_lines",
     "build_pdf_report_lines",
+    "export_austrian_pdf_report",
     "export_austrian_e1kv_pdf_report",
     "export_austrian_e1kv_xlsx_report",
     "export_pdf_report",
     "report_austrian_e1kv",
+    "report_austrian_tax_summary",
     "report_balance_history",
     "report_balance_sheet",
     "report_capital_gains",

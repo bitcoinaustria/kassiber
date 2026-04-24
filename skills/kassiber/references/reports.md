@@ -145,17 +145,21 @@ after `journals process`:
 
 ```bash
 kassiber --machine reports austrian-e1kv --year 2024
+kassiber --machine reports austrian-tax-summary --year 2024
 kassiber --format csv --output e1kv-2024.csv reports austrian-e1kv --year 2024
 kassiber reports export-austrian-e1kv-pdf --year 2024 --file e1kv-2024.pdf
+kassiber reports export-austrian --year 2024 --file austria-2024.pdf
 kassiber reports export-austrian-e1kv-xlsx --year 2024 --file e1kv-2024.xlsx
 ```
 
 The JSON envelope includes the review gate, the current ausländisch /
 self-custody Kennzahl assumption, FinanzOnline summary rows, row-level
-details, and quarantine/data-quality notes. The CSV output contains the
-row-level detail table. The PDF repeats the review gate and assumptions. The
-XLSX workbook contains separate summary, transaction, assumption, and
-data-quality sheets with accountant-friendly formatting.
+details, Steuerbericht-style sections 1.1-4.5, and quarantine/data-quality
+notes. `reports austrian-tax-summary` and `reports export-austrian` are aliases
+for the same annual Austrian handoff. The CSV output contains the row-level
+detail table. The PDF repeats the review gate and assumptions. The XLSX workbook
+contains separate summary, section, transaction, assumption, and data-quality
+sheets with accountant-friendly formatting.
 
 Do not hand-fill domestic-provider or withheld-KESt fields from Kassiber
 output today; Kassiber does not yet store the metadata needed for 171, 173, or

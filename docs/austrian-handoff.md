@@ -92,6 +92,12 @@ Kennzahlen such as 171, 173, or 175. CLI/PDF E 1kv
 exports must surface that assumption until the data model can represent
 withheld tax.
 
+`kassiber reports austrian-e1kv` is the canonical annual export. The
+friendlier `reports austrian-tax-summary` and `reports export-austrian`
+aliases use the same builder and data. The structured output includes
+Steuerbericht-style sections 1.1-4.5, with unsupported areas rendered
+as explicit zero-value placeholders instead of being silently omitted.
+
 One taxable event can split across multiple gain/loss rows in rp2, so
 Kassiber groups Austrian realized journal rows by `(taxable_event,
 at_category)` rather than by transaction id alone. That keeps mixed Alt

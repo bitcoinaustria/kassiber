@@ -4115,11 +4115,26 @@ class ReviewRegressionTest(unittest.TestCase):
         self.assertEqual(summary_by_kennzahl[172]["amount_eur_cents"], 800)
         self.assertEqual(summary_by_kennzahl[174]["amount_eur_cents"], 1000)
         self.assertEqual(summary_by_kennzahl[176]["amount_eur_cents"], 0)
+        self.assertEqual(report["kennzahl_totals"]["172"]["amount_eur_cents"], 800)
+        self.assertIn("2.1", report["sections"])
+        self.assertEqual(report["sections"]["2.1"]["totals"]["amount_eur_cents"], 800)
+        self.assertEqual(report["sections"]["4.4"]["status"], "not_modelled")
         rows_by_tx = {row["tx_id"]: row for row in report["rows"]}
         self.assertEqual(rows_by_tx["at-e1kv-staking"]["kennzahl"], 172)
         self.assertEqual(rows_by_tx["at-e1kv-staking"]["income_eur_cents"], 800)
         self.assertEqual(rows_by_tx["at-e1kv-sell"]["kennzahl"], 174)
         self.assertEqual(rows_by_tx["at-e1kv-sell"]["gain_loss_eur_cents"], 1000)
+
+        payload, result = self._run_json(
+            "reports", "austrian-tax-summary",
+            "--workspace", "Main",
+            "--profile", "Default",
+            "--year", "2024",
+        )
+        self._assert_ok(payload, result, "reports.austrian-tax-summary")
+        self.assertEqual(payload["data"]["form"], "E 1kv")
+        self.assertEqual(payload["data"]["year"], 2024)
+        self.assertEqual(payload["data"]["sections"]["2.1"]["totals"]["amount_eur_cents"], 800)
 
         csv_file = self.case_dir / "austrian-e1kv.csv"
         result = self._run_cli(
@@ -4149,6 +4164,18 @@ class ReviewRegressionTest(unittest.TestCase):
         self.assertGreater(payload["data"]["pages"], 0)
         self.assertGreater(pdf_file.stat().st_size, 0)
 
+        alias_pdf_file = self.case_dir / "austrian-alias.pdf"
+        payload, result = self._run_json(
+            "reports", "export-austrian",
+            "--workspace", "Main",
+            "--profile", "Default",
+            "--year", "2024",
+            "--file", str(alias_pdf_file),
+        )
+        self._assert_ok(payload, result, "reports.export-austrian")
+        self.assertEqual(payload["data"]["form"], "E 1kv")
+        self.assertGreater(alias_pdf_file.stat().st_size, 0)
+
         xlsx_file = self.case_dir / "austrian-e1kv.xlsx"
         payload, result = self._run_json(
             "reports", "export-austrian-e1kv-xlsx",
@@ -4159,7 +4186,7 @@ class ReviewRegressionTest(unittest.TestCase):
         )
         self._assert_ok(payload, result, "reports.export-austrian-e1kv-xlsx")
         self.assertEqual(payload["data"]["form"], "E 1kv")
-        self.assertEqual(payload["data"]["sheets"], ["Summary", "Transactions", "Assumptions", "Data Quality"])
+        self.assertEqual(payload["data"]["sheets"], ["Summary", "Sections", "Transactions", "Assumptions", "Data Quality"])
         self.assertIn("Transactions", payload["data"]["sheets"])
         self.assertGreater(xlsx_file.stat().st_size, 0)
         with zipfile.ZipFile(xlsx_file) as workbook:
@@ -4168,6 +4195,7 @@ class ReviewRegressionTest(unittest.TestCase):
             workbook_xml = workbook.read("xl/workbook.xml").decode("utf-8")
             shared_strings = workbook.read("xl/sharedStrings.xml").decode("utf-8")
         self.assertIn('name="Transactions"', workbook_xml)
+        self.assertIn('name="Sections"', workbook_xml)
         self.assertIn("at-e1kv-staking", shared_strings)
         self.assertIn("Form amount EUR", shared_strings)
 

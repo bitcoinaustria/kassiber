@@ -202,7 +202,9 @@ python3 -m kassiber reports balance-sheet
 python3 -m kassiber reports capital-gains
 # For Austrian/EUR profiles:
 python3 -m kassiber --machine reports austrian-e1kv --year 2024
+python3 -m kassiber --machine reports austrian-tax-summary --year 2024
 python3 -m kassiber reports export-austrian-e1kv-pdf --year 2024 --file e1kv-2024.pdf
+python3 -m kassiber reports export-austrian --year 2024 --file austria-2024.pdf
 python3 -m kassiber reports export-austrian-e1kv-xlsx --year 2024 --file e1kv-2024.xlsx
 python3 -m kassiber ui
 ```
@@ -236,7 +238,7 @@ Contributor docs:
 
 Notable gaps today:
 
-- Austrian E 1kv CSV/PDF/XLSX export is review-gated and currently targets the ausländisch / self-custody Kennzahlen; domestic-provider withheld KESt metadata is not modeled yet
+- Austrian E 1kv CSV/PDF/XLSX export is review-gated and currently targets the ausländisch / self-custody Kennzahlen; the PDF/JSON output includes Steuerbericht-style sections 1.1-4.5 with unsupported placeholders, while domestic-provider withheld KESt metadata is not modeled yet
 - full BTCPay invoice/payment provenance ingest is not implemented yet; BTCPay sync currently covers confirmed on-chain wallet history plus comments/labels
 - descriptor/xpub live sync through `bitcoinrpc` is not implemented yet
 - some Lightning node adapters are declared but do not sync yet

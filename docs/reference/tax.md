@@ -118,21 +118,26 @@ Current Austrian status:
 - Austrian profiles process through rp2's `AT` country plugin via the shared RP2 adapter
 - Kassiber keeps normalization, provenance capture, transfer preparation, cross-asset carry wiring, and current disposal-category / Kennzahl mapping
 - Austrian cross-asset `--policy carrying-value` pairs are supported and feed Kassiber's swap-basis-carry path before RP2
-- Austrian E 1kv export is available through `reports austrian-e1kv`, `reports export-austrian-e1kv-pdf`, and `reports export-austrian-e1kv-xlsx`
+- Austrian E 1kv export is available through `reports austrian-e1kv`, `reports export-austrian-e1kv-pdf`, and `reports export-austrian-e1kv-xlsx`; `reports austrian-tax-summary` and `reports export-austrian` are friendlier aliases for the same annual Austrian handoff
 - Austrian output should remain review-gated; Kassiber is not tax advice
 
 The E 1kv export is annual and review-oriented:
 
 ```bash
 python3 -m kassiber --machine reports austrian-e1kv --year 2024
+python3 -m kassiber --machine reports austrian-tax-summary --year 2024
 python3 -m kassiber --format csv --output e1kv-2024.csv reports austrian-e1kv --year 2024
 python3 -m kassiber reports export-austrian-e1kv-pdf --year 2024 --file e1kv-2024.pdf
+python3 -m kassiber reports export-austrian --year 2024 --file austria-2024.pdf
 python3 -m kassiber reports export-austrian-e1kv-xlsx --year 2024 --file e1kv-2024.xlsx
 ```
 
 Kassiber currently maps crypto rows to the ausländisch / self-custody
 Kennzahlen 172, 174, and 176. Domestic-provider and withheld-KESt rows such as
 171, 173, or 175 need structured provider metadata before Kassiber can populate
-them.
+them. The structured JSON/PDF report includes Steuerbericht-style sections
+1.1-4.5 so unsupported areas such as margin/derivatives, NFTs, gifts, lost
+coins, commercial mining, and minting are visible as zero-value placeholders
+instead of disappearing from the handoff.
 
 See [../plan/06-austrian-tax-engine.md](../plan/06-austrian-tax-engine.md) for the broader design and remaining Austrian backlog, plus [../austrian-handoff.md](../austrian-handoff.md) for the current marker / carry-basis contract.

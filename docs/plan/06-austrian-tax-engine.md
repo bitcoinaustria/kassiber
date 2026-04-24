@@ -121,12 +121,18 @@ journal fiat columns are still `REAL`.
 Implemented surfaces:
 
 - `reports austrian-e1kv --year <YYYY>` for structured JSON/plain output
+- `reports austrian-tax-summary --year <YYYY>` as a friendlier alias for the
+  same structured annual handoff
 - `--format csv --output <path> reports austrian-e1kv --year <YYYY>` for
   row-level CSV
 - `reports export-austrian-e1kv-pdf --year <YYYY> --file <path>` for the
   PDF handoff
+- `reports export-austrian --year <YYYY> --file <path>` as a friendlier alias
+  for the same PDF handoff
 - `reports export-austrian-e1kv-xlsx --year <YYYY> --file <path>` for the
   styled workbook handoff
+- Steuerbericht-style sections 1.1-4.5 in the structured output and PDF, with
+  unsupported sections rendered as explicit zero-value placeholders
 - CLI/PDF/XLSX review gate and current ausländisch / self-custody assumption
 - regression coverage for JSON, CSV, PDF, and XLSX generation
 
