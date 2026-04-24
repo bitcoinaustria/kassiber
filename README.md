@@ -16,6 +16,14 @@ flags without echoing raw descriptor material or arbitrary config keys. This
 is not a general privacy guarantee; addresses, paths, notes, and `--debug`
 output can still be sensitive.
 
+For public bug reports, use `kassiber diagnostics collect`. It emits a
+public-safe report with versions, command shape, sanitized error context, and
+state counts without raw txids, addresses, labels, notes, exact amounts, paths,
+backend hostnames, or secrets. Pass `--save` to also write the report under
+`exports/diagnostics/` in the active Kassiber state root. For one-off failing
+commands, add `--diagnostics-out auto` before the subcommand to write the same
+kind of report when an error occurs.
+
 ## What Kassiber does
 
 - keeps a local SQLite system of record
@@ -123,6 +131,7 @@ By default Kassiber stores state under `~/.kassiber/`:
 - `config/backends.env` for optional backend bootstrap overrides
 - `config/settings.json` for the managed path manifest and UI state
 - `exports/` for generated report files
+- `exports/diagnostics/` for optional public-safe bug-report artifacts
 - `attachments/` for managed attachment blobs
 
 Backend definitions and the stored default backend now live canonically in

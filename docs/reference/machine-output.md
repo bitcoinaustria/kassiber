@@ -8,6 +8,7 @@ Global flags:
 - `--output <path>`
 - `--machine` as a shortcut for JSON
 - `--debug` to include debug details on errors
+- `--diagnostics-out <path|auto>` to write a public-safe diagnostics report on error
 
 ## Success envelope
 
@@ -43,6 +44,39 @@ Errors emit:
 ```
 
 `--debug` may include stack traces and other sensitive context. Do not paste debug output publicly without reviewing it first.
+
+## Public Diagnostics
+
+`kassiber diagnostics collect` emits a public bug-report artifact:
+
+```json
+{
+  "kind": "diagnostics.collect",
+  "schema_version": 1,
+  "data": {
+    "report": {
+      "report_schema_version": 1,
+      "public_safe": true,
+      "environment": {},
+      "invocation": {},
+      "storage": {},
+      "state": {},
+      "checks": {}
+    },
+    "saved": null
+  }
+}
+```
+
+Use `kassiber --machine diagnostics collect --save` to also write the report
+under `exports/diagnostics/` in the active state root. Use
+`--diagnostics-out auto` before a failing subcommand to save the same public
+report only when that command errors.
+
+Diagnostics reports preserve shape, counts, and sanitized code context. They do
+not include raw txids, addresses, descriptors, xpubs, labels, notes, exact
+amounts, exact rates, backend hostnames, local paths, raw config, raw API
+payloads, imported rows, or stack locals. `--debug` remains private.
 
 ## Safe-To-Record Contract
 

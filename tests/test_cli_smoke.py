@@ -246,6 +246,14 @@ class CliSmokeTest(unittest.TestCase):
         self.assertEqual(payload["data"]["attachments_root"], str(self.data_root.parent / "attachments"))
         self.assertEqual(payload["data"]["env_file"], str(self.data_root.parent / "config" / "backends.env"))
 
+        payload = self._cli("diagnostics", "collect")
+        self._assert_kind(payload, "diagnostics.collect")
+        self.assertIsNone(payload["data"]["saved"])
+        report = payload["data"]["report"]
+        self.assertTrue(report["public_safe"])
+        self.assertEqual(report["storage"]["diagnostics_location"], "exports/diagnostics")
+        self.assertIn("counts", report["state"])
+
     def test_01a_backends_batch_size_roundtrip(self):
         payload = self._cli(
             "backends", "create", "bench",

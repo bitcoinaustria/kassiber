@@ -52,6 +52,7 @@ py -m kassiber attachments list --help >/dev/null
 py -m kassiber journals events --help >/dev/null
 py -m kassiber reports balance-history --help >/dev/null
 py -m kassiber rates --help >/dev/null
+py -m kassiber diagnostics collect --help >/dev/null
 py -m kassiber ui --help >/dev/null
 
 echo
