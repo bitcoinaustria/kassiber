@@ -30,7 +30,11 @@ import { RangeTabs, type Range } from "@/components/kb/RangeTabs";
 import { SyncDot } from "@/components/kb/SyncDot";
 import { ProtocolChip } from "@/components/kb/ProtocolChip";
 import { GutterStat } from "@/components/kb/Stats";
-import type { Connection, OverviewSnapshot, Tx } from "@/mocks/seed";
+import type {
+  Connection,
+  OverviewSnapshot,
+  Tx,
+} from "@/mocks/seed";
 
 const blurClass = (hidden: boolean) => (hidden ? "sensitive" : "");
 
@@ -47,11 +51,10 @@ const fmtEurThousands = (v: number) =>
 export function Overview() {
   const { data, isLoading } = useDaemon<OverviewSnapshot>("ui.overview.snapshot");
   const hideSensitive = useUiStore((s) => s.hideSensitive);
-  const setIdentity = useUiStore((s) => s.setIdentity);
 
   if (isLoading || !data?.data) {
     return (
-      <div className="flex min-h-screen items-center justify-center font-mono text-xs text-ink-3">
+      <div className="flex flex-1 items-center justify-center font-mono text-xs text-ink-3">
         loading…
       </div>
     );
@@ -60,43 +63,10 @@ export function Overview() {
   const snapshot = data.data;
   const isEmpty = snapshot.connections.length === 0;
 
-  return (
-    <div className="flex min-h-screen flex-col bg-paper">
-      <OverviewHeader onReset={() => setIdentity(null)} />
-      {isEmpty ? (
-        <EmptyOverview onAdd={() => {}} />
-      ) : (
-        <PopulatedOverview snapshot={snapshot} hideSensitive={hideSensitive} />
-      )}
-    </div>
-  );
-}
-
-function OverviewHeader({ onReset }: { onReset: () => void }) {
-  const identity = useUiStore((s) => s.identity);
-  return (
-    <div className="flex h-13 flex-shrink-0 items-center gap-7 border-b border-ink bg-paper px-4.5">
-      <span className="font-sans text-[20px] font-semibold tracking-tight text-ink">
-        Kassiber
-      </span>
-      <div className="h-5 w-px bg-line" />
-      <span className="font-mono text-[11px] uppercase tracking-[0.08em] text-ink-3">
-        Overview
-      </span>
-      <div className="ml-auto flex items-center gap-3">
-        {identity && (
-          <span className="font-mono text-[11px] text-ink-2">
-            {identity.workspace} · {identity.name}
-          </span>
-        )}
-        <button
-          onClick={onReset}
-          className="cursor-pointer border border-line bg-transparent px-2 py-1 font-mono text-[10px] uppercase tracking-[0.1em] text-ink-2 hover:border-ink hover:text-ink"
-        >
-          Reset
-        </button>
-      </div>
-    </div>
+  return isEmpty ? (
+    <EmptyOverview onAdd={() => {}} />
+  ) : (
+    <PopulatedOverview snapshot={snapshot} hideSensitive={hideSensitive} />
   );
 }
 
