@@ -377,8 +377,8 @@ ever compromised.
 - Render with shadcn/ui `Card` + finance-ledger styling. Tailwind config
   encodes the warm-neutral background, white work surfaces, restrained
   borders, serif/display accent + mono typography.
-- Wire the chart with Tremor's `LineChart` against the existing
-  balance-history data shape.
+- Wire the chart with the shadcn/ui chart block (Recharts under the
+  hood) against the existing balance-history data shape.
 - TanStack Query handles the fetch with a 5-minute stale time; manual
   refresh through a kbd shortcut and a refresh button.
 
@@ -663,7 +663,8 @@ green before merging the phase's PRs.
       `kassiber/<version>`.
 - [ ] AGPL: every JS/Rust/Python dep tracked in
       [THIRD_PARTY_LICENSES.md](../../THIRD_PARTY_LICENSES.md);
-      CI fails on a new MIT-incompatible-with-AGPL dep.
+      CI fails on any new dep with a license incompatible with
+      AGPL-3.0-only.
 - [ ] Code-signing identities live in CI secrets, never in the repo.
 - [ ] Bundled Python tree is read-only at runtime; user-writable state
       stays under `~/.kassiber/`.
@@ -754,5 +755,4 @@ These should be tracked at the project level, not silently accepted.
 - python-build-standalone: https://github.com/astral-sh/python-build-standalone
 - shadcn/ui: https://ui.shadcn.com
 - TanStack Query / Table / Router: https://tanstack.com
-- Tremor: https://www.tremor.so
 - Pydantic v2 → JSON Schema: https://docs.pydantic.dev

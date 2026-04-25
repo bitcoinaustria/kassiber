@@ -16,7 +16,7 @@ Adopt the following stack:
 - **Frontend:** React 19 + TypeScript + Vite
 - **UI primitives:** shadcn/ui (Radix + Tailwind; copy-paste, no version lock)
 - **Tables:** TanStack Table (virtualized, server-driven)
-- **Charts:** Tremor for dashboards; Recharts where Tremor's primitives don't fit
+- **Charts:** shadcn/ui chart blocks (Recharts under the hood); reach for another lib only if a screen genuinely outgrows what shadcn charts cover
 - **Forms:** React Hook Form + Zod
 - **Routing:** TanStack Router
 - **Server state:** TanStack Query against the Python daemon
@@ -39,9 +39,9 @@ Python.
 
 ## Why
 
-- **Component ecosystem.** TanStack Table, Tremor, shadcn/ui, Recharts, and
-  React Hook Form + Zod cover financial dashboards, accounting tables, and
-  forms at production polish in person-weeks.
+- **Component ecosystem.** TanStack Table, shadcn/ui (charts and the rest),
+  Recharts, and React Hook Form + Zod cover financial dashboards, accounting
+  tables, and forms at production polish in person-weeks.
 - **AI-assisted maintenance.** React + TypeScript + Tailwind + shadcn is
   among the densest training corpuses available. v0/Lovable/Artifacts all
   output exactly this stack natively; AI-generated screens drop in with
@@ -66,7 +66,7 @@ Python.
 │  │ Webview (system)        │    │ Rust core                │ │
 │  │  React + TS + shadcn    │◄──►│  - Tauri commands        │ │
 │  │  TanStack Query/Table   │IPC │  - sidecar supervisor    │ │
-│  │  Tremor / Recharts      │    │  - path resolution       │ │
+│  │  Recharts                │    │  - path resolution       │ │
 │  └─────────────────────────┘    └─────────────┬────────────┘ │
 │                                                │ stdin/stdout │
 │                                                ▼ JSONL        │
@@ -138,5 +138,4 @@ before the first public release.
 - python-build-standalone: https://github.com/astral-sh/python-build-standalone
 - shadcn/ui: https://ui.shadcn.com
 - TanStack Query / Table / Router: https://tanstack.com
-- Tremor: https://www.tremor.so
 - Pydantic v2 → JSON Schema: https://docs.pydantic.dev

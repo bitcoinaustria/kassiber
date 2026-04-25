@@ -62,7 +62,7 @@ Out of scope unless a future design says otherwise:
 | Desktop UI | In progress | Tauri 2 + React + TypeScript with a Python sidecar daemon, per [01-stack-decision.md](01-stack-decision.md) and [04-desktop-ui.md](04-desktop-ui.md) |
 | Project storage | Target-state | app-wide to per-project migration still needs a focused plan |
 | External documents | Design | reconcile BTC evidence without becoming ERP/invoicing |
-| Packaging | Planned | Briefcase intended; macOS `.app` not proven yet |
+| Packaging | Planned | Tauri bundler with `python-build-standalone` sidecar per [01-stack-decision.md](01-stack-decision.md); no signed build proven yet |
 
 ## Stack
 

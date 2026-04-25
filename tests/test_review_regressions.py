@@ -5568,6 +5568,20 @@ class ReviewRegressionTest(unittest.TestCase):
         self.assertIn("Kennzahl-Abweichungen", notes_text)
         self.assertIn("at-e1kv-staking", notes_text)
 
+    def test_pdf_report_substitutes_non_latin1_glyphs(self):
+        # Pin the documented Latin-1 PDF rendering regression (see
+        # kassiber/pdf_report.py module docstring and TODO.md "Open bugs
+        # and debt"). Flip these to assert preservation when the
+        # Unicode-safe renderer follow-up lands.
+        from kassiber.pdf_report import _ascii_text
+
+        self.assertEqual(_ascii_text("€"), "?")
+        self.assertEqual(_ascii_text("₿"), "?")
+        self.assertEqual(_ascii_text("↔"), "?")
+        # Latin-1 covers German umlauts and ß, so they survive today.
+        self.assertEqual(_ascii_text("Übersicht"), "Übersicht")
+        self.assertEqual(_ascii_text("Größe ä ö ü ß"), "Größe ä ö ü ß")
+
     def test_austrian_e1kv_empty_year_keeps_unsupported_placeholders(self):
         self._bootstrap_austrian_e1kv_wallet(label="AustrianEmpty")
         payload, result = self._run_json(
