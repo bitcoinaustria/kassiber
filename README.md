@@ -171,39 +171,6 @@ Before pushing code or docs changes, run:
 ./scripts/quality-gate.sh
 ```
 
-## Desktop UI (in development)
-
-A Tauri 2 + React 19 + TypeScript desktop frontend lives at [ui-tauri/](ui-tauri/). It is under active translation per [docs/plan/04-desktop-ui.md](docs/plan/04-desktop-ui.md); the CLI remains the primary control surface today.
-
-The frontend currently runs against a mock daemon (`VITE_DAEMON=mock`, the default) — every screen renders against hand-rolled fixtures keyed by daemon `kind`. The Rust supervisor (`ui-tauri/src-tauri/`) and Python sidecar daemon (`kassiber/daemon.py`) land in later phases of the plan; until then the UI is browser-only.
-
-Requirements:
-
-- Node `>=20`
-- `pnpm` (https://pnpm.io)
-
-Install and run the dev server:
-
-```bash
-cd ui-tauri
-pnpm install
-pnpm dev
-# → http://localhost:5173
-```
-
-The app boots into the Welcome onboarding flow on first load, persists identity to localStorage, and routes through Overview / Connections / Transactions / Reports / Profiles. AppHeader's overflow menu (top right) hosts the currency (₿/€) and language (EN/DE) toggles, the hide-sensitive eye, and the Settings modal.
-
-Other useful commands:
-
-```bash
-pnpm typecheck   # tsc --noEmit project references
-pnpm lint        # ESLint flat config
-pnpm build       # production bundle into dist/
-pnpm test        # Vitest (no tests yet)
-```
-
-`pnpm typecheck && pnpm lint && pnpm build` is the local UI gate; pair it with `./scripts/quality-gate.sh` from the repo root before pushing changes that touch both layers.
-
 ## Quick start
 
 Minimal setup:
