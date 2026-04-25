@@ -4,7 +4,7 @@
 
 - Kassiber is a local-first Bitcoin accounting CLI.
 - The CLI entrypoint lives in [kassiber/cli/main.py](kassiber/cli/main.py). The remaining command implementation surface lives in [kassiber/cli/handlers.py](kassiber/cli/handlers.py).
-- Desktop UI: Tauri 2 + React + TypeScript with a Python sidecar daemon. Stack decision lives in [docs/plan/01-stack-decision.md](docs/plan/01-stack-decision.md); implementation plan lives in [docs/plan/04-desktop-ui.md](docs/plan/04-desktop-ui.md). [docs/plan/00-overview.md](docs/plan/00-overview.md) remains the orientation map. The desktop shell itself is under construction in `ui-tauri/` per the plan.
+- Desktop UI: Tauri 2 + React + TypeScript with a Python sidecar daemon. Stack decision lives in [docs/plan/01-stack-decision.md](docs/plan/01-stack-decision.md); implementation plan lives in [docs/plan/04-desktop-ui.md](docs/plan/04-desktop-ui.md). [docs/plan/00-overview.md](docs/plan/00-overview.md) remains the orientation map. The frontend skeleton (Vite + React 19 + TS + Tailwind v4 + TanStack + Zustand + mock daemon transport) lives at [ui-tauri/](ui-tauri/); Claude Design source mockups are staged under `ui-tauri/claude-design/`. The Rust supervisor (`ui-tauri/src-tauri/`) and Python daemon (`kassiber/daemon.py`) land in later phases per the plan.
 - External-document reconciliation scope and architecture are captured in [docs/plan/08-external-document-reconciliation.md](docs/plan/08-external-document-reconciliation.md).
 - Supporting modules (bottom-up — no back-edges into the CLI layer):
   - [kassiber/errors.py](kassiber/errors.py) — `AppError` typed exception carrying `code`, `hint`, `details`, `retryable`.

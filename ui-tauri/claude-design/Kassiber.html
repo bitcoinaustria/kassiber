@@ -1,0 +1,292 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<title>Kassiber — Bitcoin-only accounting</title>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Blinker:wght@300;400;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+
+<style>
+  :root {
+    /* Bitcoin Austria palette */
+    --paper:      #ffffff;
+    --paper-2:    #fafafa;
+    --ink:        #222222;
+    --ink-2:      #4a4a4a;
+    --ink-3:      #8a8a8a;
+    --line:       #ececec;
+    --line-2:     #d4d4d4;
+    --accent:     #e3000f;
+    --accent-2:   #ff4954;
+
+    --serif: 'Blinker', -apple-system, 'Helvetica Neue', sans-serif;
+    --sans:  'Blinker', -apple-system, 'Helvetica Neue', sans-serif;
+    --mono:  'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; height: 100%; }
+  body {
+    font-family: var(--sans);
+    color: var(--ink);
+    background: #ececec;
+    background-image:
+      radial-gradient(circle at 30% 20%, rgba(255,255,255,0.6), transparent 60%),
+      radial-gradient(circle at 70% 80%, rgba(227,0,15,0.03), transparent 60%);
+  }
+  #app {
+    min-height: 100vh;
+    display: flex; align-items: center; justify-content: center;
+    padding: 24px;
+  }
+  ::-webkit-scrollbar { width: 8px; height: 8px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--line-2); border-radius: 0; }
+  ::-webkit-scrollbar-thumb:hover { background: var(--ink-3); }
+  @keyframes kb-fade { from { opacity: 0; } to { opacity: 1; } }
+  @keyframes kb-rise { from { transform: translateY(8px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+  @keyframes kb-shake { 0%,100%{transform:translateX(0);} 25%{transform:translateX(-6px);} 75%{transform:translateX(6px);} }
+  .sensitive { filter: blur(7px) saturate(0.6); user-select: none; }
+  button { font-family: inherit; }
+  button:focus { outline: 1px solid var(--accent); outline-offset: 1px; }
+  input:focus { outline: none; }
+  input:focus-within { border-color: var(--ink); }
+  .tweaks-panel {
+    position: fixed; right: 20px; bottom: 20px; width: 260px;
+    background: var(--paper-2); border: 1px solid var(--ink);
+    box-shadow: 8px 8px 0 var(--ink);
+    z-index: 1000; font-family: var(--sans); display: none;
+  }
+  .tweaks-panel.open { display: block; }
+</style>
+
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+</head>
+<body>
+<div id="app"></div>
+
+<script type="text/babel" src="components/strings.jsx"></script>
+<script type="text/babel" src="components/frame.jsx"></script>
+<script type="text/babel" src="components/logo.jsx"></script>
+<script type="text/babel" src="components/ui.jsx"></script>
+<script type="text/babel" src="components/chrome.jsx"></script>
+<script type="text/babel" src="screens/welcome.jsx"></script>
+<script type="text/babel" src="screens/overview.jsx"></script>
+<script type="text/babel" src="screens/connections.jsx"></script>
+<script type="text/babel" src="screens/transactions.jsx"></script>
+<script type="text/babel" src="screens/tax.jsx"></script>
+<script type="text/babel" src="screens/settings.jsx"></script>
+<script type="text/babel" src="screens/profiles.jsx"></script>
+
+<script type="text/babel">
+const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/{
+  "hideSensitive": false,
+  "startScreen": "overview-full"
+}/*EDITMODE-END*/;
+
+function App() {
+  const [lang, setLang] = React.useState(() => localStorage.getItem('kb.lang') || 'en');
+  const [ccy, setCcy] = React.useState(() => localStorage.getItem('kb.ccy') || 'btc');
+  const [route, setRoute] = React.useState(() => localStorage.getItem('kb.route') || 'welcome');
+  const [user, setUser] = React.useState(() => {
+    try { return JSON.parse(localStorage.getItem('kb.user')) || null; } catch { return null; }
+  });
+  const [connections, setConnections] = React.useState(() => {
+    try { return JSON.parse(localStorage.getItem('kb.connections')) || []; } catch { return []; }
+  });
+  const [settingsOpen, setSettingsOpen] = React.useState(false);
+  const [addOpen, setAddOpen] = React.useState(false);
+  const [addKind, setAddKind] = React.useState(null);
+  const [selectedConn, setSelectedConn] = React.useState(null);
+  const [hideSensitive, setHideSensitive] = React.useState(TWEAK_DEFAULTS.hideSensitive);
+  const [tweaksOpen, setTweaksOpen] = React.useState(false);
+  const [labelsOpen, setLabelsOpen] = React.useState(null); // null | { scope: 'all' | connId, mode: 'import' | 'export' }
+
+  const openImportLabels = (scope) => setLabelsOpen({ scope: scope || 'all', mode: 'import' });
+  const openExportLabels = (scope) => setLabelsOpen({ scope: scope || 'all', mode: 'export' });
+
+  const t = STRINGS[lang];
+
+  React.useEffect(() => localStorage.setItem('kb.lang', lang), [lang]);
+  React.useEffect(() => localStorage.setItem('kb.ccy', ccy), [ccy]);
+  React.useEffect(() => localStorage.setItem('kb.route', route), [route]);
+  React.useEffect(() => { if (user) localStorage.setItem('kb.user', JSON.stringify(user)); }, [user]);
+  React.useEffect(() => localStorage.setItem('kb.connections', JSON.stringify(connections)), [connections]);
+
+  React.useEffect(() => {
+    const onMsg = (e) => {
+      if (e.data?.type === '__activate_edit_mode') setTweaksOpen(true);
+      if (e.data?.type === '__deactivate_edit_mode') setTweaksOpen(false);
+    };
+    window.addEventListener('message', onMsg);
+    window.parent.postMessage({ type: '__edit_mode_available' }, '*');
+    return () => window.removeEventListener('message', onMsg);
+  }, []);
+
+  let screen;
+
+  if (!user || route === 'welcome') {
+    return (
+      <>
+        <MacFrame title="Kassiber — local" width={1360} height={860}>
+          <WelcomeScreen t={t} onEnter={(u) => { setUser(u); setRoute('overview'); }} />
+        </MacFrame>
+        <TopControls lang={lang} setLang={setLang} hideSensitive={hideSensitive} setHideSensitive={setHideSensitive}
+          route={route} setRoute={setRoute} user={user}
+          onReset={() => { localStorage.clear(); location.reload(); }} />
+      </>
+    );
+  }
+
+  const isEmpty = connections.length === 0;
+
+  if (route === 'overview' || route === 'overview-full') {
+    const showPopulated = route === 'overview-full' || !isEmpty;
+    screen = showPopulated
+      ? <PopulatedOverview t={t} lang={lang} hideSensitive={hideSensitive} ccy={ccy}
+          onAddConnection={() => setAddOpen(true)}
+          onSelectConnection={(id) => { setSelectedConn(id); setRoute('connection-detail'); }}
+          onOpenTx={() => setRoute('transactions')}
+        />
+      : <EmptyOverview t={t} onAdd={() => setAddOpen(true)} />;
+  } else if (route === 'transactions') {
+    screen = <TransactionsScreen hideSensitive={hideSensitive} onBack={() => setRoute('overview-full')}
+      onImportLabels={() => openImportLabels('all')}
+      onExportLabels={() => openExportLabels('all')} />;
+  } else if (route === 'connections') {
+    screen = <PopulatedOverview t={t} lang={lang} hideSensitive={hideSensitive} ccy={ccy}
+      onAddConnection={() => setAddOpen(true)}
+      onSelectConnection={(id) => { setSelectedConn(id); setRoute('connection-detail'); }}
+      onOpenTx={() => setRoute('transactions')}
+    />;
+  } else if (route === 'reports') {
+    screen = <TaxReportScreen hideSensitive={hideSensitive} onBack={() => setRoute('overview-full')} />;
+  } else if (route === 'connection-detail') {
+    const conn = MOCK.connections.find(c => c.id === selectedConn) || MOCK.connections[0];
+    screen = <ConnectionDetail conn={conn} onBack={() => setRoute('overview-full')} hideSensitive={hideSensitive}
+      onImportLabels={() => openImportLabels(conn.id)}
+      onExportLabels={() => openExportLabels(conn.id)} />;
+  } else if (route === 'profiles' && window.ProfilesScreen) {
+    screen = <ProfilesScreen onBack={() => setRoute('overview-full')} />;
+  }
+
+  return (
+    <>
+      <MacFrame title={`Kassiber · ${user?.workspace || 'My Books'}`} width={1360} height={860}>
+        <AppHeader t={t} lang={lang} setLang={setLang} ccy={ccy} setCcy={setCcy}
+          name={user?.name || 'Alice'} workspace={user?.workspace || 'My Books'}
+          onOpenSettings={() => setSettingsOpen(true)}
+          onOpenProfiles={() => setRoute('profiles')}
+          route={route === 'connection-detail' ? 'overview-full' : (route === 'overview-full' ? 'overview' : route)}
+          setRoute={(r) => setRoute(r === 'overview' ? 'overview-full' : r)}
+        />
+        {screen}
+        <AppFooter onOpenSettings={() => setSettingsOpen(true)} />
+
+        <ConnectionTypePicker open={addOpen && !addKind} onClose={() => { setAddOpen(false); setAddKind(null); }}
+          onPick={(k) => setAddKind(k)} t={t} />
+        <XpubForm open={addOpen && addKind === 'xpub'}
+          onBack={() => setAddKind(null)}
+          onClose={() => { setAddOpen(false); setAddKind(null); }}
+          onSave={(c) => { setConnections([...connections, {...c, id: 'c' + Date.now()}]); setAddOpen(false); setAddKind(null); setRoute('overview-full'); }} />
+        {addOpen && addKind && addKind !== 'xpub' && (
+          <Modal open={true} title={t.kind[addKind].name} back={() => setAddKind(null)} onClose={() => { setAddOpen(false); setAddKind(null); }} width={560}>
+            <p style={{margin:0, fontFamily:'var(--sans)', fontSize:13, color:'var(--ink-2)'}}>
+              {t.kind[addKind].desc}. Form coming in next iteration.
+            </p>
+            <div style={{marginTop:20, display:'flex', justifyContent:'flex-end', gap:10}}>
+              <Button variant="ghost" onClick={() => setAddKind(null)}>Back</Button>
+              <Button onClick={() => { setAddOpen(false); setAddKind(null); }}>Close</Button>
+            </div>
+          </Modal>
+        )}
+        <SettingsModal open={settingsOpen} onClose={() => setSettingsOpen(false)}
+          hideSensitive={hideSensitive} setHideSensitive={setHideSensitive}
+          onImportLabels={() => { setSettingsOpen(false); openImportLabels('all'); }}
+          onExportLabels={() => { setSettingsOpen(false); openExportLabels('all'); }}
+          onImportCsv={() => { setSettingsOpen(false); /* CSV form to come */ }} />
+
+        <Bip329Form open={!!labelsOpen} onClose={() => setLabelsOpen(null)}
+          onImport={() => setLabelsOpen(null)}
+          connections={MOCK.connections}
+          scopedConnId={labelsOpen?.scope !== 'all' ? labelsOpen?.scope : null}
+          mode={labelsOpen?.mode || 'import'} />
+      </MacFrame>
+      <TopControls lang={lang} setLang={setLang} hideSensitive={hideSensitive} setHideSensitive={setHideSensitive}
+        route={route} setRoute={setRoute} user={user}
+        onReset={() => { localStorage.clear(); location.reload(); }} />
+      {tweaksOpen && (
+        <TweaksPanel hideSensitive={hideSensitive} setHideSensitive={setHideSensitive} />
+      )}
+    </>
+  );
+}
+
+function TopControls({ route, setRoute, user, onReset }) {
+  const scenes = [
+    ['welcome', 'Welcome'],
+    ['overview', user ? 'Overview · empty' : 'Overview · sign in first'],
+    ['overview-full', 'Overview · data'],
+    ['transactions', 'Transactions'],
+    ['reports', 'Tax · capital gains'],
+    ['connection-detail', 'Connection detail'],
+    ['profiles', 'Profiles'],
+  ];
+  return (
+    <div style={{
+      position: 'fixed', top: 12, left: 12, zIndex: 500,
+      background: 'var(--paper-2)', border: '1px solid var(--ink)',
+      padding: 6, display: 'flex', gap: 4, alignItems: 'center',
+      boxShadow: '3px 3px 0 var(--accent)',
+    }}>
+      <span style={{ fontFamily: 'var(--mono)', fontSize: 9, color: 'var(--ink-3)', letterSpacing: '0.1em', padding: '0 6px' }}>SCENE</span>
+      {scenes.map(([k, label]) => (
+        <button key={k} onClick={() => setRoute(k)} style={{
+          background: route === k ? 'var(--ink)' : 'transparent',
+          color: route === k ? 'var(--paper)' : 'var(--ink)',
+          border: 'none',
+          padding: '3px 8px',
+          fontFamily: 'var(--mono)', fontSize: 10,
+          letterSpacing: '0.04em',
+          cursor: 'pointer',
+        }}>{label}</button>
+      ))}
+      <span style={{ width: 1, height: 14, background: 'var(--line)', margin: '0 4px' }} />
+      <button onClick={onReset} style={{
+        background: 'transparent', color: 'var(--accent)', border: 'none',
+        padding: '3px 8px', fontFamily: 'var(--mono)', fontSize: 10,
+        letterSpacing: '0.04em', cursor: 'pointer',
+      }}>⟲ reset</button>
+    </div>
+  );
+}
+
+function TweaksPanel({ hideSensitive, setHideSensitive }) {
+  return (
+    <div className="tweaks-panel open">
+      <div style={{ padding: '10px 14px', borderBottom: '1px solid var(--line)', fontFamily: 'var(--sans)', fontSize: 15, fontWeight: 600 }}>
+        Tweaks
+      </div>
+      <div style={{ padding: 14, display: 'flex', flexDirection: 'column', gap: 12 }}>
+        <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+          <div>
+            <div style={{ fontSize: 12 }}>Hide sensitive data</div>
+            <div style={{ fontSize: 10, color: 'var(--ink-3)' }}>Blurs balances &amp; amounts</div>
+          </div>
+          <Toggle on={hideSensitive} onChange={(v) => {
+            setHideSensitive(v);
+            window.parent.postMessage({ type: '__edit_mode_set_keys', edits: { hideSensitive: v } }, '*');
+          }} />
+        </label>
+      </div>
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('app')).render(<App />);
+</script>
+</body>
+</html>

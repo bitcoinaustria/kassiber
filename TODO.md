@@ -205,7 +205,15 @@ and [docs/plan/04-desktop-ui.md](docs/plan/04-desktop-ui.md).
 
 ### 1.2 Tauri shell skeleton + typed IPC + first screen
 
-- [ ] `ui-tauri/` workspace: Vite + React + TS + shadcn baseline
+- [x] `ui-tauri/` workspace skeleton: Vite + React 19 + TS + Tailwind v4
+  + TanStack Query/Router + Zustand + theme tokens (Bitcoin Austria palette)
+  + bundled Blinker/JetBrains Mono fonts + mock daemon transport. Claude
+  Design originals staged under `ui-tauri/claude-design/` for reference;
+  translation lands in `ui-tauri/src/routes/` per phase 1.3.
+- [ ] shadcn primitives added per-screen via `pnpm dlx shadcn@latest add`
+  (button, card, dialog, switch, input, label, select, tabs, tooltip,
+  scroll-area, table, badge, separator, sheet, sonner, dropdown-menu,
+  chart) — install only what each screen actually needs
 - [ ] Rust supervisor with capability allowlist generated from Pydantic
 - [ ] CSP locked to `'self'`; no remote script
 - [ ] Pydantic v2 contracts to JSON Schema to TS types in CI; schema-drift
