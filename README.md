@@ -2,6 +2,12 @@
 
 ![Kassiber banner](docs/assets/readme-banner.png)
 
+> [!WARNING]
+> Kassiber is pre-alpha software. Expect crashes, bugs, breaking changes, and
+> inaccurate accounting or tax data. Do not rely on Kassiber as the only source
+> of truth for filings, bookkeeping, audits, or financial decisions. Review all
+> output independently before using it.
+
 Kassiber is an open-source, local-first Bitcoin accounting CLI. A desktop shell built on Tauri 2 + React + TypeScript with a Python sidecar daemon is in active development (see [docs/plan/01-stack-decision.md](docs/plan/01-stack-decision.md) and [docs/plan/04-desktop-ui.md](docs/plan/04-desktop-ui.md)).
 
 It keeps your accounting state on your machine, syncs from Bitcoin-native sources, and processes journals locally before generating reports. Built from scratch, it takes early visual cues from Clams and other tools in the space without inheriting the cloud trust model.
