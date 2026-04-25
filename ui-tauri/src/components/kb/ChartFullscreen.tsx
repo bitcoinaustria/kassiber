@@ -25,6 +25,7 @@ import {
 } from "@/components/ui/dialog";
 import { MOCK_OVERVIEW } from "@/mocks/seed";
 import { useUiStore } from "@/store/ui";
+import { useElementSize } from "@/lib/useElementSize";
 import { cn } from "@/lib/utils";
 
 type Range = "d" | "w" | "m" | "ytd" | "1y" | "5y" | "all";
@@ -243,8 +244,8 @@ export function ChartFullscreen({
         })
       : "₿ " + v.toFixed(v < 0.01 ? 8 : 4);
 
-  const W = 1100;
-  const H = 440;
+  const [chartContainerRef, { width: W, height: H }] =
+    useElementSize<HTMLDivElement>(1100, 440);
   const pad = { t: 28, r: 24, b: 36, l: 80 };
   const yMax = max * 1.08;
   const yMin = 0;
@@ -513,11 +514,12 @@ export function ChartFullscreen({
 
         {/* Chart */}
         <div className="flex min-h-0 flex-1 flex-col px-4.5 pt-3">
-          <div className="relative min-h-0 flex-1">
+          <div ref={chartContainerRef} className="relative min-h-0 flex-1">
             <svg
+              width={W}
+              height={H}
               viewBox={`0 0 ${W} ${H}`}
-              preserveAspectRatio="none"
-              className="block size-full cursor-crosshair"
+              className="block cursor-crosshair"
               onMouseMove={onMouseMove}
               onMouseLeave={() => setHover(null)}
             >

@@ -6,14 +6,18 @@
  * without needing more underlying data points; once the daemon
  * exposes a real `reports.balance-history` series we'll switch to
  * that and likely drop down to the shadcn `chart` (Recharts) primitive.
+ *
+ * Sizing: the chart fills its container in both axes via ResizeObserver
+ * and matches its viewBox to the measured pixel dimensions, so font
+ * sizes and stroke widths render at the expected size regardless of
+ * viewport. Callers control size via the wrapping element's CSS.
  */
 
+import { useElementSize } from "@/lib/useElementSize";
 import type { Range } from "./RangeTabs";
 
 interface BalanceChartProps {
   series: number[];
-  width?: number;
-  height?: number;
   ccy?: "btc" | "eur";
   priceEur?: number;
   range?: Range;
@@ -38,12 +42,15 @@ const RANGE_CFG: Record<Range, RangeConfig> = {
 
 export function BalanceChart({
   series,
-  width = 520,
-  height = 240,
   ccy = "btc",
   priceEur = 60000,
   range = "ytd",
 }: BalanceChartProps) {
+  const [containerRef, { width, height }] = useElementSize<HTMLDivElement>(
+    520,
+    240,
+  );
+
   const cfg = RANGE_CFG[range];
   const end = series[series.length - 1];
   const startVal = end * cfg.start;
@@ -93,86 +100,87 @@ export function BalanceChart({
       : v.toFixed(1);
 
   return (
-    <svg
-      width="100%"
-      height={height}
-      viewBox={`0 0 ${width} ${height}`}
-      preserveAspectRatio="none"
-      className="block"
-    >
-      {yTicks.map((tk, i) => {
-        const yy = pad.t + tk * (height - pad.t - pad.b);
-        return (
-          <g key={i}>
-            <line
-              x1={pad.l}
-              x2={width - pad.r}
-              y1={yy}
-              y2={yy}
-              stroke="var(--color-line)"
-              strokeDasharray={i === yTicks.length - 1 ? "" : "2 3"}
-            />
+    <div ref={containerRef} className="block h-full w-full">
+      <svg
+        width={width}
+        height={height}
+        viewBox={`0 0 ${width} ${height}`}
+        className="block"
+      >
+        {yTicks.map((tk, i) => {
+          const yy = pad.t + tk * (height - pad.t - pad.b);
+          return (
+            <g key={i}>
+              <line
+                x1={pad.l}
+                x2={width - pad.r}
+                y1={yy}
+                y2={yy}
+                stroke="var(--color-line)"
+                strokeDasharray={i === yTicks.length - 1 ? "" : "2 3"}
+              />
+              <text
+                x={pad.l - 6}
+                y={yy + 3}
+                textAnchor="end"
+                fontFamily="var(--font-mono)"
+                fontSize="9"
+                fill="var(--color-ink-3)"
+              >
+                {fmtY((1 - tk) * max)}
+              </text>
+            </g>
+          );
+        })}
+        <path d={areaPath} fill="var(--color-accent)" fillOpacity="0.08" />
+        <path
+          d={linePath}
+          stroke="var(--color-accent)"
+          strokeWidth="1.5"
+          fill="none"
+        />
+        {pts.map(
+          (p, i) =>
+            (i % showDotEvery === 0 || i === pts.length - 1) && (
+              <circle
+                key={i}
+                cx={p[0]}
+                cy={p[1]}
+                r="2"
+                fill="var(--color-paper-2)"
+                stroke="var(--color-accent)"
+                strokeWidth="1"
+              />
+            ),
+        )}
+        {cfg.labels.map((lbl, i) => {
+          const frac =
+            cfg.labels.length === 1 ? 0.5 : i / (cfg.labels.length - 1);
+          const x = pad.l + frac * (width - pad.l - pad.r);
+          return (
             <text
-              x={pad.l - 6}
-              y={yy + 3}
-              textAnchor="end"
+              key={i}
+              x={x}
+              y={height - 6}
+              textAnchor="middle"
               fontFamily="var(--font-mono)"
               fontSize="9"
               fill="var(--color-ink-3)"
             >
-              {fmtY((1 - tk) * max)}
+              {lbl}
             </text>
-          </g>
-        );
-      })}
-      <path d={areaPath} fill="var(--color-accent)" fillOpacity="0.08" />
-      <path
-        d={linePath}
-        stroke="var(--color-accent)"
-        strokeWidth="1.5"
-        fill="none"
-      />
-      {pts.map(
-        (p, i) =>
-          (i % showDotEvery === 0 || i === pts.length - 1) && (
-            <circle
-              key={i}
-              cx={p[0]}
-              cy={p[1]}
-              r="2"
-              fill="var(--color-paper-2)"
-              stroke="var(--color-accent)"
-              strokeWidth="1"
-            />
-          ),
-      )}
-      {cfg.labels.map((lbl, i) => {
-        const frac =
-          cfg.labels.length === 1 ? 0.5 : i / (cfg.labels.length - 1);
-        const x = pad.l + frac * (width - pad.l - pad.r);
-        return (
-          <text
-            key={i}
-            x={x}
-            y={height - 6}
-            textAnchor="middle"
-            fontFamily="var(--font-mono)"
-            fontSize="9"
-            fill="var(--color-ink-3)"
-          >
-            {lbl}
-          </text>
-        );
-      })}
-      <text
-        x={pad.l - 28}
-        y={pad.t + 4}
-        fontFamily="var(--font-mono)"
-        fontSize="9"
-        fill="var(--color-ink-3)"
-      >
-        {ccy === "eur" ? "€" : "₿"}
-      </text>
-    </svg>
+          );
+        })}
+        <text
+          x={pad.l - 28}
+          y={pad.t + 4}
+          fontFamily="var(--font-mono)"
+          fontSize="9"
+          fill="var(--color-ink-3)"
+        >
+          {ccy === "eur" ? "€" : "₿"}
+        </text>
+      </svg>
+    </div>
   );
 }

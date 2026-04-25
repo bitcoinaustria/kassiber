@@ -180,14 +180,13 @@ function PopulatedOverview({
               chartRange={chartRange}
               currency={currency}
             />
-            <div className="flex min-h-0 flex-col p-3.5">
+            <div className="flex min-h-[260px] flex-col p-3.5">
               <div className="min-h-0 flex-1">
                 <BalanceChart
                   series={snapshot.balanceSeries}
                   ccy={currency}
                   priceEur={snapshot.priceEur}
                   range={chartRange}
-                  height={240}
                 />
               </div>
             </div>
