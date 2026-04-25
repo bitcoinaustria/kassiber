@@ -1,31 +1,38 @@
 /**
  * Reports — capital-gains export flow.
  *
- * Visual translation of claude-design/screens/tax.jsx. The screen is
- * named "Reports" in the kassiber app because /reports surfaces multiple
- * report types (capital gains, journal entries, balance sheet, the
- * Austrian E 1kv preview); only capital gains is wired here today.
- *
- * Inline styles from the source become Tailwind classes against the
- * theme tokens in styles/globals.css. The fixture lives in
- * mocks/reports.ts and is served via the mock daemon under
- * `ui.reports.capital_gains` so the screen exercises the same loading
- * shape as Overview.
- *
- * Deferred:
- *  - Wiring the cost-basis selection / policy toggles to a real engine
- *  - Live re-computation when From/To dates are edited (the inputs are
- *    visible but only echo the selected year)
- *  - Actual export click handlers (CSV/PDF/JSON buttons are display-only)
- *  - "Back" navigation — the AppShell header now governs routing
+ * The screen still uses fixture data through the mock daemon, but the
+ * layout now follows the shared shadcn dashboard language used by Overview
+ * and Transactions.
  */
 
 import { useState, type ReactNode } from "react";
-import { ArrowRight } from "lucide-react";
+import {
+  ArrowRight,
+  Download,
+  FileSpreadsheet,
+  FileText,
+  ShieldCheck,
+} from "lucide-react";
 
 import { Button } from "@/components/ui/button";
-import { LabeledInput } from "@/components/kb/LabeledInput";
-import { KbCard } from "@/components/kb/KbCard";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import { useDaemon } from "@/daemon/client";
 import { useUiStore } from "@/store/ui";
 import { cn } from "@/lib/utils";
@@ -43,9 +50,9 @@ const COST_BASIS_METHODS: Array<{
   name: string;
   desc: string;
 }> = [
-  { k: "fifo", name: "FIFO", desc: "First-in, first-out · common default" },
+  { k: "fifo", name: "FIFO", desc: "First-in, first-out" },
   { k: "lifo", name: "LIFO", desc: "Last-in, first-out" },
-  { k: "hifo", name: "HIFO", desc: "Highest-in, first-out (tax optimization)" },
+  { k: "hifo", name: "HIFO", desc: "Highest-in, first-out" },
   { k: "spec", name: "Specific ID", desc: "Per-lot selection" },
 ];
 
@@ -59,15 +66,13 @@ export function Reports() {
 
   if (isLoading || !data?.data) {
     return (
-      <div className="flex flex-1 items-center justify-center font-mono text-xs text-ink-3">
-        loading…
+      <div className="flex flex-1 items-center justify-center text-sm text-muted-foreground">
+        Loading reports...
       </div>
     );
   }
 
-  return (
-    <ReportsView report={data.data} hideSensitive={hideSensitive} />
-  );
+  return <ReportsView report={data.data} hideSensitive={hideSensitive} />;
 }
 
 interface ReportsViewProps {
@@ -80,7 +85,6 @@ function ReportsView({ report, hideSensitive }: ReportsViewProps) {
   const [jurCode, setJurCode] = useState(report.jurisdictionCode);
   const j = JURISDICTIONS[jurCode] ?? JURISDICTIONS.AT;
   const [method, setMethod] = useState<CostBasisMethod>(j.defaultMethod);
-  const [step, setStep] = useState<1 | 2>(1);
 
   const fmt = (n: number) =>
     n.toLocaleString(j.locale, {
@@ -101,163 +105,33 @@ function ReportsView({ report, hideSensitive }: ReportsViewProps) {
   const kest = totals.gain * j.rate;
 
   return (
-    <div className="flex-1 overflow-auto bg-paper p-3 sm:p-4.5">
-      <div className="mb-4 flex flex-col gap-2 sm:mb-4.5 sm:flex-row sm:items-end sm:justify-between">
-        <div className="min-w-0">
-          <div className="kb-mono-caption">
-            Report · Capital gains · {j.name}
-          </div>
-          <h2 className="m-0 mt-1 font-sans text-[26px] font-semibold tracking-[-0.01em] text-ink sm:text-[32px]">
-            Capital gains
-          </h2>
-        </div>
-        <div className="flex items-center gap-4.5">
-          <div className="font-mono text-[10px] tracking-[0.08em] text-ink-3">
-            STEP {step} / 2
-          </div>
-        </div>
+    <div className="w-full space-y-4 bg-background p-3 sm:space-y-6 sm:p-4 md:p-6">
+      <div className="flex justify-end">
+        <Button variant="outline" size="sm" className="h-9 gap-2">
+          <Download className="size-4" aria-hidden="true" />
+          Export bundle
+        </Button>
       </div>
 
-      <div className="grid grid-cols-1 gap-3.5 lg:grid-cols-[minmax(0,340px)_minmax(0,1fr)]">
-        {/* Left: config */}
-        <div className="flex flex-col gap-2.5">
-          <KbCard title="Jurisdiction">
-            <div className="flex flex-col gap-2.5">
-              <div className="flex flex-wrap gap-1.5">
-                {Object.values(JURISDICTIONS).map((x) => {
-                  const active = jurCode === x.code;
-                  return (
-                    <button
-                      key={x.code}
-                      type="button"
-                      onClick={() => {
-                        setJurCode(x.code);
-                        setMethod(x.defaultMethod);
-                      }}
-                      className={cn(
-                        "cursor-pointer border px-3 py-1 font-mono text-[11px] font-semibold uppercase tracking-[0.08em]",
-                        active
-                          ? "border-ink bg-ink text-paper"
-                          : "border-line bg-transparent text-ink-2",
-                      )}
-                    >
-                      {x.code}
-                    </button>
-                  );
-                })}
-              </div>
-              <div className="font-sans text-[11px] text-ink-3">
-                {j.name} · {j.policy}
-              </div>
-            </div>
-          </KbCard>
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(280px,360px)_minmax(0,1fr)]">
+        <ReportControls
+          year={year}
+          setYear={setYear}
+          jurCode={jurCode}
+          setJurCode={(code) => {
+            const next = JURISDICTIONS[code] ?? JURISDICTIONS.AT;
+            setJurCode(code);
+            setMethod(next.defaultMethod);
+          }}
+          method={method}
+          setMethod={setMethod}
+          rateLabel={j.rateLabel}
+          policy={j.policy}
+        />
 
-          <KbCard title="Reporting period">
-            <div className="flex flex-col gap-2.5">
-              <div className="flex flex-wrap gap-1.5">
-                {REPORTING_YEARS.map((y) => {
-                  const active = year === y;
-                  return (
-                    <button
-                      key={y}
-                      type="button"
-                      onClick={() => setYear(y)}
-                      className={cn(
-                        "cursor-pointer border px-3 py-1 font-mono text-[11px] font-semibold uppercase tracking-[0.08em]",
-                        active
-                          ? "border-ink bg-ink text-paper"
-                          : "border-line bg-transparent text-ink-2",
-                      )}
-                    >
-                      {y}
-                    </button>
-                  );
-                })}
-              </div>
-              <div className="grid grid-cols-2 gap-2">
-                <LabeledInput
-                  label="From"
-                  value={`${year}-01-01`}
-                  onChange={() => {}}
-                  mono
-                />
-                <LabeledInput
-                  label="To"
-                  value={`${year}-12-31`}
-                  onChange={() => {}}
-                  mono
-                />
-              </div>
-            </div>
-          </KbCard>
-
-          <KbCard title="Cost-basis method">
-            <div className="flex flex-col gap-1.5">
-              {COST_BASIS_METHODS.map(({ k, name, desc }) => {
-                const active = method === k;
-                return (
-                  <label
-                    key={k}
-                    className={cn(
-                      "flex cursor-pointer gap-2.5 border border-line p-2.5",
-                      active ? "bg-paper" : "bg-transparent",
-                    )}
-                  >
-                    <input
-                      type="radio"
-                      name="method"
-                      checked={active}
-                      onChange={() => setMethod(k)}
-                      className="mt-0.5 accent-accent"
-                    />
-                    <div>
-                      <div className="font-mono text-xs font-semibold text-ink">
-                        {name}
-                      </div>
-                      <div className="mt-0.5 font-sans text-[11px] text-ink-3">
-                        {desc}
-                      </div>
-                    </div>
-                  </label>
-                );
-              })}
-            </div>
-          </KbCard>
-
-          <KbCard title="Policy">
-            <div className="flex flex-col gap-2">
-              <ReportToggleRow
-                key={`internal-${jurCode}`}
-                label="Treat internal transfers as non-taxable"
-                def={j.internalsNonTaxable}
-              />
-              <ReportToggleRow
-                key={`rate-${jurCode}`}
-                label={`Apply ${j.rateLabel} flat rate`}
-                def={j.rate > 0}
-              />
-              <ReportToggleRow
-                label="Include Lightning channel fees as cost"
-                def
-              />
-              <ReportToggleRow label="Aggregate lots per UTXO set" />
-            </div>
-          </KbCard>
-
-          <Button
-            size="lg"
-            onClick={() => setStep(2)}
-            className="rounded-none"
-          >
-            Generate preview
-            <ArrowRight className="size-3" />
-          </Button>
-        </div>
-
-        {/* Right: preview */}
-        <div className="flex min-w-0 flex-col gap-2.5">
-          <div className="grid grid-cols-2 gap-2.5 md:grid-cols-4">
-            <ReportStatTile
+        <div className="min-w-0 space-y-4">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+            <ReportMetricCard
               label="Proceeds"
               value={
                 <span className={blurClass(hideSensitive)}>
@@ -266,8 +140,8 @@ function ReportsView({ report, hideSensitive }: ReportsViewProps) {
               }
               sub={`${lots.length} disposals`}
             />
-            <ReportStatTile
-              label="Cost basis"
+            <ReportMetricCard
+              label="Cost Basis"
               value={
                 <span className={blurClass(hideSensitive)}>
                   {j.ccy} {fmt(totals.cost)}
@@ -275,21 +149,21 @@ function ReportsView({ report, hideSensitive }: ReportsViewProps) {
               }
               sub={method.toUpperCase()}
             />
-            <ReportStatTile
-              label="Net gain"
+            <ReportMetricCard
+              label="Net Gain"
               value={
                 <span
-                  className={cn("text-[#3fa66a]", blurClass(hideSensitive))}
+                  className={cn("text-emerald-600", blurClass(hideSensitive))}
                 >
                   + {j.ccy} {fmt(totals.gain)}
                 </span>
               }
               sub={`${year} tax year`}
             />
-            <ReportStatTile
+            <ReportMetricCard
               label={j.rateLabel}
               value={
-                <span className={cn("text-accent", blurClass(hideSensitive))}>
+                <span className={blurClass(hideSensitive)}>
                   {j.ccy} {fmt(kest)}
                 </span>
               }
@@ -297,108 +171,230 @@ function ReportsView({ report, hideSensitive }: ReportsViewProps) {
             />
           </div>
 
-          <KbCard title={`Disposed lots · ${year}`} pad={false}>
-            <div className="overflow-x-auto">
-            <table className="w-full min-w-[720px] border-collapse">
-              <thead>
-                <tr className="border-b border-ink">
-                  <th className="px-3 py-2 text-left font-sans text-[9px] font-semibold uppercase tracking-[0.12em] text-ink-3">
-                    Acquired
-                  </th>
-                  <th className="px-3 py-2 text-left font-sans text-[9px] font-semibold uppercase tracking-[0.12em] text-ink-3">
-                    Disposed
-                  </th>
-                  <th className="px-3 py-2 text-left font-sans text-[9px] font-semibold uppercase tracking-[0.12em] text-ink-3">
-                    Holding
-                  </th>
-                  <th className="px-3 py-2 text-right font-sans text-[9px] font-semibold uppercase tracking-[0.12em] text-ink-3">
-                    Sats
-                  </th>
-                  <th className="px-3 py-2 text-right font-sans text-[9px] font-semibold uppercase tracking-[0.12em] text-ink-3">
-                    Cost {j.ccy}
-                  </th>
-                  <th className="px-3 py-2 text-right font-sans text-[9px] font-semibold uppercase tracking-[0.12em] text-ink-3">
-                    Proceeds {j.ccy}
-                  </th>
-                  <th className="px-3 py-2 text-right font-sans text-[9px] font-semibold uppercase tracking-[0.12em] text-ink-3">
-                    Gain {j.ccy}
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {lots.map((l, i) => (
-                  <ReportLotRow
-                    key={i}
-                    lot={l}
-                    hideSensitive={hideSensitive}
-                  />
-                ))}
-                <tr className="bg-paper">
-                  <td
-                    className="px-3 py-2 font-mono text-[11px] font-semibold text-ink"
-                    colSpan={3}
-                  >
-                    Total
-                  </td>
-                  <td
-                    className={cn(
-                      "px-3 py-2 text-right font-mono text-[11px] font-semibold tabular-nums text-ink",
-                      blurClass(hideSensitive),
-                    )}
-                  >
-                    {totals.sats.toLocaleString("en-US")}
-                  </td>
-                  <td
-                    className={cn(
-                      "px-3 py-2 text-right font-mono text-[11px] font-semibold tabular-nums text-ink",
-                      blurClass(hideSensitive),
-                    )}
-                  >
-                    {totals.cost.toFixed(2)}
-                  </td>
-                  <td
-                    className={cn(
-                      "px-3 py-2 text-right font-mono text-[11px] font-semibold tabular-nums text-ink",
-                      blurClass(hideSensitive),
-                    )}
-                  >
-                    {totals.proceeds.toFixed(2)}
-                  </td>
-                  <td
-                    className={cn(
-                      "px-3 py-2 text-right font-mono text-[11px] font-semibold tabular-nums text-[#3fa66a]",
-                      blurClass(hideSensitive),
-                    )}
-                  >
-                    + {totals.gain.toFixed(2)}
-                  </td>
-                </tr>
-              </tbody>
-            </table>
-            </div>
-          </KbCard>
+          <Card>
+            <CardHeader className="border-b">
+              <CardTitle>Disposed lots · {year}</CardTitle>
+              <CardDescription>
+                Previewed disposal lots for the selected jurisdiction and
+                method.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="overflow-x-auto p-0">
+              <Table>
+                <TableHeader>
+                  <TableRow className="bg-muted/50 hover:bg-muted/50">
+                    <TableHead className="min-w-[112px]">Acquired</TableHead>
+                    <TableHead className="min-w-[112px]">Disposed</TableHead>
+                    <TableHead>Holding</TableHead>
+                    <TableHead className="text-right">Sats</TableHead>
+                    <TableHead className="text-right">Cost {j.ccy}</TableHead>
+                    <TableHead className="text-right">
+                      Proceeds {j.ccy}
+                    </TableHead>
+                    <TableHead className="text-right">Gain {j.ccy}</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {lots.map((lot, index) => (
+                    <ReportLotRow
+                      key={`${lot.acquired}-${lot.disposed}-${index}`}
+                      lot={lot}
+                      hideSensitive={hideSensitive}
+                    />
+                  ))}
+                  <TableRow className="bg-muted/30 font-medium">
+                    <TableCell colSpan={3}>Total</TableCell>
+                    <TableCell
+                      className={cn(
+                        "text-right tabular-nums",
+                        blurClass(hideSensitive),
+                      )}
+                    >
+                      {totals.sats.toLocaleString("en-US")}
+                    </TableCell>
+                    <TableCell
+                      className={cn(
+                        "text-right tabular-nums",
+                        blurClass(hideSensitive),
+                      )}
+                    >
+                      {totals.cost.toFixed(2)}
+                    </TableCell>
+                    <TableCell
+                      className={cn(
+                        "text-right tabular-nums",
+                        blurClass(hideSensitive),
+                      )}
+                    >
+                      {totals.proceeds.toFixed(2)}
+                    </TableCell>
+                    <TableCell
+                      className={cn(
+                        "text-right text-emerald-600 tabular-nums",
+                        blurClass(hideSensitive),
+                      )}
+                    >
+                      + {totals.gain.toFixed(2)}
+                    </TableCell>
+                  </TableRow>
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
 
-          <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 2xl:grid-cols-3">
             <ReportExportFormat
+              icon={FileSpreadsheet}
               name="CSV"
               sub="Spreadsheet"
               detail="17 columns · UTF-8"
             />
             <ReportExportFormat
+              icon={FileText}
               name="PDF"
               sub="Human-readable"
               detail={`4 pages · ${j.name} format`}
               primary
             />
             <ReportExportFormat
-              name="JSON"
-              sub="Envelope"
-              detail="Machine-readable"
+              icon={FileSpreadsheet}
+              name="XLSX"
+              sub="Spreadsheet"
+              detail="Multi-sheet workbook"
             />
           </div>
         </div>
       </div>
     </div>
+  );
+}
+
+interface ReportControlsProps {
+  year: number;
+  setYear: (year: number) => void;
+  jurCode: string;
+  setJurCode: (code: string) => void;
+  method: CostBasisMethod;
+  setMethod: (method: CostBasisMethod) => void;
+  rateLabel: string;
+  policy: string;
+}
+
+function ReportControls({
+  year,
+  setYear,
+  jurCode,
+  setJurCode,
+  method,
+  setMethod,
+  rateLabel,
+  policy,
+}: ReportControlsProps) {
+  return (
+    <Card className="h-fit">
+      <CardHeader className="border-b">
+        <CardTitle>Report setup</CardTitle>
+        <CardDescription>{policy}</CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-6">
+        <section className="space-y-3">
+          <Label>Jurisdiction</Label>
+          <div className="grid grid-cols-4 gap-2">
+            {Object.values(JURISDICTIONS).map((x) => {
+              const active = jurCode === x.code;
+              return (
+                <Button
+                  key={x.code}
+                  type="button"
+                  variant={active ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => setJurCode(x.code)}
+                >
+                  {x.code}
+                </Button>
+              );
+            })}
+          </div>
+        </section>
+
+        <section className="space-y-3">
+          <Label>Reporting period</Label>
+          <div className="grid grid-cols-4 gap-2">
+            {REPORTING_YEARS.map((y) => (
+              <Button
+                key={y}
+                type="button"
+                variant={year === y ? "default" : "outline"}
+                size="sm"
+                onClick={() => setYear(y)}
+              >
+                {y}
+              </Button>
+            ))}
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            <div className="space-y-1.5">
+              <Label htmlFor="report-from">From</Label>
+              <Input id="report-from" value={`${year}-01-01`} readOnly />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="report-to">To</Label>
+              <Input id="report-to" value={`${year}-12-31`} readOnly />
+            </div>
+          </div>
+        </section>
+
+        <section className="space-y-3">
+          <Label>Cost-basis method</Label>
+          <div className="grid gap-2">
+            {COST_BASIS_METHODS.map(({ k, name, desc }) => {
+              const active = method === k;
+              return (
+                <button
+                  key={k}
+                  type="button"
+                  onClick={() => setMethod(k)}
+                  className={cn(
+                    "rounded-md border p-3 text-left transition-colors",
+                    active
+                      ? "border-primary bg-primary/5"
+                      : "bg-background hover:bg-muted/50",
+                  )}
+                >
+                  <span className="flex items-center gap-2">
+                    <span
+                      className={cn(
+                        "size-2 rounded-full",
+                        active ? "bg-primary" : "bg-muted-foreground/40",
+                      )}
+                    />
+                    <span className="font-medium">{name}</span>
+                  </span>
+                  <span className="mt-1 block text-xs text-muted-foreground">
+                    {desc}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        </section>
+
+        <section className="space-y-3">
+          <Label>Policy</Label>
+          <div className="grid gap-2">
+            <ReportToggleRow label="Treat internal transfers as non-taxable" def />
+            <ReportToggleRow label={`Apply ${rateLabel} flat rate`} def />
+            <ReportToggleRow label="Include Lightning channel fees as cost" def />
+            <ReportToggleRow label="Aggregate lots per UTXO set" />
+          </div>
+        </section>
+
+        <Button type="button" className="w-full gap-2">
+          Generate preview
+          <ArrowRight className="size-4" aria-hidden="true" />
+        </Button>
+      </CardContent>
+    </Card>
   );
 }
 
@@ -411,76 +407,70 @@ function ReportLotRow({ lot, hideSensitive }: ReportLotRowProps) {
   const gain = lot.proceedsEur - lot.costEur;
   const isLong = lot.type === "LT";
   return (
-    <tr className="border-b border-line">
-      <td className="px-3 py-2 font-mono text-[11px] text-ink-2">
+    <TableRow>
+      <TableCell className="font-mono text-xs text-muted-foreground">
         {lot.acquired}
-      </td>
-      <td className="px-3 py-2 font-mono text-[11px] text-ink-2">
+      </TableCell>
+      <TableCell className="font-mono text-xs text-muted-foreground">
         {lot.disposed}
-      </td>
-      <td className="px-3 py-2">
+      </TableCell>
+      <TableCell>
         <span
           className={cn(
-            "border px-1.5 py-0.5 font-mono text-[9px] tracking-[0.1em]",
+            "inline-flex rounded-md px-2 py-1 text-xs font-medium ring-1 ring-inset",
             isLong
-              ? "border-[#3fa66a] text-[#3fa66a]"
-              : "border-ink-3 text-ink-2",
+              ? "bg-emerald-50 text-emerald-700 ring-emerald-600/20 dark:bg-emerald-900/30 dark:text-emerald-400 dark:ring-emerald-400/20"
+              : "bg-muted text-muted-foreground ring-border",
           )}
         >
           {isLong ? "> 1Y" : "< 1Y"}
         </span>
-      </td>
-      <td
-        className={cn(
-          "px-3 py-2 text-right font-mono text-[11px] tabular-nums text-ink-2",
-          blurClass(hideSensitive),
-        )}
+      </TableCell>
+      <TableCell
+        className={cn("text-right tabular-nums", blurClass(hideSensitive))}
       >
         {lot.sats.toLocaleString("en-US")}
-      </td>
-      <td
-        className={cn(
-          "px-3 py-2 text-right font-mono text-[11px] tabular-nums text-ink-2",
-          blurClass(hideSensitive),
-        )}
+      </TableCell>
+      <TableCell
+        className={cn("text-right tabular-nums", blurClass(hideSensitive))}
       >
         {lot.costEur.toFixed(2)}
-      </td>
-      <td
-        className={cn(
-          "px-3 py-2 text-right font-mono text-[11px] tabular-nums text-ink-2",
-          blurClass(hideSensitive),
-        )}
+      </TableCell>
+      <TableCell
+        className={cn("text-right tabular-nums", blurClass(hideSensitive))}
       >
         {lot.proceedsEur.toFixed(2)}
-      </td>
-      <td
+      </TableCell>
+      <TableCell
         className={cn(
-          "px-3 py-2 text-right font-mono text-[11px] tabular-nums text-[#3fa66a]",
+          "text-right text-emerald-600 tabular-nums",
           blurClass(hideSensitive),
         )}
       >
         + {gain.toFixed(2)}
-      </td>
-    </tr>
+      </TableCell>
+    </TableRow>
   );
 }
 
-interface ReportStatTileProps {
+interface ReportMetricCardProps {
   label: string;
   value: ReactNode;
   sub: string;
 }
 
-function ReportStatTile({ label, value, sub }: ReportStatTileProps) {
+function ReportMetricCard({ label, value, sub }: ReportMetricCardProps) {
   return (
-    <div className="flex flex-col gap-1 border border-line bg-paper-2 p-3.5">
-      <div className="kb-mono-caption">{label}</div>
-      <div className="font-sans text-[20px] font-medium leading-[1.1] tracking-[-0.005em] text-ink">
-        {value}
-      </div>
-      <div className="font-mono text-[10px] text-ink-3">{sub}</div>
-    </div>
+    <Card className="gap-3 py-5">
+      <CardContent className="space-y-3">
+        <div className="flex items-center gap-2 text-muted-foreground">
+          <ShieldCheck className="size-4" aria-hidden="true" />
+          <span className="text-xs font-medium">{label}</span>
+        </div>
+        <p className="text-2xl font-semibold tracking-tight">{value}</p>
+        <p className="text-xs text-muted-foreground">{sub}</p>
+      </CardContent>
+    </Card>
   );
 }
 
@@ -495,27 +485,28 @@ function ReportToggleRow({ label, def }: ReportToggleRowProps) {
     <button
       type="button"
       onClick={() => setOn((v) => !v)}
-      className="flex cursor-pointer items-center gap-2.5 border-none bg-transparent p-0 text-left"
+      className="flex items-center justify-between gap-3 rounded-md border bg-background px-3 py-2 text-left text-sm transition-colors hover:bg-muted/50"
     >
+      <span>{label}</span>
       <span
         className={cn(
-          "relative inline-block h-4 w-[30px] transition-colors",
-          on ? "bg-ink" : "bg-line-2",
+          "relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors",
+          on ? "bg-primary" : "bg-muted",
         )}
       >
         <span
           className={cn(
-            "absolute top-0.5 size-3 bg-paper-2 transition-[left]",
-            on ? "left-4" : "left-0.5",
+            "size-4 rounded-full bg-background shadow transition-transform",
+            on ? "translate-x-4" : "translate-x-0.5",
           )}
         />
       </span>
-      <span className="font-sans text-xs text-ink-2">{label}</span>
     </button>
   );
 }
 
 interface ReportExportFormatProps {
+  icon: React.ComponentType<React.SVGProps<SVGSVGElement>>;
   name: string;
   sub: string;
   detail: string;
@@ -523,27 +514,30 @@ interface ReportExportFormatProps {
 }
 
 function ReportExportFormat({
+  icon: Icon,
   name,
   sub,
   detail,
   primary,
 }: ReportExportFormatProps) {
   return (
-    <button
+    <Button
       type="button"
-      className={cn(
-        "flex cursor-pointer flex-col gap-0.5 border p-4 text-left",
-        primary
-          ? "border-ink bg-ink text-paper"
-          : "border-line bg-paper-2 text-ink",
-      )}
+      variant={primary ? "default" : "outline"}
+      className="h-auto min-h-20 min-w-0 justify-start gap-3 whitespace-normal p-4 text-left"
     >
-      <div className="flex items-center justify-between">
-        <span className="font-sans text-[22px]">{name}</span>
-        <span className="font-mono text-sm">⤓</span>
-      </div>
-      <span className="font-sans text-[11px] opacity-70">{sub}</span>
-      <span className="mt-1.5 font-mono text-[10px] opacity-55">{detail}</span>
-    </button>
+      <Icon className="size-5 shrink-0" aria-hidden="true" />
+      <span className="grid min-w-0 gap-1">
+        <span className="font-medium">{name}</span>
+        <span
+          className={cn(
+            "whitespace-normal text-xs leading-snug font-normal break-words",
+            primary ? "text-primary-foreground/75" : "text-muted-foreground",
+          )}
+        >
+          {sub} · {detail}
+        </span>
+      </span>
+    </Button>
   );
 }

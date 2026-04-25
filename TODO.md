@@ -210,16 +210,31 @@ and [docs/plan/04-desktop-ui.md](docs/plan/04-desktop-ui.md).
   + bundled Blinker/JetBrains Mono fonts + mock daemon transport. Claude
   Design originals staged under `ui-tauri/claude-design/` for reference;
   translation lands in `ui-tauri/src/routes/` per phase 1.3.
-- [ ] shadcn primitives added per-screen via `pnpm dlx shadcn@latest add`
-  (button, card, dialog, switch, input, label, select, tabs, tooltip,
-  scroll-area, table, badge, separator, sheet, sonner, dropdown-menu,
-  chart) — install only what each screen actually needs
+- [x] Configure shadcn registries for `@shadcnblocks` and `@blocks-so`,
+  keep the local development API key in ignored `ui-tauri/.env`, and
+  document `SHADCNBLOCKS_API_KEY` via `ui-tauri/.env.example`
+- [x] Add the shadcn primitives and block dependencies currently needed by
+  the mock shell and first dashboards: button/card/dialog/input/label/select/
+  table/sidebar/sheet/dropdown-menu/tooltip/scroll-area/separator/switch/
+  textarea/chart/avatar/skeleton. Future screens should still install only
+  what they actually use.
+- [x] Replace the old Kassiber nav with the shared shadcn desktop shell:
+  sidebar, route header, larger search, privacy toggle, settings/donate/
+  bug-report actions, profile switcher, centered version label, and global
+  pre-alpha banner
+- [x] Add reusable shell-level assistant mockup based on `@blocks-so/ai-02`,
+  with local-model selector, Kassiber-specific suggestions, collapsed-on-scroll
+  behavior, and hover/focus expansion
+- [x] Overview screen now uses `@shadcnblocks/dashboard5` as the first
+  dashboard screen, keeping Export -> Reports, Add connection modal, and
+  Show all transactions wiring
+- [x] Transactions screen now uses `@shadcnblocks/dashboard2` as the
+  transaction dashboard, with ordered period controls, enlarged search copy,
+  and privacy visibility toggle in the header
 - [ ] Rust supervisor with capability allowlist generated from Pydantic
 - [ ] CSP locked to `'self'`; no remote script
 - [ ] Pydantic v2 contracts to JSON Schema to TS types in CI; schema-drift
   fails the build
-- [ ] Overview screen seeded from existing Claude Design JSX mockups
-  (to be implemented in `ui-tauri/src/routes/`)
 - [ ] Bridge mode containment tests (per
   [04-desktop-ui.md](docs/plan/04-desktop-ui.md) §2.6 + 2.7): negative
   tests for cross-origin / no-Origin / non-loopback bind / production-env
@@ -230,7 +245,23 @@ and [docs/plan/04-desktop-ui.md](docs/plan/04-desktop-ui.md).
 
 ### 1.3 Read-only screens
 
-- [ ] Connections, Transactions, Reports, Profiles, Settings, Welcome
+- [x] Overview dashboard shell using shadcn block components and mock daemon
+  fixture data
+- [x] Transactions dashboard shell using shadcn block components and mock
+  daemon fixture data
+- [x] Connections screen reshaped to the shared shadcn dashboard language,
+  including connection metrics, source table, and the existing Add connection
+  modal flow
+- [x] Reports screen reshaped to the shared shadcn dashboard language,
+  including capital-gains controls, preview table, and CSV/PDF/XLSX export
+  format cards
+- [x] Settings modal restyled with shadcn dialog/card/switch/input/select
+  primitives while keeping the existing settings entrypoint in the shell
+- [ ] Profiles screen
+- [ ] Welcome/onboarding screen
+- [ ] Replace mock daemon fixture data in Overview, Transactions,
+  Connections, Reports, and Settings with typed daemon calls once phase 1.1
+  exists
 
 ### 1.4 Live actions and workers
 

@@ -6,8 +6,8 @@
  * `routeTree.gen.ts` automatically.
  *
  * Layout: `/` shows Welcome (no chrome). Authenticated routes mount
- * under the AppShell layout (header + outlet + footer) and require
- * a persisted identity; otherwise the layout redirects to `/`.
+ * under the AppShell layout and require a persisted identity; otherwise
+ * the layout redirects to `/`.
  */
 
 import {

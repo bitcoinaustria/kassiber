@@ -1,32 +1,54 @@
 /**
- * SettingsModal — workspace-wide preferences.
+ * SettingsModal - workspace-wide preferences.
  *
- * Translated from claude-design/screens/settings.jsx. Sections:
- *  - Privacy (hide-sensitive toggle wired to the Zustand UI store; the
- *    clipboard auto-clear toggle is local UI state for now)
- *  - App lock (auto-lock, idle timeout, passphrase prompts) — local
- *    state until the lock subsystem lands
- *  - Data (backup/restore/logs stubs, BIP-329 + CSV import/export
- *    stubs, DB path readout)
- *  - Sync backends (list + Add backend sub-modal)
- *  - Danger zone (workspace reset stub)
- *
- * Add-backend flow is a nested modal, same `Dialog` shell with the
- * kassiber hard-edge override.
+ * Most controls are local UI state until the daemon-backed settings surface
+ * lands. Hide-sensitive data is wired to the shared UI store.
  */
 import * as React from "react";
-import { Lock } from "lucide-react";
+import {
+  Database,
+  Download,
+  FileInput,
+  KeyRound,
+  Lock,
+  Plus,
+  RefreshCw,
+  Server,
+  ShieldCheck,
+  Trash2,
+  Upload,
+} from "lucide-react";
 import { useNavigate } from "@tanstack/react-router";
 
 import { Button } from "@/components/ui/button";
 import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import {
   Dialog,
   DialogContent,
   DialogDescription,
+  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { LabeledInput } from "@/components/kb/LabeledInput";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { Separator } from "@/components/ui/separator";
+import { Switch } from "@/components/ui/switch";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import { useUiStore } from "@/store/ui";
 import { cn } from "@/lib/utils";
 
@@ -48,7 +70,7 @@ const DEFAULT_BACKENDS: Backend[] = [
     name: "mempool.space",
     url: "https://mempool.space/api",
     net: "BTC",
-    health: "#893,014 · 2m",
+    health: "#893,014 - 2m",
     on: true,
     auth: "none",
   },
@@ -57,7 +79,7 @@ const DEFAULT_BACKENDS: Backend[] = [
     name: "local electrs",
     url: "tcp://127.0.0.1:50001",
     net: "BTC",
-    health: "—",
+    health: "-",
     on: false,
     auth: "none",
   },
@@ -66,7 +88,7 @@ const DEFAULT_BACKENDS: Backend[] = [
     name: "Blockstream Liquid",
     url: "https://blockstream.info/liquid/api",
     net: "LIQUID",
-    health: "—",
+    health: "-",
     on: false,
     auth: "none",
   },
@@ -75,7 +97,7 @@ const DEFAULT_BACKENDS: Backend[] = [
     name: "CoinGecko",
     url: "https://api.coingecko.com/api/v3",
     net: "FX",
-    health: "€71,420 · 14s",
+    health: "EUR 71,420 - 14s",
     on: true,
     auth: "none",
   },
@@ -92,6 +114,14 @@ export function SettingsModal({ open, onClose }: SettingsModalProps) {
   const setIdentity = useUiStore((s) => s.setIdentity);
   const navigate = useNavigate();
 
+  const [clearClipboard, setClearClipboard] = React.useState(true);
+  const [autoLockEnabled, setAutoLockEnabled] = React.useState(true);
+  const [autoLockMinutes, setAutoLockMinutes] = React.useState(5);
+  const [requirePassphrase, setRequirePassphrase] = React.useState(true);
+  const [lockOnClose, setLockOnClose] = React.useState(true);
+  const [backends, setBackends] = React.useState<Backend[]>(DEFAULT_BACKENDS);
+  const [addOpen, setAddOpen] = React.useState(false);
+
   const onResetWorkspace = () => {
     const ok = window.confirm(
       "Reset workspace?\n\nThis clears your local identity and returns you to the Welcome screen. Encrypted data on disk is not touched.",
@@ -102,16 +132,6 @@ export function SettingsModal({ open, onClose }: SettingsModalProps) {
     navigate({ to: "/" });
   };
 
-  const [clearClipboard, setClearClipboard] = React.useState(true);
-
-  const [autoLockEnabled, setAutoLockEnabled] = React.useState(true);
-  const [autoLockMinutes, setAutoLockMinutes] = React.useState(5);
-  const [requirePassphrase, setRequirePassphrase] = React.useState(true);
-  const [lockOnClose, setLockOnClose] = React.useState(true);
-
-  const [backends, setBackends] = React.useState<Backend[]>(DEFAULT_BACKENDS);
-  const [addOpen, setAddOpen] = React.useState(false);
-
   return (
     <Dialog
       open={open}
@@ -119,219 +139,257 @@ export function SettingsModal({ open, onClose }: SettingsModalProps) {
         if (!next) onClose();
       }}
     >
-      <DialogContent
-        className={cn(
-          "max-h-[88vh] w-full max-w-[580px] gap-0 overflow-y-auto",
-          "rounded-none border-ink bg-paper p-0 shadow-hard-ink",
-          "data-[state=open]:zoom-in-100 data-[state=closed]:zoom-out-100",
-        )}
-      >
-        <DialogHeader className="flex-row items-center justify-between gap-2 border-b border-line px-5 py-3.5">
-          <DialogTitle className="font-sans text-base font-semibold tracking-[-0.005em] text-ink">
-            Settings
-          </DialogTitle>
-          <DialogDescription className="sr-only">
-            Workspace preferences for Kassiber.
+      <DialogContent className="max-h-[88vh] w-full max-w-[900px] gap-0 overflow-hidden p-0 sm:max-w-[900px]">
+        <DialogHeader className="border-b px-6 py-5">
+          <DialogTitle>Settings</DialogTitle>
+          <DialogDescription>
+            Workspace preferences, privacy controls, and local data tools.
           </DialogDescription>
         </DialogHeader>
 
-        <div className="flex flex-col gap-5 p-5">
-          {/* Privacy */}
-          <Section title="Privacy">
-            <Row
-              label="Hide sensitive data"
-              sub="Blur balances, addresses, and amounts throughout the UI."
-              control={
-                <Toggle on={hideSensitive} onChange={setHideSensitive} />
-              }
-            />
-            <Row
-              label="Clear clipboard after 30s"
-              sub="Auto-clear copied addresses and keys."
-              control={
-                <Toggle on={clearClipboard} onChange={setClearClipboard} />
-              }
-            />
-          </Section>
-
-          {/* App lock */}
-          <Section title="App lock">
-            <Row
-              label="Auto-lock when idle"
-              sub="Require passphrase to re-enter after a period of inactivity."
-              control={
-                <Toggle on={autoLockEnabled} onChange={setAutoLockEnabled} />
-              }
-            />
-            <div
-              className={cn(
-                "flex items-center gap-2 px-0.5 py-1",
-                !autoLockEnabled && "opacity-40",
-              )}
-            >
-              <span className="font-sans text-xs text-ink-2">Idle timeout</span>
-              <div className="ml-auto flex gap-1">
-                {[1, 5, 15, 30, 60].map((m) => (
-                  <Pill
-                    key={m}
-                    active={autoLockMinutes === m}
-                    onClick={
-                      autoLockEnabled
-                        ? () => setAutoLockMinutes(m)
-                        : undefined
-                    }
-                  >
-                    {m}m
-                  </Pill>
-                ))}
-              </div>
-            </div>
-            <Row
-              label="Require passphrase on launch"
-              sub="Prompt for your workspace passphrase every time Kassiber opens."
-              control={
-                <Toggle
-                  on={requirePassphrase}
-                  onChange={setRequirePassphrase}
+        <ScrollArea className="max-h-[calc(88vh-132px)]">
+          <div className="grid gap-4 p-4 lg:grid-cols-2">
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2 text-base">
+                  <ShieldCheck className="size-4" aria-hidden="true" />
+                  Privacy
+                </CardTitle>
+                <CardDescription>
+                  Controls for sensitive values shown inside the app.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <SettingsSwitchRow
+                  label="Hide sensitive data"
+                  description="Blur balances, addresses, and amounts throughout the UI."
+                  checked={hideSensitive}
+                  onCheckedChange={setHideSensitive}
                 />
-              }
-            />
-            <Row
-              label="Lock on window close"
-              sub="Clear in-memory decrypted state when the app window is closed."
-              control={<Toggle on={lockOnClose} onChange={setLockOnClose} />}
-            />
-            <div className="mt-1 flex gap-2">
-              <KbSecondaryButton size="sm">
-                <Lock className="size-2.5" />
-                Lock now
-              </KbSecondaryButton>
-              <KbGhostButton size="sm">Change passphrase…</KbGhostButton>
-            </div>
-          </Section>
+                <SettingsSwitchRow
+                  label="Clear clipboard after 30s"
+                  description="Auto-clear copied addresses and keys."
+                  checked={clearClipboard}
+                  onCheckedChange={setClearClipboard}
+                />
+              </CardContent>
+            </Card>
 
-          {/* Data */}
-          <Section title="Data">
-            <div className="grid grid-cols-3 gap-2">
-              <KbSecondaryButton size="md" align="start">
-                <span className="font-mono text-sm">⤓</span>
-                Backup
-              </KbSecondaryButton>
-              <KbSecondaryButton size="md" align="start">
-                <span className="font-mono text-sm">⤒</span>
-                Restore
-              </KbSecondaryButton>
-              <KbSecondaryButton size="md" align="start">
-                <span className="font-mono text-sm">⋯</span>
-                Logs
-              </KbSecondaryButton>
-            </div>
-
-            <div className="mt-2.5 border border-line bg-paper px-3 py-2.5">
-              <div className="mb-2 font-mono text-[9px] font-semibold uppercase tracking-[0.14em] text-ink-3">
-                Labels & imports · workspace-wide
-              </div>
-              <div className="grid grid-cols-3 gap-2">
-                <KbSecondaryButton size="sm" align="start">
-                  ↓ Import BIP-329
-                </KbSecondaryButton>
-                <KbSecondaryButton size="sm" align="start">
-                  ↑ Export BIP-329
-                </KbSecondaryButton>
-                <KbSecondaryButton size="sm" align="start">
-                  ↓ Import CSV
-                </KbSecondaryButton>
-              </div>
-            </div>
-
-            <div className="mt-2 font-mono text-[10px] leading-[1.6] text-ink-3">
-              DB ~/.kassiber/kassiber.db · 2.4 MB
-              <br />
-              Last backup 2026-04-17 23:02 · backup_2026-04-17.tar.zst
-            </div>
-          </Section>
-
-          {/* Sync backends */}
-          <Section title="Sync backends">
-            <div className="flex flex-col gap-1.5">
-              {backends.map((b) => (
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2 text-base">
+                  <Lock className="size-4" aria-hidden="true" />
+                  App lock
+                </CardTitle>
+                <CardDescription>
+                  Local lock behavior for decrypted workspace state.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <SettingsSwitchRow
+                  label="Auto-lock when idle"
+                  description="Require passphrase after inactivity."
+                  checked={autoLockEnabled}
+                  onCheckedChange={setAutoLockEnabled}
+                />
                 <div
-                  key={b.id}
-                  className="grid grid-cols-[10px_64px_1fr_auto_auto] items-center gap-3 border border-line px-2.5 py-2"
+                  className={cn(
+                    "space-y-2",
+                    !autoLockEnabled && "pointer-events-none opacity-50",
+                  )}
                 >
-                  <span
-                    className={cn(
-                      "size-1.5 rounded-full",
-                      b.on ? "bg-[#3fa66a]" : "bg-ink-3",
-                    )}
-                  />
-                  <NetworkBadge net={b.net} />
-                  <div className="min-w-0">
-                    <div className="font-mono text-xs text-ink">{b.name}</div>
-                    <div className="overflow-hidden text-ellipsis whitespace-nowrap font-mono text-[10px] text-ink-3">
-                      {b.url}
-                    </div>
+                  <Label>Idle timeout</Label>
+                  <div className="flex flex-wrap gap-2">
+                    {[1, 5, 15, 30, 60].map((m) => (
+                      <Button
+                        key={m}
+                        type="button"
+                        variant={autoLockMinutes === m ? "default" : "outline"}
+                        size="sm"
+                        onClick={() => setAutoLockMinutes(m)}
+                      >
+                        {m}m
+                      </Button>
+                    ))}
                   </div>
-                  <span
-                    className={cn(
-                      "min-w-[120px] text-right font-mono text-[10px] tracking-[0.04em]",
-                      b.on ? "text-ink-2" : "text-ink-3",
-                    )}
-                  >
-                    {b.health}
-                  </span>
-                  <span
-                    className={cn(
-                      "min-w-[44px] text-right font-mono text-[9px] uppercase tracking-[0.12em]",
-                      b.on ? "text-[#3fa66a]" : "text-ink-3",
-                    )}
-                  >
-                    {b.on ? "active" : "idle"}
-                  </span>
                 </div>
-              ))}
+                <SettingsSwitchRow
+                  label="Require passphrase on launch"
+                  description="Prompt every time Kassiber opens."
+                  checked={requirePassphrase}
+                  onCheckedChange={setRequirePassphrase}
+                />
+                <SettingsSwitchRow
+                  label="Lock on window close"
+                  description="Clear in-memory decrypted state when the app window closes."
+                  checked={lockOnClose}
+                  onCheckedChange={setLockOnClose}
+                />
+                <div className="flex flex-wrap gap-2 pt-1">
+                  <Button type="button" size="sm" variant="outline">
+                    <Lock className="size-4" aria-hidden="true" />
+                    Lock now
+                  </Button>
+                  <Button type="button" size="sm" variant="ghost">
+                    <KeyRound className="size-4" aria-hidden="true" />
+                    Change passphrase
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
 
-              <button
-                onClick={() => setAddOpen(true)}
-                className="flex cursor-pointer items-center justify-center gap-2 border border-dashed border-ink-3 bg-transparent px-2.5 py-2.5 font-mono text-[11px] uppercase tracking-[0.1em] text-ink-2 hover:border-ink hover:bg-paper-2"
-              >
-                <svg
-                  width="10"
-                  height="10"
-                  viewBox="0 0 10 10"
-                  fill="none"
-                  aria-hidden="true"
+            <Card className="lg:col-span-2">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2 text-base">
+                  <Database className="size-4" aria-hidden="true" />
+                  Data
+                </CardTitle>
+                <CardDescription>
+                  Backup, restore, labels, imports, and local database status.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="grid gap-2 sm:grid-cols-3">
+                  <Button type="button" variant="outline" className="justify-start">
+                    <Download className="size-4" aria-hidden="true" />
+                    Backup
+                  </Button>
+                  <Button type="button" variant="outline" className="justify-start">
+                    <Upload className="size-4" aria-hidden="true" />
+                    Restore
+                  </Button>
+                  <Button type="button" variant="outline" className="justify-start">
+                    <FileInput className="size-4" aria-hidden="true" />
+                    Logs
+                  </Button>
+                </div>
+
+                <Separator />
+
+                <div className="grid gap-2 sm:grid-cols-3">
+                  <Button type="button" variant="secondary" className="justify-start">
+                    Import BIP-329
+                  </Button>
+                  <Button type="button" variant="secondary" className="justify-start">
+                    Export BIP-329
+                  </Button>
+                  <Button type="button" variant="secondary" className="justify-start">
+                    Import CSV
+                  </Button>
+                </div>
+
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <div className="space-y-1.5">
+                    <Label htmlFor="settings-db-path">Database</Label>
+                    <Input
+                      id="settings-db-path"
+                      readOnly
+                      value="~/.kassiber/kassiber.db"
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="settings-last-backup">Last backup</Label>
+                    <Input
+                      id="settings-last-backup"
+                      readOnly
+                      value="2026-04-17 23:02 - backup_2026-04-17.tar.zst"
+                    />
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card className="lg:col-span-2">
+              <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <CardTitle className="flex items-center gap-2 text-base">
+                    <Server className="size-4" aria-hidden="true" />
+                    Sync backends
+                  </CardTitle>
+                  <CardDescription>
+                    Local node, indexer, and rate endpoints available to the workspace.
+                  </CardDescription>
+                </div>
+                <Button type="button" size="sm" onClick={() => setAddOpen(true)}>
+                  <Plus className="size-4" aria-hidden="true" />
+                  Add backend
+                </Button>
+              </CardHeader>
+              <CardContent>
+                <div className="overflow-x-auto rounded-md border">
+                  <Table>
+                    <TableHeader>
+                      <TableRow className="bg-muted/50 hover:bg-muted/50">
+                        <TableHead>Backend</TableHead>
+                        <TableHead>Network</TableHead>
+                        <TableHead>Health</TableHead>
+                        <TableHead>Auth</TableHead>
+                        <TableHead className="text-right">Status</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {backends.map((backend) => (
+                        <TableRow key={backend.id}>
+                          <TableCell className="min-w-[240px]">
+                            <div className="font-medium">{backend.name}</div>
+                            <div className="max-w-[360px] truncate text-xs text-muted-foreground">
+                              {backend.url}
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            <NetworkBadge net={backend.net} />
+                          </TableCell>
+                          <TableCell className="text-muted-foreground">
+                            {backend.health}
+                          </TableCell>
+                          <TableCell className="text-muted-foreground">
+                            {backend.auth}
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <StatusBadge active={backend.on} />
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card className="border-destructive/30 lg:col-span-2">
+              <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <CardTitle className="flex items-center gap-2 text-base text-destructive">
+                    <Trash2 className="size-4" aria-hidden="true" />
+                    Danger zone
+                  </CardTitle>
+                  <CardDescription>
+                    Reset local identity and return to the Welcome screen.
+                  </CardDescription>
+                </div>
+                <Button
+                  type="button"
+                  variant="destructive"
+                  onClick={onResetWorkspace}
                 >
-                  <path
-                    d="M5 1 V9 M1 5 H9"
-                    stroke="currentColor"
-                    strokeWidth="1.2"
-                    strokeLinecap="round"
-                  />
-                </svg>
-                Add backend
-              </button>
-            </div>
-          </Section>
+                  Reset workspace
+                </Button>
+              </CardHeader>
+            </Card>
+          </div>
+        </ScrollArea>
 
-          {/* Danger zone */}
-          <Section title="Danger zone">
-            <Button
-              variant="destructive"
-              className="self-start rounded-none"
-              size="sm"
-              onClick={onResetWorkspace}
-            >
-              ⚠ Reset workspace
-            </Button>
-          </Section>
-        </div>
+        <DialogFooter className="border-t px-6 py-4">
+          <Button type="button" variant="outline" onClick={onClose}>
+            Done
+          </Button>
+        </DialogFooter>
 
         <AddBackendModal
           open={addOpen}
           onClose={() => setAddOpen(false)}
-          onAdd={(b) => {
-            setBackends((prev) => [...prev, b]);
+          onAdd={(backend) => {
+            setBackends((prev) => [...prev, backend]);
             setAddOpen(false);
           }}
         />
@@ -340,124 +398,44 @@ export function SettingsModal({ open, onClose }: SettingsModalProps) {
   );
 }
 
-interface SectionProps {
-  title: string;
-  children: React.ReactNode;
-}
-
-function Section({ title, children }: SectionProps) {
-  return (
-    <div className="flex flex-col gap-2.5">
-      <div className="border-b border-line pb-1.5 font-mono text-[10px] font-semibold uppercase tracking-[0.14em] text-ink-3">
-        {title}
-      </div>
-      {children}
-    </div>
-  );
-}
-
-interface RowProps {
+interface SettingsSwitchRowProps {
   label: string;
-  sub?: string;
-  control: React.ReactNode;
+  description: string;
+  checked: boolean;
+  onCheckedChange: (checked: boolean) => void;
 }
 
-function Row({ label, sub, control }: RowProps) {
+function SettingsSwitchRow({
+  label,
+  description,
+  checked,
+  onCheckedChange,
+}: SettingsSwitchRowProps) {
   return (
-    <div className="flex items-center gap-3.5 py-1.5">
-      <div className="flex-1">
-        <div className="font-sans text-[13px] text-ink">{label}</div>
-        {sub && (
-          <div className="mt-0.5 font-sans text-[11px] text-ink-3">{sub}</div>
-        )}
+    <div className="flex items-start justify-between gap-4">
+      <div className="min-w-0 space-y-1">
+        <Label className="text-sm font-medium">{label}</Label>
+        <p className="text-sm text-muted-foreground">{description}</p>
       </div>
-      {control}
+      <Switch checked={checked} onCheckedChange={onCheckedChange} />
     </div>
   );
 }
 
-interface ToggleProps {
-  on: boolean;
-  onChange?: (next: boolean) => void;
-}
+function NetworkBadge({ net }: { net: Net }) {
+  const classes: Record<Net, string> = {
+    BTC: "border-amber-500/25 bg-amber-500/10 text-amber-700 dark:text-amber-300",
+    LIQUID:
+      "border-sky-500/25 bg-sky-500/10 text-sky-700 dark:text-sky-300",
+    LN: "border-violet-500/25 bg-violet-500/10 text-violet-700 dark:text-violet-300",
+    FX: "border-emerald-500/25 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300",
+  };
 
-function Toggle({ on, onChange }: ToggleProps) {
-  return (
-    <button
-      type="button"
-      onClick={() => onChange?.(!on)}
-      className={cn(
-        "relative h-5 w-9 cursor-pointer border-none p-0 transition-colors",
-        on ? "bg-ink" : "bg-line-2",
-      )}
-      aria-pressed={on}
-    >
-      <span
-        className={cn(
-          "absolute top-0.5 size-4 bg-paper-2 transition-[left]",
-          on ? "left-[18px]" : "left-0.5",
-        )}
-      />
-    </button>
-  );
-}
-
-interface PillProps {
-  active: boolean;
-  onClick?: () => void;
-  children: React.ReactNode;
-}
-
-function Pill({ active, onClick, children }: PillProps) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      disabled={!onClick}
-      className={cn(
-        "border px-2 py-0.5 font-mono text-[10px] tracking-[0.04em] disabled:cursor-not-allowed",
-        active
-          ? "border-ink bg-ink text-paper"
-          : "border-line bg-transparent text-ink-2 hover:border-ink-3",
-        onClick && "cursor-pointer",
-      )}
-    >
-      {children}
-    </button>
-  );
-}
-
-interface NetworkBadgeProps {
-  net: Net;
-}
-
-const NETWORK_PALETTE: Record<
-  Net,
-  { className: string; style?: React.CSSProperties }
-> = {
-  BTC: {
-    className:
-      "border-[rgba(177,106,18,0.45)] bg-[rgba(177,106,18,0.10)] text-[#b16a12]",
-  },
-  LIQUID: {
-    className:
-      "border-[rgba(62,94,168,0.45)] bg-[rgba(62,94,168,0.10)] text-[#3e5ea8]",
-  },
-  LN: {
-    className:
-      "border-[rgba(122,63,166,0.45)] bg-[rgba(122,63,166,0.10)] text-[#7a3fa6]",
-  },
-  FX: {
-    className: "border-ink-3 bg-transparent text-ink-2",
-  },
-};
-
-function NetworkBadge({ net }: NetworkBadgeProps) {
   return (
     <span
       className={cn(
-        "inline-flex items-center justify-center border px-2 py-0.5 font-mono text-[9px] font-bold tracking-[0.14em]",
-        NETWORK_PALETTE[net].className,
+        "inline-flex items-center rounded-md border px-2 py-0.5 text-xs font-medium",
+        classes[net],
       )}
     >
       {net}
@@ -465,60 +443,20 @@ function NetworkBadge({ net }: NetworkBadgeProps) {
   );
 }
 
-interface KbButtonProps {
-  size?: "sm" | "md";
-  align?: "center" | "start";
-  disabled?: boolean;
-  onClick?: () => void;
-  children: React.ReactNode;
-}
-
-function KbSecondaryButton({
-  size = "md",
-  align = "center",
-  disabled,
-  onClick,
-  children,
-}: KbButtonProps) {
+function StatusBadge({ active }: { active: boolean }) {
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      disabled={disabled}
+    <span
       className={cn(
-        "inline-flex cursor-pointer items-center gap-2 border border-line bg-paper-2 font-sans text-ink hover:border-ink hover:bg-paper",
-        align === "start" ? "justify-start" : "justify-center",
-        size === "sm"
-          ? "h-7 px-2.5 text-[11px]"
-          : "h-8 px-3 text-xs",
-        disabled && "cursor-not-allowed opacity-50 hover:border-line hover:bg-paper-2",
+        "inline-flex items-center rounded-md border px-2 py-0.5 text-xs font-medium",
+        active
+          ? "border-emerald-500/25 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300"
+          : "border-border bg-muted text-muted-foreground",
       )}
     >
-      {children}
-    </button>
+      {active ? "Active" : "Idle"}
+    </span>
   );
 }
-
-function KbGhostButton({
-  size = "md",
-  onClick,
-  children,
-}: KbButtonProps) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={cn(
-        "inline-flex cursor-pointer items-center justify-center gap-2 border border-transparent bg-transparent font-sans text-ink-2 hover:text-ink",
-        size === "sm" ? "h-7 px-2 text-[11px]" : "h-8 px-2.5 text-xs",
-      )}
-    >
-      {children}
-    </button>
-  );
-}
-
-// ─── Add Backend modal ───────────────────────────────────────────────────────
 
 interface BackendPreset {
   id: string;
@@ -542,10 +480,30 @@ const BACKEND_TYPES: BackendType[] = [
     net: "BTC",
     desc: "Read blocks, addresses and UTXOs from a Bitcoin backend.",
     presets: [
-      { id: "mempool", name: "mempool.space", url: "https://mempool.space/api", scheme: "REST" },
-      { id: "esplora", name: "Blockstream Esplora", url: "https://blockstream.info/api", scheme: "REST" },
-      { id: "electrum", name: "Electrum server", url: "tcp://127.0.0.1:50001", scheme: "Electrum" },
-      { id: "core", name: "Bitcoin Core RPC", url: "http://127.0.0.1:8332", scheme: "RPC" },
+      {
+        id: "mempool",
+        name: "mempool.space",
+        url: "https://mempool.space/api",
+        scheme: "REST",
+      },
+      {
+        id: "esplora",
+        name: "Blockstream Esplora",
+        url: "https://blockstream.info/api",
+        scheme: "REST",
+      },
+      {
+        id: "electrum",
+        name: "Electrum server",
+        url: "tcp://127.0.0.1:50001",
+        scheme: "Electrum",
+      },
+      {
+        id: "core",
+        name: "Bitcoin Core RPC",
+        url: "http://127.0.0.1:8332",
+        scheme: "RPC",
+      },
     ],
   },
   {
@@ -554,39 +512,83 @@ const BACKEND_TYPES: BackendType[] = [
     net: "LN",
     desc: "Read channel state, invoices and forwards from an LN node.",
     presets: [
-      { id: "lnd", name: "LND", url: "https://127.0.0.1:8080", scheme: "REST" },
-      { id: "cln", name: "Core Lightning", url: "http://127.0.0.1:3010", scheme: "CLNREST" },
-      { id: "lnbits", name: "LNbits", url: "https://your.lnbits.host", scheme: "REST" },
-      { id: "nwc", name: "Nostr Wallet Connect", url: "nostr+walletconnect://", scheme: "NWC" },
+      {
+        id: "lnd",
+        name: "LND",
+        url: "https://127.0.0.1:8080",
+        scheme: "REST",
+      },
+      {
+        id: "cln",
+        name: "Core Lightning",
+        url: "http://127.0.0.1:3010",
+        scheme: "CLNREST",
+      },
+      {
+        id: "lnbits",
+        name: "LNbits",
+        url: "https://your.lnbits.host",
+        scheme: "REST",
+      },
+      {
+        id: "nwc",
+        name: "Nostr Wallet Connect",
+        url: "nostr+walletconnect://",
+        scheme: "NWC",
+      },
     ],
   },
   {
     id: "liquid",
-    label: "Liquid / sidechain",
+    label: "Liquid",
     net: "LIQUID",
-    desc: "Read Liquid, Rootstock or other sidechain balances.",
+    desc: "Read Liquid balances and sidechain activity.",
     presets: [
-      { id: "blockstream", name: "Blockstream Liquid", url: "https://blockstream.info/liquid/api", scheme: "REST" },
-      { id: "liquidcore", name: "Elements RPC", url: "http://127.0.0.1:7041", scheme: "RPC" },
+      {
+        id: "blockstream",
+        name: "Blockstream Liquid",
+        url: "https://blockstream.info/liquid/api",
+        scheme: "REST",
+      },
+      {
+        id: "liquidcore",
+        name: "Elements RPC",
+        url: "http://127.0.0.1:7041",
+        scheme: "RPC",
+      },
     ],
   },
   {
     id: "fx",
     label: "Price / FX",
     net: "FX",
-    desc: "BTC/EUR and other fiat reference rates, spot and historical.",
+    desc: "BTC/EUR and other fiat reference rates.",
     presets: [
-      { id: "coingecko", name: "CoinGecko", url: "https://api.coingecko.com/api/v3", scheme: "REST" },
-      { id: "kraken", name: "Kraken", url: "https://api.kraken.com/0/public", scheme: "REST" },
-      { id: "bitstamp", name: "Bitstamp", url: "https://www.bitstamp.net/api/v2", scheme: "REST" },
-      { id: "ecb", name: "ECB reference", url: "https://data-api.ecb.europa.eu/service/data", scheme: "REST" },
+      {
+        id: "coingecko",
+        name: "CoinGecko",
+        url: "https://api.coingecko.com/api/v3",
+        scheme: "REST",
+      },
+      {
+        id: "kraken",
+        name: "Kraken",
+        url: "https://api.kraken.com/0/public",
+        scheme: "REST",
+      },
+      {
+        id: "bitstamp",
+        name: "Bitstamp",
+        url: "https://www.bitstamp.net/api/v2",
+        scheme: "REST",
+      },
     ],
   },
   {
     id: "other",
     label: "Other",
     net: "FX",
-    desc: "A generic HTTP / WebSocket endpoint.",
+    desc: "A generic HTTP or WebSocket endpoint.",
     presets: [],
   },
 ];
@@ -617,17 +619,18 @@ function AddBackendModal({ open, onClose, onAdd }: AddBackendModalProps) {
   const [testState, setTestState] = React.useState<TestState>("idle");
 
   const type =
-    BACKEND_TYPES.find((t) => t.id === typeId) ?? BACKEND_TYPES[0];
+    BACKEND_TYPES.find((candidate) => candidate.id === typeId) ??
+    BACKEND_TYPES[0];
   const preset =
     presetId === "custom"
       ? null
-      : type.presets.find((p) => p.id === presetId) ?? null;
+      : type.presets.find((candidate) => candidate.id === presetId) ?? null;
 
   React.useEffect(() => {
     if (!open) return;
     setTypeId("btc");
     setPresetId("mempool");
-    setName("");
+    setName("mempool.space");
     setUrl("https://mempool.space/api");
     setAuth("none");
     setAuthVal("");
@@ -645,13 +648,12 @@ function AddBackendModal({ open, onClose, onAdd }: AddBackendModalProps) {
       setName("");
     }
     setTestState("idle");
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [typeId, presetId]);
+  }, [open, preset, presetId]);
 
   const onPickType = (id: string) => {
     setTypeId(id);
-    const t = BACKEND_TYPES.find((x) => x.id === id);
-    setPresetId(t?.presets[0]?.id ?? "custom");
+    const nextType = BACKEND_TYPES.find((candidate) => candidate.id === id);
+    setPresetId(nextType?.presets[0]?.id ?? "custom");
   };
 
   const testConnection = () => {
@@ -673,7 +675,7 @@ function AddBackendModal({ open, onClose, onAdd }: AddBackendModalProps) {
       name: name.trim(),
       url: url.trim(),
       net: type.net,
-      health: testState === "ok" ? "just added · ok" : "—",
+      health: testState === "ok" ? "just added - ok" : "-",
       on: testState === "ok",
       auth,
     });
@@ -686,240 +688,220 @@ function AddBackendModal({ open, onClose, onAdd }: AddBackendModalProps) {
         if (!next) onClose();
       }}
     >
-      <DialogContent
-        className={cn(
-          "max-h-[90vh] w-full max-w-[620px] gap-0 overflow-y-auto",
-          "rounded-none border-ink bg-paper p-0 shadow-hard-ink",
-        )}
-      >
-        <DialogHeader className="flex-row items-center justify-between gap-2 border-b border-line px-5 py-3.5">
-          <DialogTitle className="font-sans text-base font-semibold tracking-[-0.005em] text-ink">
-            Add backend
-          </DialogTitle>
-          <DialogDescription className="sr-only">
-            Connect a Bitcoin, Lightning, Liquid, or rate backend.
+      <DialogContent className="max-h-[88vh] w-full max-w-[760px] overflow-hidden p-0 sm:max-w-[760px]">
+        <DialogHeader className="border-b px-6 py-5">
+          <DialogTitle>Add backend</DialogTitle>
+          <DialogDescription>
+            Connect a Bitcoin, Lightning, Liquid, or price backend.
           </DialogDescription>
         </DialogHeader>
 
-        <div className="flex flex-col gap-[18px] p-5">
-          {/* 1 — Type selector */}
-          <div>
-            <SectionLabel step="01" label="Backend type" />
-            <div className="mt-2 grid grid-cols-5 gap-1.5">
-              {BACKEND_TYPES.map((t) => {
-                const active = t.id === typeId;
-                return (
-                  <button
-                    key={t.id}
-                    type="button"
-                    onClick={() => onPickType(t.id)}
-                    className={cn(
-                      "flex min-h-[72px] cursor-pointer flex-col gap-1.5 border p-2.5 text-left",
-                      active
-                        ? "border-ink bg-paper-2 shadow-[3px_3px_0_var(--color-ink)]"
-                        : "border-line bg-transparent",
-                    )}
-                  >
-                    <NetworkBadge net={t.net} />
-                    <span className="font-sans text-xs font-medium leading-[1.2] text-ink">
-                      {t.label}
-                    </span>
-                  </button>
-                );
-              })}
-            </div>
-            <div className="mt-2 font-sans text-[11px] text-ink-3">
-              {type.desc}
-            </div>
-          </div>
-
-          {/* 2 — Preset */}
-          {type.presets.length > 0 && (
-            <div>
-              <SectionLabel step="02" label="Preset" />
-              <div className="mt-2 flex flex-wrap gap-1">
-                {type.presets.map((p) => (
-                  <Pill
-                    key={p.id}
-                    active={presetId === p.id}
-                    onClick={() => setPresetId(p.id)}
-                  >
-                    {p.name}
-                    <span className="ml-1.5 text-[9px] opacity-60">
-                      {p.scheme}
-                    </span>
-                  </Pill>
-                ))}
-                <Pill
-                  active={presetId === "custom"}
-                  onClick={() => setPresetId("custom")}
-                >
-                  + Custom
-                </Pill>
+        <ScrollArea className="max-h-[calc(88vh-150px)]">
+          <div className="space-y-5 p-6">
+            <section className="space-y-3">
+              <div>
+                <Label>Backend type</Label>
+                <p className="text-sm text-muted-foreground">{type.desc}</p>
               </div>
-            </div>
-          )}
-
-          {/* 3 — Connection details */}
-          <div>
-            <SectionLabel
-              step={type.presets.length > 0 ? "03" : "02"}
-              label="Connection"
-            />
-            <div className="mt-2 flex flex-col gap-2.5">
-              <LabeledInput
-                label="Display name"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                placeholder="e.g. My home node"
-              />
-              <LabeledInput
-                label="Endpoint URL"
-                value={url}
-                onChange={(e) => {
-                  setUrl(e.target.value);
-                  setTestState("idle");
-                }}
-                placeholder="https://…"
-                mono
-              />
-
-              <div className="flex flex-col gap-1.5">
-                <span className="font-sans text-[10px] font-semibold uppercase tracking-[0.12em] text-ink-2">
-                  Authentication
-                </span>
-                <div className="flex flex-wrap gap-1">
-                  {AUTH_MODES.map((m) => (
-                    <Pill
-                      key={m.id}
-                      active={auth === m.id}
-                      onClick={() => setAuth(m.id)}
+              <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-5">
+                {BACKEND_TYPES.map((backendType) => {
+                  const active = backendType.id === typeId;
+                  return (
+                    <Button
+                      key={backendType.id}
+                      type="button"
+                      variant={active ? "default" : "outline"}
+                      className="h-auto min-h-20 flex-col items-start justify-start gap-2 whitespace-normal p-3 text-left"
+                      onClick={() => onPickType(backendType.id)}
                     >
-                      {m.label}
-                    </Pill>
+                      <NetworkBadge net={backendType.net} />
+                      <span className="text-sm leading-tight font-medium">
+                        {backendType.label}
+                      </span>
+                    </Button>
+                  );
+                })}
+              </div>
+            </section>
+
+            {type.presets.length > 0 && (
+              <section className="space-y-3">
+                <Label>Preset</Label>
+                <div className="flex flex-wrap gap-2">
+                  {type.presets.map((backendPreset) => (
+                    <Button
+                      key={backendPreset.id}
+                      type="button"
+                      variant={
+                        presetId === backendPreset.id ? "default" : "outline"
+                      }
+                      size="sm"
+                      onClick={() => setPresetId(backendPreset.id)}
+                    >
+                      {backendPreset.name}
+                      <span className="text-xs opacity-70">
+                        {backendPreset.scheme}
+                      </span>
+                    </Button>
                   ))}
+                  <Button
+                    type="button"
+                    variant={presetId === "custom" ? "default" : "outline"}
+                    size="sm"
+                    onClick={() => setPresetId("custom")}
+                  >
+                    Custom
+                  </Button>
                 </div>
-                {auth === "apikey" && (
-                  <LabeledInput
-                    label="API key"
-                    value={authVal}
-                    onChange={(e) => setAuthVal(e.target.value)}
-                    placeholder="sk_live_…"
-                    type="password"
-                    mono
-                  />
-                )}
-                {auth === "bearer" && (
-                  <LabeledInput
-                    label="Bearer token"
-                    value={authVal}
-                    onChange={(e) => setAuthVal(e.target.value)}
-                    placeholder="eyJ…"
-                    type="password"
-                    mono
-                  />
-                )}
-                {auth === "basic" && (
-                  <div className="grid grid-cols-2 gap-2">
-                    <LabeledInput
-                      label="Username"
+              </section>
+            )}
+
+            <section className="grid gap-4 sm:grid-cols-2">
+              <div className="space-y-2">
+                <Label htmlFor="backend-name">Display name</Label>
+                <Input
+                  id="backend-name"
+                  value={name}
+                  onChange={(event) => setName(event.target.value)}
+                  placeholder="My home node"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="backend-url">Endpoint URL</Label>
+                <Input
+                  id="backend-url"
+                  value={url}
+                  onChange={(event) => {
+                    setUrl(event.target.value);
+                    setTestState("idle");
+                  }}
+                  placeholder="https://..."
+                />
+              </div>
+            </section>
+
+            <section className="space-y-3">
+              <Label>Authentication</Label>
+              <div className="flex flex-wrap gap-2">
+                {AUTH_MODES.map((mode) => (
+                  <Button
+                    key={mode.id}
+                    type="button"
+                    variant={auth === mode.id ? "default" : "outline"}
+                    size="sm"
+                    onClick={() => setAuth(mode.id)}
+                  >
+                    {mode.label}
+                  </Button>
+                ))}
+              </div>
+              {auth === "apikey" && (
+                <SecretField
+                  id="backend-api-key"
+                  label="API key"
+                  value={authVal}
+                  onChange={setAuthVal}
+                  placeholder="sk_live_..."
+                />
+              )}
+              {auth === "bearer" && (
+                <SecretField
+                  id="backend-bearer"
+                  label="Bearer token"
+                  value={authVal}
+                  onChange={setAuthVal}
+                  placeholder="eyJ..."
+                />
+              )}
+              {auth === "basic" && (
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label htmlFor="backend-username">Username</Label>
+                    <Input
+                      id="backend-username"
                       value={authVal}
-                      onChange={(e) => setAuthVal(e.target.value)}
-                      mono
-                    />
-                    <LabeledInput
-                      label="Password"
-                      value={authVal2}
-                      onChange={(e) => setAuthVal2(e.target.value)}
-                      type="password"
-                      mono
+                      onChange={(event) => setAuthVal(event.target.value)}
                     />
                   </div>
+                  <SecretField
+                    id="backend-password"
+                    label="Password"
+                    value={authVal2}
+                    onChange={setAuthVal2}
+                  />
+                </div>
+              )}
+            </section>
+
+            <div className="rounded-md border bg-muted/30 p-3 text-sm">
+              <div className="flex flex-wrap items-center gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={testConnection}
+                  disabled={!url.trim() || testState === "testing"}
+                >
+                  <RefreshCw
+                    className={cn(
+                      "size-4",
+                      testState === "testing" && "animate-spin",
+                    )}
+                    aria-hidden="true"
+                  />
+                  {testState === "testing" ? "Testing" : "Test connection"}
+                </Button>
+                {testState === "ok" && (
+                  <span className="text-emerald-600">Connected - 142 ms</span>
+                )}
+                {testState === "fail" && (
+                  <span className="text-destructive">
+                    Could not reach endpoint
+                  </span>
                 )}
               </div>
             </div>
           </div>
+        </ScrollArea>
 
-          {/* Test + footer */}
-          <div className="flex items-center gap-2.5 border-t border-ink pt-3.5">
-            <KbSecondaryButton
-              size="sm"
-              onClick={testConnection}
-              disabled={!url.trim() || testState === "testing"}
-            >
-              <span
-                className={cn(
-                  "inline-flex size-2.5 items-center justify-center",
-                  testState === "testing" && "animate-spin",
-                )}
-              >
-                <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
-                  <path
-                    d="M1.6 5 A3.4 3.4 0 1 1 5 8.4"
-                    stroke="currentColor"
-                    strokeWidth="1.1"
-                    fill="none"
-                    strokeLinecap="round"
-                  />
-                  <path
-                    d="M1.6 5 L1.6 2.3 L4.3 2.3"
-                    stroke="currentColor"
-                    strokeWidth="1.1"
-                    fill="none"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  />
-                </svg>
-              </span>
-              {testState === "testing" ? "Testing…" : "Test connection"}
-            </KbSecondaryButton>
-
-            {testState === "ok" && (
-              <span className="inline-flex items-center gap-1.5 font-mono text-[10px] uppercase tracking-[0.1em] text-[#3fa66a]">
-                <span className="size-1.5 rounded-full bg-[#3fa66a]" />
-                Connected · 142 ms
-              </span>
-            )}
-            {testState === "fail" && (
-              <span className="font-mono text-[10px] uppercase tracking-[0.1em] text-accent">
-                ⚠ Could not reach endpoint
-              </span>
-            )}
-
-            <div className="ml-auto flex gap-2">
-              <KbGhostButton size="md" onClick={onClose}>
-                Cancel
-              </KbGhostButton>
-              <Button
-                onClick={add}
-                disabled={!canAdd}
-                size="sm"
-                className="rounded-none"
-              >
-                Add backend
-              </Button>
-            </div>
-          </div>
-        </div>
+        <DialogFooter className="border-t px-6 py-4">
+          <Button type="button" variant="outline" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button type="button" disabled={!canAdd} onClick={add}>
+            Add backend
+          </Button>
+        </DialogFooter>
       </DialogContent>
     </Dialog>
   );
 }
 
-interface SectionLabelProps {
-  step: string;
+interface SecretFieldProps {
+  id: string;
   label: string;
+  value: string;
+  onChange: (value: string) => void;
+  placeholder?: string;
 }
 
-function SectionLabel({ step, label }: SectionLabelProps) {
+function SecretField({
+  id,
+  label,
+  value,
+  onChange,
+  placeholder,
+}: SecretFieldProps) {
   return (
-    <div className="flex items-baseline gap-2 border-b border-line pb-1.5">
-      <span className="font-mono text-[9px] font-bold tracking-[0.14em] text-accent">
-        {step}
-      </span>
-      <span className="font-mono text-[10px] font-semibold uppercase tracking-[0.14em] text-ink-2">
-        {label}
-      </span>
+    <div className="space-y-2">
+      <Label htmlFor={id}>{label}</Label>
+      <Input
+        id={id}
+        type="password"
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        placeholder={placeholder}
+      />
     </div>
   );
 }

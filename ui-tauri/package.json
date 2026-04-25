@@ -10,7 +10,8 @@
     "preview": "vite preview",
     "typecheck": "tsc -b --noEmit",
     "lint": "eslint .",
-    "test": "vitest"
+    "test": "vitest",
+    "blocks:add:dashboard5": "sh -c 'set -a; [ -f .env ] && . ./.env; set +a; if [ -z \"${SHADCNBLOCKS_API_KEY:-}\" ] || [ \"$SHADCNBLOCKS_API_KEY\" = \"replace_with_your_shadcnblocks_api_key\" ]; then echo \"Set SHADCNBLOCKS_API_KEY in ui-tauri/.env first\" >&2; exit 1; fi; npx shadcn@latest add @shadcnblocks/dashboard5'"
   },
   "dependencies": {
     "@fontsource/blinker": "^5.2.5",
@@ -23,6 +24,7 @@
     "radix-ui": "^1.4.3",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
+    "recharts": "^3.8.1",
     "tailwind-merge": "^2.6.0",
     "zustand": "^5.0.3"
   },

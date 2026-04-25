@@ -1,34 +1,42 @@
 /**
  * Connections list view.
  *
- * Visual translation of the connections list from claude-design — a
- * richer table-style view than the Overview's ConnectionsCard, with
- * full sync metadata, address counts, and a per-row composition bar.
- *
- * Per-row click navigates to /connections/$connectionId. Add connection
- * opens the AddConnectionFlow (picker → per-kind form).
- *
- * Outstanding before this screen is feature-complete:
- *  - Per-kind add forms beyond xpub (descriptor, lightning, exchange,
- *    cashu, btcpay, csv) — each lands when its claude-design source
- *    materializes
- *  - Bulk sync / per-row sync actions wiring to the daemon
+ * Uses the shared shadcn dashboard language while keeping the existing
+ * AddConnectionFlow and row navigation behavior.
  */
 
-import { useState } from "react";
-import { Plus, RefreshCw } from "lucide-react";
+import { useState, type KeyboardEvent, type ReactNode } from "react";
+import { Plus, RefreshCw, Wallet } from "lucide-react";
 import { useNavigate } from "@tanstack/react-router";
 
 import { Button } from "@/components/ui/button";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import { useDaemon } from "@/daemon/client";
 import { useUiStore } from "@/store/ui";
 import { useCurrency, type Currency } from "@/lib/currency";
 import { cn } from "@/lib/utils";
 
-import { SyncDot } from "@/components/kb/SyncDot";
-import { ProtocolChip } from "@/components/kb/ProtocolChip";
 import { AddConnectionFlow } from "@/components/kb/AddConnectionFlow";
-import type { Connection, OverviewSnapshot } from "@/mocks/seed";
+import type {
+  Connection,
+  ConnectionKind,
+  ConnectionStatus,
+  OverviewSnapshot,
+} from "@/mocks/seed";
 
 const blurClass = (hidden: boolean) => (hidden ? "sensitive" : "");
 
@@ -39,6 +47,41 @@ const fmtEur = (v: number) =>
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   });
+
+const kindLabels: Record<ConnectionKind, string> = {
+  xpub: "On-chain",
+  descriptor: "On-chain",
+  "core-ln": "Lightning",
+  lnd: "Lightning",
+  nwc: "NWC",
+  cashu: "Ecash",
+  btcpay: "BTCPay",
+  kraken: "Exchange",
+  bitstamp: "Exchange",
+  coinbase: "Exchange",
+  bitpanda: "Exchange",
+  river: "Exchange",
+  strike: "Lightning",
+  csv: "CSV",
+  bip329: "BIP329",
+};
+
+const statusStyles: Record<ConnectionStatus, string> = {
+  synced:
+    "bg-emerald-50 text-emerald-700 ring-emerald-600/20 dark:bg-emerald-900/30 dark:text-emerald-400 dark:ring-emerald-400/20",
+  syncing:
+    "bg-amber-50 text-amber-700 ring-amber-600/20 dark:bg-amber-900/30 dark:text-amber-400 dark:ring-amber-400/20",
+  idle: "bg-muted text-muted-foreground ring-border",
+  error:
+    "bg-red-50 text-red-700 ring-red-600/20 dark:bg-red-900/30 dark:text-red-400 dark:ring-red-400/20",
+};
+
+const statusDotStyles: Record<ConnectionStatus, string> = {
+  synced: "bg-emerald-500",
+  syncing: "bg-amber-500",
+  idle: "bg-muted-foreground/50",
+  error: "bg-red-500",
+};
 
 export function Connections() {
   const { data, isLoading } = useDaemon<OverviewSnapshot>("ui.overview.snapshot");
@@ -55,17 +98,18 @@ export function Connections() {
 
   if (isLoading || !data?.data) {
     return (
-      <div className="flex flex-1 items-center justify-center font-mono text-xs text-ink-3">
-        loading…
+      <div className="flex flex-1 items-center justify-center text-sm text-muted-foreground">
+        Loading connections...
       </div>
     );
   }
 
   const snapshot = data.data;
   const totalBtc = snapshot.connections.reduce((s, c) => s + c.balance, 0);
-
+  const totalEur = totalBtc * snapshot.priceEur;
   const errorN = snapshot.connections.filter((c) => c.status === "error").length;
   const syncingN = snapshot.connections.filter((c) => c.status === "syncing").length;
+  const syncedN = snapshot.connections.filter((c) => c.status === "synced").length;
 
   const onSelect = (id: string) =>
     void navigate({
@@ -74,74 +118,120 @@ export function Connections() {
     });
 
   return (
-    <div className="flex-1 overflow-auto bg-paper p-3 sm:p-[18px]">
-      <div className="mb-4 flex flex-col gap-3 sm:mb-[18px] sm:flex-row sm:items-end sm:justify-between sm:gap-4">
-        <div className="min-w-0">
-          <div className="kb-mono-caption">
-            {snapshot.connections.length} connections · {errorN > 0 ? `${errorN} need attention · ` : ""}
+    <div className="w-full space-y-4 bg-background p-3 sm:space-y-6 sm:p-4 md:p-6">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+        <div className="min-w-0 space-y-1">
+          <p className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
+            {snapshot.connections.length} connections ·{" "}
+            {errorN > 0 ? `${errorN} need attention · ` : ""}
             {syncingN > 0 ? `${syncingN} syncing` : "all synced"}
-          </div>
-          <h2 className="m-0 mt-1 font-sans text-[26px] font-semibold tracking-[-0.01em] text-ink sm:text-[32px]">
+          </p>
+          <h2 className="text-2xl font-semibold tracking-tight">
             Connections
           </h2>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <Button
-            variant="secondary"
-            size="sm"
-            className="rounded-none"
-            onClick={onSyncAll}
-          >
+          <Button variant="outline" size="sm" className="h-9 gap-2" onClick={onSyncAll}>
             <RefreshCw
-              className={cn("size-3", spinning && "animate-spin")}
+              className={cn("size-4", spinning && "animate-spin")}
+              aria-hidden="true"
             />
             Sync all
           </Button>
-          <Button
-            size="sm"
-            className="rounded-none"
-            onClick={() => setAddOpen(true)}
-          >
-            <Plus className="size-3" />
+          <Button size="sm" className="h-9 gap-2" onClick={() => setAddOpen(true)}>
+            <Plus className="size-4" aria-hidden="true" />
             Add connection
           </Button>
         </div>
       </div>
 
-      <div className="@container border border-line bg-paper-2">
-        <div
-          className={cn(
-            "items-center gap-x-3 border-b border-line bg-paper px-3 py-2 font-mono text-[9px] font-semibold uppercase tracking-[0.14em] text-ink-3",
-            "grid grid-cols-[20px_minmax(0,1fr)_minmax(90px,140px)]",
-            "@2xl:grid-cols-[20px_minmax(0,1fr)_100px_minmax(90px,140px)]",
-            "@3xl:grid-cols-[20px_minmax(0,1fr)_100px_100px_minmax(90px,140px)]",
-            "@4xl:grid-cols-[20px_minmax(0,1.4fr)_120px_120px_minmax(0,1fr)_140px]",
-          )}
-        >
-          <span />
-          <span>Connection</span>
-          <span className="hidden @2xl:inline">Kind</span>
-          <span className="hidden @3xl:inline">Last sync</span>
-          <span className="hidden @4xl:inline">Composition</span>
-          <span className="text-right">Balance</span>
-        </div>
-
-        {snapshot.connections.map((c, i) => (
-          <ConnectionRow
-            key={c.id}
-            connection={c}
-            totalBtc={totalBtc}
-            priceEur={snapshot.priceEur}
-            hideSensitive={hideSensitive}
-            currency={currency}
-            isLast={i === snapshot.connections.length - 1}
-            onSelect={() => onSelect(c.id)}
-          />
-        ))}
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+        <ConnectionMetric
+          label="Total balance"
+          value={
+            <span className={blurClass(hideSensitive)}>
+              {currency === "eur" ? fmtEur(totalEur) : `₿ ${fmtBtc(totalBtc)}`}
+            </span>
+          }
+          sub={
+            currency === "eur"
+              ? `₿ ${fmtBtc(totalBtc)}`
+              : fmtEur(totalEur)
+          }
+        />
+        <ConnectionMetric
+          label="Synced"
+          value={syncedN.toLocaleString("en-US")}
+          sub={`${snapshot.connections.length} configured sources`}
+        />
+        <ConnectionMetric
+          label="Syncing"
+          value={syncingN.toLocaleString("en-US")}
+          sub={errorN > 0 ? `${errorN} need attention` : "No errors"}
+        />
       </div>
+
+      <Card>
+        <CardHeader className="border-b">
+          <CardTitle>Wallets and sources</CardTitle>
+          <CardDescription>
+            Local wallet, Lightning, ecash, and import sources available to
+            Kassiber.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="overflow-x-auto p-0">
+          <Table>
+            <TableHeader>
+              <TableRow className="bg-muted/50 hover:bg-muted/50">
+                <TableHead className="min-w-[260px]">Connection</TableHead>
+                <TableHead>Kind</TableHead>
+                <TableHead>Last sync</TableHead>
+                <TableHead className="hidden min-w-[180px] lg:table-cell">
+                  Composition
+                </TableHead>
+                <TableHead className="text-right">Balance</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {snapshot.connections.map((connection) => (
+                <ConnectionRow
+                  key={connection.id}
+                  connection={connection}
+                  totalBtc={totalBtc}
+                  priceEur={snapshot.priceEur}
+                  hideSensitive={hideSensitive}
+                  currency={currency}
+                  onSelect={() => onSelect(connection.id)}
+                />
+              ))}
+            </TableBody>
+          </Table>
+        </CardContent>
+      </Card>
 
       <AddConnectionFlow open={addOpen} onClose={() => setAddOpen(false)} />
     </div>
+  );
+}
+
+interface ConnectionMetricProps {
+  label: string;
+  value: ReactNode;
+  sub: string;
+}
+
+function ConnectionMetric({ label, value, sub }: ConnectionMetricProps) {
+  return (
+    <Card className="gap-3 py-5">
+      <CardContent className="space-y-3">
+        <div className="flex items-center gap-2 text-muted-foreground">
+          <Wallet className="size-4" aria-hidden="true" />
+          <span className="text-xs font-medium">{label}</span>
+        </div>
+        <p className="text-2xl font-semibold tracking-tight">{value}</p>
+        <p className="text-xs text-muted-foreground">{sub}</p>
+      </CardContent>
+    </Card>
   );
 }
 
@@ -151,7 +241,6 @@ interface ConnectionRowProps {
   priceEur: number;
   hideSensitive: boolean;
   currency: Currency;
-  isLast: boolean;
   onSelect: () => void;
 }
 
@@ -161,108 +250,102 @@ function ConnectionRow({
   priceEur,
   hideSensitive,
   currency,
-  isLast,
   onSelect,
 }: ConnectionRowProps) {
   const sats = Math.round(c.balance * 1e8);
   const pct = totalBtc > 0 ? (c.balance / totalBtc) * 100 : 0;
   const isEur = currency === "eur";
 
+  const onKeyDown = (event: KeyboardEvent<HTMLTableRowElement>) => {
+    if (event.key === "Enter" || event.key === " ") {
+      event.preventDefault();
+      onSelect();
+    }
+  };
+
   return (
-    <button
-      type="button"
+    <TableRow
+      role="button"
+      tabIndex={0}
+      className="cursor-pointer"
       onClick={onSelect}
-      className={cn(
-        "w-full cursor-pointer items-center gap-x-3 border-0 bg-transparent px-3 py-3 text-left transition-colors hover:bg-paper",
-        "grid grid-cols-[20px_minmax(0,1fr)_minmax(90px,140px)]",
-        "@2xl:grid-cols-[20px_minmax(0,1fr)_100px_minmax(90px,140px)]",
-        "@3xl:grid-cols-[20px_minmax(0,1fr)_100px_100px_minmax(90px,140px)]",
-        "@4xl:grid-cols-[20px_minmax(0,1.4fr)_120px_120px_minmax(0,1fr)_140px]",
-        !isLast && "border-b border-line",
-      )}
+      onKeyDown={onKeyDown}
     >
-      <SyncDot status={c.status} />
-
-      <div className="flex min-w-0 flex-col gap-0.5">
-        <span className="flex items-center gap-2 overflow-hidden truncate font-sans text-[14px] font-semibold tracking-[-0.005em] text-ink">
-          <span className="truncate">{c.label}</span>
-          <span className="@2xl:hidden">
-            <ProtocolChip kind={c.kind} />
-          </span>
+      <TableCell>
+        <div className="flex items-center gap-3">
+          <span
+            className={cn("size-2.5 rounded-full", statusDotStyles[c.status])}
+            aria-hidden="true"
+          />
+          <div className="min-w-0">
+            <div className="truncate font-medium">{c.label}</div>
+            <div className="truncate text-xs text-muted-foreground">
+              {c.addresses != null && `${c.addresses} addresses`}
+              {c.channels != null && `${c.channels} channels`}
+              {c.gap != null && ` · gap ${c.gap}`}
+              {c.addresses == null && c.channels == null && "Ready"}
+            </div>
+          </div>
+        </div>
+      </TableCell>
+      <TableCell>
+        <span className="inline-flex items-center rounded-md border px-2 py-1 text-xs text-muted-foreground">
+          {kindLabels[c.kind]}
         </span>
-        <span className="font-mono text-[10px] uppercase tracking-[0.04em] text-ink-3">
-          {c.last}
-          {c.addresses != null && (
-            <>
-              {" · "}
-              <span>{c.addresses} addresses</span>
-            </>
-          )}
-          {c.channels != null && (
-            <>
-              {" · "}
-              <span>{c.channels} channels</span>
-            </>
-          )}
-          {c.gap != null && (
-            <>
-              {" · gap "}
-              <span>{c.gap}</span>
-            </>
-          )}
-        </span>
-      </div>
-
-      <div className="hidden @2xl:block">
-        <ProtocolChip kind={c.kind} />
-      </div>
-
-      <span className="hidden font-mono text-[11px] uppercase tracking-[0.04em] text-ink-2 @3xl:inline">
-        {c.status}
-      </span>
-
-      <div className="hidden items-center gap-2 @4xl:flex">
-        <div className="relative h-1 flex-1 max-w-[180px] bg-line">
-          <div
+      </TableCell>
+      <TableCell>
+        <div className="grid gap-1">
+          <span className="text-sm">{c.last}</span>
+          <span
             className={cn(
-              "absolute inset-y-0 left-0 bg-ink transition-[width] duration-200",
+              "w-fit rounded-md px-2 py-1 text-xs font-medium ring-1 ring-inset",
+              statusStyles[c.status],
+            )}
+          >
+            {c.status}
+          </span>
+        </div>
+      </TableCell>
+      <TableCell className="hidden lg:table-cell">
+        <div className="flex items-center gap-2">
+          <div className="relative h-2 flex-1 overflow-hidden rounded-full bg-muted">
+            <div
+              className={cn(
+                "absolute inset-y-0 left-0 rounded-full bg-primary transition-[width]",
+                blurClass(hideSensitive),
+              )}
+              style={{ width: `${Math.max(1.5, pct)}%` }}
+            />
+          </div>
+          <span
+            className={cn(
+              "w-12 text-right text-xs text-muted-foreground tabular-nums",
               blurClass(hideSensitive),
             )}
-            style={{ width: `${Math.max(1.5, pct)}%` }}
-          />
+          >
+            {pct < 0.1 ? "<0.1%" : `${pct.toFixed(pct < 10 ? 1 : 0)}%`}
+          </span>
         </div>
-        <span
-          className={cn(
-            "min-w-[40px] font-mono text-[11px] tabular-nums text-ink-3",
-            blurClass(hideSensitive),
-          )}
+      </TableCell>
+      <TableCell className="text-right">
+        <div
+          className={cn("font-medium tabular-nums", blurClass(hideSensitive))}
         >
-          {pct < 0.1 ? "<0.1%" : pct.toFixed(pct < 10 ? 1 : 0) + "%"}
-        </span>
-      </div>
-
-      <div className="text-right">
+          {isEur ? fmtEur(c.balance * priceEur) : `₿ ${fmtBtc(c.balance)}`}
+        </div>
         <div
           className={cn(
-            "font-sans text-[14px] font-medium tabular-nums text-ink",
+            "text-xs text-muted-foreground tabular-nums",
             blurClass(hideSensitive),
           )}
         >
           {isEur
-            ? fmtEur(c.balance * priceEur)
-            : "₿ " + fmtBtc(c.balance)}
+            ? `₿ ${fmtBtc(c.balance)} · ${sats.toLocaleString("en-US")} sat`
+            : `${sats.toLocaleString("en-US")} sat · ${fmtEur(
+                c.balance * priceEur,
+              )}`}
         </div>
-        <div
-          className={cn(
-            "font-mono text-[10px] tabular-nums text-ink-3",
-            blurClass(hideSensitive),
-          )}
-        >
-          {isEur
-            ? "₿ " + fmtBtc(c.balance) + " · " + sats.toLocaleString("en-US") + " sat"
-            : sats.toLocaleString("en-US") + " sat · " + fmtEur(c.balance * priceEur)}
-        </div>
-      </div>
-    </button>
+      </TableCell>
+    </TableRow>
   );
 }
