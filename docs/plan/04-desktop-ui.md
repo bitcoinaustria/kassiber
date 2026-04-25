@@ -364,13 +364,13 @@ ever compromised.
 
 ### 2.5 First screen: Overview
 
-> **JSX prototype as seed.** A working JSX prototype already exists
-> outside the repo (worktree `ui-mockups-from-claude-design`). Drop the
-> JSX into `ui-tauri/src/routes/`, mechanically translate inline styles
-> or CSS to Tailwind classes, replace any hardcoded fixture data with
-> `useDaemon(...)` calls, and keep `useState` / `useEffect` / form state
-> as-is. This collapses the design → static → review → wire loop into a
-> single "import JSX, swap data hooks" step per screen.
+> **JSX prototype as seed.** Existing Claude Design JSX mockups are the
+> visual and structural starting point for each screen. Drop the JSX into
+> `ui-tauri/src/routes/`, mechanically translate inline styles or CSS to
+> Tailwind classes, replace any hardcoded fixture data with `useDaemon(...)`
+> calls, and keep `useState` / `useEffect` / form state as-is. This
+> collapses the design → static → review → wire loop into a single
+> "import JSX, swap data hooks" step per screen.
 
 - Add a daemon `kind: "ui.overview.snapshot"` that returns the dashboard
   data the Overview screen needs.

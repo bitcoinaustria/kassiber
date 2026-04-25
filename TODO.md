@@ -210,8 +210,8 @@ and [docs/plan/04-desktop-ui.md](docs/plan/04-desktop-ui.md).
 - [ ] CSP locked to `'self'`; no remote script
 - [ ] Pydantic v2 contracts to JSON Schema to TS types in CI; schema-drift
   fails the build
-- [ ] Overview screen seeded from the existing JSX prototype in the
-  `ui-mockups-from-claude-design` worktree
+- [ ] Overview screen seeded from existing Claude Design JSX mockups
+  (to be implemented in `ui-tauri/src/routes/`)
 
 ### 1.3 Read-only screens
 
