@@ -212,6 +212,13 @@ and [docs/plan/04-desktop-ui.md](docs/plan/04-desktop-ui.md).
   fails the build
 - [ ] Overview screen seeded from existing Claude Design JSX mockups
   (to be implemented in `ui-tauri/src/routes/`)
+- [ ] Bridge mode containment tests (per
+  [04-desktop-ui.md](docs/plan/04-desktop-ui.md) §2.6 + 2.7): negative
+  tests for cross-origin / no-Origin / non-loopback bind / production-env
+  startup / missing-or-wrong token / mutation-disabled-by-default;
+  positive test that `daemon.log` and `supervisor.log` from a captured
+  bridge session contain zero token occurrences. Each gate must be wired
+  into the quality-gate before the bridge code is allowed to land.
 
 ### 1.3 Read-only screens
 
@@ -292,8 +299,23 @@ and [docs/plan/04-desktop-ui.md](docs/plan/04-desktop-ui.md).
   `tests/test_review_regressions.py`. Follow-up: pick a Unicode-safe
   renderer (`reportlab` / `fpdf2` / `weasyprint`), embed at least one
   Unicode-capable font, and flip that pin to assert preservation
-  instead of substitution. Until then, treat exported PDFs that
+  instead of substitution. Acceptance criterion for the follow-up PR:
+  `test_austrian_e1kv_report_exports_summary_csv_pdf_and_xlsx` asserts
+  the rendered PDF bytes contain `b"\xe2\x82\xac"` (the UTF-8 bytes
+  for `€`) and at least one representative non-ASCII user-text token,
+  and `test_pdf_report_substitutes_non_latin1_glyphs` flips from
+  substitution to preservation. Until then, treat exported PDFs that
   contain Euro signs or non-Latin-1 user content as not audit-grade.
+- [ ] Decide the permanent substitute-vs-fail policy for PDF rendering
+  as part of the Unicode-renderer follow-up. Pre-release ships the
+  silent-substitute behavior because we have no users yet and want
+  exported PDFs to keep working through the rewrite. The follow-up
+  must pick one of: (a) preserve all input glyphs (default once the
+  Unicode renderer lands), (b) fail loudly with a structured
+  `code: "pdf_unrepresentable"` error envelope listing the offending
+  codepoints, (c) ship both with a `--strict-unicode` flag. Document
+  the choice in [pdf_report.py](kassiber/pdf_report.py) and link the
+  decision rationale from this entry.
 - [ ] Fix `rates set` pair validation so malformed syntax like `BTCUSD`
   is rejected cleanly
 - [ ] Keep the machine envelope boundary centralized and explicit

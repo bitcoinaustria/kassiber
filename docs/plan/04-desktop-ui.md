@@ -396,13 +396,36 @@ The frontend ships in three runtime modes, all sharing the same React app:
    styling, component iteration, and AI-assisted screen work.
 
 2. **Real daemon over loopback bridge, plain browser.** `python -m kassiber
-   daemon --bridge ws://127.0.0.1:8765 --token <random>` exposes the
-   daemon over an authenticated localhost WebSocket, dev-only. With
-   `VITE_DAEMON=bridge` and the token from a `.env.local`, the same
-   Vite-served React app talks to a real DB. AI browser tools can drive
-   real data flows. The bridge is **gated to development builds only** —
-   refusing to start when `KASSIBER_ENV=production`, refusing connections
-   without the token, and binding only to `127.0.0.1`.
+   daemon --bridge ws://127.0.0.1:8765` exposes the daemon over an
+   authenticated localhost WebSocket, dev-only, so AI browser tools can
+   drive real data flows. The bridge is treated as a trust boundary, not
+   a convenience, and is gated by **all** of the following — any failure
+   refuses startup or rejects the connection:
+
+   - **Per-run random token.** 256-bit token generated at daemon start,
+     never written to disk. Printed once to stdout for the dev to paste
+     into the Vite dev server's session. **No `.env.local` token file.**
+     The Vite client holds the token in process memory only; reload
+     prompts for re-paste.
+   - **Strict Origin validation.** WS upgrade rejected unless the
+     `Origin` header matches an allowlist (default `http://localhost:5173`
+     only); allowlist is a CLI flag, not env-derived.
+   - **Loopback-only bind.** Refuses to start on any address other than
+     `127.0.0.1`. No `0.0.0.0`, no LAN bind, no `--host` override.
+   - **Production refusal.** Refuses to start when `KASSIBER_ENV=production`
+     or when the bundled-app build flag is set.
+   - **Read-only by default.** Bridge mode exposes a bridge-specific
+     `kind` allowlist that is a strict subset of the daemon's full
+     surface, defaulting to read-only kinds. Mutations require an
+     explicit `--allow-mutations` flag and emit a startup banner naming
+     each enabled mutation kind.
+   - **Token redaction.** The token never appears in `daemon.log`,
+     `supervisor.log`, error envelopes, or any progress envelope.
+     Redaction is unit-tested.
+
+   The Tauri shell does **not** use the bridge — it speaks JSONL over
+   stdin/stdout to the supervised child. The bridge is a development
+   affordance, not part of any shipped artifact.
 
 3. **Tauri shell.** `pnpm tauri dev` launches the production-shaped
    webview with `daemon:invoke` Tauri commands, native dialogs, and the
@@ -434,6 +457,20 @@ ship the bridge transport.
   disagree.
 - A "shell-of-shells" smoke: launch Tauri, fetch overview, screenshot
   matches a stored baseline within tolerance.
+- Bridge containment tests (negative-test suite, all required to pass):
+  - WS upgrade with a `Origin: http://evil.example` header is rejected.
+  - WS upgrade with no `Origin` header is rejected.
+  - Daemon refuses `--bridge` bind to anything other than `127.0.0.1`
+    (try `0.0.0.0`, an external interface, `localhost` if it resolves
+    differently from `127.0.0.1`).
+  - Daemon refuses `--bridge` startup with `KASSIBER_ENV=production`.
+  - Daemon refuses bridge connections with a missing or wrong token.
+  - Default bridge `kind` allowlist is a strict subset of the daemon
+    surface; a mutation kind hits an explicit "mutations disabled"
+    error unless `--allow-mutations` is set.
+  - Token redaction: a captured `daemon.log` and `supervisor.log` from
+    a bridge dev session contain zero occurrences of the token
+    (verified by a CI grep for the known per-run value).
 
 ## Phase 3 — Screen-by-screen port
 
