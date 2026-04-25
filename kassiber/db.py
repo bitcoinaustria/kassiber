@@ -25,7 +25,11 @@ import os
 import sqlite3
 from pathlib import Path
 
+from .errors import AppError
+from .fingerprints import make_transaction_fingerprint
+from .msat import btc_to_msat, dec, msat_to_btc
 from .tax_policy import DEFAULT_LONG_TERM_DAYS, DEFAULT_TAX_COUNTRY
+from .wallet_descriptors import LIQUID_POLICY_ASSET_IDS
 
 
 APP_NAME = "kassiber"
@@ -412,6 +416,7 @@ def ensure_schema_compat(conn):
     ensure_column(conn, "transactions", "confirmed_at", "TEXT")
     ensure_column(conn, "transactions", "fiat_price_source", "TEXT")
     _migrate_msat_columns(conn)
+    _backfill_liquid_asset_codes(conn)
 
 
 def _column_is_real(conn, table_name, column_name):
@@ -521,3 +526,82 @@ def _migrate_msat_columns(conn):
         raise
     finally:
         conn.execute(f"PRAGMA foreign_keys = {'ON' if previous_fk_state else 'OFF'}")
+
+
+def _raw_decimal_for_fingerprint(row, raw_key, msat_key):
+    stored_msat = int(row[msat_key] or 0)
+    try:
+        payload = json.loads(row["raw_json"] or "{}")
+    except (TypeError, ValueError, json.JSONDecodeError):
+        payload = {}
+    if isinstance(payload, dict):
+        raw_value = payload.get(raw_key)
+        if raw_value not in (None, ""):
+            try:
+                # Raw imports may carry signed amounts; fingerprint inputs are normalized positive values.
+                value = abs(dec(raw_value))
+            except (AppError, TypeError, ValueError):
+                value = None
+            if value is not None and btc_to_msat(value) == stored_msat:
+                return value
+    return msat_to_btc(stored_msat)
+
+
+def _backfilled_transaction_fingerprint(row, asset_code):
+    return make_transaction_fingerprint(
+        row["wallet_id"],
+        row["external_id"] or "",
+        row["occurred_at"],
+        row["direction"],
+        asset_code,
+        _raw_decimal_for_fingerprint(row, "amount", "amount"),
+        _raw_decimal_for_fingerprint(row, "fee", "fee"),
+    )
+
+
+def _backfill_liquid_asset_codes(conn):
+    """Heal Liquid transactions whose asset was stored as a raw policy-asset hex.
+
+    Early Liquid descriptor wallets could be created with a symbolic ``policy_asset``
+    (e.g. ``L-BTC``), which made the sync decoder leave the 64-char hex asset id on
+    each record instead of normalizing to ``LBTC`` — auto-pricing then skipped them
+    because the fiat-rate alias is keyed on ``LBTC``. Rewrite the hex to ``LBTC`` and
+    invalidate only the profiles that owned hex rows so the next ``journals process``
+    reprices them, leaving untouched any profile that already had clean ``LBTC`` data.
+    """
+    policy_asset_hexes = tuple(sorted({value.lower() for value in LIQUID_POLICY_ASSET_IDS.values() if value}))
+    if not policy_asset_hexes:
+        return
+    placeholders = ",".join("?" for _ in policy_asset_hexes)
+    affected_rows = conn.execute(
+        f"""
+        SELECT id, profile_id, wallet_id, external_id, occurred_at, direction,
+               amount, fee, raw_json
+        FROM transactions
+        WHERE lower(asset) IN ({placeholders})
+        """,
+        policy_asset_hexes,
+    ).fetchall()
+    affected_profile_ids = sorted({row["profile_id"] for row in affected_rows})
+    if not affected_profile_ids:
+        return
+    for row in affected_rows:
+        fingerprint = _backfilled_transaction_fingerprint(row, "LBTC")
+        collision = conn.execute(
+            "SELECT id FROM transactions WHERE fingerprint = ? AND id != ? LIMIT 1",
+            (fingerprint, row["id"]),
+        ).fetchone()
+        if collision:
+            conn.execute("UPDATE transactions SET asset = 'LBTC' WHERE id = ?", (row["id"],))
+        else:
+            conn.execute(
+                "UPDATE transactions SET asset = 'LBTC', fingerprint = ? WHERE id = ?",
+                (fingerprint, row["id"]),
+            )
+    profile_placeholders = ",".join("?" for _ in affected_profile_ids)
+    conn.execute(
+        f"UPDATE profiles SET last_processed_at = NULL, last_processed_tx_count = 0 "
+        f"WHERE id IN ({profile_placeholders})",
+        affected_profile_ids,
+    )
+    conn.commit()

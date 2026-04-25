@@ -88,7 +88,6 @@ from ..util import (
     normalize_chain_value,
     normalize_network_value,
     parse_int,
-    str_or_none,
 )
 from ..tax_policy import (
     DEFAULT_LONG_TERM_DAYS,
@@ -99,7 +98,6 @@ from ..tax_policy import (
 )
 from ..wallet_descriptors import (
     DEFAULT_DESCRIPTOR_GAP_LIMIT,
-    default_policy_asset_id,
     derive_descriptor_targets,
     liquid_plan_can_unblind,
     load_descriptor_plan,
@@ -476,15 +474,6 @@ def load_wallet_descriptor_plan_from_config(config):
         return load_descriptor_plan(config)
     except ValueError as exc:
         raise AppError(str(exc)) from exc
-
-
-def wallet_policy_asset_id(config, chain, network):
-    explicit = str_or_none(config.get("policy_asset"))
-    if explicit:
-        return normalize_asset_code(explicit)
-    if chain == "liquid":
-        return normalize_asset_code(default_policy_asset_id(network))
-    return ""
 
 
 def parse_wallet_config(args):

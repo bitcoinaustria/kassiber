@@ -2,7 +2,6 @@ from __future__ import annotations
 
 """Import orchestration helpers above the parser-only `kassiber.importers` boundary."""
 
-import hashlib
 import json
 import os
 import sqlite3
@@ -12,6 +11,7 @@ from typing import Any, Callable, Mapping, Sequence
 
 from ..envelope import json_ready
 from ..errors import AppError
+from ..fingerprints import make_transaction_fingerprint
 from ..importers import is_btcpay_format, is_phoenix_format, load_import_records
 from ..msat import btc_to_msat, dec
 from ..time_utils import UNKNOWN_OCCURRED_AT, now_iso, parse_timestamp
@@ -44,22 +44,6 @@ def normalize_import_direction(direction: Any, amount: Any) -> str:
             return "outbound"
         raise AppError(f"Unsupported direction '{direction}'")
     return "outbound" if dec(amount) < 0 else "inbound"
-
-
-def make_transaction_fingerprint(wallet_id, external_id, occurred_at, direction, asset, amount, fee) -> str:
-    payload = json.dumps(
-        {
-            "wallet_id": wallet_id,
-            "external_id": external_id,
-            "occurred_at": occurred_at,
-            "direction": direction,
-            "asset": asset,
-            "amount": str(amount),
-            "fee": str(fee),
-        },
-        sort_keys=True,
-    )
-    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
 
 def _find_existing_transaction(
