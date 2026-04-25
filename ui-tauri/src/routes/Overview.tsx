@@ -142,8 +142,8 @@ function PopulatedOverview({
 
   return (
     <div className="flex-1 overflow-auto p-3">
-      {/* Top row: split chart card | connections */}
-      <div className="mb-2.5 grid grid-cols-[2.4fr_1fr] gap-2.5">
+      {/* Top row: chart card | connections — stacks below lg */}
+      <div className="mb-2.5 grid grid-cols-1 gap-2.5 lg:grid-cols-[minmax(0,2.4fr)_minmax(0,1fr)]">
         <KbCard
           title="Balance & performance"
           action={
@@ -169,9 +169,9 @@ function PopulatedOverview({
             </div>
           }
           pad={false}
-          className="flex flex-col"
+          className="@container flex flex-col"
         >
-          <div className="grid min-h-0 flex-1 grid-cols-[240px_1fr]">
+          <div className="flex min-h-0 flex-1 flex-col @3xl:grid @3xl:grid-cols-[240px_minmax(0,1fr)]">
             <ChartGutter
               snapshot={snapshot}
               totalBtc={totalBtc}
@@ -201,8 +201,8 @@ function PopulatedOverview({
         />
       </div>
 
-      {/* Middle row: transactions preview | balances */}
-      <div className="mb-2.5 grid grid-cols-[1.6fr_1.5fr] items-stretch gap-2.5">
+      {/* Middle row: transactions preview | balances — stacks below md */}
+      <div className="mb-2.5 grid grid-cols-1 items-stretch gap-2.5 md:grid-cols-[minmax(0,1.6fr)_minmax(0,1.5fr)]">
         <KbCard
           title="Transactions"
           pad={false}
@@ -228,8 +228,8 @@ function PopulatedOverview({
         </KbCard>
       </div>
 
-      {/* Bottom row: report tiles */}
-      <div className="grid grid-cols-3 gap-2.5">
+      {/* Bottom row: report tiles — 1 → 2 → 3 columns */}
+      <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2 xl:grid-cols-3">
         <ReportTile
           title="Capital gains"
           sub="FIFO · EUR · jurisdiction preset"
@@ -278,7 +278,7 @@ function ChartGutter({
 }: ChartGutterProps) {
   const isEur = currency === "eur";
   return (
-    <div className="flex flex-col gap-3 border-r border-line bg-paper-2 px-4 py-3.5">
+    <div className="flex flex-col gap-3 border-b border-line bg-paper-2 px-4 py-3.5 @3xl:border-b-0 @3xl:border-r">
       <div>
         <div className="font-mono text-[9px] uppercase tracking-[0.14em] text-ink-3">
           Total
