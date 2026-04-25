@@ -1796,6 +1796,10 @@ def _austrian_e1kv_render_table_row(values, format_names):
     ]
 
 
+def _austrian_e1kv_csv_filename(index, stem):
+    return f"{int(index):02d}_{stem}.csv"
+
+
 def _austrian_e1kv_section_table_specs(report):
     sections = report["sections"]
     split_11 = _austrian_disposal_split(sections["1.1"]["detail_rows"])
@@ -1820,7 +1824,7 @@ def _austrian_e1kv_section_table_specs(report):
     return [
         {
             "sheet_name": "1.1.",
-            "filename": "01_1.1.csv",
+            "filename": _austrian_e1kv_csv_filename(1, "1.1"),
             "title": AUSTRIAN_E1KV_XLSX_TITLES["1.1"],
             "headers": AUSTRIAN_E1KV_XLSX_DISPOSAL_HEADERS,
             "rows": [_austrian_e1kv_xlsx_disposal_values(row) for row in sections["1.1"]["detail_rows"]],
@@ -1834,7 +1838,7 @@ def _austrian_e1kv_section_table_specs(report):
         },
         {
             "sheet_name": "1.2.",
-            "filename": "02_1.2.csv",
+            "filename": _austrian_e1kv_csv_filename(2, "1.2"),
             "title": AUSTRIAN_E1KV_XLSX_TITLES["1.2"],
             "headers": AUSTRIAN_E1KV_XLSX_MARGIN_HEADERS,
             "rows": [],
@@ -1848,7 +1852,7 @@ def _austrian_e1kv_section_table_specs(report):
         },
         {
             "sheet_name": "1.3.",
-            "filename": "03_1.3.csv",
+            "filename": _austrian_e1kv_csv_filename(3, "1.3"),
             "title": AUSTRIAN_E1KV_XLSX_TITLES["1.3"],
             "headers": AUSTRIAN_E1KV_XLSX_HOLDING_HEADERS,
             "rows": [],
@@ -1860,7 +1864,7 @@ def _austrian_e1kv_section_table_specs(report):
         *[
             {
                 "sheet_name": f"{section_id}.",
-                "filename": f"0{index}_{section_id}.csv",
+                "filename": _austrian_e1kv_csv_filename(index, section_id),
                 "title": AUSTRIAN_E1KV_XLSX_TITLES[section_id],
                 "headers": AUSTRIAN_E1KV_XLSX_INCOME_HEADERS,
                 "rows": [_austrian_e1kv_xlsx_income_values(row) for row in sections[section_id]["detail_rows"]],
@@ -1878,7 +1882,7 @@ def _austrian_e1kv_section_table_specs(report):
         ],
         {
             "sheet_name": "3.1.",
-            "filename": "06_3.1.csv",
+            "filename": _austrian_e1kv_csv_filename(6, "3.1"),
             "title": AUSTRIAN_E1KV_XLSX_TITLES["3.1"],
             "headers": AUSTRIAN_E1KV_XLSX_HOLDING_HEADERS,
             "rows": [
@@ -1894,7 +1898,7 @@ def _austrian_e1kv_section_table_specs(report):
         },
         {
             "sheet_name": "3.2.",
-            "filename": "07_3.2.csv",
+            "filename": _austrian_e1kv_csv_filename(7, "3.2"),
             "title": AUSTRIAN_E1KV_XLSX_TITLES["3.2"],
             "headers": AUSTRIAN_E1KV_XLSX_INCOME_HEADERS,
             "rows": [],
@@ -1905,7 +1909,7 @@ def _austrian_e1kv_section_table_specs(report):
         },
         {
             "sheet_name": "3.3.",
-            "filename": "08_3.3.csv",
+            "filename": _austrian_e1kv_csv_filename(8, "3.3"),
             "title": AUSTRIAN_E1KV_XLSX_TITLES["3.3"],
             "headers": AUSTRIAN_E1KV_XLSX_FEE_HEADERS,
             "rows": [],
@@ -1919,7 +1923,7 @@ def _austrian_e1kv_section_table_specs(report):
         },
         {
             "sheet_name": "4.1.",
-            "filename": "09_4.1.csv",
+            "filename": _austrian_e1kv_csv_filename(9, "4.1"),
             "title": AUSTRIAN_E1KV_XLSX_TITLES["4.1"],
             "headers": AUSTRIAN_E1KV_XLSX_INCOME_HEADERS,
             "rows": [],
@@ -1930,7 +1934,7 @@ def _austrian_e1kv_section_table_specs(report):
         },
         {
             "sheet_name": "4.2.",
-            "filename": "10_4.2.csv",
+            "filename": _austrian_e1kv_csv_filename(10, "4.2"),
             "title": AUSTRIAN_E1KV_XLSX_TITLES["4.2"],
             "headers": AUSTRIAN_E1KV_XLSX_OUTGOING_HEADERS,
             "rows": [],
@@ -1941,7 +1945,7 @@ def _austrian_e1kv_section_table_specs(report):
         },
         {
             "sheet_name": "4.3.",
-            "filename": "11_4.3.csv",
+            "filename": _austrian_e1kv_csv_filename(11, "4.3"),
             "title": AUSTRIAN_E1KV_XLSX_TITLES["4.3"],
             "headers": AUSTRIAN_E1KV_XLSX_OUTGOING_HEADERS,
             "rows": [],
@@ -1953,7 +1957,7 @@ def _austrian_e1kv_section_table_specs(report):
         *[
             {
                 "sheet_name": f"{section_id}.",
-                "filename": f"{index}_{section_id}.csv",
+                "filename": _austrian_e1kv_csv_filename(index, section_id),
                 "title": AUSTRIAN_E1KV_XLSX_TITLES[section_id],
                 "headers": AUSTRIAN_E1KV_XLSX_INCOME_HEADERS,
                 "rows": [],
@@ -1962,7 +1966,7 @@ def _austrian_e1kv_section_table_specs(report):
                 "value_column": 6,
                 "column_widths": (18, 24, 18, 14, 12, 36, 24),
             }
-            for index, section_id, total_label in (("12", "4.4", "Summe Mining"), ("13", "4.5", "Summe Minting"))
+            for index, section_id, total_label in ((12, "4.4", "Summe Mining"), (13, "4.5", "Summe Minting"))
         ],
     ]
 
@@ -2277,12 +2281,16 @@ def export_austrian_e1kv_csv_bundle(conn, workspace_ref, profile_ref, dir_path, 
             }
         )
 
-    write_file("Übersicht", "00_uebersicht.csv", _austrian_e1kv_overview_csv_rows(report))
+    write_file(
+        "Übersicht",
+        _austrian_e1kv_csv_filename(0, "uebersicht"),
+        _austrian_e1kv_overview_csv_rows(report),
+    )
     for spec in _austrian_e1kv_section_table_specs(report):
         write_file(spec["sheet_name"], spec["filename"], _austrian_e1kv_detail_csv_rows(spec))
     write_file(
         "Erläuterungen zum Steuerreport",
-        "99_erlaeuterungen_zum_steuerreport.csv",
+        _austrian_e1kv_csv_filename(99, "erlaeuterungen_zum_steuerreport"),
         _austrian_e1kv_explanation_csv_rows(report),
     )
     return {

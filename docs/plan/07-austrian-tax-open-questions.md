@@ -25,6 +25,7 @@ so a Steuerberater can review them.
 | AT-008 | late first sync | on-chain acquisition timestamp governs | closed |
 | AT-009 | Altvermögen declaration | computed by date, user declaration as warning/audit signal if added | future UI flow |
 | AT-010 | provider KESt withholding | outside MVP automation until withholding metadata exists | warning/review |
+| AT-011 | staking classification | classic staking: no laufende Einkünfte at receipt, zero acquisition cost; yield/lending/DeFi products labelled "staking" may be taxable Überlassung | product provenance required |
 
 ## Implementation Rules
 
@@ -93,9 +94,29 @@ Kassiber does not yet persist provider domicile or withheld-KESt metadata.
 Until that exists, keep provider withholding outside automation and surface a
 review note.
 
+### AT-011 Staking Classification
+
+The current BMF crypto tax page distinguishes classic staking from products
+that are only labelled "staking". Classic staking, where existing crypto is
+used mainly for transaction processing or validation, is not laufende
+Einkünfte at receipt; the received crypto is taxed later with acquisition cost
+zero. If the product mechanics are really paid Überlassung of crypto, such as
+lending, yield, liquidity-pool, or other DeFi arrangements, receipt can be
+taxable laufende Einkünfte under § 27b Abs 2 Z 1 EStG even if the provider
+calls it staking.
+
+Current Kassiber imports still promote explicit `staking` rows into the
+income-like RP2 path, so this is an open classification gap rather than a
+settled behavior guarantee. Kassiber should not keep treating the word
+`staking` alone as enough provenance for either side of that line once imports
+capture product mechanics explicitly. Until then, review staking-labelled rows
+before relying on the E 1kv handoff.
+
+Reference: BMF, [Steuerliche Behandlung von Kryptowährungen](https://www.bmf.gv.at/themen/steuern/sparen-veranlagen/steuerliche-behandlung-von-kryptowaehrungen.html).
+
 ## Sources To Recheck When Touching This File
 
-- BMF crypto FAQ
+- BMF crypto tax page
 - § 27a / § 27b EStG
 - KryptowährungsVO § 2
 - current E 1kv form
