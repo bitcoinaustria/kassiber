@@ -6,6 +6,8 @@
  * Add entries as screens get translated.
  */
 
+import { MOCK_OVERVIEW } from "@/mocks/seed";
+
 export const fixtures: Record<string, unknown> = {
   status: {
     version: "0.0.0-ui-scaffold",
@@ -13,4 +15,5 @@ export const fixtures: Record<string, unknown> = {
     workspace: null,
     profile: null,
   },
+  "ui.overview.snapshot": MOCK_OVERVIEW,
 };
