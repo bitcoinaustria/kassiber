@@ -67,7 +67,6 @@ from ..diagnostics import (
 )
 from ..errors import AppError
 from ..tax_policy import supported_tax_countries
-from ..ui.dashboard import collect_ui_snapshot
 
 
 def _backend_extra_config(args: argparse.Namespace) -> dict[str, object] | None:
@@ -206,9 +205,6 @@ def build_parser() -> argparse.ArgumentParser:
 
     sub.add_parser("init")
     sub.add_parser("status")
-    ui = sub.add_parser("ui")
-    ui.add_argument("--workspace")
-    ui.add_argument("--profile")
 
     backends = sub.add_parser("backends")
     backends_sub = backends.add_subparsers(dest="backends_command", required=True)
@@ -776,39 +772,6 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def dispatch(conn: sqlite3.Connection | None, args: argparse.Namespace) -> Any:
-    if args.command == "ui":
-        if args.format in {"plain", "csv"}:
-            raise AppError(
-                "kassiber ui supports the interactive window or json output (`--machine`) only",
-                code="format_unsupported",
-            )
-        if args.format == "json":
-            return emit(
-                args,
-                collect_ui_snapshot(
-                    conn,
-                    args.data_root,
-                    args.runtime_config,
-                    workspace_ref=args.workspace,
-                    profile_ref=args.profile,
-                ),
-                kind="ui.snapshot",
-            )
-        if args.output:
-            raise AppError(
-                "`kassiber ui` does not write the interactive window to --output; use `--machine` for a file snapshot",
-                code="format_unsupported",
-            )
-        from ..ui.app import run
-
-        run(
-            conn,
-            data_root=args.data_root,
-            runtime_config=args.runtime_config,
-            workspace_ref=args.workspace,
-            profile_ref=args.profile,
-        )
-        return None
     if args.command == "init":
         return cmd_init(conn, args)
     if args.command == "status":

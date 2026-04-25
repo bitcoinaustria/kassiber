@@ -312,19 +312,6 @@ class CliSmokeTest(unittest.TestCase):
         self.assertEqual(prof["tax_country"], "generic")
         self.assertEqual(prof["fiat_currency"], "USD")
 
-    def test_02a_ui_snapshot(self):
-        payload = self._cli("ui", "--workspace", "Main", "--profile", "Default")
-        self._assert_kind(payload, "ui.snapshot")
-        self.assertEqual(payload["data"]["scope"]["workspace_label"], "Main")
-        self.assertEqual(payload["data"]["scope"]["profile_label"], "Default")
-        self.assertEqual(payload["data"]["shell"]["project_label"], "Main / Default")
-        self.assertEqual(payload["data"]["shell"]["connection_count"], 0)
-        self.assertTrue(payload["data"]["shell"]["is_empty"])
-        self.assertEqual(len(payload["data"]["profiles"]), 1)
-        self.assertIn("placeholder", payload["data"]["shell"]["notices"][0].lower())
-        self.assertIn("GENERIC POLICY", payload["data"]["reports"]["header_eyebrow"])
-        self.assertNotIn("\u00a727", payload["data"]["reports"]["header_eyebrow"])
-
     def test_03_wallet_create(self):
         payload = self._cli(
             "wallets", "create",
@@ -429,28 +416,6 @@ class CliSmokeTest(unittest.TestCase):
         self.assertEqual(data["phoenix_notes_set"], 4)
         self.assertEqual(data["phoenix_tags_added"], 4)
         self.assertEqual(data["phoenix_tags_created"], 4)
-
-    def test_04a_ui_snapshot_uses_live_routed_data(self):
-        payload = self._cli("ui", "--workspace", "Main", "--profile", "Default")
-        self._assert_kind(payload, "ui.snapshot")
-        transactions = payload["data"]["transactions"]
-        self.assertEqual(transactions["total_count"], 4)
-        self.assertEqual(len(transactions["items"]), 4)
-        first_row = transactions["items"][0]
-        self.assertEqual(first_row["account_label"], "Treasury")
-        self.assertIn("type_label", first_row)
-        self.assertIn("type_badge_tone", first_row)
-        self.assertEqual(first_row["direction"], "outbound")
-        self.assertEqual(first_row["amount_sats_signed_label"], "- 500,000")
-        self.assertEqual(first_row["type_tone"], "negative")
-
-        reports = payload["data"]["reports"]
-        self.assertEqual(reports["summary_cards"][0]["value"], "4")
-        self.assertEqual(reports["preview_title"], "Recent transaction inputs")
-        self.assertEqual(len(reports["preview_rows"]), 4)
-        self.assertEqual(reports["preview_rows"][0]["amount_label"], "-0.00500000 BTC")
-        self.assertNotIn("AUSTRIA", reports["header_eyebrow"])
-        self.assertNotIn("\u00a727", reports["header_eyebrow"])
 
     def test_05_msat_exposed_on_records(self):
         payload = self._cli(

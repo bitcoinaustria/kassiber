@@ -178,22 +178,58 @@ top of the monolith.
 - [x] Persist BTCPay confirmed wallet-sync config on wallets so `wallets sync` / `wallets sync --all` can reuse store-backed sources without retyping `--store-id`
 - [ ] Keep BTCPay file import conservative (`deposit` / `withdrawal`) until a confirmed document match or explicit review step reclassifies the transaction
 
-## Phase 1 - Desktop App
+## Phase 1 - Desktop UI
 
-Goal: build the Phase 1 PySide6/QML app shell from `docs/plan/04-desktop-ui.md`
-over the shared core after the extraction work is done.
+Goal: build the desktop UI as Tauri 2 + React + TypeScript with a Python
+sidecar daemon, per [docs/plan/01-stack-decision.md](docs/plan/01-stack-decision.md)
+and [docs/plan/04-desktop-ui.md](docs/plan/04-desktop-ui.md).
 
-- [x] Add `kassiber ui` entrypoint once `kassiber.core` is stable
-- [x] Start with a macOS-first PySide6/QML app shell and empty state
-- [x] Persist window geometry in `settings.json` under a `ui` subkey
-- [x] Replace the single placeholder panel with a routed mockup scaffold for Welcome, Overview, Connection Detail, Transaction View, Tax Reports, and Settings
-- [x] Add the Phase 2 read-only dashboard tiles over `kassiber.core`
-- [ ] Continue screenshot-driven polish for the Claude Design screens and close the remaining spacing/typography/detail gaps as assets are collected under `docs/design/`
-- [ ] Keep long-running sync/import/journal work off the UI thread via QThreads once those actions land
-- [ ] Add connections, imports, attachments, and fuller settings only after
-  the app shell is solid
-- [ ] Treat packaging/signing as a later step, not a blocker for the core
-  refactor
+### 1.0 Prep cleanup (parallel-safe, no UI change)
+
+- [ ] Publish `rp2` as a versioned wheel artifact and update `pyproject.toml`
+  to consume it (eliminates the VCS-pinned packaging risk)
+- [ ] Decompose `kassiber/cli/handlers.py` into per-domain `kassiber/core/api/`
+  modules so each handler is a pure `(args_dict) -> envelope_dict` callable
+- [ ] Centralize the safe-view contract in `kassiber/core/api/safe_views.py`
+  so every consumer sees the same redaction
+- [ ] Add `~/.kassiber/logs/` (or per-project `logs/`) with rotation; teach
+  `diagnostics collect` to fold all logs
+
+### 1.1 Daemon mode (no UI yet)
+
+- [ ] Add `kassiber/daemon.py` and a `kassiber daemon` subcommand
+- [ ] JSONL request/response with `request_id`, `progress`, `cancel`, and
+  `daemon.ready` lifecycle envelopes
+- [ ] Worker pool with one SQLite connection per worker
+- [ ] Smoke + regression coverage; redaction audit in CI
+
+### 1.2 Tauri shell skeleton + typed IPC + first screen
+
+- [ ] `ui-tauri/` workspace: Vite + React + TS + shadcn baseline
+- [ ] Rust supervisor with capability allowlist generated from Pydantic
+- [ ] CSP locked to `'self'`; no remote script
+- [ ] Pydantic v2 contracts to JSON Schema to TS types in CI; schema-drift
+  fails the build
+- [ ] Overview screen seeded from the existing JSX prototype in the
+  `ui-mockups-from-claude-design` worktree
+
+### 1.3 Read-only screens
+
+- [ ] Connections, Transactions, Reports, Profiles, Settings, Welcome
+
+### 1.4 Live actions and workers
+
+- [ ] Sync, imports, journals process, metadata edits, transfer pairing,
+  attachments, quarantine resolve, report exports, profile/wallet/backend
+  CRUD, backup/restore
+- [ ] Progress + cancellation UI
+- [ ] Separate secret-entry IPC channel; OS-keychain-backed secret refs
+
+### 1.5 Packaging, signing, distribution
+
+- [ ] `python-build-standalone` sidecar bundling
+- [ ] Tauri bundler per OS; Apple Developer ID, Windows EV, GPG `.deb`
+- [ ] User-initiated update check only; no background polling
 
 ## Later backlog
 
@@ -246,6 +282,15 @@ over the shared core after the extraction work is done.
 
 ## Open bugs and debt
 
+- [ ] PDF report rendering is Latin-1 only after the PySide6 removal:
+  `_ascii_text` in `kassiber/pdf_report.py` silently replaces `€`, `₿`,
+  German umlauts, and non-European script with `?` in exported PDFs.
+  Affects Austrian E 1kv exports and any non-Latin-1 user content.
+  Follow-up: pick a Unicode-safe renderer (`reportlab` / `fpdf2` /
+  `weasyprint`), embed at least one Unicode-capable font, and add a
+  regression test that exports non-Latin-1 transaction text and either
+  preserves it or fails loudly. Until then, treat exported PDFs that
+  contain Austrian or non-ASCII content as not audit-grade.
 - [ ] Fix `rates set` pair validation so malformed syntax like `BTCUSD`
   is rejected cleanly
 - [ ] Keep the machine envelope boundary centralized and explicit
@@ -258,7 +303,7 @@ over the shared core after the extraction work is done.
 
 Run these after any extraction or behavior change:
 
-- `PYTHONPYCACHEPREFIX=/tmp/kassiber-pyc uv run python -m py_compile kassiber/*.py kassiber/ui/*.py kassiber/ui/viewmodels/*.py`
+- `PYTHONPYCACHEPREFIX=/tmp/kassiber-pyc uv run python -m py_compile kassiber/*.py`
 - `uv run python -m unittest tests.test_cli_smoke -v`
 - `uv run python -m kassiber --help`
 - `uv run python -m kassiber --machine status`
@@ -270,4 +315,3 @@ Run these after any extraction or behavior change:
 - `uv run python -m kassiber journals events --help`
 - `uv run python -m kassiber reports balance-history --help`
 - `uv run python -m kassiber rates --help`
-- `uv run python -m kassiber ui --help`

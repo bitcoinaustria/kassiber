@@ -2,7 +2,7 @@
 
 ![Kassiber banner](docs/assets/readme-banner.png)
 
-Kassiber is an open-source, local-first Bitcoin accounting CLI with an early desktop shell.
+Kassiber is an open-source, local-first Bitcoin accounting CLI. A desktop shell built on Tauri 2 + React + TypeScript with a Python sidecar daemon is in active development (see [docs/plan/01-stack-decision.md](docs/plan/01-stack-decision.md) and [docs/plan/04-desktop-ui.md](docs/plan/04-desktop-ui.md)).
 
 It keeps your accounting state on your machine, syncs from Bitcoin-native sources, and processes journals locally before generating reports. Built from scratch, it takes early visual cues from Clams and other tools in the space without inheriting the cloud trust model.
 
@@ -34,7 +34,7 @@ kind of report when an error occurs.
 - stores notes, tags, exclusions, transfer pairs, and attachments
 - processes journals explicitly before reports are trusted
 - exposes every command through a deterministic JSON envelope
-- ships an early PySide6/QML desktop shell over the same local data
+- has a desktop shell on Tauri 2 + React + TypeScript with a Python sidecar daemon under construction (see [docs/plan/01-stack-decision.md](docs/plan/01-stack-decision.md))
 
 ## Architecture
 
@@ -148,7 +148,6 @@ Requirements:
 
 - Python `>=3.10`
 - `embit>=0.8.0`
-- `PySide6>=6.7,<7`
 - `rp2` from `bitcoinaustria/rp2` (pinned in `pyproject.toml`)
 
 Install in a virtual environment:
@@ -216,7 +215,6 @@ python3 -m kassiber reports export-austrian-e1kv-pdf --year 2024 --file e1kv-202
 python3 -m kassiber reports export-austrian --year 2024 --file austria-2024.pdf
 python3 -m kassiber reports export-austrian-e1kv-xlsx --year 2024 --file e1kv-2024.xlsx
 python3 -m kassiber reports export-austrian-e1kv-csv --year 2024 --dir e1kv-2024-csv
-python3 -m kassiber ui
 ```
 
 ## Docs
@@ -233,7 +231,8 @@ Reference docs:
 Planning and architecture docs:
 
 - [docs/plan/00-overview.md](docs/plan/00-overview.md)
-- [docs/plan/04-desktop-ui.md](docs/plan/04-desktop-ui.md)
+- [docs/plan/01-stack-decision.md](docs/plan/01-stack-decision.md) (desktop stack ADR)
+- [docs/plan/04-desktop-ui.md](docs/plan/04-desktop-ui.md) (desktop implementation plan)
 - [docs/plan/06-austrian-tax-engine.md](docs/plan/06-austrian-tax-engine.md)
 - [docs/plan/08-external-document-reconciliation.md](docs/plan/08-external-document-reconciliation.md)
 
@@ -255,7 +254,7 @@ Notable gaps today:
 - `custom` wallet import mapping is not implemented yet
 - reports still use stored journal pricing rather than querying the rates cache live
 - no REST/server mode or multi-user auth
-- desktop UI is still early
+- desktop UI (Tauri 2 + React + Python sidecar) is under construction; the CLI is the primary control surface today
 
 See [TODO.md](TODO.md) for the active backlog.
 

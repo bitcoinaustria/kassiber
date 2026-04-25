@@ -1,49 +1,13 @@
 # Desktop Reference
 
-Kassiber ships an early PySide6/QML desktop shell over the same local SQLite store used by the CLI.
+Kassiber's desktop shell uses Tauri 2 + React + TypeScript with the Python
+core running as a long-lived sidecar daemon over JSONL. See
+[../plan/01-stack-decision.md](../plan/01-stack-decision.md) for the stack
+decision and [../plan/04-desktop-ui.md](../plan/04-desktop-ui.md) for the
+implementation plan.
 
-Launch it with:
-
-```bash
-python3 -m kassiber ui
-```
-
-## Current scope
-
-The desktop app is still early. Today it mainly provides:
-
-- the desktop shell and frame
-- empty state
-- project/profile surface
-- placeholder settings and add-connection dialogs
-- persisted window size and position
-
-It should be thought of as a thin local UI over the same core functionality the CLI already exposes.
-
-## Architecture
-
-- the UI imports the shared Kassiber core
-- long-running work should happen off the UI thread
-- the CLI and desktop are meant to be peers over the same local-first runtime
-
-## What to use today
-
-Use the CLI for the real workflow:
-
-- creating workspaces, profiles, wallet/reporting buckets, wallets
-- syncing transactions
-- imports
-- journal processing
-- reports
-- transfer pairing
-- metadata and attachments
-
-Use the desktop shell today as an early companion interface, not as the primary control surface.
-
-## Design docs
-
-See the plan docs for the fuller desktop direction:
-
-- [../plan/01-stack-decision.md](../plan/01-stack-decision.md)
-- [../plan/04-desktop-ui.md](../plan/04-desktop-ui.md)
-- [../design/README.md](../design/README.md)
+The desktop shell is in active development. Until it ships, use the CLI as
+the primary control surface — see [../../README.md](../../README.md) for
+the quick start and [machine-output.md](machine-output.md) for the JSON
+envelope contract that the future desktop shell will consume through the
+daemon.
