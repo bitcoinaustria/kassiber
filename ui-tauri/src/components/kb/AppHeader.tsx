@@ -12,6 +12,7 @@ import { Link, useRouterState } from "@tanstack/react-router";
 import { Eye, EyeOff, MoreHorizontal, Settings, Lock } from "lucide-react";
 
 import { Wordmark } from "./Wordmark";
+import { SettingsModal } from "./SettingsModal";
 import { useUiStore } from "@/store/ui";
 import { cn } from "@/lib/utils";
 
@@ -104,6 +105,7 @@ export function AppHeader() {
 
 function OverflowMenu() {
   const [open, setOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
   const lang = useUiStore((s) => s.lang);
   const setLang = useUiStore((s) => s.setLang);
@@ -123,6 +125,10 @@ function OverflowMenu() {
 
   return (
     <div ref={ref} className="relative">
+      <SettingsModal
+        open={settingsOpen}
+        onClose={() => setSettingsOpen(false)}
+      />
       <button
         onClick={() => setOpen((v) => !v)}
         title="More"
@@ -162,7 +168,13 @@ function OverflowMenu() {
 
           <div className="-mx-2.5 h-px bg-line" />
 
-          <MenuButton onClick={() => setOpen(false)} icon={<Settings className="size-3.5 text-ink-2" />}>
+          <MenuButton
+            onClick={() => {
+              setOpen(false);
+              setSettingsOpen(true);
+            }}
+            icon={<Settings className="size-3.5 text-ink-2" />}
+          >
             Settings
           </MenuButton>
           <MenuButton
