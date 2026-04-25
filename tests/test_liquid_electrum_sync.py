@@ -638,6 +638,87 @@ class LiquidAssetBackfillTest(unittest.TestCase):
         finally:
             conn.close()
 
+    def test_backfill_keeps_stale_fingerprint_when_recomputed_value_collides(self):
+        hex_id = default_policy_asset_id("liquidv1")
+        occurred_at = "2026-04-15T12:00:00Z"
+        amount = Decimal("0.01000000")
+        fee = Decimal("0.00000000")
+        stale_fingerprint = make_transaction_fingerprint(
+            "wal-1",
+            "",
+            occurred_at,
+            "inbound",
+            hex_id,
+            amount,
+            fee,
+        )
+        lbtc_fingerprint = make_transaction_fingerprint(
+            "wal-1",
+            "",
+            occurred_at,
+            "inbound",
+            "LBTC",
+            amount,
+            fee,
+        )
+        conn = open_db(str(self.data_root))
+        try:
+            self._seed_minimal_schema(conn)
+            for tx_id, asset, fingerprint in (
+                ("tx-hex", hex_id, stale_fingerprint),
+                ("tx-lbtc", "LBTC", lbtc_fingerprint),
+            ):
+                conn.execute(
+                    "INSERT INTO transactions ("
+                    "id, workspace_id, profile_id, wallet_id, external_id, fingerprint, "
+                    "occurred_at, direction, asset, amount, fee, raw_json, created_at"
+                    ") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                    (
+                        tx_id,
+                        "ws-1",
+                        "prof-1",
+                        "wal-1",
+                        None,
+                        fingerprint,
+                        occurred_at,
+                        "inbound",
+                        asset,
+                        btc_to_msat(amount),
+                        btc_to_msat(fee),
+                        json.dumps(
+                            {
+                                "occurred_at": occurred_at,
+                                "direction": "inbound",
+                                "asset": asset,
+                                "amount": str(amount),
+                                "fee": str(fee),
+                            },
+                            sort_keys=True,
+                        ),
+                        occurred_at,
+                    ),
+                )
+            conn.commit()
+        finally:
+            conn.close()
+
+        conn = open_db(str(self.data_root))
+        try:
+            rows = {
+                row["id"]: row
+                for row in conn.execute(
+                    "SELECT id, asset, fingerprint FROM transactions"
+                ).fetchall()
+            }
+            self.assertEqual(rows["tx-hex"]["asset"], "LBTC")
+            self.assertEqual(rows["tx-hex"]["fingerprint"], stale_fingerprint)
+            self.assertEqual(rows["tx-lbtc"]["asset"], "LBTC")
+            self.assertEqual(rows["tx-lbtc"]["fingerprint"], lbtc_fingerprint)
+            count = conn.execute("SELECT COUNT(*) AS count FROM transactions").fetchone()
+            self.assertEqual(count["count"], 2)
+        finally:
+            conn.close()
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -538,6 +538,7 @@ def _raw_decimal_for_fingerprint(row, raw_key, msat_key):
         raw_value = payload.get(raw_key)
         if raw_value not in (None, ""):
             try:
+                # Raw imports may carry signed amounts; fingerprint inputs are normalized positive values.
                 value = abs(dec(raw_value))
             except (AppError, TypeError, ValueError):
                 value = None
