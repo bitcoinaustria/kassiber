@@ -23,6 +23,7 @@ import { ArrowDownToLine, ArrowUpToLine, ChevronDown, Plus, Search } from "lucid
 import { Button } from "@/components/ui/button";
 import { useDaemon } from "@/daemon/client";
 import { useUiStore } from "@/store/ui";
+import { useCurrency, type Currency } from "@/lib/currency";
 import { cn } from "@/lib/utils";
 import type { Tx, TxType } from "@/mocks/seed";
 import type { TransactionsLedger } from "@/mocks/transactions";
@@ -73,6 +74,7 @@ const fmtRate = (n: number) =>
 export function Transactions() {
   const { data, isLoading } = useDaemon<TransactionsLedger>("ui.transactions.list");
   const hideSensitive = useUiStore((s) => s.hideSensitive);
+  const currency = useCurrency();
 
   const [q, setQ] = useState("");
   const [typeFilter, setTypeFilter] = useState<Filter>("all");
@@ -253,7 +255,12 @@ export function Transactions() {
           </thead>
           <tbody>
             {filtered.map((tx) => (
-              <TxRow key={tx.id} tx={tx} hideSensitive={hideSensitive} />
+              <TxRow
+                key={tx.id}
+                tx={tx}
+                hideSensitive={hideSensitive}
+                currency={currency}
+              />
             ))}
           </tbody>
         </table>
@@ -307,13 +314,34 @@ function Th({ align = "left", children }: ThProps) {
 interface TxRowProps {
   tx: Tx;
   hideSensitive: boolean;
+  currency: Currency;
 }
 
-function TxRow({ tx, hideSensitive }: TxRowProps) {
+function TxRow({ tx, hideSensitive, currency }: TxRowProps) {
   // Type chip needs a dynamic border + text colour that varies by tx type;
   // there isn't a single Tailwind utility per arbitrary type so we set the
   // colour via a CSS variable rather than using inline styles for layout.
   const typeColor = TX_TYPE_HEX[tx.type];
+  const isEur = currency === "eur";
+
+  // The sats column is technical and reads better as the canonical ledger
+  // amount; we keep it visible regardless of the toggle but shift emphasis
+  // (text-ink vs text-ink-2) so the currency-matching column reads as the
+  // primary value.
+  const satsClass = cn(
+    "px-3.5 py-2.5 text-right font-mono text-[11px]",
+    tx.amountSat > 0
+      ? "text-[#3fa66a]"
+      : isEur
+        ? "text-ink-2"
+        : "text-ink",
+    blurClass(hideSensitive),
+  );
+  const eurClass = cn(
+    "px-3.5 py-2.5 text-right font-mono text-[11px]",
+    isEur ? "text-ink" : "text-ink-2",
+    blurClass(hideSensitive),
+  );
 
   return (
     <tr className="border-b border-line">
@@ -339,26 +367,11 @@ function TxRow({ tx, hideSensitive }: TxRowProps) {
           {tx.tag}
         </span>
       </td>
-      <td
-        className={cn(
-          "px-3.5 py-2.5 text-right font-mono text-[11px]",
-          tx.amountSat > 0 ? "text-[#3fa66a]" : "text-ink",
-          blurClass(hideSensitive),
-        )}
-      >
-        {fmtSat(tx.amountSat)}
-      </td>
+      <td className={satsClass}>{fmtSat(tx.amountSat)}</td>
       <td className="px-3.5 py-2.5 text-right font-mono text-[11px] text-ink-3">
         {fmtRate(tx.rate)}
       </td>
-      <td
-        className={cn(
-          "px-3.5 py-2.5 text-right font-mono text-[11px] text-ink-2",
-          blurClass(hideSensitive),
-        )}
-      >
-        {fmtEurSigned(tx.eur)}
-      </td>
+      <td className={eurClass}>{fmtEurSigned(tx.eur)}</td>
       <td className="px-3.5 py-2.5 text-right font-mono text-[11px] text-ink-3">
         {tx.conf}
       </td>

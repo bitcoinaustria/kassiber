@@ -16,6 +16,7 @@
  */
 import * as React from "react";
 import { Lock } from "lucide-react";
+import { useNavigate } from "@tanstack/react-router";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -88,6 +89,18 @@ interface SettingsModalProps {
 export function SettingsModal({ open, onClose }: SettingsModalProps) {
   const hideSensitive = useUiStore((s) => s.hideSensitive);
   const setHideSensitive = useUiStore((s) => s.setHideSensitive);
+  const setIdentity = useUiStore((s) => s.setIdentity);
+  const navigate = useNavigate();
+
+  const onResetWorkspace = () => {
+    const ok = window.confirm(
+      "Reset workspace?\n\nThis clears your local identity and returns you to the Welcome screen. Encrypted data on disk is not touched.",
+    );
+    if (!ok) return;
+    setIdentity(null);
+    onClose();
+    navigate({ to: "/" });
+  };
 
   const [clearClipboard, setClearClipboard] = React.useState(true);
 
@@ -307,6 +320,7 @@ export function SettingsModal({ open, onClose }: SettingsModalProps) {
               variant="destructive"
               className="self-start rounded-none"
               size="sm"
+              onClick={onResetWorkspace}
             >
               ⚠ Reset workspace
             </Button>

@@ -5,24 +5,29 @@
  * richer table-style view than the Overview's ConnectionsCard, with
  * full sync metadata, address counts, and a per-row composition bar.
  *
+ * Per-row click navigates to /connections/$connectionId. Add connection
+ * opens the AddConnectionFlow (picker → per-kind form).
+ *
  * Outstanding before this screen is feature-complete:
- *  - Connection detail subroute (/connections/$id) with deep info
- *    (addresses, derivations, fingerprints, edit/remove)
- *  - Add-connection picker modal (claude-design's ConnectionTypePicker)
- *  - Per-kind add forms (XpubForm, descriptor form, etc.)
+ *  - Per-kind add forms beyond xpub (descriptor, lightning, exchange,
+ *    cashu, btcpay, csv) — each lands when its claude-design source
+ *    materializes
  *  - Bulk sync / per-row sync actions wiring to the daemon
  */
 
 import { useState } from "react";
 import { Plus, RefreshCw } from "lucide-react";
+import { useNavigate } from "@tanstack/react-router";
 
 import { Button } from "@/components/ui/button";
 import { useDaemon } from "@/daemon/client";
 import { useUiStore } from "@/store/ui";
+import { useCurrency, type Currency } from "@/lib/currency";
 import { cn } from "@/lib/utils";
 
 import { SyncDot } from "@/components/kb/SyncDot";
 import { ProtocolChip } from "@/components/kb/ProtocolChip";
+import { AddConnectionFlow } from "@/components/kb/AddConnectionFlow";
 import type { Connection, OverviewSnapshot } from "@/mocks/seed";
 
 const blurClass = (hidden: boolean) => (hidden ? "sensitive" : "");
@@ -38,7 +43,10 @@ const fmtEur = (v: number) =>
 export function Connections() {
   const { data, isLoading } = useDaemon<OverviewSnapshot>("ui.overview.snapshot");
   const hideSensitive = useUiStore((s) => s.hideSensitive);
+  const currency = useCurrency();
+  const navigate = useNavigate();
   const [spinning, setSpinning] = useState(false);
+  const [addOpen, setAddOpen] = useState(false);
 
   const onSyncAll = () => {
     setSpinning(true);
@@ -58,6 +66,12 @@ export function Connections() {
 
   const errorN = snapshot.connections.filter((c) => c.status === "error").length;
   const syncingN = snapshot.connections.filter((c) => c.status === "syncing").length;
+
+  const onSelect = (id: string) =>
+    void navigate({
+      to: "/connections/$connectionId",
+      params: { connectionId: id },
+    });
 
   return (
     <div className="flex-1 overflow-auto bg-paper p-[18px]">
@@ -83,7 +97,11 @@ export function Connections() {
             />
             Sync all
           </Button>
-          <Button size="sm" className="rounded-none">
+          <Button
+            size="sm"
+            className="rounded-none"
+            onClick={() => setAddOpen(true)}
+          >
             <Plus className="size-3" />
             Add connection
           </Button>
@@ -105,11 +123,16 @@ export function Connections() {
             key={c.id}
             connection={c}
             totalBtc={totalBtc}
+            priceEur={snapshot.priceEur}
             hideSensitive={hideSensitive}
+            currency={currency}
             isLast={i === snapshot.connections.length - 1}
+            onSelect={() => onSelect(c.id)}
           />
         ))}
       </div>
+
+      <AddConnectionFlow open={addOpen} onClose={() => setAddOpen(false)} />
     </div>
   );
 }
@@ -117,23 +140,32 @@ export function Connections() {
 interface ConnectionRowProps {
   connection: Connection;
   totalBtc: number;
+  priceEur: number;
   hideSensitive: boolean;
+  currency: Currency;
   isLast: boolean;
+  onSelect: () => void;
 }
 
 function ConnectionRow({
   connection: c,
   totalBtc,
+  priceEur,
   hideSensitive,
+  currency,
   isLast,
+  onSelect,
 }: ConnectionRowProps) {
   const sats = Math.round(c.balance * 1e8);
   const pct = totalBtc > 0 ? (c.balance / totalBtc) * 100 : 0;
+  const isEur = currency === "eur";
 
   return (
-    <div
+    <button
+      type="button"
+      onClick={onSelect}
       className={cn(
-        "grid grid-cols-[20px_1.4fr_120px_120px_1fr_140px] items-center gap-x-3 px-3 py-3 transition-colors hover:bg-paper",
+        "grid w-full cursor-pointer grid-cols-[20px_1.4fr_120px_120px_1fr_140px] items-center gap-x-3 border-0 bg-transparent px-3 py-3 text-left transition-colors hover:bg-paper",
         !isLast && "border-b border-line",
       )}
     >
@@ -201,7 +233,9 @@ function ConnectionRow({
             blurClass(hideSensitive),
           )}
         >
-          ₿ {fmtBtc(c.balance)}
+          {isEur
+            ? fmtEur(c.balance * priceEur)
+            : "₿ " + fmtBtc(c.balance)}
         </div>
         <div
           className={cn(
@@ -209,9 +243,11 @@ function ConnectionRow({
             blurClass(hideSensitive),
           )}
         >
-          {sats.toLocaleString("en-US")} sat · {fmtEur(c.balance * 71_420.18)}
+          {isEur
+            ? "₿ " + fmtBtc(c.balance) + " · " + sats.toLocaleString("en-US") + " sat"
+            : sats.toLocaleString("en-US") + " sat · " + fmtEur(c.balance * priceEur)}
         </div>
       </div>
-    </div>
+    </button>
   );
 }

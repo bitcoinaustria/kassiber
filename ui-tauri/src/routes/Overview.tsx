@@ -14,18 +14,21 @@
  *  - Add-connection picker / connection detail navigation
  *  - Currency toggle (₿/€) is currently fixed to BTC; the toggle from
  *    chrome.jsx lands when AppHeader is translated
- *  - ChartFullscreen modal — deferred until a real need surfaces
  */
 
 import { useState } from "react";
 import { Plus } from "lucide-react";
+import { useNavigate } from "@tanstack/react-router";
 import { useDaemon } from "@/daemon/client";
 import { useUiStore } from "@/store/ui";
+import { useCurrency, type Currency } from "@/lib/currency";
 import { cn } from "@/lib/utils";
 
 import { Button } from "@/components/ui/button";
 import { KbCard } from "@/components/kb/KbCard";
 import { BalanceChart } from "@/components/kb/BalanceChart";
+import { ChartFullscreen } from "@/components/kb/ChartFullscreen";
+import { AddConnectionFlow } from "@/components/kb/AddConnectionFlow";
 import { RangeTabs, type Range } from "@/components/kb/RangeTabs";
 import { SyncDot } from "@/components/kb/SyncDot";
 import { ProtocolChip } from "@/components/kb/ProtocolChip";
@@ -51,6 +54,9 @@ const fmtEurThousands = (v: number) =>
 export function Overview() {
   const { data, isLoading } = useDaemon<OverviewSnapshot>("ui.overview.snapshot");
   const hideSensitive = useUiStore((s) => s.hideSensitive);
+  const currency = useCurrency();
+  const navigate = useNavigate();
+  const [addOpen, setAddOpen] = useState(false);
 
   if (isLoading || !data?.data) {
     return (
@@ -62,11 +68,27 @@ export function Overview() {
 
   const snapshot = data.data;
   const isEmpty = snapshot.connections.length === 0;
+  const onSelectConnection = (id: string) =>
+    void navigate({
+      to: "/connections/$connectionId",
+      params: { connectionId: id },
+    });
 
-  return isEmpty ? (
-    <EmptyOverview onAdd={() => {}} />
-  ) : (
-    <PopulatedOverview snapshot={snapshot} hideSensitive={hideSensitive} />
+  return (
+    <>
+      {isEmpty ? (
+        <EmptyOverview onAdd={() => setAddOpen(true)} />
+      ) : (
+        <PopulatedOverview
+          snapshot={snapshot}
+          hideSensitive={hideSensitive}
+          currency={currency}
+          onAddConnection={() => setAddOpen(true)}
+          onSelectConnection={onSelectConnection}
+        />
+      )}
+      <AddConnectionFlow open={addOpen} onClose={() => setAddOpen(false)} />
+    </>
   );
 }
 
@@ -101,13 +123,20 @@ function EmptyOverview({ onAdd }: { onAdd: () => void }) {
 interface PopulatedOverviewProps {
   snapshot: OverviewSnapshot;
   hideSensitive: boolean;
+  currency: Currency;
+  onAddConnection: () => void;
+  onSelectConnection: (id: string) => void;
 }
 
 function PopulatedOverview({
   snapshot,
   hideSensitive,
+  currency,
+  onAddConnection,
+  onSelectConnection,
 }: PopulatedOverviewProps) {
   const [chartRange, setChartRange] = useState<Range>("ytd");
+  const [chartExpanded, setChartExpanded] = useState(false);
   const totalBtc = snapshot.connections.reduce((s, c) => s + c.balance, 0);
   const totalEur = totalBtc * snapshot.priceEur;
 
@@ -117,7 +146,28 @@ function PopulatedOverview({
       <div className="mb-2.5 grid grid-cols-[2.4fr_1fr] gap-2.5">
         <KbCard
           title="Balance & performance"
-          action={<RangeTabs value={chartRange} onChange={setChartRange} />}
+          action={
+            <div className="flex items-center gap-2">
+              <RangeTabs value={chartRange} onChange={setChartRange} />
+              <button
+                type="button"
+                onClick={() => setChartExpanded(true)}
+                title="Expand chart"
+                className="flex size-5 cursor-pointer items-center justify-center border border-line bg-transparent p-0 hover:border-ink"
+              >
+                <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
+                  <path
+                    d="M1 4 V1 H4 M9 4 V1 H6 M1 6 V9 H4 M9 6 V9 H6"
+                    stroke="var(--color-ink-2)"
+                    strokeWidth="1.2"
+                    strokeLinecap="square"
+                    fill="none"
+                  />
+                </svg>
+                <span className="sr-only">Expand chart</span>
+              </button>
+            </div>
+          }
           pad={false}
           className="flex flex-col"
         >
@@ -128,12 +178,13 @@ function PopulatedOverview({
               totalEur={totalEur}
               hideSensitive={hideSensitive}
               chartRange={chartRange}
+              currency={currency}
             />
             <div className="flex min-h-0 flex-col p-3.5">
               <div className="min-h-0 flex-1">
                 <BalanceChart
                   series={snapshot.balanceSeries}
-                  ccy="btc"
+                  ccy={currency}
                   priceEur={snapshot.priceEur}
                   range={chartRange}
                   height={240}
@@ -146,8 +197,8 @@ function PopulatedOverview({
         <ConnectionsCard
           connections={snapshot.connections}
           hideSensitive={hideSensitive}
-          onAddConnection={() => {}}
-          onSelectConnection={() => {}}
+          onAddConnection={onAddConnection}
+          onSelectConnection={onSelectConnection}
         />
       </div>
 
@@ -170,6 +221,7 @@ function PopulatedOverview({
           <TransactionsPreview
             txs={snapshot.txs.slice(0, 6)}
             hideSensitive={hideSensitive}
+            currency={currency}
           />
         </KbCard>
         <KbCard title="Balances">
@@ -198,6 +250,12 @@ function PopulatedOverview({
           icon="▭"
         />
       </div>
+
+      <ChartFullscreen
+        open={chartExpanded}
+        onClose={() => setChartExpanded(false)}
+        totalBtc={totalBtc}
+      />
     </div>
   );
 }
@@ -208,6 +266,7 @@ interface ChartGutterProps {
   totalEur: number;
   hideSensitive: boolean;
   chartRange: Range;
+  currency: Currency;
 }
 
 function ChartGutter({
@@ -216,7 +275,9 @@ function ChartGutter({
   totalEur,
   hideSensitive,
   chartRange,
+  currency,
 }: ChartGutterProps) {
+  const isEur = currency === "eur";
   return (
     <div className="flex flex-col gap-3 border-r border-line bg-paper-2 px-4 py-3.5">
       <div>
@@ -229,7 +290,7 @@ function ChartGutter({
             blurClass(hideSensitive),
           )}
         >
-          ₿ {fmtBtc(totalBtc)}
+          {isEur ? fmtEur(totalEur) : "₿ " + fmtBtc(totalBtc)}
         </div>
         <div
           className={cn(
@@ -237,7 +298,7 @@ function ChartGutter({
             blurClass(hideSensitive),
           )}
         >
-          {fmtEur(totalEur)}
+          {isEur ? "₿ " + fmtBtc(totalBtc) : fmtEur(totalEur)}
         </div>
       </div>
 
@@ -247,7 +308,7 @@ function ChartGutter({
         </div>
         <RangeDelta
           range={chartRange}
-          ccy="btc"
+          ccy={currency}
           priceEur={snapshot.priceEur}
           hideSensitive={hideSensitive}
         />
@@ -351,11 +412,12 @@ function RangeDelta({ range, ccy, priceEur, hideSensitive }: RangeDeltaProps) {
       </div>
       <div className={cn("mt-0.5 font-mono text-[10px]", colorClass)}>
         {sign} {Math.abs(d.pct).toFixed(2)} %
-        {ccy === "btc" && (
-          <span className={cn("ml-1 text-ink-3", blurClass(hideSensitive))}>
-            · ≈ {sign} {fmtEurInt(absEur)}
-          </span>
-        )}
+        <span className={cn("ml-1 text-ink-3", blurClass(hideSensitive))}>
+          · ≈ {sign}{" "}
+          {ccy === "btc"
+            ? fmtEurInt(absEur)
+            : abs.toFixed(abs < 0.01 ? 8 : 4) + " ₿"}
+        </span>
       </div>
     </>
   );
@@ -550,6 +612,7 @@ function ConnectionsCard({
 interface TransactionsPreviewProps {
   txs: Tx[];
   hideSensitive: boolean;
+  currency: Currency;
 }
 
 const TX_TYPE_COLOR: Record<Tx["type"], string> = {
@@ -564,7 +627,12 @@ const TX_TYPE_COLOR: Record<Tx["type"], string> = {
   Rebalance: "text-ink-2",
 };
 
-function TransactionsPreview({ txs, hideSensitive }: TransactionsPreviewProps) {
+function TransactionsPreview({
+  txs,
+  hideSensitive,
+  currency,
+}: TransactionsPreviewProps) {
+  const isEur = currency === "eur";
   return (
     <table className="w-full border-collapse font-mono text-[11px]">
       <thead>
@@ -579,47 +647,60 @@ function TransactionsPreview({ txs, hideSensitive }: TransactionsPreviewProps) {
             Counterparty
           </th>
           <th className="px-3.5 py-2 text-right font-sans text-[9px] font-semibold uppercase tracking-[0.12em] text-ink-3">
-            sats
+            {isEur ? "€" : "₿"}
           </th>
           <th className="px-3.5 py-2 text-right font-sans text-[9px] font-semibold uppercase tracking-[0.12em] text-ink-3">
-            €
+            {isEur ? "sats" : "€"}
           </th>
         </tr>
       </thead>
       <tbody>
-        {txs.map((tx) => (
-          <tr key={tx.id} className="border-b border-line">
-            <td className="px-3.5 py-2.5 text-ink-2">{tx.date.slice(5, 10)}</td>
-            <td className="px-3.5 py-2.5">
-              <span
+        {txs.map((tx) => {
+          const btc = tx.amountSat / 1e8;
+          const sign = tx.amountSat > 0 ? "+" : tx.amountSat < 0 ? "−" : "";
+          const primary = isEur
+            ? (tx.eur > 0 ? "+ €" : "− €") + Math.abs(tx.eur).toFixed(2)
+            : sign + " ₿ " + Math.abs(btc).toFixed(8);
+          const secondary = isEur
+            ? (tx.amountSat > 0 ? "+" : "") +
+              tx.amountSat.toLocaleString("en-US")
+            : (tx.eur > 0 ? "+ €" : "− €") + Math.abs(tx.eur).toFixed(2);
+          return (
+            <tr key={tx.id} className="border-b border-line">
+              <td className="px-3.5 py-2.5 text-ink-2">{tx.date.slice(5, 10)}</td>
+              <td className="px-3.5 py-2.5">
+                <span
+                  className={cn(
+                    "text-[9px] uppercase tracking-[0.1em]",
+                    TX_TYPE_COLOR[tx.type],
+                  )}
+                >
+                  {tx.type}
+                </span>
+              </td>
+              <td className="px-3.5 py-2.5 font-sans text-xs text-ink">
+                {tx.counter}
+              </td>
+              <td
                 className={cn(
-                  "text-[9px] uppercase tracking-[0.1em]",
-                  TX_TYPE_COLOR[tx.type],
+                  "px-3.5 py-2.5 text-right",
+                  tx.amountSat > 0 ? "text-[#3fa66a]" : "text-ink",
+                  blurClass(hideSensitive),
                 )}
               >
-                {tx.type}
-              </span>
-            </td>
-            <td className="px-3.5 py-2.5 font-sans text-xs text-ink">
-              {tx.counter}
-            </td>
-            <td
-              className={cn(
-                "px-3.5 py-2.5 text-right",
-                tx.amountSat > 0 ? "text-[#3fa66a]" : "text-ink",
-                blurClass(hideSensitive),
-              )}
-            >
-              {(tx.amountSat > 0 ? "+" : "") +
-                tx.amountSat.toLocaleString("en-US")}
-            </td>
-            <td
-              className={cn("px-3.5 py-2.5 text-right", blurClass(hideSensitive))}
-            >
-              {(tx.eur > 0 ? "+ €" : "− €") + Math.abs(tx.eur).toFixed(2)}
-            </td>
-          </tr>
-        ))}
+                {primary}
+              </td>
+              <td
+                className={cn(
+                  "px-3.5 py-2.5 text-right",
+                  blurClass(hideSensitive),
+                )}
+              >
+                {secondary}
+              </td>
+            </tr>
+          );
+        })}
       </tbody>
     </table>
   );

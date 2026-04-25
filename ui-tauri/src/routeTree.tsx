@@ -23,6 +23,7 @@ import { Transactions } from "./routes/Transactions";
 import { Reports } from "./routes/Reports";
 import { Profiles } from "./routes/Profiles";
 import { Connections } from "./routes/Connections";
+import { ConnectionDetail } from "./routes/ConnectionDetail";
 import { AppShell } from "./components/kb/AppShell";
 import { useUiStore } from "./store/ui";
 
@@ -82,6 +83,12 @@ const connectionsRoute = createRoute({
   component: Connections,
 });
 
+const connectionDetailRoute = createRoute({
+  getParentRoute: () => appLayoutRoute,
+  path: "/connections/$connectionId",
+  component: ConnectionDetail,
+});
+
 const routeTree = rootRoute.addChildren([
   indexRoute,
   appLayoutRoute.addChildren([
@@ -90,6 +97,7 @@ const routeTree = rootRoute.addChildren([
     reportsRoute,
     profilesRoute,
     connectionsRoute,
+    connectionDetailRoute,
   ]),
 ]);
 

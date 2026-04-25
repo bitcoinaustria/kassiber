@@ -13,6 +13,7 @@ import { Eye, EyeOff, MoreHorizontal, Settings, Lock } from "lucide-react";
 
 import { Wordmark } from "./Wordmark";
 import { SettingsModal } from "./SettingsModal";
+import { ProfileSwitcherPopover } from "./ProfileSwitcherPopover";
 import { useUiStore } from "@/store/ui";
 import { cn } from "@/lib/utils";
 
@@ -26,6 +27,7 @@ export function AppHeader() {
   const identity = useUiStore((s) => s.identity);
   const hideSensitive = useUiStore((s) => s.hideSensitive);
   const setHideSensitive = useUiStore((s) => s.setHideSensitive);
+  const [profileSwitcherOpen, setProfileSwitcherOpen] = useState(false);
 
   const routerState = useRouterState();
   const path = routerState.location.pathname;
@@ -59,6 +61,7 @@ export function AppHeader() {
       <div className="flex items-center gap-2">
         {identity && (
           <button
+            onClick={() => setProfileSwitcherOpen(true)}
             title={`Workspace · ${identity.workspace} · signed in as ${identity.name}`}
             className="flex h-6.5 cursor-pointer items-center gap-1.5 border border-line bg-transparent px-2.5"
           >
@@ -81,6 +84,11 @@ export function AppHeader() {
             </svg>
           </button>
         )}
+
+        <ProfileSwitcherPopover
+          open={profileSwitcherOpen}
+          onClose={() => setProfileSwitcherOpen(false)}
+        />
 
         <button
           onClick={() => setHideSensitive(!hideSensitive)}
