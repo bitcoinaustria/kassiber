@@ -7,8 +7,10 @@ the docs in the same change.
 
 ## Product
 
-Kassiber is a local-first Bitcoin accounting CLI with an early PySide6/QML
-desktop shell.
+Kassiber is a local-first Bitcoin accounting CLI. A desktop shell built on
+Tauri 2 + React + TypeScript with a Python sidecar daemon is in active
+development; see [01-stack-decision.md](01-stack-decision.md) for the stack
+and [04-desktop-ui.md](04-desktop-ui.md) for the implementation plan.
 
 It owns wallet sync/import, local storage, provenance, metadata, attachments,
 transfer pairing, review/quarantine workflows, CLI/desktop UX, and
@@ -30,7 +32,7 @@ Out of scope unless a future design says otherwise:
 - CLI entrypoint: `kassiber/cli/main.py`
 - remaining CLI helper surface: `kassiber/cli/handlers.py`
 - shared runtime/core: `kassiber/core/`
-- desktop shell: `kassiber/ui/`
+- desktop shell: `ui-tauri/` (under construction per [01-stack-decision.md](01-stack-decision.md) and [04-desktop-ui.md](04-desktop-ui.md))
 - storage: SQLite under current app-wide `~/.kassiber/` state root
 - target storage direction: one DB per project under `~/.kassiber/projects/`
 - tax engine: RP2 fork at `bitcoinaustria/rp2`
@@ -41,7 +43,8 @@ Out of scope unless a future design says otherwise:
 
 - local-first by default
 - CLI stays first-class
-- no bundled Chromium and no Node runtime
+- no bundled browser runtime; no separately-installed user runtime (Tauri uses
+  the OS webview; the bundled Python sidecar ships inside the app)
 - Bitcoin-first; L-BTC is in scope
 - BTC amounts are integer msat
 - reports are trusted only after journal processing
@@ -56,27 +59,25 @@ Out of scope unless a future design says otherwise:
 | Core extraction | Landed | keep logic in shared core, not CLI/UI copies |
 | Attachments | Landed | use shipped `attachments`; keep links/file blobs bounded |
 | Austrian RP2 path | Active | processing and review-gated E 1kv PDF/XLSX export work; domestic-provider KESt metadata pending |
-| Desktop UI | In progress | routed read-only shell exists; live workers/actions pending |
+| Desktop UI | In progress | Tauri 2 + React + TypeScript with a Python sidecar daemon, per [01-stack-decision.md](01-stack-decision.md) and [04-desktop-ui.md](04-desktop-ui.md) |
 | Project storage | Target-state | app-wide to per-project migration still needs a focused plan |
 | External documents | Design | reconcile BTC evidence without becoming ERP/invoicing |
-| Packaging | Planned | Briefcase intended; macOS `.app` not proven yet |
+| Packaging | Planned | Tauri bundler with `python-build-standalone` sidecar per [01-stack-decision.md](01-stack-decision.md); no signed build proven yet |
 
 ## Stack
 
-Desktop: PySide6 + QML.
+Desktop: Tauri 2 + React + TypeScript + shadcn/ui, with the Python core
+running as a long-lived sidecar daemon over stdin/stdout JSONL.
 
-Why: one Python runtime, direct core imports, no webview, no Node runtime, and
-good enough visual fidelity for an accounting workbench.
-
-Use current QML `Canvas` charting while it is enough. Prefer Qt Graphs over
-QtCharts for richer future charting.
+See [01-stack-decision.md](01-stack-decision.md) for the stack decision and
+[04-desktop-ui.md](04-desktop-ui.md) for the implementation plan.
 
 ## Doc Index
 
-- `01-stack-decision.md`: desktop stack ADR
+- `01-stack-decision.md`: desktop stack ADR (Tauri + React + Python sidecar)
 - `02-core-extraction.md`: archived Phase 0 extraction reference
 - `03-storage-conventions.md`: project-bundle storage target
-- `04-desktop-ui.md`: desktop implementation guide
+- `04-desktop-ui.md`: desktop implementation plan
 - `05-attachments.md`: attachment/link boundary
 - `06-austrian-tax-engine.md`: Austrian RP2 boundary and E 1kv direction
 - `07-austrian-tax-open-questions.md`: unresolved AT assumptions and review gates

@@ -14,7 +14,6 @@ authors = [
 ]
 dependencies = [
   "embit>=0.8.0",
-  "PySide6>=6.7,<7",
   "rp2 @ git+https://github.com/bitcoinaustria/rp2.git@23c944962c775667794b19d66e785058d7aaf599",
   "XlsxWriter>=3.2,<4",
 ]
@@ -28,16 +27,3 @@ include-package-data = true
 [tool.setuptools.packages.find]
 where = ["."]
 include = ["kassiber*"]
-
-[tool.setuptools.package-data]
-"kassiber.ui" = [
-  "resources/qml/*.qml",
-  "resources/qml/pages/*.qml",
-  "resources/qml/components/*.qml",
-  "resources/qml/components/*.js",
-  "resources/qml/dialogs/*.qml",
-  "resources/fonts/*.ttf",
-  "resources/fonts/*.txt",
-  "resources/fonts/*/*.ttf",
-  "resources/fonts/*/*.txt",
-]

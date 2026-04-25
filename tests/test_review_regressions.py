@@ -1003,26 +1003,6 @@ class ReviewRegressionTest(unittest.TestCase):
         self.assertNotIn("{'wallets_in_scope':", result.stdout)
         self.assertNotIn("{'cost_basis':", result.stdout)
 
-    def test_pdf_export_bundled_fonts_are_packaged_and_loadable(self):
-        from kassiber import pdf_report
-
-        for key in pdf_report.PDF_FONT_FILES:
-            self.assertTrue(pdf_report._bundled_pdf_font_path(key).exists())
-
-        os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
-        try:
-            from PySide6.QtGui import QFontDatabase, QGuiApplication
-        except ImportError as exc:
-            self.skipTest(f"PySide6 QtGui unavailable in this environment: {exc}")
-
-        _app = QGuiApplication.instance() or QGuiApplication(["kassiber-font-test"])
-        families = pdf_report._load_bundled_pdf_font_families(QFontDatabase)
-
-        self.assertIn("body", families)
-        self.assertIn("mono", families)
-        self.assertTrue(families["body"])
-        self.assertTrue(families["mono"])
-
     def test_tax_summary_total_rows_leave_quantity_blank_for_mixed_assets(self):
         self._bootstrap_profile()
         for label in ("BTC", "LBTC"):
@@ -5587,6 +5567,20 @@ class ReviewRegressionTest(unittest.TestCase):
         self.assertIn("AT-E1KV-KENNZAHL-REPROCESS", notes_text)
         self.assertIn("Kennzahl-Abweichungen", notes_text)
         self.assertIn("at-e1kv-staking", notes_text)
+
+    def test_pdf_report_substitutes_non_latin1_glyphs(self):
+        # Pin the documented Latin-1 PDF rendering regression (see
+        # kassiber/pdf_report.py module docstring and TODO.md "Open bugs
+        # and debt"). Flip these to assert preservation when the
+        # Unicode-safe renderer follow-up lands.
+        from kassiber.pdf_report import _ascii_text
+
+        self.assertEqual(_ascii_text("€"), "?")
+        self.assertEqual(_ascii_text("₿"), "?")
+        self.assertEqual(_ascii_text("↔"), "?")
+        # Latin-1 covers German umlauts and ß, so they survive today.
+        self.assertEqual(_ascii_text("Übersicht"), "Übersicht")
+        self.assertEqual(_ascii_text("Größe ä ö ü ß"), "Größe ä ö ü ß")
 
     def test_austrian_e1kv_empty_year_keeps_unsupported_placeholders(self):
         self._bootstrap_austrian_e1kv_wallet(label="AustrianEmpty")

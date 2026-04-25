@@ -1,8 +1,0 @@
-import QtQuick 2.15
-import QtQuick.Controls 2.15
-
-ActionButton {
-    variant: "primary"
-    size: "lg"
-    minWidth: 180
-}

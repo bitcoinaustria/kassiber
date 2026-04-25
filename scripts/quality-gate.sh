@@ -34,7 +34,7 @@ py() {
   fi
 }
 
-run py -m py_compile kassiber/*.py kassiber/ui/*.py kassiber/ui/viewmodels/*.py
+run py -m py_compile kassiber/*.py
 
 run py -m unittest tests.test_cli_smoke -v
 run py -m unittest tests.test_review_regressions -v
@@ -53,7 +53,6 @@ py -m kassiber journals events --help >/dev/null
 py -m kassiber reports balance-history --help >/dev/null
 py -m kassiber rates --help >/dev/null
 py -m kassiber diagnostics collect --help >/dev/null
-py -m kassiber ui --help >/dev/null
 
 echo
 echo "quality gate passed"
