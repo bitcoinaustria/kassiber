@@ -20,6 +20,10 @@ dist-ssr/
 src/schema/contracts.ts
 src/routeTree.gen.ts
 
+# Local-only design references — drop fresh Claude Design exports here
+# when re-checking visuals; the translated screens in src/ are the truth.
+claude-design/
+
 # Logs
 npm-debug.log*
 yarn-debug.log*
