@@ -44,13 +44,13 @@ function ProfilesView({ snapshot }: { snapshot: ProfilesSnapshot }) {
   const profileCount = workspaces.reduce((a, w) => a + w.profiles.length, 0);
 
   return (
-    <div className="flex-1 overflow-auto bg-paper p-[22px]">
-      <div className="mb-[22px] flex items-end justify-between">
-        <div>
+    <div className="flex-1 overflow-auto bg-paper p-3 sm:p-[22px]">
+      <div className="mb-5 flex flex-col gap-3 sm:mb-[22px] lg:flex-row lg:items-end lg:justify-between lg:gap-4">
+        <div className="min-w-0">
           <div className="font-mono text-[10px] uppercase tracking-[0.14em] text-ink-3">
             Identity · {workspaces.length} workspaces · {profileCount} profiles
           </div>
-          <h2 className="m-0 mt-1 font-sans text-[32px] font-semibold tracking-[-0.01em] text-ink">
+          <h2 className="m-0 mt-1 font-sans text-[26px] font-semibold tracking-[-0.01em] text-ink sm:text-[32px]">
             Switch profile
           </h2>
           <div className="mt-1.5 max-w-[640px] font-sans text-[12.5px] leading-[1.5] text-ink-2">
@@ -59,7 +59,7 @@ function ProfilesView({ snapshot }: { snapshot: ProfilesSnapshot }) {
             read-only mode.
           </div>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           <Button
             variant="ghost"
             size="sm"
@@ -128,7 +128,7 @@ function ProfileWorkspaceBlock({
   const profileCount = workspace.profiles.length;
   return (
     <div>
-      <div className="mb-2.5 flex items-baseline gap-3 border-b border-ink pb-1.5">
+      <div className="mb-2.5 flex flex-wrap items-baseline gap-x-3 gap-y-1 border-b border-ink pb-1.5">
         <div className="flex items-center gap-2">
           <svg
             width="12"
@@ -160,7 +160,7 @@ function ProfileWorkspaceBlock({
         </span>
       </div>
 
-      <div className="grid grid-cols-2 gap-2.5">
+      <div className="grid grid-cols-1 gap-2.5 md:grid-cols-2">
         {workspace.profiles.map((p) => (
           <ProfileCard
             key={p.id}

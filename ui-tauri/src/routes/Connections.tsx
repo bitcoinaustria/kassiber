@@ -74,18 +74,18 @@ export function Connections() {
     });
 
   return (
-    <div className="flex-1 overflow-auto bg-paper p-[18px]">
-      <div className="mb-[18px] flex items-end justify-between">
-        <div>
+    <div className="flex-1 overflow-auto bg-paper p-3 sm:p-[18px]">
+      <div className="mb-4 flex flex-col gap-3 sm:mb-[18px] sm:flex-row sm:items-end sm:justify-between sm:gap-4">
+        <div className="min-w-0">
           <div className="kb-mono-caption">
             {snapshot.connections.length} connections · {errorN > 0 ? `${errorN} need attention · ` : ""}
             {syncingN > 0 ? `${syncingN} syncing` : "all synced"}
           </div>
-          <h2 className="m-0 mt-1 font-sans text-[32px] font-semibold tracking-[-0.01em] text-ink">
+          <h2 className="m-0 mt-1 font-sans text-[26px] font-semibold tracking-[-0.01em] text-ink sm:text-[32px]">
             Connections
           </h2>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <Button
             variant="secondary"
             size="sm"
@@ -108,13 +108,21 @@ export function Connections() {
         </div>
       </div>
 
-      <div className="border border-line bg-paper-2">
-        <div className="grid grid-cols-[20px_1.4fr_120px_120px_1fr_140px] items-center gap-x-3 border-b border-line bg-paper px-3 py-2 font-mono text-[9px] font-semibold uppercase tracking-[0.14em] text-ink-3">
+      <div className="@container border border-line bg-paper-2">
+        <div
+          className={cn(
+            "items-center gap-x-3 border-b border-line bg-paper px-3 py-2 font-mono text-[9px] font-semibold uppercase tracking-[0.14em] text-ink-3",
+            "grid grid-cols-[20px_minmax(0,1fr)_minmax(90px,140px)]",
+            "@2xl:grid-cols-[20px_minmax(0,1fr)_100px_minmax(90px,140px)]",
+            "@3xl:grid-cols-[20px_minmax(0,1fr)_100px_100px_minmax(90px,140px)]",
+            "@4xl:grid-cols-[20px_minmax(0,1.4fr)_120px_120px_minmax(0,1fr)_140px]",
+          )}
+        >
           <span />
           <span>Connection</span>
-          <span>Kind</span>
-          <span>Last sync</span>
-          <span>Composition</span>
+          <span className="hidden @2xl:inline">Kind</span>
+          <span className="hidden @3xl:inline">Last sync</span>
+          <span className="hidden @4xl:inline">Composition</span>
           <span className="text-right">Balance</span>
         </div>
 
@@ -165,15 +173,22 @@ function ConnectionRow({
       type="button"
       onClick={onSelect}
       className={cn(
-        "grid w-full cursor-pointer grid-cols-[20px_1.4fr_120px_120px_1fr_140px] items-center gap-x-3 border-0 bg-transparent px-3 py-3 text-left transition-colors hover:bg-paper",
+        "w-full cursor-pointer items-center gap-x-3 border-0 bg-transparent px-3 py-3 text-left transition-colors hover:bg-paper",
+        "grid grid-cols-[20px_minmax(0,1fr)_minmax(90px,140px)]",
+        "@2xl:grid-cols-[20px_minmax(0,1fr)_100px_minmax(90px,140px)]",
+        "@3xl:grid-cols-[20px_minmax(0,1fr)_100px_100px_minmax(90px,140px)]",
+        "@4xl:grid-cols-[20px_minmax(0,1.4fr)_120px_120px_minmax(0,1fr)_140px]",
         !isLast && "border-b border-line",
       )}
     >
       <SyncDot status={c.status} />
 
       <div className="flex min-w-0 flex-col gap-0.5">
-        <span className="overflow-hidden truncate font-sans text-[14px] font-semibold tracking-[-0.005em] text-ink">
-          {c.label}
+        <span className="flex items-center gap-2 overflow-hidden truncate font-sans text-[14px] font-semibold tracking-[-0.005em] text-ink">
+          <span className="truncate">{c.label}</span>
+          <span className="@2xl:hidden">
+            <ProtocolChip kind={c.kind} />
+          </span>
         </span>
         <span className="font-mono text-[10px] uppercase tracking-[0.04em] text-ink-3">
           {c.last}
@@ -198,15 +213,15 @@ function ConnectionRow({
         </span>
       </div>
 
-      <div>
+      <div className="hidden @2xl:block">
         <ProtocolChip kind={c.kind} />
       </div>
 
-      <span className="font-mono text-[11px] uppercase tracking-[0.04em] text-ink-2">
+      <span className="hidden font-mono text-[11px] uppercase tracking-[0.04em] text-ink-2 @3xl:inline">
         {c.status}
       </span>
 
-      <div className="flex items-center gap-2">
+      <div className="hidden items-center gap-2 @4xl:flex">
         <div className="relative h-1 flex-1 max-w-[180px] bg-line">
           <div
             className={cn(

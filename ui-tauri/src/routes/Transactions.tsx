@@ -120,17 +120,17 @@ export function Transactions() {
   }
 
   return (
-    <div className="flex-1 overflow-auto bg-paper p-[18px]">
-      <div className="mb-[18px] flex items-end justify-between">
-        <div>
+    <div className="flex-1 overflow-auto bg-paper p-3 sm:p-[18px]">
+      <div className="mb-4 flex flex-col gap-3 sm:mb-[18px] lg:flex-row lg:items-end lg:justify-between lg:gap-4">
+        <div className="min-w-0">
           <div className="kb-mono-caption">
             Ledger · {filtered.length} entries · {year}
           </div>
-          <h2 className="m-0 mt-1 font-sans text-[32px] font-semibold tracking-[-0.01em] text-ink">
+          <h2 className="m-0 mt-1 font-sans text-[26px] font-semibold tracking-[-0.01em] text-ink sm:text-[32px]">
             Transactions
           </h2>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <Button variant="secondary" size="sm" className="rounded-none">
             <ArrowDownToLine className="size-3" />
             Import labels
@@ -139,7 +139,7 @@ export function Transactions() {
             <ArrowUpToLine className="size-3" />
             Export labels
           </Button>
-          <div className="mx-0.5 h-[22px] w-px self-center bg-line" />
+          <div className="mx-0.5 hidden h-[22px] w-px self-center bg-line lg:block" />
           <Button variant="secondary" size="sm" className="rounded-none">
             <ArrowDownToLine className="size-3" />
             CSV
@@ -156,18 +156,18 @@ export function Transactions() {
       </div>
 
       {/* filter strip */}
-      <div className="mb-2.5 flex items-center gap-3 border border-line bg-paper-2 px-3 py-2.5">
-        <div className="flex flex-1 items-center gap-1.5">
-          <Search className="size-3 text-ink-3" strokeWidth={1.5} />
+      <div className="mb-2.5 flex flex-col gap-2 border border-line bg-paper-2 px-3 py-2.5 md:flex-row md:items-center md:gap-3">
+        <div className="flex min-w-0 flex-1 items-center gap-1.5">
+          <Search className="size-3 shrink-0 text-ink-3" strokeWidth={1.5} />
           <input
             value={q}
             onChange={(e) => setQ(e.target.value)}
             placeholder="Search counterparty, tag, account…"
-            className="flex-1 border-none bg-transparent font-sans text-xs text-ink outline-none placeholder:text-ink-3"
+            className="min-w-0 flex-1 border-none bg-transparent font-sans text-xs text-ink outline-none placeholder:text-ink-3"
           />
         </div>
-        <div className="h-5 w-px bg-line" />
-        <div className="flex items-center gap-1">
+        <div className="hidden h-5 w-px bg-line md:block" />
+        <div className="flex flex-wrap items-center gap-1">
           {PRIMARY_TYPES.map((t) => {
             const active = typeFilter === t;
             return (
@@ -238,8 +238,8 @@ export function Transactions() {
       </div>
 
       {/* table */}
-      <div className="border border-line bg-paper-2">
-        <table className="w-full border-collapse">
+      <div className="overflow-x-auto border border-line bg-paper-2">
+        <table className="w-full min-w-[760px] border-collapse">
           <thead>
             <tr className="border-b border-ink bg-paper">
               <Th>Date · time</Th>

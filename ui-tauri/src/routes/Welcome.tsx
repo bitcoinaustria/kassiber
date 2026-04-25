@@ -148,10 +148,10 @@ function WelcomeIntro({ onNext }: { onNext: () => void }) {
   ];
   return (
     <WelcomeShell step="intro">
-      <div className="flex flex-1 items-center justify-center px-12 py-10">
+      <div className="flex flex-1 items-center justify-center px-6 py-8 sm:px-10 lg:px-12 lg:py-10">
         <div className="flex w-full max-w-[520px] flex-col">
           <Wordmark size={22} />
-          <h1 className="mb-0 mt-7 font-sans text-[40px] font-semibold leading-[1.1] tracking-[-0.02em] text-ink">
+          <h1 className="mb-0 mt-7 font-sans text-[32px] font-semibold leading-[1.1] tracking-[-0.02em] text-ink sm:text-[40px]">
             Your books. Your keys.
           </h1>
           <p className="mb-0 mt-3.5 max-w-[440px] font-sans text-sm leading-[1.55] text-ink-2">
@@ -214,13 +214,13 @@ function WelcomeSetup({
 
   return (
     <WelcomeShell step="setup">
-      <div className="grid flex-1 grid-cols-2">
-        <div className="relative flex flex-col justify-between overflow-hidden border-r border-line bg-paper-2 px-14 py-12">
+      <div className="grid flex-1 grid-cols-1 lg:grid-cols-2">
+        <div className="relative flex flex-col justify-between overflow-hidden border-b border-line bg-paper-2 px-6 py-8 sm:px-10 sm:py-10 lg:border-b-0 lg:border-r lg:px-14 lg:py-12">
           <div>
             <div className="mb-3.5 font-mono text-[10px] uppercase tracking-[0.2em] text-accent">
               Step 01 of 02
             </div>
-            <h2 className="m-0 font-sans text-[64px] font-semibold leading-[0.95] tracking-[-0.025em] text-ink">
+            <h2 className="m-0 font-sans text-[40px] font-semibold leading-[0.95] tracking-[-0.025em] text-ink sm:text-[52px] lg:text-[64px]">
               Tell us
               <br />
               who&apos;s writing.
@@ -233,11 +233,11 @@ function WelcomeSetup({
           </div>
           <div className="mt-8 font-mono text-[10px] leading-[1.7] tracking-[0.12em] text-ink-3">
             <div>{"// Stored at"}</div>
-            <div className="text-ink-2">~/.kassiber/{dirSlug}/</div>
+            <div className="break-all text-ink-2">~/.kassiber/{dirSlug}/</div>
           </div>
         </div>
 
-        <div className="flex flex-col gap-6 px-14 py-12">
+        <div className="flex flex-col gap-6 px-6 py-8 sm:px-10 sm:py-10 lg:px-14 lg:py-12">
           <div className="flex flex-col gap-[18px]">
             <LabeledInput
               label="Your name"
@@ -348,13 +348,13 @@ function WelcomeEncrypt({
 
   return (
     <WelcomeShell step="encrypt">
-      <div className="grid flex-1 grid-cols-2">
-        <div className="relative flex flex-col justify-between overflow-hidden border-r border-line bg-paper-2 px-14 py-12">
+      <div className="grid flex-1 grid-cols-1 lg:grid-cols-2">
+        <div className="relative flex flex-col justify-between overflow-hidden border-b border-line bg-paper-2 px-6 py-8 sm:px-10 sm:py-10 lg:border-b-0 lg:border-r lg:px-14 lg:py-12">
           <div>
             <div className="mb-3.5 font-mono text-[10px] uppercase tracking-[0.2em] text-accent">
               Step 02 of 02
             </div>
-            <h2 className="m-0 font-sans text-[64px] font-semibold leading-[0.95] tracking-[-0.025em] text-ink">
+            <h2 className="m-0 font-sans text-[40px] font-semibold leading-[0.95] tracking-[-0.025em] text-ink sm:text-[52px] lg:text-[64px]">
               Lock the
               <br />
               <span className="italic">door.</span>
@@ -384,8 +384,8 @@ function WelcomeEncrypt({
           </div>
         </div>
 
-        <div className="flex flex-col gap-5 px-14 py-12">
-          <div className="grid grid-cols-2 gap-2.5">
+        <div className="flex flex-col gap-5 px-6 py-8 sm:px-10 sm:py-10 lg:px-14 lg:py-12">
+          <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
             <ChoiceCard
               active={mode === "encrypt"}
               onClick={() => setMode("encrypt")}
@@ -407,7 +407,7 @@ function WelcomeEncrypt({
 
           {mode === "encrypt" && (
             <div className="flex flex-col gap-3.5 border border-ink bg-paper-2 px-5 py-4.5">
-              <div className="grid grid-cols-2 gap-2.5">
+              <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
                 <LabeledInput
                   label="Passphrase"
                   value={passphrase}

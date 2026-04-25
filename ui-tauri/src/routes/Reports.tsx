@@ -101,13 +101,13 @@ function ReportsView({ report, hideSensitive }: ReportsViewProps) {
   const kest = totals.gain * j.rate;
 
   return (
-    <div className="flex-1 overflow-auto bg-paper p-4.5">
-      <div className="mb-4.5 flex items-end justify-between">
-        <div>
+    <div className="flex-1 overflow-auto bg-paper p-3 sm:p-4.5">
+      <div className="mb-4 flex flex-col gap-2 sm:mb-4.5 sm:flex-row sm:items-end sm:justify-between">
+        <div className="min-w-0">
           <div className="kb-mono-caption">
             Report · Capital gains · {j.name}
           </div>
-          <h2 className="m-0 mt-1 font-sans text-[32px] font-semibold tracking-[-0.01em] text-ink">
+          <h2 className="m-0 mt-1 font-sans text-[26px] font-semibold tracking-[-0.01em] text-ink sm:text-[32px]">
             Capital gains
           </h2>
         </div>
@@ -118,7 +118,7 @@ function ReportsView({ report, hideSensitive }: ReportsViewProps) {
         </div>
       </div>
 
-      <div className="grid grid-cols-[340px_1fr] gap-3.5">
+      <div className="grid grid-cols-1 gap-3.5 lg:grid-cols-[minmax(0,340px)_minmax(0,1fr)]">
         {/* Left: config */}
         <div className="flex flex-col gap-2.5">
           <KbCard title="Jurisdiction">
@@ -255,8 +255,8 @@ function ReportsView({ report, hideSensitive }: ReportsViewProps) {
         </div>
 
         {/* Right: preview */}
-        <div className="flex flex-col gap-2.5">
-          <div className="grid grid-cols-4 gap-2.5">
+        <div className="flex min-w-0 flex-col gap-2.5">
+          <div className="grid grid-cols-2 gap-2.5 md:grid-cols-4">
             <ReportStatTile
               label="Proceeds"
               value={
@@ -298,7 +298,8 @@ function ReportsView({ report, hideSensitive }: ReportsViewProps) {
           </div>
 
           <KbCard title={`Disposed lots · ${year}`} pad={false}>
-            <table className="w-full border-collapse">
+            <div className="overflow-x-auto">
+            <table className="w-full min-w-[720px] border-collapse">
               <thead>
                 <tr className="border-b border-ink">
                   <th className="px-3 py-2 text-left font-sans text-[9px] font-semibold uppercase tracking-[0.12em] text-ink-3">
@@ -374,9 +375,10 @@ function ReportsView({ report, hideSensitive }: ReportsViewProps) {
                 </tr>
               </tbody>
             </table>
+            </div>
           </KbCard>
 
-          <div className="grid grid-cols-3 gap-2.5">
+          <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-3">
             <ReportExportFormat
               name="CSV"
               sub="Spreadsheet"

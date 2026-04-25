@@ -132,38 +132,40 @@ function ConnectionDetailView({
     connection.kind === "xpub" || connection.kind === "descriptor";
 
   return (
-    <div className="flex-1 overflow-auto bg-paper p-[18px]">
-      <div className="mb-5 flex items-center gap-3.5">
-        <Button
-          asChild
-          variant="secondary"
-          size="icon-sm"
-          className="rounded-none"
-        >
-          <Link to="/connections" aria-label="Back to connections">
-            <ArrowLeft className="size-3" />
-          </Link>
-        </Button>
-        <div className="flex size-10 flex-shrink-0 items-center justify-center border border-ink font-mono text-[14px] font-semibold text-ink">
-          {connection.kind === "xpub" || connection.kind === "descriptor"
-            ? "₿"
-            : connection.kind === "core-ln" || connection.kind === "lnd"
-              ? "⚡"
-              : connection.kind === "cashu"
-                ? "ₑ"
-                : connection.kind === "nwc"
-                  ? "N"
-                  : "·"}
-        </div>
-        <div className="flex-1">
-          <div className="font-mono text-[10px] uppercase tracking-[0.12em] text-ink-3">
-            {connection.kind} · Connection
+    <div className="flex-1 overflow-auto bg-paper p-3 sm:p-[18px]">
+      <div className="mb-4 flex flex-col gap-3 sm:mb-5 lg:flex-row lg:items-center lg:gap-3.5">
+        <div className="flex min-w-0 items-center gap-3.5">
+          <Button
+            asChild
+            variant="secondary"
+            size="icon-sm"
+            className="shrink-0 rounded-none"
+          >
+            <Link to="/connections" aria-label="Back to connections">
+              <ArrowLeft className="size-3" />
+            </Link>
+          </Button>
+          <div className="flex size-10 shrink-0 items-center justify-center border border-ink font-mono text-[14px] font-semibold text-ink">
+            {connection.kind === "xpub" || connection.kind === "descriptor"
+              ? "₿"
+              : connection.kind === "core-ln" || connection.kind === "lnd"
+                ? "⚡"
+                : connection.kind === "cashu"
+                  ? "ₑ"
+                  : connection.kind === "nwc"
+                    ? "N"
+                    : "·"}
           </div>
-          <h2 className="m-0 font-sans text-[30px] font-semibold tracking-[-0.01em] text-ink">
-            {connection.label}
-          </h2>
+          <div className="min-w-0 flex-1">
+            <div className="font-mono text-[10px] uppercase tracking-[0.12em] text-ink-3">
+              {connection.kind} · Connection
+            </div>
+            <h2 className="m-0 truncate font-sans text-[24px] font-semibold tracking-[-0.01em] text-ink sm:text-[30px]">
+              {connection.label}
+            </h2>
+          </div>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2 lg:flex-nowrap">
           <Button variant="secondary" size="sm" className="rounded-none">
             <RefreshCw className="size-3" /> Sync
           </Button>
@@ -173,7 +175,7 @@ function ConnectionDetailView({
           <Button variant="secondary" size="sm" className="rounded-none">
             <ArrowUpToLine className="size-3" /> Export labels
           </Button>
-          <div className="mx-0.5 h-[22px] w-px self-center bg-line" />
+          <div className="mx-0.5 hidden h-[22px] w-px self-center bg-line lg:block" />
           <Button variant="ghost" size="sm" className="rounded-none">
             Edit
           </Button>
@@ -183,7 +185,7 @@ function ConnectionDetailView({
         </div>
       </div>
 
-      <div className="mb-4.5 grid grid-cols-4 gap-2.5">
+      <div className="mb-4.5 grid grid-cols-2 gap-2.5 md:grid-cols-4">
         <StatTile
           label="Balance"
           value={
@@ -206,7 +208,7 @@ function ConnectionDetailView({
         />
       </div>
 
-      <div className="grid grid-cols-[1.4fr_1fr] gap-2.5">
+      <div className="grid grid-cols-1 gap-2.5 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
         <KbCard title="Recent transactions" pad={false}>
           <table className="w-full border-collapse font-mono text-[11px]">
             <thead>

@@ -33,11 +33,11 @@ export function AppHeader() {
   const path = routerState.location.pathname;
 
   return (
-    <header className="flex h-13 flex-shrink-0 items-center gap-7 border-b border-ink bg-paper px-4.5">
+    <header className="flex h-13 flex-shrink-0 items-center gap-3 border-b border-ink bg-paper px-3 sm:gap-5 sm:px-4.5 lg:gap-7">
       <Wordmark size={20} />
-      <div className="h-5 w-px bg-line" />
+      <div className="hidden h-5 w-px bg-line sm:block" />
 
-      <nav className="flex flex-1 gap-1">
+      <nav className="flex min-w-0 flex-1 gap-0.5 sm:gap-1">
         {NAV_ITEMS.map((item) => {
           const active = path === item.to || path.startsWith(`${item.to}/`);
           return (
@@ -45,7 +45,7 @@ export function AppHeader() {
               key={item.to}
               to={item.to}
               className={cn(
-                "relative px-3 py-1.5 font-sans text-xs font-medium tracking-[0.02em] no-underline",
+                "relative px-2 py-1.5 font-sans text-xs font-medium tracking-[0.02em] no-underline sm:px-3",
                 active ? "text-ink" : "text-ink-3 hover:text-ink-2",
               )}
             >
@@ -58,22 +58,22 @@ export function AppHeader() {
         })}
       </nav>
 
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-1.5 sm:gap-2">
         {identity && (
           <button
             onClick={() => setProfileSwitcherOpen(true)}
             title={`Workspace · ${identity.workspace} · signed in as ${identity.name}`}
-            className="flex h-6.5 cursor-pointer items-center gap-1.5 border border-line bg-transparent px-2.5"
+            className="hidden h-6.5 max-w-[200px] cursor-pointer items-center gap-1.5 border border-line bg-transparent px-2.5 md:flex"
           >
-            <span className="size-1 bg-accent" />
-            <span className="font-mono text-[11px] font-medium text-ink">
+            <span className="size-1 shrink-0 bg-accent" />
+            <span className="truncate font-mono text-[11px] font-medium text-ink">
               {identity.workspace}
             </span>
             <svg
               width="7"
               height="7"
               viewBox="0 0 10 10"
-              className="ml-px"
+              className="ml-px shrink-0"
             >
               <path
                 d="M2 4 L5 7 L8 4"
