@@ -283,14 +283,17 @@ and [docs/plan/04-desktop-ui.md](docs/plan/04-desktop-ui.md).
 ## Open bugs and debt
 
 - [ ] PDF report rendering is Latin-1 only after the PySide6 removal:
-  `_ascii_text` in `kassiber/pdf_report.py` silently replaces `€`, `₿`,
-  German umlauts, and non-European script with `?` in exported PDFs.
-  Affects Austrian E 1kv exports and any non-Latin-1 user content.
-  Follow-up: pick a Unicode-safe renderer (`reportlab` / `fpdf2` /
-  `weasyprint`), embed at least one Unicode-capable font, and add a
-  regression test that exports non-Latin-1 transaction text and either
-  preserves it or fails loudly. Until then, treat exported PDFs that
-  contain Austrian or non-ASCII content as not audit-grade.
+  `_ascii_text` in `kassiber/pdf_report.py` silently replaces every
+  codepoint outside Latin-1 with `?` in exported PDFs — notably `€`,
+  `₿`, arrows like `↔`, and any non-European script. German umlauts
+  and `ß` are inside Latin-1 and survive, but the Euro sign in
+  Austrian E 1kv exports does not. The current behavior is pinned by
+  `test_pdf_report_substitutes_non_latin1_glyphs` in
+  `tests/test_review_regressions.py`. Follow-up: pick a Unicode-safe
+  renderer (`reportlab` / `fpdf2` / `weasyprint`), embed at least one
+  Unicode-capable font, and flip that pin to assert preservation
+  instead of substitution. Until then, treat exported PDFs that
+  contain Euro signs or non-Latin-1 user content as not audit-grade.
 - [ ] Fix `rates set` pair validation so malformed syntax like `BTCUSD`
   is rejected cleanly
 - [ ] Keep the machine envelope boundary centralized and explicit
