@@ -1,5 +1,3 @@
-"use client";
-
 import { Link } from "@tanstack/react-router";
 import {
   ArrowUpRight,
@@ -87,17 +85,16 @@ type RevenueFlowColors = {
   prevYear: string;
 };
 
-type OrderStatus = "Processing" | "Shipped" | "Delivered" | "Cancelled";
+type TransactionStatus = "confirmed" | "pending" | "review" | "failed";
 
-type Order = {
+type Transaction = {
   id: string;
-  orderNumber: string;
-  customer: string;
-  customerInitials: string;
-  products: string[];
-  productCount: number;
-  status: OrderStatus;
-  total: number;
+  txid: string;
+  counterparty: string;
+  counterpartyInitials: string;
+  tags: string[];
+  status: TransactionStatus;
+  amount: number;
   date: string;
 };
 
@@ -288,233 +285,213 @@ const salesCategoryData: SalesCategoryItem[] = [
   },
 ];
 
-const orderStatuses: OrderStatus[] = [
-  "Processing",
-  "Shipped",
-  "Delivered",
-  "Cancelled",
+const transactionStatuses: TransactionStatus[] = [
+  "confirmed",
+  "pending",
+  "review",
+  "failed",
 ];
 
-const orders: Order[] = [
+const transactionRecords: Transaction[] = [
   {
     id: "1",
-    orderNumber: "TX-2026-001",
-    customer: "Cold Storage",
-    customerInitials: "CS",
-    products: ["Invoice", "ACME GmbH"],
-    productCount: 2,
-    status: "Delivered",
-    total: 2499.0,
-    date: "Jan 28, 2024",
+    txid: "TX-2026-001",
+    counterparty: "Cold Storage",
+    counterpartyInitials: "CS",
+    tags: ["Invoice", "ACME GmbH"],
+    status: "confirmed",
+    amount: 2499.0,
+    date: "Jan 28, 2026",
   },
   {
     id: "2",
-    orderNumber: "TX-2026-002",
-    customer: "Home Node",
-    customerInitials: "HN",
-    products: ["Server rental", "Hetzner"],
-    productCount: 2,
-    status: "Shipped",
-    total: 1348.0,
-    date: "Jan 27, 2024",
+    txid: "TX-2026-002",
+    counterparty: "Home Node",
+    counterpartyInitials: "HN",
+    tags: ["Server rental", "Hetzner"],
+    status: "review",
+    amount: 1348.0,
+    date: "Jan 27, 2026",
   },
   {
     id: "3",
-    orderNumber: "TX-2026-003",
-    customer: "Multisig Vault",
-    customerInitials: "MV",
-    products: ["Internal transfer", "Vault"],
-    productCount: 3,
-    status: "Processing",
-    total: 1198.0,
-    date: "Jan 27, 2024",
+    txid: "TX-2026-003",
+    counterparty: "Multisig Vault",
+    counterpartyInitials: "MV",
+    tags: ["Internal transfer"],
+    status: "pending",
+    amount: 1198.0,
+    date: "Jan 27, 2026",
   },
   {
     id: "4",
-    orderNumber: "TX-2026-004",
-    customer: "Alby Hub",
-    customerInitials: "AH",
-    products: ["Lightning payment"],
-    productCount: 1,
-    status: "Delivered",
-    total: 799.0,
-    date: "Jan 26, 2024",
+    txid: "TX-2026-004",
+    counterparty: "Alby Hub",
+    counterpartyInitials: "AH",
+    tags: ["Lightning payment"],
+    status: "confirmed",
+    amount: 799.0,
+    date: "Jan 26, 2026",
   },
   {
     id: "5",
-    orderNumber: "TX-2026-005",
-    customer: "Cashu Wallet",
-    customerInitials: "CW",
-    products: ["Ecash spend"],
-    productCount: 1,
-    status: "Cancelled",
-    total: 599.0,
-    date: "Jan 26, 2024",
+    txid: "TX-2026-005",
+    counterparty: "Cashu Wallet",
+    counterpartyInitials: "CW",
+    tags: ["Ecash spend"],
+    status: "failed",
+    amount: 599.0,
+    date: "Jan 26, 2026",
   },
   {
     id: "6",
-    orderNumber: "ORD-2024-006",
-    customer: "David Kim",
-    customerInitials: "DK",
-    products: ["Studio Display", "Mac Studio"],
-    productCount: 2,
-    status: "Shipped",
-    total: 5498.0,
-    date: "Jan 25, 2024",
+    txid: "TX-2026-006",
+    counterparty: "BTCPay Server",
+    counterpartyInitials: "BP",
+    tags: ["Customer invoice", "Bitcoin Austria"],
+    status: "confirmed",
+    amount: 5498.0,
+    date: "Jan 25, 2026",
   },
   {
     id: "7",
-    orderNumber: "ORD-2024-007",
-    customer: "Anna Martinez",
-    customerInitials: "AM",
-    products: ["MacBook Air M2"],
-    productCount: 1,
-    status: "Delivered",
-    total: 1199.0,
-    date: "Jan 25, 2024",
+    txid: "TX-2026-007",
+    counterparty: "Bitstamp",
+    counterpartyInitials: "BS",
+    tags: ["EUR off-ramp"],
+    status: "confirmed",
+    amount: 1199.0,
+    date: "Jan 25, 2026",
   },
   {
     id: "8",
-    orderNumber: "ORD-2024-008",
-    customer: "Robert Taylor",
-    customerInitials: "RT",
-    products: ["iPhone 15", "MagSafe Charger"],
-    productCount: 2,
-    status: "Processing",
-    total: 878.0,
-    date: "Jan 24, 2024",
+    txid: "TX-2026-008",
+    counterparty: "Kraken",
+    counterpartyInitials: "KR",
+    tags: ["Withdrawal", "Self-custody"],
+    status: "pending",
+    amount: 878.0,
+    date: "Jan 24, 2026",
   },
   {
     id: "9",
-    orderNumber: "ORD-2024-009",
-    customer: "Jennifer Lee",
-    customerInitials: "JL",
-    products: ["AirPods Max"],
-    productCount: 1,
-    status: "Shipped",
-    total: 549.0,
-    date: "Jan 24, 2024",
+    txid: "TX-2026-009",
+    counterparty: "Phoenix Wallet",
+    counterpartyInitials: "PW",
+    tags: ["Lightning sweep"],
+    status: "confirmed",
+    amount: 549.0,
+    date: "Jan 24, 2026",
   },
   {
     id: "10",
-    orderNumber: "ORD-2024-010",
-    customer: "William Brown",
-    customerInitials: "WB",
-    products: ["iPad Pro 12.9", "Magic Keyboard"],
-    productCount: 2,
-    status: "Delivered",
-    total: 1648.0,
-    date: "Jan 23, 2024",
+    txid: "TX-2026-010",
+    counterparty: "Voltage Cloud",
+    counterpartyInitials: "VC",
+    tags: ["Node hosting"],
+    status: "confirmed",
+    amount: 1648.0,
+    date: "Jan 23, 2026",
   },
   {
     id: "11",
-    orderNumber: "ORD-2024-011",
-    customer: "Sophia Davis",
-    customerInitials: "SD",
-    products: ["MacBook Pro 16"],
-    productCount: 1,
-    status: "Processing",
-    total: 2499.0,
-    date: "Jan 23, 2024",
+    txid: "TX-2026-011",
+    counterparty: "Mullvad VPN",
+    counterpartyInitials: "MU",
+    tags: ["Subscription", "Privacy"],
+    status: "confirmed",
+    amount: 96.0,
+    date: "Jan 23, 2026",
   },
   {
     id: "12",
-    orderNumber: "ORD-2024-012",
-    customer: "Daniel Garcia",
-    customerInitials: "DG",
-    products: ["Apple TV 4K", "HomePod mini"],
-    productCount: 2,
-    status: "Cancelled",
-    total: 278.0,
-    date: "Jan 22, 2024",
+    txid: "TX-2026-012",
+    counterparty: "OpenSats",
+    counterpartyInitials: "OS",
+    tags: ["Donation"],
+    status: "confirmed",
+    amount: 250.0,
+    date: "Jan 22, 2026",
   },
   {
     id: "13",
-    orderNumber: "ORD-2024-013",
-    customer: "Olivia White",
-    customerInitials: "OW",
-    products: ["iPhone 15 Pro Max"],
-    productCount: 1,
-    status: "Delivered",
-    total: 1199.0,
-    date: "Jan 22, 2024",
+    txid: "TX-2026-013",
+    counterparty: "Bitrefill",
+    counterpartyInitials: "BR",
+    tags: ["Gift card"],
+    status: "confirmed",
+    amount: 199.0,
+    date: "Jan 22, 2026",
   },
   {
     id: "14",
-    orderNumber: "ORD-2024-014",
-    customer: "Thomas Anderson",
-    customerInitials: "TA",
-    products: ["Mac Pro", "Pro Display XDR"],
-    productCount: 2,
-    status: "Shipped",
-    total: 12498.0,
-    date: "Jan 21, 2024",
+    txid: "TX-2026-014",
+    counterparty: "Hardware Wallet",
+    counterpartyInitials: "HW",
+    tags: ["Cold storage move"],
+    status: "review",
+    amount: 12498.0,
+    date: "Jan 21, 2026",
   },
   {
     id: "15",
-    orderNumber: "ORD-2024-015",
-    customer: "Emily Thompson",
-    customerInitials: "ET",
-    products: ["iPad mini", "Apple Pencil"],
-    productCount: 2,
-    status: "Delivered",
-    total: 648.0,
-    date: "Jan 21, 2024",
+    txid: "TX-2026-015",
+    counterparty: "River Financial",
+    counterpartyInitials: "RF",
+    tags: ["Recurring buy", "DCA"],
+    status: "confirmed",
+    amount: 648.0,
+    date: "Jan 21, 2026",
   },
   {
     id: "16",
-    orderNumber: "ORD-2024-016",
-    customer: "Christopher Moore",
-    customerInitials: "CM",
-    products: ["AirPods Pro 2"],
-    productCount: 1,
-    status: "Processing",
-    total: 249.0,
-    date: "Jan 20, 2024",
+    txid: "TX-2026-016",
+    counterparty: "Strike",
+    counterpartyInitials: "SK",
+    tags: ["Auto-buy"],
+    status: "pending",
+    amount: 249.0,
+    date: "Jan 20, 2026",
   },
   {
     id: "17",
-    orderNumber: "ORD-2024-017",
-    customer: "Isabella Jackson",
-    customerInitials: "IJ",
-    products: ["Apple Watch Series 9"],
-    productCount: 1,
-    status: "Shipped",
-    total: 399.0,
-    date: "Jan 20, 2024",
+    txid: "TX-2026-017",
+    counterparty: "Lightning Labs",
+    counterpartyInitials: "LL",
+    tags: ["Service payment"],
+    status: "confirmed",
+    amount: 399.0,
+    date: "Jan 20, 2026",
   },
   {
     id: "18",
-    orderNumber: "ORD-2024-018",
-    customer: "Matthew Harris",
-    customerInitials: "MH",
-    products: ["MacBook Air 15"],
-    productCount: 1,
-    status: "Delivered",
-    total: 1299.0,
-    date: "Jan 19, 2024",
+    txid: "TX-2026-018",
+    counterparty: "Mobile Wallet",
+    counterpartyInitials: "MW",
+    tags: ["Tip jar"],
+    status: "confirmed",
+    amount: 42.0,
+    date: "Jan 19, 2026",
   },
   {
     id: "19",
-    orderNumber: "ORD-2024-019",
-    customer: "Ava Clark",
-    customerInitials: "AC",
-    products: ["iPhone SE", "EarPods"],
-    productCount: 2,
-    status: "Cancelled",
-    total: 448.0,
-    date: "Jan 19, 2024",
+    txid: "TX-2026-019",
+    counterparty: "Coinbase",
+    counterpartyInitials: "CB",
+    tags: ["Withdrawal"],
+    status: "failed",
+    amount: 448.0,
+    date: "Jan 19, 2026",
   },
   {
     id: "20",
-    orderNumber: "ORD-2024-020",
-    customer: "Joshua Lewis",
-    customerInitials: "JL",
-    products: ["Mac Mini M2 Pro"],
-    productCount: 1,
-    status: "Processing",
-    total: 1299.0,
-    date: "Jan 18, 2024",
+    txid: "TX-2026-020",
+    counterparty: "Project Treasury",
+    counterpartyInitials: "PT",
+    tags: ["Reimbursement"],
+    status: "review",
+    amount: 1299.0,
+    date: "Jan 18, 2026",
   },
 ];
 
@@ -1284,21 +1261,28 @@ const RevenueFlowChart = () => {
   );
 };
 
-const statusStyles: Record<OrderStatus, string> = {
-  Processing:
-    "bg-amber-50 text-amber-700 ring-1 ring-inset ring-amber-600/20 dark:bg-amber-900/30 dark:text-amber-400 dark:ring-amber-400/20",
-  Shipped:
-    "bg-blue-50 text-blue-700 ring-1 ring-inset ring-blue-700/10 dark:bg-blue-900/30 dark:text-blue-400 dark:ring-blue-400/20",
-  Delivered:
+const statusStyles: Record<TransactionStatus, string> = {
+  confirmed:
     "bg-emerald-50 text-emerald-700 ring-1 ring-inset ring-emerald-600/20 dark:bg-emerald-900/30 dark:text-emerald-400 dark:ring-emerald-400/20",
-  Cancelled:
+  pending:
+    "bg-amber-50 text-amber-700 ring-1 ring-inset ring-amber-600/20 dark:bg-amber-900/30 dark:text-amber-400 dark:ring-amber-400/20",
+  review:
+    "bg-blue-50 text-blue-700 ring-1 ring-inset ring-blue-700/10 dark:bg-blue-900/30 dark:text-blue-400 dark:ring-blue-400/20",
+  failed:
     "bg-red-50 text-red-700 ring-1 ring-inset ring-red-600/10 dark:bg-red-900/30 dark:text-red-400 dark:ring-red-400/20",
 };
 
+const statusLabels: Record<TransactionStatus, string> = {
+  confirmed: "Confirmed",
+  pending: "Pending",
+  review: "Review",
+  failed: "Failed",
+};
+
 const RecentTransactionsTable = ({ className }: { className?: string }) => {
-  const [statusFilter, setStatusFilter] = React.useState<OrderStatus | "all">(
-    "all",
-  );
+  const [statusFilter, setStatusFilter] = React.useState<
+    TransactionStatus | "all"
+  >("all");
   const [currentPage, setCurrentPage] = React.useState(1);
   const [isHydrated, setIsHydrated] = React.useState(false);
   const pageSize = 6;
@@ -1310,9 +1294,9 @@ const RecentTransactionsTable = ({ className }: { className?: string }) => {
     if (
       nextStatus &&
       (nextStatus === "all" ||
-        orderStatuses.includes(nextStatus as OrderStatus))
+        transactionStatuses.includes(nextStatus as TransactionStatus))
     ) {
-      setStatusFilter(nextStatus as OrderStatus | "all");
+      setStatusFilter(nextStatus as TransactionStatus | "all");
     }
     const nextPage = Number(params.get("page"));
     if (!Number.isNaN(nextPage) && nextPage > 0) {
@@ -1321,17 +1305,20 @@ const RecentTransactionsTable = ({ className }: { className?: string }) => {
     setIsHydrated(true);
   }, []);
 
-  const filteredOrders = React.useMemo(() => {
-    if (statusFilter === "all") return orders;
-    return orders.filter((order) => order.status === statusFilter);
+  const filteredTransactions = React.useMemo(() => {
+    if (statusFilter === "all") return transactionRecords;
+    return transactionRecords.filter((t) => t.status === statusFilter);
   }, [statusFilter]);
 
-  const totalPages = Math.max(1, Math.ceil(filteredOrders.length / pageSize));
+  const totalPages = Math.max(
+    1,
+    Math.ceil(filteredTransactions.length / pageSize),
+  );
 
-  const paginatedOrders = React.useMemo(() => {
+  const paginatedTransactions = React.useMemo(() => {
     const startIndex = (currentPage - 1) * pageSize;
-    return filteredOrders.slice(startIndex, startIndex + pageSize);
-  }, [filteredOrders, currentPage, pageSize]);
+    return filteredTransactions.slice(startIndex, startIndex + pageSize);
+  }, [filteredTransactions, currentPage, pageSize]);
 
   React.useEffect(() => {
     setCurrentPage(1);
@@ -1361,8 +1348,10 @@ const RecentTransactionsTable = ({ className }: { className?: string }) => {
     setCurrentPage(Math.max(1, Math.min(page, totalPages)));
   };
 
-  const startRow = filteredOrders.length ? (currentPage - 1) * pageSize + 1 : 0;
-  const endRow = Math.min(currentPage * pageSize, filteredOrders.length);
+  const startRow = filteredTransactions.length
+    ? (currentPage - 1) * pageSize + 1
+    : 0;
+  const endRow = Math.min(currentPage * pageSize, filteredTransactions.length);
 
   return (
     <div className={cn("rounded-xl border bg-card", className)}>
@@ -1380,7 +1369,7 @@ const RecentTransactionsTable = ({ className }: { className?: string }) => {
             Recent Transactions
           </span>
           <span className="ml-1 inline-flex items-center rounded-md bg-gray-50 px-2 py-1 text-[10px] font-medium text-gray-600 ring-1 ring-gray-500/10 ring-inset sm:text-xs dark:bg-gray-800/50 dark:text-gray-400 dark:ring-gray-400/20">
-            {filteredOrders.length}
+            {filteredTransactions.length}
           </span>
         </div>
 
@@ -1407,13 +1396,13 @@ const RecentTransactionsTable = ({ className }: { className?: string }) => {
               >
                 All Statuses
               </DropdownMenuCheckboxItem>
-              {orderStatuses.map((status) => (
+              {transactionStatuses.map((status) => (
                 <DropdownMenuCheckboxItem
                   key={status}
                   checked={statusFilter === status}
                   onCheckedChange={() => setStatusFilter(status)}
                 >
-                  {status}
+                  {statusLabels[status]}
                 </DropdownMenuCheckboxItem>
               ))}
             </DropdownMenuContent>
@@ -1440,7 +1429,7 @@ const RecentTransactionsTable = ({ className }: { className?: string }) => {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {paginatedOrders.length === 0 ? (
+            {paginatedTransactions.length === 0 ? (
               <TableRow>
                 <TableCell
                   colSpan={4}
@@ -1450,25 +1439,25 @@ const RecentTransactionsTable = ({ className }: { className?: string }) => {
                 </TableCell>
               </TableRow>
             ) : (
-              paginatedOrders.map((order) => (
-                <TableRow key={order.id}>
+              paginatedTransactions.map((t) => (
+                <TableRow key={t.id}>
                   <TableCell className="text-xs font-medium text-muted-foreground sm:text-sm">
-                    {order.orderNumber}
+                    {t.txid}
                   </TableCell>
                   <TableCell className="text-xs text-muted-foreground sm:text-sm">
-                    {order.customer}
+                    {t.counterparty}
                   </TableCell>
                   <TableCell className="text-xs text-foreground tabular-nums sm:text-sm">
-                    {currencyFormatter.format(order.total)}
+                    {currencyFormatter.format(t.amount)}
                   </TableCell>
                   <TableCell>
                     <span
                       className={cn(
                         "inline-flex items-center rounded-md px-2 py-1 text-[10px] font-medium sm:text-xs",
-                        statusStyles[order.status],
+                        statusStyles[t.status],
                       )}
                     >
-                      {order.status}
+                      {statusLabels[t.status]}
                     </span>
                   </TableCell>
                 </TableRow>
@@ -1480,7 +1469,7 @@ const RecentTransactionsTable = ({ className }: { className?: string }) => {
 
       <div className="flex items-center justify-between border-t px-4 py-3 text-[10px] text-muted-foreground sm:px-6 sm:text-xs">
         <span>
-          {startRow}-{endRow} of {filteredOrders.length}
+          {startRow}-{endRow} of {filteredTransactions.length}
         </span>
         <div className="flex items-center gap-1">
           <Button
