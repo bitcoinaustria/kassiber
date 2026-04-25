@@ -1,9 +1,15 @@
 import json
 import tempfile
 import unittest
+from decimal import Decimal
 from pathlib import Path
 from unittest.mock import patch
 
+from kassiber.core.imports import (
+    ImportCoordinatorHooks,
+    insert_wallet_records,
+    make_transaction_fingerprint,
+)
 from kassiber.core.sync import WalletSyncState
 from kassiber.core.sync_backends import (
     discover_descriptor_targets,
@@ -14,6 +20,7 @@ from kassiber.core.sync_backends import (
 )
 from kassiber.core.wallets import wallet_policy_asset_id
 from kassiber.db import open_db
+from kassiber.msat import btc_to_msat
 from kassiber.time_utils import timestamp_to_iso
 from kassiber.wallet_descriptors import default_policy_asset_id
 
@@ -524,6 +531,110 @@ class LiquidAssetBackfillTest(unittest.TestCase):
             self.assertEqual(prof_1["last_processed_tx_count"], 0)
             self.assertEqual(prof_2["last_processed_at"], "2026-04-21T00:00:00Z")
             self.assertEqual(prof_2["last_processed_tx_count"], 7)
+        finally:
+            conn.close()
+
+    def test_backfill_refreshes_fingerprint_for_import_without_external_id(self):
+        hex_id = default_policy_asset_id("liquidv1")
+        occurred_at = "2026-04-15T12:00:00Z"
+        amount = Decimal("0.01000000")
+        fee = Decimal("0.00000000")
+        original_fingerprint = make_transaction_fingerprint(
+            "wal-1",
+            "",
+            occurred_at,
+            "inbound",
+            hex_id,
+            amount,
+            fee,
+        )
+        conn = open_db(str(self.data_root))
+        try:
+            self._seed_minimal_schema(conn)
+            conn.execute(
+                "INSERT INTO transactions ("
+                "id, workspace_id, profile_id, wallet_id, external_id, fingerprint, "
+                "occurred_at, direction, asset, amount, fee, raw_json, created_at"
+                ") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (
+                    "tx-no-external-id",
+                    "ws-1",
+                    "prof-1",
+                    "wal-1",
+                    None,
+                    original_fingerprint,
+                    occurred_at,
+                    "inbound",
+                    hex_id,
+                    btc_to_msat(amount),
+                    btc_to_msat(fee),
+                    json.dumps(
+                        {
+                            "occurred_at": occurred_at,
+                            "direction": "inbound",
+                            "asset": hex_id,
+                            "amount": str(amount),
+                            "fee": str(fee),
+                        },
+                        sort_keys=True,
+                    ),
+                    occurred_at,
+                ),
+            )
+            conn.commit()
+        finally:
+            conn.close()
+
+        conn = open_db(str(self.data_root))
+        try:
+            expected_fingerprint = make_transaction_fingerprint(
+                "wal-1",
+                "",
+                occurred_at,
+                "inbound",
+                "LBTC",
+                amount,
+                fee,
+            )
+            row = conn.execute(
+                "SELECT asset, fingerprint FROM transactions WHERE id = ?",
+                ("tx-no-external-id",),
+            ).fetchone()
+            self.assertEqual(row["asset"], "LBTC")
+            self.assertEqual(row["fingerprint"], expected_fingerprint)
+
+            profile = conn.execute(
+                "SELECT * FROM profiles WHERE id = ?", ("prof-1",)
+            ).fetchone()
+            wallet = conn.execute(
+                "SELECT * FROM wallets WHERE id = ?", ("wal-1",)
+            ).fetchone()
+            outcome = insert_wallet_records(
+                conn,
+                profile,
+                wallet,
+                [
+                    {
+                        "occurred_at": occurred_at,
+                        "direction": "inbound",
+                        "asset": "LBTC",
+                        "amount": str(amount),
+                        "fee": str(fee),
+                    }
+                ],
+                "unit-test",
+                ImportCoordinatorHooks(
+                    ensure_tag_row=lambda *args: None,
+                    invalidate_journals=lambda db, profile_id: db.execute(
+                        "UPDATE profiles SET last_processed_at = NULL, last_processed_tx_count = 0 WHERE id = ?",
+                        (profile_id,),
+                    ),
+                ),
+            )
+            self.assertEqual(outcome["imported"], 0)
+            self.assertEqual(outcome["skipped"], 1)
+            count = conn.execute("SELECT COUNT(*) AS count FROM transactions").fetchone()
+            self.assertEqual(count["count"], 1)
         finally:
             conn.close()
 
