@@ -96,6 +96,10 @@ export interface CapitalGainsReport {
   year: number;
   method: CostBasisMethod;
   lots: DisposedLot[];
+  status?: {
+    needsJournals: boolean;
+    quarantines: number;
+  };
 }
 
 export const MOCK_CAPITAL_GAINS: CapitalGainsReport = {

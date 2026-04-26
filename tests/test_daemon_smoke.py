@@ -62,6 +62,12 @@ class DaemonSmokeTest(unittest.TestCase):
             self.assertEqual(ready["kind"], "daemon.ready")
             self.assertEqual(ready["schema_version"], 1)
             self.assertIn("status", ready["data"]["supported_kinds"])
+            self.assertIn("ui.overview.snapshot", ready["data"]["supported_kinds"])
+            self.assertIn("ui.transactions.list", ready["data"]["supported_kinds"])
+            self.assertIn("ui.reports.capital_gains", ready["data"]["supported_kinds"])
+            self.assertIn("ui.journals.snapshot", ready["data"]["supported_kinds"])
+            self.assertIn("ui.profiles.snapshot", ready["data"]["supported_kinds"])
+            self.assertIn("ui.wallets.sync", ready["data"]["supported_kinds"])
 
             _write_payload(proc, {"request_id": "status-1", "kind": "status"})
             status = _read_payload(proc)
@@ -112,10 +118,10 @@ class DaemonSmokeTest(unittest.TestCase):
                 ),
                 (
                     {"request_id": "ui-1", "kind": "ui.overview.snapshot"},
-                    "daemon_unavailable",
+                    None,
                     "ui-1",
                     False,
-                    True,
+                    None,
                 ),
                 (
                     {"request_id": "unknown-1", "kind": "rates.latest"},
@@ -129,17 +135,71 @@ class DaemonSmokeTest(unittest.TestCase):
                 with self.subTest(code=code, request=request):
                     _write_payload(proc, request)
                     response = _read_payload(proc)
-                    self.assertEqual(response["kind"], "error")
                     self.assertEqual(response["schema_version"], 1)
-                    self.assertEqual(response["error"]["code"], code)
+                    if code is None:
+                        self.assertIn(
+                            response["kind"],
+                            {"ui.overview.snapshot", "ui.transactions.list"},
+                        )
+                        self.assertEqual(response["data"]["txs"], [])
+                    else:
+                        self.assertEqual(response["kind"], "error")
+                        self.assertEqual(response["error"]["code"], code)
                     if request_id is None:
                         self.assertIsNone(response.get("request_id"))
                         if explicit_null_request_id:
                             self.assertIn("request_id", response)
                     else:
                         self.assertEqual(response["request_id"], request_id)
-                    if retryable is not None:
+                    if retryable is not None and code is not None:
                         self.assertEqual(response["error"]["retryable"], retryable)
+
+            _write_payload(proc, {"request_id": "tx-1", "kind": "ui.transactions.list"})
+            tx_response = _read_payload(proc)
+            self.assertEqual(tx_response["request_id"], "tx-1")
+            self.assertEqual(tx_response["kind"], "ui.transactions.list")
+            self.assertEqual(tx_response["data"]["txs"], [])
+
+            _write_payload(
+                proc,
+                {"request_id": "report-1", "kind": "ui.reports.capital_gains"},
+            )
+            report_response = _read_payload(proc)
+            self.assertEqual(report_response["request_id"], "report-1")
+            self.assertEqual(report_response["kind"], "ui.reports.capital_gains")
+            self.assertEqual(report_response["data"]["lots"], [])
+
+            _write_payload(
+                proc,
+                {"request_id": "journals-1", "kind": "ui.journals.snapshot"},
+            )
+            journals_response = _read_payload(proc)
+            self.assertEqual(journals_response["request_id"], "journals-1")
+            self.assertEqual(journals_response["kind"], "ui.journals.snapshot")
+            self.assertEqual(journals_response["data"]["recent"], [])
+
+            _write_payload(
+                proc,
+                {"request_id": "profiles-1", "kind": "ui.profiles.snapshot"},
+            )
+            profiles_response = _read_payload(proc)
+            self.assertEqual(profiles_response["request_id"], "profiles-1")
+            self.assertEqual(profiles_response["kind"], "ui.profiles.snapshot")
+            self.assertEqual(profiles_response["data"]["workspaces"], [])
+            self.assertEqual(profiles_response["data"]["activeProfileId"], "")
+
+            _write_payload(
+                proc,
+                {
+                    "request_id": "sync-1",
+                    "kind": "ui.wallets.sync",
+                    "args": {"all": True},
+                },
+            )
+            sync_response = _read_payload(proc)
+            self.assertEqual(sync_response["request_id"], "sync-1")
+            self.assertEqual(sync_response["kind"], "ui.wallets.sync")
+            self.assertEqual(sync_response["data"]["results"], [])
 
             _write_payload(proc, {"request_id": "shutdown-1", "kind": "daemon.shutdown"})
             self.assertEqual(_read_payload(proc)["kind"], "daemon.shutdown")

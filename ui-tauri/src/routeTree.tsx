@@ -21,6 +21,7 @@ import { Welcome } from "./routes/Welcome";
 import { Overview } from "./routes/Overview";
 import { Transactions } from "./routes/Transactions";
 import { Reports } from "./routes/Reports";
+import { Journals } from "./routes/Journals";
 import { TaxEvents } from "./routes/TaxEvents";
 import { Quarantine } from "./routes/Quarantine";
 import { Profiles } from "./routes/Profiles";
@@ -73,6 +74,12 @@ const reportsRoute = createRoute({
   component: Reports,
 });
 
+const journalsRoute = createRoute({
+  getParentRoute: () => appLayoutRoute,
+  path: "/journals",
+  component: Journals,
+});
+
 const taxEventsRoute = createRoute({
   getParentRoute: () => appLayoutRoute,
   path: "/tax-events",
@@ -109,6 +116,7 @@ const routeTree = rootRoute.addChildren([
     overviewRoute,
     transactionsRoute,
     reportsRoute,
+    journalsRoute,
     taxEventsRoute,
     quarantineRoute,
     profilesRoute,

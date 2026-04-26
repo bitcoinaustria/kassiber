@@ -14,6 +14,7 @@ import {
   LayoutDashboard,
   LogOut,
   Search,
+  Server,
   Settings,
   CircleDollarSign,
   ShieldAlert,
@@ -39,6 +40,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
+import { Switch } from "@/components/ui/switch";
 import {
   Sidebar,
   SidebarContent,
@@ -59,6 +61,8 @@ import {
 } from "@/components/ui/sidebar";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { useUiStore } from "@/store/ui";
+import { useDaemon } from "@/daemon/client";
+import type { OverviewSnapshot } from "@/mocks/seed";
 import { SettingsModal } from "./SettingsModal";
 import { ScreenAssistantMockup } from "./ScreenAssistantMockup";
 import { PreAlphaBanner } from "./PreAlphaBanner";
@@ -107,7 +111,7 @@ const NAV_GROUPS: NavGroup[] = [
           { label: "Imports", icon: Download, href: "/transactions" },
         ],
       },
-      { label: "Journals", icon: BookOpen, href: "/reports" },
+      { label: "Journals", icon: BookOpen, href: "/journals" },
     ],
   },
   {
@@ -145,6 +149,15 @@ const ROUTE_META: Array<[string, RouteMeta]> = [
       icon: Users,
       searchLabel: "Search profiles",
       searchPlaceholder: "Search profiles, countries...",
+    },
+  ],
+  [
+    "/journals",
+    {
+      title: "Journals",
+      icon: BookOpen,
+      searchLabel: "Search journals",
+      searchPlaceholder: "Search entry type, wallet, asset...",
     },
   ],
   [
@@ -361,8 +374,28 @@ function AppSidebar({
 }
 
 function SidebarActions({ onSettingsClick }: { onSettingsClick: () => void }) {
+  const dataMode = useUiStore((state) => state.dataMode);
+  const setDataMode = useUiStore((state) => state.setDataMode);
+  const isRealData = dataMode === "real";
+
   return (
     <SidebarMenu>
+      <SidebarMenuItem>
+        <div className="flex min-h-8 w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:px-0">
+          <Server className="size-4 shrink-0" aria-hidden="true" />
+          <span className="min-w-0 flex-1 truncate group-data-[collapsible=icon]:hidden">
+            {isRealData ? "Real data" : "Mock data"}
+          </span>
+          <Switch
+            checked={isRealData}
+            aria-label="Toggle real data mode"
+            onCheckedChange={(checked) =>
+              setDataMode(checked ? "real" : "mock")
+            }
+            className="group-data-[collapsible=icon]:hidden"
+          />
+        </div>
+      </SidebarMenuItem>
       <SidebarMenuItem>
         <SidebarMenuButton asChild tooltip="Donate sats">
           <a href="#donate">
@@ -546,6 +579,48 @@ function AppDashboardHeader({ meta }: { meta: RouteMeta }) {
   const Icon = meta.icon;
   const hideSensitive = useUiStore((s) => s.hideSensitive);
   const setHideSensitive = useUiStore((s) => s.setHideSensitive);
+  const dataMode = useUiStore((s) => s.dataMode);
+  const appNotifications = useUiStore((s) => s.notifications);
+  const clearNotifications = useUiStore((s) => s.clearNotifications);
+  const { data } = useDaemon<OverviewSnapshot>("ui.overview.snapshot");
+  const snapshot = data?.data;
+  const systemNotificationItems = [
+    ...(snapshot?.status?.needsJournals
+      ? [
+          {
+            id: "journals-stale",
+            title: "Journals need processing",
+            body: "Reports are not trusted until journals are processed.",
+            tone: "warning" as const,
+          },
+        ]
+      : []),
+    ...((snapshot?.status?.quarantines ?? 0) > 0
+      ? [
+          {
+            id: "quarantines",
+            title: "Transactions quarantined",
+            body: `${snapshot?.status?.quarantines ?? 0} transactions need review.`,
+            tone: "warning" as const,
+          },
+        ]
+      : []),
+    {
+      id: "data-mode",
+      title: dataMode === "mock" ? "Mock data active" : "Real data active",
+      body:
+        dataMode === "mock"
+          ? "The UI is showing fixture data."
+          : "The UI is reading from the local daemon.",
+      tone: "info" as const,
+    },
+  ];
+  const notificationItems = [...appNotifications, ...systemNotificationItems];
+  const notificationCount = notificationItems.filter(
+    (item) =>
+      item.tone !== "info" ||
+      item.title.toLowerCase().includes("sync"),
+  ).length;
 
   return (
     <header className="flex w-full items-center gap-3 border-b bg-background px-4 py-4 sm:px-6">
@@ -572,14 +647,55 @@ function AppDashboardHeader({ meta }: { meta: RouteMeta }) {
             {"\u00a0"}K
           </kbd>
         </div>
-        <Button
-          variant="outline"
-          size="icon"
-          className="size-9"
-          aria-label="Notifications"
-        >
-          <Bell className="size-4" aria-hidden="true" />
-        </Button>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button
+              variant="outline"
+              size="icon"
+              className="relative size-9"
+              aria-label="Notifications"
+            >
+              <Bell className="size-4" aria-hidden="true" />
+              {notificationCount > 0 && (
+                <span className="absolute -top-1 -right-1 flex size-4 items-center justify-center rounded-full bg-destructive text-[9px] font-medium text-destructive-foreground">
+                  {notificationCount}
+                </span>
+              )}
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-80">
+            <div className="flex items-center justify-between gap-2 px-2 py-1.5">
+              <DropdownMenuLabel className="p-0">
+                Notifications
+              </DropdownMenuLabel>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="h-7 px-2 text-xs"
+                disabled={appNotifications.length === 0}
+                onClick={(event) => {
+                  event.preventDefault();
+                  clearNotifications();
+                }}
+              >
+                Clear all
+              </Button>
+            </div>
+            <DropdownMenuSeparator />
+            {notificationItems.map((item) => (
+              <DropdownMenuItem
+                key={item.id}
+                className="flex flex-col items-start gap-0.5 whitespace-normal"
+              >
+                <span className="font-medium">{item.title}</span>
+                <span className="text-xs text-muted-foreground">
+                  {item.body}
+                </span>
+              </DropdownMenuItem>
+            ))}
+          </DropdownMenuContent>
+        </DropdownMenu>
         <Button
           variant="outline"
           size="icon"

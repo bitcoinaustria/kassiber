@@ -8,7 +8,16 @@ from dataclasses import dataclass
 from typing import Any, TextIO
 
 from . import __version__
+from .cli.handlers import sync_wallet
+from .core.repo import current_context_snapshot
 from .core.runtime import build_status_payload
+from .core.ui_snapshot import (
+    build_capital_gains_snapshot,
+    build_journals_snapshot,
+    build_overview_snapshot,
+    build_profiles_snapshot,
+    build_transactions_snapshot,
+)
 from .envelope import SCHEMA_VERSION, build_envelope, build_error_envelope, json_ready
 from .errors import AppError
 
@@ -112,6 +121,119 @@ def handle_request(ctx: DaemonContext, request: dict[str, Any]) -> tuple[dict[st
             False,
         )
 
+    if kind == "ui.overview.snapshot":
+        return (
+            _with_request_id(
+                build_envelope("ui.overview.snapshot", build_overview_snapshot(ctx.conn)),
+                request_id,
+            ),
+            False,
+        )
+
+    if kind == "ui.transactions.list":
+        return (
+            _with_request_id(
+                build_envelope(
+                    "ui.transactions.list",
+                    build_transactions_snapshot(ctx.conn, request.get("args")),
+                ),
+                request_id,
+            ),
+            False,
+        )
+
+    if kind == "ui.reports.capital_gains":
+        return (
+            _with_request_id(
+                build_envelope(
+                    "ui.reports.capital_gains",
+                    build_capital_gains_snapshot(ctx.conn),
+                ),
+                request_id,
+            ),
+            False,
+        )
+
+    if kind == "ui.journals.snapshot":
+        return (
+            _with_request_id(
+                build_envelope(
+                    "ui.journals.snapshot",
+                    build_journals_snapshot(ctx.conn),
+                ),
+                request_id,
+            ),
+            False,
+        )
+
+    if kind == "ui.profiles.snapshot":
+        return (
+            _with_request_id(
+                build_envelope(
+                    "ui.profiles.snapshot",
+                    build_profiles_snapshot(ctx.conn),
+                ),
+                request_id,
+            ),
+            False,
+        )
+
+    if kind == "ui.wallets.sync":
+        args = request.get("args")
+        if args is not None and not isinstance(args, dict):
+            return (
+                _error_envelope(
+                    "validation",
+                    "ui.wallets.sync args must be an object",
+                    request_id=request_id,
+                    details={"type": type(args).__name__},
+                    retryable=False,
+                ),
+                False,
+            )
+        raw_args = args or {}
+        wallet = raw_args.get("wallet")
+        sync_all = bool(raw_args.get("all", wallet is None))
+        if wallet is not None and not isinstance(wallet, str):
+            return (
+                _error_envelope(
+                    "validation",
+                    "ui.wallets.sync wallet must be a string",
+                    request_id=request_id,
+                    details={"type": type(wallet).__name__},
+                    retryable=False,
+                ),
+                False,
+            )
+        context = current_context_snapshot(ctx.conn)
+        if not context["workspace_id"] or not context["profile_id"]:
+            return (
+                _with_request_id(
+                    build_envelope("ui.wallets.sync", {"results": []}),
+                    request_id,
+                ),
+                False,
+            )
+        return (
+            _with_request_id(
+                build_envelope(
+                    "ui.wallets.sync",
+                    {
+                        "results": sync_wallet(
+                            ctx.conn,
+                            ctx.runtime_config,
+                            None,
+                            None,
+                            wallet_ref=wallet,
+                            sync_all=sync_all,
+                        )
+                    },
+                ),
+                request_id,
+            ),
+            False,
+        )
+
     if kind.startswith("ui."):
         return (
             _error_envelope(
@@ -159,7 +281,16 @@ def run(
             "daemon.ready",
             {
                 "version": __version__,
-                "supported_kinds": ["status", "daemon.shutdown"],
+                "supported_kinds": [
+                    "status",
+                    "ui.overview.snapshot",
+                    "ui.transactions.list",
+                    "ui.reports.capital_gains",
+                    "ui.journals.snapshot",
+                    "ui.profiles.snapshot",
+                    "ui.wallets.sync",
+                    "daemon.shutdown",
+                ],
             },
         ),
     )

@@ -268,9 +268,15 @@ and [docs/plan/04-desktop-ui.md](docs/plan/04-desktop-ui.md).
   primitives while keeping the existing settings entrypoint in the shell
 - [ ] Profiles screen
 - [ ] Welcome/onboarding screen
-- [ ] Replace mock daemon fixture data in Overview, Transactions,
-  Connections, Reports, and Settings with typed daemon calls once phase 1.1
-  exists
+- [x] Replace the Overview mock fixture with a read-only
+  `ui.overview.snapshot` daemon kind backed by the current SQLite profile
+- [x] Replace the Transactions table mock fixture with a read-only
+  `ui.transactions.list` daemon kind and enable a loopback-only Vite dev
+  bridge for browser testing against real local data
+- [x] Replace Connections, Journals, and capital-gains Reports mock fixtures
+  with first real daemon-backed snapshots and a `ui.wallets.sync` action
+- [ ] Replace remaining Settings mock fixture data with typed daemon calls once
+  phase 1.1 exists
 
 ### 1.4 Live actions and workers
 

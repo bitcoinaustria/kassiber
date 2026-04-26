@@ -6,16 +6,23 @@
  */
 
 import {
+  useMutation,
   useQuery,
+  useQueryClient,
   type UseQueryOptions,
   type UseQueryResult,
 } from "@tanstack/react-query";
 import { getTransport, type DaemonEnvelope } from "./transport";
+import { useUiStore } from "@/store/ui";
 
-const transport = getTransport();
-
-export function daemonQueryKey(kind: string, args?: Record<string, unknown>) {
-  return args ? (["daemon", kind, args] as const) : (["daemon", kind] as const);
+export function daemonQueryKey(
+  mode: string,
+  kind: string,
+  args?: Record<string, unknown>,
+) {
+  return args
+    ? (["daemon", mode, kind, args] as const)
+    : (["daemon", mode, kind] as const);
 }
 
 export function useDaemon<T = unknown>(
@@ -26,10 +33,29 @@ export function useDaemon<T = unknown>(
     "queryKey" | "queryFn"
   >,
 ): UseQueryResult<DaemonEnvelope<T>> {
+  const dataMode = useUiStore((state) => state.dataMode);
   return useQuery<DaemonEnvelope<T>>({
-    queryKey: daemonQueryKey(kind, args),
-    queryFn: () => transport.invoke<T>({ kind, args }),
+    queryKey: daemonQueryKey(dataMode, kind, args),
+    queryFn: () => getTransport(dataMode).invoke<T>({ kind, args }),
     staleTime: 5 * 60 * 1000,
     ...options,
+  });
+}
+
+export function useDaemonMutation<T = unknown>(kind: string) {
+  const dataMode = useUiStore((state) => state.dataMode);
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (args?: Record<string, unknown>) => {
+      const envelope = await getTransport(dataMode).invoke<T>({ kind, args });
+      if (envelope.kind === "error" || envelope.error) {
+        throw new Error(envelope.error?.message ?? `daemon ${kind} failed`);
+      }
+      return envelope;
+    },
+    onSuccess: () =>
+      queryClient.invalidateQueries({
+        queryKey: ["daemon", dataMode],
+      }),
   });
 }

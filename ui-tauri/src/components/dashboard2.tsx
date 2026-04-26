@@ -76,6 +76,13 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { cn } from "@/lib/utils";
+import { formatBtc, useCurrency, type Currency } from "@/lib/currency";
+import {
+  MOCK_TRANSACTIONS,
+  type TransactionsLedger,
+} from "@/mocks/transactions";
+import type { Tx } from "@/mocks/seed";
+import { useUiStore } from "@/store/ui";
 
 type TransactionStatus = "completed" | "pending" | "failed" | "review";
 
@@ -85,6 +92,7 @@ type Transaction = {
   id: string;
   txnId: string;
   amount: number;
+  amountBtc?: number;
   counterparty: string;
   counterpartyInitials: string;
   direction: TransactionDirection;
@@ -133,6 +141,17 @@ const compactCurrencyFormatter = new Intl.NumberFormat("en-US", {
   notation: "compact",
   maximumFractionDigits: 0,
 });
+
+const blurClass = (hidden: boolean) => (hidden ? "sensitive" : "");
+
+function formatDisplayMoney(eur: number, btc: number, currency: Currency) {
+  if (currency === "btc") return formatBtc(btc);
+  return currencyFormatter.format(eur);
+}
+
+function transactionBtc(txn: Transaction) {
+  return txn.amountBtc ?? 0;
+}
 
 const percentFormatter = new Intl.NumberFormat("en-US", {
   style: "percent",
@@ -860,6 +879,45 @@ const transactionRecords: Transaction[] = [
   },
 ];
 
+function toDashboardTransaction(tx: Tx, index: number): Transaction {
+  const direction: TransactionDirection = tx.internal
+    ? "Transfer"
+    : tx.amountSat >= 0
+      ? "Receive"
+      : "Send";
+  const status: TransactionStatus = tx.conf > 0 ? "completed" : "pending";
+  const paymentMethod =
+    tx.account.toLowerCase().includes("lightning") ||
+    tx.account.toLowerCase().includes("ln") ||
+    tx.account.toLowerCase().includes("phoenix")
+      ? "Lightning"
+      : tx.account.toLowerCase().includes("liquid") ||
+          tx.account.toLowerCase().includes("lbtc")
+        ? "Liquid"
+        : "On-chain";
+  return {
+    id: tx.id,
+    txnId: tx.id || `TX-${index + 1}`,
+    amount: Math.abs(tx.eur || (tx.amountSat / 100_000_000) * tx.rate),
+    amountBtc: Math.abs(tx.amountSat / 100_000_000),
+    counterparty: tx.counter || tx.account || "Unassigned",
+    counterpartyInitials: initials(tx.counter || tx.account || "TX"),
+    direction,
+    paymentMethod,
+    date: tx.date,
+    status: tx.tag.toLowerCase().includes("review") ? "review" : status,
+  };
+}
+
+function initials(value: string) {
+  return value
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase() ?? "")
+    .join("");
+}
+
 const PAGE_SIZE_OPTIONS = [5, 10, 20];
 
 const periodLabels: Record<PeriodKey, string> = {
@@ -877,6 +935,82 @@ const periodKeys: PeriodKey[] = [
   "1year",
   "5years",
 ];
+
+function periodLimit(period: PeriodKey) {
+  if (period === "30days") return 10;
+  if (period === "3months") return 18;
+  if (period === "ytd") return 40;
+  if (period === "5years") return 60;
+  return 30;
+}
+
+function recordsForPeriod(records: Transaction[], period: PeriodKey) {
+  return records.slice(0, periodLimit(period)).reverse();
+}
+
+function buildVolumeRows(
+  records: Transaction[],
+  period: PeriodKey,
+  currency: Currency,
+): VolumeDataPoint[] {
+  if (records.length === 0) return volumeData[period];
+  return recordsForPeriod(records, period).map((txn, index) => ({
+    month: period === "30days" ? `#${index + 1}` : txn.date.slice(0, 10) || `#${index + 1}`,
+    revenue: currency === "btc" ? transactionBtc(txn) : txn.amount,
+  }));
+}
+
+function buildCostRows(
+  records: Transaction[],
+  period: PeriodKey,
+  currency: Currency,
+): CostDataPoint[] {
+  if (records.length === 0) return costsData[period];
+  return recordsForPeriod(records, period).map((txn, index) => ({
+    month: period === "30days" ? `#${index + 1}` : txn.date.slice(0, 10) || `#${index + 1}`,
+    cogs:
+      txn.direction === "Send"
+        ? currency === "btc"
+          ? transactionBtc(txn)
+          : txn.amount
+        : 0,
+    operatingExpenses:
+      txn.status === "review"
+        ? currency === "btc"
+          ? transactionBtc(txn)
+          : txn.amount
+        : 0,
+  }));
+}
+
+function summarizeVolume(records: Transaction[], period: PeriodKey): PeriodSummary {
+  if (records.length === 0) return volumeSummary[period];
+  const rows = recordsForPeriod(records, period);
+  const total = rows.reduce((sum, txn) => sum + txn.amount, 0);
+  return { total, change: rows.length, isPositive: true };
+}
+
+function summarizeCosts(records: Transaction[], period: PeriodKey): PeriodSummary {
+  if (records.length === 0) return costsSummary[period];
+  const rows = recordsForPeriod(records, period);
+  const total = rows
+    .filter((txn) => txn.direction === "Send" || txn.status === "review")
+    .reduce((sum, txn) => sum + txn.amount, 0);
+  return { total, change: rows.filter((txn) => txn.status === "review").length, isPositive: total === 0 };
+}
+
+function buildStatsData(records: Transaction[]): StatItem[] {
+  const total = records.reduce((sum, txn) => sum + txn.amount, 0);
+  const reviewed = records.filter((txn) => txn.status === "review").length;
+  const sends = records.filter((txn) => txn.direction === "Send");
+  const avg = records.length ? total / records.length : 0;
+  return [
+    { ...statsData[0], value: total, previousValue: 0, changePercent: records.length, isPositive: true },
+    { ...statsData[1], value: sends.reduce((sum, txn) => sum + txn.amount, 0), previousValue: 0, changePercent: sends.length, isPositive: true },
+    { ...statsData[2], value: records.length ? reviewed / records.length : 0, previousValue: 0, changePercent: reviewed, isPositive: reviewed === 0 },
+    { ...statsData[3], value: avg, previousValue: 0, changePercent: records.length, isPositive: true },
+  ];
+}
 
 const PeriodTabs = ({
   activePeriod,
@@ -914,12 +1048,16 @@ interface ChartTooltipProps {
   active?: boolean;
   payload?: ChartTooltipPayload[];
   label?: string | number;
+  hideSensitive: boolean;
+  currency: Currency;
 }
 
 function VolumeTooltip({
   active,
   payload,
   label,
+  hideSensitive,
+  currency,
 }: ChartTooltipProps) {
   if (!active || !payload?.length) return null;
 
@@ -935,17 +1073,38 @@ function VolumeTooltip({
         <span className="text-[10px] text-muted-foreground sm:text-sm">
           Volume:
         </span>
-        <span className="text-[10px] font-medium text-foreground sm:text-sm">
-          {currencyFormatter.format(Number(value))}
+        <span
+          className={cn(
+            "text-[10px] font-medium text-foreground sm:text-sm",
+            blurClass(hideSensitive),
+          )}
+        >
+          {currency === "btc"
+            ? formatBtc(Number(value))
+            : currencyFormatter.format(Number(value))}
         </span>
       </div>
     </div>
   );
 }
 
-const VolumeChart = ({ period }: { period: PeriodKey }) => {
-  const data = volumeData[period];
-  const summary = volumeSummary[period];
+const VolumeChart = ({
+  period,
+  records,
+  hideSensitive,
+  currency,
+}: {
+  period: PeriodKey;
+  records: Transaction[];
+  hideSensitive: boolean;
+  currency: Currency;
+}) => {
+  const data = buildVolumeRows(records, period, currency);
+  const summary = summarizeVolume(records, period);
+  const summaryBtc = recordsForPeriod(records, period).reduce(
+    (sum, txn) => sum + transactionBtc(txn),
+    0,
+  );
 
   const renderChartCard = (expanded = false) => {
     const gradientId = expanded ? "revenueGradientExpanded" : "revenueGradient";
@@ -958,8 +1117,13 @@ const VolumeChart = ({ period }: { period: PeriodKey }) => {
             Transaction Volume
           </p>
           <div className="flex items-center gap-2">
-            <p className="text-xl leading-tight font-semibold tracking-tight sm:text-2xl">
-              {currencyFormatter.format(summary.total)}
+            <p
+              className={cn(
+                "text-xl leading-tight font-semibold tracking-tight sm:text-2xl",
+                blurClass(hideSensitive),
+              )}
+            >
+              {formatDisplayMoney(summary.total, summaryBtc, currency)}
             </p>
             <div className="flex items-center gap-0.5">
               {summary.isPositive ? (
@@ -977,10 +1141,11 @@ const VolumeChart = ({ period }: { period: PeriodKey }) => {
                 className={cn(
                   "text-xs font-medium",
                   summary.isPositive ? "text-emerald-600" : "text-red-600",
+                  blurClass(hideSensitive),
                 )}
               >
                 {summary.isPositive ? "+" : "-"}
-                {summary.change}%
+                {summary.change}
               </span>
             </div>
           </div>
@@ -1035,11 +1200,22 @@ const VolumeChart = ({ period }: { period: PeriodKey }) => {
               tickLine={false}
               tick={{ fontSize: 10 }}
               dx={-5}
-              tickFormatter={(value) => compactCurrencyFormatter.format(value)}
+              tickFormatter={(value) =>
+                hideSensitive
+                  ? ""
+                  : currency === "btc"
+                  ? formatBtc(Number(value), { precision: 4 })
+                  : compactCurrencyFormatter.format(value)
+              }
               width={40}
             />
             <Tooltip
-              content={<VolumeTooltip />}
+              content={
+                <VolumeTooltip
+                  hideSensitive={hideSensitive}
+                  currency={currency}
+                />
+              }
               cursor={{ strokeOpacity: 0.2 }}
             />
             <Area
@@ -1074,6 +1250,8 @@ function CostsTooltip({
   payload,
   label,
   colors,
+  hideSensitive,
+  currency,
 }: ChartTooltipProps & {
   colors: { primary: string; secondary: string };
 }) {
@@ -1098,8 +1276,15 @@ function CostsTooltip({
           <span className="text-[10px] text-muted-foreground sm:text-sm">
             COGS:
           </span>
-          <span className="text-[10px] font-medium text-foreground sm:text-sm">
-            {currencyFormatter.format(Number(cogs))}
+          <span
+            className={cn(
+              "text-[10px] font-medium text-foreground sm:text-sm",
+              blurClass(hideSensitive),
+            )}
+          >
+            {currency === "btc"
+              ? formatBtc(Number(cogs))
+              : currencyFormatter.format(Number(cogs))}
           </span>
         </div>
         <div className="flex items-center gap-1.5 sm:gap-2">
@@ -1110,13 +1295,28 @@ function CostsTooltip({
           <span className="text-[10px] text-muted-foreground sm:text-sm">
             Operating:
           </span>
-          <span className="text-[10px] font-medium text-foreground sm:text-sm">
-            {currencyFormatter.format(Number(operatingExpenses))}
+          <span
+            className={cn(
+              "text-[10px] font-medium text-foreground sm:text-sm",
+              blurClass(hideSensitive),
+            )}
+          >
+            {currency === "btc"
+              ? formatBtc(Number(operatingExpenses))
+              : currencyFormatter.format(Number(operatingExpenses))}
           </span>
         </div>
         <div className="mt-1 border-t border-border pt-1">
-          <span className="text-[10px] font-medium text-foreground sm:text-xs">
-            Total: {currencyFormatter.format(total)}
+          <span
+            className={cn(
+              "text-[10px] font-medium text-foreground sm:text-xs",
+              blurClass(hideSensitive),
+            )}
+          >
+            Total:{" "}
+            {currency === "btc"
+              ? formatBtc(total)
+              : currencyFormatter.format(total)}
           </span>
         </div>
       </div>
@@ -1124,9 +1324,22 @@ function CostsTooltip({
   );
 }
 
-const CostsChart = ({ period }: { period: PeriodKey }) => {
-  const data = costsData[period];
-  const summary = costsSummary[period];
+const CostsChart = ({
+  period,
+  records,
+  hideSensitive,
+  currency,
+}: {
+  period: PeriodKey;
+  records: Transaction[];
+  hideSensitive: boolean;
+  currency: Currency;
+}) => {
+  const data = buildCostRows(records, period, currency);
+  const summary = summarizeCosts(records, period);
+  const summaryBtc = recordsForPeriod(records, period)
+    .filter((txn) => txn.direction === "Send" || txn.status === "review")
+    .reduce((sum, txn) => sum + transactionBtc(txn), 0);
 
   return (
     <div className="flex min-w-0 flex-1 flex-col gap-4 rounded-xl border bg-card p-4 sm:gap-5 sm:p-5">
@@ -1157,8 +1370,13 @@ const CostsChart = ({ period }: { period: PeriodKey }) => {
           </div>
         </div>
         <div className="flex items-center gap-2">
-          <p className="text-xl leading-tight font-semibold tracking-tight sm:text-2xl">
-            {currencyFormatter.format(summary.total)}
+          <p
+            className={cn(
+              "text-xl leading-tight font-semibold tracking-tight sm:text-2xl",
+              blurClass(hideSensitive),
+            )}
+          >
+            {formatDisplayMoney(summary.total, summaryBtc, currency)}
           </p>
           <div className="flex items-center gap-0.5">
             {summary.isPositive ? (
@@ -1172,14 +1390,15 @@ const CostsChart = ({ period }: { period: PeriodKey }) => {
                 aria-hidden="true"
               />
             )}
-            <span
-              className={cn(
-                "text-xs font-medium",
-                summary.isPositive ? "text-emerald-600" : "text-red-600",
-              )}
-            >
+              <span
+                className={cn(
+                  "text-xs font-medium",
+                  summary.isPositive ? "text-emerald-600" : "text-red-600",
+                  blurClass(hideSensitive),
+                )}
+              >
               {summary.isPositive ? "+" : "-"}
-              {summary.change}%
+              {summary.change}
             </span>
           </div>
         </div>
@@ -1201,7 +1420,13 @@ const CostsChart = ({ period }: { period: PeriodKey }) => {
               tickLine={false}
               tick={{ fontSize: 10 }}
               dx={-5}
-              tickFormatter={(value) => compactCurrencyFormatter.format(value)}
+              tickFormatter={(value) =>
+                hideSensitive
+                  ? ""
+                  : currency === "btc"
+                  ? formatBtc(Number(value), { precision: 4 })
+                  : compactCurrencyFormatter.format(value)
+              }
               width={40}
             />
             <Tooltip
@@ -1211,6 +1436,8 @@ const CostsChart = ({ period }: { period: PeriodKey }) => {
                     primary: "var(--color-cogs)",
                     secondary: "var(--color-operatingExpenses)",
                   }}
+                  hideSensitive={hideSensitive}
+                  currency={currency}
                 />
               }
               cursor={{ fillOpacity: 0.05 }}
@@ -1234,10 +1461,29 @@ const CostsChart = ({ period }: { period: PeriodKey }) => {
   );
 };
 
-const StatsCards = () => {
+const StatsCards = ({
+  records,
+  hideSensitive,
+  currency,
+}: {
+  records: Transaction[];
+  hideSensitive: boolean;
+  currency: Currency;
+}) => {
+  const stats = buildStatsData(records);
+  const totalBtc = records.reduce((sum, txn) => sum + transactionBtc(txn), 0);
+  const sentBtc = records
+    .filter((txn) => txn.direction === "Send")
+    .reduce((sum, txn) => sum + transactionBtc(txn), 0);
+  const avgBtc = records.length ? totalBtc / records.length : 0;
+  const btcByStat = new Map([
+    ["Transaction Volume", totalBtc],
+    ["Realized Gain", sentBtc],
+    ["Avg Transaction", avgBtc],
+  ]);
   return (
     <div className="grid grid-cols-2 gap-3 rounded-xl border bg-card p-4 sm:gap-4 sm:p-5 lg:grid-cols-4 lg:gap-6 lg:p-6">
-      {statsData.map((stat, index) => {
+      {stats.map((stat, index) => {
         const formatter =
           stat.format === "currency" ? currencyFormatter : percentFormatter;
 
@@ -1250,11 +1496,29 @@ const StatsCards = () => {
                   {stat.title}
                 </span>
               </div>
-              <p className="hidden text-[10px] text-muted-foreground/70 sm:block sm:text-xs">
-                {formatter.format(stat.previousValue)} previous month
+              <p
+                className={cn(
+                  "hidden text-[10px] text-muted-foreground/70 sm:block sm:text-xs",
+                  blurClass(hideSensitive),
+                )}
+              >
+                {stat.format === "currency"
+                  ? formatDisplayMoney(stat.previousValue, 0, currency)
+                  : formatter.format(stat.previousValue)} previous month
               </p>
-              <p className="text-xl leading-tight font-semibold tracking-tight sm:text-2xl lg:text-[28px]">
-                {formatter.format(stat.value)}
+              <p
+                className={cn(
+                  "text-xl leading-tight font-semibold tracking-tight sm:text-2xl lg:text-[28px]",
+                  blurClass(hideSensitive),
+                )}
+              >
+                {stat.format === "currency"
+                  ? formatDisplayMoney(
+                      stat.value,
+                      btcByStat.get(stat.title) ?? 0,
+                      currency,
+                    )
+                  : formatter.format(stat.value)}
               </p>
               <div className="flex flex-wrap items-center gap-x-1 gap-y-0.5 text-[10px] sm:text-xs">
                 {stat.isPositive ? (
@@ -1272,6 +1536,7 @@ const StatsCards = () => {
                   className={cn(
                     "whitespace-nowrap",
                     stat.isPositive ? "text-emerald-600" : "text-red-600",
+                    blurClass(hideSensitive),
                   )}
                 >
                   {stat.isPositive ? "+" : "-"}
@@ -1345,7 +1610,15 @@ const dateFilterOptions = [
 const filterChipClassName =
   "inline-flex h-5 cursor-pointer items-center gap-1 rounded-md bg-gray-50 px-2 text-[10px] font-medium text-gray-600 ring-1 ring-inset ring-gray-500/10 sm:h-6 sm:text-xs dark:bg-gray-800/50 dark:text-gray-400 dark:ring-gray-400/20";
 
-const TransactionsTable = () => {
+const TransactionsTable = ({
+  records,
+  hideSensitive,
+  currency,
+}: {
+  records: Transaction[];
+  hideSensitive: boolean;
+  currency: Currency;
+}) => {
   const [searchQuery, setSearchQuery] = React.useState("");
   const [statusFilter, setStatusFilter] = React.useState<string>("all");
   const [dateFilter, setDateFilter] = React.useState<string>("all");
@@ -1417,7 +1690,7 @@ const TransactionsTable = () => {
 
   const filteredTransactions = React.useMemo(() => {
     const query = searchQuery.toLowerCase();
-    return transactionRecords.filter((txn) => {
+    return records.filter((txn) => {
       const matchesSearch =
         txn.txnId.toLowerCase().includes(query) ||
         txn.counterparty.toLowerCase().includes(query);
@@ -1456,7 +1729,7 @@ const TransactionsTable = () => {
         matchesSearch && matchesStatus && matchesPaymentMethod && matchesDate
       );
     });
-  }, [searchQuery, statusFilter, dateFilter, paymentMethodFilter]);
+  }, [records, searchQuery, statusFilter, dateFilter, paymentMethodFilter]);
 
   const totalPages = Math.ceil(filteredTransactions.length / pageSize);
 
@@ -1752,7 +2025,12 @@ const TransactionsTable = () => {
                 const StatusIcon = transactionStatusIcons[txn.status];
                 return (
                   <TableRow key={txn.id}>
-                    <TableCell className="text-xs font-medium sm:text-sm">
+                    <TableCell
+                      className={cn(
+                        "text-xs font-medium sm:text-sm",
+                        blurClass(hideSensitive),
+                      )}
+                    >
                       {txn.txnId}
                     </TableCell>
                     <TableCell className="hidden md:table-cell">
@@ -1762,13 +2040,27 @@ const TransactionsTable = () => {
                             {txn.counterpartyInitials}
                           </AvatarFallback>
                         </Avatar>
-                        <span className="text-xs text-muted-foreground sm:text-sm">
+                        <span
+                          className={cn(
+                            "text-xs text-muted-foreground sm:text-sm",
+                            blurClass(hideSensitive),
+                          )}
+                        >
                           {txn.counterparty}
                         </span>
                       </div>
                     </TableCell>
-                    <TableCell className="text-xs text-foreground tabular-nums sm:text-sm">
-                      {currencyFormatter.format(txn.amount)}
+                    <TableCell
+                      className={cn(
+                        "text-xs text-foreground tabular-nums sm:text-sm",
+                        blurClass(hideSensitive),
+                      )}
+                    >
+                      {formatDisplayMoney(
+                        txn.amount,
+                        transactionBtc(txn),
+                        currency,
+                      )}
                     </TableCell>
                     <TableCell className="hidden lg:table-cell">
                       <span className="inline-flex items-center rounded-md border px-2 py-0.5 text-[10px] font-normal text-muted-foreground sm:text-xs">
@@ -1951,10 +2243,25 @@ const TransactionsTable = () => {
   );
 };
 
-const Dashboard2 = ({ className }: { className?: string }) => {
+const Dashboard2 = ({
+  className,
+  ledger = MOCK_TRANSACTIONS,
+}: {
+  className?: string;
+  ledger?: TransactionsLedger;
+}) => {
   const [period, setPeriod] = React.useState<PeriodKey>("1year");
   const [newTxnOpen, setNewTxnOpen] = React.useState(false);
   const [txnNote, setTxnNote] = React.useState("");
+  const hideSensitive = useUiStore((s) => s.hideSensitive);
+  const currency = useCurrency();
+  const records = React.useMemo(
+    () =>
+      ledger.txs.length
+        ? ledger.txs.map(toDashboardTransaction)
+        : transactionRecords,
+    [ledger.txs],
+  );
 
   React.useEffect(() => {
     if (typeof window === "undefined") return;
@@ -2054,13 +2361,31 @@ const Dashboard2 = ({ className }: { className?: string }) => {
       </div>
 
       <div className="flex flex-col gap-4 sm:gap-6 lg:flex-row">
-        <VolumeChart period={period} />
-        <CostsChart period={period} />
+        <VolumeChart
+          period={period}
+          records={records}
+          hideSensitive={hideSensitive}
+          currency={currency}
+        />
+        <CostsChart
+          period={period}
+          records={records}
+          hideSensitive={hideSensitive}
+          currency={currency}
+        />
       </div>
 
-      <StatsCards />
+      <StatsCards
+        records={records}
+        hideSensitive={hideSensitive}
+        currency={currency}
+      />
 
-      <TransactionsTable />
+      <TransactionsTable
+        records={records}
+        hideSensitive={hideSensitive}
+        currency={currency}
+      />
     </div>
   );
 };
