@@ -440,15 +440,15 @@ fn attach_stderr_tail_to_internal_error(response: &mut Value, stderr_tail: Strin
         Some(Value::Object(details)) => {
             details.insert("stderr_tail".to_string(), Value::String(stderr_tail));
         }
+        Some(Value::Null) | None => {
+            error.insert("details".to_string(), json!({ "stderr_tail": stderr_tail }));
+        }
         Some(details) => {
             let previous = details.take();
             *details = json!({
                 "details": previous,
                 "stderr_tail": stderr_tail,
             });
-        }
-        None => {
-            error.insert("details".to_string(), json!({ "stderr_tail": stderr_tail }));
         }
     }
 }
