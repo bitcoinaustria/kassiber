@@ -178,6 +178,9 @@ const ROUTE_META: Array<[string, RouteMeta]> = [
 export function AppShell() {
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const [settingsOpen, setSettingsOpen] = React.useState(false);
+  const [settingsFocus, setSettingsFocus] = React.useState<
+    "backends" | null
+  >(null);
   const [assistantCollapsed, setAssistantCollapsed] = React.useState(false);
   const mainRef = React.useRef<HTMLElement>(null);
   const routeMeta =
@@ -206,6 +209,20 @@ export function AppShell() {
     };
   }, [pathname]);
 
+  React.useEffect(() => {
+    const openSettings = (event: Event) => {
+      const detail = (event as CustomEvent<{ section?: "backends" }>).detail;
+      setSettingsFocus(detail?.section ?? null);
+      setSettingsOpen(true);
+    };
+
+    window.addEventListener("kassiber:open-settings", openSettings);
+
+    return () => {
+      window.removeEventListener("kassiber:open-settings", openSettings);
+    };
+  }, []);
+
   return (
     <TooltipProvider>
       <div className="flex h-svh flex-col overflow-hidden bg-sidebar">
@@ -219,7 +236,10 @@ export function AppShell() {
           </a>
           <AppSidebar
             pathname={pathname}
-            onSettingsClick={() => setSettingsOpen(true)}
+            onSettingsClick={() => {
+              setSettingsFocus(null);
+              setSettingsOpen(true);
+            }}
           />
           <div className="min-h-0 w-full overflow-hidden lg:p-2">
             <div className="relative flex h-full w-full flex-col items-center justify-start overflow-hidden bg-background lg:rounded-xl lg:border">
@@ -244,6 +264,7 @@ export function AppShell() {
       </div>
       <SettingsModal
         open={settingsOpen}
+        focusSection={settingsFocus}
         onClose={() => setSettingsOpen(false)}
       />
     </TooltipProvider>
@@ -488,9 +509,14 @@ function NavUser() {
 
 function AppVersion() {
   return (
-    <div className="px-2 pb-1 text-center text-xs text-muted-foreground group-data-[collapsible=icon]:hidden">
+    <a
+      href="https://github.com/bitcoinaustria/kassiber"
+      target="_blank"
+      rel="noreferrer"
+      className="px-2 pb-1 text-center text-xs text-muted-foreground underline-offset-4 hover:text-foreground hover:underline group-data-[collapsible=icon]:hidden"
+    >
       Kassiber v{APP_VERSION}
-    </div>
+    </a>
   );
 }
 
@@ -498,8 +524,6 @@ function AppDashboardHeader({ meta }: { meta: RouteMeta }) {
   const Icon = meta.icon;
   const hideSensitive = useUiStore((s) => s.hideSensitive);
   const setHideSensitive = useUiStore((s) => s.setHideSensitive);
-  const currency = useUiStore((s) => s.currency);
-  const setCurrency = useUiStore((s) => s.setCurrency);
 
   return (
     <header className="flex w-full items-center gap-3 border-b bg-background px-4 py-4 sm:px-6">
@@ -534,31 +558,6 @@ function AppDashboardHeader({ meta }: { meta: RouteMeta }) {
         >
           <Bell className="size-4" aria-hidden="true" />
         </Button>
-        <div
-          className="hidden h-9 items-center rounded-md border bg-muted/40 p-1 sm:flex"
-          aria-label="Display currency"
-        >
-          <Button
-            type="button"
-            variant={currency === "eur" ? "default" : "ghost"}
-            size="sm"
-            className="h-7 px-2.5 text-xs"
-            aria-pressed={currency === "eur"}
-            onClick={() => setCurrency("eur")}
-          >
-            €
-          </Button>
-          <Button
-            type="button"
-            variant={currency === "btc" ? "default" : "ghost"}
-            size="sm"
-            className="h-7 px-2.5 text-xs"
-            aria-pressed={currency === "btc"}
-            onClick={() => setCurrency("btc")}
-          >
-            ₿
-          </Button>
-        </div>
         <Button
           variant="outline"
           size="icon"

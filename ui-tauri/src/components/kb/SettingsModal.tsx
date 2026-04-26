@@ -105,14 +105,22 @@ const DEFAULT_BACKENDS: Backend[] = [
 
 interface SettingsModalProps {
   open: boolean;
+  focusSection?: "backends" | null;
   onClose: () => void;
 }
 
-export function SettingsModal({ open, onClose }: SettingsModalProps) {
+export function SettingsModal({
+  open,
+  focusSection = null,
+  onClose,
+}: SettingsModalProps) {
   const hideSensitive = useUiStore((s) => s.hideSensitive);
   const setHideSensitive = useUiStore((s) => s.setHideSensitive);
+  const currency = useUiStore((s) => s.currency);
+  const setCurrency = useUiStore((s) => s.setCurrency);
   const setIdentity = useUiStore((s) => s.setIdentity);
   const navigate = useNavigate();
+  const backendsRef = React.useRef<HTMLDivElement | null>(null);
 
   const [clearClipboard, setClearClipboard] = React.useState(true);
   const [autoLockEnabled, setAutoLockEnabled] = React.useState(true);
@@ -121,6 +129,19 @@ export function SettingsModal({ open, onClose }: SettingsModalProps) {
   const [lockOnClose, setLockOnClose] = React.useState(true);
   const [backends, setBackends] = React.useState<Backend[]>(DEFAULT_BACKENDS);
   const [addOpen, setAddOpen] = React.useState(false);
+
+  React.useEffect(() => {
+    if (!open || focusSection !== "backends") return;
+
+    const id = window.requestAnimationFrame(() => {
+      backendsRef.current?.scrollIntoView({
+        block: "start",
+        behavior: "smooth",
+      });
+    });
+
+    return () => window.cancelAnimationFrame(id);
+  }, [focusSection, open]);
 
   const onResetWorkspace = () => {
     const ok = window.confirm(
@@ -172,6 +193,35 @@ export function SettingsModal({ open, onClose }: SettingsModalProps) {
                   checked={clearClipboard}
                   onCheckedChange={setClearClipboard}
                 />
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base">Display currency</CardTitle>
+                <CardDescription>
+                  Choose how balances and reports are shown across the app.
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="grid grid-cols-2 gap-2">
+                  <Button
+                    type="button"
+                    variant={currency === "eur" ? "default" : "outline"}
+                    aria-pressed={currency === "eur"}
+                    onClick={() => setCurrency("eur")}
+                  >
+                    € Euro
+                  </Button>
+                  <Button
+                    type="button"
+                    variant={currency === "btc" ? "default" : "outline"}
+                    aria-pressed={currency === "btc"}
+                    onClick={() => setCurrency("btc")}
+                  >
+                    ₿ Bitcoin
+                  </Button>
+                </div>
               </CardContent>
             </Card>
 
@@ -299,62 +349,64 @@ export function SettingsModal({ open, onClose }: SettingsModalProps) {
               </CardContent>
             </Card>
 
-            <Card className="lg:col-span-2">
-              <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                <div>
-                  <CardTitle className="flex items-center gap-2 text-base">
-                    <Server className="size-4" aria-hidden="true" />
-                    Sync backends
-                  </CardTitle>
-                  <CardDescription>
-                    Local node, indexer, and rate endpoints available to the workspace.
-                  </CardDescription>
-                </div>
-                <Button type="button" size="sm" onClick={() => setAddOpen(true)}>
-                  <Plus className="size-4" aria-hidden="true" />
-                  Add backend
-                </Button>
-              </CardHeader>
-              <CardContent>
-                <div className="overflow-x-auto rounded-md border">
-                  <Table>
-                    <TableHeader>
-                      <TableRow className="bg-muted/50 hover:bg-muted/50">
-                        <TableHead>Backend</TableHead>
-                        <TableHead>Network</TableHead>
-                        <TableHead>Health</TableHead>
-                        <TableHead>Auth</TableHead>
-                        <TableHead className="text-right">Status</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {backends.map((backend) => (
-                        <TableRow key={backend.id}>
-                          <TableCell className="min-w-[240px]">
-                            <div className="font-medium">{backend.name}</div>
-                            <div className="max-w-[360px] truncate text-xs text-muted-foreground">
-                              {backend.url}
-                            </div>
-                          </TableCell>
-                          <TableCell>
-                            <NetworkBadge net={backend.net} />
-                          </TableCell>
-                          <TableCell className="text-muted-foreground">
-                            {backend.health}
-                          </TableCell>
-                          <TableCell className="text-muted-foreground">
-                            {backend.auth}
-                          </TableCell>
-                          <TableCell className="text-right">
-                            <StatusBadge active={backend.on} />
-                          </TableCell>
+            <div ref={backendsRef} className="lg:col-span-2">
+              <Card>
+                <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                  <div>
+                    <CardTitle className="flex items-center gap-2 text-base">
+                      <Server className="size-4" aria-hidden="true" />
+                      Sync backends
+                    </CardTitle>
+                    <CardDescription>
+                      Local node, indexer, and rate endpoints available to the workspace.
+                    </CardDescription>
+                  </div>
+                  <Button type="button" size="sm" onClick={() => setAddOpen(true)}>
+                    <Plus className="size-4" aria-hidden="true" />
+                    Add backend
+                  </Button>
+                </CardHeader>
+                <CardContent>
+                  <div className="overflow-x-auto rounded-md border">
+                    <Table>
+                      <TableHeader>
+                        <TableRow className="bg-muted/50 hover:bg-muted/50">
+                          <TableHead>Backend</TableHead>
+                          <TableHead>Network</TableHead>
+                          <TableHead>Health</TableHead>
+                          <TableHead>Auth</TableHead>
+                          <TableHead className="text-right">Status</TableHead>
                         </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </div>
-              </CardContent>
-            </Card>
+                      </TableHeader>
+                      <TableBody>
+                        {backends.map((backend) => (
+                          <TableRow key={backend.id}>
+                            <TableCell className="min-w-[240px]">
+                              <div className="font-medium">{backend.name}</div>
+                              <div className="max-w-[360px] truncate text-xs text-muted-foreground">
+                                {backend.url}
+                              </div>
+                            </TableCell>
+                            <TableCell>
+                              <NetworkBadge net={backend.net} />
+                            </TableCell>
+                            <TableCell className="text-muted-foreground">
+                              {backend.health}
+                            </TableCell>
+                            <TableCell className="text-muted-foreground">
+                              {backend.auth}
+                            </TableCell>
+                            <TableCell className="text-right">
+                              <StatusBadge active={backend.on} />
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
 
             <Card className="border-destructive/30 lg:col-span-2">
               <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">

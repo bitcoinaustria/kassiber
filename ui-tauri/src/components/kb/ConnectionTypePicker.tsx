@@ -7,7 +7,12 @@
  * the dedicated XPub form.
  */
 
-import { useMemo, useState } from "react";
+import {
+  useMemo,
+  useState,
+  type ComponentType,
+  type SVGProps,
+} from "react";
 import {
   Bitcoin,
   Bolt,
@@ -33,6 +38,7 @@ import { cn } from "@/lib/utils";
 export type ConnectionKindKey =
   | "xpub"
   | "descriptor"
+  | "liquid-descriptor"
   | "core-ln"
   | "lnd"
   | "nwc"
@@ -51,7 +57,7 @@ interface ConnectionItem {
   name: string;
   desc: string;
   status?: "available" | "soon";
-  icon: React.ComponentType<React.SVGProps<SVGSVGElement>>;
+  icon: ComponentType<SVGProps<SVGSVGElement>>;
 }
 
 interface SectionDef {
@@ -62,8 +68,8 @@ interface SectionDef {
 
 const SECTIONS: SectionDef[] = [
   {
-    id: "self-custody",
-    label: "Self-custody",
+    id: "wallet-descriptors",
+    label: "Wallet descriptors",
     items: [
       {
         k: "xpub",
@@ -78,6 +84,13 @@ const SECTIONS: SectionDef[] = [
         desc: "Multisig or descriptor wallet discovery.",
         status: "soon",
         icon: Wallet,
+      },
+      {
+        k: "liquid-descriptor",
+        name: "Liquid descriptor",
+        desc: "Liquid watch-only wallet or Elements descriptor.",
+        status: "soon",
+        icon: Bitcoin,
       },
     ],
   },
@@ -208,6 +221,15 @@ export function ConnectionTypePicker({
     [activeCategory],
   );
 
+  const openBitcoinBackendSettings = () => {
+    window.dispatchEvent(
+      new CustomEvent("kassiber:open-settings", {
+        detail: { section: "backends" },
+      }),
+    );
+    onClose();
+  };
+
   return (
     <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
       <DialogContent
@@ -259,13 +281,24 @@ export function ConnectionTypePicker({
         </div>
 
         <div className="border-t bg-muted/30 px-6 py-4">
-          <div className="flex items-start gap-3 rounded-lg border bg-background px-4 py-3">
-            <Lock className="mt-0.5 size-4 shrink-0 text-primary" />
-            <span className="text-sm leading-6 text-muted-foreground">
-              Watch-only by design. Use extended public keys, descriptors, local
-              files, or read-only credentials. Withdrawal permissions and
-              private keys stay outside Kassiber.
-            </span>
+          <div className="flex flex-col gap-3 rounded-lg border bg-background px-4 py-3 sm:flex-row sm:items-start sm:justify-between">
+            <div className="flex items-start gap-3">
+              <Lock className="mt-0.5 size-4 shrink-0 text-primary" />
+              <span className="text-sm leading-6 text-muted-foreground">
+                Watch-only by design. Use extended public keys, descriptors, local
+                files, or read-only credentials. Withdrawal permissions and
+                private keys stay outside Kassiber.
+              </span>
+            </div>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="shrink-0"
+              onClick={openBitcoinBackendSettings}
+            >
+              Bitcoin backend settings
+            </Button>
           </div>
         </div>
       </DialogContent>
