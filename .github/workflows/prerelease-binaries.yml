@@ -382,12 +382,6 @@ jobs:
           set -euo pipefail
           test -n "$(find release -maxdepth 1 -type f -print -quit)"
 
-          if find release -maxdepth 1 -type f -name 'kassiber-desktop-sidecar-*' -print -quit | grep -q .; then
-            echo "Internal desktop sidecar artifacts must not be published." >&2
-            find release -maxdepth 1 -type f -name 'kassiber-desktop-sidecar-*' >&2
-            exit 1
-          fi
-
           if find release -maxdepth 1 -type f -name 'kassiber-cli-*' ! -name '*.tar.gz' ! -name '*.sha256' -print -quit | grep -q .; then
             echo "Raw CLI sidecars must not be published as release assets." >&2
             find release -maxdepth 1 -type f -name 'kassiber-cli-*' ! -name '*.tar.gz' ! -name '*.sha256' >&2

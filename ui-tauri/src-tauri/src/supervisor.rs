@@ -557,6 +557,8 @@ fn kassiber_command(resource_dir: Option<&Path>, args: Vec<String>) -> DaemonCom
     }
 
     if let Some(sidecar) = bundled_sidecar(resource_dir) {
+        // PyInstaller should not need the app resource directory as cwd; keeping
+        // it stable prevents accidental writes relative to a developer checkout.
         let cwd = resource_dir
             .map(PathBuf::from)
             .or_else(|| sidecar.parent().map(PathBuf::from))
@@ -584,6 +586,9 @@ fn bundled_sidecar(resource_dir: Option<&Path>) -> Option<PathBuf> {
     let resource_dir = resource_dir?;
     let sidecar = sidecar_filename()?;
     [
+        // Packaged Tauri builds place resources under the configured
+        // `binaries/` directory. The flat fallback keeps manually assembled
+        // dev bundles easy to smoke-test.
         resource_dir.join("binaries").join(&sidecar),
         resource_dir.join(&sidecar),
     ]
@@ -595,6 +600,8 @@ fn sidecar_filename() -> Option<String> {
     let triple = match (env::consts::OS, env::consts::ARCH) {
         ("macos", "aarch64") => "aarch64-apple-darwin",
         ("macos", "x86_64") => "x86_64-apple-darwin",
+        // Not built by the prerelease workflow yet; Linux arm64 falls back to
+        // developer Python unless a matching sidecar is manually bundled.
         ("linux", "aarch64") => "aarch64-unknown-linux-gnu",
         ("linux", "x86_64") => "x86_64-unknown-linux-gnu",
         ("windows", "x86_64") => "x86_64-pc-windows-msvc",
