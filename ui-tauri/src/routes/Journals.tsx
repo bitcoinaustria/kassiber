@@ -16,6 +16,8 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { useDaemon } from "@/daemon/client";
+import { cn } from "@/lib/utils";
+import { useUiStore } from "@/store/ui";
 
 interface JournalEntryType {
   type: string;
@@ -52,10 +54,13 @@ const eur = new Intl.NumberFormat("de-AT", {
   currency: "EUR",
 });
 
+const blurClass = (hidden: boolean) => (hidden ? "sensitive" : "");
+
 export function Journals() {
   const { data, isLoading } = useDaemon<JournalsSnapshot>(
     "ui.journals.snapshot",
   );
+  const hideSensitive = useUiStore((s) => s.hideSensitive);
 
   if (isLoading) {
     return (
@@ -117,6 +122,8 @@ export function Journals() {
           label="Last processed"
           value={status.lastProcessedAt ? status.lastProcessedAt.slice(0, 10) : "never"}
           sub={status.profile ?? "local profile"}
+          sensitiveSub
+          hideSensitive={hideSensitive}
         />
       </div>
 
@@ -144,7 +151,12 @@ export function Journals() {
                       {entry.count.toLocaleString("en-US")} rows
                     </p>
                   </div>
-                  <p className="text-sm tabular-nums">
+                  <p
+                    className={cn(
+                      "text-sm tabular-nums",
+                      blurClass(hideSensitive),
+                    )}
+                  >
                     {eur.format(entry.gainLossEur)}
                   </p>
                 </div>
@@ -184,14 +196,31 @@ export function Journals() {
                         {entry.date}
                       </TableCell>
                       <TableCell>{entry.type}</TableCell>
-                      <TableCell>{entry.wallet}</TableCell>
-                      <TableCell className="text-right tabular-nums">
+                      <TableCell className={blurClass(hideSensitive)}>
+                        {entry.wallet}
+                      </TableCell>
+                      <TableCell
+                        className={cn(
+                          "text-right tabular-nums",
+                          blurClass(hideSensitive),
+                        )}
+                      >
                         {entry.quantity.toFixed(8)} {entry.asset}
                       </TableCell>
-                      <TableCell className="text-right tabular-nums">
+                      <TableCell
+                        className={cn(
+                          "text-right tabular-nums",
+                          blurClass(hideSensitive),
+                        )}
+                      >
                         {eur.format(entry.fiatValueEur)}
                       </TableCell>
-                      <TableCell className="text-right tabular-nums">
+                      <TableCell
+                        className={cn(
+                          "text-right tabular-nums",
+                          blurClass(hideSensitive),
+                        )}
+                      >
                         {eur.format(entry.gainLossEur)}
                       </TableCell>
                     </TableRow>
@@ -236,17 +265,28 @@ function JournalMetric({
   label,
   value,
   sub,
+  sensitiveSub = false,
+  hideSensitive = false,
 }: {
   label: string;
   value: string;
   sub: string;
+  sensitiveSub?: boolean;
+  hideSensitive?: boolean;
 }) {
   return (
     <Card className="gap-3 py-5">
       <CardContent className="space-y-2">
         <p className="text-xs font-medium text-muted-foreground">{label}</p>
         <p className="text-2xl font-semibold tracking-tight">{value}</p>
-        <p className="text-xs text-muted-foreground">{sub}</p>
+        <p
+          className={cn(
+            "text-xs text-muted-foreground",
+            sensitiveSub && blurClass(hideSensitive),
+          )}
+        >
+          {sub}
+        </p>
       </CardContent>
     </Card>
   );

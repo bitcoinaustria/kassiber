@@ -68,6 +68,7 @@ import {
   type PortfolioPoint,
   type Tx as OverviewTx,
 } from "@/mocks/seed";
+import { useUiStore } from "@/store/ui";
 
 type StatItem = {
   title: string;
@@ -124,6 +125,8 @@ const compactCurrencyFormatter = new Intl.NumberFormat("en-US", {
   notation: "compact",
   maximumFractionDigits: 0,
 });
+
+const blurClass = (hidden: boolean) => (hidden ? "sensitive" : "");
 
 /**
  * Custom hook for hover highlight interaction.
@@ -815,7 +818,13 @@ const WelcomeSection = ({
   );
 };
 
-const StatsCards = ({ snapshot }: { snapshot: OverviewSnapshot }) => {
+const StatsCards = ({
+  snapshot,
+  hideSensitive,
+}: {
+  snapshot: OverviewSnapshot;
+  hideSensitive: boolean;
+}) => {
   const stats = buildStatsData(snapshot);
   return (
     <div className="rounded-xl border bg-card">
@@ -837,7 +846,12 @@ const StatsCards = ({ snapshot }: { snapshot: OverviewSnapshot }) => {
                   {stat.title}
                 </span>
               </div>
-              <p className="text-2xl font-semibold tracking-tight sm:text-[28px]">
+              <p
+                className={cn(
+                  "text-2xl font-semibold tracking-tight sm:text-[28px]",
+                  stat.format === "currency" && blurClass(hideSensitive),
+                )}
+              >
                 {formatter.format(stat.value)}
               </p>
               <div className="flex flex-wrap items-center gap-2 text-[10px] sm:text-xs xl:flex-nowrap">
@@ -847,6 +861,7 @@ const StatsCards = ({ snapshot }: { snapshot: OverviewSnapshot }) => {
                     stat.isPositive
                       ? "text-emerald-600 dark:text-emerald-400"
                       : "text-red-600 dark:text-red-400",
+                    stat.format === "currency" && blurClass(hideSensitive),
                   )}
                 >
                   {statusText}
@@ -875,7 +890,13 @@ const StatsCards = ({ snapshot }: { snapshot: OverviewSnapshot }) => {
   );
 };
 
-const RevenueSourceChart = ({ snapshot }: { snapshot: OverviewSnapshot }) => {
+const RevenueSourceChart = ({
+  snapshot,
+  hideSensitive,
+}: {
+  snapshot: OverviewSnapshot;
+  hideSensitive: boolean;
+}) => {
   const { active: activeSegment, handleHover } = useHoverHighlight<number>();
   const { total, items: revenueSourceItems } = buildRevenueSourceItems(snapshot);
 
@@ -895,7 +916,12 @@ const RevenueSourceChart = ({ snapshot }: { snapshot: OverviewSnapshot }) => {
             <span className="text-sm font-medium sm:text-base">
               Revenue by Source
             </span>
-            <p className="text-[10px] text-muted-foreground sm:text-xs">
+            <p
+              className={cn(
+                "text-[10px] text-muted-foreground sm:text-xs",
+                blurClass(hideSensitive),
+              )}
+            >
               {compactCurrencyFormatter.format(total)} in loaded rows
             </p>
           </div>
@@ -932,7 +958,11 @@ const RevenueSourceChart = ({ snapshot }: { snapshot: OverviewSnapshot }) => {
                     onPointerLeave={() => handleHover(null)}
                     onFocus={() => handleHover(index)}
                     onBlur={() => handleHover(null)}
-                    aria-label={`${item.label}: ${currencyFormatter.format(item.value)} (${item.percent}%)`}
+                    aria-label={
+                      hideSensitive
+                        ? `${item.label}: hidden (${item.percent}%)`
+                        : `${item.label}: ${currencyFormatter.format(item.value)} (${item.percent}%)`
+                    }
                   />
                 </ShadTooltipTrigger>
                 <ShadTooltipContent
@@ -951,7 +981,12 @@ const RevenueSourceChart = ({ snapshot }: { snapshot: OverviewSnapshot }) => {
                         {item.percent}%
                       </span>
                     </div>
-                    <span className="text-muted-foreground tabular-nums">
+                    <span
+                      className={cn(
+                        "text-muted-foreground tabular-nums",
+                        blurClass(hideSensitive),
+                      )}
+                    >
                       {currencyFormatter.format(item.value)}
                     </span>
                   </div>
@@ -1020,7 +1055,12 @@ const RevenueSourceChart = ({ snapshot }: { snapshot: OverviewSnapshot }) => {
                         {item.percent}%
                       </span>
                     </div>
-                    <span className="text-muted-foreground tabular-nums">
+                    <span
+                      className={cn(
+                        "text-muted-foreground tabular-nums",
+                        blurClass(hideSensitive),
+                      )}
+                    >
                       {currencyFormatter.format(item.value)}
                     </span>
                   </div>
@@ -1034,7 +1074,13 @@ const RevenueSourceChart = ({ snapshot }: { snapshot: OverviewSnapshot }) => {
   );
 };
 
-const SalesByCategoryChart = ({ snapshot }: { snapshot: OverviewSnapshot }) => {
+const SalesByCategoryChart = ({
+  snapshot,
+  hideSensitive,
+}: {
+  snapshot: OverviewSnapshot;
+  hideSensitive: boolean;
+}) => {
   const { active: activeSlice, handleHover: setHoveredSlice } =
     useHoverHighlight<number>();
   const salesCategoryData = buildHoldingsBySource(snapshot);
@@ -1071,9 +1117,10 @@ const SalesByCategoryChart = ({ snapshot }: { snapshot: OverviewSnapshot }) => {
                 aria-hidden="true"
               />
               <span
-                className={
-                  unrealizedPercent >= 0 ? "text-emerald-600" : "text-red-600"
-                }
+                className={cn(
+                  unrealizedPercent >= 0 ? "text-emerald-600" : "text-red-600",
+                  blurClass(hideSensitive),
+                )}
               >
                 {unrealizedPercent >= 0 ? "+" : ""}
                 {unrealizedPercent.toFixed(1)}%
@@ -1120,7 +1167,12 @@ const SalesByCategoryChart = ({ snapshot }: { snapshot: OverviewSnapshot }) => {
             </PieChart>
           </ChartContainer>
           <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
-            <span className="text-sm font-semibold sm:text-base">
+            <span
+              className={cn(
+                "text-sm font-semibold sm:text-base",
+                blurClass(hideSensitive),
+              )}
+            >
               {compactCurrencyFormatter.format(totalSales)}
             </span>
             <span className="text-[8px] text-muted-foreground sm:text-[10px]">
@@ -1150,7 +1202,12 @@ const SalesByCategoryChart = ({ snapshot }: { snapshot: OverviewSnapshot }) => {
                 </span>
               </div>
               <div className="flex items-center gap-2 text-[10px] sm:text-xs">
-                <span className="font-medium tabular-nums">
+                <span
+                  className={cn(
+                    "font-medium tabular-nums",
+                    blurClass(hideSensitive),
+                  )}
+                >
                   {compactCurrencyFormatter.format(item.value)}
                 </span>
                 <span className="text-muted-foreground tabular-nums">
@@ -1165,11 +1222,17 @@ const SalesByCategoryChart = ({ snapshot }: { snapshot: OverviewSnapshot }) => {
   );
 };
 
-const SideChartsSection = ({ snapshot }: { snapshot: OverviewSnapshot }) => {
+const SideChartsSection = ({
+  snapshot,
+  hideSensitive,
+}: {
+  snapshot: OverviewSnapshot;
+  hideSensitive: boolean;
+}) => {
   return (
     <div className="flex w-full flex-col gap-4 xl:w-[410px]">
-      <RevenueSourceChart snapshot={snapshot} />
-      <SalesByCategoryChart snapshot={snapshot} />
+      <RevenueSourceChart snapshot={snapshot} hideSensitive={hideSensitive} />
+      <SalesByCategoryChart snapshot={snapshot} hideSensitive={hideSensitive} />
     </div>
   );
 };
@@ -1184,6 +1247,7 @@ interface RevenueTooltipProps {
   payload?: RevenueTooltipPayload[];
   label?: string | number;
   colors: RevenueFlowColors;
+  hideSensitive: boolean;
 }
 
 function CustomTooltip({
@@ -1191,6 +1255,7 @@ function CustomTooltip({
   payload,
   label,
   colors,
+  hideSensitive,
 }: RevenueTooltipProps) {
   if (!active || !payload?.length) return null;
 
@@ -1213,7 +1278,12 @@ function CustomTooltip({
           <span className="text-[10px] text-muted-foreground sm:text-sm">
             Value:
           </span>
-          <span className="text-[10px] font-medium text-foreground sm:text-sm">
+          <span
+            className={cn(
+              "text-[10px] font-medium text-foreground sm:text-sm",
+              blurClass(hideSensitive),
+            )}
+          >
             {currencyFormatter.format(Number(thisYear))}
           </span>
         </div>
@@ -1225,7 +1295,12 @@ function CustomTooltip({
           <span className="text-[10px] text-muted-foreground sm:text-sm">
             Cost Basis:
           </span>
-          <span className="text-[10px] font-medium text-foreground sm:text-sm">
+          <span
+            className={cn(
+              "text-[10px] font-medium text-foreground sm:text-sm",
+              blurClass(hideSensitive),
+            )}
+          >
             {currencyFormatter.format(Number(prevYear))}
           </span>
         </div>
@@ -1245,7 +1320,13 @@ function CustomTooltip({
   );
 }
 
-const RevenueFlowChart = ({ snapshot }: { snapshot: OverviewSnapshot }) => {
+const RevenueFlowChart = ({
+  snapshot,
+  hideSensitive,
+}: {
+  snapshot: OverviewSnapshot;
+  hideSensitive: boolean;
+}) => {
   const [period, setPeriod] = React.useState<TimePeriod>("1year");
   const { active: activeSeries, handleHover } = useHoverHighlight<
     "thisYear" | "prevYear"
@@ -1290,7 +1371,12 @@ const RevenueFlowChart = ({ snapshot }: { snapshot: OverviewSnapshot }) => {
     <div className="flex min-w-0 flex-1 flex-col gap-4 rounded-xl border bg-card p-4 sm:gap-6 sm:p-6">
       <div className="flex flex-wrap items-center gap-2 sm:gap-4">
         <div className="flex flex-1 flex-col gap-1">
-          <p className="text-xl leading-tight font-semibold tracking-tight sm:text-2xl">
+          <p
+            className={cn(
+              "text-xl leading-tight font-semibold tracking-tight sm:text-2xl",
+              blurClass(hideSensitive),
+            )}
+          >
             {currencyFormatter.format(latestPortfolioValue)}
           </p>
           <p className="text-xs text-muted-foreground">
@@ -1368,7 +1454,7 @@ const RevenueFlowChart = ({ snapshot }: { snapshot: OverviewSnapshot }) => {
       >
         <ChartContainer
           config={revenueFlowChartConfig}
-          className="h-full w-full"
+          className={cn("h-full w-full", blurClass(hideSensitive))}
         >
           <AreaChart data={chartData}>
             <defs>
@@ -1432,6 +1518,7 @@ const RevenueFlowChart = ({ snapshot }: { snapshot: OverviewSnapshot }) => {
                     thisYear: "var(--color-thisYear)",
                     prevYear: "var(--color-prevYear)",
                   }}
+                  hideSensitive={hideSensitive}
                 />
               }
               cursor={{ strokeOpacity: 0.2 }}
@@ -1537,9 +1624,11 @@ function initials(value: string) {
 const RecentTransactionsTable = ({
   className,
   transactions,
+  hideSensitive,
 }: {
   className?: string;
   transactions: Transaction[];
+  hideSensitive: boolean;
 }) => {
   const [statusFilter, setStatusFilter] = React.useState<
     TransactionStatus | "all"
@@ -1702,13 +1791,28 @@ const RecentTransactionsTable = ({
             ) : (
               paginatedTransactions.map((t) => (
                 <TableRow key={t.id}>
-                  <TableCell className="text-xs font-medium text-muted-foreground sm:text-sm">
+                  <TableCell
+                    className={cn(
+                      "text-xs font-medium text-muted-foreground sm:text-sm",
+                      blurClass(hideSensitive),
+                    )}
+                  >
                     {t.txid}
                   </TableCell>
-                  <TableCell className="text-xs text-muted-foreground sm:text-sm">
+                  <TableCell
+                    className={cn(
+                      "text-xs text-muted-foreground sm:text-sm",
+                      blurClass(hideSensitive),
+                    )}
+                  >
                     {t.counterparty}
                   </TableCell>
-                  <TableCell className="text-xs text-foreground tabular-nums sm:text-sm">
+                  <TableCell
+                    className={cn(
+                      "text-xs text-foreground tabular-nums sm:text-sm",
+                      blurClass(hideSensitive),
+                    )}
+                  >
                     {currencyFormatter.format(t.amount)}
                   </TableCell>
                   <TableCell>
@@ -1809,6 +1913,7 @@ const Dashboard5 = ({
   snapshot?: OverviewSnapshot;
 }) => {
   const [addConnectionOpen, setAddConnectionOpen] = React.useState(false);
+  const hideSensitive = useUiStore((s) => s.hideSensitive);
   const transactions = React.useMemo(
     () =>
       snapshot.txs.length
@@ -1829,15 +1934,22 @@ const Dashboard5 = ({
           snapshot={snapshot}
           onAddConnection={() => setAddConnectionOpen(true)}
         />
-        <StatsCards snapshot={snapshot} />
+        <StatsCards snapshot={snapshot} hideSensitive={hideSensitive} />
         <div className="flex flex-col gap-4 sm:gap-6 xl:flex-row">
-          <RevenueFlowChart snapshot={snapshot} />
-          <SideChartsSection snapshot={snapshot} />
+          <RevenueFlowChart
+            snapshot={snapshot}
+            hideSensitive={hideSensitive}
+          />
+          <SideChartsSection
+            snapshot={snapshot}
+            hideSensitive={hideSensitive}
+          />
         </div>
         <div className="flex flex-col gap-4 xl:flex-row">
           <RecentTransactionsTable
             className="flex-1"
             transactions={transactions}
+            hideSensitive={hideSensitive}
           />
           <RecentActivity className="xl:w-[360px]" />
         </div>

@@ -81,6 +81,7 @@ import {
   type TransactionsLedger,
 } from "@/mocks/transactions";
 import type { Tx } from "@/mocks/seed";
+import { useUiStore } from "@/store/ui";
 
 type TransactionStatus = "completed" | "pending" | "failed" | "review";
 
@@ -138,6 +139,8 @@ const compactCurrencyFormatter = new Intl.NumberFormat("en-US", {
   notation: "compact",
   maximumFractionDigits: 0,
 });
+
+const blurClass = (hidden: boolean) => (hidden ? "sensitive" : "");
 
 const percentFormatter = new Intl.NumberFormat("en-US", {
   style: "percent",
@@ -1015,12 +1018,14 @@ interface ChartTooltipProps {
   active?: boolean;
   payload?: ChartTooltipPayload[];
   label?: string | number;
+  hideSensitive: boolean;
 }
 
 function VolumeTooltip({
   active,
   payload,
   label,
+  hideSensitive,
 }: ChartTooltipProps) {
   if (!active || !payload?.length) return null;
 
@@ -1036,7 +1041,12 @@ function VolumeTooltip({
         <span className="text-[10px] text-muted-foreground sm:text-sm">
           Volume:
         </span>
-        <span className="text-[10px] font-medium text-foreground sm:text-sm">
+        <span
+          className={cn(
+            "text-[10px] font-medium text-foreground sm:text-sm",
+            blurClass(hideSensitive),
+          )}
+        >
           {currencyFormatter.format(Number(value))}
         </span>
       </div>
@@ -1047,9 +1057,11 @@ function VolumeTooltip({
 const VolumeChart = ({
   period,
   records,
+  hideSensitive,
 }: {
   period: PeriodKey;
   records: Transaction[];
+  hideSensitive: boolean;
 }) => {
   const data = buildVolumeRows(records, period);
   const summary = summarizeVolume(records, period);
@@ -1065,7 +1077,12 @@ const VolumeChart = ({
             Transaction Volume
           </p>
           <div className="flex items-center gap-2">
-            <p className="text-xl leading-tight font-semibold tracking-tight sm:text-2xl">
+            <p
+              className={cn(
+                "text-xl leading-tight font-semibold tracking-tight sm:text-2xl",
+                blurClass(hideSensitive),
+              )}
+            >
               {currencyFormatter.format(summary.total)}
             </p>
             <div className="flex items-center gap-0.5">
@@ -1113,7 +1130,10 @@ const VolumeChart = ({
             : "h-[180px] w-full min-w-0 sm:h-[220px]"
         }
       >
-        <ChartContainer config={revenueChartConfig} className="h-full w-full">
+        <ChartContainer
+          config={revenueChartConfig}
+          className={cn("h-full w-full", blurClass(hideSensitive))}
+        >
           <AreaChart data={data}>
             <defs>
               <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
@@ -1146,7 +1166,7 @@ const VolumeChart = ({
               width={40}
             />
             <Tooltip
-              content={<VolumeTooltip />}
+              content={<VolumeTooltip hideSensitive={hideSensitive} />}
               cursor={{ strokeOpacity: 0.2 }}
             />
             <Area
@@ -1181,6 +1201,7 @@ function CostsTooltip({
   payload,
   label,
   colors,
+  hideSensitive,
 }: ChartTooltipProps & {
   colors: { primary: string; secondary: string };
 }) {
@@ -1205,7 +1226,12 @@ function CostsTooltip({
           <span className="text-[10px] text-muted-foreground sm:text-sm">
             COGS:
           </span>
-          <span className="text-[10px] font-medium text-foreground sm:text-sm">
+          <span
+            className={cn(
+              "text-[10px] font-medium text-foreground sm:text-sm",
+              blurClass(hideSensitive),
+            )}
+          >
             {currencyFormatter.format(Number(cogs))}
           </span>
         </div>
@@ -1217,12 +1243,22 @@ function CostsTooltip({
           <span className="text-[10px] text-muted-foreground sm:text-sm">
             Operating:
           </span>
-          <span className="text-[10px] font-medium text-foreground sm:text-sm">
+          <span
+            className={cn(
+              "text-[10px] font-medium text-foreground sm:text-sm",
+              blurClass(hideSensitive),
+            )}
+          >
             {currencyFormatter.format(Number(operatingExpenses))}
           </span>
         </div>
         <div className="mt-1 border-t border-border pt-1">
-          <span className="text-[10px] font-medium text-foreground sm:text-xs">
+          <span
+            className={cn(
+              "text-[10px] font-medium text-foreground sm:text-xs",
+              blurClass(hideSensitive),
+            )}
+          >
             Total: {currencyFormatter.format(total)}
           </span>
         </div>
@@ -1234,9 +1270,11 @@ function CostsTooltip({
 const CostsChart = ({
   period,
   records,
+  hideSensitive,
 }: {
   period: PeriodKey;
   records: Transaction[];
+  hideSensitive: boolean;
 }) => {
   const data = buildCostRows(records, period);
   const summary = summarizeCosts(records, period);
@@ -1270,7 +1308,12 @@ const CostsChart = ({
           </div>
         </div>
         <div className="flex items-center gap-2">
-          <p className="text-xl leading-tight font-semibold tracking-tight sm:text-2xl">
+          <p
+            className={cn(
+              "text-xl leading-tight font-semibold tracking-tight sm:text-2xl",
+              blurClass(hideSensitive),
+            )}
+          >
             {currencyFormatter.format(summary.total)}
           </p>
           <div className="flex items-center gap-0.5">
@@ -1299,7 +1342,10 @@ const CostsChart = ({
       </div>
 
       <div className="h-[180px] w-full min-w-0 sm:h-[220px]">
-        <ChartContainer config={costsChartConfig} className="h-full w-full">
+        <ChartContainer
+          config={costsChartConfig}
+          className={cn("h-full w-full", blurClass(hideSensitive))}
+        >
           <BarChart data={data}>
             <CartesianGrid strokeDasharray="0" vertical={false} />
             <XAxis
@@ -1324,6 +1370,7 @@ const CostsChart = ({
                     primary: "var(--color-cogs)",
                     secondary: "var(--color-operatingExpenses)",
                   }}
+                  hideSensitive={hideSensitive}
                 />
               }
               cursor={{ fillOpacity: 0.05 }}
@@ -1347,7 +1394,13 @@ const CostsChart = ({
   );
 };
 
-const StatsCards = ({ records }: { records: Transaction[] }) => {
+const StatsCards = ({
+  records,
+  hideSensitive,
+}: {
+  records: Transaction[];
+  hideSensitive: boolean;
+}) => {
   const stats = buildStatsData(records);
   return (
     <div className="grid grid-cols-2 gap-3 rounded-xl border bg-card p-4 sm:gap-4 sm:p-5 lg:grid-cols-4 lg:gap-6 lg:p-6">
@@ -1364,10 +1417,20 @@ const StatsCards = ({ records }: { records: Transaction[] }) => {
                   {stat.title}
                 </span>
               </div>
-              <p className="hidden text-[10px] text-muted-foreground/70 sm:block sm:text-xs">
+              <p
+                className={cn(
+                  "hidden text-[10px] text-muted-foreground/70 sm:block sm:text-xs",
+                  stat.format === "currency" && blurClass(hideSensitive),
+                )}
+              >
                 {formatter.format(stat.previousValue)} previous month
               </p>
-              <p className="text-xl leading-tight font-semibold tracking-tight sm:text-2xl lg:text-[28px]">
+              <p
+                className={cn(
+                  "text-xl leading-tight font-semibold tracking-tight sm:text-2xl lg:text-[28px]",
+                  stat.format === "currency" && blurClass(hideSensitive),
+                )}
+              >
                 {formatter.format(stat.value)}
               </p>
               <div className="flex flex-wrap items-center gap-x-1 gap-y-0.5 text-[10px] sm:text-xs">
@@ -1459,7 +1522,13 @@ const dateFilterOptions = [
 const filterChipClassName =
   "inline-flex h-5 cursor-pointer items-center gap-1 rounded-md bg-gray-50 px-2 text-[10px] font-medium text-gray-600 ring-1 ring-inset ring-gray-500/10 sm:h-6 sm:text-xs dark:bg-gray-800/50 dark:text-gray-400 dark:ring-gray-400/20";
 
-const TransactionsTable = ({ records }: { records: Transaction[] }) => {
+const TransactionsTable = ({
+  records,
+  hideSensitive,
+}: {
+  records: Transaction[];
+  hideSensitive: boolean;
+}) => {
   const [searchQuery, setSearchQuery] = React.useState("");
   const [statusFilter, setStatusFilter] = React.useState<string>("all");
   const [dateFilter, setDateFilter] = React.useState<string>("all");
@@ -1866,7 +1935,12 @@ const TransactionsTable = ({ records }: { records: Transaction[] }) => {
                 const StatusIcon = transactionStatusIcons[txn.status];
                 return (
                   <TableRow key={txn.id}>
-                    <TableCell className="text-xs font-medium sm:text-sm">
+                    <TableCell
+                      className={cn(
+                        "text-xs font-medium sm:text-sm",
+                        blurClass(hideSensitive),
+                      )}
+                    >
                       {txn.txnId}
                     </TableCell>
                     <TableCell className="hidden md:table-cell">
@@ -1876,12 +1950,22 @@ const TransactionsTable = ({ records }: { records: Transaction[] }) => {
                             {txn.counterpartyInitials}
                           </AvatarFallback>
                         </Avatar>
-                        <span className="text-xs text-muted-foreground sm:text-sm">
+                        <span
+                          className={cn(
+                            "text-xs text-muted-foreground sm:text-sm",
+                            blurClass(hideSensitive),
+                          )}
+                        >
                           {txn.counterparty}
                         </span>
                       </div>
                     </TableCell>
-                    <TableCell className="text-xs text-foreground tabular-nums sm:text-sm">
+                    <TableCell
+                      className={cn(
+                        "text-xs text-foreground tabular-nums sm:text-sm",
+                        blurClass(hideSensitive),
+                      )}
+                    >
                       {currencyFormatter.format(txn.amount)}
                     </TableCell>
                     <TableCell className="hidden lg:table-cell">
@@ -2075,6 +2159,7 @@ const Dashboard2 = ({
   const [period, setPeriod] = React.useState<PeriodKey>("1year");
   const [newTxnOpen, setNewTxnOpen] = React.useState(false);
   const [txnNote, setTxnNote] = React.useState("");
+  const hideSensitive = useUiStore((s) => s.hideSensitive);
   const records = React.useMemo(
     () =>
       ledger.txs.length
@@ -2181,13 +2266,21 @@ const Dashboard2 = ({
       </div>
 
       <div className="flex flex-col gap-4 sm:gap-6 lg:flex-row">
-        <VolumeChart period={period} records={records} />
-        <CostsChart period={period} records={records} />
+        <VolumeChart
+          period={period}
+          records={records}
+          hideSensitive={hideSensitive}
+        />
+        <CostsChart
+          period={period}
+          records={records}
+          hideSensitive={hideSensitive}
+        />
       </div>
 
-      <StatsCards records={records} />
+      <StatsCards records={records} hideSensitive={hideSensitive} />
 
-      <TransactionsTable records={records} />
+      <TransactionsTable records={records} hideSensitive={hideSensitive} />
     </div>
   );
 };
