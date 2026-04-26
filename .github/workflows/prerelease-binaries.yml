@@ -32,7 +32,7 @@ jobs:
       fail-fast: false
       matrix:
         os:
-          - ubuntu-latest
+          - ubuntu-22.04
           - macos-latest
 
     steps:
@@ -84,7 +84,19 @@ jobs:
         run: |
           set -euo pipefail
           ./dist/kassiber --help >/dev/null
-          ./dist/kassiber --data-root "$RUNNER_TEMP/kassiber-smoke" --machine status >/dev/null
+          ./dist/kassiber --data-root "$RUNNER_TEMP/kassiber-status-smoke" --machine status >/dev/null
+
+          at_root="$RUNNER_TEMP/kassiber-at-smoke"
+          ./dist/kassiber --data-root "$at_root" --machine init >/dev/null
+          ./dist/kassiber --data-root "$at_root" --machine workspaces create Smoke >/dev/null
+          ./dist/kassiber \
+            --data-root "$at_root" \
+            --machine \
+            profiles create \
+            --workspace Smoke \
+            --tax-country at \
+            --gains-algorithm MOVING_AVERAGE_AT \
+            Austrian >/dev/null
 
       - name: Package binary
         shell: bash
@@ -168,7 +180,7 @@ jobs:
 
       - name: Build unsigned desktop preview
         working-directory: ui-tauri
-        run: pnpm tauri build --bundles ${{ matrix.bundles }} --ci --no-sign
+        run: pnpm tauri build --bundles ${{ matrix.bundles }} --ci
 
       - name: Package desktop artifacts
         shell: bash

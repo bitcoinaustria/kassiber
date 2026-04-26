@@ -181,7 +181,8 @@ uv sync
 Tagged `v*` pushes build unsigned prerelease CLI binaries for macOS and Linux
 through GitHub Actions. Manual runs of the `prerelease-binaries` workflow also
 upload the same `.tar.gz` artifacts, and can attach them to an existing tag
-when `publish_release` and `tag_name` are provided.
+when `publish_release` and `tag_name` are provided. Linux CLI binaries are
+built on Ubuntu 22.04 to keep the glibc floor aligned with the AppImage build.
 
 The same workflow also builds unsigned desktop preview artifacts: macOS
 `.app` zip / `.dmg`, Linux `.AppImage`, and Windows `.msi` plus NSIS setup

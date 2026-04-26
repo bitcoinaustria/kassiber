@@ -480,6 +480,7 @@ fn repo_root() -> PathBuf {
         }
     }
 
+    // Packaged previews use this as a venv search root before falling back to python3.
     env::current_exe()
         .ok()
         .and_then(|path| path.parent().map(PathBuf::from))
