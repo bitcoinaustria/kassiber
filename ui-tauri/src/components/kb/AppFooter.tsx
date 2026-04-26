@@ -48,7 +48,7 @@ export function AppFooter() {
   return (
     <footer className="relative flex h-7 flex-shrink-0 items-center justify-between gap-2 border-t border-line bg-paper px-3 font-mono text-[10px] tracking-[0.05em] text-ink-3 sm:px-4.5">
       <div className="flex min-w-0 items-center gap-2 sm:gap-4.5">
-        <span className="shrink-0">KASSIBER v0.0.0</span>
+        <span className="shrink-0">KASSIBER v0.21.0</span>
         <span className="hidden items-center gap-1.5 md:flex">
           <span className="size-1.5 shrink-0 rounded-full bg-[#3fa66a]" />
           WATCH-ONLY · LOCAL ENCRYPTED VAULT

@@ -221,7 +221,8 @@ jobs:
                   ;;
               esac
           done < <(
-            find ui-tauri/src-tauri/target/release/bundle \
+            find ui-tauri/src-tauri/target \
+              -path "*/release/bundle/*" \
               \( -name "*.AppImage" -o -name "*.app" -o -name "*.dmg" -o -name "*.exe" -o -name "*.msi" \) -print0
           )
           test -n "$(find release -type f -print -quit)"

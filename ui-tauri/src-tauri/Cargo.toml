@@ -1,6 +1,6 @@
 [package]
 name = "kassiber-ui"
-version = "0.0.0"
+version = "0.21.0"
 description = "Kassiber desktop shell"
 authors = ["Bitcoin Austria"]
 edition = "2021"
