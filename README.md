@@ -176,6 +176,19 @@ Or use `uv`:
 uv sync
 ```
 
+### Prerelease binaries
+
+Tagged `v*` pushes build unsigned prerelease CLI binaries for macOS and Linux
+through GitHub Actions. Manual runs of the `prerelease-binaries` workflow also
+upload the same `.tar.gz` artifacts, and can attach them to an existing tag
+when `publish_release` and `tag_name` are provided.
+
+The same workflow also builds an unsigned macOS desktop preview (`.app` zip and
+`.dmg`). That preview does not yet bundle the Python sidecar; it is for testing
+the shell on machines where `python3 -m kassiber daemon` already works, or where
+`KASSIBER_DAEMON_PYTHON` / `KASSIBER_REPO_ROOT` are set before launch. Fully
+self-contained desktop installers remain in active development.
+
 Before pushing code or docs changes, run:
 
 ```bash

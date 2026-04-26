@@ -32,6 +32,15 @@ That covers:
 - review regression suite
 - key CLI help/smoke checks
 
+## Prerelease binaries
+
+`.github/workflows/prerelease-binaries.yml` builds unsigned CLI binaries on
+macOS and Linux. Manual workflow runs upload `.tar.gz` artifacts; `v*` tag
+pushes also attach those artifacts and their SHA-256 files to a GitHub
+prerelease. The workflow also builds an unsigned macOS desktop preview app and
+DMG; until the Python sidecar is bundled, that desktop artifact expects an
+external Kassiber-capable Python environment.
+
 ## Pull requests
 
 PRs should say:

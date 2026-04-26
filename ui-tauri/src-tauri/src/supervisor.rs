@@ -470,10 +470,19 @@ fn repo_root() -> PathBuf {
         return PathBuf::from(path);
     }
 
-    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+    let build_repo_root = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .parent()
         .and_then(|path| path.parent())
-        .map(PathBuf::from)
+        .map(PathBuf::from);
+    if let Some(path) = build_repo_root {
+        if path.exists() {
+            return path;
+        }
+    }
+
+    env::current_exe()
+        .ok()
+        .and_then(|path| path.parent().map(PathBuf::from))
         .unwrap_or_else(|| PathBuf::from("."))
 }
 

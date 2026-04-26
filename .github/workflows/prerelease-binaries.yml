@@ -1,0 +1,206 @@
+name: prerelease-binaries
+
+on:
+  workflow_dispatch:
+    inputs:
+      publish_release:
+        description: "Attach artifacts to a GitHub prerelease"
+        required: true
+        default: false
+        type: boolean
+      tag_name:
+        description: "Existing tag to publish to when publish_release is true"
+        required: false
+        default: ""
+        type: string
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: prerelease-binaries-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Build ${{ matrix.os }} binary
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu-latest
+          - macos-latest
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.tag_name || github.ref }}
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Sync dependencies
+        run: uv sync --frozen
+
+      - name: Derive artifact target
+        id: target
+        shell: bash
+        run: |
+          set -euo pipefail
+          case "$(uname -s)" in
+            Darwin) os_name="macos" ;;
+            Linux) os_name="linux" ;;
+            *) os_name="$(uname -s | tr '[:upper:]' '[:lower:]')" ;;
+          esac
+          arch_name="$(uname -m)"
+          echo "target=${os_name}-${arch_name}" >> "$GITHUB_OUTPUT"
+
+      - name: Build one-file CLI binary
+        run: >
+          uv run --with pyinstaller==6.20.0 pyinstaller
+          --clean
+          --noconfirm
+          --onefile
+          --name kassiber
+          --paths .
+          --collect-submodules rp2
+          --collect-data rp2
+          --hidden-import rp2.plugin.country.at
+          scripts/kassiber_pyinstaller_entry.py
+
+      - name: Smoke packaged CLI
+        shell: bash
+        run: |
+          set -euo pipefail
+          ./dist/kassiber --help >/dev/null
+          ./dist/kassiber --data-root "$RUNNER_TEMP/kassiber-smoke" --machine status >/dev/null
+
+      - name: Package binary
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p release
+          artifact_name="kassiber-${{ steps.target.outputs.target }}"
+          cp dist/kassiber "release/${artifact_name}"
+          chmod 755 "release/${artifact_name}"
+          tar -C release -czf "release/${artifact_name}.tar.gz" "${artifact_name}"
+          shasum -a 256 "release/${artifact_name}.tar.gz" > "release/${artifact_name}.tar.gz.sha256"
+
+      - name: Upload binary artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: kassiber-${{ steps.target.outputs.target }}
+          path: |
+            release/*.tar.gz
+            release/*.sha256
+          if-no-files-found: error
+
+  build-macos-desktop:
+    name: Build macOS desktop preview
+    runs-on: macos-latest
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.tag_name || github.ref }}
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install frontend dependencies
+        working-directory: ui-tauri
+        run: pnpm install --frozen-lockfile
+
+      - name: Build unsigned macOS app and DMG
+        working-directory: ui-tauri
+        run: pnpm tauri build --bundles app,dmg --ci --no-sign
+
+      - name: Package desktop artifacts
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p release
+          while IFS= read -r -d '' artifact; do
+              name="$(basename "$artifact")"
+              case "$artifact" in
+                *.app)
+                  zip_name="kassiber-desktop-macos-${name%.app}.app.zip"
+                  ditto -c -k --keepParent "$artifact" "release/${zip_name}"
+                  shasum -a 256 "release/${zip_name}" > "release/${zip_name}.sha256"
+                  ;;
+                *.dmg)
+                  dmg_name="kassiber-desktop-macos-${name}"
+                  cp "$artifact" "release/${dmg_name}"
+                  shasum -a 256 "release/${dmg_name}" > "release/${dmg_name}.sha256"
+                  ;;
+              esac
+          done < <(
+            find ui-tauri/src-tauri/target/release/bundle \
+              \( -name "*.dmg" -o -name "*.app" \) -print0
+          )
+          test -n "$(find release -type f -print -quit)"
+
+      - name: Upload desktop artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: kassiber-desktop-macos-preview
+          path: |
+            release/*
+          if-no-files-found: error
+
+  publish:
+    name: Publish prerelease
+    needs:
+      - build
+      - build-macos-desktop
+    runs-on: ubuntu-latest
+    if: >-
+      github.event_name == 'push' ||
+      (github.event_name == 'workflow_dispatch' &&
+      inputs.publish_release == true &&
+      inputs.tag_name != '')
+
+    steps:
+      - name: Download binary artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: release
+          merge-multiple: true
+
+      - name: Create or update prerelease
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.event_name == 'workflow_dispatch' && inputs.tag_name || github.ref_name }}
+          prerelease: true
+          fail_on_unmatched_files: true
+          body: |
+            Automated Kassiber prerelease artifacts.
+
+            These artifacts are unsigned prerelease builds for CLI and macOS
+            desktop-preview testing. The desktop preview does not yet bundle the
+            Python sidecar; launch it from an environment where `python3 -m
+            kassiber daemon` works, or set `KASSIBER_DAEMON_PYTHON` and
+            `KASSIBER_REPO_ROOT` before launching.
+          files: |
+            release/*
