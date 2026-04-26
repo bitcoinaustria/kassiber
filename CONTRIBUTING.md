@@ -38,14 +38,17 @@ That covers:
 macOS Apple Silicon, macOS Intel, and Linux. Manual workflow runs upload
 `.tar.gz` artifacts; `v*` tag pushes also attach those artifacts and their
 SHA-256 files to a GitHub prerelease. Linux CLI binaries are built on Ubuntu
-22.04 to match the AppImage portability floor. The workflow also builds
-unsigned desktop previews for universal macOS (`.app` zip / `.dmg`), Linux
-(`.AppImage`), and Windows (`.msi` plus NSIS setup `.exe`). Desktop previews
-bundle a one-file Kassiber CLI sidecar, so they do not expect an external
-Kassiber-capable Python environment for normal daemon calls. The GUI executable
-also forwards `--cli ...` to the bundled CLI sidecar for installed-app CLI use.
-The desktop shell displays the build commit beside the version number; CLI
-artifact filenames and `.sha256` sidecars still do not embed the commit hash.
+22.04 to match the AppImage portability floor. CLI archives use
+`kassiber-cli-<target>.tar.gz` filenames and contain an executable named
+`kassiber`. The workflow also builds unsigned desktop previews for universal
+macOS (`.app` zip / `.dmg`), Linux (`.AppImage`), and Windows (`.msi` plus
+NSIS setup `.exe`) with `kassiber-desktop-<target>-...` filenames. Desktop
+previews bundle a one-file Kassiber CLI sidecar, so they do not expect an
+external Kassiber-capable Python environment for normal daemon calls. The GUI
+executable also forwards `--cli ...` to the bundled CLI sidecar for
+installed-app CLI use. The desktop shell displays the build commit beside the
+version number; CLI artifact filenames and `.sha256` sidecars still do not
+embed the commit hash.
 
 Pull requests intentionally do not build binaries automatically. If a maintainer
 asks for binaries for a PR or branch, run `prerelease-binaries` manually against

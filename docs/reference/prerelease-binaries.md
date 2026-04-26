@@ -75,13 +75,14 @@ asks for one.
 The workflow currently builds:
 
 - CLI: macOS arm64, macOS x86_64, and Linux x86_64 one-file PyInstaller
-  binaries as `.tar.gz` archives, each with a `.sha256` file. Linux is built
-  on Ubuntu 22.04 to keep the glibc floor aligned with the AppImage build.
+  binaries as `kassiber-cli-<target>.tar.gz` archives, each with a `.sha256`
+  file. The extracted executable is still named `kassiber`. Linux is built on
+  Ubuntu 22.04 to keep the glibc floor aligned with the AppImage build.
 - Desktop previews: a universal macOS `.app` zip plus `.dmg`, Linux
-  `.AppImage`, and Windows `.msi` plus NSIS setup `.exe`, each with a
-  `.sha256` file. Each desktop preview includes a bundled one-file Kassiber
-  CLI sidecar for its target platform; the universal macOS app bundles both
-  arm64 and x86_64 CLI sidecars.
+  `.AppImage`, and Windows `.msi` plus NSIS setup `.exe`, each emitted with a
+  `kassiber-desktop-<target>-...` filename and a `.sha256` file. Each desktop
+  preview includes a bundled one-file Kassiber CLI sidecar for its target
+  platform; the universal macOS app bundles both arm64 and x86_64 CLI sidecars.
 
 The macOS CLI legs stay architecture-specific because PyInstaller universal2
 requires a universal2 Python interpreter or extra binary stitching. The macOS

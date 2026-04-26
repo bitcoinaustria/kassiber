@@ -105,16 +105,17 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p release
-          artifact_name="kassiber-${{ steps.target.outputs.target }}"
-          cp dist/kassiber "release/${artifact_name}"
-          chmod 755 "release/${artifact_name}"
-          tar -C release -czf "release/${artifact_name}.tar.gz" "${artifact_name}"
-          shasum -a 256 "release/${artifact_name}.tar.gz" > "release/${artifact_name}.tar.gz.sha256"
+          package_name="kassiber-cli-${{ steps.target.outputs.target }}"
+          mkdir -p "release/${package_name}"
+          cp dist/kassiber "release/${package_name}/kassiber"
+          chmod 755 "release/${package_name}/kassiber"
+          tar -C release -czf "release/${package_name}.tar.gz" "${package_name}"
+          shasum -a 256 "release/${package_name}.tar.gz" > "release/${package_name}.tar.gz.sha256"
 
-      - name: Upload binary artifact
+      - name: Upload CLI artifact
         uses: actions/upload-artifact@v4
         with:
-          name: kassiber-${{ steps.target.outputs.target }}
+          name: kassiber-cli-${{ steps.target.outputs.target }}
           path: |
             release/*.tar.gz
             release/*.sha256
