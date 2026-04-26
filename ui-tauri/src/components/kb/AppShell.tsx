@@ -112,8 +112,8 @@ const NAV_GROUPS: NavGroup[] = [
   {
     title: "Review",
     items: [
-      { label: "Tax Events", icon: CircleDollarSign, href: "/reports" },
-      { label: "Quarantine", icon: ShieldAlert, href: "/reports" },
+      { label: "Tax Events", icon: CircleDollarSign, href: "/tax-events" },
+      { label: "Quarantine", icon: ShieldAlert, href: "/quarantine" },
     ],
   },
 ];
@@ -153,6 +153,24 @@ const ROUTE_META: Array<[string, RouteMeta]> = [
       icon: BarChart3,
       searchLabel: "Search reports",
       searchPlaceholder: "Search reports, exports...",
+    },
+  ],
+  [
+    "/tax-events",
+    {
+      title: "Tax Events",
+      icon: CircleDollarSign,
+      searchLabel: "Search tax events",
+      searchPlaceholder: "Search event, basis, account...",
+    },
+  ],
+  [
+    "/quarantine",
+    {
+      title: "Quarantine",
+      icon: ShieldAlert,
+      searchLabel: "Search quarantine",
+      searchPlaceholder: "Search issue, account, source...",
     },
   ],
   [

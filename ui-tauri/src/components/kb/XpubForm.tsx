@@ -8,7 +8,7 @@
  */
 
 import { useMemo, useState } from "react";
-import { ChevronDown, Check, X, ArrowLeft } from "lucide-react";
+import { ArrowLeft, Check, X } from "lucide-react";
 
 import {
   Dialog,
@@ -18,7 +18,18 @@ import {
   DialogDescription,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { LabeledInput } from "@/components/kb/LabeledInput";
+import { Badge } from "@/components/ui/badge";
+import { Card, CardContent } from "@/components/ui/card";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 
 const ADDRESS_TYPES: Array<[
@@ -87,121 +98,143 @@ export function XpubForm({ open, onClose, onBack, onSaved }: XpubFormProps) {
     <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
       <DialogContent
         showCloseButton={false}
-        className="max-w-[620px] gap-0 rounded-none border border-ink bg-paper p-0 shadow-hard-ink"
+        className="max-w-[680px] gap-0 overflow-hidden rounded-lg border bg-background p-0 shadow-xl"
       >
-        <DialogHeader className="flex-row items-center gap-2 border-b border-line px-5 py-4">
+        <DialogHeader className="flex-row items-center gap-3 border-b px-6 py-5">
           {onBack && (
-            <button
+            <Button
+              type="button"
+              variant="outline"
+              size="icon"
               onClick={onBack}
               aria-label="Back"
-              className="cursor-pointer border border-line bg-transparent p-1.5"
             >
-              <ArrowLeft className="size-3 text-ink-2" />
-            </button>
+              <ArrowLeft className="size-4" />
+            </Button>
           )}
-          <DialogTitle className="font-sans text-lg font-semibold text-ink">
-            XPub
-          </DialogTitle>
-          <span className="flex-1" />
-          <button
+          <div className="min-w-0 flex-1">
+            <DialogTitle className="text-2xl font-semibold tracking-tight">
+              XPub connection
+            </DialogTitle>
+            <DialogDescription className="mt-1 text-sm text-muted-foreground">
+              Enter an extended public key. Kassiber derives addresses and
+              syncs on-chain history without private keys.
+            </DialogDescription>
+          </div>
+          <Button
+            type="button"
+            variant="outline"
+            size="icon"
             onClick={onClose}
             aria-label="Close"
-            className="cursor-pointer border border-line bg-transparent p-1.5"
           >
-            <X className="size-3 text-ink-2" />
-          </button>
+            <X className="size-4" />
+          </Button>
         </DialogHeader>
-        <DialogDescription className="px-5 pt-4 font-sans text-[13px] text-ink-2">
-          Enter your extended public key. Kassiber will derive addresses and
-          sync on-chain history.
-        </DialogDescription>
 
-        <div className="flex flex-col gap-4 px-5 py-4">
-          <LabeledInput
-            label="Connection label"
-            value={label}
-            onChange={(e) => setLabel(e.target.value)}
-            placeholder="e.g. Cold Storage"
-          />
+        <div className="max-h-[68vh] space-y-5 overflow-y-auto px-6 py-5">
+          <div className="grid gap-2">
+            <Label htmlFor="xpub-label">Connection label</Label>
+            <Input
+              id="xpub-label"
+              value={label}
+              onChange={(e) => setLabel(e.target.value)}
+              placeholder="e.g. Cold Storage"
+            />
+          </div>
 
-          <div>
-            <LabeledInput
-              label="xpub / ypub / zpub"
+          <div className="grid gap-2">
+            <Label htmlFor="xpub-key">XPUB / YPUB / ZPUB</Label>
+            <Input
+              id="xpub-key"
               value={xpub}
               onChange={(e) => setXpub(e.target.value)}
               placeholder={EXAMPLE_XPUB}
-              mono
+              className="font-mono text-xs"
             />
-            <div className="mt-1.5 flex gap-4 font-mono text-[10px] text-ink-3">
-              <span>
-                Detected: <span className="text-ink-2">{detected}</span>
-              </span>
-              <span>
-                Fingerprint: <span className="text-ink-2">{fingerprint}</span>
-              </span>
+            <div className="flex flex-wrap gap-2 pt-1">
+              <Badge variant="secondary">Detected: {detected}</Badge>
+              <Badge variant="outline">Fingerprint: {fingerprint}</Badge>
             </div>
           </div>
 
-          <div>
-            <div className="mb-2 font-sans text-[10px] font-semibold uppercase tracking-[0.12em] text-ink-2">
+          <section className="grid gap-3">
+            <Label>
               Address types to derive
-            </div>
-            <div className="grid grid-cols-2 gap-1.5">
+            </Label>
+            <div className="grid gap-2 sm:grid-cols-2">
               {ADDRESS_TYPES.map(([k, name, prefix]) => (
-                <label
+                <Card
                   key={k}
                   className={cn(
-                    "flex cursor-pointer items-center gap-2.5 border border-line px-2.5 py-2",
-                    addrTypes[k] && "bg-paper-2",
+                    "cursor-pointer transition-colors hover:bg-muted/40",
+                    addrTypes[k] && "border-primary bg-primary/5",
                   )}
+                  onClick={() =>
+                    setAddrTypes((a) => ({ ...a, [k]: !a[k] }))
+                  }
                 >
-                  <input
-                    type="checkbox"
-                    checked={addrTypes[k]}
-                    onChange={() =>
-                      setAddrTypes((a) => ({ ...a, [k]: !a[k] }))
-                    }
-                    className="accent-accent"
-                  />
-                  <span className="flex-1 font-sans text-xs text-ink">
-                    {name}
-                  </span>
-                  <span className="font-mono text-[10px] text-ink-3">
-                    {prefix}
-                  </span>
-                </label>
+                  <CardContent className="flex items-center gap-3 p-3">
+                    <Checkbox
+                      checked={addrTypes[k]}
+                      onCheckedChange={(checked) =>
+                        setAddrTypes((a) => ({ ...a, [k]: checked === true }))
+                      }
+                      onClick={(event) => event.stopPropagation()}
+                      aria-label={name}
+                    />
+                    <span className="min-w-0 flex-1">
+                      <span className="block text-sm font-medium">{name}</span>
+                      <span className="block font-mono text-xs text-muted-foreground">
+                        {prefix}
+                      </span>
+                    </span>
+                  </CardContent>
+                </Card>
               ))}
             </div>
-          </div>
+          </section>
 
           <div className="grid grid-cols-2 gap-4">
-            <LabeledInput
-              label="Gap limit"
-              value={String(gap)}
-              onChange={(e) =>
-                setGap(Number.parseInt(e.target.value, 10) || 0)
-              }
-              type="number"
-              mono
-            />
-            <div>
-              <div className="mb-1.5 font-sans text-[10px] font-semibold uppercase tracking-[0.12em] text-ink-2">
-                Sync backend
-              </div>
-              <div className="flex items-center justify-between border border-line bg-paper-2 px-2.5 py-2 font-sans text-xs text-ink">
-                Mempool.space (default)
-                <ChevronDown className="size-2.5 text-ink-3" />
-              </div>
+            <div className="grid gap-2">
+              <Label htmlFor="xpub-gap">Gap limit</Label>
+              <Input
+                id="xpub-gap"
+                value={String(gap)}
+                onChange={(e) =>
+                  setGap(Number.parseInt(e.target.value, 10) || 0)
+                }
+                type="number"
+                className="font-mono"
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label>Sync backend</Label>
+              <Select value="mempool-space">
+                <SelectTrigger className="w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="mempool-space">
+                    Mempool.space (default)
+                  </SelectItem>
+                  <SelectItem value="electrum" disabled>
+                    Electrum (soon)
+                  </SelectItem>
+                  <SelectItem value="bitcoin-core" disabled>
+                    Bitcoin Core RPC (soon)
+                  </SelectItem>
+                </SelectContent>
+              </Select>
             </div>
           </div>
         </div>
 
-        <div className="flex justify-end gap-2.5 border-t border-line px-5 py-3">
+        <div className="flex justify-end gap-2.5 border-t bg-muted/30 px-6 py-4">
           <Button
             variant="ghost"
             onClick={onClose}
             size="sm"
-            className="rounded-none"
           >
             Cancel
           </Button>
@@ -209,9 +242,9 @@ export function XpubForm({ open, onClose, onBack, onSaved }: XpubFormProps) {
             onClick={submit}
             disabled={!xpub.trim()}
             size="sm"
-            className="rounded-none"
+            className="gap-2"
           >
-            <Check className="size-3" /> Save and sync
+            <Check className="size-4" /> Save and sync
           </Button>
         </div>
       </DialogContent>

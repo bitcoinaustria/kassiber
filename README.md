@@ -197,7 +197,11 @@ pnpm dev
 # → http://localhost:5173
 ```
 
-The app boots into the Welcome onboarding flow on first load, persists identity to localStorage, and routes through Overview / Connections / Transactions / Reports / Profiles. AppHeader's overflow menu (top right) hosts the currency (₿/€) and language (EN/DE) toggles, the hide-sensitive eye, and the Settings modal.
+The app boots into the Welcome onboarding flow on first load, persists identity
+to localStorage, and routes through Overview / Connections / Transactions /
+Reports / Tax Events / Quarantine / Profiles. The shared shell hosts global
+search, the hide-sensitive eye, and the Settings modal; display currency lives
+inside Settings.
 
 Other useful commands:
 

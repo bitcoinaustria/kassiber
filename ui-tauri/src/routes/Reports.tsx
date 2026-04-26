@@ -7,13 +7,7 @@
  */
 
 import { useState, type ReactNode } from "react";
-import {
-  ArrowRight,
-  Download,
-  FileSpreadsheet,
-  FileText,
-  ShieldCheck,
-} from "lucide-react";
+import { ArrowRight, FileSpreadsheet, FileText } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -25,6 +19,13 @@ import {
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import {
   Table,
   TableBody,
@@ -106,13 +107,6 @@ function ReportsView({ report, hideSensitive }: ReportsViewProps) {
 
   return (
     <div className="w-full space-y-4 bg-background p-3 sm:space-y-6 sm:p-4 md:p-6">
-      <div className="flex justify-end">
-        <Button variant="outline" size="sm" className="h-9 gap-2">
-          <Download className="size-4" aria-hidden="true" />
-          Export bundle
-        </Button>
-      </div>
-
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(280px,360px)_minmax(0,1fr)]">
         <ReportControls
           year={year}
@@ -299,39 +293,37 @@ function ReportControls({
       <CardContent className="space-y-6">
         <section className="space-y-3">
           <Label>Jurisdiction</Label>
-          <div className="grid grid-cols-4 gap-2">
-            {Object.values(JURISDICTIONS).map((x) => {
-              const active = jurCode === x.code;
-              return (
-                <Button
-                  key={x.code}
-                  type="button"
-                  variant={active ? "default" : "outline"}
-                  size="sm"
-                  onClick={() => setJurCode(x.code)}
-                >
-                  {x.code}
-                </Button>
-              );
-            })}
-          </div>
+          <Select value={jurCode} onValueChange={setJurCode}>
+            <SelectTrigger className="w-full">
+              <SelectValue placeholder="Select jurisdiction" />
+            </SelectTrigger>
+            <SelectContent>
+              {Object.values(JURISDICTIONS).map((x) => (
+                <SelectItem key={x.code} value={x.code}>
+                  {x.code} · {x.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </section>
 
         <section className="space-y-3">
           <Label>Reporting period</Label>
-          <div className="grid grid-cols-4 gap-2">
-            {REPORTING_YEARS.map((y) => (
-              <Button
-                key={y}
-                type="button"
-                variant={year === y ? "default" : "outline"}
-                size="sm"
-                onClick={() => setYear(y)}
-              >
-                {y}
-              </Button>
-            ))}
-          </div>
+          <Select
+            value={String(year)}
+            onValueChange={(value) => setYear(Number(value))}
+          >
+            <SelectTrigger className="w-full">
+              <SelectValue placeholder="Select tax year" />
+            </SelectTrigger>
+            <SelectContent>
+              {REPORTING_YEARS.map((y) => (
+                <SelectItem key={y} value={String(y)}>
+                  {y}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
           <div className="grid grid-cols-2 gap-2">
             <div className="space-y-1.5">
               <Label htmlFor="report-from">From</Label>
@@ -463,10 +455,7 @@ function ReportMetricCard({ label, value, sub }: ReportMetricCardProps) {
   return (
     <Card className="gap-3 py-5">
       <CardContent className="space-y-3">
-        <div className="flex items-center gap-2 text-muted-foreground">
-          <ShieldCheck className="size-4" aria-hidden="true" />
-          <span className="text-xs font-medium">{label}</span>
-        </div>
+        <p className="text-xs font-medium text-muted-foreground">{label}</p>
         <p className="text-2xl font-semibold tracking-tight">{value}</p>
         <p className="text-xs text-muted-foreground">{sub}</p>
       </CardContent>

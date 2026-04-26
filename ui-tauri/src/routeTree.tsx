@@ -21,6 +21,8 @@ import { Welcome } from "./routes/Welcome";
 import { Overview } from "./routes/Overview";
 import { Transactions } from "./routes/Transactions";
 import { Reports } from "./routes/Reports";
+import { TaxEvents } from "./routes/TaxEvents";
+import { Quarantine } from "./routes/Quarantine";
 import { Profiles } from "./routes/Profiles";
 import { Connections } from "./routes/Connections";
 import { ConnectionDetail } from "./routes/ConnectionDetail";
@@ -71,6 +73,18 @@ const reportsRoute = createRoute({
   component: Reports,
 });
 
+const taxEventsRoute = createRoute({
+  getParentRoute: () => appLayoutRoute,
+  path: "/tax-events",
+  component: TaxEvents,
+});
+
+const quarantineRoute = createRoute({
+  getParentRoute: () => appLayoutRoute,
+  path: "/quarantine",
+  component: Quarantine,
+});
+
 const profilesRoute = createRoute({
   getParentRoute: () => appLayoutRoute,
   path: "/profiles",
@@ -95,6 +109,8 @@ const routeTree = rootRoute.addChildren([
     overviewRoute,
     transactionsRoute,
     reportsRoute,
+    taxEventsRoute,
+    quarantineRoute,
     profilesRoute,
     connectionsRoute,
     connectionDetailRoute,
