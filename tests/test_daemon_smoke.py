@@ -5,6 +5,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
+from kassiber.daemon import MAX_REQUEST_LINE_CHARS
+
 
 ROOT = Path(__file__).resolve().parent.parent
 
@@ -84,25 +86,35 @@ class DaemonSmokeTest(unittest.TestCase):
             self.assertEqual(_read_payload(proc)["kind"], "daemon.ready")
 
             cases = [
-                ("{", "invalid_json", None, None),
-                ([1, 2, 3], "validation", None, None),
-                ({"request_id": "missing-kind"}, "validation", "missing-kind", None),
+                ("{", "invalid_json", None, True, None),
+                ([1, 2, 3], "validation", None, True, None),
+                (
+                    "x" * (MAX_REQUEST_LINE_CHARS + 1),
+                    "request_too_large",
+                    None,
+                    True,
+                    False,
+                ),
+                ({"request_id": "missing-kind"}, "validation", "missing-kind", False, None),
                 (
                     {"request_id": "numeric-kind", "kind": 42},
                     "validation",
                     "numeric-kind",
+                    False,
                     None,
                 ),
                 (
                     {"request_id": "cancel-1", "kind": "cancel"},
                     "unsupported_kind",
                     "cancel-1",
+                    False,
                     None,
                 ),
                 (
                     {"request_id": "ui-1", "kind": "ui.overview.snapshot"},
                     "daemon_unavailable",
                     "ui-1",
+                    False,
                     True,
                 ),
                 (
@@ -110,9 +122,10 @@ class DaemonSmokeTest(unittest.TestCase):
                     "unsupported_kind",
                     "unknown-1",
                     False,
+                    False,
                 ),
             ]
-            for request, code, request_id, retryable in cases:
+            for request, code, request_id, explicit_null_request_id, retryable in cases:
                 with self.subTest(code=code, request=request):
                     _write_payload(proc, request)
                     response = _read_payload(proc)
@@ -121,6 +134,8 @@ class DaemonSmokeTest(unittest.TestCase):
                     self.assertEqual(response["error"]["code"], code)
                     if request_id is None:
                         self.assertIsNone(response.get("request_id"))
+                        if explicit_null_request_id:
+                            self.assertIn("request_id", response)
                     else:
                         self.assertEqual(response["request_id"], request_id)
                     if retryable is not None:

@@ -83,6 +83,7 @@ fn daemon_invoke(
         }
     };
 
+    let request_id = request.request_id.clone();
     match supervisor.invoke(&request.kind, request.args) {
         Ok(response) => match serde_json::from_value(response) {
             Ok(envelope) => envelope,
@@ -91,11 +92,11 @@ fn daemon_invoke(
                 format!("Python daemon response did not match the envelope contract: {error}"),
                 Some("Check daemon smoke tests before wiring more UI kinds."),
                 None,
-                None,
+                request_id.clone(),
                 false,
             ),
         },
-        Err(error) => supervisor_error_envelope(error),
+        Err(error) => supervisor_error_envelope(error, request_id),
     }
 }
 
@@ -122,13 +123,13 @@ fn error_envelope(
     }
 }
 
-fn supervisor_error_envelope(error: SupervisorError) -> DaemonEnvelope {
+fn supervisor_error_envelope(error: SupervisorError, request_id: Option<Value>) -> DaemonEnvelope {
     error_envelope(
         error.code,
         error.message,
         error.hint,
         error.details,
-        None,
+        request_id,
         error.retryable,
     )
 }
