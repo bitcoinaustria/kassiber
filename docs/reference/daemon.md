@@ -16,14 +16,14 @@ local store.
 
 The Tauri supervisor starts the same command. In development it prefers the
 repo-local `.venv/bin/python`, then `.venv\Scripts\python.exe` on Windows,
-then `python3`. Set `KASSIBER_DAEMON_PYTHON=/path/to/python` to override
-the Python executable, or `KASSIBER_REPO_ROOT=/path/to/checkout` when the
-development binary should run against a different checkout.
+then `python3`. Set `KASSIBER_PYTHON=/path/to/python` to override the Python
+executable, or `KASSIBER_REPO_ROOT=/path/to/checkout` when the development
+binary should run against a different checkout.
 
 Packaged prerelease desktop builds bundle a one-file PyInstaller CLI sidecar
 and prefer that bundled executable before the development Python fallback when
-starting the daemon. `KASSIBER_DAEMON_PYTHON` remains the highest-priority
-override for debugging.
+starting the daemon. `KASSIBER_PYTHON` remains the highest-priority override
+for daemon startup and installed-app CLI forwarding during debugging.
 
 The first line is always a lifecycle envelope:
 

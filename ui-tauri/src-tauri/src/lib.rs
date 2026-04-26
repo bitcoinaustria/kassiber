@@ -166,7 +166,7 @@ fn desktop_cli_args() -> Option<Vec<String>> {
         return Some(args[1..].to_vec());
     }
 
-    if env::var_os("KASSIBER_DESKTOP_CLI").is_some() || exe_stem_is_kassiber() {
+    if exe_stem_is_kassiber() {
         return Some(args);
     }
 

@@ -46,9 +46,10 @@ NSIS setup `.exe`) with `kassiber-desktop-<target>-...` filenames. Desktop
 previews bundle a one-file Kassiber CLI sidecar, so they do not expect an
 external Kassiber-capable Python environment for normal daemon calls. The GUI
 executable also forwards `--cli ...` to the bundled CLI sidecar for
-installed-app CLI use. The desktop shell displays the build commit beside the
-version number; CLI artifact filenames and `.sha256` sidecars still do not
-embed the commit hash.
+installed-app CLI use. Raw bundled sidecar files are internal to desktop
+packages and must not be published as release assets. The desktop shell
+displays the build commit beside the version number; CLI artifact filenames and
+`.sha256` sidecars still do not embed the commit hash.
 
 Pull requests intentionally do not build binaries automatically. If a maintainer
 asks for binaries for a PR or branch, run `prerelease-binaries` manually against

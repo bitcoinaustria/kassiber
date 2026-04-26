@@ -151,7 +151,8 @@ List endpoints with `--limit` also accept `--cursor`. The cursor is an opaque ba
   a release for PR/tester builds.
 - CLI archives are named `kassiber-cli-<target>.tar.gz`, and the extracted
   executable is named `kassiber`. Desktop preview files are named with the
-  `kassiber-desktop-<target>-...` prefix.
+  `kassiber-desktop-<target>-...` prefix. Raw bundled sidecar files use Rust
+  target triples internally and must not be published as release assets.
 - Desktop preview artifacts bundle one-file `kassiber-cli-*` sidecars and
   should not require an external Python checkout for normal daemon calls. The
   GUI executable forwards `--cli ...` to the bundled CLI sidecar.

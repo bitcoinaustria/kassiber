@@ -362,11 +362,37 @@ jobs:
       inputs.tag_name != '')
 
     steps:
-      - name: Download binary artifacts
+      - name: Download CLI release artifacts
         uses: actions/download-artifact@v4
         with:
+          pattern: kassiber-cli-*
           path: release
           merge-multiple: true
+
+      - name: Download desktop release artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: kassiber-desktop-*-preview
+          path: release
+          merge-multiple: true
+
+      - name: Verify release artifact set
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$(find release -maxdepth 1 -type f -print -quit)"
+
+          if find release -maxdepth 1 -type f -name 'kassiber-desktop-sidecar-*' -print -quit | grep -q .; then
+            echo "Internal desktop sidecar artifacts must not be published." >&2
+            find release -maxdepth 1 -type f -name 'kassiber-desktop-sidecar-*' >&2
+            exit 1
+          fi
+
+          if find release -maxdepth 1 -type f -name 'kassiber-cli-*' ! -name '*.tar.gz' ! -name '*.sha256' -print -quit | grep -q .; then
+            echo "Raw CLI sidecars must not be published as release assets." >&2
+            find release -maxdepth 1 -type f -name 'kassiber-cli-*' ! -name '*.tar.gz' ! -name '*.sha256' >&2
+            exit 1
+          fi
 
       - name: Create or update prerelease
         uses: softprops/action-gh-release@v2
@@ -381,7 +407,7 @@ jobs:
             preview testing. Desktop previews now bundle the Kassiber CLI
             sidecar, so normal daemon calls do not require a separate Python
             checkout, and the GUI executable can forward `--cli ...` to the
-            bundled CLI. Set `KASSIBER_DAEMON_PYTHON` only when intentionally
+            bundled CLI. Set `KASSIBER_PYTHON` only when intentionally
             overriding the bundled sidecar for debugging.
           files: |
             release/*

@@ -360,9 +360,9 @@ impl DaemonCommand {
     fn failure_hint(&self) -> &'static str {
         match self.source {
             "bundled_sidecar" => {
-                "The bundled Kassiber CLI sidecar failed to start; reinstall the desktop package or set KASSIBER_DAEMON_PYTHON to override it."
+                "The bundled Kassiber CLI sidecar failed to start; reinstall the desktop package or set KASSIBER_PYTHON to override it."
             }
-            _ => "Set KASSIBER_DAEMON_PYTHON to a Python with Kassiber importable.",
+            _ => "Set KASSIBER_PYTHON to a Python with Kassiber importable.",
         }
     }
 }
@@ -544,7 +544,7 @@ fn default_python(repo_root: &PathBuf) -> PathBuf {
 }
 
 fn kassiber_command(resource_dir: Option<&Path>, args: Vec<String>) -> DaemonCommand {
-    if let Ok(python) = env::var("KASSIBER_DAEMON_PYTHON") {
+    if let Ok(python) = env::var("KASSIBER_PYTHON") {
         let repo_root = repo_root();
         let mut python_args = vec!["-m".into(), "kassiber".into()];
         python_args.extend(args);

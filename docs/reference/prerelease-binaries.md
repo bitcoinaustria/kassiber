@@ -84,6 +84,12 @@ The workflow currently builds:
   preview includes a bundled one-file Kassiber CLI sidecar for its target
   platform; the universal macOS app bundles both arm64 and x86_64 CLI sidecars.
 
+Public CLI and desktop release filenames use user-facing target names such as
+`macos-arm64`, `macos-x86_64`, and `linux-x86_64`. Bundled sidecar resource
+filenames are internal to the desktop package and use Rust target triples such
+as `kassiber-cli-aarch64-apple-darwin`; those raw sidecars are not release
+assets.
+
 The macOS CLI legs stay architecture-specific because PyInstaller universal2
 requires a universal2 Python interpreter or extra binary stitching. The macOS
 desktop leg uses GitHub's `macos-latest` runner with Tauri's
@@ -102,7 +108,11 @@ Kassiber.AppImage --cli status
 Kassiber.exe --cli status
 ```
 
-`KASSIBER_DAEMON_PYTHON` remains available as an intentional debug override.
+If the GUI executable is symlinked with the exact stem `kassiber`, plain CLI
+arguments are also forwarded. Use `--cli ...` for any other executable name.
+
+`KASSIBER_PYTHON` remains available as an intentional debug override for daemon
+startup and installed-app CLI forwarding.
 
 There is no standalone Windows CLI artifact yet. Windows coverage is
 desktop-preview only, and the installed desktop executable can forward
