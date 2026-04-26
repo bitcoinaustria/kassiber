@@ -197,6 +197,17 @@ testing the shell on machines where `python3 -m kassiber daemon` already works,
 or where `KASSIBER_DAEMON_PYTHON` / `KASSIBER_REPO_ROOT` are set before launch.
 Fully self-contained desktop installers remain in active development.
 
+> [!WARNING]
+> The macOS desktop preview is currently unsigned and not notarized. Gatekeeper
+> will warn before launch. Only bypass that warning for Kassiber builds you
+> downloaded from this repository and verified as trustworthy; do not disable
+> Gatekeeper globally. To remove quarantine for this app bundle only after
+> installing it in `/Applications`, run:
+>
+> ```bash
+> sudo xattr -dr com.apple.quarantine /Applications/Kassiber.app
+> ```
+
 Operational guidance for branch, PR, and tag builds lives in
 [docs/reference/prerelease-binaries.md](docs/reference/prerelease-binaries.md).
 
