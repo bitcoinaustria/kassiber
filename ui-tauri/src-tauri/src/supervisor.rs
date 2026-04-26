@@ -467,13 +467,24 @@ fn request_id_mismatch(expected: &str, response: &Value) -> SupervisorError {
 
 fn repo_root() -> PathBuf {
     if let Ok(path) = env::var("KASSIBER_REPO_ROOT") {
+        // Trust explicit user overrides even when stale; the daemon error then points at the chosen path.
         return PathBuf::from(path);
     }
 
-    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+    let build_repo_root = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .parent()
         .and_then(|path| path.parent())
-        .map(PathBuf::from)
+        .map(PathBuf::from);
+    if let Some(path) = build_repo_root {
+        if path.exists() {
+            return path;
+        }
+    }
+
+    // Packaged previews use this as a venv search root before falling back to python3.
+    env::current_exe()
+        .ok()
+        .and_then(|path| path.parent().map(PathBuf::from))
         .unwrap_or_else(|| PathBuf::from("."))
 }
 

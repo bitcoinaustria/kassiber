@@ -1,4 +1,4 @@
-import { spawn } from "node:child_process";
+import { execFileSync, spawn } from "node:child_process";
 import path from "node:path";
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
@@ -189,7 +189,25 @@ function invokeDaemon(request: Record<string, unknown>) {
   });
 }
 
+function resolveAppCommit(): string {
+  const envCommit = process.env.KASSIBER_BUILD_COMMIT ?? process.env.GITHUB_SHA;
+  if (envCommit) {
+    return envCommit.slice(0, 12);
+  }
+
+  try {
+    return execFileSync("git", ["rev-parse", "--short=12", "HEAD"], {
+      encoding: "utf8",
+    }).trim();
+  } catch {
+    return "unknown";
+  }
+}
+
 export default defineConfig({
+  define: {
+    __APP_COMMIT__: JSON.stringify(resolveAppCommit()),
+  },
   plugins: [daemonBridgePlugin(), react(), tailwindcss()],
   resolve: {
     alias: {

@@ -87,6 +87,7 @@ type RouteMeta = {
 };
 
 const APP_VERSION = "0.21.0";
+const APP_COMMIT = __APP_COMMIT__;
 
 const NAV_GROUPS: NavGroup[] = [
   {
@@ -564,9 +565,12 @@ function AppVersion() {
       href="https://github.com/bitcoinaustria/kassiber"
       target="_blank"
       rel="noreferrer"
-      className="px-2 pb-1 text-center text-xs text-muted-foreground underline-offset-4 hover:text-foreground hover:underline group-data-[collapsible=icon]:hidden"
+      title={`Kassiber v${APP_VERSION} (${APP_COMMIT})`}
+      className="inline-flex flex-wrap items-center justify-center gap-1 px-2 pb-1 text-center text-xs text-muted-foreground underline-offset-4 hover:text-foreground hover:underline group-data-[collapsible=icon]:hidden"
     >
-      Kassiber v{APP_VERSION}
+      <span>Kassiber v{APP_VERSION}</span>
+      <span aria-hidden="true">·</span>
+      <span className="font-mono">{APP_COMMIT}</span>
     </a>
   );
 }
