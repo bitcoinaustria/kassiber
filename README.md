@@ -186,12 +186,13 @@ Before pushing code or docs changes, run:
 
 A Tauri 2 + React 19 + TypeScript desktop frontend lives at [ui-tauri/](ui-tauri/). It is under active translation per [docs/plan/04-desktop-ui.md](docs/plan/04-desktop-ui.md); the CLI remains the primary control surface today.
 
-The frontend currently runs against a mock daemon (`VITE_DAEMON=mock`, the default) — every screen renders against hand-rolled fixtures keyed by daemon `kind`. The Rust supervisor (`ui-tauri/src-tauri/`) and Python sidecar daemon (`kassiber/daemon.py`) land in later phases of the plan; until then the UI is browser-only.
+The frontend currently runs against a mock daemon (`VITE_DAEMON=mock`, the default) — every screen renders against hand-rolled fixtures keyed by daemon `kind`. A minimal Tauri shell now lives in `ui-tauri/src-tauri/` and forwards whitelisted `daemon_invoke` calls to `python -m kassiber daemon`; the first real round-trip is `status`. Until typed UI snapshot kinds land, data screens still use browser mock mode for the dashboard workflow.
 
 Requirements:
 
 - Node `>=20`
 - `pnpm` (https://pnpm.io)
+- Rust stable for the Tauri shell (`cargo check` / `pnpm tauri:dev`)
 
 Install and run the dev server:
 
@@ -202,7 +203,20 @@ pnpm dev
 # → http://localhost:5173
 ```
 
-The app boots into the Welcome onboarding flow on first load, persists identity to localStorage, and routes through Overview / Connections / Transactions / Reports / Profiles. AppHeader's overflow menu (top right) hosts the currency (₿/€) and language (EN/DE) toggles, the hide-sensitive eye, and the Settings modal.
+To exercise the Tauri command boundary:
+
+```bash
+cd ui-tauri
+pnpm tauri:dev
+```
+
+`pnpm tauri:dev` runs the webview with the Tauri transport, starts the Python daemon, and forwards calls through the Rust supervisor. The supervisor prefers `.venv/bin/python` when present and otherwise falls back to `python3`; set `KASSIBER_DAEMON_PYTHON=/path/to/python` to override it, or `KASSIBER_REPO_ROOT=/path/to/checkout` to point the dev shell at another checkout. Screens that still require fixture data show daemon-unavailable states until typed UI snapshot kinds are wired.
+
+The app boots into the Welcome onboarding flow on first load, persists identity
+to localStorage, and routes through Overview / Connections / Transactions /
+Reports / Tax Events / Quarantine / Profiles. The shared shell hosts global
+search, the hide-sensitive eye, and the Settings modal; display currency lives
+inside Settings.
 
 Other useful commands:
 
@@ -210,6 +224,7 @@ Other useful commands:
 pnpm typecheck   # tsc --noEmit project references
 pnpm lint        # ESLint flat config
 pnpm build       # production bundle into dist/
+pnpm tauri       # Tauri CLI
 pnpm test        # Vitest (no tests yet)
 ```
 
@@ -271,6 +286,7 @@ Reference docs:
 - [docs/reference/tax.md](docs/reference/tax.md)
 - [docs/reference/machine-output.md](docs/reference/machine-output.md)
 - [docs/reference/desktop.md](docs/reference/desktop.md)
+- [docs/reference/daemon.md](docs/reference/daemon.md)
 
 Planning and architecture docs:
 

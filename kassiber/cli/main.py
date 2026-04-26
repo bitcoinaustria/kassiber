@@ -7,6 +7,7 @@ import sys
 import traceback
 from typing import Any, Sequence
 
+from .. import daemon as daemon_runtime
 from .handlers import (
     APP_NAME,
     BACKEND_CLEAR_FIELD_ALIASES,
@@ -203,6 +204,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     sub = parser.add_subparsers(dest="command", required=True)
 
+    sub.add_parser("daemon")
     sub.add_parser("init")
     sub.add_parser("status")
 
@@ -772,6 +774,8 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def dispatch(conn: sqlite3.Connection | None, args: argparse.Namespace) -> Any:
+    if args.command == "daemon":
+        return daemon_runtime.run(conn, args)
     if args.command == "init":
         return cmd_init(conn, args)
     if args.command == "status":

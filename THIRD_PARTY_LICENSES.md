@@ -7,12 +7,15 @@ It is not meant to be a hand-maintained inventory of every transitive package in
 ## Core dependency credit
 
 Kassiber currently depends directly on the Kassiber-maintained [RP2 fork](https://github.com/bitcoinaustria/rp2) as its tax engine, [embit](https://github.com/diybitcoinhardware/embit) for descriptor derivation and Liquid support, and [XlsxWriter](https://xlsxwriter.readthedocs.io/) for styled XLSX report exports.
+The in-development Tauri frontend also depends directly on TanStack Table for
+interactive local data grids.
 
 | Package | Version policy | Role | License |
 | --- | --- | --- | --- |
 | `rp2` | `git+https://github.com/bitcoinaustria/rp2.git@23c944962c775667794b19d66e785058d7aaf599` | Tax engine used by journal processing and tax-aware reports | Apache-2.0 |
 | `embit` | `>=0.8.0` | Bitcoin/Liquid descriptor parsing, script derivation, Liquid confidential output handling | MIT |
 | `XlsxWriter` | `>=3.2,<4` | Styled `.xlsx` workbook export for practitioner-facing reports | BSD-2-Clause |
+| `@tanstack/react-table` | `^8.21.3` | Interactive sorting, filtering, selection, and pagination in desktop UI data tables | MIT |
 
 ## Notable downstream license note
 

@@ -433,6 +433,10 @@ The frontend ships in three runtime modes, all sharing the same React app:
    testing, and shell-startup measurement. Not directly drivable from
    AI browser tools (it's not a URL they can navigate to), but the
    webview's DevTools is accessible for debugging.
+   During development the supervisor resolves the Python command from the
+   checkout (`.venv` first, then `python3`) and may use `KASSIBER_REPO_ROOT`
+   for another checkout. Packaged builds must replace that dev-only
+   repo-root lookup with the bundled sidecar path from Phase 5.
 
 A dev script (`pnpm dev:browser`, `pnpm dev:bridge`, `pnpm dev:shell`)
 selects the mode. The Vite config rejects `VITE_DAEMON` values other

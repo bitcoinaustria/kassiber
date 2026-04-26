@@ -1,13 +1,29 @@
 /**
- * Add-connection picker modal — translated from
- * claude-design/screens/connections.jsx (ConnectionTypePicker).
+ * Add-connection picker modal.
  *
- * Opened from the Add connection buttons on /connections and the
- * Overview connections card. Picking a kind closes the picker and
- * forwards the selection upward; the parent decides what to do
- * (e.g. open XpubForm for `xpub`, show a coming-soon panel for
- * other kinds).
+ * Adapted from shadcnblocks/settings-integrations4: tabbed integration
+ * categories with card rows and primary connect actions. It stays wrapped
+ * in Kassiber's existing modal flow so selecting XPub can still continue to
+ * the dedicated XPub form.
  */
+
+import {
+  useMemo,
+  useState,
+  type ComponentType,
+  type SVGProps,
+} from "react";
+import {
+  Bitcoin,
+  Bolt,
+  ChevronRight,
+  FileText,
+  Landmark,
+  Lock,
+  Server,
+  Store,
+  Wallet,
+} from "lucide-react";
 
 import {
   Dialog,
@@ -16,12 +32,13 @@ import {
   DialogTitle,
   DialogDescription,
 } from "@/components/ui/dialog";
-import { ChevronRight, Lock } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
 export type ConnectionKindKey =
   | "xpub"
   | "descriptor"
+  | "liquid-descriptor"
   | "core-ln"
   | "lnd"
   | "nwc"
@@ -35,48 +52,155 @@ export type ConnectionKindKey =
   | "strike"
   | "csv";
 
+interface ConnectionItem {
+  k: ConnectionKindKey;
+  name: string;
+  desc: string;
+  status?: "available" | "soon";
+  icon: ComponentType<SVGProps<SVGSVGElement>>;
+}
+
 interface SectionDef {
+  id: string;
   label: string;
-  items: Array<{ k: ConnectionKindKey; name: string; desc: string }>;
+  items: ConnectionItem[];
 }
 
 const SECTIONS: SectionDef[] = [
   {
-    label: "Self-custody · On-chain",
+    id: "wallet-descriptors",
+    label: "Wallet descriptors",
     items: [
-      { k: "xpub", name: "XPub", desc: "Single-sig on-chain watch" },
-      { k: "descriptor", name: "Descriptor", desc: "Multisig wallet descriptor" },
+      {
+        k: "xpub",
+        name: "XPub",
+        desc: "Single-sig on-chain watch-only import.",
+        status: "available",
+        icon: Bitcoin,
+      },
+      {
+        k: "descriptor",
+        name: "Descriptor",
+        desc: "Multisig or descriptor wallet discovery.",
+        status: "soon",
+        icon: Wallet,
+      },
+      {
+        k: "liquid-descriptor",
+        name: "Liquid descriptor",
+        desc: "Liquid watch-only wallet or Elements descriptor.",
+        status: "soon",
+        icon: Bitcoin,
+      },
     ],
   },
   {
+    id: "lightning",
     label: "Lightning",
     items: [
-      { k: "core-ln", name: "Core Lightning", desc: "CLN node RPC" },
-      { k: "lnd", name: "LND", desc: "Lightning Network Daemon" },
-      { k: "nwc", name: "NWC", desc: "Nostr Wallet Connect" },
+      {
+        k: "core-ln",
+        name: "Core Lightning",
+        desc: "CLN node history through local RPC.",
+        status: "soon",
+        icon: Bolt,
+      },
+      {
+        k: "lnd",
+        name: "LND",
+        desc: "Lightning Network Daemon read-only data.",
+        status: "soon",
+        icon: Server,
+      },
+      {
+        k: "nwc",
+        name: "NWC",
+        desc: "Nostr Wallet Connect event history.",
+        status: "soon",
+        icon: Bolt,
+      },
     ],
   },
   {
-    label: "Services · Merchant",
+    id: "merchant",
+    label: "Merchant",
     items: [
-      { k: "btcpay", name: "BTCPay Server", desc: "Merchant API · store read-key" },
-      { k: "cashu", name: "Cashu", desc: "Ecash mint wallet" },
+      {
+        k: "btcpay",
+        name: "BTCPay Server",
+        desc: "Store wallet history through a read key.",
+        status: "soon",
+        icon: Store,
+      },
+      {
+        k: "cashu",
+        name: "Cashu",
+        desc: "Ecash mint wallet activity.",
+        status: "soon",
+        icon: Wallet,
+      },
     ],
   },
   {
-    label: "Exchanges · Read-only API",
+    id: "exchanges",
+    label: "Exchanges",
     items: [
-      { k: "kraken", name: "Kraken", desc: "Read-only API key" },
-      { k: "bitstamp", name: "Bitstamp", desc: "Read-only API key" },
-      { k: "coinbase", name: "Coinbase", desc: "Read-only API key" },
-      { k: "bitpanda", name: "Bitpanda", desc: "Read-only API key" },
-      { k: "river", name: "River", desc: "Read-only API key" },
-      { k: "strike", name: "Strike", desc: "Read-only API key" },
+      {
+        k: "kraken",
+        name: "Kraken",
+        desc: "Read-only API import.",
+        status: "soon",
+        icon: Landmark,
+      },
+      {
+        k: "bitstamp",
+        name: "Bitstamp",
+        desc: "Read-only API import.",
+        status: "soon",
+        icon: Landmark,
+      },
+      {
+        k: "coinbase",
+        name: "Coinbase",
+        desc: "Read-only API import.",
+        status: "soon",
+        icon: Landmark,
+      },
+      {
+        k: "bitpanda",
+        name: "Bitpanda",
+        desc: "Read-only API import.",
+        status: "soon",
+        icon: Landmark,
+      },
+      {
+        k: "river",
+        name: "River",
+        desc: "Read-only API import.",
+        status: "soon",
+        icon: Landmark,
+      },
+      {
+        k: "strike",
+        name: "Strike",
+        desc: "Read-only API import.",
+        status: "soon",
+        icon: Landmark,
+      },
     ],
   },
   {
+    id: "file",
     label: "File",
-    items: [{ k: "csv", name: "CSV import", desc: "One-shot, from file" }],
+    items: [
+      {
+        k: "csv",
+        name: "CSV import",
+        desc: "One-shot import from a local file.",
+        status: "soon",
+        icon: FileText,
+      },
+    ],
   },
 ];
 
@@ -91,72 +215,135 @@ export function ConnectionTypePicker({
   onClose,
   onPick,
 }: ConnectionTypePickerProps) {
+  const [activeCategory, setActiveCategory] = useState(SECTIONS[0].id);
+  const activeSection = useMemo(
+    () => SECTIONS.find((section) => section.id === activeCategory) ?? SECTIONS[0],
+    [activeCategory],
+  );
+
+  const openBitcoinBackendSettings = () => {
+    window.dispatchEvent(
+      new CustomEvent("kassiber:open-settings", {
+        detail: { section: "backends" },
+      }),
+    );
+    onClose();
+  };
+
   return (
     <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
       <DialogContent
         showCloseButton={true}
         className={cn(
-          "max-w-[720px] gap-0 rounded-none border border-ink bg-paper p-0 shadow-hard-ink",
-          "[&>button[data-slot=dialog-close]]:right-3 [&>button[data-slot=dialog-close]]:top-3",
+          "max-w-[820px] gap-0 overflow-hidden rounded-lg border bg-background p-0 shadow-xl",
+          "[&>button[data-slot=dialog-close]]:right-4 [&>button[data-slot=dialog-close]]:top-4",
         )}
       >
-        <DialogHeader className="border-b border-line px-5 py-4">
-          <DialogTitle className="font-sans text-lg font-semibold text-ink">
+        <DialogHeader className="border-b px-6 py-5">
+          <DialogTitle className="text-2xl font-semibold tracking-tight">
             Add a connection
           </DialogTitle>
-          <DialogDescription className="font-sans text-[13px] text-ink-2">
-            Kassiber is watch-only. Keys never leave your machine.
+          <DialogDescription className="text-sm text-muted-foreground">
+            Connect watch-only wallets, nodes, services, exchanges, or local
+            files. Kassiber never asks for private keys.
           </DialogDescription>
         </DialogHeader>
 
-        <div className="max-h-[460px] overflow-y-auto px-5 py-4">
-          {SECTIONS.map((sec, si) => (
-            <div key={sec.label} className={si === 0 ? "" : "mt-4.5"}>
-              <div className="mb-2 flex items-center gap-2.5 font-mono text-[10px] uppercase tracking-[0.16em] text-ink-3">
-                <span>{sec.label}</span>
-                <span className="h-px flex-1 bg-line" />
-                <span>{String(sec.items.length).padStart(2, "0")}</span>
-              </div>
-              <div className="grid grid-cols-2 gap-1.5">
-                {sec.items.map((item) => (
-                  <button
-                    key={item.k}
-                    onClick={() => {
-                      onPick(item.k);
-                      onClose();
-                    }}
-                    className="grid cursor-pointer grid-cols-[1fr_auto] items-center gap-3 border border-line bg-transparent px-3.5 py-3 text-left transition-colors hover:border-ink hover:bg-paper"
-                  >
-                    <div className="min-w-0">
-                      <div className="font-sans text-sm font-semibold tracking-[-0.005em] text-ink">
-                        {item.name}
-                      </div>
-                      <div className="mt-0.5 font-mono text-[10px] tracking-[0.04em] text-ink-3">
-                        {item.desc.toUpperCase()}
-                      </div>
-                    </div>
-                    <ChevronRight className="size-3.5 text-ink-3" />
-                  </button>
-                ))}
-              </div>
-            </div>
-          ))}
+        <div className="border-b px-6 pt-4">
+          <div className="flex gap-1 overflow-x-auto pb-3">
+            {SECTIONS.map((section) => {
+              const active = activeSection.id === section.id;
+              return (
+                <button
+                  key={section.id}
+                  type="button"
+                  onClick={() => setActiveCategory(section.id)}
+                  className={cn(
+                    "h-9 shrink-0 rounded-md px-3 text-sm font-medium transition-colors",
+                    active
+                      ? "bg-muted text-foreground"
+                      : "text-muted-foreground hover:bg-muted/60 hover:text-foreground",
+                  )}
+                >
+                  {section.label}
+                </button>
+              );
+            })}
+          </div>
         </div>
 
-        <div className="border-t border-line px-5 py-3">
-          <div className="flex items-start gap-2.5 border border-line bg-paper-2 px-3 py-3">
-            <Lock className="mt-0.5 size-3.5 shrink-0 text-accent" />
-            <span className="font-sans text-[11px] leading-[1.55] text-ink-2">
-              Watch-only by design. Kassiber imports history via extended
-              public keys, descriptors, or read-only API credentials.{" "}
-              <b>
-                No private keys or withdrawal permissions ever touch this
-                machine through Kassiber.
-              </b>
-            </span>
+        <div className="max-h-[520px] overflow-y-auto px-6 py-5">
+          <div className="space-y-3">
+            {activeSection.items.map((item) => (
+              <ConnectionCard key={item.k} item={item} onPick={onPick} />
+            ))}
+          </div>
+        </div>
+
+        <div className="border-t bg-muted/30 px-6 py-4">
+          <div className="flex flex-col gap-3 rounded-lg border bg-background px-4 py-3 sm:flex-row sm:items-start sm:justify-between">
+            <div className="flex items-start gap-3">
+              <Lock className="mt-0.5 size-4 shrink-0 text-primary" />
+              <span className="text-sm leading-6 text-muted-foreground">
+                Watch-only by design. Use extended public keys, descriptors, local
+                files, or read-only credentials. Withdrawal permissions and
+                private keys stay outside Kassiber.
+              </span>
+            </div>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="shrink-0"
+              onClick={openBitcoinBackendSettings}
+            >
+              Bitcoin backend settings
+            </Button>
           </div>
         </div>
       </DialogContent>
     </Dialog>
+  );
+}
+
+function ConnectionCard({
+  item,
+  onPick,
+}: {
+  item: ConnectionItem;
+  onPick: (kind: ConnectionKindKey) => void;
+}) {
+  const Icon = item.icon;
+  const available = item.status === "available";
+
+  return (
+    <div className="flex items-start gap-4 rounded-lg border p-4 transition-colors hover:bg-muted/30">
+      <div className="flex size-10 shrink-0 items-center justify-center rounded-md border bg-background">
+        <Icon className="size-5 text-muted-foreground" aria-hidden="true" />
+      </div>
+      <div className="min-w-0 flex-1 space-y-1">
+        <div className="flex flex-wrap items-center gap-2">
+          <p className="font-medium">{item.name}</p>
+          {available ? (
+            <span className="inline-flex rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-800">
+              Available
+            </span>
+          ) : (
+            <span className="inline-flex rounded-full bg-secondary px-2 py-0.5 text-xs font-medium text-secondary-foreground">
+              Soon
+            </span>
+          )}
+        </div>
+        <p className="text-sm text-muted-foreground">{item.desc}</p>
+      </div>
+      <Button
+        variant={available ? "default" : "outline"}
+        size="sm"
+        onClick={() => onPick(item.k)}
+      >
+        {available ? "Connect" : "Preview"}
+        <ChevronRight className="size-4" aria-hidden="true" />
+      </Button>
+    </div>
   );
 }
