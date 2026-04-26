@@ -128,22 +128,21 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - label: macOS arm64
+          - label: macOS universal
             os: macos-latest
-            target: macos-arm64
+            target: macos-universal
             bundles: app,dmg
-          - label: macOS x86_64
-            os: macos-15-intel
-            target: macos-x86_64
-            bundles: app,dmg
+            tauri_args: --target universal-apple-darwin
           - label: Linux
             os: ubuntu-22.04
             target: linux-x86_64
             bundles: appimage
+            tauri_args: ""
           - label: Windows
             os: windows-latest
             target: windows-x86_64
             bundles: msi,nsis
+            tauri_args: ""
 
     steps:
       - uses: actions/checkout@v4
@@ -162,6 +161,10 @@ jobs:
 
       - name: Set up Rust
         uses: dtolnay/rust-toolchain@stable
+
+      - name: Install macOS universal Rust targets
+        if: matrix.target == 'macos-universal'
+        run: rustup target add aarch64-apple-darwin x86_64-apple-darwin
 
       - name: Install Linux Tauri dependencies
         if: runner.os == 'Linux'
@@ -187,7 +190,7 @@ jobs:
 
       - name: Build unsigned desktop preview
         working-directory: ui-tauri
-        run: pnpm tauri build --bundles ${{ matrix.bundles }} --ci
+        run: pnpm tauri build ${{ matrix.tauri_args }} --bundles ${{ matrix.bundles }} --ci
 
       - name: Package desktop artifacts
         shell: bash

@@ -189,12 +189,11 @@ against the PR branch when a tester artifact is needed. The workflow run and
 release tag record the source commit, but artifact filenames and `.sha256`
 sidecars do not embed the commit hash yet.
 
-The same workflow also builds unsigned desktop preview artifacts: macOS
-arm64/x86_64 `.app` zip / `.dmg`, Linux `.AppImage`, and Windows `.msi` plus
-NSIS setup `.exe`. These previews do not yet bundle the Python sidecar; they
-are for testing the shell on machines where `python3 -m kassiber daemon`
-already works, or where `KASSIBER_DAEMON_PYTHON` / `KASSIBER_REPO_ROOT` are
-set before launch.
+The same workflow also builds unsigned desktop preview artifacts: a universal
+macOS `.app` zip / `.dmg`, Linux `.AppImage`, and Windows `.msi` plus NSIS
+setup `.exe`. These previews do not yet bundle the Python sidecar; they are for
+testing the shell on machines where `python3 -m kassiber daemon` already works,
+or where `KASSIBER_DAEMON_PYTHON` / `KASSIBER_REPO_ROOT` are set before launch.
 Fully self-contained desktop installers remain in active development.
 
 Operational guidance for branch, PR, and tag builds lives in

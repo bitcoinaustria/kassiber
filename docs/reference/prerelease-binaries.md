@@ -77,14 +77,16 @@ The workflow currently builds:
 - CLI: macOS arm64, macOS x86_64, and Linux x86_64 one-file PyInstaller
   binaries as `.tar.gz` archives, each with a `.sha256` file. Linux is built
   on Ubuntu 22.04 to keep the glibc floor aligned with the AppImage build.
-- Desktop previews: macOS arm64 and macOS x86_64 `.app` zip plus `.dmg`,
-  Linux `.AppImage`, and Windows `.msi` plus NSIS setup `.exe`, each with a
+- Desktop previews: a universal macOS `.app` zip plus `.dmg`, Linux
+  `.AppImage`, and Windows `.msi` plus NSIS setup `.exe`, each with a
   `.sha256` file.
 
-The macOS arm64 legs use GitHub's `macos-latest` runner. The macOS Intel legs
-use `macos-15-intel`. Keep desktop artifact target names architecture-specific
-(`macos-arm64`, `macos-x86_64`) so `.app` zip and `.dmg` names stay
-unambiguous.
+The macOS CLI legs stay architecture-specific because PyInstaller universal2
+requires a universal2 Python interpreter or extra binary stitching. The macOS
+desktop leg uses GitHub's `macos-latest` runner with Tauri's
+`--target universal-apple-darwin`, after installing both Rust targets
+(`aarch64-apple-darwin` and `x86_64-apple-darwin`). Keep the desktop artifact
+target name `macos-universal` so users only see one Mac GUI download.
 
 Desktop artifacts are unsigned previews and do not yet bundle the Python
 sidecar. Real daemon calls require a machine where `python3 -m kassiber daemon`
@@ -130,5 +132,6 @@ host OS supports it, for example on macOS:
 ```bash
 cd ui-tauri
 pnpm install --frozen-lockfile
-pnpm tauri build --bundles app,dmg --ci
+rustup target add aarch64-apple-darwin x86_64-apple-darwin
+pnpm tauri build --target universal-apple-darwin --bundles app,dmg --ci
 ```
