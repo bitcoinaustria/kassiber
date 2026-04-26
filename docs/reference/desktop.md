@@ -11,3 +11,14 @@ the primary control surface — see [../../README.md](../../README.md) for
 the quick start and [machine-output.md](machine-output.md) for the JSON
 envelope contract that the future desktop shell will consume through the
 daemon.
+
+Current development modes:
+
+- `pnpm dev` in `ui-tauri/` runs the browser dashboard against mock daemon
+  fixtures.
+- `pnpm tauri:dev` runs the Tauri shell, starts `python -m kassiber daemon`,
+  and calls the Rust `daemon_invoke` boundary. The command allowlists the
+  current UI data kinds; `status` is a real daemon round-trip, while UI
+  snapshot kinds return `daemon_unavailable` until typed read models land.
+  The supervisor uses `.venv/bin/python` when present, then `python3`, unless
+  `KASSIBER_DAEMON_PYTHON` is set.

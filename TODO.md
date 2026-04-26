@@ -197,11 +197,14 @@ and [docs/plan/04-desktop-ui.md](docs/plan/04-desktop-ui.md).
 
 ### 1.1 Daemon mode (no UI yet)
 
-- [ ] Add `kassiber/daemon.py` and a `kassiber daemon` subcommand
-- [ ] JSONL request/response with `request_id`, `progress`, `cancel`, and
-  `daemon.ready` lifecycle envelopes
+- [x] Add `kassiber/daemon.py` and a `kassiber daemon` subcommand
+- [x] JSONL request/response with `request_id`, `daemon.ready`, and a first
+  `status` round-trip
+- [ ] Add `progress` envelopes, cancellation, and mutation-safe long-running
+  request handling
 - [ ] Worker pool with one SQLite connection per worker
-- [ ] Smoke + regression coverage; redaction audit in CI
+- [x] Smoke coverage for daemon ready/status/shutdown
+- [ ] Redaction audit in CI
 
 ### 1.2 Tauri shell skeleton + typed IPC + first screen
 
@@ -231,8 +234,14 @@ and [docs/plan/04-desktop-ui.md](docs/plan/04-desktop-ui.md).
 - [x] Transactions screen now uses `@shadcnblocks/dashboard2` as the
   transaction dashboard, with ordered period controls, enlarged search copy,
   and privacy visibility toggle in the header
-- [ ] Rust supervisor with capability allowlist generated from Pydantic
-- [ ] CSP locked to `'self'`; no remote script
+- [x] Initial Tauri 2 shell bootstrap with `ui-tauri/src-tauri/`, a locked
+  CSP, a minimal capability file, and a whitelisted `daemon_invoke` command
+  wired to the React daemon transport
+- [x] Replace the temporary `daemon_unavailable` Tauri command body with a
+  Rust supervisor that spawns the Python daemon and dispatches JSONL by
+  `request_id`
+- [ ] Generate the Rust daemon kind allowlist from Pydantic contracts instead
+  of the current hand-maintained bootstrap list
 - [ ] Pydantic v2 contracts to JSON Schema to TS types in CI; schema-drift
   fails the build
 - [ ] Bridge mode containment tests (per

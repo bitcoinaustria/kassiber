@@ -37,12 +37,14 @@ py() {
 run py -m py_compile kassiber/*.py
 
 run py -m unittest tests.test_cli_smoke -v
+run py -m unittest tests.test_daemon_smoke -v
 run py -m unittest tests.test_review_regressions -v
 
 echo
 echo "> CLI help smoke"
 py -m kassiber --help >/dev/null
 py -m kassiber --machine status >/dev/null
+py -m kassiber daemon </dev/null >/dev/null
 py -m kassiber backends list >/dev/null
 py -m kassiber wallets kinds >/dev/null
 py -m kassiber wallets sync-btcpay --help >/dev/null
