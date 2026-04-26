@@ -15,6 +15,7 @@ from .core.ui_snapshot import (
     build_capital_gains_snapshot,
     build_journals_snapshot,
     build_overview_snapshot,
+    build_profiles_snapshot,
     build_transactions_snapshot,
 )
 from .envelope import SCHEMA_VERSION, build_envelope, build_error_envelope, json_ready
@@ -165,6 +166,18 @@ def handle_request(ctx: DaemonContext, request: dict[str, Any]) -> tuple[dict[st
             False,
         )
 
+    if kind == "ui.profiles.snapshot":
+        return (
+            _with_request_id(
+                build_envelope(
+                    "ui.profiles.snapshot",
+                    build_profiles_snapshot(ctx.conn),
+                ),
+                request_id,
+            ),
+            False,
+        )
+
     if kind == "ui.wallets.sync":
         args = request.get("args")
         if args is not None and not isinstance(args, dict):
@@ -274,6 +287,7 @@ def run(
                     "ui.transactions.list",
                     "ui.reports.capital_gains",
                     "ui.journals.snapshot",
+                    "ui.profiles.snapshot",
                     "ui.wallets.sync",
                     "daemon.shutdown",
                 ],

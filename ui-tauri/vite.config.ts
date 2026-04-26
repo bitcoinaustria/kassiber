@@ -9,6 +9,7 @@ const ALLOWED_BRIDGE_KINDS = new Set([
   "status",
   "ui.overview.snapshot",
   "ui.transactions.list",
+  "ui.profiles.snapshot",
   "ui.reports.capital_gains",
   "ui.journals.snapshot",
   "ui.wallets.sync",

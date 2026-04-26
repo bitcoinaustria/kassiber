@@ -66,6 +66,7 @@ class DaemonSmokeTest(unittest.TestCase):
             self.assertIn("ui.transactions.list", ready["data"]["supported_kinds"])
             self.assertIn("ui.reports.capital_gains", ready["data"]["supported_kinds"])
             self.assertIn("ui.journals.snapshot", ready["data"]["supported_kinds"])
+            self.assertIn("ui.profiles.snapshot", ready["data"]["supported_kinds"])
             self.assertIn("ui.wallets.sync", ready["data"]["supported_kinds"])
 
             _write_payload(proc, {"request_id": "status-1", "kind": "status"})
@@ -176,6 +177,16 @@ class DaemonSmokeTest(unittest.TestCase):
             self.assertEqual(journals_response["request_id"], "journals-1")
             self.assertEqual(journals_response["kind"], "ui.journals.snapshot")
             self.assertEqual(journals_response["data"]["recent"], [])
+
+            _write_payload(
+                proc,
+                {"request_id": "profiles-1", "kind": "ui.profiles.snapshot"},
+            )
+            profiles_response = _read_payload(proc)
+            self.assertEqual(profiles_response["request_id"], "profiles-1")
+            self.assertEqual(profiles_response["kind"], "ui.profiles.snapshot")
+            self.assertEqual(profiles_response["data"]["workspaces"], [])
+            self.assertEqual(profiles_response["data"]["activeProfileId"], "")
 
             _write_payload(
                 proc,

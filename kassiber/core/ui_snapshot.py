@@ -107,6 +107,115 @@ def _relative_last(value: str | None) -> str:
     return dt.date().isoformat()
 
 
+def _workspace_jurisdiction(tax_countries: list[str]) -> str:
+    normalized = {country.strip().lower() for country in tax_countries if country}
+    if not normalized:
+        return "Generic"
+    if normalized == {"at"}:
+        return "Austria"
+    if len(normalized) == 1:
+        return next(iter(normalized)).upper()
+    return "Mixed"
+
+
+def _tax_policy_label(profile: sqlite3.Row) -> str:
+    country = str(profile["tax_country"] or "generic").strip().upper()
+    if country == "AT":
+        return f"Austria - {profile['gains_algorithm']} - {profile['fiat_currency']}"
+    elif country == "GENERIC":
+        country_label = "Generic"
+    else:
+        country_label = country
+    return (
+        f"{country_label} - {profile['gains_algorithm']} - "
+        f"{profile['fiat_currency']} - {profile['tax_long_term_days']} day long-term"
+    )
+
+
+def build_profiles_snapshot(conn: sqlite3.Connection) -> dict[str, Any]:
+    context = current_context_snapshot(conn)
+    profile_rows = conn.execute(
+        """
+        SELECT
+            p.id,
+            p.workspace_id,
+            p.label,
+            p.fiat_currency,
+            p.tax_country,
+            p.tax_long_term_days,
+            p.gains_algorithm,
+            p.last_processed_at,
+            p.created_at,
+            COUNT(DISTINCT a.id) AS account_count,
+            COUNT(DISTINCT w.id) AS wallet_count
+        FROM profiles p
+        LEFT JOIN accounts a ON a.profile_id = p.id
+        LEFT JOIN wallets w ON w.profile_id = p.id
+        GROUP BY p.id
+        ORDER BY p.created_at ASC, p.label ASC
+        """
+    ).fetchall()
+    profiles_by_workspace: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    tax_countries_by_workspace: dict[str, list[str]] = defaultdict(list)
+    currencies_by_workspace: dict[str, list[str]] = defaultdict(list)
+
+    for row in profile_rows:
+        is_active = row["id"] == context["profile_id"]
+        tax_countries_by_workspace[row["workspace_id"]].append(row["tax_country"])
+        currencies_by_workspace[row["workspace_id"]].append(row["fiat_currency"])
+        profiles_by_workspace[row["workspace_id"]].append(
+            {
+                "id": row["id"],
+                "name": row["label"],
+                "role": "Owner",
+                "taxPolicy": _tax_policy_label(row),
+                "accounts": int(row["account_count"] or 0),
+                "wallets": int(row["wallet_count"] or 0),
+                "lastOpened": (
+                    "Just now"
+                    if is_active
+                    else _relative_last(row["last_processed_at"] or row["created_at"])
+                ),
+                "active": is_active,
+            }
+        )
+
+    workspace_rows = conn.execute(
+        """
+        SELECT id, label, created_at
+        FROM workspaces
+        ORDER BY created_at ASC, label ASC
+        """
+    ).fetchall()
+    workspaces = []
+    for row in workspace_rows:
+        currencies = {
+            currency.strip().upper()
+            for currency in currencies_by_workspace.get(row["id"], [])
+            if currency
+        }
+        workspaces.append(
+            {
+                "id": row["id"],
+                "name": row["label"],
+                "kind": "Personal",
+                "currency": next(iter(currencies)) if len(currencies) == 1 else "Mixed",
+                "jurisdiction": _workspace_jurisdiction(
+                    tax_countries_by_workspace.get(row["id"], []),
+                ),
+                "created": (row["created_at"] or "")[:10],
+                "profiles": profiles_by_workspace.get(row["id"], []),
+            }
+        )
+
+    return {
+        "workspaces": workspaces,
+        "activeProfileId": context["profile_id"] or (
+            profile_rows[0]["id"] if profile_rows else ""
+        ),
+    }
+
+
 def _transaction_wallet_balances(
     conn: sqlite3.Connection,
     profile_id: str,
