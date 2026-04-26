@@ -106,9 +106,25 @@ jobs:
             release/*.sha256
           if-no-files-found: error
 
-  build-macos-desktop:
-    name: Build macOS desktop preview
-    runs-on: macos-latest
+  build-desktop:
+    name: Build ${{ matrix.label }} desktop preview
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - label: macOS
+            os: macos-latest
+            target: macos
+            bundles: app,dmg
+          - label: Linux
+            os: ubuntu-22.04
+            target: linux-x86_64
+            bundles: appimage
+          - label: Windows
+            os: windows-latest
+            target: windows-x86_64
+            bundles: msi,nsis
 
     steps:
       - uses: actions/checkout@v4
@@ -128,43 +144,70 @@ jobs:
       - name: Set up Rust
         uses: dtolnay/rust-toolchain@stable
 
+      - name: Install Linux Tauri dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential \
+            curl \
+            file \
+            libayatana-appindicator3-dev \
+            libfuse2 \
+            libgtk-3-dev \
+            librsvg2-dev \
+            libssl-dev \
+            libwebkit2gtk-4.1-dev \
+            libxdo-dev \
+            patchelf \
+            wget
+
       - name: Install frontend dependencies
         working-directory: ui-tauri
         run: pnpm install --frozen-lockfile
 
-      - name: Build unsigned macOS app and DMG
+      - name: Build unsigned desktop preview
         working-directory: ui-tauri
-        run: pnpm tauri build --bundles app,dmg --ci --no-sign
+        run: pnpm tauri build --bundles ${{ matrix.bundles }} --ci --no-sign
 
       - name: Package desktop artifacts
         shell: bash
         run: |
           set -euo pipefail
+
+          sha256_file() {
+            if command -v shasum >/dev/null 2>&1; then
+              shasum -a 256 "$1"
+            else
+              sha256sum "$1"
+            fi
+          }
+
           mkdir -p release
           while IFS= read -r -d '' artifact; do
               name="$(basename "$artifact")"
               case "$artifact" in
                 *.app)
-                  zip_name="kassiber-desktop-macos-${name%.app}.app.zip"
+                  zip_name="kassiber-desktop-${{ matrix.target }}-${name%.app}.app.zip"
                   ditto -c -k --keepParent "$artifact" "release/${zip_name}"
-                  shasum -a 256 "release/${zip_name}" > "release/${zip_name}.sha256"
+                  sha256_file "release/${zip_name}" > "release/${zip_name}.sha256"
                   ;;
-                *.dmg)
-                  dmg_name="kassiber-desktop-macos-${name}"
-                  cp "$artifact" "release/${dmg_name}"
-                  shasum -a 256 "release/${dmg_name}" > "release/${dmg_name}.sha256"
+                *.AppImage|*.dmg|*.exe|*.msi)
+                  artifact_name="kassiber-desktop-${{ matrix.target }}-${name}"
+                  cp "$artifact" "release/${artifact_name}"
+                  sha256_file "release/${artifact_name}" > "release/${artifact_name}.sha256"
                   ;;
               esac
           done < <(
             find ui-tauri/src-tauri/target/release/bundle \
-              \( -name "*.dmg" -o -name "*.app" \) -print0
+              \( -name "*.AppImage" -o -name "*.app" -o -name "*.dmg" -o -name "*.exe" -o -name "*.msi" \) -print0
           )
           test -n "$(find release -type f -print -quit)"
 
       - name: Upload desktop artifact
         uses: actions/upload-artifact@v4
         with:
-          name: kassiber-desktop-macos-preview
+          name: kassiber-desktop-${{ matrix.target }}-preview
           path: |
             release/*
           if-no-files-found: error
@@ -173,7 +216,7 @@ jobs:
     name: Publish prerelease
     needs:
       - build
-      - build-macos-desktop
+      - build-desktop
     runs-on: ubuntu-latest
     if: >-
       github.event_name == 'push' ||
@@ -197,10 +240,10 @@ jobs:
           body: |
             Automated Kassiber prerelease artifacts.
 
-            These artifacts are unsigned prerelease builds for CLI and macOS
-            desktop-preview testing. The desktop preview does not yet bundle the
-            Python sidecar; launch it from an environment where `python3 -m
-            kassiber daemon` works, or set `KASSIBER_DAEMON_PYTHON` and
+            These artifacts are unsigned prerelease builds for CLI and desktop
+            preview testing. Desktop previews do not yet bundle the Python
+            sidecar; launch them from an environment where `python3 -m kassiber
+            daemon` works, or set `KASSIBER_DAEMON_PYTHON` and
             `KASSIBER_REPO_ROOT` before launching.
           files: |
             release/*

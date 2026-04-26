@@ -284,7 +284,8 @@ and [docs/plan/04-desktop-ui.md](docs/plan/04-desktop-ui.md).
 
 - [x] Automated unsigned prerelease CLI binaries for macOS and Linux via
   GitHub Actions
-- [x] Automated unsigned macOS desktop preview artifacts via GitHub Actions
+- [x] Automated unsigned desktop preview artifacts for macOS, Linux, and
+  Windows via GitHub Actions
 - [ ] `python-build-standalone` sidecar bundling
 - [ ] Tauri bundler per OS; Apple Developer ID, Windows EV, GPG `.deb`
 - [ ] User-initiated update check only; no background polling
