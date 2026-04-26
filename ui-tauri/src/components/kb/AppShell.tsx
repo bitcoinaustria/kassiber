@@ -1,3 +1,4 @@
+import { useIsFetching } from "@tanstack/react-query";
 import { Link, Outlet, useRouterState } from "@tanstack/react-router";
 import {
   BarChart3,
@@ -62,15 +63,26 @@ import {
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { useUiStore } from "@/store/ui";
 import { useDaemon } from "@/daemon/client";
+import { cn } from "@/lib/utils";
 import type { OverviewSnapshot } from "@/mocks/seed";
 import { SettingsModal } from "./SettingsModal";
 import { ScreenAssistantMockup } from "./ScreenAssistantMockup";
 import { PreAlphaBanner } from "./PreAlphaBanner";
 
+type AppRoutePath =
+  | "/overview"
+  | "/transactions"
+  | "/reports"
+  | "/connections"
+  | "/profiles"
+  | "/journals"
+  | "/tax-events"
+  | "/quarantine";
+
 type NavItem = {
   label: string;
   icon: React.ComponentType<React.SVGProps<SVGSVGElement>>;
-  href: string;
+  href: AppRoutePath;
   children?: NavItem[];
 };
 
@@ -209,12 +221,17 @@ const ROUTE_META: Array<[string, RouteMeta]> = [
 
 export function AppShell() {
   const pathname = useRouterState({ select: (s) => s.location.pathname });
+  const routerBusy = useRouterState({
+    select: (s) => s.isLoading || s.isTransitioning || s.status === "pending",
+  });
+  const daemonFetchCount = useIsFetching({ queryKey: ["daemon"] });
   const [settingsOpen, setSettingsOpen] = React.useState(false);
   const [settingsFocus, setSettingsFocus] = React.useState<
     "backends" | null
   >(null);
   const [assistantCollapsed, setAssistantCollapsed] = React.useState(false);
   const mainRef = React.useRef<HTMLElement>(null);
+  const shellBusy = routerBusy || daemonFetchCount > 0;
   const routeMeta =
     ROUTE_META.find(([prefix]) => pathname.startsWith(prefix))?.[1] ?? {
       title: "Kassiber",
@@ -280,10 +297,11 @@ export function AppShell() {
                 id="app-main"
                 ref={mainRef}
                 tabIndex={-1}
-                className={`min-h-0 w-full flex-1 overflow-auto bg-background transition-[padding-bottom] duration-200 ${
+                className={`relative min-h-0 w-full flex-1 overflow-auto bg-background transition-[padding-bottom] duration-200 ${
                   assistantCollapsed ? "pb-[150px]" : "pb-[240px]"
                 }`}
               >
+                <RouteTransitionIndicator active={shellBusy} />
                 <Outlet />
               </main>
               <ScreenAssistantMockup
@@ -300,6 +318,20 @@ export function AppShell() {
         onClose={() => setSettingsOpen(false)}
       />
     </TooltipProvider>
+  );
+}
+
+function RouteTransitionIndicator({ active }: { active: boolean }) {
+  return (
+    <div
+      aria-hidden="true"
+      className={cn(
+        "pointer-events-none sticky top-0 z-10 h-px w-full overflow-hidden transition-opacity duration-150",
+        active ? "opacity-100" : "opacity-0",
+      )}
+    >
+      <div className="h-full w-1/2 bg-primary/70 motion-safe:animate-[route-progress_0.9s_ease-in-out_infinite] motion-reduce:w-full" />
+    </div>
   );
 }
 
@@ -440,10 +472,10 @@ function NavMenuItem({
     return (
       <SidebarMenuItem>
         <SidebarMenuButton asChild isActive={active} tooltip={item.label}>
-          <a href={item.href}>
+          <Link to={item.href}>
             <Icon className="size-4" aria-hidden="true" />
             <span>{item.label}</span>
-          </a>
+          </Link>
         </SidebarMenuButton>
       </SidebarMenuItem>
     );
@@ -467,7 +499,9 @@ function NavMenuItem({
               return (
                 <SidebarMenuSubItem key={child.label}>
                   <SidebarMenuSubButton asChild isActive={childActive}>
-                    <a href={child.href}>{child.label}</a>
+                    <Link to={child.href}>
+                      {child.label}
+                    </Link>
                   </SidebarMenuSubButton>
                 </SidebarMenuSubItem>
               );
