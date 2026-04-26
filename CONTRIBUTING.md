@@ -35,13 +35,14 @@ That covers:
 ## Prerelease binaries
 
 `.github/workflows/prerelease-binaries.yml` builds unsigned CLI binaries on
-macOS and Linux. Manual workflow runs upload `.tar.gz` artifacts; `v*` tag
-pushes also attach those artifacts and their SHA-256 files to a GitHub
-prerelease. Linux CLI binaries are built on Ubuntu 22.04 to match the AppImage
-portability floor. The workflow also builds unsigned desktop previews for
-macOS (`.app` zip / `.dmg`), Linux (`.AppImage`), and Windows (`.msi` plus NSIS
-setup `.exe`); until the Python sidecar is bundled, those desktop artifacts
-expect an external Kassiber-capable Python environment.
+macOS Apple Silicon, macOS Intel, and Linux. Manual workflow runs upload
+`.tar.gz` artifacts; `v*` tag pushes also attach those artifacts and their
+SHA-256 files to a GitHub prerelease. Linux CLI binaries are built on Ubuntu
+22.04 to match the AppImage portability floor. The workflow also builds
+unsigned desktop previews for macOS arm64/x86_64 (`.app` zip / `.dmg`), Linux
+(`.AppImage`), and Windows (`.msi` plus NSIS setup `.exe`); until the Python
+sidecar is bundled, those desktop artifacts expect an external
+Kassiber-capable Python environment.
 
 Pull requests intentionally do not build binaries automatically. If a maintainer
 asks for binaries for a PR or branch, run `prerelease-binaries` manually against

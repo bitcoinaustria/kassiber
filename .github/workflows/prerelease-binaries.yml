@@ -28,12 +28,14 @@ jobs:
   build:
     name: Build ${{ matrix.os }} binary
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
     strategy:
       fail-fast: false
       matrix:
         os:
           - ubuntu-22.04
           - macos-latest
+          - macos-15-intel
 
     steps:
       - uses: actions/checkout@v4
@@ -121,13 +123,18 @@ jobs:
   build-desktop:
     name: Build ${{ matrix.label }} desktop preview
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
     strategy:
       fail-fast: false
       matrix:
         include:
-          - label: macOS
+          - label: macOS arm64
             os: macos-latest
-            target: macos
+            target: macos-arm64
+            bundles: app,dmg
+          - label: macOS x86_64
+            os: macos-15-intel
+            target: macos-x86_64
             bundles: app,dmg
           - label: Linux
             os: ubuntu-22.04
@@ -230,6 +237,7 @@ jobs:
       - build
       - build-desktop
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     if: >-
       github.event_name == 'push' ||
       (github.event_name == 'workflow_dispatch' &&

@@ -64,15 +64,27 @@ gh workflow run prerelease-binaries.yml \
 Only use `publish_release=true` for real prerelease tags. PR and branch tester
 builds should stay workflow artifacts, not GitHub Releases.
 
+The publish job intentionally waits for every CLI and desktop matrix leg. A
+failed macOS, Linux, or Windows leg blocks the prerelease instead of shipping a
+partial artifact set. Re-run the failed workflow/job after fixing runner or
+packaging failures; do not create a partial release unless the user explicitly
+asks for one.
+
 ## Artifact Set
 
 The workflow currently builds:
 
-- CLI: macOS and Linux one-file PyInstaller binaries as `.tar.gz` archives,
-  each with a `.sha256` file. Linux is built on Ubuntu 22.04 to keep the glibc
-  floor aligned with the AppImage build.
-- Desktop previews: macOS `.app` zip plus `.dmg`, Linux `.AppImage`, and
-  Windows `.msi` plus NSIS setup `.exe`, each with a `.sha256` file.
+- CLI: macOS arm64, macOS x86_64, and Linux x86_64 one-file PyInstaller
+  binaries as `.tar.gz` archives, each with a `.sha256` file. Linux is built
+  on Ubuntu 22.04 to keep the glibc floor aligned with the AppImage build.
+- Desktop previews: macOS arm64 and macOS x86_64 `.app` zip plus `.dmg`,
+  Linux `.AppImage`, and Windows `.msi` plus NSIS setup `.exe`, each with a
+  `.sha256` file.
+
+The macOS arm64 legs use GitHub's `macos-latest` runner. The macOS Intel legs
+use `macos-15-intel`. Keep desktop artifact target names architecture-specific
+(`macos-arm64`, `macos-x86_64`) so `.app` zip and `.dmg` names stay
+unambiguous.
 
 Desktop artifacts are unsigned previews and do not yet bundle the Python
 sidecar. Real daemon calls require a machine where `python3 -m kassiber daemon`

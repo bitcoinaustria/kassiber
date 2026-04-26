@@ -467,6 +467,7 @@ fn request_id_mismatch(expected: &str, response: &Value) -> SupervisorError {
 
 fn repo_root() -> PathBuf {
     if let Ok(path) = env::var("KASSIBER_REPO_ROOT") {
+        // Trust explicit user overrides even when stale; the daemon error then points at the chosen path.
         return PathBuf::from(path);
     }
 
