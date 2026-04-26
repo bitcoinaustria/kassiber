@@ -889,7 +889,7 @@ const StatsCards = ({
                     stat.isPositive
                       ? "text-emerald-600 dark:text-emerald-400"
                       : "text-red-600 dark:text-red-400",
-                    stat.format === "currency" && blurClass(hideSensitive),
+                    blurClass(hideSensitive),
                   )}
                 >
                   {statusText}
@@ -996,7 +996,7 @@ const RevenueSourceChart = ({
                     onBlur={() => handleHover(null)}
                     aria-label={
                       hideSensitive
-                        ? `${item.label}: hidden (${item.percent}%)`
+                        ? `${item.label}: hidden`
                         : `${item.label}: ${formatDisplayMoney(
                             item.value,
                             snapshot.priceEur,
@@ -1017,7 +1017,12 @@ const RevenueSourceChart = ({
                         style={{ backgroundColor: item.color }}
                       />
                       <span className="font-medium">{item.label}</span>
-                      <span className="text-muted-foreground tabular-nums">
+                      <span
+                        className={cn(
+                          "text-muted-foreground tabular-nums",
+                          blurClass(hideSensitive),
+                        )}
+                      >
                         {item.percent}%
                       </span>
                     </div>
@@ -1049,6 +1054,7 @@ const RevenueSourceChart = ({
                 activeSegment !== null &&
                   activeSegment !== index &&
                   "opacity-40",
+                blurClass(hideSensitive),
               )}
             >
               {item.percent}%
@@ -1095,7 +1101,12 @@ const RevenueSourceChart = ({
                         style={{ backgroundColor: item.color }}
                       />
                       <span className="font-medium">{item.label}</span>
-                      <span className="text-muted-foreground tabular-nums">
+                      <span
+                        className={cn(
+                          "text-muted-foreground tabular-nums",
+                          blurClass(hideSensitive),
+                        )}
+                      >
                         {item.percent}%
                       </span>
                     </div>
@@ -1264,7 +1275,12 @@ const SalesByCategoryChart = ({
                     currency,
                   )}
                 </span>
-                <span className="text-muted-foreground tabular-nums">
+                <span
+                  className={cn(
+                    "text-muted-foreground tabular-nums",
+                    blurClass(hideSensitive),
+                  )}
+                >
                   {item.percent}%
                 </span>
               </div>
@@ -1377,6 +1393,7 @@ function CustomTooltip({
             className={cn(
               "text-[10px] font-medium sm:text-xs",
               diff >= 0 ? "text-emerald-500" : "text-red-500",
+              blurClass(hideSensitive),
             )}
           >
             {diff >= 0 ? "+" : ""}
@@ -1524,7 +1541,7 @@ const RevenueFlowChart = ({
       >
         <ChartContainer
           config={revenueFlowChartConfig}
-          className={cn("h-full w-full", blurClass(hideSensitive))}
+          className="h-full w-full"
         >
           <AreaChart data={chartData}>
             <defs>
@@ -1579,7 +1596,13 @@ const RevenueFlowChart = ({
               tick={{ fontSize: 10 }}
               dx={-5}
               tickFormatter={(value) =>
-                formatCompactDisplayMoney(Number(value), snapshot.priceEur, currency)
+                hideSensitive
+                  ? ""
+                  : formatCompactDisplayMoney(
+                      Number(value),
+                      snapshot.priceEur,
+                      currency,
+                    )
               }
               width={40}
             />

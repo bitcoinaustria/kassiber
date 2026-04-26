@@ -387,10 +387,7 @@ function ConnectionRow({
         <div className="flex items-center gap-2">
           <div className="relative h-2 flex-1 overflow-hidden rounded-full bg-muted">
             <div
-              className={cn(
-                "absolute inset-y-0 left-0 rounded-full bg-primary transition-[width]",
-                blurClass(hideSensitive),
-              )}
+              className="absolute inset-y-0 left-0 rounded-full bg-primary transition-[width]"
               style={{ width: `${Math.max(1.5, pct)}%` }}
             />
           </div>

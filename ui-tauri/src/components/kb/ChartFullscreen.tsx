@@ -479,7 +479,7 @@ export function ChartFullscreen({
               </span>
             }
             sub={
-              <span className={up ? "text-[#3fa66a]" : "text-accent"}>
+              <span className={cn(up ? "text-[#3fa66a]" : "text-accent", blurCls)}>
                 {up ? "+" : "−"} {Math.abs(pct).toFixed(2)} %
               </span>
             }
@@ -500,14 +500,18 @@ export function ChartFullscreen({
           <KpiBlock
             label="Spot · BTC/EUR"
             value={
-              "€ " +
-              MOCK_OVERVIEW.priceEur.toLocaleString("de-AT", {
-                minimumFractionDigits: 2,
-                maximumFractionDigits: 2,
-              })
+              <span className={blurCls}>
+                {"€ " +
+                  MOCK_OVERVIEW.priceEur.toLocaleString("de-AT", {
+                    minimumFractionDigits: 2,
+                    maximumFractionDigits: 2,
+                  })}
+              </span>
             }
             sub={
-              <span className="text-[#3fa66a]">+ 1.42 % · 24h</span>
+              <span className={cn("text-[#3fa66a]", blurCls)}>
+                + 1.42 % · 24h
+              </span>
             }
           />
         </div>
@@ -545,9 +549,11 @@ export function ChartFullscreen({
                       fontSize="10"
                       fill="var(--color-ink-3)"
                     >
-                      {ccy === "eur"
-                        ? "€ " + Math.round(v).toLocaleString("de-AT")
-                        : v.toFixed(v < 0.1 ? 4 : 2)}
+                      {hideSensitive
+                        ? ""
+                        : ccy === "eur"
+                          ? "€ " + Math.round(v).toLocaleString("de-AT")
+                          : v.toFixed(v < 0.1 ? 4 : 2)}
                     </text>
                   </g>
                 );
@@ -611,7 +617,7 @@ export function ChartFullscreen({
                 </>
               )}
               {stacked && (
-                <g className={blurCls}>
+                <g>
                   {stackLayers.map((l, idx) => (
                     <path
                       key={l.ci}

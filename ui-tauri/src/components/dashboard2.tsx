@@ -1141,6 +1141,7 @@ const VolumeChart = ({
                 className={cn(
                   "text-xs font-medium",
                   summary.isPositive ? "text-emerald-600" : "text-red-600",
+                  blurClass(hideSensitive),
                 )}
               >
                 {summary.isPositive ? "+" : "-"}
@@ -1170,10 +1171,7 @@ const VolumeChart = ({
             : "h-[180px] w-full min-w-0 sm:h-[220px]"
         }
       >
-        <ChartContainer
-          config={revenueChartConfig}
-          className={cn("h-full w-full", blurClass(hideSensitive))}
-        >
+        <ChartContainer config={revenueChartConfig} className="h-full w-full">
           <AreaChart data={data}>
             <defs>
               <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
@@ -1203,7 +1201,9 @@ const VolumeChart = ({
               tick={{ fontSize: 10 }}
               dx={-5}
               tickFormatter={(value) =>
-                currency === "btc"
+                hideSensitive
+                  ? ""
+                  : currency === "btc"
                   ? formatBtc(Number(value), { precision: 4 })
                   : compactCurrencyFormatter.format(value)
               }
@@ -1390,12 +1390,13 @@ const CostsChart = ({
                 aria-hidden="true"
               />
             )}
-            <span
-              className={cn(
-                "text-xs font-medium",
-                summary.isPositive ? "text-emerald-600" : "text-red-600",
-              )}
-            >
+              <span
+                className={cn(
+                  "text-xs font-medium",
+                  summary.isPositive ? "text-emerald-600" : "text-red-600",
+                  blurClass(hideSensitive),
+                )}
+              >
               {summary.isPositive ? "+" : "-"}
               {summary.change}
             </span>
@@ -1404,10 +1405,7 @@ const CostsChart = ({
       </div>
 
       <div className="h-[180px] w-full min-w-0 sm:h-[220px]">
-        <ChartContainer
-          config={costsChartConfig}
-          className={cn("h-full w-full", blurClass(hideSensitive))}
-        >
+        <ChartContainer config={costsChartConfig} className="h-full w-full">
           <BarChart data={data}>
             <CartesianGrid strokeDasharray="0" vertical={false} />
             <XAxis
@@ -1423,7 +1421,9 @@ const CostsChart = ({
               tick={{ fontSize: 10 }}
               dx={-5}
               tickFormatter={(value) =>
-                currency === "btc"
+                hideSensitive
+                  ? ""
+                  : currency === "btc"
                   ? formatBtc(Number(value), { precision: 4 })
                   : compactCurrencyFormatter.format(value)
               }
@@ -1499,7 +1499,7 @@ const StatsCards = ({
               <p
                 className={cn(
                   "hidden text-[10px] text-muted-foreground/70 sm:block sm:text-xs",
-                  stat.format === "currency" && blurClass(hideSensitive),
+                  blurClass(hideSensitive),
                 )}
               >
                 {stat.format === "currency"
@@ -1509,7 +1509,7 @@ const StatsCards = ({
               <p
                 className={cn(
                   "text-xl leading-tight font-semibold tracking-tight sm:text-2xl lg:text-[28px]",
-                  stat.format === "currency" && blurClass(hideSensitive),
+                  blurClass(hideSensitive),
                 )}
               >
                 {stat.format === "currency"
@@ -1536,6 +1536,7 @@ const StatsCards = ({
                   className={cn(
                     "whitespace-nowrap",
                     stat.isPositive ? "text-emerald-600" : "text-red-600",
+                    blurClass(hideSensitive),
                   )}
                 >
                   {stat.isPositive ? "+" : "-"}
