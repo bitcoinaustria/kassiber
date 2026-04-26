@@ -40,9 +40,10 @@ macOS Apple Silicon, macOS Intel, and Linux. Manual workflow runs upload
 SHA-256 files to a GitHub prerelease. Linux CLI binaries are built on Ubuntu
 22.04 to match the AppImage portability floor. The workflow also builds
 unsigned desktop previews for universal macOS (`.app` zip / `.dmg`), Linux
-(`.AppImage`), and Windows (`.msi` plus NSIS setup `.exe`); until the Python
-sidecar is bundled, those desktop artifacts expect an external Kassiber-capable
-Python environment.
+(`.AppImage`), and Windows (`.msi` plus NSIS setup `.exe`). Desktop previews
+bundle a one-file Kassiber CLI sidecar, so they do not expect an external
+Kassiber-capable Python environment for normal daemon calls. The GUI executable
+also forwards `--cli ...` to the bundled CLI sidecar for installed-app CLI use.
 The desktop shell displays the build commit beside the version number; CLI
 artifact filenames and `.sha256` sidecars still do not embed the commit hash.
 

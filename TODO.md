@@ -292,9 +292,13 @@ and [docs/plan/04-desktop-ui.md](docs/plan/04-desktop-ui.md).
   GitHub Actions
 - [x] Automated unsigned desktop preview artifacts for macOS, Linux, and
   Windows via GitHub Actions
+- [x] Bundle one-file Kassiber CLI sidecars into unsigned desktop preview
+  artifacts so preview apps do not require an external Python checkout and can
+  forward installed-app CLI calls via `--cli`
 - [ ] Add build metadata (`BUILD_INFO.json` or equivalent) to every
   prerelease artifact with commit, ref, run id, and build timestamp
-- [ ] `python-build-standalone` sidecar bundling
+- [ ] Decide whether production installers should keep the PyInstaller sidecar
+  or switch to a `python-build-standalone` runtime tree
 - [ ] Tauri bundler per OS; Apple Developer ID, Windows EV, GPG `.deb`
 - [ ] User-initiated update check only; no background polling
 

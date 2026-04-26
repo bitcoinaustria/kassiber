@@ -22,5 +22,18 @@ Current development modes:
   snapshot kinds return `daemon_unavailable` until typed read models land.
   The supervisor uses `.venv/bin/python` when present, then `python3`, unless
   `KASSIBER_DAEMON_PYTHON` is set. `KASSIBER_REPO_ROOT` can point a dev
-  shell at a different checkout; production packaging replaces this repo-root
-  lookup with a bundled sidecar path.
+  shell at a different checkout.
+
+Current prerelease desktop packages bundle a one-file `kassiber-cli-*`
+sidecar built with PyInstaller. At runtime the supervisor prefers
+`KASSIBER_DAEMON_PYTHON` when it is explicitly set, then the bundled sidecar
+from the app resources, then the development Python fallback above.
+
+The GUI executable also works as a CLI forwarder when launched with
+`--cli ...`. Examples:
+
+```bash
+Kassiber.AppImage --cli status
+/Applications/Kassiber.app/Contents/MacOS/kassiber-ui --cli status
+Kassiber.exe --cli status
+```

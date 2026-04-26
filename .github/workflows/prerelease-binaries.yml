@@ -122,6 +122,8 @@ jobs:
 
   build-desktop:
     name: Build ${{ matrix.label }} desktop preview
+    needs:
+      - build-desktop-sidecar
     runs-on: ${{ matrix.os }}
     timeout-minutes: 45
     strategy:
@@ -133,16 +135,22 @@ jobs:
             target: macos-universal
             bundles: app,dmg
             tauri_args: --target universal-apple-darwin
+            sidecar_artifact_pattern: kassiber-desktop-sidecar-*-apple-darwin
+            sidecar_expected: 2
           - label: Linux
             os: ubuntu-22.04
             target: linux-x86_64
             bundles: appimage
             tauri_args: ""
+            sidecar_artifact_pattern: kassiber-desktop-sidecar-x86_64-unknown-linux-gnu
+            sidecar_expected: 1
           - label: Windows
             os: windows-latest
             target: windows-x86_64
             bundles: msi,nsis
             tauri_args: ""
+            sidecar_artifact_pattern: kassiber-desktop-sidecar-x86_64-pc-windows-msvc
+            sidecar_expected: 1
 
     steps:
       - uses: actions/checkout@v4
@@ -187,6 +195,22 @@ jobs:
       - name: Install frontend dependencies
         working-directory: ui-tauri
         run: pnpm install --frozen-lockfile
+
+      - name: Download desktop CLI sidecar
+        uses: actions/download-artifact@v4
+        with:
+          pattern: ${{ matrix.sidecar_artifact_pattern }}
+          path: ui-tauri/src-tauri/binaries
+          merge-multiple: true
+
+      - name: Verify desktop CLI sidecar inputs
+        shell: bash
+        run: |
+          set -euo pipefail
+          count="$(find ui-tauri/src-tauri/binaries -maxdepth 1 -type f -name 'kassiber-cli-*' | wc -l | tr -d ' ')"
+          test "$count" = "${{ matrix.sidecar_expected }}"
+          find ui-tauri/src-tauri/binaries -maxdepth 1 -type f -name 'kassiber-cli-*' -exec chmod 755 {} +
+          find ui-tauri/src-tauri/binaries -maxdepth 1 -type f -name 'kassiber-cli-*' -print
 
       - name: Build unsigned desktop preview
         working-directory: ui-tauri
@@ -235,6 +259,94 @@ jobs:
             release/*
           if-no-files-found: error
 
+  build-desktop-sidecar:
+    name: Build ${{ matrix.label }} desktop CLI sidecar
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - label: macOS arm64
+            os: macos-latest
+            triple: aarch64-apple-darwin
+            exe_ext: ""
+          - label: macOS x86_64
+            os: macos-15-intel
+            triple: x86_64-apple-darwin
+            exe_ext: ""
+          - label: Linux x86_64
+            os: ubuntu-22.04
+            triple: x86_64-unknown-linux-gnu
+            exe_ext: ""
+          - label: Windows x86_64
+            os: windows-latest
+            triple: x86_64-pc-windows-msvc
+            exe_ext: ".exe"
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.tag_name || github.ref }}
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Sync dependencies
+        run: uv sync --frozen
+
+      - name: Build one-file CLI sidecar
+        run: >
+          uv run --with pyinstaller==6.20.0 pyinstaller
+          --clean
+          --noconfirm
+          --onefile
+          --name kassiber-cli
+          --paths .
+          --collect-submodules rp2
+          --collect-data rp2
+          --hidden-import rp2.plugin.country.at
+          scripts/kassiber_pyinstaller_entry.py
+
+      - name: Smoke CLI sidecar
+        shell: bash
+        run: |
+          set -euo pipefail
+          sidecar="./dist/kassiber-cli${{ matrix.exe_ext }}"
+          "$sidecar" --help >/dev/null
+
+          daemon_root="$RUNNER_TEMP/kassiber-cli-sidecar-smoke"
+          printf '{"request_id":"smoke-1","kind":"daemon.shutdown"}\n' \
+            | "$sidecar" --data-root "$daemon_root" daemon \
+            > "$RUNNER_TEMP/cli-sidecar-smoke.jsonl"
+          grep '"kind":"daemon.ready"' "$RUNNER_TEMP/cli-sidecar-smoke.jsonl"
+          grep '"kind":"daemon.shutdown"' "$RUNNER_TEMP/cli-sidecar-smoke.jsonl"
+
+      - name: Stage sidecar for desktop bundle
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p sidecar
+          src="dist/kassiber-cli${{ matrix.exe_ext }}"
+          dst="sidecar/kassiber-cli-${{ matrix.triple }}${{ matrix.exe_ext }}"
+          cp "$src" "$dst"
+          chmod 755 "$dst"
+
+      - name: Upload desktop sidecar
+        uses: actions/upload-artifact@v4
+        with:
+          name: kassiber-desktop-sidecar-${{ matrix.triple }}
+          path: sidecar/*
+          if-no-files-found: error
+          retention-days: 7
+
   publish:
     name: Publish prerelease
     needs:
@@ -265,9 +377,10 @@ jobs:
             Automated Kassiber prerelease artifacts.
 
             These artifacts are unsigned prerelease builds for CLI and desktop
-            preview testing. Desktop previews do not yet bundle the Python
-            sidecar; launch them from an environment where `python3 -m kassiber
-            daemon` works, or set `KASSIBER_DAEMON_PYTHON` and
-            `KASSIBER_REPO_ROOT` before launching.
+            preview testing. Desktop previews now bundle the Kassiber CLI
+            sidecar, so normal daemon calls do not require a separate Python
+            checkout, and the GUI executable can forward `--cli ...` to the
+            bundled CLI. Set `KASSIBER_DAEMON_PYTHON` only when intentionally
+            overriding the bundled sidecar for debugging.
           files: |
             release/*
