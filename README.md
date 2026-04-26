@@ -186,7 +186,8 @@ are provided. Linux CLI binaries are built on Ubuntu 22.04 to keep the glibc
 floor aligned with the AppImage build.
 Pull requests do not build binaries automatically; use a manual workflow run
 against the PR branch when a tester artifact is needed. The workflow run and
-release tag record the source commit, but artifact filenames and `.sha256`
+release tag record the source commit, and the desktop shell displays the build
+commit beside the version number. CLI artifact filenames and `.sha256`
 sidecars do not embed the commit hash yet.
 
 The same workflow also builds unsigned desktop preview artifacts: a universal

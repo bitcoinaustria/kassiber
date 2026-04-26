@@ -100,9 +100,9 @@ There is no Windows CLI binary yet. Windows coverage is desktop-preview only.
 Every GitHub Actions run records the source ref and commit SHA. For tag
 prereleases, the tag itself is the source-of-truth link back to the commit.
 
-The artifact filenames and `.sha256` sidecars do not currently include or
-embed the source commit hash. Do not claim an artifact contains the latest
-commit hash unless the workflow has been changed to add build metadata.
+The desktop shell displays the build commit beside the version number. CLI
+binaries, artifact filenames, and `.sha256` sidecars do not currently include
+or embed the source commit hash.
 
 The intended next hardening step is to include a small `BUILD_INFO.json` or
 `BUILD_INFO.txt` in every packaged artifact with at least:

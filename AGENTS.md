@@ -149,9 +149,11 @@ List endpoints with `--limit` also accept `--cursor`. The cursor is an opaque ba
 - If the user asks for binaries for a PR or branch, run the workflow manually
   against that branch and leave the result as workflow artifacts. Do not create
   a release for PR/tester builds.
-- The workflow run and release tag identify the source commit, but artifact
+- The workflow run and release tag identify the source commit, and the desktop
+  shell displays the build commit beside the version number. CLI artifact
   filenames and `.sha256` sidecars do not embed the commit hash yet. Do not
-  claim embedded build metadata until the workflow adds a `BUILD_INFO` file.
+  claim full embedded build metadata until the workflow adds a `BUILD_INFO`
+  file.
 - Operational commands and artifact details live in
   [docs/reference/prerelease-binaries.md](docs/reference/prerelease-binaries.md).
 

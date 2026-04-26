@@ -43,6 +43,8 @@ unsigned desktop previews for universal macOS (`.app` zip / `.dmg`), Linux
 (`.AppImage`), and Windows (`.msi` plus NSIS setup `.exe`); until the Python
 sidecar is bundled, those desktop artifacts expect an external Kassiber-capable
 Python environment.
+The desktop shell displays the build commit beside the version number; CLI
+artifact filenames and `.sha256` sidecars still do not embed the commit hash.
 
 Pull requests intentionally do not build binaries automatically. If a maintainer
 asks for binaries for a PR or branch, run `prerelease-binaries` manually against
