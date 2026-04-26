@@ -62,6 +62,12 @@ import {
 } from "@/components/ui/tooltip";
 import { AddConnectionFlow } from "@/components/kb/AddConnectionFlow";
 import { cn } from "@/lib/utils";
+import {
+  MOCK_OVERVIEW,
+  type OverviewSnapshot,
+  type PortfolioPoint,
+  type Tx as OverviewTx,
+} from "@/mocks/seed";
 
 type StatItem = {
   title: string;
@@ -71,6 +77,7 @@ type StatItem = {
   isPositive: boolean;
   icon: React.ComponentType<React.SVGProps<SVGSVGElement>>;
   format: "currency" | "number";
+  comparisonLabel: string;
 };
 
 type SalesCategoryItem = {
@@ -171,6 +178,7 @@ const statsData: StatItem[] = [
     isPositive: true,
     icon: CircleDollarSign,
     format: "currency",
+    comparisonLabel: "vs Last Month",
   },
   {
     title: "Transactions",
@@ -180,6 +188,7 @@ const statsData: StatItem[] = [
     isPositive: true,
     icon: ClipboardList,
     format: "number",
+    comparisonLabel: "vs Last Month",
   },
   {
     title: "Reviewed events",
@@ -189,6 +198,7 @@ const statsData: StatItem[] = [
     isPositive: true,
     icon: Users,
     format: "number",
+    comparisonLabel: "vs Last Month",
   },
   {
     title: "Open review",
@@ -198,8 +208,54 @@ const statsData: StatItem[] = [
     isPositive: false,
     icon: CreditCard,
     format: "currency",
+    comparisonLabel: "vs Last Month",
   },
 ];
+
+function buildStatsData(snapshot: OverviewSnapshot): StatItem[] {
+  const transactionCount = snapshot.status?.transactionCount ?? snapshot.txs.length;
+  return [
+    {
+      ...statsData[0],
+      value: snapshot.fiat.eurBalance,
+      previousValue: snapshot.fiat.eurCostBasis,
+      changePercent: snapshot.fiat.eurCostBasis
+        ? (snapshot.fiat.eurUnrealized / snapshot.fiat.eurCostBasis) * 100
+        : 0,
+      isPositive: snapshot.fiat.eurUnrealized >= 0,
+      comparisonLabel: snapshot.fiat.eurCostBasis
+        ? "vs cost basis"
+        : "current estimate",
+    },
+    {
+      ...statsData[1],
+      value: transactionCount,
+      previousValue: 0,
+      changePercent: 0,
+      isPositive: true,
+      comparisonLabel: "loaded rows",
+    },
+    {
+      ...statsData[2],
+      title: "Connections",
+      value: snapshot.connections.length,
+      previousValue: 0,
+      changePercent: 0,
+      isPositive: true,
+      comparisonLabel: "configured",
+    },
+    {
+      ...statsData[3],
+      title: "Open review",
+      value: snapshot.status?.quarantines ?? 0,
+      previousValue: 0,
+      changePercent: 0,
+      isPositive: (snapshot.status?.quarantines ?? 0) === 0,
+      format: "number",
+      comparisonLabel: "journal quarantine",
+    },
+  ];
+}
 
 const fullYearData = [
   { month: "Jan", thisYear: 42000, prevYear: 38000 },
@@ -242,48 +298,200 @@ const periodKeys: TimePeriod[] = [
   "5years",
 ];
 
-function getDataForPeriod(period: TimePeriod) {
-  if (period === "30days") return fullYearData.slice(-4);
-  if (period === "3months") return fullYearData.slice(-3);
-  if (period === "ytd") return fullYearData.slice(0, 6);
-  if (period === "5years") return fiveYearData;
-  return fullYearData;
+function getDataForPeriod(period: TimePeriod, snapshot: OverviewSnapshot) {
+  const fallback = period === "5years" ? fiveYearData : fullYearData;
+  if (snapshot.portfolioSeries?.length) {
+    const points = buildDatedPortfolioPoints(snapshot.portfolioSeries, period);
+    if (points.length) return points;
+  }
+  if (!snapshot.balanceSeries.some((value) => value !== 0)) {
+    if (period === "30days") return fallback.slice(-4);
+    if (period === "3months") return fallback.slice(-3);
+    if (period === "ytd") return fallback.slice(0, 6);
+    return fallback;
+  }
+  const labels =
+    period === "5years"
+      ? ["2022", "2023", "2024", "2025", "2026"]
+      : [
+          "Jan",
+          "Feb",
+          "Mar",
+          "Apr",
+          "May",
+          "Jun",
+          "Jul",
+          "Aug",
+          "Sep",
+          "Oct",
+          "Nov",
+          "Dec",
+        ];
+  const points = snapshot.balanceSeries.map((btc, index) => {
+    const isLatestPoint = index === snapshot.balanceSeries.length - 1;
+    const value = isLatestPoint
+      ? snapshot.fiat.eurBalance
+      : btc * snapshot.priceEur;
+    const basisShare =
+      snapshot.fiat.eurBalance > 0
+        ? value / snapshot.fiat.eurBalance
+        : index / Math.max(1, snapshot.balanceSeries.length - 1);
+    return {
+      month: labels[index % labels.length],
+      thisYear: value,
+      prevYear:
+        snapshot.fiat.eurCostBasis * Math.max(0, Math.min(1, basisShare)),
+    };
+  });
+  if (period === "30days") return points.slice(-4);
+  if (period === "3months") return points.slice(-3);
+  if (period === "ytd") {
+    return points.slice(0, Math.max(1, new Date().getMonth() + 1));
+  }
+  if (period === "5years") {
+    return points.filter((_, index) => index % 3 === 0).slice(-5);
+  }
+  return points;
 }
 
-const revenueSourceData = {
-  total: 124700,
-  onchain: { value: 72400, percent: 58 },
-  lightning: { value: 31200, percent: 25 },
-  liquid: { value: 16100, percent: 13 },
-  manual: { value: 5000, percent: 4 },
-};
+function buildDatedPortfolioPoints(
+  series: PortfolioPoint[],
+  period: TimePeriod,
+) {
+  const sorted = [...series].sort((a, b) => a.date.localeCompare(b.date));
+  const latestDate = parseSeriesDate(sorted[sorted.length - 1]?.date);
+  const filtered = sorted.filter((point) =>
+    isPointInPeriod(point.date, latestDate, period),
+  );
+  const scoped = filtered.length ? filtered : sorted.slice(-1);
+  const points =
+    period === "5years"
+      ? latestPointPerYear(scoped)
+      : period === "1year" || period === "ytd"
+        ? latestPointPerMonth(scoped)
+        : scoped;
+  return points.map((point) => ({
+    month: formatPortfolioLabel(point.date, period),
+    thisYear: point.valueEur,
+    prevYear: point.costBasisEur,
+  }));
+}
 
-const salesCategoryData: SalesCategoryItem[] = [
-  {
-    name: "On-chain BTC",
-    value: 145200,
-    percent: 58,
-    color: palette.primary,
-  },
-  {
-    name: "Lightning",
-    value: 62400,
-    percent: 25,
-    color: `color-mix(in oklch, var(--primary) 80%, ${mixBase})`,
-  },
-  {
-    name: "Liquid",
-    value: 32500,
-    percent: 13,
-    color: `color-mix(in oklch, var(--primary) 60%, ${mixBase})`,
-  },
-  {
-    name: "Other",
-    value: 10000,
-    percent: 4,
-    color: `color-mix(in oklch, var(--primary) 42%, ${mixBase})`,
-  },
-];
+function parseSeriesDate(value: string | undefined) {
+  const parsed = value ? new Date(`${value.slice(0, 10)}T00:00:00Z`) : null;
+  return parsed && !Number.isNaN(parsed.valueOf()) ? parsed : new Date();
+}
+
+function isPointInPeriod(
+  value: string,
+  latestDate: Date,
+  period: TimePeriod,
+) {
+  const pointDate = parseSeriesDate(value);
+  if (period === "ytd") {
+    return pointDate.getUTCFullYear() === latestDate.getUTCFullYear();
+  }
+  const start = new Date(latestDate);
+  if (period === "30days") {
+    start.setUTCDate(start.getUTCDate() - 30);
+  } else if (period === "3months") {
+    start.setUTCMonth(start.getUTCMonth() - 3);
+  } else if (period === "1year") {
+    start.setUTCFullYear(start.getUTCFullYear() - 1);
+  } else {
+    start.setUTCFullYear(start.getUTCFullYear() - 5);
+  }
+  return pointDate >= start && pointDate <= latestDate;
+}
+
+function latestPointPerYear(points: PortfolioPoint[]) {
+  const byYear = new Map<string, PortfolioPoint>();
+  for (const point of points) {
+    byYear.set(point.date.slice(0, 4), point);
+  }
+  return [...byYear.values()].slice(-5);
+}
+
+function latestPointPerMonth(points: PortfolioPoint[]) {
+  const byMonth = new Map<string, PortfolioPoint>();
+  for (const point of points) {
+    byMonth.set(point.date.slice(0, 7), point);
+  }
+  return [...byMonth.values()];
+}
+
+function formatPortfolioLabel(value: string, period: TimePeriod) {
+  const date = parseSeriesDate(value);
+  if (period === "5years") {
+    return String(date.getUTCFullYear());
+  }
+  if (period === "30days" || period === "3months") {
+    return date.toLocaleDateString("en-US", {
+      month: "short",
+      day: "numeric",
+      timeZone: "UTC",
+    });
+  }
+  return date.toLocaleDateString("en-US", {
+    month: "short",
+    year: "2-digit",
+    timeZone: "UTC",
+  });
+}
+
+function sourceForLabel(label: string) {
+  const value = label.toLowerCase();
+  if (value.includes("liquid") || value.includes("lbtc")) return "liquid";
+  if (
+    value.includes("lightning") ||
+    value.includes("ln") ||
+    value.includes("phoenix") ||
+    value.includes("nwc") ||
+    value.includes("core-ln")
+  ) {
+    return "lightning";
+  }
+  return "onchain";
+}
+
+function percentOf(value: number, total: number) {
+  if (total <= 0) return 0;
+  return Math.round((value / total) * 100);
+}
+
+function buildRevenueSourceItems(snapshot: OverviewSnapshot) {
+  const bySource = { onchain: 0, lightning: 0, liquid: 0, manual: 0 };
+  for (const tx of snapshot.txs) {
+    const key = sourceForLabel(`${tx.account} ${tx.counter}`) as keyof typeof bySource;
+    bySource[key] += Math.abs(tx.eur || (tx.amountSat / 100_000_000) * tx.rate);
+  }
+  const total = Object.values(bySource).reduce((sum, value) => sum + value, 0);
+  return {
+    total,
+    items: [
+      { key: "onchain", label: "On-chain", value: bySource.onchain, percent: percentOf(bySource.onchain, total), color: palette.primary },
+      { key: "lightning", label: "Lightning", value: bySource.lightning, percent: percentOf(bySource.lightning, total), color: palette.secondary.light },
+      { key: "liquid", label: "Liquid", value: bySource.liquid, percent: percentOf(bySource.liquid, total), color: palette.tertiary.light },
+      { key: "manual", label: "Manual", value: bySource.manual, percent: percentOf(bySource.manual, total), color: `color-mix(in oklch, var(--primary) 42%, ${mixBase})` },
+    ],
+  };
+}
+
+function buildHoldingsBySource(snapshot: OverviewSnapshot): SalesCategoryItem[] {
+  const bySource = { onchain: 0, lightning: 0, liquid: 0, other: 0 };
+  for (const connection of snapshot.connections) {
+    const value = connection.balance * snapshot.priceEur;
+    const source = sourceForLabel(`${connection.kind} ${connection.label}`);
+    bySource[source as keyof typeof bySource] += value;
+  }
+  const total = Object.values(bySource).reduce((sum, value) => sum + value, 0);
+  return [
+    { name: "On-chain BTC", value: bySource.onchain, percent: percentOf(bySource.onchain, total), color: palette.primary },
+    { name: "Lightning", value: bySource.lightning, percent: percentOf(bySource.lightning, total), color: `color-mix(in oklch, var(--primary) 80%, ${mixBase})` },
+    { name: "Liquid", value: bySource.liquid, percent: percentOf(bySource.liquid, total), color: `color-mix(in oklch, var(--primary) 60%, ${mixBase})` },
+    { name: "Other", value: bySource.other, percent: percentOf(bySource.other, total), color: `color-mix(in oklch, var(--primary) 42%, ${mixBase})` },
+  ];
+}
 
 const transactionStatuses: TransactionStatus[] = [
   "confirmed",
@@ -550,20 +758,33 @@ const recentActivity: ActivityItem[] = [
 
 const WelcomeSection = ({
   onAddConnection,
+  snapshot,
 }: {
   onAddConnection: () => void;
+  snapshot: OverviewSnapshot;
 }) => {
+  const reviewCount = snapshot.status?.quarantines ?? 0;
+  const profile = snapshot.status?.profile ?? "local profile";
+  const transactionCount = snapshot.status?.transactionCount ?? snapshot.txs.length;
   return (
     <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between sm:gap-6">
       <div className="space-y-2 sm:space-y-5">
         <h2 className="text-lg leading-relaxed font-semibold sm:text-[22px]">
-          Welcome back, Hal.
+          {profile}
         </h2>
         <p className="text-sm text-muted-foreground sm:text-base">
-          Today you have{" "}
-          <span className="font-medium text-foreground">18 transactions</span>{" "}
-          waiting for review and{" "}
-          <span className="font-medium text-foreground">3 reports</span> ready
+          Current view has{" "}
+          <span className="font-medium text-foreground">
+            {transactionCount} transactions
+          </span>
+          ,{" "}
+          <span className="font-medium text-foreground">
+            {snapshot.connections.length} connections
+          </span>
+          , and{" "}
+          <span className="font-medium text-foreground">
+            {reviewCount} review items
+          </span>
         </p>
       </div>
 
@@ -594,13 +815,20 @@ const WelcomeSection = ({
   );
 };
 
-const StatsCards = () => {
+const StatsCards = ({ snapshot }: { snapshot: OverviewSnapshot }) => {
+  const stats = buildStatsData(snapshot);
   return (
     <div className="rounded-xl border bg-card">
       <div className="grid grid-cols-1 divide-x-0 divide-y divide-border sm:grid-cols-2 sm:divide-y-0 lg:grid-cols-4 lg:divide-x">
-        {statsData.map((stat) => {
+        {stats.map((stat) => {
           const formatter =
             stat.format === "currency" ? currencyFormatter : numberFormatter;
+          const hasComparison = stat.previousValue > 0;
+          const statusText = hasComparison
+            ? `${stat.isPositive ? "+" : "-"}${stat.changePercent.toFixed(1)}%`
+            : stat.value === 0
+              ? "Clear"
+              : "Current";
 
           return (
             <div key={stat.title} className="space-y-4 p-4 sm:p-6">
@@ -621,19 +849,22 @@ const StatsCards = () => {
                       : "text-red-600 dark:text-red-400",
                   )}
                 >
-                  {stat.isPositive ? "+" : "-"}
-                  {stat.changePercent.toFixed(1)}%
-                  <span className="hidden sm:inline">
-                    (
-                    {formatter.format(
-                      Math.abs(stat.value - stat.previousValue),
-                    )}
-                    )
-                  </span>
+                  {statusText}
+                  {hasComparison && (
+                    <span className="hidden sm:inline">
+                      (
+                      {formatter.format(
+                        Math.abs(stat.value - stat.previousValue),
+                      )}
+                      )
+                    </span>
+                  )}
                 </span>
                 <span className="hidden items-center gap-2 text-muted-foreground sm:inline-flex">
                   <span className="size-1 rounded-full bg-muted-foreground" />
-                  <span className="xl:whitespace-nowrap">vs Last Month</span>
+                  <span className="xl:whitespace-nowrap">
+                    {stat.comparisonLabel}
+                  </span>
                 </span>
               </div>
             </div>
@@ -644,35 +875,9 @@ const StatsCards = () => {
   );
 };
 
-const RevenueSourceChart = () => {
+const RevenueSourceChart = ({ snapshot }: { snapshot: OverviewSnapshot }) => {
   const { active: activeSegment, handleHover } = useHoverHighlight<number>();
-
-  const revenueSourceItems = [
-    {
-      key: "onchain",
-      label: "On-chain",
-      ...revenueSourceData.onchain,
-      color: palette.primary,
-    },
-    {
-      key: "lightning",
-      label: "Lightning",
-      ...revenueSourceData.lightning,
-      color: palette.secondary.light,
-    },
-    {
-      key: "liquid",
-      label: "Liquid",
-      ...revenueSourceData.liquid,
-      color: palette.tertiary.light,
-    },
-    {
-      key: "manual",
-      label: "Manual",
-      ...revenueSourceData.manual,
-      color: `color-mix(in oklch, var(--primary) 42%, ${mixBase})`,
-    },
-  ];
+  const { total, items: revenueSourceItems } = buildRevenueSourceItems(snapshot);
 
   return (
     <div className="flex flex-col gap-4 rounded-xl border bg-card p-4 sm:p-5">
@@ -691,8 +896,7 @@ const RevenueSourceChart = () => {
               Revenue by Source
             </span>
             <p className="text-[10px] text-muted-foreground sm:text-xs">
-              {compactCurrencyFormatter.format(revenueSourceData.total)} this
-              month
+              {compactCurrencyFormatter.format(total)} in loaded rows
             </p>
           </div>
         </div>
@@ -830,9 +1034,13 @@ const RevenueSourceChart = () => {
   );
 };
 
-const SalesByCategoryChart = () => {
+const SalesByCategoryChart = ({ snapshot }: { snapshot: OverviewSnapshot }) => {
   const { active: activeSlice, handleHover: setHoveredSlice } =
     useHoverHighlight<number>();
+  const salesCategoryData = buildHoldingsBySource(snapshot);
+  const unrealizedPercent = snapshot.fiat.eurCostBasis
+    ? (snapshot.fiat.eurUnrealized / snapshot.fiat.eurCostBasis) * 100
+    : 0;
   const totalSales = salesCategoryData.reduce(
     (acc, item) => acc + item.value,
     0,
@@ -856,10 +1064,20 @@ const SalesByCategoryChart = () => {
             </span>
             <p className="flex items-center gap-1 text-[10px] text-muted-foreground sm:text-xs">
               <ArrowUpRight
-                className="size-3 text-emerald-600"
+                className={cn(
+                  "size-3",
+                  unrealizedPercent >= 0 ? "text-emerald-600" : "text-red-600",
+                )}
                 aria-hidden="true"
               />
-              <span className="text-emerald-600">+8.4%</span>
+              <span
+                className={
+                  unrealizedPercent >= 0 ? "text-emerald-600" : "text-red-600"
+                }
+              >
+                {unrealizedPercent >= 0 ? "+" : ""}
+                {unrealizedPercent.toFixed(1)}%
+              </span>
               <span>vs cost basis</span>
             </p>
           </div>
@@ -947,11 +1165,11 @@ const SalesByCategoryChart = () => {
   );
 };
 
-const SideChartsSection = () => {
+const SideChartsSection = ({ snapshot }: { snapshot: OverviewSnapshot }) => {
   return (
     <div className="flex w-full flex-col gap-4 xl:w-[410px]">
-      <RevenueSourceChart />
-      <SalesByCategoryChart />
+      <RevenueSourceChart snapshot={snapshot} />
+      <SalesByCategoryChart snapshot={snapshot} />
     </div>
   );
 };
@@ -980,12 +1198,11 @@ function CustomTooltip({
   const prevYear = payload.find((p) => p.dataKey === "prevYear")?.value || 0;
   const diff = Number(thisYear) - Number(prevYear);
   const percentage = prevYear ? Math.round((diff / Number(prevYear)) * 100) : 0;
-  const currentYear = new Date().getFullYear();
 
   return (
     <div className="rounded-lg border border-border bg-popover p-2 shadow-lg sm:p-3">
       <p className="mb-1.5 text-xs font-medium text-foreground sm:mb-2 sm:text-sm">
-        {label}, {currentYear}
+        {label}
       </p>
       <div className="space-y-1 sm:space-y-1.5">
         <div className="flex items-center gap-1.5 sm:gap-2">
@@ -1028,7 +1245,7 @@ function CustomTooltip({
   );
 }
 
-const RevenueFlowChart = () => {
+const RevenueFlowChart = ({ snapshot }: { snapshot: OverviewSnapshot }) => {
   const [period, setPeriod] = React.useState<TimePeriod>("1year");
   const { active: activeSeries, handleHover } = useHoverHighlight<
     "thisYear" | "prevYear"
@@ -1063,15 +1280,18 @@ const RevenueFlowChart = () => {
     window.history.replaceState(null, "", nextUrl);
   }, [period]);
 
-  const chartData = getDataForPeriod(period);
-  const totalRevenue = chartData.reduce((acc, item) => acc + item.thisYear, 0);
+  const chartData = getDataForPeriod(period, snapshot);
+  const latestPortfolioValue =
+    chartData.length > 0
+      ? chartData[chartData.length - 1]?.thisYear
+      : snapshot.fiat.eurBalance;
 
   const renderChartCard = (expanded = false) => (
     <div className="flex min-w-0 flex-1 flex-col gap-4 rounded-xl border bg-card p-4 sm:gap-6 sm:p-6">
       <div className="flex flex-wrap items-center gap-2 sm:gap-4">
         <div className="flex flex-1 flex-col gap-1">
           <p className="text-xl leading-tight font-semibold tracking-tight sm:text-2xl">
-            {currencyFormatter.format(totalRevenue)}
+            {currencyFormatter.format(latestPortfolioValue)}
           </p>
           <p className="text-xs text-muted-foreground">
             Portfolio Value ({periodLabels[period]})
@@ -1279,7 +1499,48 @@ const statusLabels: Record<TransactionStatus, string> = {
   failed: "Failed",
 };
 
-const RecentTransactionsTable = ({ className }: { className?: string }) => {
+function toDashboardTransaction(tx: OverviewTx, index: number): Transaction {
+  const amount = Math.abs(tx.eur || (tx.amountSat / 100_000_000) * tx.rate);
+  const status: TransactionStatus = tx.internal
+    ? "pending"
+    : tx.conf > 0
+      ? "confirmed"
+      : tx.tag.toLowerCase().includes("review")
+        ? "review"
+        : "pending";
+  return {
+    id: tx.id,
+    txid: tx.id || `TX-${index + 1}`,
+    counterparty: tx.account || tx.counter || "Unassigned",
+    counterpartyInitials: initials(tx.account || tx.counter || "TX"),
+    tags: tx.tag
+      ? tx.tag
+          .split(",")
+          .map((tag) => tag.trim())
+          .filter(Boolean)
+      : [tx.type],
+    status,
+    amount,
+    date: tx.date,
+  };
+}
+
+function initials(value: string) {
+  return value
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase() ?? "")
+    .join("");
+}
+
+const RecentTransactionsTable = ({
+  className,
+  transactions,
+}: {
+  className?: string;
+  transactions: Transaction[];
+}) => {
   const [statusFilter, setStatusFilter] = React.useState<
     TransactionStatus | "all"
   >("all");
@@ -1306,9 +1567,9 @@ const RecentTransactionsTable = ({ className }: { className?: string }) => {
   }, []);
 
   const filteredTransactions = React.useMemo(() => {
-    if (statusFilter === "all") return transactionRecords;
-    return transactionRecords.filter((t) => t.status === statusFilter);
-  }, [statusFilter]);
+    if (statusFilter === "all") return transactions;
+    return transactions.filter((t) => t.status === statusFilter);
+  }, [statusFilter, transactions]);
 
   const totalPages = Math.max(
     1,
@@ -1540,8 +1801,21 @@ const RecentActivity = ({ className }: { className?: string }) => {
   );
 };
 
-const Dashboard5 = ({ className }: { className?: string }) => {
+const Dashboard5 = ({
+  className,
+  snapshot = MOCK_OVERVIEW,
+}: {
+  className?: string;
+  snapshot?: OverviewSnapshot;
+}) => {
   const [addConnectionOpen, setAddConnectionOpen] = React.useState(false);
+  const transactions = React.useMemo(
+    () =>
+      snapshot.txs.length
+        ? snapshot.txs.map(toDashboardTransaction)
+        : transactionRecords,
+    [snapshot.txs],
+  );
 
   return (
     <>
@@ -1551,14 +1825,20 @@ const Dashboard5 = ({ className }: { className?: string }) => {
           className,
         )}
       >
-        <WelcomeSection onAddConnection={() => setAddConnectionOpen(true)} />
-        <StatsCards />
+        <WelcomeSection
+          snapshot={snapshot}
+          onAddConnection={() => setAddConnectionOpen(true)}
+        />
+        <StatsCards snapshot={snapshot} />
         <div className="flex flex-col gap-4 sm:gap-6 xl:flex-row">
-          <RevenueFlowChart />
-          <SideChartsSection />
+          <RevenueFlowChart snapshot={snapshot} />
+          <SideChartsSection snapshot={snapshot} />
         </div>
         <div className="flex flex-col gap-4 xl:flex-row">
-          <RecentTransactionsTable className="flex-1" />
+          <RecentTransactionsTable
+            className="flex-1"
+            transactions={transactions}
+          />
           <RecentActivity className="xl:w-[360px]" />
         </div>
       </div>

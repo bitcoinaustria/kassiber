@@ -11,12 +11,16 @@
  */
 
 import { mockDaemon } from "./mock";
+import { useUiStore, type DataMode } from "@/store/ui";
 
 export type DaemonMode = "mock" | "bridge" | "tauri";
 
 function defaultDaemonMode(): DaemonMode {
   if (typeof window !== "undefined" && "__TAURI_INTERNALS__" in window) {
     return "tauri";
+  }
+  if (import.meta.env.DEV) {
+    return "bridge";
   }
   return "mock";
 }
@@ -63,12 +67,29 @@ const tauriDaemon: DaemonTransport = {
   },
 };
 
-export function getTransport(): DaemonTransport {
+const bridgeDaemon: DaemonTransport = {
+  async invoke<T = unknown>(
+    req: DaemonRequest,
+  ): Promise<DaemonEnvelope<T>> {
+    const response = await fetch("/__kassiber__/daemon", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(req),
+    });
+    return response.json() as Promise<DaemonEnvelope<T>>;
+  },
+};
+
+export function getTransport(dataMode?: DataMode): DaemonTransport {
+  if ((dataMode ?? useUiStore.getState().dataMode) === "mock") {
+    return mockDaemon;
+  }
+
   switch (DAEMON_MODE) {
     case "mock":
       return mockDaemon;
     case "bridge":
-      throw new Error("bridge transport not yet implemented (Phase 1.1)");
+      return bridgeDaemon;
     case "tauri":
       return tauriDaemon;
   }

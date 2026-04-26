@@ -76,6 +76,11 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { cn } from "@/lib/utils";
+import {
+  MOCK_TRANSACTIONS,
+  type TransactionsLedger,
+} from "@/mocks/transactions";
+import type { Tx } from "@/mocks/seed";
 
 type TransactionStatus = "completed" | "pending" | "failed" | "review";
 
@@ -860,6 +865,44 @@ const transactionRecords: Transaction[] = [
   },
 ];
 
+function toDashboardTransaction(tx: Tx, index: number): Transaction {
+  const direction: TransactionDirection = tx.internal
+    ? "Transfer"
+    : tx.amountSat >= 0
+      ? "Receive"
+      : "Send";
+  const status: TransactionStatus = tx.conf > 0 ? "completed" : "pending";
+  const paymentMethod =
+    tx.account.toLowerCase().includes("lightning") ||
+    tx.account.toLowerCase().includes("ln") ||
+    tx.account.toLowerCase().includes("phoenix")
+      ? "Lightning"
+      : tx.account.toLowerCase().includes("liquid") ||
+          tx.account.toLowerCase().includes("lbtc")
+        ? "Liquid"
+        : "On-chain";
+  return {
+    id: tx.id,
+    txnId: tx.id || `TX-${index + 1}`,
+    amount: Math.abs(tx.eur || (tx.amountSat / 100_000_000) * tx.rate),
+    counterparty: tx.counter || tx.account || "Unassigned",
+    counterpartyInitials: initials(tx.counter || tx.account || "TX"),
+    direction,
+    paymentMethod,
+    date: tx.date,
+    status: tx.tag.toLowerCase().includes("review") ? "review" : status,
+  };
+}
+
+function initials(value: string) {
+  return value
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase() ?? "")
+    .join("");
+}
+
 const PAGE_SIZE_OPTIONS = [5, 10, 20];
 
 const periodLabels: Record<PeriodKey, string> = {
@@ -877,6 +920,64 @@ const periodKeys: PeriodKey[] = [
   "1year",
   "5years",
 ];
+
+function periodLimit(period: PeriodKey) {
+  if (period === "30days") return 10;
+  if (period === "3months") return 18;
+  if (period === "ytd") return 40;
+  if (period === "5years") return 60;
+  return 30;
+}
+
+function recordsForPeriod(records: Transaction[], period: PeriodKey) {
+  return records.slice(0, periodLimit(period)).reverse();
+}
+
+function buildVolumeRows(records: Transaction[], period: PeriodKey): VolumeDataPoint[] {
+  if (records.length === 0) return volumeData[period];
+  return recordsForPeriod(records, period).map((txn, index) => ({
+    month: period === "30days" ? `#${index + 1}` : txn.date.slice(0, 10) || `#${index + 1}`,
+    revenue: txn.amount,
+  }));
+}
+
+function buildCostRows(records: Transaction[], period: PeriodKey): CostDataPoint[] {
+  if (records.length === 0) return costsData[period];
+  return recordsForPeriod(records, period).map((txn, index) => ({
+    month: period === "30days" ? `#${index + 1}` : txn.date.slice(0, 10) || `#${index + 1}`,
+    cogs: txn.direction === "Send" ? txn.amount : 0,
+    operatingExpenses: txn.status === "review" ? txn.amount : 0,
+  }));
+}
+
+function summarizeVolume(records: Transaction[], period: PeriodKey): PeriodSummary {
+  if (records.length === 0) return volumeSummary[period];
+  const rows = recordsForPeriod(records, period);
+  const total = rows.reduce((sum, txn) => sum + txn.amount, 0);
+  return { total, change: rows.length, isPositive: true };
+}
+
+function summarizeCosts(records: Transaction[], period: PeriodKey): PeriodSummary {
+  if (records.length === 0) return costsSummary[period];
+  const rows = recordsForPeriod(records, period);
+  const total = rows
+    .filter((txn) => txn.direction === "Send" || txn.status === "review")
+    .reduce((sum, txn) => sum + txn.amount, 0);
+  return { total, change: rows.filter((txn) => txn.status === "review").length, isPositive: total === 0 };
+}
+
+function buildStatsData(records: Transaction[]): StatItem[] {
+  const total = records.reduce((sum, txn) => sum + txn.amount, 0);
+  const reviewed = records.filter((txn) => txn.status === "review").length;
+  const sends = records.filter((txn) => txn.direction === "Send");
+  const avg = records.length ? total / records.length : 0;
+  return [
+    { ...statsData[0], value: total, previousValue: 0, changePercent: records.length, isPositive: true },
+    { ...statsData[1], value: sends.reduce((sum, txn) => sum + txn.amount, 0), previousValue: 0, changePercent: sends.length, isPositive: true },
+    { ...statsData[2], value: records.length ? reviewed / records.length : 0, previousValue: 0, changePercent: reviewed, isPositive: reviewed === 0 },
+    { ...statsData[3], value: avg, previousValue: 0, changePercent: records.length, isPositive: true },
+  ];
+}
 
 const PeriodTabs = ({
   activePeriod,
@@ -943,9 +1044,15 @@ function VolumeTooltip({
   );
 }
 
-const VolumeChart = ({ period }: { period: PeriodKey }) => {
-  const data = volumeData[period];
-  const summary = volumeSummary[period];
+const VolumeChart = ({
+  period,
+  records,
+}: {
+  period: PeriodKey;
+  records: Transaction[];
+}) => {
+  const data = buildVolumeRows(records, period);
+  const summary = summarizeVolume(records, period);
 
   const renderChartCard = (expanded = false) => {
     const gradientId = expanded ? "revenueGradientExpanded" : "revenueGradient";
@@ -980,7 +1087,7 @@ const VolumeChart = ({ period }: { period: PeriodKey }) => {
                 )}
               >
                 {summary.isPositive ? "+" : "-"}
-                {summary.change}%
+                {summary.change}
               </span>
             </div>
           </div>
@@ -1124,9 +1231,15 @@ function CostsTooltip({
   );
 }
 
-const CostsChart = ({ period }: { period: PeriodKey }) => {
-  const data = costsData[period];
-  const summary = costsSummary[period];
+const CostsChart = ({
+  period,
+  records,
+}: {
+  period: PeriodKey;
+  records: Transaction[];
+}) => {
+  const data = buildCostRows(records, period);
+  const summary = summarizeCosts(records, period);
 
   return (
     <div className="flex min-w-0 flex-1 flex-col gap-4 rounded-xl border bg-card p-4 sm:gap-5 sm:p-5">
@@ -1179,7 +1292,7 @@ const CostsChart = ({ period }: { period: PeriodKey }) => {
               )}
             >
               {summary.isPositive ? "+" : "-"}
-              {summary.change}%
+              {summary.change}
             </span>
           </div>
         </div>
@@ -1234,10 +1347,11 @@ const CostsChart = ({ period }: { period: PeriodKey }) => {
   );
 };
 
-const StatsCards = () => {
+const StatsCards = ({ records }: { records: Transaction[] }) => {
+  const stats = buildStatsData(records);
   return (
     <div className="grid grid-cols-2 gap-3 rounded-xl border bg-card p-4 sm:gap-4 sm:p-5 lg:grid-cols-4 lg:gap-6 lg:p-6">
-      {statsData.map((stat, index) => {
+      {stats.map((stat, index) => {
         const formatter =
           stat.format === "currency" ? currencyFormatter : percentFormatter;
 
@@ -1345,7 +1459,7 @@ const dateFilterOptions = [
 const filterChipClassName =
   "inline-flex h-5 cursor-pointer items-center gap-1 rounded-md bg-gray-50 px-2 text-[10px] font-medium text-gray-600 ring-1 ring-inset ring-gray-500/10 sm:h-6 sm:text-xs dark:bg-gray-800/50 dark:text-gray-400 dark:ring-gray-400/20";
 
-const TransactionsTable = () => {
+const TransactionsTable = ({ records }: { records: Transaction[] }) => {
   const [searchQuery, setSearchQuery] = React.useState("");
   const [statusFilter, setStatusFilter] = React.useState<string>("all");
   const [dateFilter, setDateFilter] = React.useState<string>("all");
@@ -1417,7 +1531,7 @@ const TransactionsTable = () => {
 
   const filteredTransactions = React.useMemo(() => {
     const query = searchQuery.toLowerCase();
-    return transactionRecords.filter((txn) => {
+    return records.filter((txn) => {
       const matchesSearch =
         txn.txnId.toLowerCase().includes(query) ||
         txn.counterparty.toLowerCase().includes(query);
@@ -1456,7 +1570,7 @@ const TransactionsTable = () => {
         matchesSearch && matchesStatus && matchesPaymentMethod && matchesDate
       );
     });
-  }, [searchQuery, statusFilter, dateFilter, paymentMethodFilter]);
+  }, [records, searchQuery, statusFilter, dateFilter, paymentMethodFilter]);
 
   const totalPages = Math.ceil(filteredTransactions.length / pageSize);
 
@@ -1951,10 +2065,23 @@ const TransactionsTable = () => {
   );
 };
 
-const Dashboard2 = ({ className }: { className?: string }) => {
+const Dashboard2 = ({
+  className,
+  ledger = MOCK_TRANSACTIONS,
+}: {
+  className?: string;
+  ledger?: TransactionsLedger;
+}) => {
   const [period, setPeriod] = React.useState<PeriodKey>("1year");
   const [newTxnOpen, setNewTxnOpen] = React.useState(false);
   const [txnNote, setTxnNote] = React.useState("");
+  const records = React.useMemo(
+    () =>
+      ledger.txs.length
+        ? ledger.txs.map(toDashboardTransaction)
+        : transactionRecords,
+    [ledger.txs],
+  );
 
   React.useEffect(() => {
     if (typeof window === "undefined") return;
@@ -2054,13 +2181,13 @@ const Dashboard2 = ({ className }: { className?: string }) => {
       </div>
 
       <div className="flex flex-col gap-4 sm:gap-6 lg:flex-row">
-        <VolumeChart period={period} />
-        <CostsChart period={period} />
+        <VolumeChart period={period} records={records} />
+        <CostsChart period={period} records={records} />
       </div>
 
-      <StatsCards />
+      <StatsCards records={records} />
 
-      <TransactionsTable />
+      <TransactionsTable records={records} />
     </div>
   );
 };

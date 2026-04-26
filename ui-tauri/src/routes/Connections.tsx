@@ -25,7 +25,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { useDaemon } from "@/daemon/client";
+import { useDaemon, useDaemonMutation } from "@/daemon/client";
 import { useUiStore } from "@/store/ui";
 import { useCurrency, type Currency } from "@/lib/currency";
 import { cn } from "@/lib/utils";
@@ -50,6 +50,7 @@ const fmtEur = (v: number) =>
 
 const kindLabels: Record<ConnectionKind, string> = {
   xpub: "On-chain",
+  address: "On-chain",
   descriptor: "On-chain",
   "core-ln": "Lightning",
   lnd: "Lightning",
@@ -62,6 +63,8 @@ const kindLabels: Record<ConnectionKind, string> = {
   bitpanda: "Exchange",
   river: "Exchange",
   strike: "Lightning",
+  phoenix: "Lightning",
+  custom: "Custom",
   csv: "CSV",
   bip329: "BIP329",
 };
@@ -83,17 +86,72 @@ const statusDotStyles: Record<ConnectionStatus, string> = {
   error: "bg-red-500",
 };
 
+interface SyncResult {
+  wallet: string;
+  status: "synced" | "skipped" | "error" | string;
+  message?: string;
+  reason?: string;
+}
+
 export function Connections() {
   const { data, isLoading } = useDaemon<OverviewSnapshot>("ui.overview.snapshot");
+  const syncWallets = useDaemonMutation<{ results: SyncResult[] }>("ui.wallets.sync");
   const hideSensitive = useUiStore((s) => s.hideSensitive);
+  const addNotification = useUiStore((s) => s.addNotification);
   const currency = useCurrency();
   const navigate = useNavigate();
-  const [spinning, setSpinning] = useState(false);
+  const [syncMessage, setSyncMessage] = useState<string | null>(null);
   const [addOpen, setAddOpen] = useState(false);
 
   const onSyncAll = () => {
-    setSpinning(true);
-    setTimeout(() => setSpinning(false), 900);
+    setSyncMessage(null);
+    addNotification({
+      title: "Wallet sync started",
+      body: "Kassiber is syncing all configured wallet sources.",
+      tone: "warning",
+    });
+    syncWallets.mutate(
+      { all: true },
+      {
+        onSuccess: (envelope) => {
+          const results = envelope.data?.results ?? [];
+          const synced = results.filter((result) => result.status === "synced").length;
+          const skipped = results.filter((result) => result.status === "skipped").length;
+          const errors = results.filter((result) => result.status === "error").length;
+          setSyncMessage(
+            [
+              synced ? `${synced} synced` : null,
+              skipped ? `${skipped} skipped` : null,
+              errors ? `${errors} failed` : null,
+            ]
+              .filter(Boolean)
+              .join(", ") || "Sync finished",
+          );
+          addNotification({
+            title: errors ? "Wallet sync finished with errors" : "Wallet sync finished",
+            body:
+              [
+                synced ? `${synced} synced` : null,
+                skipped ? `${skipped} skipped` : null,
+                errors ? `${errors} failed` : null,
+              ]
+                .filter(Boolean)
+                .join(", ") || "No wallet changes returned.",
+            tone: errors ? "error" : "success",
+          });
+        },
+        onError: (error) => {
+          const message =
+            error instanceof Error ? error.message : "Wallet sync failed";
+          setSyncMessage(message);
+          addNotification({
+            title: "Wallet sync failed",
+            body: message,
+            tone: "error",
+          });
+        },
+      },
+    );
   };
 
   if (isLoading || !data?.data) {
@@ -131,12 +189,18 @@ export function Connections() {
           </h2>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <Button variant="outline" size="sm" className="h-9 gap-2" onClick={onSyncAll}>
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-9 gap-2"
+            onClick={onSyncAll}
+            disabled={syncWallets.isPending}
+          >
             <RefreshCw
-              className={cn("size-4", spinning && "animate-spin")}
+              className={cn("size-4", syncWallets.isPending && "animate-spin")}
               aria-hidden="true"
             />
-            Sync all
+            {syncWallets.isPending ? "Syncing" : "Sync all"}
           </Button>
           <Button size="sm" className="h-9 gap-2" onClick={() => setAddOpen(true)}>
             <Plus className="size-4" aria-hidden="true" />
@@ -144,6 +208,19 @@ export function Connections() {
           </Button>
         </div>
       </div>
+      {syncMessage && (
+        <div
+          className={cn(
+            "rounded-md border px-3 py-2 text-sm",
+            syncWallets.isError
+              ? "border-red-200 bg-red-50 text-red-700 dark:border-red-900/60 dark:bg-red-950/40 dark:text-red-300"
+              : "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900/60 dark:bg-emerald-950/40 dark:text-emerald-300",
+          )}
+          role="status"
+        >
+          {syncMessage}
+        </div>
+      )}
 
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
         <ConnectionMetric

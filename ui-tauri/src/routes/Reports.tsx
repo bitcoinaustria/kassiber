@@ -65,10 +65,25 @@ export function Reports() {
   );
   const hideSensitive = useUiStore((s) => s.hideSensitive);
 
-  if (isLoading || !data?.data) {
+  if (isLoading) {
     return (
       <div className="flex flex-1 items-center justify-center text-sm text-muted-foreground">
         Loading reports...
+      </div>
+    );
+  }
+
+  if (data?.error || !data?.data) {
+    return (
+      <div className="w-full bg-background p-3 sm:p-4 md:p-6">
+        <Card>
+          <CardHeader>
+            <CardTitle>Reports unavailable</CardTitle>
+            <CardDescription>
+              {data?.error?.message ?? "The daemon did not return report data."}
+            </CardDescription>
+          </CardHeader>
+        </Card>
       </div>
     );
   }
@@ -124,6 +139,17 @@ function ReportsView({ report, hideSensitive }: ReportsViewProps) {
         />
 
         <div className="min-w-0 space-y-4">
+          {report.status?.needsJournals && (
+            <Card className="border-amber-200 bg-amber-50 text-amber-950 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-100">
+              <CardHeader>
+                <CardTitle>Journals need processing</CardTitle>
+                <CardDescription className="text-amber-800 dark:text-amber-200">
+                  Recent transaction changes are not reflected in trusted report
+                  totals yet.
+                </CardDescription>
+              </CardHeader>
+            </Card>
+          )}
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
             <ReportMetricCard
               label="Proceeds"
@@ -147,9 +173,12 @@ function ReportsView({ report, hideSensitive }: ReportsViewProps) {
               label="Net Gain"
               value={
                 <span
-                  className={cn("text-emerald-600", blurClass(hideSensitive))}
+                  className={cn(
+                    totals.gain >= 0 ? "text-emerald-600" : "text-red-600",
+                    blurClass(hideSensitive),
+                  )}
                 >
-                  + {j.ccy} {fmt(totals.gain)}
+                  {signedMoney(j.ccy, totals.gain, fmt)}
                 </span>
               }
               sub={`${year} tax year`}
@@ -224,11 +253,12 @@ function ReportsView({ report, hideSensitive }: ReportsViewProps) {
                     </TableCell>
                     <TableCell
                       className={cn(
-                        "text-right text-emerald-600 tabular-nums",
+                        "text-right tabular-nums",
+                        totals.gain >= 0 ? "text-emerald-600" : "text-red-600",
                         blurClass(hideSensitive),
                       )}
                     >
-                      + {totals.gain.toFixed(2)}
+                      {signedNumber(totals.gain)}
                     </TableCell>
                   </TableRow>
                 </TableBody>
@@ -435,14 +465,27 @@ function ReportLotRow({ lot, hideSensitive }: ReportLotRowProps) {
       </TableCell>
       <TableCell
         className={cn(
-          "text-right text-emerald-600 tabular-nums",
+          "text-right tabular-nums",
+          gain >= 0 ? "text-emerald-600" : "text-red-600",
           blurClass(hideSensitive),
         )}
       >
-        + {gain.toFixed(2)}
+        {signedNumber(gain)}
       </TableCell>
     </TableRow>
   );
+}
+
+function signedNumber(value: number) {
+  return `${value >= 0 ? "+" : "-"} ${Math.abs(value).toFixed(2)}`;
+}
+
+function signedMoney(
+  currency: string,
+  value: number,
+  format: (value: number) => string,
+) {
+  return `${value >= 0 ? "+" : "-"} ${currency} ${format(Math.abs(value))}`;
 }
 
 interface ReportMetricCardProps {

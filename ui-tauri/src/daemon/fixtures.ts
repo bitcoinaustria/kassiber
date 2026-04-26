@@ -20,6 +20,32 @@ export const fixtures: Record<string, unknown> = {
   },
   "ui.overview.snapshot": MOCK_OVERVIEW,
   "ui.transactions.list": MOCK_TRANSACTIONS,
+  "ui.wallets.sync": {
+    results: MOCK_OVERVIEW.connections.map((connection) => ({
+      wallet: connection.label,
+      status: "synced",
+      inserted: 0,
+      updated: 0,
+    })),
+  },
   "ui.profiles.snapshot": MOCK_PROFILES,
   "ui.reports.capital_gains": MOCK_CAPITAL_GAINS,
+  "ui.journals.snapshot": {
+    status: {
+      workspace: "Demo Workspace",
+      profile: "local profile",
+      transactionCount: MOCK_OVERVIEW.txs.length,
+      journalEntryCount: 42,
+      needsJournals: false,
+      quarantines: 0,
+      lastProcessedAt: "2026-04-26T12:00:00Z",
+    },
+    entryTypes: [
+      { type: "acquisition", count: 28, gainLossEur: 0 },
+      { type: "disposal", count: 8, gainLossEur: 1240.5 },
+      { type: "transfer_in", count: 3, gainLossEur: 0 },
+      { type: "transfer_out", count: 3, gainLossEur: 0 },
+    ],
+    recent: [],
+  },
 };

@@ -12,6 +12,7 @@ export type ConnectionStatus = "synced" | "syncing" | "idle" | "error";
 
 export type ConnectionKind =
   | "xpub"
+  | "address"
   | "descriptor"
   | "core-ln"
   | "lnd"
@@ -24,6 +25,8 @@ export type ConnectionKind =
   | "bitpanda"
   | "river"
   | "strike"
+  | "phoenix"
+  | "custom"
   | "csv"
   | "bip329";
 
@@ -72,6 +75,14 @@ export interface FiatSnapshot {
   eurRealizedYTD: number;
 }
 
+export interface PortfolioPoint {
+  date: string;
+  label: string;
+  balanceBtc: number;
+  valueEur: number;
+  costBasisEur: number;
+}
+
 export interface OverviewSnapshot {
   priceEur: number;
   priceUsd: number;
@@ -79,7 +90,16 @@ export interface OverviewSnapshot {
   txs: Tx[];
   /** monthly-ish BTC totals across the span */
   balanceSeries: number[];
+  /** dated portfolio points from the daemon, using real source dates/rates */
+  portfolioSeries?: PortfolioPoint[];
   fiat: FiatSnapshot;
+  status?: {
+    workspace: string | null;
+    profile: string | null;
+    transactionCount?: number;
+    needsJournals: boolean;
+    quarantines: number;
+  };
 }
 
 export const MOCK_OVERVIEW: OverviewSnapshot = {
@@ -147,6 +167,20 @@ export const MOCK_OVERVIEW: OverviewSnapshot = {
     { id: "tx12", date: "2026-04-03 09:22", type: "Consolidation", account: "Cold Storage", counter: "12 UTXOs → 1", amountSat: -42_180, eur: -30.13, rate: 71432.0, tag: "Consolidation", conf: 210 },
   ],
   balanceSeries: [0.8, 1.1, 1.6, 1.55, 2.2, 2.4, 2.8, 3.1, 3.6, 4.0, 4.3, 4.38],
+  portfolioSeries: [
+    { date: "2025-05-31", label: "2025-05-31", balanceBtc: 0.8, valueEur: 57_136.14, costBasisEur: 42_880 },
+    { date: "2025-06-30", label: "2025-06-30", balanceBtc: 1.1, valueEur: 78_562.20, costBasisEur: 58_920 },
+    { date: "2025-07-31", label: "2025-07-31", balanceBtc: 1.6, valueEur: 114_272.29, costBasisEur: 86_120 },
+    { date: "2025-08-31", label: "2025-08-31", balanceBtc: 1.55, valueEur: 110_701.28, costBasisEur: 84_450 },
+    { date: "2025-09-30", label: "2025-09-30", balanceBtc: 2.2, valueEur: 157_124.40, costBasisEur: 106_700 },
+    { date: "2025-10-31", label: "2025-10-31", balanceBtc: 2.4, valueEur: 171_408.43, costBasisEur: 118_240 },
+    { date: "2025-11-30", label: "2025-11-30", balanceBtc: 2.8, valueEur: 199_976.50, costBasisEur: 137_980 },
+    { date: "2025-12-31", label: "2025-12-31", balanceBtc: 3.1, valueEur: 221_402.56, costBasisEur: 150_220 },
+    { date: "2026-01-31", label: "2026-01-31", balanceBtc: 3.6, valueEur: 257_112.65, costBasisEur: 167_900 },
+    { date: "2026-02-28", label: "2026-02-28", balanceBtc: 4.0, valueEur: 285_680.72, costBasisEur: 181_430 },
+    { date: "2026-03-31", label: "2026-03-31", balanceBtc: 4.3, valueEur: 307_106.77, costBasisEur: 193_100 },
+    { date: "2026-04-30", label: "2026-04-30", balanceBtc: 4.38, valueEur: 312_842.77, costBasisEur: 198_502.40 },
+  ],
   fiat: {
     eurBalance: 312_842.77,
     eurCostBasis: 198_502.40,

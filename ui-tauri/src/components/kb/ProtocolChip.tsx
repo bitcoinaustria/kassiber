@@ -2,6 +2,7 @@ import type { ConnectionKind } from "@/mocks/seed";
 
 const PROTOCOL_LABELS: Record<ConnectionKind, string> = {
   xpub: "ON-CHAIN",
+  address: "ON-CHAIN",
   descriptor: "ON-CHAIN",
   "core-ln": "LIGHTNING",
   lnd: "LIGHTNING",
@@ -14,6 +15,8 @@ const PROTOCOL_LABELS: Record<ConnectionKind, string> = {
   bitpanda: "EXCHANGE",
   river: "EXCHANGE",
   strike: "EXCHANGE",
+  phoenix: "LIGHTNING",
+  custom: "CUSTOM",
   csv: "FILE",
   bip329: "LABELS",
 };
