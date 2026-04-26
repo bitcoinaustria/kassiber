@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" role="img" aria-label="Kassiber app icon">
+  <rect width="1024" height="1024" fill="#ffffff"/>
+  <text
+    x="512"
+    y="548"
+    fill="#000000"
+    font-family="Blinker, Inter, Arial, sans-serif"
+    font-size="430"
+    font-weight="800"
+    letter-spacing="0"
+    text-anchor="middle"
+    dominant-baseline="middle">KA</text>
+</svg>

@@ -282,6 +282,12 @@ and [docs/plan/04-desktop-ui.md](docs/plan/04-desktop-ui.md).
 
 ### 1.5 Packaging, signing, distribution
 
+- [x] Automated unsigned prerelease CLI binaries for macOS and Linux via
+  GitHub Actions
+- [x] Automated unsigned desktop preview artifacts for macOS, Linux, and
+  Windows via GitHub Actions
+- [ ] Add build metadata (`BUILD_INFO.json` or equivalent) to every
+  prerelease artifact with commit, ref, run id, and build timestamp
 - [ ] `python-build-standalone` sidecar bundling
 - [ ] Tauri bundler per OS; Apple Developer ID, Windows EV, GPG `.deb`
 - [ ] User-initiated update check only; no background polling
