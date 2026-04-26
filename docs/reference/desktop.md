@@ -21,4 +21,6 @@ Current development modes:
   current UI data kinds; `status` is a real daemon round-trip, while UI
   snapshot kinds return `daemon_unavailable` until typed read models land.
   The supervisor uses `.venv/bin/python` when present, then `python3`, unless
-  `KASSIBER_DAEMON_PYTHON` is set.
+  `KASSIBER_DAEMON_PYTHON` is set. `KASSIBER_REPO_ROOT` can point a dev
+  shell at a different checkout; production packaging replaces this repo-root
+  lookup with a bundled sidecar path.

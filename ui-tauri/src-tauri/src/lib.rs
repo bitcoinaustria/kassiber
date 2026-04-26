@@ -20,6 +20,8 @@ const ALLOWED_DAEMON_KINDS: &[&str] = &[
 pub struct DaemonRequest {
     kind: String,
     #[serde(default)]
+    request_id: Option<Value>,
+    #[serde(default)]
     args: Option<Value>,
 }
 
@@ -62,6 +64,7 @@ fn daemon_invoke(
                 "Add the kind to the generated daemon allowlist before exposing it to the webview.",
             ),
             Some(json!({ "kind": request.kind })),
+            request.request_id,
             false,
         );
     }
@@ -74,6 +77,7 @@ fn daemon_invoke(
                 "daemon supervisor lock is poisoned",
                 Some("Restart the Tauri shell."),
                 None,
+                request.request_id,
                 true,
             )
         }
@@ -87,6 +91,7 @@ fn daemon_invoke(
                 format!("Python daemon response did not match the envelope contract: {error}"),
                 Some("Check daemon smoke tests before wiring more UI kinds."),
                 None,
+                None,
                 false,
             ),
         },
@@ -99,12 +104,13 @@ fn error_envelope(
     message: impl Into<String>,
     hint: Option<&str>,
     details: Option<Value>,
+    request_id: Option<Value>,
     retryable: bool,
 ) -> DaemonEnvelope {
     DaemonEnvelope {
         kind: "error".to_string(),
         schema_version: SCHEMA_VERSION,
-        request_id: None,
+        request_id,
         data: None,
         error: Some(DaemonError {
             code: code.to_string(),
@@ -122,6 +128,7 @@ fn supervisor_error_envelope(error: SupervisorError) -> DaemonEnvelope {
         error.message,
         error.hint,
         error.details,
+        None,
         error.retryable,
     )
 }

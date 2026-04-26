@@ -1,8 +1,14 @@
-use serde_json::{json, Value};
+use serde_json::{json, Map, Value};
 use std::env;
-use std::io::{BufRead, BufReader, Write};
+use std::io::{BufRead, BufReader, Read, Write};
 use std::path::PathBuf;
-use std::process::{Child, ChildStdin, ChildStdout, Command, Stdio};
+use std::process::{Child, ChildStderr, ChildStdin, ChildStdout, Command, Stdio};
+use std::sync::{mpsc, Arc, Mutex};
+use std::time::{Duration, Instant};
+
+const DAEMON_READY_TIMEOUT: Duration = Duration::from_secs(5);
+const DAEMON_INVOKE_TIMEOUT: Duration = Duration::from_secs(15);
+const STDERR_TAIL_LIMIT: usize = 16 * 1024;
 
 pub struct DaemonSupervisor {
     process: Option<DaemonProcess>,
@@ -12,7 +18,13 @@ pub struct DaemonSupervisor {
 struct DaemonProcess {
     child: Child,
     stdin: ChildStdin,
-    stdout: BufReader<ChildStdout>,
+    stdout_rx: mpsc::Receiver<Result<Value, SupervisorError>>,
+    stderr_tail: StderrTail,
+}
+
+#[derive(Clone)]
+struct StderrTail {
+    bytes: Arc<Mutex<Vec<u8>>>,
 }
 
 #[derive(Debug)]
@@ -49,6 +61,25 @@ impl SupervisorError {
         self.details = Some(details);
         self
     }
+
+    fn with_stderr_tail(mut self, stderr_tail: String) -> Self {
+        if stderr_tail.is_empty() {
+            return self;
+        }
+
+        let mut map = match self.details.take() {
+            Some(Value::Object(map)) => map,
+            Some(details) => {
+                let mut map = Map::new();
+                map.insert("details".to_string(), details);
+                map
+            }
+            None => Map::new(),
+        };
+        map.insert("stderr_tail".to_string(), Value::String(stderr_tail));
+        self.details = Some(Value::Object(map));
+        self
+    }
 }
 
 impl DaemonSupervisor {
@@ -71,14 +102,22 @@ impl DaemonSupervisor {
         }
 
         process.write_json_line(&request)?;
+        let deadline = Instant::now() + DAEMON_INVOKE_TIMEOUT;
 
         loop {
-            let response = process.read_json_line()?;
-            if response.get("request_id").and_then(Value::as_str) != Some(request_id.as_str()) {
+            let remaining = deadline.saturating_duration_since(Instant::now());
+            let response = process.read_json_value(remaining)?;
+
+            // Progress is part of the daemon protocol, even though no current
+            // status request emits it yet. It must still belong to this call.
+            if response.get("kind").and_then(Value::as_str) == Some("progress") {
+                if response.get("request_id").and_then(Value::as_str) != Some(request_id.as_str()) {
+                    return Err(request_id_mismatch(&request_id, &response));
+                }
                 continue;
             }
-            if response.get("kind").and_then(Value::as_str) == Some("progress") {
-                continue;
+            if response.get("request_id").and_then(Value::as_str) != Some(request_id.as_str()) {
+                return Err(request_id_mismatch(&request_id, &response));
             }
             return Ok(response);
         }
@@ -94,12 +133,14 @@ impl DaemonSupervisor {
         let should_restart = match self.process.as_mut() {
             Some(process) => match process.child.try_wait() {
                 Ok(Some(status)) => {
+                    let stderr_tail = process.stderr_tail();
                     self.process = None;
                     return Err(SupervisorError::new(
                         "daemon_exited",
                         format!("Python daemon exited before handling the request: {status}"),
                     )
                     .hint("Restart the Tauri shell and check the daemon smoke test output.")
+                    .with_stderr_tail(stderr_tail)
                     .retryable());
                 }
                 Ok(None) => false,
@@ -137,7 +178,7 @@ impl DaemonProcess {
             .current_dir(&repo_root)
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
-            .stderr(Stdio::null())
+            .stderr(Stdio::piped())
             .spawn()
             .map_err(|error| {
                 SupervisorError::new(
@@ -161,19 +202,28 @@ impl DaemonProcess {
                 "Python daemon stdout was not captured",
             )
         })?;
+        let stderr = child.stderr.take().ok_or_else(|| {
+            SupervisorError::new(
+                "daemon_spawn_failed",
+                "Python daemon stderr was not captured",
+            )
+        })?;
+        let stderr_tail = StderrTail::spawn(stderr);
 
         let mut process = Self {
             child,
             stdin,
-            stdout: BufReader::new(stdout),
+            stdout_rx: spawn_stdout_reader(stdout),
+            stderr_tail,
         };
-        let ready = process.read_json_line()?;
+        let ready = process.read_json_value(DAEMON_READY_TIMEOUT)?;
         if ready.get("kind").and_then(Value::as_str) != Some("daemon.ready") {
             return Err(SupervisorError::new(
                 "daemon_protocol_error",
                 "Python daemon did not emit daemon.ready on startup",
             )
-            .details(ready));
+            .details(ready)
+            .with_stderr_tail(process.stderr_tail()));
         }
 
         Ok(process)
@@ -202,39 +252,132 @@ impl DaemonProcess {
         })
     }
 
-    fn read_json_line(&mut self) -> Result<Value, SupervisorError> {
-        let mut line = String::new();
-        let bytes = self.stdout.read_line(&mut line).map_err(|error| {
-            SupervisorError::new(
-                "daemon_read_failed",
-                format!("Could not read from Python daemon stdout: {error}"),
+    fn read_json_value(&mut self, timeout: Duration) -> Result<Value, SupervisorError> {
+        match self.stdout_rx.recv_timeout(timeout) {
+            Ok(Ok(response)) => Ok(response),
+            Ok(Err(error)) => Err(error.with_stderr_tail(self.stderr_tail())),
+            Err(mpsc::RecvTimeoutError::Timeout) => Err(SupervisorError::new(
+                "daemon_timeout",
+                format!(
+                    "Python daemon did not answer within {} seconds",
+                    timeout.as_secs()
+                ),
             )
-            .retryable()
-        })?;
-        if bytes == 0 {
-            return Err(
-                SupervisorError::new("daemon_exited", "Python daemon closed stdout").retryable(),
-            );
+            .with_stderr_tail(self.stderr_tail())
+            .retryable()),
+            Err(mpsc::RecvTimeoutError::Disconnected) => Err(SupervisorError::new(
+                "daemon_exited",
+                "Python daemon stdout reader stopped",
+            )
+            .with_stderr_tail(self.stderr_tail())
+            .retryable()),
         }
-        serde_json::from_str(line.trim()).map_err(|error| {
-            SupervisorError::new(
-                "daemon_protocol_error",
-                format!("Python daemon emitted invalid JSON: {error}"),
-            )
-            .details(json!({ "line": line.trim() }))
-        })
+    }
+
+    fn stderr_tail(&self) -> String {
+        self.stderr_tail.text()
     }
 }
 
 impl Drop for DaemonProcess {
     fn drop(&mut self) {
-        let _ = self.write_json_line(&json!({
-            "request_id": "tauri-drop",
-            "kind": "daemon.shutdown"
-        }));
         let _ = self.child.kill();
         let _ = self.child.wait();
     }
+}
+
+impl StderrTail {
+    fn spawn(stderr: ChildStderr) -> Self {
+        let tail = Self {
+            bytes: Arc::new(Mutex::new(Vec::new())),
+        };
+        let thread_tail = tail.clone();
+        std::thread::spawn(move || {
+            let mut reader = BufReader::new(stderr);
+            let mut buffer = [0; 1024];
+            loop {
+                match reader.read(&mut buffer) {
+                    Ok(0) => return,
+                    Ok(count) => thread_tail.append(&buffer[..count]),
+                    Err(_) => return,
+                }
+            }
+        });
+        tail
+    }
+
+    fn append(&self, chunk: &[u8]) {
+        if let Ok(mut bytes) = self.bytes.lock() {
+            bytes.extend_from_slice(chunk);
+            if bytes.len() > STDERR_TAIL_LIMIT {
+                let overflow = bytes.len() - STDERR_TAIL_LIMIT;
+                bytes.drain(..overflow);
+            }
+        }
+    }
+
+    fn text(&self) -> String {
+        self.bytes
+            .lock()
+            .map(|bytes| String::from_utf8_lossy(&bytes).to_string())
+            .unwrap_or_default()
+    }
+}
+
+fn spawn_stdout_reader(stdout: ChildStdout) -> mpsc::Receiver<Result<Value, SupervisorError>> {
+    let (tx, rx) = mpsc::channel();
+    std::thread::spawn(move || {
+        let mut reader = BufReader::new(stdout);
+        loop {
+            let mut line = String::new();
+            match reader.read_line(&mut line) {
+                Ok(0) => {
+                    let _ = tx.send(Err(SupervisorError::new(
+                        "daemon_exited",
+                        "Python daemon closed stdout",
+                    )
+                    .retryable()));
+                    return;
+                }
+                Ok(_) => match serde_json::from_str(line.trim()) {
+                    Ok(response) => {
+                        if tx.send(Ok(response)).is_err() {
+                            return;
+                        }
+                    }
+                    Err(error) => {
+                        let _ = tx.send(Err(SupervisorError::new(
+                            "daemon_protocol_error",
+                            format!("Python daemon emitted invalid JSON: {error}"),
+                        )
+                        .details(json!({ "line": line.trim() }))));
+                        return;
+                    }
+                },
+                Err(error) => {
+                    let _ = tx.send(Err(SupervisorError::new(
+                        "daemon_read_failed",
+                        format!("Could not read from Python daemon stdout: {error}"),
+                    )
+                    .retryable()));
+                    return;
+                }
+            }
+        }
+    });
+    rx
+}
+
+fn request_id_mismatch(expected: &str, response: &Value) -> SupervisorError {
+    SupervisorError::new(
+        "daemon_request_id_mismatch",
+        "Python daemon response request_id did not match the active request",
+    )
+    .details(json!({
+        "expected": expected,
+        "actual": response.get("request_id").cloned().unwrap_or(Value::Null),
+        "kind": response.get("kind").cloned().unwrap_or(Value::Null),
+    }))
 }
 
 fn repo_root() -> PathBuf {

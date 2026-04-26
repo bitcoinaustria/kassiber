@@ -205,7 +205,7 @@ cd ui-tauri
 pnpm tauri:dev
 ```
 
-`pnpm tauri:dev` runs the webview with the Tauri transport, starts the Python daemon, and forwards calls through the Rust supervisor. The supervisor prefers `.venv/bin/python` when present and otherwise falls back to `python3`; set `KASSIBER_DAEMON_PYTHON=/path/to/python` to override it. Screens that still require fixture data show daemon-unavailable states until typed UI snapshot kinds are wired.
+`pnpm tauri:dev` runs the webview with the Tauri transport, starts the Python daemon, and forwards calls through the Rust supervisor. The supervisor prefers `.venv/bin/python` when present and otherwise falls back to `python3`; set `KASSIBER_DAEMON_PYTHON=/path/to/python` to override it, or `KASSIBER_REPO_ROOT=/path/to/checkout` to point the dev shell at another checkout. Screens that still require fixture data show daemon-unavailable states until typed UI snapshot kinds are wired.
 
 The app boots into the Welcome onboarding flow on first load, persists identity
 to localStorage, and routes through Overview / Connections / Transactions /

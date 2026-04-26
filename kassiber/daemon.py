@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import sqlite3
 import sys
+import traceback
 from dataclasses import dataclass
 from typing import Any, TextIO
 
@@ -10,6 +11,10 @@ from . import __version__
 from .core.runtime import build_status_payload
 from .envelope import SCHEMA_VERSION, build_envelope, build_error_envelope, json_ready
 from .errors import AppError
+
+
+MAX_REQUEST_LINE_CHARS = 1_000_000
+_REQUEST_ID_MISSING = object()
 
 
 @dataclass(frozen=True)
@@ -25,8 +30,11 @@ def _write_jsonl(stream: TextIO, payload: dict[str, Any]) -> None:
     stream.flush()
 
 
-def _with_request_id(envelope: dict[str, Any], request_id: object | None) -> dict[str, Any]:
-    if request_id is not None:
+def _with_request_id(
+    envelope: dict[str, Any],
+    request_id: object = _REQUEST_ID_MISSING,
+) -> dict[str, Any]:
+    if request_id is not _REQUEST_ID_MISSING:
         envelope["request_id"] = request_id
     return envelope
 
@@ -35,7 +43,7 @@ def _error_envelope(
     code: str,
     message: str,
     *,
-    request_id: object | None = None,
+    request_id: object = _REQUEST_ID_MISSING,
     details: Any = None,
     hint: str | None = None,
     retryable: bool = False,
@@ -60,7 +68,7 @@ def _status_payload(ctx: DaemonContext) -> dict[str, Any]:
 
 
 def handle_request(ctx: DaemonContext, request: dict[str, Any]) -> tuple[dict[str, Any], bool]:
-    request_id = request.get("request_id")
+    request_id = request.get("request_id", _REQUEST_ID_MISSING)
     kind = request.get("kind")
     if not isinstance(kind, str) or not kind:
         return (
@@ -156,7 +164,24 @@ def run(
         ),
     )
 
-    for line in input_stream:
+    while True:
+        line = input_stream.readline(MAX_REQUEST_LINE_CHARS + 1)
+        if line == "":
+            break
+        if len(line) > MAX_REQUEST_LINE_CHARS:
+            while line and not line.endswith("\n"):
+                line = input_stream.readline(MAX_REQUEST_LINE_CHARS + 1)
+            _write_jsonl(
+                output_stream,
+                _error_envelope(
+                    "request_too_large",
+                    "daemon request line is too large",
+                    request_id=None,
+                    details={"max_chars": MAX_REQUEST_LINE_CHARS},
+                    retryable=False,
+                ),
+            )
+            continue
         raw = line.strip()
         if not raw:
             continue
@@ -168,6 +193,7 @@ def run(
                 _error_envelope(
                     "invalid_json",
                     "daemon request line is not valid JSON",
+                    request_id=None,
                     details={"error": str(exc)},
                     retryable=False,
                 ),
@@ -179,6 +205,7 @@ def run(
                 _error_envelope(
                     "validation",
                     "daemon request must be a JSON object",
+                    request_id=None,
                     details={"type": type(request).__name__},
                     retryable=False,
                 ),
@@ -198,6 +225,8 @@ def run(
             )
             should_shutdown = False
         except Exception as exc:
+            traceback.print_exc(file=sys.stderr)
+            sys.stderr.flush()
             response = _error_envelope(
                 "internal_error",
                 str(exc) or exc.__class__.__name__,
