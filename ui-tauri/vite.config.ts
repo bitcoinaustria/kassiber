@@ -15,6 +15,22 @@ const ALLOWED_BRIDGE_KINDS = new Set([
   "ui.wallets.sync",
 ]);
 
+function isLoopbackHost(hostHeader: string | string[] | undefined) {
+  const rawHost = Array.isArray(hostHeader) ? hostHeader[0] : hostHeader;
+  if (!rawHost) return false;
+
+  const host = rawHost.startsWith("[")
+    ? rawHost.slice(1, rawHost.indexOf("]"))
+    : rawHost.split(":")[0];
+
+  return (
+    host === "localhost" ||
+    host === "::1" ||
+    host === "0:0:0:0:0:0:0:1" ||
+    /^127(?:\.\d{1,3}){3}$/.test(host)
+  );
+}
+
 function readBody(req: import("node:http").IncomingMessage) {
   return new Promise<string>((resolve, reject) => {
     let body = "";
@@ -36,6 +52,23 @@ function daemonBridgePlugin() {
     name: "kassiber-daemon-bridge",
     configureServer(server: import("vite").ViteDevServer) {
       server.middlewares.use(DAEMON_BRIDGE_PATH, async (req, res) => {
+        if (!isLoopbackHost(req.headers.host)) {
+          res.statusCode = 403;
+          res.setHeader("content-type", "application/json");
+          res.end(
+            JSON.stringify({
+              kind: "error",
+              schema_version: 1,
+              error: {
+                code: "bridge_forbidden_host",
+                message: "daemon bridge only accepts loopback hosts",
+                retryable: false,
+              },
+            }),
+          );
+          return;
+        }
+
         if (req.method !== "POST") {
           res.statusCode = 405;
           res.setHeader("content-type", "application/json");
@@ -164,6 +197,7 @@ export default defineConfig({
     },
   },
   server: {
+    host: "127.0.0.1",
     port: 5173,
     strictPort: true,
   },

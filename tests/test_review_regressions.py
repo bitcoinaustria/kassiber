@@ -20,7 +20,10 @@ from kassiber.core import attachments as core_attachments
 from kassiber.core import rates as core_rates
 from kassiber.core.engines import TaxEngineLedgerInputs, build_tax_engine
 from kassiber.core.runtime import bootstrap_runtime, close_runtime
+from kassiber.core.ui_snapshot import build_overview_snapshot, build_transactions_snapshot
+from kassiber.db import open_db, set_setting
 from kassiber.errors import AppError
+from kassiber.msat import btc_to_msat
 
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -317,6 +320,217 @@ class ReviewRegressionTest(unittest.TestCase):
     def _assert_ok(self, payload, result, kind):
         self.assertEqual(result.returncode, 0, msg=f"{payload!r}")
         self.assertEqual(payload.get("kind"), kind)
+
+    def test_ui_snapshots_use_populated_profile_rows(self):
+        conn = open_db(self.data_root)
+        self.addCleanup(conn.close)
+        now = "2026-01-01T00:00:00Z"
+        conn.execute(
+            "INSERT INTO workspaces(id, label, created_at) VALUES(?, ?, ?)",
+            ("ws-ui", "UI Workspace", now),
+        )
+        conn.execute(
+            """
+            INSERT INTO profiles(
+                id, workspace_id, label, fiat_currency, tax_country,
+                tax_long_term_days, gains_algorithm, last_processed_at,
+                last_processed_tx_count, created_at
+            ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                "pf-ui",
+                "ws-ui",
+                "UI Profile",
+                "EUR",
+                "generic",
+                365,
+                "FIFO",
+                "2026-02-02T00:00:00Z",
+                2,
+                now,
+            ),
+        )
+        conn.execute(
+            """
+            INSERT INTO wallets(
+                id, workspace_id, profile_id, label, kind, config_json, created_at
+            ) VALUES(?, ?, ?, ?, ?, ?, ?)
+            """,
+            ("wal-ui", "ws-ui", "pf-ui", "Cold Wallet", "address", "{}", now),
+        )
+        conn.executemany(
+            """
+            INSERT INTO transactions(
+                id, workspace_id, profile_id, wallet_id, external_id, fingerprint,
+                occurred_at, confirmed_at, direction, asset, amount, fee,
+                fiat_currency, fiat_rate, fiat_value, fiat_price_source, kind,
+                description, counterparty, note, excluded, raw_json, created_at
+            ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            [
+                (
+                    "tx-ui-in",
+                    "ws-ui",
+                    "pf-ui",
+                    "wal-ui",
+                    "external-in",
+                    "fp-ui-in",
+                    "2026-01-10T10:00:00Z",
+                    "2026-01-10T10:10:00Z",
+                    "inbound",
+                    "BTC",
+                    btc_to_msat("1.0"),
+                    0,
+                    "EUR",
+                    50_000,
+                    50_000,
+                    "import",
+                    "deposit",
+                    "Initial funding",
+                    "Exchange",
+                    None,
+                    0,
+                    "{}",
+                    "2026-01-10T10:00:00Z",
+                ),
+                (
+                    "tx-ui-spend",
+                    "ws-ui",
+                    "pf-ui",
+                    "wal-ui",
+                    "external-spend",
+                    "fp-ui-spend",
+                    "2026-02-01T12:00:00Z",
+                    "2026-02-01T12:10:00Z",
+                    "outbound",
+                    "BTC",
+                    btc_to_msat("0.1"),
+                    btc_to_msat("0.001"),
+                    "EUR",
+                    60_000,
+                    6_000,
+                    "import",
+                    "payment",
+                    "Merchant spend",
+                    "Merchant",
+                    None,
+                    0,
+                    "{}",
+                    "2026-02-01T12:00:00Z",
+                ),
+            ],
+        )
+        conn.executemany(
+            """
+            INSERT INTO journal_entries(
+                id, workspace_id, profile_id, transaction_id, wallet_id,
+                occurred_at, entry_type, asset, quantity, fiat_value, unit_cost,
+                cost_basis, proceeds, gain_loss, description, created_at
+            ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            [
+                (
+                    "je-ui-in",
+                    "ws-ui",
+                    "pf-ui",
+                    "tx-ui-in",
+                    "wal-ui",
+                    "2026-01-10T10:00:00Z",
+                    "acquisition",
+                    "BTC",
+                    btc_to_msat("1.0"),
+                    50_000,
+                    50_000,
+                    50_000,
+                    None,
+                    None,
+                    "Initial funding",
+                    "2026-01-10T10:00:00Z",
+                ),
+                (
+                    "je-ui-spend",
+                    "ws-ui",
+                    "pf-ui",
+                    "tx-ui-spend",
+                    "wal-ui",
+                    "2026-02-01T12:00:00Z",
+                    "disposal",
+                    "BTC",
+                    -btc_to_msat("0.1"),
+                    -6_000,
+                    50_000,
+                    5_000,
+                    6_000,
+                    1_000,
+                    "Merchant spend",
+                    "2026-02-01T12:00:00Z",
+                ),
+                (
+                    "je-ui-fee",
+                    "ws-ui",
+                    "pf-ui",
+                    "tx-ui-spend",
+                    "wal-ui",
+                    "2026-02-01T12:00:00Z",
+                    "fee",
+                    "BTC",
+                    -btc_to_msat("0.001"),
+                    -60,
+                    60_000,
+                    50,
+                    60,
+                    10,
+                    "Network fee",
+                    "2026-02-01T12:00:00Z",
+                ),
+            ],
+        )
+        conn.execute(
+            """
+            INSERT INTO journal_quarantines(
+                transaction_id, workspace_id, profile_id, reason, detail_json, created_at
+            ) VALUES(?, ?, ?, ?, ?, ?)
+            """,
+            ("tx-ui-spend", "ws-ui", "pf-ui", "missing_fee_price", "{}", now),
+        )
+        conn.execute(
+            """
+            INSERT INTO rates_cache(pair, timestamp, rate, source, fetched_at)
+            VALUES(?, ?, ?, ?, ?)
+            """,
+            ("BTC-EUR", "2026-02-01T00:00:00Z", 65_000, "manual", now),
+        )
+        set_setting(conn, "context_workspace", "ws-ui")
+        set_setting(conn, "context_profile", "pf-ui")
+        conn.commit()
+
+        overview = build_overview_snapshot(conn)
+        self.assertEqual(overview["status"]["workspace"], "UI Workspace")
+        self.assertEqual(overview["status"]["profile"], "UI Profile")
+        self.assertEqual(overview["status"]["transactionCount"], 2)
+        self.assertFalse(overview["status"]["needsJournals"])
+        self.assertEqual(overview["status"]["quarantines"], 1)
+        self.assertEqual(overview["priceEur"], 65_000)
+        self.assertEqual(len(overview["connections"]), 1)
+        self.assertEqual(overview["connections"][0]["label"], "Cold Wallet")
+        self.assertAlmostEqual(overview["connections"][0]["balance"], 0.899)
+        self.assertAlmostEqual(overview["balanceSeries"][-1], 0.899)
+        self.assertAlmostEqual(overview["fiat"]["eurBalance"], 58_435)
+        self.assertAlmostEqual(overview["fiat"]["eurCostBasis"], 50_000)
+        self.assertGreaterEqual(len(overview["portfolioSeries"]), 2)
+        self.assertAlmostEqual(overview["portfolioSeries"][-1]["balanceBtc"], 0.899)
+        self.assertAlmostEqual(overview["portfolioSeries"][-1]["valueEur"], 58_435)
+        self.assertEqual(overview["txs"][0]["id"], "tx-ui-spend")
+        self.assertEqual(overview["txs"][0]["type"], "Fee")
+        self.assertEqual(overview["txs"][0]["amountSat"], -10_000_000)
+        self.assertEqual(overview["txs"][0]["tag"], "Review")
+
+        transactions = build_transactions_snapshot(conn, {"limit": 10})
+        self.assertEqual(transactions["year"], 2026)
+        self.assertEqual([row["id"] for row in transactions["txs"]], ["tx-ui-spend", "tx-ui-in"])
+        self.assertEqual(transactions["txs"][1]["type"], "Income")
+        self.assertEqual(transactions["txs"][1]["amountSat"], 100_000_000)
+        self.assertEqual(transactions["txs"][1]["eur"], 50_000)
 
     def _bootstrap_runtime_state(self, *, env_file=None, persist_bootstrap=False):
         args = Namespace(

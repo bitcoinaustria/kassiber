@@ -150,7 +150,7 @@ function formatDisplayMoney(eur: number, btc: number, currency: Currency) {
 }
 
 function transactionBtc(txn: Transaction) {
-  return txn.amountBtc ?? txn.amount / 71_420;
+  return txn.amountBtc ?? 0;
 }
 
 const percentFormatter = new Intl.NumberFormat("en-US", {
