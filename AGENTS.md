@@ -137,6 +137,24 @@ List endpoints with `--limit` also accept `--cursor`. The cursor is an opaque ba
 - When adding a new runtime dependency, update both the README dependency story and `THIRD_PARTY_LICENSES.md`.
 - Keep `THIRD_PARTY_LICENSES.md` concise: direct dependencies and notable license constraints matter more than a hand-maintained transitive dump.
 
+## Prerelease binary workflow
+
+- `.github/workflows/prerelease-binaries.yml` is intentionally not a normal PR
+  workflow. Do not add PR-triggered binary builds unless the user explicitly
+  asks for that policy change.
+- `v*` tag pushes build CLI and desktop artifacts and publish them to a GitHub
+  prerelease. Manual `workflow_dispatch` runs build/upload artifacts for the
+  selected ref; they only publish when `publish_release=true` and `tag_name`
+  names an existing tag.
+- If the user asks for binaries for a PR or branch, run the workflow manually
+  against that branch and leave the result as workflow artifacts. Do not create
+  a release for PR/tester builds.
+- The workflow run and release tag identify the source commit, but artifact
+  filenames and `.sha256` sidecars do not embed the commit hash yet. Do not
+  claim embedded build metadata until the workflow adds a `BUILD_INFO` file.
+- Operational commands and artifact details live in
+  [docs/reference/prerelease-binaries.md](docs/reference/prerelease-binaries.md).
+
 ## Verification
 
 All commands below assume project dependencies are installed — either via `uv sync` (then prefix with `uv run`) or via `pip install -e .` inside an activated venv (then use `python3` directly). The examples use `uv run python` because it works without pre-activation; swap in `python3` when working inside an activated venv. For the baseline push/PR pass, use `./scripts/quality-gate.sh` as the single trusted entrypoint; the commands below are the underlying pieces.

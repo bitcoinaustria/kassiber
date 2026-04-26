@@ -183,6 +183,10 @@ through GitHub Actions. Manual runs of the `prerelease-binaries` workflow also
 upload the same `.tar.gz` artifacts, and can attach them to an existing tag
 when `publish_release` and `tag_name` are provided. Linux CLI binaries are
 built on Ubuntu 22.04 to keep the glibc floor aligned with the AppImage build.
+Pull requests do not build binaries automatically; use a manual workflow run
+against the PR branch when a tester artifact is needed. The workflow run and
+release tag record the source commit, but artifact filenames and `.sha256`
+sidecars do not embed the commit hash yet.
 
 The same workflow also builds unsigned desktop preview artifacts: macOS
 `.app` zip / `.dmg`, Linux `.AppImage`, and Windows `.msi` plus NSIS setup
@@ -190,6 +194,9 @@ The same workflow also builds unsigned desktop preview artifacts: macOS
 testing the shell on machines where `python3 -m kassiber daemon` already works,
 or where `KASSIBER_DAEMON_PYTHON` / `KASSIBER_REPO_ROOT` are set before launch.
 Fully self-contained desktop installers remain in active development.
+
+Operational guidance for branch, PR, and tag builds lives in
+[docs/reference/prerelease-binaries.md](docs/reference/prerelease-binaries.md).
 
 Before pushing code or docs changes, run:
 
@@ -302,6 +309,7 @@ Reference docs:
 - [docs/reference/machine-output.md](docs/reference/machine-output.md)
 - [docs/reference/desktop.md](docs/reference/desktop.md)
 - [docs/reference/daemon.md](docs/reference/daemon.md)
+- [docs/reference/prerelease-binaries.md](docs/reference/prerelease-binaries.md)
 
 Planning and architecture docs:
 

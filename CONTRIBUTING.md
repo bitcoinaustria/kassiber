@@ -43,6 +43,13 @@ macOS (`.app` zip / `.dmg`), Linux (`.AppImage`), and Windows (`.msi` plus NSIS
 setup `.exe`); until the Python sidecar is bundled, those desktop artifacts
 expect an external Kassiber-capable Python environment.
 
+Pull requests intentionally do not build binaries automatically. If a maintainer
+asks for binaries for a PR or branch, run `prerelease-binaries` manually against
+that branch and leave the result as workflow artifacts. Only publish to GitHub
+Releases for real `v*` prerelease tags. See
+[`docs/reference/prerelease-binaries.md`](docs/reference/prerelease-binaries.md)
+for the exact commands and commit-hash caveats.
+
 ## Pull requests
 
 PRs should say:
