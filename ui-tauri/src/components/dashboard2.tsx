@@ -76,6 +76,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { cn } from "@/lib/utils";
+import { formatBtc, useCurrency, type Currency } from "@/lib/currency";
 import {
   MOCK_TRANSACTIONS,
   type TransactionsLedger,
@@ -91,6 +92,7 @@ type Transaction = {
   id: string;
   txnId: string;
   amount: number;
+  amountBtc?: number;
   counterparty: string;
   counterpartyInitials: string;
   direction: TransactionDirection;
@@ -141,6 +143,15 @@ const compactCurrencyFormatter = new Intl.NumberFormat("en-US", {
 });
 
 const blurClass = (hidden: boolean) => (hidden ? "sensitive" : "");
+
+function formatDisplayMoney(eur: number, btc: number, currency: Currency) {
+  if (currency === "btc") return formatBtc(btc);
+  return currencyFormatter.format(eur);
+}
+
+function transactionBtc(txn: Transaction) {
+  return txn.amountBtc ?? txn.amount / 71_420;
+}
 
 const percentFormatter = new Intl.NumberFormat("en-US", {
   style: "percent",
@@ -888,6 +899,7 @@ function toDashboardTransaction(tx: Tx, index: number): Transaction {
     id: tx.id,
     txnId: tx.id || `TX-${index + 1}`,
     amount: Math.abs(tx.eur || (tx.amountSat / 100_000_000) * tx.rate),
+    amountBtc: Math.abs(tx.amountSat / 100_000_000),
     counterparty: tx.counter || tx.account || "Unassigned",
     counterpartyInitials: initials(tx.counter || tx.account || "TX"),
     direction,
@@ -936,20 +948,38 @@ function recordsForPeriod(records: Transaction[], period: PeriodKey) {
   return records.slice(0, periodLimit(period)).reverse();
 }
 
-function buildVolumeRows(records: Transaction[], period: PeriodKey): VolumeDataPoint[] {
+function buildVolumeRows(
+  records: Transaction[],
+  period: PeriodKey,
+  currency: Currency,
+): VolumeDataPoint[] {
   if (records.length === 0) return volumeData[period];
   return recordsForPeriod(records, period).map((txn, index) => ({
     month: period === "30days" ? `#${index + 1}` : txn.date.slice(0, 10) || `#${index + 1}`,
-    revenue: txn.amount,
+    revenue: currency === "btc" ? transactionBtc(txn) : txn.amount,
   }));
 }
 
-function buildCostRows(records: Transaction[], period: PeriodKey): CostDataPoint[] {
+function buildCostRows(
+  records: Transaction[],
+  period: PeriodKey,
+  currency: Currency,
+): CostDataPoint[] {
   if (records.length === 0) return costsData[period];
   return recordsForPeriod(records, period).map((txn, index) => ({
     month: period === "30days" ? `#${index + 1}` : txn.date.slice(0, 10) || `#${index + 1}`,
-    cogs: txn.direction === "Send" ? txn.amount : 0,
-    operatingExpenses: txn.status === "review" ? txn.amount : 0,
+    cogs:
+      txn.direction === "Send"
+        ? currency === "btc"
+          ? transactionBtc(txn)
+          : txn.amount
+        : 0,
+    operatingExpenses:
+      txn.status === "review"
+        ? currency === "btc"
+          ? transactionBtc(txn)
+          : txn.amount
+        : 0,
   }));
 }
 
@@ -1019,6 +1049,7 @@ interface ChartTooltipProps {
   payload?: ChartTooltipPayload[];
   label?: string | number;
   hideSensitive: boolean;
+  currency: Currency;
 }
 
 function VolumeTooltip({
@@ -1026,6 +1057,7 @@ function VolumeTooltip({
   payload,
   label,
   hideSensitive,
+  currency,
 }: ChartTooltipProps) {
   if (!active || !payload?.length) return null;
 
@@ -1047,7 +1079,9 @@ function VolumeTooltip({
             blurClass(hideSensitive),
           )}
         >
-          {currencyFormatter.format(Number(value))}
+          {currency === "btc"
+            ? formatBtc(Number(value))
+            : currencyFormatter.format(Number(value))}
         </span>
       </div>
     </div>
@@ -1058,13 +1092,19 @@ const VolumeChart = ({
   period,
   records,
   hideSensitive,
+  currency,
 }: {
   period: PeriodKey;
   records: Transaction[];
   hideSensitive: boolean;
+  currency: Currency;
 }) => {
-  const data = buildVolumeRows(records, period);
+  const data = buildVolumeRows(records, period, currency);
   const summary = summarizeVolume(records, period);
+  const summaryBtc = recordsForPeriod(records, period).reduce(
+    (sum, txn) => sum + transactionBtc(txn),
+    0,
+  );
 
   const renderChartCard = (expanded = false) => {
     const gradientId = expanded ? "revenueGradientExpanded" : "revenueGradient";
@@ -1083,7 +1123,7 @@ const VolumeChart = ({
                 blurClass(hideSensitive),
               )}
             >
-              {currencyFormatter.format(summary.total)}
+              {formatDisplayMoney(summary.total, summaryBtc, currency)}
             </p>
             <div className="flex items-center gap-0.5">
               {summary.isPositive ? (
@@ -1162,11 +1202,20 @@ const VolumeChart = ({
               tickLine={false}
               tick={{ fontSize: 10 }}
               dx={-5}
-              tickFormatter={(value) => compactCurrencyFormatter.format(value)}
+              tickFormatter={(value) =>
+                currency === "btc"
+                  ? formatBtc(Number(value), { precision: 4 })
+                  : compactCurrencyFormatter.format(value)
+              }
               width={40}
             />
             <Tooltip
-              content={<VolumeTooltip hideSensitive={hideSensitive} />}
+              content={
+                <VolumeTooltip
+                  hideSensitive={hideSensitive}
+                  currency={currency}
+                />
+              }
               cursor={{ strokeOpacity: 0.2 }}
             />
             <Area
@@ -1202,6 +1251,7 @@ function CostsTooltip({
   label,
   colors,
   hideSensitive,
+  currency,
 }: ChartTooltipProps & {
   colors: { primary: string; secondary: string };
 }) {
@@ -1232,7 +1282,9 @@ function CostsTooltip({
               blurClass(hideSensitive),
             )}
           >
-            {currencyFormatter.format(Number(cogs))}
+            {currency === "btc"
+              ? formatBtc(Number(cogs))
+              : currencyFormatter.format(Number(cogs))}
           </span>
         </div>
         <div className="flex items-center gap-1.5 sm:gap-2">
@@ -1249,7 +1301,9 @@ function CostsTooltip({
               blurClass(hideSensitive),
             )}
           >
-            {currencyFormatter.format(Number(operatingExpenses))}
+            {currency === "btc"
+              ? formatBtc(Number(operatingExpenses))
+              : currencyFormatter.format(Number(operatingExpenses))}
           </span>
         </div>
         <div className="mt-1 border-t border-border pt-1">
@@ -1259,7 +1313,10 @@ function CostsTooltip({
               blurClass(hideSensitive),
             )}
           >
-            Total: {currencyFormatter.format(total)}
+            Total:{" "}
+            {currency === "btc"
+              ? formatBtc(total)
+              : currencyFormatter.format(total)}
           </span>
         </div>
       </div>
@@ -1271,13 +1328,18 @@ const CostsChart = ({
   period,
   records,
   hideSensitive,
+  currency,
 }: {
   period: PeriodKey;
   records: Transaction[];
   hideSensitive: boolean;
+  currency: Currency;
 }) => {
-  const data = buildCostRows(records, period);
+  const data = buildCostRows(records, period, currency);
   const summary = summarizeCosts(records, period);
+  const summaryBtc = recordsForPeriod(records, period)
+    .filter((txn) => txn.direction === "Send" || txn.status === "review")
+    .reduce((sum, txn) => sum + transactionBtc(txn), 0);
 
   return (
     <div className="flex min-w-0 flex-1 flex-col gap-4 rounded-xl border bg-card p-4 sm:gap-5 sm:p-5">
@@ -1314,7 +1376,7 @@ const CostsChart = ({
               blurClass(hideSensitive),
             )}
           >
-            {currencyFormatter.format(summary.total)}
+            {formatDisplayMoney(summary.total, summaryBtc, currency)}
           </p>
           <div className="flex items-center gap-0.5">
             {summary.isPositive ? (
@@ -1360,7 +1422,11 @@ const CostsChart = ({
               tickLine={false}
               tick={{ fontSize: 10 }}
               dx={-5}
-              tickFormatter={(value) => compactCurrencyFormatter.format(value)}
+              tickFormatter={(value) =>
+                currency === "btc"
+                  ? formatBtc(Number(value), { precision: 4 })
+                  : compactCurrencyFormatter.format(value)
+              }
               width={40}
             />
             <Tooltip
@@ -1371,6 +1437,7 @@ const CostsChart = ({
                     secondary: "var(--color-operatingExpenses)",
                   }}
                   hideSensitive={hideSensitive}
+                  currency={currency}
                 />
               }
               cursor={{ fillOpacity: 0.05 }}
@@ -1397,11 +1464,23 @@ const CostsChart = ({
 const StatsCards = ({
   records,
   hideSensitive,
+  currency,
 }: {
   records: Transaction[];
   hideSensitive: boolean;
+  currency: Currency;
 }) => {
   const stats = buildStatsData(records);
+  const totalBtc = records.reduce((sum, txn) => sum + transactionBtc(txn), 0);
+  const sentBtc = records
+    .filter((txn) => txn.direction === "Send")
+    .reduce((sum, txn) => sum + transactionBtc(txn), 0);
+  const avgBtc = records.length ? totalBtc / records.length : 0;
+  const btcByStat = new Map([
+    ["Transaction Volume", totalBtc],
+    ["Realized Gain", sentBtc],
+    ["Avg Transaction", avgBtc],
+  ]);
   return (
     <div className="grid grid-cols-2 gap-3 rounded-xl border bg-card p-4 sm:gap-4 sm:p-5 lg:grid-cols-4 lg:gap-6 lg:p-6">
       {stats.map((stat, index) => {
@@ -1423,7 +1502,9 @@ const StatsCards = ({
                   stat.format === "currency" && blurClass(hideSensitive),
                 )}
               >
-                {formatter.format(stat.previousValue)} previous month
+                {stat.format === "currency"
+                  ? formatDisplayMoney(stat.previousValue, 0, currency)
+                  : formatter.format(stat.previousValue)} previous month
               </p>
               <p
                 className={cn(
@@ -1431,7 +1512,13 @@ const StatsCards = ({
                   stat.format === "currency" && blurClass(hideSensitive),
                 )}
               >
-                {formatter.format(stat.value)}
+                {stat.format === "currency"
+                  ? formatDisplayMoney(
+                      stat.value,
+                      btcByStat.get(stat.title) ?? 0,
+                      currency,
+                    )
+                  : formatter.format(stat.value)}
               </p>
               <div className="flex flex-wrap items-center gap-x-1 gap-y-0.5 text-[10px] sm:text-xs">
                 {stat.isPositive ? (
@@ -1525,9 +1612,11 @@ const filterChipClassName =
 const TransactionsTable = ({
   records,
   hideSensitive,
+  currency,
 }: {
   records: Transaction[];
   hideSensitive: boolean;
+  currency: Currency;
 }) => {
   const [searchQuery, setSearchQuery] = React.useState("");
   const [statusFilter, setStatusFilter] = React.useState<string>("all");
@@ -1966,7 +2055,11 @@ const TransactionsTable = ({
                         blurClass(hideSensitive),
                       )}
                     >
-                      {currencyFormatter.format(txn.amount)}
+                      {formatDisplayMoney(
+                        txn.amount,
+                        transactionBtc(txn),
+                        currency,
+                      )}
                     </TableCell>
                     <TableCell className="hidden lg:table-cell">
                       <span className="inline-flex items-center rounded-md border px-2 py-0.5 text-[10px] font-normal text-muted-foreground sm:text-xs">
@@ -2160,6 +2253,7 @@ const Dashboard2 = ({
   const [newTxnOpen, setNewTxnOpen] = React.useState(false);
   const [txnNote, setTxnNote] = React.useState("");
   const hideSensitive = useUiStore((s) => s.hideSensitive);
+  const currency = useCurrency();
   const records = React.useMemo(
     () =>
       ledger.txs.length
@@ -2270,17 +2364,27 @@ const Dashboard2 = ({
           period={period}
           records={records}
           hideSensitive={hideSensitive}
+          currency={currency}
         />
         <CostsChart
           period={period}
           records={records}
           hideSensitive={hideSensitive}
+          currency={currency}
         />
       </div>
 
-      <StatsCards records={records} hideSensitive={hideSensitive} />
+      <StatsCards
+        records={records}
+        hideSensitive={hideSensitive}
+        currency={currency}
+      />
 
-      <TransactionsTable records={records} hideSensitive={hideSensitive} />
+      <TransactionsTable
+        records={records}
+        hideSensitive={hideSensitive}
+        currency={currency}
+      />
     </div>
   );
 };

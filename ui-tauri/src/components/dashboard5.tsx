@@ -61,6 +61,7 @@ import {
   TooltipTrigger as ShadTooltipTrigger,
 } from "@/components/ui/tooltip";
 import { AddConnectionFlow } from "@/components/kb/AddConnectionFlow";
+import { formatBtc, useCurrency, type Currency } from "@/lib/currency";
 import { cn } from "@/lib/utils";
 import {
   MOCK_OVERVIEW,
@@ -103,6 +104,7 @@ type Transaction = {
   tags: string[];
   status: TransactionStatus;
   amount: number;
+  amountBtc?: number;
   date: string;
 };
 
@@ -127,6 +129,28 @@ const compactCurrencyFormatter = new Intl.NumberFormat("en-US", {
 });
 
 const blurClass = (hidden: boolean) => (hidden ? "sensitive" : "");
+
+function btcFromEur(eur: number, priceEur: number) {
+  return priceEur ? eur / priceEur : 0;
+}
+
+function formatDisplayMoney(eur: number, priceEur: number, currency: Currency) {
+  if (currency === "btc") return formatBtc(btcFromEur(eur, priceEur));
+  return currencyFormatter.format(eur);
+}
+
+function formatCompactDisplayMoney(
+  eur: number,
+  priceEur: number,
+  currency: Currency,
+) {
+  if (currency === "btc") return formatBtc(btcFromEur(eur, priceEur), { precision: 4 });
+  return compactCurrencyFormatter.format(eur);
+}
+
+function transactionBtc(tx: Transaction, priceEur: number) {
+  return tx.amountBtc ?? btcFromEur(tx.amount, priceEur);
+}
 
 /**
  * Custom hook for hover highlight interaction.
@@ -821,9 +845,11 @@ const WelcomeSection = ({
 const StatsCards = ({
   snapshot,
   hideSensitive,
+  currency,
 }: {
   snapshot: OverviewSnapshot;
   hideSensitive: boolean;
+  currency: Currency;
 }) => {
   const stats = buildStatsData(snapshot);
   return (
@@ -852,7 +878,9 @@ const StatsCards = ({
                   stat.format === "currency" && blurClass(hideSensitive),
                 )}
               >
-                {formatter.format(stat.value)}
+                {stat.format === "currency"
+                  ? formatDisplayMoney(stat.value, snapshot.priceEur, currency)
+                  : formatter.format(stat.value)}
               </p>
               <div className="flex flex-wrap items-center gap-2 text-[10px] sm:text-xs xl:flex-nowrap">
                 <span
@@ -868,9 +896,15 @@ const StatsCards = ({
                   {hasComparison && (
                     <span className="hidden sm:inline">
                       (
-                      {formatter.format(
-                        Math.abs(stat.value - stat.previousValue),
-                      )}
+                      {stat.format === "currency"
+                        ? formatDisplayMoney(
+                            Math.abs(stat.value - stat.previousValue),
+                            snapshot.priceEur,
+                            currency,
+                          )
+                        : formatter.format(
+                            Math.abs(stat.value - stat.previousValue),
+                          )}
                       )
                     </span>
                   )}
@@ -893,9 +927,11 @@ const StatsCards = ({
 const RevenueSourceChart = ({
   snapshot,
   hideSensitive,
+  currency,
 }: {
   snapshot: OverviewSnapshot;
   hideSensitive: boolean;
+  currency: Currency;
 }) => {
   const { active: activeSegment, handleHover } = useHoverHighlight<number>();
   const { total, items: revenueSourceItems } = buildRevenueSourceItems(snapshot);
@@ -922,7 +958,7 @@ const RevenueSourceChart = ({
                 blurClass(hideSensitive),
               )}
             >
-              {compactCurrencyFormatter.format(total)} in loaded rows
+              {formatCompactDisplayMoney(total, snapshot.priceEur, currency)} in loaded rows
             </p>
           </div>
         </div>
@@ -961,7 +997,11 @@ const RevenueSourceChart = ({
                     aria-label={
                       hideSensitive
                         ? `${item.label}: hidden (${item.percent}%)`
-                        : `${item.label}: ${currencyFormatter.format(item.value)} (${item.percent}%)`
+                        : `${item.label}: ${formatDisplayMoney(
+                            item.value,
+                            snapshot.priceEur,
+                            currency,
+                          )} (${item.percent}%)`
                     }
                   />
                 </ShadTooltipTrigger>
@@ -987,7 +1027,11 @@ const RevenueSourceChart = ({
                         blurClass(hideSensitive),
                       )}
                     >
-                      {currencyFormatter.format(item.value)}
+                      {formatDisplayMoney(
+                        item.value,
+                        snapshot.priceEur,
+                        currency,
+                      )}
                     </span>
                   </div>
                 </ShadTooltipContent>
@@ -1061,7 +1105,11 @@ const RevenueSourceChart = ({
                         blurClass(hideSensitive),
                       )}
                     >
-                      {currencyFormatter.format(item.value)}
+                      {formatDisplayMoney(
+                        item.value,
+                        snapshot.priceEur,
+                        currency,
+                      )}
                     </span>
                   </div>
                 </ShadTooltipContent>
@@ -1077,9 +1125,11 @@ const RevenueSourceChart = ({
 const SalesByCategoryChart = ({
   snapshot,
   hideSensitive,
+  currency,
 }: {
   snapshot: OverviewSnapshot;
   hideSensitive: boolean;
+  currency: Currency;
 }) => {
   const { active: activeSlice, handleHover: setHoveredSlice } =
     useHoverHighlight<number>();
@@ -1173,7 +1223,7 @@ const SalesByCategoryChart = ({
                 blurClass(hideSensitive),
               )}
             >
-              {compactCurrencyFormatter.format(totalSales)}
+              {formatCompactDisplayMoney(totalSales, snapshot.priceEur, currency)}
             </span>
             <span className="text-[8px] text-muted-foreground sm:text-[10px]">
               Total
@@ -1208,7 +1258,11 @@ const SalesByCategoryChart = ({
                     blurClass(hideSensitive),
                   )}
                 >
-                  {compactCurrencyFormatter.format(item.value)}
+                  {formatCompactDisplayMoney(
+                    item.value,
+                    snapshot.priceEur,
+                    currency,
+                  )}
                 </span>
                 <span className="text-muted-foreground tabular-nums">
                   {item.percent}%
@@ -1225,14 +1279,24 @@ const SalesByCategoryChart = ({
 const SideChartsSection = ({
   snapshot,
   hideSensitive,
+  currency,
 }: {
   snapshot: OverviewSnapshot;
   hideSensitive: boolean;
+  currency: Currency;
 }) => {
   return (
     <div className="flex w-full flex-col gap-4 xl:w-[410px]">
-      <RevenueSourceChart snapshot={snapshot} hideSensitive={hideSensitive} />
-      <SalesByCategoryChart snapshot={snapshot} hideSensitive={hideSensitive} />
+      <RevenueSourceChart
+        snapshot={snapshot}
+        hideSensitive={hideSensitive}
+        currency={currency}
+      />
+      <SalesByCategoryChart
+        snapshot={snapshot}
+        hideSensitive={hideSensitive}
+        currency={currency}
+      />
     </div>
   );
 };
@@ -1248,6 +1312,8 @@ interface RevenueTooltipProps {
   label?: string | number;
   colors: RevenueFlowColors;
   hideSensitive: boolean;
+  currency: Currency;
+  priceEur: number;
 }
 
 function CustomTooltip({
@@ -1256,6 +1322,8 @@ function CustomTooltip({
   label,
   colors,
   hideSensitive,
+  currency,
+  priceEur,
 }: RevenueTooltipProps) {
   if (!active || !payload?.length) return null;
 
@@ -1284,7 +1352,7 @@ function CustomTooltip({
               blurClass(hideSensitive),
             )}
           >
-            {currencyFormatter.format(Number(thisYear))}
+            {formatDisplayMoney(Number(thisYear), priceEur, currency)}
           </span>
         </div>
         <div className="flex items-center gap-1.5 sm:gap-2">
@@ -1301,7 +1369,7 @@ function CustomTooltip({
               blurClass(hideSensitive),
             )}
           >
-            {currencyFormatter.format(Number(prevYear))}
+            {formatDisplayMoney(Number(prevYear), priceEur, currency)}
           </span>
         </div>
         <div className="mt-1 border-t border-border pt-1">
@@ -1323,9 +1391,11 @@ function CustomTooltip({
 const RevenueFlowChart = ({
   snapshot,
   hideSensitive,
+  currency,
 }: {
   snapshot: OverviewSnapshot;
   hideSensitive: boolean;
+  currency: Currency;
 }) => {
   const [period, setPeriod] = React.useState<TimePeriod>("1year");
   const { active: activeSeries, handleHover } = useHoverHighlight<
@@ -1377,7 +1447,7 @@ const RevenueFlowChart = ({
               blurClass(hideSensitive),
             )}
           >
-            {currencyFormatter.format(latestPortfolioValue)}
+            {formatDisplayMoney(latestPortfolioValue, snapshot.priceEur, currency)}
           </p>
           <p className="text-xs text-muted-foreground">
             Portfolio Value ({periodLabels[period]})
@@ -1508,7 +1578,9 @@ const RevenueFlowChart = ({
               tickLine={false}
               tick={{ fontSize: 10 }}
               dx={-5}
-              tickFormatter={(value) => compactCurrencyFormatter.format(value)}
+              tickFormatter={(value) =>
+                formatCompactDisplayMoney(Number(value), snapshot.priceEur, currency)
+              }
               width={40}
             />
             <Tooltip
@@ -1519,6 +1591,8 @@ const RevenueFlowChart = ({
                     prevYear: "var(--color-prevYear)",
                   }}
                   hideSensitive={hideSensitive}
+                  currency={currency}
+                  priceEur={snapshot.priceEur}
                 />
               }
               cursor={{ strokeOpacity: 0.2 }}
@@ -1608,6 +1682,7 @@ function toDashboardTransaction(tx: OverviewTx, index: number): Transaction {
       : [tx.type],
     status,
     amount,
+    amountBtc: Math.abs(tx.amountSat / 100_000_000),
     date: tx.date,
   };
 }
@@ -1625,10 +1700,14 @@ const RecentTransactionsTable = ({
   className,
   transactions,
   hideSensitive,
+  currency,
+  priceEur,
 }: {
   className?: string;
   transactions: Transaction[];
   hideSensitive: boolean;
+  currency: Currency;
+  priceEur: number;
 }) => {
   const [statusFilter, setStatusFilter] = React.useState<
     TransactionStatus | "all"
@@ -1813,7 +1892,9 @@ const RecentTransactionsTable = ({
                       blurClass(hideSensitive),
                     )}
                   >
-                    {currencyFormatter.format(t.amount)}
+                    {currency === "btc"
+                      ? formatBtc(transactionBtc(t, priceEur))
+                      : formatDisplayMoney(t.amount, priceEur, currency)}
                   </TableCell>
                   <TableCell>
                     <span
@@ -1914,6 +1995,7 @@ const Dashboard5 = ({
 }) => {
   const [addConnectionOpen, setAddConnectionOpen] = React.useState(false);
   const hideSensitive = useUiStore((s) => s.hideSensitive);
+  const currency = useCurrency();
   const transactions = React.useMemo(
     () =>
       snapshot.txs.length
@@ -1934,15 +2016,21 @@ const Dashboard5 = ({
           snapshot={snapshot}
           onAddConnection={() => setAddConnectionOpen(true)}
         />
-        <StatsCards snapshot={snapshot} hideSensitive={hideSensitive} />
+        <StatsCards
+          snapshot={snapshot}
+          hideSensitive={hideSensitive}
+          currency={currency}
+        />
         <div className="flex flex-col gap-4 sm:gap-6 xl:flex-row">
           <RevenueFlowChart
             snapshot={snapshot}
             hideSensitive={hideSensitive}
+            currency={currency}
           />
           <SideChartsSection
             snapshot={snapshot}
             hideSensitive={hideSensitive}
+            currency={currency}
           />
         </div>
         <div className="flex flex-col gap-4 xl:flex-row">
@@ -1950,6 +2038,8 @@ const Dashboard5 = ({
             className="flex-1"
             transactions={transactions}
             hideSensitive={hideSensitive}
+            currency={currency}
+            priceEur={snapshot.priceEur}
           />
           <RecentActivity className="xl:w-[360px]" />
         </div>
