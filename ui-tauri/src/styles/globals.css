@@ -102,6 +102,15 @@
   user-select: none;
 }
 
+@keyframes route-progress {
+  0% {
+    transform: translateX(-120%);
+  }
+  100% {
+    transform: translateX(220%);
+  }
+}
+
 /*
  ---break---
  */

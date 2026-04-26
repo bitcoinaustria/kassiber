@@ -62,6 +62,7 @@ import {
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { useUiStore } from "@/store/ui";
 import { useDaemon } from "@/daemon/client";
+import { cn } from "@/lib/utils";
 import type { OverviewSnapshot } from "@/mocks/seed";
 import { SettingsModal } from "./SettingsModal";
 import { ScreenAssistantMockup } from "./ScreenAssistantMockup";
@@ -70,7 +71,7 @@ import { PreAlphaBanner } from "./PreAlphaBanner";
 type NavItem = {
   label: string;
   icon: React.ComponentType<React.SVGProps<SVGSVGElement>>;
-  href: string;
+  href: AppRoutePath;
   children?: NavItem[];
 };
 
@@ -78,6 +79,16 @@ type NavGroup = {
   title: string;
   items: NavItem[];
 };
+
+type AppRoutePath =
+  | "/overview"
+  | "/transactions"
+  | "/reports"
+  | "/connections"
+  | "/profiles"
+  | "/journals"
+  | "/tax-events"
+  | "/quarantine";
 
 type RouteMeta = {
   title: string;
@@ -214,6 +225,7 @@ export function AppShell() {
     "backends" | null
   >(null);
   const [assistantCollapsed, setAssistantCollapsed] = React.useState(false);
+  const [routeSettling, setRouteSettling] = React.useState(false);
   const mainRef = React.useRef<HTMLElement>(null);
   const routeMeta =
     ROUTE_META.find(([prefix]) => pathname.startsWith(prefix))?.[1] ?? {
@@ -238,6 +250,17 @@ export function AppShell() {
 
     return () => {
       main.removeEventListener("scroll", syncAssistantState);
+    };
+  }, [pathname]);
+
+  React.useEffect(() => {
+    setRouteSettling(true);
+    const timer = window.setTimeout(() => {
+      setRouteSettling(false);
+    }, 260);
+
+    return () => {
+      window.clearTimeout(timer);
     };
   }, [pathname]);
 
@@ -280,10 +303,11 @@ export function AppShell() {
                 id="app-main"
                 ref={mainRef}
                 tabIndex={-1}
-                className={`min-h-0 w-full flex-1 overflow-auto bg-background transition-[padding-bottom] duration-200 ${
+                className={`relative min-h-0 w-full flex-1 overflow-auto bg-background transition-[padding-bottom] duration-200 ${
                   assistantCollapsed ? "pb-[150px]" : "pb-[240px]"
                 }`}
               >
+                <RouteTransitionIndicator active={routeSettling} />
                 <Outlet />
               </main>
               <ScreenAssistantMockup
@@ -300,6 +324,20 @@ export function AppShell() {
         onClose={() => setSettingsOpen(false)}
       />
     </TooltipProvider>
+  );
+}
+
+function RouteTransitionIndicator({ active }: { active: boolean }) {
+  return (
+    <div
+      aria-hidden="true"
+      className={cn(
+        "pointer-events-none sticky top-0 z-10 h-px w-full overflow-hidden transition-opacity duration-150",
+        active ? "opacity-100" : "opacity-0",
+      )}
+    >
+      <div className="h-full w-1/2 animate-[route-progress_0.9s_ease-in-out_infinite] bg-primary/70" />
+    </div>
   );
 }
 
@@ -440,10 +478,10 @@ function NavMenuItem({
     return (
       <SidebarMenuItem>
         <SidebarMenuButton asChild isActive={active} tooltip={item.label}>
-          <a href={item.href}>
+          <Link to={item.href} preload="intent">
             <Icon className="size-4" aria-hidden="true" />
             <span>{item.label}</span>
-          </a>
+          </Link>
         </SidebarMenuButton>
       </SidebarMenuItem>
     );
@@ -467,7 +505,9 @@ function NavMenuItem({
               return (
                 <SidebarMenuSubItem key={child.label}>
                   <SidebarMenuSubButton asChild isActive={childActive}>
-                    <a href={child.href}>{child.label}</a>
+                    <Link to={child.href} preload="intent">
+                      {child.label}
+                    </Link>
                   </SidebarMenuSubButton>
                 </SidebarMenuSubItem>
               );
