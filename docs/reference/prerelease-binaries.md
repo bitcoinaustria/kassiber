@@ -75,11 +75,20 @@ asks for one.
 The workflow currently builds:
 
 - CLI: macOS arm64, macOS x86_64, and Linux x86_64 one-file PyInstaller
-  binaries as `.tar.gz` archives, each with a `.sha256` file. Linux is built
-  on Ubuntu 22.04 to keep the glibc floor aligned with the AppImage build.
+  binaries as `kassiber-cli-<target>.tar.gz` archives, each with a `.sha256`
+  file. The extracted executable is still named `kassiber`. Linux is built on
+  Ubuntu 22.04 to keep the glibc floor aligned with the AppImage build.
 - Desktop previews: a universal macOS `.app` zip plus `.dmg`, Linux
-  `.AppImage`, and Windows `.msi` plus NSIS setup `.exe`, each with a
-  `.sha256` file.
+  `.AppImage`, and Windows `.msi` plus NSIS setup `.exe`, each emitted with a
+  `kassiber-desktop-<target>-...` filename and a `.sha256` file. Each desktop
+  preview includes a bundled one-file Kassiber CLI sidecar for its target
+  platform; the universal macOS app bundles both arm64 and x86_64 CLI sidecars.
+
+Public CLI and desktop release filenames use user-facing target names such as
+`macos-arm64`, `macos-x86_64`, and `linux-x86_64`. Bundled sidecar resource
+filenames are internal to the desktop package and use Rust target triples such
+as `kassiber-cli-aarch64-apple-darwin`; those raw sidecars are not release
+assets.
 
 The macOS CLI legs stay architecture-specific because PyInstaller universal2
 requires a universal2 Python interpreter or extra binary stitching. The macOS
@@ -88,12 +97,26 @@ desktop leg uses GitHub's `macos-latest` runner with Tauri's
 (`aarch64-apple-darwin` and `x86_64-apple-darwin`). Keep the desktop artifact
 target name `macos-universal` so users only see one Mac GUI download.
 
-Desktop artifacts are unsigned previews and do not yet bundle the Python
-sidecar. Real daemon calls require a machine where `python3 -m kassiber daemon`
-works, or a launch environment that sets `KASSIBER_DAEMON_PYTHON` and
-`KASSIBER_REPO_ROOT`.
+Desktop artifacts are unsigned previews, but normal daemon calls use the
+bundled PyInstaller CLI sidecar and do not require a separate Python checkout.
+The GUI executable also forwards `--cli ...` to that sidecar so an installed
+desktop app can still be used from a terminal, for example:
 
-There is no Windows CLI binary yet. Windows coverage is desktop-preview only.
+```bash
+Kassiber.AppImage --cli status
+/Applications/Kassiber.app/Contents/MacOS/kassiber-ui --cli status
+Kassiber.exe --cli status
+```
+
+If the GUI executable is symlinked with the exact stem `kassiber`, plain CLI
+arguments are also forwarded. Use `--cli ...` for any other executable name.
+
+`KASSIBER_PYTHON` remains available as an intentional debug override for daemon
+startup and installed-app CLI forwarding.
+
+There is no standalone Windows CLI artifact yet. Windows coverage is
+desktop-preview only, and the installed desktop executable can forward
+`--cli ...` to the bundled CLI sidecar.
 
 ## Commit Identity
 

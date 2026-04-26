@@ -1,7 +1,7 @@
 use serde_json::{json, Map, Value};
 use std::env;
 use std::io::{BufRead, BufReader, Read, Write};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::{Child, ChildStderr, ChildStdin, ChildStdout, Command, Stdio};
 use std::sync::{
     atomic::{AtomicBool, Ordering},
@@ -15,6 +15,7 @@ const STDERR_TAIL_LIMIT: usize = 16 * 1024;
 
 pub struct DaemonSupervisor {
     process: Option<DaemonProcess>,
+    resource_dir: Option<PathBuf>,
     next_request_id: u64,
 }
 
@@ -87,9 +88,10 @@ impl SupervisorError {
 }
 
 impl DaemonSupervisor {
-    pub fn new() -> Self {
+    pub fn new(resource_dir: Option<PathBuf>) -> Self {
         Self {
             process: None,
+            resource_dir,
             next_request_id: 1,
         }
     }
@@ -178,7 +180,7 @@ impl DaemonSupervisor {
         };
 
         if should_restart {
-            self.process = Some(DaemonProcess::spawn()?);
+            self.process = Some(DaemonProcess::spawn(self.resource_dir.as_deref())?);
         }
 
         self.process.as_mut().ok_or_else(|| {
@@ -188,15 +190,11 @@ impl DaemonSupervisor {
 }
 
 impl DaemonProcess {
-    fn spawn() -> Result<Self, SupervisorError> {
-        let repo_root = repo_root();
-        let python = env::var("KASSIBER_DAEMON_PYTHON")
-            .unwrap_or_else(|_| default_python(&repo_root).to_string_lossy().to_string());
-        let mut child = Command::new(&python)
-            .arg("-m")
-            .arg("kassiber")
-            .arg("daemon")
-            .current_dir(&repo_root)
+    fn spawn(resource_dir: Option<&Path>) -> Result<Self, SupervisorError> {
+        let command = kassiber_command(resource_dir, vec!["daemon".into()]);
+        let mut child = Command::new(&command.program)
+            .args(&command.args)
+            .current_dir(&command.cwd)
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
@@ -204,10 +202,16 @@ impl DaemonProcess {
             .map_err(|error| {
                 SupervisorError::new(
                     "daemon_spawn_failed",
-                    format!("Could not start Python daemon with {python:?}: {error}"),
+                    format!(
+                        "Could not start Kassiber daemon with {:?}: {error}",
+                        command.program
+                    ),
                 )
-                .hint("Set KASSIBER_DAEMON_PYTHON to a Python with Kassiber importable.")
-                .details(json!({ "cwd": repo_root }))
+                .hint(command.failure_hint())
+                .details(json!({
+                    "cwd": command.cwd,
+                    "source": command.source,
+                }))
                 .retryable()
             })?;
 
@@ -323,6 +327,43 @@ impl DaemonProcess {
     fn kill(&mut self) {
         let _ = self.child.kill();
         let _ = self.child.wait();
+    }
+}
+
+struct DaemonCommand {
+    program: PathBuf,
+    args: Vec<String>,
+    cwd: PathBuf,
+    source: &'static str,
+}
+
+pub fn run_cli(resource_dir: Option<&Path>, args: Vec<String>) -> i32 {
+    let command = kassiber_command(resource_dir, args);
+    match Command::new(&command.program)
+        .args(&command.args)
+        .current_dir(&command.cwd)
+        .status()
+    {
+        Ok(status) => status.code().unwrap_or(1),
+        Err(error) => {
+            eprintln!(
+                "Could not start Kassiber CLI with {:?}: {error}",
+                command.program
+            );
+            eprintln!("{}", command.failure_hint());
+            1
+        }
+    }
+}
+
+impl DaemonCommand {
+    fn failure_hint(&self) -> &'static str {
+        match self.source {
+            "bundled_sidecar" => {
+                "The bundled Kassiber CLI sidecar failed to start; reinstall the desktop package or set KASSIBER_PYTHON to override it."
+            }
+            _ => "Set KASSIBER_PYTHON to a Python with Kassiber importable.",
+        }
     }
 }
 
@@ -500,4 +541,76 @@ fn default_python(repo_root: &PathBuf) -> PathBuf {
     }
 
     PathBuf::from("python3")
+}
+
+fn kassiber_command(resource_dir: Option<&Path>, args: Vec<String>) -> DaemonCommand {
+    if let Ok(python) = env::var("KASSIBER_PYTHON") {
+        let repo_root = repo_root();
+        let mut python_args = vec!["-m".into(), "kassiber".into()];
+        python_args.extend(args);
+        return DaemonCommand {
+            program: PathBuf::from(python),
+            args: python_args,
+            cwd: repo_root,
+            source: "env_python",
+        };
+    }
+
+    if let Some(sidecar) = bundled_sidecar(resource_dir) {
+        // PyInstaller should not need the app resource directory as cwd; keeping
+        // it stable prevents accidental writes relative to a developer checkout.
+        let cwd = resource_dir
+            .map(PathBuf::from)
+            .or_else(|| sidecar.parent().map(PathBuf::from))
+            .unwrap_or_else(|| PathBuf::from("."));
+        return DaemonCommand {
+            program: sidecar,
+            args,
+            cwd,
+            source: "bundled_sidecar",
+        };
+    }
+
+    let repo_root = repo_root();
+    let mut python_args = vec!["-m".into(), "kassiber".into()];
+    python_args.extend(args);
+    DaemonCommand {
+        program: default_python(&repo_root),
+        args: python_args,
+        cwd: repo_root,
+        source: "python_fallback",
+    }
+}
+
+fn bundled_sidecar(resource_dir: Option<&Path>) -> Option<PathBuf> {
+    let resource_dir = resource_dir?;
+    let sidecar = sidecar_filename()?;
+    [
+        // Packaged Tauri builds place resources under the configured
+        // `binaries/` directory. The flat fallback keeps manually assembled
+        // dev bundles easy to smoke-test.
+        resource_dir.join("binaries").join(&sidecar),
+        resource_dir.join(&sidecar),
+    ]
+    .into_iter()
+    .find(|path| path.exists())
+}
+
+fn sidecar_filename() -> Option<String> {
+    let triple = match (env::consts::OS, env::consts::ARCH) {
+        ("macos", "aarch64") => "aarch64-apple-darwin",
+        ("macos", "x86_64") => "x86_64-apple-darwin",
+        // Not built by the prerelease workflow yet; Linux arm64 falls back to
+        // developer Python unless a matching sidecar is manually bundled.
+        ("linux", "aarch64") => "aarch64-unknown-linux-gnu",
+        ("linux", "x86_64") => "x86_64-unknown-linux-gnu",
+        ("windows", "x86_64") => "x86_64-pc-windows-msvc",
+        _ => return None,
+    };
+    let extension = if env::consts::OS == "windows" {
+        ".exe"
+    } else {
+        ""
+    };
+    Some(format!("kassiber-cli-{triple}{extension}"))
 }

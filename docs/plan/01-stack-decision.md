@@ -22,8 +22,10 @@ Adopt the following stack:
 - **Server state:** TanStack Query against the Python daemon
 - **Local UI state:** Zustand
 - **IPC transport:** stdin/stdout JSONL with monotonic `request_id`
-- **Python bundling:** `python-build-standalone` (the relocatable distribution
-  `uv` ships) packaged as a Tauri resource
+- **Python bundling:** current prerelease bundles use a one-file PyInstaller
+  CLI sidecar packaged as a Tauri resource; production packaging may still
+  switch to `python-build-standalone` if the runtime tree is easier to sign,
+  debug, or update.
 - **Packaging:** Tauri bundler — `.dmg`/`.app` (macOS), `.msi`/`.exe`
   (Windows), `.deb`/`.AppImage` (Linux)
 - **Update model:** **no background update check** (preserves the
@@ -92,8 +94,9 @@ layers without changing the frontend contract.
   and TypeScript the only genuinely new surface.
 - **IPC overhead per call.** Negligible at human-interaction frequency.
 - **Sidecar packaging** is more work than a single-language path, paid
-  mostly in CI. `python-build-standalone` is the maintained relocatable
-  distribution.
+  mostly in CI. PyInstaller gives the prerelease path a self-contained CLI
+  quickly; `python-build-standalone` remains the production alternative if the
+  one-file sidecar becomes hard to sign, debug, or patch.
 - **WebKitGTK quirks on Linux.** Each major Linux distro ships its own
   WebKitGTK. Test on Ubuntu LTS; budget a CSS-fixup pass per release.
 - **Bundle size.** Larger than a pure-native build. Acceptable for desktop

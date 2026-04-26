@@ -183,7 +183,8 @@ Apple Silicon, macOS Intel, and Linux through GitHub Actions. Manual runs of
 the `prerelease-binaries` workflow also upload the same `.tar.gz` artifacts,
 and can attach them to an existing tag when `publish_release` and `tag_name`
 are provided. Linux CLI binaries are built on Ubuntu 22.04 to keep the glibc
-floor aligned with the AppImage build.
+floor aligned with the AppImage build. CLI archives are named
+`kassiber-cli-<target>.tar.gz`; the executable inside is named `kassiber`.
 Pull requests do not build binaries automatically; use a manual workflow run
 against the PR branch when a tester artifact is needed. The workflow run and
 release tag record the source commit, and the desktop shell displays the build
@@ -192,10 +193,14 @@ sidecars do not embed the commit hash yet.
 
 The same workflow also builds unsigned desktop preview artifacts: a universal
 macOS `.app` zip / `.dmg`, Linux `.AppImage`, and Windows `.msi` plus NSIS
-setup `.exe`. These previews do not yet bundle the Python sidecar; they are for
-testing the shell on machines where `python3 -m kassiber daemon` already works,
-or where `KASSIBER_DAEMON_PYTHON` / `KASSIBER_REPO_ROOT` are set before launch.
-Fully self-contained desktop installers remain in active development.
+setup `.exe`, all named with a `kassiber-desktop-<target>-...` prefix. These
+previews include a bundled Kassiber CLI sidecar that the GUI uses for daemon
+calls, so normal daemon calls do not require a separate Python checkout. The
+installed GUI executable also forwards `--cli ...` to the bundled CLI sidecar;
+for example, `Kassiber.AppImage --cli status` or `Kassiber.exe --cli status`.
+Set `KASSIBER_PYTHON` only when intentionally overriding the bundled sidecar
+for debugging. Signing, notarization, and production installer hardening remain
+in active development.
 
 > [!WARNING]
 > The macOS desktop preview is currently unsigned and not notarized. Gatekeeper
@@ -245,7 +250,7 @@ cd ui-tauri
 pnpm tauri:dev
 ```
 
-`pnpm tauri:dev` runs the webview with the Tauri transport, starts the Python daemon, and forwards calls through the Rust supervisor. The supervisor prefers `.venv/bin/python` when present and otherwise falls back to `python3`; set `KASSIBER_DAEMON_PYTHON=/path/to/python` to override it, or `KASSIBER_REPO_ROOT=/path/to/checkout` to point the dev shell at another checkout. Screens that still require fixture data show daemon-unavailable states until typed UI snapshot kinds are wired.
+`pnpm tauri:dev` runs the webview with the Tauri transport, starts the Python daemon, and forwards calls through the Rust supervisor. The supervisor prefers `.venv/bin/python` when present and otherwise falls back to `python3`; set `KASSIBER_PYTHON=/path/to/python` to override it, or `KASSIBER_REPO_ROOT=/path/to/checkout` to point the dev shell at another checkout. Screens that still require fixture data show daemon-unavailable states until typed UI snapshot kinds are wired.
 
 The app boots into the Welcome onboarding flow on first load, persists identity
 to localStorage, and routes through Overview / Connections / Transactions /

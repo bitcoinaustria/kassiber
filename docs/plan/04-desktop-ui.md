@@ -435,8 +435,8 @@ The frontend ships in three runtime modes, all sharing the same React app:
    webview's DevTools is accessible for debugging.
    During development the supervisor resolves the Python command from the
    checkout (`.venv` first, then `python3`) and may use `KASSIBER_REPO_ROOT`
-   for another checkout. Packaged builds must replace that dev-only
-   repo-root lookup with the bundled sidecar path from Phase 5.
+   for another checkout. Packaged builds now prefer a bundled PyInstaller
+   CLI sidecar before falling back to developer Python.
 
 A dev script (`pnpm dev:browser`, `pnpm dev:bridge`, `pnpm dev:shell`)
 selects the mode. The Vite config rejects `VITE_DAEMON` values other
@@ -620,19 +620,15 @@ column stores the ref ID, not the raw value.
 
 ### 5.1 Python sidecar bundling
 
-- Use `python-build-standalone` (the relocatable distribution `uv`
-  consumes). Pin a specific tag per Tauri release.
-- CI build per-OS:
-  1. Download the standalone Python tarball.
-  2. Create a venv in a fixed relative path under
-     `ui-tauri/src-tauri/python/`.
-  3. `pip install kassiber[ui-tauri]` (a new optional extra in
-     [pyproject.toml](../../pyproject.toml) limited to runtime daemon
-     deps).
-  4. Strip non-essentials (no test files, no docs, no `__pycache__`).
-  5. Sanity-run `python -m kassiber daemon < /dev/null`.
-- Bundle size impact: measure and record. Target ≤ 80 MB compressed for
-  the Python tree alone.
+- Current prerelease path: build a one-file PyInstaller `kassiber-cli-*`
+  executable per desktop target, smoke it with the JSONL daemon protocol, and
+  bundle it as a Tauri resource.
+- Universal macOS desktop packages carry both arm64 and x86_64 CLI
+  sidecars; the Rust supervisor picks the matching sidecar at runtime.
+- Production decision still open: keep the PyInstaller sidecar if signing and
+  patching are acceptable, or switch to `python-build-standalone` with a pinned
+  relocatable runtime tree if that is easier to inspect, debug, or notarize.
+- Bundle size impact: measure and record for each approach before signing.
 
 ### 5.2 Tauri bundler config
 

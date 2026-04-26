@@ -21,6 +21,30 @@ Current development modes:
   current UI data kinds; `status` is a real daemon round-trip, while UI
   snapshot kinds return `daemon_unavailable` until typed read models land.
   The supervisor uses `.venv/bin/python` when present, then `python3`, unless
-  `KASSIBER_DAEMON_PYTHON` is set. `KASSIBER_REPO_ROOT` can point a dev
-  shell at a different checkout; production packaging replaces this repo-root
-  lookup with a bundled sidecar path.
+  `KASSIBER_PYTHON` is set. `KASSIBER_REPO_ROOT` can point a dev shell at a
+  different checkout.
+
+Current prerelease desktop packages bundle a one-file `kassiber-cli-*`
+sidecar built with PyInstaller. At runtime the supervisor prefers
+`KASSIBER_PYTHON` when it is explicitly set, then the bundled sidecar from the
+app resources, then the development Python fallback above. The same
+`KASSIBER_PYTHON` override applies to installed-app CLI forwarding.
+
+The GUI executable also works as a CLI forwarder when launched with
+`--cli ...`. Examples:
+
+```bash
+Kassiber.AppImage --cli status
+/Applications/Kassiber.app/Contents/MacOS/kassiber-ui --cli status
+Kassiber.exe --cli status
+```
+
+If the app executable is symlinked with the exact executable stem `kassiber`,
+plain CLI args are also forwarded:
+
+```bash
+ln -s /Applications/Kassiber.app/Contents/MacOS/kassiber-ui /usr/local/bin/kassiber
+kassiber status
+```
+
+Use `--cli ...` for any other symlink or executable name.

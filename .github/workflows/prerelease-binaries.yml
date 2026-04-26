@@ -105,16 +105,17 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p release
-          artifact_name="kassiber-${{ steps.target.outputs.target }}"
-          cp dist/kassiber "release/${artifact_name}"
-          chmod 755 "release/${artifact_name}"
-          tar -C release -czf "release/${artifact_name}.tar.gz" "${artifact_name}"
-          shasum -a 256 "release/${artifact_name}.tar.gz" > "release/${artifact_name}.tar.gz.sha256"
+          package_name="kassiber-cli-${{ steps.target.outputs.target }}"
+          mkdir -p "release/${package_name}"
+          cp dist/kassiber "release/${package_name}/kassiber"
+          chmod 755 "release/${package_name}/kassiber"
+          tar -C release -czf "release/${package_name}.tar.gz" "${package_name}"
+          shasum -a 256 "release/${package_name}.tar.gz" > "release/${package_name}.tar.gz.sha256"
 
-      - name: Upload binary artifact
+      - name: Upload CLI artifact
         uses: actions/upload-artifact@v4
         with:
-          name: kassiber-${{ steps.target.outputs.target }}
+          name: kassiber-cli-${{ steps.target.outputs.target }}
           path: |
             release/*.tar.gz
             release/*.sha256
@@ -122,6 +123,8 @@ jobs:
 
   build-desktop:
     name: Build ${{ matrix.label }} desktop preview
+    needs:
+      - build-desktop-sidecar
     runs-on: ${{ matrix.os }}
     timeout-minutes: 45
     strategy:
@@ -133,16 +136,22 @@ jobs:
             target: macos-universal
             bundles: app,dmg
             tauri_args: --target universal-apple-darwin
+            sidecar_artifact_pattern: kassiber-desktop-sidecar-*-apple-darwin
+            sidecar_expected: 2
           - label: Linux
             os: ubuntu-22.04
             target: linux-x86_64
             bundles: appimage
             tauri_args: ""
+            sidecar_artifact_pattern: kassiber-desktop-sidecar-x86_64-unknown-linux-gnu
+            sidecar_expected: 1
           - label: Windows
             os: windows-latest
             target: windows-x86_64
             bundles: msi,nsis
             tauri_args: ""
+            sidecar_artifact_pattern: kassiber-desktop-sidecar-x86_64-pc-windows-msvc
+            sidecar_expected: 1
 
     steps:
       - uses: actions/checkout@v4
@@ -187,6 +196,22 @@ jobs:
       - name: Install frontend dependencies
         working-directory: ui-tauri
         run: pnpm install --frozen-lockfile
+
+      - name: Download desktop CLI sidecar
+        uses: actions/download-artifact@v4
+        with:
+          pattern: ${{ matrix.sidecar_artifact_pattern }}
+          path: ui-tauri/src-tauri/binaries
+          merge-multiple: true
+
+      - name: Verify desktop CLI sidecar inputs
+        shell: bash
+        run: |
+          set -euo pipefail
+          count="$(find ui-tauri/src-tauri/binaries -maxdepth 1 -type f -name 'kassiber-cli-*' | wc -l | tr -d ' ')"
+          test "$count" = "${{ matrix.sidecar_expected }}"
+          find ui-tauri/src-tauri/binaries -maxdepth 1 -type f -name 'kassiber-cli-*' -exec chmod 755 {} +
+          find ui-tauri/src-tauri/binaries -maxdepth 1 -type f -name 'kassiber-cli-*' -print
 
       - name: Build unsigned desktop preview
         working-directory: ui-tauri
@@ -235,6 +260,94 @@ jobs:
             release/*
           if-no-files-found: error
 
+  build-desktop-sidecar:
+    name: Build ${{ matrix.label }} desktop CLI sidecar
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - label: macOS arm64
+            os: macos-latest
+            triple: aarch64-apple-darwin
+            exe_ext: ""
+          - label: macOS x86_64
+            os: macos-15-intel
+            triple: x86_64-apple-darwin
+            exe_ext: ""
+          - label: Linux x86_64
+            os: ubuntu-22.04
+            triple: x86_64-unknown-linux-gnu
+            exe_ext: ""
+          - label: Windows x86_64
+            os: windows-latest
+            triple: x86_64-pc-windows-msvc
+            exe_ext: ".exe"
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.tag_name || github.ref }}
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Sync dependencies
+        run: uv sync --frozen
+
+      - name: Build one-file CLI sidecar
+        run: >
+          uv run --with pyinstaller==6.20.0 pyinstaller
+          --clean
+          --noconfirm
+          --onefile
+          --name kassiber-cli
+          --paths .
+          --collect-submodules rp2
+          --collect-data rp2
+          --hidden-import rp2.plugin.country.at
+          scripts/kassiber_pyinstaller_entry.py
+
+      - name: Smoke CLI sidecar
+        shell: bash
+        run: |
+          set -euo pipefail
+          sidecar="./dist/kassiber-cli${{ matrix.exe_ext }}"
+          "$sidecar" --help >/dev/null
+
+          daemon_root="$RUNNER_TEMP/kassiber-cli-sidecar-smoke"
+          printf '{"request_id":"smoke-1","kind":"daemon.shutdown"}\n' \
+            | "$sidecar" --data-root "$daemon_root" daemon \
+            > "$RUNNER_TEMP/cli-sidecar-smoke.jsonl"
+          grep '"kind":"daemon.ready"' "$RUNNER_TEMP/cli-sidecar-smoke.jsonl"
+          grep '"kind":"daemon.shutdown"' "$RUNNER_TEMP/cli-sidecar-smoke.jsonl"
+
+      - name: Stage sidecar for desktop bundle
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p sidecar
+          src="dist/kassiber-cli${{ matrix.exe_ext }}"
+          dst="sidecar/kassiber-cli-${{ matrix.triple }}${{ matrix.exe_ext }}"
+          cp "$src" "$dst"
+          chmod 755 "$dst"
+
+      - name: Upload desktop sidecar
+        uses: actions/upload-artifact@v4
+        with:
+          name: kassiber-desktop-sidecar-${{ matrix.triple }}
+          path: sidecar/*
+          if-no-files-found: error
+          retention-days: 7
+
   publish:
     name: Publish prerelease
     needs:
@@ -249,11 +362,31 @@ jobs:
       inputs.tag_name != '')
 
     steps:
-      - name: Download binary artifacts
+      - name: Download CLI release artifacts
         uses: actions/download-artifact@v4
         with:
+          pattern: kassiber-cli-*
           path: release
           merge-multiple: true
+
+      - name: Download desktop release artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: kassiber-desktop-*-preview
+          path: release
+          merge-multiple: true
+
+      - name: Verify release artifact set
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$(find release -maxdepth 1 -type f -print -quit)"
+
+          if find release -maxdepth 1 -type f -name 'kassiber-cli-*' ! -name '*.tar.gz' ! -name '*.sha256' -print -quit | grep -q .; then
+            echo "Raw CLI sidecars must not be published as release assets." >&2
+            find release -maxdepth 1 -type f -name 'kassiber-cli-*' ! -name '*.tar.gz' ! -name '*.sha256' >&2
+            exit 1
+          fi
 
       - name: Create or update prerelease
         uses: softprops/action-gh-release@v2
@@ -265,9 +398,10 @@ jobs:
             Automated Kassiber prerelease artifacts.
 
             These artifacts are unsigned prerelease builds for CLI and desktop
-            preview testing. Desktop previews do not yet bundle the Python
-            sidecar; launch them from an environment where `python3 -m kassiber
-            daemon` works, or set `KASSIBER_DAEMON_PYTHON` and
-            `KASSIBER_REPO_ROOT` before launching.
+            preview testing. Desktop previews now bundle the Kassiber CLI
+            sidecar, so normal daemon calls do not require a separate Python
+            checkout, and the GUI executable can forward `--cli ...` to the
+            bundled CLI. Set `KASSIBER_PYTHON` only when intentionally
+            overriding the bundled sidecar for debugging.
           files: |
             release/*

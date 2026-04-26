@@ -2,9 +2,11 @@ mod supervisor;
 
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
+use std::env;
+use std::path::PathBuf;
 use std::sync::Mutex;
 use supervisor::{DaemonSupervisor, SupervisorError};
-use tauri::State;
+use tauri::{Manager, State};
 
 const SCHEMA_VERSION: u8 = 1;
 
@@ -135,9 +137,49 @@ fn supervisor_error_envelope(error: SupervisorError, request_id: Option<Value>) 
 }
 
 pub fn run() {
+    let cli_args = desktop_cli_args();
     tauri::Builder::default()
-        .manage(Mutex::new(DaemonSupervisor::new()))
+        .setup(move |app| {
+            let resource_dir = app.path().resource_dir().ok();
+            if let Some(args) = cli_args.as_ref() {
+                let code = supervisor::run_cli(resource_dir.as_deref(), args.clone());
+                std::process::exit(code);
+            }
+            app.manage(Mutex::new(DaemonSupervisor::new(resource_dir)));
+            Ok(())
+        })
         .invoke_handler(tauri::generate_handler![daemon_invoke])
         .run(tauri::generate_context!())
         .expect("error while running Kassiber desktop shell");
+}
+
+fn desktop_cli_args() -> Option<Vec<String>> {
+    let args: Vec<String> = env::args()
+        .skip(1)
+        .filter(|arg| !arg.starts_with("-psn_"))
+        .collect();
+    if args.is_empty() {
+        return None;
+    }
+
+    if args[0] == "--cli" || args[0] == "cli" {
+        return Some(args[1..].to_vec());
+    }
+
+    if exe_stem_is_kassiber() {
+        return Some(args);
+    }
+
+    None
+}
+
+fn exe_stem_is_kassiber() -> bool {
+    env::current_exe()
+        .ok()
+        .and_then(|path: PathBuf| {
+            path.file_stem()
+                .map(|stem| stem.to_string_lossy().to_string())
+        })
+        .map(|stem| stem.eq_ignore_ascii_case("kassiber"))
+        .unwrap_or(false)
 }
