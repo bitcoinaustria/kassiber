@@ -90,6 +90,9 @@ importers:
       globals:
         specifier: ^15.14.0
         version: 15.15.0
+      jiti:
+        specifier: ^2.6.1
+        version: 2.6.1
       tailwindcss:
         specifier: ^4.0.0
         version: 4.2.2
