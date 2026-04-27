@@ -209,12 +209,26 @@ class OpenAICompatClient:
         except (urllib.error.URLError, TimeoutError, OSError) as exc:
             raise _network_error_app_error(exc) from exc
 
-    def list_models(self) -> list[dict]:
-        """Best-effort `GET /v1/models`. Returns ``[]`` on graceful failure."""
+    def list_models(self, *, strict: bool = False) -> list[dict]:
+        """`GET /v1/models`.
+
+        Default mode (``strict=False``) is forgiving: a 4xx response is
+        treated as "this provider doesn't expose `/v1/models`" and returns
+        ``[]`` so the picker can fall back to the configured default
+        model. Some OpenAI-compatible servers (small llama.cpp builds,
+        custom proxies) skip the `/models` endpoint entirely.
+
+        Strict mode (``strict=True``) propagates `ai_request_invalid` so
+        callers like `ai.test_connection` can distinguish "endpoint
+        missing / base_url is wrong" from "provider has no models
+        configured" — both used to look identical, which let
+        misconfigured URLs (e.g. ``https://api.openai.com`` without
+        ``/v1``) report as a successful connection.
+        """
         try:
             response = self._open("models", method="GET", body=None, accept_sse=False)
         except AppError as exc:
-            if exc.code in ("ai_request_invalid",):
+            if exc.code == "ai_request_invalid" and not strict:
                 return []
             raise
         with response:
@@ -300,18 +314,27 @@ class OpenAICompatClient:
             accept_sse=True,
             timeout=DEFAULT_INACTIVITY_TIMEOUT_SECONDS,
         )
-        with response:
-            line_iter = (raw.decode("utf-8", errors="replace") for raw in response)
-            for chunk in parse_sse_chunks(line_iter):
-                choices = chunk.get("choices") if isinstance(chunk, dict) else None
-                if not isinstance(choices, list) or not choices:
-                    continue
-                choice = choices[0] if isinstance(choices[0], dict) else {}
-                delta = choice.get("delta")
-                if not isinstance(delta, dict):
-                    delta = {}
-                yield ChatDelta(
-                    delta=delta,
-                    finish_reason=choice.get("finish_reason"),
-                    raw=chunk,
-                )
+        # `_open` maps connection-time failures, but a socket timeout or
+        # remote disconnect *during* iteration escapes as a raw
+        # URLError/OSError and would surface as a non-retryable
+        # `internal_error` from the daemon thread's catch-all. Map it
+        # here so transient network failures match the non-streaming
+        # behavior (retryable `ai_unavailable`).
+        try:
+            with response:
+                line_iter = (raw.decode("utf-8", errors="replace") for raw in response)
+                for chunk in parse_sse_chunks(line_iter):
+                    choices = chunk.get("choices") if isinstance(chunk, dict) else None
+                    if not isinstance(choices, list) or not choices:
+                        continue
+                    choice = choices[0] if isinstance(choices[0], dict) else {}
+                    delta = choice.get("delta")
+                    if not isinstance(delta, dict):
+                        delta = {}
+                    yield ChatDelta(
+                        delta=delta,
+                        finish_reason=choice.get("finish_reason"),
+                        raw=chunk,
+                    )
+        except (urllib.error.URLError, TimeoutError, OSError) as exc:
+            raise _network_error_app_error(exc) from exc

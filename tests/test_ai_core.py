@@ -8,10 +8,12 @@ cover the underlying primitives directly so failures point at one layer.
 from __future__ import annotations
 
 import io
+import socket
 import tempfile
 import unittest
 import urllib.error
 from pathlib import Path
+from unittest.mock import patch
 
 from kassiber.ai import (
     create_db_ai_provider,
@@ -175,6 +177,90 @@ class ClientDefaultsTest(unittest.TestCase):
         headers = client._headers(json_body=False, accept_sse=True)
         self.assertEqual(headers["Authorization"], "Bearer sk-test")
         self.assertEqual(headers["Accept"], "text/event-stream")
+
+
+class ListModelsStrictModeTest(unittest.TestCase):
+    """`list_models(strict=True)` must surface 4xx so `ai.test_connection`
+    can tell a misconfigured base URL apart from a provider that simply
+    doesn't expose `/v1/models`."""
+
+    def _http_error(self, status):
+        return urllib.error.HTTPError(
+            url="http://x/v1/models",
+            code=status,
+            msg="",
+            hdrs=None,  # type: ignore[arg-type]
+            fp=io.BytesIO(b""),
+        )
+
+    def test_default_mode_swallows_4xx_to_empty_list(self):
+        # Picker UX: providers that skip /v1/models still let the user fall
+        # back to a configured default_model.
+        with patch("urllib.request.urlopen", side_effect=self._http_error(404)):
+            client = OpenAICompatClient(base_url="http://x/v1")
+            self.assertEqual(client.list_models(), [])
+
+    def test_strict_mode_propagates_4xx(self):
+        with patch("urllib.request.urlopen", side_effect=self._http_error(404)):
+            client = OpenAICompatClient(base_url="http://x/v1")
+            with self.assertRaises(AppError) as ctx:
+                client.list_models(strict=True)
+            self.assertEqual(ctx.exception.code, "ai_request_invalid")
+
+    def test_strict_mode_does_not_change_auth_failure(self):
+        # 401 was never swallowed; strict mode shouldn't change that path.
+        with patch("urllib.request.urlopen", side_effect=self._http_error(401)):
+            client = OpenAICompatClient(base_url="http://x/v1")
+            with self.assertRaises(AppError) as ctx:
+                client.list_models()
+            self.assertEqual(ctx.exception.code, "ai_auth_failed")
+            with self.assertRaises(AppError) as ctx:
+                client.list_models(strict=True)
+            self.assertEqual(ctx.exception.code, "ai_auth_failed")
+
+
+class StreamChatErrorMappingTest(unittest.TestCase):
+    """Read-time socket failures during a stream must map to retryable
+    `ai_unavailable`, not bubble up as raw `URLError`/`OSError` and
+    surface as non-retryable `internal_error` from the daemon thread."""
+
+    class _ResponseRaisingMidIteration:
+        """Fake urlopen response that yields one SSE event then breaks.
+
+        urllib's response object iterates line-by-line, so the mock needs
+        to surface the data line and the event-boundary blank line as
+        separate iterations before raising — otherwise the parser is
+        still waiting for the boundary when the timeout fires.
+        """
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return False
+
+        def __iter__(self):
+            yield b'data: {"choices":[{"delta":{"content":"hi"}}]}\n'
+            yield b"\n"
+            raise socket.timeout("read timed out mid-stream")
+
+    def test_socket_timeout_mid_stream_maps_to_ai_unavailable(self):
+        with patch(
+            "urllib.request.urlopen",
+            return_value=self._ResponseRaisingMidIteration(),
+        ):
+            client = OpenAICompatClient(base_url="http://x/v1")
+            it = client.stream_chat(
+                messages=[{"role": "user", "content": "hi"}], model="m"
+            )
+            # The first delta should arrive normally; the second iteration
+            # raises the mapped AppError.
+            first = next(it)
+            self.assertEqual(first.delta.get("content"), "hi")
+            with self.assertRaises(AppError) as ctx:
+                next(it)
+            self.assertEqual(ctx.exception.code, "ai_unavailable")
+            self.assertTrue(ctx.exception.retryable)
 
 
 class ProvidersCrudTest(unittest.TestCase):

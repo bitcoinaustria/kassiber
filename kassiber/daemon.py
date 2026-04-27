@@ -614,7 +614,10 @@ def handle_request(
             api_key=api_key_text or None,
             timeout=10.0,
         )
-        models = client.list_models()
+        # Strict mode: surface 4xx as `ai_request_invalid` so a missing
+        # `/v1` suffix or a typoed host fails the test instead of
+        # silently reporting "0 models reachable".
+        models = client.list_models(strict=True)
         return (
             _with_request_id(
                 build_envelope(
