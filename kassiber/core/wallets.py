@@ -493,6 +493,29 @@ def get_wallet_details(conn, workspace_ref, profile_ref, wallet_ref):
     return wallet_row_to_dict(wallet)
 
 
+def reveal_wallet_secrets(conn, workspace_ref, profile_ref, wallet_ref):
+    """Return the raw descriptor / blinding-key material of a wallet.
+
+    Bypasses `redact_wallet_config_for_output`. The DB must already be
+    unlocked, which means the caller already supplied the SQLCipher
+    passphrase for this invocation.
+    """
+
+    _, profile = resolve_scope(conn, workspace_ref, profile_ref)
+    wallet = resolve_wallet(conn, profile["id"], wallet_ref)
+    config = json.loads(wallet["config_json"]) if wallet["config_json"] else {}
+    return {
+        "id": wallet["id"],
+        "label": wallet["label"],
+        "kind": wallet["kind"],
+        "descriptor": config.get("descriptor"),
+        "change_descriptor": config.get("change_descriptor"),
+        "blinding_key": config.get("blinding_key"),
+        "addresses": config.get("addresses"),
+        "config": config,
+    }
+
+
 def update_wallet(conn, workspace_ref, profile_ref, wallet_ref, updates):
     _, profile = resolve_scope(conn, workspace_ref, profile_ref)
     wallet = resolve_wallet(conn, profile["id"], wallet_ref)

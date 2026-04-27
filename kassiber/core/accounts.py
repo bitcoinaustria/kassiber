@@ -445,6 +445,37 @@ def clear_default_backend(conn, runtime_config):
     return _clear_default_backend(conn, runtime_config)
 
 
+def reveal_backend_secrets(conn, runtime_config, name):
+    """Return the raw secret-bearing fields of a backend record.
+
+    Bypasses the standard redaction layer used by `get_backend_details`.
+    Callers must already have unlocked the SQLCipher database (which
+    means they typed or fd-piped the passphrase for this invocation).
+    """
+
+    normalized_name = str(name).strip().lower()
+    backend = runtime_config["backends"].get(normalized_name)
+    if backend:
+        payload = dict(backend)
+        payload.setdefault("name", normalized_name)
+    else:
+        payload = get_db_backend(conn, name)
+    return {
+        "name": payload.get("name"),
+        "kind": payload.get("kind"),
+        "url": payload.get("url"),
+        "auth_header": payload.get("auth_header"),
+        "token": payload.get("token"),
+        "username": payload.get("username") or payload.get("config", {}).get("username")
+        if isinstance(payload.get("config"), dict)
+        else payload.get("username"),
+        "password": payload.get("password") or payload.get("config", {}).get("password")
+        if isinstance(payload.get("config"), dict)
+        else payload.get("password"),
+        "config": payload.get("config"),
+    }
+
+
 __all__ = [
     "ACCOUNT_TYPES",
     "BACKEND_KINDS",

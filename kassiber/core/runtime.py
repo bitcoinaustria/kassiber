@@ -28,6 +28,7 @@ from ..db import (
 )
 from ..envelope import SCHEMA_VERSION, _write_text, build_error_envelope
 from ..errors import AppError
+from ..secrets.prompt import prompt_passphrase, read_passphrase_from_fd
 from .repo import current_context_snapshot
 
 
@@ -86,6 +87,36 @@ def ensure_runtime_layout(paths):
     return paths
 
 
+def _resolve_db_passphrase(args):
+    """Materialize the database passphrase from `--db-passphrase-fd`, if any.
+
+    The fd is consumed exactly once. Subsequent calls return the cached
+    value so a daemon that performs multiple opens does not need a fresh
+    pipe each time.
+    """
+
+    cached = getattr(args, "_db_passphrase_cached", None)
+    if cached is not None:
+        return cached
+    fd = getattr(args, "db_passphrase_fd", None)
+    if fd is None:
+        return None
+    passphrase = read_passphrase_from_fd(int(fd))
+    args.db_passphrase_fd = None
+    args._db_passphrase_cached = passphrase
+    return passphrase
+
+
+def _open_db_with_passphrase(data_root, passphrase, *, allow_prompt):
+    try:
+        return open_db(data_root, passphrase=passphrase)
+    except AppError as exc:
+        if exc.code == "passphrase_required" and passphrase is None and allow_prompt:
+            prompted = prompt_passphrase()
+            return open_db(data_root, passphrase=prompted)
+        raise
+
+
 def bootstrap_runtime(args, needs_db=True, persist_bootstrap=False):
     paths = ensure_runtime_layout(
         resolve_runtime_paths(
@@ -100,7 +131,13 @@ def bootstrap_runtime(args, needs_db=True, persist_bootstrap=False):
     conn = None
     try:
         if needs_db:
-            conn = open_db(paths.data_root)
+            passphrase = _resolve_db_passphrase(args)
+            allow_prompt = sys.stdin.isatty() if passphrase is None else False
+            conn = _open_db_with_passphrase(
+                paths.data_root,
+                passphrase,
+                allow_prompt=allow_prompt,
+            )
             if persist_bootstrap:
                 seed_db_backends(conn, args.runtime_config)
             merge_db_backends(conn, args.runtime_config)

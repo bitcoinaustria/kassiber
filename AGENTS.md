@@ -16,6 +16,8 @@
   - [kassiber/backends.py](kassiber/backends.py) — named sync backends with SQLite as the canonical store plus optional dotenv bootstrap via `config/backends.env`, along with CRUD helpers.
   - [kassiber/sync_btcpay.py](kassiber/sync_btcpay.py) — BTCPay Greenfield API fetcher used by wallet-configured BTCPay sync and `wallets sync-btcpay`; it reshapes confirmed remote wallet-transaction rows into the existing BTCPay import format so Kassiber can reuse the same notes/tags pipeline.
   - [kassiber/cli/handlers.py](kassiber/cli/handlers.py) — remaining CLI command handlers and compatibility-layer imports while deeper decomposition continues.
+  - [kassiber/secrets/](kassiber/secrets/) — SQLCipher keying helpers (`sqlcipher.py`), passphrase prompt/fd plumbing (`prompt.py`), plaintext→encrypted migration (`migration.py`), passphrase rotation (`passphrase.py`), `kassiber secrets {init,change-passphrase,verify,status}` CLI (`cli.py`), and the `--*-stdin` / `--*-fd` credential-input helpers (`cli_input.py`).
+  - [kassiber/backup/](kassiber/backup/) — `tar | age` backup format: SQLCipher-aware export (`pack.py`), age subprocess + pyrage fallback (`age_cli.py`), strict tar member validation (`safe_tar.py`), and `kassiber backup {export,import}` CLI (`cli.py`).
   - [kassiber/core/attachments.py](kassiber/core/attachments.py) — transaction attachment storage, URL-reference handling, integrity verification, and orphan-file GC for the managed attachment tree.
   - [kassiber/core/engines/__init__.py](kassiber/core/engines/__init__.py) — tax-engine interface/resolver. Both the generic RP2 path and the Austrian (§ 27b EStG) path route through `GenericRP2TaxEngine`; AT profiles surface rp2's `rp2.plugin.country.at.AT` plugin directly so accounting methods and engine semantics come from rp2, while Kassiber keeps Austrian disposal bucketing / Kennzahl mapping on its side.
   - [kassiber/core/tax_events.py](kassiber/core/tax_events.py) — in-memory normalization seam between raw transaction rows and tax-engine inputs, including early quarantine classification for under-specified tax semantics.
@@ -54,7 +56,7 @@ Kassiber is currently in **dev mode**: renaming commands, breaking flags, and re
   - reports (summary, tax-summary, balance-sheet, portfolio-summary, capital-gains, journal-entries, balance-history, austrian-e1kv, austrian-tax-summary, export-pdf, export-austrian, export-austrian-e1kv-pdf, export-austrian-e1kv-xlsx, export-austrian-e1kv-csv)
   - rates (local cache + CoinGecko sync + manual override)
   - diagnostics (public-safe bug-report collection)
-- Every command accepts `--format {table,plain,json,csv}`, `--output <path>`, `--machine` (= `--format json`), `--debug`, and `--diagnostics-out <path|auto>`.
+- Every command accepts `--format {table,plain,json,csv}`, `--output <path>`, `--machine` (= `--format json`), `--debug`, `--diagnostics-out <path|auto>`, and `--db-passphrase-fd FD` (used to unlock a SQLCipher-encrypted database non-interactively).
 - Successful responses use `{kind, schema_version, data}`. Errors use `{kind: "error", schema_version, error: {code, message, hint, details, retryable, debug}}`.
 - Live sync kinds implemented: `esplora`, `electrum`, `bitcoinrpc`. BTCPay Greenfield confirmed on-chain wallet history sync is available through wallet config and `wallets sync-btcpay`.
 - BIP329 records are stored in SQLite and transaction labels are bridged into Kassiber tags.
@@ -65,11 +67,13 @@ Kassiber is currently in **dev mode**: renaming commands, breaking flags, and re
 ## Command surface
 
 - `init`, `status`, `daemon`, `context {show,current,set}`
+- `secrets {init,init-resume,change-passphrase,verify,status}`
+- `backup {export,import}`
 - `workspaces {list,create}`
 - `profiles {list,create,get,set}`
 - `accounts {list,create}`
-- `wallets {kinds,list,create,get,update,delete,sync,sync-btcpay,derive,import-json,import-csv,import-btcpay,import-phoenix}`
-- `backends {kinds,list,get,create,update,delete,set-default,clear-default}`
+- `wallets {kinds,list,create,get,update,delete,reveal-descriptor,sync,sync-btcpay,derive,import-json,import-csv,import-btcpay,import-phoenix}`
+- `backends {kinds,list,get,create,update,delete,reveal-token,set-default,clear-default}`
 - `transactions {list}`
 - `attachments {add,list,remove,verify,gc}`
 - `metadata records {list,get,note {set,clear},tag {add,remove},excluded {set,clear}}`

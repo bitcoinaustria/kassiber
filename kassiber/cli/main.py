@@ -66,23 +66,43 @@ from ..diagnostics import (
     save_public_diagnostics_report,
     write_error_diagnostics,
 )
+from ..backup.cli import add_backup_parser, dispatch_backup
 from ..errors import AppError
+from ..secrets.cli import add_secrets_parser, dispatch_secrets
+from ..secrets.cli_input import (
+    add_secret_stdin_options,
+    enforce_single_stdin_consumer,
+    read_secret_from_args,
+)
 from ..tax_policy import supported_tax_countries
 
 
 def _backend_extra_config(args: argparse.Namespace) -> dict[str, object] | None:
+    enforce_single_stdin_consumer(
+        args, ("token", "auth_header", "username", "password")
+    )
     config = {}
     if getattr(args, "insecure", None) is not None:
         config["insecure"] = args.insecure
     if getattr(args, "cookiefile", None) is not None:
         config["cookiefile"] = args.cookiefile
-    if getattr(args, "username", None) is not None:
-        config["username"] = args.username
-    if getattr(args, "password", None) is not None:
-        config["password"] = args.password
+    username = read_secret_from_args(args, "username")
+    if username is not None:
+        config["username"] = username
+    password = read_secret_from_args(args, "password")
+    if password is not None:
+        config["password"] = password
     if getattr(args, "wallet_prefix", None) is not None:
         config["walletprefix"] = args.wallet_prefix
     return config or None
+
+
+def _backend_token(args: argparse.Namespace) -> str | None:
+    return read_secret_from_args(args, "token")
+
+
+def _backend_auth_header(args: argparse.Namespace) -> str | None:
+    return read_secret_from_args(args, "auth-header", legacy_attr="auth_header")
 
 
 def _normalized_backend_clear_fields(values: Sequence[str] | None) -> list[str]:
@@ -202,11 +222,24 @@ def build_parser() -> argparse.ArgumentParser:
         metavar="PATH|auto",
         help="On error, write a public-safe diagnostics report to PATH, or use 'auto' for exports/diagnostics",
     )
+    parser.add_argument(
+        "--db-passphrase-fd",
+        type=int,
+        default=None,
+        metavar="FD",
+        help=(
+            "Read the SQLCipher database passphrase from this open file descriptor "
+            "and close it after use; required for headless automation against an encrypted database."
+        ),
+    )
     sub = parser.add_subparsers(dest="command", required=True)
 
     sub.add_parser("daemon")
     sub.add_parser("init")
     sub.add_parser("status")
+
+    add_secrets_parser(sub)
+    add_backup_parser(sub)
 
     backends = sub.add_parser("backends")
     backends_sub = backends.add_subparsers(dest="backends_command", required=True)
@@ -222,15 +255,31 @@ def build_parser() -> argparse.ArgumentParser:
     backends_create.add_argument("--url", required=True)
     backends_create.add_argument("--chain", choices=["bitcoin", "liquid"])
     backends_create.add_argument("--network")
-    backends_create.add_argument("--auth-header")
-    backends_create.add_argument("--token")
+    backends_create.add_argument(
+        "--auth-header",
+        help="DEPRECATED — exposes secrets in shell history; prefer --auth-header-stdin",
+    )
+    backends_create.add_argument(
+        "--token",
+        help="DEPRECATED — exposes secrets in shell history; prefer --token-stdin",
+    )
+    add_secret_stdin_options(backends_create, "auth-header", label="auth header")
+    add_secret_stdin_options(backends_create, "token")
     backends_create.add_argument("--batch-size", type=int)
     backends_create.add_argument("--timeout", type=int)
     backends_create.add_argument("--tor-proxy")
     backends_create.add_argument("--insecure")
     backends_create.add_argument("--cookiefile")
-    backends_create.add_argument("--username")
-    backends_create.add_argument("--password")
+    backends_create.add_argument(
+        "--username",
+        help="DEPRECATED — exposes secrets in shell history; prefer --username-stdin",
+    )
+    backends_create.add_argument(
+        "--password",
+        help="DEPRECATED — exposes secrets in shell history; prefer --password-stdin",
+    )
+    add_secret_stdin_options(backends_create, "username")
+    add_secret_stdin_options(backends_create, "password")
     backends_create.add_argument("--wallet-prefix")
     backends_create.add_argument("--notes")
 
@@ -240,15 +289,31 @@ def build_parser() -> argparse.ArgumentParser:
     backends_update.add_argument("--url")
     backends_update.add_argument("--chain", choices=["bitcoin", "liquid"])
     backends_update.add_argument("--network")
-    backends_update.add_argument("--auth-header")
-    backends_update.add_argument("--token")
+    backends_update.add_argument(
+        "--auth-header",
+        help="DEPRECATED — prefer --auth-header-stdin",
+    )
+    backends_update.add_argument(
+        "--token",
+        help="DEPRECATED — prefer --token-stdin",
+    )
+    add_secret_stdin_options(backends_update, "auth-header", label="auth header")
+    add_secret_stdin_options(backends_update, "token")
     backends_update.add_argument("--batch-size", type=int)
     backends_update.add_argument("--timeout", type=int)
     backends_update.add_argument("--tor-proxy")
     backends_update.add_argument("--insecure")
     backends_update.add_argument("--cookiefile")
-    backends_update.add_argument("--username")
-    backends_update.add_argument("--password")
+    backends_update.add_argument(
+        "--username",
+        help="DEPRECATED — prefer --username-stdin",
+    )
+    backends_update.add_argument(
+        "--password",
+        help="DEPRECATED — prefer --password-stdin",
+    )
+    add_secret_stdin_options(backends_update, "username")
+    add_secret_stdin_options(backends_update, "password")
     backends_update.add_argument("--wallet-prefix")
     backends_update.add_argument("--notes")
     backends_update.add_argument("--clear", action="append", choices=sorted(BACKEND_CLEAR_FIELD_ALIASES))
@@ -260,6 +325,12 @@ def build_parser() -> argparse.ArgumentParser:
     backends_set_default.add_argument("name")
 
     backends_sub.add_parser("clear-default")
+
+    backends_reveal = backends_sub.add_parser(
+        "reveal-token",
+        help="Print the raw token / auth-header for a backend (requires database unlock)",
+    )
+    backends_reveal.add_argument("name")
 
     context = sub.add_parser("context")
     context_sub = context.add_subparsers(dest="context_command", required=True)
@@ -345,10 +416,20 @@ def build_parser() -> argparse.ArgumentParser:
     wallets_create.add_argument("--chain", choices=["bitcoin", "liquid"])
     wallets_create.add_argument("--network")
     wallets_create.add_argument("--address", action="append")
-    wallets_create.add_argument("--descriptor")
+    wallets_create.add_argument(
+        "--descriptor",
+        help="DEPRECATED — exposes descriptor in shell history; prefer --descriptor-stdin or --descriptor-file",
+    )
     wallets_create.add_argument("--descriptor-file")
-    wallets_create.add_argument("--change-descriptor")
+    add_secret_stdin_options(wallets_create, "descriptor")
+    wallets_create.add_argument(
+        "--change-descriptor",
+        help="DEPRECATED — prefer --change-descriptor-stdin or --change-descriptor-file",
+    )
     wallets_create.add_argument("--change-descriptor-file")
+    add_secret_stdin_options(
+        wallets_create, "change-descriptor", label="change descriptor"
+    )
     wallets_create.add_argument("--gap-limit", type=int)
     wallets_create.add_argument("--policy-asset")
     wallets_create.add_argument("--store-id")
@@ -387,6 +468,14 @@ def build_parser() -> argparse.ArgumentParser:
     wallets_delete.add_argument("--profile")
     wallets_delete.add_argument("--wallet", required=True)
     wallets_delete.add_argument("--cascade", action="store_true", help="Also delete transactions and journal entries belonging to this wallet")
+
+    wallets_reveal = wallets_sub.add_parser(
+        "reveal-descriptor",
+        help="Print the raw descriptor / change descriptor / blinding key (requires database unlock)",
+    )
+    wallets_reveal.add_argument("--workspace")
+    wallets_reveal.add_argument("--profile")
+    wallets_reveal.add_argument("--wallet", required=True)
     wallets_import_json = wallets_sub.add_parser("import-json")
     wallets_import_json.add_argument("--workspace")
     wallets_import_json.add_argument("--profile")
@@ -780,6 +869,10 @@ def dispatch(conn: sqlite3.Connection | None, args: argparse.Namespace) -> Any:
         return cmd_init(conn, args)
     if args.command == "status":
         return cmd_status(conn, args)
+    if args.command == "secrets":
+        return emit(args, dispatch_secrets(args))
+    if args.command == "backup":
+        return emit(args, dispatch_backup(args))
     if args.command == "backends":
         if args.backends_command == "list":
             return emit(args, core_accounts.list_backends(args.runtime_config))
@@ -800,8 +893,8 @@ def dispatch(conn: sqlite3.Connection | None, args: argparse.Namespace) -> Any:
                     args.url,
                     chain=args.chain,
                     network=args.network,
-                    auth_header=args.auth_header,
-                    token=args.token,
+                    auth_header=_backend_auth_header(args),
+                    token=_backend_token(args),
                     batch_size=args.batch_size,
                     timeout=args.timeout,
                     tor_proxy=args.tor_proxy,
@@ -815,8 +908,8 @@ def dispatch(conn: sqlite3.Connection | None, args: argparse.Namespace) -> Any:
                 "url": args.url,
                 "chain": args.chain,
                 "network": args.network,
-                "auth_header": args.auth_header,
-                "token": args.token,
+                "auth_header": _backend_auth_header(args),
+                "token": _backend_token(args),
                 "batch_size": args.batch_size,
                 "timeout": args.timeout,
                 "tor_proxy": args.tor_proxy,
@@ -834,6 +927,11 @@ def dispatch(conn: sqlite3.Connection | None, args: argparse.Namespace) -> Any:
             )
         if args.backends_command == "clear-default":
             return emit(args, core_accounts.clear_default_backend(conn, args.runtime_config))
+        if args.backends_command == "reveal-token":
+            return emit(
+                args,
+                core_accounts.reveal_backend_secrets(conn, args.runtime_config, args.name),
+            )
     if args.command == "context":
         if args.context_command == "show":
             return cmd_context_show(conn, args)
@@ -987,6 +1085,13 @@ def dispatch(conn: sqlite3.Connection | None, args: argparse.Namespace) -> Any:
                     args.profile,
                     args.wallet,
                     cascade=args.cascade,
+                ),
+            )
+        if args.wallets_command == "reveal-descriptor":
+            return emit(
+                args,
+                core_wallets.reveal_wallet_secrets(
+                    conn, args.workspace, args.profile, args.wallet
                 ),
             )
         if args.wallets_command == "import-json":
@@ -1554,6 +1659,10 @@ def command_needs_db(args: argparse.Namespace) -> bool:
     if args.command == "backends" and getattr(args, "backends_command", None) == "kinds":
         return False
     if args.command == "wallets" and getattr(args, "wallets_command", None) == "kinds":
+        return False
+    if args.command == "secrets":
+        return False
+    if args.command == "backup":
         return False
     return True
 
