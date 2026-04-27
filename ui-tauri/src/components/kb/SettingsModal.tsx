@@ -11,10 +11,12 @@ import {
   FileInput,
   KeyRound,
   Lock,
+  Pencil,
   Plus,
   RefreshCw,
   Server,
   ShieldCheck,
+  Sparkles,
   Trash2,
   Upload,
 } from "lucide-react";
@@ -49,6 +51,11 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import {
+  AiProviderForm,
+  type ExistingAiProvider,
+} from "@/components/kb/AiProviderForm";
+import { useDaemon, useDaemonMutation } from "@/daemon/client";
 import { useUiStore } from "@/store/ui";
 import { cn } from "@/lib/utils";
 
@@ -105,7 +112,7 @@ const DEFAULT_BACKENDS: Backend[] = [
 
 interface SettingsModalProps {
   open: boolean;
-  focusSection?: "backends" | null;
+  focusSection?: "backends" | "ai" | null;
   onClose: () => void;
 }
 
@@ -121,6 +128,7 @@ export function SettingsModal({
   const setIdentity = useUiStore((s) => s.setIdentity);
   const navigate = useNavigate();
   const backendsRef = React.useRef<HTMLDivElement | null>(null);
+  const aiRef = React.useRef<HTMLDivElement | null>(null);
 
   const [clearClipboard, setClearClipboard] = React.useState(true);
   const [autoLockEnabled, setAutoLockEnabled] = React.useState(true);
@@ -131,10 +139,12 @@ export function SettingsModal({
   const [addOpen, setAddOpen] = React.useState(false);
 
   React.useEffect(() => {
-    if (!open || focusSection !== "backends") return;
+    if (!open) return;
+    if (focusSection !== "backends" && focusSection !== "ai") return;
 
+    const target = focusSection === "ai" ? aiRef : backendsRef;
     const id = window.requestAnimationFrame(() => {
-      backendsRef.current?.scrollIntoView({
+      target.current?.scrollIntoView({
         block: "start",
         behavior: "smooth",
       });
@@ -408,6 +418,10 @@ export function SettingsModal({
               </Card>
             </div>
 
+            <div ref={aiRef} className="lg:col-span-2">
+              <AiProvidersCard />
+            </div>
+
             <Card className="border-destructive/30 lg:col-span-2">
               <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <div>
@@ -447,6 +461,200 @@ export function SettingsModal({
         />
       </DialogContent>
     </Dialog>
+  );
+}
+
+interface AiProviderRow {
+  name: string;
+  base_url: string;
+  kind: "local" | "remote" | "tee";
+  default_model?: string | null;
+  notes?: string | null;
+  has_api_key: boolean;
+  is_default: boolean;
+  acknowledged_at?: string | null;
+}
+
+interface AiProvidersListData {
+  providers: AiProviderRow[];
+  default: string | null;
+}
+
+const AI_KIND_BADGE: Record<AiProviderRow["kind"], string> = {
+  local: "border-emerald-500/25 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300",
+  remote: "border-amber-500/25 bg-amber-500/10 text-amber-700 dark:text-amber-300",
+  tee: "border-sky-500/25 bg-sky-500/10 text-sky-700 dark:text-sky-300",
+};
+
+function AiProvidersCard() {
+  const providersQuery = useDaemon<AiProvidersListData>("ai.providers.list");
+  const data = React.useMemo<AiProvidersListData>(
+    () =>
+      providersQuery.data?.kind === "ai.providers.list" &&
+      providersQuery.data.data
+        ? providersQuery.data.data
+        : { providers: [], default: null },
+    [providersQuery.data],
+  );
+  const setDefault = useDaemonMutation("ai.providers.set_default");
+  const clearDefault = useDaemonMutation("ai.providers.clear_default");
+  const deleteProvider = useDaemonMutation("ai.providers.delete");
+  const [editingName, setEditingName] = React.useState<string | null>(null);
+  const [addOpen, setAddOpen] = React.useState(false);
+
+  const editingProvider = React.useMemo<ExistingAiProvider | null>(() => {
+    if (!editingName) return null;
+    const row = data.providers.find((p) => p.name === editingName);
+    if (!row) return null;
+    return {
+      name: row.name,
+      base_url: row.base_url,
+      default_model: row.default_model ?? undefined,
+      kind: row.kind,
+      notes: row.notes ?? undefined,
+      has_api_key: row.has_api_key,
+    };
+  }, [data, editingName]);
+
+  return (
+    <Card>
+      <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <CardTitle className="flex items-center gap-2 text-base">
+            <Sparkles className="size-4" aria-hidden="true" />
+            AI providers
+          </CardTitle>
+          <CardDescription>
+            OpenAI-compatible endpoints for the in-app assistant. Local Ollama
+            runs without a key; remote providers see prompt content.
+          </CardDescription>
+        </div>
+        <Button type="button" size="sm" onClick={() => setAddOpen(true)}>
+          <Plus className="size-4" aria-hidden="true" />
+          Add provider
+        </Button>
+      </CardHeader>
+      <CardContent>
+        <div className="overflow-x-auto rounded-md border">
+          <Table>
+            <TableHeader>
+              <TableRow className="bg-muted/50 hover:bg-muted/50">
+                <TableHead>Provider</TableHead>
+                <TableHead>Posture</TableHead>
+                <TableHead>Default model</TableHead>
+                <TableHead>Auth</TableHead>
+                <TableHead className="text-right">Default</TableHead>
+                <TableHead className="text-right">Actions</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {data.providers.length === 0 ? (
+                <TableRow>
+                  <TableCell
+                    colSpan={6}
+                    className="text-center text-sm text-muted-foreground"
+                  >
+                    No providers configured.
+                  </TableCell>
+                </TableRow>
+              ) : (
+                data.providers.map((row) => (
+                  <TableRow key={row.name}>
+                    <TableCell className="min-w-[220px]">
+                      <div className="font-medium">{row.name}</div>
+                      <div className="max-w-[320px] truncate text-xs text-muted-foreground">
+                        {row.base_url}
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      <span
+                        className={cn(
+                          "inline-flex rounded-full border px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide",
+                          AI_KIND_BADGE[row.kind],
+                        )}
+                      >
+                        {row.kind === "tee" ? "TEE" : row.kind}
+                      </span>
+                    </TableCell>
+                    <TableCell className="font-mono text-xs">
+                      {row.default_model ?? "-"}
+                    </TableCell>
+                    <TableCell className="text-muted-foreground">
+                      {row.has_api_key ? "Bearer" : "none"}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      {row.is_default ? (
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => clearDefault.mutate(undefined)}
+                          disabled={clearDefault.isPending}
+                        >
+                          Clear default
+                        </Button>
+                      ) : (
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          onClick={() => setDefault.mutate({ name: row.name })}
+                          disabled={setDefault.isPending}
+                        >
+                          Set default
+                        </Button>
+                      )}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <div className="flex justify-end gap-1">
+                        <Button
+                          type="button"
+                          size="icon-sm"
+                          variant="ghost"
+                          aria-label={`Edit ${row.name}`}
+                          onClick={() => setEditingName(row.name)}
+                        >
+                          <Pencil className="size-3.5" aria-hidden="true" />
+                        </Button>
+                        <Button
+                          type="button"
+                          size="icon-sm"
+                          variant="ghost"
+                          aria-label={`Delete ${row.name}`}
+                          disabled={row.is_default || deleteProvider.isPending}
+                          onClick={() => {
+                            const ok = window.confirm(
+                              `Delete AI provider '${row.name}'? Cannot be undone.`,
+                            );
+                            if (!ok) return;
+                            deleteProvider.mutate({ name: row.name });
+                          }}
+                        >
+                          <Trash2 className="size-3.5" aria-hidden="true" />
+                        </Button>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ))
+              )}
+            </TableBody>
+          </Table>
+        </div>
+      </CardContent>
+
+      <AiProviderForm
+        open={addOpen}
+        initial={null}
+        onClose={() => setAddOpen(false)}
+        onSaved={() => setAddOpen(false)}
+      />
+      <AiProviderForm
+        open={Boolean(editingProvider)}
+        initial={editingProvider}
+        onClose={() => setEditingName(null)}
+        onSaved={() => setEditingName(null)}
+      />
+    </Card>
   );
 }
 

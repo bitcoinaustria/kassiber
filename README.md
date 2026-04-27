@@ -121,6 +121,14 @@ for coding and terminal assistants. It helps an assistant use the Kassiber CLI
 safely for onboarding, imports, journal processing, reports, metadata cleanup,
 and troubleshooting.
 
+The desktop app ships an in-app assistant that streams chat over an
+OpenAI-compatible endpoint configured in **Settings → AI providers**. The
+default seed entry is local Ollama (`http://localhost:11434/v1`). Add remote
+providers (OpenAI, Maple AI, OpenRouter, …) when you want them; remote
+prompts leave the device, so the picker tags each provider as `local`,
+`remote`, or `tee`. The same surface is reachable from the CLI via
+`kassiber ai providers …`, `kassiber ai models`, and `kassiber ai chat`.
+
 AI is optional. Kassiber's core accounting flow does not depend on a model, and
 future AI-assisted features such as OCR, extraction, and reconciliation
 suggestions should stay review-gated.

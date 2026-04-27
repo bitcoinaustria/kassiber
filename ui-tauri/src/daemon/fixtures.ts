@@ -48,4 +48,43 @@ export const fixtures: Record<string, unknown> = {
     ],
     recent: [],
   },
+  "ai.providers.list": {
+    providers: [
+      {
+        name: "ollama",
+        base_url: "http://localhost:11434/v1",
+        kind: "local",
+        default_model: "qwen3.6:35b",
+        notes: "Local Ollama (mock).",
+        acknowledged_at: "2026-04-27T08:00:00Z",
+        created_at: "2026-04-27T08:00:00Z",
+        updated_at: "2026-04-27T08:00:00Z",
+        has_api_key: false,
+        is_default: true,
+      },
+    ],
+    default: "ollama",
+  },
+  "ai.list_models": {
+    provider: "ollama",
+    models: [
+      { id: "qwen3.6:35b", owned_by: "library" },
+      { id: "llama3.3:70b", owned_by: "library" },
+    ],
+  },
 };
+
+/**
+ * Pre-canned AI chat stream for mock mode. Each delta is sent with a
+ * small delay so the UI can exercise the streaming reducer + thinking
+ * parser without a real provider.
+ */
+export const MOCK_AI_CHAT_STREAM: { content: string; delayMs?: number }[] = [
+  { content: "<think>Let me check the recent ", delayMs: 20 },
+  { content: "transactions and quarantine state.</think>", delayMs: 60 },
+  { content: "Here is what I see:\n\n", delayMs: 30 },
+  { content: "- 4 transactions imported in the last 7 days\n", delayMs: 40 },
+  { content: "- 0 quarantined entries\n", delayMs: 40 },
+  { content: "- Journals are up to date.\n\n", delayMs: 40 },
+  { content: "You're good to run reports.", delayMs: 80 },
+];

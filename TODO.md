@@ -228,6 +228,20 @@ and [docs/plan/04-desktop-ui.md](docs/plan/04-desktop-ui.md).
 - [x] Add reusable shell-level assistant mockup based on `@blocks-so/ai-02`,
   with local-model selector, Kassiber-specific suggestions, collapsed-on-scroll
   behavior, and hover/focus expansion
+- [x] Wire the in-app assistant to a real OpenAI-compatible client over the
+  daemon protocol — provider config in SQLite, CLI parity
+  (`kassiber ai providers/models/chat`), streaming chat with `<think>`
+  reasoning split, and a Settings → AI providers panel
+- [ ] AI tool use (PR 2): expose typed daemon kinds as the assistant's tool
+  surface, seed the system prompt from `skills/kassiber/`, run a
+  read-only-by-default tool loop with per-call consent for mutating tools
+- [ ] Cooperative AI chat cancellation: thread a `threading.Event` (or a
+  dedicated `ai.chat.cancel` request kind) so Stop actually halts generation
+  rather than just hiding the in-flight reply
+- [ ] Daemon worker pool: replace the surgical `ai.chat` thread with a real
+  worker-pool model so concurrent streaming + non-streaming requests don't
+  serialize through one stdin/stdout reader (also unblocks tool-call SQLite
+  access from the AI thread)
 - [x] Overview screen now uses `@shadcnblocks/dashboard5` as the first
   dashboard screen, keeping Export -> Reports, Add connection modal, and
   Show all transactions wiring
@@ -341,7 +355,8 @@ and [docs/plan/04-desktop-ui.md](docs/plan/04-desktop-ui.md).
   from the public diagnostics contract
 - [ ] Replace plaintext secret enrollment through CLI args / dotenv with
   local-only secret capture flows or secret refs so hosted agents do not need
-  raw values in prompts or command strings
+  raw values in prompts or command strings (covers both `backends.token` /
+  `backends.auth_header` and `ai_providers.api_key`)
 - [ ] Split wallet descriptor and other sensitive config out of the generic
   `wallets.config_json` blob into typed project-local tables plus OS keychain
   references where appropriate

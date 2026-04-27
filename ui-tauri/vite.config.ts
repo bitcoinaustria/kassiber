@@ -13,6 +13,17 @@ const ALLOWED_BRIDGE_KINDS = new Set([
   "ui.reports.capital_gains",
   "ui.journals.snapshot",
   "ui.wallets.sync",
+  // Non-streaming AI kinds. ai.chat is intentionally excluded — bridge mode
+  // is one-shot stdin/stdout; streaming requires the Tauri shell.
+  "ai.providers.list",
+  "ai.providers.get",
+  "ai.providers.create",
+  "ai.providers.update",
+  "ai.providers.delete",
+  "ai.providers.set_default",
+  "ai.providers.clear_default",
+  "ai.providers.acknowledge",
+  "ai.list_models",
 ]);
 
 function isLoopbackHost(hostHeader: string | string[] | undefined) {

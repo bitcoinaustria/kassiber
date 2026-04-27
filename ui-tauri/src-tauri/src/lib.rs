@@ -16,7 +16,24 @@ const ALLOWED_DAEMON_KINDS: &[&str] = &[
     "ui.transactions.list",
     "ui.profiles.snapshot",
     "ui.reports.capital_gains",
+    "ai.providers.list",
+    "ai.providers.get",
+    "ai.providers.create",
+    "ai.providers.update",
+    "ai.providers.delete",
+    "ai.providers.set_default",
+    "ai.providers.clear_default",
+    "ai.providers.acknowledge",
+    "ai.list_models",
+    "ai.chat",
 ];
+
+/// Kinds that may emit intermediate stream records (kind = "<request_kind>.delta",
+/// "<request_kind>.tool_call", etc.) before the terminal envelope. The supervisor
+/// forwards intermediate records to the webview as Tauri events
+/// `daemon://stream/<request_id>` and switches to a per-record inactivity
+/// timeout. Other kinds keep the existing total-budget behavior.
+const STREAMING_DAEMON_KINDS: &[&str] = &["ai.chat"];
 
 #[derive(Debug, Deserialize)]
 pub struct DaemonRequest {
@@ -52,6 +69,7 @@ pub struct DaemonError {
 
 #[tauri::command]
 fn daemon_invoke(
+    app: tauri::AppHandle,
     state: State<'_, Mutex<DaemonSupervisor>>,
     request: DaemonRequest,
 ) -> DaemonEnvelope {
@@ -86,7 +104,8 @@ fn daemon_invoke(
     };
 
     let request_id = request.request_id.clone();
-    match supervisor.invoke(&request.kind, request.args) {
+    let streaming = STREAMING_DAEMON_KINDS.contains(&request.kind.as_str());
+    match supervisor.invoke(&request.kind, request.args, &app, streaming) {
         Ok(response) => match serde_json::from_value(response) {
             Ok(envelope) => envelope,
             Err(error) => error_envelope(

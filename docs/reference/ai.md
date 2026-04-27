@@ -1,18 +1,28 @@
 # AI Reference
 
-Kassiber has two different AI-related layers:
+Kassiber has three AI-related layers:
 
 - a repo-local skill bundle for AI coding and terminal assistants
+- the in-app assistant that ships with the desktop UI (and a CLI surface that
+  reuses the same provider config)
 - planned in-product AI help for OCR, extraction, and reconciliation workflows
 
 These are related, but they are not the same thing.
 
 ## What exists today
 
-Today, the shipped AI surface is the repo-local Kassiber skill in
-[`../../skills/kassiber/`](../../skills/kassiber/).
+Two surfaces ship today:
 
-That skill helps an AI assistant use the Kassiber CLI safely and correctly for:
+- The repo-local Kassiber skill in
+  [`../../skills/kassiber/`](../../skills/kassiber/) for AI coding and terminal
+  assistants.
+- An **in-app assistant** in the desktop UI that streams chat from an
+  OpenAI-compatible endpoint, plus a parallel CLI surface
+  (`kassiber ai providers …`, `kassiber ai models`, `kassiber ai chat`) that
+  reuses the same provider config.
+
+The repo-local skill helps an AI assistant use the Kassiber CLI safely and
+correctly for:
 
 - onboarding and context checks
 - wallet setup and imports
@@ -64,7 +74,10 @@ If in doubt, keep inference local.
 Local inference is the recommended default.
 
 [Ollama](https://ollama.com/) is a good fit because it runs locally and exposes
-a simple local API on `http://localhost:11434/api`.
+an OpenAI-compatible API at `http://localhost:11434/v1`. The first time the
+in-app assistant or CLI is invoked, Kassiber seeds a default `ollama` provider
+pointing at that endpoint. Run `ollama serve` (or have Ollama auto-start) and
+the assistant Just Works.
 
 Example:
 
@@ -76,6 +89,36 @@ Local testing so far has used `qwen3.6:35b` with good results for Kassiber-style
 assistant flows. Smaller and less powerful models can still be useful for
 narrower tasks, and should become more practical as Kassiber's prompts, skill
 bundle, and workflows get tighter.
+
+## In-app surface
+
+The desktop assistant lives at the bottom of every authenticated screen. Its
+provider/model picker is fed by `ai.providers.list` and `ai.list_models` over
+the daemon protocol; chat streaming is wired through Tauri events
+(`daemon://stream`) so the UI can render reasoning (`<think>`) and the answer
+in real time.
+
+Provider configuration is mirrored in the CLI:
+
+```bash
+kassiber ai providers list
+kassiber ai providers create openai --base-url https://api.openai.com/v1 --kind remote --api-key $OPENAI_API_KEY --default-model gpt-4o-mini
+kassiber ai providers set-default openai
+kassiber ai models
+kassiber ai chat "Summarise the last week of imports."
+```
+
+API keys are stored in plaintext in the SQLite database for now, mirroring the
+existing `backends` pattern. An OS-keychain migration is tracked in
+[`../../TODO.md`](../../TODO.md).
+
+`<think>...</think>` content emitted inline by Qwen3, DeepSeek-R1, QwQ, and
+similar thinking-capable models is split out into a collapsible reasoning pane
+above the answer. Models that don't emit thinking tags pass through unchanged.
+
+Streaming is one-shot: pressing **Stop** hides the in-flight assistant message
+in the UI, but the underlying request keeps generating until it finishes.
+Cooperative cancellation lands with the worker-pool refactor.
 
 ## Remote inference
 

@@ -79,6 +79,8 @@ _KIND_SUBCOMMAND_ATTRS = (
     "reports_command",
     "rates_command",
     "diagnostics_command",
+    "ai_command",
+    "ai_providers_command",
 )
 
 
