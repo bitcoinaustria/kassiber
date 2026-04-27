@@ -84,10 +84,19 @@ export const fixtures: Record<string, unknown> = {
 
 /**
  * Pre-canned AI chat stream for mock mode. Each delta is sent with a
- * small delay so the UI can exercise the streaming reducer + thinking
- * parser without a real provider.
+ * small delay so the UI can exercise the streaming reducer plus both
+ * thinking channels — inline `<think>...</think>` (older Qwen / R1) and
+ * the structured `reasoning` field (Ollama's OpenAI-compat shim for
+ * Qwen3, Gemma reasoning builds, OpenAI o1/o3) — without a real
+ * provider.
  */
-export const MOCK_AI_CHAT_STREAM: { content: string; delayMs?: number }[] = [
+export const MOCK_AI_CHAT_STREAM: {
+  content?: string;
+  reasoning?: string;
+  delayMs?: number;
+}[] = [
+  { reasoning: "Pulling overview snapshot. ", delayMs: 20 },
+  { reasoning: "Inspecting quarantine state and journal freshness.", delayMs: 50 },
   { content: "<think>Let me check the recent ", delayMs: 20 },
   { content: "transactions and quarantine state.</think>", delayMs: 60 },
   { content: "Here is what I see:\n\n", delayMs: 30 },

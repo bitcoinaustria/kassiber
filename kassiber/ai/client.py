@@ -281,12 +281,21 @@ class OpenAICompatClient:
                 ) from exc
         choice = ((payload.get("choices") or [{}])[0]) if isinstance(payload, dict) else {}
         message = (choice.get("message") or {}) if isinstance(choice, dict) else {}
-        return {
+        # `reasoning` is the structured chain-of-thought channel from
+        # OpenAI o1/o3-style models and Ollama's OpenAI-compat shim for
+        # Qwen3 / Gemma reasoning builds. Surface it alongside `content`
+        # so callers (CLI envelope, future tool-use plumbing) can show or
+        # ignore reasoning without re-parsing.
+        reasoning = message.get("reasoning")
+        result: dict[str, Any] = {
             "role": message.get("role") or "assistant",
             "content": message.get("content") or "",
             "finish_reason": choice.get("finish_reason"),
             "usage": payload.get("usage") if isinstance(payload, dict) else None,
         }
+        if isinstance(reasoning, str) and reasoning:
+            result["reasoning"] = reasoning
+        return result
 
     def stream_chat(
         self,

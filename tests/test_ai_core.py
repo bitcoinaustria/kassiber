@@ -219,6 +219,61 @@ class ListModelsStrictModeTest(unittest.TestCase):
             self.assertEqual(ctx.exception.code, "ai_auth_failed")
 
 
+class ChatReasoningPassthroughTest(unittest.TestCase):
+    """OpenAI o1/o3 and Ollama's OpenAI-compat shim for Qwen3 / Gemma
+    reasoning builds emit a structured `reasoning` field on the chat
+    message. Surface it on the result so callers (CLI envelope, future
+    tool-use plumbing, the assistant UI) can show or ignore it without
+    re-parsing the upstream payload."""
+
+    class _FakeResponse:
+        def __init__(self, payload: bytes):
+            self._payload = payload
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return False
+
+        def read(self):
+            return self._payload
+
+    def test_chat_includes_reasoning_when_provider_emits_it(self):
+        payload = (
+            b'{"choices":[{"message":{"role":"assistant","content":"hi",'
+            b'"reasoning":"thinking out loud"},"finish_reason":"stop"}],'
+            b'"usage":{"prompt_tokens":1,"completion_tokens":2}}'
+        )
+        with patch(
+            "urllib.request.urlopen",
+            return_value=self._FakeResponse(payload),
+        ):
+            client = OpenAICompatClient(base_url="http://x/v1")
+            result = client.chat(
+                messages=[{"role": "user", "content": "x"}], model="m"
+            )
+        self.assertEqual(result["content"], "hi")
+        self.assertEqual(result["reasoning"], "thinking out loud")
+        self.assertEqual(result["finish_reason"], "stop")
+
+    def test_chat_omits_reasoning_when_provider_does_not_emit_it(self):
+        payload = (
+            b'{"choices":[{"message":{"role":"assistant","content":"plain"},'
+            b'"finish_reason":"stop"}]}'
+        )
+        with patch(
+            "urllib.request.urlopen",
+            return_value=self._FakeResponse(payload),
+        ):
+            client = OpenAICompatClient(base_url="http://x/v1")
+            result = client.chat(
+                messages=[{"role": "user", "content": "x"}], model="m"
+            )
+        self.assertEqual(result["content"], "plain")
+        self.assertNotIn("reasoning", result)
+
+
 class StreamChatErrorMappingTest(unittest.TestCase):
     """Read-time socket failures during a stream must map to retryable
     `ai_unavailable`, not bubble up as raw `URLError`/`OSError` and

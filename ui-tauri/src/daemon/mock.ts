@@ -70,11 +70,14 @@ async function mockAiChatStream<T, R>(
     await new Promise((resolve) =>
       setTimeout(resolve, chunk.delayMs ?? 30),
     );
+    const delta: { content?: string; reasoning?: string } = {};
+    if (chunk.content !== undefined) delta.content = chunk.content;
+    if (chunk.reasoning !== undefined) delta.reasoning = chunk.reasoning;
     const record: DaemonStreamRecord<R> = {
       kind: "ai.chat.delta",
       schema_version: 1,
       request_id: requestId,
-      data: { delta: { content: chunk.content } } as R,
+      data: { delta } as R,
     };
     options?.onRecord?.(record);
   }

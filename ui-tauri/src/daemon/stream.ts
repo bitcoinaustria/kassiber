@@ -46,6 +46,14 @@ interface AiChatDeltaShape {
   delta?: {
     role?: AiChatMessage["role"] | "tool";
     content?: string;
+    /**
+     * Structured reasoning channel emitted by OpenAI o1/o3-style models
+     * and by Ollama's OpenAI-compat shim for Qwen3 / Gemma reasoning
+     * builds. Distinct from inline `<think>...</think>` tags inside
+     * `content`, which `ThinkParser` handles. Both flow into the same
+     * UI thinking pane.
+     */
+    reasoning?: string;
   };
 }
 
@@ -103,16 +111,31 @@ export function useAiChatStream(): UseAiChatStreamResult {
     (record: DaemonStreamRecord<AiChatDeltaShape>) => {
       if (record.kind !== "ai.chat.delta") return;
       const content = record.data?.delta?.content;
-      if (!content) return;
-      const parser = parserRef.current ?? new ThinkParser();
-      parserRef.current = parser;
-      const split = parser.feed(content);
-      if (!split.content && !split.thinking) return;
+      const reasoning = record.data?.delta?.reasoning;
+      if (!content && !reasoning) return;
+      // `content` may carry inline `<think>...</think>` chunks (DeepSeek-R1,
+      // older Qwen builds). `reasoning` is the structured channel
+      // (OpenAI o1/o3, Ollama's OpenAI-compat for Qwen3 / Gemma reasoning
+      // builds). Merge both into the thinking pane; visible answer comes
+      // from the parsed-content channel only.
+      let visibleAdd = "";
+      let thinkingAdd = "";
+      if (content) {
+        const parser = parserRef.current ?? new ThinkParser();
+        parserRef.current = parser;
+        const split = parser.feed(content);
+        visibleAdd = split.content;
+        thinkingAdd = split.thinking;
+      }
+      if (reasoning) {
+        thinkingAdd += reasoning;
+      }
+      if (!visibleAdd && !thinkingAdd) return;
       updateAssistant((current) => ({
         ...current,
         status: "streaming",
-        content: current.content + split.content,
-        thinking: (current.thinking ?? "") + split.thinking,
+        content: current.content + visibleAdd,
+        thinking: (current.thinking ?? "") + thinkingAdd,
       }));
     },
     [updateAssistant],
