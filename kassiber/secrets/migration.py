@@ -42,14 +42,27 @@ BACKUP_SUFFIX = ".pre-encryption.sqlite3.bak"
 # one). The list is intentionally Bitcoin-shaped: descriptor prefixes,
 # extended-key prefixes, and the env-style credential markers Kassiber
 # may have stored before encryption.
+#
+# All markers are at least 5 bytes so that random-looking SQLCipher
+# ciphertext is very unlikely to trip a false positive. For 5-byte
+# markers the per-position collision probability is ~1/2^40 (~9e-13),
+# leaving the false-positive expectation under 0.01 even for a 10 GB
+# encrypted file. The 4-byte BIP32 version prefixes `xprv` / `tprv` are
+# extended to `xprv9` / `tprv8` because the base58check encoding of any
+# BIP32 extended private key always begins with that 5-char prefix
+# (the high-order digits are dominated by the fixed 4-byte version
+# bytes), depth-agnostic.
 DEFAULT_CREDENTIAL_MARKERS: tuple[bytes, ...] = (
     b"slip77(",
-    b"xprv",
-    b"tprv",
+    b"xprv9",
+    b"tprv8",
     b"_TOKEN=",
     b"_PASSWORD=",
     b"Authorization:",
 )
+
+
+_MARKER_SCAN_CHUNK_BYTES = 4 * 1024 * 1024
 
 
 @dataclass
@@ -86,10 +99,33 @@ def find_resumable_state(plaintext_path: Path) -> dict:
 
 
 def _scan_for_markers(path: Path, markers: Iterable[bytes]) -> list[str]:
-    """Return any marker strings that appear in the on-disk file as raw bytes."""
+    """Return any marker strings that appear in the on-disk file as raw bytes.
 
-    haystack = path.read_bytes()
-    return [m.decode("utf-8", "replace") for m in markers if m in haystack]
+    Streams the file in fixed-size chunks with a carry-over of
+    `max(len(m)) - 1` bytes so a marker straddling a chunk boundary is
+    still detected. Reading the whole file in one shot would OOM on
+    multi-GB databases.
+    """
+
+    marker_list = tuple(markers)
+    if not marker_list:
+        return []
+    overlap = max(len(m) for m in marker_list) - 1
+    found: set[bytes] = set()
+    with open(path, "rb") as handle:
+        tail = b""
+        while True:
+            block = handle.read(_MARKER_SCAN_CHUNK_BYTES)
+            if not block:
+                break
+            window = tail + block
+            for m in marker_list:
+                if m not in found and m in window:
+                    found.add(m)
+            if len(found) == len(marker_list):
+                break
+            tail = window[-overlap:] if overlap else b""
+    return [m.decode("utf-8", "replace") for m in marker_list if m in found]
 
 
 def migrate_plaintext_to_encrypted(

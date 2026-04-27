@@ -76,6 +76,9 @@ def read_passphrase_from_fd(fd: int) -> str:
         try:
             os.close(fd)
         except OSError:
+            # Best-effort fd cleanup; we deliberately swallow close
+            # failures so the original read error (if any) is what the
+            # caller sees rather than a noisy double exception.
             pass
 
     raw = b"".join(chunks)

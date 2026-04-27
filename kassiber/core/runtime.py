@@ -28,7 +28,9 @@ from ..db import (
 )
 from ..envelope import SCHEMA_VERSION, _write_text, build_error_envelope
 from ..errors import AppError
+from ..secrets.credentials import scan_dotenv_for_secrets
 from ..secrets.prompt import prompt_passphrase, read_passphrase_from_fd
+from ..secrets.sqlcipher import looks_like_plaintext_sqlite
 from .repo import current_context_snapshot
 
 
@@ -117,6 +119,27 @@ def _open_db_with_passphrase(data_root, passphrase, *, allow_prompt):
         raise
 
 
+def _warn_plaintext_secrets_once(env_file: str) -> None:
+    """Print a one-line warning when the dotenv has plaintext credentials.
+
+    Only fires when the on-disk database is encrypted (i.e. the user has
+    opted into V4.1 at-rest encryption) so plaintext-only setups stay
+    quiet. Output goes to stderr; machine-mode stdout envelopes are
+    untouched.
+    """
+
+    findings = scan_dotenv_for_secrets(Path(env_file))
+    if not findings:
+        return
+    keys = ", ".join(sorted({finding["env_key"] for finding in findings}))
+    sys.stderr.write(
+        "warning: encrypted database is in use but the bootstrap dotenv "
+        f"({env_file}) still contains plaintext secret entries ({keys}). "
+        "Run `kassiber secrets migrate-credentials` to lift them into the "
+        "encrypted backends table.\n"
+    )
+
+
 def bootstrap_runtime(args, needs_db=True, persist_bootstrap=False):
     paths = ensure_runtime_layout(
         resolve_runtime_paths(
@@ -141,6 +164,9 @@ def bootstrap_runtime(args, needs_db=True, persist_bootstrap=False):
             if persist_bootstrap:
                 seed_db_backends(conn, args.runtime_config)
             merge_db_backends(conn, args.runtime_config)
+            db_path = Path(paths.database)
+            if db_path.exists() and not looks_like_plaintext_sqlite(db_path):
+                _warn_plaintext_secrets_once(paths.env_file)
         return RuntimeState(paths=paths, runtime_config=args.runtime_config, conn=conn)
     except Exception:
         if conn is not None:

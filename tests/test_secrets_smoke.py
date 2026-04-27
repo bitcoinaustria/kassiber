@@ -20,7 +20,6 @@ Covers the round-trips the plan calls out as table-stakes:
 
 from __future__ import annotations
 
-import io
 import os
 import sqlite3
 import tarfile
@@ -31,7 +30,6 @@ from pathlib import Path
 from kassiber.backup.pack import export_backup, import_backup
 from kassiber.backup.safe_tar import (
     UnsafeTarMember,
-    extract_tar_safely,
     inspect_tar_members,
 )
 from kassiber.db import open_db
@@ -426,6 +424,194 @@ class CredentialLeakageGuardTests(unittest.TestCase):
                 self.assertEqual(ctx.exception.code, "migration_leaks_plaintext")
             finally:
                 migration._scan_for_markers = real_scan
+
+
+class CredentialMigrationTests(unittest.TestCase):
+    """Move plaintext secret entries from `backends.env` into the encrypted DB.
+
+    Covers the V4.1 follow-up that closes the "tokens stay plaintext on
+    disk" gap: secret-shaped dotenv keys (token, password, auth_header,
+    username + RPC aliases) are lifted into the SQLCipher `backends`
+    table, and the dotenv is rewritten with non-secret rows preserved.
+    """
+
+    def _seed_backend(self, data_root: Path, name: str, kind: str, url: str) -> None:
+        from kassiber.backends import create_db_backend
+
+        conn = open_db(str(data_root), passphrase="tracer-pass-12345")
+        try:
+            create_db_backend(conn, name, kind, url)
+        finally:
+            conn.close()
+
+    def test_scan_separates_secrets_from_urls(self):
+        from kassiber.secrets.credentials import scan_dotenv_for_secrets
+
+        with tempfile.TemporaryDirectory() as root:
+            env_file = Path(root) / "backends.env"
+            env_file.write_text(
+                "\n".join(
+                    [
+                        "# bootstrap config",
+                        "KASSIBER_BACKEND_BTCPAY_KIND=btcpay",
+                        "KASSIBER_BACKEND_BTCPAY_URL=https://btcpay.example.com",
+                        "KASSIBER_BACKEND_BTCPAY_TOKEN=tok-xyz",
+                        "KASSIBER_BACKEND_CORE_KIND=bitcoinrpc",
+                        "KASSIBER_BACKEND_CORE_URL=http://127.0.0.1:8332",
+                        "KASSIBER_BACKEND_CORE_RPCUSER=alice",
+                        "KASSIBER_BACKEND_CORE_RPCPASSWORD=hunter2",
+                        "KASSIBER_DEFAULT_BACKEND=btcpay",
+                    ]
+                ),
+                encoding="utf-8",
+            )
+            findings = scan_dotenv_for_secrets(env_file)
+            keys = {(f["backend"], f["field"]) for f in findings}
+            self.assertEqual(
+                keys,
+                {
+                    ("btcpay", "token"),
+                    ("core", "username"),
+                    ("core", "password"),
+                },
+                "URLs, kinds, and KASSIBER_DEFAULT_BACKEND must not be flagged",
+            )
+
+    def test_scan_handles_missing_file(self):
+        from kassiber.secrets.credentials import scan_dotenv_for_secrets
+
+        with tempfile.TemporaryDirectory() as root:
+            self.assertEqual(
+                scan_dotenv_for_secrets(Path(root) / "absent.env"),
+                [],
+            )
+
+    def test_migration_lifts_token_and_strips_dotenv(self):
+        from kassiber.secrets.credentials import migrate_dotenv_credentials
+
+        with tempfile.TemporaryDirectory() as root:
+            data_root = Path(root) / "data"
+            data_root.mkdir()
+            seed = open_db(str(data_root))
+            seed.close()
+            migrate_plaintext_to_encrypted(
+                data_root / "kassiber.sqlite3", "tracer-pass-12345"
+            )
+            self._seed_backend(
+                data_root, "btcpay", "btcpay", "https://btcpay.example.com"
+            )
+
+            env_file = Path(root) / "backends.env"
+            env_file.write_text(
+                "\n".join(
+                    [
+                        "# kassiber backend bootstrap",
+                        "KASSIBER_BACKEND_BTCPAY_KIND=btcpay",
+                        "KASSIBER_BACKEND_BTCPAY_URL=https://btcpay.example.com",
+                        "KASSIBER_BACKEND_BTCPAY_TOKEN=tok-xyz-123",
+                        "",
+                    ]
+                ),
+                encoding="utf-8",
+            )
+
+            conn = open_db(str(data_root), passphrase="tracer-pass-12345")
+            try:
+                result = migrate_dotenv_credentials(conn, env_file)
+            finally:
+                conn.close()
+
+            self.assertEqual(len(result["migrated"]), 1)
+            self.assertEqual(result["skipped"], [])
+            self.assertTrue(result["rewritten"])
+            self.assertIsNotNone(result["backup_path"])
+
+            sanitized = env_file.read_text(encoding="utf-8")
+            self.assertIn("KASSIBER_BACKEND_BTCPAY_KIND=btcpay", sanitized)
+            self.assertIn("KASSIBER_BACKEND_BTCPAY_URL=https://btcpay.example.com", sanitized)
+            self.assertNotIn("TOKEN", sanitized)
+
+            from kassiber.backends import get_db_backend
+
+            conn = open_db(str(data_root), passphrase="tracer-pass-12345")
+            try:
+                row = get_db_backend(conn, "btcpay")
+                self.assertEqual(row["token"], "tok-xyz-123")
+            finally:
+                conn.close()
+
+            self.assertIn(
+                "TOKEN=tok-xyz-123",
+                Path(result["backup_path"]).read_text(encoding="utf-8"),
+            )
+
+    def test_migration_skips_unknown_backend(self):
+        from kassiber.secrets.credentials import migrate_dotenv_credentials
+
+        with tempfile.TemporaryDirectory() as root:
+            data_root = Path(root) / "data"
+            data_root.mkdir()
+            seed = open_db(str(data_root))
+            seed.close()
+            migrate_plaintext_to_encrypted(
+                data_root / "kassiber.sqlite3", "tracer-pass-12345"
+            )
+
+            env_file = Path(root) / "backends.env"
+            env_file.write_text(
+                "KASSIBER_BACKEND_GHOST_TOKEN=tok-orphan\n",
+                encoding="utf-8",
+            )
+            conn = open_db(str(data_root), passphrase="tracer-pass-12345")
+            try:
+                result = migrate_dotenv_credentials(conn, env_file)
+            finally:
+                conn.close()
+
+            self.assertEqual(result["migrated"], [])
+            self.assertEqual(len(result["skipped"]), 1)
+            self.assertEqual(result["skipped"][0]["reason"], "backend_not_in_db")
+            self.assertIn(
+                "KASSIBER_BACKEND_GHOST_TOKEN=tok-orphan",
+                env_file.read_text(encoding="utf-8"),
+            )
+
+    def test_username_and_password_lift_into_config_json(self):
+        from kassiber.backends import get_db_backend
+        from kassiber.secrets.credentials import migrate_dotenv_credentials
+
+        with tempfile.TemporaryDirectory() as root:
+            data_root = Path(root) / "data"
+            data_root.mkdir()
+            seed = open_db(str(data_root))
+            seed.close()
+            migrate_plaintext_to_encrypted(
+                data_root / "kassiber.sqlite3", "tracer-pass-12345"
+            )
+            self._seed_backend(
+                data_root, "core", "bitcoinrpc", "http://127.0.0.1:8332"
+            )
+
+            env_file = Path(root) / "backends.env"
+            env_file.write_text(
+                "\n".join(
+                    [
+                        "KASSIBER_BACKEND_CORE_RPCUSER=alice",
+                        "KASSIBER_BACKEND_CORE_RPCPASSWORD=hunter2",
+                    ]
+                ),
+                encoding="utf-8",
+            )
+            conn = open_db(str(data_root), passphrase="tracer-pass-12345")
+            try:
+                migrate_dotenv_credentials(conn, env_file)
+                row = get_db_backend(conn, "core")
+            finally:
+                conn.close()
+            self.assertEqual(row.get("username"), "alice")
+            self.assertEqual(row.get("password"), "hunter2")
+            self.assertNotIn("RPCUSER", env_file.read_text(encoding="utf-8"))
+            self.assertNotIn("RPCPASSWORD", env_file.read_text(encoding="utf-8"))
 
 
 if __name__ == "__main__":  # pragma: no cover

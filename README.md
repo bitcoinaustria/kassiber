@@ -147,10 +147,14 @@ By default Kassiber stores state under `~/.kassiber/`:
 - `attachments/` for managed attachment blobs
 
 Backend definitions and the stored default backend now live canonically in
-SQLite. `backends.env` is still accepted as a bootstrap/compatibility path,
-but Kassiber only imports that bootstrap config into SQLite during explicit
-bootstrap-import flows such as `kassiber init`; once imported, the DB is the
-long-term source of truth.
+SQLite. `backends.env` is still accepted as a bootstrap/compatibility path
+for non-secret addressing (URL, `KIND`, chain, network), but secrets — API
+tokens, passwords, auth headers, basic-auth usernames — belong in the
+encrypted `backends` table. New credentials should be seeded with
+`--token-stdin` / `--token-fd FD` so they go straight into the DB; pre-existing
+entries in `backends.env` can be lifted out with
+`kassiber secrets migrate-credentials` (see [SECURITY.md](SECURITY.md) for
+the full at-rest boundary).
 
 Use `kassiber status` to see the active paths. `--data-root` and `--env-file` let you override them.
 

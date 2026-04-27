@@ -347,14 +347,23 @@ and [docs/plan/04-desktop-ui.md](docs/plan/04-desktop-ui.md).
   remove them once `tests/test_review_regressions.py` migrates off argv.
 - [ ] Strip the deprecated argv credential forms from the parser and update
   `tests/test_review_regressions.py` to use stdin/fd in every backend/wallet
-  setup site.
+  setup site. At the same time, harden the `backends.env` plaintext-secret
+  warning into a refusal once no test or example needs the dotenv path for
+  secret seeding.
 - [ ] Split wallet descriptor and other sensitive config out of the generic
   `wallets.config_json` blob into typed project-local tables now that
   SQLCipher protects the file at rest.
 - [x] Encrypt `kassiber.sqlite3` at rest with SQLCipher 4 behind a user
-  passphrase, with `kassiber secrets {init,change-passphrase,verify,status}`,
+  passphrase, with `kassiber secrets {init,change-passphrase,verify,status,migrate-credentials}`,
   `kassiber backup {export,import}`, `--db-passphrase-fd` plumbing through the
   CLI and daemon, and a `tar | age` single-file backup format.
+- [x] Move backend secrets (token, password, auth_header, basic-auth username
+  + RPC aliases) out of the plaintext `config/backends.env` bootstrap and into
+  the encrypted `backends` table. `kassiber secrets migrate-credentials` lifts
+  pre-existing entries with a `.pre-credentials-migration-<ts>.bak` snapshot,
+  and `bootstrap_runtime` warns to stderr whenever the dotenv still contains
+  secret-shaped entries while the DB is encrypted. URLs / kinds / chain /
+  network stay in the dotenv (they are addresses, not credentials).
 - [ ] Tauri supervisor wiring: passphrase modal at startup, private fd hand-off
   to the Python sidecar, `auth_required`/`auth_response` relay for reveal
   flows, and log redaction of `passphrase_secret` / `token` / `descriptor` /

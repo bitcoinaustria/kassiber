@@ -61,6 +61,7 @@ py -m kassiber secrets init --help >/dev/null
 py -m kassiber secrets change-passphrase --help >/dev/null
 py -m kassiber secrets verify --help >/dev/null
 py -m kassiber secrets status --help >/dev/null
+py -m kassiber secrets migrate-credentials --help >/dev/null
 py -m kassiber backup --help >/dev/null
 py -m kassiber backup export --help >/dev/null
 py -m kassiber backup import --help >/dev/null

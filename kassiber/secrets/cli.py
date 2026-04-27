@@ -12,6 +12,7 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
+from ..backends import resolve_effective_env_file
 from ..db import (
     ensure_data_root,
     resolve_database_path,
@@ -19,6 +20,10 @@ from ..db import (
 )
 from ..envelope import build_envelope
 from ..errors import AppError
+from .credentials import (
+    migrate_dotenv_credentials,
+    scan_dotenv_for_secrets,
+)
 from .migration import (
     create_empty_encrypted_database,
     find_resumable_state,
@@ -88,6 +93,21 @@ def cmd_secrets_status(args: argparse.Namespace) -> dict:
     classification = _classify(db_path)
     classification["resumable"] = find_resumable_state(db_path)
     classification["sqlcipher_available"] = sqlcipher_available()
+    env_file = Path(
+        resolve_effective_env_file(
+            getattr(args, "env_file", None), args.data_root
+        )
+    )
+    plaintext_secrets = scan_dotenv_for_secrets(env_file)
+    classification["dotenv_path"] = str(env_file)
+    classification["dotenv_plaintext_secrets"] = plaintext_secrets
+    if classification["encrypted"] and plaintext_secrets:
+        classification["dotenv_warning"] = (
+            "Encrypted database is in use but the bootstrap dotenv still "
+            "contains plaintext secrets. Run "
+            "`kassiber secrets migrate-credentials` to lift them into the "
+            "encrypted backends table and sanitize the file."
+        )
     return build_envelope("secrets.status", classification)
 
 
@@ -242,6 +262,76 @@ def cmd_secrets_verify(args: argparse.Namespace) -> dict:
     )
 
 
+def cmd_secrets_migrate_credentials(args: argparse.Namespace) -> dict:
+    """Lift plaintext secrets from `backends.env` into the encrypted DB."""
+
+    require_sqlcipher()
+    db_path = _resolve_db_path(args)
+    classification = _classify(db_path)
+    if not classification["exists"]:
+        raise AppError(
+            "database does not exist; run `kassiber secrets init` first",
+            code="missing_database",
+            details={"database": str(db_path)},
+            retryable=False,
+        )
+    if classification["plaintext"]:
+        raise AppError(
+            "database is plaintext; encrypt it with `kassiber secrets init` "
+            "before migrating credentials into it",
+            code="plaintext_database",
+            details={"database": str(db_path)},
+            retryable=False,
+        )
+
+    env_file = Path(
+        resolve_effective_env_file(
+            getattr(args, "env_file", None), args.data_root
+        )
+    )
+    findings = scan_dotenv_for_secrets(env_file)
+    if not findings:
+        return build_envelope(
+            "secrets.migrate_credentials",
+            {
+                "dotenv_path": str(env_file),
+                "migrated": [],
+                "skipped": [],
+                "backup_path": None,
+                "rewritten": False,
+                "note": "dotenv has no plaintext secret-shaped entries",
+            },
+        )
+
+    if getattr(args, "dry_run", False):
+        return build_envelope(
+            "secrets.migrate_credentials",
+            {
+                "dotenv_path": str(env_file),
+                "dry_run": True,
+                "would_migrate": findings,
+                "rewritten": False,
+            },
+        )
+
+    passphrase = _resolve_passphrase(
+        args,
+        "db_passphrase_fd",
+        label="Database passphrase: ",
+        confirm=False,
+    )
+    conn = open_encrypted(db_path, passphrase)
+    try:
+        result = migrate_dotenv_credentials(
+            conn,
+            env_file,
+            create_missing_backends=False,
+        )
+    finally:
+        conn.close()
+    return build_envelope("secrets.migrate_credentials", result)
+
+
 def add_secrets_parser(subparsers) -> argparse.ArgumentParser:
     """Attach the `secrets` subcommand tree to the top-level parser."""
 
@@ -296,6 +386,19 @@ def add_secrets_parser(subparsers) -> argparse.ArgumentParser:
     )
     _ = status
 
+    migrate_creds = secrets_sub.add_parser(
+        "migrate-credentials",
+        help=(
+            "Move plaintext backend secrets (token/password/auth-header/username) "
+            "from the bootstrap dotenv into the encrypted backends table"
+        ),
+    )
+    migrate_creds.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="List the dotenv entries that would migrate, without touching the file",
+    )
+
     return secrets
 
 
@@ -311,6 +414,8 @@ def dispatch_secrets(args: argparse.Namespace) -> dict:
         return cmd_secrets_verify(args)
     if sub == "status":
         return cmd_secrets_status(args)
+    if sub == "migrate-credentials":
+        return cmd_secrets_migrate_credentials(args)
     raise AppError(
         f"unknown secrets command: {sub!r}",
         code="unknown_command",

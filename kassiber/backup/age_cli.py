@@ -35,8 +35,28 @@ class AgeBackend:
     binary_path: Optional[str] = None
 
 
-def select_age_backend(prefer_binary: bool = True) -> AgeBackend:
-    """Pick the best available age implementation."""
+def select_age_backend(
+    prefer_binary: bool = True,
+    *,
+    mode: Optional[str] = None,
+) -> AgeBackend:
+    """Pick the best available age implementation.
+
+    `mode="passphrase"` prefers `pyrage` even when an `age`/`rage`
+    binary is on PATH, because `encrypt_age_stream`/`decrypt_age_stream`
+    do not currently route passphrase-mode flows through the binary
+    backends. Without this preference the default `kassiber backup
+    export` (passphrase mode) would fail on hosts that happen to have
+    `age` installed even though `pyrage` is also available.
+    """
+
+    if mode == "passphrase":
+        try:
+            import pyrage  # noqa: F401  - import probe only
+        except ModuleNotFoundError:
+            pass
+        else:
+            return AgeBackend(flavor="pyrage")
 
     if prefer_binary:
         for binary in ("age", "rage"):
@@ -88,7 +108,9 @@ def encrypt_age_stream(
             code="invalid_age_call",
             retryable=False,
         )
-    backend = backend or select_age_backend()
+    backend = backend or select_age_backend(
+        mode="passphrase" if passphrase is not None else "recipient",
+    )
 
     if backend.flavor in ("age", "rage"):
         args: list[str] = []
@@ -146,7 +168,9 @@ def decrypt_age_stream(
             code="invalid_age_call",
             retryable=False,
         )
-    backend = backend or select_age_backend()
+    backend = backend or select_age_backend(
+        mode="passphrase" if passphrase is not None else "recipient",
+    )
 
     if backend.flavor in ("age", "rage"):
         args: list[str] = ["--decrypt"]

@@ -98,9 +98,14 @@ from a parent process.
   `kassiber.pre-encryption.sqlite3.bak` so `mv` rolls back the change.
 - `~/.kassiber/config/backends.env` and `~/.kassiber/attachments/` are
   **not** inside the SQLCipher boundary. They are outside the encrypted
-  database file and remain plaintext on disk. Move secrets out of
-  `backends.env` (using `--token-stdin` and friends, or BTCPay token
-  enrollment) before treating the data directory as protected.
+  database file and remain plaintext on disk. URLs, kinds, chain, and
+  network metadata are not secrets and may stay in the dotenv. Tokens,
+  passwords, auth headers, and basic-auth usernames must move into the
+  encrypted DB — use `kassiber secrets migrate-credentials` to lift any
+  pre-existing entries in `backends.env` into the encrypted `backends`
+  table, or seed new credentials directly with `--token-stdin` /
+  `--token-fd FD`. Until that runs, every Kassiber command warns to
+  stderr that the dotenv still carries plaintext secrets.
 - A wrong passphrase produces the structured `unlock_failed` envelope
   rather than a partial open. The daemon refuses to start without a
   passphrase when the file is encrypted.

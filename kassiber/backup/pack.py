@@ -32,6 +32,9 @@ from typing import Iterable, Optional
 
 from .. import __version__
 from ..db import (
+    DEFAULT_ATTACHMENTS_DIRNAME,
+    DEFAULT_CONFIG_DIRNAME,
+    DEFAULT_DATA_DIRNAME,
     resolve_attachments_root,
     resolve_config_root,
     resolve_database_path,
@@ -184,7 +187,9 @@ def export_backup(
             retryable=False,
         )
 
-    backend = age_backend or select_age_backend()
+    backend = age_backend or select_age_backend(
+        mode="passphrase" if backup_passphrase is not None else "recipient",
+    )
     state_root = Path(resolve_effective_state_root(data_root)).expanduser()
     effective_data_root = Path(resolve_effective_data_root(data_root)).expanduser()
     db_path = Path(resolve_database_path(effective_data_root)).expanduser()
@@ -288,7 +293,9 @@ def import_backup(
             retryable=False,
         )
 
-    backend = age_backend or select_age_backend()
+    backend = age_backend or select_age_backend(
+        mode="passphrase" if backup_passphrase is not None else "recipient",
+    )
     archive_path = Path(archive_path).expanduser()
     if not archive_path.exists():
         raise AppError(
@@ -360,9 +367,23 @@ def import_backup(
             target_data_root = Path(target_data_root).expanduser()
             target_data_root.mkdir(parents=True, exist_ok=True)
             installed_root = target_data_root
+            # Mirror resolve_effective_state_root() but skip the legacy
+            # XDG fallback: install always writes to the literal target
+            # the user asked for, never to a half-discovered legacy path.
+            # Without this, --target-data-root=<state>/data would dump
+            # attachments/ and config/ next to the data root only when
+            # the path looks like `<state>/data`; for a flat custom root
+            # like `--data-root /srv/kassiber`, sidecars would land in
+            # `/srv/attachments` and `/srv/config/`, outside the tree.
+            if target_data_root.name == DEFAULT_DATA_DIRNAME:
+                target_state_root = target_data_root.parent
+            else:
+                target_state_root = target_data_root
             target_db = target_data_root / BACKUP_DB_NAME
-            target_attachments = target_data_root.parent / BACKUP_ATTACHMENTS_DIR
-            target_env = target_data_root.parent / BACKUP_CONFIG_DIR / "backends.env"
+            target_attachments = target_state_root / DEFAULT_ATTACHMENTS_DIRNAME
+            target_env = (
+                target_state_root / DEFAULT_CONFIG_DIRNAME / "backends.env"
+            )
 
             # Move any pre-existing live data into a sibling
             # `pre-restore-<timestamp>/` directory so an accidental
@@ -373,7 +394,7 @@ def import_backup(
                 or target_env.exists()
             )
             if needs_backup:
-                backup_dir = target_data_root.parent / (
+                backup_dir = target_state_root / (
                     "pre-restore-" + datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
                 )
                 backup_dir.mkdir(parents=True, exist_ok=False)
@@ -389,10 +410,14 @@ def import_backup(
                     backup_env_dir.mkdir(parents=True, exist_ok=True)
                     shutil.move(str(target_env), str(backup_env_dir / "backends.env"))
 
+            target_db.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(staging_dir / BACKUP_DB_NAME, target_db)
             staged_attachments = staging_dir / BACKUP_ATTACHMENTS_DIR
             if staged_attachments.exists():
-                shutil.copytree(staged_attachments, target_attachments)
+                target_attachments.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copytree(
+                    staged_attachments, target_attachments, dirs_exist_ok=True
+                )
             staged_env = staging_dir / BACKUP_BACKENDS_ENV
             if staged_env.exists():
                 target_env.parent.mkdir(parents=True, exist_ok=True)

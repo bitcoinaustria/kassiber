@@ -58,10 +58,10 @@ Behavior:
 You can also sync confirmed on-chain wallet history directly from a BTCPay store:
 
 ```bash
-python3 -m kassiber backends create btcpay-prod \
+printf %s "$BTCPAY_TOKEN" | python3 -m kassiber backends create btcpay-prod \
   --kind btcpay \
   --url https://btcpay.example.com \
-  --token <api-key>
+  --token-stdin
 
 python3 -m kassiber wallets create \
   --label btcpay-shop \
@@ -76,6 +76,10 @@ python3 -m kassiber wallets sync-btcpay \
   --backend btcpay-prod \
   --store-id <store-id>
 ```
+
+`--token-stdin` keeps the Greenfield API key out of shell history and the
+process listing. Use `--token-fd <FD>` instead when stdin is already in use.
+The argv form `--token <value>` still works for legacy scripts but warns.
 
 That API-backed path reuses the same BTCPay normalization and metadata rules as the file import, but only imports confirmed rows from the remote wallet history and records their confirmation timestamp for later rate lookup. `wallets sync-btcpay --wallet ... --backend ... --store-id ...` still works too. It stores the same BTCPay config on the wallet and runs the sync immediately, so later `wallets sync` or `wallets sync --all` calls can reuse that wallet config.
 

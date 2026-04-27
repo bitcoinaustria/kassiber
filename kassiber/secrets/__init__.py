@@ -11,6 +11,10 @@ The module is split into:
   encrypted store with `sqlcipher_export()`, preserving metadata that the
   export does not carry by itself.
 - `passphrase`: change-passphrase entry point that wraps `PRAGMA rekey`.
+- `credentials`: scan the plaintext `backends.env` bootstrap for
+  secret-shaped entries (tokens, passwords, auth headers) and lift them
+  into the encrypted `backends` table so nothing secret is left on disk
+  in plaintext form.
 
 `secrets/cli.py` exposes the `kassiber secrets {init, change-passphrase,
 verify, status}` argparse surface.
@@ -33,6 +37,12 @@ from .prompt import (
     read_passphrase_from_fd,
     validate_passphrase,
 )
+
+# `credentials` is intentionally NOT re-exported here: it depends on
+# `kassiber.backends`, which in turn depends on `kassiber.db`, which
+# imports this module during its own load. Callers that need the
+# credential-migration helpers should `from kassiber.secrets.credentials
+# import ...` directly.
 
 __all__ = [
     "KDF_ITER_DEFAULT",
