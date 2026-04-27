@@ -250,7 +250,6 @@ def migrate_dotenv_credentials(
                 fallback_kind,
                 fallback_url,
             )
-            existing = get_db_backend(conn, backend_name)
 
         if field in {"username", "password"}:
             updates = {"config": {field: value}}

@@ -73,13 +73,12 @@ def read_passphrase_from_fd(fd: int) -> str:
             hint="Make sure the parent process opens the fd before exec.",
         ) from None
     finally:
+        # Best-effort fd cleanup; an OSError here would otherwise mask the
+        # real read failure above, so we deliberately swallow it.
         try:
             os.close(fd)
         except OSError:
-            # Best-effort fd cleanup; we deliberately swallow close
-            # failures so the original read error (if any) is what the
-            # caller sees rather than a noisy double exception.
-            pass
+            pass  # close-after-read failure is non-actionable here
 
     raw = b"".join(chunks)
     if len(raw) > _MAX_PASSPHRASE_BYTES:
