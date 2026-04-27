@@ -112,9 +112,16 @@ API keys are stored in plaintext in the SQLite database for now, mirroring the
 existing `backends` pattern. An OS-keychain migration is tracked in
 [`../../TODO.md`](../../TODO.md).
 
-`<think>...</think>` content emitted inline by Qwen3, DeepSeek-R1, QwQ, and
-similar thinking-capable models is split out into a collapsible reasoning pane
-above the answer. Models that don't emit thinking tags pass through unchanged.
+Reasoning-capable models surface chain-of-thought through one of two
+channels, and both are split into a collapsible reasoning pane above the
+answer:
+
+- Inline `<think>...</think>` tags inside the content stream — emitted by
+  DeepSeek-R1 and QwQ.
+- A structured `reasoning` field on the delta — emitted by OpenAI o1/o3
+  and by Ollama's OpenAI-compat shim for Qwen3 / Gemma reasoning builds.
+
+Models that don't emit either pass through unchanged.
 
 Settings → AI providers exposes a **Test connection** action. It calls the
 daemon's `ai.test_connection` kind with the *currently entered* base URL and

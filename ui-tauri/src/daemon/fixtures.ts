@@ -83,22 +83,22 @@ export const fixtures: Record<string, unknown> = {
 };
 
 /**
- * Pre-canned AI chat stream for mock mode. Each delta is sent with a
- * small delay so the UI can exercise the streaming reducer plus both
- * thinking channels — inline `<think>...</think>` (older Qwen / R1) and
- * the structured `reasoning` field (Ollama's OpenAI-compat shim for
- * Qwen3, Gemma reasoning builds, OpenAI o1/o3) — without a real
- * provider.
+ * Pre-canned AI chat stream for mock mode. Mimics what Ollama's
+ * OpenAI-compat shim sends for current reasoning builds (Qwen3, Gemma
+ * reasoning) and what OpenAI o1/o3 endpoints send: structured
+ * `reasoning` deltas first, then visible `content` deltas — never both
+ * in one stream. The inline `<think>...</think>` tag style used by
+ * DeepSeek-R1 / QwQ is covered by `lib/thinkParser.test.ts` rather than
+ * mixed into this fixture, so the mock matches one realistic provider
+ * shape instead of conflating two.
  */
 export const MOCK_AI_CHAT_STREAM: {
   content?: string;
   reasoning?: string;
   delayMs?: number;
 }[] = [
-  { reasoning: "Pulling overview snapshot. ", delayMs: 20 },
-  { reasoning: "Inspecting quarantine state and journal freshness.", delayMs: 50 },
-  { content: "<think>Let me check the recent ", delayMs: 20 },
-  { content: "transactions and quarantine state.</think>", delayMs: 60 },
+  { reasoning: "Looking at the workspace. ", delayMs: 20 },
+  { reasoning: "Counting recent imports and checking journal freshness.", delayMs: 60 },
   { content: "Here is what I see:\n\n", delayMs: 30 },
   { content: "- 4 transactions imported in the last 7 days\n", delayMs: 40 },
   { content: "- 0 quarantined entries\n", delayMs: 40 },
