@@ -80,3 +80,34 @@ Override roots only when the user explicitly wants a custom location:
 kassiber --data-root /custom/root/data status
 kassiber --data-root /custom/root/data init
 ```
+
+## Optional: encrypt the local database
+
+After `kassiber init` and basic workspace/profile setup, the user can opt
+into SQLCipher at-rest encryption with:
+
+```bash
+kassiber secrets init        # interactive passphrase prompt + confirm
+kassiber secrets verify      # confirm the encrypted DB opens cleanly
+kassiber secrets status
+```
+
+After this runs, every later command needs the passphrase — interactively, or
+via `--db-passphrase-fd <FD>`. The pre-encryption plaintext file is preserved
+as `kassiber.pre-encryption.sqlite3.bak` so the user can roll back; advise
+them to delete it once they trust the new encrypted DB. There is no recovery
+path if the passphrase is lost.
+
+If `backends.env` already had API tokens, RPC passwords, or auth headers
+before the migration, lift them into the encrypted DB so they no longer sit
+in plaintext on disk:
+
+```bash
+kassiber secrets migrate-credentials --dry-run
+kassiber secrets migrate-credentials
+```
+
+URLs and other addressing fields stay in the dotenv; only the secret-shaped
+entries move. See [references/secrets-and-backup.md](secrets-and-backup.md)
+for the full flow, the `--*-stdin` / `--*-fd` channels for credential input,
+and the `kassiber backup` round-trip.

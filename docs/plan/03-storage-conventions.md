@@ -104,22 +104,48 @@ Until that plan lands, do not partially move active accounting state into
 
 ## Backup / Restore
 
-MVP backup should use SQLite snapshot APIs such as `Connection.backup()`.
+`kassiber backup export` now uses `Connection.backup()` to take a hot
+SQLCipher copy of the live DB while writers continue, tars the staging
+tree (DB + attachments + `backends.env`), and pipes the tarball through
+`age` (binary or `pyrage`) into a single `.kassiber` envelope. Recovery
+without Kassiber is intentionally possible with stock `age` + `tar` +
+`sqlcipher`.
 
-Restore/import should start as "import as new project" or require the project to
-be closed first. Do not design hot in-place restore in the MVP.
+Restore is staged through `kassiber backup import`: decrypt to a temp
+tarball, run the strict tar-member validator, extract under a staging
+directory, validate the manifest, and only on `--install` move the
+staged tree into the live data root after snapshotting any pre-existing
+files into `pre-restore-<ts>/`. There is no hot in-place restore.
 
 ## Secrets
 
-Current storage is not encrypted at rest.
+The local SQLite file at `~/.kassiber/data/kassiber.sqlite3` is now
+optionally encrypted at rest under a user passphrase via SQLCipher 4
+(`kassiber secrets init`). Stock SQLCipher PRAGMA defaults
+(`kdf_iter = 256000`, `cipher_compatibility = 4`,
+`cipher_page_size = 4096`) are deliberate so a stranded user can recover
+with the upstream `sqlcipher` binary alone. The passphrase is the
+perimeter; there is no recovery path if it is lost. See
+[../../SECURITY.md](../../SECURITY.md) for the full at-rest boundary
+including what stays plaintext (attachments, exports, the dotenv
+addressing rows, the `*.pre-encryption.sqlite3.bak` rollback file).
 
-Separate the project-boundary migration from the final secret-storage design.
-Future directions:
+Backend secrets (`token`, `password`, `auth_header`, `username`, plus
+the RPC aliases `rpcuser` / `rpcpassword`) live in the encrypted
+`backends` table, not in the dotenv. `kassiber secrets
+migrate-credentials` lifts pre-existing entries out of `backends.env`
+into the encrypted DB and rewrites the file with non-secret addressing
+rows preserved; every command warns to stderr while the dotenv still
+contains secret-shaped entries.
+
+Future directions still on the backlog:
 
 - secret-redacted success output stays safe for agents
 - local-only enrollment flows avoid pasting secrets into prompts
-- OS-keychain-backed refs can seal backend credentials and private descriptors
-- portable encrypted backups need a separate passphrase-based design
+- opt-in OS-keychain-backed refs as a convenience over the SQLCipher
+  passphrase, never a cryptographic substitute
+- typed project-local tables for descriptor / blinding-key material so
+  they do not share the generic `wallets.config_json` blob
 
 ## Repository Pattern
 

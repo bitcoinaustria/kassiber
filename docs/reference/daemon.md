@@ -28,8 +28,14 @@ for daemon startup and installed-app CLI forwarding during debugging.
 The first line is always a lifecycle envelope:
 
 ```json
-{"kind":"daemon.ready","schema_version":1,"data":{"version":"0.21.0","supported_kinds":["status","daemon.shutdown"]}}
+{"kind":"daemon.ready","schema_version":1,"data":{"version":"...","supported_kinds":["status","ui.overview.snapshot","ui.transactions.list","ui.reports.capital_gains","ui.journals.snapshot","ui.profiles.snapshot","ui.wallets.sync","daemon.shutdown"]}}
 ```
+
+`supported_kinds` is the public UI allowlist the Tauri supervisor mirrors;
+treat this list (not the docs) as the source of truth for what the supervisor
+will pass through. Reveal kinds (see below) are dispatched by the daemon but
+deliberately not advertised here, because they require a passphrase
+round-trip and the supervisor enforces a stricter gate around them.
 
 Requests carry a caller-chosen `request_id`, a `kind`, and optional `args`:
 
@@ -50,6 +56,37 @@ the request supplied one. Malformed JSON and non-object requests cannot carry
 a caller request id, so they return `request_id: null`. `daemon.shutdown`
 asks the daemon to write a final shutdown envelope and exit cleanly.
 
-Only `status` is backed by real data in the first slice, and its `data`
-payload mirrors `kassiber --machine status`. UI snapshot kinds return
-`daemon_unavailable` until typed contracts and read models land.
+`status`, the `ui.*` snapshots, and `ui.wallets.sync` are backed by real data
+today; their `data` payloads mirror the equivalent `kassiber --machine ...`
+calls. UI kinds not yet wired return `daemon_unavailable` instead.
+
+## Encrypted database
+
+When `kassiber.sqlite3` is SQLCipher-encrypted, the daemon still bootstraps
+through the normal runtime path: it accepts the global `--db-passphrase-fd
+<FD>` and falls back to an interactive prompt only if a controlling TTY is
+attached. The Tauri supervisor will eventually hand the passphrase via fd
+inheritance (tracked in `TODO.md`).
+
+## Reveal kinds (`auth_required` round-trip)
+
+`wallets.reveal_descriptor` and `backends.reveal_token` return raw secret
+material — descriptor bodies, blinding keys, BTCPay/RPC tokens. Even when
+the daemon already has the database open with the user's passphrase, the
+first reveal request returns:
+
+```json
+{"kind":"auth_required","schema_version":1,"data":{"scope":"reveal_token","label":"Re-enter database passphrase to reveal backend 'btcpay'"},"request_id":"reveal-1"}
+```
+
+The client then resends the same request with `args.auth_response =
+{"passphrase_secret": "..."}`. The daemon verifies by opening a throwaway
+SQLCipher connection against the on-disk file; a wrong passphrase returns the
+structured `local_auth_denied` error envelope. This is a UX gate, not
+cryptographic separation — once the daemon is running with an unlocked DB it
+can read every credential. The auth round-trip exists so a compromised UI
+process cannot silently siphon secrets without surfacing a re-prompt.
+
+The supervisor and any client must redact `passphrase_secret`, `token`,
+`descriptor`, `change_descriptor`, `blinding_key`, `auth_header`, and
+`password` fields from any persisted log line.

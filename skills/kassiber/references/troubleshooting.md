@@ -116,3 +116,58 @@ and trust the reported `state_root`, `data_root`, and `database` fields.
 
 If you are using the repo-local Kassiber skill bundle, remember that bundled
 references live under `<skill-dir>/references/`, not repo-root `references/`.
+
+## Passphrase / encrypted DB errors
+
+If a command returns:
+
+- `passphrase_required` — the on-disk database is SQLCipher-encrypted but no
+  passphrase was supplied. Re-run interactively, or pass
+  `--db-passphrase-fd <FD>` from a parent process. There is no
+  `--db-passphrase <value>` flag.
+- `unlock_failed` — the passphrase did not match. Double-check it; if rotated
+  recently, the old passphrase no longer works.
+- `plaintext_database` from `kassiber secrets change-passphrase` — the file is
+  still plaintext. Run `kassiber secrets init` first.
+- `already_encrypted` from `kassiber secrets init` — the file is already
+  SQLCipher. Use `kassiber secrets change-passphrase` to rotate.
+- `migration_leaks_plaintext` from `kassiber secrets init` — stop and inspect.
+  The encrypted output appears to contain plaintext credential markers; do
+  not delete the `.pre-encryption.sqlite3.bak` rollback file.
+- `local_auth_denied` from a daemon reveal request — the supplied passphrase
+  did not verify against the on-disk DB. Re-prompt the user; do not retry
+  silently.
+- `age_unavailable` from `kassiber backup ...` — neither the `age`/`rage`
+  binary nor the `pyrage` Python module is available. Install one of them.
+- `age_passphrase_mode_unsupported` — should not happen for default backup
+  flows after V4.1; if it does, the host has `age` on `PATH` but no `pyrage`,
+  and the caller forced a binary backend. Install `pyrage`.
+
+Never embed a passphrase in argv; there is no `--db-passphrase <value>` flag
+and the daemon does not accept passphrases via the request payload outside of
+the `auth_response` round-trip.
+
+If `kassiber secrets init` was interrupted, run `kassiber secrets init-resume`
+to inspect the leftover `*.encrypted.sqlite3` file and decide whether to
+finalize or discard it. Do not blindly rename the temp file into place.
+
+## Plaintext-secret warning at startup
+
+If every Kassiber command starts printing
+
+> warning: encrypted database is in use but the bootstrap dotenv (...)
+> still contains plaintext secret entries (...)
+
+then `backends.env` carries one or more of `*_TOKEN`, `*_PASSWORD`,
+`*_AUTH_HEADER`, `*_USERNAME`, `*_RPCPASSWORD`, or `*_RPCUSER` while the
+database is SQLCipher-encrypted. Lift them into the encrypted DB:
+
+```bash
+kassiber secrets migrate-credentials --dry-run     # preview what would move
+kassiber secrets migrate-credentials               # actually move + sanitize file
+```
+
+A `.pre-credentials-migration-<ts>.bak` of the original dotenv is saved
+alongside the file. URLs, `KIND`, chain, network, and other non-secret
+rows survive the rewrite untouched. The warning stops once the dotenv
+no longer contains secret-shaped entries.

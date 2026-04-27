@@ -28,6 +28,7 @@ from pathlib import Path
 from .errors import AppError
 from .fingerprints import make_transaction_fingerprint
 from .msat import btc_to_msat, dec, msat_to_btc
+from .secrets import sqlcipher as secrets_sqlcipher
 from .tax_policy import DEFAULT_LONG_TERM_DAYS, DEFAULT_TAX_COUNTRY
 from .wallet_descriptors import LIQUID_POLICY_ASSET_IDS
 
@@ -358,19 +359,59 @@ def resolve_database_path(data_root):
     return legacy
 
 
-def open_db(data_root):
+def open_db(data_root, *, passphrase=None):
     """Open (and lazily migrate) the SQLite store rooted at `data_root`.
 
-    Returns a `sqlite3.Connection` with `row_factory = Row` and foreign
-    keys enabled. Safe to call repeatedly — schema creation uses
-    `IF NOT EXISTS` and migrations are conditional on the column type.
+    Returns a connection with `row_factory = Row` and foreign keys
+    enabled. Safe to call repeatedly — schema creation uses `IF NOT
+    EXISTS` and migrations are conditional on the column type.
+
+    When `passphrase` is provided the database is opened through the
+    SQLCipher driver. The keying PRAGMAs (`PRAGMA key`,
+    `cipher_compatibility`, `kdf_iter`, `cipher_page_size`) are issued in
+    the documented order and verified by reading `sqlite_master` before
+    the schema script runs. When `passphrase` is `None` the legacy
+    plaintext code path is preserved for backwards compatibility.
     """
     root = ensure_data_root(resolve_effective_data_root(data_root))
-    conn = sqlite3.connect(resolve_database_path(root))
-    conn.row_factory = sqlite3.Row
+    db_path = resolve_database_path(root)
+
+    file_present = db_path.exists() and db_path.stat().st_size > 0
+    plaintext_header = (
+        secrets_sqlcipher.looks_like_plaintext_sqlite(db_path) if file_present else False
+    )
+
+    if passphrase is None:
+        if file_present and not plaintext_header:
+            raise AppError(
+                "database is encrypted; supply a passphrase via --db-passphrase-fd",
+                code="passphrase_required",
+                hint="Use `kassiber --db-passphrase-fd <fd> <command>` or rely on the GUI unlock prompt.",
+                retryable=False,
+            )
+        conn = sqlite3.connect(db_path)
+        conn.row_factory = sqlite3.Row
+        conn.executescript(SCHEMA)
+        ensure_schema_compat(conn)
+        conn.execute("PRAGMA foreign_keys = ON")
+        return conn
+
+    if file_present and plaintext_header:
+        raise AppError(
+            "database file at this path is plaintext SQLite",
+            code="plaintext_database",
+            hint="Run `kassiber secrets init` to migrate the existing database before opening it with a passphrase.",
+            details={"database": str(db_path)},
+            retryable=False,
+        )
+
+    conn = secrets_sqlcipher.open_encrypted(
+        db_path,
+        passphrase,
+        row_factory=secrets_sqlcipher.get_row_class(),
+    )
     conn.executescript(SCHEMA)
     ensure_schema_compat(conn)
-    conn.execute("PRAGMA foreign_keys = ON")
     return conn
 
 

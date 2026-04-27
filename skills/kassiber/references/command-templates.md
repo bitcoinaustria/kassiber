@@ -104,15 +104,110 @@ kassiber wallets create \
 BTCPay backend + sync template:
 
 ```bash
-kassiber backends create <btcpay-backend-name> \
+printf %s "$BTCPAY_TOKEN" | kassiber backends create <btcpay-backend-name> \
   --kind btcpay \
   --url <btcpay-base-url> \
-  --token "$BTCPAY_TOKEN"
+  --token-stdin
 kassiber wallets sync-btcpay \
   --wallet <wallet-label> \
   --backend <btcpay-backend-name> \
   --store-id <btcpay-store-id>
 ```
+
+The `--token-stdin` form keeps the secret out of shell history and the
+process listing. Use `--token-fd <FD>` instead when stdin is already in use.
+
+## Secret-bearing flags
+
+Every secret-bearing CLI value has matching `--<name>-stdin` and
+`--<name>-fd <FD>` variants. The argv form (e.g. `--token <value>`) still
+works for legacy scripts but emits a deprecation warning and leaks to shell
+history.
+
+Covered fields: `--token`, `--password`, `--username`, `--auth-header`,
+`--descriptor`, `--change-descriptor`. Constraints:
+
+- Only one `--*-stdin` option may be active per invocation.
+- Multiple `--*-fd` options may coexist; each fd is closed after the value
+  is read.
+- Empty values and NUL bytes are rejected up front.
+
+Examples:
+
+```bash
+# token from a piped local variable
+printf %s "$BTCPAY_TOKEN" | kassiber backends create prod \
+  --kind btcpay --url https://btcpay.example.com --token-stdin
+
+# descriptor pair from two file descriptors
+kassiber wallets create \
+  --label vault --kind descriptor --account treasury --backend mempool \
+  --descriptor-fd 3 --change-descriptor-fd 4 \
+  3< /path/to/receive.desc 4< /path/to/change.desc
+```
+
+## SQLCipher passphrase
+
+The DB passphrase has no argv form by design. Three channels:
+
+```bash
+# interactive (controlling TTY)
+kassiber status
+
+# fd-based (parent shell opens fd 3)
+kassiber --db-passphrase-fd 3 status 3< /tmp/pass
+
+# pipe (single secret on stdin, no other --*-stdin in play)
+gopass show kassiber/db-pass | kassiber --db-passphrase-fd 0 status
+```
+
+Wrong passphrase → `unlock_failed`. Missing passphrase against an encrypted
+DB → `passphrase_required`. Plaintext DB → no prompt.
+
+## Secrets
+
+```bash
+kassiber secrets status
+kassiber secrets init                              # interactive prompt + confirm
+kassiber secrets init --new-passphrase-fd 4 4< /tmp/new
+kassiber secrets verify                            # confirm encrypted DB opens
+kassiber secrets change-passphrase                 # interactive
+kassiber secrets change-passphrase --db-passphrase-fd 3 --new-passphrase-fd 4 \
+  3< /tmp/old 4< /tmp/new
+kassiber secrets init-resume                       # inspect a half-finished migration
+
+# lift token/password/auth_header/username out of the plaintext dotenv
+# into the encrypted backends table
+kassiber secrets migrate-credentials --dry-run
+kassiber secrets migrate-credentials
+kassiber secrets migrate-credentials --db-passphrase-fd 3 3< /tmp/pass
+```
+
+## Backups
+
+```bash
+kassiber backup export --file /tmp/snap.kassiber                   # interactive outer passphrase
+kassiber backup export --file /tmp/snap.kassiber --backup-passphrase-fd 4 4< /tmp/outer
+kassiber backup export --file /tmp/snap.kassiber --recipient "age1..."   # recipient mode
+
+kassiber backup import /tmp/snap.kassiber --backup-passphrase-fd 4 4< /tmp/outer
+kassiber backup import /tmp/snap.kassiber --backup-passphrase-fd 4 \
+  --install --target-data-root ~/.kassiber/data 4< /tmp/outer
+```
+
+`--install` snapshots any pre-existing live data into a sibling
+`pre-restore-<timestamp>/` directory before overwriting. The inner DB inside
+the bundle is still SQLCipher-encrypted under the original DB passphrase.
+
+## Reveal
+
+```bash
+kassiber backends reveal-token <name>
+kassiber wallets reveal-descriptor <wallet-label> --workspace personal --profile main
+```
+
+Each request triggers a daemon `auth_required` round-trip; a wrong
+passphrase produces `local_auth_denied`. Do not pipe reveal output into chat.
 
 ## Transactions
 

@@ -83,22 +83,49 @@ reports are fully offline.
 - Keep backend config out of version control. Prefer `COOKIEFILE` over inline
   `USERNAME` / `PASSWORD`.
 
-### At-rest encryption — not implemented yet
+### At-rest encryption — passphrase-gated SQLCipher (V4.1)
 
-**Nothing Kassiber writes is encrypted.** The SQLite database, `backends.env`
-file, and any exported CSVs are plain files on disk. That includes
-every xpub, descriptor, SLIP77 blinding key, backend URL, auth header,
-token, and RPC credential the tool has touched.
+The SQLite database is now optionally encrypted via SQLCipher 4. After
+running `kassiber secrets init`, every subsequent invocation needs a
+passphrase: type it interactively, or pass `--db-passphrase-fd <FD>`
+from a parent process.
 
-Today the only protection layer is whatever your OS gives you —
-full-disk encryption, user account separation, file permissions.
+- `~/.kassiber/data/kassiber.sqlite3` — when encrypted, contents are
+  protected by SQLCipher 4 with stock PBKDF2-HMAC-SHA512
+  (`kdf_iter = 256000`). Recoverable with the upstream `sqlcipher`
+  binary using only the passphrase.
+- The pre-migration plaintext file is preserved as
+  `kassiber.pre-encryption.sqlite3.bak` so `mv` rolls back the change.
+- `~/.kassiber/config/backends.env` and `~/.kassiber/attachments/` are
+  **not** inside the SQLCipher boundary. They are outside the encrypted
+  database file and remain plaintext on disk. URLs, kinds, chain, and
+  network metadata are not secrets and may stay in the dotenv. Tokens,
+  passwords, auth headers, and basic-auth usernames must move into the
+  encrypted DB — use `kassiber secrets migrate-credentials` to lift any
+  pre-existing entries in `backends.env` into the encrypted `backends`
+  table, or seed new credentials directly with `--token-stdin` /
+  `--token-fd FD`. Until that runs, every Kassiber command warns to
+  stderr that the dotenv still carries plaintext secrets.
+- A wrong passphrase produces the structured `unlock_failed` envelope
+  rather than a partial open. The daemon refuses to start without a
+  passphrase when the file is encrypted.
+- `kassiber secrets change-passphrase` rotates the key in place via
+  `PRAGMA rekey` and verifies with `cipher_integrity_check` when the
+  bundled SQLCipher build supports it.
+- A `.kassiber` backup file does **not** recover a forgotten passphrase.
+  The DB inside the backup is encrypted under whatever passphrase was
+  active when the backup was produced.
 
-The intended direction is seamless integration with the OS keychain
-(macOS Keychain, Linux freedesktop secret-service / libsecret, Windows
-DPAPI / Credential Manager) so that sensitive fields — blinding keys,
-RPC credentials, backend tokens — are sealed by default and unlocked
-on demand, without the user managing a separate passphrase. Until that
-lands, treat the data directory and backend config file as sensitive material.
+**OS keychain is not the perimeter.** This iteration deliberately does
+not store unlock material in the OS keychain. The passphrase is the
+perimeter. Pick a long passphrase from a password manager and treat
+the loss of that passphrase as data loss — there is no recovery path.
+
+**Reveal is a UX gate, not cryptographic separation.** Once the daemon
+is running with the unlocked DB, it can read every credential. The
+`auth_required` round-trip for `wallets reveal-descriptor` and
+`backends reveal-token` enforces re-prompting for presence; it does not
+add a separate cryptographic tier.
 
 ## Safe-to-record CLI output
 
@@ -131,11 +158,18 @@ fails.
 
 ## Caveats
 
-- **Secrets on the command line end up in shell history.** `backends
-  create --token ...`, `--auth-header ...`, and `--password ...` write
-  credentials into `~/.zsh_history` / `~/.bash_history`. Prefer
-  `~/.kassiber/config/backends.env` (or another `--env-file`) or environment
-  variables for anything sensitive.
+- **Secrets on the command line still end up in shell history if you
+  use the deprecated argv forms.** `--token <value>`,
+  `--auth-header <value>`, `--password <value>`, `--username <value>`,
+  `--descriptor <value>`, and `--change-descriptor <value>` are kept
+  for backwards-compatibility with existing scripts and emit a
+  deprecation warning. Prefer the safe replacements:
+  `--token-stdin` / `--token-fd FD` (and the matching `*-stdin` /
+  `*-fd` variants for the other secret-bearing fields). Only one
+  `--*-stdin` option may be active per invocation; any number of
+  `--*-fd` options may coexist. The SQLCipher passphrase itself never
+  has an argv form: use `--db-passphrase-fd FD` or the interactive
+  prompt.
 - **`--debug` is outside the safe-to-record contract.** Debug stack traces,
   exception context, and any future private logs may still include sensitive
   local state. Review before pasting into issues, screenshots, or logs. Use

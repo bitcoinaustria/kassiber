@@ -5,8 +5,14 @@ Kassiber syncs wallets through named backends. A backend is a pointer to an exte
 Backends are stored canonically in SQLite.
 
 - `~/.kassiber/config/backends.env` or your chosen `--env-file` is still
-  accepted as a bootstrap / compatibility input
-- the `backends` table in SQLite is the long-term source of truth
+  accepted as a bootstrap / compatibility input for non-secret addressing
+  fields (`KIND`, `URL`, `CHAIN`, `NETWORK`, `BATCH_SIZE`, `TIMEOUT`,
+  `INSECURE`, `WALLETPREFIX`, `COOKIEFILE`, `KASSIBER_DEFAULT_BACKEND`)
+- the `backends` table in SQLite is the long-term source of truth, and
+  it is the only place secret-bearing fields (`TOKEN`, `PASSWORD`,
+  `USERNAME`, `AUTH_HEADER`, plus the RPC aliases `RPCUSER` /
+  `RPCPASSWORD`) should live once `kassiber secrets init` has put the
+  database under SQLCipher
 
 Built-in defaults and dotenv-defined backends are imported into SQLite during
 explicit bootstrap-import flows such as `kassiber init` or backend mutation
@@ -146,7 +152,10 @@ The backend CLI now accepts the common backend-specific knobs directly:
 
 Use this to pull confirmed on-chain wallet transactions directly from a BTCPay server instead of exporting CSV or JSON from the UI.
 
-- create a backend with `--kind btcpay`, `--url https://btcpay.example.com`, and `--token <greenfield-api-key>`
+- create a backend with `--kind btcpay`, `--url https://btcpay.example.com`,
+  and a piped `--token-stdin` (preferred) or `--token-fd FD` for the
+  Greenfield API key — the argv form `--token <value>` still works for
+  legacy scripts but emits a deprecation warning and leaks to shell history
 - store the BTCPay wallet config on the wallet with `wallets create/update --backend <btcpay-backend> --store-id <store-id>`
 - `wallets sync-btcpay --wallet <label> --backend <btcpay-backend> --store-id <store-id>` keeps the legacy one-off CLI shape and now stores that config on the wallet too
 - once the config is stored, `wallets sync --wallet <label>` and `wallets sync --all` reuse it automatically
@@ -233,7 +242,14 @@ For Liquid:
 - public backends learn your queried scripts and timing
 - descriptor sync leaks more wallet structure than fixed-address sync
 - `tor_proxy` is stored but not wired yet; route the whole process externally if needed
-- backend credentials in CLI flags can land in shell history
+- credentials in argv (`--token <value>`, `--password <value>`,
+  `--auth-header <value>`, `--username <value>`) land in shell history
+  and the process listing — use the `--*-stdin` / `--*-fd FD` variants
+  instead; argv forms warn but still work for legacy scripts
+- after `kassiber secrets init`, secrets do not belong in the plaintext
+  `backends.env` bootstrap; lift any pre-existing entries into the
+  encrypted `backends` table with `kassiber secrets migrate-credentials`
+  (URLs and other addressing fields stay in the dotenv)
 - `backends get` / `list` are safe-to-record only for secret-bearing config values; other metadata may still be sensitive
 
 See [SECURITY.md](../../SECURITY.md) for the current privacy model and outbound request inventory.
