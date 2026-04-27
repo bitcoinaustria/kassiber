@@ -74,7 +74,13 @@ def _normalize_kind(value: Any) -> str:
     return kind
 
 
-def _normalize_base_url(value: Any) -> str:
+def normalize_base_url(value: Any) -> str:
+    """Validate and canonicalize an OpenAI-compatible base URL.
+
+    Strips whitespace and trailing slashes, requires a scheme, and raises
+    `AppError(code='validation')` on bad input. Used by both the persisted
+    CRUD path and the transient `ai.test_connection` handler.
+    """
     base = str_or_none(value)
     if base is None:
         raise AppError(
@@ -214,7 +220,7 @@ def create_db_ai_provider(
     """Insert a new AI provider row. Raises on name conflict or invalid input."""
     seed_default_ai_provider_if_empty(conn)
     name = _normalize_name(name)
-    base_url = _normalize_base_url(base_url)
+    base_url = normalize_base_url(base_url)
     kind = _normalize_kind(kind)
     api_key = str_or_none(api_key)
     default_model = str_or_none(default_model)
@@ -279,7 +285,7 @@ def update_db_ai_provider(conn, name: str, updates: dict) -> dict:
         new_kind = _normalize_kind(new_kind)
     new_base_url = updates.get("base_url")
     if new_base_url is not None:
-        new_base_url = _normalize_base_url(new_base_url)
+        new_base_url = normalize_base_url(new_base_url)
 
     def resolved(field: str, fallback):
         if field in clear_fields:

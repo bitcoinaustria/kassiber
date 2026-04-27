@@ -75,24 +75,18 @@ export function ProviderModelPicker({ value, onChange }: ProviderModelPickerProp
     [providersQuery.data],
   );
 
-  // Once the providers list lands, fall back to the default provider's
-  // default_model if the parent hasn't picked anything yet.
-  React.useEffect(() => {
-    if (value || providers.length === 0) return;
-    const defaultProvider =
-      providers.find((p) => p.is_default) ?? providers[0];
-    if (!defaultProvider) return;
-    if (defaultProvider.default_model) {
-      onChange({
-        provider: defaultProvider.name,
-        model: defaultProvider.default_model,
-      });
-    }
-  }, [providers, value, onChange]);
-
+  // Resolve the active provider eagerly so the models query fires for the
+  // default provider even before the parent has picked a `value`. Without
+  // this, a freshly-seeded `ollama` row (which has `default_model = null`)
+  // would leave the picker showing only disabled placeholders, blocking
+  // the first chat send.
+  const fallbackProvider = React.useMemo(
+    () => providers.find((p) => p.is_default) ?? providers[0],
+    [providers],
+  );
   const selectedProvider = value
     ? providers.find((p) => p.name === value.provider)
-    : undefined;
+    : fallbackProvider;
 
   const modelsQuery = useDaemon<ModelsListData>(
     "ai.list_models",
@@ -110,6 +104,26 @@ export function ProviderModelPicker({ value, onChange }: ProviderModelPickerProp
         : [],
     [modelsQuery.data],
   );
+
+  // Once providers (and, if needed, models) land, seed a selection so the
+  // user can send a chat without first opening Settings. Prefer the saved
+  // `default_model`; otherwise pick the first model the provider advertises.
+  React.useEffect(() => {
+    if (value || !fallbackProvider) return;
+    if (fallbackProvider.default_model) {
+      onChange({
+        provider: fallbackProvider.name,
+        model: fallbackProvider.default_model,
+      });
+      return;
+    }
+    if (models.length > 0) {
+      onChange({
+        provider: fallbackProvider.name,
+        model: models[0].id,
+      });
+    }
+  }, [fallbackProvider, models, value, onChange]);
 
   const groupedRows = React.useMemo(() => {
     return providers.map((provider) => {

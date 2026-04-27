@@ -91,34 +91,32 @@ export function AiProviderForm({
   const handleTest = async () => {
     setTestStatus({ state: "running" });
     try {
-      // Test against the entered credentials by hitting `ai.list_models` with
-      // a transient provider — but our daemon API only takes a stored
-      // provider name, so we resort to a one-off inline approach: persist
-      // would be invasive. Instead, validate the URL shape here and rely
-      // on the daemon's `ai.list_models` after save. For now this is a
-      // best-effort check that the URL is well-formed.
-      const trimmed = baseUrl.trim();
-      if (!trimmed) {
+      const trimmedUrl = baseUrl.trim();
+      if (!trimmedUrl) {
         throw new Error("Base URL is required");
       }
-      if (!/^https?:\/\//.test(trimmed)) {
+      if (!/^https?:\/\//.test(trimmedUrl)) {
         throw new Error("Base URL needs a scheme (http:// or https://)");
       }
-      // If the provider already exists with the same name, query its models.
-      if (editing && initial) {
-        const envelope = await getTransport().invoke<{
-          models: { id: string }[];
-        }>({ kind: "ai.list_models", args: { provider: initial.name } });
-        if (envelope.kind === "error" || envelope.error) {
-          throw new Error(envelope.error?.message ?? "list_models failed");
-        }
-        setTestStatus({
-          state: "ok",
-          modelCount: envelope.data?.models?.length ?? 0,
-        });
-        return;
+      const args: Record<string, unknown> = { base_url: trimmedUrl };
+      const trimmedKey = apiKey.trim();
+      if (trimmedKey) {
+        args.api_key = trimmedKey;
+      } else if (editing && initial) {
+        // Empty API-key field means "keep current key" — let the daemon
+        // fall back to the stored value so the test exercises real creds.
+        args.provider = initial.name;
       }
-      setTestStatus({ state: "ok", modelCount: 0 });
+      const envelope = await getTransport().invoke<{
+        model_count?: number;
+      }>({ kind: "ai.test_connection", args });
+      if (envelope.kind === "error" || envelope.error) {
+        throw new Error(envelope.error?.message ?? "Connection test failed");
+      }
+      setTestStatus({
+        state: "ok",
+        modelCount: envelope.data?.model_count ?? 0,
+      });
     } catch (caught) {
       const message = caught instanceof Error ? caught.message : String(caught);
       setTestStatus({ state: "fail", message });

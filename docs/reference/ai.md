@@ -116,9 +116,21 @@ existing `backends` pattern. An OS-keychain migration is tracked in
 similar thinking-capable models is split out into a collapsible reasoning pane
 above the answer. Models that don't emit thinking tags pass through unchanged.
 
+Settings → AI providers exposes a **Test connection** action. It calls the
+daemon's `ai.test_connection` kind with the *currently entered* base URL and
+API key (or, when editing without changing the API-key field, the saved key)
+and reports the model count without persisting anything.
+
 Streaming is one-shot: pressing **Stop** hides the in-flight assistant message
-in the UI, but the underlying request keeps generating until it finishes.
-Cooperative cancellation lands with the worker-pool refactor.
+in the UI, but the underlying request keeps generating until it finishes. For
+**metered remote providers this still consumes tokens** until the model
+completes — Stop is UI-only, not a billing-side cancel. Cooperative
+cancellation lands with the worker-pool refactor.
+
+While a chat is streaming, the Tauri shell currently serializes other daemon
+calls behind the same supervisor lock, so navigation that needs a fresh daemon
+round-trip will wait until the stream finishes. The worker-pool refactor in
+[`../../TODO.md`](../../TODO.md) removes that single-flight constraint.
 
 ## Remote inference
 

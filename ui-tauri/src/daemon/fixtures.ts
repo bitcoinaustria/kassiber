@@ -72,6 +72,14 @@ export const fixtures: Record<string, unknown> = {
       { id: "llama3.3:70b", owned_by: "library" },
     ],
   },
+  "ai.test_connection": {
+    base_url: "http://localhost:11434/v1",
+    model_count: 2,
+    models: [
+      { id: "qwen3.6:35b", owned_by: "library" },
+      { id: "llama3.3:70b", owned_by: "library" },
+    ],
+  },
 };
 
 /**

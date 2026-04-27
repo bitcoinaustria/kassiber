@@ -183,7 +183,15 @@ class OpenAICompatClient:
             headers["Authorization"] = f"Bearer {self.api_key}"
         return headers
 
-    def _open(self, path: str, *, method: str, body: bytes | None, accept_sse: bool):
+    def _open(
+        self,
+        path: str,
+        *,
+        method: str,
+        body: bytes | None,
+        accept_sse: bool,
+        timeout: float | None = None,
+    ):
         url = f"{self.base_url.rstrip('/')}/{path.lstrip('/')}"
         request = urllib.request.Request(
             url,
@@ -192,7 +200,10 @@ class OpenAICompatClient:
             headers=self._headers(json_body=body is not None, accept_sse=accept_sse),
         )
         try:
-            return urllib.request.urlopen(request, timeout=self.timeout)
+            return urllib.request.urlopen(
+                request,
+                timeout=timeout if timeout is not None else self.timeout,
+            )
         except urllib.error.HTTPError as exc:
             raise _http_error_app_error(exc) from exc
         except (urllib.error.URLError, TimeoutError, OSError) as exc:
@@ -270,7 +281,15 @@ class OpenAICompatClient:
         model: str,
         options: dict[str, Any] | None = None,
     ) -> Iterator[ChatDelta]:
-        """Streaming `POST /v1/chat/completions`. Yields one ChatDelta per SSE chunk."""
+        """Streaming `POST /v1/chat/completions`. Yields one ChatDelta per SSE chunk.
+
+        Uses the per-record inactivity timeout (a chunk must arrive within
+        the window or the next socket read raises) instead of the
+        non-streaming total budget. This matches the Tauri supervisor's
+        `DAEMON_STREAM_INACTIVITY_TIMEOUT` so the Python side can write a
+        clean error envelope before the supervisor decides to kill the
+        daemon process.
+        """
         body = {"model": model, "messages": messages, "stream": True}
         if options:
             body.update(options)
@@ -279,6 +298,7 @@ class OpenAICompatClient:
             method="POST",
             body=json.dumps(body).encode("utf-8"),
             accept_sse=True,
+            timeout=DEFAULT_INACTIVITY_TIMEOUT_SECONDS,
         )
         with response:
             line_iter = (raw.decode("utf-8", errors="replace") for raw in response)

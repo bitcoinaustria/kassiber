@@ -25,6 +25,7 @@ const ALLOWED_DAEMON_KINDS: &[&str] = &[
     "ai.providers.clear_default",
     "ai.providers.acknowledge",
     "ai.list_models",
+    "ai.test_connection",
     "ai.chat",
 ];
 
@@ -105,7 +106,13 @@ fn daemon_invoke(
 
     let request_id = request.request_id.clone();
     let streaming = STREAMING_DAEMON_KINDS.contains(&request.kind.as_str());
-    match supervisor.invoke(&request.kind, request.args, &app, streaming) {
+    match supervisor.invoke(
+        &request.kind,
+        request.args,
+        &app,
+        streaming,
+        request.request_id,
+    ) {
         Ok(response) => match serde_json::from_value(response) {
             Ok(envelope) => envelope,
             Err(error) => error_envelope(

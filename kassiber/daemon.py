@@ -24,6 +24,7 @@ from .ai.providers import (
     acknowledge_remote_use,
     get_default_ai_provider_name,
     list_with_default as list_ai_providers_with_default,
+    normalize_base_url,
 )
 from .cli.handlers import sync_wallet
 from .core.repo import current_context_snapshot
@@ -573,6 +574,62 @@ def handle_request(
             False,
         )
 
+    if kind == "ai.test_connection":
+        # Transient connection test against caller-supplied credentials —
+        # nothing is persisted. The Settings form uses this to validate the
+        # *entered* base_url + api_key before saving. If `provider` names a
+        # stored row and `api_key` is blank, the saved key is reused so the
+        # form's "leave blank to keep current key" affordance still tests
+        # with credentials.
+        args = _coerce_args_dict(request_id, request.get("args"))
+        base_url_raw = args.get("base_url")
+        if not isinstance(base_url_raw, str) or not base_url_raw.strip():
+            raise AppError(
+                "ai.test_connection requires a non-empty base_url string",
+                code="validation",
+            )
+        canonical_url = normalize_base_url(base_url_raw)
+        api_key_raw = args.get("api_key")
+        if api_key_raw is not None and not isinstance(api_key_raw, str):
+            raise AppError(
+                "ai.test_connection api_key must be a string",
+                code="validation",
+            )
+        api_key_text = api_key_raw.strip() if isinstance(api_key_raw, str) else ""
+        if not api_key_text:
+            stored_provider = args.get("provider")
+            if isinstance(stored_provider, str) and stored_provider.strip():
+                try:
+                    stored = get_db_ai_provider(ctx.conn, stored_provider)
+                except AppError:
+                    stored = None
+                if stored and stored.get("api_key"):
+                    api_key_text = stored["api_key"]
+        # Use a tight timeout so a dead URL surfaces a clean error before
+        # the Tauri supervisor's `DAEMON_INVOKE_TIMEOUT` (15s) kills the
+        # daemon process. Test connection is interactive — a 10s ceiling
+        # matches what the user expects from a "does this work?" probe.
+        client = OpenAICompatClient(
+            base_url=canonical_url,
+            api_key=api_key_text or None,
+            timeout=10.0,
+        )
+        models = client.list_models()
+        return (
+            _with_request_id(
+                build_envelope(
+                    "ai.test_connection",
+                    {
+                        "base_url": canonical_url,
+                        "model_count": len(models),
+                        "models": models,
+                    },
+                ),
+                request_id,
+            ),
+            False,
+        )
+
     if kind == "ai.chat":
         # Validate eagerly so syntax errors surface synchronously.
         validated = _ai_chat_args(_coerce_args_dict(request_id, request.get("args")))
@@ -661,6 +718,7 @@ def run(
                     "ai.providers.clear_default",
                     "ai.providers.acknowledge",
                     "ai.list_models",
+                    "ai.test_connection",
                     "ai.chat",
                     "daemon.shutdown",
                 ],

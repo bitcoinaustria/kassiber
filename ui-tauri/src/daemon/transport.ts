@@ -38,6 +38,12 @@ export const DAEMON_MODE = RAW_MODE as DaemonMode;
 export interface DaemonRequest {
   kind: string;
   args?: Record<string, unknown>;
+  /**
+   * Optional client-allocated request_id. Streaming transports allocate
+   * one automatically so they can filter `daemon://stream` records as
+   * they arrive instead of buffering them until the terminal envelope.
+   */
+  request_id?: string;
 }
 
 export interface DaemonEnvelope<T = unknown> {
@@ -83,6 +89,16 @@ export interface DaemonTransport {
   ): Promise<DaemonEnvelope<T>>;
 }
 
+function makeRequestId(): string {
+  if (
+    typeof globalThis.crypto !== "undefined" &&
+    typeof globalThis.crypto.randomUUID === "function"
+  ) {
+    return globalThis.crypto.randomUUID();
+  }
+  return `req-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+}
+
 const tauriDaemon: DaemonTransport = {
   async invoke<T = unknown>(
     req: DaemonRequest,
@@ -97,41 +113,25 @@ const tauriDaemon: DaemonTransport = {
     const { invoke } = await import("@tauri-apps/api/core");
     const { listen } = await import("@tauri-apps/api/event");
 
-    // Subscribe to the shared stream channel BEFORE invoking; the
-    // supervisor allocates request_id internally and emits records with
-    // that id, so we filter by matching the terminal envelope's id once
-    // it returns.
-    const buffered: DaemonStreamRecord<R>[] = [];
-    let terminalRequestId: string | number | null | undefined;
-    const flush = (record: DaemonStreamRecord<R>) => {
-      if (terminalRequestId !== undefined) {
-        if (record.request_id === terminalRequestId) {
-          options?.onRecord?.(record);
-        }
-        return;
-      }
-      buffered.push(record);
-    };
+    // Allocate the request_id client-side and pass it through; the
+    // supervisor honors a String request_id when supplied, so we can
+    // filter `daemon://stream` records as they arrive instead of
+    // buffering them until the terminal envelope returns.
+    const requestId = req.request_id ?? makeRequestId();
 
     const unlisten = await listen<DaemonStreamRecord<R>>(
       "daemon://stream",
       (event) => {
-        flush(event.payload);
+        if (event.payload.request_id === requestId) {
+          options?.onRecord?.(event.payload);
+        }
       },
     );
 
     try {
-      const envelope = await invoke<DaemonEnvelope<T>>("daemon_invoke", {
-        request: req,
+      return await invoke<DaemonEnvelope<T>>("daemon_invoke", {
+        request: { ...req, request_id: requestId },
       });
-      terminalRequestId = envelope.request_id;
-      // Drain anything buffered before the terminal envelope arrived.
-      for (const record of buffered) {
-        if (record.request_id === terminalRequestId) {
-          options?.onRecord?.(record);
-        }
-      }
-      return envelope;
     } finally {
       unlisten();
     }

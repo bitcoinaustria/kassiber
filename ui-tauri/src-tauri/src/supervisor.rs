@@ -107,8 +107,15 @@ impl DaemonSupervisor {
         args: Option<Value>,
         app: &AppHandle,
         streaming: bool,
+        client_request_id: Option<Value>,
     ) -> Result<Value, SupervisorError> {
-        let request_id = self.allocate_request_id();
+        // Honor a JS-supplied String request_id so streaming transports can
+        // filter `daemon://stream` records as they arrive without buffering;
+        // fall back to the supervisor-allocated id otherwise.
+        let request_id = client_request_id
+            .as_ref()
+            .and_then(|value| value.as_str().map(String::from))
+            .unwrap_or_else(|| self.allocate_request_id());
         let process = self.ensure_process()?;
         let mut request = json!({
             "request_id": request_id,

@@ -8,8 +8,6 @@ cover the underlying primitives directly so failures point at one layer.
 from __future__ import annotations
 
 import io
-import json
-import sqlite3
 import tempfile
 import unittest
 import urllib.error

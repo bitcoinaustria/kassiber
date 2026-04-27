@@ -206,10 +206,13 @@ through Settings → AI providers or `kassiber ai providers create`.
   cannot reach Ollama (or any other model API) directly — every call
   passes through the Python daemon. The provider URL never reaches the
   webview's CSP/CORS surface.
-- **Streaming Stop is best-effort.** Pressing Stop on the assistant hides
-  the in-flight reply UI-side; the underlying generation keeps running
-  until the model completes. No prompt content is exposed beyond what was
-  already sent.
+- **Streaming Stop is UI-only, not a billing-side cancel.** Pressing Stop
+  on the assistant hides the in-flight reply UI-side; the underlying
+  generation keeps running until the model completes. For metered remote
+  providers this means tokens continue to be consumed (and billed) after
+  Stop. No prompt content is exposed beyond what was already sent.
+  Cooperative cancellation lands with the worker-pool refactor in
+  `TODO.md`.
 - **No tool use in PR 1.** The in-app assistant cannot run Kassiber CLI
   commands, mutate state, or read your snapshots. That arrives in a
   follow-up gated behind per-tool consent.
