@@ -485,18 +485,27 @@ def parse_wallet_config(args):
             config.update(json.load(handle))
     if getattr(args, "backend", None):
         config["backend"] = args.backend.strip().lower()
-    descriptor_text = read_text_argument(
-        getattr(args, "descriptor", None),
-        getattr(args, "descriptor_file", None),
-        "Descriptor",
-    )
+    from ..secrets.cli_input import enforce_single_stdin_consumer, read_secret_from_args
+
+    enforce_single_stdin_consumer(args, ("descriptor", "change_descriptor"))
+    descriptor_text = read_secret_from_args(args, "descriptor")
+    if descriptor_text is None:
+        descriptor_text = read_text_argument(
+            None,
+            getattr(args, "descriptor_file", None),
+            "Descriptor",
+        )
     if descriptor_text:
         config["descriptor"] = descriptor_text
-    change_descriptor_text = read_text_argument(
-        getattr(args, "change_descriptor", None),
-        getattr(args, "change_descriptor_file", None),
-        "Change descriptor",
+    change_descriptor_text = read_secret_from_args(
+        args, "change-descriptor", legacy_attr="change_descriptor"
     )
+    if change_descriptor_text is None:
+        change_descriptor_text = read_text_argument(
+            None,
+            getattr(args, "change_descriptor_file", None),
+            "Change descriptor",
+        )
     if change_descriptor_text:
         config["change_descriptor"] = change_descriptor_text
     addresses = normalize_addresses(getattr(args, "address", None))

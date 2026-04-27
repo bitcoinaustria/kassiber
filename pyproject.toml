@@ -16,6 +16,8 @@ dependencies = [
   "embit>=0.8.0",
   "rp2 @ git+https://github.com/bitcoinaustria/rp2.git@23c944962c775667794b19d66e785058d7aaf599",
   "XlsxWriter>=3.2,<4",
+  "sqlcipher3>=0.6.2,<1",
+  "pyrage>=1.3,<2",
 ]
 
 [project.scripts]

@@ -353,16 +353,47 @@ and [docs/plan/04-desktop-ui.md](docs/plan/04-desktop-ui.md).
   artifacts
 - [ ] Keep private `--debug` traces and any future downloadable logs separate
   from the public diagnostics contract
-- [ ] Replace plaintext secret enrollment through CLI args / dotenv with
-  local-only secret capture flows or secret refs so hosted agents do not need
-  raw values in prompts or command strings (covers both `backends.token` /
-  `backends.auth_header` and `ai_providers.api_key`)
+- [x] Add stdin/fd-based secret-input flows (`--token-stdin` / `--token-fd FD`,
+  `--password-stdin` / `--password-fd`, `--descriptor-stdin` /
+  `--descriptor-fd`, etc.) so hosted agents and shells never need raw values
+  in argv. Argv forms (`--token <value>`, `--password <value>`,
+  `--descriptor <value>`, …) are kept as deprecated, warning-on-use shims;
+  remove them once `tests/test_review_regressions.py` migrates off argv.
+- [ ] Strip the deprecated argv credential forms from the parser and update
+  `tests/test_review_regressions.py` to use stdin/fd in every backend/wallet
+  setup site. At the same time, harden the `backends.env` plaintext-secret
+  warning into a refusal once no test or example needs the dotenv path for
+  secret seeding.
+- [ ] Extend the stdin/fd secret-input pattern to `ai_providers.api_key`:
+  `kassiber ai providers {create,update}` currently only accepts
+  `--api-key <value>` via argv. Add `--api-key-stdin` / `--api-key-fd FD`
+  (matching the backends pattern) and a daemon-side `ai.providers.set_api_key`
+  reveal/rotate flow so hosted agents never have to put raw API keys on the
+  command line.
 - [ ] Split wallet descriptor and other sensitive config out of the generic
-  `wallets.config_json` blob into typed project-local tables plus OS keychain
-  references where appropriate
-- [ ] Seal backend credentials, private descriptors, and blinding keys behind
-  OS keychain-backed secret refs instead of leaving raw values in plaintext
-  SQLite / dotenv storage
+  `wallets.config_json` blob into typed project-local tables now that
+  SQLCipher protects the file at rest.
+- [x] Encrypt `kassiber.sqlite3` at rest with SQLCipher 4 behind a user
+  passphrase, with `kassiber secrets {init,change-passphrase,verify,status,migrate-credentials}`,
+  `kassiber backup {export,import}`, `--db-passphrase-fd` plumbing through the
+  CLI and daemon, and a `tar | age` single-file backup format.
+- [x] Move backend secrets (token, password, auth_header, basic-auth username
+  + RPC aliases) out of the plaintext `config/backends.env` bootstrap and into
+  the encrypted `backends` table. `kassiber secrets migrate-credentials` lifts
+  pre-existing entries with a `.pre-credentials-migration-<ts>.bak` snapshot,
+  and `bootstrap_runtime` warns to stderr whenever the dotenv still contains
+  secret-shaped entries while the DB is encrypted. URLs / kinds / chain /
+  network stay in the dotenv (they are addresses, not credentials).
+- [ ] Tauri supervisor wiring: passphrase modal at startup, private fd hand-off
+  to the Python sidecar, `auth_required`/`auth_response` relay for reveal
+  flows, and log redaction of `passphrase_secret` / `token` / `descriptor` /
+  `change_descriptor` / `blinding_key` / `auth_header` / `password` envelopes.
+- [ ] Cross-platform CI for SQLCipher: PyInstaller bundle smoke tests on
+  macOS arm64/x86_64, Linux x86_64, Windows x86_64. Today's tracer bullet
+  ran on macOS arm64 only.
+- [ ] Optional convenience: opt-in OS-keychain remember-me layer and biometric
+  reveal gate. Both are convenience over the SQLCipher passphrase, never a
+  cryptographic substitute.
 - [x] Kassiber skill bundle for agents (`skills/kassiber`)
 - [ ] Optional server/REST mode, still local-first and opt-in
 

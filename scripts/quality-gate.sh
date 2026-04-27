@@ -34,10 +34,11 @@ py() {
   fi
 }
 
-run py -m py_compile kassiber/*.py
+run py -m py_compile kassiber/*.py kassiber/secrets/*.py kassiber/backup/*.py
 
 run py -m unittest tests.test_cli_smoke -v
 run py -m unittest tests.test_daemon_smoke -v
+run py -m unittest tests.test_secrets_smoke -v
 run py -m unittest tests.test_review_regressions -v
 
 echo
@@ -59,6 +60,17 @@ py -m kassiber ai --help >/dev/null
 py -m kassiber ai providers --help >/dev/null
 py -m kassiber ai providers create --help >/dev/null
 py -m kassiber ai chat --help >/dev/null
+py -m kassiber secrets --help >/dev/null
+py -m kassiber secrets init --help >/dev/null
+py -m kassiber secrets change-passphrase --help >/dev/null
+py -m kassiber secrets verify --help >/dev/null
+py -m kassiber secrets status --help >/dev/null
+py -m kassiber secrets migrate-credentials --help >/dev/null
+py -m kassiber backup --help >/dev/null
+py -m kassiber backup export --help >/dev/null
+py -m kassiber backup import --help >/dev/null
+py -m kassiber backends reveal-token --help >/dev/null
+py -m kassiber wallets reveal-descriptor --help >/dev/null
 
 echo
 echo "quality gate passed"

@@ -73,7 +73,10 @@ mainnet pair `--chain liquid --network liquidv1`.
 
 For secret-bearing setup, prefer giving the user a paste-ready command template
 to run in a separate local terminal instead of asking them to paste descriptors,
-tokens, or other credentials into chat.
+tokens, or other credentials into chat. Wherever the template would otherwise
+embed `--token <value>` or `--descriptor <value>` directly, use the matching
+`--*-stdin` (or `--*-fd FD`) form so the secret never lands in shell history;
+see [secrets-and-backup.md](secrets-and-backup.md) for the field list.
 
 ## Descriptor wallets
 
@@ -180,7 +183,8 @@ BTCPay:
 
 ```bash
 kassiber wallets import-btcpay --wallet btcpay --file /path/to/export.csv --input-format csv
-kassiber backends create btcpay-prod --kind btcpay --url https://btcpay.example.com --token "$BTCPAY_TOKEN"
+printf %s "$BTCPAY_TOKEN" | kassiber backends create btcpay-prod \
+  --kind btcpay --url https://btcpay.example.com --token-stdin
 kassiber wallets create --label btcpay-shop --kind custom --backend btcpay-prod --store-id <store-id>
 kassiber wallets sync --wallet btcpay-shop
 kassiber wallets sync-btcpay --wallet btcpay-shop --backend btcpay-prod --store-id <store-id>
@@ -190,17 +194,18 @@ kassiber wallets sync-btcpay --wallet btcpay-shop --backend btcpay-prod --store-
 BTCPay backend/store config on the wallet so later `wallets sync` and
 `wallets sync --all` can reuse it.
 
-Do not ask users to paste raw BTCPay API tokens into chat. Prefer a local shell
-variable such as `BTCPAY_TOKEN`, a local `backends.env` entry, or a command
-they run locally with the secret substituted on their machine.
+Do not ask users to paste raw BTCPay API tokens into chat. Prefer
+`--token-stdin` (with a local `printf %s "$VAR" | kassiber ...` pipe) or
+`--token-fd <FD>`. The argv form `--token <value>` still works for legacy
+scripts but warns and leaks to shell history.
 
 Paste-ready local template:
 
 ```bash
-kassiber backends create <btcpay-backend-name> \
+printf %s "$BTCPAY_TOKEN" | kassiber backends create <btcpay-backend-name> \
   --kind btcpay \
   --url <btcpay-base-url> \
-  --token "$BTCPAY_TOKEN"
+  --token-stdin
 kassiber wallets create \
   --label <wallet-label> \
   --kind custom \

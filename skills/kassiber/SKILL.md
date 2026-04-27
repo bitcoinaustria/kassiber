@@ -57,13 +57,17 @@ If a fast-path command returns a structured error, inspect the envelope and take
 25. If a BTCPay or CSV export belongs to the same real wallet as an existing Kassiber wallet, import it into that wallet instead of creating a duplicate wallet record.
 26. On errors, inspect the machine envelope first. Kassiber success responses are `{kind, schema_version, data}` and errors use `kind: "error"` with structured fields.
 27. Treat normal `backends ...` and `wallets ...` success output as safe-to-record only for secret-bearing config values. Do not ask users to paste raw backend credentials, raw private descriptor material, or suppressed config blobs into chat just because `backends get` or `wallets get` returns an allowlisted safe view.
-28. For BTCPay and other secret-bearing backends, do not ask users to paste raw API tokens into chat. Prefer a local shell variable, a local `backends.env` entry, or a command they run locally with the secret substituted on their machine.
+28. For BTCPay and other secret-bearing backends, do not ask users to paste raw API tokens into chat. Prefer `--token-stdin` (then have them pipe the secret in locally), `--token-fd FD`, or — only as a fallback for older scripts — a local `backends.env` entry. The argv form `--token <value>` still works but warns and leaks to shell history; do not recommend it.
 29. Do not persist backend or wallet config changes just to work around a sync failure unless the user requested that mutation or explicitly agrees after you explain the tradeoff. `wallets update --backend ...`, `--gap-limit`, and `backends set-default` change durable state.
 30. Never claim a BTC ↔ LBTC swap is already paired, carrying-value, or reflected in reports unless `kassiber --machine journals transfers list` shows the pair or `kassiber transfers pair` just succeeded and you reprocessed journals.
 31. When quarantines remain, distinguish processed holdings from raw transaction-net estimates. Reports show processed journal state only; any netting from `transactions list` must be labeled as an approximate diagnostic rather than a Kassiber holding.
 32. For rate coverage, do not infer the covered time window from `samples` or `days` alone. Use `kassiber rates range` with RFC3339 timestamps around the missing transactions.
 33. Treat Kassiber accounts as wallet/reporting buckets. Do not recommend double-entry charts of accounts, automatic fee expense postings, or external equity counterpart accounts unless the product gains an explicit ledger model.
 34. For planning or codebase work, treat `TODO.md` as the executable backlog and `docs/plan/` as orientation/guardrails. Verify current behavior against code before acting on a plan doc.
+35. If `kassiber status` (or any other command) returns `passphrase_required`, the local DB is SQLCipher-encrypted. Either prompt the user interactively, or have them re-run the command with `--db-passphrase-fd <FD>` from a parent process. Never embed a passphrase in argv — there is no `--db-passphrase <value>` flag and there will not be one.
+36. `kassiber secrets init` is a one-time migration from plaintext to SQLCipher. After it runs, the original plaintext file is preserved as `kassiber.pre-encryption.sqlite3.bak`; advise the user to verify the encrypted DB opens (`kassiber secrets verify`) and then `rm` the `.bak` themselves once they trust the new file. Forgetting the passphrase means data loss — there is no recovery path and `.kassiber` backups do not help.
+37. `.kassiber` backup files are `tar | age` envelopes that wrap a SQLCipher copy of the DB plus the attachments tree and `backends.env`. They are recoverable with stock `age` + `tar` + `sqlcipher` even without Kassiber installed. Backup decryption uses an outer age passphrase (`--backup-passphrase-fd`) that is independent of the DB passphrase.
+38. The dotenv bootstrap (`backends.env`) is for non-secret addressing only: URLs, `KIND`, chain, network, batch sizes. Tokens, passwords, auth headers, and basic-auth usernames belong in the encrypted DB. If Kassiber warns at startup that the dotenv still has plaintext secrets, run `kassiber secrets migrate-credentials` (or `--dry-run` first) to lift them into the encrypted backends table; the file is rewritten with non-secret rows preserved and a `.pre-credentials-migration-<ts>.bak` snapshot is saved.
 
 ## Gotchas
 
@@ -114,6 +118,7 @@ Related notes:
 - For balance sheet, portfolio, capital gains, balance history, PDF export, and rates, read [references/reports.md](references/reports.md).
 - For quick state checks and smoke validation, read [references/verification.md](references/verification.md) and use `scripts/verify-state.sh` when helpful.
 - For common failure modes and path confusion, read [references/troubleshooting.md](references/troubleshooting.md).
+- For SQLCipher encryption (`kassiber secrets ...`), `tar | age` backups (`kassiber backup ...`), passphrase entry, and the `--*-stdin` / `--*-fd` secret-input channels, read [references/secrets-and-backup.md](references/secrets-and-backup.md).
 
 ## Report Selection
 

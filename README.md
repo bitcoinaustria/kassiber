@@ -17,7 +17,7 @@ Kassiber is an open-source, local-first Bitcoin accounting CLI. A desktop shell 
 
 It keeps your accounting state on your machine, syncs from Bitcoin-native sources, and processes journals locally before generating reports. Built from scratch, it takes early visual cues from Clams and other tools in the space without inheriting the cloud trust model.
 
-Before pointing Kassiber at real wallets, read [SECURITY.md](SECURITY.md). It covers backend visibility, external requests, and current caveats such as missing at-rest encryption and incomplete Tor support.
+Before pointing Kassiber at real wallets, read [SECURITY.md](SECURITY.md). It covers backend visibility, external requests, the V4.1 SQLCipher-based at-rest encryption (and what it does *not* protect — sidecar files, attachments, the OS-level threat model), and incomplete Tor support.
 
 Normal `backends ...` and `wallets ...` success output now follows a narrow
 safe-to-record contract for secret-bearing config values: backend inspection
@@ -37,7 +37,8 @@ kind of report when an error occurs.
 
 ## What Kassiber does
 
-- keeps a local SQLite system of record
+- keeps a local SQLite system of record (optionally encrypted at rest via SQLCipher 4 with a passphrase you choose; see `kassiber secrets init`)
+- ships a single-file `tar | age` backup format (`kassiber backup export`) that is recoverable with stock `age` + `tar` + `sqlcipher` if Kassiber stops being maintained
 - supports multiple workspaces, profiles, wallet buckets, and wallets
 - syncs from `esplora` and `electrum`, plus `bitcoinrpc` for address-based Bitcoin wallets and confirmed BTCPay Greenfield wallet history
 - imports generic CSV/JSON, BTCPay exports, Phoenix exports, and BIP329 labels
@@ -154,10 +155,14 @@ By default Kassiber stores state under `~/.kassiber/`:
 - `attachments/` for managed attachment blobs
 
 Backend definitions and the stored default backend now live canonically in
-SQLite. `backends.env` is still accepted as a bootstrap/compatibility path,
-but Kassiber only imports that bootstrap config into SQLite during explicit
-bootstrap-import flows such as `kassiber init`; once imported, the DB is the
-long-term source of truth.
+SQLite. `backends.env` is still accepted as a bootstrap/compatibility path
+for non-secret addressing (URL, `KIND`, chain, network), but secrets — API
+tokens, passwords, auth headers, basic-auth usernames — belong in the
+encrypted `backends` table. New credentials should be seeded with
+`--token-stdin` / `--token-fd FD` so they go straight into the DB; pre-existing
+entries in `backends.env` can be lifted out with
+`kassiber secrets migrate-credentials` (see [SECURITY.md](SECURITY.md) for
+the full at-rest boundary).
 
 Use `kassiber status` to see the active paths. `--data-root` and `--env-file` let you override them.
 

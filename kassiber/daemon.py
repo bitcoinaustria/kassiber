@@ -27,6 +27,8 @@ from .ai.providers import (
     normalize_base_url,
 )
 from .cli.handlers import sync_wallet
+from .core import accounts as core_accounts
+from .core import wallets as core_wallets
 from .core.repo import current_context_snapshot
 from .core.runtime import build_status_payload
 from .core.ui_snapshot import (
@@ -36,8 +38,10 @@ from .core.ui_snapshot import (
     build_profiles_snapshot,
     build_transactions_snapshot,
 )
-from .envelope import SCHEMA_VERSION, build_envelope, build_error_envelope, json_ready
+from .db import resolve_database_path, resolve_effective_data_root
+from .envelope import build_envelope, build_error_envelope, json_ready
 from .errors import AppError
+from .secrets.sqlcipher import open_encrypted, sqlcipher_available
 
 
 MAX_REQUEST_LINE_CHARS = 1_000_000
@@ -249,6 +253,26 @@ def _ai_provider_redacted(ctx: DaemonContext, provider: dict) -> dict:
         provider,
         default_name=get_default_ai_provider_name(ctx.conn),
     )
+
+
+def _verify_passphrase_for_reveal(ctx: "DaemonContext", passphrase: str) -> bool:
+    """Confirm that `passphrase` would unlock the active database.
+
+    Opens a throw-away SQLCipher connection so a wrong passphrase fails
+    cleanly without affecting the live `ctx.conn` handle.
+    """
+
+    if not sqlcipher_available():
+        return False
+    db_path = resolve_database_path(resolve_effective_data_root(ctx.data_root))
+    try:
+        probe = open_encrypted(db_path, passphrase)
+    except AppError as exc:
+        if exc.code == "unlock_failed":
+            return False
+        raise
+    probe.close()
+    return True
 
 
 def handle_request(
@@ -657,6 +681,26 @@ def handle_request(
         thread.start()
         return (None, False)
 
+    if kind == "wallets.reveal_descriptor":
+        return _handle_reveal_request(
+            ctx,
+            request,
+            request_id,
+            kind=kind,
+            scope="reveal_descriptor",
+            target_kind="wallet",
+        )
+
+    if kind == "backends.reveal_token":
+        return _handle_reveal_request(
+            ctx,
+            request,
+            request_id,
+            kind=kind,
+            scope="reveal_token",
+            target_kind="backend",
+        )
+
     if kind.startswith("ui."):
         return (
             _error_envelope(
@@ -678,6 +722,105 @@ def handle_request(
             details={"kind": kind},
             hint="Only status is exposed through the first daemon slice.",
             retryable=False,
+        ),
+        False,
+    )
+
+
+def _handle_reveal_request(
+    ctx: DaemonContext,
+    request: dict[str, Any],
+    request_id: object,
+    *,
+    kind: str,
+    scope: str,
+    target_kind: str,
+) -> tuple[dict[str, Any], bool]:
+    """Reveal a sensitive field after a passphrase round-trip.
+
+    Per the V4.1 plan, the daemon does not return secrets without an
+    explicit `auth_response` from the client carrying the SQLCipher
+    passphrase. We verify by opening a throw-away SQLCipher connection
+    against the on-disk database; a wrong passphrase produces
+    `local_auth_denied`.
+    """
+
+    args = request.get("args") or {}
+    target = args.get("name") or args.get("wallet") or args.get("backend")
+    if not isinstance(target, str) or not target:
+        return (
+            _error_envelope(
+                "validation",
+                f"{target_kind} reveal request requires a string `name` (or `wallet`/`backend`)",
+                request_id=request_id,
+                retryable=False,
+            ),
+            False,
+        )
+
+    auth = args.get("auth_response")
+    if not isinstance(auth, dict) or "passphrase_secret" not in auth:
+        return (
+            _with_request_id(
+                build_envelope(
+                    "auth_required",
+                    {
+                        "scope": scope,
+                        "label": f"Re-enter database passphrase to reveal {target_kind} {target!r}",
+                    },
+                ),
+                request_id,
+            ),
+            False,
+        )
+
+    passphrase = auth.get("passphrase_secret")
+    if not isinstance(passphrase, str) or not passphrase:
+        return (
+            _error_envelope(
+                "local_auth_denied",
+                "auth_response did not include a passphrase",
+                request_id=request_id,
+                retryable=True,
+            ),
+            False,
+        )
+
+    try:
+        verified = _verify_passphrase_for_reveal(ctx, passphrase)
+    except AppError as exc:
+        return (
+            _error_envelope(
+                exc.code or "auth_error",
+                str(exc),
+                request_id=request_id,
+                hint=exc.hint,
+                retryable=False,
+            ),
+            False,
+        )
+    if not verified:
+        return (
+            _error_envelope(
+                "local_auth_denied",
+                "passphrase verification failed",
+                request_id=request_id,
+                retryable=True,
+            ),
+            False,
+        )
+
+    if scope == "reveal_token":
+        payload = core_accounts.reveal_backend_secrets(ctx.conn, ctx.runtime_config, target)
+    else:
+        workspace = args.get("workspace")
+        profile = args.get("profile")
+        payload = core_wallets.reveal_wallet_secrets(ctx.conn, workspace, profile, target)
+
+    return (
+        _with_request_id(
+            build_envelope(kind, payload),
+            request_id,
         ),
         False,
     )
@@ -723,6 +866,8 @@ def run(
                     "ai.list_models",
                     "ai.test_connection",
                     "ai.chat",
+                    "wallets.reveal_descriptor",
+                    "backends.reveal_token",
                     "daemon.shutdown",
                 ],
             },
