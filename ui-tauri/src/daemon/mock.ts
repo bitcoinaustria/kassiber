@@ -43,6 +43,19 @@ export const mockDaemon: DaemonTransport = {
       };
     }
 
+    if (req.kind === "ui.workspace.delete") {
+      return {
+        kind: "ui.workspace.delete",
+        schema_version: 1,
+        request_id: req.request_id,
+        data: {
+          deleted: true,
+          workspace: { id: "mock-workspace", label: "Demo Workspace" },
+          removed: { profiles: 2, wallets: 4, transactions: 24 },
+        } as T,
+      };
+    }
+
     const fixture = fixtures[req.kind];
     if (fixture === undefined) {
       return {

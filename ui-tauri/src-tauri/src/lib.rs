@@ -23,6 +23,7 @@ const ALLOWED_DAEMON_KINDS: &[&str] = &[
     "ui.journals.transfers.list",
     "ui.rates.summary",
     "ui.workspace.health",
+    "ui.workspace.delete",
     "ui.next_actions",
     "ui.wallets.sync",
     "ai.providers.list",

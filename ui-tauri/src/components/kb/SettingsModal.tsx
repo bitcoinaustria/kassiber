@@ -71,6 +71,14 @@ interface Backend {
   auth: string;
 }
 
+interface StatusData {
+  data_root: string;
+  database: string;
+  current_workspace: string | null;
+  workspaces: number;
+  profiles: number;
+}
+
 const DEFAULT_BACKENDS: Backend[] = [
   {
     id: "b1",
@@ -125,8 +133,15 @@ export function SettingsModal({
   const setHideSensitive = useUiStore((s) => s.setHideSensitive);
   const currency = useUiStore((s) => s.currency);
   const setCurrency = useUiStore((s) => s.setCurrency);
+  const identity = useUiStore((s) => s.identity);
   const setIdentity = useUiStore((s) => s.setIdentity);
   const navigate = useNavigate();
+  const statusQuery = useDaemon<StatusData>("status", undefined, {
+    enabled: open,
+  });
+  const status =
+    statusQuery.data?.kind === "status" ? statusQuery.data.data : null;
+  const deleteWorkspace = useDaemonMutation("ui.workspace.delete");
   const backendsRef = React.useRef<HTMLDivElement | null>(null);
   const aiRef = React.useRef<HTMLDivElement | null>(null);
 
@@ -163,6 +178,28 @@ export function SettingsModal({
     void navigate({ to: "/", replace: true });
   };
 
+  const onDeleteWorkspace = async () => {
+    const workspaceLabel =
+      status?.current_workspace || identity?.workspace || "current workspace";
+    const typed = window.prompt(
+      `Delete ${workspaceLabel}?\n\nThis removes the current workspace and its profiles, wallets, transactions, journals, and metadata from the local Kassiber database. Back up first if you need this data.\n\nType DELETE to continue.`,
+    );
+    if (typed !== "DELETE") return;
+
+    try {
+      await deleteWorkspace.mutateAsync({ confirm: "DELETE" });
+      setIdentity(null);
+      onClose();
+      void navigate({ to: "/", replace: true });
+    } catch (error) {
+      window.alert(
+        error instanceof Error
+          ? error.message
+          : "Workspace delete failed.",
+      );
+    }
+  };
+
   return (
     <Dialog
       open={open}
@@ -170,16 +207,16 @@ export function SettingsModal({
         if (!next) onClose();
       }}
     >
-      <DialogContent className="max-h-[88vh] w-full max-w-[900px] gap-0 overflow-hidden p-0 sm:max-w-[900px]">
-        <DialogHeader className="border-b px-6 py-5">
+      <DialogContent className="max-h-[90vh] w-[calc(100vw-2rem)] max-w-6xl gap-0 overflow-hidden p-0">
+        <DialogHeader className="shrink-0 border-b px-6 py-5">
           <DialogTitle>Settings</DialogTitle>
           <DialogDescription>
             Workspace preferences, privacy controls, and local data tools.
           </DialogDescription>
         </DialogHeader>
 
-        <ScrollArea className="max-h-[calc(88vh-132px)]">
-          <div className="grid gap-4 p-4 lg:grid-cols-2">
+        <ScrollArea className="h-[min(72vh,760px)]">
+          <div className="grid min-w-0 gap-4 p-4 lg:grid-cols-3">
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2 text-base">
@@ -298,7 +335,7 @@ export function SettingsModal({
               </CardContent>
             </Card>
 
-            <Card className="lg:col-span-2">
+            <Card className="lg:col-span-3">
               <CardHeader>
                 <CardTitle className="flex items-center gap-2 text-base">
                   <Database className="size-4" aria-hidden="true" />
@@ -340,26 +377,26 @@ export function SettingsModal({
 
                 <div className="grid gap-3 sm:grid-cols-2">
                   <div className="space-y-1.5">
+                    <Label htmlFor="settings-data-root">Data root</Label>
+                    <Input
+                      id="settings-data-root"
+                      readOnly
+                      value={status?.data_root ?? "loading..."}
+                    />
+                  </div>
+                  <div className="space-y-1.5">
                     <Label htmlFor="settings-db-path">Database</Label>
                     <Input
                       id="settings-db-path"
                       readOnly
-                      value="~/.kassiber/kassiber.db"
-                    />
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label htmlFor="settings-last-backup">Last backup</Label>
-                    <Input
-                      id="settings-last-backup"
-                      readOnly
-                      value="2026-04-17 23:02 - backup_2026-04-17.tar.zst"
+                      value={status?.database ?? "loading..."}
                     />
                   </div>
                 </div>
               </CardContent>
             </Card>
 
-            <div ref={backendsRef} className="lg:col-span-2">
+            <div ref={backendsRef} className="min-w-0 lg:col-span-3">
               <Card>
                 <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                   <div>
@@ -418,34 +455,64 @@ export function SettingsModal({
               </Card>
             </div>
 
-            <div ref={aiRef} className="lg:col-span-2">
+            <div ref={aiRef} className="min-w-0 lg:col-span-3">
               <AiProvidersCard />
             </div>
 
-            <Card className="border-destructive/30 lg:col-span-2">
-              <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                <div>
+            <Card className="border-destructive/30 lg:col-span-3">
+              <CardHeader>
+                <div className="space-y-1">
                   <CardTitle className="flex items-center gap-2 text-base text-destructive">
                     <Trash2 className="size-4" aria-hidden="true" />
                     Danger zone
                   </CardTitle>
                   <CardDescription>
-                    Reset local identity and return to the Welcome screen.
+                    Reset the Welcome gate or delete the current local workspace.
                   </CardDescription>
                 </div>
-                <Button
-                  type="button"
-                  variant="destructive"
-                  onClick={onResetWorkspace}
-                >
-                  Reset workspace
-                </Button>
               </CardHeader>
+              <CardContent className="grid gap-3">
+                <div className="flex flex-col gap-3 rounded-lg border p-4 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="min-w-0 space-y-1">
+                    <p className="text-sm font-medium">Reset Welcome state</p>
+                    <p className="text-sm text-muted-foreground">
+                      Clear only the local UI identity and return to onboarding.
+                    </p>
+                  </div>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="shrink-0"
+                    onClick={onResetWorkspace}
+                  >
+                    Reset workspace
+                  </Button>
+                </div>
+                <div className="flex flex-col gap-3 rounded-lg border border-destructive/30 bg-destructive/5 p-4 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="min-w-0 space-y-1">
+                    <p className="text-sm font-medium text-destructive">
+                      Delete workspace
+                    </p>
+                    <p className="text-sm text-muted-foreground">
+                      Remove the current workspace records from the local database.
+                    </p>
+                  </div>
+                  <Button
+                    type="button"
+                    variant="destructive"
+                    className="shrink-0"
+                    disabled={deleteWorkspace.isPending}
+                    onClick={() => void onDeleteWorkspace()}
+                  >
+                    {deleteWorkspace.isPending ? "Deleting..." : "Delete workspace"}
+                  </Button>
+                </div>
+              </CardContent>
             </Card>
           </div>
         </ScrollArea>
 
-        <DialogFooter className="border-t px-6 py-4">
+        <DialogFooter className="shrink-0 border-t bg-background px-6 py-4">
           <Button type="button" variant="outline" onClick={onClose}>
             Done
           </Button>

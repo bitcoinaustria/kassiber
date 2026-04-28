@@ -422,6 +422,7 @@ class DaemonSmokeTest(unittest.TestCase):
             self.assertIn("ui.profiles.snapshot", ready["data"]["supported_kinds"])
             self.assertIn("ui.rates.summary", ready["data"]["supported_kinds"])
             self.assertIn("ui.workspace.health", ready["data"]["supported_kinds"])
+            self.assertIn("ui.workspace.delete", ready["data"]["supported_kinds"])
             self.assertIn("ui.next_actions", ready["data"]["supported_kinds"])
             self.assertIn("ui.wallets.sync", ready["data"]["supported_kinds"])
             self.assertIn("wallets.reveal_descriptor", ready["data"]["supported_kinds"])
@@ -442,6 +443,47 @@ class DaemonSmokeTest(unittest.TestCase):
             _write_payload(proc, {"request_id": "shutdown-1", "kind": "daemon.shutdown"})
             shutdown = _read_payload(proc)
             self.assertEqual(shutdown["request_id"], "shutdown-1")
+            self.assertEqual(shutdown["kind"], "daemon.shutdown")
+
+            code, stderr = _close_daemon(proc)
+            self.assertEqual(code, 0, stderr)
+            self.assertEqual(stderr, "")
+
+    def test_ui_workspace_delete_removes_current_workspace_and_keeps_daemon_alive(self):
+        with tempfile.TemporaryDirectory(prefix="kassiber-daemon-") as tmp:
+            data_root = Path(tmp) / "data"
+            _seed_workspace_with_transaction(data_root, tmp)
+            proc = _start_daemon(data_root)
+
+            ready = _read_payload(proc)
+            self.assertEqual(ready["kind"], "daemon.ready")
+
+            _write_payload(
+                proc,
+                {
+                    "request_id": "delete-workspace-1",
+                    "kind": "ui.workspace.delete",
+                    "args": {"confirm": "DELETE"},
+                },
+            )
+            deleted = _read_payload(proc)
+            self.assertEqual(deleted["request_id"], "delete-workspace-1")
+            self.assertEqual(deleted["kind"], "ui.workspace.delete")
+            self.assertEqual(deleted["data"]["workspace"]["label"], "Demo")
+            self.assertEqual(deleted["data"]["removed"]["profiles"], 1)
+            self.assertEqual(deleted["data"]["removed"]["wallets"], 1)
+            self.assertEqual(deleted["data"]["removed"]["transactions"], 1)
+
+            _write_payload(proc, {"request_id": "status-after-delete", "kind": "status"})
+            status = _read_payload(proc)
+            self.assertEqual(status["kind"], "status")
+            self.assertEqual(status["data"]["workspaces"], 0)
+            self.assertEqual(status["data"]["profiles"], 0)
+            self.assertEqual(status["data"]["current_workspace"], "")
+            self.assertEqual(status["data"]["current_profile"], "")
+
+            _write_payload(proc, {"request_id": "shutdown-1", "kind": "daemon.shutdown"})
+            shutdown = _read_payload(proc)
             self.assertEqual(shutdown["kind"], "daemon.shutdown")
 
             code, stderr = _close_daemon(proc)

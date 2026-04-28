@@ -80,6 +80,7 @@ SUPPORTED_KINDS = (
     "ui.profiles.snapshot",
     "ui.rates.summary",
     "ui.workspace.health",
+    "ui.workspace.delete",
     "ui.next_actions",
     "ui.wallets.sync",
     "ai.providers.list",
@@ -1115,6 +1116,44 @@ def _verify_passphrase_for_reveal(ctx: "DaemonContext", passphrase: str) -> bool
     return True
 
 
+def _delete_current_workspace(ctx: "DaemonContext") -> dict[str, Any]:
+    context = current_context_snapshot(ctx.conn)
+    workspace_id = context.get("workspace_id")
+    workspace_label = context.get("workspace_label")
+    if not workspace_id:
+        raise AppError(
+            "No current workspace is selected.",
+            code="state_not_ready",
+            hint="Reset the local UI identity if you only need to return to the Welcome flow.",
+        )
+
+    counts = {
+        "profiles": ctx.conn.execute(
+            "SELECT COUNT(*) AS count FROM profiles WHERE workspace_id = ?",
+            (workspace_id,),
+        ).fetchone()["count"],
+        "wallets": ctx.conn.execute(
+            "SELECT COUNT(*) AS count FROM wallets WHERE workspace_id = ?",
+            (workspace_id,),
+        ).fetchone()["count"],
+        "transactions": ctx.conn.execute(
+            "SELECT COUNT(*) AS count FROM transactions WHERE workspace_id = ?",
+            (workspace_id,),
+        ).fetchone()["count"],
+    }
+    with ctx.conn:
+        ctx.conn.execute("DELETE FROM workspaces WHERE id = ?", (workspace_id,))
+        ctx.conn.execute(
+            "DELETE FROM settings WHERE key IN ('context_workspace', 'context_profile')"
+        )
+
+    return {
+        "deleted": True,
+        "workspace": {"id": workspace_id, "label": workspace_label},
+        "removed": counts,
+    }
+
+
 def handle_request(
     ctx: DaemonContext,
     request: dict[str, Any],
@@ -1290,6 +1329,25 @@ def handle_request(
                 build_envelope(
                     "ui.workspace.health",
                     build_workspace_health_snapshot(ctx.conn),
+                ),
+                request_id,
+            ),
+            False,
+        )
+
+    if kind == "ui.workspace.delete":
+        args = _coerce_args_dict(request_id, request.get("args"))
+        if args.get("confirm") != "DELETE":
+            raise AppError(
+                "ui.workspace.delete requires confirm='DELETE'",
+                code="validation",
+                hint="Ask the user to type DELETE before deleting the workspace.",
+            )
+        return (
+            _with_request_id(
+                build_envelope(
+                    "ui.workspace.delete",
+                    _delete_current_workspace(ctx),
                 ),
                 request_id,
             ),
