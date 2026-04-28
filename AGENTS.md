@@ -70,6 +70,21 @@ Kassiber is currently in **dev mode**: renaming commands, breaking flags, and re
   `ai.chat.cancel` and `ai.tool_call.consent` take
   `args.target_request_id` so the control request keeps its own routing
   `request_id`; cancelled chats finish with `finish_reason: "cancelled"`.
+- In-app AI read tools are explicit daemon kinds, not generic CLI or daemon
+  dispatch. Current read-only AI kinds are `status`,
+  `ui.overview.snapshot`, `ui.transactions.list`, `ui.wallets.list`,
+  `ui.backends.list`, `ui.profiles.snapshot`, `ui.reports.capital_gains`,
+  `ui.journals.snapshot`, `ui.journals.quarantine`,
+  `ui.journals.transfers.list`, `ui.rates.summary`,
+  `ui.workspace.health`, `ui.next_actions`, and virtual
+  `read_skill_reference`. `read_skill_reference("index")` returns only the
+  compact in-app skill routing document; deeper references stay allowlisted.
+  `ui.transactions.list` supports bounded filters for `limit`, `direction`,
+  `asset`, `wallet`, `since`, `sort`, and `order`. `ui.backends.list` is
+  scoped to the active profile and exposes URL presence metadata, not exact
+  endpoint URLs. Do not expose raw shell, raw filesystem, arbitrary CLI
+  execution, descriptors, xpub material, secrets, env files, wallet config JSON,
+  or raw wallet files through AI tools.
 - Browser dev mode can exercise the real daemon over the Vite loopback bridge:
   `pnpm --dir ui-tauri run dev:bridge` serves the React app at
   `http://127.0.0.1:5173`, forwards invokes through `/__kassiber__/daemon`,

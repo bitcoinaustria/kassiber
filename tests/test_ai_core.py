@@ -130,13 +130,20 @@ class SseParserTest(unittest.TestCase):
 
 class ToolCatalogPromptTest(unittest.TestCase):
     def test_tool_catalog_stability(self):
-        read_only_names = {
+        expected_tool_names = {
             "status",
             "ui_overview_snapshot",
             "ui_transactions_list",
+            "ui_wallets_list",
+            "ui_backends_list",
             "ui_profiles_snapshot",
             "ui_reports_capital_gains",
             "ui_journals_snapshot",
+            "ui_journals_quarantine",
+            "ui_journals_transfers_list",
+            "ui_rates_summary",
+            "ui_workspace_health",
+            "ui_next_actions",
             "read_skill_reference",
             "ui_wallets_sync",
         }
@@ -145,10 +152,16 @@ class ToolCatalogPromptTest(unittest.TestCase):
             for tool in build_openai_tools()
             if tool.get("type") == "function"
         }
-        self.assertEqual(tool_names, read_only_names)
+        self.assertEqual(tool_names, expected_tool_names)
         for tool_name in tool_names:
             self.assertRegex(tool_name, r"^[A-Za-z0-9_-]{1,64}$")
         self.assertEqual(get_tool("ui_overview_snapshot").name, "ui.overview.snapshot")
+        self.assertEqual(get_tool("ui_workspace_health").name, "ui.workspace.health")
+        self.assertEqual(get_tool("ui_next_actions").kind_class, "read_only")
+        self.assertEqual(get_tool("ui_wallets_list").kind_class, "read_only")
+        self.assertEqual(get_tool("ui_backends_list").kind_class, "read_only")
+        self.assertEqual(get_tool("ui_journals_quarantine").kind_class, "read_only")
+        self.assertEqual(get_tool("ui_rates_summary").kind_class, "read_only")
         self.assertEqual(get_tool("ui_wallets_sync").name, "ui.wallets.sync")
         self.assertEqual(get_tool("ui.wallets.sync").kind_class, "mutating")
         self.assertIn("ui_wallets_sync", tool_names)
@@ -182,7 +195,13 @@ class ToolCatalogPromptTest(unittest.TestCase):
         self.assertEqual(summarize_tool_call(tool, {"wallet": "cold"}), "Sync wallet cold")
 
     def test_read_skill_reference_allowlist(self):
+        self.assertIn("index", SKILL_REFERENCE_NAMES)
         self.assertIn("wallets-backends", SKILL_REFERENCE_NAMES)
+        index = read_skill_reference("index")
+        self.assertEqual(index["name"], "index")
+        self.assertIn("Kassiber In-App Skill Index", index["content"])
+        self.assertIn("wallets-backends", index["content"])
+        self.assertNotIn("kassiber backends create my-esplora", index["content"])
         reference = read_skill_reference("wallets-backends")
         self.assertEqual(reference["name"], "wallets-backends")
         self.assertIn("Wallets and Backends", reference["content"])
@@ -197,8 +216,10 @@ class ToolCatalogPromptTest(unittest.TestCase):
         )
         self.assertEqual(messages[0]["role"], "system")
         self.assertIn("read_skill_reference", messages[0]["content"])
+        self.assertIn('name "index"', messages[0]["content"])
+        self.assertIn("journals must be reprocessed", messages[0]["content"])
         self.assertNotIn("kassiber backends create my-esplora", messages[0]["content"])
-        self.assertLess(len(DEFAULT_KASSIBER_SYSTEM_PROMPT), 1200)
+        self.assertLess(len(DEFAULT_KASSIBER_SYSTEM_PROMPT), 2000)
 
 
 class ToolCallAccumulatorTest(unittest.TestCase):

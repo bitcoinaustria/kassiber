@@ -17,9 +17,16 @@ const ALLOWED_BRIDGE_KINDS = new Set([
   "status",
   "ui.overview.snapshot",
   "ui.transactions.list",
+  "ui.wallets.list",
+  "ui.backends.list",
   "ui.profiles.snapshot",
   "ui.reports.capital_gains",
   "ui.journals.snapshot",
+  "ui.journals.quarantine",
+  "ui.journals.transfers.list",
+  "ui.rates.summary",
+  "ui.workspace.health",
+  "ui.next_actions",
   "ui.wallets.sync",
   // AI provider config and chat kinds. The bridge keeps one daemon process so
   // ai.chat, cancel, and consent all route through the same active registry.

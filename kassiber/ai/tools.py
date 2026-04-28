@@ -58,6 +58,7 @@ class ToolEntry:
 
 
 SKILL_REFERENCE_NAMES = (
+    "index",
     "command-templates",
     "journal-processing",
     "metadata",
@@ -108,12 +109,64 @@ TOOL_CATALOG: tuple[ToolEntry, ...] = (
                     "maximum": 500,
                     "description": "Maximum number of transactions to return.",
                 },
+                "direction": {
+                    "type": "string",
+                    "enum": ["inbound", "outbound"],
+                    "description": "Optional transaction direction filter.",
+                },
+                "asset": {
+                    "type": "string",
+                    "description": "Optional asset code filter, for example BTC or LBTC.",
+                },
+                "wallet": {
+                    "type": "string",
+                    "description": "Optional wallet id or label filter.",
+                },
+                "since": {
+                    "type": "string",
+                    "description": "Optional RFC3339 lower bound on occurred_at.",
+                },
+                "sort": {
+                    "type": "string",
+                    "enum": ["occurred-at", "amount", "fiat-value", "fee"],
+                    "description": "Sort column applied before the limit.",
+                },
+                "order": {
+                    "type": "string",
+                    "enum": ["asc", "desc"],
+                    "description": "Sort direction.",
+                },
             },
         },
         kind_class="read_only",
         wire_name="ui_transactions_list",
         daemon_kind="ui.transactions.list",
         summary_template="Read recent transactions",
+    ),
+    ToolEntry(
+        name="ui.wallets.list",
+        description=(
+            "Read configured wallets, labels, kinds, safe backend names/kinds, "
+            "and transaction/sync status without descriptors or wallet config JSON."
+        ),
+        parameters=_EMPTY_OBJECT_SCHEMA,
+        kind_class="read_only",
+        wire_name="ui_wallets_list",
+        daemon_kind="ui.wallets.list",
+        summary_template="Read wallets",
+    ),
+    ToolEntry(
+        name="ui.backends.list",
+        description=(
+            "Read sync backends referenced by the active profile with coarse URL "
+            "and credential presence flags; never returns exact URLs, tokens, "
+            "cookies, auth headers, or config JSON."
+        ),
+        parameters=_EMPTY_OBJECT_SCHEMA,
+        kind_class="read_only",
+        wire_name="ui_backends_list",
+        daemon_kind="ui.backends.list",
+        summary_template="Read backends",
     ),
     ToolEntry(
         name="ui.profiles.snapshot",
@@ -141,6 +194,82 @@ TOOL_CATALOG: tuple[ToolEntry, ...] = (
         wire_name="ui_journals_snapshot",
         daemon_kind="ui.journals.snapshot",
         summary_template="Read journals snapshot",
+    ),
+    ToolEntry(
+        name="ui.journals.quarantine",
+        description="Read quarantine counts and a bounded recent list of quarantined transactions.",
+        parameters={
+            "type": "object",
+            "additionalProperties": False,
+            "properties": {
+                "limit": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 100,
+                    "description": "Maximum quarantined items to return.",
+                },
+            },
+        },
+        kind_class="read_only",
+        wire_name="ui_journals_quarantine",
+        daemon_kind="ui.journals.quarantine",
+        summary_template="Read journal quarantine",
+    ),
+    ToolEntry(
+        name="ui.journals.transfers.list",
+        description=(
+            "Read bounded transfer-pair audit data and transfer entry counts "
+            "without changing journal state."
+        ),
+        parameters={
+            "type": "object",
+            "additionalProperties": False,
+            "properties": {
+                "limit": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 100,
+                    "description": "Maximum transfer pairs to return.",
+                },
+            },
+        },
+        kind_class="read_only",
+        wire_name="ui_journals_transfers_list",
+        daemon_kind="ui.journals.transfers.list",
+        summary_template="Read transfer audit",
+    ),
+    ToolEntry(
+        name="ui.rates.summary",
+        description="Read cached rate pairs and latest local rate metadata; does not sync the network.",
+        parameters=_EMPTY_OBJECT_SCHEMA,
+        kind_class="read_only",
+        wire_name="ui_rates_summary",
+        daemon_kind="ui.rates.summary",
+        summary_template="Read rates summary",
+    ),
+    ToolEntry(
+        name="ui.workspace.health",
+        description=(
+            "Read active workspace/profile health: wallet and transaction counts, "
+            "journal freshness, quarantine count, and report-readiness hints."
+        ),
+        parameters=_EMPTY_OBJECT_SCHEMA,
+        kind_class="read_only",
+        wire_name="ui_workspace_health",
+        daemon_kind="ui.workspace.health",
+        summary_template="Read workspace health",
+    ),
+    ToolEntry(
+        name="ui.next_actions",
+        description=(
+            "Read structured recommended next actions for the active workspace. "
+            "This only advises; it never runs the actions."
+        ),
+        parameters=_EMPTY_OBJECT_SCHEMA,
+        kind_class="read_only",
+        wire_name="ui_next_actions",
+        daemon_kind="ui.next_actions",
+        summary_template="Read next actions",
     ),
     ToolEntry(
         name="read_skill_reference",
@@ -229,6 +358,36 @@ def summarize_tool_call(tool: ToolEntry, arguments: dict[str, Any]) -> str:
     return tool.summary_template or tool.name
 
 
+SKILL_REFERENCE_INDEX = """# Kassiber In-App Skill Index
+
+Use this compact index to choose an allowlisted deeper reference. Do not ask
+users to paste secrets, wallet files, descriptors, xpub material, tokens, auth
+headers, cookies, or raw config JSON into chat.
+
+Core workflow: create/select workspace and profile -> configure backend and
+wallet -> sync or import transactions -> add metadata/tags/notes/exclusions ->
+process journals -> review quarantine and transfer/swap pairs -> run reports ->
+export or back up.
+
+Before answering workspace-specific questions, use safe read tools such as
+ui.workspace.health, ui.next_actions, ui.wallets.list, ui.backends.list,
+ui.transactions.list, ui.journals.quarantine, ui.journals.transfers.list,
+ui.rates.summary, and report snapshots. Do not invent calculations when
+Kassiber can read program-derived output.
+
+Read command-templates for exact CLI command shapes and common fast paths.
+Read onboarding for first-run setup, data roots, and context selection.
+Read wallets-backends for wallet kinds, backend selection, live sync, and
+imports. Read journal-processing for processing order, stale journals,
+quarantines, and transfer/swap pairing. Read metadata for notes, tags,
+exclusions, BIP329 labels, and attachments. Read reports for summary,
+portfolio, capital gains, balance history, Austrian handoff, and exports.
+Read verification for quick state checks and smoke validation. Read
+troubleshooting for common errors and path confusion. Read secrets-and-backup
+for SQLCipher, passphrase/fd handling, credential migration, and backups.
+"""
+
+
 def skill_reference_root() -> Path:
     return Path(__file__).resolve().parents[2] / "skills" / "kassiber" / "references"
 
@@ -241,6 +400,8 @@ def read_skill_reference(name: str, *, root: Path | None = None) -> dict[str, st
             details={"name": name, "allowed": list(SKILL_REFERENCE_NAMES)},
             retryable=False,
         )
+    if name == "index":
+        return {"name": name, "content": SKILL_REFERENCE_INDEX}
     reference_root = root or skill_reference_root()
     path = reference_root / f"{name}.md"
     try:
