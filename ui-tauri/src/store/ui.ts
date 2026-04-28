@@ -29,6 +29,9 @@ export interface AppNotification {
  * handoff, which is still on the live-actions backlog (see TODO.md). Until
  * that ships, `encrypted: true` does NOT mean the database is encrypted on
  * disk — it means the user opted in.
+ *
+ * `aiSetupMode` records welcome-flow intent only. In particular,
+ * `aiSetupMode: "disabled"` does not yet hide or disable the assistant dock.
  */
 export interface Identity {
   name: string;
@@ -63,6 +66,10 @@ export interface Identity {
     | "custom";
   backendName?: string;
   backendUrl?: string;
+  aiSetupMode?: "local" | "remote" | "disabled";
+  aiProviderKind?: "local" | "remote" | "tee";
+  aiProviderName?: string;
+  aiBaseUrl?: string;
 }
 
 interface UiState {

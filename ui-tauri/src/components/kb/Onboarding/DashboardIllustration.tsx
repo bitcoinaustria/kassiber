@@ -119,7 +119,7 @@ export const DashboardIllustration = ({
             ))}
           </div>
 
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-4 gap-3">
             {[
               [
                 "Endpoint",
@@ -134,6 +134,14 @@ export const DashboardIllustration = ({
                 form.backendSetupMode === "skip" ? "manual import" : "enabled",
               ],
               ["Secrets", "encrypted path"],
+              [
+                "Assistant",
+                form.aiSetupMode === "disabled"
+                  ? "disabled"
+                  : form.aiSetupMode === "remote"
+                    ? "remote/TEE"
+                    : "local",
+              ],
             ].map(([label, value]) => (
               <div key={label} className="rounded-lg border border-line p-3">
                 <div className="font-mono text-[10px] uppercase tracking-[0.12em] text-ink-3">

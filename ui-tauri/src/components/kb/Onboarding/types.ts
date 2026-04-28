@@ -15,6 +15,8 @@ export type GainsAlgorithm = GenericGainsAlgorithm | AustrianGainsAlgorithm;
 
 export type DatabaseMode = "sqlcipher" | "plaintext";
 export type BackendSetupMode = "default" | "custom" | "skip";
+export type AiSetupMode = "local" | "remote" | "disabled";
+export type AiProviderKind = "local" | "remote" | "tee";
 export type BackendKind =
   | "esplora"
   | "electrum"
@@ -40,6 +42,11 @@ export interface OnboardingForm {
   backendName: string;
   backendUrl: string;
   skipBackendsAcknowledged: boolean;
+  aiSetupMode: AiSetupMode;
+  aiProviderKind: AiProviderKind;
+  aiProviderName: string;
+  aiBaseUrl: string;
+  aiRemoteAcknowledged: boolean;
 }
 
 export interface StepComponentProps {

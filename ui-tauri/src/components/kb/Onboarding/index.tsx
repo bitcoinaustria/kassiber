@@ -7,10 +7,13 @@ import { cn } from "@/lib/utils";
 import { useUiStore, type Identity } from "@/store/ui";
 
 import {
+  DEFAULT_AI_BASE_URL,
+  DEFAULT_AI_PROVIDER_NAME,
   DEFAULT_FORM,
   GAINS_ALGORITHM_DEFAULTS,
   gainsAlgorithmsFor,
 } from "./constants";
+import { AiStep } from "./steps/AiStep";
 import { ConnectionsStep } from "./steps/ConnectionsStep";
 import { DatabaseStep } from "./steps/DatabaseStep";
 import { IdentityStep } from "./steps/IdentityStep";
@@ -43,6 +46,19 @@ const DEFAULT_STEPS: OnboardingStep[] = [
       }
       if (form.backendSetupMode === "custom") {
         return Boolean(form.backendName.trim() && form.backendUrl.trim());
+      }
+      return true;
+    },
+  },
+  {
+    component: AiStep,
+    isComplete: (form) => {
+      if (form.aiSetupMode === "remote") {
+        return Boolean(
+          form.aiProviderName.trim() &&
+            form.aiBaseUrl.trim() &&
+            form.aiRemoteAcknowledged,
+        );
       }
       return true;
     },
@@ -109,6 +125,17 @@ export const Onboarding = ({ className, steps: customSteps }: OnboardingProps) =
         form.backendSetupMode === "custom"
           ? form.backendUrl.trim()
           : undefined,
+      aiSetupMode: form.aiSetupMode,
+      aiProviderKind:
+        form.aiSetupMode === "disabled" ? undefined : form.aiProviderKind,
+      aiProviderName:
+        form.aiSetupMode === "disabled"
+          ? undefined
+          : form.aiProviderName.trim() || DEFAULT_AI_PROVIDER_NAME,
+      aiBaseUrl:
+        form.aiSetupMode === "disabled"
+          ? undefined
+          : form.aiBaseUrl.trim() || DEFAULT_AI_BASE_URL,
     };
     setIdentity(identity);
     void navigate({ to: "/overview" });

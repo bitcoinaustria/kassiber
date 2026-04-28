@@ -1,4 +1,5 @@
 import type {
+  AiProviderKind,
   AustrianGainsAlgorithm,
   BackendKind,
   BackendPreviewRow,
@@ -11,6 +12,8 @@ import type {
 
 export const DEFAULT_BACKEND_NAME = "mempool";
 export const DEFAULT_BACKEND_URL = "https://mempool.bitcoin-austria.at/api";
+export const DEFAULT_AI_PROVIDER_NAME = "ollama";
+export const DEFAULT_AI_BASE_URL = "http://localhost:11434/v1";
 
 export const DEFAULT_FORM: OnboardingForm = {
   name: "",
@@ -29,6 +32,11 @@ export const DEFAULT_FORM: OnboardingForm = {
   backendName: DEFAULT_BACKEND_NAME,
   backendUrl: DEFAULT_BACKEND_URL,
   skipBackendsAcknowledged: false,
+  aiSetupMode: "local",
+  aiProviderKind: "local",
+  aiProviderName: DEFAULT_AI_PROVIDER_NAME,
+  aiBaseUrl: DEFAULT_AI_BASE_URL,
+  aiRemoteAcknowledged: false,
 };
 
 export const FIAT_CURRENCIES: FiatCurrency[] = ["EUR", "USD", "CHF", "GBP"];
@@ -81,6 +89,12 @@ export const PUBLIC_BACKEND_DEFAULTS: readonly BackendPreviewRow[] = [
   },
   { name: "liquid", kind: "Electrum", url: "ssl://les.bullbitcoin.com:995" },
 ];
+
+export const AI_PROVIDER_KIND_LABELS: Record<AiProviderKind, string> = {
+  local: "Local",
+  remote: "Remote",
+  tee: "TEE",
+};
 
 /**
  * Returns a user-facing validation hint for the long-term-days input,
