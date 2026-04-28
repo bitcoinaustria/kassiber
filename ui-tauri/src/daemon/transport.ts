@@ -117,7 +117,7 @@ const tauriDaemon: DaemonTransport = {
     // supervisor honors a String request_id when supplied, so we can
     // filter `daemon://stream` records as they arrive instead of
     // buffering them until the terminal envelope returns.
-  const requestId = req.request_id ?? makeDaemonRequestId();
+    const requestId = req.request_id ?? makeDaemonRequestId();
 
     const unlisten = await listen<DaemonStreamRecord<R>>(
       "daemon://stream",

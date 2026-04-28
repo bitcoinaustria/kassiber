@@ -11,6 +11,7 @@ import * as React from "react";
 
 import Ai02 from "@/components/ai-02";
 import { ChatThread } from "@/components/ai/ChatThread";
+import { ToolConsentDialog } from "@/components/ai/ToolConsentDialog";
 import { useAiChatStream } from "@/daemon/stream";
 import { cn } from "@/lib/utils";
 
@@ -29,7 +30,15 @@ export function ScreenAssistantMockup({
   >(null);
   const [toolsEnabled, setToolsEnabled] = React.useState(true);
 
-  const { messages, isStreaming, send, abort, error } = useAiChatStream();
+  const {
+    messages,
+    isStreaming,
+    send,
+    abort,
+    error,
+    pendingConsent,
+    sendConsent,
+  } = useAiChatStream();
 
   const compact = collapsed && !isInteracting && messages.length === 0;
   const hasThread = messages.length > 0;
@@ -98,6 +107,10 @@ export function ScreenAssistantMockup({
           isStreaming={isStreaming}
           toolsEnabled={toolsEnabled}
           onToolsEnabledChange={setToolsEnabled}
+        />
+        <ToolConsentDialog
+          request={pendingConsent}
+          onDecision={sendConsent}
         />
       </div>
     </section>

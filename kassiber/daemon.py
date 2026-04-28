@@ -33,7 +33,12 @@ from .ai.providers import (
     list_with_default as list_ai_providers_with_default,
     normalize_base_url,
 )
-from .ai.tools import get_tool, read_skill_reference
+from .ai.tools import (
+    get_tool,
+    read_skill_reference,
+    redact_tool_arguments,
+    summarize_tool_call,
+)
 from .cli.handlers import sync_wallet
 from .core import accounts as core_accounts
 from .core import wallets as core_wallets
@@ -46,7 +51,7 @@ from .core.ui_snapshot import (
     build_profiles_snapshot,
     build_transactions_snapshot,
 )
-from .db import resolve_database_path, resolve_effective_data_root
+from .db import open_db, resolve_database_path, resolve_effective_data_root
 from .envelope import build_envelope, build_error_envelope, json_ready
 from .errors import AppError
 from .secrets.sqlcipher import looks_like_plaintext_sqlite, open_encrypted, sqlcipher_available
@@ -74,50 +79,109 @@ SUPPORTED_KINDS = (
     "ai.test_connection",
     "ai.chat",
     "ai.chat.cancel",
+    "ai.tool_call.consent",
     "wallets.reveal_descriptor",
     "backends.reveal_token",
     "daemon.shutdown",
 )
 PENDING_AI_CANCEL_TTL_SECONDS = 30.0
 MAX_PENDING_AI_CANCELS = 128
+AI_TOOL_CONSENT_TIMEOUT_SECONDS = 300.0
+
+
+class AiToolConsentState:
+    """Per-chat consent queue for mutating AI tool calls."""
+
+    def __init__(self) -> None:
+        self._condition = threading.Condition()
+        self._decisions: dict[str, str] = {}
+        self._allow_session: set[str] = set()
+
+    def record(self, call_id: str, decision: str) -> None:
+        with self._condition:
+            self._decisions[call_id] = decision
+            self._condition.notify_all()
+
+    def notify_cancelled(self) -> None:
+        with self._condition:
+            self._condition.notify_all()
+
+    def has_session_allow(self, tool_name: str) -> bool:
+        with self._condition:
+            return tool_name in self._allow_session
+
+    def wait(
+        self,
+        *,
+        call_id: str,
+        tool_name: str,
+        cancel_event: threading.Event,
+        timeout: float,
+    ) -> str:
+        deadline = time.monotonic() + timeout
+        with self._condition:
+            if tool_name in self._allow_session:
+                return "allow_session"
+            while True:
+                if cancel_event.is_set():
+                    return "cancelled"
+                decision = self._decisions.pop(call_id, None)
+                if decision is not None:
+                    if decision == "allow_session":
+                        self._allow_session.add(tool_name)
+                    return decision
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    return "consent_timeout"
+                self._condition.wait(min(0.25, remaining))
+
+
+@dataclass(frozen=True)
+class ActiveAiChat:
+    cancel_event: threading.Event
+    consent: AiToolConsentState
 
 
 class ActiveAiChats:
-    """In-memory registry for cooperative `ai.chat.cancel` requests."""
+    """In-memory registry for cooperative AI chat controls."""
 
     def __init__(self) -> None:
         self._lock = threading.Lock()
-        self._events: dict[str, threading.Event] = {}
+        self._chats: dict[str, ActiveAiChat] = {}
         self._pending_cancel_deadlines: dict[str, float] = {}
 
-    def register(self, request_id: object) -> tuple[str | None, threading.Event]:
-        event = threading.Event()
+    def register(self, request_id: object) -> tuple[str | None, ActiveAiChat]:
+        chat = ActiveAiChat(
+            cancel_event=threading.Event(),
+            consent=AiToolConsentState(),
+        )
         key = _request_id_registry_key(request_id)
         if key is None:
-            return None, event
+            return None, chat
         now = time.monotonic()
         with self._lock:
             self._prune_pending_locked(now)
             deadline = self._pending_cancel_deadlines.pop(key, None)
             if deadline is not None and deadline >= now:
-                event.set()
-            self._events[key] = event
-        return key, event
+                chat.cancel_event.set()
+            self._chats[key] = chat
+        return key, chat
 
-    def unregister(self, key: str | None, event: threading.Event) -> None:
+    def unregister(self, key: str | None, chat: ActiveAiChat) -> None:
         if key is None:
             return
         with self._lock:
-            if self._events.get(key) is event:
-                self._events.pop(key, None)
+            if self._chats.get(key) is chat:
+                self._chats.pop(key, None)
 
     def cancel(self, target_request_id: str) -> tuple[bool, bool]:
         now = time.monotonic()
         with self._lock:
             self._prune_pending_locked(now)
-            event = self._events.get(target_request_id)
-            if event is not None:
-                event.set()
+            chat = self._chats.get(target_request_id)
+            if chat is not None:
+                chat.cancel_event.set()
+                chat.consent.notify_cancelled()
                 return True, False
             self._pending_cancel_deadlines[target_request_id] = (
                 now + PENDING_AI_CANCEL_TTL_SECONDS
@@ -141,6 +205,14 @@ class ActiveAiChats:
                 key=lambda item: item[1],
             )[0]
             self._pending_cancel_deadlines.pop(oldest, None)
+
+    def record_consent(self, target_request_id: str, call_id: str, decision: str) -> bool:
+        with self._lock:
+            chat = self._chats.get(target_request_id)
+        if chat is None:
+            return False
+        chat.consent.record(call_id, decision)
+        return True
 
 
 @dataclass(frozen=True)
@@ -388,6 +460,67 @@ def _open_read_only_tool_connection(data_root: str) -> sqlite3.Connection:
     return conn
 
 
+def _coerce_wallets_sync_args(raw_args: dict[str, Any], *, strict: bool) -> dict[str, Any]:
+    if strict:
+        unknown = sorted(set(raw_args) - {"wallet", "all"})
+        if unknown:
+            raise AppError(
+                "ui.wallets.sync received unsupported arguments",
+                code="validation",
+                details={"unknown": unknown},
+                retryable=False,
+            )
+    wallet = raw_args.get("wallet")
+    if wallet is not None:
+        if not isinstance(wallet, str) or not wallet.strip():
+            raise AppError(
+                "ui.wallets.sync wallet must be a non-empty string",
+                code="validation",
+                details={"type": type(wallet).__name__},
+                retryable=False,
+            )
+        wallet = wallet.strip()
+    sync_all_raw = raw_args.get("all")
+    if sync_all_raw is not None and not isinstance(sync_all_raw, bool):
+        raise AppError(
+            "ui.wallets.sync all must be a boolean",
+            code="validation",
+            details={"type": type(sync_all_raw).__name__},
+            retryable=False,
+        )
+    sync_all = bool(sync_all_raw if sync_all_raw is not None else wallet is None)
+    if sync_all and wallet:
+        raise AppError(
+            "ui.wallets.sync wallet and all are mutually exclusive",
+            code="validation",
+            retryable=False,
+        )
+    return {"wallet": wallet, "all": sync_all}
+
+
+def _wallets_sync_payload(
+    conn: sqlite3.Connection,
+    runtime_config: dict[str, object],
+    raw_args: dict[str, Any],
+    *,
+    strict: bool,
+) -> dict[str, Any]:
+    args = _coerce_wallets_sync_args(raw_args, strict=strict)
+    context = current_context_snapshot(conn)
+    if not context["workspace_id"] or not context["profile_id"]:
+        return {"results": []}
+    return {
+        "results": sync_wallet(
+            conn,
+            runtime_config,
+            None,
+            None,
+            wallet_ref=args["wallet"],
+            sync_all=args["all"],
+        )
+    }
+
+
 def _parse_ai_tool_call(raw: dict[str, Any], index: int) -> ParsedAiToolCall:
     call_id = raw.get("id")
     if not isinstance(call_id, str) or not call_id:
@@ -502,6 +635,41 @@ def _execute_read_only_ai_tool(call: ParsedAiToolCall, runtime: AiToolRuntime) -
         )
 
 
+def _execute_mutating_ai_tool(call: ParsedAiToolCall, runtime: AiToolRuntime) -> dict[str, Any]:
+    if call.argument_error:
+        return _tool_result_denied(call.argument_error)
+    entry = get_tool(call.name)
+    if entry is None or entry.kind_class != "mutating":
+        return _tool_result_denied("tool_not_allowed")
+    try:
+        if entry.daemon_kind != "ui.wallets.sync":
+            return _tool_result_denied("tool_not_allowed")
+        args = _coerce_wallets_sync_args(call.arguments, strict=True)
+        conn = open_db(runtime.data_root)
+        try:
+            payload = _wallets_sync_payload(
+                conn,
+                runtime.runtime_config,
+                args,
+                strict=True,
+            )
+        finally:
+            conn.close()
+        return {"ok": True, "envelope": build_envelope(entry.daemon_kind, payload)}
+    except AppError as exc:
+        return _tool_result_denied(
+            exc.code or "tool_error",
+            message=str(exc),
+        )
+    except Exception as exc:
+        traceback.print_exc(file=sys.stderr)
+        sys.stderr.flush()
+        return _tool_result_denied(
+            "tool_error",
+            message=str(exc) or exc.__class__.__name__,
+        )
+
+
 def _tool_result_content_for_model(result: dict[str, Any]) -> str:
     return json.dumps(json_ready(result), sort_keys=True, separators=(",", ":"))
 
@@ -585,9 +753,10 @@ def _run_ai_chat_tool_loop(
     provider_snapshot: dict[str, Any],
     validated: dict[str, Any],
     out: _OutputChannel,
-    cancel_event: threading.Event,
+    active_chat: ActiveAiChat,
     runtime: AiToolRuntime,
 ) -> None:
+    cancel_event = active_chat.cancel_event
     messages = build_chat_messages(
         validated["messages"],
         system_prompt_kind=validated["system_prompt_kind"],
@@ -628,6 +797,18 @@ def _run_ai_chat_tool_loop(
             entry = get_tool(call.name)
             kind_class = entry.kind_class if entry is not None else "unknown"
             display_name = entry.name if entry is not None else call.name
+            tool_session_name = entry.name if entry is not None else call.name
+            preview_arguments = (
+                redact_tool_arguments(call.arguments)
+                if kind_class != "read_only"
+                else call.arguments
+            )
+            needs_consent = (
+                entry is not None
+                and entry.kind_class == "mutating"
+                and not call.argument_error
+                and not active_chat.consent.has_session_allow(tool_session_name)
+            )
             out.write(
                 _with_request_id(
                     build_envelope(
@@ -635,9 +816,9 @@ def _run_ai_chat_tool_loop(
                         {
                             "call_id": call.call_id,
                             "name": display_name,
-                            "arguments": call.arguments,
+                            "arguments": preview_arguments,
                             "kind_class": kind_class,
-                            "needs_consent": False,
+                            "needs_consent": needs_consent,
                         },
                     ),
                     request_id,
@@ -646,7 +827,54 @@ def _run_ai_chat_tool_loop(
             if cancel_event.is_set():
                 finish_reason = "cancelled"
                 break
-            result = _execute_read_only_ai_tool(call, runtime)
+            if entry is not None and entry.kind_class == "mutating" and not call.argument_error:
+                if needs_consent:
+                    out.write(
+                        _with_request_id(
+                            build_envelope(
+                                "ai.chat.tool_consent_required",
+                                {
+                                    "call_id": call.call_id,
+                                    "name": display_name,
+                                    "summary": summarize_tool_call(entry, call.arguments),
+                                    "arguments_preview": preview_arguments,
+                                },
+                            ),
+                            request_id,
+                        )
+                    )
+                decision = active_chat.consent.wait(
+                    call_id=call.call_id,
+                    tool_name=tool_session_name,
+                    cancel_event=cancel_event,
+                    timeout=AI_TOOL_CONSENT_TIMEOUT_SECONDS,
+                )
+                if decision == "cancelled" or cancel_event.is_set():
+                    finish_reason = "cancelled"
+                    break
+                if decision == "deny":
+                    result = _tool_result_denied("user_denied")
+                elif decision == "consent_timeout":
+                    result = _tool_result_denied("consent_timeout")
+                else:
+                    out.write(
+                        _with_request_id(
+                            build_envelope(
+                                "ai.chat.tool_call",
+                                {
+                                    "call_id": call.call_id,
+                                    "name": display_name,
+                                    "arguments": preview_arguments,
+                                    "kind_class": kind_class,
+                                    "needs_consent": False,
+                                },
+                            ),
+                            request_id,
+                        )
+                    )
+                    result = _execute_mutating_ai_tool(call, runtime)
+            else:
+                result = _execute_read_only_ai_tool(call, runtime)
             out.write(
                 _with_request_id(
                     build_envelope(
@@ -681,12 +909,13 @@ def _run_ai_chat_stream(
     provider_snapshot: dict[str, Any],
     validated: dict[str, Any],
     out: _OutputChannel,
-    cancel_event: threading.Event,
+    active_chat: ActiveAiChat,
     active_ai_chats: ActiveAiChats,
     registry_key: str | None,
     runtime: AiToolRuntime,
 ) -> None:
     """Thread target — streams AI records and a terminal `ai.chat`."""
+    cancel_event = active_chat.cancel_event
     try:
         finish_reason = None
         if not cancel_event.is_set():
@@ -701,7 +930,7 @@ def _run_ai_chat_stream(
                     provider_snapshot,
                     validated,
                     out,
-                    cancel_event,
+                    active_chat,
                     runtime,
                 )
                 return
@@ -756,7 +985,7 @@ def _run_ai_chat_stream(
             )
         )
     finally:
-        active_ai_chats.unregister(registry_key, cancel_event)
+        active_ai_chats.unregister(registry_key, active_chat)
 
 
 def _ai_provider_redacted(ctx: DaemonContext, provider: dict) -> dict:
@@ -911,43 +1140,16 @@ def handle_request(
                 ),
                 False,
             )
-        raw_args = args or {}
-        wallet = raw_args.get("wallet")
-        sync_all = bool(raw_args.get("all", wallet is None))
-        if wallet is not None and not isinstance(wallet, str):
-            return (
-                _error_envelope(
-                    "validation",
-                    "ui.wallets.sync wallet must be a string",
-                    request_id=request_id,
-                    details={"type": type(wallet).__name__},
-                    retryable=False,
-                ),
-                False,
-            )
-        context = current_context_snapshot(ctx.conn)
-        if not context["workspace_id"] or not context["profile_id"]:
-            return (
-                _with_request_id(
-                    build_envelope("ui.wallets.sync", {"results": []}),
-                    request_id,
-                ),
-                False,
-            )
         return (
             _with_request_id(
                 build_envelope(
                     "ui.wallets.sync",
-                    {
-                        "results": sync_wallet(
-                            ctx.conn,
-                            ctx.runtime_config,
-                            None,
-                            None,
-                            wallet_ref=wallet,
-                            sync_all=sync_all,
-                        )
-                    },
+                    _wallets_sync_payload(
+                        ctx.conn,
+                        ctx.runtime_config,
+                        args or {},
+                        strict=False,
+                    ),
                 ),
                 request_id,
             ),
@@ -1189,6 +1391,44 @@ def handle_request(
             False,
         )
 
+    if kind == "ai.tool_call.consent":
+        args = _coerce_args_dict(request_id, request.get("args"))
+        target_request_id = args.get("target_request_id")
+        call_id = args.get("call_id")
+        decision = args.get("decision")
+        if not isinstance(target_request_id, str) or not target_request_id:
+            raise AppError(
+                "ai.tool_call.consent requires target_request_id",
+                code="validation",
+                hint="Pass {target_request_id: '<active ai.chat request_id>'}.",
+            )
+        if not isinstance(call_id, str) or not call_id:
+            raise AppError(
+                "ai.tool_call.consent requires call_id",
+                code="validation",
+            )
+        if decision not in ("allow_once", "allow_session", "deny"):
+            raise AppError(
+                "ai.tool_call.consent decision must be allow_once, allow_session, or deny",
+                code="validation",
+                details={"decision": decision},
+            )
+        recorded = ctx.active_ai_chats.record_consent(
+            target_request_id,
+            call_id,
+            decision,
+        )
+        payload: dict[str, Any] = {"recorded": recorded}
+        if not recorded:
+            payload["reason"] = "not_found"
+        return (
+            _with_request_id(
+                build_envelope("ai.tool_call.consent", payload),
+                request_id,
+            ),
+            False,
+        )
+
     if kind == "ai.chat":
         # Validate eagerly so syntax errors surface synchronously.
         validated = _ai_chat_args(_coerce_args_dict(request_id, request.get("args")))
@@ -1207,7 +1447,7 @@ def handle_request(
             data_root=ctx.data_root,
             runtime_config=dict(ctx.runtime_config),
         )
-        registry_key, cancel_event = ctx.active_ai_chats.register(request_id)
+        registry_key, active_chat = ctx.active_ai_chats.register(request_id)
         thread = threading.Thread(
             target=_run_ai_chat_stream,
             args=(
@@ -1215,7 +1455,7 @@ def handle_request(
                 provider_snapshot,
                 validated,
                 out,
-                cancel_event,
+                active_chat,
                 ctx.active_ai_chats,
                 registry_key,
                 runtime,

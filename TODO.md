@@ -242,7 +242,7 @@ and [docs/plan/04-desktop-ui.md](docs/plan/04-desktop-ui.md).
   assistant's tool surface, seed the system prompt from compact
   `skills/kassiber/` guidance, add tool cards, and start with a bounded
   read-only-by-default tool loop.
-- [ ] AI mutating tool consent (PR 4): require explicit per-call/session
+- [x] AI mutating tool consent (PR 4): require explicit per-call/session
   approval before executing mutating tools such as wallet sync.
 - [ ] Daemon worker pool: replace the surgical `ai.chat` thread with a real
   worker-pool model and one SQLite connection per worker when read-only tools

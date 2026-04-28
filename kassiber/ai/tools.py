@@ -11,6 +11,21 @@ from ..errors import AppError
 
 ToolKindClass = Literal["read_only", "mutating"]
 
+SENSITIVE_ARGUMENT_KEY_PARTS = (
+    "api_key",
+    "auth",
+    "blinding",
+    "config_json",
+    "cookie",
+    "descriptor",
+    "header",
+    "password",
+    "passphrase",
+    "private",
+    "secret",
+    "token",
+)
+
 
 @dataclass(frozen=True)
 class ToolEntry:
@@ -145,7 +160,10 @@ TOOL_CATALOG: tuple[ToolEntry, ...] = (
     ),
     ToolEntry(
         name="ui.wallets.sync",
-        description="Sync configured wallets. Declared for future consent flow; blocked in this PR.",
+        description=(
+            "Sync configured wallets after the user explicitly allows this "
+            "mutating action."
+        ),
         parameters={
             "type": "object",
             "additionalProperties": False,
@@ -177,6 +195,33 @@ def openai_tool_definitions(*, include_mutating: bool = False) -> list[dict[str,
         for tool in TOOL_CATALOG
         if include_mutating or tool.kind_class == "read_only"
     ]
+
+
+def redact_tool_arguments(value: Any) -> Any:
+    """Return a UI-safe preview of model-supplied tool arguments."""
+    if isinstance(value, dict):
+        redacted: dict[str, Any] = {}
+        for key, item in value.items():
+            key_text = str(key)
+            lowered = key_text.lower()
+            if any(part in lowered for part in SENSITIVE_ARGUMENT_KEY_PARTS):
+                redacted[key_text] = "<redacted>"
+            else:
+                redacted[key_text] = redact_tool_arguments(item)
+        return redacted
+    if isinstance(value, list):
+        return [redact_tool_arguments(item) for item in value]
+    return value
+
+
+def summarize_tool_call(tool: ToolEntry, arguments: dict[str, Any]) -> str:
+    """Build a short, non-secret consent summary for an allowlisted tool."""
+    if tool.name == "ui.wallets.sync":
+        wallet = arguments.get("wallet")
+        if isinstance(wallet, str) and wallet.strip():
+            return f"Sync wallet {wallet.strip()}"
+        return "Sync all wallets"
+    return tool.summary_template or tool.name
 
 
 def skill_reference_root() -> Path:

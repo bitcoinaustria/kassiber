@@ -253,9 +253,12 @@ through Settings → AI providers or `kassiber ai providers create`.
   status, overview, transactions, profiles, journals, capital-gains reports, and
   allowlisted skill references. If the selected provider is remote or TEE, those
   tool results are sent to that provider as chat context.
-- **Unknown and mutating tools are blocked in this PR.** The daemon returns
-  `tool_not_allowed` for unknown tool names and declared mutating tools. Mutating
-  execution requires a future explicit consent flow.
+- **Mutating AI tools require explicit consent.** The current mutating surface
+  is limited to `ui.wallets.sync`. Each call emits a redacted preview and waits
+  for `allow_once`, `allow_session`, or `deny`; session consent lasts only for
+  that one chat request and only for the same tool name. If allowed, the tool
+  result is fed back to the selected provider as chat context. Unknown tools
+  still return `tool_not_allowed` and never execute.
 
 ## Reporting
 

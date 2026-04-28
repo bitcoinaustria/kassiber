@@ -21,7 +21,9 @@ ask for API keys, wallet descriptors, private blinding keys, auth headers, or
 database passphrases. If detailed workflow guidance is needed, call
 read_skill_reference for one allowlisted reference instead of relying on memory.
 
-This build exposes only read-only tools. Unknown or mutating tool calls are blocked.
+Read-only tools may run automatically. Mutating tools, currently limited to
+wallet sync, require explicit user consent before execution. Unknown tools are
+blocked.
 """
 
 
@@ -64,4 +66,4 @@ def build_chat_messages(
 
 
 def build_openai_tools() -> list[dict[str, Any]]:
-    return openai_tool_definitions(include_mutating=False)
+    return openai_tool_definitions(include_mutating=True)

@@ -217,6 +217,7 @@ class DaemonSmokeTest(unittest.TestCase):
             self.assertIn("ai.test_connection", ready["data"]["supported_kinds"])
             self.assertIn("ai.chat", ready["data"]["supported_kinds"])
             self.assertIn("ai.chat.cancel", ready["data"]["supported_kinds"])
+            self.assertIn("ai.tool_call.consent", ready["data"]["supported_kinds"])
 
             _write_payload(proc, {"request_id": "status-1", "kind": "status"})
             status = _read_payload(proc)
@@ -550,6 +551,492 @@ class DaemonSmokeTest(unittest.TestCase):
             server.shutdown()
             server.server_close()
 
+    def test_ai_chat_mutating_tool_deny_continues_after_consent(self):
+        server = _start_tool_chat_server(
+            [
+                (_tool_call_message("ui_wallets_sync"), 0.0),
+                (
+                    _chat_completion_response(
+                        {"role": "assistant", "content": "Okay, I did not sync."},
+                    ),
+                    0.0,
+                ),
+            ]
+        )
+        base_url = f"http://127.0.0.1:{server.server_port}/v1"
+        try:
+            with tempfile.TemporaryDirectory(prefix="kassiber-daemon-") as tmp:
+                proc = _start_daemon(Path(tmp) / "data")
+                self.assertEqual(_read_payload_timeout(proc)["kind"], "daemon.ready")
+                _write_payload(
+                    proc,
+                    {
+                        "request_id": "provider-1",
+                        "kind": "ai.providers.create",
+                        "args": {"name": "tool-local", "base_url": base_url, "kind": "local"},
+                    },
+                )
+                self.assertEqual(_read_payload_timeout(proc)["kind"], "ai.providers.create")
+                _write_payload(
+                    proc,
+                    {
+                        "request_id": "chat-mutating-deny",
+                        "kind": "ai.chat",
+                        "args": {
+                            "provider": "tool-local",
+                            "model": "test-model",
+                            "tools_enabled": True,
+                            "messages": [{"role": "user", "content": "Sync my wallets"}],
+                        },
+                    },
+                )
+
+                consent = None
+                records = []
+                deadline = time.time() + 5
+                while time.time() < deadline and consent is None:
+                    payload = _read_payload_timeout(proc, max(0.1, deadline - time.time()))
+                    if payload.get("request_id") != "chat-mutating-deny":
+                        continue
+                    records.append(payload)
+                    if payload.get("kind") == "ai.chat.tool_call":
+                        payload = _read_payload(proc)
+                        records.append(payload)
+                    if payload.get("kind") == "ai.chat.tool_consent_required":
+                        consent = payload
+
+                self.assertIsNotNone(consent)
+                self.assertEqual(consent["data"]["name"], "ui.wallets.sync")
+                with self.assertRaises(AssertionError):
+                    _read_payload_timeout(proc, 0.2)
+
+                _write_payload(
+                    proc,
+                    {
+                        "request_id": "consent-deny-1",
+                        "kind": "ai.tool_call.consent",
+                        "args": {
+                            "target_request_id": "chat-mutating-deny",
+                            "call_id": "call_1",
+                            "decision": "deny",
+                        },
+                    },
+                )
+                consent_response = None
+                result = None
+                terminal = None
+                deadline = time.time() + 5
+                while time.time() < deadline and terminal is None:
+                    payload = _read_payload_timeout(proc, max(0.1, deadline - time.time()))
+                    if payload.get("request_id") == "consent-deny-1":
+                        consent_response = payload
+                    if payload.get("request_id") != "chat-mutating-deny":
+                        continue
+                    if payload.get("kind") == "ai.chat.tool_call":
+                        payload = _read_payload(proc)
+                    if payload.get("kind") == "ai.chat.tool_result":
+                        result = payload
+                    if payload.get("kind") == "ai.chat.delta":
+                        payload = _read_payload(proc)
+                    if payload.get("kind") == "ai.chat":
+                        terminal = payload
+
+                self.assertIsNotNone(consent_response)
+                self.assertTrue(consent_response["data"]["recorded"])
+                self.assertIsNotNone(result)
+                self.assertFalse(result["data"]["ok"])
+                self.assertEqual(result["data"]["reason"], "user_denied")
+                self.assertIsNotNone(terminal)
+                self.assertEqual(len(server.requests), 2)  # type: ignore[attr-defined]
+                self.assertTrue(
+                    any(
+                        message.get("role") == "tool"
+                        and "user_denied" in message.get("content", "")
+                        for message in server.requests[1]["messages"]  # type: ignore[attr-defined]
+                    )
+                )
+
+                _write_payload(proc, {"request_id": "shutdown-1", "kind": "daemon.shutdown"})
+                self.assertEqual(_read_payload_timeout(proc)["kind"], "daemon.shutdown")
+                code, stderr = _close_daemon(proc)
+                self.assertEqual(code, 0, stderr)
+                self.assertEqual(stderr, "")
+        finally:
+            server.shutdown()
+            server.server_close()
+
+    def test_ai_chat_mutating_tool_allow_once_executes(self):
+        server = _start_tool_chat_server(
+            [
+                (_tool_call_message("ui_wallets_sync"), 0.0),
+                (
+                    _chat_completion_response(
+                        {"role": "assistant", "content": "Sync finished."},
+                    ),
+                    0.0,
+                ),
+            ]
+        )
+        base_url = f"http://127.0.0.1:{server.server_port}/v1"
+        try:
+            with tempfile.TemporaryDirectory(prefix="kassiber-daemon-") as tmp:
+                proc = _start_daemon(Path(tmp) / "data")
+                self.assertEqual(_read_payload_timeout(proc)["kind"], "daemon.ready")
+                _write_payload(
+                    proc,
+                    {
+                        "request_id": "provider-1",
+                        "kind": "ai.providers.create",
+                        "args": {"name": "tool-local", "base_url": base_url, "kind": "local"},
+                    },
+                )
+                self.assertEqual(_read_payload_timeout(proc)["kind"], "ai.providers.create")
+                _write_payload(
+                    proc,
+                    {
+                        "request_id": "chat-mutating-allow",
+                        "kind": "ai.chat",
+                        "args": {
+                            "provider": "tool-local",
+                            "model": "test-model",
+                            "tools_enabled": True,
+                            "messages": [{"role": "user", "content": "Sync my wallets"}],
+                        },
+                    },
+                )
+                while True:
+                    payload = _read_payload_timeout(proc)
+                    if (
+                        payload.get("request_id") == "chat-mutating-allow"
+                        and payload.get("kind") == "ai.chat.tool_call"
+                    ):
+                        payload = _read_payload(proc)
+                    if (
+                        payload.get("request_id") == "chat-mutating-allow"
+                        and payload.get("kind") == "ai.chat.tool_consent_required"
+                    ):
+                        break
+                _write_payload(
+                    proc,
+                    {
+                        "request_id": "consent-allow-1",
+                        "kind": "ai.tool_call.consent",
+                        "args": {
+                            "target_request_id": "chat-mutating-allow",
+                            "call_id": "call_1",
+                            "decision": "allow_once",
+                        },
+                    },
+                )
+                result = None
+                terminal = None
+                deadline = time.time() + 5
+                while time.time() < deadline and terminal is None:
+                    payload = _read_payload_timeout(proc, max(0.1, deadline - time.time()))
+                    if payload.get("request_id") != "chat-mutating-allow":
+                        continue
+                    if payload.get("kind") == "ai.chat.tool_call":
+                        payload = _read_payload(proc)
+                    if payload.get("kind") == "ai.chat.tool_result":
+                        result = payload
+                    if payload.get("kind") == "ai.chat.delta":
+                        payload = _read_payload(proc)
+                    if payload.get("kind") == "ai.chat":
+                        terminal = payload
+
+                self.assertIsNotNone(result)
+                self.assertTrue(result["data"]["ok"])
+                self.assertEqual(result["data"]["envelope"]["kind"], "ui.wallets.sync")
+                self.assertEqual(result["data"]["envelope"]["data"]["results"], [])
+                self.assertIsNotNone(terminal)
+
+                _write_payload(proc, {"request_id": "shutdown-1", "kind": "daemon.shutdown"})
+                self.assertEqual(_read_payload_timeout(proc)["kind"], "daemon.shutdown")
+                code, stderr = _close_daemon(proc)
+                self.assertEqual(code, 0, stderr)
+                self.assertEqual(stderr, "")
+        finally:
+            server.shutdown()
+            server.server_close()
+
+    def test_ai_chat_mutating_tool_allow_session_skips_second_prompt(self):
+        server = _start_tool_chat_server(
+            [
+                (_tool_call_message("ui_wallets_sync", call_id="call_1"), 0.0),
+                (_tool_call_message("ui_wallets_sync", call_id="call_2"), 0.0),
+                (
+                    _chat_completion_response(
+                        {"role": "assistant", "content": "Both sync calls finished."},
+                    ),
+                    0.0,
+                ),
+            ]
+        )
+        base_url = f"http://127.0.0.1:{server.server_port}/v1"
+        try:
+            with tempfile.TemporaryDirectory(prefix="kassiber-daemon-") as tmp:
+                proc = _start_daemon(Path(tmp) / "data")
+                self.assertEqual(_read_payload_timeout(proc)["kind"], "daemon.ready")
+                _write_payload(
+                    proc,
+                    {
+                        "request_id": "provider-1",
+                        "kind": "ai.providers.create",
+                        "args": {"name": "tool-local", "base_url": base_url, "kind": "local"},
+                    },
+                )
+                self.assertEqual(_read_payload_timeout(proc)["kind"], "ai.providers.create")
+                _write_payload(
+                    proc,
+                    {
+                        "request_id": "chat-mutating-session",
+                        "kind": "ai.chat",
+                        "args": {
+                            "provider": "tool-local",
+                            "model": "test-model",
+                            "tools_enabled": True,
+                            "messages": [{"role": "user", "content": "Sync twice"}],
+                        },
+                    },
+                )
+                while True:
+                    payload = _read_payload_timeout(proc)
+                    if (
+                        payload.get("request_id") == "chat-mutating-session"
+                        and payload.get("kind") == "ai.chat.tool_call"
+                    ):
+                        payload = _read_payload(proc)
+                    if (
+                        payload.get("request_id") == "chat-mutating-session"
+                        and payload.get("kind") == "ai.chat.tool_consent_required"
+                    ):
+                        break
+                _write_payload(
+                    proc,
+                    {
+                        "request_id": "consent-session-1",
+                        "kind": "ai.tool_call.consent",
+                        "args": {
+                            "target_request_id": "chat-mutating-session",
+                            "call_id": "call_1",
+                            "decision": "allow_session",
+                        },
+                    },
+                )
+                consent_required_count = 1
+                tool_result_count = 0
+                terminal = None
+                deadline = time.time() + 5
+                while time.time() < deadline and terminal is None:
+                    payload = _read_payload_timeout(proc, max(0.1, deadline - time.time()))
+                    if payload.get("request_id") != "chat-mutating-session":
+                        continue
+                    if payload.get("kind") == "ai.chat.tool_call":
+                        payload = _read_payload(proc)
+                    if payload.get("kind") == "ai.chat.tool_consent_required":
+                        consent_required_count += 1
+                    if payload.get("kind") == "ai.chat.tool_result":
+                        tool_result_count += 1
+                    if payload.get("kind") == "ai.chat.delta":
+                        payload = _read_payload(proc)
+                    if payload.get("kind") == "ai.chat":
+                        terminal = payload
+
+                self.assertIsNotNone(terminal)
+                self.assertEqual(consent_required_count, 1)
+                self.assertEqual(tool_result_count, 2)
+
+                _write_payload(proc, {"request_id": "shutdown-1", "kind": "daemon.shutdown"})
+                self.assertEqual(_read_payload_timeout(proc)["kind"], "daemon.shutdown")
+                code, stderr = _close_daemon(proc)
+                self.assertEqual(code, 0, stderr)
+                self.assertEqual(stderr, "")
+        finally:
+            server.shutdown()
+            server.server_close()
+
+    def test_ai_chat_cancel_while_waiting_for_tool_consent_finishes_cancelled(self):
+        server = _start_tool_chat_server(
+            [
+                (_tool_call_message("ui_wallets_sync"), 0.0),
+                (
+                    _chat_completion_response(
+                        {"role": "assistant", "content": "Should not happen."},
+                    ),
+                    0.0,
+                ),
+            ]
+        )
+        base_url = f"http://127.0.0.1:{server.server_port}/v1"
+        try:
+            with tempfile.TemporaryDirectory(prefix="kassiber-daemon-") as tmp:
+                proc = _start_daemon(Path(tmp) / "data")
+                self.assertEqual(_read_payload_timeout(proc)["kind"], "daemon.ready")
+                _write_payload(
+                    proc,
+                    {
+                        "request_id": "provider-1",
+                        "kind": "ai.providers.create",
+                        "args": {"name": "tool-local", "base_url": base_url, "kind": "local"},
+                    },
+                )
+                self.assertEqual(_read_payload_timeout(proc)["kind"], "ai.providers.create")
+                _write_payload(
+                    proc,
+                    {
+                        "request_id": "chat-mutating-cancel",
+                        "kind": "ai.chat",
+                        "args": {
+                            "provider": "tool-local",
+                            "model": "test-model",
+                            "tools_enabled": True,
+                            "messages": [{"role": "user", "content": "Sync my wallets"}],
+                        },
+                    },
+                )
+                while True:
+                    payload = _read_payload_timeout(proc)
+                    if (
+                        payload.get("request_id") == "chat-mutating-cancel"
+                        and payload.get("kind") == "ai.chat.tool_call"
+                    ):
+                        payload = _read_payload(proc)
+                    if (
+                        payload.get("request_id") == "chat-mutating-cancel"
+                        and payload.get("kind") == "ai.chat.tool_consent_required"
+                    ):
+                        break
+                _write_payload(
+                    proc,
+                    {
+                        "request_id": "cancel-consent-1",
+                        "kind": "ai.chat.cancel",
+                        "args": {"target_request_id": "chat-mutating-cancel"},
+                    },
+                )
+                cancel_response = None
+                terminal = None
+                deadline = time.time() + 5
+                while time.time() < deadline and (cancel_response is None or terminal is None):
+                    payload = _read_payload_timeout(proc, max(0.1, deadline - time.time()))
+                    if payload.get("request_id") == "cancel-consent-1":
+                        cancel_response = payload
+                    if (
+                        payload.get("request_id") == "chat-mutating-cancel"
+                        and payload.get("kind") == "ai.chat"
+                    ):
+                        terminal = payload
+
+                self.assertIsNotNone(cancel_response)
+                self.assertTrue(cancel_response["data"]["cancelled"])
+                self.assertIsNotNone(terminal)
+                self.assertEqual(terminal["data"]["finish_reason"], "cancelled")
+                self.assertEqual(len(server.requests), 1)  # type: ignore[attr-defined]
+
+                _write_payload(proc, {"request_id": "shutdown-1", "kind": "daemon.shutdown"})
+                self.assertEqual(_read_payload_timeout(proc)["kind"], "daemon.shutdown")
+                code, stderr = _close_daemon(proc)
+                self.assertEqual(code, 0, stderr)
+                self.assertEqual(stderr, "")
+        finally:
+            server.shutdown()
+            server.server_close()
+
+    def test_ai_chat_mutating_tool_consent_preview_redacts_secrets(self):
+        server = _start_tool_chat_server(
+            [
+                (
+                    _tool_call_message(
+                        "ui_wallets_sync",
+                        arguments=json.dumps(
+                            {
+                                "wallet": "cold",
+                                "descriptor": "wpkh(secret)",
+                                "config_json": {"token": "secret"},
+                            }
+                        ),
+                    ),
+                    0.0,
+                ),
+            ]
+        )
+        base_url = f"http://127.0.0.1:{server.server_port}/v1"
+        try:
+            with tempfile.TemporaryDirectory(prefix="kassiber-daemon-") as tmp:
+                proc = _start_daemon(Path(tmp) / "data")
+                self.assertEqual(_read_payload_timeout(proc)["kind"], "daemon.ready")
+                _write_payload(
+                    proc,
+                    {
+                        "request_id": "provider-1",
+                        "kind": "ai.providers.create",
+                        "args": {"name": "tool-local", "base_url": base_url, "kind": "local"},
+                    },
+                )
+                self.assertEqual(_read_payload_timeout(proc)["kind"], "ai.providers.create")
+                _write_payload(
+                    proc,
+                    {
+                        "request_id": "chat-mutating-redact",
+                        "kind": "ai.chat",
+                        "args": {
+                            "provider": "tool-local",
+                            "model": "test-model",
+                            "tools_enabled": True,
+                            "messages": [{"role": "user", "content": "Sync cold"}],
+                        },
+                    },
+                )
+                consent = None
+                deadline = time.time() + 5
+                while time.time() < deadline and consent is None:
+                    payload = _read_payload_timeout(proc, max(0.1, deadline - time.time()))
+                    if (
+                        payload.get("request_id") == "chat-mutating-redact"
+                        and payload.get("kind") == "ai.chat.tool_call"
+                    ):
+                        payload = _read_payload(proc)
+                    if (
+                        payload.get("request_id") == "chat-mutating-redact"
+                        and payload.get("kind") == "ai.chat.tool_consent_required"
+                    ):
+                        consent = payload
+                self.assertIsNotNone(consent)
+                preview = consent["data"]["arguments_preview"]
+                self.assertEqual(preview["wallet"], "cold")
+                self.assertEqual(preview["descriptor"], "<redacted>")
+                self.assertEqual(preview["config_json"], "<redacted>")
+
+                _write_payload(
+                    proc,
+                    {
+                        "request_id": "consent-redact-1",
+                        "kind": "ai.tool_call.consent",
+                        "args": {
+                            "target_request_id": "chat-mutating-redact",
+                            "call_id": "call_1",
+                            "decision": "deny",
+                        },
+                    },
+                )
+                self.assertEqual(_read_payload_timeout(proc)["kind"], "ai.tool_call.consent")
+                while True:
+                    payload = _read_payload_timeout(proc)
+                    if (
+                        payload.get("request_id") == "chat-mutating-redact"
+                        and payload.get("kind") == "ai.chat"
+                    ):
+                        break
+
+                _write_payload(proc, {"request_id": "shutdown-1", "kind": "daemon.shutdown"})
+                self.assertEqual(_read_payload_timeout(proc)["kind"], "daemon.shutdown")
+                code, stderr = _close_daemon(proc)
+                self.assertEqual(code, 0, stderr)
+                self.assertEqual(stderr, "")
+        finally:
+            server.shutdown()
+            server.server_close()
+
     def test_ai_chat_cancel_during_tool_loop_finishes_cancelled(self):
         server = _start_tool_chat_server(
             [
@@ -591,6 +1078,11 @@ class DaemonSmokeTest(unittest.TestCase):
                 )
                 while True:
                     payload = _read_payload_timeout(proc)
+                    if (
+                        payload.get("request_id") == "chat-tools-3"
+                        and payload.get("kind") == "ai.chat.tool_call"
+                    ):
+                        payload = _read_payload(proc)
                     if (
                         payload.get("request_id") == "chat-tools-3"
                         and payload.get("kind")

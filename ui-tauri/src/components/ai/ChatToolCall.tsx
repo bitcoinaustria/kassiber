@@ -2,6 +2,7 @@ import {
   CheckCircle2,
   LoaderCircle,
   ShieldAlert,
+  ShieldCheck,
   Wrench,
   XCircle,
 } from "lucide-react";
@@ -12,10 +13,13 @@ import { cn } from "@/lib/utils";
 interface ChatToolCallProps {
   toolCall: AiChatToolCall;
 }
+
 function statusLabel(status: AiChatToolCall["status"]): string {
   switch (status) {
     case "pending":
       return "Pending";
+    case "awaiting_consent":
+      return "Awaiting consent";
     case "running":
       return "Running";
     case "done":
@@ -30,6 +34,9 @@ function statusLabel(status: AiChatToolCall["status"]): string {
 function StatusIcon({ status }: { status: AiChatToolCall["status"] }) {
   if (status === "done") {
     return <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" aria-hidden="true" />;
+  }
+  if (status === "awaiting_consent") {
+    return <ShieldCheck className="h-3.5 w-3.5 text-primary" aria-hidden="true" />;
   }
   if (status === "denied") {
     return <ShieldAlert className="h-3.5 w-3.5 text-amber-600" aria-hidden="true" />;
@@ -50,6 +57,7 @@ function StatusIcon({ status }: { status: AiChatToolCall["status"] }) {
 
 export function ChatToolCall({ toolCall }: ChatToolCallProps) {
   const hasArguments = Object.keys(toolCall.arguments).length > 0;
+  const hasResult = toolCall.result !== undefined && toolCall.result !== null;
   return (
     <div
       className={cn(
@@ -69,9 +77,24 @@ export function ChatToolCall({ toolCall }: ChatToolCallProps) {
         </span>
       </div>
       {hasArguments ? (
-        <pre className="mt-1 max-h-24 overflow-auto whitespace-pre-wrap break-words rounded bg-background/75 px-2 py-1 font-mono text-[10px] text-muted-foreground">
-          {JSON.stringify(toolCall.arguments, null, 2)}
-        </pre>
+        <details className="mt-1">
+          <summary className="cursor-pointer select-none text-[10px] font-medium uppercase text-muted-foreground">
+            Arguments
+          </summary>
+          <pre className="mt-1 max-h-24 overflow-auto whitespace-pre-wrap break-words rounded bg-background/75 px-2 py-1 font-mono text-[10px] text-muted-foreground">
+            {JSON.stringify(toolCall.arguments, null, 2)}
+          </pre>
+        </details>
+      ) : null}
+      {hasResult ? (
+        <details className="mt-1">
+          <summary className="cursor-pointer select-none text-[10px] font-medium uppercase text-muted-foreground">
+            Result
+          </summary>
+          <pre className="mt-1 max-h-28 overflow-auto whitespace-pre-wrap break-words rounded bg-background/75 px-2 py-1 font-mono text-[10px] text-muted-foreground">
+            {JSON.stringify(toolCall.result, null, 2)}
+          </pre>
+        </details>
       ) : null}
       {toolCall.reason ? (
         <p className="mt-1 break-words font-mono text-[10px] text-muted-foreground">
