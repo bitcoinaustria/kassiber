@@ -39,6 +39,10 @@ const ALLOWED_BRIDGE_KINDS = new Set([
 ]);
 const STREAMING_BRIDGE_KINDS = new Set(["ai.chat"]);
 
+function makeBridgeRequestId(prefix = "bridge") {
+  return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+}
+
 function isLoopbackHost(hostHeader: string | string[] | undefined) {
   const rawHost = Array.isArray(hostHeader) ? hostHeader[0] : hostHeader;
   if (!rawHost) return false;
@@ -95,6 +99,14 @@ class DaemonBridgeSupervisor {
     return this.dispatch(request, onRecord);
   }
 
+  cancelAiChat(targetRequestId: string) {
+    return this.invoke({
+      kind: "ai.chat.cancel",
+      request_id: makeBridgeRequestId("bridge-cancel"),
+      args: { target_request_id: targetRequestId },
+    });
+  }
+
   shutdown() {
     const child = this.child;
     this.child = null;
@@ -125,7 +137,7 @@ class DaemonBridgeSupervisor {
     const requestId =
       typeof request.request_id === "string" && request.request_id
         ? request.request_id
-        : `bridge-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+        : makeBridgeRequestId();
     const kind = typeof request.kind === "string" ? request.kind : "";
 
     return new Promise<Record<string, unknown>>((resolve, reject) => {
@@ -310,24 +322,43 @@ async function handleBridgeStream(
   res.setHeader("content-type", "application/x-ndjson");
   res.setHeader("cache-control", "no-cache");
 
+  const streamRequestId =
+    typeof request.request_id === "string" && request.request_id
+      ? request.request_id
+      : makeBridgeRequestId("bridge-stream");
+  request.request_id = streamRequestId;
+  let completed = false;
+  res.once("close", () => {
+    if (completed) return;
+    void supervisor.cancelAiChat(streamRequestId).catch(() => undefined);
+  });
+
   try {
     const terminal = await supervisor.stream(request, (record) => {
-      writeNdjson(res, record);
+      if (!res.destroyed && !res.writableEnded) {
+        writeNdjson(res, record);
+      }
     });
-    writeNdjson(res, terminal);
-    res.end();
+    completed = true;
+    if (!res.destroyed && !res.writableEnded) {
+      writeNdjson(res, terminal);
+      res.end();
+    }
   } catch (error) {
-    writeNdjson(res, {
-      kind: "error",
-      schema_version: 1,
-      request_id: request.request_id,
-      error: {
-        code: "bridge_daemon_failed",
-        message: error instanceof Error ? error.message : String(error),
-        retryable: true,
-      },
-    });
-    res.end();
+    completed = true;
+    if (!res.destroyed && !res.writableEnded) {
+      writeNdjson(res, {
+        kind: "error",
+        schema_version: 1,
+        request_id: request.request_id,
+        error: {
+          code: "bridge_daemon_failed",
+          message: error instanceof Error ? error.message : String(error),
+          retryable: true,
+        },
+      });
+      res.end();
+    }
   }
 }
 

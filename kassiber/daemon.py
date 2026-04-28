@@ -642,6 +642,8 @@ def _execute_mutating_ai_tool(call: ParsedAiToolCall, runtime: AiToolRuntime) ->
     if entry is None or entry.kind_class != "mutating":
         return _tool_result_denied("tool_not_allowed")
     try:
+        # Keep the first mutating surface explicit; switch to a typed dispatcher
+        # when the next mutating tool is added.
         if entry.daemon_kind != "ui.wallets.sync":
             return _tool_result_denied("tool_not_allowed")
         args = _coerce_wallets_sync_args(call.arguments, strict=True)

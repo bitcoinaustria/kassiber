@@ -9,7 +9,7 @@ import unittest
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
-from kassiber.daemon import MAX_REQUEST_LINE_CHARS
+from kassiber.daemon import AiToolConsentState, MAX_REQUEST_LINE_CHARS
 
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -232,6 +232,43 @@ class DaemonSmokeTest(unittest.TestCase):
             self.assertEqual(shutdown["request_id"], "shutdown-1")
             self.assertEqual(shutdown["kind"], "daemon.shutdown")
 
+            code, stderr = _close_daemon(proc)
+            self.assertEqual(code, 0, stderr)
+            self.assertEqual(stderr, "")
+
+    def test_ai_tool_consent_state_times_out(self):
+        consent = AiToolConsentState()
+        decision = consent.wait(
+            call_id="call_1",
+            tool_name="ui.wallets.sync",
+            cancel_event=threading.Event(),
+            timeout=0.01,
+        )
+        self.assertEqual(decision, "consent_timeout")
+
+    def test_ai_tool_consent_stale_target_returns_not_found(self):
+        with tempfile.TemporaryDirectory(prefix="kassiber-daemon-") as tmp:
+            proc = _start_daemon(Path(tmp) / "data")
+            self.assertEqual(_read_payload_timeout(proc)["kind"], "daemon.ready")
+            _write_payload(
+                proc,
+                {
+                    "request_id": "consent-stale-1",
+                    "kind": "ai.tool_call.consent",
+                    "args": {
+                        "target_request_id": "missing-chat",
+                        "call_id": "call_1",
+                        "decision": "allow_once",
+                    },
+                },
+            )
+            response = _read_payload_timeout(proc)
+            self.assertEqual(response["kind"], "ai.tool_call.consent")
+            self.assertFalse(response["data"]["recorded"])
+            self.assertEqual(response["data"]["reason"], "not_found")
+
+            _write_payload(proc, {"request_id": "shutdown-1", "kind": "daemon.shutdown"})
+            self.assertEqual(_read_payload_timeout(proc)["kind"], "daemon.shutdown")
             code, stderr = _close_daemon(proc)
             self.assertEqual(code, 0, stderr)
             self.assertEqual(stderr, "")

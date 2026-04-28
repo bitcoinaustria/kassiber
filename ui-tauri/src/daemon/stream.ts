@@ -119,6 +119,11 @@ export interface AiChatToolConsentRequiredShape {
   arguments_preview?: Record<string, unknown>;
 }
 
+interface AiToolConsentResponseShape {
+  recorded?: boolean;
+  reason?: string;
+}
+
 type AiChatStreamRecordData =
   | AiChatDeltaShape
   | AiChatToolCallShape
@@ -202,6 +207,36 @@ export function buildToolConsentArgs(
     target_request_id: request.targetRequestId,
     call_id: request.callId,
     decision,
+  };
+}
+
+export function applyToolConsentResponseToMessage(
+  current: AiChatMessage,
+  callId: string,
+  decision: AiToolConsentDecision,
+  recorded: boolean,
+  reason?: string,
+): AiChatMessage {
+  const nextStatus: AiToolCallStatus = recorded
+    ? decision === "deny"
+      ? "denied"
+      : "running"
+    : "error";
+  return {
+    ...current,
+    toolCalls: (current.toolCalls ?? []).map((toolCall) =>
+      toolCall.callId === callId
+        ? {
+            ...toolCall,
+            status: nextStatus,
+            reason: recorded
+              ? decision === "deny"
+                ? "user_denied"
+                : toolCall.reason
+              : reason ?? "not_found",
+          }
+        : toolCall,
+    ),
   };
 }
 
@@ -529,34 +564,67 @@ export function useAiChatStream(): UseAiChatStreamResult {
       const request = pendingConsent;
       if (!request) return;
       setPendingConsent(null);
-      updateAssistant((current) => ({
-        ...current,
-        toolCalls: (current.toolCalls ?? []).map((toolCall) =>
-          toolCall.callId === request.callId
-            ? {
-                ...toolCall,
-                status: decision === "deny" ? "denied" : "running",
-                reason: decision === "deny" ? "user_denied" : toolCall.reason,
-              }
-            : toolCall,
-        ),
-      }));
       try {
-        const envelope = await getTransport(dataMode).invoke({
-          kind: "ai.tool_call.consent",
-          request_id: makeDaemonRequestId(),
-          args: buildToolConsentArgs(request, decision),
-        });
+        const envelope =
+          await getTransport(dataMode).invoke<AiToolConsentResponseShape>({
+            kind: "ai.tool_call.consent",
+            request_id: makeDaemonRequestId(),
+            args: buildToolConsentArgs(request, decision),
+          });
         if (envelope.kind === "error" || envelope.error) {
           setError({
             code: envelope.error?.code ?? "consent_failed",
             message: envelope.error?.message ?? "Could not record tool consent",
           });
+          updateAssistant((current) =>
+            applyToolConsentResponseToMessage(
+              current,
+              request.callId,
+              decision,
+              false,
+              envelope.error?.code ?? "consent_failed",
+            ),
+          );
+          return;
         }
+        if (envelope.data?.recorded === false) {
+          const reason = envelope.data.reason ?? "not_found";
+          setError({
+            code: "consent_not_recorded",
+            message: `Could not record tool consent: ${reason}`,
+          });
+          updateAssistant((current) =>
+            applyToolConsentResponseToMessage(
+              current,
+              request.callId,
+              decision,
+              false,
+              reason,
+            ),
+          );
+          return;
+        }
+        updateAssistant((current) =>
+          applyToolConsentResponseToMessage(
+            current,
+            request.callId,
+            decision,
+            true,
+          ),
+        );
       } catch (caught) {
         const message =
           caught instanceof Error ? caught.message : String(caught);
         setError({ code: "consent_failed", message });
+        updateAssistant((current) =>
+          applyToolConsentResponseToMessage(
+            current,
+            request.callId,
+            decision,
+            false,
+            "consent_failed",
+          ),
+        );
       }
     },
     [dataMode, pendingConsent, updateAssistant],

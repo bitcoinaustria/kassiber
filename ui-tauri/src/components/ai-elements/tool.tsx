@@ -172,12 +172,20 @@ function formatPayload(payload: unknown): string {
 }
 
 function iconForState(state: ToolState) {
-  if (state === "done") return CheckCircle2;
-  if (state === "awaiting_consent") return ShieldCheck;
-  if (state === "denied") return ShieldAlert;
-  if (state === "error") return XCircle;
-  if (state === "running") return LoaderCircle;
-  return Wrench;
+  switch (state) {
+    case "pending":
+      return Wrench;
+    case "awaiting_consent":
+      return ShieldCheck;
+    case "running":
+      return LoaderCircle;
+    case "done":
+      return CheckCircle2;
+    case "denied":
+      return ShieldAlert;
+    case "error":
+      return XCircle;
+  }
 }
 
 function labelForState(state: ToolState): string {

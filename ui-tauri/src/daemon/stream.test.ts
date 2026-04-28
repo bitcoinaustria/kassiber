@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   applyAiChatDeltaToMessage,
   applyAiChatStreamRecordToMessage,
+  applyToolConsentResponseToMessage,
   buildToolConsentArgs,
   terminalAiChatStatus,
   type AiChatMessage,
@@ -166,5 +167,41 @@ describe("AI stream reducer helpers", () => {
       call_id: "call_1",
       decision: "allow_session",
     });
+  });
+
+  it("marks stale consent acknowledgements as tool errors", () => {
+    const current = assistantMessage({
+      toolCalls: [
+        {
+          callId: "call_1",
+          name: "ui.wallets.sync",
+          arguments: {},
+          kindClass: "mutating",
+          needsConsent: true,
+          status: "awaiting_consent",
+        },
+      ],
+    });
+
+    const stale = applyToolConsentResponseToMessage(
+      current,
+      "call_1",
+      "allow_once",
+      false,
+      "not_found",
+    );
+
+    expect(stale.toolCalls?.[0].status).toBe("error");
+    expect(stale.toolCalls?.[0].reason).toBe("not_found");
+
+    const recordedDeny = applyToolConsentResponseToMessage(
+      current,
+      "call_1",
+      "deny",
+      true,
+    );
+
+    expect(recordedDeny.toolCalls?.[0].status).toBe("denied");
+    expect(recordedDeny.toolCalls?.[0].reason).toBe("user_denied");
   });
 });

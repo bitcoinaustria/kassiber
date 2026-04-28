@@ -63,6 +63,10 @@ Kassiber is currently in **dev mode**: renaming commands, breaking flags, and re
   `ai.chat.tool_call`, `ai.chat.tool_consent_required`, and
   `ai.chat.tool_result` to the `daemon://stream` Tauri event channel; the
   exact-kind terminal record (or an error) resolves only the matching request.
+  Mutating tools may emit `ai.chat.tool_call` twice for the same `call_id`:
+  first with `needs_consent: true`, then after approval with
+  `needs_consent: false` to mark that same call as running. Clients should
+  upsert tool cards by `call_id` instead of rendering duplicate cards.
   `ai.chat.cancel` and `ai.tool_call.consent` take
   `args.target_request_id` so the control request keeps its own routing
   `request_id`; cancelled chats finish with `finish_reason: "cancelled"`.

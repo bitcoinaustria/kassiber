@@ -180,6 +180,13 @@ definitions, emits `ai.chat.tool_call`, `ai.chat.tool_consent_required`, and
 `role: "tool"` messages, and finishes with the normal terminal `ai.chat`
 envelope.
 
+Clients should upsert tool cards by `call_id`. Mutating tools emit an initial
+`ai.chat.tool_call` with `needs_consent: true`, followed by
+`ai.chat.tool_consent_required`. If the user approves the call, the daemon emits
+another `ai.chat.tool_call` for the same `call_id` with `needs_consent: false`
+before `ai.chat.tool_result`; that second record marks the approved call as
+running and must not create a duplicate card.
+
 Read-only provider tool names run automatically through safe daemon snapshot
 surfaces:
 

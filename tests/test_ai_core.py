@@ -160,12 +160,22 @@ class ToolCatalogPromptTest(unittest.TestCase):
                 {
                     "wallet": "cold",
                     "descriptor": "wpkh(xpub...)",
+                    "mnemonic": "abandon abandon abandon",
+                    "recovery_phrase": "abandon abandon abandon",
+                    "seed": "00" * 32,
+                    "wif": "Kxabc",
+                    "xprv": "xprv9s21...",
                     "nested": {"api_token": "secret"},
                 }
             ),
             {
                 "wallet": "cold",
                 "descriptor": "<redacted>",
+                "mnemonic": "<redacted>",
+                "recovery_phrase": "<redacted>",
+                "seed": "<redacted>",
+                "wif": "<redacted>",
+                "xprv": "<redacted>",
                 "nested": {"api_token": "<redacted>"},
             },
         )

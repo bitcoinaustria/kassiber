@@ -19,11 +19,16 @@ SENSITIVE_ARGUMENT_KEY_PARTS = (
     "cookie",
     "descriptor",
     "header",
+    "mnemonic",
     "password",
     "passphrase",
     "private",
+    "recovery",
     "secret",
+    "seed",
     "token",
+    "wif",
+    "xprv",
 )
 
 

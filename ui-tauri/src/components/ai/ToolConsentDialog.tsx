@@ -53,7 +53,7 @@ export function ToolConsentDialog({
               This action needs explicit approval before Kassiber runs it.
             </span>
             {hasPreview ? (
-              <details className="mt-2">
+              <details open className="mt-2">
                 <summary className="cursor-pointer select-none text-[10px] font-medium uppercase text-muted-foreground">
                   Arguments
                 </summary>
