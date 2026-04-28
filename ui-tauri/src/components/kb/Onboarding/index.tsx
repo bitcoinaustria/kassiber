@@ -1,0 +1,163 @@
+import { useState } from "react";
+import { useNavigate } from "@tanstack/react-router";
+import { ShieldCheck } from "lucide-react";
+
+import { Wordmark } from "@/components/kb/Wordmark";
+import { cn } from "@/lib/utils";
+import { useUiStore, type Identity } from "@/store/ui";
+
+import {
+  DEFAULT_FORM,
+  GAINS_ALGORITHM_DEFAULTS,
+  gainsAlgorithmsFor,
+} from "./constants";
+import { ConnectionsStep } from "./steps/ConnectionsStep";
+import { DatabaseStep } from "./steps/DatabaseStep";
+import { IdentityStep } from "./steps/IdentityStep";
+import { TaxStep } from "./steps/TaxStep";
+import type { OnboardingForm, OnboardingStep } from "./types";
+
+interface OnboardingProps {
+  className?: string;
+  steps?: OnboardingStep[];
+}
+
+const DEFAULT_STEPS: OnboardingStep[] = [
+  {
+    component: IdentityStep,
+    isComplete: (form) =>
+      Boolean(form.name.trim() && form.workspace.trim() && form.profile.trim()),
+  },
+  {
+    component: TaxStep,
+    isComplete: (form) => {
+      const days = Number.parseInt(form.taxLongTermDays, 10);
+      return Number.isFinite(days) && days > 0;
+    },
+  },
+  {
+    component: ConnectionsStep,
+    isComplete: (form) => {
+      if (form.backendSetupMode === "skip") {
+        return form.skipBackendsAcknowledged;
+      }
+      if (form.backendSetupMode === "custom") {
+        return Boolean(form.backendName.trim() && form.backendUrl.trim());
+      }
+      return true;
+    },
+  },
+  {
+    component: DatabaseStep,
+    isComplete: (form) =>
+      form.databaseMode === "plaintext"
+        ? form.plaintextAcknowledged
+        : form.recoveryAcknowledged,
+  },
+];
+
+export const Onboarding = ({ className, steps: customSteps }: OnboardingProps) => {
+  const navigate = useNavigate();
+  const setIdentity = useUiStore((state) => state.setIdentity);
+  const [currentStep, setCurrentStep] = useState(0);
+  const [form, setForm] = useState<OnboardingForm>(DEFAULT_FORM);
+  const activeSteps = customSteps ?? DEFAULT_STEPS;
+  const step = activeSteps[currentStep];
+
+  const update = <K extends keyof OnboardingForm>(
+    key: K,
+    value: OnboardingForm[K],
+  ) => {
+    setForm((current) => ({ ...current, [key]: value }));
+  };
+
+  const finish = () => {
+    // Step gates already enforce these — clamp defensively in case state
+    // arrives via an injected `customSteps` override (used by tests).
+    const allowedAlgorithms = gainsAlgorithmsFor(form.taxCountry);
+    const gainsAlgorithm = allowedAlgorithms.includes(form.gainsAlgorithm)
+      ? form.gainsAlgorithm
+      : GAINS_ALGORITHM_DEFAULTS[form.taxCountry];
+    const parsedDays = Number.parseInt(form.taxLongTermDays, 10);
+    const taxLongTermDays =
+      Number.isFinite(parsedDays) && parsedDays > 0 ? parsedDays : 365;
+    const identity: Identity = {
+      name: form.name.trim(),
+      workspace: form.workspace.trim() || "Personal",
+      // Legacy field. Today rp2 only ships `at` + `generic` country plugins,
+      // so all non-AT picks collapse to "Generic". Prefer `taxCountry` for
+      // new callers.
+      country: form.taxCountry === "at" ? "AT" : "Generic",
+      // Intent only until the native SQLCipher passphrase handoff lands; see
+      // `Identity` JSDoc in store/ui.ts.
+      encrypted: form.databaseMode === "sqlcipher",
+      profile: form.profile.trim() || "main",
+      taxCountry: form.taxCountry,
+      fiatCurrency: form.fiatCurrency,
+      taxLongTermDays,
+      gainsAlgorithm,
+      databaseMode: form.databaseMode,
+      migrateCredentials: form.migrateCredentials,
+      backendSetupMode: form.backendSetupMode,
+      backendKind:
+        form.backendSetupMode === "custom" ? form.backendKind : undefined,
+      backendName:
+        form.backendSetupMode === "custom"
+          ? form.backendName.trim() || "custom"
+          : undefined,
+      backendUrl:
+        form.backendSetupMode === "custom"
+          ? form.backendUrl.trim()
+          : undefined,
+    };
+    setIdentity(identity);
+    void navigate({ to: "/overview" });
+  };
+
+  const handleSubmit = () => {
+    if (!step.isComplete(form)) return;
+    if (currentStep !== activeSteps.length - 1) {
+      setCurrentStep(currentStep + 1);
+      return;
+    }
+    finish();
+  };
+
+  const handleGoBack = () => {
+    if (currentStep > 0) setCurrentStep(currentStep - 1);
+  };
+
+  return (
+    <section className="min-h-screen bg-paper px-4 py-6 text-ink sm:px-8 lg:px-10">
+      <div
+        className={cn(
+          "mx-auto flex max-w-7xl flex-col items-center gap-8",
+          className,
+        )}
+      >
+        <div className="flex w-full items-center justify-between gap-4">
+          <Wordmark size={22} />
+          <div className="hidden items-center gap-2 text-xs text-ink-2 sm:flex">
+            <ShieldCheck className="size-4" />
+            Local-first · watch-only · SQLCipher-aware
+          </div>
+        </div>
+
+        <step.component
+          form={form}
+          update={update}
+          onSubmit={handleSubmit}
+          currentStep={currentStep}
+          totalSteps={activeSteps.length}
+          goBack={handleGoBack}
+        />
+
+        <div className="flex flex-wrap items-center justify-center gap-4 text-xs text-ink-3">
+          <span>Private keys never enter Kassiber.</span>
+          <span>State stays under ~/.kassiber unless overridden.</span>
+          <span>Run backups before tracking real funds.</span>
+        </div>
+      </div>
+    </section>
+  );
+};

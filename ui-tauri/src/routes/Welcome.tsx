@@ -1,5 +1,5 @@
-import { Onboarding1 } from "@/components/onboarding1";
+import { Onboarding } from "@/components/kb/Onboarding";
 
 export function Welcome() {
-  return <Onboarding1 />;
+  return <Onboarding />;
 }
