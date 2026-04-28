@@ -1,10 +1,11 @@
 use serde_json::{json, Map, Value};
+use std::collections::HashMap;
 use std::env;
 use std::io::{BufRead, BufReader, Read, Write};
 use std::path::{Path, PathBuf};
 use std::process::{Child, ChildStderr, ChildStdin, ChildStdout, Command, Stdio};
 use std::sync::{
-    atomic::{AtomicBool, Ordering},
+    atomic::{AtomicBool, AtomicU64, Ordering},
     mpsc, Arc, Mutex,
 };
 use std::time::{Duration, Instant};
@@ -19,15 +20,15 @@ const DAEMON_STREAM_INACTIVITY_TIMEOUT: Duration = Duration::from_secs(90);
 const STDERR_TAIL_LIMIT: usize = 16 * 1024;
 
 pub struct DaemonSupervisor {
-    process: Option<DaemonProcess>,
+    process: Mutex<Option<Arc<DaemonProcess>>>,
     resource_dir: Option<PathBuf>,
-    next_request_id: u64,
+    next_request_id: AtomicU64,
 }
 
 struct DaemonProcess {
-    child: Child,
-    stdin: ChildStdin,
-    stdout_rx: mpsc::Receiver<Result<Value, SupervisorError>>,
+    child: Mutex<Child>,
+    stdin: Mutex<ChildStdin>,
+    pending: Arc<Mutex<HashMap<String, mpsc::Sender<Result<Value, SupervisorError>>>>>,
     stderr_tail: StderrTail,
     broken: Arc<AtomicBool>,
 }
@@ -37,7 +38,7 @@ struct StderrTail {
     bytes: Arc<Mutex<Vec<u8>>>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct SupervisorError {
     pub code: &'static str,
     pub message: String,
@@ -95,20 +96,49 @@ impl SupervisorError {
 impl DaemonSupervisor {
     pub fn new(resource_dir: Option<PathBuf>) -> Self {
         Self {
-            process: None,
+            process: Mutex::new(None),
             resource_dir,
-            next_request_id: 1,
+            next_request_id: AtomicU64::new(1),
+        }
+    }
+
+    #[cfg(test)]
+    fn new_with_process(process: DaemonProcess) -> Self {
+        Self {
+            process: Mutex::new(Some(Arc::new(process))),
+            resource_dir: None,
+            next_request_id: AtomicU64::new(1),
         }
     }
 
     pub fn invoke(
-        &mut self,
+        &self,
         kind: &str,
         args: Option<Value>,
         app: &AppHandle,
         streaming: bool,
         client_request_id: Option<Value>,
     ) -> Result<Value, SupervisorError> {
+        self.invoke_inner(kind, args, streaming, client_request_id, |response| {
+            // Single channel per app; the webview filters by request_id
+            // from the payload so we don't need a per-stream listener.
+            if let Err(error) = app.emit("daemon://stream", response) {
+                eprintln!("kassiber: failed to emit stream event: {error}");
+            }
+        })
+    }
+
+    fn invoke_inner<F>(
+        &self,
+        kind: &str,
+        args: Option<Value>,
+        streaming: bool,
+        client_request_id: Option<Value>,
+        mut emit_stream: F,
+    ) -> Result<Value, SupervisorError>
+    where
+        F: FnMut(&Value),
+    {
         // Honor a JS-supplied String request_id so streaming transports can
         // filter `daemon://stream` records as they arrive without buffering;
         // fall back to the supervisor-allocated id otherwise.
@@ -117,6 +147,9 @@ impl DaemonSupervisor {
             .and_then(|value| value.as_str().map(String::from))
             .unwrap_or_else(|| self.allocate_request_id());
         let process = self.ensure_process()?;
+        let (tx, rx) = mpsc::channel();
+        process.register_request(request_id.clone(), tx)?;
+
         let mut request = json!({
             "request_id": request_id,
             "kind": kind,
@@ -125,25 +158,55 @@ impl DaemonSupervisor {
             request["args"] = args;
         }
 
-        process.write_json_line(&request)?;
+        if let Err(error) = process.write_json_line(&request) {
+            process.unregister_request(&request_id);
+            process.mark_broken();
+            process.kill();
+            return Err(error.with_stderr_tail(process.stderr_tail()));
+        }
 
         // For streaming kinds we use a per-record inactivity timeout so a slow
         // model that keeps emitting tokens stays alive past the 15s
         // total-budget. Non-streaming kinds keep the original total deadline.
-        let stream_prefix = format!("{kind}.");
         let deadline = if streaming {
             None
         } else {
             Some(Instant::now() + DAEMON_INVOKE_TIMEOUT)
         };
 
-        loop {
+        let result = loop {
             let remaining = if let Some(deadline) = deadline {
                 deadline.saturating_duration_since(Instant::now())
             } else {
                 DAEMON_STREAM_INACTIVITY_TIMEOUT
             };
-            let mut response = process.read_json_value(remaining)?;
+            let mut response = match rx.recv_timeout(remaining) {
+                Ok(Ok(response)) => response,
+                Ok(Err(error)) => break Err(error.with_stderr_tail(process.stderr_tail())),
+                Err(mpsc::RecvTimeoutError::Timeout) => {
+                    process.mark_broken();
+                    process.kill();
+                    break Err(SupervisorError::new(
+                        "daemon_timeout",
+                        format!(
+                            "Python daemon did not answer within {} seconds",
+                            remaining.as_secs()
+                        ),
+                    )
+                    .with_stderr_tail(process.stderr_tail())
+                    .retryable());
+                }
+                Err(mpsc::RecvTimeoutError::Disconnected) => {
+                    process.mark_broken();
+                    process.kill();
+                    break Err(SupervisorError::new(
+                        "daemon_exited",
+                        "Python daemon stdout reader stopped",
+                    )
+                    .with_stderr_tail(process.stderr_tail())
+                    .retryable());
+                }
+            };
 
             let response_kind = response
                 .get("kind")
@@ -151,69 +214,68 @@ impl DaemonSupervisor {
                 .unwrap_or("")
                 .to_string();
 
-            // Treat any record sharing this request's id and a kind that
-            // starts with "<request_kind>." (e.g. ai.chat.delta) as a
-            // mid-stream record: forward to the webview as a Tauri event,
-            // reset the inactivity clock, keep reading.
-            let is_stream_record = streaming
-                && (response_kind == "progress" || response_kind.starts_with(&stream_prefix));
+            if response.get("request_id").and_then(request_id_value_key)
+                != Some(request_id.as_str())
+            {
+                process.mark_broken();
+                process.kill();
+                break Err(request_id_mismatch(&request_id, &response)
+                    .with_stderr_tail(process.stderr_tail()));
+            }
 
-            if is_stream_record {
-                if response.get("request_id").and_then(Value::as_str) != Some(request_id.as_str()) {
-                    process.mark_broken();
-                    process.kill();
-                    return Err(request_id_mismatch(&request_id, &response)
-                        .with_stderr_tail(process.stderr_tail()));
-                }
-                // Single channel per app; the webview filters by request_id
-                // from the payload so we don't need a per-stream listener.
-                if let Err(error) = app.emit("daemon://stream", &response) {
-                    eprintln!("kassiber: failed to emit stream event: {error}");
-                }
+            if response_kind == kind || response_kind == "error" {
+                attach_stderr_tail_to_internal_error(&mut response, process.stderr_tail());
+                break Ok(response);
+            }
+
+            if streaming {
+                emit_stream(&response);
                 continue;
             }
 
             // Pre-streaming "progress" passthrough kept for the existing
             // protocol surface; non-streaming kinds still ignore them.
-            if !streaming && response_kind == "progress" {
-                if response.get("request_id").and_then(Value::as_str) != Some(request_id.as_str()) {
-                    process.mark_broken();
-                    process.kill();
-                    return Err(request_id_mismatch(&request_id, &response)
-                        .with_stderr_tail(process.stderr_tail()));
-                }
+            if response_kind == "progress" {
                 continue;
             }
 
-            if response.get("request_id").and_then(Value::as_str) != Some(request_id.as_str()) {
-                process.mark_broken();
-                process.kill();
-                return Err(request_id_mismatch(&request_id, &response)
-                    .with_stderr_tail(process.stderr_tail()));
-            }
-            attach_stderr_tail_to_internal_error(&mut response, process.stderr_tail());
-            return Ok(response);
-        }
+            process.mark_broken();
+            process.kill();
+            break Err(SupervisorError::new(
+                "daemon_protocol_error",
+                "Python daemon emitted a non-terminal record for a non-streaming request",
+            )
+            .details(json!({
+                "request_id": request_id,
+                "kind": response_kind,
+            }))
+            .with_stderr_tail(process.stderr_tail()));
+        };
+        process.unregister_request(&request_id);
+        result
     }
 
-    fn allocate_request_id(&mut self) -> String {
-        let request_id = format!("tauri-{}", self.next_request_id);
-        self.next_request_id += 1;
-        request_id
+    fn allocate_request_id(&self) -> String {
+        let request_id = self.next_request_id.fetch_add(1, Ordering::SeqCst);
+        format!("tauri-{request_id}")
     }
 
-    fn ensure_process(&mut self) -> Result<&mut DaemonProcess, SupervisorError> {
-        let should_restart = match self.process.as_mut() {
+    fn ensure_process(&self) -> Result<Arc<DaemonProcess>, SupervisorError> {
+        let mut slot = self.process.lock().map_err(|_| {
+            SupervisorError::new("daemon_lock_poisoned", "daemon process lock is poisoned")
+                .retryable()
+        })?;
+        let should_restart = match slot.as_ref() {
             Some(process) => {
                 if process.is_broken() {
                     process.kill();
-                    self.process = None;
+                    *slot = None;
                     true
                 } else {
-                    match process.child.try_wait() {
+                    match process.try_wait() {
                         Ok(Some(status)) => {
                             let stderr_tail = process.stderr_tail();
-                            self.process = None;
+                            *slot = None;
                             return Err(SupervisorError::new(
                                 "daemon_exited",
                                 format!(
@@ -226,7 +288,7 @@ impl DaemonSupervisor {
                         }
                         Ok(None) => false,
                         Err(error) => {
-                            self.process = None;
+                            *slot = None;
                             return Err(SupervisorError::new(
                                 "daemon_status_failed",
                                 format!("Could not inspect Python daemon status: {error}"),
@@ -240,10 +302,12 @@ impl DaemonSupervisor {
         };
 
         if should_restart {
-            self.process = Some(DaemonProcess::spawn(self.resource_dir.as_deref())?);
+            *slot = Some(Arc::new(DaemonProcess::spawn(
+                self.resource_dir.as_deref(),
+            )?));
         }
 
-        self.process.as_mut().ok_or_else(|| {
+        slot.as_ref().cloned().ok_or_else(|| {
             SupervisorError::new("daemon_unavailable", "Python daemon is unavailable")
         })
     }
@@ -251,7 +315,10 @@ impl DaemonSupervisor {
 
 impl DaemonProcess {
     fn spawn(resource_dir: Option<&Path>) -> Result<Self, SupervisorError> {
-        let command = kassiber_command(resource_dir, vec!["daemon".into()]);
+        Self::spawn_command(kassiber_command(resource_dir, vec!["daemon".into()]))
+    }
+
+    fn spawn_command(command: DaemonCommand) -> Result<Self, SupervisorError> {
         let mut child = Command::new(&command.program)
             .args(&command.args)
             .current_dir(&command.cwd)
@@ -296,15 +363,50 @@ impl DaemonProcess {
         let stderr_tail = StderrTail::spawn(stderr);
 
         let broken = Arc::new(AtomicBool::new(false));
-        let mut process = Self {
-            child,
-            stdin,
-            stdout_rx: spawn_stdout_reader(stdout, Arc::clone(&broken)),
+        let pending = Arc::new(Mutex::new(HashMap::new()));
+        let (ready_tx, ready_rx) = mpsc::channel();
+        spawn_stdout_reader(stdout, Arc::clone(&pending), Arc::clone(&broken), ready_tx);
+        let process = Self {
+            child: Mutex::new(child),
+            stdin: Mutex::new(stdin),
+            pending,
             stderr_tail,
             broken,
         };
-        let ready = process.read_json_value(DAEMON_READY_TIMEOUT)?;
+        let ready = match ready_rx.recv_timeout(DAEMON_READY_TIMEOUT) {
+            Ok(Ok(ready)) => ready,
+            Ok(Err(error)) => {
+                process.mark_broken();
+                process.kill();
+                return Err(error.with_stderr_tail(process.stderr_tail()));
+            }
+            Err(mpsc::RecvTimeoutError::Timeout) => {
+                process.mark_broken();
+                process.kill();
+                return Err(SupervisorError::new(
+                    "daemon_timeout",
+                    format!(
+                        "Python daemon did not answer within {} seconds",
+                        DAEMON_READY_TIMEOUT.as_secs()
+                    ),
+                )
+                .with_stderr_tail(process.stderr_tail())
+                .retryable());
+            }
+            Err(mpsc::RecvTimeoutError::Disconnected) => {
+                process.mark_broken();
+                process.kill();
+                return Err(SupervisorError::new(
+                    "daemon_exited",
+                    "Python daemon stdout reader stopped",
+                )
+                .with_stderr_tail(process.stderr_tail())
+                .retryable());
+            }
+        };
         if ready.get("kind").and_then(Value::as_str) != Some("daemon.ready") {
+            process.mark_broken();
+            process.kill();
             return Err(SupervisorError::new(
                 "daemon_protocol_error",
                 "Python daemon did not emit daemon.ready on startup",
@@ -316,21 +418,61 @@ impl DaemonProcess {
         Ok(process)
     }
 
-    fn write_json_line(&mut self, payload: &Value) -> Result<(), SupervisorError> {
+    fn register_request(
+        &self,
+        request_id: String,
+        sender: mpsc::Sender<Result<Value, SupervisorError>>,
+    ) -> Result<(), SupervisorError> {
+        if self.is_broken() {
+            return Err(SupervisorError::new(
+                "daemon_exited",
+                "Python daemon stdout reader stopped",
+            )
+            .retryable());
+        }
+        let mut pending = self.pending.lock().map_err(|_| {
+            SupervisorError::new(
+                "daemon_lock_poisoned",
+                "daemon request registry is poisoned",
+            )
+            .retryable()
+        })?;
+        if pending.contains_key(&request_id) {
+            return Err(SupervisorError::new(
+                "daemon_request_id_conflict",
+                "daemon request_id is already in flight",
+            )
+            .details(json!({ "request_id": request_id })));
+        }
+        pending.insert(request_id, sender);
+        Ok(())
+    }
+
+    fn unregister_request(&self, request_id: &str) {
+        if let Ok(mut pending) = self.pending.lock() {
+            pending.remove(request_id);
+        }
+    }
+
+    fn write_json_line(&self, payload: &Value) -> Result<(), SupervisorError> {
         let line = serde_json::to_string(payload).map_err(|error| {
             SupervisorError::new(
                 "daemon_protocol_error",
                 format!("Could not serialize daemon request: {error}"),
             )
         })?;
-        writeln!(self.stdin, "{line}").map_err(|error| {
+        let mut stdin = self.stdin.lock().map_err(|_| {
+            SupervisorError::new("daemon_lock_poisoned", "daemon stdin lock is poisoned")
+                .retryable()
+        })?;
+        writeln!(stdin, "{line}").map_err(|error| {
             SupervisorError::new(
                 "daemon_write_failed",
                 format!("Could not write to Python daemon stdin: {error}"),
             )
             .retryable()
         })?;
-        self.stdin.flush().map_err(|error| {
+        stdin.flush().map_err(|error| {
             SupervisorError::new(
                 "daemon_write_failed",
                 format!("Could not flush Python daemon stdin: {error}"),
@@ -339,41 +481,16 @@ impl DaemonProcess {
         })
     }
 
-    fn read_json_value(&mut self, timeout: Duration) -> Result<Value, SupervisorError> {
-        match self.stdout_rx.recv_timeout(timeout) {
-            Ok(Ok(response)) => Ok(response),
-            Ok(Err(error)) => {
-                self.mark_broken();
-                self.kill();
-                Err(error.with_stderr_tail(self.stderr_tail()))
-            }
-            Err(mpsc::RecvTimeoutError::Timeout) => {
-                self.mark_broken();
-                self.kill();
-                Err(SupervisorError::new(
-                    "daemon_timeout",
-                    format!(
-                        "Python daemon did not answer within {} seconds",
-                        timeout.as_secs()
-                    ),
-                )
-                .with_stderr_tail(self.stderr_tail())
-                .retryable())
-            }
-            Err(mpsc::RecvTimeoutError::Disconnected) => {
-                self.mark_broken();
-                self.kill();
-                Err(
-                    SupervisorError::new("daemon_exited", "Python daemon stdout reader stopped")
-                        .with_stderr_tail(self.stderr_tail())
-                        .retryable(),
-                )
-            }
-        }
-    }
-
     fn stderr_tail(&self) -> String {
         self.stderr_tail.text()
+    }
+
+    fn try_wait(&self) -> Result<Option<std::process::ExitStatus>, String> {
+        let mut child = self
+            .child
+            .lock()
+            .map_err(|_| "daemon child lock is poisoned".to_string())?;
+        child.try_wait().map_err(|error| error.to_string())
     }
 
     fn is_broken(&self) -> bool {
@@ -384,9 +501,11 @@ impl DaemonProcess {
         self.broken.store(true, Ordering::SeqCst);
     }
 
-    fn kill(&mut self) {
-        let _ = self.child.kill();
-        let _ = self.child.wait();
+    fn kill(&self) {
+        if let Ok(mut child) = self.child.lock() {
+            let _ = child.kill();
+            let _ = child.wait();
+        }
     }
 }
 
@@ -473,52 +592,170 @@ impl StderrTail {
 
 fn spawn_stdout_reader(
     stdout: ChildStdout,
+    pending: Arc<Mutex<HashMap<String, mpsc::Sender<Result<Value, SupervisorError>>>>>,
     broken: Arc<AtomicBool>,
-) -> mpsc::Receiver<Result<Value, SupervisorError>> {
-    let (tx, rx) = mpsc::channel();
+    ready_tx: mpsc::Sender<Result<Value, SupervisorError>>,
+) {
     std::thread::spawn(move || {
         let mut reader = BufReader::new(stdout);
+        let mut startup = Some(ready_tx);
         loop {
             let mut line = String::new();
             match reader.read_line(&mut line) {
                 Ok(0) => {
-                    broken.store(true, Ordering::SeqCst);
-                    let _ = tx.send(Err(SupervisorError::new(
-                        "daemon_exited",
-                        "Python daemon closed stdout",
-                    )
-                    .retryable()));
+                    fail_stdout_reader(
+                        &broken,
+                        &pending,
+                        &mut startup,
+                        SupervisorError::new("daemon_exited", "Python daemon closed stdout")
+                            .retryable(),
+                    );
                     return;
                 }
-                Ok(_) => match serde_json::from_str(line.trim()) {
+                Ok(_) => match serde_json::from_str::<Value>(line.trim()) {
                     Ok(response) => {
-                        if tx.send(Ok(response)).is_err() {
+                        if response.get("kind").and_then(Value::as_str) == Some("daemon.ready")
+                            && response.get("request_id").is_none()
+                        {
+                            if let Some(tx) = startup.take() {
+                                let _ = tx.send(Ok(response));
+                                continue;
+                            }
+                        }
+
+                        if startup.is_some() {
+                            fail_stdout_reader(
+                                &broken,
+                                &pending,
+                                &mut startup,
+                                SupervisorError::new(
+                                    "daemon_protocol_error",
+                                    "Python daemon emitted a request response before daemon.ready",
+                                )
+                                .details(response),
+                            );
                             return;
                         }
+
+                        let Some(request_id) = response
+                            .get("request_id")
+                            .and_then(request_id_value_key)
+                            .map(str::to_string)
+                        else {
+                            fail_stdout_reader(
+                                &broken,
+                                &pending,
+                                &mut startup,
+                                SupervisorError::new(
+                                    "daemon_protocol_error",
+                                    "Python daemon emitted a response without request_id",
+                                )
+                                .details(response),
+                            );
+                            return;
+                        };
+
+                        let sender = match pending.lock() {
+                            Ok(pending) => pending.get(&request_id).cloned(),
+                            Err(_) => {
+                                fail_stdout_reader(
+                                    &broken,
+                                    &pending,
+                                    &mut startup,
+                                    SupervisorError::new(
+                                        "daemon_lock_poisoned",
+                                        "daemon request registry is poisoned",
+                                    )
+                                    .retryable(),
+                                );
+                                return;
+                            }
+                        };
+
+                        if let Some(sender) = sender {
+                            if sender.send(Ok(response)).is_err() {
+                                if let Ok(mut pending) = pending.lock() {
+                                    pending.remove(&request_id);
+                                }
+                            }
+                            continue;
+                        }
+
+                        fail_stdout_reader(
+                            &broken,
+                            &pending,
+                            &mut startup,
+                            SupervisorError::new(
+                                "daemon_request_id_mismatch",
+                                "Python daemon emitted a response for an unknown request_id",
+                            )
+                            .details(json!({ "request_id": request_id })),
+                        );
+                        return;
                     }
                     Err(error) => {
-                        broken.store(true, Ordering::SeqCst);
-                        let _ = tx.send(Err(SupervisorError::new(
-                            "daemon_protocol_error",
-                            format!("Python daemon emitted invalid JSON: {error}"),
-                        )
-                        .details(json!({ "line": line.trim() }))));
+                        fail_stdout_reader(
+                            &broken,
+                            &pending,
+                            &mut startup,
+                            SupervisorError::new(
+                                "daemon_protocol_error",
+                                format!("Python daemon emitted invalid JSON: {error}"),
+                            )
+                            .details(json!({ "line": line.trim() })),
+                        );
                         return;
                     }
                 },
                 Err(error) => {
-                    broken.store(true, Ordering::SeqCst);
-                    let _ = tx.send(Err(SupervisorError::new(
-                        "daemon_read_failed",
-                        format!("Could not read from Python daemon stdout: {error}"),
-                    )
-                    .retryable()));
+                    fail_stdout_reader(
+                        &broken,
+                        &pending,
+                        &mut startup,
+                        SupervisorError::new(
+                            "daemon_read_failed",
+                            format!("Could not read from Python daemon stdout: {error}"),
+                        )
+                        .retryable(),
+                    );
                     return;
                 }
             }
         }
     });
-    rx
+}
+
+fn fail_stdout_reader(
+    broken: &Arc<AtomicBool>,
+    pending: &Arc<Mutex<HashMap<String, mpsc::Sender<Result<Value, SupervisorError>>>>>,
+    startup: &mut Option<mpsc::Sender<Result<Value, SupervisorError>>>,
+    error: SupervisorError,
+) {
+    broken.store(true, Ordering::SeqCst);
+    if let Some(tx) = startup.take() {
+        let _ = tx.send(Err(error.clone()));
+    }
+    broadcast_pending_error(pending, error);
+}
+
+fn broadcast_pending_error(
+    pending: &Arc<Mutex<HashMap<String, mpsc::Sender<Result<Value, SupervisorError>>>>>,
+    error: SupervisorError,
+) {
+    let senders = match pending.lock() {
+        Ok(mut pending) => pending
+            .drain()
+            .map(|(_, sender)| sender)
+            .collect::<Vec<_>>(),
+        Err(_) => return,
+    };
+    for sender in senders {
+        let _ = sender.send(Err(error.clone()));
+    }
+}
+
+fn request_id_value_key(value: &Value) -> Option<&str> {
+    value.as_str()
 }
 
 fn attach_stderr_tail_to_internal_error(response: &mut Value, stderr_tail: String) {
@@ -673,4 +910,131 @@ fn sidecar_filename() -> Option<String> {
         ""
     };
     Some(format!("kassiber-cli-{triple}{extension}"))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::fs;
+    use std::sync::mpsc;
+    use std::thread;
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    #[cfg(unix)]
+    use std::os::unix::fs::PermissionsExt;
+
+    #[cfg(unix)]
+    fn write_stub_daemon() -> (PathBuf, PathBuf) {
+        let unique = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("clock before epoch")
+            .as_nanos();
+        let dir = env::temp_dir().join(format!(
+            "kassiber-supervisor-test-{}-{unique}",
+            std::process::id()
+        ));
+        fs::create_dir_all(&dir).expect("create temp dir");
+        let script = dir.join("stub-daemon.py");
+        fs::write(
+            &script,
+            r#"#!/usr/bin/env python3
+import json
+import sys
+import threading
+import time
+
+write_lock = threading.Lock()
+
+def emit(payload):
+    with write_lock:
+        sys.stdout.write(json.dumps(payload, separators=(",", ":")) + "\n")
+        sys.stdout.flush()
+
+emit({"kind":"daemon.ready","schema_version":1,"data":{"version":"test","supported_kinds":["slow","fast","daemon.shutdown"]}})
+
+def slow(request_id):
+    emit({"kind":"slow.delta","schema_version":1,"request_id":request_id,"data":{"delta":{"content":"a"}}})
+    time.sleep(0.35)
+    emit({"kind":"slow","schema_version":1,"request_id":request_id,"data":{"finish_reason":"stop"}})
+
+for line in sys.stdin:
+    if not line.strip():
+        continue
+    request = json.loads(line)
+    request_id = request.get("request_id")
+    kind = request.get("kind")
+    if kind == "slow":
+        threading.Thread(target=slow, args=(request_id,), daemon=True).start()
+    elif kind == "fast":
+        emit({"kind":"fast","schema_version":1,"request_id":request_id,"data":{"ok":True}})
+    elif kind == "daemon.shutdown":
+        emit({"kind":"daemon.shutdown","schema_version":1,"request_id":request_id,"data":{}})
+        break
+"#,
+        )
+        .expect("write stub daemon");
+        let mut permissions = fs::metadata(&script).expect("metadata").permissions();
+        permissions.set_mode(0o755);
+        fs::set_permissions(&script, permissions).expect("chmod stub daemon");
+        (dir, script)
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn demuxes_fast_request_while_streaming_request_is_active() {
+        let (dir, script) = write_stub_daemon();
+        let process = DaemonProcess::spawn_command(DaemonCommand {
+            program: script,
+            args: Vec::new(),
+            cwd: dir.clone(),
+            source: "env_python",
+        })
+        .expect("spawn stub daemon");
+        let supervisor = Arc::new(DaemonSupervisor::new_with_process(process));
+        let (delta_tx, delta_rx) = mpsc::channel();
+
+        let slow_supervisor = Arc::clone(&supervisor);
+        let slow = thread::spawn(move || {
+            slow_supervisor.invoke_inner("slow", None, true, Some(json!("slow-1")), |record| {
+                let _ = delta_tx.send(record.clone());
+            })
+        });
+
+        let delta = delta_rx
+            .recv_timeout(Duration::from_secs(2))
+            .expect("stream delta");
+        assert_eq!(
+            delta.get("kind").and_then(Value::as_str),
+            Some("slow.delta")
+        );
+
+        let started = Instant::now();
+        let fast = supervisor
+            .invoke_inner("fast", None, false, Some(json!("fast-1")), |_| {})
+            .expect("fast response");
+        assert!(
+            started.elapsed() < Duration::from_millis(250),
+            "fast request waited for the slow stream to finish"
+        );
+        assert_eq!(fast.get("kind").and_then(Value::as_str), Some("fast"));
+        assert_eq!(
+            fast.get("request_id").and_then(Value::as_str),
+            Some("fast-1")
+        );
+
+        let slow_terminal = slow.join().expect("slow join").expect("slow response");
+        assert_eq!(
+            slow_terminal.get("kind").and_then(Value::as_str),
+            Some("slow")
+        );
+
+        let _ = supervisor.invoke_inner(
+            "daemon.shutdown",
+            None,
+            false,
+            Some(json!("shutdown-1")),
+            |_| {},
+        );
+        let _ = fs::remove_dir_all(dir);
+    }
 }

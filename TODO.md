@@ -200,8 +200,8 @@ and [docs/plan/04-desktop-ui.md](docs/plan/04-desktop-ui.md).
 - [x] Add `kassiber/daemon.py` and a `kassiber daemon` subcommand
 - [x] JSONL request/response with `request_id`, `daemon.ready`, and a first
   `status` round-trip
-- [ ] Add `progress` envelopes, cancellation, and mutation-safe long-running
-  request handling
+- [ ] Add `progress` envelopes and mutation-safe long-running request handling
+  beyond the AI chat cancel path
 - [ ] Worker pool with one SQLite connection per worker
 - [x] Smoke coverage for daemon ready/status/shutdown
 - [ ] Redaction audit in CI
@@ -232,16 +232,20 @@ and [docs/plan/04-desktop-ui.md](docs/plan/04-desktop-ui.md).
   daemon protocol — provider config in SQLite, CLI parity
   (`kassiber ai providers/models/chat`), streaming chat with `<think>`
   reasoning split, and a Settings → AI providers panel
-- [ ] AI tool use (PR 2): expose typed daemon kinds as the assistant's tool
-  surface, seed the system prompt from `skills/kassiber/`, run a
-  read-only-by-default tool loop with per-call consent for mutating tools
-- [ ] Cooperative AI chat cancellation: thread a `threading.Event` (or a
-  dedicated `ai.chat.cancel` request kind) so Stop actually halts generation
-  rather than only stopping further UI updates
+- [x] Split the Tauri daemon supervisor by `request_id` so one streaming
+  `ai.chat` call no longer single-flights unrelated daemon invokes; keep one
+  daemon process, one narrow stdin write lock, and one stdout demux reader.
+- [x] Add cooperative AI chat cancellation through `ai.chat.cancel` and a
+  per-request `threading.Event` so Stop suppresses further deltas and the
+  terminal chat envelope reports `finish_reason: "cancelled"`.
+- [ ] AI tool use (PR 3): expose typed daemon kinds as the assistant's tool
+  surface, seed the system prompt from compact `skills/kassiber/` guidance,
+  and start with a read-only-by-default tool loop. Leave mutating tool consent
+  for a later PR.
 - [ ] Daemon worker pool: replace the surgical `ai.chat` thread with a real
-  worker-pool model so concurrent streaming + non-streaming requests don't
-  serialize through one stdin/stdout reader (also unblocks tool-call SQLite
-  access from the AI thread)
+  worker-pool model and one SQLite connection per worker when read-only tools
+  or longer-running UI actions need daemon-side concurrency beyond the
+  supervisor demux.
 - [x] Overview screen now uses `@shadcnblocks/dashboard5` as the first
   dashboard screen, keeping Export -> Reports, Add connection modal, and
   Show all transactions wiring

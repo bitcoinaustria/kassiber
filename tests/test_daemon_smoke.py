@@ -1,8 +1,12 @@
 import json
+import select
 import subprocess
 import sys
 import tempfile
+import threading
+import time
 import unittest
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 from kassiber.daemon import MAX_REQUEST_LINE_CHARS
@@ -34,6 +38,14 @@ def _read_payload(proc):
     return json.loads(proc.stdout.readline())
 
 
+def _read_payload_timeout(proc, timeout=5.0):
+    assert proc.stdout is not None
+    ready, _, _ = select.select([proc.stdout.fileno()], [], [], timeout)
+    if not ready:
+        raise AssertionError(f"daemon did not emit a payload within {timeout:.1f}s")
+    return json.loads(proc.stdout.readline())
+
+
 def _write_payload(proc, payload):
     assert proc.stdin is not None
     line = payload if isinstance(payload, str) else json.dumps(payload)
@@ -50,6 +62,44 @@ def _close_daemon(proc):
     if proc.stderr is not None:
         proc.stderr.close()
     return proc.wait(timeout=5), stderr
+
+
+class _SlowChatHandler(BaseHTTPRequestHandler):
+    def do_POST(self):
+        if self.path != "/v1/chat/completions":
+            self.send_response(404)
+            self.end_headers()
+            return
+        length = int(self.headers.get("content-length") or "0")
+        if length:
+            self.rfile.read(length)
+        self.send_response(200)
+        self.send_header("content-type", "text/event-stream")
+        self.send_header("cache-control", "no-cache")
+        self.end_headers()
+        for chunk in ("one", "two", "three"):
+            payload = {
+                "choices": [
+                    {
+                        "delta": {"content": chunk},
+                        "finish_reason": None,
+                    }
+                ]
+            }
+            try:
+                self.wfile.write(f"data: {json.dumps(payload)}\n\n".encode())
+                self.wfile.flush()
+            except (BrokenPipeError, ConnectionResetError):
+                return
+            time.sleep(0.15)
+        try:
+            self.wfile.write(b"data: [DONE]\n\n")
+            self.wfile.flush()
+        except (BrokenPipeError, ConnectionResetError):
+            return
+
+    def log_message(self, *args):
+        return
 
 
 class DaemonSmokeTest(unittest.TestCase):
@@ -72,6 +122,7 @@ class DaemonSmokeTest(unittest.TestCase):
             self.assertIn("backends.reveal_token", ready["data"]["supported_kinds"])
             self.assertIn("ai.test_connection", ready["data"]["supported_kinds"])
             self.assertIn("ai.chat", ready["data"]["supported_kinds"])
+            self.assertIn("ai.chat.cancel", ready["data"]["supported_kinds"])
 
             _write_payload(proc, {"request_id": "status-1", "kind": "status"})
             status = _read_payload(proc)
@@ -89,6 +140,85 @@ class DaemonSmokeTest(unittest.TestCase):
             code, stderr = _close_daemon(proc)
             self.assertEqual(code, 0, stderr)
             self.assertEqual(stderr, "")
+
+    def test_ai_chat_cancel_cooperatively_finishes_cancelled(self):
+        server = ThreadingHTTPServer(("127.0.0.1", 0), _SlowChatHandler)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        base_url = f"http://127.0.0.1:{server.server_port}/v1"
+        try:
+            with tempfile.TemporaryDirectory(prefix="kassiber-daemon-") as tmp:
+                data_root = Path(tmp) / "data"
+                proc = _start_daemon(data_root)
+
+                ready = _read_payload_timeout(proc)
+                self.assertEqual(ready["kind"], "daemon.ready")
+                self.assertIn("ai.chat.cancel", ready["data"]["supported_kinds"])
+
+                _write_payload(
+                    proc,
+                    {
+                        "request_id": "provider-1",
+                        "kind": "ai.providers.create",
+                        "args": {
+                            "name": "slow-local",
+                            "base_url": base_url,
+                            "kind": "local",
+                        },
+                    },
+                )
+                provider = _read_payload_timeout(proc)
+                self.assertEqual(provider["kind"], "ai.providers.create")
+
+                _write_payload(
+                    proc,
+                    {
+                        "request_id": "chat-1",
+                        "kind": "ai.chat",
+                        "args": {
+                            "provider": "slow-local",
+                            "model": "test-model",
+                            "messages": [{"role": "user", "content": "hello"}],
+                        },
+                    },
+                )
+                first_delta = _read_payload_timeout(proc)
+                self.assertEqual(first_delta["request_id"], "chat-1")
+                self.assertEqual(first_delta["kind"], "ai.chat.delta")
+
+                _write_payload(
+                    proc,
+                    {
+                        "request_id": "cancel-1",
+                        "kind": "ai.chat.cancel",
+                        "args": {"target_request_id": "chat-1"},
+                    },
+                )
+
+                cancel_response = None
+                terminal = None
+                deadline = time.time() + 5
+                while time.time() < deadline and (cancel_response is None or terminal is None):
+                    payload = _read_payload_timeout(proc, max(0.1, deadline - time.time()))
+                    if payload.get("request_id") == "cancel-1":
+                        cancel_response = payload
+                    if payload.get("request_id") == "chat-1" and payload.get("kind") == "ai.chat":
+                        terminal = payload
+
+                self.assertIsNotNone(cancel_response)
+                self.assertEqual(cancel_response["kind"], "ai.chat.cancel")
+                self.assertTrue(cancel_response["data"]["cancelled"])
+                self.assertIsNotNone(terminal)
+                self.assertEqual(terminal["data"]["finish_reason"], "cancelled")
+
+                _write_payload(proc, {"request_id": "shutdown-1", "kind": "daemon.shutdown"})
+                self.assertEqual(_read_payload_timeout(proc)["kind"], "daemon.shutdown")
+                code, stderr = _close_daemon(proc)
+                self.assertEqual(code, 0, stderr)
+                self.assertEqual(stderr, "")
+        finally:
+            server.shutdown()
+            server.server_close()
 
     def test_daemon_error_paths_are_structured(self):
         with tempfile.TemporaryDirectory(prefix="kassiber-daemon-") as tmp:

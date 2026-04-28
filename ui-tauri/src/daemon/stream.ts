@@ -7,10 +7,8 @@
  * channels via `ThinkParser`, so the reasoning pane and answer pane can
  * render independently as tokens arrive.
  *
- * v1 omits provider-side cancellation: `abort()` marks the in-flight assistant
- * message stopped and suppresses later UI updates, but the underlying request
- * keeps generating until it finishes. Cooperative cancellation lands with the
- * worker-pool refactor.
+ * Stop sends a cooperative `ai.chat.cancel` daemon request for the active
+ * stream request_id, while the UI still suppresses late records locally.
  */
 
 import * as React from "react";
@@ -19,7 +17,7 @@ import type {
   DaemonEnvelope,
   DaemonStreamRecord,
 } from "./transport";
-import { getTransport } from "./transport";
+import { getTransport, makeDaemonRequestId } from "./transport";
 import { ThinkParser } from "@/lib/thinkParser";
 import { useUiStore } from "@/store/ui";
 
@@ -43,7 +41,7 @@ export interface AiChatRequest {
   options?: Record<string, unknown>;
 }
 
-interface AiChatDeltaShape {
+export interface AiChatDeltaShape {
   delta?: {
     role?: AiChatMessage["role"] | "tool";
     content?: string;
@@ -83,6 +81,49 @@ function makeId(): string {
   return `msg-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
+export function applyAiChatDeltaToMessage(
+  current: AiChatMessage,
+  record: DaemonStreamRecord<AiChatDeltaShape>,
+  parser: ThinkParser,
+  aborted: boolean,
+): AiChatMessage {
+  if (aborted || record.kind !== "ai.chat.delta") return current;
+  const content = record.data?.delta?.content;
+  const reasoning = record.data?.delta?.reasoning;
+  if (!content && !reasoning) return current;
+
+  // `content` may carry inline `<think>...</think>` chunks (DeepSeek-R1,
+  // older Qwen builds). `reasoning` is the structured channel
+  // (OpenAI o1/o3, Ollama's OpenAI-compat for Qwen3 / Gemma reasoning
+  // builds). Merge both into the thinking pane; visible answer comes
+  // from the parsed-content channel only.
+  let visibleAdd = "";
+  let thinkingAdd = "";
+  if (content) {
+    const split = parser.feed(content);
+    visibleAdd = split.content;
+    thinkingAdd = split.thinking;
+  }
+  if (reasoning) {
+    thinkingAdd += reasoning;
+  }
+  if (!visibleAdd && !thinkingAdd) return current;
+
+  return {
+    ...current,
+    status: "streaming",
+    content: current.content + visibleAdd,
+    thinking: (current.thinking ?? "") + thinkingAdd,
+  };
+}
+
+export function terminalAiChatStatus(
+  finishReason: string | null | undefined,
+  aborted: boolean,
+): AiChatMessage["status"] {
+  return aborted || finishReason === "cancelled" ? "cancelled" : "done";
+}
+
 /** React hook driving one assistant thread. */
 export function useAiChatStream(): UseAiChatStreamResult {
   const dataMode = useUiStore((state) => state.dataMode);
@@ -94,6 +135,7 @@ export function useAiChatStream(): UseAiChatStreamResult {
   const abortRef = React.useRef<AbortController | null>(null);
   const parserRef = React.useRef<ThinkParser | null>(null);
   const assistantIdRef = React.useRef<string | null>(null);
+  const requestIdRef = React.useRef<string | null>(null);
 
   const updateAssistant = React.useCallback(
     (
@@ -110,35 +152,16 @@ export function useAiChatStream(): UseAiChatStreamResult {
 
   const onRecord = React.useCallback(
     (record: DaemonStreamRecord<AiChatDeltaShape>) => {
-      if (abortRef.current?.signal.aborted) return;
-      if (record.kind !== "ai.chat.delta") return;
-      const content = record.data?.delta?.content;
-      const reasoning = record.data?.delta?.reasoning;
-      if (!content && !reasoning) return;
-      // `content` may carry inline `<think>...</think>` chunks (DeepSeek-R1,
-      // older Qwen builds). `reasoning` is the structured channel
-      // (OpenAI o1/o3, Ollama's OpenAI-compat for Qwen3 / Gemma reasoning
-      // builds). Merge both into the thinking pane; visible answer comes
-      // from the parsed-content channel only.
-      let visibleAdd = "";
-      let thinkingAdd = "";
-      if (content) {
-        const parser = parserRef.current ?? new ThinkParser();
-        parserRef.current = parser;
-        const split = parser.feed(content);
-        visibleAdd = split.content;
-        thinkingAdd = split.thinking;
-      }
-      if (reasoning) {
-        thinkingAdd += reasoning;
-      }
-      if (!visibleAdd && !thinkingAdd) return;
-      updateAssistant((current) => ({
-        ...current,
-        status: "streaming",
-        content: current.content + visibleAdd,
-        thinking: (current.thinking ?? "") + thinkingAdd,
-      }));
+      const parser = parserRef.current ?? new ThinkParser();
+      parserRef.current = parser;
+      updateAssistant((current) =>
+        applyAiChatDeltaToMessage(
+          current,
+          record,
+          parser,
+          abortRef.current?.signal.aborted ?? false,
+        ),
+      );
     },
     [updateAssistant],
   );
@@ -171,6 +194,8 @@ export function useAiChatStream(): UseAiChatStreamResult {
 
       const controller = new AbortController();
       abortRef.current = controller;
+      const requestId = makeDaemonRequestId();
+      requestIdRef.current = requestId;
       try {
         const transport = getTransport(dataMode);
         const envelope = (await transport.stream<
@@ -179,6 +204,7 @@ export function useAiChatStream(): UseAiChatStreamResult {
         >(
           {
             kind: "ai.chat",
+            request_id: requestId,
             args: {
               provider: request.provider,
               model: request.model,
@@ -202,9 +228,10 @@ export function useAiChatStream(): UseAiChatStreamResult {
           return;
         }
 
+        const finishReason = envelope.data?.finish_reason ?? null;
         // Flush any pending tag-prefix bytes still in the parser.
         const parser = parserRef.current;
-        if (parser) {
+        if (parser && !controller.signal.aborted) {
           const tail = parser.flush();
           if (tail.content || tail.thinking) {
             updateAssistant((current) => ({
@@ -217,8 +244,8 @@ export function useAiChatStream(): UseAiChatStreamResult {
 
         updateAssistant((current) => ({
           ...current,
-          status: controller.signal.aborted ? "cancelled" : "done",
-          finishReason: envelope.data?.finish_reason ?? null,
+          status: terminalAiChatStatus(finishReason, controller.signal.aborted),
+          finishReason,
           provider: envelope.data?.provider ?? request.provider,
           model: envelope.data?.model ?? request.model,
         }));
@@ -237,18 +264,27 @@ export function useAiChatStream(): UseAiChatStreamResult {
         abortRef.current = null;
         parserRef.current = null;
         assistantIdRef.current = null;
+        requestIdRef.current = null;
       }
     },
     [dataMode, isStreaming, onRecord, updateAssistant],
   );
 
   const abort = React.useCallback(() => {
+    const requestId = requestIdRef.current;
     abortRef.current?.abort();
+    if (requestId) {
+      void getTransport(dataMode).invoke({
+        kind: "ai.chat.cancel",
+        request_id: makeDaemonRequestId(),
+        args: { target_request_id: requestId },
+      }).catch(() => undefined);
+    }
     updateAssistant((current) => ({
       ...current,
       status: "cancelled",
     }));
-  }, [updateAssistant]);
+  }, [dataMode, updateAssistant]);
 
   const reset = React.useCallback(() => {
     setMessages([]);
