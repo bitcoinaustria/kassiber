@@ -6,6 +6,9 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "dev:browser": "VITE_DAEMON=mock vite",
+    "dev:bridge": "VITE_DAEMON=bridge vite",
+    "dev:shell": "tauri dev",
     "build": "tsc -b && vite build",
     "tauri": "tauri",
     "tauri:dev": "tauri dev",

@@ -11,16 +11,17 @@
 import * as React from "react";
 
 import {
-  Select,
-  SelectContent,
-  SelectGroup,
-  SelectItem,
-  SelectLabel,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+  ModelSelector,
+  ModelSelectorContent,
+  ModelSelectorEmpty,
+  ModelSelectorGroup,
+  ModelSelectorItem,
+  ModelSelectorLabel,
+  ModelSelectorName,
+  ModelSelectorTrigger,
+  ModelSelectorValue,
+} from "@/components/ai-elements";
 import { useDaemon } from "@/daemon/client";
-import { cn } from "@/lib/utils";
 
 export interface ProviderRow {
   name: string;
@@ -47,12 +48,6 @@ interface ProviderModelPickerProps {
   value: { provider: string; model: string } | null;
   onChange: (next: { provider: string; model: string } | null) => void;
 }
-
-const KIND_LABELS: Record<ProviderRow["kind"], { label: string; tone: string }> = {
-  local: { label: "local", tone: "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300" },
-  remote: { label: "remote", tone: "bg-amber-500/15 text-amber-700 dark:text-amber-300" },
-  tee: { label: "TEE", tone: "bg-sky-500/15 text-sky-700 dark:text-sky-300" },
-};
 
 function rowValue(provider: string, model: string): string {
   return `${provider}::${model}`;
@@ -153,59 +148,45 @@ export function ProviderModelPicker({ value, onChange }: ProviderModelPickerProp
   };
 
   return (
-    <Select
+    <ModelSelector
       value={value ? rowValue(value.provider, value.model) : ""}
       onValueChange={handleChange}
     >
-      <SelectTrigger className="w-fit border-none bg-transparent! p-0 text-sm text-muted-foreground hover:text-foreground focus:ring-0 shadow-none">
-        <SelectValue>
-          <span className="truncate">{currentLabel}</span>
-        </SelectValue>
-      </SelectTrigger>
-      <SelectContent
-        position="popper"
-        side="top"
-        align="start"
-        className="min-w-72"
-      >
+      <ModelSelectorTrigger>
+        <ModelSelectorValue>{currentLabel}</ModelSelectorValue>
+      </ModelSelectorTrigger>
+      <ModelSelectorContent>
         {groupedRows.length === 0 ? (
-          <SelectGroup>
-            <SelectLabel>No AI providers configured</SelectLabel>
-          </SelectGroup>
+          <ModelSelectorGroup>
+            <ModelSelectorLabel>No AI providers configured</ModelSelectorLabel>
+          </ModelSelectorGroup>
         ) : (
           groupedRows.map(({ provider, models: rows }) => (
-            <SelectGroup key={provider.name}>
-              <SelectLabel className="flex items-center gap-2">
-                <span>{provider.name}</span>
-                <span
-                  className={cn(
-                    "rounded-full px-1.5 py-0.5 text-[10px] font-medium uppercase",
-                    KIND_LABELS[provider.kind].tone,
-                  )}
-                >
-                  {KIND_LABELS[provider.kind].label}
-                </span>
-              </SelectLabel>
+            <ModelSelectorGroup key={provider.name}>
+              <ModelSelectorLabel
+                provider={provider.name}
+                kind={provider.kind}
+              />
               {rows.length === 0 ? (
-                <SelectItem value={rowValue(provider.name, "__placeholder__")} disabled>
-                  <span className="text-muted-foreground">
+                <ModelSelectorItem value={rowValue(provider.name, "__placeholder__")} disabled>
+                  <ModelSelectorEmpty>
                     No models found · open Settings to set a default
-                  </span>
-                </SelectItem>
+                  </ModelSelectorEmpty>
+                </ModelSelectorItem>
               ) : (
                 rows.map((model) => (
-                  <SelectItem
+                  <ModelSelectorItem
                     key={`${provider.name}-${model.id}`}
                     value={rowValue(provider.name, model.id)}
                   >
-                    <span className="font-mono text-xs">{model.id}</span>
-                  </SelectItem>
+                    <ModelSelectorName>{model.id}</ModelSelectorName>
+                  </ModelSelectorItem>
                 ))
               )}
-            </SelectGroup>
+            </ModelSelectorGroup>
           ))
         )}
-      </SelectContent>
-    </Select>
+      </ModelSelectorContent>
+    </ModelSelector>
   );
 }

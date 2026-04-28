@@ -60,11 +60,20 @@ Kassiber is currently in **dev mode**: renaming commands, breaking flags, and re
 - Successful responses use `{kind, schema_version, data}`. Errors use `{kind: "error", schema_version, error: {code, message, hint, details, retryable, debug}}`.
 - The Tauri supervisor routes daemon responses by `request_id`, not by kind.
   Streaming requests emit intermediate records such as `ai.chat.delta`,
-  `ai.chat.tool_call`, and `ai.chat.tool_result` to the `daemon://stream` Tauri
-  event channel; the exact-kind terminal record (or an error) resolves only the
-  matching request. `ai.chat.cancel` takes
-  `args.target_request_id` so the cancel request keeps its own routing
+  `ai.chat.tool_call`, `ai.chat.tool_consent_required`, and
+  `ai.chat.tool_result` to the `daemon://stream` Tauri event channel; the
+  exact-kind terminal record (or an error) resolves only the matching request.
+  Mutating tools may emit `ai.chat.tool_call` twice for the same `call_id`:
+  first with `needs_consent: true`, then after approval with
+  `needs_consent: false` to mark that same call as running. Clients should
+  upsert tool cards by `call_id` instead of rendering duplicate cards.
+  `ai.chat.cancel` and `ai.tool_call.consent` take
+  `args.target_request_id` so the control request keeps its own routing
   `request_id`; cancelled chats finish with `finish_reason: "cancelled"`.
+- Browser dev mode can exercise the real daemon over the Vite loopback bridge:
+  `pnpm --dir ui-tauri run dev:bridge` serves the React app at
+  `http://127.0.0.1:5173`, forwards invokes through `/__kassiber__/daemon`,
+  and streams `ai.chat` as NDJSON from `/__kassiber__/daemon/stream`.
 - Live sync kinds implemented: `esplora`, `electrum`, `bitcoinrpc`. BTCPay Greenfield confirmed on-chain wallet history sync is available through wallet config and `wallets sync-btcpay`.
 - BIP329 records are stored in SQLite and transaction labels are bridged into Kassiber tags.
 - BTCPay CSV/JSON imports become transactions, with comments mapped to notes and labels mapped to tags. Wallet-configured BTCPay sync and `wallets sync-btcpay` reuse that same normalization for confirmed Greenfield wallet history.

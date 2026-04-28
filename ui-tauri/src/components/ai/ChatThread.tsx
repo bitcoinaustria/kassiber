@@ -9,8 +9,8 @@
 import * as React from "react";
 
 import { ChatMessage } from "./ChatMessage";
+import { Conversation, ConversationContent } from "@/components/ai-elements";
 import type { AiChatMessage } from "@/daemon/stream";
-import { cn } from "@/lib/utils";
 
 interface ChatThreadProps {
   messages: AiChatMessage[];
@@ -40,17 +40,12 @@ export function ChatThread({ messages, className }: ChatThreadProps) {
   if (messages.length === 0) return null;
 
   return (
-    <div
-      ref={containerRef}
-      onScroll={handleScroll}
-      className={cn(
-        "flex w-full max-w-3xl flex-col gap-3 overflow-y-auto px-1",
-        className,
-      )}
-    >
-      {messages.map((message) => (
-        <ChatMessage key={message.id} message={message} />
-      ))}
-    </div>
+    <Conversation className={className}>
+      <ConversationContent ref={containerRef} onScroll={handleScroll}>
+        {messages.map((message) => (
+          <ChatMessage key={message.id} message={message} />
+        ))}
+      </ConversationContent>
+    </Conversation>
   );
 }

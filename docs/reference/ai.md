@@ -98,6 +98,20 @@ the daemon protocol; chat streaming is wired through Tauri events
 (`daemon://stream`) so the UI can render reasoning (`<think>`) and the answer
 in real time.
 
+For browser-driven development, the Vite dev server also exposes a loopback-only
+daemon bridge. Run:
+
+```bash
+pnpm --dir ui-tauri run dev:bridge
+```
+
+Then open `http://127.0.0.1:5173`. In bridge mode, the browser talks to the
+same local Python daemon protocol through Vite: normal calls use
+`/__kassiber__/daemon`, and `ai.chat` streams NDJSON records from
+`/__kassiber__/daemon/stream`. This is a development-only convenience for
+testing real local AI, tool cards, cancellation, and consent from an ordinary
+browser tab. Packaged builds and `tauri dev` do not use the bridge.
+
 Provider configuration is mirrored in the CLI:
 
 ```bash
@@ -148,7 +162,7 @@ tokens already generated or in flight may still be billed.
 
 ## Tool use
 
-The in-app assistant can opt into a bounded read-only tool loop with
+The in-app assistant can opt into a bounded tool loop with
 `ai.chat` top-level args:
 
 ```json
@@ -161,11 +175,20 @@ The in-app assistant can opt into a bounded read-only tool loop with
 
 Tool control stays top-level; generation options still live under `options`.
 When enabled, Kassiber prepends a compact system prompt, sends OpenAI-style tool
-definitions, emits `ai.chat.tool_call` / `ai.chat.tool_result` stream records,
-feeds tool results back as `role: "tool"` messages, and finishes with the normal
-terminal `ai.chat` envelope.
+definitions, emits `ai.chat.tool_call`, `ai.chat.tool_consent_required`, and
+`ai.chat.tool_result` stream records as needed, feeds tool results back as
+`role: "tool"` messages, and finishes with the normal terminal `ai.chat`
+envelope.
 
-Read-only provider tool names exposed in this PR:
+Clients should upsert tool cards by `call_id`. Mutating tools emit an initial
+`ai.chat.tool_call` with `needs_consent: true`, followed by
+`ai.chat.tool_consent_required`. If the user approves the call, the daemon emits
+another `ai.chat.tool_call` for the same `call_id` with `needs_consent: false`
+before `ai.chat.tool_result`; that second record marks the approved call as
+running and must not create a duplicate card.
+
+Read-only provider tool names run automatically through safe daemon snapshot
+surfaces:
 
 - `status`
 - `ui_overview_snapshot` maps to daemon kind `ui.overview.snapshot`
@@ -180,9 +203,29 @@ Read-only provider tool names exposed in this PR:
 `metadata`, `onboarding`, `reports`, `secrets-and-backup`, `troubleshooting`,
 `verification`, and `wallets-backends`.
 
-Unknown and mutating tool calls return `ok: false` with
-`reason: "tool_not_allowed"` and are not executed. Mutating tools wait for the
-future consent PR.
+The first mutating provider tool is `ui_wallets_sync`, which maps to daemon kind
+`ui.wallets.sync`. When a model requests it, the daemon emits
+`ai.chat.tool_consent_required` with a short summary and redacted argument
+preview, then waits for:
+
+```json
+{
+  "kind": "ai.tool_call.consent",
+  "args": {
+    "target_request_id": "<active ai.chat request_id>",
+    "call_id": "<tool call id>",
+    "decision": "allow_once"
+  }
+}
+```
+
+`decision` can be `allow_once`, `allow_session`, or `deny`. Session consent is
+in-memory and lasts only for the current `ai.chat` request; it applies only to
+subsequent calls to the same tool name in that chat. If the user denies or does
+not respond before the consent timeout, the daemon feeds a tool result back to
+the model with `ok: false` and `reason: "user_denied"` or
+`"consent_timeout"`. Unknown tools still return `tool_not_allowed` and are not
+executed.
 
 ## Remote inference
 

@@ -35,7 +35,15 @@ export interface AiChatMessage {
   model?: string;
 }
 
-export type AiToolCallStatus = "pending" | "running" | "done" | "denied" | "error";
+export type AiToolCallStatus =
+  | "pending"
+  | "awaiting_consent"
+  | "running"
+  | "done"
+  | "denied"
+  | "error";
+
+export type AiToolConsentDecision = "allow_once" | "allow_session" | "deny";
 
 export interface AiChatToolCall {
   callId: string;
@@ -57,6 +65,14 @@ export interface AiChatRequest {
   toolLoopMaxIterations?: number;
   systemPromptKind?: "kassiber" | "raw" | null;
   systemPrompt?: string;
+}
+
+export interface AiToolConsentRequest {
+  targetRequestId: string;
+  callId: string;
+  name: string;
+  summary: string;
+  argumentsPreview: Record<string, unknown>;
 }
 
 export interface AiChatDeltaShape {
@@ -96,16 +112,31 @@ export interface AiChatToolResultShape {
   message?: string;
 }
 
+export interface AiChatToolConsentRequiredShape {
+  call_id: string;
+  name: string;
+  summary?: string;
+  arguments_preview?: Record<string, unknown>;
+}
+
+interface AiToolConsentResponseShape {
+  recorded?: boolean;
+  reason?: string;
+}
+
 type AiChatStreamRecordData =
   | AiChatDeltaShape
   | AiChatToolCallShape
-  | AiChatToolResultShape;
+  | AiChatToolResultShape
+  | AiChatToolConsentRequiredShape;
 
 export interface UseAiChatStreamResult {
   messages: AiChatMessage[];
   isStreaming: boolean;
   error: { code: string; message: string } | null;
+  pendingConsent: AiToolConsentRequest | null;
   send: (request: AiChatRequest, userMessageContent: string) => Promise<void>;
+  sendConsent: (decision: AiToolConsentDecision) => Promise<void>;
   abort: () => void;
   reset: () => void;
 }
@@ -158,10 +189,55 @@ export function applyAiChatDeltaToMessage(
 
 function toolResultStatus(data: AiChatToolResultShape): AiToolCallStatus {
   if (data.ok) return "done";
-  if (data.reason === "tool_not_allowed" || data.reason === "user_denied") {
+  if (
+    data.reason === "tool_not_allowed" ||
+    data.reason === "user_denied" ||
+    data.reason === "consent_timeout"
+  ) {
     return "denied";
   }
   return "error";
+}
+
+export function buildToolConsentArgs(
+  request: AiToolConsentRequest,
+  decision: AiToolConsentDecision,
+): Record<string, unknown> {
+  return {
+    target_request_id: request.targetRequestId,
+    call_id: request.callId,
+    decision,
+  };
+}
+
+export function applyToolConsentResponseToMessage(
+  current: AiChatMessage,
+  callId: string,
+  decision: AiToolConsentDecision,
+  recorded: boolean,
+  reason?: string,
+): AiChatMessage {
+  const nextStatus: AiToolCallStatus = recorded
+    ? decision === "deny"
+      ? "denied"
+      : "running"
+    : "error";
+  return {
+    ...current,
+    toolCalls: (current.toolCalls ?? []).map((toolCall) =>
+      toolCall.callId === callId
+        ? {
+            ...toolCall,
+            status: nextStatus,
+            reason: recorded
+              ? decision === "deny"
+                ? "user_denied"
+                : toolCall.reason
+              : reason ?? "not_found",
+          }
+        : toolCall,
+    ),
+  };
 }
 
 export function applyAiChatStreamRecordToMessage(
@@ -236,6 +312,31 @@ export function applyAiChatStreamRecordToMessage(
           ],
     };
   }
+  if (record.kind === "ai.chat.tool_consent_required") {
+    const data = record.data as AiChatToolConsentRequiredShape | undefined;
+    if (!data?.call_id || !data.name) return current;
+    const existing = current.toolCalls ?? [];
+    const found = existing.some((toolCall) => toolCall.callId === data.call_id);
+    const nextToolCall: AiChatToolCall = {
+      callId: data.call_id,
+      name: data.name,
+      arguments: data.arguments_preview ?? {},
+      kindClass: "mutating",
+      needsConsent: true,
+      status: "awaiting_consent",
+    };
+    return {
+      ...current,
+      status: "streaming",
+      toolCalls: found
+        ? existing.map((toolCall) =>
+            toolCall.callId === data.call_id
+              ? { ...toolCall, ...nextToolCall }
+              : toolCall,
+          )
+        : [...existing, nextToolCall],
+    };
+  }
   return current;
 }
 
@@ -254,10 +355,16 @@ export function useAiChatStream(): UseAiChatStreamResult {
   const [error, setError] = React.useState<UseAiChatStreamResult["error"]>(
     null,
   );
+  const [pendingConsent, setPendingConsent] =
+    React.useState<AiToolConsentRequest | null>(null);
   const abortRef = React.useRef<AbortController | null>(null);
   const parserRef = React.useRef<ThinkParser | null>(null);
   const assistantIdRef = React.useRef<string | null>(null);
   const requestIdRef = React.useRef<string | null>(null);
+  const recordQueueRef = React.useRef<
+    DaemonStreamRecord<AiChatStreamRecordData>[]
+  >([]);
+  const flushTimerRef = React.useRef<number | null>(null);
 
   const updateAssistant = React.useCallback(
     (
@@ -272,20 +379,68 @@ export function useAiChatStream(): UseAiChatStreamResult {
     [],
   );
 
+  const flushQueuedRecords = React.useCallback(() => {
+    if (flushTimerRef.current !== null) {
+      window.clearTimeout(flushTimerRef.current);
+      flushTimerRef.current = null;
+    }
+    const records = recordQueueRef.current.splice(0);
+    if (records.length === 0) return;
+
+    const parser = parserRef.current ?? new ThinkParser();
+    parserRef.current = parser;
+    updateAssistant((current) =>
+      records.reduce(
+        (next, record) =>
+          applyAiChatStreamRecordToMessage(
+            next,
+            record,
+            parser,
+            abortRef.current?.signal.aborted ?? false,
+          ),
+        current,
+      ),
+    );
+  }, [updateAssistant]);
+
+  const scheduleRecordFlush = React.useCallback(() => {
+    if (flushTimerRef.current !== null) return;
+    flushTimerRef.current = window.setTimeout(() => {
+      flushTimerRef.current = null;
+      flushQueuedRecords();
+    }, 32);
+  }, [flushQueuedRecords]);
+
   const onRecord = React.useCallback(
     (record: DaemonStreamRecord<AiChatStreamRecordData>) => {
-      const parser = parserRef.current ?? new ThinkParser();
-      parserRef.current = parser;
-      updateAssistant((current) =>
-        applyAiChatStreamRecordToMessage(
-          current,
-          record,
-          parser,
-          abortRef.current?.signal.aborted ?? false,
-        ),
-      );
+      if (record.kind === "ai.chat.tool_consent_required") {
+        const data = record.data as AiChatToolConsentRequiredShape | undefined;
+        const targetRequestId =
+          typeof record.request_id === "string"
+            ? record.request_id
+            : requestIdRef.current;
+        if (data?.call_id && data.name && targetRequestId) {
+          setPendingConsent({
+            targetRequestId,
+            callId: data.call_id,
+            name: data.name,
+            summary: data.summary ?? data.name,
+            argumentsPreview: data.arguments_preview ?? {},
+          });
+        }
+      }
+      if (record.kind === "ai.chat.tool_result") {
+        const data = record.data as AiChatToolResultShape | undefined;
+        if (data?.call_id) {
+          setPendingConsent((current) =>
+            current?.callId === data.call_id ? null : current,
+          );
+        }
+      }
+      recordQueueRef.current.push(record);
+      scheduleRecordFlush();
     },
-    [updateAssistant],
+    [scheduleRecordFlush],
   );
 
   const send = React.useCallback(
@@ -293,6 +448,7 @@ export function useAiChatStream(): UseAiChatStreamResult {
       if (isStreaming) return;
       setError(null);
       setIsStreaming(true);
+      setPendingConsent(null);
       const userId = makeId();
       const assistantId = makeId();
       assistantIdRef.current = assistantId;
@@ -340,6 +496,7 @@ export function useAiChatStream(): UseAiChatStreamResult {
           },
           { onRecord, signal: controller.signal },
         )) as DaemonEnvelope<AiChatTerminalShape>;
+        flushQueuedRecords();
 
         if (envelope.kind === "error" || envelope.error) {
           const code = envelope.error?.code ?? "unknown_error";
@@ -386,19 +543,102 @@ export function useAiChatStream(): UseAiChatStreamResult {
           errorMessage: message,
         }));
       } finally {
+        if (flushTimerRef.current !== null) {
+          window.clearTimeout(flushTimerRef.current);
+          flushTimerRef.current = null;
+        }
+        recordQueueRef.current = [];
         setIsStreaming(false);
+        setPendingConsent(null);
         abortRef.current = null;
         parserRef.current = null;
         assistantIdRef.current = null;
         requestIdRef.current = null;
       }
     },
-    [dataMode, isStreaming, onRecord, updateAssistant],
+    [dataMode, flushQueuedRecords, isStreaming, onRecord, updateAssistant],
+  );
+
+  const sendConsent = React.useCallback(
+    async (decision: AiToolConsentDecision) => {
+      const request = pendingConsent;
+      if (!request) return;
+      setPendingConsent(null);
+      try {
+        const envelope =
+          await getTransport(dataMode).invoke<AiToolConsentResponseShape>({
+            kind: "ai.tool_call.consent",
+            request_id: makeDaemonRequestId(),
+            args: buildToolConsentArgs(request, decision),
+          });
+        if (envelope.kind === "error" || envelope.error) {
+          setError({
+            code: envelope.error?.code ?? "consent_failed",
+            message: envelope.error?.message ?? "Could not record tool consent",
+          });
+          updateAssistant((current) =>
+            applyToolConsentResponseToMessage(
+              current,
+              request.callId,
+              decision,
+              false,
+              envelope.error?.code ?? "consent_failed",
+            ),
+          );
+          return;
+        }
+        if (envelope.data?.recorded === false) {
+          const reason = envelope.data.reason ?? "not_found";
+          setError({
+            code: "consent_not_recorded",
+            message: `Could not record tool consent: ${reason}`,
+          });
+          updateAssistant((current) =>
+            applyToolConsentResponseToMessage(
+              current,
+              request.callId,
+              decision,
+              false,
+              reason,
+            ),
+          );
+          return;
+        }
+        updateAssistant((current) =>
+          applyToolConsentResponseToMessage(
+            current,
+            request.callId,
+            decision,
+            true,
+          ),
+        );
+      } catch (caught) {
+        const message =
+          caught instanceof Error ? caught.message : String(caught);
+        setError({ code: "consent_failed", message });
+        updateAssistant((current) =>
+          applyToolConsentResponseToMessage(
+            current,
+            request.callId,
+            decision,
+            false,
+            "consent_failed",
+          ),
+        );
+      }
+    },
+    [dataMode, pendingConsent, updateAssistant],
   );
 
   const abort = React.useCallback(() => {
     const requestId = requestIdRef.current;
     abortRef.current?.abort();
+    recordQueueRef.current = [];
+    if (flushTimerRef.current !== null) {
+      window.clearTimeout(flushTimerRef.current);
+      flushTimerRef.current = null;
+    }
+    setPendingConsent(null);
     if (requestId) {
       void getTransport(dataMode).invoke({
         kind: "ai.chat.cancel",
@@ -415,7 +655,17 @@ export function useAiChatStream(): UseAiChatStreamResult {
   const reset = React.useCallback(() => {
     setMessages([]);
     setError(null);
+    setPendingConsent(null);
   }, []);
 
-  return { messages, isStreaming, error, send, abort, reset };
+  return {
+    messages,
+    isStreaming,
+    error,
+    pendingConsent,
+    send,
+    sendConsent,
+    abort,
+    reset,
+  };
 }

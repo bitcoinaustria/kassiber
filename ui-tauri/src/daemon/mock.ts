@@ -34,6 +34,15 @@ export const mockDaemon: DaemonTransport = {
       };
     }
 
+    if (req.kind === "ai.tool_call.consent") {
+      return {
+        kind: "ai.tool_call.consent",
+        schema_version: 1,
+        request_id: req.request_id,
+        data: { recorded: true } as T,
+      };
+    }
+
     const fixture = fixtures[req.kind];
     if (fixture === undefined) {
       return {

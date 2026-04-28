@@ -42,7 +42,13 @@ from kassiber.ai.prompt import (
     build_chat_messages,
     build_openai_tools,
 )
-from kassiber.ai.tools import SKILL_REFERENCE_NAMES, get_tool, read_skill_reference
+from kassiber.ai.tools import (
+    SKILL_REFERENCE_NAMES,
+    get_tool,
+    read_skill_reference,
+    redact_tool_arguments,
+    summarize_tool_call,
+)
 from kassiber.ai.providers import list_with_default
 from kassiber.db import open_db
 from kassiber.errors import AppError
@@ -132,6 +138,7 @@ class ToolCatalogPromptTest(unittest.TestCase):
             "ui_reports_capital_gains",
             "ui_journals_snapshot",
             "read_skill_reference",
+            "ui_wallets_sync",
         }
         tool_names = {
             tool["function"]["name"]
@@ -142,8 +149,37 @@ class ToolCatalogPromptTest(unittest.TestCase):
         for tool_name in tool_names:
             self.assertRegex(tool_name, r"^[A-Za-z0-9_-]{1,64}$")
         self.assertEqual(get_tool("ui_overview_snapshot").name, "ui.overview.snapshot")
+        self.assertEqual(get_tool("ui_wallets_sync").name, "ui.wallets.sync")
         self.assertEqual(get_tool("ui.wallets.sync").kind_class, "mutating")
-        self.assertNotIn("ui.wallets.sync", tool_names)
+        self.assertIn("ui_wallets_sync", tool_names)
+
+    def test_mutating_tool_preview_redacts_secret_like_arguments(self):
+        tool = get_tool("ui.wallets.sync")
+        self.assertEqual(
+            redact_tool_arguments(
+                {
+                    "wallet": "cold",
+                    "descriptor": "wpkh(xpub...)",
+                    "mnemonic": "abandon abandon abandon",
+                    "recovery_phrase": "abandon abandon abandon",
+                    "seed": "00" * 32,
+                    "wif": "Kxabc",
+                    "xprv": "xprv9s21...",
+                    "nested": {"api_token": "secret"},
+                }
+            ),
+            {
+                "wallet": "cold",
+                "descriptor": "<redacted>",
+                "mnemonic": "<redacted>",
+                "recovery_phrase": "<redacted>",
+                "seed": "<redacted>",
+                "wif": "<redacted>",
+                "xprv": "<redacted>",
+                "nested": {"api_token": "<redacted>"},
+            },
+        )
+        self.assertEqual(summarize_tool_call(tool, {"wallet": "cold"}), "Sync wallet cold")
 
     def test_read_skill_reference_allowlist(self):
         self.assertIn("wallets-backends", SKILL_REFERENCE_NAMES)

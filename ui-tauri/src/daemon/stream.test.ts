@@ -3,6 +3,8 @@ import { describe, expect, it } from "vitest";
 import {
   applyAiChatDeltaToMessage,
   applyAiChatStreamRecordToMessage,
+  applyToolConsentResponseToMessage,
+  buildToolConsentArgs,
   terminalAiChatStatus,
   type AiChatMessage,
 } from "./stream";
@@ -104,5 +106,102 @@ describe("AI stream reducer helpers", () => {
 
     expect(withDelta.content).toBe("Ready.");
     expect(withDelta.toolCalls?.[0].status).toBe("done");
+  });
+
+  it("applies consent required, denial, and consent request args", () => {
+    const parser = new ThinkParser();
+    const withPrompt = applyAiChatStreamRecordToMessage(
+      assistantMessage(),
+      {
+        kind: "ai.chat.tool_consent_required",
+        schema_version: 1,
+        request_id: "chat-1",
+        data: {
+          call_id: "call_1",
+          name: "ui.wallets.sync",
+          summary: "Sync all wallets",
+          arguments_preview: { descriptor: "<redacted>" },
+        },
+      },
+      parser,
+      false,
+    );
+
+    expect(withPrompt.toolCalls).toHaveLength(1);
+    expect(withPrompt.toolCalls?.[0].status).toBe("awaiting_consent");
+    expect(withPrompt.toolCalls?.[0].arguments).toEqual({
+      descriptor: "<redacted>",
+    });
+
+    const withDenied = applyAiChatStreamRecordToMessage(
+      withPrompt,
+      {
+        kind: "ai.chat.tool_result",
+        schema_version: 1,
+        request_id: "chat-1",
+        data: {
+          call_id: "call_1",
+          ok: false,
+          reason: "user_denied",
+        },
+      },
+      parser,
+      false,
+    );
+
+    expect(withDenied.toolCalls?.[0].status).toBe("denied");
+    expect(withDenied.toolCalls?.[0].reason).toBe("user_denied");
+    expect(
+      buildToolConsentArgs(
+        {
+          targetRequestId: "chat-1",
+          callId: "call_1",
+          name: "ui.wallets.sync",
+          summary: "Sync all wallets",
+          argumentsPreview: {},
+        },
+        "allow_session",
+      ),
+    ).toEqual({
+      target_request_id: "chat-1",
+      call_id: "call_1",
+      decision: "allow_session",
+    });
+  });
+
+  it("marks stale consent acknowledgements as tool errors", () => {
+    const current = assistantMessage({
+      toolCalls: [
+        {
+          callId: "call_1",
+          name: "ui.wallets.sync",
+          arguments: {},
+          kindClass: "mutating",
+          needsConsent: true,
+          status: "awaiting_consent",
+        },
+      ],
+    });
+
+    const stale = applyToolConsentResponseToMessage(
+      current,
+      "call_1",
+      "allow_once",
+      false,
+      "not_found",
+    );
+
+    expect(stale.toolCalls?.[0].status).toBe("error");
+    expect(stale.toolCalls?.[0].reason).toBe("not_found");
+
+    const recordedDeny = applyToolConsentResponseToMessage(
+      current,
+      "call_1",
+      "deny",
+      true,
+    );
+
+    expect(recordedDeny.toolCalls?.[0].status).toBe("denied");
+    expect(recordedDeny.toolCalls?.[0].reason).toBe("user_denied");
   });
 });

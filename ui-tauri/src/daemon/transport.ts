@@ -3,7 +3,7 @@
  *
  * Three runtime modes per docs/plan/04-desktop-ui.md §2.6:
  *   - "mock"   — fixture responses, no Python required (default dev mode)
- *   - "bridge" — authenticated localhost WebSocket, dev-only (later)
+ *   - "bridge" — Vite dev-server bridge to the Python daemon, dev-only
  *   - "tauri"  — JSONL over stdin/stdout via Rust supervisor (production)
  *
  * The Tauri mode calls the Rust shell command boundary, which forwards
@@ -89,6 +89,61 @@ export interface DaemonTransport {
   ): Promise<DaemonEnvelope<T>>;
 }
 
+export async function readBridgeNdjsonStream<T = unknown, R = unknown>(
+  response: Response,
+  requestKind: string,
+  requestId: string,
+  options?: DaemonStreamOptions<R>,
+): Promise<DaemonEnvelope<T>> {
+  if (!response.ok) {
+    throw new Error(`bridge stream failed with HTTP ${response.status}`);
+  }
+  if (!response.body) {
+    throw new Error("bridge stream response did not include a body");
+  }
+
+  const decoder = new TextDecoder();
+  const reader = response.body.getReader();
+  let buffer = "";
+  let terminal: DaemonEnvelope<T> | null = null;
+
+  const handleLine = (line: string) => {
+    const trimmed = line.trim();
+    if (!trimmed) return;
+    const record = JSON.parse(trimmed) as DaemonStreamRecord<R>;
+    if (record.request_id !== requestId) {
+      return;
+    }
+    if (record.kind === requestKind || record.kind === "error") {
+      terminal = record as DaemonEnvelope<T>;
+      return;
+    }
+    if (!options?.signal?.aborted) {
+      options?.onRecord?.(record);
+    }
+  };
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    let lineEnd = buffer.indexOf("\n");
+    while (lineEnd >= 0) {
+      handleLine(buffer.slice(0, lineEnd));
+      buffer = buffer.slice(lineEnd + 1);
+      lineEnd = buffer.indexOf("\n");
+    }
+  }
+
+  buffer += decoder.decode();
+  handleLine(buffer);
+
+  if (!terminal) {
+    throw new Error("bridge stream ended without a terminal daemon envelope");
+  }
+  return terminal;
+}
+
 export function makeDaemonRequestId(): string {
   if (
     typeof globalThis.crypto !== "undefined" &&
@@ -117,7 +172,7 @@ const tauriDaemon: DaemonTransport = {
     // supervisor honors a String request_id when supplied, so we can
     // filter `daemon://stream` records as they arrive instead of
     // buffering them until the terminal envelope returns.
-  const requestId = req.request_id ?? makeDaemonRequestId();
+    const requestId = req.request_id ?? makeDaemonRequestId();
 
     const unlisten = await listen<DaemonStreamRecord<R>>(
       "daemon://stream",
@@ -150,16 +205,22 @@ const bridgeDaemon: DaemonTransport = {
     });
     return response.json() as Promise<DaemonEnvelope<T>>;
   },
-  async stream<T = unknown>(req: DaemonRequest): Promise<DaemonEnvelope<T>> {
-    return {
-      kind: "error",
-      schema_version: 1,
-      error: {
-        code: "stream_not_supported",
-        message: `bridge mode does not support streaming kinds (${req.kind}); use VITE_DAEMON=mock or run inside the Tauri shell.`,
-        retryable: false,
-      },
-    };
+  async stream<T = unknown, R = unknown>(
+    req: DaemonRequest,
+    options?: DaemonStreamOptions<R>,
+  ): Promise<DaemonEnvelope<T>> {
+    const requestId = req.request_id ?? makeDaemonRequestId();
+    const response = await fetch("/__kassiber__/daemon/stream", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ ...req, request_id: requestId }),
+    });
+    return readBridgeNdjsonStream<T, R>(
+      response,
+      req.kind,
+      requestId,
+      options,
+    );
   },
 };
 

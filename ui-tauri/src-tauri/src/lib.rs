@@ -30,6 +30,7 @@ const ALLOWED_DAEMON_KINDS: &[&str] = &[
     "ai.test_connection",
     "ai.chat",
     "ai.chat.cancel",
+    "ai.tool_call.consent",
 ];
 
 /// Kinds that may emit intermediate stream records (kind = "<request_kind>.delta",
