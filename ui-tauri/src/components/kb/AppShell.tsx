@@ -14,6 +14,7 @@ import {
   Heart,
   LayoutDashboard,
   LogOut,
+  MessageSquareText,
   Search,
   Server,
   Settings,
@@ -65,6 +66,8 @@ import { useUiStore } from "@/store/ui";
 import { useDaemon } from "@/daemon/client";
 import { cn } from "@/lib/utils";
 import type { OverviewSnapshot } from "@/mocks/seed";
+import { AssistantSessionProvider } from "@/components/ai/AssistantSessionProvider";
+import type { AssistantReturnPath } from "@/components/ai/assistantSession";
 import { SettingsModal } from "./SettingsModal";
 import { ScreenAssistantMockup } from "./ScreenAssistantMockup";
 import { PreAlphaBanner } from "./PreAlphaBanner";
@@ -77,7 +80,8 @@ type AppRoutePath =
   | "/profiles"
   | "/journals"
   | "/tax-events"
-  | "/quarantine";
+  | "/quarantine"
+  | "/assistant";
 
 type NavItem = {
   label: string;
@@ -108,6 +112,7 @@ const NAV_GROUPS: NavGroup[] = [
       { label: "Overview", icon: LayoutDashboard, href: "/overview" },
       { label: "Transactions", icon: ClipboardList, href: "/transactions" },
       { label: "Reports", icon: BarChart3, href: "/reports" },
+      { label: "Assistant", icon: MessageSquareText, href: "/assistant" },
     ],
   },
   {
@@ -209,6 +214,15 @@ const ROUTE_META: Array<[string, RouteMeta]> = [
     },
   ],
   [
+    "/assistant",
+    {
+      title: "Assistant",
+      icon: MessageSquareText,
+      searchLabel: "Search assistant",
+      searchPlaceholder: "Search conversation...",
+    },
+  ],
+  [
     "/overview",
     {
       title: "Overview",
@@ -218,6 +232,17 @@ const ROUTE_META: Array<[string, RouteMeta]> = [
     },
   ],
 ];
+
+function assistantReturnPathFor(pathname: string): AssistantReturnPath {
+  if (pathname.startsWith("/connections")) return "/connections";
+  if (pathname === "/transactions") return "/transactions";
+  if (pathname === "/reports") return "/reports";
+  if (pathname === "/profiles") return "/profiles";
+  if (pathname === "/journals") return "/journals";
+  if (pathname === "/tax-events") return "/tax-events";
+  if (pathname === "/quarantine") return "/quarantine";
+  return "/overview";
+}
 
 export function AppShell() {
   const pathname = useRouterState({ select: (s) => s.location.pathname });
@@ -230,8 +255,11 @@ export function AppShell() {
     "backends" | null
   >(null);
   const [assistantCollapsed, setAssistantCollapsed] = React.useState(false);
+  const [assistantReturnPath, setAssistantReturnPath] =
+    React.useState<AssistantReturnPath>("/overview");
   const mainRef = React.useRef<HTMLElement>(null);
   const shellBusy = routerBusy || daemonFetchCount > 0;
+  const isAssistantRoute = pathname === "/assistant";
   const routeMeta =
     ROUTE_META.find(([prefix]) => pathname.startsWith(prefix))?.[1] ?? {
       title: "Kassiber",
@@ -239,6 +267,12 @@ export function AppShell() {
       searchLabel: "Search Kassiber",
       searchPlaceholder: "Search transactions, reports...",
     };
+
+  React.useEffect(() => {
+    if (!isAssistantRoute) {
+      setAssistantReturnPath(assistantReturnPathFor(pathname));
+    }
+  }, [isAssistantRoute, pathname]);
 
   React.useEffect(() => {
     const main = mainRef.current;
@@ -274,44 +308,52 @@ export function AppShell() {
 
   return (
     <TooltipProvider>
-      <div className="flex h-svh flex-col overflow-hidden bg-sidebar">
-        <PreAlphaBanner className="shrink-0" />
-        <SidebarProvider className="min-h-0 flex-1 bg-sidebar">
-          <a
-            href="#app-main"
-            className="sr-only focus:not-sr-only focus:absolute focus:top-4 focus:left-4 focus:z-50 focus:rounded-md focus:bg-background focus:px-3 focus:py-2 focus:text-sm focus:text-foreground focus:ring-2 focus:ring-ring"
-          >
-            Skip to main content
-          </a>
-          <AppSidebar
-            pathname={pathname}
-            onSettingsClick={() => {
-              setSettingsFocus(null);
-              setSettingsOpen(true);
-            }}
-          />
-          <div className="min-h-0 w-full overflow-hidden lg:p-2">
-            <div className="relative flex h-full w-full flex-col items-center justify-start overflow-hidden bg-background lg:rounded-xl lg:border">
-              <AppDashboardHeader meta={routeMeta} />
-              <main
-                id="app-main"
-                ref={mainRef}
-                tabIndex={-1}
-                className={`relative min-h-0 w-full flex-1 overflow-auto bg-background transition-[padding-bottom] duration-200 ${
-                  assistantCollapsed ? "pb-[150px]" : "pb-[240px]"
-                }`}
-              >
-                <RouteTransitionIndicator active={shellBusy} />
-                <Outlet />
-              </main>
-              <ScreenAssistantMockup
-                collapsed={assistantCollapsed}
-                className="absolute inset-x-0 bottom-0 z-20"
-              />
+      <AssistantSessionProvider returnPath={assistantReturnPath}>
+        <div className="flex h-svh flex-col overflow-hidden bg-sidebar">
+          <PreAlphaBanner className="shrink-0" />
+          <SidebarProvider className="min-h-0 flex-1 bg-sidebar">
+            <a
+              href="#app-main"
+              className="sr-only focus:not-sr-only focus:absolute focus:top-4 focus:left-4 focus:z-50 focus:rounded-md focus:bg-background focus:px-3 focus:py-2 focus:text-sm focus:text-foreground focus:ring-2 focus:ring-ring"
+            >
+              Skip to main content
+            </a>
+            <AppSidebar
+              pathname={pathname}
+              onSettingsClick={() => {
+                setSettingsFocus(null);
+                setSettingsOpen(true);
+              }}
+            />
+            <div className="min-h-0 w-full overflow-hidden lg:p-2">
+              <div className="relative flex h-full w-full flex-col items-center justify-start overflow-hidden bg-background lg:rounded-xl lg:border">
+                <AppDashboardHeader meta={routeMeta} />
+                <main
+                  id="app-main"
+                  ref={mainRef}
+                  tabIndex={-1}
+                  className={`relative min-h-0 w-full flex-1 overflow-auto bg-background transition-[padding-bottom] duration-200 ${
+                    isAssistantRoute
+                      ? "pb-0"
+                      : assistantCollapsed
+                        ? "pb-[150px]"
+                        : "pb-[240px]"
+                  }`}
+                >
+                  <RouteTransitionIndicator active={shellBusy} />
+                  <Outlet />
+                </main>
+                {isAssistantRoute ? null : (
+                  <ScreenAssistantMockup
+                    collapsed={assistantCollapsed}
+                    className="absolute inset-x-0 bottom-0 z-20"
+                  />
+                )}
+              </div>
             </div>
-          </div>
-        </SidebarProvider>
-      </div>
+          </SidebarProvider>
+        </div>
+      </AssistantSessionProvider>
       <SettingsModal
         open={settingsOpen}
         focusSection={settingsFocus}

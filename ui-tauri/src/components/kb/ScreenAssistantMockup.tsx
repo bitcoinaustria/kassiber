@@ -9,13 +9,19 @@
  */
 
 import * as React from "react";
-import { ChevronDown, ChevronUp, MessageSquareText } from "lucide-react";
+import { Link } from "@tanstack/react-router";
+import {
+  ChevronDown,
+  ChevronUp,
+  Maximize2,
+  MessageSquareText,
+} from "lucide-react";
 
 import Ai02 from "@/components/ai-02";
+import { useAssistantSession } from "@/components/ai/assistantSession";
 import { ChatThread } from "@/components/ai/ChatThread";
 import { ToolConsentDialog } from "@/components/ai/ToolConsentDialog";
 import { Button } from "@/components/ui/button";
-import { useAiChatStream } from "@/daemon/stream";
 import { cn } from "@/lib/utils";
 
 interface ScreenAssistantMockupProps {
@@ -28,21 +34,20 @@ export function ScreenAssistantMockup({
   collapsed = false,
 }: ScreenAssistantMockupProps) {
   const [isInteracting, setIsInteracting] = React.useState(false);
-  const [selection, setSelection] = React.useState<
-    { provider: string; model: string } | null
-  >(null);
-  const [toolsEnabled, setToolsEnabled] = React.useState(true);
   const [isThreadCollapsed, setIsThreadCollapsed] = React.useState(false);
-
   const {
     messages,
     isStreaming,
-    send,
     abort,
     error,
     pendingConsent,
     sendConsent,
-  } = useAiChatStream();
+    selection,
+    setSelection,
+    sendPrompt,
+    toolsEnabled,
+    setToolsEnabled,
+  } = useAssistantSession();
 
   const compact = collapsed && !isInteracting && messages.length === 0;
   const hasThread = messages.length > 0;
@@ -53,34 +58,6 @@ export function ScreenAssistantMockup({
       setIsThreadCollapsed(false);
     }
   }, [hasThread]);
-
-  const handleSubmit = React.useCallback(
-    (prompt: string) => {
-      if (!selection?.model) return;
-      const userMessages = messages
-        .filter((message) => message.role !== "system")
-        .map((message) => ({
-          role: message.role,
-          content: message.content,
-        }));
-      const next = [
-        ...userMessages,
-        { role: "user" as const, content: prompt },
-      ];
-      void send(
-        {
-          provider: selection.provider,
-          model: selection.model,
-          messages: next,
-          toolsEnabled,
-          toolLoopMaxIterations: 8,
-          systemPromptKind: toolsEnabled ? "kassiber" : null,
-        },
-        prompt,
-      );
-    },
-    [messages, selection, send, toolsEnabled],
-  );
 
   return (
     <section
@@ -115,10 +92,24 @@ export function ScreenAssistantMockup({
                 </span>
               ) : null}
               <Button
-                type="button"
+                asChild
                 variant="ghost"
                 size="icon-xs"
                 className="ml-auto rounded-full"
+              >
+                <Link
+                  to="/assistant"
+                  aria-label="Open assistant page"
+                  title="Open assistant page"
+                >
+                  <Maximize2 className="h-3.5 w-3.5" aria-hidden="true" />
+                </Link>
+              </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon-xs"
+                className="rounded-full"
                 onClick={() => setIsThreadCollapsed(true)}
                 aria-label="Collapse conversation"
                 title="Collapse conversation"
@@ -133,26 +124,47 @@ export function ScreenAssistantMockup({
           </div>
         ) : null}
         {hasThread && isThreadCollapsed ? (
-          <button
-            type="button"
-            className="flex w-full items-center gap-2 rounded-2xl border border-border/70 bg-background/92 px-3 py-2 text-left text-xs text-muted-foreground shadow-[0_10px_35px_rgba(15,23,42,0.12)] transition-colors hover:bg-background"
-            onClick={() => setIsThreadCollapsed(false)}
-            aria-label="Expand preserved conversation"
-          >
-            <MessageSquareText className="h-3.5 w-3.5" aria-hidden="true" />
-            <span className="font-medium text-foreground">
-              Conversation hidden
-            </span>
-            <span className="min-w-0 flex-1 truncate">
-              {messages.length} {messages.length === 1 ? "message" : "messages"} preserved for context
-            </span>
-            {isStreaming ? (
-              <span className="rounded-full bg-primary/10 px-1.5 py-0.5 text-[10px] font-medium uppercase text-primary">
-                Generating
+          <div className="flex w-full items-center gap-1.5 rounded-2xl border border-border/70 bg-background/92 px-2 py-1.5 text-xs text-muted-foreground shadow-[0_10px_35px_rgba(15,23,42,0.12)]">
+            <button
+              type="button"
+              className="flex min-w-0 flex-1 items-center gap-2 rounded-xl px-1 py-1 text-left transition-colors hover:bg-muted/60"
+              onClick={() => setIsThreadCollapsed(false)}
+              aria-label="Expand preserved conversation"
+            >
+              <MessageSquareText
+                className="h-3.5 w-3.5 shrink-0"
+                aria-hidden="true"
+              />
+              <span className="font-medium text-foreground">
+                Conversation hidden
               </span>
-            ) : null}
-            <ChevronUp className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
-          </button>
+              <span className="min-w-0 flex-1 truncate">
+                {messages.length}{" "}
+                {messages.length === 1 ? "message" : "messages"} preserved for
+                context
+              </span>
+              {isStreaming ? (
+                <span className="shrink-0 rounded-full bg-primary/10 px-1.5 py-0.5 text-[10px] font-medium uppercase text-primary">
+                  Generating
+                </span>
+              ) : null}
+              <ChevronUp className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+            </button>
+            <Button
+              asChild
+              variant="ghost"
+              size="icon-xs"
+              className="rounded-full"
+            >
+              <Link
+                to="/assistant"
+                aria-label="Open assistant page"
+                title="Open assistant page"
+              >
+                <Maximize2 className="h-3.5 w-3.5" aria-hidden="true" />
+              </Link>
+            </Button>
+          </div>
         ) : null}
         {error ? (
           <div className="w-full rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-xs text-destructive">
@@ -164,7 +176,7 @@ export function ScreenAssistantMockup({
           compact={compact}
           selection={selection}
           onSelectionChange={setSelection}
-          onSubmit={handleSubmit}
+          onSubmit={sendPrompt}
           onAbort={abort}
           isStreaming={isStreaming}
           toolsEnabled={toolsEnabled}
