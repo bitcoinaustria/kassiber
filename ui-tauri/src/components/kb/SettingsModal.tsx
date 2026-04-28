@@ -160,7 +160,7 @@ export function SettingsModal({
     if (!ok) return;
     setIdentity(null);
     onClose();
-    navigate({ to: "/" });
+    void navigate({ to: "/", replace: true });
   };
 
   return (
