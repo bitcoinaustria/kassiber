@@ -1,6 +1,4 @@
-"use client";
-
-import React, { useState } from "react";
+import { useState, type ComponentType, type ReactNode } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import {
   AlertTriangle,
@@ -41,7 +39,12 @@ import { useUiStore, type Identity } from "@/store/ui";
 
 type TaxCountry = "at" | "generic";
 type FiatCurrency = "EUR" | "USD" | "CHF" | "GBP";
-type GainsAlgorithm = "FIFO" | "LIFO" | "HIFO" | "LOFO";
+// Algorithm tokens match `kassiber.tax_policy` / rp2 plugins.
+// Generic country exposes FIFO/LIFO/HIFO/LOFO; AT exposes
+// MOVING_AVERAGE_AT (default) plus MOVING_AVERAGE and FIFO for diagnostics.
+type GenericGainsAlgorithm = "FIFO" | "LIFO" | "HIFO" | "LOFO";
+type AustrianGainsAlgorithm = "MOVING_AVERAGE_AT" | "MOVING_AVERAGE" | "FIFO";
+type GainsAlgorithm = GenericGainsAlgorithm | AustrianGainsAlgorithm;
 type DatabaseMode = "sqlcipher" | "plaintext";
 type BackendSetupMode = "default" | "custom" | "skip";
 type BackendKind =
@@ -87,7 +90,7 @@ interface StepComponentProps {
 }
 
 interface OnboardingStep {
-  component: React.ComponentType<StepComponentProps>;
+  component: ComponentType<StepComponentProps>;
   isComplete: (form: OnboardingForm) => boolean;
 }
 
@@ -106,7 +109,7 @@ const DEFAULT_FORM: OnboardingForm = {
   taxCountry: "at",
   fiatCurrency: "EUR",
   taxLongTermDays: "365",
-  gainsAlgorithm: "FIFO",
+  gainsAlgorithm: "MOVING_AVERAGE_AT",
   databaseMode: "sqlcipher",
   recoveryAcknowledged: false,
   plaintextAcknowledged: false,
@@ -119,7 +122,23 @@ const DEFAULT_FORM: OnboardingForm = {
 };
 
 const FIAT_CURRENCIES: FiatCurrency[] = ["EUR", "USD", "CHF", "GBP"];
-const GAINS_ALGORITHMS: GainsAlgorithm[] = ["FIFO", "LIFO", "HIFO", "LOFO"];
+const GENERIC_GAINS_ALGORITHMS: GenericGainsAlgorithm[] = [
+  "FIFO",
+  "LIFO",
+  "HIFO",
+  "LOFO",
+];
+const AUSTRIAN_GAINS_ALGORITHMS: AustrianGainsAlgorithm[] = [
+  "MOVING_AVERAGE_AT",
+  "MOVING_AVERAGE",
+  "FIFO",
+];
+const GAINS_ALGORITHM_DEFAULTS: Record<TaxCountry, GainsAlgorithm> = {
+  at: "MOVING_AVERAGE_AT",
+  generic: "FIFO",
+};
+const gainsAlgorithmsFor = (country: TaxCountry): GainsAlgorithm[] =>
+  country === "at" ? AUSTRIAN_GAINS_ALGORITHMS : GENERIC_GAINS_ALGORITHMS;
 const BACKEND_KINDS: BackendKind[] = [
   "esplora",
   "electrum",
@@ -138,10 +157,20 @@ const BACKEND_KIND_LABELS: Record<BackendKind, string> = {
   custom: "Custom",
 };
 
-const PUBLIC_BACKEND_DEFAULTS = [
-  [DEFAULT_BACKEND_NAME, "Esplora", DEFAULT_BACKEND_URL],
-  ["fulcrum", "Electrum", "ssl://index.bitcoin-austria.at:50002"],
-  ["liquid", "Electrum", "ssl://les.bullbitcoin.com:995"],
+interface BackendPreviewRow {
+  name: string;
+  kind: string;
+  url: string;
+}
+
+const PUBLIC_BACKEND_DEFAULTS: readonly BackendPreviewRow[] = [
+  { name: DEFAULT_BACKEND_NAME, kind: "Esplora", url: DEFAULT_BACKEND_URL },
+  {
+    name: "fulcrum",
+    kind: "Electrum",
+    url: "ssl://index.bitcoin-austria.at:50002",
+  },
+  { name: "liquid", kind: "Electrum", url: "ssl://les.bullbitcoin.com:995" },
 ];
 
 const OnboardingStepHeader = ({
@@ -152,14 +181,14 @@ const OnboardingStepHeader = ({
   goBack,
 }: OnboardingStepHeaderProps) => {
   return (
-    <div className="relative">
+    <div className="flex items-start gap-2">
       {goBack && stepIndex > 0 && (
         <Button
           type="button"
           variant="ghost"
           size="icon"
           onClick={goBack}
-          className="absolute right-full top-1/2 -translate-x-1/2 -translate-y-1/2 text-ink-2"
+          className="-ml-2 shrink-0 text-ink-2"
           aria-label="Go back"
         >
           <ChevronLeft className="size-4" />
@@ -167,7 +196,7 @@ const OnboardingStepHeader = ({
       )}
       <div>
         <p className="font-mono text-[10px] font-medium uppercase tracking-[0.14em] text-ink-3">
-          {eyebrow} - {stepIndex + 1}/{totalSteps}
+          {eyebrow} · {stepIndex + 1}/{totalSteps}
         </p>
         <h3 className="mt-2 text-2xl font-semibold tracking-normal text-ink md:whitespace-nowrap">
           {title}
@@ -177,7 +206,7 @@ const OnboardingStepHeader = ({
   );
 };
 
-const OnboardingStepFrame = ({ children }: { children: React.ReactNode }) => {
+const OnboardingStepFrame = ({ children }: { children: ReactNode }) => {
   return (
     <div className="flex w-full flex-col-reverse gap-8 rounded-lg border border-line bg-paper md:min-h-[78dvh] md:flex-row lg:rounded-lg">
       {children}
@@ -197,7 +226,7 @@ const OnboardingStepLeftWrapper = ({
   eyebrow: string;
   currentStep: number;
   totalSteps: number;
-  children: React.ReactNode;
+  children: ReactNode;
   goBack?: () => void;
 }) => {
   return (
@@ -220,7 +249,7 @@ const OnboardingStepRightWrapper = ({
   children,
   className,
 }: {
-  children: React.ReactNode;
+  children: ReactNode;
   className?: string;
 }) => {
   return (
@@ -421,6 +450,62 @@ const TextField = ({
   );
 };
 
+const taxLongTermDaysHint = (raw: string): string | null => {
+  const trimmed = raw.trim();
+  if (!trimmed) return "Required.";
+  const days = Number.parseInt(trimmed, 10);
+  if (!Number.isFinite(days) || String(days) !== trimmed) {
+    return "Use a whole number of days.";
+  }
+  if (days < 1) return "Must be at least 1 day.";
+  return null;
+};
+
+const NumberField = ({
+  label,
+  name,
+  value,
+  placeholder,
+  min,
+  onChange,
+  hint,
+}: {
+  label: string;
+  name: string;
+  value: string;
+  placeholder: string;
+  min?: number;
+  onChange: (value: string) => void;
+  hint?: string | null;
+}) => {
+  return (
+    <div className="space-y-2">
+      <Label htmlFor={name}>{label}</Label>
+      <Input
+        id={name}
+        name={name}
+        type="number"
+        inputMode="numeric"
+        min={min}
+        value={value}
+        placeholder={placeholder}
+        onChange={(event) => onChange(event.target.value)}
+        aria-invalid={hint ? true : undefined}
+        aria-describedby={hint ? `${name}-hint` : undefined}
+        className="w-full rounded-md border-line"
+      />
+      {hint && (
+        <p
+          id={`${name}-hint`}
+          className="m-0 font-mono text-[10px] uppercase tracking-[0.08em] text-accent"
+        >
+          {hint}
+        </p>
+      )}
+    </div>
+  );
+};
+
 const SelectField = <T extends string>({
   label,
   value,
@@ -613,15 +698,21 @@ const StepTwoComponent = ({
                 title="Austria"
                 description="EUR defaults, section 27b buckets, and moving average semantics through rp2's AT plugin."
                 onClick={() => {
+                  if (form.taxCountry === "at") return;
                   update("taxCountry", "at");
                   update("fiatCurrency", "EUR");
+                  update("gainsAlgorithm", GAINS_ALGORITHM_DEFAULTS.at);
                 }}
               />
               <ChoiceCard
                 active={form.taxCountry === "generic"}
                 title="Generic"
                 description="Country-neutral FIFO/LIFO/HIFO/LOFO profile for non-Austrian workflows."
-                onClick={() => update("taxCountry", "generic")}
+                onClick={() => {
+                  if (form.taxCountry === "generic") return;
+                  update("taxCountry", "generic");
+                  update("gainsAlgorithm", GAINS_ALGORITHM_DEFAULTS.generic);
+                }}
               />
             </div>
 
@@ -635,16 +726,18 @@ const StepTwoComponent = ({
               <SelectField
                 label="Lot selection"
                 value={form.gainsAlgorithm}
-                options={GAINS_ALGORITHMS}
+                options={gainsAlgorithmsFor(form.taxCountry)}
                 onChange={(value) => update("gainsAlgorithm", value)}
               />
             </div>
-            <TextField
+            <NumberField
               label="Long-term holding days"
               name="taxLongTermDays"
               value={form.taxLongTermDays}
               placeholder="365"
+              min={1}
               onChange={(value) => update("taxLongTermDays", value)}
+              hint={taxLongTermDaysHint(form.taxLongTermDays)}
             />
           </div>
 
@@ -894,18 +987,18 @@ const ConnectionsPanel = ({ form }: { form: OnboardingForm }) => {
       : form.backendSetupMode === "custom"
         ? "Custom backend"
         : "Skipped";
-  const activeRows =
+  const activeRows: readonly BackendPreviewRow[] =
     form.backendSetupMode === "default"
       ? PUBLIC_BACKEND_DEFAULTS
       : form.backendSetupMode === "custom"
         ? [
-            [
-              form.backendName.trim() || "custom",
-              BACKEND_KIND_LABELS[form.backendKind],
-              form.backendUrl.trim() || "endpoint pending",
-            ],
+            {
+              name: form.backendName.trim() || "custom",
+              kind: BACKEND_KIND_LABELS[form.backendKind],
+              url: form.backendUrl.trim() || "endpoint pending",
+            },
           ]
-        : [["None", "Manual import", "configure later"]];
+        : [{ name: "None", kind: "Manual import", url: "configure later" }];
 
   return (
     <div className="flex h-full items-center">
@@ -947,14 +1040,14 @@ const ConnectionsPanel = ({ form }: { form: OnboardingForm }) => {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {activeRows.map(([name, kind, url]) => (
-                <TableRow key={name} className="even:bg-paper-2/60">
+              {activeRows.map((row) => (
+                <TableRow key={row.name} className="even:bg-paper-2/60">
                   <TableCell className="h-10 border-r font-medium">
-                    {name}
+                    {row.name}
                   </TableCell>
-                  <TableCell className="h-10 border-r">{kind}</TableCell>
+                  <TableCell className="h-10 border-r">{row.kind}</TableCell>
                   <TableCell className="h-10 max-w-[240px] truncate">
-                    {url}
+                    {row.url}
                   </TableCell>
                 </TableRow>
               ))}
@@ -1071,16 +1164,30 @@ const Onboarding1 = ({ className, steps: customSteps }: Onboarding1Props) => {
   };
 
   const finish = () => {
+    // Step gates already enforce these — clamp defensively in case state
+    // arrives via an injected `customSteps` override (used by tests).
+    const allowedAlgorithms = gainsAlgorithmsFor(form.taxCountry);
+    const gainsAlgorithm = allowedAlgorithms.includes(form.gainsAlgorithm)
+      ? form.gainsAlgorithm
+      : GAINS_ALGORITHM_DEFAULTS[form.taxCountry];
+    const parsedDays = Number.parseInt(form.taxLongTermDays, 10);
+    const taxLongTermDays =
+      Number.isFinite(parsedDays) && parsedDays > 0 ? parsedDays : 365;
     const identity: Identity = {
       name: form.name.trim(),
       workspace: form.workspace.trim() || "Personal",
+      // Legacy field. Today rp2 only ships `at` + `generic` country plugins,
+      // so all non-AT picks collapse to "Generic". Prefer `taxCountry` for
+      // new callers.
       country: form.taxCountry === "at" ? "AT" : "Generic",
+      // Intent only until the native SQLCipher passphrase handoff lands; see
+      // `Identity` JSDoc in store/ui.ts.
       encrypted: form.databaseMode === "sqlcipher",
       profile: form.profile.trim() || "main",
       taxCountry: form.taxCountry,
       fiatCurrency: form.fiatCurrency,
-      taxLongTermDays: Number.parseInt(form.taxLongTermDays, 10) || 365,
-      gainsAlgorithm: form.gainsAlgorithm,
+      taxLongTermDays,
+      gainsAlgorithm,
       databaseMode: form.databaseMode,
       migrateCredentials: form.migrateCredentials,
       backendSetupMode: form.backendSetupMode,
@@ -1118,7 +1225,7 @@ const Onboarding1 = ({ className, steps: customSteps }: Onboarding1Props) => {
           <Wordmark size={22} />
           <div className="hidden items-center gap-2 text-xs text-ink-2 sm:flex">
             <ShieldCheck className="size-4" />
-            Local-first - watch-only - SQLCipher-aware
+            Local-first · watch-only · SQLCipher-aware
           </div>
         </div>
 
@@ -1132,7 +1239,7 @@ const Onboarding1 = ({ className, steps: customSteps }: Onboarding1Props) => {
         />
 
         <div className="flex flex-wrap items-center justify-center gap-4 text-xs text-ink-3">
-          <p>Private keys never enter Kassiber.</p>
+          <span>Private keys never enter Kassiber.</span>
           <span>State stays under ~/.kassiber unless overridden.</span>
           <span>Run backups before tracking real funds.</span>
         </div>

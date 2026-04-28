@@ -14,6 +14,22 @@ export interface AppNotification {
   createdAt: string;
 }
 
+/**
+ * Captured onboarding intent for the local profile. Only `name`/`workspace`
+ * are read by the running UI today (see AppHeader); the remaining fields are
+ * captured in the webview so the upcoming native sidecar handoff can seed a
+ * profile/backend without re-prompting.
+ *
+ * `country` is the legacy identity field; new callers should prefer
+ * `taxCountry`. Today only `at` and `generic` map to a real rp2 plugin
+ * (see `kassiber.tax_policy`), so `country` resolves to `"AT" | "Generic"`.
+ *
+ * `encrypted` records the user's *intent* to use SQLCipher. The actual
+ * passphrase capture and SQLCipher unlock live in the native sidecar fd
+ * handoff, which is still on the live-actions backlog (see TODO.md). Until
+ * that ships, `encrypted: true` does NOT mean the database is encrypted on
+ * disk — it means the user opted in.
+ */
 export interface Identity {
   name: string;
   workspace: string;
@@ -23,7 +39,18 @@ export interface Identity {
   taxCountry?: "at" | "generic";
   fiatCurrency?: string;
   taxLongTermDays?: number;
-  gainsAlgorithm?: "FIFO" | "LIFO" | "HIFO" | "LOFO";
+  /**
+   * Token matches `kassiber.tax_policy` / rp2 plugin tokens. Generic supports
+   * FIFO/LIFO/HIFO/LOFO; AT additionally exposes MOVING_AVERAGE and
+   * MOVING_AVERAGE_AT (the AT default).
+   */
+  gainsAlgorithm?:
+    | "FIFO"
+    | "LIFO"
+    | "HIFO"
+    | "LOFO"
+    | "MOVING_AVERAGE"
+    | "MOVING_AVERAGE_AT";
   databaseMode?: "sqlcipher" | "plaintext";
   migrateCredentials?: boolean;
   backendSetupMode?: "default" | "custom" | "skip";
