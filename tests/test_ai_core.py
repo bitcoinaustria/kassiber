@@ -126,11 +126,11 @@ class ToolCatalogPromptTest(unittest.TestCase):
     def test_tool_catalog_stability(self):
         read_only_names = {
             "status",
-            "ui.overview.snapshot",
-            "ui.transactions.list",
-            "ui.profiles.snapshot",
-            "ui.reports.capital_gains",
-            "ui.journals.snapshot",
+            "ui_overview_snapshot",
+            "ui_transactions_list",
+            "ui_profiles_snapshot",
+            "ui_reports_capital_gains",
+            "ui_journals_snapshot",
             "read_skill_reference",
         }
         tool_names = {
@@ -139,6 +139,9 @@ class ToolCatalogPromptTest(unittest.TestCase):
             if tool.get("type") == "function"
         }
         self.assertEqual(tool_names, read_only_names)
+        for tool_name in tool_names:
+            self.assertRegex(tool_name, r"^[A-Za-z0-9_-]{1,64}$")
+        self.assertEqual(get_tool("ui_overview_snapshot").name, "ui.overview.snapshot")
         self.assertEqual(get_tool("ui.wallets.sync").kind_class, "mutating")
         self.assertNotIn("ui.wallets.sync", tool_names)
 

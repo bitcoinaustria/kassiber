@@ -65,11 +65,16 @@ def _close_daemon(proc):
 
 
 class _SlowChatHandler(BaseHTTPRequestHandler):
+    request_count = 0
+    request_count_lock = threading.Lock()
+
     def do_POST(self):
         if self.path != "/v1/chat/completions":
             self.send_response(404)
             self.end_headers()
             return
+        with self.request_count_lock:
+            type(self).request_count += 1
         length = int(self.headers.get("content-length") or "0")
         if length:
             self.rfile.read(length)
@@ -309,10 +314,81 @@ class DaemonSmokeTest(unittest.TestCase):
             server.shutdown()
             server.server_close()
 
+    def test_ai_chat_cancel_before_chat_registers_is_queued(self):
+        with _SlowChatHandler.request_count_lock:
+            _SlowChatHandler.request_count = 0
+        server = ThreadingHTTPServer(("127.0.0.1", 0), _SlowChatHandler)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        base_url = f"http://127.0.0.1:{server.server_port}/v1"
+        try:
+            with tempfile.TemporaryDirectory(prefix="kassiber-daemon-") as tmp:
+                data_root = Path(tmp) / "data"
+                proc = _start_daemon(data_root)
+
+                ready = _read_payload_timeout(proc)
+                self.assertEqual(ready["kind"], "daemon.ready")
+
+                _write_payload(
+                    proc,
+                    {
+                        "request_id": "provider-1",
+                        "kind": "ai.providers.create",
+                        "args": {
+                            "name": "slow-local",
+                            "base_url": base_url,
+                            "kind": "local",
+                        },
+                    },
+                )
+                provider = _read_payload_timeout(proc)
+                self.assertEqual(provider["kind"], "ai.providers.create")
+
+                _write_payload(
+                    proc,
+                    {
+                        "request_id": "cancel-early",
+                        "kind": "ai.chat.cancel",
+                        "args": {"target_request_id": "chat-early"},
+                    },
+                )
+                cancel_response = _read_payload_timeout(proc)
+                self.assertEqual(cancel_response["kind"], "ai.chat.cancel")
+                self.assertTrue(cancel_response["data"]["cancelled"])
+                self.assertTrue(cancel_response["data"]["queued"])
+
+                _write_payload(
+                    proc,
+                    {
+                        "request_id": "chat-early",
+                        "kind": "ai.chat",
+                        "args": {
+                            "provider": "slow-local",
+                            "model": "test-model",
+                            "messages": [{"role": "user", "content": "hello"}],
+                        },
+                    },
+                )
+                terminal = _read_payload_timeout(proc)
+                self.assertEqual(terminal["request_id"], "chat-early")
+                self.assertEqual(terminal["kind"], "ai.chat")
+                self.assertEqual(terminal["data"]["finish_reason"], "cancelled")
+                with _SlowChatHandler.request_count_lock:
+                    self.assertEqual(_SlowChatHandler.request_count, 0)
+
+                _write_payload(proc, {"request_id": "shutdown-1", "kind": "daemon.shutdown"})
+                self.assertEqual(_read_payload_timeout(proc)["kind"], "daemon.shutdown")
+                code, stderr = _close_daemon(proc)
+                self.assertEqual(code, 0, stderr)
+                self.assertEqual(stderr, "")
+        finally:
+            server.shutdown()
+            server.server_close()
+
     def test_ai_chat_read_only_tool_loop_emits_tool_records(self):
         server = _start_tool_chat_server(
             [
-                (_tool_call_message("ui.overview.snapshot"), 0.0),
+                (_tool_call_message("ui_overview_snapshot"), 0.0),
                 (
                     _chat_completion_response(
                         {"role": "assistant", "content": "No transactions yet."},
@@ -375,6 +451,10 @@ class DaemonSmokeTest(unittest.TestCase):
                 self.assertIn("ai.chat.delta", kinds)
                 self.assertIsNotNone(terminal)
                 self.assertEqual(terminal["data"]["finish_reason"], "stop")
+                tool_call = next(
+                    record for record in records if record["kind"] == "ai.chat.tool_call"
+                )
+                self.assertEqual(tool_call["data"]["name"], "ui.overview.snapshot")
                 tool_result = next(
                     record for record in records if record["kind"] == "ai.chat.tool_result"
                 )
@@ -388,6 +468,12 @@ class DaemonSmokeTest(unittest.TestCase):
                         for message in server.requests[1]["messages"]  # type: ignore[attr-defined]
                     )
                 )
+                tool_names = {
+                    tool["function"]["name"]
+                    for tool in server.requests[0]["tools"]  # type: ignore[attr-defined]
+                }
+                self.assertIn("ui_overview_snapshot", tool_names)
+                self.assertNotIn("ui.overview.snapshot", tool_names)
 
                 _write_payload(proc, {"request_id": "shutdown-1", "kind": "daemon.shutdown"})
                 self.assertEqual(_read_payload_timeout(proc)["kind"], "daemon.shutdown")
@@ -467,7 +553,7 @@ class DaemonSmokeTest(unittest.TestCase):
     def test_ai_chat_cancel_during_tool_loop_finishes_cancelled(self):
         server = _start_tool_chat_server(
             [
-                (_tool_call_message("ui.overview.snapshot"), 0.0),
+                (_tool_call_message("ui_overview_snapshot"), 0.0),
                 (
                     _chat_completion_response(
                         {"role": "assistant", "content": "This should be suppressed."},

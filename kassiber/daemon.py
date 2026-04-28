@@ -4,6 +4,7 @@ import json
 import sqlite3
 import sys
 import threading
+import time
 import traceback
 from dataclasses import dataclass
 from typing import Any, TextIO
@@ -77,6 +78,8 @@ SUPPORTED_KINDS = (
     "backends.reveal_token",
     "daemon.shutdown",
 )
+PENDING_AI_CANCEL_TTL_SECONDS = 30.0
+MAX_PENDING_AI_CANCELS = 128
 
 
 class ActiveAiChats:
@@ -85,13 +88,19 @@ class ActiveAiChats:
     def __init__(self) -> None:
         self._lock = threading.Lock()
         self._events: dict[str, threading.Event] = {}
+        self._pending_cancel_deadlines: dict[str, float] = {}
 
     def register(self, request_id: object) -> tuple[str | None, threading.Event]:
         event = threading.Event()
         key = _request_id_registry_key(request_id)
         if key is None:
             return None, event
+        now = time.monotonic()
         with self._lock:
+            self._prune_pending_locked(now)
+            deadline = self._pending_cancel_deadlines.pop(key, None)
+            if deadline is not None and deadline >= now:
+                event.set()
             self._events[key] = event
         return key, event
 
@@ -102,13 +111,36 @@ class ActiveAiChats:
             if self._events.get(key) is event:
                 self._events.pop(key, None)
 
-    def cancel(self, target_request_id: str) -> bool:
+    def cancel(self, target_request_id: str) -> tuple[bool, bool]:
+        now = time.monotonic()
         with self._lock:
+            self._prune_pending_locked(now)
             event = self._events.get(target_request_id)
-        if event is None:
-            return False
-        event.set()
-        return True
+            if event is not None:
+                event.set()
+                return True, False
+            self._pending_cancel_deadlines[target_request_id] = (
+                now + PENDING_AI_CANCEL_TTL_SECONDS
+            )
+            self._trim_pending_locked()
+            return False, True
+
+    def _prune_pending_locked(self, now: float) -> None:
+        expired = [
+            key
+            for key, deadline in self._pending_cancel_deadlines.items()
+            if deadline <= now
+        ]
+        for key in expired:
+            self._pending_cancel_deadlines.pop(key, None)
+
+    def _trim_pending_locked(self) -> None:
+        while len(self._pending_cancel_deadlines) > MAX_PENDING_AI_CANCELS:
+            oldest = min(
+                self._pending_cancel_deadlines.items(),
+                key=lambda item: item[1],
+            )[0]
+            self._pending_cancel_deadlines.pop(oldest, None)
 
 
 @dataclass(frozen=True)
@@ -595,13 +627,14 @@ def _run_ai_chat_tool_loop(
             call = _parse_ai_tool_call(raw_tool_call, index)
             entry = get_tool(call.name)
             kind_class = entry.kind_class if entry is not None else "unknown"
+            display_name = entry.name if entry is not None else call.name
             out.write(
                 _with_request_id(
                     build_envelope(
                         "ai.chat.tool_call",
                         {
                             "call_id": call.call_id,
-                            "name": call.name,
+                            "name": display_name,
                             "arguments": call.arguments,
                             "kind_class": kind_class,
                             "needs_consent": False,
@@ -655,47 +688,48 @@ def _run_ai_chat_stream(
 ) -> None:
     """Thread target — streams AI records and a terminal `ai.chat`."""
     try:
-        client = OpenAICompatClient(
-            base_url=provider_snapshot["base_url"],
-            api_key=provider_snapshot.get("api_key"),
-        )
-        if validated["tools_enabled"]:
-            _run_ai_chat_tool_loop(
-                request_id,
-                client,
-                provider_snapshot,
-                validated,
-                out,
-                cancel_event,
-                runtime,
-            )
-            return
-        stream_messages = build_chat_messages(
-            validated["messages"],
-            system_prompt_kind=validated["system_prompt_kind"],
-            system_prompt=validated["system_prompt"],
-        )
         finish_reason = None
-        for chunk in client.stream_chat(
-            messages=stream_messages,
-            model=validated["model"],
-            options=validated["options"],
-        ):
-            if cancel_event.is_set():
-                finish_reason = "cancelled"
-                break
-            delta_payload = {"delta": chunk.delta}
-            if chunk.finish_reason is not None:
-                finish_reason = chunk.finish_reason
-            out.write(
-                _with_request_id(
-                    build_envelope("ai.chat.delta", delta_payload),
-                    request_id,
-                )
+        if not cancel_event.is_set():
+            client = OpenAICompatClient(
+                base_url=provider_snapshot["base_url"],
+                api_key=provider_snapshot.get("api_key"),
             )
-            if cancel_event.is_set():
-                finish_reason = "cancelled"
-                break
+            if validated["tools_enabled"]:
+                _run_ai_chat_tool_loop(
+                    request_id,
+                    client,
+                    provider_snapshot,
+                    validated,
+                    out,
+                    cancel_event,
+                    runtime,
+                )
+                return
+            stream_messages = build_chat_messages(
+                validated["messages"],
+                system_prompt_kind=validated["system_prompt_kind"],
+                system_prompt=validated["system_prompt"],
+            )
+            for chunk in client.stream_chat(
+                messages=stream_messages,
+                model=validated["model"],
+                options=validated["options"],
+            ):
+                if cancel_event.is_set():
+                    finish_reason = "cancelled"
+                    break
+                delta_payload = {"delta": chunk.delta}
+                if chunk.finish_reason is not None:
+                    finish_reason = chunk.finish_reason
+                out.write(
+                    _with_request_id(
+                        build_envelope("ai.chat.delta", delta_payload),
+                        request_id,
+                    )
+                )
+                if cancel_event.is_set():
+                    finish_reason = "cancelled"
+                    break
         if cancel_event.is_set():
             finish_reason = "cancelled"
         _write_ai_chat_terminal(out, request_id, provider_snapshot, validated, finish_reason)
@@ -1143,10 +1177,10 @@ def handle_request(
                 code="validation",
                 hint="Pass {target_request_id: '<active ai.chat request_id>'}.",
             )
-        cancelled = ctx.active_ai_chats.cancel(target_request_id)
-        payload: dict[str, Any] = {"cancelled": cancelled}
-        if not cancelled:
-            payload["reason"] = "not_found"
+        cancelled, queued = ctx.active_ai_chats.cancel(target_request_id)
+        payload: dict[str, Any] = {"cancelled": cancelled or queued}
+        if queued:
+            payload["queued"] = True
         return (
             _with_request_id(
                 build_envelope("ai.chat.cancel", payload),

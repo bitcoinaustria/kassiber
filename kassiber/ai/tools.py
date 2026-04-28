@@ -18,14 +18,19 @@ class ToolEntry:
     description: str
     parameters: dict[str, Any]
     kind_class: ToolKindClass
+    wire_name: str | None = None
     daemon_kind: str | None = None
     summary_template: str | None = None
+
+    @property
+    def provider_name(self) -> str:
+        return self.wire_name or self.name
 
     def to_openai_tool(self) -> dict[str, Any]:
         return {
             "type": "function",
             "function": {
-                "name": self.name,
+                "name": self.provider_name,
                 "description": self.description,
                 "parameters": self.parameters,
             },
@@ -66,6 +71,7 @@ TOOL_CATALOG: tuple[ToolEntry, ...] = (
         description="Read the current dashboard overview snapshot for the active workspace/profile.",
         parameters=_EMPTY_OBJECT_SCHEMA,
         kind_class="read_only",
+        wire_name="ui_overview_snapshot",
         daemon_kind="ui.overview.snapshot",
         summary_template="Read overview snapshot",
     ),
@@ -85,6 +91,7 @@ TOOL_CATALOG: tuple[ToolEntry, ...] = (
             },
         },
         kind_class="read_only",
+        wire_name="ui_transactions_list",
         daemon_kind="ui.transactions.list",
         summary_template="Read recent transactions",
     ),
@@ -93,6 +100,7 @@ TOOL_CATALOG: tuple[ToolEntry, ...] = (
         description="Read workspaces, profiles, and the active profile summary.",
         parameters=_EMPTY_OBJECT_SCHEMA,
         kind_class="read_only",
+        wire_name="ui_profiles_snapshot",
         daemon_kind="ui.profiles.snapshot",
         summary_template="Read profiles snapshot",
     ),
@@ -101,6 +109,7 @@ TOOL_CATALOG: tuple[ToolEntry, ...] = (
         description="Read the current capital gains report snapshot for the active profile.",
         parameters=_EMPTY_OBJECT_SCHEMA,
         kind_class="read_only",
+        wire_name="ui_reports_capital_gains",
         daemon_kind="ui.reports.capital_gains",
         summary_template="Read capital gains snapshot",
     ),
@@ -109,6 +118,7 @@ TOOL_CATALOG: tuple[ToolEntry, ...] = (
         description="Read journal processing status, recent journal rows, and quarantine summary.",
         parameters=_EMPTY_OBJECT_SCHEMA,
         kind_class="read_only",
+        wire_name="ui_journals_snapshot",
         daemon_kind="ui.journals.snapshot",
         summary_template="Read journals snapshot",
     ),
@@ -145,12 +155,16 @@ TOOL_CATALOG: tuple[ToolEntry, ...] = (
             },
         },
         kind_class="mutating",
+        wire_name="ui_wallets_sync",
         daemon_kind="ui.wallets.sync",
         summary_template="Sync wallets",
     ),
 )
 
-TOOL_BY_NAME: dict[str, ToolEntry] = {tool.name: tool for tool in TOOL_CATALOG}
+TOOL_BY_NAME: dict[str, ToolEntry] = {}
+for tool in TOOL_CATALOG:
+    TOOL_BY_NAME[tool.name] = tool
+    TOOL_BY_NAME[tool.provider_name] = tool
 
 
 def get_tool(name: str) -> ToolEntry | None:

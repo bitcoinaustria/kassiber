@@ -165,14 +165,14 @@ definitions, emits `ai.chat.tool_call` / `ai.chat.tool_result` stream records,
 feeds tool results back as `role: "tool"` messages, and finishes with the normal
 terminal `ai.chat` envelope.
 
-Read-only tools exposed in this PR:
+Read-only provider tool names exposed in this PR:
 
 - `status`
-- `ui.overview.snapshot`
-- `ui.transactions.list`
-- `ui.profiles.snapshot`
-- `ui.reports.capital_gains`
-- `ui.journals.snapshot`
+- `ui_overview_snapshot` maps to daemon kind `ui.overview.snapshot`
+- `ui_transactions_list` maps to daemon kind `ui.transactions.list`
+- `ui_profiles_snapshot` maps to daemon kind `ui.profiles.snapshot`
+- `ui_reports_capital_gains` maps to daemon kind `ui.reports.capital_gains`
+- `ui_journals_snapshot` maps to daemon kind `ui.journals.snapshot`
 - `read_skill_reference`
 
 `read_skill_reference` is a virtual tool restricted to allowlisted files under
