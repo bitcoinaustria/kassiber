@@ -68,6 +68,8 @@ class DaemonSmokeTest(unittest.TestCase):
             self.assertIn("ui.journals.snapshot", ready["data"]["supported_kinds"])
             self.assertIn("ui.profiles.snapshot", ready["data"]["supported_kinds"])
             self.assertIn("ui.wallets.sync", ready["data"]["supported_kinds"])
+            self.assertIn("wallets.reveal_descriptor", ready["data"]["supported_kinds"])
+            self.assertIn("backends.reveal_token", ready["data"]["supported_kinds"])
             self.assertIn("ai.test_connection", ready["data"]["supported_kinds"])
             self.assertIn("ai.chat", ready["data"]["supported_kinds"])
 

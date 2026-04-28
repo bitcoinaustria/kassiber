@@ -65,6 +65,8 @@ After a successful migration:
 - `~/.kassiber/data/kassiber.sqlite3` is the encrypted file.
 - `~/.kassiber/data/kassiber.pre-encryption.sqlite3.bak` is the original
   plaintext file, preserved so a manual rollback is one `mv` away.
+- Kassiber refuses to overwrite an existing `.pre-encryption.sqlite3.bak`;
+  inspect, move, or delete the old rollback file before retrying.
 - Advise the user to run `kassiber secrets verify` and then delete the `.bak`
   file once they trust the encrypted DB. Kassiber does not auto-delete it.
 
@@ -232,7 +234,7 @@ kassiber backup export --file /tmp/snap.kassiber --recipient "age1..."
 runs the strict tar member validator (rejects symlinks, hardlinks, device
 nodes, FIFOs, traversal, duplicates, oversized members), extracts into a
 staging directory, validates the manifest against the staged files, and
-optionally moves the staged tree into place with `--install`.
+optionally installs the staged tree with `--install`.
 
 ```bash
 # stage only — leave the tree under a temp directory
@@ -245,7 +247,10 @@ kassiber backup import /tmp/snap.kassiber --backup-passphrase-fd 4 \
 
 `--install` moves any pre-existing live data into a sibling
 `pre-restore-<timestamp>/` directory before overwriting, so an accidental
-restore over a populated data root is recoverable.
+restore over a populated data root is recoverable. After a successful
+install, Kassiber removes the decrypted temp restore workspace. Stage-only
+imports intentionally leave the extracted staging tree in the returned temp
+path for manual inspection.
 
 A `.kassiber` file does **not** include or recover the inner DB passphrase.
 You still need it to read the database after restore.

@@ -131,12 +131,19 @@ If a command returns:
   still plaintext. Run `kassiber secrets init` first.
 - `already_encrypted` from `kassiber secrets init` — the file is already
   SQLCipher. Use `kassiber secrets change-passphrase` to rotate.
+- `backup_exists` from `kassiber secrets init` — an existing
+  `.pre-encryption.sqlite3.bak` rollback file would be overwritten. Inspect,
+  move, or delete the old file before retrying.
 - `migration_leaks_plaintext` from `kassiber secrets init` — stop and inspect.
   The encrypted output appears to contain plaintext credential markers; do
   not delete the `.pre-encryption.sqlite3.bak` rollback file.
 - `local_auth_denied` from a daemon reveal request — the supplied passphrase
   did not verify against the on-disk DB. Re-prompt the user; do not retry
   silently.
+- `restore_cleanup_failed` from `kassiber backup import --install` — the live
+  restore completed but the decrypted temp workspace could not be removed.
+  Remove the path from the error details manually before sharing logs or
+  leaving the machine unattended.
 - `age_unavailable` from `kassiber backup ...` — neither the `age`/`rage`
   binary nor the `pyrage` Python module is available. Install one of them.
 - `age_passphrase_mode_unsupported` — should not happen for default backup

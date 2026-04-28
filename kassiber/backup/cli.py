@@ -97,7 +97,7 @@ def cmd_backup_import(args: argparse.Namespace) -> dict:
         "backup.import",
         {
             "archive": str(archive),
-            "staging_path": str(result.staging_path),
+            "staging_path": str(result.staging_path) if result.staging_path else None,
             "installed_data_root": (
                 str(result.installed_data_root)
                 if result.installed_data_root
@@ -108,6 +108,7 @@ def cmd_backup_import(args: argparse.Namespace) -> dict:
                 if result.pre_restore_backup
                 else None
             ),
+            "temporary_artifacts_cleaned": result.temporary_artifacts_cleaned,
             "manifest": result.manifest,
         },
     )

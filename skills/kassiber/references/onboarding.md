@@ -95,8 +95,9 @@ kassiber secrets status
 After this runs, every later command needs the passphrase — interactively, or
 via `--db-passphrase-fd <FD>`. The pre-encryption plaintext file is preserved
 as `kassiber.pre-encryption.sqlite3.bak` so the user can roll back; advise
-them to delete it once they trust the new encrypted DB. There is no recovery
-path if the passphrase is lost.
+them to delete it once they trust the new encrypted DB. Kassiber refuses to
+overwrite an existing rollback file at that path; inspect, move, or delete the
+old file before retrying. There is no recovery path if the passphrase is lost.
 
 If `backends.env` already had API tokens, RPC passwords, or auth headers
 before the migration, lift them into the encrypted DB so they no longer sit

@@ -96,6 +96,7 @@ from a parent process.
   binary using only the passphrase.
 - The pre-migration plaintext file is preserved as
   `kassiber.pre-encryption.sqlite3.bak` so `mv` rolls back the change.
+  Kassiber refuses to overwrite an existing rollback backup at that path.
 - `~/.kassiber/config/backends.env` and `~/.kassiber/attachments/` are
   **not** inside the SQLCipher boundary. They are outside the encrypted
   database file and remain plaintext on disk. URLs, kinds, chain, and

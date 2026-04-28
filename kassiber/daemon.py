@@ -47,6 +47,29 @@ from .secrets.sqlcipher import open_encrypted, sqlcipher_available
 
 MAX_REQUEST_LINE_CHARS = 1_000_000
 _REQUEST_ID_MISSING = object()
+SUPPORTED_KINDS = (
+    "status",
+    "ui.overview.snapshot",
+    "ui.transactions.list",
+    "ui.reports.capital_gains",
+    "ui.journals.snapshot",
+    "ui.profiles.snapshot",
+    "ui.wallets.sync",
+    "ai.providers.list",
+    "ai.providers.get",
+    "ai.providers.create",
+    "ai.providers.update",
+    "ai.providers.delete",
+    "ai.providers.set_default",
+    "ai.providers.clear_default",
+    "ai.providers.acknowledge",
+    "ai.list_models",
+    "ai.test_connection",
+    "ai.chat",
+    "wallets.reveal_descriptor",
+    "backends.reveal_token",
+    "daemon.shutdown",
+)
 
 
 @dataclass(frozen=True)
@@ -847,29 +870,7 @@ def run(
             "daemon.ready",
             {
                 "version": __version__,
-                "supported_kinds": [
-                    "status",
-                    "ui.overview.snapshot",
-                    "ui.transactions.list",
-                    "ui.reports.capital_gains",
-                    "ui.journals.snapshot",
-                    "ui.profiles.snapshot",
-                    "ui.wallets.sync",
-                    "ai.providers.list",
-                    "ai.providers.get",
-                    "ai.providers.create",
-                    "ai.providers.update",
-                    "ai.providers.delete",
-                    "ai.providers.set_default",
-                    "ai.providers.clear_default",
-                    "ai.providers.acknowledge",
-                    "ai.list_models",
-                    "ai.test_connection",
-                    "ai.chat",
-                    "wallets.reveal_descriptor",
-                    "backends.reveal_token",
-                    "daemon.shutdown",
-                ],
+                "supported_kinds": list(SUPPORTED_KINDS),
             },
         ),
     )

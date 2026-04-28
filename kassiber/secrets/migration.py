@@ -172,6 +172,17 @@ def migrate_plaintext_to_encrypted(
             details={"encrypted_temp": str(encrypted_path)},
             retryable=False,
         )
+    if backup_path.exists():
+        raise AppError(
+            f"refusing to overwrite existing rollback backup at {backup_path}",
+            code="backup_exists",
+            hint=(
+                "Inspect or move the existing .pre-encryption.sqlite3.bak file "
+                "before retrying `kassiber secrets init`."
+            ),
+            details={"backup_path": str(backup_path)},
+            retryable=False,
+        )
 
     quoted = escape_passphrase(new_passphrase)
 
