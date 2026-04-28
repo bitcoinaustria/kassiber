@@ -28,14 +28,14 @@ for daemon startup and installed-app CLI forwarding during debugging.
 The first line is always a lifecycle envelope:
 
 ```json
-{"kind":"daemon.ready","schema_version":1,"data":{"version":"...","supported_kinds":["status","ui.overview.snapshot","ui.transactions.list","ui.reports.capital_gains","ui.journals.snapshot","ui.profiles.snapshot","ui.wallets.sync","daemon.shutdown"]}}
+{"kind":"daemon.ready","schema_version":1,"data":{"version":"...","supported_kinds":["status","ui.overview.snapshot","ui.transactions.list","ui.reports.capital_gains","ui.journals.snapshot","ui.profiles.snapshot","ui.wallets.sync","wallets.reveal_descriptor","backends.reveal_token","daemon.shutdown"]}}
 ```
 
 `supported_kinds` is the public UI allowlist the Tauri supervisor mirrors;
 treat this list (not the docs) as the source of truth for what the supervisor
-will pass through. Reveal kinds (see below) are dispatched by the daemon but
-deliberately not advertised here, because they require a passphrase
-round-trip and the supervisor enforces a stricter gate around them.
+will pass through. Reveal kinds (see below) are included in the list but still
+require their own passphrase round-trip before the daemon returns raw secret
+material.
 
 Requests carry a caller-chosen `request_id`, a `kind`, and optional `args`:
 

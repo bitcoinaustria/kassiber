@@ -68,6 +68,8 @@ class DaemonSmokeTest(unittest.TestCase):
             self.assertIn("ui.journals.snapshot", ready["data"]["supported_kinds"])
             self.assertIn("ui.profiles.snapshot", ready["data"]["supported_kinds"])
             self.assertIn("ui.wallets.sync", ready["data"]["supported_kinds"])
+            self.assertIn("wallets.reveal_descriptor", ready["data"]["supported_kinds"])
+            self.assertIn("backends.reveal_token", ready["data"]["supported_kinds"])
 
             _write_payload(proc, {"request_id": "status-1", "kind": "status"})
             status = _read_payload(proc)

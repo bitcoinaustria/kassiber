@@ -74,10 +74,11 @@ class BackupExportResult:
 
 @dataclass
 class BackupImportResult:
-    staging_path: Path
+    staging_path: Optional[Path]
     installed_data_root: Optional[Path]
     manifest: dict
     pre_restore_backup: Optional[Path] = None
+    temporary_artifacts_cleaned: bool = False
 
 
 def _now_iso() -> str:
@@ -321,6 +322,7 @@ def import_backup(
 
         with tarfile.open(decrypted_tar, "r") as tar:
             extract_tar_safely(tar, staging_dir)
+        decrypted_tar.unlink()
 
         manifest_path = staging_dir / BACKUP_MANIFEST_NAME
         if not manifest_path.exists():
@@ -423,11 +425,28 @@ def import_backup(
                 target_env.parent.mkdir(parents=True, exist_ok=True)
                 shutil.copy2(staged_env, target_env)
 
+            try:
+                shutil.rmtree(staging_parent)
+            except OSError as exc:
+                raise AppError(
+                    "backup was installed but the decrypted temporary restore workspace could not be removed",
+                    code="restore_cleanup_failed",
+                    hint=f"Remove the temporary restore workspace manually: {staging_parent}",
+                    details={"temporary_path": str(staging_parent), "error": str(exc)},
+                    retryable=False,
+                ) from None
+            return BackupImportResult(
+                staging_path=None,
+                installed_data_root=installed_root,
+                manifest=manifest,
+                pre_restore_backup=backup_dir,
+                temporary_artifacts_cleaned=True,
+            )
+
         return BackupImportResult(
             staging_path=staging_dir,
-            installed_data_root=installed_root,
+            installed_data_root=None,
             manifest=manifest,
-            pre_restore_backup=backup_dir if move_into_place else None,
         )
     except Exception:
         shutil.rmtree(staging_parent, ignore_errors=True)

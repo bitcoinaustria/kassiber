@@ -21,6 +21,7 @@ Covers the round-trips the plan calls out as table-stakes:
 from __future__ import annotations
 
 import os
+import shutil
 import sqlite3
 import tarfile
 import tempfile
@@ -173,6 +174,28 @@ class MigrationTests(unittest.TestCase):
             finally:
                 conn.close()
 
+    def test_refuses_to_overwrite_existing_rollback_backup(self):
+        with tempfile.TemporaryDirectory() as root:
+            db_path = Path(root) / "kassiber.sqlite3"
+            seed = sqlite3.connect(str(db_path))
+            seed.execute("CREATE TABLE x(a)")
+            seed.execute("INSERT INTO x VALUES('value')")
+            seed.commit()
+            seed.close()
+
+            backup_path = Path(root) / "kassiber.pre-encryption.sqlite3.bak"
+            backup_path.write_text("existing rollback", encoding="utf-8")
+
+            with self.assertRaises(AppError) as ctx:
+                migrate_plaintext_to_encrypted(db_path, "new-passphrase")
+
+            self.assertEqual(ctx.exception.code, "backup_exists")
+            self.assertEqual(
+                backup_path.read_text(encoding="utf-8"),
+                "existing rollback",
+            )
+            self.assertTrue(looks_like_plaintext_sqlite(db_path))
+
 
 class ChangePassphraseTests(unittest.TestCase):
     def test_rotation(self):
@@ -269,14 +292,30 @@ class BackupRoundTripTests(unittest.TestCase):
 
             restore_root = Path(root) / "restore"
             (restore_root / "data").mkdir(parents=True)
-            result = import_backup(
-                backup_path,
-                restore_root / "data",
-                backup_passphrase="outer-pass",
-                move_into_place=True,
-            )
+            from kassiber.backup import pack as backup_pack
+
+            restore_temp = Path(root) / "restore-temp"
+            real_mkdtemp = backup_pack.tempfile.mkdtemp
+
+            def _mkdtemp(prefix):
+                restore_temp.mkdir()
+                return str(restore_temp)
+
+            backup_pack.tempfile.mkdtemp = _mkdtemp
+            try:
+                result = import_backup(
+                    backup_path,
+                    restore_root / "data",
+                    backup_passphrase="outer-pass",
+                    move_into_place=True,
+                )
+            finally:
+                backup_pack.tempfile.mkdtemp = real_mkdtemp
             self.assertEqual(result.manifest["schema_version"], 1)
             self.assertIsNone(result.pre_restore_backup)  # clean target
+            self.assertIsNone(result.staging_path)
+            self.assertTrue(result.temporary_artifacts_cleaned)
+            self.assertFalse(restore_temp.exists())
             db_path = restore_root / "data" / "kassiber.sqlite3"
             self.assertTrue(db_path.exists())
             conn = open_encrypted(db_path, "db-pass")
@@ -286,6 +325,51 @@ class BackupRoundTripTests(unittest.TestCase):
                 )
             finally:
                 conn.close()
+
+    def test_stage_only_import_removes_decrypted_tarball(self):
+        with tempfile.TemporaryDirectory() as root:
+            data_root = Path(root) / "data"
+            data_root.mkdir()
+            seed = open_db(str(data_root))
+            seed.execute("CREATE TABLE marker(x INTEGER)")
+            seed.execute("INSERT INTO marker VALUES(123)")
+            seed.commit()
+            seed.close()
+            migrate_plaintext_to_encrypted(data_root / "kassiber.sqlite3", "db-pass")
+
+            backup_path = Path(root) / "snap.kassiber"
+            export_backup(
+                str(data_root),
+                backup_path,
+                "db-pass",
+                backup_passphrase="outer-pass",
+            )
+
+            from kassiber.backup import pack as backup_pack
+
+            restore_temp = Path(root) / "restore-stage"
+            real_mkdtemp = backup_pack.tempfile.mkdtemp
+
+            def _mkdtemp(prefix):
+                restore_temp.mkdir()
+                return str(restore_temp)
+
+            backup_pack.tempfile.mkdtemp = _mkdtemp
+            try:
+                result = import_backup(
+                    backup_path,
+                    Path(root) / "unused",
+                    backup_passphrase="outer-pass",
+                    move_into_place=False,
+                )
+            finally:
+                backup_pack.tempfile.mkdtemp = real_mkdtemp
+
+            self.assertIsNotNone(result.staging_path)
+            self.assertTrue(result.staging_path.exists())
+            self.assertFalse((restore_temp / "bundle.tar").exists())
+            self.assertFalse(result.temporary_artifacts_cleaned)
+            shutil.rmtree(restore_temp)
 
     def test_install_preserves_existing_data_root(self):
         """Installing over a populated data root must move the old files
@@ -334,6 +418,8 @@ class BackupRoundTripTests(unittest.TestCase):
             )
             self.assertIsNotNone(result.pre_restore_backup)
             self.assertTrue(result.pre_restore_backup.exists())
+            self.assertIsNone(result.staging_path)
+            self.assertTrue(result.temporary_artifacts_cleaned)
             # Pre-existing local DB is preserved.
             preserved_db = result.pre_restore_backup / "kassiber.sqlite3"
             self.assertTrue(preserved_db.exists())

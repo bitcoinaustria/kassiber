@@ -113,9 +113,11 @@ without Kassiber is intentionally possible with stock `age` + `tar` +
 
 Restore is staged through `kassiber backup import`: decrypt to a temp
 tarball, run the strict tar-member validator, extract under a staging
-directory, validate the manifest, and only on `--install` move the
-staged tree into the live data root after snapshotting any pre-existing
-files into `pre-restore-<ts>/`. There is no hot in-place restore.
+directory, validate the manifest, and only on `--install` copy the staged
+tree into the live data root after snapshotting any pre-existing files
+into `pre-restore-<ts>/`. Successful installs remove the decrypted temp
+workspace; stage-only imports leave the extracted staging tree for manual
+inspection. There is no hot in-place restore.
 
 ## Secrets
 
