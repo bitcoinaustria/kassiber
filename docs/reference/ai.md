@@ -134,11 +134,12 @@ uses `kassiber ai providers update <name> --acknowledge` (or
 saving an off-device provider. Without that acknowledgement, `ai.chat` returns
 `ai_remote_ack_required` before sending any prompt content.
 
-Streaming is one-shot: pressing **Stop** hides the in-flight assistant message
-in the UI, but the underlying request keeps generating until it finishes. For
-**metered remote providers this still consumes tokens** until the model
-completes — Stop is UI-only, not a billing-side cancel. Cooperative
-cancellation lands with the worker-pool refactor.
+Streaming is one-shot: pressing **Stop** marks the in-flight assistant message
+stopped and suppresses later streamed UI updates, but the underlying request
+keeps generating until it finishes. For **metered remote providers this still
+consumes tokens** until the model completes — Stop is UI-only, not a
+billing-side cancel. Cooperative cancellation lands with the worker-pool
+refactor.
 
 While a chat is streaming, the Tauri shell currently serializes other daemon
 calls behind the same supervisor lock, so navigation that needs a fresh daemon

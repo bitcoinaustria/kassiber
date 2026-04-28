@@ -237,7 +237,7 @@ and [docs/plan/04-desktop-ui.md](docs/plan/04-desktop-ui.md).
   read-only-by-default tool loop with per-call consent for mutating tools
 - [ ] Cooperative AI chat cancellation: thread a `threading.Event` (or a
   dedicated `ai.chat.cancel` request kind) so Stop actually halts generation
-  rather than just hiding the in-flight reply
+  rather than only stopping further UI updates
 - [ ] Daemon worker pool: replace the surgical `ai.chat` thread with a real
   worker-pool model so concurrent streaming + non-streaming requests don't
   serialize through one stdin/stdout reader (also unblocks tool-call SQLite

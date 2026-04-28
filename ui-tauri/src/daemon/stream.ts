@@ -7,9 +7,10 @@
  * channels via `ThinkParser`, so the reasoning pane and answer pane can
  * render independently as tokens arrive.
  *
- * v1 omits cancellation: `abort()` hides the in-flight assistant message
- * UI-side, but the underlying request keeps generating until it finishes.
- * Cooperative cancellation lands with the worker-pool refactor.
+ * v1 omits provider-side cancellation: `abort()` marks the in-flight assistant
+ * message stopped and suppresses later UI updates, but the underlying request
+ * keeps generating until it finishes. Cooperative cancellation lands with the
+ * worker-pool refactor.
  */
 
 import * as React from "react";
