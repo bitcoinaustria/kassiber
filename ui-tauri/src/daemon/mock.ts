@@ -73,6 +73,40 @@ async function mockAiChatStream<T, R>(
 ): Promise<DaemonEnvelope<T>> {
   const requestId = req.request_id ?? `mock-${Math.random().toString(36).slice(2)}`;
   let cancelled = false;
+  const args = (req.args ?? {}) as {
+    model?: string;
+    provider?: string;
+    tools_enabled?: boolean;
+  };
+  if (args.tools_enabled) {
+    options?.onRecord?.({
+      kind: "ai.chat.tool_call",
+      schema_version: 1,
+      request_id: requestId,
+      data: {
+        call_id: "mock-tool-1",
+        name: "ui.overview.snapshot",
+        arguments: {},
+        kind_class: "read_only",
+        needs_consent: false,
+      } as R,
+    });
+    await new Promise((resolve) => setTimeout(resolve, 80));
+    if (options?.signal?.aborted) {
+      cancelled = true;
+    } else {
+      options?.onRecord?.({
+        kind: "ai.chat.tool_result",
+        schema_version: 1,
+        request_id: requestId,
+        data: {
+          call_id: "mock-tool-1",
+          ok: true,
+          envelope: { kind: "ui.overview.snapshot", schema_version: 1, data: fixtures["ui.overview.snapshot"] },
+        } as R,
+      });
+    }
+  }
   for (const chunk of MOCK_AI_CHAT_STREAM) {
     if (options?.signal?.aborted) {
       cancelled = true;
@@ -92,7 +126,6 @@ async function mockAiChatStream<T, R>(
     };
     options?.onRecord?.(record);
   }
-  const args = (req.args ?? {}) as { model?: string; provider?: string };
   return {
     kind: "ai.chat",
     schema_version: 1,

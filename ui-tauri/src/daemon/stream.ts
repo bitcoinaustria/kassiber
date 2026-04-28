@@ -26,6 +26,7 @@ export interface AiChatMessage {
   role: "user" | "assistant" | "system";
   content: string;
   thinking?: string;
+  toolCalls?: AiChatToolCall[];
   status: "pending" | "streaming" | "done" | "error" | "cancelled";
   errorCode?: string;
   errorMessage?: string;
@@ -34,11 +35,28 @@ export interface AiChatMessage {
   model?: string;
 }
 
+export type AiToolCallStatus = "pending" | "running" | "done" | "denied" | "error";
+
+export interface AiChatToolCall {
+  callId: string;
+  name: string;
+  arguments: Record<string, unknown>;
+  kindClass: "read_only" | "mutating" | "unknown";
+  needsConsent: boolean;
+  status: AiToolCallStatus;
+  result?: unknown;
+  reason?: string;
+}
+
 export interface AiChatRequest {
   provider?: string;
   model: string;
   messages: { role: AiChatMessage["role"] | "tool"; content: string }[];
   options?: Record<string, unknown>;
+  toolsEnabled?: boolean;
+  toolLoopMaxIterations?: number;
+  systemPromptKind?: "kassiber" | "raw" | null;
+  systemPrompt?: string;
 }
 
 export interface AiChatDeltaShape {
@@ -61,6 +79,27 @@ interface AiChatTerminalShape {
   model?: string;
   finish_reason?: string | null;
 }
+
+export interface AiChatToolCallShape {
+  call_id: string;
+  name: string;
+  arguments?: Record<string, unknown>;
+  kind_class?: "read_only" | "mutating" | "unknown";
+  needs_consent?: boolean;
+}
+
+export interface AiChatToolResultShape {
+  call_id: string;
+  ok?: boolean;
+  reason?: string;
+  envelope?: unknown;
+  message?: string;
+}
+
+type AiChatStreamRecordData =
+  | AiChatDeltaShape
+  | AiChatToolCallShape
+  | AiChatToolResultShape;
 
 export interface UseAiChatStreamResult {
   messages: AiChatMessage[];
@@ -117,6 +156,89 @@ export function applyAiChatDeltaToMessage(
   };
 }
 
+function toolResultStatus(data: AiChatToolResultShape): AiToolCallStatus {
+  if (data.ok) return "done";
+  if (data.reason === "tool_not_allowed" || data.reason === "user_denied") {
+    return "denied";
+  }
+  return "error";
+}
+
+export function applyAiChatStreamRecordToMessage(
+  current: AiChatMessage,
+  record: DaemonStreamRecord<AiChatStreamRecordData>,
+  parser: ThinkParser,
+  aborted: boolean,
+): AiChatMessage {
+  if (aborted) return current;
+  if (record.kind === "ai.chat.delta") {
+    return applyAiChatDeltaToMessage(
+      current,
+      record as DaemonStreamRecord<AiChatDeltaShape>,
+      parser,
+      false,
+    );
+  }
+  if (record.kind === "ai.chat.tool_call") {
+    const data = record.data as AiChatToolCallShape | undefined;
+    if (!data?.call_id || !data.name) return current;
+    const nextToolCall: AiChatToolCall = {
+      callId: data.call_id,
+      name: data.name,
+      arguments: data.arguments ?? {},
+      kindClass: data.kind_class ?? "unknown",
+      needsConsent: Boolean(data.needs_consent),
+      status: data.needs_consent ? "pending" : "running",
+    };
+    const existing = current.toolCalls ?? [];
+    const found = existing.some((toolCall) => toolCall.callId === data.call_id);
+    return {
+      ...current,
+      status: "streaming",
+      toolCalls: found
+        ? existing.map((toolCall) =>
+            toolCall.callId === data.call_id
+              ? { ...toolCall, ...nextToolCall }
+              : toolCall,
+          )
+        : [...existing, nextToolCall],
+    };
+  }
+  if (record.kind === "ai.chat.tool_result") {
+    const data = record.data as AiChatToolResultShape | undefined;
+    if (!data?.call_id) return current;
+    const existing = current.toolCalls ?? [];
+    const status = toolResultStatus(data);
+    const found = existing.some((toolCall) => toolCall.callId === data.call_id);
+    const applyResult = (toolCall: AiChatToolCall): AiChatToolCall => ({
+      ...toolCall,
+      status,
+      result: data.envelope ?? data.message ?? null,
+      reason: data.reason,
+    });
+    return {
+      ...current,
+      status: "streaming",
+      toolCalls: found
+        ? existing.map((toolCall) =>
+            toolCall.callId === data.call_id ? applyResult(toolCall) : toolCall,
+          )
+        : [
+            ...existing,
+            applyResult({
+              callId: data.call_id,
+              name: "Tool",
+              arguments: {},
+              kindClass: "unknown",
+              needsConsent: false,
+              status,
+            }),
+          ],
+    };
+  }
+  return current;
+}
+
 export function terminalAiChatStatus(
   finishReason: string | null | undefined,
   aborted: boolean,
@@ -151,11 +273,11 @@ export function useAiChatStream(): UseAiChatStreamResult {
   );
 
   const onRecord = React.useCallback(
-    (record: DaemonStreamRecord<AiChatDeltaShape>) => {
+    (record: DaemonStreamRecord<AiChatStreamRecordData>) => {
       const parser = parserRef.current ?? new ThinkParser();
       parserRef.current = parser;
       updateAssistant((current) =>
-        applyAiChatDeltaToMessage(
+        applyAiChatStreamRecordToMessage(
           current,
           record,
           parser,
@@ -200,7 +322,7 @@ export function useAiChatStream(): UseAiChatStreamResult {
         const transport = getTransport(dataMode);
         const envelope = (await transport.stream<
           AiChatTerminalShape,
-          AiChatDeltaShape
+          AiChatStreamRecordData
         >(
           {
             kind: "ai.chat",
@@ -210,6 +332,10 @@ export function useAiChatStream(): UseAiChatStreamResult {
               model: request.model,
               messages: request.messages,
               options: request.options,
+              tools_enabled: request.toolsEnabled,
+              tool_loop_max_iterations: request.toolLoopMaxIterations,
+              system_prompt_kind: request.systemPromptKind,
+              system_prompt: request.systemPrompt,
             },
           },
           { onRecord, signal: controller.signal },

@@ -238,10 +238,12 @@ and [docs/plan/04-desktop-ui.md](docs/plan/04-desktop-ui.md).
 - [x] Add cooperative AI chat cancellation through `ai.chat.cancel` and a
   per-request `threading.Event` so Stop suppresses further deltas and the
   terminal chat envelope reports `finish_reason: "cancelled"`.
-- [ ] AI tool use (PR 3): expose typed daemon kinds as the assistant's tool
-  surface, seed the system prompt from compact `skills/kassiber/` guidance,
-  and start with a read-only-by-default tool loop. Leave mutating tool consent
-  for a later PR.
+- [x] AI read-only tool use (PR 3): expose typed safe daemon snapshots as the
+  assistant's tool surface, seed the system prompt from compact
+  `skills/kassiber/` guidance, add tool cards, and start with a bounded
+  read-only-by-default tool loop.
+- [ ] AI mutating tool consent (PR 4): require explicit per-call/session
+  approval before executing mutating tools such as wallet sync.
 - [ ] Daemon worker pool: replace the surgical `ai.chat` thread with a real
   worker-pool model and one SQLite connection per worker when read-only tools
   or longer-running UI actions need daemon-side concurrency beyond the

@@ -59,9 +59,10 @@ Kassiber is currently in **dev mode**: renaming commands, breaking flags, and re
 - Every command accepts `--format {table,plain,json,csv}`, `--output <path>`, `--machine` (= `--format json`), `--debug`, `--diagnostics-out <path|auto>`, and `--db-passphrase-fd FD` (used to unlock a SQLCipher-encrypted database non-interactively).
 - Successful responses use `{kind, schema_version, data}`. Errors use `{kind: "error", schema_version, error: {code, message, hint, details, retryable, debug}}`.
 - The Tauri supervisor routes daemon responses by `request_id`, not by kind.
-  Streaming requests emit intermediate records such as `ai.chat.delta` to the
-  `daemon://stream` Tauri event channel; the exact-kind terminal record (or an
-  error) resolves only the matching request. `ai.chat.cancel` takes
+  Streaming requests emit intermediate records such as `ai.chat.delta`,
+  `ai.chat.tool_call`, and `ai.chat.tool_result` to the `daemon://stream` Tauri
+  event channel; the exact-kind terminal record (or an error) resolves only the
+  matching request. `ai.chat.cancel` takes
   `args.target_request_id` so the cancel request keeps its own routing
   `request_id`; cancelled chats finish with `finish_reason: "cancelled"`.
 - Live sync kinds implemented: `esplora`, `electrum`, `bitcoinrpc`. BTCPay Greenfield confirmed on-chain wallet history sync is available through wallet config and `wallets sync-btcpay`.

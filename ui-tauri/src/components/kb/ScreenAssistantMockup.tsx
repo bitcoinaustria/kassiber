@@ -27,6 +27,7 @@ export function ScreenAssistantMockup({
   const [selection, setSelection] = React.useState<
     { provider: string; model: string } | null
   >(null);
+  const [toolsEnabled, setToolsEnabled] = React.useState(true);
 
   const { messages, isStreaming, send, abort, error } = useAiChatStream();
 
@@ -51,11 +52,14 @@ export function ScreenAssistantMockup({
           provider: selection.provider,
           model: selection.model,
           messages: next,
+          toolsEnabled,
+          toolLoopMaxIterations: 8,
+          systemPromptKind: toolsEnabled ? "kassiber" : null,
         },
         prompt,
       );
     },
-    [messages, selection, send],
+    [messages, selection, send, toolsEnabled],
   );
 
   return (
@@ -92,6 +96,8 @@ export function ScreenAssistantMockup({
           onSubmit={handleSubmit}
           onAbort={abort}
           isStreaming={isStreaming}
+          toolsEnabled={toolsEnabled}
+          onToolsEnabledChange={setToolsEnabled}
         />
       </div>
     </section>

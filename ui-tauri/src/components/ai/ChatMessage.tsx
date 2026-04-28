@@ -12,6 +12,7 @@ import { AlertTriangle, Sparkles, User } from "lucide-react";
 import { ChatLoader } from "./ChatLoader";
 import { ChatMarkdown } from "./ChatMarkdown";
 import { ChatReasoning } from "./ChatReasoning";
+import { ChatToolCall } from "./ChatToolCall";
 import type { AiChatMessage } from "@/daemon/stream";
 import { cn } from "@/lib/utils";
 
@@ -37,6 +38,7 @@ export function ChatMessage({ message }: ChatMessageProps) {
 
   const isStreaming = message.status === "streaming" || message.status === "pending";
   const hasAnswer = Boolean(message.content);
+  const hasToolCalls = Boolean(message.toolCalls?.length);
   const showLoader = !hasAnswer && (message.status === "pending" || message.status === "streaming");
 
   return (
@@ -63,6 +65,13 @@ export function ChatMessage({ message }: ChatMessageProps) {
               isStreaming={isStreaming}
               hasAnswer={hasAnswer}
             />
+          ) : null}
+          {hasToolCalls ? (
+            <div className={message.thinking ? "mt-2" : undefined}>
+              {message.toolCalls?.map((toolCall) => (
+                <ChatToolCall key={toolCall.callId} toolCall={toolCall} />
+              ))}
+            </div>
           ) : null}
           {hasAnswer ? <ChatMarkdown content={message.content} /> : null}
           {showLoader ? <ChatLoader className="mt-1" /> : null}

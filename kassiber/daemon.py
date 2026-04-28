@@ -21,12 +21,18 @@ from .ai import (
     update_db_ai_provider,
 )
 from .ai.client import OpenAICompatClient
+from .ai.prompt import (
+    build_chat_messages,
+    build_openai_tools,
+    normalize_system_prompt_kind,
+)
 from .ai.providers import (
     acknowledge_remote_use,
     get_default_ai_provider_name,
     list_with_default as list_ai_providers_with_default,
     normalize_base_url,
 )
+from .ai.tools import get_tool, read_skill_reference
 from .cli.handlers import sync_wallet
 from .core import accounts as core_accounts
 from .core import wallets as core_wallets
@@ -42,7 +48,7 @@ from .core.ui_snapshot import (
 from .db import resolve_database_path, resolve_effective_data_root
 from .envelope import build_envelope, build_error_envelope, json_ready
 from .errors import AppError
-from .secrets.sqlcipher import open_encrypted, sqlcipher_available
+from .secrets.sqlcipher import looks_like_plaintext_sqlite, open_encrypted, sqlcipher_available
 
 
 MAX_REQUEST_LINE_CHARS = 1_000_000
@@ -113,6 +119,20 @@ class DaemonContext:
     active_ai_chats: ActiveAiChats
 
 
+@dataclass(frozen=True)
+class AiToolRuntime:
+    data_root: str
+    runtime_config: dict[str, object]
+
+
+@dataclass(frozen=True)
+class ParsedAiToolCall:
+    call_id: str
+    name: str
+    arguments: dict[str, Any]
+    argument_error: str | None = None
+
+
 class _OutputChannel:
     """Thread-safe writer for daemon JSONL output.
 
@@ -171,11 +191,19 @@ def _error_envelope(
     )
 
 
-def _status_payload(ctx: DaemonContext) -> dict[str, Any]:
-    payload = build_status_payload(ctx.conn, ctx.data_root)
-    payload["default_backend"] = ctx.runtime_config["default_backend"]
-    payload["env_file"] = ctx.runtime_config["env_file"]
+def _status_payload_from_parts(
+    conn: sqlite3.Connection,
+    data_root: str,
+    runtime_config: dict[str, object],
+) -> dict[str, Any]:
+    payload = build_status_payload(conn, data_root)
+    payload["default_backend"] = runtime_config["default_backend"]
+    payload["env_file"] = runtime_config["env_file"]
     return payload
+
+
+def _status_payload(ctx: DaemonContext) -> dict[str, Any]:
+    return _status_payload_from_parts(ctx.conn, ctx.data_root, ctx.runtime_config)
 
 
 def _coerce_args_dict(request_id: object, args: object) -> dict[str, Any]:
@@ -224,7 +252,26 @@ def _ai_chat_args(args: dict) -> dict[str, Any]:
                 f"ai.chat messages[{index}].content must be a string",
                 code="validation",
             )
-        cleaned.append({"role": role, "content": content})
+        cleaned_message: dict[str, Any] = {"role": role, "content": content}
+        tool_call_id = raw.get("tool_call_id")
+        if role == "tool" and tool_call_id is not None:
+            if not isinstance(tool_call_id, str) or not tool_call_id:
+                raise AppError(
+                    f"ai.chat messages[{index}].tool_call_id must be a string",
+                    code="validation",
+                )
+            cleaned_message["tool_call_id"] = tool_call_id
+        tool_calls = raw.get("tool_calls")
+        if role == "assistant" and tool_calls is not None:
+            if not isinstance(tool_calls, list):
+                raise AppError(
+                    f"ai.chat messages[{index}].tool_calls must be an array",
+                    code="validation",
+                )
+            cleaned_message["tool_calls"] = [
+                tool_call for tool_call in tool_calls if isinstance(tool_call, dict)
+            ]
+        cleaned.append(cleaned_message)
     options = args.get("options")
     if options is not None and not isinstance(options, dict):
         raise AppError(
@@ -237,12 +284,363 @@ def _ai_chat_args(args: dict) -> dict[str, Any]:
             "ai.chat provider must be a string",
             code="validation",
         )
+    tools_enabled = args.get("tools_enabled", False)
+    if not isinstance(tools_enabled, bool):
+        raise AppError(
+            "ai.chat tools_enabled must be a boolean",
+            code="validation",
+        )
+    raw_loop_limit = args.get("tool_loop_max_iterations", 8)
+    try:
+        tool_loop_max_iterations = int(raw_loop_limit)
+    except (TypeError, ValueError):
+        raise AppError(
+            "ai.chat tool_loop_max_iterations must be an integer",
+            code="validation",
+        ) from None
+    if tool_loop_max_iterations < 1 or tool_loop_max_iterations > 32:
+        raise AppError(
+            "ai.chat tool_loop_max_iterations must be between 1 and 32",
+            code="validation",
+        )
+    system_prompt_kind = normalize_system_prompt_kind(
+        args.get("system_prompt_kind"),
+        tools_enabled=tools_enabled,
+    )
+    system_prompt = args.get("system_prompt")
+    if system_prompt is not None and not isinstance(system_prompt, str):
+        raise AppError(
+            "ai.chat system_prompt must be a string",
+            code="validation",
+        )
+    if system_prompt is not None and system_prompt_kind != "raw":
+        raise AppError(
+            "ai.chat system_prompt is only accepted when system_prompt_kind is raw",
+            code="validation",
+        )
     return {
         "provider": provider,
         "model": model.strip(),
         "messages": cleaned,
         "options": options or {},
+        "tools_enabled": tools_enabled,
+        "tool_loop_max_iterations": tool_loop_max_iterations,
+        "system_prompt_kind": system_prompt_kind,
+        "system_prompt": system_prompt,
     }
+
+
+def _open_read_only_tool_connection(data_root: str) -> sqlite3.Connection:
+    db_path = resolve_database_path(resolve_effective_data_root(data_root))
+    if not db_path.exists():
+        raise AppError(
+            "Kassiber database is not initialized",
+            code="state_not_ready",
+            details={"database": str(db_path)},
+            retryable=False,
+        )
+    if db_path.stat().st_size > 0 and not looks_like_plaintext_sqlite(db_path):
+        raise AppError(
+            "read-only AI tools cannot open an encrypted database without a passphrase",
+            code="passphrase_required",
+            hint=(
+                "The AI worker uses a separate read-only SQLite connection and "
+                "does not retain database passphrases."
+            ),
+            retryable=False,
+        )
+    conn = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
+    conn.row_factory = sqlite3.Row
+    conn.execute("PRAGMA query_only = ON")
+    conn.execute("PRAGMA foreign_keys = ON")
+    return conn
+
+
+def _parse_ai_tool_call(raw: dict[str, Any], index: int) -> ParsedAiToolCall:
+    call_id = raw.get("id")
+    if not isinstance(call_id, str) or not call_id:
+        call_id = f"call_{index}"
+    function = raw.get("function")
+    if not isinstance(function, dict):
+        return ParsedAiToolCall(
+            call_id=call_id,
+            name="",
+            arguments={},
+            argument_error="invalid_tool_call",
+        )
+    name = function.get("name")
+    if not isinstance(name, str):
+        name = ""
+    raw_arguments = function.get("arguments")
+    if raw_arguments in (None, ""):
+        return ParsedAiToolCall(call_id=call_id, name=name, arguments={})
+    if isinstance(raw_arguments, dict):
+        return ParsedAiToolCall(call_id=call_id, name=name, arguments=raw_arguments)
+    if not isinstance(raw_arguments, str):
+        return ParsedAiToolCall(
+            call_id=call_id,
+            name=name,
+            arguments={},
+            argument_error="invalid_arguments",
+        )
+    try:
+        parsed = json.loads(raw_arguments)
+    except json.JSONDecodeError:
+        return ParsedAiToolCall(
+            call_id=call_id,
+            name=name,
+            arguments={},
+            argument_error="invalid_arguments",
+        )
+    if not isinstance(parsed, dict):
+        return ParsedAiToolCall(
+            call_id=call_id,
+            name=name,
+            arguments={},
+            argument_error="invalid_arguments",
+        )
+    return ParsedAiToolCall(call_id=call_id, name=name, arguments=parsed)
+
+
+def _tool_result_denied(reason: str, *, message: str | None = None) -> dict[str, Any]:
+    result: dict[str, Any] = {"ok": False, "reason": reason}
+    if message:
+        result["message"] = message
+    return result
+
+
+def _execute_read_only_ai_tool(call: ParsedAiToolCall, runtime: AiToolRuntime) -> dict[str, Any]:
+    if call.argument_error:
+        return _tool_result_denied(call.argument_error)
+    entry = get_tool(call.name)
+    if entry is None or entry.kind_class != "read_only":
+        return _tool_result_denied("tool_not_allowed")
+    try:
+        if call.name == "read_skill_reference":
+            reference_name = call.arguments.get("name")
+            if not isinstance(reference_name, str):
+                raise AppError(
+                    "read_skill_reference requires a name string",
+                    code="validation",
+                    retryable=False,
+                )
+            return {
+                "ok": True,
+                "envelope": build_envelope(
+                    "read_skill_reference",
+                    read_skill_reference(reference_name),
+                ),
+            }
+        if entry.daemon_kind is None:
+            return _tool_result_denied("tool_not_allowed")
+        conn = _open_read_only_tool_connection(runtime.data_root)
+        try:
+            if entry.daemon_kind == "status":
+                payload = _status_payload_from_parts(
+                    conn,
+                    runtime.data_root,
+                    runtime.runtime_config,
+                )
+            elif entry.daemon_kind == "ui.overview.snapshot":
+                payload = build_overview_snapshot(conn)
+            elif entry.daemon_kind == "ui.transactions.list":
+                payload = build_transactions_snapshot(conn, call.arguments)
+            elif entry.daemon_kind == "ui.profiles.snapshot":
+                payload = build_profiles_snapshot(conn)
+            elif entry.daemon_kind == "ui.reports.capital_gains":
+                payload = build_capital_gains_snapshot(conn)
+            elif entry.daemon_kind == "ui.journals.snapshot":
+                payload = build_journals_snapshot(conn)
+            else:
+                return _tool_result_denied("tool_not_allowed")
+        finally:
+            conn.close()
+        return {"ok": True, "envelope": build_envelope(entry.daemon_kind, payload)}
+    except AppError as exc:
+        return _tool_result_denied(
+            exc.code or "tool_error",
+            message=str(exc),
+        )
+    except Exception as exc:
+        traceback.print_exc(file=sys.stderr)
+        sys.stderr.flush()
+        return _tool_result_denied(
+            "tool_error",
+            message=str(exc) or exc.__class__.__name__,
+        )
+
+
+def _tool_result_content_for_model(result: dict[str, Any]) -> str:
+    return json.dumps(json_ready(result), sort_keys=True, separators=(",", ":"))
+
+
+def _stream_ai_chat_tool_turn(
+    request_id: object,
+    client: OpenAICompatClient,
+    validated: dict[str, Any],
+    messages: list[dict[str, Any]],
+    tools: list[dict[str, Any]],
+    out: _OutputChannel,
+    cancel_event: threading.Event,
+) -> tuple[list[dict[str, Any]], str, str, str | None]:
+    tool_calls: list[dict[str, Any]] = []
+    content_parts: list[str] = []
+    reasoning_parts: list[str] = []
+    finish_reason = None
+    for chunk in client.stream_chat(
+        messages=messages,
+        model=validated["model"],
+        options=validated["options"],
+        tools=tools,
+        tool_choice="auto",
+    ):
+        if cancel_event.is_set():
+            finish_reason = "cancelled"
+            break
+        delta = chunk.delta
+        delta_tool_calls = delta.get("tool_calls")
+        if isinstance(delta_tool_calls, list):
+            tool_calls = delta_tool_calls
+        delta_payload: dict[str, Any] = {}
+        content = delta.get("content")
+        reasoning = delta.get("reasoning")
+        if isinstance(content, str) and content:
+            content_parts.append(content)
+            delta_payload["content"] = content
+        if isinstance(reasoning, str) and reasoning:
+            reasoning_parts.append(reasoning)
+            delta_payload["reasoning"] = reasoning
+        if delta_payload:
+            out.write(
+                _with_request_id(
+                    build_envelope("ai.chat.delta", {"delta": delta_payload}),
+                    request_id,
+                )
+            )
+        if chunk.finish_reason is not None:
+            finish_reason = chunk.finish_reason
+        if cancel_event.is_set():
+            finish_reason = "cancelled"
+            break
+    return tool_calls, "".join(content_parts), "".join(reasoning_parts), finish_reason
+
+
+def _write_ai_chat_terminal(
+    out: _OutputChannel,
+    request_id: object,
+    provider_snapshot: dict[str, Any],
+    validated: dict[str, Any],
+    finish_reason: str | None,
+) -> None:
+    out.write(
+        _with_request_id(
+            build_envelope(
+                "ai.chat",
+                {
+                    "provider": provider_snapshot["name"],
+                    "model": validated["model"],
+                    "finish_reason": finish_reason,
+                },
+            ),
+            request_id,
+        )
+    )
+
+
+def _run_ai_chat_tool_loop(
+    request_id: object,
+    client: OpenAICompatClient,
+    provider_snapshot: dict[str, Any],
+    validated: dict[str, Any],
+    out: _OutputChannel,
+    cancel_event: threading.Event,
+    runtime: AiToolRuntime,
+) -> None:
+    messages = build_chat_messages(
+        validated["messages"],
+        system_prompt_kind=validated["system_prompt_kind"],
+        system_prompt=validated["system_prompt"],
+    )
+    tools = build_openai_tools()
+    finish_reason = None
+    for _iteration in range(validated["tool_loop_max_iterations"]):
+        if cancel_event.is_set():
+            finish_reason = "cancelled"
+            break
+        tool_calls, content, _reasoning, finish_reason = _stream_ai_chat_tool_turn(
+            request_id,
+            client,
+            validated,
+            messages,
+            tools,
+            out,
+            cancel_event,
+        )
+        if cancel_event.is_set():
+            finish_reason = "cancelled"
+            break
+        if not tool_calls:
+            break
+
+        messages.append(
+            {
+                "role": "assistant",
+                "content": content,
+                "tool_calls": tool_calls,
+            }
+        )
+        for index, raw_tool_call in enumerate(tool_calls):
+            if not isinstance(raw_tool_call, dict):
+                continue
+            call = _parse_ai_tool_call(raw_tool_call, index)
+            entry = get_tool(call.name)
+            kind_class = entry.kind_class if entry is not None else "unknown"
+            out.write(
+                _with_request_id(
+                    build_envelope(
+                        "ai.chat.tool_call",
+                        {
+                            "call_id": call.call_id,
+                            "name": call.name,
+                            "arguments": call.arguments,
+                            "kind_class": kind_class,
+                            "needs_consent": False,
+                        },
+                    ),
+                    request_id,
+                )
+            )
+            if cancel_event.is_set():
+                finish_reason = "cancelled"
+                break
+            result = _execute_read_only_ai_tool(call, runtime)
+            out.write(
+                _with_request_id(
+                    build_envelope(
+                        "ai.chat.tool_result",
+                        {"call_id": call.call_id, **result},
+                    ),
+                    request_id,
+                )
+            )
+            messages.append(
+                {
+                    "role": "tool",
+                    "tool_call_id": call.call_id,
+                    "content": _tool_result_content_for_model(result),
+                }
+            )
+            if cancel_event.is_set():
+                finish_reason = "cancelled"
+                break
+        if finish_reason == "cancelled":
+            break
+    else:
+        finish_reason = "tool_loop_max_iterations"
+
+    if cancel_event.is_set():
+        finish_reason = "cancelled"
+    _write_ai_chat_terminal(out, request_id, provider_snapshot, validated, finish_reason)
 
 
 def _run_ai_chat_stream(
@@ -253,21 +651,33 @@ def _run_ai_chat_stream(
     cancel_event: threading.Event,
     active_ai_chats: ActiveAiChats,
     registry_key: str | None,
+    runtime: AiToolRuntime,
 ) -> None:
-    """Thread target — streams `ai.chat.delta` records and a terminal `ai.chat`.
-
-    Receives an already-resolved provider snapshot so SQLite is never
-    touched from the worker thread (sqlite3 connections are tied to the
-    thread that opened them).
-    """
+    """Thread target — streams AI records and a terminal `ai.chat`."""
     try:
         client = OpenAICompatClient(
             base_url=provider_snapshot["base_url"],
             api_key=provider_snapshot.get("api_key"),
         )
+        if validated["tools_enabled"]:
+            _run_ai_chat_tool_loop(
+                request_id,
+                client,
+                provider_snapshot,
+                validated,
+                out,
+                cancel_event,
+                runtime,
+            )
+            return
+        stream_messages = build_chat_messages(
+            validated["messages"],
+            system_prompt_kind=validated["system_prompt_kind"],
+            system_prompt=validated["system_prompt"],
+        )
         finish_reason = None
         for chunk in client.stream_chat(
-            messages=validated["messages"],
+            messages=stream_messages,
             model=validated["model"],
             options=validated["options"],
         ):
@@ -288,19 +698,7 @@ def _run_ai_chat_stream(
                 break
         if cancel_event.is_set():
             finish_reason = "cancelled"
-        out.write(
-            _with_request_id(
-                build_envelope(
-                    "ai.chat",
-                    {
-                        "provider": provider_snapshot["name"],
-                        "model": validated["model"],
-                        "finish_reason": finish_reason,
-                    },
-                ),
-                request_id,
-            )
-        )
+        _write_ai_chat_terminal(out, request_id, provider_snapshot, validated, finish_reason)
     except AppError as exc:
         out.write(
             _error_envelope(
@@ -771,6 +1169,10 @@ def handle_request(
             "api_key": provider.get("api_key"),
             "kind": provider["kind"],
         }
+        runtime = AiToolRuntime(
+            data_root=ctx.data_root,
+            runtime_config=dict(ctx.runtime_config),
+        )
         registry_key, cancel_event = ctx.active_ai_chats.register(request_id)
         thread = threading.Thread(
             target=_run_ai_chat_stream,
@@ -782,6 +1184,7 @@ def handle_request(
                 cancel_event,
                 ctx.active_ai_chats,
                 registry_key,
+                runtime,
             ),
             daemon=True,
             name="kassiber-ai-chat",
