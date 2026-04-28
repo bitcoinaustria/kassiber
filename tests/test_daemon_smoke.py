@@ -1,6 +1,7 @@
 import json
 import queue
 import select
+import sqlite3
 import subprocess
 import sys
 import tempfile
@@ -59,6 +60,35 @@ def _write_payload(proc, payload):
     line = payload if isinstance(payload, str) else json.dumps(payload)
     proc.stdin.write(line + "\n")
     proc.stdin.flush()
+
+
+def _run_cli(data_root, *args):
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "kassiber",
+            "--data-root",
+            str(data_root),
+            "--machine",
+            *args,
+        ],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    stdout = result.stdout.strip()
+    if not stdout:
+        raise AssertionError(
+            f"CLI produced no stdout for {args}; stderr: {result.stderr}"
+        )
+    payload = json.loads(stdout)
+    if result.returncode != 0 or payload.get("kind") == "error":
+        raise AssertionError(
+            f"CLI failed for {args}; code={result.returncode}; payload={payload}; stderr={result.stderr}"
+        )
+    return payload
 
 
 def _close_daemon(proc):
@@ -204,6 +234,173 @@ def _tool_call_message(name, arguments="{}", call_id="call_1"):
     )
 
 
+def _seed_workspace_with_transaction(data_root, tmp_root):
+    csv_path = Path(tmp_root) / "transactions.csv"
+    csv_path.write_text(
+        "\n".join(
+            [
+                "date,txid,direction,asset,amount,fee,fiat_rate,description",
+                "2026-01-01T10:00:00Z,seed-inbound-1,inbound,BTC,0.10000000,0,50000,Seed acquisition",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    _run_cli(data_root, "init")
+    _run_cli(data_root, "workspaces", "create", "Demo")
+    _run_cli(data_root, "profiles", "create", "Main", "--fiat-currency", "EUR")
+    _run_cli(
+        data_root,
+        "wallets",
+        "create",
+        "--label",
+        "Cold",
+        "--kind",
+        "address",
+        "--address",
+        "bc1qtestaddress0000000000000000000000000000000",
+    )
+    _run_cli(data_root, "wallets", "import-csv", "--wallet", "Cold", "--file", str(csv_path))
+    _run_cli(data_root, "rates", "set", "BTC-EUR", "2026-01-01T00:00:00Z", "50000")
+
+
+def _seed_sensitive_ai_surface(data_root):
+    _run_cli(data_root, "init")
+    _run_cli(data_root, "workspaces", "create", "Secure")
+    _run_cli(data_root, "profiles", "create", "Main", "--fiat-currency", "EUR")
+    conn = sqlite3.connect(Path(data_root) / "kassiber.sqlite3")
+    try:
+        workspace_id = conn.execute(
+            "SELECT id FROM workspaces WHERE label = 'Secure'"
+        ).fetchone()[0]
+        profile_id = conn.execute(
+            "SELECT id FROM profiles WHERE label = 'Main'"
+        ).fetchone()[0]
+        account_id = conn.execute(
+            "SELECT id FROM accounts WHERE profile_id = ? AND code = 'treasury'",
+            (profile_id,),
+        ).fetchone()[0]
+        now = "2026-01-01T00:00:00Z"
+        conn.executemany(
+            """
+            INSERT INTO backends(
+                name, kind, chain, network, url, auth_header, token,
+                batch_size, timeout, tor_proxy, config_json, notes, created_at, updated_at
+            )
+            VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            [
+                (
+                    "private",
+                    "esplora",
+                    "bitcoin",
+                    "mainnet",
+                    "https://user:pass@private-node.local/secret-path?token=abc",
+                    "Bearer secret-auth-header",
+                    "secret-token-value",
+                    50,
+                    10,
+                    "",
+                    json.dumps(
+                        {
+                            "cookiefile": "/Users/dev/.bitcoin/.cookie",
+                            "username": "rpcuser",
+                            "password": "rpcpass",
+                            "walletprefix": "secret-wallet-prefix",
+                        },
+                        sort_keys=True,
+                    ),
+                    "secret backend note",
+                    now,
+                    now,
+                ),
+                (
+                    "unused",
+                    "esplora",
+                    "bitcoin",
+                    "mainnet",
+                    "https://unused-node.local/also-secret",
+                    "",
+                    "",
+                    None,
+                    None,
+                    "",
+                    "{}",
+                    "",
+                    now,
+                    now,
+                ),
+            ],
+        )
+        conn.execute(
+            "INSERT OR REPLACE INTO settings(key, value) VALUES('default_backend', 'private')"
+        )
+        conn.executemany(
+            """
+            INSERT INTO wallets(
+                id, workspace_id, profile_id, account_id, label, kind, config_json, created_at
+            )
+            VALUES(?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            [
+                (
+                    "wallet-file-only",
+                    workspace_id,
+                    profile_id,
+                    account_id,
+                    "FileOnly",
+                    "address",
+                    json.dumps(
+                        {
+                            "source_file": "/tmp/sensitive-wallet-export.csv",
+                            "source_format": "csv",
+                        },
+                        sort_keys=True,
+                    ),
+                    now,
+                ),
+                (
+                    "wallet-descriptor",
+                    workspace_id,
+                    profile_id,
+                    account_id,
+                    "DescriptorLive",
+                    "descriptor",
+                    json.dumps(
+                        {
+                            "backend": "private",
+                            "chain": "bitcoin",
+                            "descriptor": "wpkh(xpub_descriptor_material/0/*)",
+                            "network": "mainnet",
+                        },
+                        sort_keys=True,
+                    ),
+                    now,
+                ),
+                (
+                    "wallet-default-address",
+                    workspace_id,
+                    profile_id,
+                    account_id,
+                    "DefaultAddress",
+                    "address",
+                    json.dumps(
+                        {
+                            "addresses": ["bc1qsensitiveaddressmaterial000000000000000000"],
+                            "chain": "bitcoin",
+                            "network": "mainnet",
+                        },
+                        sort_keys=True,
+                    ),
+                    now,
+                ),
+            ],
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+
 class DaemonSmokeTest(unittest.TestCase):
     def test_daemon_ready_status_and_shutdown_jsonl(self):
         with tempfile.TemporaryDirectory(prefix="kassiber-daemon-") as tmp:
@@ -216,9 +413,16 @@ class DaemonSmokeTest(unittest.TestCase):
             self.assertIn("status", ready["data"]["supported_kinds"])
             self.assertIn("ui.overview.snapshot", ready["data"]["supported_kinds"])
             self.assertIn("ui.transactions.list", ready["data"]["supported_kinds"])
+            self.assertIn("ui.wallets.list", ready["data"]["supported_kinds"])
+            self.assertIn("ui.backends.list", ready["data"]["supported_kinds"])
             self.assertIn("ui.reports.capital_gains", ready["data"]["supported_kinds"])
             self.assertIn("ui.journals.snapshot", ready["data"]["supported_kinds"])
+            self.assertIn("ui.journals.quarantine", ready["data"]["supported_kinds"])
+            self.assertIn("ui.journals.transfers.list", ready["data"]["supported_kinds"])
             self.assertIn("ui.profiles.snapshot", ready["data"]["supported_kinds"])
+            self.assertIn("ui.rates.summary", ready["data"]["supported_kinds"])
+            self.assertIn("ui.workspace.health", ready["data"]["supported_kinds"])
+            self.assertIn("ui.next_actions", ready["data"]["supported_kinds"])
             self.assertIn("ui.wallets.sync", ready["data"]["supported_kinds"])
             self.assertIn("wallets.reveal_descriptor", ready["data"]["supported_kinds"])
             self.assertIn("backends.reveal_token", ready["data"]["supported_kinds"])
@@ -306,6 +510,175 @@ class DaemonSmokeTest(unittest.TestCase):
         payload_mock.assert_called_once()
         self.assertIs(payload_mock.call_args.args[0], conn_marker)
         self.assertEqual(results[0]["envelope"]["kind"], "ui.wallets.sync")
+
+    def test_daemon_safe_read_tool_kinds_return_workspace_state(self):
+        with tempfile.TemporaryDirectory(prefix="kassiber-daemon-state-") as tmp:
+            data_root = Path(tmp) / "data"
+            _seed_workspace_with_transaction(data_root, tmp)
+            proc = _start_daemon(data_root)
+            self.assertEqual(_read_payload_timeout(proc)["kind"], "daemon.ready")
+
+            _write_payload(proc, {"request_id": "health-1", "kind": "ui.workspace.health"})
+            health = _read_payload_timeout(proc)
+            self.assertEqual(health["kind"], "ui.workspace.health")
+            self.assertEqual(health["data"]["workspace"]["label"], "Demo")
+            self.assertEqual(health["data"]["profile"]["label"], "Main")
+            self.assertEqual(health["data"]["counts"]["wallets"], 1)
+            self.assertEqual(health["data"]["counts"]["transactions"], 1)
+            self.assertEqual(health["data"]["journals"]["status"], "not_processed")
+            self.assertFalse(health["data"]["reports"]["ready"])
+
+            _write_payload(proc, {"request_id": "next-1", "kind": "ui.next_actions"})
+            next_actions = _read_payload_timeout(proc)
+            self.assertEqual(next_actions["kind"], "ui.next_actions")
+            self.assertEqual(
+                next_actions["data"]["suggestions"][0]["id"],
+                "process_journals",
+            )
+
+            _write_payload(proc, {"request_id": "wallets-1", "kind": "ui.wallets.list"})
+            wallets = _read_payload_timeout(proc)
+            self.assertEqual(wallets["kind"], "ui.wallets.list")
+            self.assertEqual(wallets["data"]["wallets"][0]["label"], "Cold")
+            wallet_payload = json.dumps(wallets["data"])
+            self.assertNotIn("descriptor", wallet_payload)
+            self.assertNotIn("config_json", wallet_payload)
+
+            _write_payload(proc, {"request_id": "backends-1", "kind": "ui.backends.list"})
+            backends = _read_payload_timeout(proc)
+            self.assertEqual(backends["kind"], "ui.backends.list")
+            self.assertGreaterEqual(backends["data"]["summary"]["count"], 1)
+            for backend in backends["data"]["backends"]:
+                self.assertNotIn("url", backend)
+                self.assertNotIn("token", backend)
+                self.assertNotIn("auth_header", backend)
+                self.assertNotIn("config_json", backend)
+                self.assertNotIn("cookiefile", backend)
+                self.assertNotIn("username", backend)
+                self.assertNotIn("password", backend)
+                self.assertNotIn("notes", backend)
+                self.assertNotIn("source", backend)
+                self.assertIn("has_url", backend)
+
+            _write_payload(
+                proc,
+                {
+                    "request_id": "tx-filter-1",
+                    "kind": "ui.transactions.list",
+                    "args": {
+                        "limit": 5,
+                        "direction": "inbound",
+                        "asset": "BTC",
+                        "wallet": "Cold",
+                        "since": "2026-01-01T00:00:00Z",
+                        "sort": "amount",
+                        "order": "desc",
+                    },
+                },
+            )
+            transactions = _read_payload_timeout(proc)
+            self.assertEqual(transactions["kind"], "ui.transactions.list")
+            self.assertEqual(len(transactions["data"]["txs"]), 1)
+            self.assertEqual(transactions["data"]["filters"]["wallet"], "Cold")
+
+            _write_payload(proc, {"request_id": "rates-1", "kind": "ui.rates.summary"})
+            rates = _read_payload_timeout(proc)
+            self.assertEqual(rates["kind"], "ui.rates.summary")
+            self.assertEqual(rates["data"]["pairs"][0]["pair"], "BTC-EUR")
+
+            _write_payload(
+                proc,
+                {
+                    "request_id": "quarantine-1",
+                    "kind": "ui.journals.quarantine",
+                    "args": {"limit": 3},
+                },
+            )
+            quarantine = _read_payload_timeout(proc)
+            self.assertEqual(quarantine["kind"], "ui.journals.quarantine")
+            self.assertEqual(quarantine["data"]["summary"]["count"], 0)
+            self.assertEqual(quarantine["data"]["items"], [])
+
+            _write_payload(
+                proc,
+                {
+                    "request_id": "transfers-1",
+                    "kind": "ui.journals.transfers.list",
+                    "args": {"limit": 3},
+                },
+            )
+            transfers = _read_payload_timeout(proc)
+            self.assertEqual(transfers["kind"], "ui.journals.transfers.list")
+            self.assertEqual(transfers["data"]["pairs"], [])
+
+            _write_payload(proc, {"request_id": "shutdown-1", "kind": "daemon.shutdown"})
+            self.assertEqual(_read_payload_timeout(proc)["kind"], "daemon.shutdown")
+            code, stderr = _close_daemon(proc)
+            self.assertEqual(code, 0, stderr)
+            self.assertEqual(stderr, "")
+
+    def test_daemon_ai_read_tools_redact_backend_and_wallet_sensitive_state(self):
+        with tempfile.TemporaryDirectory(prefix="kassiber-daemon-sensitive-") as tmp:
+            data_root = Path(tmp) / "data"
+            _seed_sensitive_ai_surface(data_root)
+            proc = _start_daemon(data_root)
+            self.assertEqual(_read_payload_timeout(proc)["kind"], "daemon.ready")
+
+            _write_payload(proc, {"request_id": "wallets-sensitive", "kind": "ui.wallets.list"})
+            wallets = _read_payload_timeout(proc)
+            self.assertEqual(wallets["kind"], "ui.wallets.list")
+            wallet_payload = json.dumps(wallets["data"], sort_keys=True)
+            self.assertNotIn("xpub_descriptor_material", wallet_payload)
+            self.assertNotIn("bc1qsensitiveaddressmaterial", wallet_payload)
+            self.assertNotIn("/tmp/sensitive-wallet-export.csv", wallet_payload)
+            wallets_by_label = {
+                wallet["label"]: wallet for wallet in wallets["data"]["wallets"]
+            }
+            self.assertEqual(wallets_by_label["FileOnly"]["sync_mode"], "file_import")
+            self.assertEqual(wallets_by_label["FileOnly"]["backend"]["name"], "")
+            self.assertEqual(wallets_by_label["FileOnly"]["backend"]["source"], "none")
+            self.assertEqual(
+                wallets_by_label["DescriptorLive"]["backend"]["source"],
+                "explicit",
+            )
+            self.assertEqual(
+                wallets_by_label["DefaultAddress"]["backend"]["source"],
+                "default",
+            )
+
+            _write_payload(proc, {"request_id": "backends-sensitive", "kind": "ui.backends.list"})
+            backends = _read_payload_timeout(proc)
+            self.assertEqual(backends["kind"], "ui.backends.list")
+            backend_payload = json.dumps(backends["data"], sort_keys=True)
+            self.assertIn('"name": "private"', backend_payload)
+            self.assertNotIn("unused", backend_payload)
+            for leaked in (
+                "private-node.local",
+                "secret-path",
+                "secret-token-value",
+                "secret-auth-header",
+                "rpcuser",
+                "rpcpass",
+                ".cookie",
+                "secret-wallet-prefix",
+                "secret backend note",
+                "unused-node.local",
+            ):
+                self.assertNotIn(leaked, backend_payload)
+            backend = backends["data"]["backends"][0]
+            self.assertNotIn("url", backend)
+            self.assertTrue(backend["has_url"])
+            self.assertTrue(backend["has_token"])
+            self.assertTrue(backend["has_auth_header"])
+            self.assertTrue(backend["has_cookiefile"])
+            self.assertTrue(backend["has_username"])
+            self.assertTrue(backend["has_password"])
+
+            _write_payload(proc, {"request_id": "shutdown-1", "kind": "daemon.shutdown"})
+            self.assertEqual(_read_payload_timeout(proc)["kind"], "daemon.shutdown")
+            code, stderr = _close_daemon(proc)
+            self.assertEqual(code, 0, stderr)
+            self.assertEqual(stderr, "")
 
     def test_ai_tool_consent_stale_target_returns_not_found(self):
         with tempfile.TemporaryDirectory(prefix="kassiber-daemon-") as tmp:
@@ -573,6 +946,106 @@ class DaemonSmokeTest(unittest.TestCase):
                 }
                 self.assertIn("ui_overview_snapshot", tool_names)
                 self.assertNotIn("ui.overview.snapshot", tool_names)
+
+                _write_payload(proc, {"request_id": "shutdown-1", "kind": "daemon.shutdown"})
+                self.assertEqual(_read_payload_timeout(proc)["kind"], "daemon.shutdown")
+                code, stderr = _close_daemon(proc)
+                self.assertEqual(code, 0, stderr)
+                self.assertEqual(stderr, "")
+        finally:
+            server.shutdown()
+            server.server_close()
+
+    def test_ai_chat_pending_question_uses_health_and_next_actions_tools(self):
+        server = _start_tool_chat_server(
+            [
+                (_tool_call_message("ui_workspace_health", call_id="call_health"), 0.0),
+                (_tool_call_message("ui_next_actions", call_id="call_next"), 0.0),
+                (
+                    _chat_completion_response(
+                        {"role": "assistant", "content": "Create a workspace first."},
+                    ),
+                    0.0,
+                ),
+            ]
+        )
+        base_url = f"http://127.0.0.1:{server.server_port}/v1"
+        try:
+            with tempfile.TemporaryDirectory(prefix="kassiber-daemon-") as tmp:
+                proc = _start_daemon(Path(tmp) / "data")
+                self.assertEqual(_read_payload_timeout(proc)["kind"], "daemon.ready")
+
+                _write_payload(
+                    proc,
+                    {
+                        "request_id": "provider-1",
+                        "kind": "ai.providers.create",
+                        "args": {
+                            "name": "tool-local",
+                            "base_url": base_url,
+                            "kind": "local",
+                        },
+                    },
+                )
+                self.assertEqual(_read_payload_timeout(proc)["kind"], "ai.providers.create")
+
+                _write_payload(
+                    proc,
+                    {
+                        "request_id": "chat-pending-1",
+                        "kind": "ai.chat",
+                        "args": {
+                            "provider": "tool-local",
+                            "model": "test-model",
+                            "tools_enabled": True,
+                            "messages": [{"role": "user", "content": "What is pending?"}],
+                        },
+                    },
+                )
+
+                records = []
+                terminal = None
+                deadline = time.time() + 5
+                while time.time() < deadline and terminal is None:
+                    payload = _read_payload_timeout(proc, max(0.1, deadline - time.time()))
+                    if payload.get("request_id") != "chat-pending-1":
+                        continue
+                    records.append(payload)
+                    if payload.get("kind") == "ai.chat":
+                        terminal = payload
+
+                self.assertIsNotNone(terminal)
+                self.assertEqual(terminal["data"]["finish_reason"], "stop")
+                tool_results = [
+                    record
+                    for record in records
+                    if record["kind"] == "ai.chat.tool_result"
+                ]
+                self.assertEqual(
+                    [record["data"]["envelope"]["kind"] for record in tool_results],
+                    ["ui.workspace.health", "ui.next_actions"],
+                )
+                self.assertEqual(len(server.requests), 3)  # type: ignore[attr-defined]
+                first_tool_names = {
+                    tool["function"]["name"]
+                    for tool in server.requests[0]["tools"]  # type: ignore[attr-defined]
+                }
+                self.assertIn("ui_workspace_health", first_tool_names)
+                self.assertIn("ui_next_actions", first_tool_names)
+                self.assertTrue(
+                    any(
+                        message.get("role") == "tool"
+                        and message.get("tool_call_id") == "call_health"
+                        for message in server.requests[1]["messages"]  # type: ignore[attr-defined]
+                    )
+                )
+                self.assertTrue(
+                    any(
+                        message.get("role") == "tool"
+                        and message.get("tool_call_id") == "call_next"
+                        for message in server.requests[2]["messages"]  # type: ignore[attr-defined]
+                    )
+                )
 
                 _write_payload(proc, {"request_id": "shutdown-1", "kind": "daemon.shutdown"})
                 self.assertEqual(_read_payload_timeout(proc)["kind"], "daemon.shutdown")

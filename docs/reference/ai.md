@@ -174,11 +174,20 @@ The in-app assistant can opt into a bounded tool loop with
 ```
 
 Tool control stays top-level; generation options still live under `options`.
-When enabled, Kassiber prepends a compact system prompt, sends OpenAI-style tool
-definitions, emits `ai.chat.tool_call`, `ai.chat.tool_consent_required`, and
+When enabled, Kassiber prepends a compact Kassiber skill-aware system prompt,
+sends OpenAI-style tool definitions, emits `ai.chat.tool_call`,
+`ai.chat.tool_consent_required`, and
 `ai.chat.tool_result` stream records as needed, feeds tool results back as
 `role: "tool"` messages, and finishes with the normal terminal `ai.chat`
 envelope.
+
+The in-app prompt is a digest, not a full dump of
+`skills/kassiber/SKILL.md`. It teaches the model the local-first accounting
+role, the normal workflow order, the journal reprocessing rule, and the
+boundary between read-only information and mutating actions. The assistant is
+skill-aware, but it is not shell-powered or CLI-powered: there is no raw command
+execution, raw filesystem access, arbitrary daemon dispatch, or generic
+Kassiber CLI tool.
 
 Clients should upsert tool cards by `call_id`. Mutating tools emit an initial
 `ai.chat.tool_call` with `needs_consent: true`, followed by
@@ -192,16 +201,37 @@ surfaces:
 
 - `status`
 - `ui_overview_snapshot` maps to daemon kind `ui.overview.snapshot`
-- `ui_transactions_list` maps to daemon kind `ui.transactions.list`
+- `ui_transactions_list` maps to daemon kind `ui.transactions.list` with
+  bounded filters for `limit`, `direction`, `asset`, `wallet`, `since`, `sort`,
+  and `order`
+- `ui_wallets_list` maps to daemon kind `ui.wallets.list`
+- `ui_backends_list` maps to daemon kind `ui.backends.list`; it is scoped to
+  backends referenced by the active profile and returns URL presence metadata,
+  not exact endpoint URLs
 - `ui_profiles_snapshot` maps to daemon kind `ui.profiles.snapshot`
 - `ui_reports_capital_gains` maps to daemon kind `ui.reports.capital_gains`
 - `ui_journals_snapshot` maps to daemon kind `ui.journals.snapshot`
+- `ui_journals_quarantine` maps to daemon kind `ui.journals.quarantine`
+- `ui_journals_transfers_list` maps to daemon kind
+  `ui.journals.transfers.list`
+- `ui_rates_summary` maps to daemon kind `ui.rates.summary`
+- `ui_workspace_health` maps to daemon kind `ui.workspace.health`
+- `ui_next_actions` maps to daemon kind `ui.next_actions`
 - `read_skill_reference`
 
-`read_skill_reference` is a virtual tool restricted to allowlisted files under
-`skills/kassiber/references/`: `command-templates`, `journal-processing`,
-`metadata`, `onboarding`, `reports`, `secrets-and-backup`, `troubleshooting`,
-`verification`, and `wallets-backends`.
+`ui.workspace.health` summarizes the active workspace/profile, wallet and
+transaction counts, journal freshness, quarantine count, and report-readiness
+hints from the current database. `ui.next_actions` returns structured
+recommendations such as create a wallet, sync/import, process journals, review
+quarantine, or run reports. It only advises; it does not execute those actions.
+
+`read_skill_reference` is a virtual tool. `read_skill_reference("index")`
+returns a compact routing document derived from the Kassiber skill concepts and
+points the model to deeper allowlisted references. The deeper references are
+restricted to files under `skills/kassiber/references/`: `command-templates`,
+`journal-processing`, `metadata`, `onboarding`, `reports`,
+`secrets-and-backup`, `troubleshooting`, `verification`, and
+`wallets-backends`.
 
 The first mutating provider tool is `ui_wallets_sync`, which maps to daemon kind
 `ui.wallets.sync`. When a model requests it, the daemon emits

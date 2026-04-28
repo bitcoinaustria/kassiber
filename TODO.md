@@ -244,6 +244,11 @@ and [docs/plan/04-desktop-ui.md](docs/plan/04-desktop-ui.md).
   read-only-by-default tool loop.
 - [x] AI mutating tool consent (PR 4): require explicit per-call/session
   approval before executing mutating tools such as wallet sync.
+- [x] In-app AI skill-aware read upgrade (PR 72): expand the compact Kassiber
+  prompt, add `read_skill_reference("index")`, expose granular read-only daemon
+  tools for wallets, backends, quarantine, transfers, rates, workspace health,
+  next actions, and filtered transactions, and keep raw shell/filesystem/CLI
+  access out of scope.
 - [x] Dev browser bridge for real local AI: Vite keeps a loopback-only Python
   daemon supervisor, demuxes JSONL by `request_id`, and streams `ai.chat`
   records to browser clients as NDJSON so Codex/browser tools can test local

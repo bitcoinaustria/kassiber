@@ -1,12 +1,20 @@
 from __future__ import annotations
 
+import json
 import sqlite3
 from collections import defaultdict
 from datetime import datetime, timezone
 from typing import Any
 
+from ..backends import redact_backend_for_output
+from ..errors import AppError
 from ..msat import msat_to_btc
+from ..time_utils import _iso_z, _parse_iso_datetime
 from .repo import current_context_snapshot
+
+
+MAX_UI_LIST_LIMIT = 500
+MAX_UI_PREVIEW_LIMIT = 100
 
 
 def _empty_overview_snapshot() -> dict[str, Any]:
@@ -67,6 +75,170 @@ def _latest_transaction_rate(
         (profile_id, fiat_currency),
     ).fetchone()
     return float(row["fiat_rate"]) if row else 0.0
+
+
+def _coerce_args(args: dict[str, Any] | None) -> dict[str, Any]:
+    if args is None:
+        return {}
+    if isinstance(args, dict):
+        return args
+    raise AppError(
+        "ui snapshot args must be an object",
+        code="validation",
+        details={"type": type(args).__name__},
+        retryable=False,
+    )
+
+
+def _coerce_limit(
+    args: dict[str, Any],
+    *,
+    default: int,
+    maximum: int,
+) -> int:
+    raw = args.get("limit", default)
+    try:
+        limit = int(raw)
+    except (TypeError, ValueError):
+        raise AppError(
+            "limit must be an integer",
+            code="validation",
+            details={"limit": raw},
+            retryable=False,
+        ) from None
+    if limit < 1:
+        raise AppError(
+            "limit must be positive",
+            code="validation",
+            details={"limit": raw},
+            retryable=False,
+        )
+    return min(limit, maximum)
+
+
+def _json_config(value: str | None) -> dict[str, Any]:
+    try:
+        parsed = json.loads(value or "{}")
+    except (TypeError, ValueError, json.JSONDecodeError):
+        return {}
+    return parsed if isinstance(parsed, dict) else {}
+
+
+def _string_or_empty(value: Any) -> str:
+    return value.strip() if isinstance(value, str) else ""
+
+
+def _wallet_backend_summary(
+    kind: str,
+    config: dict[str, Any],
+    default_backend: Any,
+) -> dict[str, str]:
+    explicit_backend = _string_or_empty(config.get("backend"))
+    default_backend_name = _string_or_empty(default_backend)
+    source_file = _string_or_empty(config.get("source_file"))
+    source_format = _string_or_empty(config.get("source_format"))
+    sync_source = _string_or_empty(config.get("sync_source"))
+    has_descriptor = bool(config.get("descriptor"))
+    has_addresses = bool(config.get("addresses"))
+    backend_name = explicit_backend
+    backend_source = "explicit" if explicit_backend else "none"
+    sync_mode = "not_configured"
+
+    if sync_source == "btcpay":
+        sync_mode = "btcpay"
+    elif source_file and source_format:
+        sync_mode = "file_import"
+    elif has_descriptor and kind in {"descriptor", "xpub", "address"}:
+        sync_mode = "backend_descriptor"
+        if not backend_name and default_backend_name:
+            backend_name = default_backend_name
+            backend_source = "default"
+    elif has_addresses and kind == "address":
+        sync_mode = "backend_addresses"
+        if not backend_name and default_backend_name:
+            backend_name = default_backend_name
+            backend_source = "default"
+
+    if not backend_name:
+        backend_source = "none"
+
+    return {
+        "name": backend_name,
+        "source": backend_source,
+        "sync_mode": sync_mode,
+    }
+
+
+def _active_context_and_profile(
+    conn: sqlite3.Connection,
+) -> tuple[dict[str, str], sqlite3.Row | None]:
+    context = current_context_snapshot(conn)
+    if not context["workspace_id"] or not context["profile_id"]:
+        return context, None
+    profile = conn.execute(
+        "SELECT * FROM profiles WHERE id = ?",
+        (context["profile_id"],),
+    ).fetchone()
+    return context, profile
+
+
+def _journal_freshness(
+    conn: sqlite3.Connection,
+    profile: sqlite3.Row | None,
+) -> dict[str, Any]:
+    if profile is None:
+        return {
+            "status": "no_profile",
+            "needs_processing": False,
+            "last_processed_at": None,
+            "last_processed_tx_count": 0,
+            "active_transaction_count": 0,
+            "journal_entry_count": 0,
+            "quarantine_count": 0,
+            "reason": "no active profile",
+        }
+
+    active_transactions = conn.execute(
+        """
+        SELECT COUNT(*) AS count
+        FROM transactions
+        WHERE profile_id = ? AND excluded = 0
+        """,
+        (profile["id"],),
+    ).fetchone()["count"]
+    journal_entries = conn.execute(
+        "SELECT COUNT(*) AS count FROM journal_entries WHERE profile_id = ?",
+        (profile["id"],),
+    ).fetchone()["count"]
+    quarantines = conn.execute(
+        "SELECT COUNT(*) AS count FROM journal_quarantines WHERE profile_id = ?",
+        (profile["id"],),
+    ).fetchone()["count"]
+    last_processed_at = profile["last_processed_at"]
+    last_processed_tx_count = int(profile["last_processed_tx_count"] or 0)
+    active_count = int(active_transactions or 0)
+    if active_count == 0:
+        status = "no_transactions"
+        reason = "no active transactions"
+    elif not last_processed_at:
+        status = "not_processed"
+        reason = "journals have not been processed"
+    elif last_processed_tx_count != active_count:
+        status = "stale"
+        reason = "active transaction count changed since last processing"
+    else:
+        status = "current"
+        reason = "journals match the active transaction count"
+    return {
+        "status": status,
+        "needs_processing": status in {"not_processed", "stale"},
+        "last_processed_at": last_processed_at,
+        "last_processed_tx_count": last_processed_tx_count,
+        "active_transaction_count": active_count,
+        "journal_entry_count": int(journal_entries or 0),
+        "quarantine_count": int(quarantines or 0),
+        "reason": reason,
+    }
 
 
 def _map_wallet_kind(kind: str) -> str:
@@ -655,15 +827,99 @@ def build_transactions_snapshot(
     if not context["workspace_id"] or not context["profile_id"]:
         return {"txs": [], "year": datetime.now(timezone.utc).year}
 
-    raw_args = args or {}
-    limit = raw_args.get("limit", 100)
-    try:
-        limit = max(1, min(500, int(limit)))
-    except (TypeError, ValueError):
-        limit = 100
+    raw_args = _coerce_args(args)
+    unknown = sorted(
+        set(raw_args)
+        - {
+            "limit",
+            "direction",
+            "asset",
+            "wallet",
+            "since",
+            "sort",
+            "order",
+        }
+    )
+    if unknown:
+        raise AppError(
+            "ui.transactions.list received unsupported filters",
+            code="validation",
+            details={"unknown": unknown},
+            retryable=False,
+        )
+    limit = _coerce_limit(raw_args, default=100, maximum=MAX_UI_LIST_LIMIT)
+    filters = ["t.profile_id = ?"]
+    params: list[Any] = [context["profile_id"]]
+    direction = raw_args.get("direction")
+    if direction is not None:
+        if direction not in {"inbound", "outbound"}:
+            raise AppError(
+                "direction must be inbound or outbound",
+                code="validation",
+                details={"direction": direction},
+                retryable=False,
+            )
+        filters.append("t.direction = ?")
+        params.append(direction)
+    asset = raw_args.get("asset")
+    asset_filter = None
+    if asset is not None:
+        if not isinstance(asset, str) or not asset.strip():
+            raise AppError("asset must be a non-empty string", code="validation")
+        asset_filter = asset.strip().upper()
+        filters.append("upper(t.asset) = ?")
+        params.append(asset_filter)
+    wallet = raw_args.get("wallet")
+    wallet_filter = None
+    if wallet is not None:
+        if not isinstance(wallet, str) or not wallet.strip():
+            raise AppError("wallet must be a non-empty string", code="validation")
+        wallet_filter = wallet.strip()
+        filters.append("(t.wallet_id = ? OR lower(w.label) = lower(?))")
+        params.extend([wallet_filter, wallet_filter])
+    since = raw_args.get("since")
+    since_filter = None
+    if since is not None:
+        if not isinstance(since, str) or not since.strip():
+            raise AppError("since must be an RFC3339 timestamp", code="validation")
+        since_filter = _iso_z(_parse_iso_datetime(since, "since"))
+        filters.append("t.occurred_at >= ?")
+        params.append(since_filter)
+
+    sort = raw_args.get("sort", "occurred-at")
+    sort_columns = {
+        "occurred-at": "t.occurred_at",
+        "amount": "t.amount",
+        "fiat-value": "COALESCE(t.fiat_value, 0)",
+        "fee": "t.fee",
+    }
+    if sort not in sort_columns:
+        raise AppError(
+            "sort must be one of: occurred-at, amount, fiat-value, fee",
+            code="validation",
+            details={"sort": sort},
+            retryable=False,
+        )
+    order = raw_args.get("order", "desc")
+    if order not in {"asc", "desc"}:
+        raise AppError(
+            "order must be asc or desc",
+            code="validation",
+            details={"order": order},
+            retryable=False,
+        )
+    order_sql = str(order).upper()
+    if sort == "occurred-at":
+        order_by = f"t.occurred_at {order_sql}, t.created_at {order_sql}, t.id {order_sql}"
+    else:
+        order_by = (
+            f"{sort_columns[sort]} {order_sql}, "
+            "t.occurred_at DESC, t.created_at DESC, t.id DESC"
+        )
+    params.append(limit)
 
     rows = conn.execute(
-        """
+        f"""
         SELECT
             t.id,
             COALESCE(t.external_id, t.id) AS external_id,
@@ -671,7 +927,9 @@ def build_transactions_snapshot(
             t.confirmed_at,
             w.label AS wallet,
             t.direction,
+            t.asset,
             t.amount,
+            t.fee,
             COALESCE(t.fiat_value, 0) AS fiat_value,
             COALESCE(t.fiat_rate, 0) AS fiat_rate,
             COALESCE(t.kind, '') AS kind,
@@ -682,15 +940,24 @@ def build_transactions_snapshot(
         FROM transactions t
         JOIN wallets w ON w.id = t.wallet_id
         LEFT JOIN journal_quarantines jq ON jq.transaction_id = t.id
-        WHERE t.profile_id = ?
-        ORDER BY t.occurred_at DESC, t.created_at DESC, t.id DESC
+        WHERE {' AND '.join(filters)}
+        ORDER BY {order_by}
         LIMIT ?
         """,
-        (context["profile_id"], limit),
+        params,
     ).fetchall()
     return {
         "txs": _transaction_rows_to_ui(conn, rows),
         "year": _snapshot_year(rows),
+        "filters": {
+            "limit": limit,
+            "direction": direction,
+            "asset": asset_filter,
+            "wallet": wallet_filter,
+            "since": since_filter,
+            "sort": sort,
+            "order": order,
+        },
     }
 
 
@@ -895,6 +1162,630 @@ def build_journals_snapshot(conn: sqlite3.Connection) -> dict[str, Any]:
             for row in recent_rows
         ],
     }
+
+
+def build_wallets_list_snapshot(
+    conn: sqlite3.Connection,
+    runtime_config: dict[str, object] | None = None,
+) -> dict[str, Any]:
+    context, profile = _active_context_and_profile(conn)
+    if profile is None:
+        return {
+            "wallets": [],
+            "summary": {
+                "workspace": None,
+                "profile": None,
+                "count": 0,
+                "transaction_count": 0,
+                "needs_journals": False,
+            },
+        }
+
+    freshness = _journal_freshness(conn, profile)
+    rows = conn.execute(
+        """
+        SELECT
+            w.id,
+            w.label,
+            w.kind,
+            w.config_json,
+            w.created_at,
+            a.code AS account_code,
+            a.label AS account_label,
+            COUNT(t.id) AS tx_count,
+            MAX(t.occurred_at) AS last_tx_at
+        FROM wallets w
+        LEFT JOIN accounts a ON a.id = w.account_id
+        LEFT JOIN transactions t ON t.wallet_id = w.id AND t.excluded = 0
+        WHERE w.profile_id = ?
+        GROUP BY w.id
+        ORDER BY w.label ASC
+        """,
+        (profile["id"],),
+    ).fetchall()
+    runtime_backends = (
+        runtime_config.get("backends", {})
+        if isinstance(runtime_config, dict)
+        else {}
+    )
+    default_backend = (
+        runtime_config.get("default_backend")
+        if isinstance(runtime_config, dict)
+        else None
+    )
+    wallets = []
+    for row in rows:
+        config = _json_config(row["config_json"])
+        backend_summary = _wallet_backend_summary(row["kind"], config, default_backend)
+        backend_name = backend_summary["name"]
+        backend = (
+            runtime_backends.get(str(backend_name))
+            if isinstance(runtime_backends, dict) and backend_name
+            else None
+        )
+        tx_count = int(row["tx_count"] or 0)
+        wallets.append(
+            {
+                "id": row["id"],
+                "label": row["label"],
+                "kind": row["kind"],
+                "account": {
+                    "code": row["account_code"] or "",
+                    "label": row["account_label"] or "",
+                },
+                "backend": {
+                    "name": str(backend_name) if backend_name else "",
+                    "source": backend_summary["source"],
+                    "kind": str(backend.get("kind") or "") if isinstance(backend, dict) else "",
+                },
+                "chain": str(config.get("chain") or ""),
+                "network": str(config.get("network") or ""),
+                "sync_mode": backend_summary["sync_mode"],
+                "sync_source": str(config.get("sync_source") or config.get("source_format") or ""),
+                "transaction_count": tx_count,
+                "last_transaction_at": row["last_tx_at"],
+                "sync_status": "has_transactions" if tx_count else "empty",
+                "journals_stale": freshness["needs_processing"] and tx_count > 0,
+                "created_at": row["created_at"],
+            }
+        )
+
+    return {
+        "wallets": wallets,
+        "summary": {
+            "workspace": context["workspace_label"] or None,
+            "profile": context["profile_label"] or None,
+            "count": len(wallets),
+            "transaction_count": sum(wallet["transaction_count"] for wallet in wallets),
+            "needs_journals": bool(freshness["needs_processing"]),
+        },
+    }
+
+
+def build_backends_list_snapshot(
+    conn: sqlite3.Connection,
+    runtime_config: dict[str, object],
+) -> dict[str, Any]:
+    runtime_backends = runtime_config.get("backends", {})
+    default_backend = str(runtime_config.get("default_backend") or "")
+    allowed_backend_fields = {
+        "name",
+        "kind",
+        "chain",
+        "network",
+        "batch_size",
+        "timeout",
+        "insecure",
+        "has_auth_header",
+        "has_token",
+        "has_cookiefile",
+        "has_username",
+        "has_password",
+    }
+    context, profile = _active_context_and_profile(conn)
+    referenced_names: set[str] = set()
+    if profile is not None:
+        wallet_rows = conn.execute(
+            """
+            SELECT kind, config_json
+            FROM wallets
+            WHERE profile_id = ?
+            ORDER BY label ASC
+            """,
+            (profile["id"],),
+        ).fetchall()
+        for row in wallet_rows:
+            backend = _wallet_backend_summary(
+                row["kind"],
+                _json_config(row["config_json"]),
+                default_backend,
+            )
+            if backend["name"]:
+                referenced_names.add(backend["name"])
+
+    rows = []
+    if isinstance(runtime_backends, dict):
+        for name, backend in sorted(runtime_backends.items()):
+            if str(name) not in referenced_names:
+                continue
+            if not isinstance(backend, dict):
+                continue
+            safe = redact_backend_for_output(
+                {
+                    "name": name,
+                    "kind": backend.get("kind", ""),
+                    "chain": backend.get("chain", ""),
+                    "network": backend.get("network", ""),
+                    "url": backend.get("url", ""),
+                    "batch_size": backend.get("batch_size", ""),
+                    "source": backend.get("source", ""),
+                    "auth_header": backend.get("auth_header", ""),
+                    "token": backend.get("token", ""),
+                    "cookiefile": backend.get("cookiefile", ""),
+                    "username": backend.get("username", ""),
+                    "password": backend.get("password", ""),
+                    "config_json": backend.get("config_json", ""),
+                }
+            )
+            safe = {
+                key: value
+                for key, value in safe.items()
+                if key in allowed_backend_fields
+            }
+            safe["has_url"] = bool(_string_or_empty(backend.get("url")))
+            safe["is_default"] = str(name) == default_backend
+            rows.append(safe)
+    return {
+        "backends": rows,
+        "summary": {
+            "workspace": context["workspace_label"] or None,
+            "profile": context["profile_label"] or None,
+            "count": len(rows),
+            "default_backend": default_backend if default_backend in referenced_names else None,
+            "scope": "active_profile",
+        },
+    }
+
+
+def build_journals_quarantine_snapshot(
+    conn: sqlite3.Connection,
+    args: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    raw_args = _coerce_args(args)
+    unknown = sorted(set(raw_args) - {"limit"})
+    if unknown:
+        raise AppError(
+            "ui.journals.quarantine received unsupported arguments",
+            code="validation",
+            details={"unknown": unknown},
+            retryable=False,
+        )
+    limit = _coerce_limit(raw_args, default=20, maximum=MAX_UI_PREVIEW_LIMIT)
+    context, profile = _active_context_and_profile(conn)
+    if profile is None:
+        return {
+            "summary": {
+                "workspace": None,
+                "profile": None,
+                "count": 0,
+                "by_reason": [],
+                "limit": limit,
+            },
+            "items": [],
+        }
+
+    reason_rows = conn.execute(
+        """
+        SELECT reason, COUNT(*) AS count
+        FROM journal_quarantines
+        WHERE profile_id = ?
+        GROUP BY reason
+        ORDER BY count DESC, reason ASC
+        """,
+        (profile["id"],),
+    ).fetchall()
+    rows = conn.execute(
+        """
+        SELECT
+            q.transaction_id,
+            q.reason,
+            q.detail_json,
+            q.created_at,
+            t.external_id,
+            t.occurred_at,
+            t.confirmed_at,
+            t.direction,
+            t.asset,
+            t.amount,
+            t.fee,
+            w.label AS wallet
+        FROM journal_quarantines q
+        JOIN transactions t ON t.id = q.transaction_id
+        JOIN wallets w ON w.id = t.wallet_id
+        WHERE q.profile_id = ?
+        ORDER BY q.created_at DESC, t.occurred_at DESC, q.transaction_id DESC
+        LIMIT ?
+        """,
+        (profile["id"], limit),
+    ).fetchall()
+    total = sum(int(row["count"] or 0) for row in reason_rows)
+    return {
+        "summary": {
+            "workspace": context["workspace_label"] or None,
+            "profile": context["profile_label"] or None,
+            "count": total,
+            "by_reason": [
+                {"reason": row["reason"], "count": int(row["count"] or 0)}
+                for row in reason_rows
+            ],
+            "limit": limit,
+        },
+        "items": [
+            {
+                "transaction_id": row["transaction_id"],
+                "external_id": row["external_id"] or "",
+                "occurred_at": row["occurred_at"],
+                "confirmed_at": row["confirmed_at"],
+                "wallet": row["wallet"],
+                "direction": row["direction"],
+                "asset": row["asset"],
+                "amount": float(msat_to_btc(row["amount"] or 0)),
+                "amount_msat": int(row["amount"] or 0),
+                "fee": float(msat_to_btc(row["fee"] or 0)),
+                "fee_msat": int(row["fee"] or 0),
+                "reason": row["reason"],
+                "detail": _json_config(row["detail_json"]),
+                "created_at": row["created_at"],
+            }
+            for row in rows
+        ],
+    }
+
+
+def build_journals_transfers_list_snapshot(
+    conn: sqlite3.Connection,
+    args: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    raw_args = _coerce_args(args)
+    unknown = sorted(set(raw_args) - {"limit"})
+    if unknown:
+        raise AppError(
+            "ui.journals.transfers.list received unsupported arguments",
+            code="validation",
+            details={"unknown": unknown},
+            retryable=False,
+        )
+    limit = _coerce_limit(raw_args, default=20, maximum=MAX_UI_PREVIEW_LIMIT)
+    context, profile = _active_context_and_profile(conn)
+    if profile is None:
+        return {
+            "summary": {
+                "workspace": None,
+                "profile": None,
+                "manual_pairs": 0,
+                "same_asset_pairs": 0,
+                "cross_asset_pairs": 0,
+                "journal_transfer_entries": 0,
+                "limit": limit,
+            },
+            "pairs": [],
+        }
+
+    summary = conn.execute(
+        """
+        SELECT
+            COUNT(*) AS manual_pairs,
+            SUM(CASE WHEN tout.asset = tin.asset THEN 1 ELSE 0 END) AS same_asset_pairs,
+            SUM(CASE WHEN tout.asset <> tin.asset THEN 1 ELSE 0 END) AS cross_asset_pairs
+        FROM transaction_pairs p
+        JOIN transactions tout ON tout.id = p.out_transaction_id
+        JOIN transactions tin ON tin.id = p.in_transaction_id
+        WHERE p.profile_id = ?
+        """,
+        (profile["id"],),
+    ).fetchone()
+    journal_transfer_entries = conn.execute(
+        """
+        SELECT COUNT(*) AS count
+        FROM journal_entries
+        WHERE profile_id = ? AND entry_type IN ('transfer_out', 'transfer_in', 'transfer_fee')
+        """,
+        (profile["id"],),
+    ).fetchone()["count"]
+    rows = conn.execute(
+        """
+        SELECT
+            p.id,
+            p.kind,
+            p.policy,
+            p.created_at,
+            p.out_transaction_id,
+            p.in_transaction_id,
+            tout.external_id AS out_external_id,
+            tout.occurred_at AS out_occurred_at,
+            tout.asset AS out_asset,
+            tout.amount AS out_amount,
+            wout.label AS out_wallet,
+            tin.external_id AS in_external_id,
+            tin.occurred_at AS in_occurred_at,
+            tin.asset AS in_asset,
+            tin.amount AS in_amount,
+            win.label AS in_wallet
+        FROM transaction_pairs p
+        JOIN transactions tout ON tout.id = p.out_transaction_id
+        JOIN transactions tin ON tin.id = p.in_transaction_id
+        JOIN wallets wout ON wout.id = tout.wallet_id
+        JOIN wallets win ON win.id = tin.wallet_id
+        WHERE p.profile_id = ?
+        ORDER BY p.created_at DESC
+        LIMIT ?
+        """,
+        (profile["id"], limit),
+    ).fetchall()
+    return {
+        "summary": {
+            "workspace": context["workspace_label"] or None,
+            "profile": context["profile_label"] or None,
+            "manual_pairs": int(summary["manual_pairs"] or 0),
+            "same_asset_pairs": int(summary["same_asset_pairs"] or 0),
+            "cross_asset_pairs": int(summary["cross_asset_pairs"] or 0),
+            "journal_transfer_entries": int(journal_transfer_entries or 0),
+            "limit": limit,
+        },
+        "pairs": [
+            {
+                "id": row["id"],
+                "kind": row["kind"],
+                "policy": row["policy"],
+                "created_at": row["created_at"],
+                "out": {
+                    "transaction_id": row["out_transaction_id"],
+                    "external_id": row["out_external_id"] or "",
+                    "occurred_at": row["out_occurred_at"],
+                    "wallet": row["out_wallet"],
+                    "asset": row["out_asset"],
+                    "amount": float(msat_to_btc(row["out_amount"] or 0)),
+                    "amount_msat": int(row["out_amount"] or 0),
+                },
+                "in": {
+                    "transaction_id": row["in_transaction_id"],
+                    "external_id": row["in_external_id"] or "",
+                    "occurred_at": row["in_occurred_at"],
+                    "wallet": row["in_wallet"],
+                    "asset": row["in_asset"],
+                    "amount": float(msat_to_btc(row["in_amount"] or 0)),
+                    "amount_msat": int(row["in_amount"] or 0),
+                },
+            }
+            for row in rows
+        ],
+    }
+
+
+def build_rates_summary_snapshot(conn: sqlite3.Connection) -> dict[str, Any]:
+    rows = conn.execute(
+        """
+        SELECT
+            pair,
+            COUNT(*) AS sample_count,
+            MIN(timestamp) AS first_timestamp,
+            MAX(timestamp) AS last_timestamp
+        FROM rates_cache
+        GROUP BY pair
+        ORDER BY pair ASC
+        """
+    ).fetchall()
+    latest_rows = conn.execute(
+        """
+        SELECT pair, timestamp, rate, source, fetched_at
+        FROM (
+            SELECT
+                pair,
+                timestamp,
+                rate,
+                source,
+                fetched_at,
+                ROW_NUMBER() OVER (
+                    PARTITION BY pair
+                    ORDER BY timestamp DESC,
+                             CASE WHEN source = 'manual' THEN 0 ELSE 1 END ASC,
+                             fetched_at DESC,
+                             source ASC
+                ) AS rn
+            FROM rates_cache
+        )
+        WHERE rn = 1
+        ORDER BY pair ASC
+        """
+    ).fetchall()
+    latest_by_pair = {row["pair"]: dict(row) for row in latest_rows}
+    pairs = []
+    for row in rows:
+        latest = latest_by_pair.get(row["pair"])
+        pairs.append(
+            {
+                "pair": row["pair"],
+                "sample_count": int(row["sample_count"] or 0),
+                "first_timestamp": row["first_timestamp"],
+                "last_timestamp": row["last_timestamp"],
+                "latest": {
+                    "timestamp": latest["timestamp"],
+                    "rate": float(latest["rate"]),
+                    "source": latest["source"],
+                    "fetched_at": latest["fetched_at"],
+                }
+                if latest
+                else None,
+            }
+        )
+    return {"pairs": pairs, "summary": {"cached_pair_count": len(pairs)}}
+
+
+def build_workspace_health_snapshot(conn: sqlite3.Connection) -> dict[str, Any]:
+    context, profile = _active_context_and_profile(conn)
+    if profile is None:
+        return {
+            "workspace": None,
+            "profile": None,
+            "counts": {
+                "wallets": 0,
+                "transactions": 0,
+                "active_transactions": 0,
+                "journal_entries": 0,
+                "quarantines": 0,
+                "rate_pairs": 0,
+            },
+            "journals": _journal_freshness(conn, None),
+            "reports": {
+                "ready": False,
+                "hints": ["Create or select a workspace and profile first."],
+            },
+        }
+
+    freshness = _journal_freshness(conn, profile)
+    wallet_count = conn.execute(
+        "SELECT COUNT(*) AS count FROM wallets WHERE profile_id = ?",
+        (profile["id"],),
+    ).fetchone()["count"]
+    transaction_count = conn.execute(
+        "SELECT COUNT(*) AS count FROM transactions WHERE profile_id = ?",
+        (profile["id"],),
+    ).fetchone()["count"]
+    rate_pairs = conn.execute(
+        "SELECT COUNT(DISTINCT pair) AS count FROM rates_cache",
+    ).fetchone()["count"]
+    hints: list[str] = []
+    if int(wallet_count or 0) == 0:
+        hints.append("Create a wallet before syncing or importing transactions.")
+    elif int(transaction_count or 0) == 0:
+        hints.append("Sync wallets or import wallet files before journal processing.")
+    if freshness["needs_processing"]:
+        hints.append("Run journal processing before trusting reports.")
+    if freshness["quarantine_count"]:
+        hints.append("Review quarantined transactions before tax export.")
+    reports_ready = (
+        int(wallet_count or 0) > 0
+        and int(transaction_count or 0) > 0
+        and freshness["status"] == "current"
+        and freshness["quarantine_count"] == 0
+    )
+    if reports_ready:
+        hints.append("Reports are ready from the current processed journal state.")
+    return {
+        "workspace": {
+            "id": context["workspace_id"],
+            "label": context["workspace_label"],
+        },
+        "profile": {
+            "id": profile["id"],
+            "label": profile["label"],
+            "fiat_currency": profile["fiat_currency"],
+            "tax_country": profile["tax_country"],
+            "tax_long_term_days": int(profile["tax_long_term_days"] or 0),
+            "gains_algorithm": profile["gains_algorithm"],
+        },
+        "counts": {
+            "wallets": int(wallet_count or 0),
+            "transactions": int(transaction_count or 0),
+            "active_transactions": freshness["active_transaction_count"],
+            "journal_entries": freshness["journal_entry_count"],
+            "quarantines": freshness["quarantine_count"],
+            "rate_pairs": int(rate_pairs or 0),
+        },
+        "journals": freshness,
+        "reports": {
+            "ready": reports_ready,
+            "hints": hints,
+        },
+    }
+
+
+def build_next_actions_snapshot(conn: sqlite3.Connection) -> dict[str, Any]:
+    health = build_workspace_health_snapshot(conn)
+    suggestions: list[dict[str, Any]] = []
+    if health["profile"] is None:
+        suggestions.append(
+            {
+                "id": "create_workspace_profile",
+                "title": "Create a workspace and profile",
+                "reason": "Kassiber needs an active accounting scope before wallets or reports.",
+                "mutating": True,
+                "requires_consent": True,
+            }
+        )
+        return {"health": health, "suggestions": suggestions}
+
+    counts = health["counts"]
+    journals = health["journals"]
+    if counts["wallets"] == 0:
+        suggestions.append(
+            {
+                "id": "create_wallet",
+                "title": "Create a wallet",
+                "reason": "No wallets exist in the active profile.",
+                "mutating": True,
+                "requires_consent": True,
+            }
+        )
+    elif counts["transactions"] == 0:
+        suggestions.append(
+            {
+                "id": "sync_or_import",
+                "title": "Sync wallets or import transactions",
+                "reason": "Wallets exist but the active profile has no transactions yet.",
+                "mutating": True,
+                "requires_consent": True,
+                "daemon_kind": "ui.wallets.sync",
+            }
+        )
+    elif journals["needs_processing"]:
+        suggestions.append(
+            {
+                "id": "process_journals",
+                "title": "Process journals",
+                "reason": journals["reason"],
+                "mutating": True,
+                "requires_consent": True,
+            }
+        )
+    if journals["quarantine_count"]:
+        suggestions.append(
+            {
+                "id": "review_quarantine",
+                "title": "Review quarantine",
+                "reason": f"{journals['quarantine_count']} transaction(s) need review before reports are complete.",
+                "mutating": False,
+                "requires_consent": False,
+                "daemon_kind": "ui.journals.quarantine",
+            }
+        )
+    if (
+        counts["transactions"] > 0
+        and not journals["needs_processing"]
+        and journals["quarantine_count"] == 0
+    ):
+        suggestions.append(
+            {
+                "id": "run_report",
+                "title": "Run reports",
+                "reason": "Journals are current and no quarantine is blocking report review.",
+                "mutating": False,
+                "requires_consent": False,
+                "daemon_kind": "ui.reports.capital_gains",
+            }
+        )
+    if not suggestions:
+        suggestions.append(
+            {
+                "id": "inspect_workspace",
+                "title": "Inspect workspace",
+                "reason": "No urgent blocker was detected from the current safe snapshot.",
+                "mutating": False,
+                "requires_consent": False,
+                "daemon_kind": "ui.workspace.health",
+            }
+        )
+    return {"health": health, "suggestions": suggestions}
 
 
 def _transaction_rows_to_ui(

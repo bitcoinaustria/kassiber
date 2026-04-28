@@ -14,6 +14,11 @@ interface ChatToolCallProps {
 export function ChatToolCall({ toolCall }: ChatToolCallProps) {
   const hasArguments = Object.keys(toolCall.arguments).length > 0;
   const hasResult = toolCall.result !== undefined && toolCall.result !== null;
+  const summary = summarizeToolResult(toolCall.result);
+  const errorText =
+    toolCall.status === "error" || toolCall.status === "denied"
+      ? toolCall.reason
+      : undefined;
   return (
     <Tool
       defaultOpen={
@@ -30,11 +35,86 @@ export function ChatToolCall({ toolCall }: ChatToolCallProps) {
       <ToolHeader name={toolCall.name} state={toolCall.status} />
       <ToolContent>
         {hasArguments ? <ToolInput input={toolCall.arguments} /> : null}
-        {hasResult ? <ToolOutput output={toolCall.result} /> : null}
-        {toolCall.reason ? (
+        {summary ? <ToolOutput output={summary} label="Summary" /> : null}
+        {hasResult ? <ToolOutput output={toolCall.result} label="Details" /> : null}
+        {errorText ? (
+          <ToolOutput error={errorText} />
+        ) : toolCall.reason ? (
           <ToolOutput output={toolCall.reason} label="Reason" />
         ) : null}
       </ToolContent>
     </Tool>
   );
+}
+
+function summarizeToolResult(result: unknown): string | null {
+  const envelope = asRecord(result);
+  const kind = typeof envelope?.kind === "string" ? envelope.kind : "";
+  const data = asRecord(envelope?.data);
+  if (!kind || !data) return null;
+
+  switch (kind) {
+    case "ui.workspace.health": {
+      const workspace = asRecord(data.workspace)?.label ?? "No workspace";
+      const profile = asRecord(data.profile)?.label ?? "No profile";
+      const journals = asRecord(data.journals);
+      const reports = asRecord(data.reports);
+      return `${workspace} / ${profile}: journals ${journals?.status ?? "unknown"}, reports ${
+        reports?.ready ? "ready" : "not ready"
+      }.`;
+    }
+    case "ui.next_actions": {
+      const suggestions = Array.isArray(data.suggestions)
+        ? data.suggestions
+        : [];
+      const titles = suggestions
+        .map((item) => asRecord(item)?.title)
+        .filter((title): title is string => typeof title === "string");
+      return titles.length
+        ? `${titles.length} suggestion(s): ${titles.join(", ")}.`
+        : "No next action suggestions.";
+    }
+    case "ui.wallets.list": {
+      const wallets = Array.isArray(data.wallets) ? data.wallets : [];
+      const labels = wallets
+        .map((item) => asRecord(item)?.label)
+        .filter((label): label is string => typeof label === "string")
+        .slice(0, 4);
+      return `${wallets.length} wallet(s)${labels.length ? `: ${labels.join(", ")}` : ""}.`;
+    }
+    case "ui.backends.list": {
+      const backends = Array.isArray(data.backends) ? data.backends : [];
+      const defaultBackend = asRecord(data.summary)?.default_backend;
+      return `${backends.length} backend(s)${
+        typeof defaultBackend === "string" ? `; default ${defaultBackend}` : ""
+      }.`;
+    }
+    case "ui.journals.quarantine": {
+      const summary = asRecord(data.summary);
+      return `${summary?.count ?? 0} quarantined transaction(s).`;
+    }
+    case "ui.journals.transfers.list": {
+      const summary = asRecord(data.summary);
+      const transferEntries = Number(summary?.journal_transfer_entries ?? 0);
+      return `${summary?.manual_pairs ?? 0} pair(s), ${transferEntries} journal transfer ${
+        transferEntries === 1 ? "entry" : "entries"
+      }.`;
+    }
+    case "ui.rates.summary": {
+      const pairs = Array.isArray(data.pairs) ? data.pairs : [];
+      return `${pairs.length} cached rate pair(s).`;
+    }
+    case "ui.transactions.list": {
+      const txs = Array.isArray(data.txs) ? data.txs : [];
+      return `${txs.length} transaction(s).`;
+    }
+    default:
+      return null;
+  }
+}
+
+function asRecord(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : null;
 }

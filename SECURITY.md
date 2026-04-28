@@ -240,7 +240,8 @@ through Settings → AI providers or `kassiber ai providers create`.
 - **The Tauri shell allowlists exactly the AI daemon kinds.** The webview
   cannot reach Ollama (or any other model API) directly — every call
   passes through the Python daemon. The provider URL never reaches the
-  webview's CSP/CORS surface.
+  webview's CSP/CORS surface. The in-app AI has no shell, raw filesystem,
+  arbitrary CLI, or generic daemon-dispatch access.
 - **The Vite daemon bridge is development-only.** `pnpm --dir ui-tauri run
   dev:bridge` exposes selected daemon kinds, including AI streaming and
   consent controls, through the Vite server on loopback for browser testing.
@@ -255,9 +256,16 @@ through Settings → AI providers or `kassiber ai providers create`.
   what was already sent.
 - **Read-only AI tools send selected local data to the selected provider.**
   When tools are enabled, the assistant may read safe daemon snapshots such as
-  status, overview, transactions, profiles, journals, capital-gains reports, and
-  allowlisted skill references. If the selected provider is remote or TEE, those
-  tool results are sent to that provider as chat context.
+  status, overview, filtered transactions, wallet/backend summaries, profiles,
+  journals, quarantine summaries, transfer-pair summaries, cached rate metadata,
+  workspace health, next-action guidance, capital-gains reports, and allowlisted
+  skill references. If the selected provider is remote or TEE, those tool
+  results are sent to that provider as chat context.
+- **AI read tools use redacted daemon surfaces.** They must not expose secrets,
+  descriptors, xpub material, API keys, tokens, cookies, auth headers, exact
+  backend URLs, wallet config JSON, or raw wallet files. Wallet and backend
+  tools return labels, kinds, URL presence flags, credential presence flags,
+  and status-style metadata only.
 - **Mutating AI tools require explicit consent.** The current mutating surface
   is limited to `ui.wallets.sync`. Each call emits a redacted preview and waits
   for `allow_once`, `allow_session`, or `deny`; session consent lasts only for

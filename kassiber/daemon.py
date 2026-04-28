@@ -46,11 +46,18 @@ from .core import wallets as core_wallets
 from .core.repo import current_context_snapshot
 from .core.runtime import build_status_payload
 from .core.ui_snapshot import (
+    build_backends_list_snapshot,
     build_capital_gains_snapshot,
     build_journals_snapshot,
+    build_journals_quarantine_snapshot,
+    build_journals_transfers_list_snapshot,
+    build_next_actions_snapshot,
     build_overview_snapshot,
     build_profiles_snapshot,
+    build_rates_summary_snapshot,
     build_transactions_snapshot,
+    build_wallets_list_snapshot,
+    build_workspace_health_snapshot,
 )
 from .db import open_db, resolve_database_path, resolve_effective_data_root
 from .envelope import build_envelope, build_error_envelope, json_ready
@@ -64,9 +71,16 @@ SUPPORTED_KINDS = (
     "status",
     "ui.overview.snapshot",
     "ui.transactions.list",
+    "ui.wallets.list",
+    "ui.backends.list",
     "ui.reports.capital_gains",
     "ui.journals.snapshot",
+    "ui.journals.quarantine",
+    "ui.journals.transfers.list",
     "ui.profiles.snapshot",
+    "ui.rates.summary",
+    "ui.workspace.health",
+    "ui.next_actions",
     "ui.wallets.sync",
     "ai.providers.list",
     "ai.providers.get",
@@ -679,12 +693,26 @@ def _execute_read_only_ai_tool(call: ParsedAiToolCall, runtime: AiToolRuntime) -
                 payload = build_overview_snapshot(conn)
             elif entry.daemon_kind == "ui.transactions.list":
                 payload = build_transactions_snapshot(conn, call.arguments)
+            elif entry.daemon_kind == "ui.wallets.list":
+                payload = build_wallets_list_snapshot(conn, runtime.runtime_config)
+            elif entry.daemon_kind == "ui.backends.list":
+                payload = build_backends_list_snapshot(conn, runtime.runtime_config)
             elif entry.daemon_kind == "ui.profiles.snapshot":
                 payload = build_profiles_snapshot(conn)
             elif entry.daemon_kind == "ui.reports.capital_gains":
                 payload = build_capital_gains_snapshot(conn)
             elif entry.daemon_kind == "ui.journals.snapshot":
                 payload = build_journals_snapshot(conn)
+            elif entry.daemon_kind == "ui.journals.quarantine":
+                payload = build_journals_quarantine_snapshot(conn, call.arguments)
+            elif entry.daemon_kind == "ui.journals.transfers.list":
+                payload = build_journals_transfers_list_snapshot(conn, call.arguments)
+            elif entry.daemon_kind == "ui.rates.summary":
+                payload = build_rates_summary_snapshot(conn)
+            elif entry.daemon_kind == "ui.workspace.health":
+                payload = build_workspace_health_snapshot(conn)
+            elif entry.daemon_kind == "ui.next_actions":
+                payload = build_next_actions_snapshot(conn)
             else:
                 return _tool_result_denied("tool_not_allowed")
         finally:
@@ -1163,6 +1191,30 @@ def handle_request(
             False,
         )
 
+    if kind == "ui.wallets.list":
+        return (
+            _with_request_id(
+                build_envelope(
+                    "ui.wallets.list",
+                    build_wallets_list_snapshot(ctx.conn, ctx.runtime_config),
+                ),
+                request_id,
+            ),
+            False,
+        )
+
+    if kind == "ui.backends.list":
+        return (
+            _with_request_id(
+                build_envelope(
+                    "ui.backends.list",
+                    build_backends_list_snapshot(ctx.conn, ctx.runtime_config),
+                ),
+                request_id,
+            ),
+            False,
+        )
+
     if kind == "ui.reports.capital_gains":
         return (
             _with_request_id(
@@ -1187,12 +1239,69 @@ def handle_request(
             False,
         )
 
+    if kind == "ui.journals.quarantine":
+        return (
+            _with_request_id(
+                build_envelope(
+                    "ui.journals.quarantine",
+                    build_journals_quarantine_snapshot(ctx.conn, request.get("args")),
+                ),
+                request_id,
+            ),
+            False,
+        )
+
+    if kind == "ui.journals.transfers.list":
+        return (
+            _with_request_id(
+                build_envelope(
+                    "ui.journals.transfers.list",
+                    build_journals_transfers_list_snapshot(ctx.conn, request.get("args")),
+                ),
+                request_id,
+            ),
+            False,
+        )
+
     if kind == "ui.profiles.snapshot":
         return (
             _with_request_id(
                 build_envelope(
                     "ui.profiles.snapshot",
                     build_profiles_snapshot(ctx.conn),
+                ),
+                request_id,
+            ),
+            False,
+        )
+
+    if kind == "ui.rates.summary":
+        return (
+            _with_request_id(
+                build_envelope("ui.rates.summary", build_rates_summary_snapshot(ctx.conn)),
+                request_id,
+            ),
+            False,
+        )
+
+    if kind == "ui.workspace.health":
+        return (
+            _with_request_id(
+                build_envelope(
+                    "ui.workspace.health",
+                    build_workspace_health_snapshot(ctx.conn),
+                ),
+                request_id,
+            ),
+            False,
+        )
+
+    if kind == "ui.next_actions":
+        return (
+            _with_request_id(
+                build_envelope(
+                    "ui.next_actions",
+                    build_next_actions_snapshot(ctx.conn),
                 ),
                 request_id,
             ),
