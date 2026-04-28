@@ -228,6 +228,20 @@ and [docs/plan/04-desktop-ui.md](docs/plan/04-desktop-ui.md).
 - [x] Add reusable shell-level assistant mockup based on `@blocks-so/ai-02`,
   with local-model selector, Kassiber-specific suggestions, collapsed-on-scroll
   behavior, and hover/focus expansion
+- [x] Wire the in-app assistant to a real OpenAI-compatible client over the
+  daemon protocol — provider config in SQLite, CLI parity
+  (`kassiber ai providers/models/chat`), streaming chat with `<think>`
+  reasoning split, and a Settings → AI providers panel
+- [ ] AI tool use (PR 2): expose typed daemon kinds as the assistant's tool
+  surface, seed the system prompt from `skills/kassiber/`, run a
+  read-only-by-default tool loop with per-call consent for mutating tools
+- [ ] Cooperative AI chat cancellation: thread a `threading.Event` (or a
+  dedicated `ai.chat.cancel` request kind) so Stop actually halts generation
+  rather than just hiding the in-flight reply
+- [ ] Daemon worker pool: replace the surgical `ai.chat` thread with a real
+  worker-pool model so concurrent streaming + non-streaming requests don't
+  serialize through one stdin/stdout reader (also unblocks tool-call SQLite
+  access from the AI thread)
 - [x] Overview screen now uses `@shadcnblocks/dashboard5` as the first
   dashboard screen, keeping Export -> Reports, Add connection modal, and
   Show all transactions wiring
@@ -350,6 +364,12 @@ and [docs/plan/04-desktop-ui.md](docs/plan/04-desktop-ui.md).
   setup site. At the same time, harden the `backends.env` plaintext-secret
   warning into a refusal once no test or example needs the dotenv path for
   secret seeding.
+- [ ] Extend the stdin/fd secret-input pattern to `ai_providers.api_key`:
+  `kassiber ai providers {create,update}` currently only accepts
+  `--api-key <value>` via argv. Add `--api-key-stdin` / `--api-key-fd FD`
+  (matching the backends pattern) and a daemon-side `ai.providers.set_api_key`
+  reveal/rotate flow so hosted agents never have to put raw API keys on the
+  command line.
 - [ ] Split wallet descriptor and other sensitive config out of the generic
   `wallets.config_json` blob into typed project-local tables now that
   SQLCipher protects the file at rest.

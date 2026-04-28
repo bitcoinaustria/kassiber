@@ -8,9 +8,14 @@ use std::sync::{
     mpsc, Arc, Mutex,
 };
 use std::time::{Duration, Instant};
+use tauri::{AppHandle, Emitter};
 
 const DAEMON_READY_TIMEOUT: Duration = Duration::from_secs(5);
 const DAEMON_INVOKE_TIMEOUT: Duration = Duration::from_secs(15);
+/// Per-record inactivity timeout for streaming kinds. The recv clock resets
+/// every time a delta arrives, so a long-running stream stays alive as long
+/// as the daemon keeps producing output within the window.
+const DAEMON_STREAM_INACTIVITY_TIMEOUT: Duration = Duration::from_secs(90);
 const STDERR_TAIL_LIMIT: usize = 16 * 1024;
 
 pub struct DaemonSupervisor {
@@ -96,8 +101,21 @@ impl DaemonSupervisor {
         }
     }
 
-    pub fn invoke(&mut self, kind: &str, args: Option<Value>) -> Result<Value, SupervisorError> {
-        let request_id = self.allocate_request_id();
+    pub fn invoke(
+        &mut self,
+        kind: &str,
+        args: Option<Value>,
+        app: &AppHandle,
+        streaming: bool,
+        client_request_id: Option<Value>,
+    ) -> Result<Value, SupervisorError> {
+        // Honor a JS-supplied String request_id so streaming transports can
+        // filter `daemon://stream` records as they arrive without buffering;
+        // fall back to the supervisor-allocated id otherwise.
+        let request_id = client_request_id
+            .as_ref()
+            .and_then(|value| value.as_str().map(String::from))
+            .unwrap_or_else(|| self.allocate_request_id());
         let process = self.ensure_process()?;
         let mut request = json!({
             "request_id": request_id,
@@ -108,15 +126,56 @@ impl DaemonSupervisor {
         }
 
         process.write_json_line(&request)?;
-        let deadline = Instant::now() + DAEMON_INVOKE_TIMEOUT;
+
+        // For streaming kinds we use a per-record inactivity timeout so a slow
+        // model that keeps emitting tokens stays alive past the 15s
+        // total-budget. Non-streaming kinds keep the original total deadline.
+        let stream_prefix = format!("{kind}.");
+        let deadline = if streaming {
+            None
+        } else {
+            Some(Instant::now() + DAEMON_INVOKE_TIMEOUT)
+        };
 
         loop {
-            let remaining = deadline.saturating_duration_since(Instant::now());
+            let remaining = if let Some(deadline) = deadline {
+                deadline.saturating_duration_since(Instant::now())
+            } else {
+                DAEMON_STREAM_INACTIVITY_TIMEOUT
+            };
             let mut response = process.read_json_value(remaining)?;
 
-            // Progress is part of the daemon protocol, even though no current
-            // status request emits it yet. It must still belong to this call.
-            if response.get("kind").and_then(Value::as_str) == Some("progress") {
+            let response_kind = response
+                .get("kind")
+                .and_then(Value::as_str)
+                .unwrap_or("")
+                .to_string();
+
+            // Treat any record sharing this request's id and a kind that
+            // starts with "<request_kind>." (e.g. ai.chat.delta) as a
+            // mid-stream record: forward to the webview as a Tauri event,
+            // reset the inactivity clock, keep reading.
+            let is_stream_record = streaming
+                && (response_kind == "progress" || response_kind.starts_with(&stream_prefix));
+
+            if is_stream_record {
+                if response.get("request_id").and_then(Value::as_str) != Some(request_id.as_str()) {
+                    process.mark_broken();
+                    process.kill();
+                    return Err(request_id_mismatch(&request_id, &response)
+                        .with_stderr_tail(process.stderr_tail()));
+                }
+                // Single channel per app; the webview filters by request_id
+                // from the payload so we don't need a per-stream listener.
+                if let Err(error) = app.emit("daemon://stream", &response) {
+                    eprintln!("kassiber: failed to emit stream event: {error}");
+                }
+                continue;
+            }
+
+            // Pre-streaming "progress" passthrough kept for the existing
+            // protocol surface; non-streaming kinds still ignore them.
+            if !streaming && response_kind == "progress" {
                 if response.get("request_id").and_then(Value::as_str) != Some(request_id.as_str()) {
                     process.mark_broken();
                     process.kill();
@@ -125,6 +184,7 @@ impl DaemonSupervisor {
                 }
                 continue;
             }
+
             if response.get("request_id").and_then(Value::as_str) != Some(request_id.as_str()) {
                 process.mark_broken();
                 process.kill();

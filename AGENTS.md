@@ -83,6 +83,8 @@ Kassiber is currently in **dev mode**: renaming commands, breaking flags, and re
 - `reports {summary,tax-summary,balance-sheet,portfolio-summary,capital-gains,journal-entries,balance-history,austrian-e1kv,austrian-tax-summary,export-pdf,export-austrian,export-austrian-e1kv-pdf,export-austrian-e1kv-xlsx,export-austrian-e1kv-csv}`
 - `rates {pairs,sync,latest,range,set}`
 - `diagnostics {collect}`
+- `ai providers {list,get,create,update,delete,set-default,clear-default}`
+- `ai {models,chat}`
 
 ## Pagination
 
@@ -213,6 +215,10 @@ uv run python -m kassiber reports export-austrian-e1kv-csv --help
 uv run python -m kassiber reports balance-history --help
 uv run python -m kassiber rates --help
 uv run python -m kassiber diagnostics collect --help
+uv run python -m kassiber ai --help
+uv run python -m kassiber ai providers --help
+uv run python -m kassiber ai providers create --help
+uv run python -m kassiber ai chat --help
 ```
 
 - Safe local workflow:

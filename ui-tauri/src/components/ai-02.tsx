@@ -1,12 +1,6 @@
 import { Button } from "@/components/ui/button";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { ProviderModelPicker } from "@/components/ai/ProviderModelPicker";
 import { cn } from "@/lib/utils";
 import {
   AlertTriangle,
@@ -14,6 +8,7 @@ import {
   Cpu,
   FileSpreadsheet,
   RefreshCw,
+  Square,
   type LucideIcon,
 } from "lucide-react";
 import { useRef, useState } from "react";
@@ -24,18 +19,16 @@ interface PromptOption {
   prompt: string;
 }
 
-interface ModelOption {
-  value: string;
-  name: string;
-  description: string;
-}
-
 interface Ai02Props {
   className?: string;
   compact?: boolean;
   placeholder?: string;
   prompts?: PromptOption[];
-  models?: ModelOption[];
+  selection: { provider: string; model: string } | null;
+  onSelectionChange: (next: { provider: string; model: string } | null) => void;
+  onSubmit: (prompt: string) => void;
+  onAbort?: () => void;
+  isStreaming?: boolean;
 }
 
 const DEFAULT_PROMPTS: PromptOption[] = [
@@ -59,38 +52,18 @@ const DEFAULT_PROMPTS: PromptOption[] = [
   },
 ];
 
-const DEFAULT_MODELS: ModelOption[] = [
-  {
-    value: "llama-3.3",
-    name: "Llama 3.3",
-    description: "Local general review",
-  },
-  {
-    value: "qwen3.6",
-    name: "Qwen3.6",
-    description: "Local reasoning and coding",
-  },
-  {
-    value: "gemma4",
-    name: "Gemma 4",
-    description: "Local fast summaries",
-  },
-  {
-    value: "mistral-small-3.1",
-    name: "Mistral Small 3.1",
-    description: "Local structured checks",
-  },
-];
-
 export default function Ai02({
   className,
   compact = false,
   placeholder = "Ask Kassiber",
   prompts = DEFAULT_PROMPTS,
-  models = DEFAULT_MODELS,
+  selection,
+  onSelectionChange,
+  onSubmit,
+  onAbort,
+  isStreaming = false,
 }: Ai02Props) {
   const [inputValue, setInputValue] = useState("");
-  const [selectedModel, setSelectedModel] = useState(models[0]);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
   const handlePromptClick = (prompt: string) => {
@@ -101,10 +74,22 @@ export default function Ai02({
     }
   };
 
-  const handleModelChange = (value: string) => {
-    const model = models.find((m) => m.value === value);
-    if (model) {
-      setSelectedModel(model);
+  const trimmedInput = inputValue.trim();
+  const canSend = Boolean(trimmedInput) && Boolean(selection?.model) && !isStreaming;
+
+  const handleSubmit = () => {
+    if (!canSend) return;
+    onSubmit(trimmedInput);
+    setInputValue("");
+    if (inputRef.current) {
+      inputRef.current.value = "";
+    }
+  };
+
+  const handleKeyDown = (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (event.key === "Enter" && !event.shiftKey) {
+      event.preventDefault();
+      handleSubmit();
     }
   };
 
@@ -130,7 +115,8 @@ export default function Ai02({
           <Textarea
             ref={inputRef}
             value={inputValue}
-            onChange={(e) => setInputValue(e.target.value)}
+            onChange={(event) => setInputValue(event.target.value)}
+            onKeyDown={handleKeyDown}
             placeholder={placeholder}
             className={cn(
               "w-full resize-none whitespace-pre-wrap break-words border-0 bg-transparent! text-[16px] text-foreground shadow-none outline-none transition-all duration-200 ease-in-out focus-visible:ring-0 focus-visible:ring-offset-0",
@@ -152,46 +138,38 @@ export default function Ai02({
           </div>
 
           <div className="relative flex items-center">
-            <Select
-              value={selectedModel.value}
-              onValueChange={handleModelChange}
-            >
-              <SelectTrigger className="w-fit border-none bg-transparent! p-0 text-sm text-muted-foreground hover:text-foreground focus:ring-0 shadow-none">
-                <SelectValue>
-                  <span>{selectedModel.name}</span>
-                </SelectValue>
-              </SelectTrigger>
-              <SelectContent
-                position="popper"
-                side="top"
-                align="start"
-                className="min-w-48"
-              >
-                {models.map((model) => (
-                  <SelectItem key={model.value} value={model.value}>
-                    <span>{model.name}</span>
-                    <span className="text-muted-foreground block text-xs">
-                      {model.description}
-                    </span>
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <ProviderModelPicker
+              value={selection}
+              onChange={onSelectionChange}
+            />
           </div>
 
           <div className="ml-auto flex items-center gap-3">
-            <Button
-              variant="ghost"
-              size="icon-sm"
-              className={cn(
-                "rounded-full transition-colors duration-100 ease-out cursor-pointer bg-primary",
-                inputValue && "bg-primary hover:bg-primary/90!",
-              )}
-              disabled={!inputValue}
-              aria-label="Send message"
-            >
-              <ArrowUp className="h-4 w-4 text-primary-foreground" />
-            </Button>
+            {isStreaming && onAbort ? (
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                className="rounded-full bg-destructive transition-colors duration-100 ease-out cursor-pointer hover:bg-destructive/90!"
+                onClick={onAbort}
+                aria-label="Stop generating"
+              >
+                <Square className="h-3.5 w-3.5 text-destructive-foreground" />
+              </Button>
+            ) : (
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                className={cn(
+                  "rounded-full transition-colors duration-100 ease-out cursor-pointer bg-primary",
+                  canSend && "bg-primary hover:bg-primary/90!",
+                )}
+                disabled={!canSend}
+                onClick={handleSubmit}
+                aria-label="Send message"
+              >
+                <ArrowUp className="h-4 w-4 text-primary-foreground" />
+              </Button>
+            )}
           </div>
         </div>
       </div>
