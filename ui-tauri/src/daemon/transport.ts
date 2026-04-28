@@ -10,7 +10,7 @@
  * whitelisted requests to the local Python daemon.
  */
 
-import { mockDaemon } from "./mock";
+import { mockDaemon, mockStream } from "./mock";
 import { useUiStore, type DataMode } from "@/store/ui";
 
 export type DaemonMode = "mock" | "bridge" | "tauri";
@@ -38,6 +38,12 @@ export const DAEMON_MODE = RAW_MODE as DaemonMode;
 export interface DaemonRequest {
   kind: string;
   args?: Record<string, unknown>;
+  /**
+   * Optional client-allocated request_id. Streaming transports allocate
+   * one automatically so they can filter `daemon://stream` records as
+   * they arrive instead of buffering them until the terminal envelope.
+   */
+  request_id?: string;
 }
 
 export interface DaemonEnvelope<T = unknown> {
@@ -54,8 +60,43 @@ export interface DaemonEnvelope<T = unknown> {
   };
 }
 
+/**
+ * Stream record forwarded by the Rust supervisor while a streaming kind
+ * (e.g. `ai.chat`) is in flight. Mid-stream records have a kind shaped
+ * like `<request_kind>.delta`; the terminal record matches the request
+ * kind exactly and is delivered as the resolved value of `stream()`.
+ */
+export interface DaemonStreamRecord<T = unknown> {
+  kind: string;
+  schema_version: number;
+  request_id?: string | number | null;
+  data?: T;
+}
+
+export interface DaemonStreamOptions<T = unknown> {
+  /** Receive each mid-stream record (kind = `<request_kind>.delta` etc.). */
+  onRecord?: (record: DaemonStreamRecord<T>) => void;
+  /** Optional abort signal; transports that support cancellation watch this. */
+  signal?: AbortSignal;
+}
+
 export interface DaemonTransport {
   invoke<T = unknown>(req: DaemonRequest): Promise<DaemonEnvelope<T>>;
+  /** Streaming variant; resolves with the terminal envelope. */
+  stream<T = unknown, R = unknown>(
+    req: DaemonRequest,
+    options?: DaemonStreamOptions<R>,
+  ): Promise<DaemonEnvelope<T>>;
+}
+
+function makeRequestId(): string {
+  if (
+    typeof globalThis.crypto !== "undefined" &&
+    typeof globalThis.crypto.randomUUID === "function"
+  ) {
+    return globalThis.crypto.randomUUID();
+  }
+  return `req-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
 }
 
 const tauriDaemon: DaemonTransport = {
@@ -64,6 +105,37 @@ const tauriDaemon: DaemonTransport = {
   ): Promise<DaemonEnvelope<T>> {
     const { invoke } = await import("@tauri-apps/api/core");
     return invoke<DaemonEnvelope<T>>("daemon_invoke", { request: req });
+  },
+  async stream<T = unknown, R = unknown>(
+    req: DaemonRequest,
+    options?: DaemonStreamOptions<R>,
+  ): Promise<DaemonEnvelope<T>> {
+    const { invoke } = await import("@tauri-apps/api/core");
+    const { listen } = await import("@tauri-apps/api/event");
+
+    // Allocate the request_id client-side and pass it through; the
+    // supervisor honors a String request_id when supplied, so we can
+    // filter `daemon://stream` records as they arrive instead of
+    // buffering them until the terminal envelope returns.
+    const requestId = req.request_id ?? makeRequestId();
+
+    const unlisten = await listen<DaemonStreamRecord<R>>(
+      "daemon://stream",
+      (event) => {
+        if (options?.signal?.aborted) return;
+        if (event.payload.request_id === requestId) {
+          options?.onRecord?.(event.payload);
+        }
+      },
+    );
+
+    try {
+      return await invoke<DaemonEnvelope<T>>("daemon_invoke", {
+        request: { ...req, request_id: requestId },
+      });
+    } finally {
+      unlisten();
+    }
   },
 };
 
@@ -78,16 +150,27 @@ const bridgeDaemon: DaemonTransport = {
     });
     return response.json() as Promise<DaemonEnvelope<T>>;
   },
+  async stream<T = unknown>(req: DaemonRequest): Promise<DaemonEnvelope<T>> {
+    return {
+      kind: "error",
+      schema_version: 1,
+      error: {
+        code: "stream_not_supported",
+        message: `bridge mode does not support streaming kinds (${req.kind}); use VITE_DAEMON=mock or run inside the Tauri shell.`,
+        retryable: false,
+      },
+    };
+  },
 };
 
 export function getTransport(dataMode?: DataMode): DaemonTransport {
   if ((dataMode ?? useUiStore.getState().dataMode) === "mock") {
-    return mockDaemon;
+    return { invoke: mockDaemon.invoke, stream: mockStream };
   }
 
   switch (DAEMON_MODE) {
     case "mock":
-      return mockDaemon;
+      return { invoke: mockDaemon.invoke, stream: mockStream };
     case "bridge":
       return bridgeDaemon;
     case "tauri":

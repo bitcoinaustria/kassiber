@@ -288,6 +288,67 @@ class CliSmokeTest(unittest.TestCase):
         self.assertEqual(rows["fulcrum"]["batch_size"], 100)
         self.assertEqual(rows["liquid"]["batch_size"], 100)
 
+    def test_01b_ai_providers_roundtrip(self):
+        # Seeded local Ollama row should be present with the local-default
+        # marker; api_key is never echoed in any redacted payload.
+        payload = self._cli("ai", "providers", "list")
+        self._assert_kind(payload, "ai.providers.list")
+        self.assertEqual(payload["data"]["default"], "ollama")
+        names = [row["name"] for row in payload["data"]["providers"]]
+        self.assertIn("ollama", names)
+        for row in payload["data"]["providers"]:
+            self.assertNotIn("api_key", row)
+            self.assertIn("has_api_key", row)
+            self.assertIn("kind", row)
+
+        payload = self._cli(
+            "ai", "providers", "create", "smoke-remote",
+            "--base-url", "https://example.test/v1",
+            "--api-key", "sk-test-secret",
+            "--default-model", "test-model",
+            "--kind", "remote",
+            "--notes", "Smoke test remote",
+        )
+        self._assert_kind(payload, "ai.providers.create")
+        self.assertEqual(payload["data"]["name"], "smoke-remote")
+        self.assertEqual(payload["data"]["kind"], "remote")
+        self.assertTrue(payload["data"]["has_api_key"])
+        self.assertNotIn("api_key", payload["data"])
+        # Remote providers are not auto-acknowledged.
+        self.assertIsNone(payload["data"].get("acknowledged_at"))
+
+        error_payload, code = _run(
+            self.data_root,
+            "ai", "chat", "hello",
+            "--provider", "smoke-remote",
+        )
+        self.assertNotEqual(code, 0)
+        self.assertEqual(error_payload["error"]["code"], "ai_remote_ack_required")
+
+        payload = self._cli("ai", "providers", "get", "smoke-remote")
+        self.assertIsNone(payload["data"].get("acknowledged_at"))
+
+        payload = self._cli(
+            "ai", "providers", "update", "smoke-remote",
+            "--default-model", "test-model-2",
+            "--acknowledge",
+        )
+        self._assert_kind(payload, "ai.providers.update")
+        self.assertEqual(payload["data"]["default_model"], "test-model-2")
+        self.assertIsNotNone(payload["data"]["acknowledged_at"])
+
+        payload = self._cli("ai", "providers", "set-default", "smoke-remote")
+        self._assert_kind(payload, "ai.providers.set-default")
+        self.assertEqual(payload["data"]["default"], "smoke-remote")
+
+        payload = self._cli("ai", "providers", "clear-default")
+        self._assert_kind(payload, "ai.providers.clear-default")
+        self.assertIsNone(payload["data"]["default"])
+
+        payload = self._cli("ai", "providers", "delete", "smoke-remote")
+        self._assert_kind(payload, "ai.providers.delete")
+        self.assertTrue(payload["data"]["deleted"])
+
     def test_02_workspace_profile(self):
         payload = self._cli("workspaces", "create", "Main")
         self._assert_kind(payload, "workspaces.create")

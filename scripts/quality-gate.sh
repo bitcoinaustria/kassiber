@@ -56,6 +56,10 @@ py -m kassiber journals events --help >/dev/null
 py -m kassiber reports balance-history --help >/dev/null
 py -m kassiber rates --help >/dev/null
 py -m kassiber diagnostics collect --help >/dev/null
+py -m kassiber ai --help >/dev/null
+py -m kassiber ai providers --help >/dev/null
+py -m kassiber ai providers create --help >/dev/null
+py -m kassiber ai chat --help >/dev/null
 py -m kassiber secrets --help >/dev/null
 py -m kassiber secrets init --help >/dev/null
 py -m kassiber secrets change-passphrase --help >/dev/null

@@ -70,6 +70,8 @@ class DaemonSmokeTest(unittest.TestCase):
             self.assertIn("ui.wallets.sync", ready["data"]["supported_kinds"])
             self.assertIn("wallets.reveal_descriptor", ready["data"]["supported_kinds"])
             self.assertIn("backends.reveal_token", ready["data"]["supported_kinds"])
+            self.assertIn("ai.test_connection", ready["data"]["supported_kinds"])
+            self.assertIn("ai.chat", ready["data"]["supported_kinds"])
 
             _write_payload(proc, {"request_id": "status-1", "kind": "status"})
             status = _read_payload(proc)
@@ -129,6 +131,24 @@ class DaemonSmokeTest(unittest.TestCase):
                     {"request_id": "unknown-1", "kind": "rates.latest"},
                     "unsupported_kind",
                     "unknown-1",
+                    False,
+                    False,
+                ),
+                (
+                    {"request_id": "ai-test-1", "kind": "ai.test_connection"},
+                    "validation",
+                    "ai-test-1",
+                    False,
+                    False,
+                ),
+                (
+                    {
+                        "request_id": "ai-test-2",
+                        "kind": "ai.test_connection",
+                        "args": {"base_url": "no-scheme"},
+                    },
+                    "validation",
+                    "ai-test-2",
                     False,
                     False,
                 ),

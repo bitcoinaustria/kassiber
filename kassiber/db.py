@@ -248,6 +248,18 @@ CREATE TABLE IF NOT EXISTS attachments (
 
 CREATE INDEX IF NOT EXISTS idx_attachments_profile_tx_created
     ON attachments(profile_id, transaction_id, created_at DESC);
+
+CREATE TABLE IF NOT EXISTS ai_providers (
+    name TEXT PRIMARY KEY,
+    base_url TEXT NOT NULL,
+    api_key TEXT,
+    default_model TEXT,
+    kind TEXT NOT NULL,
+    notes TEXT,
+    acknowledged_at TEXT,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
 """
 
 

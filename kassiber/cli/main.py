@@ -8,6 +8,22 @@ import traceback
 from typing import Any, Sequence
 
 from .. import daemon as daemon_runtime
+from ..ai import (
+    AI_PROVIDER_KINDS,
+    clear_default_ai_provider,
+    create_db_ai_provider,
+    delete_db_ai_provider,
+    get_db_ai_provider,
+    redact_ai_provider_for_output,
+    require_ai_provider_acknowledged,
+    resolve_ai_provider,
+    set_default_ai_provider,
+    update_db_ai_provider,
+)
+from ..ai.client import OpenAICompatClient
+from ..ai.providers import (
+    list_with_default as list_ai_providers_with_default,
+)
 from .handlers import (
     APP_NAME,
     BACKEND_CLEAR_FIELD_ALIASES,
@@ -75,6 +91,44 @@ from ..secrets.cli_input import (
     read_secret_from_args,
 )
 from ..tax_policy import supported_tax_countries
+
+
+_AI_PROVIDER_KINDS_LIST = AI_PROVIDER_KINDS
+_AI_PROVIDER_CLEARABLE_FIELDS = ("api_key", "default_model", "notes")
+
+
+def _ai_provider_redacted(conn: sqlite3.Connection, provider: dict) -> dict:
+    """Redact a provider for emit, decorating with `is_default` from the
+    stored default pointer."""
+    from ..ai.providers import get_default_ai_provider_name
+
+    return redact_ai_provider_for_output(provider, default_name=get_default_ai_provider_name(conn))
+
+
+def _ai_chat_messages(args: argparse.Namespace) -> list[dict]:
+    messages: list[dict] = []
+    if getattr(args, "system", None):
+        messages.append({"role": "system", "content": args.system})
+    messages.append({"role": "user", "content": args.prompt})
+    return messages
+
+
+def _ai_chat_options(args: argparse.Namespace) -> dict | None:
+    options: dict = {}
+    temp = getattr(args, "temperature", None)
+    if temp is not None:
+        options["temperature"] = temp
+    max_tokens = getattr(args, "max_tokens", None)
+    if max_tokens is not None:
+        options["max_tokens"] = max_tokens
+    return options or None
+
+
+def _ai_client_for(provider: dict) -> OpenAICompatClient:
+    return OpenAICompatClient(
+        base_url=provider["base_url"],
+        api_key=provider.get("api_key"),
+    )
 
 
 def _backend_extra_config(args: argparse.Namespace) -> dict[str, object] | None:
@@ -858,6 +912,72 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Also write the report under exports/diagnostics in the active Kassiber state root",
     )
+
+    ai = sub.add_parser(
+        "ai",
+        description="AI provider configuration and chat over OpenAI-compatible APIs.",
+    )
+    ai_sub = ai.add_subparsers(dest="ai_command", required=True)
+
+    ai_providers = ai_sub.add_parser("providers", description="Manage AI provider configurations.")
+    ai_providers_sub = ai_providers.add_subparsers(dest="ai_providers_command", required=True)
+    ai_providers_sub.add_parser("list")
+
+    ai_providers_get = ai_providers_sub.add_parser("get")
+    ai_providers_get.add_argument("name")
+
+    ai_providers_create = ai_providers_sub.add_parser("create")
+    ai_providers_create.add_argument("name")
+    ai_providers_create.add_argument("--base-url", required=True, help="OpenAI-compatible root, e.g. http://localhost:11434/v1")
+    ai_providers_create.add_argument("--api-key", help="Bearer token; omit for keyless local providers")
+    ai_providers_create.add_argument("--default-model")
+    ai_providers_create.add_argument(
+        "--kind",
+        choices=list(_AI_PROVIDER_KINDS_LIST),
+        default="local",
+        help="local = on-machine, remote = data leaves the device, tee = encrypted attestation provider",
+    )
+    ai_providers_create.add_argument("--notes")
+    ai_providers_create.add_argument(
+        "--acknowledge",
+        action="store_true",
+        help="Acknowledge that prompts may leave the device (auto for kind=local)",
+    )
+
+    ai_providers_update = ai_providers_sub.add_parser("update")
+    ai_providers_update.add_argument("name")
+    ai_providers_update.add_argument("--base-url")
+    ai_providers_update.add_argument("--api-key")
+    ai_providers_update.add_argument("--default-model")
+    ai_providers_update.add_argument("--kind", choices=list(_AI_PROVIDER_KINDS_LIST))
+    ai_providers_update.add_argument("--notes")
+    ai_providers_update.add_argument(
+        "--clear",
+        action="append",
+        choices=sorted(_AI_PROVIDER_CLEARABLE_FIELDS),
+        help="Null out a field (repeatable)",
+    )
+    ai_providers_update.add_argument("--acknowledge", action="store_true", help="Stamp acknowledged_at to now")
+    ai_providers_update.add_argument("--revoke-acknowledge", action="store_true", help="Clear acknowledged_at")
+
+    ai_providers_delete = ai_providers_sub.add_parser("delete")
+    ai_providers_delete.add_argument("name")
+
+    ai_providers_set_default = ai_providers_sub.add_parser("set-default")
+    ai_providers_set_default.add_argument("name")
+
+    ai_providers_sub.add_parser("clear-default")
+
+    ai_models = ai_sub.add_parser("models", description="List models the configured provider exposes.")
+    ai_models.add_argument("--provider", help="Provider name (defaults to the stored default)")
+
+    ai_chat = ai_sub.add_parser("chat", description="Send one prompt to the AI provider (non-streaming).")
+    ai_chat.add_argument("prompt", help="User prompt; use --system for an additional system message")
+    ai_chat.add_argument("--provider", help="Provider name (defaults to the stored default)")
+    ai_chat.add_argument("--model", help="Model id (defaults to the provider's default_model)")
+    ai_chat.add_argument("--system", help="Optional system prompt")
+    ai_chat.add_argument("--temperature", type=float)
+    ai_chat.add_argument("--max-tokens", type=int)
 
     return parser
 
@@ -1652,6 +1772,73 @@ def dispatch(conn: sqlite3.Connection | None, args: argparse.Namespace) -> Any:
                         "filename": saved.path.name,
                     }
             return emit(args, {"report": report, "saved": saved_payload})
+    if args.command == "ai":
+        if args.ai_command == "providers":
+            if args.ai_providers_command == "list":
+                return emit(args, list_ai_providers_with_default(conn))
+            if args.ai_providers_command == "get":
+                return emit(args, _ai_provider_redacted(conn, get_db_ai_provider(conn, args.name)))
+            if args.ai_providers_command == "create":
+                created = create_db_ai_provider(
+                    conn,
+                    args.name,
+                    args.base_url,
+                    api_key=args.api_key,
+                    default_model=args.default_model,
+                    kind=args.kind,
+                    notes=args.notes,
+                    acknowledged=args.acknowledge,
+                )
+                return emit(args, _ai_provider_redacted(conn, created))
+            if args.ai_providers_command == "update":
+                updates = {
+                    "base_url": args.base_url,
+                    "api_key": args.api_key,
+                    "default_model": args.default_model,
+                    "kind": args.kind,
+                    "notes": args.notes,
+                    "clear": list(args.clear or ()),
+                    "acknowledged": args.acknowledge,
+                    "acknowledge_clear": args.revoke_acknowledge,
+                }
+                updated = update_db_ai_provider(conn, args.name, updates)
+                return emit(args, _ai_provider_redacted(conn, updated))
+            if args.ai_providers_command == "delete":
+                return emit(args, delete_db_ai_provider(conn, args.name))
+            if args.ai_providers_command == "set-default":
+                return emit(args, set_default_ai_provider(conn, args.name))
+            if args.ai_providers_command == "clear-default":
+                return emit(args, clear_default_ai_provider(conn))
+        if args.ai_command == "models":
+            provider = resolve_ai_provider(conn, args.provider)
+            client = _ai_client_for(provider)
+            return emit(args, {"provider": provider["name"], "models": client.list_models()})
+        if args.ai_command == "chat":
+            provider = resolve_ai_provider(conn, args.provider)
+            model = args.model or provider.get("default_model")
+            if not model:
+                raise AppError(
+                    "AI chat requires a model",
+                    code="validation",
+                    hint=f"Pass --model, or set --default-model on provider '{provider['name']}'.",
+                )
+            require_ai_provider_acknowledged(provider)
+            client = _ai_client_for(provider)
+            response = client.chat(
+                messages=_ai_chat_messages(args),
+                model=model,
+                options=_ai_chat_options(args),
+            )
+            return emit(
+                args,
+                {
+                    "provider": provider["name"],
+                    "model": model,
+                    "message": {"role": response["role"], "content": response["content"]},
+                    "finish_reason": response.get("finish_reason"),
+                    "usage": response.get("usage"),
+                },
+            )
     raise AppError("Unknown command")
 
 

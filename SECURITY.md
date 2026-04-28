@@ -215,6 +215,43 @@ fails.
   in the catalog but do not sync; credentials registered against them
   sit in the DB unused.
 
+## AI provider configuration
+
+The desktop app and `kassiber ai` CLI surface speak the OpenAI-compatible
+wire format against any provider you configure. The default seeded entry
+points at local Ollama (`http://localhost:11434/v1`); add remote providers
+through Settings → AI providers or `kassiber ai providers create`.
+
+- **Prompts are sensitive accounting data.** A chat about quarantined
+  transactions or report prep can include wallet labels, addresses, notes,
+  imported document contents, backend hostnames, and tax annotations. Any
+  remote provider sees that content. The provider/model picker tags each
+  configured endpoint as `local`, `remote`, or `tee` so you can see at a
+  glance whether a prompt is about to leave the device.
+- **Remote chat only after explicit acknowledgement.** Remote providers
+  start unacknowledged unless they are created or updated with
+  `--acknowledge`, or confirmed in Settings → AI providers. `ai.chat`
+  refuses to send prompts to an unacknowledged off-device provider with
+  `ai_remote_ack_required`.
+- **API keys live in plaintext SQLite** (mirroring how `backends` stores
+  tokens) until the OS-keychain migration tracked in `TODO.md` covers
+  both surfaces. Filesystem read of `~/.kassiber/data/kassiber.sqlite3`
+  exposes any stored API key.
+- **The Tauri shell allowlists exactly the AI daemon kinds.** The webview
+  cannot reach Ollama (or any other model API) directly — every call
+  passes through the Python daemon. The provider URL never reaches the
+  webview's CSP/CORS surface.
+- **Streaming Stop is UI-only, not a billing-side cancel.** Pressing Stop
+  on the assistant marks the in-flight reply stopped and suppresses later
+  streamed UI updates; the underlying generation keeps running until the
+  model completes. For metered remote providers this means tokens continue
+  to be consumed (and billed) after Stop. No prompt content is exposed beyond
+  what was already sent. Cooperative cancellation lands with the worker-pool
+  refactor in `TODO.md`.
+- **No tool use in PR 1.** The in-app assistant cannot run Kassiber CLI
+  commands, mutate state, or read your snapshots. That arrives in a
+  follow-up gated behind per-tool consent.
+
 ## Reporting
 
 Do not file security-impacting issues in the public tracker. Contact
