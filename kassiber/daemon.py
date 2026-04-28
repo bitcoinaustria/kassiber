@@ -14,6 +14,7 @@ from .ai import (
     delete_db_ai_provider,
     get_db_ai_provider,
     redact_ai_provider_for_output,
+    require_ai_provider_acknowledged,
     resolve_ai_provider,
     set_default_ai_provider,
     clear_default_ai_provider,
@@ -664,8 +665,7 @@ def handle_request(
         # the worker thread never touches SQLite (sqlite3 connections are
         # bound to the thread that opened them).
         provider = resolve_ai_provider(ctx.conn, validated["provider"])
-        if provider["kind"] != "local" and not provider.get("acknowledged_at"):
-            acknowledge_remote_use(ctx.conn, provider["name"])
+        require_ai_provider_acknowledged(provider)
         provider_snapshot = {
             "name": provider["name"],
             "base_url": provider["base_url"],

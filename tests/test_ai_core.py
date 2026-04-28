@@ -8,6 +8,7 @@ cover the underlying primitives directly so failures point at one layer.
 from __future__ import annotations
 
 import io
+import json
 import socket
 import tempfile
 import unittest
@@ -21,6 +22,7 @@ from kassiber.ai import (
     get_db_ai_provider,
     list_db_ai_providers,
     redact_ai_provider_for_output,
+    require_ai_provider_acknowledged,
     resolve_ai_provider,
     set_default_ai_provider,
     clear_default_ai_provider,
@@ -193,6 +195,19 @@ class ListModelsStrictModeTest(unittest.TestCase):
             fp=io.BytesIO(b""),
         )
 
+    class _FakeResponse:
+        def __init__(self, payload: bytes):
+            self._payload = payload
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return False
+
+        def read(self):
+            return self._payload
+
     def test_default_mode_swallows_4xx_to_empty_list(self):
         # Picker UX: providers that skip /v1/models still let the user fall
         # back to a configured default_model.
@@ -207,6 +222,28 @@ class ListModelsStrictModeTest(unittest.TestCase):
                 client.list_models(strict=True)
             self.assertEqual(ctx.exception.code, "ai_request_invalid")
 
+    def test_strict_mode_rejects_invalid_json_200(self):
+        with patch(
+            "urllib.request.urlopen",
+            return_value=self._FakeResponse(b"<html>not json</html>"),
+        ):
+            client = OpenAICompatClient(base_url="http://x/v1")
+            self.assertEqual(client.list_models(), [])
+            with self.assertRaises(AppError) as ctx:
+                client.list_models(strict=True)
+            self.assertEqual(ctx.exception.code, "ai_request_invalid")
+
+    def test_strict_mode_rejects_unexpected_200_shape(self):
+        with patch(
+            "urllib.request.urlopen",
+            return_value=self._FakeResponse(b'{"ok":true}'),
+        ):
+            client = OpenAICompatClient(base_url="http://x/v1")
+            self.assertEqual(client.list_models(), [])
+            with self.assertRaises(AppError) as ctx:
+                client.list_models(strict=True)
+            self.assertEqual(ctx.exception.code, "ai_request_invalid")
+
     def test_strict_mode_does_not_change_auth_failure(self):
         # 401 was never swallowed; strict mode shouldn't change that path.
         with patch("urllib.request.urlopen", side_effect=self._http_error(401)):
@@ -217,6 +254,80 @@ class ListModelsStrictModeTest(unittest.TestCase):
             with self.assertRaises(AppError) as ctx:
                 client.list_models(strict=True)
             self.assertEqual(ctx.exception.code, "ai_auth_failed")
+
+
+class ChatBodyContractTest(unittest.TestCase):
+    """Caller-supplied options must not override the OpenAI wire contract."""
+
+    class _ReadResponse:
+        def __init__(self, payload: bytes):
+            self._payload = payload
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return False
+
+        def read(self):
+            return self._payload
+
+    class _StreamResponse:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return False
+
+        def __iter__(self):
+            yield b"data: [DONE]\n"
+            yield b"\n"
+
+    def test_chat_forces_reserved_fields_after_options(self):
+        captured: dict = {}
+
+        def fake_urlopen(request, timeout=None):
+            captured.update(json.loads(request.data.decode("utf-8")))
+            return self._ReadResponse(
+                b'{"choices":[{"message":{"role":"assistant","content":"ok"},"finish_reason":"stop"}]}'
+            )
+
+        with patch("urllib.request.urlopen", side_effect=fake_urlopen):
+            client = OpenAICompatClient(base_url="http://x/v1")
+            client.chat(
+                messages=[{"role": "user", "content": "real"}],
+                model="real-model",
+                options={
+                    "stream": True,
+                    "model": "wrong-model",
+                    "messages": [],
+                    "temperature": 0.2,
+                },
+            )
+        self.assertEqual(captured["stream"], False)
+        self.assertEqual(captured["model"], "real-model")
+        self.assertEqual(captured["messages"], [{"role": "user", "content": "real"}])
+        self.assertEqual(captured["temperature"], 0.2)
+
+    def test_stream_chat_forces_stream_true_after_options(self):
+        captured: dict = {}
+
+        def fake_urlopen(request, timeout=None):
+            captured.update(json.loads(request.data.decode("utf-8")))
+            return self._StreamResponse()
+
+        with patch("urllib.request.urlopen", side_effect=fake_urlopen):
+            client = OpenAICompatClient(base_url="http://x/v1")
+            list(
+                client.stream_chat(
+                    messages=[{"role": "user", "content": "real"}],
+                    model="real-model",
+                    options={"stream": False, "model": "wrong-model", "messages": []},
+                )
+            )
+        self.assertEqual(captured["stream"], True)
+        self.assertEqual(captured["model"], "real-model")
+        self.assertEqual(captured["messages"], [{"role": "user", "content": "real"}])
 
 
 class ChatReasoningPassthroughTest(unittest.TestCase):
@@ -381,6 +492,17 @@ class ProvidersCrudTest(unittest.TestCase):
                 self.assertNotIn("api_key", redacted)
                 self.assertTrue(redacted["has_api_key"])
                 self.assertFalse(redacted["is_default"])
+
+                with self.assertRaises(AppError) as ctx:
+                    require_ai_provider_acknowledged(fetched)
+                self.assertEqual(ctx.exception.code, "ai_remote_ack_required")
+
+                acknowledged = update_db_ai_provider(
+                    conn,
+                    "openai",
+                    {"acknowledged": True},
+                )
+                require_ai_provider_acknowledged(acknowledged)
             finally:
                 conn.close()
 

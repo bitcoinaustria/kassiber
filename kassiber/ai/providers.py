@@ -390,7 +390,7 @@ def list_with_default(conn) -> dict:
 
 
 def acknowledge_remote_use(conn, name: str) -> dict:
-    """Stamp `acknowledged_at` so the UI's first-use confirm fires only once."""
+    """Stamp explicit off-device acknowledgement for an AI provider."""
     seed_default_ai_provider_if_empty(conn)
     name = _normalize_name(name)
     row = conn.execute(
@@ -409,6 +409,24 @@ def acknowledge_remote_use(conn, name: str) -> dict:
     )
     conn.commit()
     return {"name": name, "acknowledged_at": ts}
+
+
+def require_ai_provider_acknowledged(provider: dict) -> None:
+    """Require explicit acknowledgement before sending chat to off-device AI."""
+    if provider.get("kind") == "local" or provider.get("acknowledged_at"):
+        return
+    name = str_or_none(provider.get("name")) or "<unknown>"
+    kind = str_or_none(provider.get("kind")) or "remote"
+    raise AppError(
+        f"AI provider '{name}' requires explicit off-device acknowledgement before chat",
+        code="ai_remote_ack_required",
+        hint=(
+            f"Run `kassiber ai providers update {name} --acknowledge`, "
+            "or confirm the provider in Settings → AI providers."
+        ),
+        details={"provider": name, "kind": kind},
+        retryable=False,
+    )
 
 
 def filter_clear_fields(values: Iterable[str] | None) -> list[str]:

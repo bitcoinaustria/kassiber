@@ -3,7 +3,7 @@
  *
  * Used inline in the Settings modal. The form holds local state and
  * surfaces validation errors from the daemon. The "Test connection"
- * button issues `ai.list_models` against the entered credentials and
+ * button issues `ai.test_connection` against the entered credentials and
  * reports the result without persisting.
  */
 
@@ -36,6 +36,7 @@ export interface AiProviderInput {
 
 export interface ExistingAiProvider extends AiProviderInput {
   has_api_key: boolean;
+  acknowledged_at?: string | null;
 }
 
 interface AiProviderFormProps {
@@ -127,6 +128,14 @@ export function AiProviderForm({
     event.preventDefault();
     setError(null);
     try {
+      const needsRemoteAck =
+        kind !== "local" && (!initial || initial.kind === "local" || !initial.acknowledged_at);
+      if (needsRemoteAck) {
+        const ok = window.confirm(
+          "Prompts sent to this provider leave this device. Acknowledge this privacy decision before saving?",
+        );
+        if (!ok) return;
+      }
       if (editing && initial) {
         const args: Record<string, unknown> = {
           name: initial.name,
@@ -137,6 +146,9 @@ export function AiProviderForm({
         };
         if (apiKey.trim()) {
           args.api_key = apiKey.trim();
+        }
+        if (needsRemoteAck) {
+          args.acknowledged = true;
         }
         await updateProvider.mutateAsync(args);
         onSaved?.(initial.name);
@@ -150,6 +162,9 @@ export function AiProviderForm({
         };
         if (apiKey.trim()) {
           args.api_key = apiKey.trim();
+        }
+        if (needsRemoteAck) {
+          args.acknowledged = true;
         }
         await createProvider.mutateAsync(args);
         onSaved?.(name.trim());

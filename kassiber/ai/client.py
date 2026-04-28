@@ -235,9 +235,24 @@ class OpenAICompatClient:
             try:
                 payload = json.loads(response.read().decode("utf-8", errors="replace"))
             except json.JSONDecodeError:
+                if strict:
+                    raise AppError(
+                        "AI provider returned a non-JSON models response",
+                        code="ai_request_invalid",
+                        hint="Check that the base URL points at an OpenAI-compatible /v1 endpoint.",
+                        retryable=False,
+                    )
                 return []
         data = payload.get("data") if isinstance(payload, dict) else None
         if not isinstance(data, list):
+            if strict:
+                raise AppError(
+                    "AI provider models response did not contain a data list",
+                    code="ai_request_invalid",
+                    details={"shape": type(payload).__name__},
+                    hint="Check that the base URL points at an OpenAI-compatible /v1 endpoint.",
+                    retryable=False,
+                )
             return []
         models: list[dict] = []
         for item in data:
@@ -261,9 +276,8 @@ class OpenAICompatClient:
         options: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         """Non-streaming `POST /v1/chat/completions`. Returns the assistant message."""
-        body = {"model": model, "messages": messages, "stream": False}
-        if options:
-            body.update(options)
+        body = dict(options or {})
+        body.update({"model": model, "messages": messages, "stream": False})
         response = self._open(
             "chat/completions",
             method="POST",
@@ -313,9 +327,8 @@ class OpenAICompatClient:
         clean error envelope before the supervisor decides to kill the
         daemon process.
         """
-        body = {"model": model, "messages": messages, "stream": True}
-        if options:
-            body.update(options)
+        body = dict(options or {})
+        body.update({"model": model, "messages": messages, "stream": True})
         response = self._open(
             "chat/completions",
             method="POST",

@@ -227,11 +227,11 @@ through Settings → AI providers or `kassiber ai providers create`.
   remote provider sees that content. The provider/model picker tags each
   configured endpoint as `local`, `remote`, or `tee` so you can see at a
   glance whether a prompt is about to leave the device.
-- **Remote providers only after explicit acknowledgement.** The
-  `acknowledged_at` column on `ai_providers` is set the first time a
-  remote provider is used (CLI: `kassiber ai providers update <name>
-  --acknowledge`). The desktop UI surfaces this acknowledgement when a
-  remote provider is added.
+- **Remote chat only after explicit acknowledgement.** Remote providers
+  start unacknowledged unless they are created or updated with
+  `--acknowledge`, or confirmed in Settings → AI providers. `ai.chat`
+  refuses to send prompts to an unacknowledged off-device provider with
+  `ai_remote_ack_required`.
 - **API keys live in plaintext SQLite** (mirroring how `backends` stores
   tokens) until the OS-keychain migration tracked in `TODO.md` covers
   both surfaces. Filesystem read of `~/.kassiber/data/kassiber.sqlite3`

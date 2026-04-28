@@ -127,7 +127,8 @@ OpenAI-compatible endpoint configured in **Settings → AI providers**. The
 default seed entry is local Ollama (`http://localhost:11434/v1`). Add remote
 providers (OpenAI, Maple AI, OpenRouter, …) when you want them; remote
 prompts leave the device, so the picker tags each provider as `local`,
-`remote`, or `tee`. The same surface is reachable from the CLI via
+`remote`, or `tee`, and chat requires explicit acknowledgement before any
+off-device prompt is sent. The same surface is reachable from the CLI via
 `kassiber ai providers …`, `kassiber ai models`, and `kassiber ai chat`.
 
 AI is optional. Kassiber's core accounting flow does not depend on a model, and

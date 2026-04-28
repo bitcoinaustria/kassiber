@@ -317,6 +317,17 @@ class CliSmokeTest(unittest.TestCase):
         # Remote providers are not auto-acknowledged.
         self.assertIsNone(payload["data"].get("acknowledged_at"))
 
+        error_payload, code = _run(
+            self.data_root,
+            "ai", "chat", "hello",
+            "--provider", "smoke-remote",
+        )
+        self.assertNotEqual(code, 0)
+        self.assertEqual(error_payload["error"]["code"], "ai_remote_ack_required")
+
+        payload = self._cli("ai", "providers", "get", "smoke-remote")
+        self.assertIsNone(payload["data"].get("acknowledged_at"))
+
         payload = self._cli(
             "ai", "providers", "update", "smoke-remote",
             "--default-model", "test-model-2",

@@ -15,13 +15,13 @@ from ..ai import (
     delete_db_ai_provider,
     get_db_ai_provider,
     redact_ai_provider_for_output,
+    require_ai_provider_acknowledged,
     resolve_ai_provider,
     set_default_ai_provider,
     update_db_ai_provider,
 )
 from ..ai.client import OpenAICompatClient
 from ..ai.providers import (
-    acknowledge_remote_use,
     list_with_default as list_ai_providers_with_default,
 )
 from .handlers import (
@@ -1822,8 +1822,7 @@ def dispatch(conn: sqlite3.Connection | None, args: argparse.Namespace) -> Any:
                     code="validation",
                     hint=f"Pass --model, or set --default-model on provider '{provider['name']}'.",
                 )
-            if provider["kind"] != "local" and not provider.get("acknowledged_at"):
-                acknowledge_remote_use(conn, provider["name"])
+            require_ai_provider_acknowledged(provider)
             client = _ai_client_for(provider)
             response = client.chat(
                 messages=_ai_chat_messages(args),

@@ -513,6 +513,7 @@ function AiProvidersCard() {
       kind: row.kind,
       notes: row.notes ?? undefined,
       has_api_key: row.has_api_key,
+      acknowledged_at: row.acknowledged_at ?? null,
     };
   }, [data, editingName]);
 

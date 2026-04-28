@@ -122,6 +122,7 @@ const tauriDaemon: DaemonTransport = {
     const unlisten = await listen<DaemonStreamRecord<R>>(
       "daemon://stream",
       (event) => {
+        if (options?.signal?.aborted) return;
         if (event.payload.request_id === requestId) {
           options?.onRecord?.(event.payload);
         }

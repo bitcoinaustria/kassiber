@@ -102,7 +102,7 @@ Provider configuration is mirrored in the CLI:
 
 ```bash
 kassiber ai providers list
-kassiber ai providers create openai --base-url https://api.openai.com/v1 --kind remote --api-key $OPENAI_API_KEY --default-model gpt-4o-mini
+kassiber ai providers create openai --base-url https://api.openai.com/v1 --kind remote --acknowledge --api-key $OPENAI_API_KEY --default-model gpt-4o-mini
 kassiber ai providers set-default openai
 kassiber ai models
 kassiber ai chat "Summarise the last week of imports."
@@ -127,6 +127,12 @@ Settings → AI providers exposes a **Test connection** action. It calls the
 daemon's `ai.test_connection` kind with the *currently entered* base URL and
 API key (or, when editing without changing the API-key field, the saved key)
 and reports the model count without persisting anything.
+
+Remote and TEE providers require explicit acknowledgement before chat. The CLI
+uses `kassiber ai providers update <name> --acknowledge` (or
+`--acknowledge` during `create`), and the desktop Settings form prompts before
+saving an off-device provider. Without that acknowledgement, `ai.chat` returns
+`ai_remote_ack_required` before sending any prompt content.
 
 Streaming is one-shot: pressing **Stop** hides the in-flight assistant message
 in the UI, but the underlying request keeps generating until it finishes. For

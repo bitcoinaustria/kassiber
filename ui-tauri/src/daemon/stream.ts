@@ -109,6 +109,7 @@ export function useAiChatStream(): UseAiChatStreamResult {
 
   const onRecord = React.useCallback(
     (record: DaemonStreamRecord<AiChatDeltaShape>) => {
+      if (abortRef.current?.signal.aborted) return;
       if (record.kind !== "ai.chat.delta") return;
       const content = record.data?.delta?.content;
       const reasoning = record.data?.delta?.reasoning;
