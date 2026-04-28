@@ -65,7 +65,11 @@ jobs:
             Linux) os_name="linux" ;;
             *) os_name="$(uname -s | tr '[:upper:]' '[:lower:]')" ;;
           esac
-          arch_name="$(uname -m)"
+          case "$(uname -m)" in
+            arm64|aarch64) arch_name="arm64" ;;
+            x86_64|amd64) arch_name="x64" ;;
+            *) arch_name="$(uname -m | tr '[:upper:]' '[:lower:]')" ;;
+          esac
           echo "target=${os_name}-${arch_name}" >> "$GITHUB_OUTPUT"
 
       - name: Build one-file CLI binary
@@ -110,7 +114,6 @@ jobs:
           cp dist/kassiber "release/${package_name}/kassiber"
           chmod 755 "release/${package_name}/kassiber"
           tar -C release -czf "release/${package_name}.tar.gz" "${package_name}"
-          shasum -a 256 "release/${package_name}.tar.gz" > "release/${package_name}.tar.gz.sha256"
 
       - name: Upload CLI artifact
         uses: actions/upload-artifact@v4
@@ -118,7 +121,6 @@ jobs:
           name: kassiber-cli-${{ steps.target.outputs.target }}
           path: |
             release/*.tar.gz
-            release/*.sha256
           if-no-files-found: error
 
   build-desktop:
@@ -140,14 +142,14 @@ jobs:
             sidecar_expected: 2
           - label: Linux
             os: ubuntu-22.04
-            target: linux-x86_64
+            target: linux-x64
             bundles: appimage
             tauri_args: ""
             sidecar_artifact_pattern: kassiber-desktop-sidecar-x86_64-unknown-linux-gnu
             sidecar_expected: 1
           - label: Windows
             os: windows-latest
-            target: windows-x86_64
+            target: windows-x64
             bundles: msi,nsis
             tauri_args: ""
             sidecar_artifact_pattern: kassiber-desktop-sidecar-x86_64-pc-windows-msvc
@@ -222,27 +224,29 @@ jobs:
         run: |
           set -euo pipefail
 
-          sha256_file() {
-            if command -v shasum >/dev/null 2>&1; then
-              shasum -a 256 "$1"
-            else
-              sha256sum "$1"
-            fi
-          }
-
           mkdir -p release
           while IFS= read -r -d '' artifact; do
               name="$(basename "$artifact")"
               case "$artifact" in
                 *.app)
-                  zip_name="kassiber-desktop-${{ matrix.target }}-${name%.app}.app.zip"
+                  zip_name="kassiber-${{ matrix.target }}.app.zip"
                   ditto -c -k --keepParent "$artifact" "release/${zip_name}"
-                  sha256_file "release/${zip_name}" > "release/${zip_name}.sha256"
                   ;;
-                *.AppImage|*.dmg|*.exe|*.msi)
-                  artifact_name="kassiber-desktop-${{ matrix.target }}-${name}"
+                *.AppImage)
+                  artifact_name="kassiber-${{ matrix.target }}.AppImage"
                   cp "$artifact" "release/${artifact_name}"
-                  sha256_file "release/${artifact_name}" > "release/${artifact_name}.sha256"
+                  ;;
+                *.dmg)
+                  artifact_name="kassiber-${{ matrix.target }}.dmg"
+                  cp "$artifact" "release/${artifact_name}"
+                  ;;
+                *.exe)
+                  artifact_name="kassiber-${{ matrix.target }}.exe"
+                  cp "$artifact" "release/${artifact_name}"
+                  ;;
+                *.msi)
+                  artifact_name="kassiber-${{ matrix.target }}.msi"
+                  cp "$artifact" "release/${artifact_name}"
                   ;;
               esac
           done < <(
@@ -382,11 +386,30 @@ jobs:
           set -euo pipefail
           test -n "$(find release -maxdepth 1 -type f -print -quit)"
 
-          if find release -maxdepth 1 -type f -name 'kassiber-cli-*' ! -name '*.tar.gz' ! -name '*.sha256' -print -quit | grep -q .; then
+          if find release -maxdepth 1 -type f -name 'kassiber-cli-*' ! -name '*.tar.gz' -print -quit | grep -q .; then
             echo "Raw CLI sidecars must not be published as release assets." >&2
-            find release -maxdepth 1 -type f -name 'kassiber-cli-*' ! -name '*.tar.gz' ! -name '*.sha256' >&2
+            find release -maxdepth 1 -type f -name 'kassiber-cli-*' ! -name '*.tar.gz' >&2
             exit 1
           fi
+
+      - name: Generate checksum manifest
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          sha256_file() {
+            if command -v shasum >/dev/null 2>&1; then
+              shasum -a 256 "$1" | awk '{print $1}'
+            else
+              sha256sum "$1" | awk '{print $1}'
+            fi
+          }
+
+          find release -maxdepth 1 -type f ! -name SHA256SUMS.txt -print0 \
+            | sort -z \
+            | while IFS= read -r -d '' artifact; do
+                printf "%s  %s\n" "$(sha256_file "$artifact")" "$(basename "$artifact")"
+              done > release/SHA256SUMS.txt
 
       - name: Create or update prerelease
         uses: softprops/action-gh-release@v2

@@ -198,20 +198,24 @@ the `prerelease-binaries` workflow also upload the same `.tar.gz` artifacts,
 and can attach them to an existing tag when `publish_release` and `tag_name`
 are provided. Linux CLI binaries are built on Ubuntu 22.04 to keep the glibc
 floor aligned with the AppImage build. CLI archives are named
-`kassiber-cli-<target>.tar.gz`; the executable inside is named `kassiber`.
+`kassiber-cli-<platform>-<arch>.tar.gz`; the executable inside is named
+`kassiber`.
 Pull requests do not build binaries automatically; use a manual workflow run
 against the PR branch when a tester artifact is needed. The workflow run and
 release tag record the source commit, and the desktop shell displays the build
-commit beside the version number. CLI artifact filenames and `.sha256`
-sidecars do not embed the commit hash yet.
+commit beside the version number. Artifact filenames do not embed the release
+version or commit hash; use the release tag and workflow run for source
+identity. Release assets include one `SHA256SUMS.txt` checksum manifest.
 
 The same workflow also builds unsigned desktop preview artifacts: a universal
 macOS `.app` zip / `.dmg`, Linux `.AppImage`, and Windows `.msi` plus NSIS
-setup `.exe`, all named with a `kassiber-desktop-<target>-...` prefix. These
-previews include a bundled Kassiber CLI sidecar that the GUI uses for daemon
-calls, so normal daemon calls do not require a separate Python checkout. The
-installed GUI executable also forwards `--cli ...` to the bundled CLI sidecar;
-for example, `Kassiber.AppImage --cli status` or `Kassiber.exe --cli status`.
+setup `.exe`, all published as short names such as
+`kassiber-macos-universal.dmg`, `kassiber-linux-x64.AppImage`, and
+`kassiber-windows-x64.exe`. These previews include a bundled Kassiber CLI
+sidecar that the GUI uses for daemon calls, so normal daemon calls do not
+require a separate Python checkout. The installed GUI executable also forwards
+`--cli ...` to the bundled CLI sidecar; for example,
+`./kassiber-linux-x64.AppImage --cli status` or `Kassiber.exe --cli status`.
 Set `KASSIBER_PYTHON` only when intentionally overriding the bundled sidecar
 for debugging. Signing, notarization, and production installer hardening remain
 in active development.

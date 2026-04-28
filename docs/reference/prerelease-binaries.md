@@ -75,17 +75,31 @@ asks for one.
 The workflow currently builds:
 
 - CLI: macOS arm64, macOS x86_64, and Linux x86_64 one-file PyInstaller
-  binaries as `kassiber-cli-<target>.tar.gz` archives, each with a `.sha256`
-  file. The extracted executable is still named `kassiber`. Linux is built on
-  Ubuntu 22.04 to keep the glibc floor aligned with the AppImage build.
+  binaries as `kassiber-cli-<platform>-<arch>.tar.gz` archives. The extracted
+  executable is still named `kassiber`. Linux is built on Ubuntu 22.04 to keep
+  the glibc floor aligned with the AppImage build.
 - Desktop previews: a universal macOS `.app` zip plus `.dmg`, Linux
-  `.AppImage`, and Windows `.msi` plus NSIS setup `.exe`, each emitted with a
-  `kassiber-desktop-<target>-...` filename and a `.sha256` file. Each desktop
-  preview includes a bundled one-file Kassiber CLI sidecar for its target
-  platform; the universal macOS app bundles both arm64 and x86_64 CLI sidecars.
+  `.AppImage`, and Windows `.msi` plus NSIS setup `.exe`, published with short
+  user-facing filenames. Each desktop preview includes a bundled one-file
+  Kassiber CLI sidecar for its target platform; the universal macOS app bundles
+  both arm64 and x86_64 CLI sidecars.
 
-Public CLI and desktop release filenames use user-facing target names such as
-`macos-arm64`, `macos-x86_64`, and `linux-x86_64`. Bundled sidecar resource
+Public release filenames intentionally omit the release version because the
+GitHub release tag already supplies it:
+
+```text
+kassiber-cli-linux-x64.tar.gz
+kassiber-cli-macos-arm64.tar.gz
+kassiber-cli-macos-x64.tar.gz
+kassiber-linux-x64.AppImage
+kassiber-macos-universal.app.zip
+kassiber-macos-universal.dmg
+kassiber-windows-x64.exe
+kassiber-windows-x64.msi
+SHA256SUMS.txt
+```
+
+Use `x64` for public filenames instead of `x86_64`. Bundled sidecar resource
 filenames are internal to the desktop package and use Rust target triples such
 as `kassiber-cli-aarch64-apple-darwin`; those raw sidecars are not release
 assets.
@@ -103,7 +117,7 @@ The GUI executable also forwards `--cli ...` to that sidecar so an installed
 desktop app can still be used from a terminal, for example:
 
 ```bash
-Kassiber.AppImage --cli status
+./kassiber-linux-x64.AppImage --cli status
 /Applications/Kassiber.app/Contents/MacOS/kassiber-ui --cli status
 Kassiber.exe --cli status
 ```
@@ -124,8 +138,8 @@ Every GitHub Actions run records the source ref and commit SHA. For tag
 prereleases, the tag itself is the source-of-truth link back to the commit.
 
 The desktop shell displays the build commit beside the version number. CLI
-binaries, artifact filenames, and `.sha256` sidecars do not currently include
-or embed the source commit hash.
+binaries, artifact filenames, and `SHA256SUMS.txt` entries do not currently
+include or embed the source commit hash.
 
 The intended next hardening step is to include a small `BUILD_INFO.json` or
 `BUILD_INFO.txt` in every packaged artifact with at least:
