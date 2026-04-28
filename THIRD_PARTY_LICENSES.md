@@ -8,7 +8,7 @@ It is not meant to be a hand-maintained inventory of every transitive package in
 
 Kassiber currently depends directly on the Kassiber-maintained [RP2 fork](https://github.com/bitcoinaustria/rp2) as its tax engine, [embit](https://github.com/diybitcoinhardware/embit) for descriptor derivation and Liquid support, and [XlsxWriter](https://xlsxwriter.readthedocs.io/) for styled XLSX report exports.
 The in-development Tauri frontend also depends directly on TanStack Table for
-interactive local data grids.
+interactive local data grids and `motion` for the animated onboarding preview.
 
 | Package | Version policy | Role | License |
 | --- | --- | --- | --- |
@@ -18,6 +18,7 @@ interactive local data grids.
 | `sqlcipher3` | `>=0.6.2,<1` | Python binding around SQLCipher 4; wheels bundle a SQLCipher community build for at-rest database encryption | Zlib (binding) + BSD-style (SQLCipher community) |
 | `pyrage` | `>=1.3,<2` | In-process `age` implementation used by the `tar | age` backup format when no system `age`/`rage` binary is available | Apache-2.0 / MIT |
 | `@tanstack/react-table` | `^8.21.3` | Interactive sorting, filtering, selection, and pagination in desktop UI data tables | MIT |
+| `motion` | `^12.38.0` | Animated transitions in the desktop Welcome onboarding preview | MIT |
 | `react-markdown` | `^10.1.0` | Markdown renderer for assistant chat replies (paragraphs, lists, code, links) | MIT |
 | `remark-gfm` | `^4.0.0` | GitHub-flavored markdown extensions (tables, strikethrough, task lists) for assistant chat replies | MIT |
 

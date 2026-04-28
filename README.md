@@ -248,6 +248,10 @@ Requirements:
 - `pnpm` (https://pnpm.io)
 - Rust stable for the Tauri shell (`cargo check` / `pnpm tauri:dev`)
 
+The UI uses shadcn primitives, TanStack data helpers, Recharts, and `motion`
+for the animated onboarding preview; dependencies are locked in
+`ui-tauri/pnpm-lock.yaml`.
+
 Install and run the dev server:
 
 ```bash

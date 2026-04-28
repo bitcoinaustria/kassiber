@@ -19,6 +19,13 @@ export interface Identity {
   workspace: string;
   country: string;
   encrypted: boolean;
+  profile?: string;
+  taxCountry?: "at" | "generic";
+  fiatCurrency?: string;
+  taxLongTermDays?: number;
+  gainsAlgorithm?: "FIFO" | "LIFO" | "HIFO" | "LOFO";
+  databaseMode?: "sqlcipher" | "plaintext";
+  migrateCredentials?: boolean;
 }
 
 interface UiState {
