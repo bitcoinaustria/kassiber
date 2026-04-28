@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "kassiber"
-version = "0.21.0"
+version = "0.22.0"
 description = "Open-source, local-first Bitcoin accounting CLI with wallet buckets and multi-wallet support."
 readme = "README.md"
 requires-python = ">=3.10"
