@@ -1,5 +1,10 @@
 import { useIsFetching } from "@tanstack/react-query";
-import { Link, Outlet, useRouterState } from "@tanstack/react-router";
+import {
+  Link,
+  Outlet,
+  useNavigate,
+  useRouterState,
+} from "@tanstack/react-router";
 import {
   BarChart3,
   Bell,
@@ -245,7 +250,9 @@ function assistantReturnPathFor(pathname: string): AssistantReturnPath {
 }
 
 export function AppShell() {
+  const navigate = useNavigate();
   const pathname = useRouterState({ select: (s) => s.location.pathname });
+  const identity = useUiStore((s) => s.identity);
   const routerBusy = useRouterState({
     select: (s) => s.isLoading || s.isTransitioning || s.status === "pending",
   });
@@ -267,6 +274,11 @@ export function AppShell() {
       searchLabel: "Search Kassiber",
       searchPlaceholder: "Search transactions, reports...",
     };
+
+  React.useEffect(() => {
+    if (identity) return;
+    void navigate({ to: "/", replace: true });
+  }, [identity, navigate]);
 
   React.useEffect(() => {
     if (!isAssistantRoute) {
@@ -305,6 +317,8 @@ export function AppShell() {
       window.removeEventListener("kassiber:open-settings", openSettings);
     };
   }, []);
+
+  if (!identity) return null;
 
   return (
     <TooltipProvider>
