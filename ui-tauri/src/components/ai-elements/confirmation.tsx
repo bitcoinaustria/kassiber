@@ -1,5 +1,5 @@
 import * as React from "react";
-import { CheckCircle2, ShieldCheck, XCircle } from "lucide-react";
+import { ShieldCheck } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -50,40 +50,6 @@ function ConfirmationRequest({
   );
 }
 
-function ConfirmationAccepted({
-  className,
-  children = "Approved",
-  ...props
-}: React.ComponentProps<"div">) {
-  return (
-    <div
-      data-slot="confirmation-accepted"
-      className={cn("mt-2 flex items-center gap-2 text-emerald-600", className)}
-      {...props}
-    >
-      <CheckCircle2 className="h-4 w-4" aria-hidden="true" />
-      <span>{children}</span>
-    </div>
-  );
-}
-
-function ConfirmationRejected({
-  className,
-  children = "Denied",
-  ...props
-}: React.ComponentProps<"div">) {
-  return (
-    <div
-      data-slot="confirmation-rejected"
-      className={cn("mt-2 flex items-center gap-2 text-amber-600", className)}
-      {...props}
-    >
-      <XCircle className="h-4 w-4" aria-hidden="true" />
-      <span>{children}</span>
-    </div>
-  );
-}
-
 function ConfirmationActions({
   className,
   ...props
@@ -105,10 +71,8 @@ function ConfirmationAction({
 
 export {
   Confirmation,
-  ConfirmationAccepted,
   ConfirmationAction,
   ConfirmationActions,
-  ConfirmationRejected,
   ConfirmationRequest,
   ConfirmationTitle,
 };

@@ -1,8 +1,6 @@
 import * as React from "react";
 
-import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { ArrowDown } from "lucide-react";
 
 function Conversation({
   className,
@@ -33,25 +31,4 @@ const ConversationContent = React.forwardRef<
 ));
 ConversationContent.displayName = "ConversationContent";
 
-function ConversationScrollButton({
-  className,
-  ...props
-}: React.ComponentProps<typeof Button>) {
-  return (
-    <Button
-      data-slot="conversation-scroll-button"
-      variant="secondary"
-      size="icon-sm"
-      className={cn(
-        "absolute right-3 bottom-3 rounded-full border border-border/70 shadow-sm",
-        className,
-      )}
-      {...props}
-    >
-      <ArrowDown aria-hidden="true" />
-      <span className="sr-only">Scroll to latest message</span>
-    </Button>
-  );
-}
-
-export { Conversation, ConversationContent, ConversationScrollButton };
+export { Conversation, ConversationContent };
