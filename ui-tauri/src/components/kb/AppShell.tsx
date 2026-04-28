@@ -18,6 +18,7 @@ import {
   EyeOff,
   Heart,
   LayoutDashboard,
+  LockKeyhole,
   LogOut,
   MessageSquareText,
   Search,
@@ -70,6 +71,11 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { useUiStore } from "@/store/ui";
 import { useDaemon } from "@/daemon/client";
 import { cn } from "@/lib/utils";
+import {
+  clearSessionUnlockPassphrase,
+  hasSessionUnlockPassphrase,
+  verifySessionUnlockPassphrase,
+} from "@/store/sessionLock";
 import type { OverviewSnapshot } from "@/mocks/seed";
 import { AssistantSessionProvider } from "@/components/ai/AssistantSessionProvider";
 import type { AssistantReturnPath } from "@/components/ai/assistantSession";
@@ -254,6 +260,8 @@ export function AppShell() {
   const navigate = useNavigate();
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const identity = useUiStore((s) => s.identity);
+  const setIdentity = useUiStore((s) => s.setIdentity);
+  const setHideSensitive = useUiStore((s) => s.setHideSensitive);
   const routerBusy = useRouterState({
     select: (s) => s.isLoading || s.isTransitioning || s.status === "pending",
   });
@@ -263,6 +271,7 @@ export function AppShell() {
     "backends" | null
   >(null);
   const [assistantCollapsed, setAssistantCollapsed] = React.useState(false);
+  const [locked, setLocked] = React.useState(false);
   const [assistantReturnPath, setAssistantReturnPath] =
     React.useState<AssistantReturnPath>("/overview");
   const mainRef = React.useRef<HTMLElement>(null);
@@ -276,6 +285,25 @@ export function AppShell() {
       searchPlaceholder: "Search transactions, reports...",
     };
 
+  const lockApp = React.useCallback(() => {
+    setHideSensitive(true);
+    if (!hasSessionUnlockPassphrase()) {
+      clearSessionUnlockPassphrase();
+      setIdentity(null);
+      void navigate({ to: "/", replace: true });
+      return;
+    }
+    setLocked(true);
+  }, [navigate, setHideSensitive, setIdentity]);
+
+  const unlockApp = React.useCallback(async (passphrase: string) => {
+    const unlocked = await verifySessionUnlockPassphrase(passphrase);
+    if (unlocked) {
+      setLocked(false);
+    }
+    return unlocked;
+  }, []);
+
   React.useEffect(() => {
     if (identity) return;
     void navigate({ to: "/", replace: true });
@@ -286,6 +314,19 @@ export function AppShell() {
       setAssistantReturnPath(assistantReturnPathFor(pathname));
     }
   }, [isAssistantRoute, pathname]);
+
+  React.useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key.toLowerCase() !== "l") return;
+      if (!(event.metaKey || event.ctrlKey)) return;
+      if (event.altKey || event.shiftKey) return;
+      event.preventDefault();
+      lockApp();
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [lockApp]);
 
   React.useEffect(() => {
     const main = mainRef.current;
@@ -335,6 +376,7 @@ export function AppShell() {
             </a>
             <AppSidebar
               pathname={pathname}
+              onLock={lockApp}
               onSettingsClick={() => {
                 setSettingsFocus(null);
                 setSettingsOpen(true);
@@ -342,7 +384,7 @@ export function AppShell() {
             />
             <div className="min-h-0 w-full overflow-hidden lg:p-2">
               <div className="relative flex h-full w-full flex-col items-center justify-start overflow-hidden bg-background lg:rounded-xl lg:border">
-                <AppDashboardHeader meta={routeMeta} />
+                <AppDashboardHeader meta={routeMeta} onLock={lockApp} />
                 <main
                   id="app-main"
                   ref={mainRef}
@@ -364,6 +406,7 @@ export function AppShell() {
                     className="absolute inset-x-0 bottom-0 z-20"
                   />
                 )}
+                {locked && <LockScreen onUnlock={unlockApp} />}
               </div>
             </div>
           </SidebarProvider>
@@ -372,6 +415,7 @@ export function AppShell() {
       <SettingsModal
         open={settingsOpen}
         focusSection={settingsFocus}
+        onLock={lockApp}
         onClose={() => setSettingsOpen(false)}
       />
     </TooltipProvider>
@@ -394,9 +438,11 @@ function RouteTransitionIndicator({ active }: { active: boolean }) {
 
 function AppSidebar({
   pathname,
+  onLock,
   onSettingsClick,
 }: {
   pathname: string;
+  onLock: () => void;
   onSettingsClick: () => void;
 }) {
   return (
@@ -454,7 +500,7 @@ function AppSidebar({
       </SidebarContent>
       <SidebarFooter>
         <SidebarActions onSettingsClick={onSettingsClick} />
-        <NavUser />
+        <NavUser onLock={onLock} />
         <AppVersion />
       </SidebarFooter>
       <SidebarRail />
@@ -570,9 +616,8 @@ function NavMenuItem({
   );
 }
 
-function NavUser() {
+function NavUser({ onLock }: { onLock: () => void }) {
   const identity = useUiStore((s) => s.identity);
-  const setIdentity = useUiStore((s) => s.setIdentity);
   const name = identity?.workspace ?? "Demo Workspace";
   const detail = identity?.name ?? "local profile";
 
@@ -639,7 +684,7 @@ function NavUser() {
               </Link>
             </DropdownMenuItem>
             <DropdownMenuSeparator />
-            <DropdownMenuItem onSelect={() => setIdentity(null)}>
+            <DropdownMenuItem onSelect={() => onLock()}>
               <LogOut className="mr-2 size-4" aria-hidden="true" />
               Lock Kassiber
             </DropdownMenuItem>
@@ -668,7 +713,13 @@ function AppVersion() {
   );
 }
 
-function AppDashboardHeader({ meta }: { meta: RouteMeta }) {
+function AppDashboardHeader({
+  meta,
+  onLock,
+}: {
+  meta: RouteMeta;
+  onLock: () => void;
+}) {
   const Icon = meta.icon;
   const hideSensitive = useUiStore((s) => s.hideSensitive);
   const setHideSensitive = useUiStore((s) => s.setHideSensitive);
@@ -810,7 +861,85 @@ function AppDashboardHeader({ meta }: { meta: RouteMeta }) {
             <Eye className="size-4" aria-hidden="true" />
           )}
         </Button>
+        <Button
+          variant="outline"
+          size="icon"
+          className="size-9"
+          aria-label="Lock Kassiber"
+          title="Lock Kassiber (Cmd/Ctrl+L)"
+          onClick={onLock}
+        >
+          <LockKeyhole className="size-4" aria-hidden="true" />
+        </Button>
       </div>
     </header>
+  );
+}
+
+function LockScreen({
+  onUnlock,
+}: {
+  onUnlock: (passphrase: string) => Promise<boolean>;
+}) {
+  const [passphrase, setPassphrase] = React.useState("");
+  const [error, setError] = React.useState<string | null>(null);
+  const inputRef = React.useRef<HTMLInputElement | null>(null);
+
+  React.useEffect(() => {
+    inputRef.current?.focus();
+  }, []);
+
+  const submit = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setError(null);
+    const ok = await onUnlock(passphrase);
+    if (!ok) {
+      setError("Passphrase did not unlock this session.");
+      setPassphrase("");
+      inputRef.current?.focus();
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/95 px-4 backdrop-blur-sm">
+      <form
+        className="w-full max-w-sm rounded-lg border bg-card p-5 shadow-xl"
+        onSubmit={(event) => {
+          void submit(event);
+        }}
+      >
+        <div className="flex items-center gap-3">
+          <div className="flex size-10 items-center justify-center rounded-md bg-primary text-primary-foreground">
+            <LockKeyhole className="size-5" aria-hidden="true" />
+          </div>
+          <div>
+            <h2 className="text-base font-semibold">Kassiber locked</h2>
+            <p className="m-0 text-xs text-muted-foreground">
+              Enter the database passphrase to unlock.
+            </p>
+          </div>
+        </div>
+        <div className="mt-5 space-y-2">
+          <label
+            htmlFor="lock-passphrase"
+            className="text-sm font-medium text-foreground"
+          >
+            Passphrase
+          </label>
+          <Input
+            id="lock-passphrase"
+            ref={inputRef}
+            type="password"
+            autoComplete="current-password"
+            value={passphrase}
+            onChange={(event) => setPassphrase(event.target.value)}
+          />
+          {error && <p className="m-0 text-xs text-destructive">{error}</p>}
+        </div>
+        <Button className="mt-5 w-full" type="submit">
+          Unlock
+        </Button>
+      </form>
+    </div>
   );
 }

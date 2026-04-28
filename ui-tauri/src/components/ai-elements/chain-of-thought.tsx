@@ -16,7 +16,10 @@ function ChainOfThought({
   return (
     <Collapsible
       data-slot="chain-of-thought"
-      className={cn("rounded-md border border-border/60 bg-muted/25", className)}
+      className={cn(
+        "w-full min-w-0 overflow-hidden text-muted-foreground",
+        className,
+      )}
       {...props}
     />
   );
@@ -34,13 +37,13 @@ function ChainOfThoughtHeader({
     <CollapsibleTrigger
       data-slot="chain-of-thought-header"
       className={cn(
-        "group flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-xs text-muted-foreground transition-colors hover:bg-muted/45",
+        "group inline-flex max-w-full min-w-0 items-center gap-2 rounded-md py-1 text-sm text-muted-foreground transition-colors hover:text-foreground",
         className,
       )}
       {...props}
     >
       <Icon className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
-      <span className="flex-1 text-left font-medium">{children}</span>
+      <span className="min-w-0 flex-1 truncate text-left font-medium">{children}</span>
       <ChevronDown
         className="h-3.5 w-3.5 shrink-0 transition-transform duration-200 group-data-[state=open]:rotate-180"
         aria-hidden="true"

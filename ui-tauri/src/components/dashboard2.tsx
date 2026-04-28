@@ -918,7 +918,7 @@ function initials(value: string) {
     .join("");
 }
 
-const PAGE_SIZE_OPTIONS = [5, 10, 20];
+const PAGE_SIZE_OPTIONS = [10, 25, 50, 100];
 
 const periodLabels: Record<PeriodKey, string> = {
   ytd: "YTD",

@@ -14,6 +14,7 @@ export const DEFAULT_BACKEND_NAME = "mempool";
 export const DEFAULT_BACKEND_URL = "https://mempool.bitcoin-austria.at/api";
 export const DEFAULT_AI_PROVIDER_NAME = "ollama";
 export const DEFAULT_AI_BASE_URL = "http://localhost:11434/v1";
+export const MIN_DATABASE_PASSPHRASE_CHARS = 12;
 
 export const DEFAULT_FORM: OnboardingForm = {
   name: "",
@@ -24,6 +25,8 @@ export const DEFAULT_FORM: OnboardingForm = {
   taxLongTermDays: "365",
   gainsAlgorithm: "MOVING_AVERAGE_AT",
   databaseMode: "sqlcipher",
+  databasePassphrase: "",
+  databasePassphraseConfirm: "",
   recoveryAcknowledged: false,
   plaintextAcknowledged: false,
   migrateCredentials: true,
@@ -50,8 +53,6 @@ export const GENERIC_GAINS_ALGORITHMS: GenericGainsAlgorithm[] = [
 
 export const AUSTRIAN_GAINS_ALGORITHMS: AustrianGainsAlgorithm[] = [
   "MOVING_AVERAGE_AT",
-  "MOVING_AVERAGE",
-  "FIFO",
 ];
 
 export const GAINS_ALGORITHM_DEFAULTS: Record<TaxCountry, GainsAlgorithm> = {
@@ -104,9 +105,8 @@ export const AI_PROVIDER_KIND_LABELS: Record<AiProviderKind, string> = {
 };
 
 /**
- * Returns a user-facing validation hint for the long-term-days input,
- * or `null` when the value parses to a positive integer. Step gates use
- * `null` here as the green-light condition.
+ * Returns a user-facing validation hint for the generic long-term-days input,
+ * or `null` when the value parses to a positive integer.
  */
 export const taxLongTermDaysHint = (raw: string): string | null => {
   const trimmed = raw.trim();
@@ -122,4 +122,17 @@ export const taxLongTermDaysHint = (raw: string): string | null => {
     return "Must be at least 1 day.";
   }
   return "Use a whole number of days.";
+};
+
+export const databasePassphraseHint = (
+  passphrase: string,
+  confirmation: string,
+): string | null => {
+  if (!passphrase) return "Enter a database passphrase.";
+  if (passphrase.length < MIN_DATABASE_PASSPHRASE_CHARS) {
+    return `Use at least ${MIN_DATABASE_PASSPHRASE_CHARS} characters.`;
+  }
+  if (!confirmation) return "Confirm the database passphrase.";
+  if (passphrase !== confirmation) return "Passphrases do not match.";
+  return null;
 };

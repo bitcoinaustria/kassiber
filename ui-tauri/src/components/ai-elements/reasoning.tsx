@@ -15,7 +15,7 @@ function Reasoning({
   return (
     <Collapsible
       data-slot="reasoning"
-      className={cn("rounded-md", className)}
+      className={cn("w-full min-w-0 text-muted-foreground", className)}
       {...props}
     />
   );
@@ -33,7 +33,7 @@ function ReasoningTrigger({
     <CollapsibleTrigger
       data-slot="reasoning-trigger"
       className={cn(
-        "group flex w-full items-center gap-2 rounded-md border border-border/50 bg-muted/40 px-2.5 py-1.5 text-xs text-muted-foreground transition-colors hover:bg-muted/70",
+        "group inline-flex max-w-full min-w-0 items-center gap-2 rounded-md py-1 text-sm text-muted-foreground transition-colors hover:text-foreground",
         className,
       )}
       {...props}
@@ -45,7 +45,7 @@ function ReasoningTrigger({
         )}
         aria-hidden="true"
       />
-      <span className="flex-1 text-left font-medium">{children}</span>
+      <span className="min-w-0 flex-1 truncate text-left font-medium">{children}</span>
       <ChevronDown
         className="h-3.5 w-3.5 shrink-0 transition-transform duration-200 group-data-[state=open]:rotate-180"
         aria-hidden="true"

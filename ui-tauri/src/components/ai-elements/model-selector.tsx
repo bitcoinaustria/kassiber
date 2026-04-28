@@ -49,7 +49,7 @@ function ModelSelectorTrigger({
     <SelectTrigger
       data-slot="model-selector-trigger"
       className={cn(
-        "w-fit border-none bg-transparent! p-0 text-sm text-muted-foreground shadow-none hover:text-foreground focus:ring-0",
+        "h-auto! min-h-0 w-fit border-none bg-transparent! p-0 text-sm leading-none text-muted-foreground shadow-none hover:text-foreground focus:ring-0 focus-visible:border-transparent focus-visible:ring-0",
         className,
       )}
       {...props}

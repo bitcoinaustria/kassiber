@@ -17,12 +17,18 @@ export const TextField = ({
   name,
   value,
   placeholder,
+  type = "text",
+  autoComplete,
+  hint,
   onChange,
 }: {
   label: string;
   name: string;
   value: string;
   placeholder: string;
+  type?: string;
+  autoComplete?: string;
+  hint?: string | null;
   onChange: (value: string) => void;
 }) => {
   return (
@@ -31,11 +37,23 @@ export const TextField = ({
       <Input
         id={name}
         name={name}
+        type={type}
+        autoComplete={autoComplete}
         value={value}
         placeholder={placeholder}
         onChange={(event) => onChange(event.target.value)}
+        aria-invalid={hint ? true : undefined}
+        aria-describedby={hint ? `${name}-hint` : undefined}
         className="w-full rounded-md border-line"
       />
+      {hint && (
+        <p
+          id={`${name}-hint`}
+          className="m-0 font-mono text-[10px] uppercase tracking-[0.08em] text-accent"
+        >
+          {hint}
+        </p>
+      )}
     </div>
   );
 };

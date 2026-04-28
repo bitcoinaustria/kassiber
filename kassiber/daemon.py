@@ -1154,6 +1154,15 @@ def _delete_current_workspace(ctx: "DaemonContext") -> dict[str, Any]:
     }
 
 
+def _database_file_is_encrypted(ctx: "DaemonContext") -> bool:
+    db_path = resolve_database_path(resolve_effective_data_root(ctx.data_root))
+    return (
+        db_path.exists()
+        and db_path.stat().st_size > 0
+        and not looks_like_plaintext_sqlite(db_path)
+    )
+
+
 def handle_request(
     ctx: DaemonContext,
     request: dict[str, Any],
@@ -1341,8 +1350,52 @@ def handle_request(
             raise AppError(
                 "ui.workspace.delete requires confirm='DELETE'",
                 code="validation",
-                hint="Ask the user to type DELETE before deleting the workspace.",
+                hint="Ask the user to confirm the destructive workspace deletion.",
             )
+        context = current_context_snapshot(ctx.conn)
+        workspace_label = context.get("workspace_label")
+        if not workspace_label:
+            raise AppError(
+                "No current workspace is selected.",
+                code="validation",
+                hint="Select a workspace before deleting it.",
+            )
+        confirm_workspace = args.get("confirm_workspace")
+        if not isinstance(confirm_workspace, str) or confirm_workspace != workspace_label:
+            raise AppError(
+                "ui.workspace.delete requires the current workspace name",
+                code="validation",
+                hint="Ask the user to type the exact current workspace name before deleting it.",
+                details={"expected_workspace": workspace_label},
+            )
+        if _database_file_is_encrypted(ctx):
+            auth = args.get("auth_response")
+            passphrase = auth.get("passphrase_secret") if isinstance(auth, dict) else None
+            if not isinstance(passphrase, str) or not passphrase:
+                return (
+                    _with_request_id(
+                        build_envelope(
+                            "auth_required",
+                            {
+                                "scope": "delete_workspace",
+                                "label": f"Re-enter database passphrase to delete workspace {workspace_label!r}",
+                            },
+                        ),
+                        request_id,
+                    ),
+                    False,
+                )
+            verified = _verify_passphrase_for_reveal(ctx, passphrase)
+            if not verified:
+                return (
+                    _error_envelope(
+                        "local_auth_denied",
+                        "passphrase verification failed",
+                        request_id=request_id,
+                        retryable=True,
+                    ),
+                    False,
+                )
         return (
             _with_request_id(
                 build_envelope(

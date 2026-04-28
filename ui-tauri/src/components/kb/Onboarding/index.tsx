@@ -3,14 +3,17 @@ import { useNavigate } from "@tanstack/react-router";
 import { ShieldCheck } from "lucide-react";
 
 import { Wordmark } from "@/components/kb/Wordmark";
+import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { useUiStore, type Identity } from "@/store/ui";
+import { setSessionUnlockPassphrase } from "@/store/sessionLock";
 
 import {
   DEFAULT_AI_BASE_URL,
   DEFAULT_AI_PROVIDER_NAME,
   DEFAULT_FORM,
   GAINS_ALGORITHM_DEFAULTS,
+  databasePassphraseHint,
   gainsAlgorithmsFor,
   parseTaxLongTermDays,
 } from "./constants";
@@ -34,7 +37,9 @@ const DEFAULT_STEPS: OnboardingStep[] = [
   },
   {
     component: TaxStep,
-    isComplete: (form) => parseTaxLongTermDays(form.taxLongTermDays) !== null,
+    isComplete: (form) =>
+      form.taxCountry === "at" ||
+      parseTaxLongTermDays(form.taxLongTermDays) !== null,
   },
   {
     component: ConnectionsStep,
@@ -66,13 +71,37 @@ const DEFAULT_STEPS: OnboardingStep[] = [
     isComplete: (form) =>
       form.databaseMode === "plaintext"
         ? form.plaintextAcknowledged
-        : form.recoveryAcknowledged,
+        : form.recoveryAcknowledged &&
+          databasePassphraseHint(
+            form.databasePassphrase,
+            form.databasePassphraseConfirm,
+          ) === null,
   },
 ];
+
+const DEV_MOCK_IDENTITY: Identity = {
+  name: "mock profile",
+  workspace: "Demo Workspace",
+  country: "AT",
+  encrypted: false,
+  profile: "mock",
+  taxCountry: "at",
+  fiatCurrency: "EUR",
+  taxLongTermDays: 0,
+  gainsAlgorithm: "MOVING_AVERAGE_AT",
+  databaseMode: "plaintext",
+  migrateCredentials: false,
+  backendSetupMode: "skip",
+  aiSetupMode: "local",
+  aiProviderKind: "local",
+  aiProviderName: DEFAULT_AI_PROVIDER_NAME,
+  aiBaseUrl: DEFAULT_AI_BASE_URL,
+};
 
 export const Onboarding = ({ className, steps: customSteps }: OnboardingProps) => {
   const navigate = useNavigate();
   const setIdentity = useUiStore((state) => state.setIdentity);
+  const setDataMode = useUiStore((state) => state.setDataMode);
   const [currentStep, setCurrentStep] = useState(0);
   const [form, setForm] = useState<OnboardingForm>(DEFAULT_FORM);
   const activeSteps = customSteps ?? DEFAULT_STEPS;
@@ -85,14 +114,17 @@ export const Onboarding = ({ className, steps: customSteps }: OnboardingProps) =
     setForm((current) => ({ ...current, [key]: value }));
   };
 
-  const finish = () => {
+  const finish = async () => {
     // Step gates already enforce these — clamp defensively in case state
     // arrives via an injected `customSteps` override (used by tests).
     const allowedAlgorithms = gainsAlgorithmsFor(form.taxCountry);
     const gainsAlgorithm = allowedAlgorithms.includes(form.gainsAlgorithm)
       ? form.gainsAlgorithm
       : GAINS_ALGORITHM_DEFAULTS[form.taxCountry];
-    const taxLongTermDays = parseTaxLongTermDays(form.taxLongTermDays) ?? 365;
+    const taxLongTermDays =
+      form.taxCountry === "at"
+        ? 0
+        : (parseTaxLongTermDays(form.taxLongTermDays) ?? 365);
     const identity: Identity = {
       name: form.name.trim(),
       workspace: form.workspace.trim() || "Personal",
@@ -133,6 +165,9 @@ export const Onboarding = ({ className, steps: customSteps }: OnboardingProps) =
           ? undefined
           : form.aiBaseUrl.trim() || DEFAULT_AI_BASE_URL,
     };
+    await setSessionUnlockPassphrase(
+      form.databaseMode === "sqlcipher" ? form.databasePassphrase : null,
+    );
     setIdentity(identity);
     void navigate({ to: "/overview" });
   };
@@ -143,11 +178,18 @@ export const Onboarding = ({ className, steps: customSteps }: OnboardingProps) =
       setCurrentStep(currentStep + 1);
       return;
     }
-    finish();
+    void finish();
   };
 
   const handleGoBack = () => {
     if (currentStep > 0) setCurrentStep(currentStep - 1);
+  };
+
+  const skipToMockPreview = () => {
+    setDataMode("mock");
+    void setSessionUnlockPassphrase(null);
+    setIdentity(DEV_MOCK_IDENTITY);
+    void navigate({ to: "/overview" });
   };
 
   return (
@@ -160,9 +202,21 @@ export const Onboarding = ({ className, steps: customSteps }: OnboardingProps) =
       >
         <div className="flex w-full items-center justify-between gap-4">
           <Wordmark size={22} />
-          <div className="hidden items-center gap-2 text-xs text-ink-2 sm:flex">
-            <ShieldCheck className="size-4" />
-            Local-first · watch-only · SQLCipher-aware
+          <div className="flex items-center gap-3">
+            <div className="hidden items-center gap-2 text-xs text-ink-2 sm:flex">
+              <ShieldCheck className="size-4" />
+              Local-first · watch-only · SQLCipher-aware
+            </div>
+            {import.meta.env.DEV && (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={skipToMockPreview}
+              >
+                Mock-only preview
+              </Button>
+            )}
           </div>
         </div>
 

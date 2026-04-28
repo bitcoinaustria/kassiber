@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 
-import { parseTaxLongTermDays, taxLongTermDaysHint } from "./constants";
+import {
+  databasePassphraseHint,
+  gainsAlgorithmsFor,
+  parseTaxLongTermDays,
+  taxLongTermDaysHint,
+} from "./constants";
 
 describe("onboarding tax long-term day parsing", () => {
   it("accepts positive whole days with surrounding whitespace", () => {
@@ -21,5 +26,29 @@ describe("onboarding tax long-term day parsing", () => {
       expect(parseTaxLongTermDays(value)).toBeNull();
       expect(taxLongTermDaysHint(value)).not.toBeNull();
     }
+  });
+});
+
+describe("onboarding Austrian tax defaults", () => {
+  it("does not offer legacy lot or holding-period choices for new AT wallets", () => {
+    expect(gainsAlgorithmsFor("at")).toEqual(["MOVING_AVERAGE_AT"]);
+  });
+});
+
+describe("onboarding database passphrase validation", () => {
+  it("requires a long passphrase and matching confirmation", () => {
+    expect(databasePassphraseHint("", "")).toBe("Enter a database passphrase.");
+    expect(databasePassphraseHint("short", "short")).toBe(
+      "Use at least 12 characters.",
+    );
+    expect(databasePassphraseHint("long enough value", "")).toBe(
+      "Confirm the database passphrase.",
+    );
+    expect(databasePassphraseHint("long enough value", "different value")).toBe(
+      "Passphrases do not match.",
+    );
+    expect(
+      databasePassphraseHint("long enough value", "long enough value"),
+    ).toBeNull();
   });
 });

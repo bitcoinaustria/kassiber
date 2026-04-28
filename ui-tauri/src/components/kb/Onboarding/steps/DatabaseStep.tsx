@@ -2,7 +2,8 @@ import { Database, KeyRound, LockKeyhole } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 
-import { CheckRow, ChoiceCard } from "../fields";
+import { CheckRow, ChoiceCard, TextField } from "../fields";
+import { databasePassphraseHint } from "../constants";
 import {
   OnboardingStepFrame,
   OnboardingStepLeftWrapper,
@@ -72,6 +73,15 @@ export const DatabaseStep = ({
   goBack,
 }: StepComponentProps) => {
   const encrypted = form.databaseMode === "sqlcipher";
+  const passphraseHint = encrypted
+    ? databasePassphraseHint(
+        form.databasePassphrase,
+        form.databasePassphraseConfirm,
+      )
+    : null;
+  const canOpenLedger = encrypted
+    ? passphraseHint === null && form.recoveryAcknowledged
+    : form.plaintextAcknowledged;
   return (
     <OnboardingStepFrame>
       <OnboardingStepLeftWrapper
@@ -101,15 +111,35 @@ export const DatabaseStep = ({
 
             {encrypted ? (
               <div className="space-y-3">
-                <div className="rounded-lg border border-line bg-paper-2 p-3">
+                <div className="space-y-4 rounded-lg border border-line bg-paper-2 p-4">
                   <div className="flex items-center gap-2 text-sm font-semibold text-ink">
                     <KeyRound className="size-4" />
-                    Passphrase capture
+                    Database passphrase
                   </div>
-                  <p className="m-0 mt-2 text-xs leading-5 text-ink-2">
-                    The passphrase belongs in the native sidecar fd handoff,
-                    not persisted webview state. This step records the
-                    SQLCipher setup intent only.
+                  <TextField
+                    label="Passphrase"
+                    name="database-passphrase"
+                    type="password"
+                    autoComplete="new-password"
+                    value={form.databasePassphrase}
+                    placeholder="At least 12 characters"
+                    onChange={(value) => update("databasePassphrase", value)}
+                  />
+                  <TextField
+                    label="Confirm passphrase"
+                    name="database-passphrase-confirm"
+                    type="password"
+                    autoComplete="new-password"
+                    value={form.databasePassphraseConfirm}
+                    placeholder="Repeat passphrase"
+                    hint={passphraseHint}
+                    onChange={(value) =>
+                      update("databasePassphraseConfirm", value)
+                    }
+                  />
+                  <p className="m-0 text-xs leading-5 text-ink-2">
+                    Used to unlock this UI session; the passphrase is not
+                    stored in the persisted UI profile.
                   </p>
                 </div>
                 <CheckRow
@@ -144,7 +174,11 @@ export const DatabaseStep = ({
             )}
           </div>
 
-          <Button onClick={onSubmit} className="w-full">
+          <Button
+            onClick={onSubmit}
+            className="w-full"
+            disabled={!canOpenLedger}
+          >
             Open ledger
           </Button>
         </div>

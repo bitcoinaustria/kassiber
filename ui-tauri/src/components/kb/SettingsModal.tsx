@@ -56,8 +56,16 @@ import {
   type ExistingAiProvider,
 } from "@/components/kb/AiProviderForm";
 import { useDaemon, useDaemonMutation } from "@/daemon/client";
+import {
+  hasSessionUnlockPassphrase,
+  verifySessionUnlockPassphrase,
+} from "@/store/sessionLock";
 import { useUiStore } from "@/store/ui";
 import { cn } from "@/lib/utils";
+import {
+  DEFAULT_BACKEND_NAME,
+  DEFAULT_BACKEND_URL,
+} from "@/components/kb/Onboarding/constants";
 
 type Net = "BTC" | "LIQUID" | "LN" | "FX";
 
@@ -82,8 +90,8 @@ interface StatusData {
 const DEFAULT_BACKENDS: Backend[] = [
   {
     id: "b1",
-    name: "mempool.space",
-    url: "https://mempool.space/api",
+    name: DEFAULT_BACKEND_NAME,
+    url: DEFAULT_BACKEND_URL,
     net: "BTC",
     health: "#893,014 - 2m",
     on: true,
@@ -121,12 +129,14 @@ const DEFAULT_BACKENDS: Backend[] = [
 interface SettingsModalProps {
   open: boolean;
   focusSection?: "backends" | "ai" | null;
+  onLock?: () => void;
   onClose: () => void;
 }
 
 export function SettingsModal({
   open,
   focusSection = null,
+  onLock,
   onClose,
 }: SettingsModalProps) {
   const hideSensitive = useUiStore((s) => s.hideSensitive);
@@ -151,7 +161,19 @@ export function SettingsModal({
   const [requirePassphrase, setRequirePassphrase] = React.useState(true);
   const [lockOnClose, setLockOnClose] = React.useState(true);
   const [backends, setBackends] = React.useState<Backend[]>(DEFAULT_BACKENDS);
-  const [addOpen, setAddOpen] = React.useState(false);
+  const [backendDialogOpen, setBackendDialogOpen] = React.useState(false);
+  const [editingBackendId, setEditingBackendId] = React.useState<string | null>(
+    null,
+  );
+  const [deleteOpen, setDeleteOpen] = React.useState(false);
+  const [deletePassphrase, setDeletePassphrase] = React.useState("");
+  const [deleteConfirm, setDeleteConfirm] = React.useState("");
+  const [deleteError, setDeleteError] = React.useState<string | null>(null);
+
+  const editingBackend = React.useMemo(
+    () => backends.find((backend) => backend.id === editingBackendId) ?? null,
+    [backends, editingBackendId],
+  );
 
   React.useEffect(() => {
     if (!open) return;
@@ -178,16 +200,75 @@ export function SettingsModal({
     void navigate({ to: "/", replace: true });
   };
 
-  const onDeleteWorkspace = async () => {
-    const workspaceLabel =
-      status?.current_workspace || identity?.workspace || "current workspace";
-    const typed = window.prompt(
-      `Delete ${workspaceLabel}?\n\nThis removes the current workspace and its profiles, wallets, transactions, journals, and metadata from the local Kassiber database. Back up first if you need this data.\n\nType DELETE to continue.`,
+  const lockNow = () => {
+    onClose();
+    window.requestAnimationFrame(() => onLock?.());
+  };
+
+  const workspaceLabel =
+    status?.current_workspace || identity?.workspace || "current workspace";
+
+  const openDeleteWorkspace = () => {
+    setDeletePassphrase("");
+    setDeleteConfirm("");
+    setDeleteError(null);
+    setDeleteOpen(true);
+  };
+
+  const openAddBackend = () => {
+    setEditingBackendId(null);
+    setBackendDialogOpen(true);
+  };
+
+  const openEditBackend = (backend: Backend) => {
+    setEditingBackendId(backend.id);
+    setBackendDialogOpen(true);
+  };
+
+  const onSaveBackend = (backend: Backend) => {
+    setBackends((prev) => {
+      const existingIndex = prev.findIndex((item) => item.id === backend.id);
+      if (existingIndex === -1) return [...prev, backend];
+
+      return prev.map((item) => (item.id === backend.id ? backend : item));
+    });
+    setBackendDialogOpen(false);
+    setEditingBackendId(null);
+  };
+
+  const onDeleteBackend = (backend: Backend) => {
+    const ok = window.confirm(
+      `Delete backend '${backend.name}'?\n\nWallets using this endpoint may need another backend before they can sync.`,
     );
-    if (typed !== "DELETE") return;
+    if (!ok) return;
+    setBackends((prev) => prev.filter((item) => item.id !== backend.id));
+  };
+
+  const onDeleteWorkspace = async () => {
+    setDeleteError(null);
+    if (!deletePassphrase) {
+      setDeleteError("Enter the database passphrase.");
+      return;
+    }
+    if (deleteConfirm.trim() !== workspaceLabel) {
+      setDeleteError(`Type ${workspaceLabel} to confirm workspace deletion.`);
+      return;
+    }
+    if (hasSessionUnlockPassphrase()) {
+      const verified = await verifySessionUnlockPassphrase(deletePassphrase);
+      if (!verified) {
+        setDeleteError("Passphrase did not unlock this session.");
+        setDeletePassphrase("");
+        return;
+      }
+    }
 
     try {
-      await deleteWorkspace.mutateAsync({ confirm: "DELETE" });
+      await deleteWorkspace.mutateAsync({
+        confirm: "DELETE",
+        confirm_workspace: workspaceLabel,
+        auth_response: { passphrase_secret: deletePassphrase },
+      });
       setIdentity(null);
       onClose();
       void navigate({ to: "/", replace: true });
@@ -207,135 +288,176 @@ export function SettingsModal({
         if (!next) onClose();
       }}
     >
-      <DialogContent className="max-h-[90vh] w-[calc(100vw-2rem)] max-w-6xl gap-0 overflow-hidden p-0">
-        <DialogHeader className="shrink-0 border-b px-6 py-5">
-          <DialogTitle>Settings</DialogTitle>
+    <DialogContent className="max-h-[92vh] w-[min(96vw,1500px)] !max-w-[min(96vw,1500px)] gap-0 overflow-hidden p-0">
+        <DialogHeader className="shrink-0 border-b px-6 py-5 lg:px-8">
+          <DialogTitle className="text-xl">Settings</DialogTitle>
           <DialogDescription>
             Workspace preferences, privacy controls, and local data tools.
           </DialogDescription>
         </DialogHeader>
 
-        <ScrollArea className="h-[min(72vh,760px)]">
-          <div className="grid min-w-0 gap-4 p-4 lg:grid-cols-3">
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2 text-base">
-                  <ShieldCheck className="size-4" aria-hidden="true" />
-                  Privacy
-                </CardTitle>
-                <CardDescription>
-                  Controls for sensitive values shown inside the app.
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <SettingsSwitchRow
-                  label="Hide sensitive data"
-                  description="Blur balances, addresses, and amounts throughout the UI."
-                  checked={hideSensitive}
-                  onCheckedChange={setHideSensitive}
-                />
-                <SettingsSwitchRow
-                  label="Clear clipboard after 30s"
-                  description="Auto-clear copied addresses and keys."
-                  checked={clearClipboard}
-                  onCheckedChange={setClearClipboard}
-                />
-              </CardContent>
-            </Card>
+        <ScrollArea className="h-[min(78vh,820px)]">
+          <div className="flex min-w-0 flex-col gap-4 p-4 lg:p-6">
+            <div className="grid min-w-0 grid-cols-1 gap-4 xl:grid-cols-2">
+              <Card className="min-w-0">
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2 text-base">
+                    <ShieldCheck className="size-4" aria-hidden="true" />
+                    Privacy
+                  </CardTitle>
+                  <CardDescription>
+                    Controls for sensitive values shown inside the app.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <SettingsSwitchRow
+                    label="Hide sensitive data"
+                    description="Blur balances, addresses, and amounts throughout the UI."
+                    checked={hideSensitive}
+                    onCheckedChange={setHideSensitive}
+                  />
+                  <SettingsSwitchRow
+                    label="Clear clipboard after 30s"
+                    description="Auto-clear copied addresses and keys."
+                    checked={clearClipboard}
+                    onCheckedChange={setClearClipboard}
+                  />
+                </CardContent>
+              </Card>
 
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-base">Display currency</CardTitle>
-                <CardDescription>
-                  Choose how balances and reports are shown across the app.
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="grid grid-cols-2 gap-2">
-                  <Button
-                    type="button"
-                    variant={currency === "eur" ? "default" : "outline"}
-                    aria-pressed={currency === "eur"}
-                    onClick={() => setCurrency("eur")}
-                  >
-                    € Euro
-                  </Button>
-                  <Button
-                    type="button"
-                    variant={currency === "btc" ? "default" : "outline"}
-                    aria-pressed={currency === "btc"}
-                    onClick={() => setCurrency("btc")}
-                  >
-                    ₿ Bitcoin
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2 text-base">
-                  <Lock className="size-4" aria-hidden="true" />
-                  App lock
-                </CardTitle>
-                <CardDescription>
-                  Local lock behavior for decrypted workspace state.
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <SettingsSwitchRow
-                  label="Auto-lock when idle"
-                  description="Require passphrase after inactivity."
-                  checked={autoLockEnabled}
-                  onCheckedChange={setAutoLockEnabled}
-                />
-                <div
-                  className={cn(
-                    "space-y-2",
-                    !autoLockEnabled && "pointer-events-none opacity-50",
-                  )}
-                >
-                  <Label>Idle timeout</Label>
-                  <div className="flex flex-wrap gap-2">
-                    {[1, 5, 15, 30, 60].map((m) => (
-                      <Button
-                        key={m}
-                        type="button"
-                        variant={autoLockMinutes === m ? "default" : "outline"}
-                        size="sm"
-                        onClick={() => setAutoLockMinutes(m)}
-                      >
-                        {m}m
-                      </Button>
-                    ))}
+              <Card className="min-w-0">
+                <CardHeader>
+                  <CardTitle className="text-base">Display currency</CardTitle>
+                  <CardDescription>
+                    Choose how balances and reports are shown across the app.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="flex max-w-md items-center justify-between gap-3 rounded-md border bg-background px-4 py-3">
+                    <span
+                      className={cn(
+                        "text-sm font-medium",
+                        currency === "eur"
+                          ? "text-foreground"
+                          : "text-muted-foreground",
+                      )}
+                    >
+                      € Euro
+                    </span>
+                    <Switch
+                      checked={currency === "btc"}
+                      onCheckedChange={(checked) =>
+                        setCurrency(checked ? "btc" : "eur")
+                      }
+                      aria-label="Display balances in Bitcoin"
+                    />
+                    <span
+                      className={cn(
+                        "text-sm font-medium",
+                        currency === "btc"
+                          ? "text-foreground"
+                          : "text-muted-foreground",
+                      )}
+                    >
+                      ₿ Bitcoin
+                    </span>
                   </div>
-                </div>
-                <SettingsSwitchRow
-                  label="Require passphrase on launch"
-                  description="Prompt every time Kassiber opens."
-                  checked={requirePassphrase}
-                  onCheckedChange={setRequirePassphrase}
-                />
-                <SettingsSwitchRow
-                  label="Lock on window close"
-                  description="Clear in-memory decrypted state when the app window closes."
-                  checked={lockOnClose}
-                  onCheckedChange={setLockOnClose}
-                />
-                <div className="flex flex-wrap gap-2 pt-1">
-                  <Button type="button" size="sm" variant="outline">
-                    <Lock className="size-4" aria-hidden="true" />
-                    Lock now
-                  </Button>
-                  <Button type="button" size="sm" variant="ghost">
-                    <KeyRound className="size-4" aria-hidden="true" />
-                    Change passphrase
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
+                </CardContent>
+              </Card>
+            </div>
 
-            <Card className="lg:col-span-3">
+            <div className="grid min-w-0 grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(320px,420px)]">
+              <Card className="min-w-0">
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2 text-base">
+                    <Lock className="size-4" aria-hidden="true" />
+                    App lock
+                  </CardTitle>
+                  <CardDescription>
+                    Local lock behavior for decrypted workspace state.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <SettingsSwitchRow
+                    label="Auto-lock when idle"
+                    description="Require passphrase after inactivity."
+                    checked={autoLockEnabled}
+                    onCheckedChange={setAutoLockEnabled}
+                  />
+                  <div
+                    className={cn(
+                      "space-y-2",
+                      !autoLockEnabled && "pointer-events-none opacity-50",
+                    )}
+                  >
+                    <Label>Idle timeout</Label>
+                    <div className="flex flex-wrap gap-2">
+                      {[1, 5, 15, 30, 60].map((m) => (
+                        <Button
+                          key={m}
+                          type="button"
+                          variant={
+                            autoLockMinutes === m ? "default" : "outline"
+                          }
+                          size="sm"
+                          onClick={() => setAutoLockMinutes(m)}
+                        >
+                          {m}m
+                        </Button>
+                      ))}
+                    </div>
+                  </div>
+                  <SettingsSwitchRow
+                    label="Require passphrase on launch"
+                    description="Prompt every time Kassiber opens."
+                    checked={requirePassphrase}
+                    onCheckedChange={setRequirePassphrase}
+                  />
+                  <SettingsSwitchRow
+                    label="Lock on window close"
+                    description="Clear in-memory decrypted state when the app window closes."
+                    checked={lockOnClose}
+                    onCheckedChange={setLockOnClose}
+                  />
+                </CardContent>
+              </Card>
+
+              <Card className="min-w-0 border-primary/15 bg-muted/20">
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2 text-base">
+                    <KeyRound className="size-4" aria-hidden="true" />
+                    Security boundary
+                  </CardTitle>
+                  <CardDescription>
+                    What the local lock does and does not protect.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <p className="m-0 text-sm leading-6 text-muted-foreground">
+                    This app lock protects against casual access in the current
+                    UI session. SQLCipher plus native fd unlock is the hard
+                    at-rest boundary.
+                  </p>
+                  <div className="flex flex-wrap gap-2">
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      onClick={lockNow}
+                    >
+                      <Lock className="size-4" aria-hidden="true" />
+                      Lock now
+                    </Button>
+                    <Button type="button" size="sm" variant="ghost">
+                      <KeyRound className="size-4" aria-hidden="true" />
+                      Change passphrase
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+
+            <Card className="min-w-0">
               <CardHeader>
                 <CardTitle className="flex items-center gap-2 text-base">
                   <Database className="size-4" aria-hidden="true" />
@@ -396,7 +518,7 @@ export function SettingsModal({
               </CardContent>
             </Card>
 
-            <div ref={backendsRef} className="min-w-0 lg:col-span-3">
+            <div ref={backendsRef} className="min-w-0">
               <Card>
                 <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                   <div>
@@ -408,7 +530,7 @@ export function SettingsModal({
                       Local node, indexer, and rate endpoints available to the workspace.
                     </CardDescription>
                   </div>
-                  <Button type="button" size="sm" onClick={() => setAddOpen(true)}>
+                  <Button type="button" size="sm" onClick={openAddBackend}>
                     <Plus className="size-4" aria-hidden="true" />
                     Add backend
                   </Button>
@@ -423,6 +545,7 @@ export function SettingsModal({
                           <TableHead>Health</TableHead>
                           <TableHead>Auth</TableHead>
                           <TableHead className="text-right">Status</TableHead>
+                          <TableHead className="text-right">Actions</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
@@ -446,6 +569,34 @@ export function SettingsModal({
                             <TableCell className="text-right">
                               <StatusBadge active={backend.on} />
                             </TableCell>
+                            <TableCell className="text-right">
+                              <div className="flex justify-end gap-1">
+                                <Button
+                                  type="button"
+                                  size="icon-sm"
+                                  variant="ghost"
+                                  aria-label={`Edit ${backend.name}`}
+                                  onClick={() => openEditBackend(backend)}
+                                >
+                                  <Pencil
+                                    className="size-3.5"
+                                    aria-hidden="true"
+                                  />
+                                </Button>
+                                <Button
+                                  type="button"
+                                  size="icon-sm"
+                                  variant="ghost"
+                                  aria-label={`Delete ${backend.name}`}
+                                  onClick={() => onDeleteBackend(backend)}
+                                >
+                                  <Trash2
+                                    className="size-3.5"
+                                    aria-hidden="true"
+                                  />
+                                </Button>
+                              </div>
+                            </TableCell>
                           </TableRow>
                         ))}
                       </TableBody>
@@ -455,11 +606,11 @@ export function SettingsModal({
               </Card>
             </div>
 
-            <div ref={aiRef} className="min-w-0 lg:col-span-3">
+            <div ref={aiRef} className="min-w-0">
               <AiProvidersCard />
             </div>
 
-            <Card className="border-destructive/30 lg:col-span-3">
+            <Card className="min-w-0 border-destructive/30">
               <CardHeader>
                 <div className="space-y-1">
                   <CardTitle className="flex items-center gap-2 text-base text-destructive">
@@ -502,9 +653,9 @@ export function SettingsModal({
                     variant="destructive"
                     className="shrink-0"
                     disabled={deleteWorkspace.isPending}
-                    onClick={() => void onDeleteWorkspace()}
+                    onClick={openDeleteWorkspace}
                   >
-                    {deleteWorkspace.isPending ? "Deleting..." : "Delete workspace"}
+                    Delete workspace
                   </Button>
                 </div>
               </CardContent>
@@ -512,20 +663,85 @@ export function SettingsModal({
           </div>
         </ScrollArea>
 
-        <DialogFooter className="shrink-0 border-t bg-background px-6 py-4">
+        <DialogFooter className="shrink-0 border-t bg-background px-6 py-4 lg:px-8">
           <Button type="button" variant="outline" onClick={onClose}>
             Done
           </Button>
         </DialogFooter>
 
-        <AddBackendModal
-          open={addOpen}
-          onClose={() => setAddOpen(false)}
-          onAdd={(backend) => {
-            setBackends((prev) => [...prev, backend]);
-            setAddOpen(false);
+        <BackendModal
+          open={backendDialogOpen}
+          initial={editingBackend}
+          onClose={() => {
+            setBackendDialogOpen(false);
+            setEditingBackendId(null);
           }}
+          onSave={onSaveBackend}
         />
+        <Dialog
+          open={deleteOpen}
+          onOpenChange={(next) => {
+            if (!next) {
+              setDeleteOpen(false);
+            }
+          }}
+        >
+          <DialogContent className="max-w-md">
+            <DialogHeader>
+              <DialogTitle>Delete workspace</DialogTitle>
+              <DialogDescription>
+                This removes {workspaceLabel} from the local Kassiber database.
+                Enter the database passphrase and the workspace name to continue.
+              </DialogDescription>
+            </DialogHeader>
+            <form
+              className="space-y-4"
+              onSubmit={(event) => {
+                event.preventDefault();
+                void onDeleteWorkspace();
+              }}
+            >
+              <div className="space-y-2">
+                <Label htmlFor="delete-passphrase">Passphrase</Label>
+                <Input
+                  id="delete-passphrase"
+                  type="password"
+                  autoComplete="current-password"
+                  value={deletePassphrase}
+                  onChange={(event) => setDeletePassphrase(event.target.value)}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="delete-confirm">Workspace name</Label>
+                <Input
+                  id="delete-confirm"
+                  value={deleteConfirm}
+                  placeholder={workspaceLabel}
+                  onChange={(event) => setDeleteConfirm(event.target.value)}
+                />
+              </div>
+              {deleteError && (
+                <p className="m-0 text-sm text-destructive">{deleteError}</p>
+              )}
+              <DialogFooter>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setDeleteOpen(false)}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  type="submit"
+                  variant="destructive"
+                  disabled={deleteWorkspace.isPending}
+                >
+                  {deleteWorkspace.isPending ? "Deleting..." : "Delete"}
+                </Button>
+              </DialogFooter>
+            </form>
+          </DialogContent>
+        </Dialog>
       </DialogContent>
     </Dialog>
   );
@@ -810,8 +1026,8 @@ const BACKEND_TYPES: BackendType[] = [
     presets: [
       {
         id: "mempool",
-        name: "mempool.space",
-        url: "https://mempool.space/api",
+        name: DEFAULT_BACKEND_NAME,
+        url: DEFAULT_BACKEND_URL,
         scheme: "REST",
       },
       {
@@ -930,17 +1146,23 @@ const AUTH_MODES: Array<{ id: string; label: string }> = [
 
 type TestState = "idle" | "testing" | "ok" | "fail";
 
-interface AddBackendModalProps {
+interface BackendModalProps {
   open: boolean;
+  initial: Backend | null;
   onClose: () => void;
-  onAdd: (backend: Backend) => void;
+  onSave: (backend: Backend) => void;
 }
 
-function AddBackendModal({ open, onClose, onAdd }: AddBackendModalProps) {
+function BackendModal({
+  open,
+  initial,
+  onClose,
+  onSave,
+}: BackendModalProps) {
   const [typeId, setTypeId] = React.useState("btc");
   const [presetId, setPresetId] = React.useState("mempool");
   const [name, setName] = React.useState("");
-  const [url, setUrl] = React.useState("https://mempool.space/api");
+  const [url, setUrl] = React.useState(DEFAULT_BACKEND_URL);
   const [auth, setAuth] = React.useState("none");
   const [authVal, setAuthVal] = React.useState("");
   const [authVal2, setAuthVal2] = React.useState("");
@@ -953,21 +1175,38 @@ function AddBackendModal({ open, onClose, onAdd }: AddBackendModalProps) {
     presetId === "custom"
       ? null
       : type.presets.find((candidate) => candidate.id === presetId) ?? null;
+  const isEditing = Boolean(initial);
 
   React.useEffect(() => {
     if (!open) return;
+    if (initial) {
+      const initialType =
+        BACKEND_TYPES.find((candidate) => candidate.net === initial.net) ??
+        BACKEND_TYPES[0];
+      setTypeId(initialType.id);
+      setPresetId("custom");
+      setName(initial.name);
+      setUrl(initial.url);
+      setAuth(initial.auth);
+      setAuthVal("");
+      setAuthVal2("");
+      setTestState(initial.on ? "ok" : "idle");
+      return;
+    }
+
     setTypeId("btc");
     setPresetId("mempool");
-    setName("mempool.space");
-    setUrl("https://mempool.space/api");
+    setName(DEFAULT_BACKEND_NAME);
+    setUrl(DEFAULT_BACKEND_URL);
     setAuth("none");
     setAuthVal("");
     setAuthVal2("");
     setTestState("idle");
-  }, [open]);
+  }, [initial, open]);
 
   React.useEffect(() => {
     if (!open) return;
+    if (initial) return;
     if (preset) {
       setUrl(preset.url);
       setName(preset.name);
@@ -976,10 +1215,14 @@ function AddBackendModal({ open, onClose, onAdd }: AddBackendModalProps) {
       setName("");
     }
     setTestState("idle");
-  }, [open, preset, presetId]);
+  }, [initial, open, preset, presetId]);
 
   const onPickType = (id: string) => {
     setTypeId(id);
+    if (initial) {
+      setPresetId("custom");
+      return;
+    }
     const nextType = BACKEND_TYPES.find((candidate) => candidate.id === id);
     setPresetId(nextType?.presets[0]?.id ?? "custom");
   };
@@ -996,15 +1239,33 @@ function AddBackendModal({ open, onClose, onAdd }: AddBackendModalProps) {
   };
 
   const canAdd = name.trim().length > 0 && url.trim().length > 0;
-  const add = () => {
+  const save = () => {
     if (!canAdd) return;
-    onAdd({
-      id: "b" + Date.now(),
+    const normalizedUrl = url.trim();
+    const urlChanged = Boolean(initial && normalizedUrl !== initial.url);
+    onSave({
+      id: initial?.id ?? "b" + Date.now(),
       name: name.trim(),
-      url: url.trim(),
+      url: normalizedUrl,
       net: type.net,
-      health: testState === "ok" ? "just added - ok" : "-",
-      on: testState === "ok",
+      health:
+        testState === "ok"
+          ? initial
+            ? "just checked - ok"
+            : "just added - ok"
+          : testState === "fail"
+            ? "-"
+            : urlChanged
+              ? "-"
+              : (initial?.health ?? "-"),
+      on:
+        testState === "ok"
+          ? true
+          : testState === "fail"
+            ? false
+            : urlChanged
+              ? false
+              : (initial?.on ?? false),
       auth,
     });
   };
@@ -1018,9 +1279,11 @@ function AddBackendModal({ open, onClose, onAdd }: AddBackendModalProps) {
     >
       <DialogContent className="max-h-[88vh] w-full max-w-[760px] overflow-hidden p-0 sm:max-w-[760px]">
         <DialogHeader className="border-b px-6 py-5">
-          <DialogTitle>Add backend</DialogTitle>
+          <DialogTitle>{isEditing ? "Edit backend" : "Add backend"}</DialogTitle>
           <DialogDescription>
-            Connect a Bitcoin, Lightning, Liquid, or price backend.
+            {isEditing
+              ? "Update this endpoint's label, network, URL, and auth mode."
+              : "Connect a Bitcoin, Lightning, Liquid, or price backend."}
           </DialogDescription>
         </DialogHeader>
 
@@ -1052,7 +1315,7 @@ function AddBackendModal({ open, onClose, onAdd }: AddBackendModalProps) {
               </div>
             </section>
 
-            {type.presets.length > 0 && (
+            {!isEditing && type.presets.length > 0 && (
               <section className="space-y-3">
                 <Label>Preset</Label>
                 <div className="flex flex-wrap gap-2">
@@ -1196,8 +1459,8 @@ function AddBackendModal({ open, onClose, onAdd }: AddBackendModalProps) {
           <Button type="button" variant="outline" onClick={onClose}>
             Cancel
           </Button>
-          <Button type="button" disabled={!canAdd} onClick={add}>
-            Add backend
+          <Button type="button" disabled={!canAdd} onClick={save}>
+            {isEditing ? "Save backend" : "Add backend"}
           </Button>
         </DialogFooter>
       </DialogContent>

@@ -284,7 +284,7 @@ function ConnectionDetailView({
                   />
                 </>
               )}
-              <KvRow k="Backend" v="mempool.space" />
+              <KvRow k="Backend" v="mempool" />
               <KvRow k="Created" v="2026-03-02 10:14" mono />
               <KvRow k="Kassiber ID" v={`conn_${connection.id}`} mono />
             </div>

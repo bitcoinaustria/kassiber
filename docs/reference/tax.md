@@ -7,13 +7,13 @@ Kassiber separates raw transaction storage from processed journal state. Reports
 Profiles carry tax defaults through:
 
 - `tax_country`
-- `tax_long_term_days`
+- `tax_long_term_days` (generic policy only; Austrian Altbestand handling is wallet-specific)
 - `gains_algorithm`
 
 Current policies:
 
 - `generic` -> RP2-backed lot accounting
-- `at` -> RP2-backed Austrian accounting through the Kassiber-maintained fork at [bitcoinaustria/rp2](https://github.com/bitcoinaustria/rp2), with Kassiber-side normalization and current disposal-category / Kennzahl mapping
+- `at` -> RP2-backed Austrian accounting through the Kassiber-maintained fork at [bitcoinaustria/rp2](https://github.com/bitcoinaustria/rp2), with moving-average defaults for new wallets plus Kassiber-side normalization and current disposal-category / Kennzahl mapping
 
 ## Journal processing
 

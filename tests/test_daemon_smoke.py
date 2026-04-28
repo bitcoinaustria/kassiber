@@ -461,9 +461,22 @@ class DaemonSmokeTest(unittest.TestCase):
             _write_payload(
                 proc,
                 {
+                    "request_id": "delete-workspace-wrong-name",
+                    "kind": "ui.workspace.delete",
+                    "args": {"confirm": "DELETE", "confirm_workspace": "Wrong"},
+                },
+            )
+            rejected = _read_payload(proc)
+            self.assertEqual(rejected["request_id"], "delete-workspace-wrong-name")
+            self.assertEqual(rejected["kind"], "error")
+            self.assertEqual(rejected["error"]["code"], "validation")
+
+            _write_payload(
+                proc,
+                {
                     "request_id": "delete-workspace-1",
                     "kind": "ui.workspace.delete",
-                    "args": {"confirm": "DELETE"},
+                    "args": {"confirm": "DELETE", "confirm_workspace": "Demo"},
                 },
             )
             deleted = _read_payload(proc)

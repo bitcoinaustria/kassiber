@@ -97,11 +97,31 @@ export const MOCK_AI_CHAT_STREAM: {
   reasoning?: string;
   delayMs?: number;
 }[] = [
-  { reasoning: "Looking at the workspace. ", delayMs: 20 },
-  { reasoning: "Counting recent imports and checking journal freshness.", delayMs: 60 },
-  { content: "Here is what I see:\n\n", delayMs: 30 },
-  { content: "- 4 transactions imported in the last 7 days\n", delayMs: 40 },
-  { content: "- 0 quarantined entries\n", delayMs: 40 },
-  { content: "- Journals are up to date.\n\n", delayMs: 40 },
-  { content: "You're good to run reports.", delayMs: 80 },
+  { reasoning: "Preparing a formatting demo. ", delayMs: 20 },
+  { reasoning: "Including headings, table, list, quote, and code.", delayMs: 60 },
+  { content: "## Review snapshot\n\n", delayMs: 30 },
+  {
+    content:
+      "This is a formatting demo for the assistant transcript. It should show relaxed paragraphs, headings, a CLI-style table, and command output without squeezing everything into a tiny bubble.\n\n",
+    delayMs: 40,
+  },
+  { content: "### CLI-style table\n\n", delayMs: 30 },
+  { content: "| Item | Status | Action |\n", delayMs: 30 },
+  { content: "| --- | --- | --- |\n", delayMs: 20 },
+  { content: "| Journals | Current | Run report exports |\n", delayMs: 30 },
+  { content: "| Quarantine | Clear | Keep watching imports |\n", delayMs: 30 },
+  { content: "| Rates | Needs review | Sync BTC-EUR cache |\n\n", delayMs: 30 },
+  { content: "### Notes\n\n", delayMs: 30 },
+  { content: "- Use program output for calculations.\n", delayMs: 30 },
+  { content: "- Keep wallet data local.\n", delayMs: 30 },
+  { content: "- Reprocess journals after imports.\n\n", delayMs: 30 },
+  {
+    content:
+      "> Tables should be readable and scroll horizontally when needed.\n\n",
+    delayMs: 40,
+  },
+  {
+    content: "```bash\nkassiber reports tax-summary --machine\n```\n",
+    delayMs: 50,
+  },
 ];

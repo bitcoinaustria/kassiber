@@ -23,6 +23,8 @@ export const TaxStep = ({
   onSubmit,
   goBack,
 }: StepComponentProps) => {
+  const isAustrian = form.taxCountry === "at";
+
   return (
     <OnboardingStepFrame>
       <OnboardingStepLeftWrapper
@@ -65,22 +67,39 @@ export const TaxStep = ({
                 options={FIAT_CURRENCIES}
                 onChange={(value) => update("fiatCurrency", value)}
               />
-              <SelectField
-                label="Lot selection"
-                value={form.gainsAlgorithm}
-                options={gainsAlgorithmsFor(form.taxCountry)}
-                onChange={(value) => update("gainsAlgorithm", value)}
-              />
+              {isAustrian ? (
+                <div className="space-y-2">
+                  <div className="text-sm font-medium text-ink">
+                    Accounting method
+                  </div>
+                  <div className="rounded-md border border-line bg-paper-2 px-3 py-2 text-sm font-medium text-ink">
+                    Moving average
+                  </div>
+                  <p className="m-0 text-xs leading-5 text-ink-2">
+                    New Austrian wallets use moving average. Altbestand is a
+                    wallet flag, not a profile holding-period exemption.
+                  </p>
+                </div>
+              ) : (
+                <SelectField
+                  label="Lot selection"
+                  value={form.gainsAlgorithm}
+                  options={gainsAlgorithmsFor(form.taxCountry)}
+                  onChange={(value) => update("gainsAlgorithm", value)}
+                />
+              )}
             </div>
-            <NumberField
-              label="Long-term holding days"
-              name="taxLongTermDays"
-              value={form.taxLongTermDays}
-              placeholder="365"
-              min={1}
-              onChange={(value) => update("taxLongTermDays", value)}
-              hint={taxLongTermDaysHint(form.taxLongTermDays)}
-            />
+            {!isAustrian && (
+              <NumberField
+                label="Long-term holding days"
+                name="taxLongTermDays"
+                value={form.taxLongTermDays}
+                placeholder="365"
+                min={1}
+                onChange={(value) => update("taxLongTermDays", value)}
+                hint={taxLongTermDaysHint(form.taxLongTermDays)}
+              />
+            )}
           </div>
 
           <Button onClick={onSubmit} className="w-full">
