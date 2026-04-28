@@ -67,7 +67,7 @@ Kassiber is currently in **dev mode**: renaming commands, breaking flags, and re
 ## Command surface
 
 - `init`, `status`, `daemon`, `context {show,current,set}`
-- `secrets {init,init-resume,change-passphrase,verify,status}`
+- `secrets {init,init-resume,change-passphrase,verify,status,migrate-credentials}`
 - `backup {export,import}`
 - `workspaces {list,create}`
 - `profiles {list,create,get,set}`
