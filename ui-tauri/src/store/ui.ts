@@ -26,6 +26,16 @@ export interface Identity {
   gainsAlgorithm?: "FIFO" | "LIFO" | "HIFO" | "LOFO";
   databaseMode?: "sqlcipher" | "plaintext";
   migrateCredentials?: boolean;
+  backendSetupMode?: "default" | "custom" | "skip";
+  backendKind?:
+    | "esplora"
+    | "electrum"
+    | "bitcoinrpc"
+    | "btcpay"
+    | "liquid-esplora"
+    | "custom";
+  backendName?: string;
+  backendUrl?: string;
 }
 
 interface UiState {

@@ -3,11 +3,14 @@
 import React, { useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import {
+  AlertTriangle,
   Check,
   ChevronLeft,
   Database,
+  Globe2,
   KeyRound,
   LockKeyhole,
+  ServerCog,
   ShieldCheck,
   WalletCards,
 } from "lucide-react";
@@ -40,6 +43,17 @@ type TaxCountry = "at" | "generic";
 type FiatCurrency = "EUR" | "USD" | "CHF" | "GBP";
 type GainsAlgorithm = "FIFO" | "LIFO" | "HIFO" | "LOFO";
 type DatabaseMode = "sqlcipher" | "plaintext";
+type BackendSetupMode = "default" | "custom" | "skip";
+type BackendKind =
+  | "esplora"
+  | "electrum"
+  | "bitcoinrpc"
+  | "btcpay"
+  | "liquid-esplora"
+  | "custom";
+
+const DEFAULT_BACKEND_NAME = "mempool";
+const DEFAULT_BACKEND_URL = "https://mempool.bitcoin-austria.at/api";
 
 interface OnboardingForm {
   name: string;
@@ -53,6 +67,11 @@ interface OnboardingForm {
   recoveryAcknowledged: boolean;
   plaintextAcknowledged: boolean;
   migrateCredentials: boolean;
+  backendSetupMode: BackendSetupMode;
+  backendKind: BackendKind;
+  backendName: string;
+  backendUrl: string;
+  skipBackendsAcknowledged: boolean;
 }
 
 interface StepComponentProps {
@@ -92,10 +111,38 @@ const DEFAULT_FORM: OnboardingForm = {
   recoveryAcknowledged: false,
   plaintextAcknowledged: false,
   migrateCredentials: true,
+  backendSetupMode: "default",
+  backendKind: "esplora",
+  backendName: DEFAULT_BACKEND_NAME,
+  backendUrl: DEFAULT_BACKEND_URL,
+  skipBackendsAcknowledged: false,
 };
 
 const FIAT_CURRENCIES: FiatCurrency[] = ["EUR", "USD", "CHF", "GBP"];
 const GAINS_ALGORITHMS: GainsAlgorithm[] = ["FIFO", "LIFO", "HIFO", "LOFO"];
+const BACKEND_KINDS: BackendKind[] = [
+  "esplora",
+  "electrum",
+  "bitcoinrpc",
+  "btcpay",
+  "liquid-esplora",
+  "custom",
+];
+
+const BACKEND_KIND_LABELS: Record<BackendKind, string> = {
+  esplora: "Esplora",
+  electrum: "Electrum",
+  bitcoinrpc: "Bitcoin Core RPC",
+  btcpay: "BTCPay",
+  "liquid-esplora": "Liquid Esplora",
+  custom: "Custom",
+};
+
+const PUBLIC_BACKEND_DEFAULTS = [
+  [DEFAULT_BACKEND_NAME, "Esplora", DEFAULT_BACKEND_URL],
+  ["fulcrum", "Electrum", "ssl://index.bitcoin-austria.at:50002"],
+  ["liquid", "Electrum", "ssl://les.bullbitcoin.com:995"],
+];
 
 const OnboardingStepHeader = ({
   title,
@@ -251,14 +298,43 @@ const DashboardIllustration = ({
             </Button>
           </div>
 
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-4 gap-3">
             {[
               ["Policy", form.taxCountry === "at" ? "Austria" : "Generic"],
               ["Currency", form.fiatCurrency],
               [
-                "Database",
-                form.databaseMode === "sqlcipher" ? "SQLCipher" : "Plain",
+                "Backend",
+                form.backendSetupMode === "skip"
+                  ? "Skipped"
+                  : form.backendSetupMode === "custom"
+                    ? BACKEND_KIND_LABELS[form.backendKind]
+                    : "Built-ins",
               ],
+              ["Database", form.databaseMode === "sqlcipher" ? "SQLCipher" : "Plain"],
+            ].map(([label, value]) => (
+              <div key={label} className="rounded-lg border border-line p-3">
+                <div className="font-mono text-[10px] uppercase tracking-[0.12em] text-ink-3">
+                  {label}
+                </div>
+                <div className="mt-2 text-lg font-semibold text-ink">
+                  {value}
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <div className="grid grid-cols-3 gap-3">
+            {[
+              [
+                "Endpoint",
+                form.backendSetupMode === "custom"
+                  ? form.backendName || "custom"
+                  : form.backendSetupMode === "skip"
+                    ? "none"
+                    : "mempool",
+              ],
+              ["Sync", form.backendSetupMode === "skip" ? "manual import" : "enabled"],
+              ["Secrets", "encrypted path"],
             ].map(([label, value]) => (
               <div key={label} className="rounded-lg border border-line p-3">
                 <div className="font-mono text-[10px] uppercase tracking-[0.12em] text-ink-3">
@@ -588,6 +664,136 @@ const StepTwoComponent = ({
   );
 };
 
+const StepConnectionsComponent = ({
+  form,
+  update,
+  currentStep,
+  totalSteps,
+  onSubmit,
+  goBack,
+}: StepComponentProps) => {
+  const skipSelected = form.backendSetupMode === "skip";
+  const customSelected = form.backendSetupMode === "custom";
+  return (
+    <OnboardingStepFrame>
+      <OnboardingStepLeftWrapper
+        title="Choose sync connections"
+        eyebrow="Connections"
+        currentStep={currentStep}
+        totalSteps={totalSteps}
+        goBack={goBack}
+      >
+        <div className="flex h-full flex-col justify-between gap-6 py-4">
+          <div className="space-y-5">
+            <div className="space-y-3">
+              <ChoiceCard
+                active={form.backendSetupMode === "default"}
+                title="Use built-in backends"
+                description="Start with Kassiber's bundled Bitcoin, Electrum, and Liquid endpoints. You can replace them later."
+                onClick={() => {
+                  update("backendSetupMode", "default");
+                  update("backendKind", "esplora");
+                  update("backendName", DEFAULT_BACKEND_NAME);
+                  update("backendUrl", DEFAULT_BACKEND_URL);
+                }}
+              />
+              <ChoiceCard
+                active={customSelected}
+                title="Use a custom backend"
+                description="Point onboarding at your own Esplora, Electrum, Bitcoin Core RPC, BTCPay, Liquid Esplora, or custom endpoint."
+                onClick={() => {
+                  update("backendSetupMode", "custom");
+                  if (
+                    form.backendName === DEFAULT_BACKEND_NAME &&
+                    form.backendUrl === DEFAULT_BACKEND_URL
+                  ) {
+                    update("backendName", "");
+                    update("backendUrl", "");
+                  }
+                }}
+              />
+              <ChoiceCard
+                active={skipSelected}
+                title="Skip connections for now"
+                description="Continue with manual imports only. Wallet sync can be configured from Settings later."
+                tone="warning"
+                onClick={() => update("backendSetupMode", "skip")}
+              />
+            </div>
+
+            {customSelected && (
+              <div className="space-y-4 rounded-lg border border-line bg-paper-2 p-4">
+                <SelectField
+                  label="Backend kind"
+                  value={form.backendKind}
+                  options={BACKEND_KINDS}
+                  onChange={(value) => update("backendKind", value)}
+                />
+                <TextField
+                  label="Display name"
+                  name="backendName"
+                  value={form.backendName}
+                  placeholder="home-node"
+                  onChange={(value) => update("backendName", value)}
+                />
+                <TextField
+                  label="Endpoint URL"
+                  name="backendUrl"
+                  value={form.backendUrl}
+                  placeholder="https://... or ssl://..."
+                  onChange={(value) => update("backendUrl", value)}
+                />
+                <div className="flex items-start gap-3 rounded-lg border border-line bg-paper p-3 text-xs leading-5 text-ink-2">
+                  <KeyRound className="mt-0.5 size-4 shrink-0 text-ink" />
+                  <p className="m-0">
+                    Do not paste API tokens, RPC passwords, cookies, or bearer
+                    headers here. Credentials should be added only after the
+                    encrypted database is open.
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {skipSelected && (
+              <div className="space-y-3 rounded-lg border border-accent bg-[rgba(227,0,15,0.04)] p-4">
+                <div className="flex items-start gap-3">
+                  <AlertTriangle className="mt-0.5 size-5 shrink-0 text-accent" />
+                  <div>
+                    <p className="m-0 font-semibold text-ink">
+                      Wallet sync will not be ready.
+                    </p>
+                    <p className="m-0 mt-1 text-xs leading-5 text-ink-2">
+                      You can still import files, but address discovery,
+                      BTCPay live history, and node-backed sync remain disabled
+                      until a backend is configured.
+                    </p>
+                  </div>
+                </div>
+                <CheckRow
+                  id="skip-backends-ack"
+                  checked={form.skipBackendsAcknowledged}
+                  onCheckedChange={(checked) =>
+                    update("skipBackendsAcknowledged", checked)
+                  }
+                  label="I understand sync needs a backend later."
+                  description="Settings can add built-in or custom backends after onboarding."
+                />
+              </div>
+            )}
+          </div>
+
+          <Button onClick={onSubmit} className="w-full">
+            Continue
+          </Button>
+        </div>
+      </OnboardingStepLeftWrapper>
+      <OnboardingStepRightWrapper className="px-8 py-10">
+        <ConnectionsPanel form={form} />
+      </OnboardingStepRightWrapper>
+    </OnboardingStepFrame>
+  );
+};
+
 const StepThreeComponent = ({
   form,
   update,
@@ -681,6 +887,85 @@ const StepThreeComponent = ({
   );
 };
 
+const ConnectionsPanel = ({ form }: { form: OnboardingForm }) => {
+  const modeLabel =
+    form.backendSetupMode === "default"
+      ? "Built-in backends"
+      : form.backendSetupMode === "custom"
+        ? "Custom backend"
+        : "Skipped";
+  const activeRows =
+    form.backendSetupMode === "default"
+      ? PUBLIC_BACKEND_DEFAULTS
+      : form.backendSetupMode === "custom"
+        ? [
+            [
+              form.backendName.trim() || "custom",
+              BACKEND_KIND_LABELS[form.backendKind],
+              form.backendUrl.trim() || "endpoint pending",
+            ],
+          ]
+        : [["None", "Manual import", "configure later"]];
+
+  return (
+    <div className="flex h-full items-center">
+      <div className="w-full max-w-lg rounded-lg border border-line bg-paper p-5 shadow-sm">
+        <div className="flex items-center gap-3">
+          <div
+            className={cn(
+              "flex size-10 items-center justify-center rounded-md text-paper",
+              form.backendSetupMode === "skip" ? "bg-accent" : "bg-ink",
+            )}
+          >
+            {form.backendSetupMode === "skip" ? (
+              <AlertTriangle className="size-5" />
+            ) : form.backendSetupMode === "custom" ? (
+              <ServerCog className="size-5" />
+            ) : (
+              <Globe2 className="size-5" />
+            )}
+          </div>
+          <div>
+            <p className="font-semibold text-ink">{modeLabel}</p>
+            <p className="text-xs text-ink-2">
+              {form.backendSetupMode === "skip"
+                ? "No live sync until settings are configured."
+                : "Endpoint choices only; credentials stay out of onboarding."}
+            </p>
+          </div>
+        </div>
+
+        <div className="mt-5 overflow-hidden rounded-lg border border-line">
+          <Table>
+            <TableHeader>
+              <TableRow className="bg-paper-2">
+                {["Name", "Kind", "Endpoint"].map((head) => (
+                  <TableHead key={head} className="h-9 border-r last:border-r-0">
+                    {head}
+                  </TableHead>
+                ))}
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {activeRows.map(([name, kind, url]) => (
+                <TableRow key={name} className="even:bg-paper-2/60">
+                  <TableCell className="h-10 border-r font-medium">
+                    {name}
+                  </TableCell>
+                  <TableCell className="h-10 border-r">{kind}</TableCell>
+                  <TableCell className="h-10 max-w-[240px] truncate">
+                    {url}
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 const DatabasePanel = ({ form }: { form: OnboardingForm }) => {
   const rows = [
     ["State root", "~/.kassiber/{data,config,exports,attachments}"],
@@ -750,6 +1035,18 @@ const steps: OnboardingStep[] = [
     },
   },
   {
+    component: StepConnectionsComponent,
+    isComplete: (form) => {
+      if (form.backendSetupMode === "skip") {
+        return form.skipBackendsAcknowledged;
+      }
+      if (form.backendSetupMode === "custom") {
+        return Boolean(form.backendName.trim() && form.backendUrl.trim());
+      }
+      return true;
+    },
+  },
+  {
     component: StepThreeComponent,
     isComplete: (form) =>
       form.databaseMode === "plaintext"
@@ -786,6 +1083,16 @@ const Onboarding1 = ({ className, steps: customSteps }: Onboarding1Props) => {
       gainsAlgorithm: form.gainsAlgorithm,
       databaseMode: form.databaseMode,
       migrateCredentials: form.migrateCredentials,
+      backendSetupMode: form.backendSetupMode,
+      backendKind: form.backendSetupMode === "custom" ? form.backendKind : undefined,
+      backendName:
+        form.backendSetupMode === "custom"
+          ? form.backendName.trim() || "custom"
+          : undefined,
+      backendUrl:
+        form.backendSetupMode === "custom"
+          ? form.backendUrl.trim()
+          : undefined,
     };
     setIdentity(identity);
     void navigate({ to: "/overview" });
