@@ -1,7 +1,9 @@
 /**
- * Three-dot typing indicator shown while the assistant is mid-stream and
- * has not yet emitted any visible-answer content.
+ * Compact status indicator shown while the assistant is mid-stream and
+ * has not yet emitted visible answer content.
  */
+
+import { LoaderCircle } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 
@@ -15,13 +17,12 @@ export function ChatLoader({ className }: ChatLoaderProps) {
       role="status"
       aria-label="Assistant is thinking"
       className={cn(
-        "inline-flex items-center gap-1 text-muted-foreground",
+        "inline-flex items-center gap-2 rounded-full bg-muted/70 px-2.5 py-1 text-xs text-muted-foreground",
         className,
       )}
     >
-      <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-current [animation-delay:-0.3s]" />
-      <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-current [animation-delay:-0.15s]" />
-      <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-current" />
+      <LoaderCircle className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
+      <span>Generating</span>
     </div>
   );
 }

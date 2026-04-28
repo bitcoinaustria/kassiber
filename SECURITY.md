@@ -241,6 +241,11 @@ through Settings → AI providers or `kassiber ai providers create`.
   cannot reach Ollama (or any other model API) directly — every call
   passes through the Python daemon. The provider URL never reaches the
   webview's CSP/CORS surface.
+- **The Vite daemon bridge is development-only.** `pnpm --dir ui-tauri run
+  dev:bridge` exposes selected daemon kinds, including AI streaming and
+  consent controls, through the Vite server on loopback for browser testing.
+  Do not bind that server to a LAN address or use it as a REST API; it is only
+  a local development bridge to the same daemon trust boundary.
 - **Streaming Stop is best-effort cooperative cancel, not a billing
   guarantee.** Pressing Stop sends `ai.chat.cancel` to the local daemon and
   suppresses later streamed UI updates. The Python worker stops forwarding

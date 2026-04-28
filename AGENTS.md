@@ -66,6 +66,10 @@ Kassiber is currently in **dev mode**: renaming commands, breaking flags, and re
   `ai.chat.cancel` and `ai.tool_call.consent` take
   `args.target_request_id` so the control request keeps its own routing
   `request_id`; cancelled chats finish with `finish_reason: "cancelled"`.
+- Browser dev mode can exercise the real daemon over the Vite loopback bridge:
+  `pnpm --dir ui-tauri run dev:bridge` serves the React app at
+  `http://127.0.0.1:5173`, forwards invokes through `/__kassiber__/daemon`,
+  and streams `ai.chat` as NDJSON from `/__kassiber__/daemon/stream`.
 - Live sync kinds implemented: `esplora`, `electrum`, `bitcoinrpc`. BTCPay Greenfield confirmed on-chain wallet history sync is available through wallet config and `wallets sync-btcpay`.
 - BIP329 records are stored in SQLite and transaction labels are bridged into Kassiber tags.
 - BTCPay CSV/JSON imports become transactions, with comments mapped to notes and labels mapped to tags. Wallet-configured BTCPay sync and `wallets sync-btcpay` reuse that same normalization for confirmed Greenfield wallet history.

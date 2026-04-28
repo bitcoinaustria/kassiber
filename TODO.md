@@ -244,6 +244,10 @@ and [docs/plan/04-desktop-ui.md](docs/plan/04-desktop-ui.md).
   read-only-by-default tool loop.
 - [x] AI mutating tool consent (PR 4): require explicit per-call/session
   approval before executing mutating tools such as wallet sync.
+- [x] Dev browser bridge for real local AI: Vite keeps a loopback-only Python
+  daemon supervisor, demuxes JSONL by `request_id`, and streams `ai.chat`
+  records to browser clients as NDJSON so Codex/browser tools can test local
+  AI, Stop, tool cards, and consent without launching the Tauri webview.
 - [ ] Daemon worker pool: replace the surgical `ai.chat` thread with a real
   worker-pool model and one SQLite connection per worker when read-only tools
   or longer-running UI actions need daemon-side concurrency beyond the

@@ -98,6 +98,20 @@ the daemon protocol; chat streaming is wired through Tauri events
 (`daemon://stream`) so the UI can render reasoning (`<think>`) and the answer
 in real time.
 
+For browser-driven development, the Vite dev server also exposes a loopback-only
+daemon bridge. Run:
+
+```bash
+pnpm --dir ui-tauri run dev:bridge
+```
+
+Then open `http://127.0.0.1:5173`. In bridge mode, the browser talks to the
+same local Python daemon protocol through Vite: normal calls use
+`/__kassiber__/daemon`, and `ai.chat` streams NDJSON records from
+`/__kassiber__/daemon/stream`. This is a development-only convenience for
+testing real local AI, tool cards, cancellation, and consent from an ordinary
+browser tab. Packaged builds and `tauri dev` do not use the bridge.
+
 Provider configuration is mirrored in the CLI:
 
 ```bash

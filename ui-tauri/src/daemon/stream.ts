@@ -326,6 +326,10 @@ export function useAiChatStream(): UseAiChatStreamResult {
   const parserRef = React.useRef<ThinkParser | null>(null);
   const assistantIdRef = React.useRef<string | null>(null);
   const requestIdRef = React.useRef<string | null>(null);
+  const recordQueueRef = React.useRef<
+    DaemonStreamRecord<AiChatStreamRecordData>[]
+  >([]);
+  const flushTimerRef = React.useRef<number | null>(null);
 
   const updateAssistant = React.useCallback(
     (
@@ -339,6 +343,38 @@ export function useAiChatStream(): UseAiChatStreamResult {
     },
     [],
   );
+
+  const flushQueuedRecords = React.useCallback(() => {
+    if (flushTimerRef.current !== null) {
+      window.clearTimeout(flushTimerRef.current);
+      flushTimerRef.current = null;
+    }
+    const records = recordQueueRef.current.splice(0);
+    if (records.length === 0) return;
+
+    const parser = parserRef.current ?? new ThinkParser();
+    parserRef.current = parser;
+    updateAssistant((current) =>
+      records.reduce(
+        (next, record) =>
+          applyAiChatStreamRecordToMessage(
+            next,
+            record,
+            parser,
+            abortRef.current?.signal.aborted ?? false,
+          ),
+        current,
+      ),
+    );
+  }, [updateAssistant]);
+
+  const scheduleRecordFlush = React.useCallback(() => {
+    if (flushTimerRef.current !== null) return;
+    flushTimerRef.current = window.setTimeout(() => {
+      flushTimerRef.current = null;
+      flushQueuedRecords();
+    }, 32);
+  }, [flushQueuedRecords]);
 
   const onRecord = React.useCallback(
     (record: DaemonStreamRecord<AiChatStreamRecordData>) => {
@@ -366,18 +402,10 @@ export function useAiChatStream(): UseAiChatStreamResult {
           );
         }
       }
-      const parser = parserRef.current ?? new ThinkParser();
-      parserRef.current = parser;
-      updateAssistant((current) =>
-        applyAiChatStreamRecordToMessage(
-          current,
-          record,
-          parser,
-          abortRef.current?.signal.aborted ?? false,
-        ),
-      );
+      recordQueueRef.current.push(record);
+      scheduleRecordFlush();
     },
-    [updateAssistant],
+    [scheduleRecordFlush],
   );
 
   const send = React.useCallback(
@@ -433,6 +461,7 @@ export function useAiChatStream(): UseAiChatStreamResult {
           },
           { onRecord, signal: controller.signal },
         )) as DaemonEnvelope<AiChatTerminalShape>;
+        flushQueuedRecords();
 
         if (envelope.kind === "error" || envelope.error) {
           const code = envelope.error?.code ?? "unknown_error";
@@ -479,6 +508,11 @@ export function useAiChatStream(): UseAiChatStreamResult {
           errorMessage: message,
         }));
       } finally {
+        if (flushTimerRef.current !== null) {
+          window.clearTimeout(flushTimerRef.current);
+          flushTimerRef.current = null;
+        }
+        recordQueueRef.current = [];
         setIsStreaming(false);
         setPendingConsent(null);
         abortRef.current = null;
@@ -487,7 +521,7 @@ export function useAiChatStream(): UseAiChatStreamResult {
         requestIdRef.current = null;
       }
     },
-    [dataMode, isStreaming, onRecord, updateAssistant],
+    [dataMode, flushQueuedRecords, isStreaming, onRecord, updateAssistant],
   );
 
   const sendConsent = React.useCallback(
@@ -531,6 +565,11 @@ export function useAiChatStream(): UseAiChatStreamResult {
   const abort = React.useCallback(() => {
     const requestId = requestIdRef.current;
     abortRef.current?.abort();
+    recordQueueRef.current = [];
+    if (flushTimerRef.current !== null) {
+      window.clearTimeout(flushTimerRef.current);
+      flushTimerRef.current = null;
+    }
     setPendingConsent(null);
     if (requestId) {
       void getTransport(dataMode).invoke({
