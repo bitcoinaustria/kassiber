@@ -1,4 +1,5 @@
 import json
+import queue
 import select
 import subprocess
 import sys
@@ -8,8 +9,15 @@ import time
 import unittest
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+from unittest import mock
 
-from kassiber.daemon import AiToolConsentState, MAX_REQUEST_LINE_CHARS
+from kassiber.daemon import (
+    AiToolConsentState,
+    AiToolRuntime,
+    MAX_REQUEST_LINE_CHARS,
+    ParsedAiToolCall,
+    _execute_mutating_ai_tool,
+)
 
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -245,6 +253,59 @@ class DaemonSmokeTest(unittest.TestCase):
             timeout=0.01,
         )
         self.assertEqual(decision, "consent_timeout")
+
+    def test_ai_tool_consent_state_rejects_unexpected_call_id(self):
+        consent = AiToolConsentState()
+        self.assertFalse(consent.record("call_1", "allow_once"))
+
+        consent.expect("call_1")
+        self.assertTrue(consent.record("call_1", "allow_once"))
+        decision = consent.wait(
+            call_id="call_1",
+            tool_name="ui.wallets.sync",
+            cancel_event=threading.Event(),
+            timeout=0.01,
+        )
+        self.assertEqual(decision, "allow_once")
+        self.assertFalse(consent.record("call_1", "deny"))
+
+    def test_mutating_tool_uses_daemon_main_thread_connection(self):
+        task_queue = queue.Queue()
+        runtime = AiToolRuntime(
+            data_root="/not-used",
+            runtime_config={},
+            main_thread_tasks=task_queue,
+        )
+        call = ParsedAiToolCall(
+            call_id="call_1",
+            name="ui.wallets.sync",
+            arguments={"all": True},
+        )
+        results = []
+
+        with (
+            mock.patch(
+                "kassiber.daemon.open_db",
+                side_effect=AssertionError("should use daemon main connection"),
+            ),
+            mock.patch(
+                "kassiber.daemon._wallets_sync_payload",
+                return_value={"results": []},
+            ) as payload_mock,
+        ):
+            thread = threading.Thread(
+                target=lambda: results.append(_execute_mutating_ai_tool(call, runtime)),
+            )
+            thread.start()
+            task = task_queue.get(timeout=1)
+            conn_marker = object()
+            task.response.put((True, task.callback(conn_marker)))
+            thread.join(timeout=1)
+
+        self.assertFalse(thread.is_alive())
+        payload_mock.assert_called_once()
+        self.assertIs(payload_mock.call_args.args[0], conn_marker)
+        self.assertEqual(results[0]["envelope"]["kind"], "ui.wallets.sync")
 
     def test_ai_tool_consent_stale_target_returns_not_found(self):
         with tempfile.TemporaryDirectory(prefix="kassiber-daemon-") as tmp:
@@ -692,6 +753,110 @@ class DaemonSmokeTest(unittest.TestCase):
                         for message in server.requests[1]["messages"]  # type: ignore[attr-defined]
                     )
                 )
+
+                _write_payload(proc, {"request_id": "shutdown-1", "kind": "daemon.shutdown"})
+                self.assertEqual(_read_payload_timeout(proc)["kind"], "daemon.shutdown")
+                code, stderr = _close_daemon(proc)
+                self.assertEqual(code, 0, stderr)
+                self.assertEqual(stderr, "")
+        finally:
+            server.shutdown()
+            server.server_close()
+
+    def test_ai_tool_consent_wrong_call_id_returns_not_found_for_active_chat(self):
+        server = _start_tool_chat_server(
+            [
+                (_tool_call_message("ui_wallets_sync"), 0.0),
+                (
+                    _chat_completion_response(
+                        {"role": "assistant", "content": "Should not happen."},
+                    ),
+                    0.0,
+                ),
+            ]
+        )
+        base_url = f"http://127.0.0.1:{server.server_port}/v1"
+        try:
+            with tempfile.TemporaryDirectory(prefix="kassiber-daemon-") as tmp:
+                proc = _start_daemon(Path(tmp) / "data")
+                self.assertEqual(_read_payload_timeout(proc)["kind"], "daemon.ready")
+                _write_payload(
+                    proc,
+                    {
+                        "request_id": "provider-1",
+                        "kind": "ai.providers.create",
+                        "args": {"name": "tool-local", "base_url": base_url, "kind": "local"},
+                    },
+                )
+                self.assertEqual(_read_payload_timeout(proc)["kind"], "ai.providers.create")
+                _write_payload(
+                    proc,
+                    {
+                        "request_id": "chat-mutating-wrong-consent",
+                        "kind": "ai.chat",
+                        "args": {
+                            "provider": "tool-local",
+                            "model": "test-model",
+                            "tools_enabled": True,
+                            "messages": [{"role": "user", "content": "Sync my wallets"}],
+                        },
+                    },
+                )
+                while True:
+                    payload = _read_payload_timeout(proc)
+                    if (
+                        payload.get("request_id") == "chat-mutating-wrong-consent"
+                        and payload.get("kind") == "ai.chat.tool_call"
+                    ):
+                        payload = _read_payload(proc)
+                    if (
+                        payload.get("request_id") == "chat-mutating-wrong-consent"
+                        and payload.get("kind") == "ai.chat.tool_consent_required"
+                    ):
+                        break
+
+                _write_payload(
+                    proc,
+                    {
+                        "request_id": "consent-wrong-call-1",
+                        "kind": "ai.tool_call.consent",
+                        "args": {
+                            "target_request_id": "chat-mutating-wrong-consent",
+                            "call_id": "wrong_call",
+                            "decision": "allow_once",
+                        },
+                    },
+                )
+                response = _read_payload_timeout(proc)
+                self.assertEqual(response["request_id"], "consent-wrong-call-1")
+                self.assertEqual(response["kind"], "ai.tool_call.consent")
+                self.assertFalse(response["data"]["recorded"])
+                self.assertEqual(response["data"]["reason"], "not_found")
+
+                _write_payload(
+                    proc,
+                    {
+                        "request_id": "cancel-wrong-call-1",
+                        "kind": "ai.chat.cancel",
+                        "args": {"target_request_id": "chat-mutating-wrong-consent"},
+                    },
+                )
+                cancel_response = None
+                terminal = None
+                deadline = time.time() + 5
+                while time.time() < deadline and (cancel_response is None or terminal is None):
+                    payload = _read_payload_timeout(proc, max(0.1, deadline - time.time()))
+                    if payload.get("request_id") == "cancel-wrong-call-1":
+                        cancel_response = payload
+                    if (
+                        payload.get("request_id") == "chat-mutating-wrong-consent"
+                        and payload.get("kind") == "ai.chat"
+                    ):
+                        terminal = payload
+
+                self.assertIsNotNone(cancel_response)
+                self.assertIsNotNone(terminal)
+                self.assertEqual(terminal["data"]["finish_reason"], "cancelled")
 
                 _write_payload(proc, {"request_id": "shutdown-1", "kind": "daemon.shutdown"})
                 self.assertEqual(_read_payload_timeout(proc)["kind"], "daemon.shutdown")

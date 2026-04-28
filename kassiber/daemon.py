@@ -1,13 +1,14 @@
 from __future__ import annotations
 
 import json
+import queue
 import sqlite3
 import sys
 import threading
 import time
 import traceback
 from dataclasses import dataclass
-from typing import Any, TextIO
+from typing import Any, Callable, TextIO
 
 from . import __version__
 from .ai import (
@@ -95,12 +96,20 @@ class AiToolConsentState:
     def __init__(self) -> None:
         self._condition = threading.Condition()
         self._decisions: dict[str, str] = {}
+        self._pending_call_ids: set[str] = set()
         self._allow_session: set[str] = set()
 
-    def record(self, call_id: str, decision: str) -> None:
+    def expect(self, call_id: str) -> None:
         with self._condition:
+            self._pending_call_ids.add(call_id)
+
+    def record(self, call_id: str, decision: str) -> bool:
+        with self._condition:
+            if call_id not in self._pending_call_ids:
+                return False
             self._decisions[call_id] = decision
             self._condition.notify_all()
+            return True
 
     def notify_cancelled(self) -> None:
         with self._condition:
@@ -122,18 +131,23 @@ class AiToolConsentState:
         with self._condition:
             if tool_name in self._allow_session:
                 return "allow_session"
-            while True:
-                if cancel_event.is_set():
-                    return "cancelled"
-                decision = self._decisions.pop(call_id, None)
-                if decision is not None:
-                    if decision == "allow_session":
-                        self._allow_session.add(tool_name)
-                    return decision
-                remaining = deadline - time.monotonic()
-                if remaining <= 0:
-                    return "consent_timeout"
-                self._condition.wait(min(0.25, remaining))
+            self._pending_call_ids.add(call_id)
+            try:
+                while True:
+                    if cancel_event.is_set():
+                        return "cancelled"
+                    decision = self._decisions.pop(call_id, None)
+                    if decision is not None:
+                        if decision == "allow_session":
+                            self._allow_session.add(tool_name)
+                        return decision
+                    remaining = deadline - time.monotonic()
+                    if remaining <= 0:
+                        return "consent_timeout"
+                    self._condition.wait(min(0.25, remaining))
+            finally:
+                self._pending_call_ids.discard(call_id)
+                self._decisions.pop(call_id, None)
 
 
 @dataclass(frozen=True)
@@ -211,8 +225,13 @@ class ActiveAiChats:
             chat = self._chats.get(target_request_id)
         if chat is None:
             return False
-        chat.consent.record(call_id, decision)
-        return True
+        return chat.consent.record(call_id, decision)
+
+
+@dataclass(frozen=True)
+class _DaemonMainThreadTask:
+    callback: Callable[[sqlite3.Connection], Any]
+    response: queue.Queue[tuple[bool, Any]]
 
 
 @dataclass(frozen=True)
@@ -221,12 +240,14 @@ class DaemonContext:
     data_root: str
     runtime_config: dict[str, object]
     active_ai_chats: ActiveAiChats
+    main_thread_tasks: queue.Queue[_DaemonMainThreadTask]
 
 
 @dataclass(frozen=True)
 class AiToolRuntime:
     data_root: str
     runtime_config: dict[str, object]
+    main_thread_tasks: queue.Queue[_DaemonMainThreadTask]
 
 
 @dataclass(frozen=True)
@@ -255,6 +276,54 @@ class _OutputChannel:
             self._stream.write(line)
             self._stream.write("\n")
             self._stream.flush()
+
+
+def _run_on_daemon_main_thread(
+    runtime: AiToolRuntime,
+    callback: Callable[[sqlite3.Connection], Any],
+) -> Any:
+    response: queue.Queue[tuple[bool, Any]] = queue.Queue(maxsize=1)
+    runtime.main_thread_tasks.put(
+        _DaemonMainThreadTask(callback=callback, response=response)
+    )
+    ok, payload = response.get()
+    if ok:
+        return payload
+    if isinstance(payload, BaseException):
+        raise payload
+    raise RuntimeError(str(payload))
+
+
+def _drain_daemon_main_thread_tasks(ctx: DaemonContext) -> None:
+    while True:
+        try:
+            task = ctx.main_thread_tasks.get_nowait()
+        except queue.Empty:
+            return
+        try:
+            payload = task.callback(ctx.conn)
+        except BaseException as exc:
+            task.response.put((False, exc))
+        else:
+            task.response.put((True, payload))
+
+
+def _start_stdin_reader(input_stream: TextIO) -> queue.Queue[str]:
+    lines: queue.Queue[str] = queue.Queue()
+
+    def _reader() -> None:
+        while True:
+            line = input_stream.readline(MAX_REQUEST_LINE_CHARS + 1)
+            lines.put(line)
+            if line == "":
+                return
+
+    threading.Thread(
+        target=_reader,
+        daemon=True,
+        name="kassiber-daemon-stdin",
+    ).start()
+    return lines
 
 
 def _with_request_id(
@@ -647,17 +716,17 @@ def _execute_mutating_ai_tool(call: ParsedAiToolCall, runtime: AiToolRuntime) ->
         if entry.daemon_kind != "ui.wallets.sync":
             return _tool_result_denied("tool_not_allowed")
         args = _coerce_wallets_sync_args(call.arguments, strict=True)
-        conn = open_db(runtime.data_root)
-        try:
+
+        def _execute(conn: sqlite3.Connection) -> dict[str, Any]:
             payload = _wallets_sync_payload(
                 conn,
                 runtime.runtime_config,
                 args,
                 strict=True,
             )
-        finally:
-            conn.close()
-        return {"ok": True, "envelope": build_envelope(entry.daemon_kind, payload)}
+            return {"ok": True, "envelope": build_envelope(entry.daemon_kind, payload)}
+
+        return _run_on_daemon_main_thread(runtime, _execute)
     except AppError as exc:
         return _tool_result_denied(
             exc.code or "tool_error",
@@ -831,6 +900,7 @@ def _run_ai_chat_tool_loop(
                 break
             if entry is not None and entry.kind_class == "mutating" and not call.argument_error:
                 if needs_consent:
+                    active_chat.consent.expect(call.call_id)
                     out.write(
                         _with_request_id(
                             build_envelope(
@@ -1448,6 +1518,7 @@ def handle_request(
         runtime = AiToolRuntime(
             data_root=ctx.data_root,
             runtime_config=dict(ctx.runtime_config),
+            main_thread_tasks=ctx.main_thread_tasks,
         )
         registry_key, active_chat = ctx.active_ai_chats.register(request_id)
         thread = threading.Thread(
@@ -1628,7 +1699,9 @@ def run(
         data_root=args.data_root,
         runtime_config=args.runtime_config,
         active_ai_chats=ActiveAiChats(),
+        main_thread_tasks=queue.Queue(),
     )
+    input_lines = _start_stdin_reader(input_stream)
 
     out.write(
         build_envelope(
@@ -1641,12 +1714,16 @@ def run(
     )
 
     while True:
-        line = input_stream.readline(MAX_REQUEST_LINE_CHARS + 1)
+        _drain_daemon_main_thread_tasks(ctx)
+        try:
+            line = input_lines.get(timeout=0.05)
+        except queue.Empty:
+            continue
         if line == "":
             break
         if len(line) > MAX_REQUEST_LINE_CHARS:
             while line and not line.endswith("\n"):
-                line = input_stream.readline(MAX_REQUEST_LINE_CHARS + 1)
+                line = input_lines.get()
             out.write(
                 _error_envelope(
                     "request_too_large",
@@ -1710,6 +1787,7 @@ def run(
 
         if response is not None:
             out.write(response)
+        _drain_daemon_main_thread_tasks(ctx)
         if should_shutdown:
             return 0
 
