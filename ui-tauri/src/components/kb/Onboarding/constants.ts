@@ -62,6 +62,13 @@ export const GAINS_ALGORITHM_DEFAULTS: Record<TaxCountry, GainsAlgorithm> = {
 export const gainsAlgorithmsFor = (country: TaxCountry): GainsAlgorithm[] =>
   country === "at" ? AUSTRIAN_GAINS_ALGORITHMS : GENERIC_GAINS_ALGORITHMS;
 
+export const parseTaxLongTermDays = (raw: string): number | null => {
+  const trimmed = raw.trim();
+  if (!/^[1-9]\d*$/.test(trimmed)) return null;
+  const days = Number(trimmed);
+  return Number.isSafeInteger(days) ? days : null;
+};
+
 export const BACKEND_KINDS: BackendKind[] = [
   "esplora",
   "electrum",
@@ -104,10 +111,15 @@ export const AI_PROVIDER_KIND_LABELS: Record<AiProviderKind, string> = {
 export const taxLongTermDaysHint = (raw: string): string | null => {
   const trimmed = raw.trim();
   if (!trimmed) return "Required.";
-  const days = Number.parseInt(trimmed, 10);
-  if (!Number.isFinite(days) || String(days) !== trimmed) {
-    return "Use a whole number of days.";
+  const days = parseTaxLongTermDays(trimmed);
+  if (days !== null) return null;
+  const integerDays = Number(trimmed);
+  if (
+    /^-?\d+$/.test(trimmed) &&
+    Number.isSafeInteger(integerDays) &&
+    integerDays < 1
+  ) {
+    return "Must be at least 1 day.";
   }
-  if (days < 1) return "Must be at least 1 day.";
-  return null;
+  return "Use a whole number of days.";
 };

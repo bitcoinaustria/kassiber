@@ -12,6 +12,7 @@ import {
   DEFAULT_FORM,
   GAINS_ALGORITHM_DEFAULTS,
   gainsAlgorithmsFor,
+  parseTaxLongTermDays,
 } from "./constants";
 import { AiStep } from "./steps/AiStep";
 import { ConnectionsStep } from "./steps/ConnectionsStep";
@@ -33,10 +34,7 @@ const DEFAULT_STEPS: OnboardingStep[] = [
   },
   {
     component: TaxStep,
-    isComplete: (form) => {
-      const days = Number.parseInt(form.taxLongTermDays, 10);
-      return Number.isFinite(days) && days > 0;
-    },
+    isComplete: (form) => parseTaxLongTermDays(form.taxLongTermDays) !== null,
   },
   {
     component: ConnectionsStep,
@@ -94,9 +92,7 @@ export const Onboarding = ({ className, steps: customSteps }: OnboardingProps) =
     const gainsAlgorithm = allowedAlgorithms.includes(form.gainsAlgorithm)
       ? form.gainsAlgorithm
       : GAINS_ALGORITHM_DEFAULTS[form.taxCountry];
-    const parsedDays = Number.parseInt(form.taxLongTermDays, 10);
-    const taxLongTermDays =
-      Number.isFinite(parsedDays) && parsedDays > 0 ? parsedDays : 365;
+    const taxLongTermDays = parseTaxLongTermDays(form.taxLongTermDays) ?? 365;
     const identity: Identity = {
       name: form.name.trim(),
       workspace: form.workspace.trim() || "Personal",
