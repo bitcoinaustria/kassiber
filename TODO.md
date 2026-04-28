@@ -294,19 +294,18 @@ and [docs/plan/04-desktop-ui.md](docs/plan/04-desktop-ui.md).
   including capital-gains controls, preview table, and CSV/PDF/XLSX export
   format cards
 - [x] Settings modal restyled with shadcn dialog/card/switch/input/select
-  primitives, wider dashboard layout, lock controls, and passphrase plus
-  workspace-name confirmation before deleting local workspace data
+  primitives, wider dashboard layout, daemon-backed lock controls, SQLCipher
+  passphrase rotation, and passphrase plus workspace-name confirmation before
+  deleting encrypted local workspace data
 - [ ] Profiles screen
 - [x] Welcome/onboarding screen refreshed with a shadcn-style, SQLCipher-aware
   setup flow that captures workspace/profile/tax defaults and database
-  protection intent with non-persisted passphrase confirmation and current
-  session lock/unlock, lets users choose the default mempool/custom/skip
-  backend setup with an explicit skip warning, keeps Austrian onboarding on
-  moving-average-only current-rule defaults without profile-level long-term
-  exemption controls, captures optional AI assistant
-  intent with a disable-for-now button, offers a dev-only mock preview
-  shortcut, and leaves native fd passphrase/credential handoff on the
-  live-actions backlog.
+  protection by initializing the local SQLCipher database through the daemon,
+  lets users choose the default mempool/custom/skip backend setup with an
+  explicit skip warning, keeps Austrian onboarding on moving-average-only
+  current-rule defaults without profile-level long-term exemption controls,
+  captures optional AI assistant intent with a disable-for-now button, and
+  offers a dev-only mock preview shortcut.
 - [x] Replace the Overview mock fixture with a read-only
   `ui.overview.snapshot` daemon kind backed by the current SQLite profile
 - [x] Replace the Transactions table mock fixture with a read-only

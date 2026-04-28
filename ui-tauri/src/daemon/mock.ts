@@ -43,6 +43,42 @@ export const mockDaemon: DaemonTransport = {
       };
     }
 
+    if (req.kind === "daemon.lock") {
+      return {
+        kind: "daemon.lock",
+        schema_version: 1,
+        request_id: req.request_id,
+        data: { locked: true } as T,
+      };
+    }
+
+    if (req.kind === "daemon.unlock") {
+      return {
+        kind: "daemon.unlock",
+        schema_version: 1,
+        request_id: req.request_id,
+        data: { unlocked: true } as T,
+      };
+    }
+
+    if (req.kind === "ui.secrets.init") {
+      return {
+        kind: "ui.secrets.init",
+        schema_version: 1,
+        request_id: req.request_id,
+        data: { encrypted: true, already_encrypted: false } as T,
+      };
+    }
+
+    if (req.kind === "ui.secrets.change_passphrase") {
+      return {
+        kind: "ui.secrets.change_passphrase",
+        schema_version: 1,
+        request_id: req.request_id,
+        data: { changed: true } as T,
+      };
+    }
+
     if (req.kind === "ui.workspace.delete") {
       return {
         kind: "ui.workspace.delete",

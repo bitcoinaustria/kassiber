@@ -70,10 +70,12 @@ import {
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { useUiStore } from "@/store/ui";
 import { useDaemon } from "@/daemon/client";
+import { getTransport } from "@/daemon/transport";
 import { cn } from "@/lib/utils";
 import {
   clearSessionUnlockPassphrase,
   hasSessionUnlockPassphrase,
+  setSessionUnlockPassphrase,
   verifySessionUnlockPassphrase,
 } from "@/store/sessionLock";
 import type { OverviewSnapshot } from "@/mocks/seed";
@@ -260,6 +262,8 @@ export function AppShell() {
   const navigate = useNavigate();
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const identity = useUiStore((s) => s.identity);
+  const dataMode = useUiStore((s) => s.dataMode);
+  const appLockPolicy = useUiStore((s) => s.appLockPolicy);
   const setIdentity = useUiStore((s) => s.setIdentity);
   const setHideSensitive = useUiStore((s) => s.setHideSensitive);
   const routerBusy = useRouterState({
@@ -271,10 +275,16 @@ export function AppShell() {
     "backends" | null
   >(null);
   const [assistantCollapsed, setAssistantCollapsed] = React.useState(false);
-  const [locked, setLocked] = React.useState(false);
+  const [locked, setLocked] = React.useState(
+    () =>
+      Boolean(identity?.encrypted) &&
+      appLockPolicy.requirePassphraseOnLaunch &&
+      !hasSessionUnlockPassphrase(),
+  );
   const [assistantReturnPath, setAssistantReturnPath] =
     React.useState<AssistantReturnPath>("/overview");
   const mainRef = React.useRef<HTMLElement>(null);
+  const launchLockApplied = React.useRef(false);
   const shellBusy = routerBusy || daemonFetchCount > 0;
   const isAssistantRoute = pathname === "/assistant";
   const routeMeta =
@@ -287,6 +297,11 @@ export function AppShell() {
 
   const lockApp = React.useCallback(() => {
     setHideSensitive(true);
+    if (identity?.encrypted) {
+      setLocked(true);
+      void getTransport(dataMode).invoke({ kind: "daemon.lock" });
+      return;
+    }
     if (!hasSessionUnlockPassphrase()) {
       clearSessionUnlockPassphrase();
       setIdentity(null);
@@ -294,20 +309,96 @@ export function AppShell() {
       return;
     }
     setLocked(true);
-  }, [navigate, setHideSensitive, setIdentity]);
+  }, [dataMode, identity?.encrypted, navigate, setHideSensitive, setIdentity]);
 
-  const unlockApp = React.useCallback(async (passphrase: string) => {
-    const unlocked = await verifySessionUnlockPassphrase(passphrase);
-    if (unlocked) {
-      setLocked(false);
-    }
-    return unlocked;
-  }, []);
+  const unlockApp = React.useCallback(
+    async (passphrase: string) => {
+      if (identity?.encrypted) {
+        const envelope = await getTransport(dataMode).invoke({
+          kind: "daemon.unlock",
+          args: { auth_response: { passphrase_secret: passphrase } },
+        });
+        const unlocked = envelope.kind !== "error" && envelope.kind !== "auth_required";
+        if (unlocked) {
+          await setSessionUnlockPassphrase(passphrase);
+          setLocked(false);
+        }
+        return unlocked;
+      }
+
+      const unlocked = await verifySessionUnlockPassphrase(passphrase);
+      if (unlocked) {
+        setLocked(false);
+      }
+      return unlocked;
+    },
+    [dataMode, identity?.encrypted],
+  );
 
   React.useEffect(() => {
     if (identity) return;
+    launchLockApplied.current = false;
     void navigate({ to: "/", replace: true });
   }, [identity, navigate]);
+
+  React.useEffect(() => {
+    if (!identity?.encrypted || !appLockPolicy.requirePassphraseOnLaunch) {
+      return;
+    }
+    if (hasSessionUnlockPassphrase()) return;
+    if (launchLockApplied.current) return;
+    launchLockApplied.current = true;
+    lockApp();
+  }, [appLockPolicy.requirePassphraseOnLaunch, identity?.encrypted, lockApp]);
+
+  React.useEffect(() => {
+    if (!identity?.encrypted || !appLockPolicy.autoLockWhenIdle || locked) {
+      return;
+    }
+
+    let timeout: number | undefined;
+    const reset = () => {
+      window.clearTimeout(timeout);
+      timeout = window.setTimeout(
+        lockApp,
+        Math.max(1, appLockPolicy.idleMinutes) * 60_000,
+      );
+    };
+    const events = ["pointerdown", "keydown", "wheel", "touchstart"];
+    events.forEach((eventName) =>
+      window.addEventListener(eventName, reset, { passive: true }),
+    );
+    reset();
+
+    return () => {
+      window.clearTimeout(timeout);
+      events.forEach((eventName) =>
+        window.removeEventListener(eventName, reset),
+      );
+    };
+  }, [
+    appLockPolicy.autoLockWhenIdle,
+    appLockPolicy.idleMinutes,
+    identity?.encrypted,
+    lockApp,
+    locked,
+  ]);
+
+  React.useEffect(() => {
+    if (!identity?.encrypted || !appLockPolicy.lockOnWindowClose) return;
+
+    const lockOnHidden = () => {
+      if (document.visibilityState === "hidden") {
+        lockApp();
+      }
+    };
+    window.addEventListener("pagehide", lockApp);
+    document.addEventListener("visibilitychange", lockOnHidden);
+    return () => {
+      window.removeEventListener("pagehide", lockApp);
+      document.removeEventListener("visibilitychange", lockOnHidden);
+    };
+  }, [appLockPolicy.lockOnWindowClose, identity?.encrypted, lockApp]);
 
   React.useEffect(() => {
     if (!isAssistantRoute) {
@@ -883,6 +974,7 @@ function LockScreen({
 }) {
   const [passphrase, setPassphrase] = React.useState("");
   const [error, setError] = React.useState<string | null>(null);
+  const [submitting, setSubmitting] = React.useState(false);
   const inputRef = React.useRef<HTMLInputElement | null>(null);
 
   React.useEffect(() => {
@@ -891,12 +983,18 @@ function LockScreen({
 
   const submit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    if (submitting) return;
     setError(null);
-    const ok = await onUnlock(passphrase);
-    if (!ok) {
-      setError("Passphrase did not unlock this session.");
-      setPassphrase("");
-      inputRef.current?.focus();
+    setSubmitting(true);
+    try {
+      const ok = await onUnlock(passphrase);
+      if (!ok) {
+        setError("Passphrase did not unlock this session.");
+        setPassphrase("");
+        inputRef.current?.focus();
+      }
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -933,11 +1031,12 @@ function LockScreen({
             autoComplete="current-password"
             value={passphrase}
             onChange={(event) => setPassphrase(event.target.value)}
+            disabled={submitting}
           />
           {error && <p className="m-0 text-xs text-destructive">{error}</p>}
         </div>
-        <Button className="mt-5 w-full" type="submit">
-          Unlock
+        <Button className="mt-5 w-full" type="submit" disabled={submitting}>
+          {submitting ? "Unlocking..." : "Unlock"}
         </Button>
       </form>
     </div>

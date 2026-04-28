@@ -58,6 +58,7 @@ import {
 import { useDaemon, useDaemonMutation } from "@/daemon/client";
 import {
   hasSessionUnlockPassphrase,
+  setSessionUnlockPassphrase,
   verifySessionUnlockPassphrase,
 } from "@/store/sessionLock";
 import { useUiStore } from "@/store/ui";
@@ -65,7 +66,10 @@ import { cn } from "@/lib/utils";
 import {
   DEFAULT_BACKEND_NAME,
   DEFAULT_BACKEND_URL,
+  databasePassphraseHint,
 } from "@/components/kb/Onboarding/constants";
+
+const PLAINTEXT_DELETE_ACK = "DELETE LOCAL DATA";
 
 type Net = "BTC" | "LIQUID" | "LN" | "FX";
 
@@ -143,6 +147,8 @@ export function SettingsModal({
   const setHideSensitive = useUiStore((s) => s.setHideSensitive);
   const currency = useUiStore((s) => s.currency);
   const setCurrency = useUiStore((s) => s.setCurrency);
+  const appLockPolicy = useUiStore((s) => s.appLockPolicy);
+  const setAppLockPolicy = useUiStore((s) => s.setAppLockPolicy);
   const identity = useUiStore((s) => s.identity);
   const setIdentity = useUiStore((s) => s.setIdentity);
   const navigate = useNavigate();
@@ -152,14 +158,11 @@ export function SettingsModal({
   const status =
     statusQuery.data?.kind === "status" ? statusQuery.data.data : null;
   const deleteWorkspace = useDaemonMutation("ui.workspace.delete");
+  const changePassphrase = useDaemonMutation("ui.secrets.change_passphrase");
   const backendsRef = React.useRef<HTMLDivElement | null>(null);
   const aiRef = React.useRef<HTMLDivElement | null>(null);
 
   const [clearClipboard, setClearClipboard] = React.useState(true);
-  const [autoLockEnabled, setAutoLockEnabled] = React.useState(true);
-  const [autoLockMinutes, setAutoLockMinutes] = React.useState(5);
-  const [requirePassphrase, setRequirePassphrase] = React.useState(true);
-  const [lockOnClose, setLockOnClose] = React.useState(true);
   const [backends, setBackends] = React.useState<Backend[]>(DEFAULT_BACKENDS);
   const [backendDialogOpen, setBackendDialogOpen] = React.useState(false);
   const [editingBackendId, setEditingBackendId] = React.useState<string | null>(
@@ -168,7 +171,15 @@ export function SettingsModal({
   const [deleteOpen, setDeleteOpen] = React.useState(false);
   const [deletePassphrase, setDeletePassphrase] = React.useState("");
   const [deleteConfirm, setDeleteConfirm] = React.useState("");
+  const [deletePlaintextAck, setDeletePlaintextAck] = React.useState("");
   const [deleteError, setDeleteError] = React.useState<string | null>(null);
+  const [passphraseOpen, setPassphraseOpen] = React.useState(false);
+  const [currentPassphrase, setCurrentPassphrase] = React.useState("");
+  const [newPassphrase, setNewPassphrase] = React.useState("");
+  const [newPassphraseConfirm, setNewPassphraseConfirm] = React.useState("");
+  const [passphraseError, setPassphraseError] = React.useState<string | null>(
+    null,
+  );
 
   const editingBackend = React.useMemo(
     () => backends.find((backend) => backend.id === editingBackendId) ?? null,
@@ -207,12 +218,23 @@ export function SettingsModal({
 
   const workspaceLabel =
     status?.current_workspace || identity?.workspace || "current workspace";
+  const encryptedWorkspace =
+    Boolean(identity?.encrypted) || identity?.databaseMode === "sqlcipher";
 
   const openDeleteWorkspace = () => {
     setDeletePassphrase("");
     setDeleteConfirm("");
+    setDeletePlaintextAck("");
     setDeleteError(null);
     setDeleteOpen(true);
+  };
+
+  const openChangePassphrase = () => {
+    setCurrentPassphrase("");
+    setNewPassphrase("");
+    setNewPassphraseConfirm("");
+    setPassphraseError(null);
+    setPassphraseOpen(true);
   };
 
   const openAddBackend = () => {
@@ -246,15 +268,22 @@ export function SettingsModal({
 
   const onDeleteWorkspace = async () => {
     setDeleteError(null);
-    if (!deletePassphrase) {
+    if (encryptedWorkspace && !deletePassphrase) {
       setDeleteError("Enter the database passphrase.");
+      return;
+    }
+    if (
+      !encryptedWorkspace &&
+      deletePlaintextAck.trim() !== PLAINTEXT_DELETE_ACK
+    ) {
+      setDeleteError(`Type ${PLAINTEXT_DELETE_ACK} to confirm local deletion.`);
       return;
     }
     if (deleteConfirm.trim() !== workspaceLabel) {
       setDeleteError(`Type ${workspaceLabel} to confirm workspace deletion.`);
       return;
     }
-    if (hasSessionUnlockPassphrase()) {
+    if (encryptedWorkspace && hasSessionUnlockPassphrase()) {
       const verified = await verifySessionUnlockPassphrase(deletePassphrase);
       if (!verified) {
         setDeleteError("Passphrase did not unlock this session.");
@@ -267,7 +296,9 @@ export function SettingsModal({
       await deleteWorkspace.mutateAsync({
         confirm: "DELETE",
         confirm_workspace: workspaceLabel,
-        auth_response: { passphrase_secret: deletePassphrase },
+        auth_response: encryptedWorkspace
+          ? { passphrase_secret: deletePassphrase }
+          : { plaintext_delete_ack: PLAINTEXT_DELETE_ACK },
       });
       setIdentity(null);
       onClose();
@@ -281,6 +312,37 @@ export function SettingsModal({
     }
   };
 
+  const onChangePassphrase = async () => {
+    setPassphraseError(null);
+    if (!currentPassphrase) {
+      setPassphraseError("Enter the current database passphrase.");
+      return;
+    }
+    const hint = databasePassphraseHint(newPassphrase, newPassphraseConfirm);
+    if (hint) {
+      setPassphraseError(hint);
+      return;
+    }
+
+    try {
+      await changePassphrase.mutateAsync({
+        auth_response: { passphrase_secret: currentPassphrase },
+        new_passphrase_secret: newPassphrase,
+      });
+      await setSessionUnlockPassphrase(newPassphrase);
+      setPassphraseOpen(false);
+      setCurrentPassphrase("");
+      setNewPassphrase("");
+      setNewPassphraseConfirm("");
+    } catch (error) {
+      setPassphraseError(
+        error instanceof Error
+          ? error.message
+          : "Could not change database passphrase.",
+      );
+    }
+  };
+
   return (
     <Dialog
       open={open}
@@ -288,7 +350,7 @@ export function SettingsModal({
         if (!next) onClose();
       }}
     >
-    <DialogContent className="max-h-[92vh] w-[min(96vw,1500px)] !max-w-[min(96vw,1500px)] gap-0 overflow-hidden p-0">
+      <DialogContent className="max-h-[92vh] w-[min(96vw,1500px)] !max-w-[min(96vw,1500px)] gap-0 overflow-hidden p-0">
         <DialogHeader className="shrink-0 border-b px-6 py-5 lg:px-8">
           <DialogTitle className="text-xl">Settings</DialogTitle>
           <DialogDescription>
@@ -381,13 +443,16 @@ export function SettingsModal({
                   <SettingsSwitchRow
                     label="Auto-lock when idle"
                     description="Require passphrase after inactivity."
-                    checked={autoLockEnabled}
-                    onCheckedChange={setAutoLockEnabled}
+                    checked={appLockPolicy.autoLockWhenIdle}
+                    onCheckedChange={(checked) =>
+                      setAppLockPolicy({ autoLockWhenIdle: checked })
+                    }
                   />
                   <div
                     className={cn(
                       "space-y-2",
-                      !autoLockEnabled && "pointer-events-none opacity-50",
+                      !appLockPolicy.autoLockWhenIdle &&
+                        "pointer-events-none opacity-50",
                     )}
                   >
                     <Label>Idle timeout</Label>
@@ -397,10 +462,12 @@ export function SettingsModal({
                           key={m}
                           type="button"
                           variant={
-                            autoLockMinutes === m ? "default" : "outline"
+                            appLockPolicy.idleMinutes === m
+                              ? "default"
+                              : "outline"
                           }
                           size="sm"
-                          onClick={() => setAutoLockMinutes(m)}
+                          onClick={() => setAppLockPolicy({ idleMinutes: m })}
                         >
                           {m}m
                         </Button>
@@ -410,14 +477,18 @@ export function SettingsModal({
                   <SettingsSwitchRow
                     label="Require passphrase on launch"
                     description="Prompt every time Kassiber opens."
-                    checked={requirePassphrase}
-                    onCheckedChange={setRequirePassphrase}
+                    checked={appLockPolicy.requirePassphraseOnLaunch}
+                    onCheckedChange={(checked) =>
+                      setAppLockPolicy({ requirePassphraseOnLaunch: checked })
+                    }
                   />
                   <SettingsSwitchRow
                     label="Lock on window close"
                     description="Clear in-memory decrypted state when the app window closes."
-                    checked={lockOnClose}
-                    onCheckedChange={setLockOnClose}
+                    checked={appLockPolicy.lockOnWindowClose}
+                    onCheckedChange={(checked) =>
+                      setAppLockPolicy({ lockOnWindowClose: checked })
+                    }
                   />
                 </CardContent>
               </Card>
@@ -434,9 +505,9 @@ export function SettingsModal({
                 </CardHeader>
                 <CardContent className="space-y-4">
                   <p className="m-0 text-sm leading-6 text-muted-foreground">
-                    This app lock protects against casual access in the current
-                    UI session. SQLCipher plus native fd unlock is the hard
-                    at-rest boundary.
+                    Lock closes the daemon database handle for encrypted
+                    workspaces. Unlocking reopens the local SQLCipher database
+                    with the passphrase.
                   </p>
                   <div className="flex flex-wrap gap-2">
                     <Button
@@ -448,7 +519,13 @@ export function SettingsModal({
                       <Lock className="size-4" aria-hidden="true" />
                       Lock now
                     </Button>
-                    <Button type="button" size="sm" variant="ghost">
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="ghost"
+                      onClick={openChangePassphrase}
+                      disabled={!encryptedWorkspace}
+                    >
                       <KeyRound className="size-4" aria-hidden="true" />
                       Change passphrase
                     </Button>
@@ -691,7 +768,9 @@ export function SettingsModal({
               <DialogTitle>Delete workspace</DialogTitle>
               <DialogDescription>
                 This removes {workspaceLabel} from the local Kassiber database.
-                Enter the database passphrase and the workspace name to continue.
+                {encryptedWorkspace
+                  ? " Enter the database passphrase and the workspace name to continue."
+                  : " This plaintext workspace has no database passphrase; type the explicit local-delete challenge and workspace name to continue."}
               </DialogDescription>
             </DialogHeader>
             <form
@@ -701,16 +780,34 @@ export function SettingsModal({
                 void onDeleteWorkspace();
               }}
             >
-              <div className="space-y-2">
-                <Label htmlFor="delete-passphrase">Passphrase</Label>
-                <Input
-                  id="delete-passphrase"
-                  type="password"
-                  autoComplete="current-password"
-                  value={deletePassphrase}
-                  onChange={(event) => setDeletePassphrase(event.target.value)}
-                />
-              </div>
+              {encryptedWorkspace ? (
+                <div className="space-y-2">
+                  <Label htmlFor="delete-passphrase">Passphrase</Label>
+                  <Input
+                    id="delete-passphrase"
+                    type="password"
+                    autoComplete="current-password"
+                    value={deletePassphrase}
+                    onChange={(event) =>
+                      setDeletePassphrase(event.target.value)
+                    }
+                  />
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  <Label htmlFor="delete-plaintext-ack">
+                    Plaintext delete challenge
+                  </Label>
+                  <Input
+                    id="delete-plaintext-ack"
+                    value={deletePlaintextAck}
+                    placeholder={PLAINTEXT_DELETE_ACK}
+                    onChange={(event) =>
+                      setDeletePlaintextAck(event.target.value)
+                    }
+                  />
+                </div>
+              )}
               <div className="space-y-2">
                 <Label htmlFor="delete-confirm">Workspace name</Label>
                 <Input
@@ -737,6 +834,85 @@ export function SettingsModal({
                   disabled={deleteWorkspace.isPending}
                 >
                   {deleteWorkspace.isPending ? "Deleting..." : "Delete"}
+                </Button>
+              </DialogFooter>
+            </form>
+          </DialogContent>
+        </Dialog>
+        <Dialog
+          open={passphraseOpen}
+          onOpenChange={(next) => {
+            if (!next) {
+              setPassphraseOpen(false);
+            }
+          }}
+        >
+          <DialogContent className="max-w-md">
+            <DialogHeader>
+              <DialogTitle>Change database passphrase</DialogTitle>
+              <DialogDescription>
+                Rekey the local SQLCipher database. The current daemon session
+                is reopened with the new passphrase after rotation.
+              </DialogDescription>
+            </DialogHeader>
+            <form
+              className="space-y-4"
+              onSubmit={(event) => {
+                event.preventDefault();
+                void onChangePassphrase();
+              }}
+            >
+              <div className="space-y-2">
+                <Label htmlFor="current-passphrase">Current passphrase</Label>
+                <Input
+                  id="current-passphrase"
+                  type="password"
+                  autoComplete="current-password"
+                  value={currentPassphrase}
+                  onChange={(event) =>
+                    setCurrentPassphrase(event.target.value)
+                  }
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="new-passphrase">New passphrase</Label>
+                <Input
+                  id="new-passphrase"
+                  type="password"
+                  autoComplete="new-password"
+                  value={newPassphrase}
+                  onChange={(event) => setNewPassphrase(event.target.value)}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="new-passphrase-confirm">
+                  Confirm new passphrase
+                </Label>
+                <Input
+                  id="new-passphrase-confirm"
+                  type="password"
+                  autoComplete="new-password"
+                  value={newPassphraseConfirm}
+                  onChange={(event) =>
+                    setNewPassphraseConfirm(event.target.value)
+                  }
+                />
+              </div>
+              {passphraseError && (
+                <p className="m-0 text-sm text-destructive">
+                  {passphraseError}
+                </p>
+              )}
+              <DialogFooter>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setPassphraseOpen(false)}
+                >
+                  Cancel
+                </Button>
+                <Button type="submit" disabled={changePassphrase.isPending}>
+                  {changePassphrase.isPending ? "Changing..." : "Change"}
                 </Button>
               </DialogFooter>
             </form>

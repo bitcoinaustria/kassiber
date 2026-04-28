@@ -138,8 +138,9 @@ export const DatabaseStep = ({
                     }
                   />
                   <p className="m-0 text-xs leading-5 text-ink-2">
-                    Used to unlock this UI session; the passphrase is not
-                    stored in the persisted UI profile.
+                    Sent to the local daemon to create and unlock the
+                    SQLCipher database. It is not stored in the persisted UI
+                    profile.
                   </p>
                 </div>
                 <CheckRow

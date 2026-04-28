@@ -4,6 +4,7 @@ import { ShieldCheck } from "lucide-react";
 
 import { Wordmark } from "@/components/kb/Wordmark";
 import { Button } from "@/components/ui/button";
+import { getTransport } from "@/daemon/transport";
 import { cn } from "@/lib/utils";
 import { useUiStore, type Identity } from "@/store/ui";
 import { setSessionUnlockPassphrase } from "@/store/sessionLock";
@@ -102,8 +103,11 @@ export const Onboarding = ({ className, steps: customSteps }: OnboardingProps) =
   const navigate = useNavigate();
   const setIdentity = useUiStore((state) => state.setIdentity);
   const setDataMode = useUiStore((state) => state.setDataMode);
+  const dataMode = useUiStore((state) => state.dataMode);
   const [currentStep, setCurrentStep] = useState(0);
   const [form, setForm] = useState<OnboardingForm>(DEFAULT_FORM);
+  const [submitting, setSubmitting] = useState(false);
+  const [finishError, setFinishError] = useState<string | null>(null);
   const activeSteps = customSteps ?? DEFAULT_STEPS;
   const step = activeSteps[currentStep];
 
@@ -125,6 +129,24 @@ export const Onboarding = ({ className, steps: customSteps }: OnboardingProps) =
       form.taxCountry === "at"
         ? 0
         : (parseTaxLongTermDays(form.taxLongTermDays) ?? 365);
+    if (form.databaseMode === "sqlcipher") {
+      const envelope = await getTransport(dataMode).invoke({
+        kind: "ui.secrets.init",
+        args: {
+          auth_response: { passphrase_secret: form.databasePassphrase },
+          migrate_credentials: form.migrateCredentials,
+        },
+      });
+      if (envelope.kind === "error" || envelope.error) {
+        throw new Error(
+          envelope.error?.message ?? "Could not initialize SQLCipher database.",
+        );
+      }
+      if (envelope.kind === "auth_required") {
+        throw new Error("Database passphrase is required.");
+      }
+    }
+
     const identity: Identity = {
       name: form.name.trim(),
       workspace: form.workspace.trim() || "Personal",
@@ -132,8 +154,6 @@ export const Onboarding = ({ className, steps: customSteps }: OnboardingProps) =
       // so all non-AT picks collapse to "Generic". Prefer `taxCountry` for
       // new callers.
       country: form.taxCountry === "at" ? "AT" : "Generic",
-      // Intent only until the native SQLCipher passphrase handoff lands; see
-      // `Identity` JSDoc in store/ui.ts.
       encrypted: form.databaseMode === "sqlcipher",
       profile: form.profile.trim() || "main",
       taxCountry: form.taxCountry,
@@ -173,12 +193,21 @@ export const Onboarding = ({ className, steps: customSteps }: OnboardingProps) =
   };
 
   const handleSubmit = () => {
+    if (submitting) return;
+    setFinishError(null);
     if (!step.isComplete(form)) return;
     if (currentStep !== activeSteps.length - 1) {
       setCurrentStep(currentStep + 1);
       return;
     }
-    void finish();
+    setSubmitting(true);
+    void finish()
+      .catch((error: unknown) => {
+        setFinishError(
+          error instanceof Error ? error.message : "Could not finish onboarding.",
+        );
+      })
+      .finally(() => setSubmitting(false));
   };
 
   const handleGoBack = () => {
@@ -228,6 +257,12 @@ export const Onboarding = ({ className, steps: customSteps }: OnboardingProps) =
           totalSteps={activeSteps.length}
           goBack={handleGoBack}
         />
+
+        {finishError && (
+          <div className="max-w-2xl rounded-md border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">
+            {finishError}
+          </div>
+        )}
 
         <div className="flex flex-wrap items-center justify-center gap-4 text-xs text-ink-3">
           <span>Private keys never enter Kassiber.</span>
