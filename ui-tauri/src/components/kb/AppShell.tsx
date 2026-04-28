@@ -276,10 +276,7 @@ export function AppShell() {
   >(null);
   const [assistantCollapsed, setAssistantCollapsed] = React.useState(false);
   const [locked, setLocked] = React.useState(
-    () =>
-      Boolean(identity?.encrypted) &&
-      appLockPolicy.requirePassphraseOnLaunch &&
-      !hasSessionUnlockPassphrase(),
+    () => Boolean(identity?.encrypted) && !hasSessionUnlockPassphrase(),
   );
   const [assistantReturnPath, setAssistantReturnPath] =
     React.useState<AssistantReturnPath>("/overview");
@@ -342,14 +339,12 @@ export function AppShell() {
   }, [identity, navigate]);
 
   React.useEffect(() => {
-    if (!identity?.encrypted || !appLockPolicy.requirePassphraseOnLaunch) {
-      return;
-    }
+    if (!identity?.encrypted) return;
     if (hasSessionUnlockPassphrase()) return;
     if (launchLockApplied.current) return;
     launchLockApplied.current = true;
     lockApp();
-  }, [appLockPolicy.requirePassphraseOnLaunch, identity?.encrypted, lockApp]);
+  }, [identity?.encrypted, lockApp]);
 
   React.useEffect(() => {
     if (!identity?.encrypted || !appLockPolicy.autoLockWhenIdle || locked) {

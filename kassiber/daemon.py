@@ -113,6 +113,9 @@ MAX_PENDING_AI_CANCELS = 128
 AI_TOOL_CONSENT_TIMEOUT_SECONDS = 300.0
 PLAINTEXT_DELETE_ACK = "DELETE LOCAL DATA"
 MIN_DATABASE_PASSPHRASE_CHARS = 12
+AUTH_FAILURES_BEFORE_BACKOFF = 3
+AUTH_BACKOFF_BASE_SECONDS = 1.0
+AUTH_BACKOFF_MAX_SECONDS = 30.0
 
 
 class AiToolConsentState:
@@ -253,6 +256,53 @@ class ActiveAiChats:
         return chat.consent.record(call_id, decision)
 
 
+class AuthAttemptBackoff:
+    """Process-local throttling for passphrase verification attempts."""
+
+    def __init__(self) -> None:
+        self._lock = threading.Lock()
+        self._failures: dict[str, int] = {}
+        self._locked_until: dict[str, float] = {}
+
+    def check(self, scope: str) -> None:
+        now = time.monotonic()
+        with self._lock:
+            locked_until = self._locked_until.get(scope, 0.0)
+            retry_after = locked_until - now
+            if retry_after <= 0:
+                self._locked_until.pop(scope, None)
+                return
+        raise AppError(
+            "too many failed passphrase attempts",
+            code="local_auth_rate_limited",
+            details={
+                "scope": scope,
+                "retry_after_seconds": max(1, int(retry_after + 0.999)),
+            },
+            hint="Wait before trying the passphrase again.",
+            retryable=True,
+        )
+
+    def record_success(self, scope: str) -> None:
+        with self._lock:
+            self._failures.pop(scope, None)
+            self._locked_until.pop(scope, None)
+
+    def record_failure(self, scope: str) -> None:
+        now = time.monotonic()
+        with self._lock:
+            failures = self._failures.get(scope, 0) + 1
+            self._failures[scope] = failures
+            if failures < AUTH_FAILURES_BEFORE_BACKOFF:
+                return
+            delay = min(
+                AUTH_BACKOFF_MAX_SECONDS,
+                AUTH_BACKOFF_BASE_SECONDS
+                * 2 ** (failures - AUTH_FAILURES_BEFORE_BACKOFF),
+            )
+            self._locked_until[scope] = now + delay
+
+
 @dataclass(frozen=True)
 class _DaemonMainThreadTask:
     callback: Callable[[sqlite3.Connection], Any]
@@ -266,6 +316,7 @@ class DaemonContext:
     runtime_config: dict[str, object]
     active_ai_chats: ActiveAiChats
     main_thread_tasks: queue.Queue[_DaemonMainThreadTask]
+    auth_backoff: AuthAttemptBackoff
 
 
 @dataclass(frozen=True)
@@ -1162,6 +1213,20 @@ def _verify_passphrase_for_reveal(ctx: "DaemonContext", passphrase: str) -> bool
     return True
 
 
+def _verify_passphrase_with_backoff(
+    ctx: "DaemonContext",
+    scope: str,
+    passphrase: str,
+) -> bool:
+    ctx.auth_backoff.check(scope)
+    verified = _verify_passphrase_for_reveal(ctx, passphrase)
+    if verified:
+        ctx.auth_backoff.record_success(scope)
+    else:
+        ctx.auth_backoff.record_failure(scope)
+    return verified
+
+
 def _delete_current_workspace(ctx: "DaemonContext") -> dict[str, Any]:
     context = current_context_snapshot(ctx.conn)
     workspace_id = context.get("workspace_id")
@@ -1268,7 +1333,9 @@ def handle_request(
                     ),
                     False,
                 )
-            if ctx.conn is not None and not _verify_passphrase_for_reveal(ctx, passphrase):
+            if not _verify_passphrase_with_backoff(
+                ctx, "unlock_database", passphrase
+            ):
                 return (
                     _error_envelope(
                         "local_auth_denied",
@@ -1321,7 +1388,9 @@ def handle_request(
         _validate_new_database_passphrase(passphrase)
         db_path = resolve_database_path(resolve_effective_data_root(ctx.data_root))
         if _database_file_is_encrypted(ctx):
-            if not _verify_passphrase_for_reveal(ctx, passphrase):
+            if not _verify_passphrase_with_backoff(
+                ctx, "init_database_encryption", passphrase
+            ):
                 return (
                     _error_envelope(
                         "local_auth_denied",
@@ -1404,7 +1473,9 @@ def handle_request(
                 code="plaintext_database",
                 retryable=False,
             )
-        if not _verify_passphrase_for_reveal(ctx, current):
+        if not _verify_passphrase_with_backoff(
+            ctx, "change_database_passphrase", current
+        ):
             return (
                 _error_envelope(
                     "local_auth_denied",
@@ -1631,7 +1702,9 @@ def handle_request(
                     ),
                     False,
                 )
-            verified = _verify_passphrase_for_reveal(ctx, passphrase)
+            verified = _verify_passphrase_with_backoff(
+                ctx, "delete_workspace", passphrase
+            )
             if not verified:
                 return (
                     _error_envelope(
@@ -2120,15 +2193,16 @@ def _handle_reveal_request(
         )
 
     try:
-        verified = _verify_passphrase_for_reveal(ctx, passphrase)
+        verified = _verify_passphrase_with_backoff(ctx, scope, passphrase)
     except AppError as exc:
         return (
             _error_envelope(
                 exc.code or "auth_error",
                 str(exc),
                 request_id=request_id,
+                details=exc.details,
                 hint=exc.hint,
-                retryable=False,
+                retryable=exc.retryable,
             ),
             False,
         )
@@ -2175,6 +2249,7 @@ def run(
         runtime_config=args.runtime_config,
         active_ai_chats=ActiveAiChats(),
         main_thread_tasks=queue.Queue(),
+        auth_backoff=AuthAttemptBackoff(),
     )
     input_lines = _start_stdin_reader(input_stream)
 

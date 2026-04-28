@@ -653,6 +653,114 @@ class DaemonSmokeTest(unittest.TestCase):
             self.assertEqual(code, 0, stderr)
             self.assertEqual(stderr, "")
 
+    @unittest.skipUnless(sqlcipher_available(), "SQLCipher driver unavailable")
+    def test_daemon_auth_backoff_throttles_unlock_and_reauth(self):
+        with tempfile.TemporaryDirectory(prefix="kassiber-daemon-") as tmp:
+            data_root = Path(tmp) / "data"
+            proc = _start_daemon(data_root)
+
+            ready = _read_payload(proc)
+            self.assertEqual(ready["kind"], "daemon.ready")
+
+            passphrase = "correct horse battery"
+            _write_payload(
+                proc,
+                {
+                    "request_id": "secrets-init",
+                    "kind": "ui.secrets.init",
+                    "args": {
+                        "auth_response": {"passphrase_secret": passphrase},
+                        "migrate_credentials": False,
+                    },
+                },
+            )
+            self.assertEqual(_read_payload(proc)["kind"], "ui.secrets.init")
+            _write_payload(proc, {"request_id": "lock-1", "kind": "daemon.lock"})
+            self.assertEqual(_read_payload(proc)["kind"], "daemon.lock")
+
+            for attempt in range(1, 4):
+                _write_payload(
+                    proc,
+                    {
+                        "request_id": f"unlock-wrong-{attempt}",
+                        "kind": "daemon.unlock",
+                        "args": {
+                            "auth_response": {
+                                "passphrase_secret": f"wrong-{attempt}"
+                            }
+                        },
+                    },
+                )
+                rejected = _read_payload(proc)
+                self.assertEqual(rejected["kind"], "error")
+                self.assertEqual(rejected["error"]["code"], "local_auth_denied")
+
+            _write_payload(
+                proc,
+                {
+                    "request_id": "unlock-rate-limited",
+                    "kind": "daemon.unlock",
+                    "args": {"auth_response": {"passphrase_secret": "wrong-4"}},
+                },
+            )
+            unlock_limited = _read_payload(proc)
+            self.assertEqual(unlock_limited["kind"], "error")
+            self.assertEqual(
+                unlock_limited["error"]["code"], "local_auth_rate_limited"
+            )
+            self.assertEqual(
+                unlock_limited["error"]["details"]["scope"], "unlock_database"
+            )
+            self.assertGreaterEqual(
+                unlock_limited["error"]["details"]["retry_after_seconds"], 1
+            )
+
+            for attempt in range(1, 4):
+                _write_payload(
+                    proc,
+                    {
+                        "request_id": f"rekey-wrong-{attempt}",
+                        "kind": "ui.secrets.change_passphrase",
+                        "args": {
+                            "auth_response": {
+                                "passphrase_secret": f"bad-current-{attempt}"
+                            },
+                            "new_passphrase_secret": "better horse battery",
+                        },
+                    },
+                )
+                rejected = _read_payload(proc)
+                self.assertEqual(rejected["kind"], "error")
+                self.assertEqual(rejected["error"]["code"], "local_auth_denied")
+
+            _write_payload(
+                proc,
+                {
+                    "request_id": "rekey-rate-limited",
+                    "kind": "ui.secrets.change_passphrase",
+                    "args": {
+                        "auth_response": {"passphrase_secret": "bad-current-4"},
+                        "new_passphrase_secret": "better horse battery",
+                    },
+                },
+            )
+            rekey_limited = _read_payload(proc)
+            self.assertEqual(rekey_limited["kind"], "error")
+            self.assertEqual(
+                rekey_limited["error"]["code"], "local_auth_rate_limited"
+            )
+            self.assertEqual(
+                rekey_limited["error"]["details"]["scope"],
+                "change_database_passphrase",
+            )
+
+            _write_payload(proc, {"request_id": "shutdown-1", "kind": "daemon.shutdown"})
+            self.assertEqual(_read_payload(proc)["kind"], "daemon.shutdown")
+
+            code, stderr = _close_daemon(proc)
+            self.assertEqual(code, 0, stderr)
+            self.assertEqual(stderr, "")
+
     def test_ai_tool_consent_state_times_out(self):
         consent = AiToolConsentState()
         decision = consent.wait(

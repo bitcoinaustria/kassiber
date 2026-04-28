@@ -476,11 +476,20 @@ export function SettingsModal({
                   </div>
                   <SettingsSwitchRow
                     label="Require passphrase on launch"
-                    description="Prompt every time Kassiber opens."
-                    checked={appLockPolicy.requirePassphraseOnLaunch}
+                    description={
+                      encryptedWorkspace
+                        ? "Encrypted databases always require unlock on launch."
+                        : "Prompt every time Kassiber opens."
+                    }
+                    checked={
+                      encryptedWorkspace
+                        ? true
+                        : appLockPolicy.requirePassphraseOnLaunch
+                    }
                     onCheckedChange={(checked) =>
                       setAppLockPolicy({ requirePassphraseOnLaunch: checked })
                     }
+                    disabled={encryptedWorkspace}
                   />
                   <SettingsSwitchRow
                     label="Lock on window close"
@@ -1123,6 +1132,7 @@ interface SettingsSwitchRowProps {
   description: string;
   checked: boolean;
   onCheckedChange: (checked: boolean) => void;
+  disabled?: boolean;
 }
 
 function SettingsSwitchRow({
@@ -1130,14 +1140,24 @@ function SettingsSwitchRow({
   description,
   checked,
   onCheckedChange,
+  disabled = false,
 }: SettingsSwitchRowProps) {
   return (
-    <div className="flex items-start justify-between gap-4">
+    <div
+      className={cn(
+        "flex items-start justify-between gap-4",
+        disabled && "opacity-60",
+      )}
+    >
       <div className="min-w-0 space-y-1">
         <Label className="text-sm font-medium">{label}</Label>
         <p className="text-sm text-muted-foreground">{description}</p>
       </div>
-      <Switch checked={checked} onCheckedChange={onCheckedChange} />
+      <Switch
+        checked={checked}
+        onCheckedChange={onCheckedChange}
+        disabled={disabled}
+      />
     </div>
   );
 }
