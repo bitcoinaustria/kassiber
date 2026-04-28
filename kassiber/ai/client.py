@@ -49,6 +49,74 @@ class ChatDelta:
     raw: dict[str, Any]
 
 
+class ToolCallAccumulator:
+    """Accumulate OpenAI-compatible streaming tool_call deltas.
+
+    Providers may split a single function-call argument string across many
+    chunks. This helper keeps the latest complete-ish snapshot per index so
+    callers can inspect accumulated arguments without reimplementing the SSE
+    merge rules.
+    """
+
+    def __init__(self) -> None:
+        self._calls: dict[int, dict[str, Any]] = {}
+
+    def add_delta(self, tool_call_deltas: object) -> list[dict[str, Any]]:
+        if not isinstance(tool_call_deltas, list):
+            return self.snapshot()
+        for position, raw in enumerate(tool_call_deltas):
+            if not isinstance(raw, dict):
+                continue
+            raw_index = raw.get("index", position)
+            try:
+                index = int(raw_index)
+            except (TypeError, ValueError):
+                index = position
+            current = self._calls.setdefault(
+                index,
+                {
+                    "id": None,
+                    "type": "function",
+                    "function": {"name": "", "arguments": ""},
+                },
+            )
+            call_id = raw.get("id")
+            if isinstance(call_id, str) and call_id:
+                current["id"] = call_id
+            call_type = raw.get("type")
+            if isinstance(call_type, str) and call_type:
+                current["type"] = call_type
+            function = raw.get("function")
+            if isinstance(function, dict):
+                current_function = current.setdefault("function", {"name": "", "arguments": ""})
+                name = function.get("name")
+                if isinstance(name, str) and name:
+                    current_function["name"] = name
+                arguments = function.get("arguments")
+                if isinstance(arguments, str):
+                    current_function["arguments"] = (
+                        str(current_function.get("arguments") or "") + arguments
+                    )
+        return self.snapshot()
+
+    def snapshot(self) -> list[dict[str, Any]]:
+        calls: list[dict[str, Any]] = []
+        for index in sorted(self._calls):
+            raw = self._calls[index]
+            function = raw.get("function") if isinstance(raw.get("function"), dict) else {}
+            calls.append(
+                {
+                    "id": raw.get("id") or f"call_{index}",
+                    "type": raw.get("type") or "function",
+                    "function": {
+                        "name": function.get("name") or "",
+                        "arguments": function.get("arguments") or "",
+                    },
+                }
+            )
+        return calls
+
+
 def parse_sse_chunks(lines: Iterable[str]) -> Iterator[dict]:
     """Yield JSON objects from an iterator over SSE text lines.
 
@@ -274,9 +342,15 @@ class OpenAICompatClient:
         messages: list[dict],
         model: str,
         options: dict[str, Any] | None = None,
+        tools: list[dict[str, Any]] | None = None,
+        tool_choice: str | dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         """Non-streaming `POST /v1/chat/completions`. Returns the assistant message."""
         body = dict(options or {})
+        if tools is not None:
+            body["tools"] = tools
+        if tool_choice is not None:
+            body["tool_choice"] = tool_choice
         body.update({"model": model, "messages": messages, "stream": False})
         response = self._open(
             "chat/completions",
@@ -309,6 +383,11 @@ class OpenAICompatClient:
         }
         if isinstance(reasoning, str) and reasoning:
             result["reasoning"] = reasoning
+        tool_calls = message.get("tool_calls")
+        if isinstance(tool_calls, list):
+            result["tool_calls"] = [
+                tool_call for tool_call in tool_calls if isinstance(tool_call, dict)
+            ]
         return result
 
     def stream_chat(
@@ -317,6 +396,8 @@ class OpenAICompatClient:
         messages: list[dict],
         model: str,
         options: dict[str, Any] | None = None,
+        tools: list[dict[str, Any]] | None = None,
+        tool_choice: str | dict[str, Any] | None = None,
     ) -> Iterator[ChatDelta]:
         """Streaming `POST /v1/chat/completions`. Yields one ChatDelta per SSE chunk.
 
@@ -328,6 +409,10 @@ class OpenAICompatClient:
         daemon process.
         """
         body = dict(options or {})
+        if tools is not None:
+            body["tools"] = tools
+        if tool_choice is not None:
+            body["tool_choice"] = tool_choice
         body.update({"model": model, "messages": messages, "stream": True})
         response = self._open(
             "chat/completions",
@@ -344,6 +429,7 @@ class OpenAICompatClient:
         # behavior (retryable `ai_unavailable`).
         try:
             with response:
+                tool_call_accumulator = ToolCallAccumulator()
                 line_iter = (raw.decode("utf-8", errors="replace") for raw in response)
                 for chunk in parse_sse_chunks(line_iter):
                     choices = chunk.get("choices") if isinstance(chunk, dict) else None
@@ -353,6 +439,11 @@ class OpenAICompatClient:
                     delta = choice.get("delta")
                     if not isinstance(delta, dict):
                         delta = {}
+                    elif isinstance(delta.get("tool_calls"), list):
+                        delta = dict(delta)
+                        delta["tool_calls"] = tool_call_accumulator.add_delta(
+                            delta.get("tool_calls")
+                        )
                     yield ChatDelta(
                         delta=delta,
                         finish_reason=choice.get("finish_reason"),

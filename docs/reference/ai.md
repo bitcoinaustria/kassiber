@@ -146,6 +146,44 @@ worker returns between provider chunks, then emits the terminal `ai.chat`
 envelope with `finish_reason: "cancelled"`. For metered remote providers, any
 tokens already generated or in flight may still be billed.
 
+## Tool use
+
+The in-app assistant can opt into a bounded read-only tool loop with
+`ai.chat` top-level args:
+
+```json
+{
+  "tools_enabled": true,
+  "tool_loop_max_iterations": 8,
+  "system_prompt_kind": "kassiber"
+}
+```
+
+Tool control stays top-level; generation options still live under `options`.
+When enabled, Kassiber prepends a compact system prompt, sends OpenAI-style tool
+definitions, emits `ai.chat.tool_call` / `ai.chat.tool_result` stream records,
+feeds tool results back as `role: "tool"` messages, and finishes with the normal
+terminal `ai.chat` envelope.
+
+Read-only provider tool names exposed in this PR:
+
+- `status`
+- `ui_overview_snapshot` maps to daemon kind `ui.overview.snapshot`
+- `ui_transactions_list` maps to daemon kind `ui.transactions.list`
+- `ui_profiles_snapshot` maps to daemon kind `ui.profiles.snapshot`
+- `ui_reports_capital_gains` maps to daemon kind `ui.reports.capital_gains`
+- `ui_journals_snapshot` maps to daemon kind `ui.journals.snapshot`
+- `read_skill_reference`
+
+`read_skill_reference` is a virtual tool restricted to allowlisted files under
+`skills/kassiber/references/`: `command-templates`, `journal-processing`,
+`metadata`, `onboarding`, `reports`, `secrets-and-backup`, `troubleshooting`,
+`verification`, and `wallets-backends`.
+
+Unknown and mutating tool calls return `ok: false` with
+`reason: "tool_not_allowed"` and are not executed. Mutating tools wait for the
+future consent PR.
+
 ## Remote inference
 
 Remote inference should be an explicit choice, not the default.

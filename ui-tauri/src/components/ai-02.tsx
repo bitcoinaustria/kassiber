@@ -1,4 +1,5 @@
 import { Button } from "@/components/ui/button";
+import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { ProviderModelPicker } from "@/components/ai/ProviderModelPicker";
 import { cn } from "@/lib/utils";
@@ -9,6 +10,7 @@ import {
   FileSpreadsheet,
   RefreshCw,
   Square,
+  Wrench,
   type LucideIcon,
 } from "lucide-react";
 import { useRef, useState } from "react";
@@ -29,6 +31,8 @@ interface Ai02Props {
   onSubmit: (prompt: string) => void;
   onAbort?: () => void;
   isStreaming?: boolean;
+  toolsEnabled?: boolean;
+  onToolsEnabledChange?: (enabled: boolean) => void;
 }
 
 const DEFAULT_PROMPTS: PromptOption[] = [
@@ -62,6 +66,8 @@ export default function Ai02({
   onSubmit,
   onAbort,
   isStreaming = false,
+  toolsEnabled = true,
+  onToolsEnabledChange,
 }: Ai02Props) {
   const [inputValue, setInputValue] = useState("");
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -143,6 +149,17 @@ export default function Ai02({
               onChange={onSelectionChange}
             />
           </div>
+
+          <label className="flex shrink-0 items-center gap-1.5 rounded-full bg-muted px-2 py-1 text-xs text-muted-foreground">
+            <Wrench className="h-3.5 w-3.5" aria-hidden="true" />
+            <span>Tools</span>
+            <Switch
+              checked={toolsEnabled}
+              onCheckedChange={onToolsEnabledChange}
+              aria-label="Enable assistant tools"
+              disabled={isStreaming || !onToolsEnabledChange}
+            />
+          </label>
 
           <div className="ml-auto flex items-center gap-3">
             {isStreaming && onAbort ? (

@@ -107,6 +107,95 @@ class _SlowChatHandler(BaseHTTPRequestHandler):
         return
 
 
+def _chat_completion_response(message, finish_reason="stop"):
+    return {
+        "choices": [
+            {
+                "message": message,
+                "finish_reason": finish_reason,
+            }
+        ]
+    }
+
+
+class _ToolChatHandler(BaseHTTPRequestHandler):
+    def do_POST(self):
+        if self.path != "/v1/chat/completions":
+            self.send_response(404)
+            self.end_headers()
+            return
+        length = int(self.headers.get("content-length") or "0")
+        body = json.loads(self.rfile.read(length).decode("utf-8")) if length else {}
+        self.server.requests.append(body)  # type: ignore[attr-defined]
+        try:
+            payload, delay = self.server.responses.pop(0)  # type: ignore[attr-defined]
+        except IndexError:
+            payload, delay = _chat_completion_response(
+                {"role": "assistant", "content": "done"},
+            ), 0.0
+        if delay:
+            time.sleep(delay)
+        if body.get("stream"):
+            self.send_response(200)
+            self.send_header("content-type", "text/event-stream")
+            self.send_header("cache-control", "no-cache")
+            self.end_headers()
+            choice = payload["choices"][0]
+            message = choice["message"]
+            delta = {}
+            if "tool_calls" in message:
+                delta["tool_calls"] = message["tool_calls"]
+            if message.get("content"):
+                delta["content"] = message["content"]
+            chunk = {
+                "choices": [
+                    {
+                        "delta": delta,
+                        "finish_reason": choice.get("finish_reason"),
+                    }
+                ]
+            }
+            self.wfile.write(f"data: {json.dumps(chunk)}\n\n".encode())
+            self.wfile.write(b"data: [DONE]\n\n")
+            self.wfile.flush()
+            return
+        raw = json.dumps(payload).encode("utf-8")
+        self.send_response(200)
+        self.send_header("content-type", "application/json")
+        self.send_header("content-length", str(len(raw)))
+        self.end_headers()
+        self.wfile.write(raw)
+
+    def log_message(self, *args):
+        return
+
+
+def _start_tool_chat_server(responses):
+    server = ThreadingHTTPServer(("127.0.0.1", 0), _ToolChatHandler)
+    server.responses = list(responses)  # type: ignore[attr-defined]
+    server.requests = []  # type: ignore[attr-defined]
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    return server
+
+
+def _tool_call_message(name, arguments="{}", call_id="call_1"):
+    return _chat_completion_response(
+        {
+            "role": "assistant",
+            "content": "",
+            "tool_calls": [
+                {
+                    "id": call_id,
+                    "type": "function",
+                    "function": {"name": name, "arguments": arguments},
+                }
+            ],
+        },
+        finish_reason="tool_calls",
+    )
+
+
 class DaemonSmokeTest(unittest.TestCase):
     def test_daemon_ready_status_and_shutdown_jsonl(self):
         with tempfile.TemporaryDirectory(prefix="kassiber-daemon-") as tmp:
@@ -286,6 +375,255 @@ class DaemonSmokeTest(unittest.TestCase):
                 self.assertEqual(terminal["data"]["finish_reason"], "cancelled")
                 with _SlowChatHandler.request_count_lock:
                     self.assertEqual(_SlowChatHandler.request_count, 0)
+
+                _write_payload(proc, {"request_id": "shutdown-1", "kind": "daemon.shutdown"})
+                self.assertEqual(_read_payload_timeout(proc)["kind"], "daemon.shutdown")
+                code, stderr = _close_daemon(proc)
+                self.assertEqual(code, 0, stderr)
+                self.assertEqual(stderr, "")
+        finally:
+            server.shutdown()
+            server.server_close()
+
+    def test_ai_chat_read_only_tool_loop_emits_tool_records(self):
+        server = _start_tool_chat_server(
+            [
+                (_tool_call_message("ui_overview_snapshot"), 0.0),
+                (
+                    _chat_completion_response(
+                        {"role": "assistant", "content": "No transactions yet."},
+                    ),
+                    0.0,
+                ),
+            ]
+        )
+        base_url = f"http://127.0.0.1:{server.server_port}/v1"
+        try:
+            with tempfile.TemporaryDirectory(prefix="kassiber-daemon-") as tmp:
+                proc = _start_daemon(Path(tmp) / "data")
+                self.assertEqual(_read_payload_timeout(proc)["kind"], "daemon.ready")
+
+                _write_payload(
+                    proc,
+                    {
+                        "request_id": "provider-1",
+                        "kind": "ai.providers.create",
+                        "args": {
+                            "name": "tool-local",
+                            "base_url": base_url,
+                            "kind": "local",
+                        },
+                    },
+                )
+                self.assertEqual(_read_payload_timeout(proc)["kind"], "ai.providers.create")
+
+                _write_payload(
+                    proc,
+                    {
+                        "request_id": "chat-tools-1",
+                        "kind": "ai.chat",
+                        "args": {
+                            "provider": "tool-local",
+                            "model": "test-model",
+                            "tools_enabled": True,
+                            "messages": [{"role": "user", "content": "What is pending?"}],
+                        },
+                    },
+                )
+
+                records = []
+                terminal = None
+                deadline = time.time() + 5
+                while time.time() < deadline and terminal is None:
+                    payload = _read_payload_timeout(proc, max(0.1, deadline - time.time()))
+                    if payload.get("request_id") != "chat-tools-1":
+                        continue
+                    records.append(payload)
+                    if payload.get("kind") == "ai.chat.delta":
+                        payload = _read_payload(proc)
+                        records.append(payload)
+                    if payload.get("kind") == "ai.chat":
+                        terminal = payload
+
+                kinds = [record["kind"] for record in records]
+                self.assertIn("ai.chat.tool_call", kinds)
+                self.assertIn("ai.chat.tool_result", kinds)
+                self.assertIn("ai.chat.delta", kinds)
+                self.assertIsNotNone(terminal)
+                self.assertEqual(terminal["data"]["finish_reason"], "stop")
+                tool_call = next(
+                    record for record in records if record["kind"] == "ai.chat.tool_call"
+                )
+                self.assertEqual(tool_call["data"]["name"], "ui.overview.snapshot")
+                tool_result = next(
+                    record for record in records if record["kind"] == "ai.chat.tool_result"
+                )
+                self.assertTrue(tool_result["data"]["ok"])
+                self.assertEqual(tool_result["data"]["envelope"]["kind"], "ui.overview.snapshot")
+                self.assertEqual(len(server.requests), 2)  # type: ignore[attr-defined]
+                self.assertTrue(server.requests[0]["tools"])  # type: ignore[attr-defined]
+                self.assertTrue(
+                    any(
+                        message.get("role") == "tool"
+                        for message in server.requests[1]["messages"]  # type: ignore[attr-defined]
+                    )
+                )
+                tool_names = {
+                    tool["function"]["name"]
+                    for tool in server.requests[0]["tools"]  # type: ignore[attr-defined]
+                }
+                self.assertIn("ui_overview_snapshot", tool_names)
+                self.assertNotIn("ui.overview.snapshot", tool_names)
+
+                _write_payload(proc, {"request_id": "shutdown-1", "kind": "daemon.shutdown"})
+                self.assertEqual(_read_payload_timeout(proc)["kind"], "daemon.shutdown")
+                code, stderr = _close_daemon(proc)
+                self.assertEqual(code, 0, stderr)
+                self.assertEqual(stderr, "")
+        finally:
+            server.shutdown()
+            server.server_close()
+
+    def test_ai_chat_unknown_tool_call_returns_tool_not_allowed(self):
+        server = _start_tool_chat_server(
+            [
+                (_tool_call_message("erase_everything"), 0.0),
+                (
+                    _chat_completion_response(
+                        {"role": "assistant", "content": "I cannot run that."},
+                    ),
+                    0.0,
+                ),
+            ]
+        )
+        base_url = f"http://127.0.0.1:{server.server_port}/v1"
+        try:
+            with tempfile.TemporaryDirectory(prefix="kassiber-daemon-") as tmp:
+                proc = _start_daemon(Path(tmp) / "data")
+                self.assertEqual(_read_payload_timeout(proc)["kind"], "daemon.ready")
+                _write_payload(
+                    proc,
+                    {
+                        "request_id": "provider-1",
+                        "kind": "ai.providers.create",
+                        "args": {"name": "tool-local", "base_url": base_url, "kind": "local"},
+                    },
+                )
+                self.assertEqual(_read_payload_timeout(proc)["kind"], "ai.providers.create")
+                _write_payload(
+                    proc,
+                    {
+                        "request_id": "chat-tools-2",
+                        "kind": "ai.chat",
+                        "args": {
+                            "provider": "tool-local",
+                            "model": "test-model",
+                            "tools_enabled": True,
+                            "messages": [{"role": "user", "content": "Delete things"}],
+                        },
+                    },
+                )
+                result = None
+                terminal = None
+                deadline = time.time() + 5
+                while time.time() < deadline and terminal is None:
+                    payload = _read_payload_timeout(proc, max(0.1, deadline - time.time()))
+                    if payload.get("request_id") != "chat-tools-2":
+                        continue
+                    if payload.get("kind") == "ai.chat.tool_result":
+                        result = payload
+                    if payload.get("kind") == "ai.chat.delta":
+                        payload = _read_payload(proc)
+                    if payload.get("kind") == "ai.chat":
+                        terminal = payload
+                self.assertIsNotNone(result)
+                self.assertFalse(result["data"]["ok"])
+                self.assertEqual(result["data"]["reason"], "tool_not_allowed")
+                self.assertIsNotNone(terminal)
+
+                _write_payload(proc, {"request_id": "shutdown-1", "kind": "daemon.shutdown"})
+                self.assertEqual(_read_payload_timeout(proc)["kind"], "daemon.shutdown")
+                code, stderr = _close_daemon(proc)
+                self.assertEqual(code, 0, stderr)
+                self.assertEqual(stderr, "")
+        finally:
+            server.shutdown()
+            server.server_close()
+
+    def test_ai_chat_cancel_during_tool_loop_finishes_cancelled(self):
+        server = _start_tool_chat_server(
+            [
+                (_tool_call_message("ui_overview_snapshot"), 0.0),
+                (
+                    _chat_completion_response(
+                        {"role": "assistant", "content": "This should be suppressed."},
+                    ),
+                    0.4,
+                ),
+            ]
+        )
+        base_url = f"http://127.0.0.1:{server.server_port}/v1"
+        try:
+            with tempfile.TemporaryDirectory(prefix="kassiber-daemon-") as tmp:
+                proc = _start_daemon(Path(tmp) / "data")
+                self.assertEqual(_read_payload_timeout(proc)["kind"], "daemon.ready")
+                _write_payload(
+                    proc,
+                    {
+                        "request_id": "provider-1",
+                        "kind": "ai.providers.create",
+                        "args": {"name": "tool-local", "base_url": base_url, "kind": "local"},
+                    },
+                )
+                self.assertEqual(_read_payload_timeout(proc)["kind"], "ai.providers.create")
+                _write_payload(
+                    proc,
+                    {
+                        "request_id": "chat-tools-3",
+                        "kind": "ai.chat",
+                        "args": {
+                            "provider": "tool-local",
+                            "model": "test-model",
+                            "tools_enabled": True,
+                            "messages": [{"role": "user", "content": "Read overview"}],
+                        },
+                    },
+                )
+                while True:
+                    payload = _read_payload_timeout(proc)
+                    if (
+                        payload.get("request_id") == "chat-tools-3"
+                        and payload.get("kind")
+                        in {
+                            "ai.chat.tool_call",
+                            "ai.chat.tool_result",
+                        }
+                    ):
+                        break
+                _write_payload(
+                    proc,
+                    {
+                        "request_id": "cancel-tools-1",
+                        "kind": "ai.chat.cancel",
+                        "args": {"target_request_id": "chat-tools-3"},
+                    },
+                )
+                cancel_response = None
+                terminal = None
+                deadline = time.time() + 5
+                while time.time() < deadline and (cancel_response is None or terminal is None):
+                    payload = _read_payload_timeout(proc, max(0.1, deadline - time.time()))
+                    if payload.get("request_id") == "cancel-tools-1":
+                        cancel_response = payload
+                    if (
+                        payload.get("request_id") == "chat-tools-3"
+                        and payload.get("kind") == "ai.chat"
+                    ):
+                        terminal = payload
+                self.assertIsNotNone(cancel_response)
+                self.assertTrue(cancel_response["data"]["cancelled"])
+                self.assertIsNotNone(terminal)
+                self.assertEqual(terminal["data"]["finish_reason"], "cancelled")
 
                 _write_payload(proc, {"request_id": "shutdown-1", "kind": "daemon.shutdown"})
                 self.assertEqual(_read_payload_timeout(proc)["kind"], "daemon.shutdown")

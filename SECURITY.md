@@ -248,9 +248,14 @@ through Settings → AI providers or `kassiber ai providers create`.
   response `finish_reason: "cancelled"`. Remote providers may still bill for
   tokens already generated or in flight. No prompt content is exposed beyond
   what was already sent.
-- **No tool use yet.** The in-app assistant cannot run Kassiber CLI commands,
-  mutate state, or read your snapshots. Read-only tools and mutating-tool
-  consent arrive in follow-up PRs.
+- **Read-only AI tools send selected local data to the selected provider.**
+  When tools are enabled, the assistant may read safe daemon snapshots such as
+  status, overview, transactions, profiles, journals, capital-gains reports, and
+  allowlisted skill references. If the selected provider is remote or TEE, those
+  tool results are sent to that provider as chat context.
+- **Unknown and mutating tools are blocked in this PR.** The daemon returns
+  `tool_not_allowed` for unknown tool names and declared mutating tools. Mutating
+  execution requires a future explicit consent flow.
 
 ## Reporting
 

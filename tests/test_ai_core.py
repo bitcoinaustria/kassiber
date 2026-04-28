@@ -32,10 +32,17 @@ from kassiber.ai import (
 from kassiber.ai.client import (
     DEFAULT_TIMEOUT_SECONDS,
     OpenAICompatClient,
+    ToolCallAccumulator,
     parse_sse_chunks,
     _http_error_app_error,
     _network_error_app_error,
 )
+from kassiber.ai.prompt import (
+    DEFAULT_KASSIBER_SYSTEM_PROMPT,
+    build_chat_messages,
+    build_openai_tools,
+)
+from kassiber.ai.tools import SKILL_REFERENCE_NAMES, get_tool, read_skill_reference
 from kassiber.ai.providers import list_with_default
 from kassiber.db import open_db
 from kassiber.errors import AppError
@@ -113,6 +120,84 @@ class SseParserTest(unittest.TestCase):
         chunks = self._parse(text)
         self.assertEqual(len(chunks), 1)
         self.assertEqual(chunks[0]["choices"][0]["delta"]["content"], "end")
+
+
+class ToolCatalogPromptTest(unittest.TestCase):
+    def test_tool_catalog_stability(self):
+        read_only_names = {
+            "status",
+            "ui_overview_snapshot",
+            "ui_transactions_list",
+            "ui_profiles_snapshot",
+            "ui_reports_capital_gains",
+            "ui_journals_snapshot",
+            "read_skill_reference",
+        }
+        tool_names = {
+            tool["function"]["name"]
+            for tool in build_openai_tools()
+            if tool.get("type") == "function"
+        }
+        self.assertEqual(tool_names, read_only_names)
+        for tool_name in tool_names:
+            self.assertRegex(tool_name, r"^[A-Za-z0-9_-]{1,64}$")
+        self.assertEqual(get_tool("ui_overview_snapshot").name, "ui.overview.snapshot")
+        self.assertEqual(get_tool("ui.wallets.sync").kind_class, "mutating")
+        self.assertNotIn("ui.wallets.sync", tool_names)
+
+    def test_read_skill_reference_allowlist(self):
+        self.assertIn("wallets-backends", SKILL_REFERENCE_NAMES)
+        reference = read_skill_reference("wallets-backends")
+        self.assertEqual(reference["name"], "wallets-backends")
+        self.assertIn("Wallets and Backends", reference["content"])
+        with self.assertRaises(AppError) as ctx:
+            read_skill_reference("../AGENTS")
+        self.assertEqual(ctx.exception.code, "tool_not_allowed")
+
+    def test_system_prompt_omits_reference_bodies_until_requested(self):
+        messages = build_chat_messages(
+            [{"role": "user", "content": "What is pending?"}],
+            system_prompt_kind="kassiber",
+        )
+        self.assertEqual(messages[0]["role"], "system")
+        self.assertIn("read_skill_reference", messages[0]["content"])
+        self.assertNotIn("kassiber backends create my-esplora", messages[0]["content"])
+        self.assertLess(len(DEFAULT_KASSIBER_SYSTEM_PROMPT), 1200)
+
+
+class ToolCallAccumulatorTest(unittest.TestCase):
+    def test_accumulates_partial_arguments(self):
+        accumulator = ToolCallAccumulator()
+        first = accumulator.add_delta(
+            [
+                {
+                    "index": 0,
+                    "id": "call_1",
+                    "type": "function",
+                    "function": {
+                        "name": "read_skill_reference",
+                        "arguments": '{"name":"wallets',
+                    },
+                }
+            ]
+        )
+        self.assertEqual(first[0]["function"]["arguments"], '{"name":"wallets')
+        second = accumulator.add_delta(
+            [
+                {
+                    "index": 0,
+                    "function": {
+                        "arguments": '-backends"}',
+                    },
+                }
+            ]
+        )
+        self.assertEqual(second[0]["id"], "call_1")
+        self.assertEqual(second[0]["function"]["name"], "read_skill_reference")
+        self.assertEqual(
+            second[0]["function"]["arguments"],
+            '{"name":"wallets-backends"}',
+        )
 
 
 class HttpErrorMappingTest(unittest.TestCase):
@@ -328,6 +413,28 @@ class ChatBodyContractTest(unittest.TestCase):
         self.assertEqual(captured["stream"], True)
         self.assertEqual(captured["model"], "real-model")
         self.assertEqual(captured["messages"], [{"role": "user", "content": "real"}])
+
+    def test_chat_sends_explicit_tools_after_options(self):
+        captured: dict = {}
+        tools = [{"type": "function", "function": {"name": "status", "parameters": {}}}]
+
+        def fake_urlopen(request, timeout=None):
+            captured.update(json.loads(request.data.decode("utf-8")))
+            return self._ReadResponse(
+                b'{"choices":[{"message":{"role":"assistant","content":"ok"},"finish_reason":"stop"}]}'
+            )
+
+        with patch("urllib.request.urlopen", side_effect=fake_urlopen):
+            client = OpenAICompatClient(base_url="http://x/v1")
+            client.chat(
+                messages=[{"role": "user", "content": "real"}],
+                model="real-model",
+                tools=tools,
+                tool_choice="auto",
+                options={"tools": [], "tool_choice": "none"},
+            )
+        self.assertEqual(captured["tools"], tools)
+        self.assertEqual(captured["tool_choice"], "auto")
 
 
 class ChatReasoningPassthroughTest(unittest.TestCase):
