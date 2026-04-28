@@ -4,7 +4,7 @@
 
 - Kassiber is a local-first Bitcoin accounting CLI.
 - The CLI entrypoint lives in [kassiber/cli/main.py](kassiber/cli/main.py). The remaining command implementation surface lives in [kassiber/cli/handlers.py](kassiber/cli/handlers.py).
-- Desktop UI: Tauri 2 + React + TypeScript with a Python sidecar daemon. Stack decision lives in [docs/plan/01-stack-decision.md](docs/plan/01-stack-decision.md); implementation plan lives in [docs/plan/04-desktop-ui.md](docs/plan/04-desktop-ui.md). [docs/plan/00-overview.md](docs/plan/00-overview.md) remains the orientation map. The frontend skeleton (Vite + React 19 + TS + Tailwind v4 + TanStack + Zustand + mock daemon transport) lives at [ui-tauri/](ui-tauri/); Claude Design source mockups are staged under `ui-tauri/claude-design/`. The first Tauri supervisor (`ui-tauri/src-tauri/`) and Python daemon (`kassiber/daemon.py`) now provide a whitelisted `status` JSONL round-trip; typed UI snapshot kinds still use mock data until their contracts land.
+- Desktop UI: Tauri 2 + React + TypeScript with a Python sidecar daemon. Stack decision lives in [docs/plan/01-stack-decision.md](docs/plan/01-stack-decision.md); implementation plan lives in [docs/plan/04-desktop-ui.md](docs/plan/04-desktop-ui.md). [docs/plan/00-overview.md](docs/plan/00-overview.md) remains the orientation map. The frontend skeleton (Vite + React 19 + TS + Tailwind v4 + TanStack + Zustand + mock daemon transport) lives at [ui-tauri/](ui-tauri/); Claude Design source mockups are staged under `ui-tauri/claude-design/`. The Tauri supervisor (`ui-tauri/src-tauri/`) keeps one Python daemon process and demuxes JSONL responses by `request_id`; typed UI snapshot kinds and the AI provider/chat surface now flow through that daemon boundary.
 - External-document reconciliation scope and architecture are captured in [docs/plan/08-external-document-reconciliation.md](docs/plan/08-external-document-reconciliation.md).
 - Supporting modules (bottom-up — no back-edges into the CLI layer):
   - [kassiber/errors.py](kassiber/errors.py) — `AppError` typed exception carrying `code`, `hint`, `details`, `retryable`.
@@ -58,6 +58,12 @@ Kassiber is currently in **dev mode**: renaming commands, breaking flags, and re
   - diagnostics (public-safe bug-report collection)
 - Every command accepts `--format {table,plain,json,csv}`, `--output <path>`, `--machine` (= `--format json`), `--debug`, `--diagnostics-out <path|auto>`, and `--db-passphrase-fd FD` (used to unlock a SQLCipher-encrypted database non-interactively).
 - Successful responses use `{kind, schema_version, data}`. Errors use `{kind: "error", schema_version, error: {code, message, hint, details, retryable, debug}}`.
+- The Tauri supervisor routes daemon responses by `request_id`, not by kind.
+  Streaming requests emit intermediate records such as `ai.chat.delta` to the
+  `daemon://stream` Tauri event channel; the exact-kind terminal record (or an
+  error) resolves only the matching request. `ai.chat.cancel` takes
+  `args.target_request_id` so the cancel request keeps its own routing
+  `request_id`; cancelled chats finish with `finish_reason: "cancelled"`.
 - Live sync kinds implemented: `esplora`, `electrum`, `bitcoinrpc`. BTCPay Greenfield confirmed on-chain wallet history sync is available through wallet config and `wallets sync-btcpay`.
 - BIP329 records are stored in SQLite and transaction labels are bridged into Kassiber tags.
 - BTCPay CSV/JSON imports become transactions, with comments mapped to notes and labels mapped to tags. Wallet-configured BTCPay sync and `wallets sync-btcpay` reuse that same normalization for confirmed Greenfield wallet history.

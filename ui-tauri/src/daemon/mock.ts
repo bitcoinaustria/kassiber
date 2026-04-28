@@ -25,6 +25,15 @@ export const mockDaemon: DaemonTransport = {
       setTimeout(resolve, SIMULATED_LATENCY_MS),
     );
 
+    if (req.kind === "ai.chat.cancel") {
+      return {
+        kind: "ai.chat.cancel",
+        schema_version: 1,
+        request_id: req.request_id,
+        data: { cancelled: true } as T,
+      };
+    }
+
     const fixture = fixtures[req.kind];
     if (fixture === undefined) {
       return {
@@ -62,9 +71,11 @@ async function mockAiChatStream<T, R>(
   req: DaemonRequest,
   options?: DaemonStreamOptions<R>,
 ): Promise<DaemonEnvelope<T>> {
-  const requestId = `mock-${Math.random().toString(36).slice(2)}`;
+  const requestId = req.request_id ?? `mock-${Math.random().toString(36).slice(2)}`;
+  let cancelled = false;
   for (const chunk of MOCK_AI_CHAT_STREAM) {
     if (options?.signal?.aborted) {
+      cancelled = true;
       break;
     }
     await new Promise((resolve) =>
@@ -89,7 +100,7 @@ async function mockAiChatStream<T, R>(
     data: {
       provider: args.provider ?? "ollama",
       model: args.model ?? "mock-model",
-      finish_reason: "stop",
+      finish_reason: cancelled ? "cancelled" : "stop",
     } as T,
   };
 }

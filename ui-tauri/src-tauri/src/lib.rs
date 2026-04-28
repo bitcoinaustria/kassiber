@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::env;
 use std::path::PathBuf;
-use std::sync::Mutex;
+use std::sync::Arc;
 use supervisor::{DaemonSupervisor, SupervisorError};
 use tauri::{Manager, State};
 
@@ -16,6 +16,8 @@ const ALLOWED_DAEMON_KINDS: &[&str] = &[
     "ui.transactions.list",
     "ui.profiles.snapshot",
     "ui.reports.capital_gains",
+    "ui.journals.snapshot",
+    "ui.wallets.sync",
     "ai.providers.list",
     "ai.providers.get",
     "ai.providers.create",
@@ -27,12 +29,13 @@ const ALLOWED_DAEMON_KINDS: &[&str] = &[
     "ai.list_models",
     "ai.test_connection",
     "ai.chat",
+    "ai.chat.cancel",
 ];
 
 /// Kinds that may emit intermediate stream records (kind = "<request_kind>.delta",
 /// "<request_kind>.tool_call", etc.) before the terminal envelope. The supervisor
 /// forwards intermediate records to the webview as Tauri events
-/// `daemon://stream/<request_id>` and switches to a per-record inactivity
+/// `daemon://stream` and switches to a per-record inactivity
 /// timeout. Other kinds keep the existing total-budget behavior.
 const STREAMING_DAEMON_KINDS: &[&str] = &["ai.chat"];
 
@@ -71,7 +74,7 @@ pub struct DaemonError {
 #[tauri::command]
 fn daemon_invoke(
     app: tauri::AppHandle,
-    state: State<'_, Mutex<DaemonSupervisor>>,
+    state: State<'_, Arc<DaemonSupervisor>>,
     request: DaemonRequest,
 ) -> DaemonEnvelope {
     if !ALLOWED_DAEMON_KINDS.contains(&request.kind.as_str()) {
@@ -90,23 +93,9 @@ fn daemon_invoke(
         );
     }
 
-    let mut supervisor = match state.lock() {
-        Ok(supervisor) => supervisor,
-        Err(_) => {
-            return error_envelope(
-                "daemon_lock_poisoned",
-                "daemon supervisor lock is poisoned",
-                Some("Restart the Tauri shell."),
-                None,
-                request.request_id,
-                true,
-            )
-        }
-    };
-
     let request_id = request.request_id.clone();
     let streaming = STREAMING_DAEMON_KINDS.contains(&request.kind.as_str());
-    match supervisor.invoke(
+    match state.invoke(
         &request.kind,
         request.args,
         &app,
@@ -171,7 +160,7 @@ pub fn run() {
                 let code = supervisor::run_cli(resource_dir.as_deref(), args.clone());
                 std::process::exit(code);
             }
-            app.manage(Mutex::new(DaemonSupervisor::new(resource_dir)));
+            app.manage(Arc::new(DaemonSupervisor::new(resource_dir)));
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![daemon_invoke])

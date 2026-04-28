@@ -66,10 +66,43 @@ SUPPORTED_KINDS = (
     "ai.list_models",
     "ai.test_connection",
     "ai.chat",
+    "ai.chat.cancel",
     "wallets.reveal_descriptor",
     "backends.reveal_token",
     "daemon.shutdown",
 )
+
+
+class ActiveAiChats:
+    """In-memory registry for cooperative `ai.chat.cancel` requests."""
+
+    def __init__(self) -> None:
+        self._lock = threading.Lock()
+        self._events: dict[str, threading.Event] = {}
+
+    def register(self, request_id: object) -> tuple[str | None, threading.Event]:
+        event = threading.Event()
+        key = _request_id_registry_key(request_id)
+        if key is None:
+            return None, event
+        with self._lock:
+            self._events[key] = event
+        return key, event
+
+    def unregister(self, key: str | None, event: threading.Event) -> None:
+        if key is None:
+            return
+        with self._lock:
+            if self._events.get(key) is event:
+                self._events.pop(key, None)
+
+    def cancel(self, target_request_id: str) -> bool:
+        with self._lock:
+            event = self._events.get(target_request_id)
+        if event is None:
+            return False
+        event.set()
+        return True
 
 
 @dataclass(frozen=True)
@@ -77,6 +110,7 @@ class DaemonContext:
     conn: sqlite3.Connection
     data_root: str
     runtime_config: dict[str, object]
+    active_ai_chats: ActiveAiChats
 
 
 class _OutputChannel:
@@ -106,6 +140,14 @@ def _with_request_id(
     if request_id is not _REQUEST_ID_MISSING:
         envelope["request_id"] = request_id
     return envelope
+
+
+def _request_id_registry_key(request_id: object) -> str | None:
+    if request_id is _REQUEST_ID_MISSING or request_id is None:
+        return None
+    if isinstance(request_id, str):
+        return request_id or None
+    return str(request_id)
 
 
 def _error_envelope(
@@ -208,6 +250,9 @@ def _run_ai_chat_stream(
     provider_snapshot: dict[str, Any],
     validated: dict[str, Any],
     out: _OutputChannel,
+    cancel_event: threading.Event,
+    active_ai_chats: ActiveAiChats,
+    registry_key: str | None,
 ) -> None:
     """Thread target — streams `ai.chat.delta` records and a terminal `ai.chat`.
 
@@ -226,6 +271,9 @@ def _run_ai_chat_stream(
             model=validated["model"],
             options=validated["options"],
         ):
+            if cancel_event.is_set():
+                finish_reason = "cancelled"
+                break
             delta_payload = {"delta": chunk.delta}
             if chunk.finish_reason is not None:
                 finish_reason = chunk.finish_reason
@@ -235,6 +283,11 @@ def _run_ai_chat_stream(
                     request_id,
                 )
             )
+            if cancel_event.is_set():
+                finish_reason = "cancelled"
+                break
+        if cancel_event.is_set():
+            finish_reason = "cancelled"
         out.write(
             _with_request_id(
                 build_envelope(
@@ -270,6 +323,8 @@ def _run_ai_chat_stream(
                 retryable=False,
             )
         )
+    finally:
+        active_ai_chats.unregister(registry_key, cancel_event)
 
 
 def _ai_provider_redacted(ctx: DaemonContext, provider: dict) -> dict:
@@ -681,6 +736,27 @@ def handle_request(
             False,
         )
 
+    if kind == "ai.chat.cancel":
+        args = _coerce_args_dict(request_id, request.get("args"))
+        target_request_id = args.get("target_request_id")
+        if not isinstance(target_request_id, str) or not target_request_id:
+            raise AppError(
+                "ai.chat.cancel requires target_request_id",
+                code="validation",
+                hint="Pass {target_request_id: '<active ai.chat request_id>'}.",
+            )
+        cancelled = ctx.active_ai_chats.cancel(target_request_id)
+        payload: dict[str, Any] = {"cancelled": cancelled}
+        if not cancelled:
+            payload["reason"] = "not_found"
+        return (
+            _with_request_id(
+                build_envelope("ai.chat.cancel", payload),
+                request_id,
+            ),
+            False,
+        )
+
     if kind == "ai.chat":
         # Validate eagerly so syntax errors surface synchronously.
         validated = _ai_chat_args(_coerce_args_dict(request_id, request.get("args")))
@@ -695,9 +771,18 @@ def handle_request(
             "api_key": provider.get("api_key"),
             "kind": provider["kind"],
         }
+        registry_key, cancel_event = ctx.active_ai_chats.register(request_id)
         thread = threading.Thread(
             target=_run_ai_chat_stream,
-            args=(request_id, provider_snapshot, validated, out),
+            args=(
+                request_id,
+                provider_snapshot,
+                validated,
+                out,
+                cancel_event,
+                ctx.active_ai_chats,
+                registry_key,
+            ),
             daemon=True,
             name="kassiber-ai-chat",
         )
@@ -863,6 +948,7 @@ def run(
         conn=conn,
         data_root=args.data_root,
         runtime_config=args.runtime_config,
+        active_ai_chats=ActiveAiChats(),
     )
 
     out.write(
