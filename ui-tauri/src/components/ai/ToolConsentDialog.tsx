@@ -4,12 +4,17 @@ import type {
   AiToolConsentDecision,
   AiToolConsentRequest,
 } from "@/daemon/stream";
-import { Button } from "@/components/ui/button";
+import {
+  Confirmation,
+  ConfirmationAction,
+  ConfirmationActions,
+  ConfirmationRequest,
+  ConfirmationTitle,
+} from "@/components/ai-elements";
 import {
   Dialog,
   DialogContent,
   DialogDescription,
-  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
@@ -41,49 +46,49 @@ export function ToolConsentDialog({
             </span>
           </DialogDescription>
         </DialogHeader>
-        <div className="rounded-md border border-border/70 bg-muted/35 px-3 py-2 text-xs">
-          <code className="block truncate font-mono text-[11px] text-foreground">
-            {request?.name ?? "tool"}
-          </code>
-          {hasPreview ? (
-            <details className="mt-2">
-              <summary className="cursor-pointer select-none text-[10px] font-medium uppercase text-muted-foreground">
-                Arguments
-              </summary>
-              <pre className="mt-1 max-h-36 overflow-auto whitespace-pre-wrap break-words rounded bg-background/75 px-2 py-1 font-mono text-[10px] text-muted-foreground">
-                {JSON.stringify(request?.argumentsPreview ?? {}, null, 2)}
-              </pre>
-            </details>
-          ) : null}
-        </div>
-        <DialogFooter>
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={() => void onDecision("deny")}
-          >
-            <XCircle aria-hidden="true" />
-            Deny
-          </Button>
-          <Button
-            type="button"
-            variant="secondary"
-            size="sm"
-            onClick={() => void onDecision("allow_session")}
-          >
-            <ShieldCheck aria-hidden="true" />
-            Allow this session
-          </Button>
-          <Button
-            type="button"
-            size="sm"
-            onClick={() => void onDecision("allow_once")}
-          >
-            <CheckCircle2 aria-hidden="true" />
-            Allow once
-          </Button>
-        </DialogFooter>
+        <Confirmation>
+          <ConfirmationTitle>{request?.name ?? "tool"}</ConfirmationTitle>
+          <ConfirmationRequest>
+            <span className="block">
+              This action needs explicit approval before Kassiber runs it.
+            </span>
+            {hasPreview ? (
+              <details className="mt-2">
+                <summary className="cursor-pointer select-none text-[10px] font-medium uppercase text-muted-foreground">
+                  Arguments
+                </summary>
+                <pre className="mt-1 max-h-36 overflow-auto whitespace-pre-wrap break-words rounded bg-background/75 px-2 py-1 font-mono text-[10px] text-muted-foreground">
+                  {JSON.stringify(request?.argumentsPreview ?? {}, null, 2)}
+                </pre>
+              </details>
+            ) : null}
+          </ConfirmationRequest>
+          <ConfirmationActions>
+            <ConfirmationAction
+              type="button"
+              variant="outline"
+              onClick={() => void onDecision("deny")}
+            >
+              <XCircle aria-hidden="true" />
+              Deny
+            </ConfirmationAction>
+            <ConfirmationAction
+              type="button"
+              variant="secondary"
+              onClick={() => void onDecision("allow_session")}
+            >
+              <ShieldCheck aria-hidden="true" />
+              Allow this session
+            </ConfirmationAction>
+            <ConfirmationAction
+              type="button"
+              onClick={() => void onDecision("allow_once")}
+            >
+              <CheckCircle2 aria-hidden="true" />
+              Allow once
+            </ConfirmationAction>
+          </ConfirmationActions>
+        </Confirmation>
       </DialogContent>
     </Dialog>
   );

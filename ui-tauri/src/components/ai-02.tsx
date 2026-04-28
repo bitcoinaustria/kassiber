@@ -1,6 +1,12 @@
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
+import {
+  Context,
+  ContextItem,
+  Suggestion,
+  Suggestions,
+} from "@/components/ai-elements";
 import { ProviderModelPicker } from "@/components/ai/ProviderModelPicker";
 import { cn } from "@/lib/utils";
 import {
@@ -82,6 +88,7 @@ export default function Ai02({
 
   const trimmedInput = inputValue.trim();
   const canSend = Boolean(trimmedInput) && Boolean(selection?.model) && !isStreaming;
+  const showSuggestions = !trimmedInput && !isStreaming && prompts.length > 0;
 
   const handleSubmit = () => {
     if (!canSend) return;
@@ -139,27 +146,34 @@ export default function Ai02({
             compact ? "min-h-[32px] pt-0 pb-1" : "min-h-[40px] pb-1",
           )}
         >
-          <div className="flex aspect-1 items-center gap-1 rounded-full bg-muted p-1.5 text-xs">
-            <Cpu className="h-4 w-4 text-muted-foreground" />
-          </div>
+          <Context className="min-w-0 flex-1">
+            <ContextItem
+              icon={<Cpu className="h-4 w-4 text-muted-foreground" />}
+              label="Model context"
+              className="max-w-full"
+            >
+              <ProviderModelPicker
+                value={selection}
+                onChange={onSelectionChange}
+              />
+            </ContextItem>
 
-          <div className="relative flex items-center">
-            <ProviderModelPicker
-              value={selection}
-              onChange={onSelectionChange}
-            />
-          </div>
-
-          <label className="flex shrink-0 items-center gap-1.5 rounded-full bg-muted px-2 py-1 text-xs text-muted-foreground">
-            <Wrench className="h-3.5 w-3.5" aria-hidden="true" />
-            <span>Tools</span>
-            <Switch
-              checked={toolsEnabled}
-              onCheckedChange={onToolsEnabledChange}
-              aria-label="Enable assistant tools"
-              disabled={isStreaming || !onToolsEnabledChange}
-            />
-          </label>
+            <ContextItem
+              icon={<Wrench className="h-3.5 w-3.5" aria-hidden="true" />}
+              label="Tool context"
+              className="shrink-0"
+            >
+              <label className="flex items-center gap-1.5">
+                <span>Tools</span>
+                <Switch
+                  checked={toolsEnabled}
+                  onCheckedChange={onToolsEnabledChange}
+                  aria-label="Enable assistant tools"
+                  disabled={isStreaming || !onToolsEnabledChange}
+                />
+              </label>
+            </ContextItem>
+          </Context>
 
           <div className="ml-auto flex items-center gap-3">
             {isStreaming && onAbort ? (
@@ -191,30 +205,31 @@ export default function Ai02({
         </div>
       </div>
 
-      <div
-        className={cn(
-          "flex flex-wrap justify-center gap-2 overflow-hidden transition-all duration-200 ease-out",
-          compact
-            ? "max-h-0 translate-y-1 opacity-0 group-hover/assistant:max-h-16 group-hover/assistant:translate-y-0 group-hover/assistant:opacity-100 group-focus-within/assistant:max-h-16 group-focus-within/assistant:translate-y-0 group-focus-within/assistant:opacity-100"
-            : "max-h-16 translate-y-0 opacity-100",
-        )}
-        aria-hidden={compact}
-      >
-        {prompts.map((button) => {
-          const IconComponent = button.icon;
-          return (
-            <Button
-              key={button.text}
-              variant="ghost"
-              className="group flex h-auto items-center gap-2 rounded-full border border-border/70 bg-background/85 px-3 py-2 text-sm text-foreground shadow-sm transition-colors duration-200 ease-out hover:bg-background dark:bg-muted/80 dark:hover:bg-muted"
-              onClick={() => handlePromptClick(button.prompt)}
-            >
-              <IconComponent className="h-4 w-4 text-muted-foreground transition-colors group-hover:text-foreground" />
-              <span>{button.text}</span>
-            </Button>
-          );
-        })}
-      </div>
+      {showSuggestions ? (
+        <Suggestions
+          className={cn(
+            "overflow-hidden transition-all duration-200 ease-out",
+            compact
+              ? "max-h-0 translate-y-1 opacity-0 group-hover/assistant:max-h-16 group-hover/assistant:translate-y-0 group-hover/assistant:opacity-100 group-focus-within/assistant:max-h-16 group-focus-within/assistant:translate-y-0 group-focus-within/assistant:opacity-100"
+              : "max-h-16 translate-y-0 opacity-100",
+          )}
+          aria-hidden={compact}
+        >
+          {prompts.map((button) => {
+            const IconComponent = button.icon;
+            return (
+              <Suggestion
+                key={button.text}
+                suggestion={button.prompt}
+                onClick={handlePromptClick}
+              >
+                <IconComponent className="h-4 w-4 text-muted-foreground transition-colors group-hover:text-foreground" />
+                <span>{button.text}</span>
+              </Suggestion>
+            );
+          })}
+        </Suggestions>
+      ) : null}
     </div>
   );
 }

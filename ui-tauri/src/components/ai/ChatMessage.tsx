@@ -7,12 +7,17 @@
  * text lands.
  */
 
-import { AlertTriangle, Sparkles, User } from "lucide-react";
+import { AlertTriangle, Sparkles, User, Wrench } from "lucide-react";
 
 import { ChatLoader } from "./ChatLoader";
 import { ChatMarkdown } from "./ChatMarkdown";
 import { ChatReasoning } from "./ChatReasoning";
 import { ChatToolCall } from "./ChatToolCall";
+import {
+  ChainOfThought,
+  ChainOfThoughtContent,
+  ChainOfThoughtHeader,
+} from "@/components/ai-elements";
 import type { AiChatMessage } from "@/daemon/stream";
 import { cn } from "@/lib/utils";
 
@@ -68,9 +73,18 @@ export function ChatMessage({ message }: ChatMessageProps) {
           ) : null}
           {hasToolCalls ? (
             <div className={message.thinking ? "mt-2" : undefined}>
-              {message.toolCalls?.map((toolCall) => (
-                <ChatToolCall key={toolCall.callId} toolCall={toolCall} />
-              ))}
+              <ChainOfThought defaultOpen>
+                <ChainOfThoughtHeader icon={Wrench}>
+                  Tool usage
+                </ChainOfThoughtHeader>
+                <ChainOfThoughtContent>
+                  <div className="space-y-2 px-2.5 pb-2">
+                    {message.toolCalls?.map((toolCall) => (
+                      <ChatToolCall key={toolCall.callId} toolCall={toolCall} />
+                    ))}
+                  </div>
+                </ChainOfThoughtContent>
+              </ChainOfThought>
             </div>
           ) : null}
           {hasAnswer ? <ChatMarkdown content={message.content} /> : null}
