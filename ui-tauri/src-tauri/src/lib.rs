@@ -3,7 +3,8 @@ mod supervisor;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::env;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
+use std::process::Command;
 use std::sync::Arc;
 use supervisor::{DaemonSupervisor, SupervisorError};
 use tauri::{Manager, State};
@@ -18,6 +19,10 @@ const ALLOWED_DAEMON_KINDS: &[&str] = &[
     "ui.backends.list",
     "ui.profiles.snapshot",
     "ui.reports.capital_gains",
+    "ui.reports.export_pdf",
+    "ui.reports.export_capital_gains_csv",
+    "ui.reports.export_austrian_e1kv_pdf",
+    "ui.reports.export_austrian_e1kv_xlsx",
     "ui.journals.snapshot",
     "ui.journals.quarantine",
     "ui.journals.transfers.list",
@@ -145,6 +150,31 @@ async fn daemon_invoke(
     }
 }
 
+#[tauri::command]
+fn open_exported_file(path: String) -> Result<(), String> {
+    let requested = PathBuf::from(path);
+    if !requested.is_absolute() {
+        return Err("Report export paths must be absolute.".to_string());
+    }
+
+    let canonical = std::fs::canonicalize(&requested)
+        .map_err(|error| format!("Report export file could not be found: {error}"))?;
+    let metadata = canonical
+        .metadata()
+        .map_err(|error| format!("Report export file could not be inspected: {error}"))?;
+    if !metadata.is_file() {
+        return Err("Only report export files can be opened.".to_string());
+    }
+    if !is_supported_export_file(&canonical) || !is_managed_report_export_path(&canonical) {
+        return Err(
+            "Only PDF, XLSX, and CSV files in Kassiber's managed report exports folder can be opened."
+                .to_string(),
+        );
+    }
+
+    open_with_default_app(&canonical)
+}
+
 fn error_envelope(
     code: &str,
     message: impl Into<String>,
@@ -179,6 +209,58 @@ fn supervisor_error_envelope(error: SupervisorError, request_id: Option<Value>) 
     )
 }
 
+fn is_supported_export_file(path: &Path) -> bool {
+    path.extension()
+        .and_then(|extension| extension.to_str())
+        .map(|extension| {
+            matches!(
+                extension.to_ascii_lowercase().as_str(),
+                "pdf" | "xlsx" | "csv"
+            )
+        })
+        .unwrap_or(false)
+}
+
+fn is_managed_report_export_path(path: &Path) -> bool {
+    let Some(parent) = path.parent() else {
+        return false;
+    };
+    let Some(grandparent) = parent.parent() else {
+        return false;
+    };
+    parent.file_name().and_then(|name| name.to_str()) == Some("reports")
+        && grandparent.file_name().and_then(|name| name.to_str()) == Some("exports")
+}
+
+fn open_with_default_app(path: &Path) -> Result<(), String> {
+    let mut command = default_app_command(path);
+    command
+        .spawn()
+        .map(|_| ())
+        .map_err(|error| format!("Could not open report export with the default app: {error}"))
+}
+
+#[cfg(target_os = "macos")]
+fn default_app_command(path: &Path) -> Command {
+    let mut command = Command::new("open");
+    command.arg(path);
+    command
+}
+
+#[cfg(target_os = "windows")]
+fn default_app_command(path: &Path) -> Command {
+    let mut command = Command::new("explorer");
+    command.arg(path);
+    command
+}
+
+#[cfg(all(unix, not(target_os = "macos")))]
+fn default_app_command(path: &Path) -> Command {
+    let mut command = Command::new("xdg-open");
+    command.arg(path);
+    command
+}
+
 pub fn run() {
     let cli_args = desktop_cli_args();
     tauri::Builder::default()
@@ -191,7 +273,7 @@ pub fn run() {
             app.manage(Arc::new(DaemonSupervisor::new(resource_dir)));
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![daemon_invoke])
+        .invoke_handler(tauri::generate_handler![daemon_invoke, open_exported_file])
         .run(tauri::generate_context!())
         .expect("error while running Kassiber desktop shell");
 }
@@ -214,6 +296,37 @@ fn desktop_cli_args() -> Option<Vec<String>> {
     }
 
     None
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{is_managed_report_export_path, is_supported_export_file};
+    use std::path::Path;
+
+    #[test]
+    fn managed_report_export_paths_are_narrowly_recognized() {
+        assert!(is_managed_report_export_path(Path::new(
+            "/Users/dev/.kassiber/exports/reports/report.pdf"
+        )));
+        assert!(!is_managed_report_export_path(Path::new(
+            "/Users/dev/.kassiber/exports/report.pdf"
+        )));
+        assert!(!is_managed_report_export_path(Path::new(
+            "/Users/dev/.kassiber/reports/export.pdf"
+        )));
+        assert!(!is_managed_report_export_path(Path::new(
+            "/Users/dev/.kassiber/exports/reports/archive/report.pdf"
+        )));
+    }
+
+    #[test]
+    fn supported_export_files_are_limited_to_report_formats() {
+        assert!(is_supported_export_file(Path::new("report.PDF")));
+        assert!(is_supported_export_file(Path::new("report.xlsx")));
+        assert!(is_supported_export_file(Path::new("report.csv")));
+        assert!(!is_supported_export_file(Path::new("report.txt")));
+        assert!(!is_supported_export_file(Path::new("report")));
+    }
 }
 
 fn exe_stem_is_kassiber() -> bool {

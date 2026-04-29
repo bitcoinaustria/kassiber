@@ -313,14 +313,17 @@ and [docs/plan/04-desktop-ui.md](docs/plan/04-desktop-ui.md).
   bridge for browser testing against real local data
 - [x] Replace Connections, Journals, and capital-gains Reports mock fixtures
   with first real daemon-backed snapshots and a `ui.wallets.sync` action
+- [x] Wire Reports export cards to daemon-backed managed exports for PDF,
+  capital-gains CSV, and Austrian E 1kv XLSX, with default-app opening for
+  completed files
 - [ ] Replace remaining Settings mock fixture data with typed daemon calls once
   phase 1.1 exists
 
 ### 1.4 Live actions and workers
 
 - [ ] Sync, imports, journals process, metadata edits, transfer pairing,
-  attachments, quarantine resolve, report exports, profile/wallet/backend
-  CRUD, backup/restore
+  attachments, quarantine resolve, profile/wallet/backend CRUD,
+  backup/restore
 - [ ] Progress + cancellation UI
 - [ ] Separate secret-entry IPC channel; OS-keychain-backed secret refs
 
