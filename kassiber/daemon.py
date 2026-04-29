@@ -1259,7 +1259,7 @@ def _verify_passphrase_for_reveal(ctx: "DaemonContext", passphrase: str) -> bool
         return False
     db_path = resolve_database_path(resolve_effective_data_root(ctx.data_root))
     try:
-        probe = open_encrypted(db_path, passphrase)
+        probe = open_encrypted(db_path, passphrase, quiet_unlock_errors=True)
     except AppError as exc:
         if exc.code == "unlock_failed":
             return False
