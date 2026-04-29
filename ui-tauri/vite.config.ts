@@ -237,7 +237,7 @@ class DaemonBridgeSupervisor {
     }
 
     const kind = typeof payload.kind === "string" ? payload.kind : "";
-    if (kind === pending.kind || kind === "error") {
+    if (kind === pending.kind || kind === "error" || kind === "auth_required") {
       this.pending.delete(String(requestId));
       clearTimeout(pending.timeout);
       pending.resolve(payload);

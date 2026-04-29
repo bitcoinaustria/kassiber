@@ -1329,6 +1329,63 @@ def _database_file_is_encrypted(ctx: "DaemonContext") -> bool:
     )
 
 
+def _handle_ai_chat_cancel(
+    ctx: "DaemonContext", request_id: object, args: dict[str, Any]
+) -> dict[str, Any]:
+    target_request_id = args.get("target_request_id")
+    if not isinstance(target_request_id, str) or not target_request_id:
+        raise AppError(
+            "ai.chat.cancel requires target_request_id",
+            code="validation",
+            hint="Pass {target_request_id: '<active ai.chat request_id>'}.",
+        )
+    cancelled, queued = ctx.active_ai_chats.cancel(target_request_id)
+    payload: dict[str, Any] = {"cancelled": cancelled or queued}
+    if queued:
+        payload["queued"] = True
+    return _with_request_id(
+        build_envelope("ai.chat.cancel", payload),
+        request_id,
+    )
+
+
+def _handle_ai_tool_call_consent(
+    ctx: "DaemonContext", request_id: object, args: dict[str, Any]
+) -> dict[str, Any]:
+    target_request_id = args.get("target_request_id")
+    call_id = args.get("call_id")
+    decision = args.get("decision")
+    if not isinstance(target_request_id, str) or not target_request_id:
+        raise AppError(
+            "ai.tool_call.consent requires target_request_id",
+            code="validation",
+            hint="Pass {target_request_id: '<active ai.chat request_id>'}.",
+        )
+    if not isinstance(call_id, str) or not call_id:
+        raise AppError(
+            "ai.tool_call.consent requires call_id",
+            code="validation",
+        )
+    if decision not in ("allow_once", "allow_session", "deny"):
+        raise AppError(
+            "ai.tool_call.consent decision must be allow_once, allow_session, or deny",
+            code="validation",
+            details={"decision": decision},
+        )
+    recorded = ctx.active_ai_chats.record_consent(
+        target_request_id,
+        call_id,
+        decision,
+    )
+    payload: dict[str, Any] = {"recorded": recorded}
+    if not recorded:
+        payload["reason"] = "not_found"
+    return _with_request_id(
+        build_envelope("ai.tool_call.consent", payload),
+        request_id,
+    )
+
+
 def handle_request(
     ctx: DaemonContext,
     request: dict[str, Any],
@@ -1550,6 +1607,22 @@ def handle_request(
             _with_request_id(
                 build_envelope("ui.secrets.change_passphrase", result),
                 request_id,
+            ),
+            False,
+        )
+
+    if kind == "ai.chat.cancel":
+        return (
+            _handle_ai_chat_cancel(
+                ctx, request_id, _coerce_args_dict(request_id, request.get("args"))
+            ),
+            False,
+        )
+
+    if kind == "ai.tool_call.consent":
+        return (
+            _handle_ai_tool_call_consent(
+                ctx, request_id, _coerce_args_dict(request_id, request.get("args"))
             ),
             False,
         )
@@ -2040,65 +2113,6 @@ def handle_request(
                         "models": models,
                     },
                 ),
-                request_id,
-            ),
-            False,
-        )
-
-    if kind == "ai.chat.cancel":
-        args = _coerce_args_dict(request_id, request.get("args"))
-        target_request_id = args.get("target_request_id")
-        if not isinstance(target_request_id, str) or not target_request_id:
-            raise AppError(
-                "ai.chat.cancel requires target_request_id",
-                code="validation",
-                hint="Pass {target_request_id: '<active ai.chat request_id>'}.",
-            )
-        cancelled, queued = ctx.active_ai_chats.cancel(target_request_id)
-        payload: dict[str, Any] = {"cancelled": cancelled or queued}
-        if queued:
-            payload["queued"] = True
-        return (
-            _with_request_id(
-                build_envelope("ai.chat.cancel", payload),
-                request_id,
-            ),
-            False,
-        )
-
-    if kind == "ai.tool_call.consent":
-        args = _coerce_args_dict(request_id, request.get("args"))
-        target_request_id = args.get("target_request_id")
-        call_id = args.get("call_id")
-        decision = args.get("decision")
-        if not isinstance(target_request_id, str) or not target_request_id:
-            raise AppError(
-                "ai.tool_call.consent requires target_request_id",
-                code="validation",
-                hint="Pass {target_request_id: '<active ai.chat request_id>'}.",
-            )
-        if not isinstance(call_id, str) or not call_id:
-            raise AppError(
-                "ai.tool_call.consent requires call_id",
-                code="validation",
-            )
-        if decision not in ("allow_once", "allow_session", "deny"):
-            raise AppError(
-                "ai.tool_call.consent decision must be allow_once, allow_session, or deny",
-                code="validation",
-                details={"decision": decision},
-            )
-        recorded = ctx.active_ai_chats.record_consent(
-            target_request_id,
-            call_id,
-            decision,
-        )
-        payload: dict[str, Any] = {"recorded": recorded}
-        if not recorded:
-            payload["reason"] = "not_found"
-        return (
-            _with_request_id(
-                build_envelope("ai.tool_call.consent", payload),
                 request_id,
             ),
             False,

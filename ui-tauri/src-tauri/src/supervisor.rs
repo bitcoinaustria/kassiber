@@ -223,7 +223,8 @@ impl DaemonSupervisor {
                     .with_stderr_tail(process.stderr_tail()));
             }
 
-            if response_kind == kind || response_kind == "error" {
+            if response_kind == kind || response_kind == "error" || response_kind == "auth_required"
+            {
                 attach_stderr_tail_to_internal_error(&mut response, process.stderr_tail());
                 break Ok(response);
             }
@@ -950,7 +951,7 @@ def emit(payload):
         sys.stdout.write(json.dumps(payload, separators=(",", ":")) + "\n")
         sys.stdout.flush()
 
-emit({"kind":"daemon.ready","schema_version":1,"data":{"version":"test","supported_kinds":["slow","fast","daemon.shutdown"]}})
+emit({"kind":"daemon.ready","schema_version":1,"data":{"version":"test","supported_kinds":["slow","fast","locked","daemon.shutdown"]}})
 
 def slow(request_id):
     emit({"kind":"slow.delta","schema_version":1,"request_id":request_id,"data":{"delta":{"content":"a"}}})
@@ -967,6 +968,8 @@ for line in sys.stdin:
         threading.Thread(target=slow, args=(request_id,), daemon=True).start()
     elif kind == "fast":
         emit({"kind":"fast","schema_version":1,"request_id":request_id,"data":{"ok":True}})
+    elif kind == "locked":
+        emit({"kind":"auth_required","schema_version":1,"request_id":request_id,"data":{"scope":"unlock_database"}})
     elif kind == "daemon.shutdown":
         emit({"kind":"daemon.shutdown","schema_version":1,"request_id":request_id,"data":{}})
         break
@@ -1033,6 +1036,42 @@ for line in sys.stdin:
             None,
             false,
             Some(json!("shutdown-1")),
+            |_| {},
+        );
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn auth_required_is_terminal_for_locked_requests() {
+        let (dir, script) = write_stub_daemon();
+        let process = DaemonProcess::spawn_command(DaemonCommand {
+            program: script,
+            args: Vec::new(),
+            cwd: dir.clone(),
+            source: "env_python",
+        })
+        .expect("spawn stub daemon");
+        let supervisor = DaemonSupervisor::new_with_process(process);
+
+        let response = supervisor
+            .invoke_inner("locked", None, false, Some(json!("locked-1")), |_| {})
+            .expect("auth_required response");
+
+        assert_eq!(
+            response.get("kind").and_then(Value::as_str),
+            Some("auth_required")
+        );
+        assert_eq!(
+            response.get("request_id").and_then(Value::as_str),
+            Some("locked-1")
+        );
+
+        let _ = supervisor.invoke_inner(
+            "daemon.shutdown",
+            None,
+            false,
+            Some(json!("shutdown-locked-1")),
             |_| {},
         );
         let _ = fs::remove_dir_all(dir);

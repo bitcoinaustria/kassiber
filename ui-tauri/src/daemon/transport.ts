@@ -89,6 +89,10 @@ export interface DaemonTransport {
   ): Promise<DaemonEnvelope<T>>;
 }
 
+function isTerminalEnvelopeKind(kind: string, requestKind: string): boolean {
+  return kind === requestKind || kind === "error" || kind === "auth_required";
+}
+
 export async function readBridgeNdjsonStream<T = unknown, R = unknown>(
   response: Response,
   requestKind: string,
@@ -114,7 +118,7 @@ export async function readBridgeNdjsonStream<T = unknown, R = unknown>(
     if (record.request_id !== requestId) {
       return;
     }
-    if (record.kind === requestKind || record.kind === "error") {
+    if (isTerminalEnvelopeKind(record.kind, requestKind)) {
       terminal = record as DaemonEnvelope<T>;
       return;
     }

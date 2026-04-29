@@ -1942,6 +1942,120 @@ class DaemonSmokeTest(unittest.TestCase):
             server.shutdown()
             server.server_close()
 
+    @unittest.skipUnless(sqlcipher_available(), "SQLCipher driver unavailable")
+    def test_ai_chat_cancel_while_encrypted_database_is_locked(self):
+        server = _start_tool_chat_server(
+            [
+                (_tool_call_message("ui_wallets_sync"), 0.0),
+                (
+                    _chat_completion_response(
+                        {"role": "assistant", "content": "Should not happen."},
+                    ),
+                    0.0,
+                ),
+            ]
+        )
+        base_url = f"http://127.0.0.1:{server.server_port}/v1"
+        try:
+            with tempfile.TemporaryDirectory(prefix="kassiber-daemon-") as tmp:
+                proc = _start_daemon(Path(tmp) / "data")
+                self.assertEqual(_read_payload_timeout(proc)["kind"], "daemon.ready")
+                _write_payload(
+                    proc,
+                    {
+                        "request_id": "secrets-init",
+                        "kind": "ui.secrets.init",
+                        "args": {
+                            "auth_response": {
+                                "passphrase_secret": "correct horse battery"
+                            },
+                            "migrate_credentials": False,
+                        },
+                    },
+                )
+                self.assertEqual(_read_payload_timeout(proc)["kind"], "ui.secrets.init")
+                _write_payload(
+                    proc,
+                    {
+                        "request_id": "provider-1",
+                        "kind": "ai.providers.create",
+                        "args": {
+                            "name": "tool-local",
+                            "base_url": base_url,
+                            "kind": "local",
+                        },
+                    },
+                )
+                self.assertEqual(_read_payload_timeout(proc)["kind"], "ai.providers.create")
+                _write_payload(
+                    proc,
+                    {
+                        "request_id": "chat-locked-cancel",
+                        "kind": "ai.chat",
+                        "args": {
+                            "provider": "tool-local",
+                            "model": "test-model",
+                            "tools_enabled": True,
+                            "messages": [
+                                {"role": "user", "content": "Sync my wallets"}
+                            ],
+                        },
+                    },
+                )
+                while True:
+                    payload = _read_payload_timeout(proc)
+                    if (
+                        payload.get("request_id") == "chat-locked-cancel"
+                        and payload.get("kind") == "ai.chat.tool_call"
+                    ):
+                        payload = _read_payload(proc)
+                    if (
+                        payload.get("request_id") == "chat-locked-cancel"
+                        and payload.get("kind") == "ai.chat.tool_consent_required"
+                    ):
+                        break
+
+                _write_payload(proc, {"request_id": "lock-1", "kind": "daemon.lock"})
+                self.assertEqual(_read_payload_timeout(proc)["kind"], "daemon.lock")
+                _write_payload(
+                    proc,
+                    {
+                        "request_id": "cancel-locked-1",
+                        "kind": "ai.chat.cancel",
+                        "args": {"target_request_id": "chat-locked-cancel"},
+                    },
+                )
+
+                cancel_response = None
+                terminal = None
+                deadline = time.time() + 5
+                while time.time() < deadline and (
+                    cancel_response is None or terminal is None
+                ):
+                    payload = _read_payload_timeout(proc, max(0.1, deadline - time.time()))
+                    if payload.get("request_id") == "cancel-locked-1":
+                        cancel_response = payload
+                    if (
+                        payload.get("request_id") == "chat-locked-cancel"
+                        and payload.get("kind") == "ai.chat"
+                    ):
+                        terminal = payload
+
+                self.assertIsNotNone(cancel_response)
+                self.assertEqual(cancel_response["kind"], "ai.chat.cancel")
+                self.assertTrue(cancel_response["data"]["cancelled"])
+                self.assertIsNotNone(terminal)
+                self.assertEqual(terminal["data"]["finish_reason"], "cancelled")
+
+                _write_payload(proc, {"request_id": "shutdown-1", "kind": "daemon.shutdown"})
+                self.assertEqual(_read_payload_timeout(proc)["kind"], "daemon.shutdown")
+                code, stderr = _close_daemon(proc)
+                self.assertEqual(code, 0, stderr)
+                self.assertEqual(stderr, "")
+        finally:
+            server.shutdown()
+            server.server_close()
+
     def test_ai_chat_mutating_tool_consent_preview_redacts_secrets(self):
         server = _start_tool_chat_server(
             [
