@@ -468,7 +468,7 @@ export function AppShell() {
     return () => {
       main.removeEventListener("scroll", syncAssistantState);
     };
-  }, [pathname]);
+  }, [locked, pathname]);
 
   React.useEffect(() => {
     const openSettings = (event: Event) => {
@@ -488,58 +488,69 @@ export function AppShell() {
 
   return (
     <TooltipProvider>
-      <AssistantSessionProvider returnPath={assistantReturnPath}>
-        <div className="flex h-svh flex-col overflow-hidden bg-sidebar">
-          <PreAlphaBanner className="shrink-0" />
-          <SidebarProvider className="min-h-0 flex-1 bg-sidebar">
-            <a
-              href="#app-main"
-              className="sr-only focus:not-sr-only focus:absolute focus:top-4 focus:left-4 focus:z-50 focus:rounded-md focus:bg-background focus:px-3 focus:py-2 focus:text-sm focus:text-foreground focus:ring-2 focus:ring-ring"
-            >
-              Skip to main content
-            </a>
-            <AppSidebar
-              pathname={pathname}
-              onLock={lockApp}
-              onSettingsClick={() => {
-                if (locked) return;
-                setSettingsFocus(null);
-                setSettingsOpen(true);
-              }}
-            />
-            <div className="min-h-0 w-full overflow-hidden lg:p-2">
-              <div className="relative flex h-full w-full flex-col items-center justify-start overflow-hidden bg-background lg:rounded-xl lg:border">
-                <AppDashboardHeader
-                  meta={routeMeta}
-                  onLock={lockApp}
-                  daemonEnabled={!locked}
-                />
+      <div className="flex h-svh flex-col overflow-hidden bg-sidebar">
+        <PreAlphaBanner className="shrink-0" />
+        <SidebarProvider className="min-h-0 flex-1 bg-sidebar">
+          <a
+            href="#app-main"
+            className="sr-only focus:not-sr-only focus:absolute focus:top-4 focus:left-4 focus:z-50 focus:rounded-md focus:bg-background focus:px-3 focus:py-2 focus:text-sm focus:text-foreground focus:ring-2 focus:ring-ring"
+          >
+            Skip to main content
+          </a>
+          <AppSidebar
+            pathname={pathname}
+            onLock={lockApp}
+            onSettingsClick={() => {
+              if (locked) return;
+              setSettingsFocus(null);
+              setSettingsOpen(true);
+            }}
+          />
+          <div className="min-h-0 w-full overflow-hidden lg:p-2">
+            <div className="relative flex h-full w-full flex-col items-center justify-start overflow-hidden bg-background lg:rounded-xl lg:border">
+              <AppDashboardHeader
+                meta={routeMeta}
+                onLock={lockApp}
+                daemonEnabled={!locked}
+              />
+              {locked ? (
                 <main
                   id="app-main"
                   ref={mainRef}
                   tabIndex={-1}
-                  className={`relative min-h-0 w-full flex-1 overflow-auto bg-background transition-[padding-bottom] duration-200 ${
-                    isAssistantRoute
-                      ? "pb-0"
-                      : assistantCollapsed
-                        ? "pb-[150px]"
-                        : "pb-[240px]"
-                  }`}
+                  className="relative min-h-0 w-full flex-1 overflow-auto bg-background"
                 >
-                  {!locked && <RouteTransitionIndicator active={shellBusy} />}
-                  {locked ? <LockScreen onUnlock={unlockApp} /> : <Outlet />}
+                  <LockScreen onUnlock={unlockApp} />
                 </main>
-                {locked || isAssistantRoute ? null : (
-                  <ScreenAssistantMockup
-                    collapsed={assistantCollapsed}
-                    className="absolute inset-x-0 bottom-0 z-20"
-                  />
-                )}
-              </div>
+              ) : (
+                <AssistantSessionProvider returnPath={assistantReturnPath}>
+                  <main
+                    id="app-main"
+                    ref={mainRef}
+                    tabIndex={-1}
+                    className={`relative min-h-0 w-full flex-1 overflow-auto bg-background transition-[padding-bottom] duration-200 ${
+                      isAssistantRoute
+                        ? "pb-0"
+                        : assistantCollapsed
+                          ? "pb-[150px]"
+                          : "pb-[240px]"
+                    }`}
+                  >
+                    <RouteTransitionIndicator active={shellBusy} />
+                    <Outlet />
+                  </main>
+                  {isAssistantRoute ? null : (
+                    <ScreenAssistantMockup
+                      collapsed={assistantCollapsed}
+                      className="absolute inset-x-0 bottom-0 z-20"
+                    />
+                  )}
+                </AssistantSessionProvider>
+              )}
             </div>
-          </SidebarProvider>
-        </div>
-      </AssistantSessionProvider>
+          </div>
+        </SidebarProvider>
+      </div>
       <SettingsModal
         open={settingsOpen && !locked}
         focusSection={settingsFocus}
