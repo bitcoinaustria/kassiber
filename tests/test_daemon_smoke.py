@@ -715,31 +715,13 @@ class DaemonSmokeTest(unittest.TestCase):
                 unlock_limited["error"]["details"]["retry_after_seconds"], 1
             )
 
-            for attempt in range(1, 4):
-                _write_payload(
-                    proc,
-                    {
-                        "request_id": f"rekey-wrong-{attempt}",
-                        "kind": "ui.secrets.change_passphrase",
-                        "args": {
-                            "auth_response": {
-                                "passphrase_secret": f"bad-current-{attempt}"
-                            },
-                            "new_passphrase_secret": "better horse battery",
-                        },
-                    },
-                )
-                rejected = _read_payload(proc)
-                self.assertEqual(rejected["kind"], "error")
-                self.assertEqual(rejected["error"]["code"], "local_auth_denied")
-
             _write_payload(
                 proc,
                 {
-                    "request_id": "rekey-rate-limited",
+                    "request_id": "rekey-cross-scope-rate-limited",
                     "kind": "ui.secrets.change_passphrase",
                     "args": {
-                        "auth_response": {"passphrase_secret": "bad-current-4"},
+                        "auth_response": {"passphrase_secret": "bad-current"},
                         "new_passphrase_secret": "better horse battery",
                     },
                 },
@@ -753,8 +735,38 @@ class DaemonSmokeTest(unittest.TestCase):
                 rekey_limited["error"]["details"]["scope"],
                 "change_database_passphrase",
             )
+            self.assertEqual(
+                rekey_limited["error"]["details"]["throttle"], "database"
+            )
 
             _write_payload(proc, {"request_id": "shutdown-1", "kind": "daemon.shutdown"})
+            self.assertEqual(_read_payload(proc)["kind"], "daemon.shutdown")
+
+            code, stderr = _close_daemon(proc)
+            self.assertEqual(code, 0, stderr)
+            self.assertEqual(stderr, "")
+
+            proc = _start_daemon(data_root)
+            ready = _read_payload(proc)
+            self.assertEqual(ready["kind"], "daemon.ready")
+            _write_payload(
+                proc,
+                {
+                    "request_id": "unlock-after-restart",
+                    "kind": "daemon.unlock",
+                    "args": {"auth_response": {"passphrase_secret": passphrase}},
+                },
+            )
+            restart_limited = _read_payload(proc)
+            self.assertEqual(restart_limited["kind"], "error")
+            self.assertEqual(
+                restart_limited["error"]["code"], "local_auth_rate_limited"
+            )
+            self.assertEqual(
+                restart_limited["error"]["details"]["throttle"], "database"
+            )
+
+            _write_payload(proc, {"request_id": "shutdown-2", "kind": "daemon.shutdown"})
             self.assertEqual(_read_payload(proc)["kind"], "daemon.shutdown")
 
             code, stderr = _close_daemon(proc)

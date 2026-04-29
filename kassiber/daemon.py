@@ -8,6 +8,7 @@ import threading
 import time
 import traceback
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any, Callable, TextIO
 
 from . import __version__
@@ -60,7 +61,12 @@ from .core.ui_snapshot import (
     build_workspace_health_snapshot,
 )
 from .backends import load_runtime_config, merge_db_backends
-from .db import open_db, resolve_database_path, resolve_effective_data_root
+from .db import (
+    open_db,
+    resolve_config_root,
+    resolve_database_path,
+    resolve_effective_data_root,
+)
 from .envelope import build_envelope, build_error_envelope, json_ready
 from .errors import AppError
 from .secrets.credentials import migrate_dotenv_credentials
@@ -114,8 +120,9 @@ AI_TOOL_CONSENT_TIMEOUT_SECONDS = 300.0
 PLAINTEXT_DELETE_ACK = "DELETE LOCAL DATA"
 MIN_DATABASE_PASSPHRASE_CHARS = 12
 AUTH_FAILURES_BEFORE_BACKOFF = 3
-AUTH_BACKOFF_BASE_SECONDS = 1.0
+AUTH_BACKOFF_BASE_SECONDS = 5.0
 AUTH_BACKOFF_MAX_SECONDS = 30.0
+AUTH_BACKOFF_FILENAME = "auth_backoff.json"
 
 
 class AiToolConsentState:
@@ -257,26 +264,30 @@ class ActiveAiChats:
 
 
 class AuthAttemptBackoff:
-    """Process-local throttling for passphrase verification attempts."""
+    """Database-level throttling for passphrase verification attempts."""
 
-    def __init__(self) -> None:
+    def __init__(self, state_path: str | None = None) -> None:
         self._lock = threading.Lock()
-        self._failures: dict[str, int] = {}
-        self._locked_until: dict[str, float] = {}
+        self._failures = 0
+        self._locked_until = 0.0
+        self._state_path = state_path
 
     def check(self, scope: str) -> None:
-        now = time.monotonic()
+        now = time.time()
         with self._lock:
-            locked_until = self._locked_until.get(scope, 0.0)
-            retry_after = locked_until - now
+            self._load_locked()
+            retry_after = self._locked_until - now
             if retry_after <= 0:
-                self._locked_until.pop(scope, None)
+                if self._locked_until:
+                    self._locked_until = 0.0
+                    self._persist_locked()
                 return
         raise AppError(
             "too many failed passphrase attempts",
             code="local_auth_rate_limited",
             details={
                 "scope": scope,
+                "throttle": "database",
                 "retry_after_seconds": max(1, int(retry_after + 0.999)),
             },
             hint="Wait before trying the passphrase again.",
@@ -285,22 +296,66 @@ class AuthAttemptBackoff:
 
     def record_success(self, scope: str) -> None:
         with self._lock:
-            self._failures.pop(scope, None)
-            self._locked_until.pop(scope, None)
+            self._failures = 0
+            self._locked_until = 0.0
+            self._persist_locked()
 
     def record_failure(self, scope: str) -> None:
-        now = time.monotonic()
+        now = time.time()
         with self._lock:
-            failures = self._failures.get(scope, 0) + 1
-            self._failures[scope] = failures
-            if failures < AUTH_FAILURES_BEFORE_BACKOFF:
+            self._load_locked()
+            self._failures += 1
+            if self._failures < AUTH_FAILURES_BEFORE_BACKOFF:
+                self._persist_locked()
                 return
             delay = min(
                 AUTH_BACKOFF_MAX_SECONDS,
                 AUTH_BACKOFF_BASE_SECONDS
-                * 2 ** (failures - AUTH_FAILURES_BEFORE_BACKOFF),
+                * 2 ** (self._failures - AUTH_FAILURES_BEFORE_BACKOFF),
             )
-            self._locked_until[scope] = now + delay
+            self._locked_until = now + delay
+            self._persist_locked()
+
+    def _load_locked(self) -> None:
+        if not self._state_path:
+            return
+        try:
+            with open(self._state_path, encoding="utf-8") as handle:
+                payload = json.load(handle)
+        except FileNotFoundError:
+            return
+        except (OSError, json.JSONDecodeError, TypeError, ValueError):
+            return
+        self._failures = max(0, int(payload.get("failures", 0)))
+        self._locked_until = max(0.0, float(payload.get("locked_until", 0.0)))
+
+    def _persist_locked(self) -> None:
+        if not self._state_path:
+            return
+        try:
+            if self._failures <= 0 and self._locked_until <= 0:
+                try:
+                    Path(self._state_path).unlink()
+                except FileNotFoundError:
+                    pass
+                return
+            state_path = Path(self._state_path)
+            state_path.parent.mkdir(parents=True, exist_ok=True)
+            tmp_path = state_path.with_suffix(state_path.suffix + ".tmp")
+            tmp_path.write_text(
+                json.dumps(
+                    {
+                        "failures": self._failures,
+                        "locked_until": self._locked_until,
+                    },
+                    sort_keys=True,
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            tmp_path.replace(state_path)
+        except OSError:
+            return
 
 
 @dataclass(frozen=True)
@@ -2249,7 +2304,9 @@ def run(
         runtime_config=args.runtime_config,
         active_ai_chats=ActiveAiChats(),
         main_thread_tasks=queue.Queue(),
-        auth_backoff=AuthAttemptBackoff(),
+        auth_backoff=AuthAttemptBackoff(
+            str(resolve_config_root(args.data_root) / AUTH_BACKOFF_FILENAME)
+        ),
     )
     input_lines = _start_stdin_reader(input_stream)
 

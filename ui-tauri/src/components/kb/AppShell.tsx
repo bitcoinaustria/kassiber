@@ -1,4 +1,4 @@
-import { useIsFetching } from "@tanstack/react-query";
+import { useIsFetching, useQueryClient } from "@tanstack/react-query";
 import {
   Link,
   Outlet,
@@ -69,7 +69,7 @@ import {
 } from "@/components/ui/sidebar";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { useUiStore } from "@/store/ui";
-import { useDaemon } from "@/daemon/client";
+import { DAEMON_AUTH_REQUIRED_EVENT, useDaemon } from "@/daemon/client";
 import { getTransport } from "@/daemon/transport";
 import { cn } from "@/lib/utils";
 import {
@@ -260,6 +260,7 @@ function assistantReturnPathFor(pathname: string): AssistantReturnPath {
 
 export function AppShell() {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const identity = useUiStore((s) => s.identity);
   const dataMode = useUiStore((s) => s.dataMode);
@@ -295,6 +296,7 @@ export function AppShell() {
   const lockApp = React.useCallback(() => {
     setHideSensitive(true);
     if (identity?.encrypted) {
+      queryClient.removeQueries({ queryKey: ["daemon", dataMode] });
       setLocked(true);
       void getTransport(dataMode).invoke({ kind: "daemon.lock" });
       return;
@@ -306,7 +308,14 @@ export function AppShell() {
       return;
     }
     setLocked(true);
-  }, [dataMode, identity?.encrypted, navigate, setHideSensitive, setIdentity]);
+  }, [
+    dataMode,
+    identity?.encrypted,
+    navigate,
+    queryClient,
+    setHideSensitive,
+    setIdentity,
+  ]);
 
   const unlockApp = React.useCallback(
     async (passphrase: string) => {
@@ -318,6 +327,9 @@ export function AppShell() {
         const unlocked = envelope.kind !== "error" && envelope.kind !== "auth_required";
         if (unlocked) {
           await setSessionUnlockPassphrase(passphrase);
+          await queryClient.invalidateQueries({
+            queryKey: ["daemon", dataMode],
+          });
           setLocked(false);
         }
         return unlocked;
@@ -329,7 +341,7 @@ export function AppShell() {
       }
       return unlocked;
     },
-    [dataMode, identity?.encrypted],
+    [dataMode, identity?.encrypted, queryClient],
   );
 
   React.useEffect(() => {
@@ -337,6 +349,23 @@ export function AppShell() {
     launchLockApplied.current = false;
     void navigate({ to: "/", replace: true });
   }, [identity, navigate]);
+
+  React.useEffect(() => {
+    if (!identity?.encrypted) return;
+
+    const onAuthRequired = () => {
+      clearSessionUnlockPassphrase();
+      queryClient.removeQueries({ queryKey: ["daemon", dataMode] });
+      setHideSensitive(true);
+      setSettingsOpen(false);
+      setLocked(true);
+    };
+
+    window.addEventListener(DAEMON_AUTH_REQUIRED_EVENT, onAuthRequired);
+    return () => {
+      window.removeEventListener(DAEMON_AUTH_REQUIRED_EVENT, onAuthRequired);
+    };
+  }, [dataMode, identity?.encrypted, queryClient, setHideSensitive]);
 
   React.useEffect(() => {
     if (!identity?.encrypted) return;
@@ -402,6 +431,10 @@ export function AppShell() {
   }, [isAssistantRoute, pathname]);
 
   React.useEffect(() => {
+    if (locked) setSettingsOpen(false);
+  }, [locked]);
+
+  React.useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key.toLowerCase() !== "l") return;
       if (!(event.metaKey || event.ctrlKey)) return;
@@ -464,13 +497,18 @@ export function AppShell() {
               pathname={pathname}
               onLock={lockApp}
               onSettingsClick={() => {
+                if (locked) return;
                 setSettingsFocus(null);
                 setSettingsOpen(true);
               }}
             />
             <div className="min-h-0 w-full overflow-hidden lg:p-2">
               <div className="relative flex h-full w-full flex-col items-center justify-start overflow-hidden bg-background lg:rounded-xl lg:border">
-                <AppDashboardHeader meta={routeMeta} onLock={lockApp} />
+                <AppDashboardHeader
+                  meta={routeMeta}
+                  onLock={lockApp}
+                  daemonEnabled={!locked}
+                />
                 <main
                   id="app-main"
                   ref={mainRef}
@@ -483,23 +521,22 @@ export function AppShell() {
                         : "pb-[240px]"
                   }`}
                 >
-                  <RouteTransitionIndicator active={shellBusy} />
-                  <Outlet />
+                  {!locked && <RouteTransitionIndicator active={shellBusy} />}
+                  {locked ? <LockScreen onUnlock={unlockApp} /> : <Outlet />}
                 </main>
-                {isAssistantRoute ? null : (
+                {locked || isAssistantRoute ? null : (
                   <ScreenAssistantMockup
                     collapsed={assistantCollapsed}
                     className="absolute inset-x-0 bottom-0 z-20"
                   />
                 )}
-                {locked && <LockScreen onUnlock={unlockApp} />}
               </div>
             </div>
           </SidebarProvider>
         </div>
       </AssistantSessionProvider>
       <SettingsModal
-        open={settingsOpen}
+        open={settingsOpen && !locked}
         focusSection={settingsFocus}
         onLock={lockApp}
         onClose={() => setSettingsOpen(false)}
@@ -802,9 +839,11 @@ function AppVersion() {
 function AppDashboardHeader({
   meta,
   onLock,
+  daemonEnabled,
 }: {
   meta: RouteMeta;
   onLock: () => void;
+  daemonEnabled: boolean;
 }) {
   const Icon = meta.icon;
   const hideSensitive = useUiStore((s) => s.hideSensitive);
@@ -812,7 +851,11 @@ function AppDashboardHeader({
   const dataMode = useUiStore((s) => s.dataMode);
   const appNotifications = useUiStore((s) => s.notifications);
   const clearNotifications = useUiStore((s) => s.clearNotifications);
-  const { data } = useDaemon<OverviewSnapshot>("ui.overview.snapshot");
+  const { data } = useDaemon<OverviewSnapshot>(
+    "ui.overview.snapshot",
+    undefined,
+    { enabled: daemonEnabled },
+  );
   const snapshot = data?.data;
   const systemNotificationItems = [
     ...(snapshot?.status?.needsJournals

@@ -15,6 +15,27 @@ import {
 import { getTransport, type DaemonEnvelope } from "./transport";
 import { useUiStore } from "@/store/ui";
 
+export const DAEMON_AUTH_REQUIRED_EVENT = "kassiber:auth-required";
+
+export class DaemonAuthRequiredError extends Error {
+  envelope: DaemonEnvelope;
+
+  constructor(envelope: DaemonEnvelope) {
+    super("Daemon authentication required");
+    this.name = "DaemonAuthRequiredError";
+    this.envelope = envelope;
+  }
+}
+
+function handleAuthRequired(envelope: DaemonEnvelope): never {
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(
+      new CustomEvent(DAEMON_AUTH_REQUIRED_EVENT, { detail: envelope }),
+    );
+  }
+  throw new DaemonAuthRequiredError(envelope);
+}
+
 export function daemonQueryKey(
   mode: string,
   kind: string,
@@ -36,8 +57,16 @@ export function useDaemon<T = unknown>(
   const dataMode = useUiStore((state) => state.dataMode);
   return useQuery<DaemonEnvelope<T>>({
     queryKey: daemonQueryKey(dataMode, kind, args),
-    queryFn: () => getTransport(dataMode).invoke<T>({ kind, args }),
+    queryFn: async () => {
+      const envelope = await getTransport(dataMode).invoke<T>({ kind, args });
+      if (envelope.kind === "auth_required") {
+        handleAuthRequired(envelope);
+      }
+      return envelope;
+    },
     staleTime: 5 * 60 * 1000,
+    retry: (failureCount, error) =>
+      error instanceof DaemonAuthRequiredError ? false : failureCount < 3,
     ...options,
   });
 }
@@ -48,6 +77,9 @@ export function useDaemonMutation<T = unknown>(kind: string) {
   return useMutation({
     mutationFn: async (args?: Record<string, unknown>) => {
       const envelope = await getTransport(dataMode).invoke<T>({ kind, args });
+      if (envelope.kind === "auth_required") {
+        handleAuthRequired(envelope);
+      }
       if (envelope.kind === "error" || envelope.error) {
         throw new Error(envelope.error?.message ?? `daemon ${kind} failed`);
       }
