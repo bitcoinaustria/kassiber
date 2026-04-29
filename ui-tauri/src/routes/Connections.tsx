@@ -1,11 +1,10 @@
 /**
  * Connections list view.
  *
- * Uses the shared shadcn dashboard language while keeping the existing
- * AddConnectionFlow and row navigation behavior.
+ * Uses the shared shadcn dashboard language while keeping row navigation.
  */
 
-import { useState, type KeyboardEvent, type ReactNode } from "react";
+import { type KeyboardEvent, type ReactNode, useState } from "react";
 import { Plus, RefreshCw, Wallet } from "lucide-react";
 import { useNavigate } from "@tanstack/react-router";
 
@@ -30,7 +29,6 @@ import { useUiStore } from "@/store/ui";
 import { useCurrency, type Currency } from "@/lib/currency";
 import { cn } from "@/lib/utils";
 
-import { AddConnectionFlow } from "@/components/kb/AddConnectionFlow";
 import type {
   Connection,
   ConnectionKind,
@@ -101,8 +99,6 @@ export function Connections() {
   const currency = useCurrency();
   const navigate = useNavigate();
   const [syncMessage, setSyncMessage] = useState<string | null>(null);
-  const [addOpen, setAddOpen] = useState(false);
-
   const onSyncAll = () => {
     setSyncMessage(null);
     addNotification({
@@ -202,7 +198,11 @@ export function Connections() {
             />
             {syncWallets.isPending ? "Syncing" : "Sync all"}
           </Button>
-          <Button size="sm" className="h-9 gap-2" onClick={() => setAddOpen(true)}>
+          <Button
+            size="sm"
+            className="h-9 gap-2"
+            onClick={() => void navigate({ to: "/imports" })}
+          >
             <Plus className="size-4" aria-hidden="true" />
             Add connection
           </Button>
@@ -285,8 +285,6 @@ export function Connections() {
           </Table>
         </CardContent>
       </Card>
-
-      <AddConnectionFlow open={addOpen} onClose={() => setAddOpen(false)} />
     </div>
   );
 }

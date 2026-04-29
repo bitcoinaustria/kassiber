@@ -93,6 +93,7 @@ type AppRoutePath =
   | "/journals"
   | "/tax-events"
   | "/quarantine"
+  | "/imports"
   | "/settings"
   | "/assistant";
 
@@ -148,7 +149,7 @@ const NAV_GROUPS: NavGroup[] = [
         children: [
           { label: "Wallets", icon: Wallet, href: "/connections" },
           { label: "Profiles", icon: Users, href: "/profiles" },
-          { label: "Imports", icon: Download, href: "/transactions" },
+          { label: "Imports", icon: Download, href: "/imports" },
         ],
       },
       { label: "Journals", icon: BookOpen, href: "/journals" },
@@ -180,6 +181,15 @@ const ROUTE_META: Array<[string, RouteMeta]> = [
       icon: Wallet,
       searchLabel: "Search connections",
       searchPlaceholder: "Search wallets, profiles...",
+    },
+  ],
+  [
+    "/imports",
+    {
+      title: "Imports",
+      icon: Download,
+      searchLabel: "Search imports",
+      searchPlaceholder: "Search wallets, services...",
     },
   ],
   [
@@ -293,6 +303,13 @@ const STATIC_SEARCH_RESULTS: SearchResult[] = [
     detail: "Workspaces and tax policy",
     keywords: ["workspace", "profile", "tax", "country"],
     to: "/profiles",
+  },
+  {
+    id: "route:imports",
+    title: "Imports",
+    detail: "Add wallet sources and integrations",
+    keywords: ["connection", "xpub", "exchange", "csv", "integration"],
+    to: "/imports",
   },
   {
     id: "route:journals",
@@ -426,6 +443,7 @@ function assistantReturnPathFor(pathname: string): AssistantReturnPath {
   if (pathname === "/journals") return "/journals";
   if (pathname === "/tax-events") return "/tax-events";
   if (pathname === "/quarantine") return "/quarantine";
+  if (pathname === "/imports") return "/imports";
   if (pathname === "/settings") return "/settings";
   return "/overview";
 }

@@ -1,4 +1,4 @@
-import { Link } from "@tanstack/react-router";
+import { Link, useNavigate } from "@tanstack/react-router";
 import {
   ArrowUpRight,
   Bell,
@@ -60,7 +60,6 @@ import {
   TooltipProvider as ShadTooltipProvider,
   TooltipTrigger as ShadTooltipTrigger,
 } from "@/components/ui/tooltip";
-import { AddConnectionFlow } from "@/components/kb/AddConnectionFlow";
 import { useWalletSyncAction } from "@/hooks/useWalletSyncAction";
 import { formatBtc, useCurrency, type Currency } from "@/lib/currency";
 import { cn } from "@/lib/utils";
@@ -2235,7 +2234,7 @@ const Dashboard5 = ({
   className?: string;
   snapshot?: OverviewSnapshot;
 }) => {
-  const [addConnectionOpen, setAddConnectionOpen] = React.useState(false);
+  const navigate = useNavigate();
   const hideSensitive = useUiStore((s) => s.hideSensitive);
   const currency = useCurrency();
   const { syncAll, isSyncing } = useWalletSyncAction();
@@ -2248,52 +2247,46 @@ const Dashboard5 = ({
   );
 
   return (
-    <>
-      <div
-        className={cn(
-          "w-full space-y-4 bg-background p-3 sm:space-y-6 sm:p-4 md:p-6",
-          className,
-        )}
-      >
-        <WelcomeSection
-          snapshot={snapshot}
-          onSync={syncAll}
-          isSyncing={isSyncing}
-          onAddConnection={() => setAddConnectionOpen(true)}
-        />
-        <StatsCards
+    <div
+      className={cn(
+        "w-full space-y-4 bg-background p-3 sm:space-y-6 sm:p-4 md:p-6",
+        className,
+      )}
+    >
+      <WelcomeSection
+        snapshot={snapshot}
+        onSync={syncAll}
+        isSyncing={isSyncing}
+        onAddConnection={() => void navigate({ to: "/imports" })}
+      />
+      <StatsCards
+        snapshot={snapshot}
+        hideSensitive={hideSensitive}
+        currency={currency}
+      />
+      <div className="flex flex-col gap-4 sm:gap-6 xl:flex-row">
+        <RevenueFlowChart
           snapshot={snapshot}
           hideSensitive={hideSensitive}
           currency={currency}
         />
-        <div className="flex flex-col gap-4 sm:gap-6 xl:flex-row">
-          <RevenueFlowChart
-            snapshot={snapshot}
-            hideSensitive={hideSensitive}
-            currency={currency}
-          />
-          <SideChartsSection
-            snapshot={snapshot}
-            hideSensitive={hideSensitive}
-            currency={currency}
-          />
-        </div>
-        <div className="flex flex-col gap-4 xl:flex-row">
-          <RecentTransactionsTable
-            className="flex-1"
-            transactions={transactions}
-            hideSensitive={hideSensitive}
-            currency={currency}
-            priceEur={snapshot.priceEur}
-          />
-          <RecentActivity className="xl:w-[360px]" />
-        </div>
+        <SideChartsSection
+          snapshot={snapshot}
+          hideSensitive={hideSensitive}
+          currency={currency}
+        />
       </div>
-      <AddConnectionFlow
-        open={addConnectionOpen}
-        onClose={() => setAddConnectionOpen(false)}
-      />
-    </>
+      <div className="flex flex-col gap-4 xl:flex-row">
+        <RecentTransactionsTable
+          className="flex-1"
+          transactions={transactions}
+          hideSensitive={hideSensitive}
+          currency={currency}
+          priceEur={snapshot.priceEur}
+        />
+        <RecentActivity className="xl:w-[360px]" />
+      </div>
+    </div>
   );
 };
 
