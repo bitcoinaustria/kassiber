@@ -26,6 +26,7 @@ export interface AiChatMessage {
   role: "user" | "assistant" | "system";
   content: string;
   thinking?: string;
+  activityLabel?: string;
   toolCalls?: AiChatToolCall[];
   status: "pending" | "streaming" | "done" | "error" | "cancelled";
   errorCode?: string;
@@ -90,6 +91,11 @@ export interface AiChatDeltaShape {
   };
 }
 
+export interface AiChatStatusShape {
+  phase?: string;
+  label?: string;
+}
+
 interface AiChatTerminalShape {
   provider?: string;
   model?: string;
@@ -125,6 +131,7 @@ interface AiToolConsentResponseShape {
 }
 
 type AiChatStreamRecordData =
+  | AiChatStatusShape
   | AiChatDeltaShape
   | AiChatToolCallShape
   | AiChatToolResultShape
@@ -184,7 +191,26 @@ export function applyAiChatDeltaToMessage(
     status: "streaming",
     content: current.content + visibleAdd,
     thinking: (current.thinking ?? "") + thinkingAdd,
+    activityLabel:
+      !visibleAdd && thinkingAdd ? "Thinking" : current.activityLabel,
   };
+}
+
+export function aiChatStatusLabel(data: AiChatStatusShape | undefined): string {
+  const explicit = data?.label?.trim();
+  if (explicit) return explicit;
+  switch (data?.phase) {
+    case "preparing":
+      return "Preparing chat";
+    case "connecting":
+      return "Connecting";
+    case "waiting_for_model":
+      return "Loading model";
+    case "thinking":
+      return "Thinking";
+    default:
+      return "Generating";
+  }
 }
 
 function toolResultStatus(data: AiChatToolResultShape): AiToolCallStatus {
@@ -260,6 +286,15 @@ export function applyAiChatStreamRecordToMessage(
       parser,
       false,
     );
+  }
+  if (record.kind === "ai.chat.status") {
+    return {
+      ...current,
+      status: "streaming",
+      activityLabel: aiChatStatusLabel(
+        record.data as AiChatStatusShape | undefined,
+      ),
+    };
   }
   if (record.kind === "ai.chat.tool_call") {
     const data = record.data as AiChatToolCallShape | undefined;
@@ -507,6 +542,7 @@ export function useAiChatStream(): UseAiChatStreamResult {
           role: "assistant",
           content: "",
           thinking: "",
+          activityLabel: "Preparing chat",
           status: "pending",
         },
       ]);

@@ -136,6 +136,12 @@ async function mockAiChatStream<T, R>(
     provider?: string;
     tools_enabled?: boolean;
   };
+  options?.onRecord?.({
+    kind: "ai.chat.status",
+    schema_version: 1,
+    request_id: requestId,
+    data: { phase: "waiting_for_model", label: "Loading model" } as R,
+  });
   if (args.tools_enabled) {
     options?.onRecord?.({
       kind: "ai.chat.tool_call",

@@ -926,6 +926,27 @@ def _tool_result_content_for_model(result: dict[str, Any]) -> str:
     return json.dumps(json_ready(result), sort_keys=True, separators=(",", ":"))
 
 
+def _write_ai_chat_status(
+    out: _OutputChannel,
+    request_id: object,
+    *,
+    phase: str,
+    label: str,
+) -> None:
+    out.write(
+        _with_request_id(
+            build_envelope(
+                "ai.chat.status",
+                {
+                    "phase": phase,
+                    "label": label,
+                },
+            ),
+            request_id,
+        )
+    )
+
+
 def _stream_ai_chat_tool_turn(
     request_id: object,
     client: OpenAICompatClient,
@@ -939,6 +960,12 @@ def _stream_ai_chat_tool_turn(
     content_parts: list[str] = []
     reasoning_parts: list[str] = []
     finish_reason = None
+    _write_ai_chat_status(
+        out,
+        request_id,
+        phase="waiting_for_model",
+        label="Thinking",
+    )
     for chunk in client.stream_chat(
         messages=messages,
         model=validated["model"],
@@ -1172,9 +1199,21 @@ def _run_ai_chat_stream(
     try:
         finish_reason = None
         if not cancel_event.is_set():
+            _write_ai_chat_status(
+                out,
+                request_id,
+                phase="preparing",
+                label="Preparing chat",
+            )
             client = OpenAICompatClient(
                 base_url=provider_snapshot["base_url"],
                 api_key=provider_snapshot.get("api_key"),
+            )
+            _write_ai_chat_status(
+                out,
+                request_id,
+                phase="connecting",
+                label="Connecting",
             )
             if validated["tools_enabled"]:
                 _run_ai_chat_tool_loop(
@@ -1191,6 +1230,12 @@ def _run_ai_chat_stream(
                 validated["messages"],
                 system_prompt_kind=validated["system_prompt_kind"],
                 system_prompt=validated["system_prompt"],
+            )
+            _write_ai_chat_status(
+                out,
+                request_id,
+                phase="waiting_for_model",
+                label="Loading model",
             )
             for chunk in client.stream_chat(
                 messages=stream_messages,

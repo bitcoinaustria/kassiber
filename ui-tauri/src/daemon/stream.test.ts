@@ -4,6 +4,7 @@ import {
   applyAiChatDeltaToMessage,
   applyAiChatStreamRecordToMessage,
   applyToolConsentResponseToMessage,
+  aiChatStatusLabel,
   buildChatCancelArgs,
   buildToolConsentArgs,
   terminalAiChatStatus,
@@ -50,6 +51,42 @@ describe("AI stream reducer helpers", () => {
     expect(terminalAiChatStatus("cancelled", false)).toBe("cancelled");
     expect(terminalAiChatStatus("stop", true)).toBe("cancelled");
     expect(terminalAiChatStatus("stop", false)).toBe("done");
+  });
+
+  it("applies status records as visible loading activity", () => {
+    const next = applyAiChatStreamRecordToMessage(
+      assistantMessage(),
+      {
+        kind: "ai.chat.status",
+        schema_version: 1,
+        request_id: "chat-1",
+        data: { phase: "waiting_for_model" },
+      },
+      new ThinkParser(),
+      false,
+    );
+
+    expect(next.status).toBe("streaming");
+    expect(next.activityLabel).toBe("Loading model");
+    expect(aiChatStatusLabel({ phase: "thinking" })).toBe("Thinking");
+  });
+
+  it("marks reasoning-only deltas as thinking activity", () => {
+    const next = applyAiChatDeltaToMessage(
+      assistantMessage({ activityLabel: "Loading model" }),
+      {
+        kind: "ai.chat.delta",
+        schema_version: 1,
+        request_id: "chat-1",
+        data: { delta: { reasoning: "Checking transactions..." } },
+      },
+      new ThinkParser(),
+      false,
+    );
+
+    expect(next.content).toBe("");
+    expect(next.thinking).toBe("Checking transactions...");
+    expect(next.activityLabel).toBe("Thinking");
   });
 
   it("applies tool call, tool result, and final delta records", () => {

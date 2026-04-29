@@ -95,8 +95,8 @@ bundle, and workflows get tighter.
 The desktop assistant lives at the bottom of every authenticated screen. Its
 provider/model picker is fed by `ai.providers.list` and `ai.list_models` over
 the daemon protocol; chat streaming is wired through Tauri events
-(`daemon://stream`) so the UI can render reasoning (`<think>`) and the answer
-in real time.
+(`daemon://stream`) so the UI can render loading status, reasoning
+(`<think>`), and the answer in real time without blocking navigation.
 
 For browser-driven development, the Vite dev server also exposes a loopback-only
 daemon bridge. Run:
@@ -152,6 +152,11 @@ Streaming is demuxed by `request_id`: the Tauri supervisor keeps one daemon
 process and one stdout reader, but routes each JSON envelope to the matching
 request. While a chat is streaming, unrelated daemon calls can complete
 independently.
+
+Before the first token arrives, `ai.chat` may emit `ai.chat.status` records
+with phases such as `preparing`, `connecting`, and `waiting_for_model`. These
+records are UI progress hints only; chain-of-thought is shown only when the
+provider emits inline `<think>` content or structured `reasoning` deltas.
 
 Pressing **Stop** sends `ai.chat.cancel` with
 `args.target_request_id = <active ai.chat request_id>`. Cancellation is

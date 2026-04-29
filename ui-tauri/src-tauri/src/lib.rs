@@ -85,13 +85,13 @@ pub struct DaemonError {
 }
 
 #[tauri::command]
-fn daemon_invoke(
+async fn daemon_invoke(
     app: tauri::AppHandle,
     state: State<'_, Arc<DaemonSupervisor>>,
     request: DaemonRequest,
-) -> DaemonEnvelope {
+) -> Result<DaemonEnvelope, DaemonEnvelope> {
     if !ALLOWED_DAEMON_KINDS.contains(&request.kind.as_str()) {
-        return error_envelope(
+        return Ok(error_envelope(
             "kind_not_allowed",
             format!(
                 "daemon kind {:?} is not allowed by the Tauri shell",
@@ -103,30 +103,45 @@ fn daemon_invoke(
             Some(json!({ "kind": request.kind })),
             request.request_id,
             false,
-        );
+        ));
     }
 
     let request_id = request.request_id.clone();
     let streaming = STREAMING_DAEMON_KINDS.contains(&request.kind.as_str());
-    match state.invoke(
-        &request.kind,
-        request.args,
-        &app,
-        streaming,
-        request.request_id,
-    ) {
-        Ok(response) => match serde_json::from_value(response) {
-            Ok(envelope) => envelope,
-            Err(error) => error_envelope(
-                "daemon_protocol_error",
-                format!("Python daemon response did not match the envelope contract: {error}"),
-                Some("Check daemon smoke tests before wiring more UI kinds."),
-                None,
-                request_id.clone(),
-                false,
-            ),
-        },
-        Err(error) => supervisor_error_envelope(error, request_id),
+    let task_request_id = request_id.clone();
+    let supervisor = Arc::clone(state.inner());
+    let DaemonRequest {
+        kind,
+        request_id: client_request_id,
+        args,
+    } = request;
+    match tauri::async_runtime::spawn_blocking(move || {
+        match supervisor.invoke(&kind, args, &app, streaming, client_request_id) {
+            Ok(response) => match serde_json::from_value(response) {
+                Ok(envelope) => envelope,
+                Err(error) => error_envelope(
+                    "daemon_protocol_error",
+                    format!("Python daemon response did not match the envelope contract: {error}"),
+                    Some("Check daemon smoke tests before wiring more UI kinds."),
+                    None,
+                    task_request_id.clone(),
+                    false,
+                ),
+            },
+            Err(error) => supervisor_error_envelope(error, task_request_id),
+        }
+    })
+    .await
+    {
+        Ok(envelope) => Ok(envelope),
+        Err(error) => Ok(error_envelope(
+            "daemon_task_failed",
+            format!("Tauri daemon task failed before returning an envelope: {error}"),
+            Some("Restart the desktop shell and check the daemon smoke tests."),
+            None,
+            request_id,
+            true,
+        )),
     }
 }
 

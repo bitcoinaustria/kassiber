@@ -1073,9 +1073,20 @@ class DaemonSmokeTest(unittest.TestCase):
                         },
                     },
                 )
-                first_delta = _read_payload_timeout(proc)
-                self.assertEqual(first_delta["request_id"], "chat-1")
-                self.assertEqual(first_delta["kind"], "ai.chat.delta")
+                first_status = _read_payload_timeout(proc)
+                self.assertEqual(first_status["request_id"], "chat-1")
+                self.assertEqual(first_status["kind"], "ai.chat.status")
+                self.assertEqual(first_status["data"]["phase"], "preparing")
+
+                first_delta = None
+                deadline = time.time() + 5
+                while time.time() < deadline and first_delta is None:
+                    payload = _read_payload_timeout(proc, max(0.1, deadline - time.time()))
+                    if payload.get("request_id") != "chat-1":
+                        continue
+                    if payload.get("kind") == "ai.chat.delta":
+                        first_delta = payload
+                self.assertIsNotNone(first_delta)
 
                 _write_payload(
                     proc,
@@ -1243,6 +1254,7 @@ class DaemonSmokeTest(unittest.TestCase):
                         terminal = payload
 
                 kinds = [record["kind"] for record in records]
+                self.assertIn("ai.chat.status", kinds)
                 self.assertIn("ai.chat.tool_call", kinds)
                 self.assertIn("ai.chat.tool_result", kinds)
                 self.assertIn("ai.chat.delta", kinds)

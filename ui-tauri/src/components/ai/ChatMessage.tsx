@@ -43,6 +43,8 @@ export function ChatMessage({ message }: ChatMessageProps) {
   const showLoader =
     !hasAnswer &&
     (message.status === "pending" || message.status === "streaming");
+  const loaderLabel =
+    message.activityLabel ?? (message.thinking ? "Thinking" : "Generating");
 
   return (
     <div className="flex w-full justify-start">
@@ -76,7 +78,9 @@ export function ChatMessage({ message }: ChatMessageProps) {
           </div>
         ) : null}
         {hasAnswer ? <ChatMarkdown content={message.content} /> : null}
-        {showLoader ? <ChatLoader className="mt-1" /> : null}
+        {showLoader ? (
+          <ChatLoader className="mt-1" label={loaderLabel} />
+        ) : null}
         {message.status === "error" ? (
           <p className="text-sm text-destructive">
             {message.errorMessage ?? "Chat failed"}

@@ -59,10 +59,12 @@ Kassiber is currently in **dev mode**: renaming commands, breaking flags, and re
 - Every command accepts `--format {table,plain,json,csv}`, `--output <path>`, `--machine` (= `--format json`), `--debug`, `--diagnostics-out <path|auto>`, and `--db-passphrase-fd FD` (used to unlock a SQLCipher-encrypted database non-interactively).
 - Successful responses use `{kind, schema_version, data}`. Errors use `{kind: "error", schema_version, error: {code, message, hint, details, retryable, debug}}`.
 - The Tauri supervisor routes daemon responses by `request_id`, not by kind.
-  Streaming requests emit intermediate records such as `ai.chat.delta`,
-  `ai.chat.tool_call`, `ai.chat.tool_consent_required`, and
+  Streaming requests emit intermediate records such as `ai.chat.status`,
+  `ai.chat.delta`, `ai.chat.tool_call`, `ai.chat.tool_consent_required`, and
   `ai.chat.tool_result` to the `daemon://stream` Tauri event channel; the
   exact-kind terminal record (or an error) resolves only the matching request.
+  `ai.chat.status` is a progress hint for loading/thinking phases, not
+  chain-of-thought content.
   Mutating tools may emit `ai.chat.tool_call` twice for the same `call_id`:
   first with `needs_consent: true`, then after approval with
   `needs_consent: false` to mark that same call as running. Clients should
