@@ -33,7 +33,7 @@ function Tool({
     <Collapsible
       data-slot="tool"
       className={cn(
-        "rounded-md border text-xs",
+        "w-full min-w-0 overflow-hidden rounded-md border text-xs",
         "border-border/70 bg-background/70",
         className,
       )}
@@ -125,7 +125,7 @@ function ToolInput({
       <p className="mb-1 text-[10px] font-medium uppercase text-muted-foreground">
         {label}
       </p>
-      <pre className="max-h-28 overflow-auto whitespace-pre-wrap break-words rounded bg-muted/55 px-2 py-1 font-mono text-[10px] text-muted-foreground">
+      <pre className="max-h-28 max-w-full overflow-auto whitespace-pre-wrap break-words rounded bg-muted/55 px-2 py-1 font-mono text-[10px] text-muted-foreground">
         {JSON.stringify(input, null, 2)}
       </pre>
     </section>
@@ -156,8 +156,8 @@ function ToolOutput({
         className={cn(
           "max-h-32 overflow-auto whitespace-pre-wrap break-words rounded px-2 py-1 font-mono text-[10px]",
           error
-            ? "bg-destructive/10 text-destructive"
-            : "bg-muted/55 text-muted-foreground",
+            ? "max-w-full bg-destructive/10 text-destructive"
+            : "max-w-full bg-muted/55 text-muted-foreground",
         )}
       >
         {error ?? formatPayload(output)}

@@ -17,6 +17,8 @@ user can still recover with the upstream `sqlcipher` binary.
 
 from __future__ import annotations
 
+from contextlib import contextmanager, nullcontext
+import os
 import sqlite3
 from pathlib import Path
 from typing import Any
@@ -160,6 +162,20 @@ def verify_unlock(conn: Any) -> None:
         ) from None
 
 
+@contextmanager
+def _suppress_c_stderr():
+    """Temporarily silence C-extension stderr writes during expected probes."""
+
+    saved_fd = os.dup(2)
+    try:
+        with open(os.devnull, "w", encoding="utf-8") as devnull:
+            os.dup2(devnull.fileno(), 2)
+        yield
+    finally:
+        os.dup2(saved_fd, 2)
+        os.close(saved_fd)
+
+
 def get_row_class() -> Any:
     """Return the `Row` class belonging to the active SQLCipher driver."""
 
@@ -177,6 +193,7 @@ def open_encrypted(
     foreign_keys: bool = True,
     detect_types: int = 0,
     row_factory: Any | None = None,
+    quiet_unlock_errors: bool = False,
 ) -> Any:
     """Open an encrypted SQLCipher database and return the keyed connection.
 
@@ -194,7 +211,8 @@ def open_encrypted(
             cipher_page_size=cipher_page_size,
             compatibility=compatibility,
         )
-        verify_unlock(conn)
+        with _suppress_c_stderr() if quiet_unlock_errors else nullcontext():
+            verify_unlock(conn)
         if row_factory is not None:
             conn.row_factory = row_factory
         if foreign_keys:

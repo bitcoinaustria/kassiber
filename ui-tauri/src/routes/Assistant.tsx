@@ -1,11 +1,12 @@
-import { Link } from "@tanstack/react-router";
-import { Bot, Minimize2, PanelBottomOpen } from "lucide-react";
+import * as React from "react";
+import { Download } from "lucide-react";
 
 import Ai02 from "@/components/ai-02";
 import { useAssistantSession } from "@/components/ai/assistantSession";
 import { ChatThread } from "@/components/ai/ChatThread";
 import { ToolConsentDialog } from "@/components/ai/ToolConsentDialog";
 import { Button } from "@/components/ui/button";
+import { saveChatExport } from "@/lib/chatExport";
 import { cn } from "@/lib/utils";
 
 export function Assistant() {
@@ -21,69 +22,120 @@ export function Assistant() {
     setToolsEnabled,
     sendConsent,
     abort,
-    returnPath,
   } = useAssistantSession();
   const hasMessages = messages.length > 0;
+  const [exportStatus, setExportStatus] = React.useState<string | null>(null);
+
+  const exportChat = React.useCallback(async () => {
+    if (messages.length === 0) return;
+    setExportStatus(null);
+    try {
+      const result = await saveChatExport(messages);
+      setExportStatus(
+        result === "saved"
+          ? "Exported"
+          : result === "download-started"
+            ? "Download started"
+            : "Export cancelled",
+      );
+    } catch {
+      setExportStatus("Export failed");
+    }
+  }, [messages]);
+
+  const composer = (
+    <Ai02
+      className={cn(
+        "max-w-none rounded-[28px] border-border/80 bg-muted/75 shadow-[0_18px_55px_rgba(15,23,42,0.16)] ring-0",
+        hasMessages &&
+          "rounded-[24px] border-border bg-background! shadow-none! ring-0!",
+      )}
+      selection={selection}
+      onSelectionChange={setSelection}
+      onSubmit={sendPrompt}
+      onAbort={abort}
+      isStreaming={isStreaming}
+      toolsEnabled={toolsEnabled}
+      onToolsEnabledChange={setToolsEnabled}
+      prompts={[]}
+    />
+  );
 
   return (
-    <div className="mx-auto flex min-h-full w-full max-w-6xl flex-col gap-4 px-4 py-4 sm:px-6 sm:py-5">
-      <div className="flex flex-wrap items-center gap-2">
-        <div className="flex min-w-0 items-center gap-2">
-          <Bot className="size-5 text-muted-foreground" aria-hidden="true" />
-          <h2 className="text-lg font-medium">Assistant</h2>
-          {isStreaming ? (
-            <span className="rounded-full bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary">
-              Generating
-            </span>
-          ) : null}
-        </div>
-
-        <div className="ml-auto flex items-center gap-2">
-          <Button asChild variant="outline" size="sm">
-            <Link to={returnPath}>
-              <PanelBottomOpen className="size-4" aria-hidden="true" />
-              Docked chat
-            </Link>
-          </Button>
-        </div>
-      </div>
-
+    <div className="mx-auto flex h-full min-h-0 w-full max-w-6xl flex-col px-4 py-3 sm:px-6 sm:py-4">
       <section
         aria-label="Assistant conversation"
-        className={cn(
-          "min-h-0 flex-1 overflow-hidden rounded-2xl border border-border/80 bg-background/95 shadow-[0_16px_50px_rgba(15,23,42,0.08)]",
-          hasMessages ? "flex" : "grid place-items-center",
-        )}
+        className="flex min-h-0 flex-1 flex-col overflow-hidden bg-background"
       >
         {hasMessages ? (
-          <ChatThread messages={messages} className="h-full max-w-none p-4" />
-        ) : (
-          <div className="flex max-w-sm flex-col items-center gap-2 px-6 py-16 text-center">
-            <Minimize2 className="size-7 text-muted-foreground" aria-hidden="true" />
-            <p className="text-sm font-medium">No conversation yet</p>
-            <p className="text-sm text-muted-foreground">
-              Start with a question below, or switch back to the docked chat.
-            </p>
+          <div className="mx-auto flex w-full max-w-4xl items-center justify-end gap-2 px-1 pb-3">
+            {isStreaming ? (
+              <span className="mr-auto rounded-full bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary">
+                Generating
+              </span>
+            ) : (
+              <span className="mr-auto text-xs text-muted-foreground">
+                {messages.length} message{messages.length === 1 ? "" : "s"}
+              </span>
+            )}
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="gap-2"
+              onClick={exportChat}
+            >
+              <Download className="size-4" aria-hidden="true" />
+              Export chat
+            </Button>
+            {exportStatus ? (
+              <span className="text-xs text-muted-foreground">
+                {exportStatus}
+              </span>
+            ) : null}
           </div>
-        )}
+        ) : null}
+
+        <div
+          className={cn(
+            "min-h-0 flex-1",
+            hasMessages ? "overflow-hidden" : "grid place-items-center",
+          )}
+        >
+          <div
+            className={cn(
+              "mx-auto w-full",
+              hasMessages
+                ? "flex h-full max-w-4xl overflow-hidden"
+                : "flex max-w-3xl -translate-y-6 flex-col items-center gap-7 px-1 text-center sm:-translate-y-10",
+            )}
+          >
+            {hasMessages ? (
+              <ChatThread messages={messages} className="h-full p-1 sm:p-2" />
+            ) : (
+              <>
+                <h2 className="text-3xl font-medium tracking-normal text-foreground sm:text-4xl">
+                  What needs reviewing today?
+                </h2>
+                <div className="w-full">{composer}</div>
+              </>
+            )}
+          </div>
+        </div>
+
+        {error ? (
+          <div className="mx-auto mt-3 w-full max-w-4xl rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+            {error.message}
+          </div>
+        ) : null}
+
+        {hasMessages ? (
+          <div className="mx-auto w-full max-w-4xl shrink-0 border-t border-border/60 pt-3">
+            {composer}
+          </div>
+        ) : null}
       </section>
 
-      {error ? (
-        <div className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">
-          {error.message}
-        </div>
-      ) : null}
-
-      <Ai02
-        className="max-w-none"
-        selection={selection}
-        onSelectionChange={setSelection}
-        onSubmit={sendPrompt}
-        onAbort={abort}
-        isStreaming={isStreaming}
-        toolsEnabled={toolsEnabled}
-        onToolsEnabledChange={setToolsEnabled}
-      />
       <ToolConsentDialog request={pendingConsent} onDecision={sendConsent} />
     </div>
   );

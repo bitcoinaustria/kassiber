@@ -1843,6 +1843,8 @@ def dispatch(conn: sqlite3.Connection | None, args: argparse.Namespace) -> Any:
 
 
 def command_needs_db(args: argparse.Namespace) -> bool:
+    if args.command == "daemon":
+        return False
     if args.command == "backends" and getattr(args, "backends_command", None) == "kinds":
         return False
     if args.command == "wallets" and getattr(args, "wallets_command", None) == "kinds":

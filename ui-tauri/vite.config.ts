@@ -26,8 +26,13 @@ const ALLOWED_BRIDGE_KINDS = new Set([
   "ui.journals.transfers.list",
   "ui.rates.summary",
   "ui.workspace.health",
+  "ui.workspace.delete",
+  "ui.secrets.init",
+  "ui.secrets.change_passphrase",
   "ui.next_actions",
   "ui.wallets.sync",
+  "daemon.lock",
+  "daemon.unlock",
   // AI provider config and chat kinds. The bridge keeps one daemon process so
   // ai.chat, cancel, and consent all route through the same active registry.
   "ai.providers.list",
@@ -232,7 +237,7 @@ class DaemonBridgeSupervisor {
     }
 
     const kind = typeof payload.kind === "string" ? payload.kind : "";
-    if (kind === pending.kind || kind === "error") {
+    if (kind === pending.kind || kind === "error" || kind === "auth_required") {
       this.pending.delete(String(requestId));
       clearTimeout(pending.timeout);
       pending.resolve(payload);

@@ -1,4 +1,4 @@
-import { useIsFetching } from "@tanstack/react-query";
+import { useIsFetching, useQueryClient } from "@tanstack/react-query";
 import {
   Link,
   Outlet,
@@ -18,6 +18,7 @@ import {
   EyeOff,
   Heart,
   LayoutDashboard,
+  LockKeyhole,
   LogOut,
   MessageSquareText,
   Search,
@@ -68,8 +69,15 @@ import {
 } from "@/components/ui/sidebar";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { useUiStore } from "@/store/ui";
-import { useDaemon } from "@/daemon/client";
+import { DAEMON_AUTH_REQUIRED_EVENT, useDaemon } from "@/daemon/client";
+import { getTransport } from "@/daemon/transport";
 import { cn } from "@/lib/utils";
+import {
+  clearSessionUnlockPassphrase,
+  hasSessionUnlockPassphrase,
+  setSessionUnlockPassphrase,
+  verifySessionUnlockPassphrase,
+} from "@/store/sessionLock";
 import type { OverviewSnapshot } from "@/mocks/seed";
 import { AssistantSessionProvider } from "@/components/ai/AssistantSessionProvider";
 import type { AssistantReturnPath } from "@/components/ai/assistantSession";
@@ -252,8 +260,14 @@ function assistantReturnPathFor(pathname: string): AssistantReturnPath {
 
 export function AppShell() {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const identity = useUiStore((s) => s.identity);
+  const appLockPolicy = useUiStore((s) => s.appLockPolicy);
+  const setIdentity = useUiStore((s) => s.setIdentity);
+  const setHideSensitive = useUiStore((s) => s.setHideSensitive);
+  const encryptedWorkspace =
+    Boolean(identity?.encrypted) || identity?.databaseMode === "sqlcipher";
   const routerBusy = useRouterState({
     select: (s) => s.isLoading || s.isTransitioning || s.status === "pending",
   });
@@ -263,9 +277,13 @@ export function AppShell() {
     "backends" | null
   >(null);
   const [assistantCollapsed, setAssistantCollapsed] = React.useState(false);
+  const [locked, setLocked] = React.useState(
+    () => encryptedWorkspace && !hasSessionUnlockPassphrase(),
+  );
   const [assistantReturnPath, setAssistantReturnPath] =
     React.useState<AssistantReturnPath>("/overview");
   const mainRef = React.useRef<HTMLElement>(null);
+  const launchLockApplied = React.useRef(false);
   const shellBusy = routerBusy || daemonFetchCount > 0;
   const isAssistantRoute = pathname === "/assistant";
   const routeMeta =
@@ -275,17 +293,164 @@ export function AppShell() {
       searchLabel: "Search Kassiber",
       searchPlaceholder: "Search transactions, reports...",
     };
+  const clearDaemonQueryCache = React.useCallback(() => {
+    void queryClient.cancelQueries({ queryKey: ["daemon"] });
+    queryClient.removeQueries({ queryKey: ["daemon"] });
+  }, [queryClient]);
+
+  const lockApp = React.useCallback(() => {
+    setHideSensitive(true);
+    if (encryptedWorkspace) {
+      clearSessionUnlockPassphrase();
+      clearDaemonQueryCache();
+      setLocked(true);
+      void getTransport("real").invoke({ kind: "daemon.lock" });
+      return;
+    }
+    if (!hasSessionUnlockPassphrase()) {
+      clearSessionUnlockPassphrase();
+      setIdentity(null);
+      void navigate({ to: "/", replace: true });
+      return;
+    }
+    setLocked(true);
+  }, [
+    clearDaemonQueryCache,
+    encryptedWorkspace,
+    navigate,
+    setHideSensitive,
+    setIdentity,
+  ]);
+
+  const unlockApp = React.useCallback(
+    async (passphrase: string) => {
+      if (encryptedWorkspace) {
+        const envelope = await getTransport("real").invoke({
+          kind: "daemon.unlock",
+          args: { auth_response: { passphrase_secret: passphrase } },
+        });
+        const unlocked = envelope.kind === "daemon.unlock";
+        if (unlocked) {
+          await setSessionUnlockPassphrase(passphrase);
+          await queryClient.invalidateQueries({
+            queryKey: ["daemon"],
+          });
+          setLocked(false);
+        }
+        return unlocked;
+      }
+
+      const unlocked = await verifySessionUnlockPassphrase(passphrase);
+      if (unlocked) {
+        setLocked(false);
+      }
+      return unlocked;
+    },
+    [encryptedWorkspace, queryClient],
+  );
 
   React.useEffect(() => {
     if (identity) return;
+    launchLockApplied.current = false;
     void navigate({ to: "/", replace: true });
   }, [identity, navigate]);
+
+  React.useEffect(() => {
+    if (!encryptedWorkspace) return;
+
+    const onAuthRequired = () => {
+      clearSessionUnlockPassphrase();
+      clearDaemonQueryCache();
+      setHideSensitive(true);
+      setSettingsOpen(false);
+      setLocked(true);
+    };
+
+    window.addEventListener(DAEMON_AUTH_REQUIRED_EVENT, onAuthRequired);
+    return () => {
+      window.removeEventListener(DAEMON_AUTH_REQUIRED_EVENT, onAuthRequired);
+    };
+  }, [clearDaemonQueryCache, encryptedWorkspace, setHideSensitive]);
+
+  React.useEffect(() => {
+    if (!encryptedWorkspace) return;
+    if (hasSessionUnlockPassphrase()) return;
+    if (launchLockApplied.current) return;
+    launchLockApplied.current = true;
+    lockApp();
+  }, [encryptedWorkspace, lockApp]);
+
+  React.useEffect(() => {
+    if (!encryptedWorkspace || !appLockPolicy.autoLockWhenIdle || locked) {
+      return;
+    }
+
+    let timeout: number | undefined;
+    const reset = () => {
+      window.clearTimeout(timeout);
+      timeout = window.setTimeout(
+        lockApp,
+        Math.max(1, appLockPolicy.idleMinutes) * 60_000,
+      );
+    };
+    const events = ["pointerdown", "keydown", "wheel", "touchstart"];
+    events.forEach((eventName) =>
+      window.addEventListener(eventName, reset, { passive: true }),
+    );
+    reset();
+
+    return () => {
+      window.clearTimeout(timeout);
+      events.forEach((eventName) =>
+        window.removeEventListener(eventName, reset),
+      );
+    };
+  }, [
+    appLockPolicy.autoLockWhenIdle,
+    appLockPolicy.idleMinutes,
+    encryptedWorkspace,
+    lockApp,
+    locked,
+  ]);
+
+  React.useEffect(() => {
+    if (!encryptedWorkspace || !appLockPolicy.lockOnWindowClose) return;
+
+    const lockOnHidden = () => {
+      if (document.visibilityState === "hidden") {
+        lockApp();
+      }
+    };
+    window.addEventListener("pagehide", lockApp);
+    document.addEventListener("visibilitychange", lockOnHidden);
+    return () => {
+      window.removeEventListener("pagehide", lockApp);
+      document.removeEventListener("visibilitychange", lockOnHidden);
+    };
+  }, [appLockPolicy.lockOnWindowClose, encryptedWorkspace, lockApp]);
 
   React.useEffect(() => {
     if (!isAssistantRoute) {
       setAssistantReturnPath(assistantReturnPathFor(pathname));
     }
   }, [isAssistantRoute, pathname]);
+
+  React.useEffect(() => {
+    if (locked) setSettingsOpen(false);
+  }, [locked]);
+
+  React.useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key.toLowerCase() !== "l") return;
+      if (!(event.metaKey || event.ctrlKey)) return;
+      if (event.altKey || event.shiftKey) return;
+      event.preventDefault();
+      lockApp();
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [lockApp]);
 
   React.useEffect(() => {
     const main = mainRef.current;
@@ -303,7 +468,7 @@ export function AppShell() {
     return () => {
       main.removeEventListener("scroll", syncAssistantState);
     };
-  }, [pathname]);
+  }, [locked, pathname]);
 
   React.useEffect(() => {
     const openSettings = (event: Event) => {
@@ -323,55 +488,73 @@ export function AppShell() {
 
   return (
     <TooltipProvider>
-      <AssistantSessionProvider returnPath={assistantReturnPath}>
-        <div className="flex h-svh flex-col overflow-hidden bg-sidebar">
-          <PreAlphaBanner className="shrink-0" />
-          <SidebarProvider className="min-h-0 flex-1 bg-sidebar">
-            <a
-              href="#app-main"
-              className="sr-only focus:not-sr-only focus:absolute focus:top-4 focus:left-4 focus:z-50 focus:rounded-md focus:bg-background focus:px-3 focus:py-2 focus:text-sm focus:text-foreground focus:ring-2 focus:ring-ring"
-            >
-              Skip to main content
-            </a>
-            <AppSidebar
-              pathname={pathname}
-              onSettingsClick={() => {
-                setSettingsFocus(null);
-                setSettingsOpen(true);
-              }}
-            />
-            <div className="min-h-0 w-full overflow-hidden lg:p-2">
-              <div className="relative flex h-full w-full flex-col items-center justify-start overflow-hidden bg-background lg:rounded-xl lg:border">
-                <AppDashboardHeader meta={routeMeta} />
+      <div className="flex h-svh flex-col overflow-hidden bg-sidebar">
+        <PreAlphaBanner className="shrink-0" />
+        <SidebarProvider className="min-h-0 flex-1 bg-sidebar">
+          <a
+            href="#app-main"
+            className="sr-only focus:not-sr-only focus:absolute focus:top-4 focus:left-4 focus:z-50 focus:rounded-md focus:bg-background focus:px-3 focus:py-2 focus:text-sm focus:text-foreground focus:ring-2 focus:ring-ring"
+          >
+            Skip to main content
+          </a>
+          <AppSidebar
+            pathname={pathname}
+            onLock={lockApp}
+            onSettingsClick={() => {
+              if (locked) return;
+              setSettingsFocus(null);
+              setSettingsOpen(true);
+            }}
+          />
+          <div className="min-h-0 w-full overflow-hidden lg:p-2">
+            <div className="relative flex h-full w-full flex-col items-center justify-start overflow-hidden bg-background lg:rounded-xl lg:border">
+              <AppDashboardHeader
+                meta={routeMeta}
+                onLock={lockApp}
+                daemonEnabled={!locked}
+              />
+              {locked ? (
                 <main
                   id="app-main"
                   ref={mainRef}
                   tabIndex={-1}
-                  className={`relative min-h-0 w-full flex-1 overflow-auto bg-background transition-[padding-bottom] duration-200 ${
-                    isAssistantRoute
-                      ? "pb-0"
-                      : assistantCollapsed
-                        ? "pb-[150px]"
-                        : "pb-[240px]"
-                  }`}
+                  className="relative min-h-0 w-full flex-1 overflow-auto bg-background"
                 >
-                  <RouteTransitionIndicator active={shellBusy} />
-                  <Outlet />
+                  <LockScreen onUnlock={unlockApp} />
                 </main>
-                {isAssistantRoute ? null : (
-                  <ScreenAssistantMockup
-                    collapsed={assistantCollapsed}
-                    className="absolute inset-x-0 bottom-0 z-20"
-                  />
-                )}
-              </div>
+              ) : (
+                <AssistantSessionProvider returnPath={assistantReturnPath}>
+                  <main
+                    id="app-main"
+                    ref={mainRef}
+                    tabIndex={-1}
+                    className={`relative min-h-0 w-full flex-1 overflow-auto bg-background transition-[padding-bottom] duration-200 ${
+                      isAssistantRoute
+                        ? "pb-0"
+                        : assistantCollapsed
+                          ? "pb-[150px]"
+                          : "pb-[240px]"
+                    }`}
+                  >
+                    <RouteTransitionIndicator active={shellBusy} />
+                    <Outlet />
+                  </main>
+                  {isAssistantRoute ? null : (
+                    <ScreenAssistantMockup
+                      collapsed={assistantCollapsed}
+                      className="absolute inset-x-0 bottom-0 z-20"
+                    />
+                  )}
+                </AssistantSessionProvider>
+              )}
             </div>
-          </SidebarProvider>
-        </div>
-      </AssistantSessionProvider>
+          </div>
+        </SidebarProvider>
+      </div>
       <SettingsModal
-        open={settingsOpen}
+        open={settingsOpen && !locked}
         focusSection={settingsFocus}
+        onLock={lockApp}
         onClose={() => setSettingsOpen(false)}
       />
     </TooltipProvider>
@@ -394,9 +577,11 @@ function RouteTransitionIndicator({ active }: { active: boolean }) {
 
 function AppSidebar({
   pathname,
+  onLock,
   onSettingsClick,
 }: {
   pathname: string;
+  onLock: () => void;
   onSettingsClick: () => void;
 }) {
   return (
@@ -454,7 +639,7 @@ function AppSidebar({
       </SidebarContent>
       <SidebarFooter>
         <SidebarActions onSettingsClick={onSettingsClick} />
-        <NavUser />
+        <NavUser onLock={onLock} />
         <AppVersion />
       </SidebarFooter>
       <SidebarRail />
@@ -570,9 +755,8 @@ function NavMenuItem({
   );
 }
 
-function NavUser() {
+function NavUser({ onLock }: { onLock: () => void }) {
   const identity = useUiStore((s) => s.identity);
-  const setIdentity = useUiStore((s) => s.setIdentity);
   const name = identity?.workspace ?? "Demo Workspace";
   const detail = identity?.name ?? "local profile";
 
@@ -639,7 +823,7 @@ function NavUser() {
               </Link>
             </DropdownMenuItem>
             <DropdownMenuSeparator />
-            <DropdownMenuItem onSelect={() => setIdentity(null)}>
+            <DropdownMenuItem onSelect={() => onLock()}>
               <LogOut className="mr-2 size-4" aria-hidden="true" />
               Lock Kassiber
             </DropdownMenuItem>
@@ -668,14 +852,26 @@ function AppVersion() {
   );
 }
 
-function AppDashboardHeader({ meta }: { meta: RouteMeta }) {
+function AppDashboardHeader({
+  meta,
+  onLock,
+  daemonEnabled,
+}: {
+  meta: RouteMeta;
+  onLock: () => void;
+  daemonEnabled: boolean;
+}) {
   const Icon = meta.icon;
   const hideSensitive = useUiStore((s) => s.hideSensitive);
   const setHideSensitive = useUiStore((s) => s.setHideSensitive);
   const dataMode = useUiStore((s) => s.dataMode);
   const appNotifications = useUiStore((s) => s.notifications);
   const clearNotifications = useUiStore((s) => s.clearNotifications);
-  const { data } = useDaemon<OverviewSnapshot>("ui.overview.snapshot");
+  const { data } = useDaemon<OverviewSnapshot>(
+    "ui.overview.snapshot",
+    undefined,
+    { enabled: daemonEnabled },
+  );
   const snapshot = data?.data;
   const systemNotificationItems = [
     ...(snapshot?.status?.needsJournals
@@ -810,7 +1006,93 @@ function AppDashboardHeader({ meta }: { meta: RouteMeta }) {
             <Eye className="size-4" aria-hidden="true" />
           )}
         </Button>
+        <Button
+          variant="outline"
+          size="icon"
+          className="size-9"
+          aria-label="Lock Kassiber"
+          title="Lock Kassiber (Cmd/Ctrl+L)"
+          onClick={onLock}
+        >
+          <LockKeyhole className="size-4" aria-hidden="true" />
+        </Button>
       </div>
     </header>
+  );
+}
+
+function LockScreen({
+  onUnlock,
+}: {
+  onUnlock: (passphrase: string) => Promise<boolean>;
+}) {
+  const [passphrase, setPassphrase] = React.useState("");
+  const [error, setError] = React.useState<string | null>(null);
+  const [submitting, setSubmitting] = React.useState(false);
+  const inputRef = React.useRef<HTMLInputElement | null>(null);
+
+  React.useEffect(() => {
+    inputRef.current?.focus();
+  }, []);
+
+  const submit = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (submitting) return;
+    setError(null);
+    setSubmitting(true);
+    try {
+      const ok = await onUnlock(passphrase);
+      if (!ok) {
+        setError("Passphrase did not unlock this session.");
+        setPassphrase("");
+        inputRef.current?.focus();
+      }
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/95 px-4 backdrop-blur-sm">
+      <form
+        className="w-full max-w-sm rounded-lg border bg-card p-5 shadow-xl"
+        onSubmit={(event) => {
+          void submit(event);
+        }}
+      >
+        <div className="flex items-center gap-3">
+          <div className="flex size-10 items-center justify-center rounded-md bg-primary text-primary-foreground">
+            <LockKeyhole className="size-5" aria-hidden="true" />
+          </div>
+          <div>
+            <h2 className="text-base font-semibold">Kassiber locked</h2>
+            <p className="m-0 text-xs text-muted-foreground">
+              Enter the database passphrase to unlock.
+            </p>
+          </div>
+        </div>
+        <div className="mt-5 space-y-2">
+          <label
+            htmlFor="lock-passphrase"
+            className="text-sm font-medium text-foreground"
+          >
+            Passphrase
+          </label>
+          <Input
+            id="lock-passphrase"
+            ref={inputRef}
+            type="password"
+            autoComplete="current-password"
+            value={passphrase}
+            onChange={(event) => setPassphrase(event.target.value)}
+            disabled={submitting}
+          />
+          {error && <p className="m-0 text-xs text-destructive">{error}</p>}
+        </div>
+        <Button className="mt-5 w-full" type="submit" disabled={submitting}>
+          {submitting ? "Unlocking..." : "Unlock"}
+        </Button>
+      </form>
+    </div>
   );
 }

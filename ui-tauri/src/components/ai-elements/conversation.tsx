@@ -23,7 +23,7 @@ const ConversationContent = React.forwardRef<
     ref={ref}
     data-slot="conversation-content"
     className={cn(
-      "flex min-h-0 w-full flex-1 flex-col gap-3 overflow-y-auto px-1",
+      "flex min-h-0 w-full flex-1 flex-col gap-6 overflow-y-auto px-1",
       className,
     )}
     {...props}

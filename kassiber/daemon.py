@@ -8,6 +8,7 @@ import threading
 import time
 import traceback
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any, Callable, TextIO
 
 from . import __version__
@@ -59,9 +60,18 @@ from .core.ui_snapshot import (
     build_wallets_list_snapshot,
     build_workspace_health_snapshot,
 )
-from .db import open_db, resolve_database_path, resolve_effective_data_root
+from .backends import load_runtime_config, merge_db_backends
+from .db import (
+    open_db,
+    resolve_config_root,
+    resolve_database_path,
+    resolve_effective_data_root,
+)
 from .envelope import build_envelope, build_error_envelope, json_ready
 from .errors import AppError
+from .secrets.credentials import migrate_dotenv_credentials
+from .secrets.migration import create_empty_encrypted_database, migrate_plaintext_to_encrypted
+from .secrets.passphrase import change_database_passphrase
 from .secrets.sqlcipher import looks_like_plaintext_sqlite, open_encrypted, sqlcipher_available
 
 
@@ -81,8 +91,12 @@ SUPPORTED_KINDS = (
     "ui.rates.summary",
     "ui.workspace.health",
     "ui.workspace.delete",
+    "ui.secrets.init",
+    "ui.secrets.change_passphrase",
     "ui.next_actions",
     "ui.wallets.sync",
+    "daemon.lock",
+    "daemon.unlock",
     "ai.providers.list",
     "ai.providers.get",
     "ai.providers.create",
@@ -103,6 +117,12 @@ SUPPORTED_KINDS = (
 PENDING_AI_CANCEL_TTL_SECONDS = 30.0
 MAX_PENDING_AI_CANCELS = 128
 AI_TOOL_CONSENT_TIMEOUT_SECONDS = 300.0
+PLAINTEXT_DELETE_ACK = "DELETE LOCAL DATA"
+MIN_DATABASE_PASSPHRASE_CHARS = 12
+AUTH_FAILURES_BEFORE_BACKOFF = 3
+AUTH_BACKOFF_BASE_SECONDS = 5.0
+AUTH_BACKOFF_MAX_SECONDS = 30.0
+AUTH_BACKOFF_FILENAME = "auth_backoff.json"
 
 
 class AiToolConsentState:
@@ -243,19 +263,115 @@ class ActiveAiChats:
         return chat.consent.record(call_id, decision)
 
 
+class AuthAttemptBackoff:
+    """Database-level throttling for passphrase verification attempts."""
+
+    def __init__(self, state_path: str | None = None) -> None:
+        self._lock = threading.Lock()
+        self._failures = 0
+        self._locked_until = 0.0
+        self._state_path = state_path
+
+    def check(self, scope: str) -> None:
+        now = time.time()
+        with self._lock:
+            self._load_locked()
+            retry_after = self._locked_until - now
+            if retry_after <= 0:
+                if self._locked_until:
+                    self._locked_until = 0.0
+                    self._persist_locked()
+                return
+        raise AppError(
+            "too many failed passphrase attempts",
+            code="local_auth_rate_limited",
+            details={
+                "scope": scope,
+                "throttle": "database",
+                "retry_after_seconds": max(1, int(retry_after + 0.999)),
+            },
+            hint="Wait before trying the passphrase again.",
+            retryable=True,
+        )
+
+    def record_success(self) -> None:
+        with self._lock:
+            self._failures = 0
+            self._locked_until = 0.0
+            self._persist_locked()
+
+    def record_failure(self) -> None:
+        now = time.time()
+        with self._lock:
+            self._load_locked()
+            self._failures += 1
+            if self._failures < AUTH_FAILURES_BEFORE_BACKOFF:
+                self._persist_locked()
+                return
+            delay = min(
+                AUTH_BACKOFF_MAX_SECONDS,
+                AUTH_BACKOFF_BASE_SECONDS
+                * 2 ** (self._failures - AUTH_FAILURES_BEFORE_BACKOFF),
+            )
+            self._locked_until = now + delay
+            self._persist_locked()
+
+    def _load_locked(self) -> None:
+        if not self._state_path:
+            return
+        try:
+            with open(self._state_path, encoding="utf-8") as handle:
+                payload = json.load(handle)
+        except FileNotFoundError:
+            return
+        except (OSError, json.JSONDecodeError, TypeError, ValueError):
+            return
+        self._failures = max(0, int(payload.get("failures", 0)))
+        self._locked_until = max(0.0, float(payload.get("locked_until", 0.0)))
+
+    def _persist_locked(self) -> None:
+        if not self._state_path:
+            return
+        try:
+            if self._failures <= 0 and self._locked_until <= 0:
+                try:
+                    Path(self._state_path).unlink()
+                except FileNotFoundError:
+                    pass
+                return
+            state_path = Path(self._state_path)
+            state_path.parent.mkdir(parents=True, exist_ok=True)
+            tmp_path = state_path.with_suffix(state_path.suffix + ".tmp")
+            tmp_path.write_text(
+                json.dumps(
+                    {
+                        "failures": self._failures,
+                        "locked_until": self._locked_until,
+                    },
+                    sort_keys=True,
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            tmp_path.replace(state_path)
+        except OSError:
+            return
+
+
 @dataclass(frozen=True)
 class _DaemonMainThreadTask:
     callback: Callable[[sqlite3.Connection], Any]
     response: queue.Queue[tuple[bool, Any]]
 
 
-@dataclass(frozen=True)
+@dataclass
 class DaemonContext:
-    conn: sqlite3.Connection
+    conn: sqlite3.Connection | None
     data_root: str
     runtime_config: dict[str, object]
     active_ai_chats: ActiveAiChats
     main_thread_tasks: queue.Queue[_DaemonMainThreadTask]
+    auth_backoff: AuthAttemptBackoff
 
 
 @dataclass(frozen=True)
@@ -316,6 +432,12 @@ def _drain_daemon_main_thread_tasks(ctx: DaemonContext) -> None:
         except queue.Empty:
             return
         try:
+            if ctx.conn is None:
+                raise AppError(
+                    "database is locked; unlock the daemon before running AI tools",
+                    code="passphrase_required",
+                    retryable=False,
+                )
             payload = task.callback(ctx.conn)
         except BaseException as exc:
             task.response.put((False, exc))
@@ -391,7 +513,63 @@ def _status_payload_from_parts(
 
 
 def _status_payload(ctx: DaemonContext) -> dict[str, Any]:
-    return _status_payload_from_parts(ctx.conn, ctx.data_root, ctx.runtime_config)
+    conn = _require_conn(ctx)
+    return _status_payload_from_parts(conn, ctx.data_root, ctx.runtime_config)
+
+
+def _require_conn(ctx: DaemonContext) -> sqlite3.Connection:
+    if ctx.conn is None:
+        raise AppError(
+            "database is locked; unlock the daemon before accessing workspace data",
+            code="passphrase_required",
+            hint="Enter the SQLCipher database passphrase to unlock the local daemon session.",
+            retryable=False,
+        )
+    return ctx.conn
+
+
+def _open_daemon_connection(
+    ctx: DaemonContext,
+    *,
+    passphrase: str | None = None,
+) -> sqlite3.Connection:
+    if ctx.conn is not None:
+        return ctx.conn
+    conn = open_db(ctx.data_root, passphrase=passphrase)
+    merge_db_backends(conn, ctx.runtime_config)
+    ctx.conn = conn
+    return conn
+
+
+def _locked_envelope(scope: str, label: str, request_id: object) -> dict[str, Any]:
+    return _with_request_id(
+        build_envelope(
+            "auth_required",
+            {
+                "scope": scope,
+                "label": label,
+            },
+        ),
+        request_id,
+    )
+
+
+def _passphrase_from_auth(args: dict[str, Any]) -> str | None:
+    auth = args.get("auth_response")
+    if not isinstance(auth, dict):
+        return None
+    passphrase = auth.get("passphrase_secret")
+    return passphrase if isinstance(passphrase, str) and passphrase else None
+
+
+def _validate_new_database_passphrase(passphrase: str) -> None:
+    if len(passphrase) < MIN_DATABASE_PASSPHRASE_CHARS:
+        raise AppError(
+            f"database passphrase must be at least {MIN_DATABASE_PASSPHRASE_CHARS} characters long",
+            code="invalid_passphrase",
+            hint="Pick a long passphrase from a password manager.",
+            retryable=False,
+        )
 
 
 def _coerce_args_dict(request_id: object, args: object) -> dict[str, Any]:
@@ -516,32 +694,6 @@ def _ai_chat_args(args: dict) -> dict[str, Any]:
         "system_prompt_kind": system_prompt_kind,
         "system_prompt": system_prompt,
     }
-
-
-def _open_read_only_tool_connection(data_root: str) -> sqlite3.Connection:
-    db_path = resolve_database_path(resolve_effective_data_root(data_root))
-    if not db_path.exists():
-        raise AppError(
-            "Kassiber database is not initialized",
-            code="state_not_ready",
-            details={"database": str(db_path)},
-            retryable=False,
-        )
-    if db_path.stat().st_size > 0 and not looks_like_plaintext_sqlite(db_path):
-        raise AppError(
-            "read-only AI tools cannot open an encrypted database without a passphrase",
-            code="passphrase_required",
-            hint=(
-                "The AI worker uses a separate read-only SQLite connection and "
-                "does not retain database passphrases."
-            ),
-            retryable=False,
-        )
-    conn = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
-    conn.row_factory = sqlite3.Row
-    conn.execute("PRAGMA query_only = ON")
-    conn.execute("PRAGMA foreign_keys = ON")
-    return conn
 
 
 def _coerce_wallets_sync_args(raw_args: dict[str, Any], *, strict: bool) -> dict[str, Any]:
@@ -682,8 +834,8 @@ def _execute_read_only_ai_tool(call: ParsedAiToolCall, runtime: AiToolRuntime) -
             }
         if entry.daemon_kind is None:
             return _tool_result_denied("tool_not_allowed")
-        conn = _open_read_only_tool_connection(runtime.data_root)
-        try:
+
+        def _read(conn: sqlite3.Connection) -> dict[str, Any]:
             if entry.daemon_kind == "status":
                 payload = _status_payload_from_parts(
                     conn,
@@ -716,9 +868,9 @@ def _execute_read_only_ai_tool(call: ParsedAiToolCall, runtime: AiToolRuntime) -
                 payload = build_next_actions_snapshot(conn)
             else:
                 return _tool_result_denied("tool_not_allowed")
-        finally:
-            conn.close()
-        return {"ok": True, "envelope": build_envelope(entry.daemon_kind, payload)}
+            return {"ok": True, "envelope": build_envelope(entry.daemon_kind, payload)}
+
+        return _run_on_daemon_main_thread(runtime, _read)
     except AppError as exc:
         return _tool_result_denied(
             exc.code or "tool_error",
@@ -1107,13 +1259,27 @@ def _verify_passphrase_for_reveal(ctx: "DaemonContext", passphrase: str) -> bool
         return False
     db_path = resolve_database_path(resolve_effective_data_root(ctx.data_root))
     try:
-        probe = open_encrypted(db_path, passphrase)
+        probe = open_encrypted(db_path, passphrase, quiet_unlock_errors=True)
     except AppError as exc:
         if exc.code == "unlock_failed":
             return False
         raise
     probe.close()
     return True
+
+
+def _verify_passphrase_with_backoff(
+    ctx: "DaemonContext",
+    scope: str,
+    passphrase: str,
+) -> bool:
+    ctx.auth_backoff.check(scope)
+    verified = _verify_passphrase_for_reveal(ctx, passphrase)
+    if verified:
+        ctx.auth_backoff.record_success()
+    else:
+        ctx.auth_backoff.record_failure()
+    return verified
 
 
 def _delete_current_workspace(ctx: "DaemonContext") -> dict[str, Any]:
@@ -1154,6 +1320,72 @@ def _delete_current_workspace(ctx: "DaemonContext") -> dict[str, Any]:
     }
 
 
+def _database_file_is_encrypted(ctx: "DaemonContext") -> bool:
+    db_path = resolve_database_path(resolve_effective_data_root(ctx.data_root))
+    return (
+        db_path.exists()
+        and db_path.stat().st_size > 0
+        and not looks_like_plaintext_sqlite(db_path)
+    )
+
+
+def _handle_ai_chat_cancel(
+    ctx: "DaemonContext", request_id: object, args: dict[str, Any]
+) -> dict[str, Any]:
+    target_request_id = args.get("target_request_id")
+    if not isinstance(target_request_id, str) or not target_request_id:
+        raise AppError(
+            "ai.chat.cancel requires target_request_id",
+            code="validation",
+            hint="Pass {target_request_id: '<active ai.chat request_id>'}.",
+        )
+    cancelled, queued = ctx.active_ai_chats.cancel(target_request_id)
+    payload: dict[str, Any] = {"cancelled": cancelled or queued}
+    if queued:
+        payload["queued"] = True
+    return _with_request_id(
+        build_envelope("ai.chat.cancel", payload),
+        request_id,
+    )
+
+
+def _handle_ai_tool_call_consent(
+    ctx: "DaemonContext", request_id: object, args: dict[str, Any]
+) -> dict[str, Any]:
+    target_request_id = args.get("target_request_id")
+    call_id = args.get("call_id")
+    decision = args.get("decision")
+    if not isinstance(target_request_id, str) or not target_request_id:
+        raise AppError(
+            "ai.tool_call.consent requires target_request_id",
+            code="validation",
+            hint="Pass {target_request_id: '<active ai.chat request_id>'}.",
+        )
+    if not isinstance(call_id, str) or not call_id:
+        raise AppError(
+            "ai.tool_call.consent requires call_id",
+            code="validation",
+        )
+    if decision not in ("allow_once", "allow_session", "deny"):
+        raise AppError(
+            "ai.tool_call.consent decision must be allow_once, allow_session, or deny",
+            code="validation",
+            details={"decision": decision},
+        )
+    recorded = ctx.active_ai_chats.record_consent(
+        target_request_id,
+        call_id,
+        decision,
+    )
+    payload: dict[str, Any] = {"recorded": recorded}
+    if not recorded:
+        payload["reason"] = "not_found"
+    return _with_request_id(
+        build_envelope("ai.tool_call.consent", payload),
+        request_id,
+    )
+
+
 def handle_request(
     ctx: DaemonContext,
     request: dict[str, Any],
@@ -1187,6 +1419,228 @@ def handle_request(
             ),
             True,
         )
+
+    if kind == "daemon.lock":
+        if ctx.conn is not None:
+            ctx.conn.close()
+            ctx.conn = None
+        return (
+            _with_request_id(
+                build_envelope("daemon.lock", {"locked": True}),
+                request_id,
+            ),
+            False,
+        )
+
+    if kind == "daemon.unlock":
+        args = _coerce_args_dict(request_id, request.get("args"))
+        passphrase = _passphrase_from_auth(args)
+        if _database_file_is_encrypted(ctx):
+            if not passphrase:
+                return (
+                    _locked_envelope(
+                        "unlock_database",
+                        "Enter the SQLCipher database passphrase to unlock Kassiber.",
+                        request_id,
+                    ),
+                    False,
+                )
+            if not _verify_passphrase_with_backoff(
+                ctx, "unlock_database", passphrase
+            ):
+                return (
+                    _error_envelope(
+                        "local_auth_denied",
+                        "passphrase verification failed",
+                        request_id=request_id,
+                        retryable=True,
+                    ),
+                    False,
+                )
+            if ctx.conn is None:
+                try:
+                    _open_daemon_connection(ctx, passphrase=passphrase)
+                except AppError as exc:
+                    if exc.code == "unlock_failed":
+                        return (
+                            _error_envelope(
+                                "local_auth_denied",
+                                "passphrase verification failed",
+                                request_id=request_id,
+                                retryable=True,
+                            ),
+                            False,
+                        )
+                    raise
+        else:
+            _open_daemon_connection(ctx)
+        return (
+            _with_request_id(
+                build_envelope(
+                    "daemon.unlock",
+                    {"unlocked": True, "status": _status_payload(ctx)},
+                ),
+                request_id,
+            ),
+            False,
+        )
+
+    if kind == "ui.secrets.init":
+        args = _coerce_args_dict(request_id, request.get("args"))
+        passphrase = _passphrase_from_auth(args)
+        if not passphrase:
+            return (
+                _locked_envelope(
+                    "init_database_encryption",
+                    "Choose a SQLCipher database passphrase.",
+                    request_id,
+                ),
+                False,
+            )
+        _validate_new_database_passphrase(passphrase)
+        db_path = resolve_database_path(resolve_effective_data_root(ctx.data_root))
+        if _database_file_is_encrypted(ctx):
+            if not _verify_passphrase_with_backoff(
+                ctx, "init_database_encryption", passphrase
+            ):
+                return (
+                    _error_envelope(
+                        "local_auth_denied",
+                        "passphrase verification failed",
+                        request_id=request_id,
+                        retryable=True,
+                    ),
+                    False,
+                )
+            _open_daemon_connection(ctx, passphrase=passphrase)
+            result: dict[str, Any] = {
+                "encrypted": True,
+                "already_encrypted": True,
+                "database": str(db_path),
+            }
+        else:
+            if ctx.conn is not None:
+                ctx.conn.close()
+                ctx.conn = None
+            if db_path.exists() and db_path.stat().st_size > 0:
+                migration = migrate_plaintext_to_encrypted(db_path, passphrase)
+                result = {
+                    "encrypted": True,
+                    "already_encrypted": False,
+                    "database": str(migration.encrypted_path),
+                    "backup_path": str(migration.backup_path),
+                    "integrity_check": migration.integrity_check,
+                    "cipher_integrity_check": migration.cipher_integrity_check,
+                    "credential_marker_clean": migration.credential_marker_clean,
+                }
+            else:
+                created = create_empty_encrypted_database(db_path, passphrase)
+                result = {
+                    "encrypted": True,
+                    "already_encrypted": False,
+                    "database": str(created),
+                    "backup_path": None,
+                    "integrity_check": "ok",
+                    "cipher_integrity_check": None,
+                    "credential_marker_clean": True,
+                }
+            conn = _open_daemon_connection(ctx, passphrase=passphrase)
+            if args.get("migrate_credentials") is not False:
+                result["credentials"] = migrate_dotenv_credentials(
+                    conn,
+                    ctx.runtime_config["env_file"],
+                    create_missing_backends=False,
+                )
+                ctx.runtime_config = load_runtime_config(ctx.runtime_config["env_file"])
+                merge_db_backends(conn, ctx.runtime_config)
+        return (
+            _with_request_id(build_envelope("ui.secrets.init", result), request_id),
+            False,
+        )
+
+    if kind == "ui.secrets.change_passphrase":
+        args = _coerce_args_dict(request_id, request.get("args"))
+        auth = args.get("auth_response")
+        current = auth.get("passphrase_secret") if isinstance(auth, dict) else None
+        new_passphrase = args.get("new_passphrase_secret")
+        if not isinstance(current, str) or not current:
+            return (
+                _locked_envelope(
+                    "change_database_passphrase",
+                    "Enter the current SQLCipher database passphrase.",
+                    request_id,
+                ),
+                False,
+            )
+        if not isinstance(new_passphrase, str) or not new_passphrase:
+            raise AppError(
+                "ui.secrets.change_passphrase requires a new passphrase",
+                code="validation",
+                hint="Ask the user to enter and confirm a new database passphrase.",
+            )
+        _validate_new_database_passphrase(new_passphrase)
+        if not _database_file_is_encrypted(ctx):
+            raise AppError(
+                "database is plaintext; initialize SQLCipher before changing passphrase",
+                code="plaintext_database",
+                retryable=False,
+            )
+        if not _verify_passphrase_with_backoff(
+            ctx, "change_database_passphrase", current
+        ):
+            return (
+                _error_envelope(
+                    "local_auth_denied",
+                    "passphrase verification failed",
+                    request_id=request_id,
+                    retryable=True,
+                ),
+                False,
+            )
+        if ctx.conn is not None:
+            ctx.conn.close()
+            ctx.conn = None
+        db_path = resolve_database_path(resolve_effective_data_root(ctx.data_root))
+        result = change_database_passphrase(db_path, current, new_passphrase)
+        _open_daemon_connection(ctx, passphrase=new_passphrase)
+        return (
+            _with_request_id(
+                build_envelope("ui.secrets.change_passphrase", result),
+                request_id,
+            ),
+            False,
+        )
+
+    if kind == "ai.chat.cancel":
+        return (
+            _handle_ai_chat_cancel(
+                ctx, request_id, _coerce_args_dict(request_id, request.get("args"))
+            ),
+            False,
+        )
+
+    if kind == "ai.tool_call.consent":
+        return (
+            _handle_ai_tool_call_consent(
+                ctx, request_id, _coerce_args_dict(request_id, request.get("args"))
+            ),
+            False,
+        )
+
+    if ctx.conn is None:
+        try:
+            _open_daemon_connection(ctx)
+        except AppError as exc:
+            if exc.code == "passphrase_required":
+                return (
+                    _locked_envelope(
+                        "unlock_database",
+                        "Enter the SQLCipher database passphrase to unlock Kassiber.",
+                        request_id,
+                    ),
+                    False,
+                )
+            raise
 
     if kind == "cancel":
         return (
@@ -1341,7 +1795,62 @@ def handle_request(
             raise AppError(
                 "ui.workspace.delete requires confirm='DELETE'",
                 code="validation",
-                hint="Ask the user to type DELETE before deleting the workspace.",
+                hint="Ask the user to confirm the destructive workspace deletion.",
+            )
+        context = current_context_snapshot(ctx.conn)
+        workspace_label = context.get("workspace_label")
+        if not workspace_label:
+            raise AppError(
+                "No current workspace is selected.",
+                code="validation",
+                hint="Select a workspace before deleting it.",
+            )
+        confirm_workspace = args.get("confirm_workspace")
+        if not isinstance(confirm_workspace, str) or confirm_workspace != workspace_label:
+            raise AppError(
+                "ui.workspace.delete requires the current workspace name",
+                code="validation",
+                hint="Ask the user to type the exact current workspace name before deleting it.",
+                details={"expected_workspace": workspace_label},
+            )
+        auth = args.get("auth_response")
+        if _database_file_is_encrypted(ctx):
+            passphrase = auth.get("passphrase_secret") if isinstance(auth, dict) else None
+            if not isinstance(passphrase, str) or not passphrase:
+                return (
+                    _with_request_id(
+                        build_envelope(
+                            "auth_required",
+                            {
+                                "scope": "delete_workspace",
+                                "label": f"Re-enter database passphrase to delete workspace {workspace_label!r}",
+                            },
+                        ),
+                        request_id,
+                    ),
+                    False,
+                )
+            verified = _verify_passphrase_with_backoff(
+                ctx, "delete_workspace", passphrase
+            )
+            if not verified:
+                return (
+                    _error_envelope(
+                        "local_auth_denied",
+                        "passphrase verification failed",
+                        request_id=request_id,
+                        retryable=True,
+                    ),
+                    False,
+                )
+        elif (
+            not isinstance(auth, dict)
+            or auth.get("plaintext_delete_ack") != PLAINTEXT_DELETE_ACK
+        ):
+            raise AppError(
+                "ui.workspace.delete requires plaintext delete acknowledgement",
+                code="validation",
+                hint=f"Ask the user to type {PLAINTEXT_DELETE_ACK!r} before deleting a plaintext workspace.",
             )
         return (
             _with_request_id(
@@ -1609,65 +2118,6 @@ def handle_request(
             False,
         )
 
-    if kind == "ai.chat.cancel":
-        args = _coerce_args_dict(request_id, request.get("args"))
-        target_request_id = args.get("target_request_id")
-        if not isinstance(target_request_id, str) or not target_request_id:
-            raise AppError(
-                "ai.chat.cancel requires target_request_id",
-                code="validation",
-                hint="Pass {target_request_id: '<active ai.chat request_id>'}.",
-            )
-        cancelled, queued = ctx.active_ai_chats.cancel(target_request_id)
-        payload: dict[str, Any] = {"cancelled": cancelled or queued}
-        if queued:
-            payload["queued"] = True
-        return (
-            _with_request_id(
-                build_envelope("ai.chat.cancel", payload),
-                request_id,
-            ),
-            False,
-        )
-
-    if kind == "ai.tool_call.consent":
-        args = _coerce_args_dict(request_id, request.get("args"))
-        target_request_id = args.get("target_request_id")
-        call_id = args.get("call_id")
-        decision = args.get("decision")
-        if not isinstance(target_request_id, str) or not target_request_id:
-            raise AppError(
-                "ai.tool_call.consent requires target_request_id",
-                code="validation",
-                hint="Pass {target_request_id: '<active ai.chat request_id>'}.",
-            )
-        if not isinstance(call_id, str) or not call_id:
-            raise AppError(
-                "ai.tool_call.consent requires call_id",
-                code="validation",
-            )
-        if decision not in ("allow_once", "allow_session", "deny"):
-            raise AppError(
-                "ai.tool_call.consent decision must be allow_once, allow_session, or deny",
-                code="validation",
-                details={"decision": decision},
-            )
-        recorded = ctx.active_ai_chats.record_consent(
-            target_request_id,
-            call_id,
-            decision,
-        )
-        payload: dict[str, Any] = {"recorded": recorded}
-        if not recorded:
-            payload["reason"] = "not_found"
-        return (
-            _with_request_id(
-                build_envelope("ai.tool_call.consent", payload),
-                request_id,
-            ),
-            False,
-        )
-
     if kind == "ai.chat":
         # Validate eagerly so syntax errors surface synchronously.
         validated = _ai_chat_args(_coerce_args_dict(request_id, request.get("args")))
@@ -1812,15 +2262,16 @@ def _handle_reveal_request(
         )
 
     try:
-        verified = _verify_passphrase_for_reveal(ctx, passphrase)
+        verified = _verify_passphrase_with_backoff(ctx, scope, passphrase)
     except AppError as exc:
         return (
             _error_envelope(
                 exc.code or "auth_error",
                 str(exc),
                 request_id=request_id,
+                details=exc.details,
                 hint=exc.hint,
-                retryable=False,
+                retryable=exc.retryable,
             ),
             False,
         )
@@ -1867,6 +2318,9 @@ def run(
         runtime_config=args.runtime_config,
         active_ai_chats=ActiveAiChats(),
         main_thread_tasks=queue.Queue(),
+        auth_backoff=AuthAttemptBackoff(
+            str(resolve_config_root(args.data_root) / AUTH_BACKOFF_FILENAME)
+        ),
     )
     input_lines = _start_stdin_reader(input_stream)
 

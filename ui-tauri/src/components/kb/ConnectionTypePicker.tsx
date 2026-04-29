@@ -281,7 +281,7 @@ export function ConnectionTypePicker({
         </div>
 
         <div className="border-t bg-muted/30 px-6 py-4">
-          <div className="flex flex-col gap-3 rounded-lg border bg-background px-4 py-3 sm:flex-row sm:items-start sm:justify-between">
+          <div className="flex flex-col gap-3 rounded-lg border bg-background px-4 py-3">
             <div className="flex items-start gap-3">
               <Lock className="mt-0.5 size-4 shrink-0 text-primary" />
               <span className="text-sm leading-6 text-muted-foreground">
@@ -294,7 +294,7 @@ export function ConnectionTypePicker({
               type="button"
               variant="outline"
               size="sm"
-              className="shrink-0"
+              className="w-fit"
               onClick={openBitcoinBackendSettings}
             >
               Bitcoin backend settings

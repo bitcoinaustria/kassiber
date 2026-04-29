@@ -19,6 +19,7 @@ from kassiber.daemon import (
     ParsedAiToolCall,
     _execute_mutating_ai_tool,
 )
+from kassiber.secrets.sqlcipher import sqlcipher_available
 
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -423,8 +424,12 @@ class DaemonSmokeTest(unittest.TestCase):
             self.assertIn("ui.rates.summary", ready["data"]["supported_kinds"])
             self.assertIn("ui.workspace.health", ready["data"]["supported_kinds"])
             self.assertIn("ui.workspace.delete", ready["data"]["supported_kinds"])
+            self.assertIn("ui.secrets.init", ready["data"]["supported_kinds"])
+            self.assertIn("ui.secrets.change_passphrase", ready["data"]["supported_kinds"])
             self.assertIn("ui.next_actions", ready["data"]["supported_kinds"])
             self.assertIn("ui.wallets.sync", ready["data"]["supported_kinds"])
+            self.assertIn("daemon.lock", ready["data"]["supported_kinds"])
+            self.assertIn("daemon.unlock", ready["data"]["supported_kinds"])
             self.assertIn("wallets.reveal_descriptor", ready["data"]["supported_kinds"])
             self.assertIn("backends.reveal_token", ready["data"]["supported_kinds"])
             self.assertIn("ai.test_connection", ready["data"]["supported_kinds"])
@@ -461,13 +466,45 @@ class DaemonSmokeTest(unittest.TestCase):
             _write_payload(
                 proc,
                 {
+                    "request_id": "delete-workspace-wrong-name",
+                    "kind": "ui.workspace.delete",
+                    "args": {"confirm": "DELETE", "confirm_workspace": "Wrong"},
+                },
+            )
+            rejected = _read_payload(proc)
+            self.assertEqual(rejected["request_id"], "delete-workspace-wrong-name")
+            self.assertEqual(rejected["kind"], "error")
+            self.assertEqual(rejected["error"]["code"], "validation")
+
+            _write_payload(
+                proc,
+                {
                     "request_id": "delete-workspace-1",
                     "kind": "ui.workspace.delete",
-                    "args": {"confirm": "DELETE"},
+                    "args": {"confirm": "DELETE", "confirm_workspace": "Demo"},
+                },
+            )
+            missing_ack = _read_payload(proc)
+            self.assertEqual(missing_ack["request_id"], "delete-workspace-1")
+            self.assertEqual(missing_ack["kind"], "error")
+            self.assertEqual(missing_ack["error"]["code"], "validation")
+
+            _write_payload(
+                proc,
+                {
+                    "request_id": "delete-workspace-2",
+                    "kind": "ui.workspace.delete",
+                    "args": {
+                        "confirm": "DELETE",
+                        "confirm_workspace": "Demo",
+                        "auth_response": {
+                            "plaintext_delete_ack": "DELETE LOCAL DATA",
+                        },
+                    },
                 },
             )
             deleted = _read_payload(proc)
-            self.assertEqual(deleted["request_id"], "delete-workspace-1")
+            self.assertEqual(deleted["request_id"], "delete-workspace-2")
             self.assertEqual(deleted["kind"], "ui.workspace.delete")
             self.assertEqual(deleted["data"]["workspace"]["label"], "Demo")
             self.assertEqual(deleted["data"]["removed"]["profiles"], 1)
@@ -485,6 +522,252 @@ class DaemonSmokeTest(unittest.TestCase):
             _write_payload(proc, {"request_id": "shutdown-1", "kind": "daemon.shutdown"})
             shutdown = _read_payload(proc)
             self.assertEqual(shutdown["kind"], "daemon.shutdown")
+
+            code, stderr = _close_daemon(proc)
+            self.assertEqual(code, 0, stderr)
+            self.assertEqual(stderr, "")
+
+    @unittest.skipUnless(sqlcipher_available(), "SQLCipher driver unavailable")
+    def test_daemon_sqlcipher_init_lock_unlock_and_rekey(self):
+        with tempfile.TemporaryDirectory(prefix="kassiber-daemon-") as tmp:
+            data_root = Path(tmp) / "data"
+            proc = _start_daemon(data_root)
+
+            ready = _read_payload(proc)
+            self.assertEqual(ready["kind"], "daemon.ready")
+
+            old_passphrase = "correct horse battery"
+            new_passphrase = "better horse battery"
+            _write_payload(
+                proc,
+                {
+                    "request_id": "secrets-init",
+                    "kind": "ui.secrets.init",
+                    "args": {
+                        "auth_response": {"passphrase_secret": old_passphrase},
+                        "migrate_credentials": False,
+                    },
+                },
+            )
+            initialized = _read_payload(proc)
+            self.assertEqual(initialized["kind"], "ui.secrets.init")
+            self.assertTrue(initialized["data"]["encrypted"])
+
+            _write_payload(proc, {"request_id": "lock-1", "kind": "daemon.lock"})
+            locked = _read_payload(proc)
+            self.assertEqual(locked["kind"], "daemon.lock")
+
+            _write_payload(proc, {"request_id": "status-locked", "kind": "status"})
+            status_locked = _read_payload(proc)
+            self.assertEqual(status_locked["kind"], "auth_required")
+            self.assertEqual(status_locked["data"]["scope"], "unlock_database")
+
+            _write_payload(
+                proc,
+                {
+                    "request_id": "unlock-wrong",
+                    "kind": "daemon.unlock",
+                    "args": {"auth_response": {"passphrase_secret": "wrong"}},
+                },
+            )
+            rejected = _read_payload(proc)
+            self.assertEqual(rejected["kind"], "error")
+            self.assertEqual(rejected["error"]["code"], "local_auth_denied")
+
+            _write_payload(
+                proc,
+                {
+                    "request_id": "unlock-right",
+                    "kind": "daemon.unlock",
+                    "args": {
+                        "auth_response": {"passphrase_secret": old_passphrase}
+                    },
+                },
+            )
+            unlocked = _read_payload(proc)
+            self.assertEqual(unlocked["kind"], "daemon.unlock")
+            self.assertTrue(unlocked["data"]["unlocked"])
+
+            _write_payload(
+                proc,
+                {
+                    "request_id": "rekey-wrong",
+                    "kind": "ui.secrets.change_passphrase",
+                    "args": {
+                        "auth_response": {"passphrase_secret": "wrong"},
+                        "new_passphrase_secret": new_passphrase,
+                    },
+                },
+            )
+            rekey_rejected = _read_payload(proc)
+            self.assertEqual(rekey_rejected["kind"], "error")
+            self.assertEqual(rekey_rejected["error"]["code"], "local_auth_denied")
+
+            _write_payload(
+                proc,
+                {
+                    "request_id": "rekey-right",
+                    "kind": "ui.secrets.change_passphrase",
+                    "args": {
+                        "auth_response": {"passphrase_secret": old_passphrase},
+                        "new_passphrase_secret": new_passphrase,
+                    },
+                },
+            )
+            rekeyed = _read_payload(proc)
+            self.assertEqual(rekeyed["kind"], "ui.secrets.change_passphrase")
+
+            _write_payload(proc, {"request_id": "lock-2", "kind": "daemon.lock"})
+            self.assertEqual(_read_payload(proc)["kind"], "daemon.lock")
+            _write_payload(
+                proc,
+                {
+                    "request_id": "unlock-old",
+                    "kind": "daemon.unlock",
+                    "args": {
+                        "auth_response": {"passphrase_secret": old_passphrase}
+                    },
+                },
+            )
+            old_rejected = _read_payload(proc)
+            self.assertEqual(old_rejected["kind"], "error")
+            self.assertEqual(old_rejected["error"]["code"], "local_auth_denied")
+
+            _write_payload(
+                proc,
+                {
+                    "request_id": "unlock-new",
+                    "kind": "daemon.unlock",
+                    "args": {
+                        "auth_response": {"passphrase_secret": new_passphrase}
+                    },
+                },
+            )
+            new_unlocked = _read_payload(proc)
+            self.assertEqual(new_unlocked["kind"], "daemon.unlock")
+
+            _write_payload(proc, {"request_id": "shutdown-1", "kind": "daemon.shutdown"})
+            self.assertEqual(_read_payload(proc)["kind"], "daemon.shutdown")
+
+            code, stderr = _close_daemon(proc)
+            self.assertEqual(code, 0, stderr)
+            self.assertEqual(stderr, "")
+
+    @unittest.skipUnless(sqlcipher_available(), "SQLCipher driver unavailable")
+    def test_daemon_auth_backoff_throttles_unlock_and_reauth(self):
+        with tempfile.TemporaryDirectory(prefix="kassiber-daemon-") as tmp:
+            data_root = Path(tmp) / "data"
+            proc = _start_daemon(data_root)
+
+            ready = _read_payload(proc)
+            self.assertEqual(ready["kind"], "daemon.ready")
+
+            passphrase = "correct horse battery"
+            _write_payload(
+                proc,
+                {
+                    "request_id": "secrets-init",
+                    "kind": "ui.secrets.init",
+                    "args": {
+                        "auth_response": {"passphrase_secret": passphrase},
+                        "migrate_credentials": False,
+                    },
+                },
+            )
+            self.assertEqual(_read_payload(proc)["kind"], "ui.secrets.init")
+            _write_payload(proc, {"request_id": "lock-1", "kind": "daemon.lock"})
+            self.assertEqual(_read_payload(proc)["kind"], "daemon.lock")
+
+            for attempt in range(1, 4):
+                _write_payload(
+                    proc,
+                    {
+                        "request_id": f"unlock-wrong-{attempt}",
+                        "kind": "daemon.unlock",
+                        "args": {
+                            "auth_response": {
+                                "passphrase_secret": f"wrong-{attempt}"
+                            }
+                        },
+                    },
+                )
+                rejected = _read_payload(proc)
+                self.assertEqual(rejected["kind"], "error")
+                self.assertEqual(rejected["error"]["code"], "local_auth_denied")
+
+            _write_payload(
+                proc,
+                {
+                    "request_id": "unlock-rate-limited",
+                    "kind": "daemon.unlock",
+                    "args": {"auth_response": {"passphrase_secret": "wrong-4"}},
+                },
+            )
+            unlock_limited = _read_payload(proc)
+            self.assertEqual(unlock_limited["kind"], "error")
+            self.assertEqual(
+                unlock_limited["error"]["code"], "local_auth_rate_limited"
+            )
+            self.assertEqual(
+                unlock_limited["error"]["details"]["scope"], "unlock_database"
+            )
+            self.assertGreaterEqual(
+                unlock_limited["error"]["details"]["retry_after_seconds"], 1
+            )
+
+            _write_payload(
+                proc,
+                {
+                    "request_id": "rekey-cross-scope-rate-limited",
+                    "kind": "ui.secrets.change_passphrase",
+                    "args": {
+                        "auth_response": {"passphrase_secret": "bad-current"},
+                        "new_passphrase_secret": "better horse battery",
+                    },
+                },
+            )
+            rekey_limited = _read_payload(proc)
+            self.assertEqual(rekey_limited["kind"], "error")
+            self.assertEqual(
+                rekey_limited["error"]["code"], "local_auth_rate_limited"
+            )
+            self.assertEqual(
+                rekey_limited["error"]["details"]["scope"],
+                "change_database_passphrase",
+            )
+            self.assertEqual(
+                rekey_limited["error"]["details"]["throttle"], "database"
+            )
+
+            _write_payload(proc, {"request_id": "shutdown-1", "kind": "daemon.shutdown"})
+            self.assertEqual(_read_payload(proc)["kind"], "daemon.shutdown")
+
+            code, stderr = _close_daemon(proc)
+            self.assertEqual(code, 0, stderr)
+            self.assertEqual(stderr, "")
+
+            proc = _start_daemon(data_root)
+            ready = _read_payload(proc)
+            self.assertEqual(ready["kind"], "daemon.ready")
+            _write_payload(
+                proc,
+                {
+                    "request_id": "unlock-after-restart",
+                    "kind": "daemon.unlock",
+                    "args": {"auth_response": {"passphrase_secret": passphrase}},
+                },
+            )
+            restart_limited = _read_payload(proc)
+            self.assertEqual(restart_limited["kind"], "error")
+            self.assertEqual(
+                restart_limited["error"]["code"], "local_auth_rate_limited"
+            )
+            self.assertEqual(
+                restart_limited["error"]["details"]["throttle"], "database"
+            )
+
+            _write_payload(proc, {"request_id": "shutdown-2", "kind": "daemon.shutdown"})
+            self.assertEqual(_read_payload(proc)["kind"], "daemon.shutdown")
 
             code, stderr = _close_daemon(proc)
             self.assertEqual(code, 0, stderr)
@@ -1649,6 +1932,120 @@ class DaemonSmokeTest(unittest.TestCase):
                 self.assertIsNotNone(terminal)
                 self.assertEqual(terminal["data"]["finish_reason"], "cancelled")
                 self.assertEqual(len(server.requests), 1)  # type: ignore[attr-defined]
+
+                _write_payload(proc, {"request_id": "shutdown-1", "kind": "daemon.shutdown"})
+                self.assertEqual(_read_payload_timeout(proc)["kind"], "daemon.shutdown")
+                code, stderr = _close_daemon(proc)
+                self.assertEqual(code, 0, stderr)
+                self.assertEqual(stderr, "")
+        finally:
+            server.shutdown()
+            server.server_close()
+
+    @unittest.skipUnless(sqlcipher_available(), "SQLCipher driver unavailable")
+    def test_ai_chat_cancel_while_encrypted_database_is_locked(self):
+        server = _start_tool_chat_server(
+            [
+                (_tool_call_message("ui_wallets_sync"), 0.0),
+                (
+                    _chat_completion_response(
+                        {"role": "assistant", "content": "Should not happen."},
+                    ),
+                    0.0,
+                ),
+            ]
+        )
+        base_url = f"http://127.0.0.1:{server.server_port}/v1"
+        try:
+            with tempfile.TemporaryDirectory(prefix="kassiber-daemon-") as tmp:
+                proc = _start_daemon(Path(tmp) / "data")
+                self.assertEqual(_read_payload_timeout(proc)["kind"], "daemon.ready")
+                _write_payload(
+                    proc,
+                    {
+                        "request_id": "secrets-init",
+                        "kind": "ui.secrets.init",
+                        "args": {
+                            "auth_response": {
+                                "passphrase_secret": "correct horse battery"
+                            },
+                            "migrate_credentials": False,
+                        },
+                    },
+                )
+                self.assertEqual(_read_payload_timeout(proc)["kind"], "ui.secrets.init")
+                _write_payload(
+                    proc,
+                    {
+                        "request_id": "provider-1",
+                        "kind": "ai.providers.create",
+                        "args": {
+                            "name": "tool-local",
+                            "base_url": base_url,
+                            "kind": "local",
+                        },
+                    },
+                )
+                self.assertEqual(_read_payload_timeout(proc)["kind"], "ai.providers.create")
+                _write_payload(
+                    proc,
+                    {
+                        "request_id": "chat-locked-cancel",
+                        "kind": "ai.chat",
+                        "args": {
+                            "provider": "tool-local",
+                            "model": "test-model",
+                            "tools_enabled": True,
+                            "messages": [
+                                {"role": "user", "content": "Sync my wallets"}
+                            ],
+                        },
+                    },
+                )
+                while True:
+                    payload = _read_payload_timeout(proc)
+                    if (
+                        payload.get("request_id") == "chat-locked-cancel"
+                        and payload.get("kind") == "ai.chat.tool_call"
+                    ):
+                        payload = _read_payload(proc)
+                    if (
+                        payload.get("request_id") == "chat-locked-cancel"
+                        and payload.get("kind") == "ai.chat.tool_consent_required"
+                    ):
+                        break
+
+                _write_payload(proc, {"request_id": "lock-1", "kind": "daemon.lock"})
+                self.assertEqual(_read_payload_timeout(proc)["kind"], "daemon.lock")
+                _write_payload(
+                    proc,
+                    {
+                        "request_id": "cancel-locked-1",
+                        "kind": "ai.chat.cancel",
+                        "args": {"target_request_id": "chat-locked-cancel"},
+                    },
+                )
+
+                cancel_response = None
+                terminal = None
+                deadline = time.time() + 5
+                while time.time() < deadline and (
+                    cancel_response is None or terminal is None
+                ):
+                    payload = _read_payload_timeout(proc, max(0.1, deadline - time.time()))
+                    if payload.get("request_id") == "cancel-locked-1":
+                        cancel_response = payload
+                    if (
+                        payload.get("request_id") == "chat-locked-cancel"
+                        and payload.get("kind") == "ai.chat"
+                    ):
+                        terminal = payload
+
+                self.assertIsNotNone(cancel_response)
+                self.assertEqual(cancel_response["kind"], "ai.chat.cancel")
+                self.assertTrue(cancel_response["data"]["cancelled"])
+                self.assertIsNotNone(terminal)
+                self.assertEqual(terminal["data"]["finish_reason"], "cancelled")
 
                 _write_payload(proc, {"request_id": "shutdown-1", "kind": "daemon.shutdown"})
                 self.assertEqual(_read_payload_timeout(proc)["kind"], "daemon.shutdown")

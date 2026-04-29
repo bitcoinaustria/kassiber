@@ -4,13 +4,11 @@ export type TaxCountry = "at" | "generic";
 export type FiatCurrency = "EUR" | "USD" | "CHF" | "GBP";
 
 // Algorithm tokens match `kassiber.tax_policy` / rp2 plugins.
-// Generic country exposes FIFO/LIFO/HIFO/LOFO; AT exposes
-// MOVING_AVERAGE_AT (default) plus MOVING_AVERAGE and FIFO for diagnostics.
+// Generic country exposes FIFO/LIFO/HIFO/LOFO. New Austrian wallets expose
+// only the current-rule moving-average default; Altbestand handling is
+// wallet-specific rather than a profile-level holding-period setting.
 export type GenericGainsAlgorithm = "FIFO" | "LIFO" | "HIFO" | "LOFO";
-export type AustrianGainsAlgorithm =
-  | "MOVING_AVERAGE_AT"
-  | "MOVING_AVERAGE"
-  | "FIFO";
+export type AustrianGainsAlgorithm = "MOVING_AVERAGE_AT";
 export type GainsAlgorithm = GenericGainsAlgorithm | AustrianGainsAlgorithm;
 
 export type DatabaseMode = "sqlcipher" | "plaintext";
@@ -34,6 +32,8 @@ export interface OnboardingForm {
   taxLongTermDays: string;
   gainsAlgorithm: GainsAlgorithm;
   databaseMode: DatabaseMode;
+  databasePassphrase: string;
+  databasePassphraseConfirm: string;
   recoveryAcknowledged: boolean;
   plaintextAcknowledged: boolean;
   migrateCredentials: boolean;

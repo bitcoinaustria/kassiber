@@ -59,4 +59,20 @@ describe("bridge NDJSON stream reader", () => {
     expect(records).toEqual([]);
     expect(terminal.data).toEqual({ finish_reason: "cancelled" });
   });
+
+  it("treats auth_required as a terminal envelope", async () => {
+    const records: DaemonStreamRecord[] = [];
+    const terminal = await readBridgeNdjsonStream(
+      ndjsonResponse([
+        '{"kind":"auth_required","schema_version":1,"request_id":"chat-locked","data":{"scope":"unlock_database"}}\n',
+      ]),
+      "ai.chat",
+      "chat-locked",
+      { onRecord: (record) => records.push(record) },
+    );
+
+    expect(records).toEqual([]);
+    expect(terminal.kind).toBe("auth_required");
+    expect(terminal.data).toEqual({ scope: "unlock_database" });
+  });
 });

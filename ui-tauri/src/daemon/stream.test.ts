@@ -4,6 +4,7 @@ import {
   applyAiChatDeltaToMessage,
   applyAiChatStreamRecordToMessage,
   applyToolConsentResponseToMessage,
+  buildChatCancelArgs,
   buildToolConsentArgs,
   terminalAiChatStatus,
   type AiChatMessage,
@@ -166,6 +167,12 @@ describe("AI stream reducer helpers", () => {
       target_request_id: "chat-1",
       call_id: "call_1",
       decision: "allow_session",
+    });
+  });
+
+  it("builds a targeted daemon cancel request for active chats", () => {
+    expect(buildChatCancelArgs("chat-active-1")).toEqual({
+      target_request_id: "chat-active-1",
     });
   });
 

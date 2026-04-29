@@ -144,8 +144,29 @@ function formatCompactDisplayMoney(
   priceEur: number,
   currency: Currency,
 ) {
-  if (currency === "btc") return formatBtc(btcFromEur(eur, priceEur), { precision: 4 });
+  if (currency === "btc") {
+    return formatBtc(btcFromEur(eur, priceEur), { precision: 3 });
+  }
   return compactCurrencyFormatter.format(eur);
+}
+
+function formatAxisDisplayMoney(
+  eur: number,
+  priceEur: number,
+  currency: Currency,
+) {
+  if (currency === "btc") {
+    return formatCompactDisplayMoney(eur, priceEur, currency).replace("₿ ", "₿");
+  }
+  return formatCompactDisplayMoney(eur, priceEur, currency);
+}
+
+function donutCenterValueClass(value: string) {
+  const length = value.replace(/\s+/g, "").length;
+  if (length <= 7) return "text-sm sm:text-base";
+  if (length <= 9) return "text-xs sm:text-sm";
+  if (length <= 11) return "text-[11px] sm:text-xs";
+  return "text-[10px] sm:text-[11px]";
 }
 
 function transactionBtc(tx: Transaction, priceEur: number) {
@@ -505,19 +526,48 @@ function buildRevenueSourceItems(snapshot: OverviewSnapshot) {
 }
 
 function buildHoldingsBySource(snapshot: OverviewSnapshot): SalesCategoryItem[] {
-  const bySource = { onchain: 0, lightning: 0, liquid: 0, other: 0 };
+  const bySource = {
+    onchain: { balance: 0, value: 0 },
+    lightning: { balance: 0, value: 0 },
+    liquid: { balance: 0, value: 0 },
+    other: { balance: 0, value: 0 },
+  };
   for (const connection of snapshot.connections) {
+    if (connection.balance <= 0) continue;
     const value = connection.balance * snapshot.priceEur;
     const source = sourceForLabel(`${connection.kind} ${connection.label}`);
-    bySource[source as keyof typeof bySource] += value;
+    bySource[source as keyof typeof bySource].balance += connection.balance;
+    bySource[source as keyof typeof bySource].value += value;
   }
-  const total = Object.values(bySource).reduce((sum, value) => sum + value, 0);
+  const total = Object.values(bySource).reduce(
+    (sum, source) => sum + source.value,
+    0,
+  );
   return [
-    { name: "On-chain BTC", value: bySource.onchain, percent: percentOf(bySource.onchain, total), color: palette.primary },
-    { name: "Lightning", value: bySource.lightning, percent: percentOf(bySource.lightning, total), color: `color-mix(in oklch, var(--primary) 80%, ${mixBase})` },
-    { name: "Liquid", value: bySource.liquid, percent: percentOf(bySource.liquid, total), color: `color-mix(in oklch, var(--primary) 60%, ${mixBase})` },
-    { name: "Other", value: bySource.other, percent: percentOf(bySource.other, total), color: `color-mix(in oklch, var(--primary) 42%, ${mixBase})` },
-  ];
+    { name: "On-chain BTC", source: bySource.onchain, color: palette.primary },
+    {
+      name: "Lightning",
+      source: bySource.lightning,
+      color: `color-mix(in oklch, var(--primary) 80%, ${mixBase})`,
+    },
+    {
+      name: "Liquid",
+      source: bySource.liquid,
+      color: `color-mix(in oklch, var(--primary) 60%, ${mixBase})`,
+    },
+    {
+      name: "Other",
+      source: bySource.other,
+      color: `color-mix(in oklch, var(--primary) 42%, ${mixBase})`,
+    },
+  ]
+    .filter((item) => item.source.balance > 0)
+    .map((item) => ({
+      name: item.name,
+      value: item.source.value,
+      percent: percentOf(item.source.value, total),
+      color: item.color,
+    }));
 }
 
 const transactionStatuses: TransactionStatus[] = [
@@ -879,7 +929,11 @@ const StatsCards = ({
                 )}
               >
                 {stat.format === "currency"
-                  ? formatDisplayMoney(stat.value, snapshot.priceEur, currency)
+                  ? formatCompactDisplayMoney(
+                      stat.value,
+                      snapshot.priceEur,
+                      currency,
+                    )
                   : formatter.format(stat.value)}
               </p>
               <div className="flex flex-wrap items-center gap-2 text-[10px] sm:text-xs xl:flex-nowrap">
@@ -897,7 +951,7 @@ const StatsCards = ({
                     <span className="hidden sm:inline">
                       (
                       {stat.format === "currency"
-                        ? formatDisplayMoney(
+                        ? formatCompactDisplayMoney(
                             Math.abs(stat.value - stat.previousValue),
                             snapshot.priceEur,
                             currency,
@@ -1152,6 +1206,11 @@ const SalesByCategoryChart = ({
     (acc, item) => acc + item.value,
     0,
   );
+  const totalSalesLabel = formatCompactDisplayMoney(
+    totalSales,
+    snapshot.priceEur,
+    currency,
+  );
 
   return (
     <div className="flex flex-1 flex-col gap-4 rounded-xl border bg-card p-4 sm:p-5">
@@ -1230,11 +1289,12 @@ const SalesByCategoryChart = ({
           <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
             <span
               className={cn(
-                "text-sm font-semibold sm:text-base",
+                "max-w-[76px] whitespace-nowrap text-center leading-tight font-semibold tabular-nums sm:max-w-[88px]",
+                donutCenterValueClass(totalSalesLabel),
                 blurClass(hideSensitive),
               )}
             >
-              {formatCompactDisplayMoney(totalSales, snapshot.priceEur, currency)}
+              {totalSalesLabel}
             </span>
             <span className="text-[8px] text-muted-foreground sm:text-[10px]">
               Total
@@ -1464,7 +1524,11 @@ const RevenueFlowChart = ({
               blurClass(hideSensitive),
             )}
           >
-            {formatDisplayMoney(latestPortfolioValue, snapshot.priceEur, currency)}
+            {formatCompactDisplayMoney(
+              latestPortfolioValue,
+              snapshot.priceEur,
+              currency,
+            )}
           </p>
           <p className="text-xs text-muted-foreground">
             Portfolio Value ({periodLabels[period]})
@@ -1594,17 +1658,18 @@ const RevenueFlowChart = ({
               axisLine={false}
               tickLine={false}
               tick={{ fontSize: 10 }}
-              dx={-5}
+              tickMargin={6}
+              dx={-2}
               tickFormatter={(value) =>
                 hideSensitive
                   ? ""
-                  : formatCompactDisplayMoney(
+                  : formatAxisDisplayMoney(
                       Number(value),
                       snapshot.priceEur,
                       currency,
                     )
               }
-              width={40}
+              width={58}
             />
             <Tooltip
               content={

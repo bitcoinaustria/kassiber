@@ -14,6 +14,13 @@ export interface AppNotification {
   createdAt: string;
 }
 
+export interface AppLockPolicy {
+  autoLockWhenIdle: boolean;
+  idleMinutes: number;
+  requirePassphraseOnLaunch: boolean;
+  lockOnWindowClose: boolean;
+}
+
 /**
  * Captured onboarding intent for the local profile. Only `name`/`workspace`
  * are read by the running UI today (see AppHeader); the remaining fields are
@@ -24,11 +31,10 @@ export interface AppNotification {
  * `taxCountry`. Today only `at` and `generic` map to a real rp2 plugin
  * (see `kassiber.tax_policy`), so `country` resolves to `"AT" | "Generic"`.
  *
- * `encrypted` records the user's *intent* to use SQLCipher. The actual
- * passphrase capture and SQLCipher unlock live in the native sidecar fd
- * handoff, which is still on the live-actions backlog (see TODO.md). Until
- * that ships, `encrypted: true` does NOT mean the database is encrypted on
- * disk — it means the user opted in.
+ * `encrypted` means the UI requested daemon-backed SQLCipher initialization
+ * during onboarding. The passphrase is never written into this persisted
+ * store; the user must re-enter it when a locked daemon session needs to open
+ * the database.
  *
  * `aiSetupMode` records welcome-flow intent only. In particular,
  * `aiSetupMode: "disabled"` does not yet hide or disable the assistant dock.
@@ -44,15 +50,13 @@ export interface Identity {
   taxLongTermDays?: number;
   /**
    * Token matches `kassiber.tax_policy` / rp2 plugin tokens. Generic supports
-   * FIFO/LIFO/HIFO/LOFO; AT additionally exposes MOVING_AVERAGE and
-   * MOVING_AVERAGE_AT (the AT default).
+   * FIFO/LIFO/HIFO/LOFO; new AT onboarding uses MOVING_AVERAGE_AT only.
    */
   gainsAlgorithm?:
     | "FIFO"
     | "LIFO"
     | "HIFO"
     | "LOFO"
-    | "MOVING_AVERAGE"
     | "MOVING_AVERAGE_AT";
   databaseMode?: "sqlcipher" | "plaintext";
   migrateCredentials?: boolean;
@@ -77,12 +81,14 @@ interface UiState {
   currency: Currency;
   dataMode: DataMode;
   hideSensitive: boolean;
+  appLockPolicy: AppLockPolicy;
   identity: Identity | null;
   notifications: AppNotification[];
   setLang: (lang: Lang) => void;
   setCurrency: (currency: Currency) => void;
   setDataMode: (dataMode: DataMode) => void;
   setHideSensitive: (hideSensitive: boolean) => void;
+  setAppLockPolicy: (policy: Partial<AppLockPolicy>) => void;
   setIdentity: (identity: Identity | null) => void;
   addNotification: (
     notification: Omit<AppNotification, "id" | "createdAt">,
@@ -98,12 +104,22 @@ export const useUiStore = create<UiState>()(
       currency: "btc",
       dataMode: "real",
       hideSensitive: false,
+      appLockPolicy: {
+        autoLockWhenIdle: true,
+        idleMinutes: 5,
+        requirePassphraseOnLaunch: true,
+        lockOnWindowClose: true,
+      },
       identity: null,
       notifications: [],
       setLang: (lang) => set({ lang }),
       setCurrency: (currency) => set({ currency }),
       setDataMode: (dataMode) => set({ dataMode }),
       setHideSensitive: (hideSensitive) => set({ hideSensitive }),
+      setAppLockPolicy: (policy) =>
+        set((state) => ({
+          appLockPolicy: { ...state.appLockPolicy, ...policy },
+        })),
       setIdentity: (identity) => set({ identity }),
       addNotification: (notification) =>
         set((state) => ({

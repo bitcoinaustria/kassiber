@@ -305,8 +305,8 @@ def create_empty_encrypted_database(
         compatibility=compatibility,
     )
     try:
-        conn.execute("CREATE TABLE IF NOT EXISTS sqlite_init_marker(x INTEGER)")
-        conn.execute("DROP TABLE sqlite_init_marker")
+        conn.execute("CREATE TABLE IF NOT EXISTS kassiber_init_marker(x INTEGER)")
+        conn.execute("DROP TABLE kassiber_init_marker")
         conn.commit()
     finally:
         conn.close()

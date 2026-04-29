@@ -138,8 +138,8 @@ export const ConnectionsStep = ({
             <div className="space-y-3">
               <ChoiceCard
                 active={form.backendSetupMode === "default"}
-                title="Use built-in backends"
-                description="Start with Kassiber's bundled Bitcoin, Electrum, and Liquid endpoints. You can replace them later."
+                title="Use default mempool backend"
+                description="Start with the bundled mempool Esplora endpoint, plus the default Electrum and Liquid helpers. You can replace them later."
                 onClick={() => {
                   update("backendSetupMode", "default");
                   update("backendKind", "esplora");
