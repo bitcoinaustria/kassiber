@@ -157,8 +157,12 @@ export function SettingsModal({
   });
   const status =
     statusQuery.data?.kind === "status" ? statusQuery.data.data : null;
-  const deleteWorkspace = useDaemonMutation("ui.workspace.delete");
-  const changePassphrase = useDaemonMutation("ui.secrets.change_passphrase");
+  const deleteWorkspace = useDaemonMutation("ui.workspace.delete", {
+    dataMode: "real",
+  });
+  const changePassphrase = useDaemonMutation("ui.secrets.change_passphrase", {
+    dataMode: "real",
+  });
   const backendsRef = React.useRef<HTMLDivElement | null>(null);
   const aiRef = React.useRef<HTMLDivElement | null>(null);
 

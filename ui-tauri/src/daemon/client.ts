@@ -13,7 +13,7 @@ import {
   type UseQueryResult,
 } from "@tanstack/react-query";
 import { getTransport, type DaemonEnvelope } from "./transport";
-import { useUiStore } from "@/store/ui";
+import { useUiStore, type DataMode } from "@/store/ui";
 
 export const DAEMON_AUTH_REQUIRED_EVENT = "kassiber:auth-required";
 
@@ -71,8 +71,12 @@ export function useDaemon<T = unknown>(
   });
 }
 
-export function useDaemonMutation<T = unknown>(kind: string) {
-  const dataMode = useUiStore((state) => state.dataMode);
+export function useDaemonMutation<T = unknown>(
+  kind: string,
+  options?: { dataMode?: DataMode },
+) {
+  const selectedDataMode = useUiStore((state) => state.dataMode);
+  const dataMode = options?.dataMode ?? selectedDataMode;
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (args?: Record<string, unknown>) => {

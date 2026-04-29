@@ -294,13 +294,13 @@ class AuthAttemptBackoff:
             retryable=True,
         )
 
-    def record_success(self, scope: str) -> None:
+    def record_success(self) -> None:
         with self._lock:
             self._failures = 0
             self._locked_until = 0.0
             self._persist_locked()
 
-    def record_failure(self, scope: str) -> None:
+    def record_failure(self) -> None:
         now = time.time()
         with self._lock:
             self._load_locked()
@@ -1276,9 +1276,9 @@ def _verify_passphrase_with_backoff(
     ctx.auth_backoff.check(scope)
     verified = _verify_passphrase_for_reveal(ctx, passphrase)
     if verified:
-        ctx.auth_backoff.record_success(scope)
+        ctx.auth_backoff.record_success()
     else:
-        ctx.auth_backoff.record_failure(scope)
+        ctx.auth_backoff.record_failure()
     return verified
 
 

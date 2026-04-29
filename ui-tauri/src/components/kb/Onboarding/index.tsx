@@ -103,7 +103,6 @@ export const Onboarding = ({ className, steps: customSteps }: OnboardingProps) =
   const navigate = useNavigate();
   const setIdentity = useUiStore((state) => state.setIdentity);
   const setDataMode = useUiStore((state) => state.setDataMode);
-  const dataMode = useUiStore((state) => state.dataMode);
   const [currentStep, setCurrentStep] = useState(0);
   const [form, setForm] = useState<OnboardingForm>(DEFAULT_FORM);
   const [submitting, setSubmitting] = useState(false);
@@ -130,7 +129,7 @@ export const Onboarding = ({ className, steps: customSteps }: OnboardingProps) =
         ? 0
         : (parseTaxLongTermDays(form.taxLongTermDays) ?? 365);
     if (form.databaseMode === "sqlcipher") {
-      const envelope = await getTransport(dataMode).invoke({
+      const envelope = await getTransport("real").invoke({
         kind: "ui.secrets.init",
         args: {
           auth_response: { passphrase_secret: form.databasePassphrase },

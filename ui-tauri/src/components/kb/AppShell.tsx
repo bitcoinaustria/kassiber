@@ -263,10 +263,11 @@ export function AppShell() {
   const queryClient = useQueryClient();
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const identity = useUiStore((s) => s.identity);
-  const dataMode = useUiStore((s) => s.dataMode);
   const appLockPolicy = useUiStore((s) => s.appLockPolicy);
   const setIdentity = useUiStore((s) => s.setIdentity);
   const setHideSensitive = useUiStore((s) => s.setHideSensitive);
+  const encryptedWorkspace =
+    Boolean(identity?.encrypted) || identity?.databaseMode === "sqlcipher";
   const routerBusy = useRouterState({
     select: (s) => s.isLoading || s.isTransitioning || s.status === "pending",
   });
@@ -277,7 +278,7 @@ export function AppShell() {
   >(null);
   const [assistantCollapsed, setAssistantCollapsed] = React.useState(false);
   const [locked, setLocked] = React.useState(
-    () => Boolean(identity?.encrypted) && !hasSessionUnlockPassphrase(),
+    () => encryptedWorkspace && !hasSessionUnlockPassphrase(),
   );
   const [assistantReturnPath, setAssistantReturnPath] =
     React.useState<AssistantReturnPath>("/overview");
@@ -292,13 +293,18 @@ export function AppShell() {
       searchLabel: "Search Kassiber",
       searchPlaceholder: "Search transactions, reports...",
     };
+  const clearDaemonQueryCache = React.useCallback(() => {
+    void queryClient.cancelQueries({ queryKey: ["daemon"] });
+    queryClient.removeQueries({ queryKey: ["daemon"] });
+  }, [queryClient]);
 
   const lockApp = React.useCallback(() => {
     setHideSensitive(true);
-    if (identity?.encrypted) {
-      queryClient.removeQueries({ queryKey: ["daemon", dataMode] });
+    if (encryptedWorkspace) {
+      clearSessionUnlockPassphrase();
+      clearDaemonQueryCache();
       setLocked(true);
-      void getTransport(dataMode).invoke({ kind: "daemon.lock" });
+      void getTransport("real").invoke({ kind: "daemon.lock" });
       return;
     }
     if (!hasSessionUnlockPassphrase()) {
@@ -309,26 +315,25 @@ export function AppShell() {
     }
     setLocked(true);
   }, [
-    dataMode,
-    identity?.encrypted,
+    clearDaemonQueryCache,
+    encryptedWorkspace,
     navigate,
-    queryClient,
     setHideSensitive,
     setIdentity,
   ]);
 
   const unlockApp = React.useCallback(
     async (passphrase: string) => {
-      if (identity?.encrypted) {
-        const envelope = await getTransport(dataMode).invoke({
+      if (encryptedWorkspace) {
+        const envelope = await getTransport("real").invoke({
           kind: "daemon.unlock",
           args: { auth_response: { passphrase_secret: passphrase } },
         });
-        const unlocked = envelope.kind !== "error" && envelope.kind !== "auth_required";
+        const unlocked = envelope.kind === "daemon.unlock";
         if (unlocked) {
           await setSessionUnlockPassphrase(passphrase);
           await queryClient.invalidateQueries({
-            queryKey: ["daemon", dataMode],
+            queryKey: ["daemon"],
           });
           setLocked(false);
         }
@@ -341,7 +346,7 @@ export function AppShell() {
       }
       return unlocked;
     },
-    [dataMode, identity?.encrypted, queryClient],
+    [encryptedWorkspace, queryClient],
   );
 
   React.useEffect(() => {
@@ -351,11 +356,11 @@ export function AppShell() {
   }, [identity, navigate]);
 
   React.useEffect(() => {
-    if (!identity?.encrypted) return;
+    if (!encryptedWorkspace) return;
 
     const onAuthRequired = () => {
       clearSessionUnlockPassphrase();
-      queryClient.removeQueries({ queryKey: ["daemon", dataMode] });
+      clearDaemonQueryCache();
       setHideSensitive(true);
       setSettingsOpen(false);
       setLocked(true);
@@ -365,18 +370,18 @@ export function AppShell() {
     return () => {
       window.removeEventListener(DAEMON_AUTH_REQUIRED_EVENT, onAuthRequired);
     };
-  }, [dataMode, identity?.encrypted, queryClient, setHideSensitive]);
+  }, [clearDaemonQueryCache, encryptedWorkspace, setHideSensitive]);
 
   React.useEffect(() => {
-    if (!identity?.encrypted) return;
+    if (!encryptedWorkspace) return;
     if (hasSessionUnlockPassphrase()) return;
     if (launchLockApplied.current) return;
     launchLockApplied.current = true;
     lockApp();
-  }, [identity?.encrypted, lockApp]);
+  }, [encryptedWorkspace, lockApp]);
 
   React.useEffect(() => {
-    if (!identity?.encrypted || !appLockPolicy.autoLockWhenIdle || locked) {
+    if (!encryptedWorkspace || !appLockPolicy.autoLockWhenIdle || locked) {
       return;
     }
 
@@ -403,13 +408,13 @@ export function AppShell() {
   }, [
     appLockPolicy.autoLockWhenIdle,
     appLockPolicy.idleMinutes,
-    identity?.encrypted,
+    encryptedWorkspace,
     lockApp,
     locked,
   ]);
 
   React.useEffect(() => {
-    if (!identity?.encrypted || !appLockPolicy.lockOnWindowClose) return;
+    if (!encryptedWorkspace || !appLockPolicy.lockOnWindowClose) return;
 
     const lockOnHidden = () => {
       if (document.visibilityState === "hidden") {
@@ -422,7 +427,7 @@ export function AppShell() {
       window.removeEventListener("pagehide", lockApp);
       document.removeEventListener("visibilitychange", lockOnHidden);
     };
-  }, [appLockPolicy.lockOnWindowClose, identity?.encrypted, lockApp]);
+  }, [appLockPolicy.lockOnWindowClose, encryptedWorkspace, lockApp]);
 
   React.useEffect(() => {
     if (!isAssistantRoute) {
