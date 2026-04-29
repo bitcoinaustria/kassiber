@@ -66,7 +66,7 @@ export function ScreenAssistantMockup({
     >
       <div
         className={cn(
-          "pointer-events-auto mx-auto flex w-full flex-col rounded-[28px] border border-zinc-300/90 bg-muted p-2 shadow-[0_24px_90px_rgba(15,23,42,0.30),0_3px_18px_rgba(15,23,42,0.14)] ring-1 ring-white/90 transition-[max-width,transform] duration-200 ease-out dark:border-white/10 dark:bg-zinc-900 dark:ring-white/10",
+          "pointer-events-auto mx-auto flex w-full flex-col rounded-[28px] border border-white/70 bg-muted/85 p-2 shadow-[0_24px_90px_rgba(15,23,42,0.26),0_3px_18px_rgba(15,23,42,0.12),inset_0_1px_0_rgba(255,255,255,0.80)] ring-1 ring-zinc-950/10 backdrop-blur-2xl backdrop-saturate-150 transition-[max-width,transform] duration-200 ease-out dark:border-white/10 dark:bg-zinc-900/75 dark:ring-white/10",
           showThread ? "max-w-5xl gap-2" : "max-w-3xl gap-3",
         )}
         onMouseEnter={() => setIsInteracting(true)}
