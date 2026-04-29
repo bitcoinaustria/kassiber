@@ -16,8 +16,8 @@ import {
   Download,
   Eye,
   EyeOff,
+  Gauge,
   Heart,
-  LayoutDashboard,
   LockKeyhole,
   LogOut,
   MessageSquareText,
@@ -115,6 +115,15 @@ type RouteMeta = {
   searchPlaceholder: string;
 };
 
+type SearchResult = {
+  id: string;
+  title: string;
+  detail: string;
+  keywords: string[];
+  to: AppRoutePath | "/connections/$connectionId";
+  connectionId?: string;
+};
+
 const APP_VERSION = "0.22.0";
 const APP_COMMIT = __APP_COMMIT__;
 const APP_COMMIT_SHORT = APP_COMMIT ? APP_COMMIT.slice(0, 7) : "unknown";
@@ -123,7 +132,7 @@ const NAV_GROUPS: NavGroup[] = [
   {
     title: "Main",
     items: [
-      { label: "Overview", icon: LayoutDashboard, href: "/overview" },
+      { label: "Overview", icon: Gauge, href: "/overview" },
       { label: "Transactions", icon: ClipboardList, href: "/transactions" },
       { label: "Reports", icon: BarChart3, href: "/reports" },
       { label: "Assistant", icon: MessageSquareText, href: "/assistant" },
@@ -240,12 +249,158 @@ const ROUTE_META: Array<[string, RouteMeta]> = [
     "/overview",
     {
       title: "Overview",
-      icon: LayoutDashboard,
+      icon: Gauge,
       searchLabel: "Search overview",
       searchPlaceholder: "Search transactions, reports...",
     },
   ],
 ];
+
+const STATIC_SEARCH_RESULTS: SearchResult[] = [
+  {
+    id: "route:overview",
+    title: "Overview",
+    detail: "Portfolio, balance, activity",
+    keywords: ["dashboard", "home", "balance", "portfolio"],
+    to: "/overview",
+  },
+  {
+    id: "route:transactions",
+    title: "Transactions",
+    detail: "Ledger rows and filters",
+    keywords: ["tx", "counterparty", "account", "amount", "import"],
+    to: "/transactions",
+  },
+  {
+    id: "route:connections",
+    title: "Connections",
+    detail: "Wallet sources and sync",
+    keywords: ["wallets", "xpub", "backend", "sync"],
+    to: "/connections",
+  },
+  {
+    id: "route:profiles",
+    title: "Profiles",
+    detail: "Workspaces and tax policy",
+    keywords: ["workspace", "profile", "tax", "country"],
+    to: "/profiles",
+  },
+  {
+    id: "route:journals",
+    title: "Journals",
+    detail: "Processed tax ledger",
+    keywords: ["process", "entries", "fees", "basis"],
+    to: "/journals",
+  },
+  {
+    id: "route:reports",
+    title: "Reports",
+    detail: "Capital gains and exports",
+    keywords: ["csv", "pdf", "xlsx", "tax", "austria", "e1kv"],
+    to: "/reports",
+  },
+  {
+    id: "route:quarantine",
+    title: "Quarantine",
+    detail: "Review ambiguous rows",
+    keywords: ["review", "issues", "missing", "price"],
+    to: "/quarantine",
+  },
+  {
+    id: "route:assistant",
+    title: "Assistant",
+    detail: "Ask Kassiber",
+    keywords: ["chat", "ai", "tools"],
+    to: "/assistant",
+  },
+];
+
+function searchMatches(result: SearchResult, query: string) {
+  const terms = query
+    .trim()
+    .toLowerCase()
+    .split(/\s+/)
+    .filter(Boolean);
+  if (!terms.length) return false;
+  const haystack = [
+    result.title,
+    result.detail,
+    ...result.keywords,
+  ]
+    .join(" ")
+    .toLowerCase();
+  return terms.every((term) => haystack.includes(term));
+}
+
+function buildSearchResults(
+  snapshot: OverviewSnapshot | undefined,
+  query: string,
+): SearchResult[] {
+  if (!query.trim()) return [];
+
+  const dynamicResults: SearchResult[] = [
+    ...(snapshot?.connections.map((connection) => ({
+      id: `connection:${connection.id}`,
+      title: connection.label,
+      detail: `${connection.kind.toUpperCase()} · ${connection.status}`,
+      keywords: [
+        "connection",
+        "wallet",
+        "sync",
+        connection.kind,
+        connection.status,
+      ],
+      to: "/connections/$connectionId" as const,
+      connectionId: connection.id,
+    })) ?? []),
+    ...(snapshot?.txs.map((tx) => ({
+      id: `tx:${tx.id}`,
+      title: `${tx.id} · ${tx.counter}`,
+      detail: `${tx.account} · ${tx.type} · ${tx.tag}`,
+      keywords: [
+        "transaction",
+        "ledger",
+        tx.id,
+        tx.account,
+        tx.counter,
+        tx.type,
+        tx.tag,
+      ],
+      to: "/transactions" as const,
+    })) ?? []),
+    ...(snapshot?.status?.needsJournals
+      ? [
+          {
+            id: "status:journals",
+            title: "Journals need processing",
+            detail: "Reports are stale until journals are processed",
+            keywords: ["journal", "reports", "stale", "process"],
+            to: "/journals" as const,
+          },
+        ]
+      : []),
+    ...((snapshot?.status?.quarantines ?? 0) > 0
+      ? [
+          {
+            id: "status:quarantine",
+            title: "Transactions quarantined",
+            detail: `${snapshot?.status?.quarantines ?? 0} rows need review`,
+            keywords: ["quarantine", "review", "missing", "price"],
+            to: "/quarantine" as const,
+          },
+        ]
+      : []),
+  ];
+
+  return [...STATIC_SEARCH_RESULTS, ...dynamicResults]
+    .filter((result) => searchMatches(result, query))
+    .slice(0, 8);
+}
+
+function nextSearchIndex(current: number, delta: number, total: number) {
+  if (total <= 0) return 0;
+  return (current + delta + total) % total;
+}
 
 function assistantReturnPathFor(pathname: string): AssistantReturnPath {
   if (pathname.startsWith("/connections")) return "/connections";
@@ -289,7 +444,7 @@ export function AppShell() {
   const routeMeta =
     ROUTE_META.find(([prefix]) => pathname.startsWith(prefix))?.[1] ?? {
       title: "Kassiber",
-      icon: LayoutDashboard,
+      icon: Gauge,
       searchLabel: "Search Kassiber",
       searchPlaceholder: "Search transactions, reports...",
     };
@@ -861,18 +1016,72 @@ function AppDashboardHeader({
   onLock: () => void;
   daemonEnabled: boolean;
 }) {
+  const navigate = useNavigate();
   const Icon = meta.icon;
   const hideSensitive = useUiStore((s) => s.hideSensitive);
   const setHideSensitive = useUiStore((s) => s.setHideSensitive);
   const dataMode = useUiStore((s) => s.dataMode);
   const appNotifications = useUiStore((s) => s.notifications);
   const clearNotifications = useUiStore((s) => s.clearNotifications);
+  const [searchQuery, setSearchQuery] = React.useState("");
+  const [searchOpen, setSearchOpen] = React.useState(false);
+  const [activeSearchIndex, setActiveSearchIndex] = React.useState(0);
+  const searchInputRef = React.useRef<HTMLInputElement>(null);
+  const searchRootRef = React.useRef<HTMLDivElement>(null);
   const { data } = useDaemon<OverviewSnapshot>(
     "ui.overview.snapshot",
     undefined,
     { enabled: daemonEnabled },
   );
   const snapshot = data?.data;
+  const searchResults = React.useMemo(
+    () => buildSearchResults(snapshot, searchQuery),
+    [snapshot, searchQuery],
+  );
+  const searchListId = React.useId();
+  const searchActiveId = searchResults[activeSearchIndex]?.id
+    ? `search-result-${searchResults[activeSearchIndex].id.replace(/[^a-zA-Z0-9_-]/g, "-")}`
+    : undefined;
+  const activateSearchResult = React.useCallback(
+    (result: SearchResult | undefined) => {
+      if (!result) return;
+      setSearchOpen(false);
+      setSearchQuery("");
+      if (result.to === "/connections/$connectionId" && result.connectionId) {
+        void navigate({
+          to: "/connections/$connectionId",
+          params: { connectionId: result.connectionId },
+        });
+        return;
+      }
+      void navigate({ to: result.to });
+    },
+    [navigate],
+  );
+
+  React.useEffect(() => {
+    setActiveSearchIndex(0);
+  }, [searchQuery]);
+
+  React.useEffect(() => {
+    if (activeSearchIndex < searchResults.length) return;
+    setActiveSearchIndex(Math.max(0, searchResults.length - 1));
+  }, [activeSearchIndex, searchResults.length]);
+
+  React.useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key.toLowerCase() !== "k") return;
+      if (!(event.metaKey || event.ctrlKey)) return;
+      if (event.altKey || event.shiftKey) return;
+      event.preventDefault();
+      setSearchOpen(true);
+      searchInputRef.current?.focus();
+      searchInputRef.current?.select();
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, []);
   const systemNotificationItems = [
     ...(snapshot?.status?.needsJournals
       ? [
@@ -917,24 +1126,108 @@ function AppDashboardHeader({
       <h1 className="text-base font-medium">{meta.title}</h1>
 
       <div className="ml-auto flex items-center gap-2">
-        <div className="relative hidden w-80 lg:block lg:w-96 xl:w-[28rem]">
+        <div
+          ref={searchRootRef}
+          className="relative hidden w-80 lg:block lg:w-96 xl:w-[28rem]"
+          onBlur={(event) => {
+            if (
+              event.relatedTarget instanceof Node &&
+              searchRootRef.current?.contains(event.relatedTarget)
+            ) {
+              return;
+            }
+            setSearchOpen(false);
+          }}
+        >
           <Search
             className="absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground"
             aria-hidden="true"
           />
           <Input
+            ref={searchInputRef}
             type="search"
             name="header-search"
             inputMode="search"
             autoComplete="off"
             aria-label={meta.searchLabel}
+            aria-expanded={searchOpen}
+            aria-controls={searchListId}
+            aria-activedescendant={searchActiveId}
             placeholder={meta.searchPlaceholder}
+            value={searchQuery}
+            onChange={(event) => {
+              setSearchQuery(event.target.value);
+              setSearchOpen(true);
+            }}
+            onFocus={() => setSearchOpen(true)}
+            onKeyDown={(event) => {
+              if (event.key === "ArrowDown") {
+                event.preventDefault();
+                setSearchOpen(true);
+                setActiveSearchIndex((current) =>
+                  nextSearchIndex(current, 1, searchResults.length),
+                );
+              } else if (event.key === "ArrowUp") {
+                event.preventDefault();
+                setSearchOpen(true);
+                setActiveSearchIndex((current) =>
+                  nextSearchIndex(current, -1, searchResults.length),
+                );
+              } else if (event.key === "Enter") {
+                event.preventDefault();
+                activateSearchResult(searchResults[activeSearchIndex]);
+              } else if (event.key === "Escape") {
+                setSearchOpen(false);
+                searchInputRef.current?.blur();
+              }
+            }}
             className="h-10 w-full pr-14 pl-9 text-sm"
           />
           <kbd className="pointer-events-none absolute top-1/2 right-2 hidden -translate-y-1/2 rounded-md border bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground md:inline-flex">
             {"\u2318"}
             {"\u00a0"}K
           </kbd>
+          {searchOpen && searchQuery.trim() && (
+            <div
+              id={searchListId}
+              role="listbox"
+              className="absolute top-11 right-0 left-0 z-30 overflow-hidden rounded-md border bg-popover p-1 text-popover-foreground shadow-lg"
+            >
+              {searchResults.length > 0 ? (
+                searchResults.map((result, index) => {
+                  const active = index === activeSearchIndex;
+                  const itemId = `search-result-${result.id.replace(/[^a-zA-Z0-9_-]/g, "-")}`;
+                  return (
+                    <button
+                      key={result.id}
+                      id={itemId}
+                      type="button"
+                      role="option"
+                      aria-selected={active}
+                      onMouseDown={(event) => {
+                        event.preventDefault();
+                        activateSearchResult(result);
+                      }}
+                      onMouseEnter={() => setActiveSearchIndex(index)}
+                      className={cn(
+                        "flex w-full flex-col gap-0.5 rounded-sm px-3 py-2 text-left text-sm",
+                        active ? "bg-accent text-accent-foreground" : "",
+                      )}
+                    >
+                      <span className="font-medium">{result.title}</span>
+                      <span className="text-xs text-muted-foreground">
+                        {result.detail}
+                      </span>
+                    </button>
+                  );
+                })
+              ) : (
+                <div className="px-3 py-2 text-sm text-muted-foreground">
+                  No matches
+                </div>
+              )}
+            </div>
+          )}
         </div>
         <DropdownMenu>
           <DropdownMenuTrigger asChild>

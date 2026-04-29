@@ -17,13 +17,14 @@ function Conversation({
 
 const ConversationContent = React.forwardRef<
   HTMLDivElement,
-  React.ComponentProps<"div">
->(({ className, ...props }, ref) => (
+  React.ComponentProps<"div"> & { scrollable?: boolean }
+>(({ className, scrollable = true, ...props }, ref) => (
   <div
     ref={ref}
     data-slot="conversation-content"
     className={cn(
-      "flex min-h-0 w-full flex-1 flex-col gap-6 overflow-y-auto px-1",
+      "flex min-h-0 w-full flex-1 flex-col gap-6 px-1",
+      scrollable ? "overflow-y-auto" : "overflow-visible",
       className,
     )}
     {...props}

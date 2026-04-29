@@ -117,8 +117,17 @@ const assistantRoute = createRoute({
   component: Assistant,
 });
 
+const assistantTypoRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/assitant",
+  beforeLoad: () => {
+    throw redirect({ to: "/assistant" });
+  },
+});
+
 const routeTree = rootRoute.addChildren([
   indexRoute,
+  assistantTypoRoute,
   appLayoutRoute.addChildren([
     overviewRoute,
     transactionsRoute,

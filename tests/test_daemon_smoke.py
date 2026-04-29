@@ -421,12 +421,17 @@ class DaemonSmokeTest(unittest.TestCase):
             self.assertIn("ui.journals.quarantine", ready["data"]["supported_kinds"])
             self.assertIn("ui.journals.transfers.list", ready["data"]["supported_kinds"])
             self.assertIn("ui.profiles.snapshot", ready["data"]["supported_kinds"])
+            self.assertIn("ui.profiles.create", ready["data"]["supported_kinds"])
+            self.assertIn("ui.profiles.switch", ready["data"]["supported_kinds"])
             self.assertIn("ui.rates.summary", ready["data"]["supported_kinds"])
             self.assertIn("ui.workspace.health", ready["data"]["supported_kinds"])
+            self.assertIn("ui.workspace.create", ready["data"]["supported_kinds"])
             self.assertIn("ui.workspace.delete", ready["data"]["supported_kinds"])
             self.assertIn("ui.secrets.init", ready["data"]["supported_kinds"])
             self.assertIn("ui.secrets.change_passphrase", ready["data"]["supported_kinds"])
             self.assertIn("ui.next_actions", ready["data"]["supported_kinds"])
+            self.assertIn("ui.wallets.update", ready["data"]["supported_kinds"])
+            self.assertIn("ui.wallets.delete", ready["data"]["supported_kinds"])
             self.assertIn("ui.wallets.sync", ready["data"]["supported_kinds"])
             self.assertIn("daemon.lock", ready["data"]["supported_kinds"])
             self.assertIn("daemon.unlock", ready["data"]["supported_kinds"])
@@ -526,6 +531,341 @@ class DaemonSmokeTest(unittest.TestCase):
             code, stderr = _close_daemon(proc)
             self.assertEqual(code, 0, stderr)
             self.assertEqual(stderr, "")
+
+    def test_ui_wallet_change_and_delete_require_local_confirmation(self):
+        with tempfile.TemporaryDirectory(prefix="kassiber-daemon-wallet-") as tmp:
+            data_root = Path(tmp) / "data"
+            _seed_workspace_with_transaction(data_root, tmp)
+            proc = _start_daemon(data_root)
+            try:
+                self.assertEqual(_read_payload_timeout(proc)["kind"], "daemon.ready")
+
+                _write_payload(
+                    proc,
+                    {
+                        "request_id": "wallet-update-missing-auth",
+                        "kind": "ui.wallets.update",
+                        "args": {"wallet": "Cold", "label": "Archive"},
+                    },
+                )
+                missing_change_ack = _read_payload_timeout(proc)
+                self.assertEqual(missing_change_ack["kind"], "error")
+                self.assertEqual(missing_change_ack["error"]["code"], "validation")
+
+                _write_payload(
+                    proc,
+                    {
+                        "request_id": "wallet-update-1",
+                        "kind": "ui.wallets.update",
+                        "args": {
+                            "wallet": "Cold",
+                            "label": "Archive",
+                            "auth_response": {
+                                "plaintext_change_ack": "CHANGE LOCAL DATA",
+                            },
+                        },
+                    },
+                )
+                updated = _read_payload_timeout(proc)
+                self.assertEqual(updated["kind"], "ui.wallets.update")
+                self.assertEqual(updated["data"]["wallet"]["label"], "Archive")
+
+                _write_payload(
+                    proc,
+                    {
+                        "request_id": "wallet-delete-missing-confirm",
+                        "kind": "ui.wallets.delete",
+                        "args": {
+                            "wallet": "Archive",
+                            "confirm": "DELETE",
+                            "auth_response": {
+                                "plaintext_delete_ack": "DELETE LOCAL DATA",
+                            },
+                        },
+                    },
+                )
+                missing_name = _read_payload_timeout(proc)
+                self.assertEqual(missing_name["kind"], "error")
+                self.assertEqual(missing_name["error"]["code"], "validation")
+
+                _write_payload(
+                    proc,
+                    {
+                        "request_id": "wallet-delete-missing-auth",
+                        "kind": "ui.wallets.delete",
+                        "args": {
+                            "wallet": "Archive",
+                            "confirm": "DELETE",
+                            "confirm_wallet": "Archive",
+                            "cascade": True,
+                        },
+                    },
+                )
+                missing_delete_ack = _read_payload_timeout(proc)
+                self.assertEqual(missing_delete_ack["kind"], "error")
+                self.assertEqual(missing_delete_ack["error"]["code"], "validation")
+
+                _write_payload(
+                    proc,
+                    {
+                        "request_id": "wallet-delete-1",
+                        "kind": "ui.wallets.delete",
+                        "args": {
+                            "wallet": "Archive",
+                            "confirm": "DELETE",
+                            "confirm_wallet": "Archive",
+                            "cascade": True,
+                            "auth_response": {
+                                "plaintext_delete_ack": "DELETE LOCAL DATA",
+                            },
+                        },
+                    },
+                )
+                deleted = _read_payload_timeout(proc)
+                self.assertEqual(deleted["kind"], "ui.wallets.delete")
+                self.assertEqual(deleted["data"]["wallet"]["label"], "Archive")
+                self.assertTrue(deleted["data"]["wallet"]["deleted"])
+                self.assertEqual(deleted["data"]["wallet"]["cascaded_transactions"], 1)
+
+                _write_payload(
+                    proc,
+                    {"request_id": "overview-1", "kind": "ui.overview.snapshot"},
+                )
+                overview = _read_payload_timeout(proc)
+                self.assertEqual(overview["kind"], "ui.overview.snapshot")
+                self.assertEqual(overview["data"]["connections"], [])
+
+                _write_payload(
+                    proc,
+                    {"request_id": "shutdown-1", "kind": "daemon.shutdown"},
+                )
+                self.assertEqual(_read_payload_timeout(proc)["kind"], "daemon.shutdown")
+                code, stderr = _close_daemon(proc)
+                self.assertEqual(code, 0, stderr)
+                self.assertEqual(stderr, "")
+            finally:
+                if proc.poll() is None:
+                    proc.kill()
+
+    def test_ui_workspace_create_adds_empty_current_workspace(self):
+        with tempfile.TemporaryDirectory(prefix="kassiber-daemon-workspace-") as tmp:
+            data_root = Path(tmp) / "data"
+            _run_cli(data_root, "init")
+
+            proc = _start_daemon(data_root)
+            try:
+                self.assertEqual(_read_payload_timeout(proc)["kind"], "daemon.ready")
+
+                _write_payload(
+                    proc,
+                    {
+                        "request_id": "create-workspace-1",
+                        "kind": "ui.workspace.create",
+                        "args": {"label": "Side Books"},
+                    },
+                )
+                created = _read_payload_timeout(proc)
+                self.assertEqual(created["kind"], "ui.workspace.create")
+                self.assertEqual(created["data"]["workspace"]["name"], "Side Books")
+                self.assertEqual(created["data"]["activeProfileId"], "")
+
+                _write_payload(
+                    proc,
+                    {"request_id": "profiles-1", "kind": "ui.profiles.snapshot"},
+                )
+                profiles = _read_payload_timeout(proc)
+                self.assertEqual(profiles["data"]["activeProfileId"], "")
+                self.assertEqual(len(profiles["data"]["workspaces"]), 1)
+                self.assertEqual(profiles["data"]["workspaces"][0]["name"], "Side Books")
+                self.assertEqual(profiles["data"]["workspaces"][0]["profiles"], [])
+
+                _write_payload(proc, {"request_id": "status-1", "kind": "status"})
+                status = _read_payload_timeout(proc)
+                self.assertEqual(status["data"]["current_workspace"], "Side Books")
+                self.assertEqual(status["data"]["current_profile"], "")
+
+                _write_payload(
+                    proc,
+                    {"request_id": "shutdown-1", "kind": "daemon.shutdown"},
+                )
+                self.assertEqual(_read_payload_timeout(proc)["kind"], "daemon.shutdown")
+                code, stderr = _close_daemon(proc)
+                self.assertEqual(code, 0, stderr)
+                self.assertEqual(stderr, "")
+            finally:
+                if proc.poll() is None:
+                    proc.kill()
+
+    def test_ui_profiles_create_adds_current_profile(self):
+        with tempfile.TemporaryDirectory(prefix="kassiber-daemon-create-profile-") as tmp:
+            data_root = Path(tmp) / "data"
+            _run_cli(data_root, "init")
+            _run_cli(data_root, "workspaces", "create", "Demo")
+            _run_cli(
+                data_root,
+                "profiles",
+                "create",
+                "Main",
+                "--fiat-currency",
+                "CHF",
+                "--tax-long-term-days",
+                "730",
+                "--gains-algorithm",
+                "HIFO",
+            )
+
+            proc = _start_daemon(data_root)
+            try:
+                self.assertEqual(_read_payload_timeout(proc)["kind"], "daemon.ready")
+
+                _write_payload(
+                    proc,
+                    {"request_id": "profiles-1", "kind": "ui.profiles.snapshot"},
+                )
+                before = _read_payload_timeout(proc)
+                workspace_id = before["data"]["workspaces"][0]["id"]
+
+                _write_payload(
+                    proc,
+                    {
+                        "request_id": "create-profile-1",
+                        "kind": "ui.profiles.create",
+                        "args": {
+                            "workspace_id": workspace_id,
+                            "label": "Side",
+                        },
+                    },
+                )
+                created = _read_payload_timeout(proc)
+                self.assertEqual(created["kind"], "ui.profiles.create")
+                self.assertEqual(created["data"]["profile"]["name"], "Side")
+                self.assertEqual(created["data"]["activeWorkspaceId"], workspace_id)
+                self.assertEqual(created["data"]["defaults"]["fiat_currency"], "CHF")
+                self.assertEqual(created["data"]["defaults"]["gains_algorithm"], "HIFO")
+                self.assertEqual(created["data"]["defaults"]["tax_long_term_days"], 730)
+
+                _write_payload(
+                    proc,
+                    {"request_id": "profiles-2", "kind": "ui.profiles.snapshot"},
+                )
+                after = _read_payload_timeout(proc)
+                self.assertEqual(
+                    after["data"]["activeProfileId"],
+                    created["data"]["activeProfileId"],
+                )
+                profiles = {
+                    profile["name"]: profile
+                    for workspace in after["data"]["workspaces"]
+                    for profile in workspace["profiles"]
+                }
+                self.assertIn("Side", profiles)
+                self.assertEqual(
+                    profiles["Side"]["taxPolicy"],
+                    "Generic - HIFO - CHF - 730 day long-term",
+                )
+                self.assertEqual(profiles["Side"]["accounts"], 1)
+                self.assertTrue(profiles["Side"]["active"])
+
+                _write_payload(proc, {"request_id": "status-1", "kind": "status"})
+                status = _read_payload_timeout(proc)
+                self.assertEqual(status["data"]["current_workspace"], "Demo")
+                self.assertEqual(status["data"]["current_profile"], "Side")
+
+                _write_payload(
+                    proc,
+                    {"request_id": "shutdown-1", "kind": "daemon.shutdown"},
+                )
+                self.assertEqual(_read_payload_timeout(proc)["kind"], "daemon.shutdown")
+                code, stderr = _close_daemon(proc)
+                self.assertEqual(code, 0, stderr)
+                self.assertEqual(stderr, "")
+            finally:
+                if proc.poll() is None:
+                    proc.kill()
+
+    def test_ui_profiles_switch_updates_active_context(self):
+        with tempfile.TemporaryDirectory(prefix="kassiber-daemon-profiles-") as tmp:
+            data_root = Path(tmp) / "data"
+            _run_cli(data_root, "init")
+            _run_cli(data_root, "workspaces", "create", "Demo")
+            _run_cli(data_root, "profiles", "create", "Main", "--fiat-currency", "EUR")
+            _run_cli(data_root, "profiles", "create", "Side", "--fiat-currency", "EUR")
+            _run_cli(data_root, "context", "set", "--workspace", "Demo", "--profile", "Main")
+
+            proc = _start_daemon(data_root)
+            try:
+                self.assertEqual(_read_payload_timeout(proc)["kind"], "daemon.ready")
+
+                _write_payload(
+                    proc,
+                    {"request_id": "profiles-1", "kind": "ui.profiles.snapshot"},
+                )
+                before = _read_payload_timeout(proc)
+                self.assertEqual(before["kind"], "ui.profiles.snapshot")
+                profiles = {
+                    profile["name"]: profile
+                    for workspace in before["data"]["workspaces"]
+                    for profile in workspace["profiles"]
+                }
+                self.assertEqual(
+                    before["data"]["activeProfileId"],
+                    profiles["Main"]["id"],
+                )
+
+                _write_payload(
+                    proc,
+                    {
+                        "request_id": "switch-1",
+                        "kind": "ui.profiles.switch",
+                        "args": {"profile_id": profiles["Side"]["id"]},
+                    },
+                )
+                switched = _read_payload_timeout(proc)
+                self.assertEqual(switched["kind"], "ui.profiles.switch")
+                self.assertEqual(
+                    switched["data"]["activeProfileId"],
+                    profiles["Side"]["id"],
+                )
+                self.assertEqual(
+                    switched["data"]["activeWorkspaceId"],
+                    before["data"]["workspaces"][0]["id"],
+                )
+
+                _write_payload(
+                    proc,
+                    {"request_id": "profiles-2", "kind": "ui.profiles.snapshot"},
+                )
+                after = _read_payload_timeout(proc)
+                self.assertEqual(
+                    after["data"]["activeProfileId"],
+                    profiles["Side"]["id"],
+                )
+                active = [
+                    profile["name"]
+                    for workspace in after["data"]["workspaces"]
+                    for profile in workspace["profiles"]
+                    if profile["active"]
+                ]
+                self.assertEqual(active, ["Side"])
+
+                _write_payload(
+                    proc,
+                    {"request_id": "health-1", "kind": "ui.workspace.health"},
+                )
+                health = _read_payload_timeout(proc)
+                self.assertEqual(health["data"]["profile"]["label"], "Side")
+
+                _write_payload(
+                    proc,
+                    {"request_id": "shutdown-1", "kind": "daemon.shutdown"},
+                )
+                self.assertEqual(_read_payload_timeout(proc)["kind"], "daemon.shutdown")
+                code, stderr = _close_daemon(proc)
+                self.assertEqual(code, 0, stderr)
+                self.assertEqual(stderr, "")
+            finally:
+                if proc.poll() is None:
+                    proc.kill()
 
     @unittest.skipUnless(sqlcipher_available(), "SQLCipher driver unavailable")
     def test_daemon_sqlcipher_init_lock_unlock_and_rekey(self):

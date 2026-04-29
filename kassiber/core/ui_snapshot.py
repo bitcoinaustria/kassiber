@@ -382,9 +382,8 @@ def build_profiles_snapshot(conn: sqlite3.Connection) -> dict[str, Any]:
 
     return {
         "workspaces": workspaces,
-        "activeProfileId": context["profile_id"] or (
-            profile_rows[0]["id"] if profile_rows else ""
-        ),
+        "activeWorkspaceId": context["workspace_id"],
+        "activeProfileId": context["profile_id"],
     }
 
 

@@ -5,9 +5,7 @@
  * Shares the kassiber-themed Dialog shell used by SettingsModal but with
  * a denser visual layout: each workspace gets a compact header with a
  * jurisdiction chip and a 2-column grid of profile cards. Clicking a
- * profile updates the local active id and closes the popover. The active
- * id is purely visual until daemon wiring lands (see Profiles.tsx for the
- * matching idiom).
+ * profile updates the active daemon context and closes the popover.
  */
 import { useEffect, useState } from "react";
 
@@ -18,7 +16,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { useDaemon } from "@/daemon/client";
+import { useDaemon, useDaemonMutation } from "@/daemon/client";
 import { cn } from "@/lib/utils";
 import type { ProfilesSnapshot, Profile, Workspace } from "@/mocks/profiles";
 
@@ -76,6 +74,9 @@ interface SwitcherBodyProps {
 }
 
 function SwitcherBody({ snapshot, onClose }: SwitcherBodyProps) {
+  const switchProfile = useDaemonMutation<{ activeProfileId: string }>(
+    "ui.profiles.switch",
+  );
   const [activeId, setActiveId] = useState(snapshot.activeProfileId);
 
   // Keep the local active id in sync if the underlying snapshot changes
@@ -85,8 +86,19 @@ function SwitcherBody({ snapshot, onClose }: SwitcherBodyProps) {
   }, [snapshot.activeProfileId]);
 
   const handlePick = (profile: Profile) => {
-    setActiveId(profile.id);
-    onClose();
+    if (profile.id === activeId) {
+      onClose();
+      return;
+    }
+    switchProfile.mutate(
+      { profile_id: profile.id },
+      {
+        onSuccess: () => {
+          setActiveId(profile.id);
+          onClose();
+        },
+      },
+    );
   };
 
   return (

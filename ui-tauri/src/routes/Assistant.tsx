@@ -62,10 +62,10 @@ export function Assistant() {
   );
 
   return (
-    <div className="mx-auto flex h-full min-h-0 w-full max-w-6xl flex-col px-4 py-3 sm:px-6 sm:py-4">
+    <div className="mx-auto flex min-h-full w-full max-w-6xl flex-col px-4 py-3 sm:px-6 sm:py-4">
       <section
         aria-label="Assistant conversation"
-        className="flex min-h-0 flex-1 flex-col overflow-hidden bg-background"
+        className="flex min-h-full flex-1 flex-col bg-background"
       >
         {hasMessages ? (
           <div className="mx-auto flex w-full max-w-4xl items-center justify-end gap-2 px-1 pb-3">
@@ -98,20 +98,24 @@ export function Assistant() {
 
         <div
           className={cn(
-            "min-h-0 flex-1",
-            hasMessages ? "overflow-hidden" : "grid place-items-center",
+            "flex-1",
+            hasMessages ? "" : "grid min-h-[480px] place-items-center",
           )}
         >
           <div
             className={cn(
               "mx-auto w-full",
               hasMessages
-                ? "flex h-full max-w-4xl overflow-hidden"
+                ? "flex max-w-4xl flex-col"
                 : "flex max-w-3xl -translate-y-6 flex-col items-center gap-7 px-1 text-center sm:-translate-y-10",
             )}
           >
             {hasMessages ? (
-              <ChatThread messages={messages} className="h-full p-1 sm:p-2" />
+              <ChatThread
+                messages={messages}
+                scrollable={false}
+                className="p-1 sm:p-2"
+              />
             ) : (
               <>
                 <h2 className="text-3xl font-medium tracking-normal text-foreground sm:text-4xl">
@@ -130,7 +134,7 @@ export function Assistant() {
         ) : null}
 
         {hasMessages ? (
-          <div className="mx-auto w-full max-w-4xl shrink-0 border-t border-border/60 pt-3">
+          <div className="mx-auto mt-4 w-full max-w-4xl shrink-0 border-t border-border/60 pt-3">
             {composer}
           </div>
         ) : null}

@@ -13,9 +13,31 @@ import type {
   DaemonStreamRecord,
   DaemonTransport,
 } from "./transport";
+import { MOCK_PROFILES } from "@/mocks/profiles";
 import { MOCK_AI_CHAT_STREAM, fixtures } from "./fixtures";
 
 const SIMULATED_LATENCY_MS = 50;
+
+const cloneMockProfiles = () => ({
+  activeWorkspaceId: MOCK_PROFILES.activeWorkspaceId,
+  activeProfileId: MOCK_PROFILES.activeProfileId,
+  workspaces: MOCK_PROFILES.workspaces.map((workspace) => ({
+    ...workspace,
+    profiles: workspace.profiles.map((profile) => ({ ...profile })),
+  })),
+});
+
+let mockProfilesSnapshot = cloneMockProfiles();
+
+type MockConnection = {
+  id: string;
+  label: string;
+};
+
+const mockOverviewSnapshot = () =>
+  fixtures["ui.overview.snapshot"] as {
+    connections: MockConnection[];
+  };
 
 export const mockDaemon: DaemonTransport = {
   async invoke<T = unknown>(
@@ -88,6 +110,264 @@ export const mockDaemon: DaemonTransport = {
           deleted: true,
           workspace: { id: "mock-workspace", label: "Demo Workspace" },
           removed: { profiles: 2, wallets: 4, transactions: 24 },
+        } as T,
+      };
+    }
+
+    if (req.kind === "ui.profiles.snapshot") {
+      return {
+        kind: "ui.profiles.snapshot",
+        schema_version: 1,
+        request_id: req.request_id,
+        data: mockProfilesSnapshot as T,
+      };
+    }
+
+    if (req.kind === "ui.profiles.switch") {
+      const args = (req.args ?? {}) as { profile_id?: unknown };
+      const profileId = typeof args.profile_id === "string" ? args.profile_id : "";
+      const exists = mockProfilesSnapshot.workspaces.some((workspace) =>
+        workspace.profiles.some((profile) => profile.id === profileId),
+      );
+      if (!exists) {
+        return {
+          kind: "error",
+          schema_version: 1,
+          request_id: req.request_id,
+          error: {
+            code: "validation",
+            message: "profile not found",
+            retryable: false,
+          },
+        };
+      }
+      mockProfilesSnapshot = {
+        ...mockProfilesSnapshot,
+        activeWorkspaceId: mockProfilesSnapshot.workspaces.find((workspace) =>
+          workspace.profiles.some((profile) => profile.id === profileId),
+        )?.id,
+        activeProfileId: profileId,
+        workspaces: mockProfilesSnapshot.workspaces.map((workspace) => ({
+          ...workspace,
+          profiles: workspace.profiles.map((profile) => ({
+            ...profile,
+            active: profile.id === profileId,
+            lastOpened: profile.id === profileId ? "Just now" : profile.lastOpened,
+          })),
+        })),
+      };
+      return {
+        kind: "ui.profiles.switch",
+        schema_version: 1,
+        request_id: req.request_id,
+        data: {
+          activeProfileId: profileId,
+          activeWorkspaceId: mockProfilesSnapshot.activeWorkspaceId,
+        } as T,
+      };
+    }
+
+    if (req.kind === "ui.profiles.create") {
+      const args = (req.args ?? {}) as {
+        workspace_id?: unknown;
+        label?: unknown;
+      };
+      const workspaceId =
+        typeof args.workspace_id === "string" ? args.workspace_id : "";
+      const label = typeof args.label === "string" ? args.label.trim() : "";
+      const workspace = mockProfilesSnapshot.workspaces.find(
+        (candidate) => candidate.id === workspaceId,
+      );
+      if (!workspace) {
+        return {
+          kind: "error",
+          schema_version: 1,
+          request_id: req.request_id,
+          error: {
+            code: "validation",
+            message: "workspace not found",
+            retryable: false,
+          },
+        };
+      }
+      if (!label) {
+        return {
+          kind: "error",
+          schema_version: 1,
+          request_id: req.request_id,
+          error: {
+            code: "validation",
+            message: "ui.profiles.create requires label",
+            retryable: false,
+          },
+        };
+      }
+      const firstProfile = workspace.profiles[0];
+      const profile = {
+        id: `mock-profile-${Date.now()}`,
+        name: label,
+        role: "Owner" as const,
+        taxPolicy: firstProfile?.taxPolicy ?? `${workspace.jurisdiction} defaults`,
+        accounts: 1,
+        wallets: 0,
+        lastOpened: "Just now",
+        active: true,
+      };
+      mockProfilesSnapshot = {
+        activeWorkspaceId: workspace.id,
+        activeProfileId: profile.id,
+        workspaces: mockProfilesSnapshot.workspaces.map((candidate) => ({
+          ...candidate,
+          profiles:
+            candidate.id === workspace.id
+              ? [
+                  ...candidate.profiles.map((existing) => ({
+                    ...existing,
+                    active: false,
+                  })),
+                  profile,
+                ]
+              : candidate.profiles.map((existing) => ({
+                  ...existing,
+                  active: false,
+                })),
+        })),
+      };
+      return {
+        kind: "ui.profiles.create",
+        schema_version: 1,
+        request_id: req.request_id,
+        data: {
+          activeProfileId: profile.id,
+          activeWorkspaceId: workspace.id,
+          profile: { id: profile.id, name: profile.name },
+          workspace: { id: workspace.id, name: workspace.name },
+        } as T,
+      };
+    }
+
+    if (req.kind === "ui.workspace.create") {
+      const args = (req.args ?? {}) as { label?: unknown };
+      const label = typeof args.label === "string" ? args.label.trim() : "";
+      if (!label) {
+        return {
+          kind: "error",
+          schema_version: 1,
+          request_id: req.request_id,
+          error: {
+            code: "validation",
+            message: "ui.workspace.create requires label",
+            retryable: false,
+          },
+        };
+      }
+      const workspace = {
+        id: `mock-workspace-${Date.now()}`,
+        name: label,
+        kind: "Personal" as const,
+        currency: "Mixed",
+        jurisdiction: "Generic",
+        created: new Date().toISOString().slice(0, 10),
+        profiles: [],
+      };
+      mockProfilesSnapshot = {
+        activeWorkspaceId: workspace.id,
+        activeProfileId: "",
+        workspaces: [
+          ...mockProfilesSnapshot.workspaces.map((existing) => ({
+            ...existing,
+            profiles: existing.profiles.map((profile) => ({
+              ...profile,
+              active: false,
+            })),
+          })),
+          workspace,
+        ],
+      };
+      return {
+        kind: "ui.workspace.create",
+        schema_version: 1,
+        request_id: req.request_id,
+        data: {
+          workspace: { id: workspace.id, name: workspace.name },
+          activeWorkspaceId: workspace.id,
+          activeProfileId: "",
+        } as T,
+      };
+    }
+
+    if (req.kind === "ui.wallets.update") {
+      const args = (req.args ?? {}) as {
+        wallet?: unknown;
+        label?: unknown;
+      };
+      const walletRef = typeof args.wallet === "string" ? args.wallet : "";
+      const label = typeof args.label === "string" ? args.label.trim() : "";
+      const overview = mockOverviewSnapshot();
+      const connection = overview.connections.find(
+        (item) => item.id === walletRef || item.label === walletRef,
+      );
+      if (!connection || !label) {
+        return {
+          kind: "error",
+          schema_version: 1,
+          request_id: req.request_id,
+          error: {
+            code: "validation",
+            message: "wallet update requires an existing wallet and label",
+            retryable: false,
+          },
+        };
+      }
+      connection.label = label;
+      return {
+        kind: "ui.wallets.update",
+        schema_version: 1,
+        request_id: req.request_id,
+        data: { wallet: connection } as T,
+      };
+    }
+
+    if (req.kind === "ui.wallets.delete") {
+      const args = (req.args ?? {}) as {
+        wallet?: unknown;
+        confirm_wallet?: unknown;
+      };
+      const walletRef = typeof args.wallet === "string" ? args.wallet : "";
+      const overview = mockOverviewSnapshot();
+      const connection = overview.connections.find(
+        (item) => item.id === walletRef || item.label === walletRef,
+      );
+      if (
+        !connection ||
+        typeof args.confirm_wallet !== "string" ||
+        args.confirm_wallet !== connection.label
+      ) {
+        return {
+          kind: "error",
+          schema_version: 1,
+          request_id: req.request_id,
+          error: {
+            code: "validation",
+            message: "wallet delete requires the exact connection label",
+            retryable: false,
+          },
+        };
+      }
+      overview.connections = overview.connections.filter(
+        (item) => item.id !== connection.id,
+      );
+      return {
+        kind: "ui.wallets.delete",
+        schema_version: 1,
+        request_id: req.request_id,
+        data: {
+          wallet: {
+            id: connection.id,
+            label: connection.label,
+            deleted: true,
+            cascaded_transactions: 0,
+          },
         } as T,
       };
     }
