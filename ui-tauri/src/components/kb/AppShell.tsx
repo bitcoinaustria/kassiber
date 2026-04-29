@@ -458,6 +458,8 @@ export function AppShell() {
   const setHideSensitive = useUiStore((s) => s.setHideSensitive);
   const encryptedWorkspace =
     Boolean(identity?.encrypted) || identity?.databaseMode === "sqlcipher";
+  const [daemonAuthRequired, setDaemonAuthRequired] = React.useState(false);
+  const requiresDaemonUnlock = encryptedWorkspace || daemonAuthRequired;
   const routerBusy = useRouterState({
     select: (s) => s.isLoading || s.isTransitioning || s.status === "pending",
   });
@@ -486,7 +488,7 @@ export function AppShell() {
 
   const lockApp = React.useCallback(() => {
     setHideSensitive(true);
-    if (encryptedWorkspace) {
+    if (requiresDaemonUnlock) {
       clearSessionUnlockPassphrase();
       clearDaemonQueryCache();
       setLocked(true);
@@ -502,15 +504,15 @@ export function AppShell() {
     setLocked(true);
   }, [
     clearDaemonQueryCache,
-    encryptedWorkspace,
     navigate,
+    requiresDaemonUnlock,
     setHideSensitive,
     setIdentity,
   ]);
 
   const unlockApp = React.useCallback(
     async (passphrase: string) => {
-      if (encryptedWorkspace) {
+      if (requiresDaemonUnlock) {
         const envelope = await getTransport("real").invoke({
           kind: "daemon.unlock",
           args: { auth_response: { passphrase_secret: passphrase } },
@@ -518,6 +520,7 @@ export function AppShell() {
         const unlocked = envelope.kind === "daemon.unlock";
         if (unlocked) {
           await setSessionUnlockPassphrase(passphrase);
+          setDaemonAuthRequired(false);
           await queryClient.invalidateQueries({
             queryKey: ["daemon"],
           });
@@ -532,7 +535,7 @@ export function AppShell() {
       }
       return unlocked;
     },
-    [encryptedWorkspace, queryClient],
+    [queryClient, requiresDaemonUnlock],
   );
 
   React.useEffect(() => {
@@ -542,9 +545,8 @@ export function AppShell() {
   }, [identity, navigate]);
 
   React.useEffect(() => {
-    if (!encryptedWorkspace) return;
-
     const onAuthRequired = () => {
+      setDaemonAuthRequired(true);
       clearSessionUnlockPassphrase();
       clearDaemonQueryCache();
       setHideSensitive(true);
@@ -555,7 +557,7 @@ export function AppShell() {
     return () => {
       window.removeEventListener(DAEMON_AUTH_REQUIRED_EVENT, onAuthRequired);
     };
-  }, [clearDaemonQueryCache, encryptedWorkspace, setHideSensitive]);
+  }, [clearDaemonQueryCache, setHideSensitive]);
 
   React.useEffect(() => {
     if (!encryptedWorkspace) return;
@@ -704,7 +706,14 @@ export function AppShell() {
                   tabIndex={-1}
                   className="relative min-h-0 w-full flex-1 overflow-auto bg-background"
                 >
-                  <LockScreen onUnlock={unlockApp} />
+                  <LockScreen
+                    reason={
+                      daemonAuthRequired
+                        ? "The daemon needs the database passphrase before it can return live workspace data."
+                        : undefined
+                    }
+                    onUnlock={unlockApp}
+                  />
                 </main>
               ) : (
                 <AssistantSessionProvider returnPath={assistantReturnPath}>
@@ -1342,8 +1351,10 @@ function AppDashboardHeader({
 }
 
 function LockScreen({
+  reason,
   onUnlock,
 }: {
+  reason?: string;
   onUnlock: (passphrase: string) => Promise<boolean>;
 }) {
   const [passphrase, setPassphrase] = React.useState("");
@@ -1385,9 +1396,11 @@ function LockScreen({
             <LockKeyhole className="size-5" aria-hidden="true" />
           </div>
           <div>
-            <h2 className="text-base font-semibold">Kassiber locked</h2>
+            <h2 className="text-base font-semibold">
+              Database passphrase required
+            </h2>
             <p className="m-0 text-xs text-muted-foreground">
-              Enter the database passphrase to unlock.
+              {reason ?? "Enter the database passphrase to unlock."}
             </p>
           </div>
         </div>
