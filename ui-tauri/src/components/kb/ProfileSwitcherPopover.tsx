@@ -2,7 +2,7 @@
  * ProfileSwitcherPopover — compact workspace/profile switcher anchored
  * to the workspace pill in AppHeader.
  *
- * Shares the kassiber-themed Dialog shell used by SettingsModal but with
+ * Shares the kassiber-themed Dialog shell used by action confirmations but with
  * a denser visual layout: each workspace gets a compact header with a
  * jurisdiction chip and a 2-column grid of profile cards. Clicking a
  * profile updates the active daemon context and closes the popover.

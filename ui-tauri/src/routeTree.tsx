@@ -27,6 +27,7 @@ import { Quarantine } from "./routes/Quarantine";
 import { Profiles } from "./routes/Profiles";
 import { Connections } from "./routes/Connections";
 import { ConnectionDetail } from "./routes/ConnectionDetail";
+import { Settings } from "./routes/Settings";
 import { Assistant } from "./routes/Assistant";
 import { AppShell } from "./components/kb/AppShell";
 import { useUiStore } from "./store/ui";
@@ -111,6 +112,12 @@ const connectionDetailRoute = createRoute({
   component: ConnectionDetail,
 });
 
+const settingsRoute = createRoute({
+  getParentRoute: () => appLayoutRoute,
+  path: "/settings",
+  component: Settings,
+});
+
 const assistantRoute = createRoute({
   getParentRoute: () => appLayoutRoute,
   path: "/assistant",
@@ -138,6 +145,7 @@ const routeTree = rootRoute.addChildren([
     profilesRoute,
     connectionsRoute,
     connectionDetailRoute,
+    settingsRoute,
     assistantRoute,
   ]),
 ]);

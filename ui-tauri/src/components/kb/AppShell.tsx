@@ -81,7 +81,6 @@ import {
 import type { OverviewSnapshot } from "@/mocks/seed";
 import { AssistantSessionProvider } from "@/components/ai/AssistantSessionProvider";
 import type { AssistantReturnPath } from "@/components/ai/assistantSession";
-import { SettingsModal } from "./SettingsModal";
 import { ScreenAssistantMockup } from "./ScreenAssistantMockup";
 import { PreAlphaBanner } from "./PreAlphaBanner";
 
@@ -94,6 +93,7 @@ type AppRoutePath =
   | "/journals"
   | "/tax-events"
   | "/quarantine"
+  | "/settings"
   | "/assistant";
 
 type NavItem = {
@@ -198,6 +198,15 @@ const ROUTE_META: Array<[string, RouteMeta]> = [
       icon: BookOpen,
       searchLabel: "Search journals",
       searchPlaceholder: "Search entry type, wallet, asset...",
+    },
+  ],
+  [
+    "/settings",
+    {
+      title: "Settings",
+      icon: Settings,
+      searchLabel: "Search settings",
+      searchPlaceholder: "Search settings, backends...",
     },
   ],
   [
@@ -307,6 +316,13 @@ const STATIC_SEARCH_RESULTS: SearchResult[] = [
     to: "/quarantine",
   },
   {
+    id: "route:settings",
+    title: "Settings",
+    detail: "Preferences, integrations, local data",
+    keywords: ["preferences", "backends", "providers", "privacy", "lock"],
+    to: "/settings",
+  },
+  {
     id: "route:assistant",
     title: "Assistant",
     detail: "Ask Kassiber",
@@ -410,6 +426,7 @@ function assistantReturnPathFor(pathname: string): AssistantReturnPath {
   if (pathname === "/journals") return "/journals";
   if (pathname === "/tax-events") return "/tax-events";
   if (pathname === "/quarantine") return "/quarantine";
+  if (pathname === "/settings") return "/settings";
   return "/overview";
 }
 
@@ -427,10 +444,6 @@ export function AppShell() {
     select: (s) => s.isLoading || s.isTransitioning || s.status === "pending",
   });
   const daemonFetchCount = useIsFetching({ queryKey: ["daemon"] });
-  const [settingsOpen, setSettingsOpen] = React.useState(false);
-  const [settingsFocus, setSettingsFocus] = React.useState<
-    "backends" | null
-  >(null);
   const [assistantCollapsed, setAssistantCollapsed] = React.useState(false);
   const [locked, setLocked] = React.useState(
     () => encryptedWorkspace && !hasSessionUnlockPassphrase(),
@@ -517,7 +530,6 @@ export function AppShell() {
       clearSessionUnlockPassphrase();
       clearDaemonQueryCache();
       setHideSensitive(true);
-      setSettingsOpen(false);
       setLocked(true);
     };
 
@@ -591,10 +603,6 @@ export function AppShell() {
   }, [isAssistantRoute, pathname]);
 
   React.useEffect(() => {
-    if (locked) setSettingsOpen(false);
-  }, [locked]);
-
-  React.useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key.toLowerCase() !== "l") return;
       if (!(event.metaKey || event.ctrlKey)) return;
@@ -605,6 +613,11 @@ export function AppShell() {
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [lockApp]);
+
+  React.useEffect(() => {
+    window.addEventListener("kassiber:lock-app", lockApp);
+    return () => window.removeEventListener("kassiber:lock-app", lockApp);
   }, [lockApp]);
 
   React.useEffect(() => {
@@ -627,9 +640,12 @@ export function AppShell() {
 
   React.useEffect(() => {
     const openSettings = (event: Event) => {
-      const detail = (event as CustomEvent<{ section?: "backends" }>).detail;
-      setSettingsFocus(detail?.section ?? null);
-      setSettingsOpen(true);
+      const detail = (event as CustomEvent<{ section?: "backends" | "ai" }>)
+        .detail;
+      void navigate({
+        to: "/settings",
+        hash: detail?.section ?? undefined,
+      });
     };
 
     window.addEventListener("kassiber:open-settings", openSettings);
@@ -637,7 +653,7 @@ export function AppShell() {
     return () => {
       window.removeEventListener("kassiber:open-settings", openSettings);
     };
-  }, []);
+  }, [navigate]);
 
   if (!identity) return null;
 
@@ -655,11 +671,6 @@ export function AppShell() {
           <AppSidebar
             pathname={pathname}
             onLock={lockApp}
-            onSettingsClick={() => {
-              if (locked) return;
-              setSettingsFocus(null);
-              setSettingsOpen(true);
-            }}
           />
           <div className="min-h-0 w-full overflow-hidden lg:p-2">
             <div className="relative flex h-full w-full flex-col items-center justify-start overflow-hidden bg-background lg:rounded-xl lg:border">
@@ -706,12 +717,6 @@ export function AppShell() {
           </div>
         </SidebarProvider>
       </div>
-      <SettingsModal
-        open={settingsOpen && !locked}
-        focusSection={settingsFocus}
-        onLock={lockApp}
-        onClose={() => setSettingsOpen(false)}
-      />
     </TooltipProvider>
   );
 }
@@ -733,11 +738,9 @@ function RouteTransitionIndicator({ active }: { active: boolean }) {
 function AppSidebar({
   pathname,
   onLock,
-  onSettingsClick,
 }: {
   pathname: string;
   onLock: () => void;
-  onSettingsClick: () => void;
 }) {
   return (
     <Sidebar
@@ -793,7 +796,7 @@ function AppSidebar({
         ))}
       </SidebarContent>
       <SidebarFooter>
-        <SidebarActions onSettingsClick={onSettingsClick} />
+        <SidebarActions pathname={pathname} />
         <NavUser onLock={onLock} />
         <AppVersion />
       </SidebarFooter>
@@ -802,7 +805,7 @@ function AppSidebar({
   );
 }
 
-function SidebarActions({ onSettingsClick }: { onSettingsClick: () => void }) {
+function SidebarActions({ pathname }: { pathname: string }) {
   const dataMode = useUiStore((state) => state.dataMode);
   const setDataMode = useUiStore((state) => state.setDataMode);
   const isRealData = dataMode === "real";
@@ -846,9 +849,15 @@ function SidebarActions({ onSettingsClick }: { onSettingsClick: () => void }) {
         </SidebarMenuButton>
       </SidebarMenuItem>
       <SidebarMenuItem>
-        <SidebarMenuButton onClick={onSettingsClick} tooltip="Settings">
-          <Settings className="size-4" aria-hidden="true" />
-          <span>Settings</span>
+        <SidebarMenuButton
+          asChild
+          isActive={pathname === "/settings"}
+          tooltip="Settings"
+        >
+          <Link to="/settings">
+            <Settings className="size-4" aria-hidden="true" />
+            <span>Settings</span>
+          </Link>
         </SidebarMenuButton>
       </SidebarMenuItem>
     </SidebarMenu>

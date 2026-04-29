@@ -14,7 +14,8 @@ export type AssistantReturnPath =
   | "/profiles"
   | "/journals"
   | "/tax-events"
-  | "/quarantine";
+  | "/quarantine"
+  | "/settings";
 
 export interface AssistantModelSelection {
   provider: string;

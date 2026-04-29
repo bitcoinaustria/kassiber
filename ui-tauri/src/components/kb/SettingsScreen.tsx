@@ -1,5 +1,5 @@
 /**
- * SettingsModal - workspace-wide preferences.
+ * SettingsScreen - workspace-wide preferences.
  *
  * Most controls are local UI state until the daemon-backed settings surface
  * lands. Hide-sensitive data is wired to the shared UI store.
@@ -20,7 +20,7 @@ import {
   Trash2,
   Upload,
 } from "lucide-react";
-import { useNavigate } from "@tanstack/react-router";
+import { useNavigate, useRouterState } from "@tanstack/react-router";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -55,6 +55,10 @@ import {
   AiProviderForm,
   type ExistingAiProvider,
 } from "@/components/kb/AiProviderForm";
+import {
+  SettingsIntegrations4,
+  type IntegrationItem,
+} from "@/components/shadcnblocks/settings-integrations4";
 import { useDaemon, useDaemonMutation } from "@/daemon/client";
 import {
   hasSessionUnlockPassphrase,
@@ -130,19 +134,28 @@ const DEFAULT_BACKENDS: Backend[] = [
   },
 ];
 
-interface SettingsModalProps {
-  open: boolean;
-  focusSection?: "backends" | "ai" | null;
+const integrationIcon = (label: string, background: string, foreground: string) =>
+  `data:image/svg+xml,${encodeURIComponent(
+    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 40"><rect width="40" height="40" rx="10" fill="${background}"/><text x="20" y="24" text-anchor="middle" font-family="Inter, Arial, sans-serif" font-size="11" font-weight="700" fill="${foreground}">${label}</text></svg>`,
+  )}`;
+
+const INTEGRATION_ICONS: Record<Net | "AI" | "FILE", string> = {
+  BTC: integrationIcon("BTC", "#f59e0b", "#111827"),
+  LIQUID: integrationIcon("LQD", "#38bdf8", "#082f49"),
+  LN: integrationIcon("LN", "#7c3aed", "#ffffff"),
+  FX: integrationIcon("EUR", "#10b981", "#052e1a"),
+  AI: integrationIcon("AI", "#111827", "#ffffff"),
+  FILE: integrationIcon("CSV", "#64748b", "#ffffff"),
+};
+
+interface SettingsScreenProps {
   onLock?: () => void;
-  onClose: () => void;
 }
 
-export function SettingsModal({
-  open,
-  focusSection = null,
-  onLock,
-  onClose,
-}: SettingsModalProps) {
+export function SettingsScreen({ onLock }: SettingsScreenProps) {
+  const hash = useRouterState({ select: (state) => state.location.hash });
+  const focusSection =
+    hash === "backends" || hash === "ai" ? hash : null;
   const hideSensitive = useUiStore((s) => s.hideSensitive);
   const setHideSensitive = useUiStore((s) => s.setHideSensitive);
   const currency = useUiStore((s) => s.currency);
@@ -153,7 +166,7 @@ export function SettingsModal({
   const setIdentity = useUiStore((s) => s.setIdentity);
   const navigate = useNavigate();
   const statusQuery = useDaemon<StatusData>("status", undefined, {
-    enabled: open,
+    enabled: true,
   });
   const status =
     statusQuery.data?.kind === "status" ? statusQuery.data.data : null;
@@ -165,6 +178,7 @@ export function SettingsModal({
   });
   const backendsRef = React.useRef<HTMLDivElement | null>(null);
   const aiRef = React.useRef<HTMLDivElement | null>(null);
+  const dataRef = React.useRef<HTMLDivElement | null>(null);
 
   const [clearClipboard, setClearClipboard] = React.useState(true);
   const [backends, setBackends] = React.useState<Backend[]>(DEFAULT_BACKENDS);
@@ -191,7 +205,6 @@ export function SettingsModal({
   );
 
   React.useEffect(() => {
-    if (!open) return;
     if (focusSection !== "backends" && focusSection !== "ai") return;
 
     const target = focusSection === "ai" ? aiRef : backendsRef;
@@ -203,7 +216,7 @@ export function SettingsModal({
     });
 
     return () => window.cancelAnimationFrame(id);
-  }, [focusSection, open]);
+  }, [focusSection]);
 
   const onResetWorkspace = () => {
     const ok = window.confirm(
@@ -211,13 +224,17 @@ export function SettingsModal({
     );
     if (!ok) return;
     setIdentity(null);
-    onClose();
     void navigate({ to: "/", replace: true });
   };
 
   const lockNow = () => {
-    onClose();
-    window.requestAnimationFrame(() => onLock?.());
+    window.requestAnimationFrame(() => {
+      if (onLock) {
+        onLock();
+        return;
+      }
+      window.dispatchEvent(new CustomEvent("kassiber:lock-app"));
+    });
   };
 
   const workspaceLabel =
@@ -260,6 +277,52 @@ export function SettingsModal({
     });
     setBackendDialogOpen(false);
     setEditingBackendId(null);
+  };
+
+  const settingsIntegrations = React.useMemo<IntegrationItem[]>(
+    () => [
+      ...backends.map((backend) => ({
+        image: INTEGRATION_ICONS[backend.net],
+        title: backend.name,
+        description: `${backend.net} backend - ${backend.url}`,
+        isConnected: backend.on,
+        category: "sync",
+        actionLabel: backend.on ? "Configure" : "Connect",
+      })),
+      {
+        image: INTEGRATION_ICONS.AI,
+        title: "AI providers",
+        description:
+          "Ollama and OpenAI-compatible assistant endpoints for local review.",
+        isConnected: true,
+        category: "assistant",
+        actionLabel: "Manage",
+      },
+      {
+        image: INTEGRATION_ICONS.FILE,
+        title: "Label and file imports",
+        description: "BIP-329 labels, CSV imports, backups, and restore tools.",
+        isConnected: true,
+        category: "data",
+        actionLabel: "Open",
+      },
+    ],
+    [backends],
+  );
+
+  const onIntegrationAction = (integration: IntegrationItem) => {
+    const backend = backends.find((item) => item.name === integration.title);
+    if (backend) {
+      openEditBackend(backend);
+      return;
+    }
+    if (integration.title === "AI providers") {
+      aiRef.current?.scrollIntoView({ block: "start", behavior: "smooth" });
+      return;
+    }
+    if (integration.title === "Label and file imports") {
+      dataRef.current?.scrollIntoView({ block: "start", behavior: "smooth" });
+    }
   };
 
   const onDeleteBackend = (backend: Backend) => {
@@ -305,7 +368,6 @@ export function SettingsModal({
           : { plaintext_delete_ack: PLAINTEXT_DELETE_ACK },
       });
       setIdentity(null);
-      onClose();
       void navigate({ to: "/", replace: true });
     } catch (error) {
       window.alert(
@@ -348,22 +410,26 @@ export function SettingsModal({
   };
 
   return (
-    <Dialog
-      open={open}
-      onOpenChange={(next) => {
-        if (!next) onClose();
-      }}
-    >
-      <DialogContent className="max-h-[92vh] w-[min(96vw,1500px)] !max-w-[min(96vw,1500px)] gap-0 overflow-hidden p-0">
-        <DialogHeader className="shrink-0 border-b px-6 py-5 lg:px-8">
-          <DialogTitle className="text-xl">Settings</DialogTitle>
-          <DialogDescription>
-            Workspace preferences, privacy controls, and local data tools.
-          </DialogDescription>
-        </DialogHeader>
+    <>
+      <div className="w-full bg-background p-3 sm:p-4 md:p-6">
+        <div className="mx-auto flex w-full max-w-[1500px] min-w-0 flex-col gap-4 lg:gap-6">
+          <div className="space-y-1">
+            <h1 className="text-2xl font-semibold tracking-tight">Settings</h1>
+            <p className="text-sm text-muted-foreground">
+              Workspace preferences, privacy controls, integrations, and local
+              data tools.
+            </p>
+          </div>
 
-        <ScrollArea className="h-[min(78vh,820px)]">
-          <div className="flex min-w-0 flex-col gap-4 p-4 lg:p-6">
+          <div className="flex min-w-0 flex-col gap-4">
+            <SettingsIntegrations4
+              className="rounded-lg border bg-card py-6 shadow-sm [&>.container]:max-w-none [&>.container]:px-6"
+              heading="Integrations"
+              subHeading="Connect sync backends, assistant providers, and local import tools."
+              integrations={settingsIntegrations}
+              onToggleIntegration={onIntegrationAction}
+            />
+
             <div className="grid min-w-0 grid-cols-1 gap-4 xl:grid-cols-2">
               <Card className="min-w-0">
                 <CardHeader>
@@ -547,7 +613,7 @@ export function SettingsModal({
               </Card>
             </div>
 
-            <Card className="min-w-0">
+            <Card ref={dataRef} className="min-w-0">
               <CardHeader>
                 <CardTitle className="flex items-center gap-2 text-base">
                   <Database className="size-4" aria-hidden="true" />
@@ -751,13 +817,8 @@ export function SettingsModal({
               </CardContent>
             </Card>
           </div>
-        </ScrollArea>
-
-        <DialogFooter className="shrink-0 border-t bg-background px-6 py-4 lg:px-8">
-          <Button type="button" variant="outline" onClick={onClose}>
-            Done
-          </Button>
-        </DialogFooter>
+        </div>
+      </div>
 
         <BackendModal
           open={backendDialogOpen}
@@ -931,8 +992,7 @@ export function SettingsModal({
             </form>
           </DialogContent>
         </Dialog>
-      </DialogContent>
-    </Dialog>
+    </>
   );
 }
 
