@@ -11,7 +11,9 @@ use std::sync::{
 use std::time::{Duration, Instant};
 use tauri::{AppHandle, Emitter};
 
-const DAEMON_READY_TIMEOUT: Duration = Duration::from_secs(5);
+// Packaged one-file Python sidecars can take longer than a development checkout
+// to start on cold launch, especially before the database unlock screen.
+const DAEMON_READY_TIMEOUT: Duration = Duration::from_secs(30);
 const DAEMON_INVOKE_TIMEOUT: Duration = Duration::from_secs(15);
 /// Per-record inactivity timeout for streaming kinds. The recv clock resets
 /// every time a delta arrives, so a long-running stream stays alive as long
