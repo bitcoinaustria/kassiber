@@ -5,7 +5,8 @@ from dataclasses import dataclass
 from decimal import Decimal
 from typing import Any, Literal, Mapping, Optional, Sequence
 
-from ..msat import dec, msat_to_btc
+from ..msat import msat_to_btc
+from . import pricing
 from .austrian import infer_outbound_regimes, infer_regime_from_timestamp, resolve_pool_id
 
 # Austrian tax-semantic markers carried on NormalizedTaxEvent / NormalizedTaxTransfer.
@@ -104,15 +105,49 @@ def build_tax_quarantine(
 
 
 def _spot_price_from_row(row: Mapping[str, Any], quantity: Decimal) -> Decimal | None:
-    if row["fiat_rate"] is not None:
-        rate = dec(row["fiat_rate"])
+    rate = pricing.decimal_from_exact(
+        _row_get(row, "fiat_rate_exact"),
+        _row_get(row, "fiat_rate"),
+    )
+    if rate is not None:
         if rate > 0:
             return rate
-    if row["fiat_value"] is not None and quantity > 0:
-        value = dec(row["fiat_value"])
+    value = pricing.decimal_from_exact(
+        _row_get(row, "fiat_value_exact"),
+        _row_get(row, "fiat_value"),
+    )
+    if value is not None and quantity > 0:
         if value > 0:
             return value / quantity
     return None
+
+
+def _row_get(row: Mapping[str, Any], key: str) -> Any:
+    if hasattr(row, "keys") and key not in row.keys():
+        return None
+    if hasattr(row, "get"):
+        return row.get(key)
+    return row[key]
+
+
+def _pricing_needs_review(row: Mapping[str, Any]) -> bool:
+    return _row_get(row, "pricing_quality") == pricing.QUALITY_COARSE_FALLBACK
+
+
+def _pricing_review_detail(row: Mapping[str, Any], wallet_label: str, asset: str, direction: str) -> dict[str, Any]:
+    return {
+        "wallet": wallet_label,
+        "asset": asset,
+        "direction": direction,
+        "required_for": "pricing_review",
+        "pricing_quality": _row_get(row, "pricing_quality"),
+        "pricing_source_kind": _row_get(row, "pricing_source_kind"),
+        "pricing_provider": _row_get(row, "pricing_provider"),
+        "pricing_pair": _row_get(row, "pricing_pair"),
+        "pricing_timestamp": _row_get(row, "pricing_timestamp"),
+        "pricing_granularity": _row_get(row, "pricing_granularity"),
+        "pricing_method": _row_get(row, "pricing_method"),
+    }
 
 
 def normalize_tax_asset_inputs(
@@ -179,6 +214,16 @@ def normalize_tax_asset_inputs(
             spot_price = _spot_price_from_row(out_row, msat_to_btc(out_row["amount"]))
             if spot_price is None:
                 spot_price = _spot_price_from_row(in_row, msat_to_btc(in_row["amount"]))
+            if fee > 0 and (_pricing_needs_review(out_row) or _pricing_needs_review(in_row)):
+                quarantines.append(
+                    build_tax_quarantine(
+                        profile,
+                        out_row,
+                        "pricing_review_required",
+                        _pricing_review_detail(out_row, from_wallet["label"], asset, "transfer"),
+                    )
+                )
+                continue
             if spot_price is None and fee > 0:
                 quarantines.append(
                     build_tax_quarantine(
@@ -232,6 +277,16 @@ def normalize_tax_asset_inputs(
         description = row["note"] or row["description"] or row["kind"] or row["id"]
         direction = row["direction"]
         if direction == "inbound":
+            if _pricing_needs_review(row):
+                quarantines.append(
+                    build_tax_quarantine(
+                        profile,
+                        row,
+                        "pricing_review_required",
+                        _pricing_review_detail(row, wallet["label"], asset, direction),
+                    )
+                )
+                continue
             spot_price = _spot_price_from_row(row, amount)
             if spot_price is None:
                 quarantines.append(
@@ -248,8 +303,21 @@ def normalize_tax_asset_inputs(
                     )
                 )
                 continue
-            fiat_value = dec(row["fiat_value"]) if row["fiat_value"] is not None else amount * spot_price
+            fiat_value = pricing.decimal_from_exact(
+                _row_get(row, "fiat_value_exact"),
+                _row_get(row, "fiat_value"),
+            ) or amount * spot_price
         elif direction == "outbound":
+            if _pricing_needs_review(row):
+                quarantines.append(
+                    build_tax_quarantine(
+                        profile,
+                        row,
+                        "pricing_review_required",
+                        _pricing_review_detail(row, wallet["label"], asset, direction),
+                    )
+                )
+                continue
             needed = amount + fee
             if needed <= 0:
                 continue
@@ -269,7 +337,10 @@ def normalize_tax_asset_inputs(
                     )
                 )
                 continue
-            fiat_value = dec(row["fiat_value"]) if row["fiat_value"] is not None else amount * spot_price
+            fiat_value = pricing.decimal_from_exact(
+                _row_get(row, "fiat_value_exact"),
+                _row_get(row, "fiat_value"),
+            ) or amount * spot_price
         else:
             quarantines.append(
                 build_tax_quarantine(

@@ -34,6 +34,7 @@ from ..core import accounts as core_accounts
 from ..core import attachments as core_attachments
 from ..core import imports as core_imports
 from ..core import metadata as core_metadata
+from ..core import pricing
 from ..core import rates as core_rates
 from ..core import reports as core_reports
 from ..core import sync as core_sync
@@ -1145,6 +1146,18 @@ def list_transactions(
             t.fee,
             COALESCE(t.fiat_rate, 0) AS fiat_rate,
             COALESCE(t.fiat_value, 0) AS fiat_value,
+            t.fiat_rate_exact,
+            t.fiat_value_exact,
+            t.fiat_price_source,
+            t.pricing_source_kind,
+            t.pricing_provider,
+            t.pricing_pair,
+            t.pricing_timestamp,
+            t.pricing_fetched_at,
+            t.pricing_granularity,
+            t.pricing_method,
+            t.pricing_external_ref,
+            t.pricing_quality,
             COALESCE(t.kind, '') AS kind,
             COALESCE(t.description, '') AS description,
             COALESCE(t.note, '') AS note,
@@ -1225,7 +1238,7 @@ def consume_lots(lots, quantity, algorithm):
 def latest_rates_for_profile(conn, profile_id):
     rows = conn.execute(
         """
-        SELECT asset, fiat_rate, fiat_value, amount
+        SELECT asset, fiat_rate, fiat_value, fiat_rate_exact, fiat_value_exact, amount
         FROM transactions
         WHERE profile_id = ? AND excluded = 0
         ORDER BY occurred_at DESC, created_at DESC
@@ -1237,20 +1250,24 @@ def latest_rates_for_profile(conn, profile_id):
         asset = row["asset"]
         if asset in rates:
             continue
-        if row["fiat_rate"] is not None:
-            rates[asset] = dec(row["fiat_rate"])
-        elif row["fiat_value"] is not None and row["amount"]:
-            rates[asset] = dec(row["fiat_value"]) / msat_to_btc(row["amount"])
+        rate = pricing.decimal_from_exact(row["fiat_rate_exact"], row["fiat_rate"])
+        value = pricing.decimal_from_exact(row["fiat_value_exact"], row["fiat_value"])
+        if rate is not None:
+            rates[asset] = rate
+        elif value is not None and row["amount"]:
+            rates[asset] = value / msat_to_btc(row["amount"])
     return rates
 
 
 def auto_price_transactions_from_rates_cache(conn, profile):
     tx_rows = conn.execute(
         """
-        SELECT id, occurred_at, asset, amount, fiat_currency, fiat_rate, fiat_value
-             , confirmed_at
+        SELECT id, occurred_at, asset, amount, fiat_currency, fiat_rate, fiat_value,
+               fiat_rate_exact, fiat_value_exact, confirmed_at
         FROM transactions
-        WHERE profile_id = ? AND excluded = 0 AND fiat_rate IS NULL AND fiat_value IS NULL
+        WHERE profile_id = ? AND excluded = 0
+          AND fiat_rate IS NULL AND fiat_value IS NULL
+          AND fiat_rate_exact IS NULL AND fiat_value_exact IS NULL
         ORDER BY occurred_at ASC, created_at ASC, id ASC
         """,
         (profile["id"],),
@@ -1264,18 +1281,48 @@ def auto_price_transactions_from_rates_cache(conn, profile):
         cached_rate = core_rates.get_cached_rate_at_or_before(conn, pair, pricing_at)
         if cached_rate is None:
             continue
-        rate = dec(cached_rate["rate"])
+        rate = pricing.decimal_from_exact(cached_rate.get("rate_exact"), cached_rate["rate"])
         fiat_value = rate * msat_to_btc(row["amount"]) if row["amount"] > 0 else None
+        source_kind = pricing.rate_cache_source_kind(cached_rate)
+        quality = pricing.rate_cache_quality(cached_rate)
+        payload = pricing.pricing_payload(
+            rate=rate,
+            value=fiat_value,
+            source_kind=source_kind,
+            quality=quality,
+            provider=cached_rate["source"],
+            pair=cached_rate["pair"],
+            pricing_timestamp=cached_rate["timestamp"],
+            fetched_at=cached_rate["fetched_at"],
+            granularity=cached_rate.get("granularity"),
+            method=cached_rate.get("method"),
+        )
         conn.execute(
             """
             UPDATE transactions
-            SET fiat_rate = ?, fiat_value = ?, fiat_price_source = ?
+            SET fiat_rate = ?, fiat_value = ?, fiat_price_source = ?,
+                fiat_rate_exact = ?, fiat_value_exact = ?,
+                pricing_source_kind = ?, pricing_provider = ?, pricing_pair = ?,
+                pricing_timestamp = ?, pricing_fetched_at = ?,
+                pricing_granularity = ?, pricing_method = ?,
+                pricing_external_ref = ?, pricing_quality = ?
             WHERE id = ?
             """,
             (
-                float(rate),
-                float(fiat_value) if fiat_value is not None else None,
-                "rates_cache",
+                payload["fiat_rate"],
+                payload["fiat_value"],
+                payload["fiat_price_source"],
+                payload["fiat_rate_exact"],
+                payload["fiat_value_exact"],
+                payload["pricing_source_kind"],
+                payload["pricing_provider"],
+                payload["pricing_pair"],
+                payload["pricing_timestamp"],
+                payload["pricing_fetched_at"],
+                payload["pricing_granularity"],
+                payload["pricing_method"],
+                payload["pricing_external_ref"],
+                payload["pricing_quality"],
                 row["id"],
             ),
         )
@@ -1346,14 +1393,29 @@ def process_journals(conn, workspace_ref, profile_ref):
     conn.execute("DELETE FROM journal_entries WHERE profile_id = ?", (profile["id"],))
     conn.execute("DELETE FROM journal_quarantines WHERE profile_id = ?", (profile["id"],))
     created_at = now_iso()
+    pricing_by_tx = {
+        row["id"]: row
+        for row in conn.execute(
+            """
+            SELECT id, pricing_source_kind, pricing_quality
+            FROM transactions
+            WHERE profile_id = ?
+            """,
+            (profile["id"],),
+        ).fetchall()
+    }
     for entry in state["entries"]:
+        exact_payload = pricing.journal_exact_payload(entry)
+        tx_pricing = pricing_by_tx.get(entry["transaction_id"])
         conn.execute(
             """
             INSERT INTO journal_entries(
                 id, workspace_id, profile_id, transaction_id, wallet_id, account_id,
                 occurred_at, entry_type, asset, quantity, fiat_value, unit_cost,
-                cost_basis, proceeds, gain_loss, description, at_category, at_kennzahl, created_at
-            ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                cost_basis, proceeds, gain_loss, fiat_value_exact, unit_cost_exact,
+                cost_basis_exact, proceeds_exact, gain_loss_exact, pricing_source_kind,
+                pricing_quality, description, at_category, at_kennzahl, created_at
+            ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 entry["id"],
@@ -1371,6 +1433,13 @@ def process_journals(conn, workspace_ref, profile_ref):
                 float(entry["cost_basis"]) if entry["cost_basis"] is not None else None,
                 float(entry["proceeds"]) if entry["proceeds"] is not None else None,
                 float(entry["gain_loss"]) if entry["gain_loss"] is not None else None,
+                exact_payload["fiat_value_exact"],
+                exact_payload["unit_cost_exact"],
+                exact_payload["cost_basis_exact"],
+                exact_payload["proceeds_exact"],
+                exact_payload["gain_loss_exact"],
+                tx_pricing["pricing_source_kind"] if tx_pricing else None,
+                tx_pricing["pricing_quality"] if tx_pricing else None,
                 entry["description"],
                 entry.get("at_category"),
                 entry.get("at_kennzahl"),
@@ -1706,6 +1775,13 @@ def list_journal_events(
             COALESCE(je.cost_basis, 0) AS cost_basis,
             COALESCE(je.proceeds, 0) AS proceeds,
             COALESCE(je.gain_loss, 0) AS gain_loss,
+            je.fiat_value_exact,
+            je.unit_cost_exact,
+            je.cost_basis_exact,
+            je.proceeds_exact,
+            je.gain_loss_exact,
+            je.pricing_source_kind,
+            je.pricing_quality,
             COALESCE(je.description, '') AS description,
             je.at_category,
             je.at_kennzahl
@@ -1911,7 +1987,10 @@ def show_quarantine(conn, workspace_ref, profile_ref, tx_ref):
         """
         SELECT q.transaction_id, q.reason, q.detail_json, q.created_at,
                w.label AS wallet, t.external_id, t.occurred_at, t.confirmed_at, t.asset,
-               t.amount, t.fee, t.fiat_rate, t.fiat_value, t.direction, t.excluded
+               t.amount, t.fee, t.fiat_rate, t.fiat_value, t.fiat_rate_exact,
+               t.fiat_value_exact, t.pricing_source_kind, t.pricing_provider,
+               t.pricing_pair, t.pricing_timestamp, t.pricing_granularity,
+               t.pricing_method, t.pricing_quality, t.direction, t.excluded
         FROM journal_quarantines q
         JOIN transactions t ON t.id = q.transaction_id
         JOIN wallets w ON w.id = t.wallet_id
@@ -1939,6 +2018,17 @@ def show_quarantine(conn, workspace_ref, profile_ref, tx_ref):
         "fee_msat": int(row["fee"]),
         "fiat_rate": row["fiat_rate"],
         "fiat_value": row["fiat_value"],
+        "fiat_rate_exact": row["fiat_rate_exact"],
+        "fiat_value_exact": row["fiat_value_exact"],
+        "pricing": {
+            "source_kind": row["pricing_source_kind"],
+            "provider": row["pricing_provider"],
+            "pair": row["pricing_pair"],
+            "timestamp": row["pricing_timestamp"],
+            "granularity": row["pricing_granularity"],
+            "method": row["pricing_method"],
+            "quality": row["pricing_quality"],
+        },
         "excluded": bool(row["excluded"]),
         "reason": row["reason"],
         "detail": json.loads(row["detail_json"] or "{}"),
@@ -1982,16 +2072,43 @@ def resolve_quarantine_price_override(
         raise AppError("--fiat-rate must be positive", code="validation")
     if new_value is not None and new_value < 0:
         raise AppError("--fiat-value must not be negative", code="validation")
+    payload = pricing.pricing_payload(
+        rate=new_rate,
+        value=new_value,
+        source_kind=pricing.SOURCE_MANUAL_OVERRIDE,
+        quality=pricing.QUALITY_EXACT,
+        provider="manual",
+        pricing_timestamp=tx["confirmed_at"] or tx["occurred_at"],
+        fetched_at=now_iso(),
+        granularity="exact",
+        method="quarantine_price_override",
+    )
     conn.execute(
         """
         UPDATE transactions
-        SET fiat_rate = ?, fiat_value = ?, fiat_price_source = ?
+        SET fiat_rate = ?, fiat_value = ?, fiat_price_source = ?,
+            fiat_rate_exact = ?, fiat_value_exact = ?,
+            pricing_source_kind = ?, pricing_provider = ?, pricing_pair = ?,
+            pricing_timestamp = ?, pricing_fetched_at = ?,
+            pricing_granularity = ?, pricing_method = ?,
+            pricing_external_ref = ?, pricing_quality = ?
         WHERE id = ?
         """,
         (
-            float(new_rate) if new_rate is not None else None,
-            float(new_value) if new_value is not None else None,
-            "manual",
+            payload["fiat_rate"],
+            payload["fiat_value"],
+            payload["fiat_price_source"],
+            payload["fiat_rate_exact"],
+            payload["fiat_value_exact"],
+            payload["pricing_source_kind"],
+            payload["pricing_provider"],
+            payload["pricing_pair"],
+            payload["pricing_timestamp"],
+            payload["pricing_fetched_at"],
+            payload["pricing_granularity"],
+            payload["pricing_method"],
+            payload["pricing_external_ref"],
+            payload["pricing_quality"],
             tx["id"],
         ),
     )
@@ -2006,6 +2123,9 @@ def resolve_quarantine_price_override(
         "resolution": "price-override",
         "fiat_rate": float(new_rate) if new_rate is not None else None,
         "fiat_value": float(new_value) if new_value is not None else None,
+        "fiat_rate_exact": payload["fiat_rate_exact"],
+        "fiat_value_exact": payload["fiat_value_exact"],
+        "pricing_source_kind": payload["pricing_source_kind"],
         "note": "Run `kassiber journals process` to regenerate entries.",
     }
 

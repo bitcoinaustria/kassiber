@@ -23,13 +23,28 @@ Generic wallet imports accept JSON arrays or CSV files with these fields:
 - `fee`
 - `fiat_rate`
 - `fiat_value`
+- `pricing_source_kind`
+- `pricing_provider`
+- `pricing_pair`
+- `pricing_timestamp`
+- `pricing_granularity`
+- `pricing_method`
+- `pricing_external_ref`
+- `pricing_quality`
 - `kind`
 - `description`
 - `counterparty`
 
 `amount` should be positive. If you pass a negative amount, Kassiber normalizes it and infers direction when possible.
 
-If imported transactions do not carry `fiat_rate` or `fiat_value`, `journals process` first tries to backfill pricing from the local rates cache. When `confirmed_at` is present, Kassiber prices from that timestamp; otherwise it falls back to `occurred_at`. Liquid Bitcoin import spellings such as `L-BTC` are normalized to `LBTC` and use the BTC fiat rate because L-BTC is pegged one-to-one with BTC. Transactions only quarantine if pricing is still missing after that.
+If imported transactions carry `fiat_rate` or `fiat_value`, Kassiber stores both
+the legacy numeric value and an exact decimal string plus pricing provenance.
+Generic imports default to `pricing_source_kind=generic_import`; source-specific
+exports may pass stronger kinds such as `exchange_execution`,
+`btcpay_invoice`, or `btcpay_payment`. Stronger later pricing can replace weaker
+earlier pricing for the same transaction.
+
+If imported transactions do not carry `fiat_rate` or `fiat_value`, `journals process` first tries to backfill pricing from the local rates cache. When `confirmed_at` is present, Kassiber prices from that timestamp; otherwise it falls back to `occurred_at`. Liquid Bitcoin import spellings such as `L-BTC` are normalized to `LBTC` and use the BTC fiat rate because L-BTC is pegged one-to-one with BTC. Coarse provider samples such as daily historical fallback are stored with provenance but quarantined for pricing review instead of being silently accepted as exact FMV.
 
 For inbound transactions, explicit earn-like `kind` values such as `income`,
 `interest`, `staking`, `mining`, `airdrop`, `hardfork`, `wages`,
@@ -81,7 +96,7 @@ python3 -m kassiber wallets sync-btcpay \
 process listing. Use `--token-fd <FD>` instead when stdin is already in use.
 The argv form `--token <value>` still works for legacy scripts but warns.
 
-That API-backed path reuses the same BTCPay normalization and metadata rules as the file import, but only imports confirmed rows from the remote wallet history and records their confirmation timestamp for later rate lookup. `wallets sync-btcpay --wallet ... --backend ... --store-id ...` still works too. It stores the same BTCPay config on the wallet and runs the sync immediately, so later `wallets sync` or `wallets sync --all` calls can reuse that wallet config.
+That API-backed path reuses the same BTCPay normalization and metadata rules as the file import, but only imports confirmed rows from the remote wallet history and records their confirmation timestamp for later rate lookup. It does not yet import BTCPay invoice/payment fiat facts; those need the future invoice/payment provenance ingest before Kassiber can treat BTCPay as the authoritative merchant price source. `wallets sync-btcpay --wallet ... --backend ... --store-id ...` still works too. It stores the same BTCPay config on the wallet and runs the sync immediately, so later `wallets sync` or `wallets sync --all` calls can reuse that wallet config.
 
 Current BTCPay modeling:
 

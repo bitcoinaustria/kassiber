@@ -8,6 +8,7 @@ from urllib import request as urlrequest
 from .. import __version__
 from ..db import APP_NAME
 from ..errors import AppError
+from . import pricing
 from ..time_utils import _iso_z, _parse_iso_datetime
 
 SUPPORTED_RATE_PAIRS = ("BTC-USD", "BTC-EUR")
@@ -78,26 +79,42 @@ def http_get_json(url, timeout=30):
         raise AppError(f"Failed to reach backend {url}: {exc.reason}") from exc
 
 
-def upsert_rate(conn, pair, timestamp, rate, source, fetched_at=None):
+def upsert_rate(conn, pair, timestamp, rate, source, fetched_at=None, granularity=None, method=None):
     normalized = _normalize_rate_pair(pair)
     ts = _iso_z(_parse_iso_datetime(timestamp, "rate_timestamp"))
     fetched = fetched_at or _iso_z(datetime.now(timezone.utc))
+    rate_exact = pricing.exact_decimal(rate)
     conn.execute(
         """
-        INSERT INTO rates_cache(pair, timestamp, rate, source, fetched_at)
-        VALUES (?, ?, ?, ?, ?)
+        INSERT INTO rates_cache(pair, timestamp, rate, rate_exact, source, fetched_at, granularity, method)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(pair, timestamp, source) DO UPDATE SET
             rate = excluded.rate,
-            fetched_at = excluded.fetched_at
+            rate_exact = excluded.rate_exact,
+            fetched_at = excluded.fetched_at,
+            granularity = excluded.granularity,
+            method = excluded.method
         """,
-        (normalized, ts, float(rate), source, fetched),
+        (
+            normalized,
+            ts,
+            float(pricing.decimal_from_exact(rate_exact)),
+            rate_exact,
+            source,
+            fetched,
+            granularity,
+            method,
+        ),
     )
     return {
         "pair": normalized,
         "timestamp": ts,
-        "rate": float(rate),
+        "rate": float(pricing.decimal_from_exact(rate_exact)),
+        "rate_exact": rate_exact,
         "source": source,
         "fetched_at": fetched,
+        "granularity": granularity,
+        "method": method,
     }
 
 
@@ -105,7 +122,7 @@ def get_latest_rate(conn, pair):
     normalized = _normalize_rate_pair(pair)
     row = conn.execute(
         """
-        SELECT pair, timestamp, rate, source, fetched_at
+        SELECT pair, timestamp, rate, rate_exact, source, fetched_at, granularity, method
         FROM rates_cache
         WHERE pair = ?
         ORDER BY timestamp DESC,
@@ -125,8 +142,11 @@ def get_latest_rate(conn, pair):
         "pair": row["pair"],
         "timestamp": row["timestamp"],
         "rate": row["rate"],
+        "rate_exact": row["rate_exact"],
         "source": row["source"],
         "fetched_at": row["fetched_at"],
+        "granularity": row["granularity"],
+        "method": row["method"],
     }
 
 
@@ -140,7 +160,7 @@ def get_rate_range(conn, pair, start=None, end=None, order="asc", limit=None):
     if order not in {"asc", "desc"}:
         raise AppError("--order must be asc or desc", code="validation")
     order_sql = order.upper()
-    sql = "SELECT pair, timestamp, rate, source, fetched_at FROM rates_cache WHERE pair = ?"
+    sql = "SELECT pair, timestamp, rate, rate_exact, source, fetched_at, granularity, method FROM rates_cache WHERE pair = ?"
     params = [normalized]
     if start:
         start_dt = _parse_iso_datetime(start, "start")
@@ -165,8 +185,11 @@ def get_rate_range(conn, pair, start=None, end=None, order="asc", limit=None):
             "pair": row["pair"],
             "timestamp": row["timestamp"],
             "rate": row["rate"],
+            "rate_exact": row["rate_exact"],
             "source": row["source"],
             "fetched_at": row["fetched_at"],
+            "granularity": row["granularity"],
+            "method": row["method"],
         }
         for row in rows
     ]
@@ -177,7 +200,7 @@ def get_cached_rate_at_or_before(conn, pair, occurred_at):
     occurred_ts = _iso_z(_parse_iso_datetime(occurred_at, "occurred_at"))
     row = conn.execute(
         """
-        SELECT pair, timestamp, rate, source, fetched_at
+        SELECT pair, timestamp, rate, rate_exact, source, fetched_at, granularity, method
         FROM rates_cache
         WHERE pair = ? AND timestamp <= ?
         ORDER BY timestamp DESC,
@@ -193,8 +216,11 @@ def get_cached_rate_at_or_before(conn, pair, occurred_at):
         "pair": row["pair"],
         "timestamp": row["timestamp"],
         "rate": row["rate"],
+        "rate_exact": row["rate_exact"],
         "source": row["source"],
         "fetched_at": row["fetched_at"],
+        "granularity": row["granularity"],
+        "method": row["method"],
     }
 
 
@@ -261,6 +287,15 @@ def list_cached_pairs(conn):
     return result
 
 
+def _coingecko_granularity(days):
+    days_int = int(days)
+    if days_int > 90:
+        return "daily"
+    if days_int > 1:
+        return "hourly"
+    return "five_minute"
+
+
 def _coingecko_market_chart(coin_id, vs, days):
     url = (
         "https://api.coingecko.com/api/v3/coins/"
@@ -317,11 +352,21 @@ def sync_rates(conn, pair=None, days=30, source="coingecko"):
         pairs = list(SUPPORTED_RATE_PAIRS)
     fetched_at = _iso_z(datetime.now(timezone.utc))
     summary = []
+    granularity = _coingecko_granularity(days)
     for normalized_pair in pairs:
         samples = fetch_rates_coingecko(normalized_pair, days=days)
         inserted = 0
         for timestamp, rate in samples:
-            upsert_rate(conn, normalized_pair, timestamp, rate, source, fetched_at=fetched_at)
+            upsert_rate(
+                conn,
+                normalized_pair,
+                timestamp,
+                rate,
+                source,
+                fetched_at=fetched_at,
+                granularity=granularity,
+                method="market_chart",
+            )
             inserted += 1
         _invalidate_profile_journals_for_pair(conn, normalized_pair)
         conn.commit()
@@ -331,21 +376,33 @@ def sync_rates(conn, pair=None, days=30, source="coingecko"):
                 "source": source,
                 "samples": inserted,
                 "days": int(days),
+                "granularity": granularity,
                 "fetched_at": fetched_at,
             }
         )
     return summary
 
 
-def set_manual_rate(conn, pair, timestamp, rate, source="manual"):
+def set_manual_rate(conn, pair, timestamp, rate, source="manual", granularity=None, method=None):
     normalized = _normalize_rate_pair(pair)
     try:
-        value = float(rate)
-    except (TypeError, ValueError) as exc:
+        value = pricing.decimal_from_exact(rate)
+    except Exception as exc:
         raise AppError(f"Invalid rate '{rate}'", code="validation") from exc
+    if value is None:
+        raise AppError(f"Invalid rate '{rate}'", code="validation")
     if value <= 0:
         raise AppError("Rate must be positive", code="validation")
-    row = upsert_rate(conn, normalized, timestamp, value, source)
+    effective_granularity = granularity or ("exact" if source == "manual" else "unknown")
+    row = upsert_rate(
+        conn,
+        normalized,
+        timestamp,
+        value,
+        source,
+        granularity=effective_granularity,
+        method=method or ("manual" if source == "manual" else "operator_supplied"),
+    )
     _invalidate_profile_journals_for_pair(conn, normalized)
     conn.commit()
     return row

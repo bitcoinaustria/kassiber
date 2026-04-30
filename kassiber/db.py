@@ -117,6 +117,17 @@ CREATE TABLE IF NOT EXISTS transactions (
     fiat_rate REAL,
     fiat_value REAL,
     fiat_price_source TEXT,
+    fiat_rate_exact TEXT,
+    fiat_value_exact TEXT,
+    pricing_source_kind TEXT,
+    pricing_provider TEXT,
+    pricing_pair TEXT,
+    pricing_timestamp TEXT,
+    pricing_fetched_at TEXT,
+    pricing_granularity TEXT,
+    pricing_method TEXT,
+    pricing_external_ref TEXT,
+    pricing_quality TEXT,
     kind TEXT,
     description TEXT,
     counterparty TEXT,
@@ -158,6 +169,13 @@ CREATE TABLE IF NOT EXISTS journal_entries (
     cost_basis REAL,
     proceeds REAL,
     gain_loss REAL,
+    fiat_value_exact TEXT,
+    unit_cost_exact TEXT,
+    cost_basis_exact TEXT,
+    proceeds_exact TEXT,
+    gain_loss_exact TEXT,
+    pricing_source_kind TEXT,
+    pricing_quality TEXT,
     description TEXT,
     at_category TEXT,
     at_kennzahl INTEGER,
@@ -222,8 +240,11 @@ CREATE TABLE IF NOT EXISTS rates_cache (
     pair TEXT NOT NULL,
     timestamp TEXT NOT NULL,
     rate REAL NOT NULL,
+    rate_exact TEXT,
     source TEXT NOT NULL,
     fetched_at TEXT NOT NULL,
+    granularity TEXT,
+    method TEXT,
     PRIMARY KEY (pair, timestamp, source)
 );
 
@@ -468,6 +489,27 @@ def ensure_schema_compat(conn):
     ensure_column(conn, "journal_entries", "at_kennzahl", "INTEGER")
     ensure_column(conn, "transactions", "confirmed_at", "TEXT")
     ensure_column(conn, "transactions", "fiat_price_source", "TEXT")
+    ensure_column(conn, "transactions", "fiat_rate_exact", "TEXT")
+    ensure_column(conn, "transactions", "fiat_value_exact", "TEXT")
+    ensure_column(conn, "transactions", "pricing_source_kind", "TEXT")
+    ensure_column(conn, "transactions", "pricing_provider", "TEXT")
+    ensure_column(conn, "transactions", "pricing_pair", "TEXT")
+    ensure_column(conn, "transactions", "pricing_timestamp", "TEXT")
+    ensure_column(conn, "transactions", "pricing_fetched_at", "TEXT")
+    ensure_column(conn, "transactions", "pricing_granularity", "TEXT")
+    ensure_column(conn, "transactions", "pricing_method", "TEXT")
+    ensure_column(conn, "transactions", "pricing_external_ref", "TEXT")
+    ensure_column(conn, "transactions", "pricing_quality", "TEXT")
+    ensure_column(conn, "journal_entries", "fiat_value_exact", "TEXT")
+    ensure_column(conn, "journal_entries", "unit_cost_exact", "TEXT")
+    ensure_column(conn, "journal_entries", "cost_basis_exact", "TEXT")
+    ensure_column(conn, "journal_entries", "proceeds_exact", "TEXT")
+    ensure_column(conn, "journal_entries", "gain_loss_exact", "TEXT")
+    ensure_column(conn, "journal_entries", "pricing_source_kind", "TEXT")
+    ensure_column(conn, "journal_entries", "pricing_quality", "TEXT")
+    ensure_column(conn, "rates_cache", "rate_exact", "TEXT")
+    ensure_column(conn, "rates_cache", "granularity", "TEXT")
+    ensure_column(conn, "rates_cache", "method", "TEXT")
     _migrate_msat_columns(conn)
     _backfill_liquid_asset_codes(conn)
 
@@ -516,6 +558,17 @@ def _migrate_msat_columns(conn):
                     fiat_rate REAL,
                     fiat_value REAL,
                     fiat_price_source TEXT,
+                    fiat_rate_exact TEXT,
+                    fiat_value_exact TEXT,
+                    pricing_source_kind TEXT,
+                    pricing_provider TEXT,
+                    pricing_pair TEXT,
+                    pricing_timestamp TEXT,
+                    pricing_fetched_at TEXT,
+                    pricing_granularity TEXT,
+                    pricing_method TEXT,
+                    pricing_external_ref TEXT,
+                    pricing_quality TEXT,
                     kind TEXT,
                     description TEXT,
                     counterparty TEXT,
@@ -530,6 +583,10 @@ def _migrate_msat_columns(conn):
                     CAST(ROUND(amount * 100000000000.0) AS INTEGER),
                     CAST(ROUND(fee * 100000000000.0) AS INTEGER),
                     fiat_currency, fiat_rate, fiat_value, fiat_price_source,
+                    fiat_rate_exact, fiat_value_exact, pricing_source_kind,
+                    pricing_provider, pricing_pair, pricing_timestamp,
+                    pricing_fetched_at, pricing_granularity, pricing_method,
+                    pricing_external_ref, pricing_quality,
                     kind, description, counterparty, note, excluded, raw_json, created_at
                 FROM transactions;
                 DROP TABLE transactions;
@@ -557,6 +614,13 @@ def _migrate_msat_columns(conn):
                     cost_basis REAL,
                     proceeds REAL,
                     gain_loss REAL,
+                    fiat_value_exact TEXT,
+                    unit_cost_exact TEXT,
+                    cost_basis_exact TEXT,
+                    proceeds_exact TEXT,
+                    gain_loss_exact TEXT,
+                    pricing_source_kind TEXT,
+                    pricing_quality TEXT,
                     description TEXT,
                     at_category TEXT,
                     at_kennzahl INTEGER,
@@ -566,7 +630,10 @@ def _migrate_msat_columns(conn):
                     id, workspace_id, profile_id, transaction_id, wallet_id, account_id,
                     occurred_at, entry_type, asset,
                     CAST(ROUND(quantity * 100000000000.0) AS INTEGER),
-                    fiat_value, unit_cost, cost_basis, proceeds, gain_loss, description,
+                    fiat_value, unit_cost, cost_basis, proceeds, gain_loss,
+                    fiat_value_exact, unit_cost_exact, cost_basis_exact,
+                    proceeds_exact, gain_loss_exact, pricing_source_kind,
+                    pricing_quality, description,
                     at_category, at_kennzahl, created_at
                 FROM journal_entries;
                 DROP TABLE journal_entries;

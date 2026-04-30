@@ -903,6 +903,8 @@ def build_parser() -> argparse.ArgumentParser:
     rates_set.add_argument("timestamp")
     rates_set.add_argument("rate")
     rates_set.add_argument("--source", default="manual")
+    rates_set.add_argument("--granularity")
+    rates_set.add_argument("--method")
 
     diagnostics = sub.add_parser("diagnostics")
     diagnostics_sub = diagnostics.add_subparsers(dest="diagnostics_command", required=True)
@@ -1748,7 +1750,13 @@ def dispatch(conn: sqlite3.Connection | None, args: argparse.Namespace) -> Any:
             return emit(
                 args,
                 core_rates.set_manual_rate(
-                    conn, args.pair, args.timestamp, args.rate, source=args.source
+                    conn,
+                    args.pair,
+                    args.timestamp,
+                    args.rate,
+                    source=args.source,
+                    granularity=args.granularity,
+                    method=args.method,
                 ),
             )
     if args.command == "diagnostics":

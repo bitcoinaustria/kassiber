@@ -1571,14 +1571,17 @@ def build_rates_summary_snapshot(conn: sqlite3.Connection) -> dict[str, Any]:
     ).fetchall()
     latest_rows = conn.execute(
         """
-        SELECT pair, timestamp, rate, source, fetched_at
+        SELECT pair, timestamp, rate, rate_exact, source, fetched_at, granularity, method
         FROM (
             SELECT
                 pair,
                 timestamp,
                 rate,
+                rate_exact,
                 source,
                 fetched_at,
+                granularity,
+                method,
                 ROW_NUMBER() OVER (
                     PARTITION BY pair
                     ORDER BY timestamp DESC,
@@ -1605,8 +1608,11 @@ def build_rates_summary_snapshot(conn: sqlite3.Connection) -> dict[str, Any]:
                 "latest": {
                     "timestamp": latest["timestamp"],
                     "rate": float(latest["rate"]),
+                    "rate_exact": latest["rate_exact"],
                     "source": latest["source"],
                     "fetched_at": latest["fetched_at"],
+                    "granularity": latest["granularity"],
+                    "method": latest["method"],
                 }
                 if latest
                 else None,

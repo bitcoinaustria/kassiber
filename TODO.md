@@ -169,6 +169,9 @@ top of the monolith.
 
 - [x] Wire the rates cache into journal pricing where it improves the
   current behavior without breaking the smoke contract
+- [x] Store transaction pricing provenance and exact decimal strings so
+  imported prices, manual overrides, provider FMV, and coarse fallback are
+  distinguishable during journal processing
 - [x] Add explicit per-event overrides only after the core engine boundary
   is stable
 
@@ -352,6 +355,9 @@ and [docs/plan/04-desktop-ui.md](docs/plan/04-desktop-ui.md).
   migrations; current `accounts` are wallet/reporting buckets
 - [ ] Per-profile Tor proxy configuration
 - [ ] Extend BTCPay Greenfield sync beyond confirmed wallet history with stable invoice/payment ids and raw payload snapshots
+- [ ] Import BTCPay invoice/payment fiat facts as authoritative pricing
+  observations and reconcile them to wallet transactions before merchant
+  receipts are treated as exact BTCPay-priced income
 - [ ] External document records for invoices, receipts, contracts, and related BTC-linked business evidence
 - [ ] Many-to-many document/payment links with allocations and reconciliation state
 - [ ] Deterministic matching rules before any AI assistance
@@ -455,6 +461,8 @@ and [docs/plan/04-desktop-ui.md](docs/plan/04-desktop-ui.md).
   decision rationale from this entry.
 - [ ] Fix `rates set` pair validation so malformed syntax like `BTCUSD`
   is rejected cleanly
+- [ ] Add real provider-backed FX adapters beyond CoinGecko only after the UI
+  and daemon can expose provider limits, granularity, and review state honestly
 - [ ] Keep the machine envelope boundary centralized and explicit
 - [ ] Keep docs and examples Bitcoin-only
 - [ ] Add a narrow docs-drift check for shared command / verification /

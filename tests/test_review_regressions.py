@@ -4477,6 +4477,130 @@ class ReviewRegressionTest(unittest.TestCase):
         self.assertAlmostEqual(tx["fiat_rate"], 60000.0, places=4)
         self.assertAlmostEqual(tx["fiat_value"], 600.0, places=4)
 
+    def test_import_pricing_provenance_rank_replaces_weaker_import(self):
+        self._bootstrap_wallet(label="PriceSource", kind="custom")
+        first_csv = self._write_case_file(
+            "generic-price.csv",
+            "date,txid,direction,asset,amount,fee,fiat_rate,description\n"
+            "2024-05-01T12:00:00Z,ranked-price-1,inbound,BTC,0.01000000,0,60000,Generic quote\n",
+        )
+        payload, result = self._run_json(
+            "wallets", "import-csv",
+            "--workspace", "Main",
+            "--profile", "Default",
+            "--wallet", "PriceSource",
+            "--file", str(first_csv),
+        )
+        self._assert_ok(payload, result, "wallets.import-csv")
+        self.assertEqual(payload["data"]["imported"], 1)
+        conn = sqlite3.connect(self.data_root / "kassiber.sqlite3")
+        conn.row_factory = sqlite3.Row
+        first_tx = conn.execute(
+            """
+            SELECT pricing_timestamp
+            FROM transactions
+            WHERE external_id = 'ranked-price-1'
+            """
+        ).fetchone()
+        conn.close()
+        self.assertEqual(first_tx["pricing_timestamp"], "2024-05-01T12:00:00Z")
+
+        exchange_csv = self._write_case_file(
+            "exchange-price.csv",
+            "date,txid,direction,asset,amount,fee,fiat_rate,pricing_source_kind,pricing_provider,pricing_pair,pricing_timestamp,pricing_method,description\n"
+            "2024-05-01T12:00:00Z,ranked-price-1,inbound,BTC,0.01000000,0,61000,exchange_execution,Kraken,BTC-EUR,2024-05-01T12:00:00Z,trade_execution,Exchange fill\n",
+        )
+        payload, result = self._run_json(
+            "wallets", "import-csv",
+            "--workspace", "Main",
+            "--profile", "Default",
+            "--wallet", "PriceSource",
+            "--file", str(exchange_csv),
+        )
+        self._assert_ok(payload, result, "wallets.import-csv")
+        self.assertEqual(payload["data"]["imported"], 0)
+        self.assertEqual(payload["data"]["skipped"], 1)
+
+        conn = sqlite3.connect(self.data_root / "kassiber.sqlite3")
+        conn.row_factory = sqlite3.Row
+        tx = conn.execute(
+            """
+            SELECT fiat_rate, fiat_value, fiat_rate_exact, fiat_value_exact,
+                   fiat_price_source, pricing_source_kind, pricing_provider,
+                   pricing_pair, pricing_method, pricing_quality
+            FROM transactions
+            WHERE external_id = 'ranked-price-1'
+            """
+        ).fetchone()
+        conn.close()
+        self.assertAlmostEqual(tx["fiat_rate"], 61000.0, places=4)
+        self.assertAlmostEqual(tx["fiat_value"], 610.0, places=4)
+        self.assertEqual(tx["fiat_rate_exact"], "61000")
+        self.assertEqual(tx["fiat_value_exact"], "610.00000000")
+        self.assertEqual(tx["fiat_price_source"], "import")
+        self.assertEqual(tx["pricing_source_kind"], "exchange_execution")
+        self.assertEqual(tx["pricing_provider"], "Kraken")
+        self.assertEqual(tx["pricing_pair"], "BTC-EUR")
+        self.assertEqual(tx["pricing_method"], "trade_execution")
+        self.assertEqual(tx["pricing_quality"], "exact")
+
+    def test_daily_provider_sample_is_review_quarantined(self):
+        self._bootstrap_wallet(label="CoarseCache")
+        payload, result = self._run_json(
+            "rates", "set", "BTC-USD", "2024-05-01T00:00:00Z", "60000",
+            "--source", "coingecko",
+            "--granularity", "daily",
+            "--method", "market_chart",
+        )
+        self._assert_ok(payload, result, "rates.set")
+        self._insert_transaction(
+            wallet_label="CoarseCache",
+            tx_id="coarse-price-1",
+            occurred_at="2024-05-01T12:00:00Z",
+            amount_msat=1_000_000_000,
+        )
+        payload, result = self._run_json(
+            "journals", "process",
+            "--workspace", "Main",
+            "--profile", "Default",
+        )
+        self._assert_ok(payload, result, "journals.process")
+        self.assertEqual(payload["data"]["auto_priced"], 1)
+        self.assertEqual(payload["data"]["entries_created"], 0)
+        self.assertEqual(payload["data"]["quarantined"], 1)
+
+        conn = sqlite3.connect(self.data_root / "kassiber.sqlite3")
+        conn.row_factory = sqlite3.Row
+        tx = conn.execute(
+            """
+            SELECT fiat_rate_exact, fiat_value_exact, pricing_source_kind,
+                   pricing_provider, pricing_timestamp, pricing_granularity,
+                   pricing_method, pricing_quality
+            FROM transactions
+            WHERE external_id = 'coarse-price-1'
+            """
+        ).fetchone()
+        quarantine = conn.execute(
+            """
+            SELECT reason, detail_json
+            FROM journal_quarantines
+            WHERE transaction_id = (SELECT id FROM transactions WHERE external_id = 'coarse-price-1')
+            """
+        ).fetchone()
+        conn.close()
+        self.assertEqual(tx["fiat_rate_exact"], "60000")
+        self.assertEqual(tx["fiat_value_exact"], "600.00")
+        self.assertEqual(tx["pricing_source_kind"], "fmv_provider")
+        self.assertEqual(tx["pricing_provider"], "coingecko")
+        self.assertEqual(tx["pricing_timestamp"], "2024-05-01T00:00:00Z")
+        self.assertEqual(tx["pricing_granularity"], "daily")
+        self.assertEqual(tx["pricing_method"], "market_chart")
+        self.assertEqual(tx["pricing_quality"], "coarse_fallback")
+        self.assertEqual(quarantine["reason"], "pricing_review_required")
+        detail = json.loads(quarantine["detail_json"])
+        self.assertEqual(detail["pricing_quality"], "coarse_fallback")
+        self.assertEqual(detail["pricing_granularity"], "daily")
+
     def test_journals_process_misses_future_only_rate(self):
         self._bootstrap_wallet(label="CacheFuture")
         payload, result = self._run_json(

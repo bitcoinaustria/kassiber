@@ -12,6 +12,7 @@ from typing import Any, Callable, Mapping, Sequence
 from ..envelope import json_ready
 from ..errors import AppError
 from ..fingerprints import make_transaction_fingerprint
+from . import pricing
 from ..importers import is_btcpay_format, is_phoenix_format, load_import_records
 from ..msat import btc_to_msat, dec
 from ..time_utils import UNKNOWN_OCCURRED_AT, now_iso, parse_timestamp
@@ -20,8 +21,8 @@ from ..wallet_descriptors import normalize_asset_code
 
 INBOUND_DIRECTIONS = {"in", "inbound", "receive", "received", "deposit", "credit", "buy"}
 OUTBOUND_DIRECTIONS = {"out", "outbound", "send", "sent", "withdrawal", "withdraw", "debit", "sell"}
-FIAT_PRICE_SOURCE_IMPORT = "import"
-FIAT_PRICE_SOURCE_RATES_CACHE = "rates_cache"
+FIAT_PRICE_SOURCE_IMPORT = pricing.LEGACY_SOURCE_IMPORT
+FIAT_PRICE_SOURCE_RATES_CACHE = pricing.LEGACY_SOURCE_RATES_CACHE
 
 ImportRow = Mapping[str, Any]
 TagRow = Mapping[str, Any]
@@ -55,7 +56,10 @@ def _find_existing_transaction(
     existing = conn.execute(
         """
         SELECT id, fingerprint, occurred_at, confirmed_at, fiat_rate, fiat_value,
-               fiat_price_source,
+               fiat_price_source, fiat_rate_exact, fiat_value_exact,
+               pricing_source_kind, pricing_provider, pricing_pair, pricing_timestamp,
+               pricing_fetched_at, pricing_granularity, pricing_method,
+               pricing_external_ref, pricing_quality,
                kind, description, counterparty, raw_json
         FROM transactions
         WHERE fingerprint = ?
@@ -67,7 +71,10 @@ def _find_existing_transaction(
     return conn.execute(
         """
         SELECT id, fingerprint, occurred_at, confirmed_at, fiat_rate, fiat_value,
-               fiat_price_source,
+               fiat_price_source, fiat_rate_exact, fiat_value_exact,
+               pricing_source_kind, pricing_provider, pricing_pair, pricing_timestamp,
+               pricing_fetched_at, pricing_granularity, pricing_method,
+               pricing_external_ref, pricing_quality,
                kind, description, counterparty, raw_json
         FROM transactions
         WHERE wallet_id = ?
@@ -90,6 +97,24 @@ def _find_existing_transaction(
     ).fetchone()
 
 
+PRICE_COLUMNS = (
+    "fiat_rate",
+    "fiat_value",
+    "fiat_rate_exact",
+    "fiat_value_exact",
+    "fiat_price_source",
+    "pricing_source_kind",
+    "pricing_provider",
+    "pricing_pair",
+    "pricing_timestamp",
+    "pricing_fetched_at",
+    "pricing_granularity",
+    "pricing_method",
+    "pricing_external_ref",
+    "pricing_quality",
+)
+
+
 def _transaction_merge_updates(existing: Mapping[str, Any], normalized: Mapping[str, Any], fingerprint: str):
     updates = {}
     if (
@@ -108,23 +133,22 @@ def _transaction_merge_updates(existing: Mapping[str, Any], normalized: Mapping[
     if confirmed_at_added:
         updates["confirmed_at"] = normalized["confirmed_at"]
 
-    has_existing_price = existing["fiat_rate"] is not None or existing["fiat_value"] is not None
-    has_import_price = normalized["fiat_price_source"] == FIAT_PRICE_SOURCE_IMPORT
-    if has_import_price and (
-        existing["fiat_price_source"] == FIAT_PRICE_SOURCE_RATES_CACHE
-        or not has_existing_price
-    ):
-        updates["fiat_rate"] = (
-            float(normalized["fiat_rate"]) if normalized["fiat_rate"] is not None else None
-        )
-        updates["fiat_value"] = (
-            float(normalized["fiat_value"]) if normalized["fiat_value"] is not None else None
-        )
-        updates["fiat_price_source"] = FIAT_PRICE_SOURCE_IMPORT
+    has_existing_price = (
+        existing["fiat_rate"] is not None
+        or existing["fiat_value"] is not None
+        or existing["fiat_rate_exact"] is not None
+        or existing["fiat_value_exact"] is not None
+    )
+    has_import_price = normalized["pricing_source_kind"] is not None
+    incoming_priority = pricing.priority_for(normalized["pricing_source_kind"])
+    existing_priority = pricing.priority_for(
+        existing["pricing_source_kind"],
+        existing["fiat_price_source"],
+    )
+    if has_import_price and (not has_existing_price or incoming_priority >= existing_priority):
+        updates.update({column: normalized[column] for column in PRICE_COLUMNS})
     elif confirmed_at_added and existing["fiat_price_source"] == FIAT_PRICE_SOURCE_RATES_CACHE:
-        updates["fiat_rate"] = None
-        updates["fiat_value"] = None
-        updates["fiat_price_source"] = None
+        updates.update({column: None for column in PRICE_COLUMNS})
 
     if not existing["kind"] and normalized["kind"]:
         updates["kind"] = normalized["kind"]
@@ -137,7 +161,7 @@ def _transaction_merge_updates(existing: Mapping[str, Any], normalized: Mapping[
     return updates
 
 
-def normalize_import_record(record: ImportRow) -> dict[str, Any]:
+def normalize_import_record(record: ImportRow, source_label: str = "") -> dict[str, Any]:
     raw_amount = dec(record.get("amount"))
     direction = normalize_import_direction(record.get("direction"), raw_amount)
     amount = abs(raw_amount)
@@ -149,25 +173,49 @@ def normalize_import_record(record: ImportRow) -> dict[str, Any]:
     value = dec(fiat_value) if fiat_value not in (None, "") else None
     if value is None and rate is not None:
         value = amount * rate
+    source_kind = None
+    quality = None
+    if has_import_price:
+        source_kind = pricing.infer_import_source_kind(source_label, record)
+        quality = str(record.get("pricing_quality") or "").strip().lower() or pricing.import_quality(source_kind)
     raw_json = record.get("raw_json")
     if raw_json is None:
         raw_json = json.dumps(json_ready(record), sort_keys=True)
     elif not isinstance(raw_json, str):
         raw_json = json.dumps(json_ready(raw_json), sort_keys=True)
+    occurred_at = parse_timestamp(record.get("occurred_at") or record.get("timestamp") or record.get("date"))
     confirmed_at = record.get("confirmed_at")
-    if confirmed_at in (None, ""):
-        confirmed_at = None
+    confirmed_at = parse_timestamp(confirmed_at) if confirmed_at not in (None, "") else None
+    if record.get("pricing_timestamp") not in (None, ""):
+        pricing_timestamp = parse_timestamp(record.get("pricing_timestamp"))
+    elif has_import_price:
+        pricing_timestamp = confirmed_at or occurred_at
+    else:
+        pricing_timestamp = None
+    payload = pricing.pricing_payload(
+        rate=rate,
+        value=value,
+        source_kind=source_kind,
+        quality=quality,
+        provider=str_or_none(record.get("pricing_provider") or record.get("provider")),
+        pair=str_or_none(record.get("pricing_pair") or record.get("pair")),
+        pricing_timestamp=pricing_timestamp,
+        fetched_at=parse_timestamp(record.get("pricing_fetched_at"))
+        if record.get("pricing_fetched_at") not in (None, "")
+        else None,
+        granularity=str_or_none(record.get("pricing_granularity") or record.get("granularity")),
+        method=str_or_none(record.get("pricing_method") or record.get("method")),
+        external_ref=str_or_none(record.get("pricing_external_ref") or record.get("external_ref")),
+    )
     return {
         "external_id": str(record.get("txid") or record.get("id") or ""),
-        "occurred_at": parse_timestamp(record.get("occurred_at") or record.get("timestamp") or record.get("date")),
-        "confirmed_at": parse_timestamp(confirmed_at) if confirmed_at is not None else None,
+        "occurred_at": occurred_at,
+        "confirmed_at": confirmed_at,
         "direction": direction,
         "asset": normalize_asset_code(record.get("asset") or "BTC"),
         "amount": amount,
         "fee": fee,
-        "fiat_rate": rate,
-        "fiat_value": value,
-        "fiat_price_source": FIAT_PRICE_SOURCE_IMPORT if has_import_price else None,
+        **payload,
         "kind": record.get("kind"),
         "description": record.get("description"),
         "counterparty": record.get("counterparty"),
@@ -188,7 +236,7 @@ def insert_wallet_records(
     imported = 0
     skipped = 0
     for record in records:
-        normalized = normalize_import_record(record)
+        normalized = normalize_import_record(record, source_label=source_label)
         fingerprint = make_transaction_fingerprint(
             wallet["id"],
             normalized["external_id"],
@@ -215,9 +263,12 @@ def insert_wallet_records(
             INSERT INTO transactions(
                 id, workspace_id, profile_id, wallet_id, external_id, fingerprint,
                 occurred_at, confirmed_at, direction, asset, amount, fee, fiat_currency,
-                fiat_rate, fiat_value, fiat_price_source, kind, description,
+                fiat_rate, fiat_value, fiat_price_source, fiat_rate_exact,
+                fiat_value_exact, pricing_source_kind, pricing_provider, pricing_pair,
+                pricing_timestamp, pricing_fetched_at, pricing_granularity,
+                pricing_method, pricing_external_ref, pricing_quality, kind, description,
                 counterparty, raw_json, created_at
-            ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 tx_id,
@@ -233,9 +284,20 @@ def insert_wallet_records(
                 btc_to_msat(normalized["amount"]),
                 btc_to_msat(normalized["fee"]),
                 profile["fiat_currency"],
-                float(normalized["fiat_rate"]) if normalized["fiat_rate"] is not None else None,
-                float(normalized["fiat_value"]) if normalized["fiat_value"] is not None else None,
+                normalized["fiat_rate"],
+                normalized["fiat_value"],
                 normalized["fiat_price_source"],
+                normalized["fiat_rate_exact"],
+                normalized["fiat_value_exact"],
+                normalized["pricing_source_kind"],
+                normalized["pricing_provider"],
+                normalized["pricing_pair"],
+                normalized["pricing_timestamp"],
+                normalized["pricing_fetched_at"],
+                normalized["pricing_granularity"],
+                normalized["pricing_method"],
+                normalized["pricing_external_ref"],
+                normalized["pricing_quality"],
                 normalized["kind"],
                 normalized["description"],
                 normalized["counterparty"],
