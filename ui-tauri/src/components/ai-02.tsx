@@ -40,6 +40,7 @@ interface Ai02Props {
   toolsEnabled?: boolean;
   onToolsEnabledChange?: (enabled: boolean) => void;
   inputPanelElevated?: boolean;
+  modelPickerEnabled?: boolean;
 }
 
 const DEFAULT_PROMPTS: PromptOption[] = [
@@ -76,6 +77,7 @@ export default function Ai02({
   toolsEnabled = true,
   onToolsEnabledChange,
   inputPanelElevated = true,
+  modelPickerEnabled = true,
 }: Ai02Props) {
   const [inputValue, setInputValue] = useState("");
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -160,6 +162,7 @@ export default function Ai02({
               <ProviderModelPicker
                 value={selection}
                 onChange={onSelectionChange}
+                enabled={modelPickerEnabled}
               />
             </ContextItem>
 

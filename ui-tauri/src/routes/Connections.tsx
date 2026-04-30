@@ -29,6 +29,7 @@ import { useUiStore } from "@/store/ui";
 import { useSyncProgressNotice } from "@/hooks/useSyncProgressNotice";
 import { useCurrency, type Currency } from "@/lib/currency";
 import { cn } from "@/lib/utils";
+import { AddConnectionDialog } from "@/components/kb/AddConnectionDialog";
 
 import type {
   Connection,
@@ -100,6 +101,7 @@ export function Connections() {
   const currency = useCurrency();
   const navigate = useNavigate();
   const [syncMessage, setSyncMessage] = useState<string | null>(null);
+  const [addConnectionOpen, setAddConnectionOpen] = useState(false);
   const { startSyncNotice, clearSyncNotice } = useSyncProgressNotice();
   const onSyncAll = () => {
     if (syncWallets.isPending) return;
@@ -213,13 +215,17 @@ export function Connections() {
           <Button
             size="sm"
             className="h-9 gap-2"
-            onClick={() => void navigate({ to: "/imports" })}
+            onClick={() => setAddConnectionOpen(true)}
           >
             <Plus className="size-4" aria-hidden="true" />
             Add connection
           </Button>
         </div>
       </div>
+      <AddConnectionDialog
+        open={addConnectionOpen}
+        onOpenChange={setAddConnectionOpen}
+      />
       {syncMessage && (
         <div
           className={cn(

@@ -57,7 +57,7 @@ export function Assistant() {
       isStreaming={isStreaming}
       toolsEnabled={toolsEnabled}
       onToolsEnabledChange={setToolsEnabled}
-      prompts={[]}
+      {...(hasMessages ? { prompts: [] } : {})}
     />
   );
 

@@ -176,71 +176,75 @@ export function Journals() {
               Latest accounting rows produced by journal processing.
             </CardDescription>
           </CardHeader>
-          <CardContent className="p-0">
-            <Table className="min-w-[820px]">
-              <TableHeader>
-                <TableRow className="bg-muted/50 hover:bg-muted/50">
-                  <TableHead className="w-[130px]">Date</TableHead>
-                  <TableHead className="w-[140px]">Type</TableHead>
-                  <TableHead className="min-w-[180px]">Wallet</TableHead>
-                  <TableHead className="w-[170px] text-right">
-                    Quantity
-                  </TableHead>
-                  <TableHead className="w-[130px] text-right">Fiat</TableHead>
-                  <TableHead className="w-[130px] text-right">
-                    Gain/Loss
-                  </TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {snapshot.recent.length ? (
-                  snapshot.recent.map((entry, index) => (
-                    <TableRow key={`${entry.date}-${entry.type}-${index}`}>
-                      <TableCell className="font-mono text-xs text-muted-foreground">
-                        {entry.date}
-                      </TableCell>
-                      <TableCell>{entry.type}</TableCell>
-                      <TableCell className={blurClass(hideSensitive)}>
-                        {entry.wallet}
-                      </TableCell>
+          <CardContent className="p-4">
+            <div className="overflow-x-auto rounded-md border">
+              <Table className="min-w-[820px]">
+                <TableHeader>
+                  <TableRow className="bg-muted/50 hover:bg-muted/50">
+                    <TableHead className="w-[130px]">Date</TableHead>
+                    <TableHead className="w-[140px]">Type</TableHead>
+                    <TableHead className="min-w-[180px]">Wallet</TableHead>
+                    <TableHead className="w-[170px] text-right">
+                      Quantity
+                    </TableHead>
+                    <TableHead className="w-[130px] text-right">
+                      Fiat
+                    </TableHead>
+                    <TableHead className="w-[130px] text-right">
+                      Gain/Loss
+                    </TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {snapshot.recent.length ? (
+                    snapshot.recent.map((entry, index) => (
+                      <TableRow key={`${entry.date}-${entry.type}-${index}`}>
+                        <TableCell className="font-mono text-xs text-muted-foreground">
+                          {entry.date}
+                        </TableCell>
+                        <TableCell>{entry.type}</TableCell>
+                        <TableCell className={blurClass(hideSensitive)}>
+                          {entry.wallet}
+                        </TableCell>
+                        <TableCell
+                          className={cn(
+                            "text-right tabular-nums",
+                            blurClass(hideSensitive),
+                          )}
+                        >
+                          {entry.quantity.toFixed(8)} {entry.asset}
+                        </TableCell>
+                        <TableCell
+                          className={cn(
+                            "text-right tabular-nums",
+                            blurClass(hideSensitive),
+                          )}
+                        >
+                          {eur.format(entry.fiatValueEur)}
+                        </TableCell>
+                        <TableCell
+                          className={cn(
+                            "text-right tabular-nums",
+                            blurClass(hideSensitive),
+                          )}
+                        >
+                          {eur.format(entry.gainLossEur)}
+                        </TableCell>
+                      </TableRow>
+                    ))
+                  ) : (
+                    <TableRow>
                       <TableCell
-                        className={cn(
-                          "text-right tabular-nums",
-                          blurClass(hideSensitive),
-                        )}
+                        colSpan={6}
+                        className="h-24 text-center text-sm text-muted-foreground"
                       >
-                        {entry.quantity.toFixed(8)} {entry.asset}
-                      </TableCell>
-                      <TableCell
-                        className={cn(
-                          "text-right tabular-nums",
-                          blurClass(hideSensitive),
-                        )}
-                      >
-                        {eur.format(entry.fiatValueEur)}
-                      </TableCell>
-                      <TableCell
-                        className={cn(
-                          "text-right tabular-nums",
-                          blurClass(hideSensitive),
-                        )}
-                      >
-                        {eur.format(entry.gainLossEur)}
+                        No journal entries available.
                       </TableCell>
                     </TableRow>
-                  ))
-                ) : (
-                  <TableRow>
-                    <TableCell
-                      colSpan={6}
-                      className="h-24 text-center text-sm text-muted-foreground"
-                    >
-                      No journal entries available.
-                    </TableCell>
-                  </TableRow>
-                )}
-              </TableBody>
-            </Table>
+                  )}
+                </TableBody>
+              </Table>
+            </div>
           </CardContent>
         </Card>
       </div>

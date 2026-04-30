@@ -3,6 +3,7 @@ import {
   spawn,
   type ChildProcessWithoutNullStreams,
 } from "node:child_process";
+import { existsSync, realpathSync } from "node:fs";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import path from "node:path";
 import { createInterface } from "node:readline";
@@ -13,6 +14,13 @@ import tailwindcss from "@tailwindcss/vite";
 const DAEMON_BRIDGE_PATH = "/__kassiber__/daemon";
 const DAEMON_BRIDGE_STREAM_PATH = "/__kassiber__/daemon/stream";
 const BRIDGE_REQUEST_TIMEOUT_MS = 10 * 60 * 1000;
+const UI_ROOT = __dirname;
+const NODE_MODULES_REALPATH = (() => {
+  const nodeModulesPath = path.resolve(UI_ROOT, "node_modules");
+  return existsSync(nodeModulesPath)
+    ? realpathSync(nodeModulesPath)
+    : nodeModulesPath;
+})();
 const ALLOWED_BRIDGE_KINDS = new Set([
   "status",
   "ui.overview.snapshot",
@@ -491,5 +499,8 @@ export default defineConfig({
     host: "127.0.0.1",
     port: 5173,
     strictPort: true,
+    fs: {
+      allow: [UI_ROOT, NODE_MODULES_REALPATH],
+    },
   },
 });

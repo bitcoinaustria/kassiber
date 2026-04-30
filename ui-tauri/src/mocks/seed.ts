@@ -56,6 +56,8 @@ export type TxType =
 
 export interface Tx {
   id: string;
+  externalId?: string;
+  explorerId?: string;
   date: string;
   type: TxType;
   account: string;
