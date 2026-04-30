@@ -546,7 +546,9 @@ export function AppShell() {
   ]);
 
   const unlockApp = React.useCallback(
-    async (passphrase: string) => {
+    async (
+      passphrase: string,
+    ): Promise<{ ok: boolean; error?: string | null }> => {
       if (requiresDaemonUnlock) {
         const envelope = await getTransport("real").invoke({
           kind: "daemon.unlock",
@@ -561,17 +563,38 @@ export function AppShell() {
           });
           setLocked(false);
         }
-        return unlocked;
+        return {
+          ok: unlocked,
+          error:
+            envelope.error?.message ??
+            (envelope.kind === "auth_required"
+              ? "Database passphrase is required."
+              : null),
+        };
       }
 
       const unlocked = await verifySessionUnlockPassphrase(passphrase);
       if (unlocked) {
         setLocked(false);
       }
-      return unlocked;
+      return { ok: unlocked, error: null };
     },
     [queryClient, requiresDaemonUnlock],
   );
+
+  const resetLocalUiSession = React.useCallback(() => {
+    clearSessionUnlockPassphrase();
+    clearDaemonQueryCache();
+    setDaemonAuthRequired(false);
+    setHideSensitive(false);
+    setIdentity(null);
+    void navigate({ to: "/", replace: true });
+  }, [
+    clearDaemonQueryCache,
+    navigate,
+    setHideSensitive,
+    setIdentity,
+  ]);
 
   React.useEffect(() => {
     if (identity) return;
@@ -756,6 +779,7 @@ export function AppShell() {
                         : undefined
                     }
                     onUnlock={unlockApp}
+                    onReset={resetLocalUiSession}
                   />
                 </main>
               ) : (
@@ -1475,9 +1499,13 @@ function AppDashboardHeader({
 function LockScreen({
   reason,
   onUnlock,
+  onReset,
 }: {
   reason?: string;
-  onUnlock: (passphrase: string) => Promise<boolean>;
+  onUnlock: (
+    passphrase: string,
+  ) => Promise<{ ok: boolean; error?: string | null }>;
+  onReset: () => void;
 }) {
   const [passphrase, setPassphrase] = React.useState("");
   const [error, setError] = React.useState<string | null>(null);
@@ -1494,9 +1522,9 @@ function LockScreen({
     setError(null);
     setSubmitting(true);
     try {
-      const ok = await onUnlock(passphrase);
-      if (!ok) {
-        setError("Passphrase did not unlock this session.");
+      const result = await onUnlock(passphrase);
+      if (!result.ok) {
+        setError(result.error ?? "Passphrase did not unlock this session.");
         setPassphrase("");
         inputRef.current?.focus();
       }
@@ -1546,6 +1574,15 @@ function LockScreen({
         </div>
         <Button className="mt-5 w-full" type="submit" disabled={submitting}>
           {submitting ? "Unlocking..." : "Unlock"}
+        </Button>
+        <Button
+          className="mt-2 w-full"
+          type="button"
+          variant="ghost"
+          disabled={submitting}
+          onClick={onReset}
+        >
+          Back to setup
         </Button>
       </form>
     </div>
