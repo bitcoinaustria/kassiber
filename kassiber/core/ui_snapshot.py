@@ -255,6 +255,15 @@ def _map_wallet_kind(kind: str) -> str:
     return aliases.get(normalized, normalized or "csv")
 
 
+def _public_explorer_id(external_id: str | None) -> str | None:
+    candidate = (external_id or "").strip()
+    if len(candidate) != 64:
+        return None
+    if all(char in "0123456789abcdefABCDEF" for char in candidate):
+        return candidate
+    return None
+
+
 def _relative_last(value: str | None) -> str:
     if not value:
         return "never"
@@ -484,7 +493,7 @@ def _transactions(conn: sqlite3.Connection, profile_id: str) -> list[dict[str, A
         """
         SELECT
             t.id,
-            COALESCE(t.external_id, t.id) AS external_id,
+            t.external_id AS external_id,
             t.occurred_at,
             t.confirmed_at,
             w.label AS wallet,
@@ -536,6 +545,7 @@ def _transactions(conn: sqlite3.Connection, profile_id: str) -> list[dict[str, A
             {
                 "id": row["id"],
                 "externalId": row["external_id"],
+                "explorerId": _public_explorer_id(row["external_id"]),
                 "date": (row["occurred_at"] or "")[:16].replace("T", " "),
                 "type": _transaction_type(
                     row["kind"],
@@ -548,6 +558,7 @@ def _transactions(conn: sqlite3.Connection, profile_id: str) -> list[dict[str, A
                     or row["description"]
                     or row["note"]
                     or row["external_id"]
+                    or row["id"]
                 ),
                 "amountSat": int(round(sign * amount_btc * 100_000_000)),
                 "eur": sign * abs(float(row["fiat_value"] or 0)),
@@ -917,7 +928,7 @@ def build_transactions_snapshot(
         f"""
         SELECT
             t.id,
-            COALESCE(t.external_id, t.id) AS external_id,
+            t.external_id AS external_id,
             t.occurred_at,
             t.confirmed_at,
             w.label AS wallet,
@@ -1817,6 +1828,7 @@ def _transaction_rows_to_ui(
             {
                 "id": row["id"],
                 "externalId": row["external_id"],
+                "explorerId": _public_explorer_id(row["external_id"]),
                 "date": (row["occurred_at"] or "")[:16].replace("T", " "),
                 "type": _transaction_type(
                     row["kind"],
@@ -1829,6 +1841,7 @@ def _transaction_rows_to_ui(
                     or row["description"]
                     or row["note"]
                     or row["external_id"]
+                    or row["id"]
                 ),
                 "amountSat": int(round(sign * amount_btc * 100_000_000)),
                 "eur": sign * abs(float(row["fiat_value"] or 0)),

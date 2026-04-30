@@ -202,6 +202,16 @@ export function AddConnectionDialog({
     CONNECTION_SOURCES.find((source) => source.id === selectedId) ??
     CONNECTION_SOURCES[0];
 
+  const selectCategory = (category: ConnectionCategory) => {
+    setActiveCategory(category);
+    const firstSource = CONNECTION_SOURCES.find(
+      (source) => source.category === category,
+    );
+    if (firstSource) {
+      setSelectedId(firstSource.id);
+    }
+  };
+
   const stageConnection = () => {
     addNotification({
       title: "Connection setup selected",
@@ -236,7 +246,7 @@ export function AddConnectionDialog({
                       ? "bg-background text-foreground shadow-sm"
                       : "text-muted-foreground hover:bg-background/70 hover:text-foreground",
                   )}
-                  onClick={() => setActiveCategory(category.id)}
+                  onClick={() => selectCategory(category.id)}
                 >
                   <Icon className="size-4" aria-hidden="true" />
                   {category.label}

@@ -906,7 +906,7 @@ function toDashboardTransaction(tx: Tx, index: number): Transaction {
   return {
     id: tx.id,
     txnId: tx.externalId || tx.id || `TX-${index + 1}`,
-    explorerId: tx.externalId || undefined,
+    explorerId: tx.explorerId || undefined,
     amount: Math.abs(tx.eur || (tx.amountSat / 100_000_000) * tx.rate),
     amountBtc: Math.abs(tx.amountSat / 100_000_000),
     counterparty: tx.counter || tx.account || "Unassigned",

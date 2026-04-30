@@ -1938,7 +1938,7 @@ function toDashboardTransaction(tx: OverviewTx, index: number): Transaction {
   return {
     id: tx.id,
     txid: tx.externalId || tx.id || `TX-${index + 1}`,
-    explorerId: tx.externalId || undefined,
+    explorerId: tx.explorerId || undefined,
     counterparty: account,
     counterpartyInitials: initials(account || "TX"),
     paymentMethod,

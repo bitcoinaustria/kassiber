@@ -373,7 +373,7 @@ class ReviewRegressionTest(unittest.TestCase):
                     "ws-ui",
                     "pf-ui",
                     "wal-ui",
-                    "external-in",
+                    "a" * 64,
                     "fp-ui-in",
                     "2026-01-10T10:00:00Z",
                     "2026-01-10T10:10:00Z",
@@ -521,14 +521,19 @@ class ReviewRegressionTest(unittest.TestCase):
         self.assertAlmostEqual(overview["portfolioSeries"][-1]["balanceBtc"], 0.899)
         self.assertAlmostEqual(overview["portfolioSeries"][-1]["valueEur"], 58_435)
         self.assertEqual(overview["txs"][0]["id"], "tx-ui-spend")
+        self.assertEqual(overview["txs"][0]["externalId"], "external-spend")
+        self.assertIsNone(overview["txs"][0]["explorerId"])
         self.assertEqual(overview["txs"][0]["type"], "Fee")
         self.assertEqual(overview["txs"][0]["amountSat"], -10_000_000)
         self.assertEqual(overview["txs"][0]["tag"], "Review")
+        self.assertEqual(overview["txs"][1]["explorerId"], "a" * 64)
 
         transactions = build_transactions_snapshot(conn, {"limit": 10})
         self.assertEqual(transactions["year"], 2026)
         self.assertEqual([row["id"] for row in transactions["txs"]], ["tx-ui-spend", "tx-ui-in"])
         self.assertEqual(transactions["txs"][1]["type"], "Income")
+        self.assertEqual(transactions["txs"][1]["externalId"], "a" * 64)
+        self.assertEqual(transactions["txs"][1]["explorerId"], "a" * 64)
         self.assertEqual(transactions["txs"][1]["amountSat"], 100_000_000)
         self.assertEqual(transactions["txs"][1]["eur"], 50_000)
 
