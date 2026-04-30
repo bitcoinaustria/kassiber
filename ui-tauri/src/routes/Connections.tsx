@@ -26,6 +26,7 @@ import {
 } from "@/components/ui/table";
 import { useDaemon, useDaemonMutation } from "@/daemon/client";
 import { useUiStore } from "@/store/ui";
+import { useSyncProgressNotice } from "@/hooks/useSyncProgressNotice";
 import { useCurrency, type Currency } from "@/lib/currency";
 import { cn } from "@/lib/utils";
 
@@ -99,13 +100,16 @@ export function Connections() {
   const currency = useCurrency();
   const navigate = useNavigate();
   const [syncMessage, setSyncMessage] = useState<string | null>(null);
+  const { startSyncNotice, clearSyncNotice } = useSyncProgressNotice();
   const onSyncAll = () => {
+    if (syncWallets.isPending) return;
     setSyncMessage(null);
     addNotification({
       title: "Wallet sync started",
       body: "Kassiber is syncing all configured wallet sources.",
       tone: "warning",
     });
+    startSyncNotice();
     syncWallets.mutate(
       { all: true },
       {
@@ -146,6 +150,7 @@ export function Connections() {
             tone: "error",
           });
         },
+        onSettled: clearSyncNotice,
       },
     );
   };
@@ -162,7 +167,10 @@ export function Connections() {
   const totalBtc = snapshot.connections.reduce((s, c) => s + c.balance, 0);
   const totalEur = totalBtc * snapshot.priceEur;
   const errorN = snapshot.connections.filter((c) => c.status === "error").length;
-  const syncingN = snapshot.connections.filter((c) => c.status === "syncing").length;
+  const snapshotSyncingN = snapshot.connections.filter((c) => c.status === "syncing").length;
+  const syncingN = syncWallets.isPending
+    ? snapshot.connections.length
+    : snapshotSyncingN;
   const syncedN = snapshot.connections.filter((c) => c.status === "synced").length;
 
   const onSelect = (id: string) =>
@@ -178,7 +186,11 @@ export function Connections() {
           <p className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
             {snapshot.connections.length} connections ·{" "}
             {errorN > 0 ? `${errorN} need attention · ` : ""}
-            {syncingN > 0 ? `${syncingN} syncing` : "all synced"}
+            {syncWallets.isPending
+              ? `${syncingN} syncing now`
+              : snapshotSyncingN > 0
+                ? `${snapshotSyncingN} updating`
+                : "all synced"}
           </p>
           <h2 className="text-2xl font-semibold tracking-tight">
             Connections
@@ -242,7 +254,7 @@ export function Connections() {
           sub={`${snapshot.connections.length} configured sources`}
         />
         <ConnectionMetric
-          label="Syncing"
+          label="Active sync"
           value={syncingN.toLocaleString("en-US")}
           sub={errorN > 0 ? `${errorN} need attention` : "No errors"}
         />

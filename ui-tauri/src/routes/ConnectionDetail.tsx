@@ -55,6 +55,7 @@ import {
   verifySessionUnlockPassphrase,
 } from "@/store/sessionLock";
 import { useUiStore } from "@/store/ui";
+import { useSyncProgressNotice } from "@/hooks/useSyncProgressNotice";
 import type {
   Connection,
   ConnectionKind,
@@ -208,6 +209,7 @@ function ConnectionDetailView({
     useDaemonMutation<UpdateWalletResult>("ui.wallets.update");
   const deleteWallet =
     useDaemonMutation<DeleteWalletResult>("ui.wallets.delete");
+  const { startSyncNotice, clearSyncNotice } = useSyncProgressNotice();
   const [syncMessage, setSyncMessage] = useState<string | null>(null);
   const [editOpen, setEditOpen] = useState(false);
   const [editLabel, setEditLabel] = useState(connection.label);
@@ -234,12 +236,16 @@ function ConnectionDetailView({
   const displayTxs = txsForConnection.length > 0 ? txsForConnection : txs.slice(0, 6);
 
   const onSync = () => {
+    if (syncWallet.isPending) return;
     setSyncMessage(null);
     addNotification({
       title: "Wallet sync started",
       body: `${connection.label} is syncing.`,
       tone: "warning",
     });
+    startSyncNotice(
+      `${connection.label} is still syncing. Large descriptors or slow backends can take a bit; Kassiber will update when the daemon returns.`,
+    );
     syncWallet.mutate(
       { wallet: connection.label },
       {
@@ -269,6 +275,7 @@ function ConnectionDetailView({
             tone: "error",
           });
         },
+        onSettled: clearSyncNotice,
       },
     );
   };
