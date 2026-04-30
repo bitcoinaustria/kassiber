@@ -8,11 +8,10 @@
  */
 
 import { useEffect, useRef, useState } from "react";
-import { Link, useRouterState } from "@tanstack/react-router";
+import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
 import { Eye, EyeOff, MoreHorizontal, Settings, Lock } from "lucide-react";
 
 import { Wordmark } from "./Wordmark";
-import { SettingsModal } from "./SettingsModal";
 import { ProfileSwitcherPopover } from "./ProfileSwitcherPopover";
 import { useUiStore } from "@/store/ui";
 import { cn } from "@/lib/utils";
@@ -113,8 +112,8 @@ export function AppHeader() {
 
 function OverflowMenu() {
   const [open, setOpen] = useState(false);
-  const [settingsOpen, setSettingsOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
+  const navigate = useNavigate();
   const lang = useUiStore((s) => s.lang);
   const setLang = useUiStore((s) => s.setLang);
   const currency = useUiStore((s) => s.currency);
@@ -133,10 +132,6 @@ function OverflowMenu() {
 
   return (
     <div ref={ref} className="relative">
-      <SettingsModal
-        open={settingsOpen}
-        onClose={() => setSettingsOpen(false)}
-      />
       <button
         onClick={() => setOpen((v) => !v)}
         title="More"
@@ -179,7 +174,7 @@ function OverflowMenu() {
           <MenuButton
             onClick={() => {
               setOpen(false);
-              setSettingsOpen(true);
+              void navigate({ to: "/settings" });
             }}
             icon={<Settings className="size-3.5 text-ink-2" />}
           >

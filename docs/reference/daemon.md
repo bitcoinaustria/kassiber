@@ -28,7 +28,59 @@ for daemon startup and installed-app CLI forwarding during debugging.
 The first line is always a lifecycle envelope:
 
 ```json
-{"kind":"daemon.ready","schema_version":1,"data":{"version":"...","supported_kinds":["status","ui.overview.snapshot","ui.transactions.list","ui.wallets.list","ui.backends.list","ui.reports.capital_gains","ui.reports.export_pdf","ui.reports.export_capital_gains_csv","ui.reports.export_austrian_e1kv_pdf","ui.reports.export_austrian_e1kv_xlsx","ui.journals.snapshot","ui.journals.quarantine","ui.journals.transfers.list","ui.profiles.snapshot","ui.rates.summary","ui.workspace.health","ui.next_actions","ui.wallets.sync","wallets.reveal_descriptor","backends.reveal_token","daemon.shutdown"]}}
+{
+  "kind": "daemon.ready",
+  "schema_version": 1,
+  "data": {
+    "version": "...",
+    "supported_kinds": [
+      "status",
+      "ui.overview.snapshot",
+      "ui.transactions.list",
+      "ui.wallets.list",
+      "ui.backends.list",
+      "ui.reports.capital_gains",
+      "ui.reports.export_pdf",
+      "ui.reports.export_capital_gains_csv",
+      "ui.reports.export_austrian_e1kv_pdf",
+      "ui.reports.export_austrian_e1kv_xlsx",
+      "ui.journals.snapshot",
+      "ui.journals.quarantine",
+      "ui.journals.transfers.list",
+      "ui.profiles.snapshot",
+      "ui.profiles.create",
+      "ui.profiles.switch",
+      "ui.rates.summary",
+      "ui.workspace.health",
+      "ui.workspace.create",
+      "ui.workspace.delete",
+      "ui.secrets.init",
+      "ui.secrets.change_passphrase",
+      "ui.next_actions",
+      "ui.wallets.update",
+      "ui.wallets.delete",
+      "ui.wallets.sync",
+      "daemon.lock",
+      "daemon.unlock",
+      "ai.providers.list",
+      "ai.providers.get",
+      "ai.providers.create",
+      "ai.providers.update",
+      "ai.providers.delete",
+      "ai.providers.set_default",
+      "ai.providers.clear_default",
+      "ai.providers.acknowledge",
+      "ai.list_models",
+      "ai.test_connection",
+      "ai.chat",
+      "ai.chat.cancel",
+      "ai.tool_call.consent",
+      "wallets.reveal_descriptor",
+      "backends.reveal_token",
+      "daemon.shutdown"
+    ]
+  }
+}
 ```
 
 `supported_kinds` is the public UI allowlist the Tauri supervisor mirrors;
@@ -36,6 +88,35 @@ treat this list (not the docs) as the source of truth for what the supervisor
 will pass through. Reveal kinds (see below) are included in the list but still
 require their own passphrase round-trip before the daemon returns raw secret
 material.
+
+`ui.profiles.switch` accepts `{"profile_id":"..."}` and updates the active
+`context_workspace` / `context_profile` settings after the database is already
+unlocked. It does not create a per-profile passphrase boundary; SQLCipher
+encryption is database-level.
+
+`ui.profiles.create` accepts `{"workspace_id":"...","label":"..."}` and creates
+a profile in that workspace. It inherits fiat currency, tax country, long-term
+period, and gains algorithm from the active profile in that workspace when
+available; otherwise it uses the first profile in the workspace, then generic
+EUR/FIFO defaults for empty workspaces. The new profile becomes active.
+
+`ui.workspace.create` accepts `{"label":"..."}` and creates an empty workspace.
+It makes the new workspace current and clears the active profile until the user
+creates or switches to a profile inside that workspace.
+
+`ui.workspace.delete` accepts
+`{"confirm":"DELETE","confirm_workspace":"..."}` for the current workspace. Like
+wallet deletes, encrypted databases require `args.auth_response.passphrase_secret`
+and plaintext databases require `DELETE LOCAL DATA`.
+
+`ui.wallets.update` accepts `{"wallet":"...","label":"..."}` for the active
+profile and currently supports label changes. `ui.wallets.delete` accepts
+`{"wallet":"...","confirm":"DELETE","confirm_wallet":"...","cascade":true|false}`.
+Both kinds are sensitive local-state changes: encrypted databases require
+`args.auth_response.passphrase_secret`, verified with the same throwaway
+SQLCipher round-trip used by reveal requests; plaintext databases require an
+explicit acknowledgement (`CHANGE LOCAL DATA` for updates, `DELETE LOCAL DATA`
+for deletes).
 
 Requests carry a caller-chosen `request_id`, a `kind`, and optional `args`:
 

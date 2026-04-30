@@ -34,11 +34,14 @@ export interface Workspace {
 
 export interface ProfilesSnapshot {
   workspaces: Workspace[];
+  /** Currently active workspace id — valid even before a workspace has profiles. */
+  activeWorkspaceId?: string;
   /** Currently active profile id — corresponds to the user's session. */
   activeProfileId: string;
 }
 
 export const MOCK_PROFILES: ProfilesSnapshot = {
+  activeWorkspaceId: "w1",
   activeProfileId: "p1",
   workspaces: [
     {

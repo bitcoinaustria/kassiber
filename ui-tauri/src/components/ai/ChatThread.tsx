@@ -15,11 +15,16 @@ import type { AiChatMessage } from "@/daemon/stream";
 interface ChatThreadProps {
   messages: AiChatMessage[];
   className?: string;
+  scrollable?: boolean;
 }
 
 const STICKY_THRESHOLD_PX = 32;
 
-export function ChatThread({ messages, className }: ChatThreadProps) {
+export function ChatThread({
+  messages,
+  className,
+  scrollable = true,
+}: ChatThreadProps) {
   const containerRef = React.useRef<HTMLDivElement>(null);
   const stickyRef = React.useRef(true);
 
@@ -33,15 +38,20 @@ export function ChatThread({ messages, className }: ChatThreadProps) {
   React.useEffect(() => {
     const node = containerRef.current;
     if (!node) return;
+    if (!scrollable) return;
     if (!stickyRef.current) return;
     node.scrollTo({ top: node.scrollHeight, behavior: "auto" });
-  }, [messages]);
+  }, [messages, scrollable]);
 
   if (messages.length === 0) return null;
 
   return (
     <Conversation className={className}>
-      <ConversationContent ref={containerRef} onScroll={handleScroll}>
+      <ConversationContent
+        ref={containerRef}
+        onScroll={handleScroll}
+        scrollable={scrollable}
+      >
         {messages.map((message) => (
           <ChatMessage key={message.id} message={message} />
         ))}

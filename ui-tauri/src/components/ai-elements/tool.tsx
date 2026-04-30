@@ -143,6 +143,9 @@ function ToolOutput({
   error?: string;
   label?: string;
 }) {
+  const formatted = error ?? formatPayload(output);
+  const isPlainText = !error && typeof output === "string";
+
   return (
     <section
       data-slot="tool-output"
@@ -152,16 +155,22 @@ function ToolOutput({
       <p className="mb-1 text-[10px] font-medium uppercase text-muted-foreground">
         {error ? "Error" : label}
       </p>
-      <pre
-        className={cn(
-          "max-h-32 overflow-auto whitespace-pre-wrap break-words rounded px-2 py-1 font-mono text-[10px]",
-          error
-            ? "max-w-full bg-destructive/10 text-destructive"
-            : "max-w-full bg-muted/55 text-muted-foreground",
-        )}
-      >
-        {error ?? formatPayload(output)}
-      </pre>
+      {isPlainText ? (
+        <p className="rounded bg-muted/55 px-2 py-1 text-xs leading-relaxed text-muted-foreground">
+          {formatted}
+        </p>
+      ) : (
+        <pre
+          className={cn(
+            "max-h-32 overflow-auto whitespace-pre-wrap break-words rounded px-2 py-1 font-mono text-[10px]",
+            error
+              ? "max-w-full bg-destructive/10 text-destructive"
+              : "max-w-full bg-muted/55 text-muted-foreground",
+          )}
+        >
+          {formatted}
+        </pre>
+      )}
     </section>
   );
 }

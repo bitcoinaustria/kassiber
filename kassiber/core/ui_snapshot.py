@@ -382,9 +382,8 @@ def build_profiles_snapshot(conn: sqlite3.Connection) -> dict[str, Any]:
 
     return {
         "workspaces": workspaces,
-        "activeProfileId": context["profile_id"] or (
-            profile_rows[0]["id"] if profile_rows else ""
-        ),
+        "activeWorkspaceId": context["workspace_id"],
+        "activeProfileId": context["profile_id"],
     }
 
 
@@ -446,7 +445,6 @@ def _connections(
     conn: sqlite3.Connection,
     profile_id: str,
     balances: dict[str, float],
-    needs_journals: bool,
 ) -> list[dict[str, Any]]:
     rows = conn.execute(
         """
@@ -475,11 +473,7 @@ def _connections(
                 "label": row["label"],
                 "last": _relative_last(row["last_tx_at"] or row["created_at"]),
                 "balance": balances.get(row["id"], 0.0),
-                "status": (
-                    "syncing"
-                    if needs_journals and tx_count
-                    else ("synced" if tx_count else "idle")
-                ),
+                "status": "synced" if tx_count else "idle",
             }
         )
     return output
@@ -797,7 +791,7 @@ def build_overview_snapshot(conn: sqlite3.Connection) -> dict[str, Any]:
     snapshot = {
         "priceEur": price_eur,
         "priceUsd": price_usd,
-        "connections": _connections(conn, profile["id"], balances, needs_journals),
+        "connections": _connections(conn, profile["id"], balances),
         "txs": _transactions(conn, profile["id"]),
         "balanceSeries": _balance_series(conn, profile["id"]),
         "portfolioSeries": _portfolio_series(

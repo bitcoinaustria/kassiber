@@ -29,9 +29,12 @@ export class DaemonAuthRequiredError extends Error {
 
 function handleAuthRequired(envelope: DaemonEnvelope): never {
   if (typeof window !== "undefined") {
-    window.dispatchEvent(
-      new CustomEvent(DAEMON_AUTH_REQUIRED_EVENT, { detail: envelope }),
-    );
+    const event = () =>
+      window.dispatchEvent(
+        new CustomEvent(DAEMON_AUTH_REQUIRED_EVENT, { detail: envelope }),
+      );
+    event();
+    window.setTimeout(event, 0);
   }
   throw new DaemonAuthRequiredError(envelope);
 }

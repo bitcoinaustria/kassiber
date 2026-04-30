@@ -6,7 +6,13 @@
  * (Phase 1.2 §2.2) will replace these with schema-driven factories.
  */
 
-export type CostBasisMethod = "fifo" | "lifo" | "hifo" | "spec";
+export type CostBasisMethod =
+  | "fifo"
+  | "lifo"
+  | "hifo"
+  | "lofo"
+  | "moving_average"
+  | "moving_average_at";
 
 export interface Jurisdiction {
   code: string;
@@ -15,6 +21,8 @@ export interface Jurisdiction {
   rate: number;
   rateLabel: string;
   defaultMethod: CostBasisMethod;
+  methodLocked?: boolean;
+  methodNote?: string;
   internalsNonTaxable: boolean;
   longTermDays: number;
   ccy: string;
@@ -25,10 +33,12 @@ export const JURISDICTIONS: Record<string, Jurisdiction> = {
   AT: {
     code: "AT",
     name: "Austria",
-    policy: "§27a EStG · KESt 27,5 %",
+    policy: "§27a/§27b EStG · KESt 27,5 %",
     rate: 0.275,
     rateLabel: "KESt 27,5 %",
-    defaultMethod: "fifo",
+    defaultMethod: "moving_average_at",
+    methodLocked: true,
+    methodNote: "FIFO old stock · AVCO new stock",
     internalsNonTaxable: true,
     longTermDays: 365,
     ccy: "€",
@@ -105,6 +115,6 @@ export interface CapitalGainsReport {
 export const MOCK_CAPITAL_GAINS: CapitalGainsReport = {
   jurisdictionCode: "AT",
   year: 2025,
-  method: "fifo",
+  method: "moving_average_at",
   lots: MOCK_LOTS,
 };

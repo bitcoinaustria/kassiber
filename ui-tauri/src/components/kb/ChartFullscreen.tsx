@@ -11,7 +11,7 @@
  *   - Range-aware KPIs (high, low, change, % change) and a legend.
  *
  * Mounted via the shared shadcn `Dialog` shell with the kassiber
- * hard-edge override, mirroring `SettingsModal` so the visual language
+ * hard-edge override, mirroring Kassiber action dialogs so the visual language
  * stays consistent.
  */
 import * as React from "react";

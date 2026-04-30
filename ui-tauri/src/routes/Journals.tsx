@@ -127,8 +127,8 @@ export function Journals() {
         />
       </div>
 
-      <div className="grid grid-cols-1 gap-4 xl:grid-cols-[360px_minmax(0,1fr)]">
-        <Card>
+      <div className="grid min-w-0 grid-cols-1 gap-4 xl:grid-cols-[360px_minmax(0,1fr)]">
+        <Card className="min-w-0">
           <CardHeader className="border-b">
             <CardTitle className="flex items-center gap-2">
               <BookOpen className="size-4" aria-hidden="true" />
@@ -169,23 +169,27 @@ export function Journals() {
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="min-w-0">
           <CardHeader className="border-b">
             <CardTitle>Recent journal entries</CardTitle>
             <CardDescription>
               Latest accounting rows produced by journal processing.
             </CardDescription>
           </CardHeader>
-          <CardContent className="overflow-x-auto p-0">
-            <Table>
+          <CardContent className="p-0">
+            <Table className="min-w-[820px]">
               <TableHeader>
                 <TableRow className="bg-muted/50 hover:bg-muted/50">
-                  <TableHead>Date</TableHead>
-                  <TableHead>Type</TableHead>
-                  <TableHead>Wallet</TableHead>
-                  <TableHead className="text-right">Quantity</TableHead>
-                  <TableHead className="text-right">Fiat</TableHead>
-                  <TableHead className="text-right">Gain/Loss</TableHead>
+                  <TableHead className="w-[130px]">Date</TableHead>
+                  <TableHead className="w-[140px]">Type</TableHead>
+                  <TableHead className="min-w-[180px]">Wallet</TableHead>
+                  <TableHead className="w-[170px] text-right">
+                    Quantity
+                  </TableHead>
+                  <TableHead className="w-[130px] text-right">Fiat</TableHead>
+                  <TableHead className="w-[130px] text-right">
+                    Gain/Loss
+                  </TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>

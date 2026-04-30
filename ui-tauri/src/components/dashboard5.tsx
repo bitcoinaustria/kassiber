@@ -1,4 +1,4 @@
-import { Link } from "@tanstack/react-router";
+import { Link, useNavigate } from "@tanstack/react-router";
 import {
   ArrowUpRight,
   Bell,
@@ -7,13 +7,13 @@ import {
   CircleDollarSign,
   ClipboardList,
   CreditCard,
-  Download,
   Filter,
   Landmark,
   Maximize2,
   MoreHorizontal,
   PieChartIcon,
   Plus,
+  RefreshCw,
   Users,
 } from "lucide-react";
 import * as React from "react";
@@ -60,7 +60,7 @@ import {
   TooltipProvider as ShadTooltipProvider,
   TooltipTrigger as ShadTooltipTrigger,
 } from "@/components/ui/tooltip";
-import { AddConnectionFlow } from "@/components/kb/AddConnectionFlow";
+import { useWalletSyncAction } from "@/hooks/useWalletSyncAction";
 import { formatBtc, useCurrency, type Currency } from "@/lib/currency";
 import { cn } from "@/lib/utils";
 import {
@@ -87,6 +87,12 @@ type SalesCategoryItem = {
   value: number;
   percent: number;
   color: string;
+};
+
+type PortfolioChartPoint = {
+  month: string;
+  thisYear: number;
+  prevYear?: number;
 };
 
 type RevenueFlowColors = {
@@ -159,6 +165,38 @@ function formatAxisDisplayMoney(
     return formatCompactDisplayMoney(eur, priceEur, currency).replace("₿ ", "₿");
   }
   return formatCompactDisplayMoney(eur, priceEur, currency);
+}
+
+function formatPortfolioMoney(
+  amount: number,
+  priceEur: number,
+  currency: Currency,
+) {
+  if (currency === "btc") return formatBtc(amount);
+  return formatDisplayMoney(amount, priceEur, currency);
+}
+
+function formatCompactPortfolioMoney(
+  amount: number,
+  priceEur: number,
+  currency: Currency,
+) {
+  if (currency === "btc") return formatBtc(amount, { precision: 3 });
+  return formatCompactDisplayMoney(amount, priceEur, currency);
+}
+
+function formatAxisPortfolioMoney(
+  amount: number,
+  priceEur: number,
+  currency: Currency,
+) {
+  if (currency === "btc") {
+    return formatCompactPortfolioMoney(amount, priceEur, currency).replace(
+      "₿ ",
+      "₿",
+    );
+  }
+  return formatAxisDisplayMoney(amount, priceEur, currency);
 }
 
 function donutCenterValueClass(value: string) {
@@ -260,20 +298,38 @@ const statsData: StatItem[] = [
   },
 ];
 
-function buildStatsData(snapshot: OverviewSnapshot): StatItem[] {
+function latestPortfolioBalanceBtc(snapshot: OverviewSnapshot) {
+  if (snapshot.portfolioSeries?.length) {
+    const latest = [...snapshot.portfolioSeries].sort((a, b) =>
+      a.date.localeCompare(b.date),
+    )[snapshot.portfolioSeries.length - 1];
+    if (latest) return latest.balanceBtc;
+  }
+  const latestBalance = snapshot.balanceSeries[snapshot.balanceSeries.length - 1];
+  if (typeof latestBalance === "number") return latestBalance;
+  return btcFromEur(snapshot.fiat.eurBalance, snapshot.priceEur);
+}
+
+function buildStatsData(
+  snapshot: OverviewSnapshot,
+  currency: Currency,
+): StatItem[] {
+  const isBitcoinMode = currency === "btc";
   const transactionCount = snapshot.status?.transactionCount ?? snapshot.txs.length;
   return [
     {
       ...statsData[0],
       value: snapshot.fiat.eurBalance,
-      previousValue: snapshot.fiat.eurCostBasis,
-      changePercent: snapshot.fiat.eurCostBasis
+      previousValue: isBitcoinMode ? 0 : snapshot.fiat.eurCostBasis,
+      changePercent: !isBitcoinMode && snapshot.fiat.eurCostBasis
         ? (snapshot.fiat.eurUnrealized / snapshot.fiat.eurCostBasis) * 100
         : 0,
       isPositive: snapshot.fiat.eurUnrealized >= 0,
-      comparisonLabel: snapshot.fiat.eurCostBasis
-        ? "vs cost basis"
-        : "current estimate",
+      comparisonLabel: isBitcoinMode
+        ? "BTC balance"
+        : snapshot.fiat.eurCostBasis
+          ? "vs cost basis"
+          : "current estimate",
     },
     {
       ...statsData[1],
@@ -346,10 +402,36 @@ const periodKeys: TimePeriod[] = [
   "5years",
 ];
 
-function getDataForPeriod(period: TimePeriod, snapshot: OverviewSnapshot) {
-  const fallback = period === "5years" ? fiveYearData : fullYearData;
+function fallbackPortfolioData(
+  data: Array<{ month: string; thisYear: number; prevYear: number }>,
+  snapshot: OverviewSnapshot,
+  currency: Currency,
+): PortfolioChartPoint[] {
+  if (currency === "btc") {
+    return data.map((point) => ({
+      month: point.month,
+      thisYear: btcFromEur(point.thisYear, snapshot.priceEur),
+    }));
+  }
+  return data;
+}
+
+function getDataForPeriod(
+  period: TimePeriod,
+  snapshot: OverviewSnapshot,
+  currency: Currency,
+): PortfolioChartPoint[] {
+  const fallback = fallbackPortfolioData(
+    period === "5years" ? fiveYearData : fullYearData,
+    snapshot,
+    currency,
+  );
   if (snapshot.portfolioSeries?.length) {
-    const points = buildDatedPortfolioPoints(snapshot.portfolioSeries, period);
+    const points = buildDatedPortfolioPoints(
+      snapshot.portfolioSeries,
+      period,
+      currency,
+    );
     if (points.length) return points;
   }
   if (!snapshot.balanceSeries.some((value) => value !== 0)) {
@@ -376,6 +458,12 @@ function getDataForPeriod(period: TimePeriod, snapshot: OverviewSnapshot) {
           "Dec",
         ];
   const points = snapshot.balanceSeries.map((btc, index) => {
+    if (currency === "btc") {
+      return {
+        month: labels[index % labels.length],
+        thisYear: btc,
+      };
+    }
     const isLatestPoint = index === snapshot.balanceSeries.length - 1;
     const value = isLatestPoint
       ? snapshot.fiat.eurBalance
@@ -405,7 +493,8 @@ function getDataForPeriod(period: TimePeriod, snapshot: OverviewSnapshot) {
 function buildDatedPortfolioPoints(
   series: PortfolioPoint[],
   period: TimePeriod,
-) {
+  currency: Currency,
+): PortfolioChartPoint[] {
   const sorted = [...series].sort((a, b) => a.date.localeCompare(b.date));
   const latestDate = parseSeriesDate(sorted[sorted.length - 1]?.date);
   const filtered = sorted.filter((point) =>
@@ -420,8 +509,8 @@ function buildDatedPortfolioPoints(
         : scoped;
   return points.map((point) => ({
     month: formatPortfolioLabel(point.date, period),
-    thisYear: point.valueEur,
-    prevYear: point.costBasisEur,
+    thisYear: currency === "btc" ? point.balanceBtc : point.valueEur,
+    prevYear: currency === "btc" ? undefined : point.costBasisEur,
   }));
 }
 
@@ -835,9 +924,13 @@ const recentActivity: ActivityItem[] = [
 
 const WelcomeSection = ({
   onAddConnection,
+  onSync,
+  isSyncing,
   snapshot,
 }: {
   onAddConnection: () => void;
+  onSync: () => void;
+  isSyncing: boolean;
   snapshot: OverviewSnapshot;
 }) => {
   const reviewCount = snapshot.status?.quarantines ?? 0;
@@ -867,16 +960,20 @@ const WelcomeSection = ({
 
       <div className="flex flex-wrap items-center gap-2 sm:gap-3">
         <Button
-          asChild
           variant="outline"
           size="sm"
           className="h-8 gap-2 sm:h-9"
-          aria-label="Export"
+          aria-label="Sync wallets"
+          onClick={onSync}
+          disabled={isSyncing}
         >
-          <Link to="/reports">
-            <Download className="size-4" aria-hidden="true" />
-            <span className="hidden sm:inline">Export</span>
-          </Link>
+          <RefreshCw
+            className={cn("size-4", isSyncing && "animate-spin")}
+            aria-hidden="true"
+          />
+          <span className="hidden sm:inline">
+            {isSyncing ? "Syncing" : "Sync"}
+          </span>
         </Button>
         <Button
           size="sm"
@@ -901,7 +998,7 @@ const StatsCards = ({
   hideSensitive: boolean;
   currency: Currency;
 }) => {
-  const stats = buildStatsData(snapshot);
+  const stats = buildStatsData(snapshot, currency);
   return (
     <div className="rounded-xl border bg-card">
       <div className="grid grid-cols-1 divide-x-0 divide-y divide-border sm:grid-cols-2 sm:divide-y-0 lg:grid-cols-4 lg:divide-x">
@@ -914,12 +1011,14 @@ const StatsCards = ({
             : stat.value === 0
               ? "Clear"
               : "Current";
+          const isBitcoinPortfolio =
+            currency === "btc" && stat.title === "Portfolio value";
 
           return (
             <div key={stat.title} className="space-y-4 p-4 sm:p-6">
               <div className="text-muted-foreground">
                 <span className="text-xs font-medium sm:text-sm">
-                  {stat.title}
+                  {isBitcoinPortfolio ? "Bitcoin balance" : stat.title}
                 </span>
               </div>
               <p
@@ -928,7 +1027,11 @@ const StatsCards = ({
                   stat.format === "currency" && blurClass(hideSensitive),
                 )}
               >
-                {stat.format === "currency"
+                {isBitcoinPortfolio
+                  ? formatBtc(latestPortfolioBalanceBtc(snapshot), {
+                      precision: 3,
+                    })
+                  : stat.format === "currency"
                   ? formatCompactDisplayMoney(
                       stat.value,
                       snapshot.priceEur,
@@ -1196,6 +1299,7 @@ const SalesByCategoryChart = ({
   hideSensitive: boolean;
   currency: Currency;
 }) => {
+  const isBitcoinMode = currency === "btc";
   const { active: activeSlice, handleHover: setHoveredSlice } =
     useHoverHighlight<number>();
   const salesCategoryData = buildHoldingsBySource(snapshot);
@@ -1228,25 +1332,35 @@ const SalesByCategoryChart = ({
             <span className="text-sm font-medium sm:text-base">
               Holdings by Source
             </span>
-            <p className="flex items-center gap-1 text-[10px] text-muted-foreground sm:text-xs">
-              <ArrowUpRight
-                className={cn(
-                  "size-3",
-                  unrealizedPercent >= 0 ? "text-emerald-600" : "text-red-600",
-                )}
-                aria-hidden="true"
-              />
-              <span
-                className={cn(
-                  unrealizedPercent >= 0 ? "text-emerald-600" : "text-red-600",
-                  blurClass(hideSensitive),
-                )}
-              >
-                {unrealizedPercent >= 0 ? "+" : ""}
-                {unrealizedPercent.toFixed(1)}%
-              </span>
-              <span>vs cost basis</span>
-            </p>
+            {isBitcoinMode ? (
+              <p className="text-[10px] text-muted-foreground sm:text-xs">
+                BTC allocation
+              </p>
+            ) : (
+              <p className="flex items-center gap-1 text-[10px] text-muted-foreground sm:text-xs">
+                <ArrowUpRight
+                  className={cn(
+                    "size-3",
+                    unrealizedPercent >= 0
+                      ? "text-emerald-600"
+                      : "text-red-600",
+                  )}
+                  aria-hidden="true"
+                />
+                <span
+                  className={cn(
+                    unrealizedPercent >= 0
+                      ? "text-emerald-600"
+                      : "text-red-600",
+                    blurClass(hideSensitive),
+                  )}
+                >
+                  {unrealizedPercent >= 0 ? "+" : ""}
+                  {unrealizedPercent.toFixed(1)}%
+                </span>
+                <span>vs cost basis</span>
+              </p>
+            )}
           </div>
         </div>
         <Button
@@ -1390,6 +1504,8 @@ interface RevenueTooltipProps {
   hideSensitive: boolean;
   currency: Currency;
   priceEur: number;
+  showCostBasis: boolean;
+  valueLabel: string;
 }
 
 function CustomTooltip({
@@ -1400,13 +1516,19 @@ function CustomTooltip({
   hideSensitive,
   currency,
   priceEur,
+  showCostBasis,
+  valueLabel,
 }: RevenueTooltipProps) {
   if (!active || !payload?.length) return null;
 
   const thisYear = payload.find((p) => p.dataKey === "thisYear")?.value || 0;
-  const prevYear = payload.find((p) => p.dataKey === "prevYear")?.value || 0;
-  const diff = Number(thisYear) - Number(prevYear);
-  const percentage = prevYear ? Math.round((diff / Number(prevYear)) * 100) : 0;
+  const prevYear = payload.find((p) => p.dataKey === "prevYear")?.value;
+  const hasCostBasis = showCostBasis && prevYear !== undefined;
+  const diff = Number(thisYear) - Number(prevYear ?? 0);
+  const percentage =
+    hasCostBasis && Number(prevYear)
+      ? Math.round((diff / Number(prevYear)) * 100)
+      : 0;
 
   return (
     <div className="rounded-lg border border-border bg-popover p-2 shadow-lg sm:p-3">
@@ -1420,7 +1542,7 @@ function CustomTooltip({
             style={{ backgroundColor: colors.thisYear }}
           />
           <span className="text-[10px] text-muted-foreground sm:text-sm">
-            Value:
+            {valueLabel}:
           </span>
           <span
             className={cn(
@@ -1428,38 +1550,42 @@ function CustomTooltip({
               blurClass(hideSensitive),
             )}
           >
-            {formatDisplayMoney(Number(thisYear), priceEur, currency)}
+            {formatPortfolioMoney(Number(thisYear), priceEur, currency)}
           </span>
         </div>
-        <div className="flex items-center gap-1.5 sm:gap-2">
-          <div
-            className="size-2 rounded-full sm:size-2.5"
-            style={{ backgroundColor: colors.prevYear }}
-          />
-          <span className="text-[10px] text-muted-foreground sm:text-sm">
-            Cost Basis:
-          </span>
-          <span
-            className={cn(
-              "text-[10px] font-medium text-foreground sm:text-sm",
-              blurClass(hideSensitive),
-            )}
-          >
-            {formatDisplayMoney(Number(prevYear), priceEur, currency)}
-          </span>
-        </div>
-        <div className="mt-1 border-t border-border pt-1">
-          <span
-            className={cn(
-              "text-[10px] font-medium sm:text-xs",
-              diff >= 0 ? "text-emerald-500" : "text-red-500",
-              blurClass(hideSensitive),
-            )}
-          >
-            {diff >= 0 ? "+" : ""}
-            {percentage}% vs basis
-          </span>
-        </div>
+        {hasCostBasis && (
+          <>
+            <div className="flex items-center gap-1.5 sm:gap-2">
+              <div
+                className="size-2 rounded-full sm:size-2.5"
+                style={{ backgroundColor: colors.prevYear }}
+              />
+              <span className="text-[10px] text-muted-foreground sm:text-sm">
+                Cost Basis:
+              </span>
+              <span
+                className={cn(
+                  "text-[10px] font-medium text-foreground sm:text-sm",
+                  blurClass(hideSensitive),
+                )}
+              >
+                {formatPortfolioMoney(Number(prevYear), priceEur, currency)}
+              </span>
+            </div>
+            <div className="mt-1 border-t border-border pt-1">
+              <span
+                className={cn(
+                  "text-[10px] font-medium sm:text-xs",
+                  diff >= 0 ? "text-emerald-500" : "text-red-500",
+                  blurClass(hideSensitive),
+                )}
+              >
+                {diff >= 0 ? "+" : ""}
+                {percentage}% vs basis
+              </span>
+            </div>
+          </>
+        )}
       </div>
     </div>
   );
@@ -1478,11 +1604,24 @@ const RevenueFlowChart = ({
   const { active: activeSeries, handleHover } = useHoverHighlight<
     "thisYear" | "prevYear"
   >();
+  const showCostBasis = currency !== "btc";
 
   const legendItems = [
-    { key: "thisYear", label: "Value", color: palette.primary },
-    { key: "prevYear", label: "Cost Basis", color: palette.secondary.light },
-  ] as const;
+    {
+      key: "thisYear" as const,
+      label: currency === "btc" ? "BTC balance" : "Value",
+      color: palette.primary,
+    },
+    ...(showCostBasis
+      ? [
+          {
+            key: "prevYear" as const,
+            label: "Cost Basis",
+            color: palette.secondary.light,
+          },
+        ]
+      : []),
+  ];
 
   React.useEffect(() => {
     if (typeof window === "undefined") return;
@@ -1508,11 +1647,13 @@ const RevenueFlowChart = ({
     window.history.replaceState(null, "", nextUrl);
   }, [period]);
 
-  const chartData = getDataForPeriod(period, snapshot);
+  const chartData = getDataForPeriod(period, snapshot, currency);
   const latestPortfolioValue =
     chartData.length > 0
       ? chartData[chartData.length - 1]?.thisYear
-      : snapshot.fiat.eurBalance;
+      : currency === "btc"
+        ? latestPortfolioBalanceBtc(snapshot)
+        : snapshot.fiat.eurBalance;
 
   const renderChartCard = (expanded = false) => (
     <div className="flex min-w-0 flex-1 flex-col gap-4 rounded-xl border bg-card p-4 sm:gap-6 sm:p-6">
@@ -1524,14 +1665,14 @@ const RevenueFlowChart = ({
               blurClass(hideSensitive),
             )}
           >
-            {formatCompactDisplayMoney(
+            {formatCompactPortfolioMoney(
               latestPortfolioValue,
               snapshot.priceEur,
               currency,
             )}
           </p>
           <p className="text-xs text-muted-foreground">
-            Portfolio Value ({periodLabels[period]})
+            {`${currency === "btc" ? "BTC Balance" : "Portfolio Value"} (${periodLabels[period]})`}
           </p>
         </div>
         <div className="hidden items-center gap-3 sm:flex sm:gap-5">
@@ -1627,24 +1768,28 @@ const RevenueFlowChart = ({
                   stopOpacity={0.05}
                 />
               </linearGradient>
-              <linearGradient
-                id={expanded ? "prevYearGradientExpanded" : "prevYearGradient"}
-                x1="0"
-                y1="0"
-                x2="0"
-                y2="1"
-              >
-                <stop
-                  offset="0%"
-                  stopColor="var(--color-prevYear)"
-                  stopOpacity={0.2}
-                />
-                <stop
-                  offset="100%"
-                  stopColor="var(--color-prevYear)"
-                  stopOpacity={0.02}
-                />
-              </linearGradient>
+              {showCostBasis && (
+                <linearGradient
+                  id={
+                    expanded ? "prevYearGradientExpanded" : "prevYearGradient"
+                  }
+                  x1="0"
+                  y1="0"
+                  x2="0"
+                  y2="1"
+                >
+                  <stop
+                    offset="0%"
+                    stopColor="var(--color-prevYear)"
+                    stopOpacity={0.2}
+                  />
+                  <stop
+                    offset="100%"
+                    stopColor="var(--color-prevYear)"
+                    stopOpacity={0.02}
+                  />
+                </linearGradient>
+              )}
             </defs>
             <CartesianGrid strokeDasharray="0" vertical={false} />
             <XAxis
@@ -1663,7 +1808,7 @@ const RevenueFlowChart = ({
               tickFormatter={(value) =>
                 hideSensitive
                   ? ""
-                  : formatAxisDisplayMoney(
+                  : formatAxisPortfolioMoney(
                       Number(value),
                       snapshot.priceEur,
                       currency,
@@ -1681,6 +1826,8 @@ const RevenueFlowChart = ({
                   hideSensitive={hideSensitive}
                   currency={currency}
                   priceEur={snapshot.priceEur}
+                  showCostBasis={showCostBasis}
+                  valueLabel={currency === "btc" ? "BTC Balance" : "Value"}
                 />
               }
               cursor={{ strokeOpacity: 0.2 }}
@@ -1698,19 +1845,25 @@ const RevenueFlowChart = ({
                 activeSeries === null || activeSeries === "thisYear" ? 1 : 0.3
               }
             />
-            <Area
-              type="monotone"
-              dataKey="prevYear"
-              stroke="var(--color-prevYear)"
-              strokeWidth={activeSeries === "prevYear" ? 3 : 2}
-              fill={`url(#${expanded ? "prevYearGradientExpanded" : "prevYearGradient"})`}
-              fillOpacity={
-                activeSeries === null || activeSeries === "prevYear" ? 1 : 0.3
-              }
-              strokeOpacity={
-                activeSeries === null || activeSeries === "prevYear" ? 1 : 0.3
-              }
-            />
+            {showCostBasis && (
+              <Area
+                type="monotone"
+                dataKey="prevYear"
+                stroke="var(--color-prevYear)"
+                strokeWidth={activeSeries === "prevYear" ? 3 : 2}
+                fill={`url(#${expanded ? "prevYearGradientExpanded" : "prevYearGradient"})`}
+                fillOpacity={
+                  activeSeries === null || activeSeries === "prevYear"
+                    ? 1
+                    : 0.3
+                }
+                strokeOpacity={
+                  activeSeries === null || activeSeries === "prevYear"
+                    ? 1
+                    : 0.3
+                }
+              />
+            )}
           </AreaChart>
         </ChartContainer>
       </div>
@@ -2081,9 +2234,10 @@ const Dashboard5 = ({
   className?: string;
   snapshot?: OverviewSnapshot;
 }) => {
-  const [addConnectionOpen, setAddConnectionOpen] = React.useState(false);
+  const navigate = useNavigate();
   const hideSensitive = useUiStore((s) => s.hideSensitive);
   const currency = useCurrency();
+  const { syncAll, isSyncing } = useWalletSyncAction();
   const transactions = React.useMemo(
     () =>
       snapshot.txs.length
@@ -2093,50 +2247,46 @@ const Dashboard5 = ({
   );
 
   return (
-    <>
-      <div
-        className={cn(
-          "w-full space-y-4 bg-background p-3 sm:space-y-6 sm:p-4 md:p-6",
-          className,
-        )}
-      >
-        <WelcomeSection
-          snapshot={snapshot}
-          onAddConnection={() => setAddConnectionOpen(true)}
-        />
-        <StatsCards
+    <div
+      className={cn(
+        "w-full space-y-4 bg-background p-3 sm:space-y-6 sm:p-4 md:p-6",
+        className,
+      )}
+    >
+      <WelcomeSection
+        snapshot={snapshot}
+        onSync={syncAll}
+        isSyncing={isSyncing}
+        onAddConnection={() => void navigate({ to: "/imports" })}
+      />
+      <StatsCards
+        snapshot={snapshot}
+        hideSensitive={hideSensitive}
+        currency={currency}
+      />
+      <div className="flex flex-col gap-4 sm:gap-6 xl:flex-row">
+        <RevenueFlowChart
           snapshot={snapshot}
           hideSensitive={hideSensitive}
           currency={currency}
         />
-        <div className="flex flex-col gap-4 sm:gap-6 xl:flex-row">
-          <RevenueFlowChart
-            snapshot={snapshot}
-            hideSensitive={hideSensitive}
-            currency={currency}
-          />
-          <SideChartsSection
-            snapshot={snapshot}
-            hideSensitive={hideSensitive}
-            currency={currency}
-          />
-        </div>
-        <div className="flex flex-col gap-4 xl:flex-row">
-          <RecentTransactionsTable
-            className="flex-1"
-            transactions={transactions}
-            hideSensitive={hideSensitive}
-            currency={currency}
-            priceEur={snapshot.priceEur}
-          />
-          <RecentActivity className="xl:w-[360px]" />
-        </div>
+        <SideChartsSection
+          snapshot={snapshot}
+          hideSensitive={hideSensitive}
+          currency={currency}
+        />
       </div>
-      <AddConnectionFlow
-        open={addConnectionOpen}
-        onClose={() => setAddConnectionOpen(false)}
-      />
-    </>
+      <div className="flex flex-col gap-4 xl:flex-row">
+        <RecentTransactionsTable
+          className="flex-1"
+          transactions={transactions}
+          hideSensitive={hideSensitive}
+          currency={currency}
+          priceEur={snapshot.priceEur}
+        />
+        <RecentActivity className="xl:w-[360px]" />
+      </div>
+    </div>
   );
 };
 

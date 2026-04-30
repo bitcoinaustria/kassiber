@@ -36,7 +36,9 @@ export function ChatToolCall({ toolCall }: ChatToolCallProps) {
       <ToolContent>
         {hasArguments ? <ToolInput input={toolCall.arguments} /> : null}
         {summary ? <ToolOutput output={summary} label="Summary" /> : null}
-        {hasResult ? <ToolOutput output={toolCall.result} label="Details" /> : null}
+        {hasResult && !summary ? (
+          <ToolOutput output={toolCall.result} label="Details" />
+        ) : null}
         {errorText ? (
           <ToolOutput error={errorText} />
         ) : toolCall.reason ? (
@@ -54,6 +56,29 @@ function summarizeToolResult(result: unknown): string | null {
   if (!kind || !data) return null;
 
   switch (kind) {
+    case "ui.overview.snapshot": {
+      const connections = Array.isArray(data.connections)
+        ? data.connections
+        : [];
+      const txs = Array.isArray(data.txs) ? data.txs : [];
+      const fiat = asRecord(data.fiat);
+      const priceEur =
+        typeof data.priceEur === "number"
+          ? `BTC/EUR ${formatMoney(data.priceEur)}`
+          : null;
+      const realizedYtd =
+        typeof fiat?.eurRealizedYTD === "number"
+          ? `realized YTD ${formatMoney(fiat.eurRealizedYTD)}`
+          : null;
+      return [
+        `${connections.length} connection(s)`,
+        `${txs.length} recent transaction(s)`,
+        priceEur,
+        realizedYtd,
+      ]
+        .filter((part): part is string => Boolean(part))
+        .join("; ");
+    }
     case "ui.workspace.health": {
       const workspace = asRecord(data.workspace)?.label ?? "No workspace";
       const profile = asRecord(data.profile)?.label ?? "No profile";
@@ -117,4 +142,11 @@ function asRecord(value: unknown): Record<string, unknown> | null {
   return value && typeof value === "object" && !Array.isArray(value)
     ? (value as Record<string, unknown>)
     : null;
+}
+
+function formatMoney(value: number): string {
+  return `€${value.toLocaleString("en-US", {
+    maximumFractionDigits: 2,
+    minimumFractionDigits: 2,
+  })}`;
 }

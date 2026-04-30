@@ -27,6 +27,8 @@ import { Quarantine } from "./routes/Quarantine";
 import { Profiles } from "./routes/Profiles";
 import { Connections } from "./routes/Connections";
 import { ConnectionDetail } from "./routes/ConnectionDetail";
+import { Imports } from "./routes/Imports";
+import { Settings } from "./routes/Settings";
 import { Assistant } from "./routes/Assistant";
 import { AppShell } from "./components/kb/AppShell";
 import { useUiStore } from "./store/ui";
@@ -111,14 +113,44 @@ const connectionDetailRoute = createRoute({
   component: ConnectionDetail,
 });
 
+const importsRoute = createRoute({
+  getParentRoute: () => appLayoutRoute,
+  path: "/imports",
+  component: Imports,
+});
+
+const settingsRoute = createRoute({
+  getParentRoute: () => appLayoutRoute,
+  path: "/settings",
+  component: Settings,
+});
+
 const assistantRoute = createRoute({
   getParentRoute: () => appLayoutRoute,
   path: "/assistant",
   component: Assistant,
 });
 
+const assistantTypoRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/assitant",
+  beforeLoad: () => {
+    throw redirect({ to: "/assistant" });
+  },
+});
+
+const importsAliasRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/Imports",
+  beforeLoad: () => {
+    throw redirect({ to: "/imports" });
+  },
+});
+
 const routeTree = rootRoute.addChildren([
   indexRoute,
+  assistantTypoRoute,
+  importsAliasRoute,
   appLayoutRoute.addChildren([
     overviewRoute,
     transactionsRoute,
@@ -129,6 +161,8 @@ const routeTree = rootRoute.addChildren([
     profilesRoute,
     connectionsRoute,
     connectionDetailRoute,
+    importsRoute,
+    settingsRoute,
     assistantRoute,
   ]),
 ]);

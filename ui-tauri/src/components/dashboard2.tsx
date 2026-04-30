@@ -10,13 +10,13 @@ import {
   Clock,
   Copy,
   CreditCard,
-  Download,
   Eye,
   Filter,
   Maximize2,
   MoreHorizontal,
   Pencil,
   Plus,
+  RefreshCw,
   RotateCcw,
   Search,
   ShoppingCart,
@@ -77,6 +77,7 @@ import {
 } from "@/components/ui/table";
 import { cn } from "@/lib/utils";
 import { formatBtc, useCurrency, type Currency } from "@/lib/currency";
+import { useWalletSyncAction } from "@/hooks/useWalletSyncAction";
 import {
   MOCK_TRANSACTIONS,
   type TransactionsLedger,
@@ -144,8 +145,12 @@ const compactCurrencyFormatter = new Intl.NumberFormat("en-US", {
 
 const blurClass = (hidden: boolean) => (hidden ? "sensitive" : "");
 
+function formatInlineBtc(btc: number, precision = 8) {
+  return `₿${Math.abs(btc).toFixed(precision)}`;
+}
+
 function formatDisplayMoney(eur: number, btc: number, currency: Currency) {
-  if (currency === "btc") return formatBtc(btc);
+  if (currency === "btc") return formatInlineBtc(btc);
   return currencyFormatter.format(eur);
 }
 
@@ -1119,7 +1124,7 @@ const VolumeChart = ({
           <div className="flex items-center gap-2">
             <p
               className={cn(
-                "text-xl leading-tight font-semibold tracking-tight sm:text-2xl",
+                "whitespace-nowrap text-xl leading-tight font-semibold tracking-tight sm:text-2xl",
                 blurClass(hideSensitive),
               )}
             >
@@ -1204,10 +1209,10 @@ const VolumeChart = ({
                 hideSensitive
                   ? ""
                   : currency === "btc"
-                  ? formatBtc(Number(value), { precision: 4 })
+                  ? formatInlineBtc(Number(value), 4)
                   : compactCurrencyFormatter.format(value)
               }
-              width={40}
+              width={56}
             />
             <Tooltip
               content={
@@ -1372,7 +1377,7 @@ const CostsChart = ({
         <div className="flex items-center gap-2">
           <p
             className={cn(
-              "text-xl leading-tight font-semibold tracking-tight sm:text-2xl",
+              "whitespace-nowrap text-xl leading-tight font-semibold tracking-tight sm:text-2xl",
               blurClass(hideSensitive),
             )}
           >
@@ -1424,10 +1429,10 @@ const CostsChart = ({
                 hideSensitive
                   ? ""
                   : currency === "btc"
-                  ? formatBtc(Number(value), { precision: 4 })
+                  ? formatInlineBtc(Number(value), 4)
                   : compactCurrencyFormatter.format(value)
               }
-              width={40}
+              width={56}
             />
             <Tooltip
               content={
@@ -1498,7 +1503,7 @@ const StatsCards = ({
               </div>
               <p
                 className={cn(
-                  "hidden text-[10px] text-muted-foreground/70 sm:block sm:text-xs",
+                  "hidden whitespace-nowrap text-[10px] text-muted-foreground/70 sm:block sm:text-xs",
                   blurClass(hideSensitive),
                 )}
               >
@@ -1508,7 +1513,7 @@ const StatsCards = ({
               </p>
               <p
                 className={cn(
-                  "text-xl leading-tight font-semibold tracking-tight sm:text-2xl lg:text-[28px]",
+                  "whitespace-nowrap text-xl leading-tight font-semibold tracking-tight sm:text-2xl lg:text-[28px]",
                   blurClass(hideSensitive),
                 )}
               >
@@ -2255,6 +2260,7 @@ const Dashboard2 = ({
   const [txnNote, setTxnNote] = React.useState("");
   const hideSensitive = useUiStore((s) => s.hideSensitive);
   const currency = useCurrency();
+  const { syncAll, isSyncing } = useWalletSyncAction();
   const records = React.useMemo(
     () =>
       ledger.txs.length
@@ -2301,10 +2307,17 @@ const Dashboard2 = ({
             variant="outline"
             size="sm"
             className="h-8 gap-2 sm:h-9"
-            aria-label="Export"
+            aria-label="Sync wallets"
+            onClick={syncAll}
+            disabled={isSyncing}
           >
-            <Download className="size-4" aria-hidden="true" />
-            <span className="hidden sm:inline">Export</span>
+            <RefreshCw
+              className={cn("size-4", isSyncing && "animate-spin")}
+              aria-hidden="true"
+            />
+            <span className="hidden sm:inline">
+              {isSyncing ? "Syncing" : "Sync"}
+            </span>
           </Button>
           <Dialog open={newTxnOpen} onOpenChange={setNewTxnOpen}>
             <DialogTrigger asChild>

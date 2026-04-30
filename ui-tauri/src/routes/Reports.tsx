@@ -8,7 +8,6 @@
 
 import { useState, type ReactNode } from "react";
 import {
-  ArrowRight,
   CheckCircle2,
   ExternalLink,
   FileSpreadsheet,
@@ -62,10 +61,35 @@ const COST_BASIS_METHODS: Array<{
   { k: "fifo", name: "FIFO", desc: "First-in, first-out" },
   { k: "lifo", name: "LIFO", desc: "Last-in, first-out" },
   { k: "hifo", name: "HIFO", desc: "Highest-in, first-out" },
-  { k: "spec", name: "Specific ID", desc: "Per-lot selection" },
+  { k: "lofo", name: "LOFO", desc: "Lowest-in, first-out" },
 ];
 
 const REPORTING_YEARS = [2023, 2024, 2025, 2026] as const;
+const METHOD_LABELS: Record<CostBasisMethod, { name: string; desc: string }> =
+  {
+    fifo: { name: "FIFO", desc: "First-in, first-out" },
+    lifo: { name: "LIFO", desc: "Last-in, first-out" },
+    hifo: { name: "HIFO", desc: "Highest-in, first-out" },
+    lofo: { name: "LOFO", desc: "Lowest-in, first-out" },
+    moving_average: {
+      name: "Moving average",
+      desc: "Average cost pool",
+    },
+    moving_average_at: {
+      name: "Austria tax method",
+      desc: "FIFO old stock · AVCO new stock",
+    },
+  };
+
+function normalizeReportMethod(
+  method: CostBasisMethod | undefined,
+  jurisdiction: (typeof JURISDICTIONS)[string],
+): CostBasisMethod {
+  if (jurisdiction.methodLocked) {
+    return jurisdiction.defaultMethod;
+  }
+  return method && METHOD_LABELS[method] ? method : jurisdiction.defaultMethod;
+}
 
 type ReportExportFormatId = "csv" | "pdf" | "xlsx";
 
@@ -120,9 +144,10 @@ interface ReportsViewProps {
 
 function ReportsView({ report, hideSensitive }: ReportsViewProps) {
   const [year, setYear] = useState(report.year);
-  const [jurCode, setJurCode] = useState(report.jurisdictionCode);
-  const j = JURISDICTIONS[jurCode] ?? JURISDICTIONS.AT;
-  const [method, setMethod] = useState<CostBasisMethod>(j.defaultMethod);
+  const j = JURISDICTIONS[report.jurisdictionCode] ?? JURISDICTIONS.AT;
+  const [method, setMethod] = useState<CostBasisMethod>(
+    normalizeReportMethod(report.method, j),
+  );
   const [exportStatus, setExportStatus] = useState<{
     tone: "success" | "error";
     message: string;
@@ -245,12 +270,7 @@ function ReportsView({ report, hideSensitive }: ReportsViewProps) {
         <ReportControls
           year={year}
           setYear={setYear}
-          jurCode={jurCode}
-          setJurCode={(code) => {
-            const next = JURISDICTIONS[code] ?? JURISDICTIONS.AT;
-            setJurCode(code);
-            setMethod(next.defaultMethod);
-          }}
+          jurisdiction={j}
           method={method}
           setMethod={setMethod}
           rateLabel={j.rateLabel}
@@ -286,7 +306,7 @@ function ReportsView({ report, hideSensitive }: ReportsViewProps) {
                   {j.ccy} {fmt(totals.cost)}
                 </span>
               }
-              sub={method.toUpperCase()}
+              sub={METHOD_LABELS[method].name}
             />
             <ReportMetricCard
               label="Net Gain"
@@ -317,8 +337,7 @@ function ReportsView({ report, hideSensitive }: ReportsViewProps) {
             <CardHeader className="border-b">
               <CardTitle>Disposed lots · {year}</CardTitle>
               <CardDescription>
-                Previewed disposal lots for the selected jurisdiction and
-                method.
+                Disposal lots for the profile jurisdiction and rp2 method.
               </CardDescription>
             </CardHeader>
             <CardContent className="overflow-x-auto p-0">
@@ -483,8 +502,7 @@ function ReportsView({ report, hideSensitive }: ReportsViewProps) {
 interface ReportControlsProps {
   year: number;
   setYear: (year: number) => void;
-  jurCode: string;
-  setJurCode: (code: string) => void;
+  jurisdiction: (typeof JURISDICTIONS)[string];
   method: CostBasisMethod;
   setMethod: (method: CostBasisMethod) => void;
   rateLabel: string;
@@ -494,8 +512,7 @@ interface ReportControlsProps {
 function ReportControls({
   year,
   setYear,
-  jurCode,
-  setJurCode,
+  jurisdiction,
   method,
   setMethod,
   rateLabel,
@@ -510,18 +527,17 @@ function ReportControls({
       <CardContent className="space-y-6">
         <section className="space-y-3">
           <Label>Jurisdiction</Label>
-          <Select value={jurCode} onValueChange={setJurCode}>
-            <SelectTrigger className="w-full">
-              <SelectValue placeholder="Select jurisdiction" />
-            </SelectTrigger>
-            <SelectContent>
-              {Object.values(JURISDICTIONS).map((x) => (
-                <SelectItem key={x.code} value={x.code}>
-                  {x.code} · {x.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <div
+            aria-readonly="true"
+            className="flex min-h-9 items-center justify-between rounded-md border bg-muted/35 px-3 py-2 text-sm"
+          >
+            <span className="font-medium">
+              {jurisdiction.code} · {jurisdiction.name}
+            </span>
+            <span className="rounded-md bg-background px-2 py-0.5 text-xs text-muted-foreground">
+              Profile
+            </span>
+          </div>
         </section>
 
         <section className="space-y-3">
@@ -555,37 +571,61 @@ function ReportControls({
 
         <section className="space-y-3">
           <Label>Cost-basis method</Label>
-          <div className="grid gap-2">
-            {COST_BASIS_METHODS.map(({ k, name, desc }) => {
-              const active = method === k;
-              return (
-                <button
-                  key={k}
-                  type="button"
-                  onClick={() => setMethod(k)}
-                  className={cn(
-                    "rounded-md border p-3 text-left transition-colors",
-                    active
-                      ? "border-primary bg-primary/5"
-                      : "bg-background hover:bg-muted/50",
-                  )}
-                >
+          {jurisdiction.methodLocked ? (
+            <div
+              aria-readonly="true"
+              className="rounded-md border bg-muted/35 p-3 text-left"
+            >
+              <div className="flex items-start justify-between gap-3">
+                <span>
                   <span className="flex items-center gap-2">
-                    <span
-                      className={cn(
-                        "size-2 rounded-full",
-                        active ? "bg-primary" : "bg-muted-foreground/40",
-                      )}
-                    />
-                    <span className="font-medium">{name}</span>
+                    <span className="size-2 rounded-full bg-primary" />
+                    <span className="font-medium">
+                      {METHOD_LABELS[method].name}
+                    </span>
                   </span>
                   <span className="mt-1 block text-xs text-muted-foreground">
-                    {desc}
+                    {jurisdiction.methodNote ?? METHOD_LABELS[method].desc}
                   </span>
-                </button>
-              );
-            })}
-          </div>
+                </span>
+                <span className="shrink-0 rounded-md bg-background px-2 py-0.5 text-xs text-muted-foreground">
+                  Profile
+                </span>
+              </div>
+            </div>
+          ) : (
+            <div className="grid gap-2">
+              {COST_BASIS_METHODS.map(({ k, name, desc }) => {
+                const active = method === k;
+                return (
+                  <button
+                    key={k}
+                    type="button"
+                    onClick={() => setMethod(k)}
+                    className={cn(
+                      "rounded-md border p-3 text-left transition-colors",
+                      active
+                        ? "border-primary bg-primary/5"
+                        : "bg-background hover:bg-muted/50",
+                    )}
+                  >
+                    <span className="flex items-center gap-2">
+                      <span
+                        className={cn(
+                          "size-2 rounded-full",
+                          active ? "bg-primary" : "bg-muted-foreground/40",
+                        )}
+                      />
+                      <span className="font-medium">{name}</span>
+                    </span>
+                    <span className="mt-1 block text-xs text-muted-foreground">
+                      {desc}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          )}
         </section>
 
         <section className="space-y-3">
@@ -593,15 +633,14 @@ function ReportControls({
           <div className="grid gap-2">
             <ReportToggleRow label="Treat internal transfers as non-taxable" def />
             <ReportToggleRow label={`Apply ${rateLabel} flat rate`} def />
-            <ReportToggleRow label="Include Lightning channel fees as cost" def />
+            <ReportToggleRow
+              label="Fees follow journals: network, Lightning, swaps"
+              def
+              disabled
+            />
             <ReportToggleRow label="Aggregate lots per UTXO set" />
           </div>
         </section>
-
-        <Button type="button" className="w-full gap-2">
-          Generate preview
-          <ArrowRight className="size-4" aria-hidden="true" />
-        </Button>
       </CardContent>
     </Card>
   );
@@ -700,21 +739,25 @@ function ReportMetricCard({ label, value, sub }: ReportMetricCardProps) {
 interface ReportToggleRowProps {
   label: string;
   def?: boolean;
+  disabled?: boolean;
 }
 
-function ReportToggleRow({ label, def }: ReportToggleRowProps) {
+function ReportToggleRow({ label, def, disabled }: ReportToggleRowProps) {
   const [on, setOn] = useState(!!def);
   return (
     <button
       type="button"
-      onClick={() => setOn((v) => !v)}
-      className="flex items-center justify-between gap-3 rounded-md border bg-background px-3 py-2 text-left text-sm transition-colors hover:bg-muted/50"
+      disabled={disabled}
+      onClick={() => {
+        if (!disabled) setOn((v) => !v);
+      }}
+      className="flex items-center justify-between gap-3 rounded-md border bg-background px-3 py-2 text-left text-sm transition-colors hover:bg-muted/50 disabled:cursor-not-allowed disabled:bg-muted/35 disabled:text-muted-foreground disabled:hover:bg-muted/35"
     >
       <span>{label}</span>
       <span
         className={cn(
           "relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors",
-          on ? "bg-primary" : "bg-muted",
+          on ? (disabled ? "bg-primary/60" : "bg-primary") : "bg-muted",
         )}
       >
         <span

@@ -69,6 +69,7 @@ from .db import (
     resolve_config_root,
     resolve_database_path,
     resolve_effective_data_root,
+    set_setting,
     resolve_exports_root,
 )
 from .envelope import build_envelope, build_error_envelope, json_ready
@@ -96,12 +97,17 @@ SUPPORTED_KINDS = (
     "ui.journals.quarantine",
     "ui.journals.transfers.list",
     "ui.profiles.snapshot",
+    "ui.profiles.create",
+    "ui.profiles.switch",
     "ui.rates.summary",
     "ui.workspace.health",
+    "ui.workspace.create",
     "ui.workspace.delete",
     "ui.secrets.init",
     "ui.secrets.change_passphrase",
     "ui.next_actions",
+    "ui.wallets.update",
+    "ui.wallets.delete",
     "ui.wallets.sync",
     "daemon.lock",
     "daemon.unlock",
@@ -126,6 +132,7 @@ PENDING_AI_CANCEL_TTL_SECONDS = 30.0
 MAX_PENDING_AI_CANCELS = 128
 AI_TOOL_CONSENT_TIMEOUT_SECONDS = 300.0
 PLAINTEXT_DELETE_ACK = "DELETE LOCAL DATA"
+PLAINTEXT_CHANGE_ACK = "CHANGE LOCAL DATA"
 MIN_DATABASE_PASSPHRASE_CHARS = 12
 AUTH_FAILURES_BEFORE_BACKOFF = 3
 AUTH_BACKOFF_BASE_SECONDS = 5.0
@@ -1495,6 +1502,55 @@ def _verify_passphrase_with_backoff(
     return verified
 
 
+def _require_sensitive_local_auth(
+    ctx: "DaemonContext",
+    *,
+    args: dict[str, Any],
+    request_id: object,
+    scope: str,
+    label: str,
+    plaintext_ack_key: str,
+    plaintext_ack_value: str,
+) -> tuple[dict[str, Any], bool] | None:
+    auth = args.get("auth_response")
+    if _database_file_is_encrypted(ctx):
+        passphrase = auth.get("passphrase_secret") if isinstance(auth, dict) else None
+        if not isinstance(passphrase, str) or not passphrase:
+            return (
+                _with_request_id(
+                    build_envelope(
+                        "auth_required",
+                        {
+                            "scope": scope,
+                            "label": label,
+                        },
+                    ),
+                    request_id,
+                ),
+                False,
+            )
+        verified = _verify_passphrase_with_backoff(ctx, scope, passphrase)
+        if not verified:
+            return (
+                _error_envelope(
+                    "local_auth_denied",
+                    "passphrase verification failed",
+                    request_id=request_id,
+                    retryable=True,
+                ),
+                False,
+            )
+        return None
+
+    if not isinstance(auth, dict) or auth.get(plaintext_ack_key) != plaintext_ack_value:
+        raise AppError(
+            f"{scope} requires plaintext acknowledgement",
+            code="validation",
+            hint=f"Ask the user to type {plaintext_ack_value!r} before changing plaintext local data.",
+        )
+    return None
+
+
 def _delete_current_workspace(ctx: "DaemonContext") -> dict[str, Any]:
     context = current_context_snapshot(ctx.conn)
     workspace_id = context.get("workspace_id")
@@ -1531,6 +1587,280 @@ def _delete_current_workspace(ctx: "DaemonContext") -> dict[str, Any]:
         "workspace": {"id": workspace_id, "label": workspace_label},
         "removed": counts,
     }
+
+
+def _switch_profile_payload(
+    conn: sqlite3.Connection,
+    args: dict[str, Any],
+) -> dict[str, Any]:
+    profile_id = args.get("profile_id")
+    if not isinstance(profile_id, str) or not profile_id.strip():
+        raise AppError(
+            "ui.profiles.switch requires profile_id",
+            code="validation",
+            hint="Select a profile from the current profiles snapshot.",
+            retryable=False,
+        )
+    profile_id = profile_id.strip()
+    row = conn.execute(
+        """
+        SELECT
+            p.id,
+            p.label,
+            p.workspace_id,
+            w.label AS workspace_label
+        FROM profiles p
+        JOIN workspaces w ON w.id = p.workspace_id
+        WHERE p.id = ?
+        LIMIT 1
+        """,
+        (profile_id,),
+    ).fetchone()
+    if not row:
+        raise AppError(
+            "profile not found",
+            code="validation",
+            hint="Refresh profiles and choose an existing profile.",
+            details={"profile_id": profile_id},
+            retryable=False,
+        )
+
+    with conn:
+        set_setting(conn, "context_workspace", row["workspace_id"])
+        set_setting(conn, "context_profile", row["id"])
+
+    return {
+        "activeProfileId": row["id"],
+        "activeWorkspaceId": row["workspace_id"],
+        "profile": {"id": row["id"], "name": row["label"]},
+        "workspace": {"id": row["workspace_id"], "name": row["workspace_label"]},
+    }
+
+
+def _profile_defaults_for_workspace(
+    conn: sqlite3.Connection,
+    workspace_id: str,
+) -> dict[str, Any]:
+    context = current_context_snapshot(conn)
+    rows = conn.execute(
+        """
+        SELECT
+            id,
+            fiat_currency,
+            tax_country,
+            tax_long_term_days,
+            gains_algorithm
+        FROM profiles
+        WHERE workspace_id = ?
+        ORDER BY created_at ASC, label ASC
+        """,
+        (workspace_id,),
+    ).fetchall()
+    row = next(
+        (candidate for candidate in rows if candidate["id"] == context["profile_id"]),
+        rows[0] if rows else None,
+    )
+    if row:
+        return {
+            "fiat_currency": row["fiat_currency"],
+            "tax_country": row["tax_country"],
+            "tax_long_term_days": row["tax_long_term_days"],
+            "gains_algorithm": row["gains_algorithm"],
+        }
+    return {
+        "fiat_currency": "EUR",
+        "tax_country": "generic",
+        "tax_long_term_days": 365,
+        "gains_algorithm": "FIFO",
+    }
+
+
+def _create_profile_payload(
+    conn: sqlite3.Connection,
+    args: dict[str, Any],
+) -> dict[str, Any]:
+    workspace_id = args.get("workspace_id")
+    if not isinstance(workspace_id, str) or not workspace_id.strip():
+        raise AppError(
+            "ui.profiles.create requires workspace_id",
+            code="validation",
+            hint="Choose the workspace that should own the new profile.",
+            retryable=False,
+        )
+    label = args.get("label")
+    if not isinstance(label, str) or not label.strip():
+        raise AppError(
+            "ui.profiles.create requires label",
+            code="validation",
+            hint="Enter a profile name.",
+            retryable=False,
+        )
+    workspace_id = workspace_id.strip()
+    defaults = _profile_defaults_for_workspace(conn, workspace_id)
+    profile = core_accounts.create_profile(
+        conn,
+        workspace_id,
+        label.strip(),
+        defaults["fiat_currency"],
+        defaults["gains_algorithm"],
+        defaults["tax_country"],
+        int(defaults["tax_long_term_days"]),
+    )
+    workspace = conn.execute(
+        "SELECT id, label FROM workspaces WHERE id = ?",
+        (profile["workspace_id"],),
+    ).fetchone()
+    return {
+        "activeProfileId": profile["id"],
+        "activeWorkspaceId": profile["workspace_id"],
+        "profile": {"id": profile["id"], "name": profile["label"]},
+        "workspace": {
+            "id": workspace["id"] if workspace else profile["workspace_id"],
+            "name": workspace["label"] if workspace else "",
+        },
+        "defaults": {
+            "fiat_currency": profile["fiat_currency"],
+            "tax_country": profile["tax_country"],
+            "tax_long_term_days": profile["tax_long_term_days"],
+            "gains_algorithm": profile["gains_algorithm"],
+        },
+    }
+
+
+def _create_workspace_payload(
+    conn: sqlite3.Connection,
+    args: dict[str, Any],
+) -> dict[str, Any]:
+    label = args.get("label")
+    if not isinstance(label, str) or not label.strip():
+        raise AppError(
+            "ui.workspace.create requires label",
+            code="validation",
+            hint="Enter a workspace name.",
+            retryable=False,
+        )
+    workspace = core_accounts.create_workspace(conn, label.strip())
+    return {
+        "workspace": {
+            "id": workspace["id"],
+            "name": workspace["label"],
+            "created": (workspace["created_at"] or "")[:10],
+        },
+        "activeWorkspaceId": workspace["id"],
+        "activeProfileId": "",
+    }
+
+
+def _wallet_ref_from_args(args: dict[str, Any], kind: str) -> str:
+    wallet_ref = args.get("wallet")
+    if not isinstance(wallet_ref, str) or not wallet_ref.strip():
+        raise AppError(
+            f"{kind} requires wallet",
+            code="validation",
+            hint="Pass the wallet id or label for the active profile.",
+            retryable=False,
+        )
+    return wallet_ref.strip()
+
+
+def _update_wallet_payload(
+    ctx: "DaemonContext",
+    args: dict[str, Any],
+    request_id: object,
+) -> tuple[dict[str, Any], bool]:
+    wallet_ref = _wallet_ref_from_args(args, "ui.wallets.update")
+    label = args.get("label")
+    if not isinstance(label, str) or not label.strip():
+        raise AppError(
+            "ui.wallets.update requires label",
+            code="validation",
+            hint="Enter a new connection label.",
+            retryable=False,
+        )
+    wallet = core_wallets.get_wallet_details(ctx.conn, None, None, wallet_ref)
+    auth_result = _require_sensitive_local_auth(
+        ctx,
+        args=args,
+        request_id=request_id,
+        scope="update_wallet",
+        label=f"Re-enter database passphrase to change wallet source {wallet['label']!r}",
+        plaintext_ack_key="plaintext_change_ack",
+        plaintext_ack_value=PLAINTEXT_CHANGE_ACK,
+    )
+    if auth_result is not None:
+        return auth_result
+    updated = core_wallets.update_wallet(
+        ctx.conn,
+        None,
+        None,
+        wallet_ref,
+        {"label": label.strip()},
+    )
+    return (
+        _with_request_id(
+            build_envelope("ui.wallets.update", {"wallet": updated}),
+            request_id,
+        ),
+        False,
+    )
+
+
+def _delete_wallet_payload(
+    ctx: "DaemonContext",
+    args: dict[str, Any],
+    request_id: object,
+) -> tuple[dict[str, Any], bool]:
+    if args.get("confirm") != "DELETE":
+        raise AppError(
+            "ui.wallets.delete requires confirm='DELETE'",
+            code="validation",
+            hint="Ask the user to confirm the destructive wallet-source deletion.",
+            retryable=False,
+        )
+    cascade = args.get("cascade", False)
+    if not isinstance(cascade, bool):
+        raise AppError(
+            "ui.wallets.delete cascade must be a boolean",
+            code="validation",
+            hint="Pass cascade=true only when the user confirmed local row deletion.",
+            retryable=False,
+        )
+    wallet_ref = _wallet_ref_from_args(args, "ui.wallets.delete")
+    wallet = core_wallets.get_wallet_details(ctx.conn, None, None, wallet_ref)
+    confirm_wallet = args.get("confirm_wallet")
+    if not isinstance(confirm_wallet, str) or confirm_wallet != wallet["label"]:
+        raise AppError(
+            "ui.wallets.delete requires the current wallet label",
+            code="validation",
+            hint="Ask the user to type the exact wallet label before deleting it.",
+            details={"expected_wallet": wallet["label"]},
+            retryable=False,
+        )
+    auth_result = _require_sensitive_local_auth(
+        ctx,
+        args=args,
+        request_id=request_id,
+        scope="delete_wallet",
+        label=f"Re-enter database passphrase to delete wallet source {wallet['label']!r}",
+        plaintext_ack_key="plaintext_delete_ack",
+        plaintext_ack_value=PLAINTEXT_DELETE_ACK,
+    )
+    if auth_result is not None:
+        return auth_result
+    deleted = core_wallets.delete_wallet(
+        ctx.conn,
+        None,
+        None,
+        wallet_ref,
+        cascade=cascade,
+    )
+    return (
+        _with_request_id(
+            build_envelope("ui.wallets.delete", {"wallet": deleted}),
+            request_id,
+        ),
+        False,
+    )
 
 
 def _database_file_is_encrypted(ctx: "DaemonContext") -> bool:
@@ -2002,6 +2332,36 @@ def handle_request(
             False,
         )
 
+    if kind == "ui.profiles.create":
+        return (
+            _with_request_id(
+                build_envelope(
+                    "ui.profiles.create",
+                    _create_profile_payload(
+                        ctx.conn,
+                        _coerce_args_dict(request_id, request.get("args")),
+                    ),
+                ),
+                request_id,
+            ),
+            False,
+        )
+
+    if kind == "ui.profiles.switch":
+        return (
+            _with_request_id(
+                build_envelope(
+                    "ui.profiles.switch",
+                    _switch_profile_payload(
+                        ctx.conn,
+                        _coerce_args_dict(request_id, request.get("args")),
+                    ),
+                ),
+                request_id,
+            ),
+            False,
+        )
+
     if kind == "ui.rates.summary":
         return (
             _with_request_id(
@@ -2017,6 +2377,21 @@ def handle_request(
                 build_envelope(
                     "ui.workspace.health",
                     build_workspace_health_snapshot(ctx.conn),
+                ),
+                request_id,
+            ),
+            False,
+        )
+
+    if kind == "ui.workspace.create":
+        return (
+            _with_request_id(
+                build_envelope(
+                    "ui.workspace.create",
+                    _create_workspace_payload(
+                        ctx.conn,
+                        _coerce_args_dict(request_id, request.get("args")),
+                    ),
                 ),
                 request_id,
             ),
@@ -2047,45 +2422,17 @@ def handle_request(
                 hint="Ask the user to type the exact current workspace name before deleting it.",
                 details={"expected_workspace": workspace_label},
             )
-        auth = args.get("auth_response")
-        if _database_file_is_encrypted(ctx):
-            passphrase = auth.get("passphrase_secret") if isinstance(auth, dict) else None
-            if not isinstance(passphrase, str) or not passphrase:
-                return (
-                    _with_request_id(
-                        build_envelope(
-                            "auth_required",
-                            {
-                                "scope": "delete_workspace",
-                                "label": f"Re-enter database passphrase to delete workspace {workspace_label!r}",
-                            },
-                        ),
-                        request_id,
-                    ),
-                    False,
-                )
-            verified = _verify_passphrase_with_backoff(
-                ctx, "delete_workspace", passphrase
-            )
-            if not verified:
-                return (
-                    _error_envelope(
-                        "local_auth_denied",
-                        "passphrase verification failed",
-                        request_id=request_id,
-                        retryable=True,
-                    ),
-                    False,
-                )
-        elif (
-            not isinstance(auth, dict)
-            or auth.get("plaintext_delete_ack") != PLAINTEXT_DELETE_ACK
-        ):
-            raise AppError(
-                "ui.workspace.delete requires plaintext delete acknowledgement",
-                code="validation",
-                hint=f"Ask the user to type {PLAINTEXT_DELETE_ACK!r} before deleting a plaintext workspace.",
-            )
+        auth_result = _require_sensitive_local_auth(
+            ctx,
+            args=args,
+            request_id=request_id,
+            scope="delete_workspace",
+            label=f"Re-enter database passphrase to delete workspace {workspace_label!r}",
+            plaintext_ack_key="plaintext_delete_ack",
+            plaintext_ack_value=PLAINTEXT_DELETE_ACK,
+        )
+        if auth_result is not None:
+            return auth_result
         return (
             _with_request_id(
                 build_envelope(
@@ -2107,6 +2454,20 @@ def handle_request(
                 request_id,
             ),
             False,
+        )
+
+    if kind == "ui.wallets.update":
+        return _update_wallet_payload(
+            ctx,
+            _coerce_args_dict(request_id, request.get("args")),
+            request_id,
+        )
+
+    if kind == "ui.wallets.delete":
+        return _delete_wallet_payload(
+            ctx,
+            _coerce_args_dict(request_id, request.get("args")),
+            request_id,
         )
 
     if kind == "ui.wallets.sync":

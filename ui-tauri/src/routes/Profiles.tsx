@@ -2,7 +2,13 @@
  * Profiles / workspaces switcher screen.
  */
 
-import { useState, type ComponentType, type SVGProps } from "react";
+import {
+  useEffect,
+  useState,
+  type ComponentType,
+  type SVGProps,
+} from "react";
+import { useNavigate } from "@tanstack/react-router";
 import {
   ArrowRight,
   BriefcaseBusiness,
@@ -15,7 +21,7 @@ import {
   Wallet,
 } from "lucide-react";
 
-import { useDaemon } from "@/daemon/client";
+import { useDaemon, useDaemonMutation } from "@/daemon/client";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -24,6 +30,16 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
 import type { ProfilesSnapshot, Profile, Workspace } from "@/mocks/profiles";
 
@@ -44,8 +60,37 @@ export function Profiles() {
 }
 
 function ProfilesView({ snapshot }: { snapshot: ProfilesSnapshot }) {
+  const navigate = useNavigate();
+  const switchProfile = useDaemonMutation<{ activeProfileId: string }>(
+    "ui.profiles.switch",
+  );
+  const createProfile = useDaemonMutation<{
+    activeProfileId: string;
+    activeWorkspaceId: string;
+  }>("ui.profiles.create");
+  const createWorkspace = useDaemonMutation<{
+    activeProfileId: string;
+    activeWorkspaceId: string;
+  }>("ui.workspace.create");
   const [activeId, setActiveId] = useState(snapshot.activeProfileId);
+  const [pendingSwitch, setPendingSwitch] =
+    useState<PendingProfileSwitch | null>(null);
+  const [profileWorkspace, setProfileWorkspace] = useState<Workspace | null>(
+    null,
+  );
+  const [profileName, setProfileName] = useState("");
+  const [workspaceDialogOpen, setWorkspaceDialogOpen] = useState(false);
+  const [workspaceName, setWorkspaceName] = useState("");
+  const [switchError, setSwitchError] = useState<string | null>(null);
+  const [profileError, setProfileError] = useState<string | null>(null);
+  const [workspaceError, setWorkspaceError] = useState<string | null>(null);
   const workspaces = snapshot.workspaces;
+  const activeProfile = findProfile(workspaces, activeId);
+  const activeWorkspace =
+    workspaces.find((workspace) => workspace.id === snapshot.activeWorkspaceId) ??
+    activeProfile?.workspace ??
+    workspaces[0] ??
+    null;
   const profileCount = workspaces.reduce((a, w) => a + w.profiles.length, 0);
   const walletCount = workspaces.reduce(
     (total, workspace) =>
@@ -63,6 +108,96 @@ function ProfilesView({ snapshot }: { snapshot: ProfilesSnapshot }) {
     0,
   );
 
+  useEffect(() => {
+    setActiveId(snapshot.activeProfileId);
+  }, [snapshot.activeProfileId]);
+
+  const requestSwitch = (workspace: Workspace, profile: Profile) => {
+    if (profile.id === activeId) return;
+    setSwitchError(null);
+    setPendingSwitch({ workspace, profile });
+  };
+
+  const requestCreateProfile = (workspace: Workspace | null) => {
+    if (!workspace) return;
+    setProfileError(null);
+    setProfileName("");
+    setProfileWorkspace(workspace);
+  };
+
+  const submitProfile = () => {
+    if (!profileWorkspace || createProfile.isPending) return;
+    const label = profileName.trim();
+    if (!label) {
+      setProfileError("Enter a profile name.");
+      return;
+    }
+    setProfileError(null);
+    createProfile.mutate(
+      { workspace_id: profileWorkspace.id, label },
+      {
+        onSuccess: (response) => {
+          setActiveId(response.data?.activeProfileId ?? "");
+          setProfileWorkspace(null);
+          setProfileName("");
+        },
+        onError: (error) => {
+          setProfileError(
+            error instanceof Error ? error.message : "Could not create profile.",
+          );
+        },
+      },
+    );
+  };
+
+  const confirmSwitch = (openOverview: boolean) => {
+    if (!pendingSwitch || switchProfile.isPending) return;
+    const nextProfile = pendingSwitch.profile;
+    setSwitchError(null);
+    switchProfile.mutate(
+      { profile_id: nextProfile.id },
+      {
+        onSuccess: () => {
+          setActiveId(nextProfile.id);
+          setPendingSwitch(null);
+          if (openOverview) {
+            void navigate({ to: "/overview" });
+          }
+        },
+        onError: (error) => {
+          setSwitchError(
+            error instanceof Error ? error.message : "Could not switch profile.",
+          );
+        },
+      },
+    );
+  };
+
+  const submitWorkspace = () => {
+    if (createWorkspace.isPending) return;
+    const label = workspaceName.trim();
+    if (!label) {
+      setWorkspaceError("Enter a workspace name.");
+      return;
+    }
+    setWorkspaceError(null);
+    createWorkspace.mutate(
+      { label },
+      {
+        onSuccess: () => {
+          setActiveId("");
+          setWorkspaceDialogOpen(false);
+          setWorkspaceName("");
+        },
+        onError: (error) => {
+          setWorkspaceError(
+            error instanceof Error ? error.message : "Could not create workspace.",
+          );
+        },
+      },
+    );
+  };
+
   return (
     <div className="w-full space-y-4 p-4 sm:p-6">
       <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
@@ -75,11 +210,23 @@ function ProfilesView({ snapshot }: { snapshot: ProfilesSnapshot }) {
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
-          <Button type="button" variant="outline">
+          <Button
+            type="button"
+            variant="outline"
+            disabled={!activeWorkspace}
+            onClick={() => requestCreateProfile(activeWorkspace)}
+          >
             <UserPlus className="size-4" aria-hidden="true" />
             Profile
           </Button>
-          <Button type="button">
+          <Button
+            type="button"
+            data-testid="create-workspace-button"
+            onClick={() => {
+              setWorkspaceError(null);
+              setWorkspaceDialogOpen(true);
+            }}
+          >
             <FolderPlus className="size-4" aria-hidden="true" />
             Workspace
           </Button>
@@ -113,12 +260,81 @@ function ProfilesView({ snapshot }: { snapshot: ProfilesSnapshot }) {
             key={workspace.id}
             workspace={workspace}
             activeId={activeId}
-            onPick={(profile) => setActiveId(profile.id)}
+            onCreateProfile={() => requestCreateProfile(workspace)}
+            onPick={(profile) => requestSwitch(workspace, profile)}
           />
         ))}
       </div>
+
+      <ProfileSwitchDialog
+        currentProfile={activeProfile?.profile ?? null}
+        errorMessage={switchError}
+        isSubmitting={switchProfile.isPending}
+        pendingSwitch={pendingSwitch}
+        onCancel={() => {
+          setSwitchError(null);
+          setPendingSwitch(null);
+        }}
+        onOpenOverview={() => confirmSwitch(true)}
+        onSwitchHere={() => confirmSwitch(false)}
+      />
+      <CreateProfileDialog
+        errorMessage={profileError}
+        isSubmitting={createProfile.isPending}
+        name={profileName}
+        open={Boolean(profileWorkspace)}
+        workspace={profileWorkspace}
+        onNameChange={(value) => {
+          setProfileName(value);
+          if (profileError) setProfileError(null);
+        }}
+        onOpenChange={(open) => {
+          if (createProfile.isPending) return;
+          if (!open) {
+            setProfileWorkspace(null);
+            setProfileName("");
+            setProfileError(null);
+          }
+        }}
+        onSubmit={submitProfile}
+      />
+      <CreateWorkspaceDialog
+        errorMessage={workspaceError}
+        isSubmitting={createWorkspace.isPending}
+        name={workspaceName}
+        open={workspaceDialogOpen}
+        onNameChange={(value) => {
+          setWorkspaceName(value);
+          if (workspaceError) setWorkspaceError(null);
+        }}
+        onOpenChange={(open) => {
+          if (createWorkspace.isPending) return;
+          setWorkspaceDialogOpen(open);
+          if (!open) {
+            setWorkspaceError(null);
+          }
+        }}
+        onSubmit={submitWorkspace}
+      />
     </div>
   );
+}
+
+interface PendingProfileSwitch {
+  workspace: Workspace;
+  profile: Profile;
+}
+
+function findProfile(workspaces: Workspace[], profileId: string) {
+  for (const workspace of workspaces) {
+    const profile = workspace.profiles.find(
+      (candidate) => candidate.id === profileId,
+    );
+    if (profile) {
+      return { workspace, profile };
+    }
+  }
+  return null;
 }
 
 interface SummaryCardProps {
@@ -148,12 +364,14 @@ function SummaryCard({ label, value, detail, icon: Icon }: SummaryCardProps) {
 interface WorkspaceSectionProps {
   workspace: Workspace;
   activeId: string;
+  onCreateProfile: () => void;
   onPick: (profile: Profile) => void;
 }
 
 function WorkspaceSection({
   workspace,
   activeId,
+  onCreateProfile,
   onPick,
 }: WorkspaceSectionProps) {
   return (
@@ -170,11 +388,12 @@ function WorkspaceSection({
           </CardDescription>
         </div>
         <div className="flex items-center gap-2">
-          <span className="rounded-md border bg-muted/40 px-2 py-1 text-xs text-muted-foreground">
-            {workspace.profiles.length} profile
-            {workspace.profiles.length === 1 ? "" : "s"}
-          </span>
-          <Button type="button" variant="outline" size="sm">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={onCreateProfile}
+          >
             <Plus className="size-4" aria-hidden="true" />
             Profile
           </Button>
@@ -191,6 +410,7 @@ function WorkspaceSection({
         ))}
         <button
           type="button"
+          onClick={onCreateProfile}
           className="flex min-h-[178px] flex-col items-center justify-center gap-2 rounded-xl border border-dashed bg-muted/20 p-4 text-center transition-colors hover:bg-muted/40"
         >
           <Plus className="size-5 text-muted-foreground" aria-hidden="true" />
@@ -216,6 +436,10 @@ function ProfileCard({ profile, isActive, onPick }: ProfileCardProps) {
   return (
     <button
       type="button"
+      aria-current={isActive ? "true" : undefined}
+      aria-label={
+        isActive ? `Current profile: ${profile.name}` : `Switch to ${profile.name}`
+      }
       onClick={onPick}
       className={cn(
         "flex min-h-[178px] flex-col justify-between rounded-xl border p-4 text-left transition-colors hover:bg-muted/35",
@@ -261,10 +485,279 @@ function ProfileCard({ profile, isActive, onPick }: ProfileCardProps) {
             isActive ? "text-foreground" : "text-muted-foreground",
           )}
         >
-          {isActive ? "Current" : "Open"}
+          {isActive ? "Current" : "Switch"}
           <ArrowRight className="size-4" aria-hidden="true" />
         </span>
       </div>
     </button>
+  );
+}
+
+interface CreateProfileDialogProps {
+  errorMessage: string | null;
+  isSubmitting: boolean;
+  name: string;
+  open: boolean;
+  workspace: Workspace | null;
+  onNameChange: (value: string) => void;
+  onOpenChange: (open: boolean) => void;
+  onSubmit: () => void;
+}
+
+function CreateProfileDialog({
+  errorMessage,
+  isSubmitting,
+  name,
+  open,
+  workspace,
+  onNameChange,
+  onOpenChange,
+  onSubmit,
+}: CreateProfileDialogProps) {
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-md">
+        <form
+          className="space-y-4"
+          onSubmit={(event) => {
+            event.preventDefault();
+            onSubmit();
+          }}
+        >
+          <DialogHeader>
+            <DialogTitle>New profile</DialogTitle>
+            <DialogDescription>
+              {workspace
+                ? `Create a profile in ${workspace.name} using that workspace's defaults.`
+                : "Create a profile using workspace defaults."}
+            </DialogDescription>
+          </DialogHeader>
+
+          {workspace && (
+            <div className="rounded-lg border bg-muted/25 p-3 text-sm">
+              <p className="font-medium">{workspace.name}</p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                {workspace.kind} · {workspace.currency} ·{" "}
+                {workspace.jurisdiction}
+              </p>
+            </div>
+          )}
+
+          <div className="space-y-2">
+            <Label htmlFor="profile-name">Profile name</Label>
+            <Input
+              id="profile-name"
+              data-testid="profile-name-input"
+              autoFocus
+              aria-invalid={Boolean(errorMessage)}
+              disabled={isSubmitting}
+              placeholder="Treasury"
+              value={name}
+              onChange={(event) => onNameChange(event.currentTarget.value)}
+            />
+          </div>
+
+          {errorMessage && (
+            <p className="rounded-md border border-destructive/25 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+              {errorMessage}
+            </p>
+          )}
+
+          <DialogFooter className="gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              disabled={isSubmitting}
+              onClick={() => onOpenChange(false)}
+            >
+              Cancel
+            </Button>
+            <Button type="submit" disabled={isSubmitting}>
+              Create profile
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+interface ProfileSwitchDialogProps {
+  currentProfile: Profile | null;
+  errorMessage: string | null;
+  isSubmitting: boolean;
+  pendingSwitch: PendingProfileSwitch | null;
+  onCancel: () => void;
+  onOpenOverview: () => void;
+  onSwitchHere: () => void;
+}
+
+function ProfileSwitchDialog({
+  currentProfile,
+  errorMessage,
+  isSubmitting,
+  pendingSwitch,
+  onCancel,
+  onOpenOverview,
+  onSwitchHere,
+}: ProfileSwitchDialogProps) {
+  const profile = pendingSwitch?.profile;
+  const workspace = pendingSwitch?.workspace;
+
+  return (
+    <Dialog
+      open={Boolean(pendingSwitch)}
+      onOpenChange={(open) => !open && onCancel()}
+    >
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>Switch profile?</DialogTitle>
+          <DialogDescription>
+            {currentProfile && profile
+              ? `Switch from ${currentProfile.name} to ${profile.name}.`
+              : "Switch to this profile."}
+          </DialogDescription>
+        </DialogHeader>
+
+        {profile && workspace && (
+          <div className="rounded-lg border bg-muted/25 p-4">
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <p className="truncate font-medium">{profile.name}</p>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  {workspace.name} · {workspace.currency} ·{" "}
+                  {workspace.jurisdiction}
+                </p>
+              </div>
+              <span className="rounded-md border bg-background px-2 py-1 text-xs text-muted-foreground">
+                {profile.role}
+              </span>
+            </div>
+            <div className="mt-3 rounded-md border bg-background/70 p-3">
+              <p className="text-xs font-medium text-muted-foreground">
+                Tax policy
+              </p>
+              <p className="mt-1 text-sm">{profile.taxPolicy}</p>
+            </div>
+            <div className="mt-3 flex gap-4 text-sm">
+              <span>
+                <span className="block text-xs text-muted-foreground">
+                  Accounts
+                </span>
+                {profile.accounts}
+              </span>
+              <span>
+                <span className="block text-xs text-muted-foreground">Wallets</span>
+                {profile.wallets}
+              </span>
+            </div>
+          </div>
+        )}
+
+        {errorMessage && (
+          <p className="rounded-md border border-destructive/25 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+            {errorMessage}
+          </p>
+        )}
+
+        <DialogFooter className="gap-2">
+          <Button
+            type="button"
+            variant="outline"
+            disabled={isSubmitting}
+            onClick={onCancel}
+          >
+            Cancel
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            disabled={isSubmitting}
+            onClick={onSwitchHere}
+          >
+            Switch here
+          </Button>
+          <Button type="button" disabled={isSubmitting} onClick={onOpenOverview}>
+            Switch and open Overview
+            <ArrowRight className="size-4" aria-hidden="true" />
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+interface CreateWorkspaceDialogProps {
+  errorMessage: string | null;
+  isSubmitting: boolean;
+  name: string;
+  open: boolean;
+  onNameChange: (value: string) => void;
+  onOpenChange: (open: boolean) => void;
+  onSubmit: () => void;
+}
+
+function CreateWorkspaceDialog({
+  errorMessage,
+  isSubmitting,
+  name,
+  open,
+  onNameChange,
+  onOpenChange,
+  onSubmit,
+}: CreateWorkspaceDialogProps) {
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-md">
+        <form
+          className="space-y-4"
+          onSubmit={(event) => {
+            event.preventDefault();
+            onSubmit();
+          }}
+        >
+          <DialogHeader>
+            <DialogTitle>New workspace</DialogTitle>
+            <DialogDescription>
+              Create an empty workspace, then add its first profile.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-2">
+            <Label htmlFor="workspace-name">Workspace name</Label>
+            <Input
+              id="workspace-name"
+              data-testid="workspace-name-input"
+              autoFocus
+              aria-invalid={Boolean(errorMessage)}
+              disabled={isSubmitting}
+              placeholder="Personal books"
+              value={name}
+              onChange={(event) => onNameChange(event.currentTarget.value)}
+            />
+          </div>
+
+          {errorMessage && (
+            <p className="rounded-md border border-destructive/25 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+              {errorMessage}
+            </p>
+          )}
+
+          <DialogFooter className="gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              disabled={isSubmitting}
+              onClick={() => onOpenChange(false)}
+            >
+              Cancel
+            </Button>
+            <Button type="submit" disabled={isSubmitting}>
+              Create workspace
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
   );
 }
