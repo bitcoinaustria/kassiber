@@ -1,4 +1,4 @@
-import { Link, useNavigate } from "@tanstack/react-router";
+import { Link } from "@tanstack/react-router";
 import {
   ArrowUpRight,
   Bell,
@@ -7,6 +7,7 @@ import {
   CircleDollarSign,
   ClipboardList,
   CreditCard,
+  ExternalLink,
   Filter,
   Landmark,
   Maximize2,
@@ -14,6 +15,7 @@ import {
   PieChartIcon,
   Plus,
   RefreshCw,
+  ShieldAlert,
   Users,
 } from "lucide-react";
 import * as React from "react";
@@ -30,10 +32,15 @@ import {
 } from "recharts";
 
 import { Button } from "@/components/ui/button";
+import { AddConnectionDialog } from "@/components/kb/AddConnectionDialog";
 import { type ChartConfig, ChartContainer } from "@/components/ui/chart";
 import {
   Dialog,
+  DialogClose,
   DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
@@ -105,8 +112,10 @@ type TransactionStatus = "confirmed" | "pending" | "review" | "failed";
 type Transaction = {
   id: string;
   txid: string;
+  explorerId?: string;
   counterparty: string;
   counterpartyInitials: string;
+  paymentMethod?: "On-chain" | "Lightning" | "Liquid" | "Other";
   tags: string[];
   status: TransactionStatus;
   amount: number;
@@ -1903,6 +1912,22 @@ const statusLabels: Record<TransactionStatus, string> = {
 
 function toDashboardTransaction(tx: OverviewTx, index: number): Transaction {
   const amount = Math.abs(tx.eur || (tx.amountSat / 100_000_000) * tx.rate);
+  const account = tx.account || tx.counter || "Unassigned";
+  const accountLower = account.toLowerCase();
+  const paymentMethod = accountLower.includes("liquid")
+    ? "Liquid"
+    : accountLower.includes("lightning") ||
+        accountLower.includes("ln") ||
+        accountLower.includes("cln") ||
+        accountLower.includes("phoenix")
+      ? "Lightning"
+      : accountLower.includes("on-chain") ||
+          accountLower.includes("xpub") ||
+          accountLower.includes("cold") ||
+          accountLower.includes("vault") ||
+          accountLower.includes("multisig")
+        ? "On-chain"
+        : "Other";
   const status: TransactionStatus = tx.internal
     ? "pending"
     : tx.conf > 0
@@ -1912,9 +1937,11 @@ function toDashboardTransaction(tx: OverviewTx, index: number): Transaction {
         : "pending";
   return {
     id: tx.id,
-    txid: tx.id || `TX-${index + 1}`,
-    counterparty: tx.account || tx.counter || "Unassigned",
-    counterpartyInitials: initials(tx.account || tx.counter || "TX"),
+    txid: tx.externalId || tx.id || `TX-${index + 1}`,
+    explorerId: tx.externalId || undefined,
+    counterparty: account,
+    counterpartyInitials: initials(account || "TX"),
+    paymentMethod,
     tags: tx.tag
       ? tx.tag
           .split(",")
@@ -1937,6 +1964,24 @@ function initials(value: string) {
     .join("");
 }
 
+function explorerForOverviewTransaction(txn: Transaction) {
+  const id = txn.explorerId?.trim();
+  if (!id) return null;
+  if (txn.paymentMethod === "Liquid") {
+    return {
+      label: "Liquid Network",
+      url: `https://liquid.network/tx/${encodeURIComponent(id)}`,
+    };
+  }
+  if (txn.paymentMethod === "On-chain") {
+    return {
+      label: "mempool.space",
+      url: `https://mempool.space/tx/${encodeURIComponent(id)}`,
+    };
+  }
+  return null;
+}
+
 const RecentTransactionsTable = ({
   className,
   transactions,
@@ -1955,7 +2000,12 @@ const RecentTransactionsTable = ({
   >("all");
   const [currentPage, setCurrentPage] = React.useState(1);
   const [isHydrated, setIsHydrated] = React.useState(false);
+  const [explorerTransaction, setExplorerTransaction] =
+    React.useState<Transaction | null>(null);
   const pageSize = 6;
+  const explorerTarget = explorerTransaction
+    ? explorerForOverviewTransaction(explorerTransaction)
+    : null;
 
   React.useEffect(() => {
     if (typeof window === "undefined") return;
@@ -2024,7 +2074,8 @@ const RecentTransactionsTable = ({
   const endRow = Math.min(currentPage * pageSize, filteredTransactions.length);
 
   return (
-    <div className={cn("rounded-xl border bg-card", className)}>
+    <>
+      <div className={cn("rounded-xl border bg-card", className)}>
       <div className="flex items-center justify-between gap-3 px-4 pt-4 sm:px-6">
         <div className="flex items-center gap-2">
           <Button
@@ -2109,46 +2160,64 @@ const RecentTransactionsTable = ({
                 </TableCell>
               </TableRow>
             ) : (
-              paginatedTransactions.map((t) => (
-                <TableRow key={t.id}>
-                  <TableCell
-                    className={cn(
-                      "text-xs font-medium text-muted-foreground sm:text-sm",
-                      blurClass(hideSensitive),
-                    )}
-                  >
-                    {t.txid}
-                  </TableCell>
-                  <TableCell
-                    className={cn(
-                      "text-xs text-muted-foreground sm:text-sm",
-                      blurClass(hideSensitive),
-                    )}
-                  >
-                    {t.counterparty}
-                  </TableCell>
-                  <TableCell
-                    className={cn(
-                      "text-xs text-foreground tabular-nums sm:text-sm",
-                      blurClass(hideSensitive),
-                    )}
-                  >
-                    {currency === "btc"
-                      ? formatBtc(transactionBtc(t, priceEur))
-                      : formatDisplayMoney(t.amount, priceEur, currency)}
-                  </TableCell>
-                  <TableCell>
-                    <span
+              paginatedTransactions.map((t) => {
+                const explorer = explorerForOverviewTransaction(t);
+                return (
+                  <TableRow key={t.id}>
+                    <TableCell
                       className={cn(
-                        "inline-flex items-center rounded-md px-2 py-1 text-[10px] font-medium sm:text-xs",
-                        statusStyles[t.status],
+                        "text-xs font-medium text-muted-foreground sm:text-sm",
+                        blurClass(hideSensitive),
                       )}
                     >
-                      {statusLabels[t.status]}
-                    </span>
-                  </TableCell>
-                </TableRow>
-              ))
+                      {explorer ? (
+                        <button
+                          type="button"
+                          className="inline-flex max-w-[32ch] items-center gap-1 truncate font-mono text-left underline-offset-4 hover:underline"
+                          title={`Open ${t.txid} on ${explorer.label}`}
+                          onClick={() => setExplorerTransaction(t)}
+                        >
+                          <span className="truncate">{t.txid}</span>
+                          <ExternalLink
+                            className="size-3 shrink-0 text-muted-foreground"
+                            aria-hidden="true"
+                          />
+                        </button>
+                      ) : (
+                        <span className="font-mono">{t.txid}</span>
+                      )}
+                    </TableCell>
+                    <TableCell
+                      className={cn(
+                        "text-xs text-muted-foreground sm:text-sm",
+                        blurClass(hideSensitive),
+                      )}
+                    >
+                      {t.counterparty}
+                    </TableCell>
+                    <TableCell
+                      className={cn(
+                        "text-xs text-foreground tabular-nums sm:text-sm",
+                        blurClass(hideSensitive),
+                      )}
+                    >
+                      {currency === "btc"
+                        ? formatBtc(transactionBtc(t, priceEur))
+                        : formatDisplayMoney(t.amount, priceEur, currency)}
+                    </TableCell>
+                    <TableCell>
+                      <span
+                        className={cn(
+                          "inline-flex items-center rounded-md px-2 py-1 text-[10px] font-medium sm:text-xs",
+                          statusStyles[t.status],
+                        )}
+                      >
+                        {statusLabels[t.status]}
+                      </span>
+                    </TableCell>
+                  </TableRow>
+                );
+              })
             )}
           </TableBody>
         </Table>
@@ -2181,7 +2250,55 @@ const RecentTransactionsTable = ({
           </Button>
         </div>
       </div>
-    </div>
+      </div>
+      <Dialog
+        open={Boolean(explorerTransaction)}
+        onOpenChange={(open) => {
+          if (!open) setExplorerTransaction(null);
+        }}
+      >
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <div className="mb-2 flex size-10 items-center justify-center rounded-full bg-amber-100 text-amber-700 dark:bg-amber-950/50 dark:text-amber-300">
+              <ShieldAlert className="size-5" aria-hidden="true" />
+            </div>
+            <DialogTitle>Open transaction in a browser?</DialogTitle>
+            <DialogDescription>
+              This opens {explorerTarget?.label ?? "a public explorer"} outside
+              Kassiber. The explorer can see your IP address and the transaction
+              id you request.
+            </DialogDescription>
+          </DialogHeader>
+          {explorerTransaction && explorerTarget ? (
+            <div className="rounded-md border bg-muted/35 p-3 text-sm">
+              <p className="font-medium">{explorerTransaction.txid}</p>
+              <p className="mt-1 break-all font-mono text-xs text-muted-foreground">
+                {explorerTarget.url}
+              </p>
+            </div>
+          ) : null}
+          <DialogFooter>
+            <DialogClose asChild>
+              <Button type="button" variant="outline">
+                Cancel
+              </Button>
+            </DialogClose>
+            <Button
+              type="button"
+              disabled={!explorerTarget}
+              onClick={() => {
+                if (!explorerTarget || typeof window === "undefined") return;
+                window.open(explorerTarget.url, "_blank", "noopener,noreferrer");
+                setExplorerTransaction(null);
+              }}
+            >
+              <ExternalLink className="size-4" aria-hidden="true" />
+              Open explorer
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 };
 
@@ -2234,7 +2351,7 @@ const Dashboard5 = ({
   className?: string;
   snapshot?: OverviewSnapshot;
 }) => {
-  const navigate = useNavigate();
+  const [addConnectionOpen, setAddConnectionOpen] = React.useState(false);
   const hideSensitive = useUiStore((s) => s.hideSensitive);
   const currency = useCurrency();
   const { syncAll, isSyncing } = useWalletSyncAction();
@@ -2257,7 +2374,11 @@ const Dashboard5 = ({
         snapshot={snapshot}
         onSync={syncAll}
         isSyncing={isSyncing}
-        onAddConnection={() => void navigate({ to: "/imports" })}
+        onAddConnection={() => setAddConnectionOpen(true)}
+      />
+      <AddConnectionDialog
+        open={addConnectionOpen}
+        onOpenChange={setAddConnectionOpen}
       />
       <StatsCards
         snapshot={snapshot}

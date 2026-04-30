@@ -52,6 +52,7 @@ export function ScreenAssistantMockup({
   const compact = collapsed && !isInteracting && messages.length === 0;
   const hasThread = messages.length > 0;
   const showThread = hasThread && !isThreadCollapsed;
+  const modelPickerEnabled = isInteracting || hasThread || isStreaming;
 
   React.useEffect(() => {
     if (!hasThread) {
@@ -182,6 +183,7 @@ export function ScreenAssistantMockup({
           toolsEnabled={toolsEnabled}
           onToolsEnabledChange={setToolsEnabled}
           inputPanelElevated={false}
+          modelPickerEnabled={modelPickerEnabled}
         />
         <ToolConsentDialog
           request={pendingConsent}

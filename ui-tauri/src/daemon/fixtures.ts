@@ -28,16 +28,6 @@ export const fixtures: Record<string, unknown> = {
       updated: 0,
     })),
   },
-  "ui.journals.process": {
-    profile: "Main",
-    entries_created: 6,
-    quarantined: 0,
-    transfers_detected: 0,
-    cross_asset_pairs: 0,
-    auto_priced: 0,
-    processed_transactions: 4,
-    processed_at: "2026-01-15T12:00:00Z",
-  },
   "ui.profiles.snapshot": MOCK_PROFILES,
   "ui.reports.capital_gains": MOCK_CAPITAL_GAINS,
   "ui.reports.export_pdf": {
@@ -93,6 +83,16 @@ export const fixtures: Record<string, unknown> = {
       { type: "transfer_out", count: 3, gainLossEur: 0 },
     ],
     recent: [],
+  },
+  "ui.journals.process": {
+    profile: "local profile",
+    entries_created: 42,
+    quarantined: 0,
+    transfers_detected: 3,
+    cross_asset_pairs: 0,
+    auto_priced: 0,
+    processed_transactions: MOCK_OVERVIEW.txs.length,
+    processed_at: "2026-04-26T12:00:00Z",
   },
   "ai.providers.list": {
     providers: [

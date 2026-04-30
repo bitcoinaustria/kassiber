@@ -42,8 +42,7 @@ from .ai.tools import (
     redact_tool_arguments,
     summarize_tool_call,
 )
-from .cli.handlers import _report_hooks, sync_wallet
-from .cli.handlers import process_journals
+from .cli.handlers import _report_hooks, process_journals, sync_wallet
 from .core import reports as core_reports
 from .core import accounts as core_accounts
 from .core import wallets as core_wallets

@@ -16,11 +16,10 @@ import {
   RefreshCw,
   Server,
   ShieldCheck,
-  Sparkles,
   Trash2,
   Upload,
 } from "lucide-react";
-import { useNavigate, useRouterState } from "@tanstack/react-router";
+import { useNavigate } from "@tanstack/react-router";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -52,20 +51,20 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import {
-  AiProviderForm,
-  type ExistingAiProvider,
-} from "@/components/kb/AiProviderForm";
-import {
   SettingsIntegrations4,
   type IntegrationItem,
 } from "@/components/shadcnblocks/settings-integrations4";
+import {
+  AiProviderForm,
+  type ExistingAiProvider,
+} from "@/components/kb/AiProviderForm";
 import { useDaemon, useDaemonMutation } from "@/daemon/client";
 import {
   hasSessionUnlockPassphrase,
   setSessionUnlockPassphrase,
   verifySessionUnlockPassphrase,
 } from "@/store/sessionLock";
-import { useUiStore } from "@/store/ui";
+import { useUiStore, type AppLockPolicy } from "@/store/ui";
 import { cn } from "@/lib/utils";
 import {
   DEFAULT_BACKEND_NAME,
@@ -94,6 +93,30 @@ interface StatusData {
   workspaces: number;
   profiles: number;
 }
+
+interface AiProviderRow {
+  name: string;
+  base_url: string;
+  kind: "local" | "remote" | "tee";
+  default_model?: string | null;
+  notes?: string | null;
+  has_api_key: boolean;
+  is_default: boolean;
+  acknowledged_at?: string | null;
+}
+
+interface AiProvidersListData {
+  providers: AiProviderRow[];
+  default: string | null;
+}
+
+const AI_KIND_BADGE: Record<AiProviderRow["kind"], string> = {
+  local:
+    "border-emerald-500/25 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300",
+  remote:
+    "border-amber-500/25 bg-amber-500/10 text-amber-700 dark:text-amber-300",
+  tee: "border-sky-500/25 bg-sky-500/10 text-sky-700 dark:text-sky-300",
+};
 
 const DEFAULT_BACKENDS: Backend[] = [
   {
@@ -153,9 +176,6 @@ interface SettingsScreenProps {
 }
 
 export function SettingsScreen({ onLock }: SettingsScreenProps) {
-  const hash = useRouterState({ select: (state) => state.location.hash });
-  const focusSection =
-    hash === "backends" || hash === "ai" ? hash : null;
   const hideSensitive = useUiStore((s) => s.hideSensitive);
   const setHideSensitive = useUiStore((s) => s.setHideSensitive);
   const currency = useUiStore((s) => s.currency);
@@ -176,10 +196,6 @@ export function SettingsScreen({ onLock }: SettingsScreenProps) {
   const changePassphrase = useDaemonMutation("ui.secrets.change_passphrase", {
     dataMode: "real",
   });
-  const backendsRef = React.useRef<HTMLDivElement | null>(null);
-  const aiRef = React.useRef<HTMLDivElement | null>(null);
-  const dataRef = React.useRef<HTMLDivElement | null>(null);
-
   const [clearClipboard, setClearClipboard] = React.useState(true);
   const [backends, setBackends] = React.useState<Backend[]>(DEFAULT_BACKENDS);
   const [backendDialogOpen, setBackendDialogOpen] = React.useState(false);
@@ -198,25 +214,14 @@ export function SettingsScreen({ onLock }: SettingsScreenProps) {
   const [passphraseError, setPassphraseError] = React.useState<string | null>(
     null,
   );
+  const [selectedIntegrationId, setSelectedIntegrationId] = React.useState<
+    string | null
+  >(null);
 
   const editingBackend = React.useMemo(
     () => backends.find((backend) => backend.id === editingBackendId) ?? null,
     [backends, editingBackendId],
   );
-
-  React.useEffect(() => {
-    if (focusSection !== "backends" && focusSection !== "ai") return;
-
-    const target = focusSection === "ai" ? aiRef : backendsRef;
-    const id = window.requestAnimationFrame(() => {
-      target.current?.scrollIntoView({
-        block: "start",
-        behavior: "smooth",
-      });
-    });
-
-    return () => window.cancelAnimationFrame(id);
-  }, [focusSection]);
 
   const onResetWorkspace = () => {
     const ok = window.confirm(
@@ -279,58 +284,159 @@ export function SettingsScreen({ onLock }: SettingsScreenProps) {
     setEditingBackendId(null);
   };
 
-  const settingsIntegrations = React.useMemo<IntegrationItem[]>(
-    () => [
-      ...backends.map((backend) => ({
-        image: INTEGRATION_ICONS[backend.net],
-        title: backend.name,
-        description: `${backend.net} backend - ${backend.url}`,
-        isConnected: backend.on,
-        category: "sync",
-        actionLabel: backend.on ? "Configure" : "Connect",
-      })),
-      {
-        image: INTEGRATION_ICONS.AI,
-        title: "AI providers",
-        description:
-          "Ollama and OpenAI-compatible assistant endpoints for local review.",
-        isConnected: true,
-        category: "assistant",
-        actionLabel: "Manage",
-      },
-      {
-        image: INTEGRATION_ICONS.FILE,
-        title: "Label and file imports",
-        description: "BIP-329 labels, CSV imports, backups, and restore tools.",
-        isConnected: true,
-        category: "data",
-        actionLabel: "Open",
-      },
-    ],
-    [backends],
-  );
-
-  const onIntegrationAction = (integration: IntegrationItem) => {
-    const backend = backends.find((item) => item.name === integration.title);
-    if (backend) {
-      openEditBackend(backend);
-      return;
-    }
-    if (integration.title === "AI providers") {
-      aiRef.current?.scrollIntoView({ block: "start", behavior: "smooth" });
-      return;
-    }
-    if (integration.title === "Label and file imports") {
-      dataRef.current?.scrollIntoView({ block: "start", behavior: "smooth" });
-    }
-  };
-
   const onDeleteBackend = (backend: Backend) => {
     const ok = window.confirm(
       `Delete backend '${backend.name}'?\n\nWallets using this endpoint may need another backend before they can sync.`,
     );
     if (!ok) return;
     setBackends((prev) => prev.filter((item) => item.id !== backend.id));
+  };
+
+  const settingsIntegrations = React.useMemo<IntegrationItem[]>(
+    () => [
+      {
+        id: "privacy-sensitive",
+        image: INTEGRATION_ICONS.FILE,
+        title: "Sensitive values",
+        description: hideSensitive
+          ? "Balances, addresses, and amounts are blurred."
+          : "Balances, addresses, and amounts are visible.",
+        isConnected: hideSensitive,
+        category: "privacy",
+        categoryLabel: "Privacy",
+        actionLabel: "Configure",
+      },
+      {
+        id: "privacy-clipboard",
+        image: INTEGRATION_ICONS.FILE,
+        title: "Clipboard clearing",
+        description: clearClipboard
+          ? "Copied addresses and keys are cleared after 30 seconds."
+          : "Copied values remain in the system clipboard.",
+        isConnected: clearClipboard,
+        category: "privacy",
+        categoryLabel: "Privacy",
+        actionLabel: "Configure",
+      },
+      {
+        id: "display-currency",
+        image: INTEGRATION_ICONS.FX,
+        title: "Display currency",
+        description:
+          currency === "btc"
+            ? "Balances are shown in Bitcoin mode."
+            : "Balances are shown in Euro mode.",
+        isConnected: true,
+        category: "display",
+        categoryLabel: "Display",
+        actionLabel: "Configure",
+      },
+      {
+        id: "security-lock-now",
+        image: INTEGRATION_ICONS.AI,
+        title: "Lock workspace",
+        description: appLockPolicy.autoLockWhenIdle
+          ? `Auto-locks after ${appLockPolicy.idleMinutes} minutes of inactivity.`
+          : "Auto-lock is disabled for idle sessions.",
+        isConnected: appLockPolicy.autoLockWhenIdle,
+        category: "security",
+        categoryLabel: "Security",
+        actionLabel: "Configure",
+      },
+      {
+        id: "security-passphrase",
+        image: INTEGRATION_ICONS.AI,
+        title: "Database passphrase",
+        description: encryptedWorkspace
+          ? "Change the SQLCipher database passphrase."
+          : "This workspace is not using SQLCipher encryption.",
+        isConnected: encryptedWorkspace,
+        category: "security",
+        categoryLabel: "Security",
+        actionLabel: "Manage",
+      },
+      ...backends.map((backend) => ({
+        id: backend.id,
+        image: INTEGRATION_ICONS[backend.net],
+        title: backend.name,
+        description: `${backend.net} backend - ${backend.url}`,
+        isConnected: backend.on,
+        category: backend.net === "FX" ? "rates" : "sync",
+        categoryLabel:
+          backend.net === "FX" ? "Rate providers" : "Sync backends",
+        actionLabel: backend.on ? "Configure" : "Connect",
+      })),
+      {
+        id: "sync-add-backend",
+        image: INTEGRATION_ICONS.BTC,
+        title: "Add sync backend",
+        description: "Add a Bitcoin, Liquid, or rates endpoint.",
+        isConnected: false,
+        category: "sync",
+        categoryLabel: "Sync backends",
+        actionLabel: "Add",
+      },
+      {
+        id: "ai-providers",
+        image: INTEGRATION_ICONS.AI,
+        title: "AI providers",
+        description:
+          "Ollama and OpenAI-compatible assistant endpoints for local review.",
+        isConnected: true,
+        category: "assistant",
+        categoryLabel: "Assistant",
+        actionLabel: "Manage",
+      },
+      {
+        id: "label-file-imports",
+        image: INTEGRATION_ICONS.FILE,
+        title: "Label and file imports",
+        description: "BIP-329 labels, CSV imports, backups, and restore tools.",
+        isConnected: true,
+        category: "data",
+        categoryLabel: "Data",
+        actionLabel: "Imports",
+      },
+      {
+        id: "data-root",
+        image: INTEGRATION_ICONS.FILE,
+        title: "Local database",
+        description: status?.database ?? "Local database path is loading.",
+        isConnected: Boolean(status?.database),
+        category: "data",
+        categoryLabel: "Data",
+        actionLabel: "Status",
+      },
+    ],
+    [
+      appLockPolicy.autoLockWhenIdle,
+      appLockPolicy.idleMinutes,
+      backends,
+      clearClipboard,
+      currency,
+      encryptedWorkspace,
+      hideSensitive,
+      status?.database,
+    ],
+  );
+
+  const onIntegrationAction = (integration: IntegrationItem) => {
+    setSelectedIntegrationId(integration.id ?? integration.title);
+    const backend = backends.find((item) => item.id === integration.id);
+    if (backend) {
+      openEditBackend(backend);
+      return;
+    }
+    if (integration.id === "sync-add-backend") {
+      openAddBackend();
+      return;
+    }
+    if (integration.id === "ai-providers") {
+      return;
+    }
+    if (integration.id === "label-file-imports") {
+      return;
+    }
   };
 
   const onDeleteWorkspace = async () => {
@@ -423,348 +529,64 @@ export function SettingsScreen({ onLock }: SettingsScreenProps) {
 
           <div className="flex min-w-0 flex-col gap-4">
             <SettingsIntegrations4
-              className="rounded-lg border bg-card py-6 shadow-sm [&>.container]:max-w-none [&>.container]:px-6"
-              heading="Integrations"
-              subHeading="Connect sync backends, assistant providers, and local import tools."
+              className="min-w-0"
+              heading="Settings"
+              subHeading="Workspace controls grouped by privacy, display, security, sync, assistant, and data."
               integrations={settingsIntegrations}
-              onToggleIntegration={onIntegrationAction}
+              selectedId={selectedIntegrationId ?? undefined}
+              onSelect={onIntegrationAction}
+              renderDetail={(integration) => {
+                if (integration.category === "privacy") {
+                  return (
+                    <PrivacySettingsPanel
+                      hideSensitive={hideSensitive}
+                      setHideSensitive={setHideSensitive}
+                      clearClipboard={clearClipboard}
+                      setClearClipboard={setClearClipboard}
+                    />
+                  );
+                }
+                if (integration.category === "display") {
+                  return (
+                    <DisplaySettingsPanel
+                      currency={currency}
+                      setCurrency={setCurrency}
+                    />
+                  );
+                }
+                if (integration.category === "security") {
+                  return (
+                    <SecuritySettingsPanel
+                      appLockPolicy={appLockPolicy}
+                      setAppLockPolicy={setAppLockPolicy}
+                      encryptedWorkspace={encryptedWorkspace}
+                      onLockNow={lockNow}
+                      onChangePassphrase={openChangePassphrase}
+                    />
+                  );
+                }
+                if (
+                  integration.category === "sync" ||
+                  integration.category === "rates"
+                ) {
+                  return (
+                    <BackendSettingsPanel
+                      backends={backends}
+                      onAdd={openAddBackend}
+                      onEdit={openEditBackend}
+                      onDelete={onDeleteBackend}
+                    />
+                  );
+                }
+                if (integration.id === "ai-providers") {
+                  return <AiProvidersPanel />;
+                }
+                if (integration.category === "data") {
+                  return <DataSettingsPanel status={status ?? null} />;
+                }
+                return null;
+              }}
             />
-
-            <div className="grid min-w-0 grid-cols-1 gap-4 xl:grid-cols-2">
-              <Card className="min-w-0">
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2 text-base">
-                    <ShieldCheck className="size-4" aria-hidden="true" />
-                    Privacy
-                  </CardTitle>
-                  <CardDescription>
-                    Controls for sensitive values shown inside the app.
-                  </CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <SettingsSwitchRow
-                    label="Hide sensitive data"
-                    description="Blur balances, addresses, and amounts throughout the UI."
-                    checked={hideSensitive}
-                    onCheckedChange={setHideSensitive}
-                  />
-                  <SettingsSwitchRow
-                    label="Clear clipboard after 30s"
-                    description="Auto-clear copied addresses and keys."
-                    checked={clearClipboard}
-                    onCheckedChange={setClearClipboard}
-                  />
-                </CardContent>
-              </Card>
-
-              <Card className="min-w-0">
-                <CardHeader>
-                  <CardTitle className="text-base">Display currency</CardTitle>
-                  <CardDescription>
-                    Choose how balances and reports are shown across the app.
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <div className="flex max-w-md items-center justify-between gap-3 rounded-md border bg-background px-4 py-3">
-                    <span
-                      className={cn(
-                        "text-sm font-medium",
-                        currency === "eur"
-                          ? "text-foreground"
-                          : "text-muted-foreground",
-                      )}
-                    >
-                      € Euro
-                    </span>
-                    <Switch
-                      checked={currency === "btc"}
-                      onCheckedChange={(checked) =>
-                        setCurrency(checked ? "btc" : "eur")
-                      }
-                      aria-label="Display balances in Bitcoin"
-                    />
-                    <span
-                      className={cn(
-                        "text-sm font-medium",
-                        currency === "btc"
-                          ? "text-foreground"
-                          : "text-muted-foreground",
-                      )}
-                    >
-                      ₿ Bitcoin
-                    </span>
-                  </div>
-                </CardContent>
-              </Card>
-            </div>
-
-            <div className="grid min-w-0 grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(320px,420px)]">
-              <Card className="min-w-0">
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2 text-base">
-                    <Lock className="size-4" aria-hidden="true" />
-                    App lock
-                  </CardTitle>
-                  <CardDescription>
-                    Local lock behavior for decrypted workspace state.
-                  </CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <SettingsSwitchRow
-                    label="Auto-lock when idle"
-                    description="Require passphrase after inactivity."
-                    checked={appLockPolicy.autoLockWhenIdle}
-                    onCheckedChange={(checked) =>
-                      setAppLockPolicy({ autoLockWhenIdle: checked })
-                    }
-                  />
-                  <div
-                    className={cn(
-                      "space-y-2",
-                      !appLockPolicy.autoLockWhenIdle &&
-                        "pointer-events-none opacity-50",
-                    )}
-                  >
-                    <Label>Idle timeout</Label>
-                    <div className="flex flex-wrap gap-2">
-                      {[1, 5, 15, 30, 60].map((m) => (
-                        <Button
-                          key={m}
-                          type="button"
-                          variant={
-                            appLockPolicy.idleMinutes === m
-                              ? "default"
-                              : "outline"
-                          }
-                          size="sm"
-                          onClick={() => setAppLockPolicy({ idleMinutes: m })}
-                        >
-                          {m}m
-                        </Button>
-                      ))}
-                    </div>
-                  </div>
-                  <SettingsSwitchRow
-                    label="Require passphrase on launch"
-                    description={
-                      encryptedWorkspace
-                        ? "Encrypted databases always require unlock on launch."
-                        : "Prompt every time Kassiber opens."
-                    }
-                    checked={
-                      encryptedWorkspace
-                        ? true
-                        : appLockPolicy.requirePassphraseOnLaunch
-                    }
-                    onCheckedChange={(checked) =>
-                      setAppLockPolicy({ requirePassphraseOnLaunch: checked })
-                    }
-                    disabled={encryptedWorkspace}
-                  />
-                  <SettingsSwitchRow
-                    label="Lock on window close"
-                    description="Clear in-memory decrypted state when the app window closes."
-                    checked={appLockPolicy.lockOnWindowClose}
-                    onCheckedChange={(checked) =>
-                      setAppLockPolicy({ lockOnWindowClose: checked })
-                    }
-                  />
-                </CardContent>
-              </Card>
-
-              <Card className="min-w-0 border-primary/15 bg-muted/20">
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2 text-base">
-                    <KeyRound className="size-4" aria-hidden="true" />
-                    Security boundary
-                  </CardTitle>
-                  <CardDescription>
-                    What the local lock does and does not protect.
-                  </CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <p className="m-0 text-sm leading-6 text-muted-foreground">
-                    Lock closes the daemon database handle for encrypted
-                    workspaces. Unlocking reopens the local SQLCipher database
-                    with the passphrase.
-                  </p>
-                  <div className="flex flex-wrap gap-2">
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="outline"
-                      onClick={lockNow}
-                    >
-                      <Lock className="size-4" aria-hidden="true" />
-                      Lock now
-                    </Button>
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="ghost"
-                      onClick={openChangePassphrase}
-                      disabled={!encryptedWorkspace}
-                    >
-                      <KeyRound className="size-4" aria-hidden="true" />
-                      Change passphrase
-                    </Button>
-                  </div>
-                </CardContent>
-              </Card>
-            </div>
-
-            <Card ref={dataRef} className="min-w-0">
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2 text-base">
-                  <Database className="size-4" aria-hidden="true" />
-                  Data
-                </CardTitle>
-                <CardDescription>
-                  Backup, restore, labels, imports, and local database status.
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="grid gap-2 sm:grid-cols-3">
-                  <Button type="button" variant="outline" className="justify-start">
-                    <Download className="size-4" aria-hidden="true" />
-                    Backup
-                  </Button>
-                  <Button type="button" variant="outline" className="justify-start">
-                    <Upload className="size-4" aria-hidden="true" />
-                    Restore
-                  </Button>
-                  <Button type="button" variant="outline" className="justify-start">
-                    <FileInput className="size-4" aria-hidden="true" />
-                    Logs
-                  </Button>
-                </div>
-
-                <Separator />
-
-                <div className="grid gap-2 sm:grid-cols-3">
-                  <Button type="button" variant="secondary" className="justify-start">
-                    Import BIP-329
-                  </Button>
-                  <Button type="button" variant="secondary" className="justify-start">
-                    Export BIP-329
-                  </Button>
-                  <Button type="button" variant="secondary" className="justify-start">
-                    Import CSV
-                  </Button>
-                </div>
-
-                <div className="grid gap-3 sm:grid-cols-2">
-                  <div className="space-y-1.5">
-                    <Label htmlFor="settings-data-root">Data root</Label>
-                    <Input
-                      id="settings-data-root"
-                      readOnly
-                      value={status?.data_root ?? "loading..."}
-                    />
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label htmlFor="settings-db-path">Database</Label>
-                    <Input
-                      id="settings-db-path"
-                      readOnly
-                      value={status?.database ?? "loading..."}
-                    />
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-
-            <div ref={backendsRef} className="min-w-0">
-              <Card>
-                <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                  <div>
-                    <CardTitle className="flex items-center gap-2 text-base">
-                      <Server className="size-4" aria-hidden="true" />
-                      Sync backends
-                    </CardTitle>
-                    <CardDescription>
-                      Local node, indexer, and rate endpoints available to the workspace.
-                    </CardDescription>
-                  </div>
-                  <Button type="button" size="sm" onClick={openAddBackend}>
-                    <Plus className="size-4" aria-hidden="true" />
-                    Add backend
-                  </Button>
-                </CardHeader>
-                <CardContent>
-                  <div className="overflow-x-auto rounded-md border">
-                    <Table>
-                      <TableHeader>
-                        <TableRow className="bg-muted/50 hover:bg-muted/50">
-                          <TableHead>Backend</TableHead>
-                          <TableHead>Network</TableHead>
-                          <TableHead>Health</TableHead>
-                          <TableHead>Auth</TableHead>
-                          <TableHead className="text-right">Status</TableHead>
-                          <TableHead className="text-right">Actions</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {backends.map((backend) => (
-                          <TableRow key={backend.id}>
-                            <TableCell className="min-w-[240px]">
-                              <div className="font-medium">{backend.name}</div>
-                              <div className="max-w-[360px] truncate text-xs text-muted-foreground">
-                                {backend.url}
-                              </div>
-                            </TableCell>
-                            <TableCell>
-                              <NetworkBadge net={backend.net} />
-                            </TableCell>
-                            <TableCell className="text-muted-foreground">
-                              {backend.health}
-                            </TableCell>
-                            <TableCell className="text-muted-foreground">
-                              {backend.auth}
-                            </TableCell>
-                            <TableCell className="text-right">
-                              <StatusBadge active={backend.on} />
-                            </TableCell>
-                            <TableCell className="text-right">
-                              <div className="flex justify-end gap-1">
-                                <Button
-                                  type="button"
-                                  size="icon-sm"
-                                  variant="ghost"
-                                  aria-label={`Edit ${backend.name}`}
-                                  onClick={() => openEditBackend(backend)}
-                                >
-                                  <Pencil
-                                    className="size-3.5"
-                                    aria-hidden="true"
-                                  />
-                                </Button>
-                                <Button
-                                  type="button"
-                                  size="icon-sm"
-                                  variant="ghost"
-                                  aria-label={`Delete ${backend.name}`}
-                                  onClick={() => onDeleteBackend(backend)}
-                                >
-                                  <Trash2
-                                    className="size-3.5"
-                                    aria-hidden="true"
-                                  />
-                                </Button>
-                              </div>
-                            </TableCell>
-                          </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
-                  </div>
-                </CardContent>
-              </Card>
-            </div>
-
-            <div ref={aiRef} className="min-w-0">
-              <AiProvidersCard />
-            </div>
 
             <Card className="min-w-0 border-destructive/30">
               <CardHeader>
@@ -996,29 +818,381 @@ export function SettingsScreen({ onLock }: SettingsScreenProps) {
   );
 }
 
-interface AiProviderRow {
-  name: string;
-  base_url: string;
-  kind: "local" | "remote" | "tee";
-  default_model?: string | null;
-  notes?: string | null;
-  has_api_key: boolean;
-  is_default: boolean;
-  acknowledged_at?: string | null;
+interface SettingsSwitchRowProps {
+  label: string;
+  description: string;
+  checked: boolean;
+  onCheckedChange: (checked: boolean) => void;
+  disabled?: boolean;
 }
 
-interface AiProvidersListData {
-  providers: AiProviderRow[];
-  default: string | null;
+function SettingsSwitchRow({
+  label,
+  description,
+  checked,
+  onCheckedChange,
+  disabled = false,
+}: SettingsSwitchRowProps) {
+  return (
+    <div
+      className={cn(
+        "flex items-start justify-between gap-4 rounded-md border bg-background p-3",
+        disabled && "opacity-60",
+      )}
+    >
+      <div className="min-w-0 space-y-1">
+        <Label className="text-sm font-medium">{label}</Label>
+        <p className="text-sm text-muted-foreground">{description}</p>
+      </div>
+      <Switch
+        checked={checked}
+        onCheckedChange={onCheckedChange}
+        disabled={disabled}
+      />
+    </div>
+  );
 }
 
-const AI_KIND_BADGE: Record<AiProviderRow["kind"], string> = {
-  local: "border-emerald-500/25 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300",
-  remote: "border-amber-500/25 bg-amber-500/10 text-amber-700 dark:text-amber-300",
-  tee: "border-sky-500/25 bg-sky-500/10 text-sky-700 dark:text-sky-300",
-};
+function PrivacySettingsPanel({
+  hideSensitive,
+  setHideSensitive,
+  clearClipboard,
+  setClearClipboard,
+}: {
+  hideSensitive: boolean;
+  setHideSensitive: (hideSensitive: boolean) => void;
+  clearClipboard: boolean;
+  setClearClipboard: (clearClipboard: boolean) => void;
+}) {
+  return (
+    <section className="grid gap-3">
+      <div className="flex items-center gap-2">
+        <ShieldCheck className="size-4" aria-hidden="true" />
+        <h3 className="text-sm font-semibold">Privacy controls</h3>
+      </div>
+      <SettingsSwitchRow
+        label="Hide sensitive data"
+        description="Blur balances, addresses, and amounts throughout the UI."
+        checked={hideSensitive}
+        onCheckedChange={setHideSensitive}
+      />
+      <SettingsSwitchRow
+        label="Clear clipboard after 30s"
+        description="Auto-clear copied addresses and keys."
+        checked={clearClipboard}
+        onCheckedChange={setClearClipboard}
+      />
+    </section>
+  );
+}
 
-function AiProvidersCard() {
+type CurrencyMode = "btc" | "eur";
+
+function DisplaySettingsPanel({
+  currency,
+  setCurrency,
+}: {
+  currency: CurrencyMode;
+  setCurrency: (currency: CurrencyMode) => void;
+}) {
+  return (
+    <section className="space-y-3">
+      <div>
+        <h3 className="text-sm font-semibold">Display currency</h3>
+        <p className="text-sm text-muted-foreground">
+          Choose how balances and reports are shown across the app.
+        </p>
+      </div>
+      <div className="flex max-w-md items-center justify-between gap-3 rounded-md border bg-background px-4 py-3">
+        <span
+          className={cn(
+            "text-sm font-medium",
+            currency === "eur" ? "text-foreground" : "text-muted-foreground",
+          )}
+        >
+          € Euro
+        </span>
+        <Switch
+          checked={currency === "btc"}
+          onCheckedChange={(checked) => setCurrency(checked ? "btc" : "eur")}
+          aria-label="Display balances in Bitcoin"
+        />
+        <span
+          className={cn(
+            "text-sm font-medium",
+            currency === "btc" ? "text-foreground" : "text-muted-foreground",
+          )}
+        >
+          ₿ Bitcoin
+        </span>
+      </div>
+    </section>
+  );
+}
+
+function SecuritySettingsPanel({
+  appLockPolicy,
+  setAppLockPolicy,
+  encryptedWorkspace,
+  onLockNow,
+  onChangePassphrase,
+}: {
+  appLockPolicy: AppLockPolicy;
+  setAppLockPolicy: (policy: Partial<AppLockPolicy>) => void;
+  encryptedWorkspace: boolean;
+  onLockNow: () => void;
+  onChangePassphrase: () => void;
+}) {
+  return (
+    <section className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(280px,360px)]">
+      <div className="space-y-3">
+        <div className="flex items-center gap-2">
+          <Lock className="size-4" aria-hidden="true" />
+          <h3 className="text-sm font-semibold">App lock</h3>
+        </div>
+        <SettingsSwitchRow
+          label="Auto-lock when idle"
+          description="Require passphrase after inactivity."
+          checked={appLockPolicy.autoLockWhenIdle}
+          onCheckedChange={(checked) =>
+            setAppLockPolicy({ autoLockWhenIdle: checked })
+          }
+        />
+        <div
+          className={cn(
+            "space-y-2 rounded-md border bg-background p-3",
+            !appLockPolicy.autoLockWhenIdle && "pointer-events-none opacity-50",
+          )}
+        >
+          <Label>Idle timeout</Label>
+          <div className="flex flex-wrap gap-2">
+            {[1, 5, 15, 30, 60].map((minutes) => (
+              <Button
+                key={minutes}
+                type="button"
+                variant={
+                  appLockPolicy.idleMinutes === minutes ? "default" : "outline"
+                }
+                size="sm"
+                onClick={() => setAppLockPolicy({ idleMinutes: minutes })}
+              >
+                {minutes}m
+              </Button>
+            ))}
+          </div>
+        </div>
+        <SettingsSwitchRow
+          label="Require passphrase on launch"
+          description={
+            encryptedWorkspace
+              ? "Encrypted databases always require unlock on launch."
+              : "Prompt every time Kassiber opens."
+          }
+          checked={
+            encryptedWorkspace
+              ? true
+              : appLockPolicy.requirePassphraseOnLaunch
+          }
+          onCheckedChange={(checked) =>
+            setAppLockPolicy({ requirePassphraseOnLaunch: checked })
+          }
+          disabled={encryptedWorkspace}
+        />
+        <SettingsSwitchRow
+          label="Lock on window close"
+          description="Clear in-memory decrypted state when the app window closes."
+          checked={appLockPolicy.lockOnWindowClose}
+          onCheckedChange={(checked) =>
+            setAppLockPolicy({ lockOnWindowClose: checked })
+          }
+        />
+      </div>
+      <div className="space-y-4 rounded-md border border-primary/15 bg-background p-4">
+        <div className="space-y-1">
+          <h3 className="flex items-center gap-2 text-sm font-semibold">
+            <KeyRound className="size-4" aria-hidden="true" />
+            Security boundary
+          </h3>
+          <p className="m-0 text-sm leading-6 text-muted-foreground">
+            Lock closes the daemon database handle for encrypted workspaces.
+            Unlocking reopens the local SQLCipher database with the passphrase.
+          </p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <Button type="button" size="sm" variant="outline" onClick={onLockNow}>
+            <Lock className="size-4" aria-hidden="true" />
+            Lock now
+          </Button>
+          <Button
+            type="button"
+            size="sm"
+            variant="ghost"
+            onClick={onChangePassphrase}
+            disabled={!encryptedWorkspace}
+          >
+            <KeyRound className="size-4" aria-hidden="true" />
+            Change passphrase
+          </Button>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function BackendSettingsPanel({
+  backends,
+  onAdd,
+  onEdit,
+  onDelete,
+}: {
+  backends: Backend[];
+  onAdd: () => void;
+  onEdit: (backend: Backend) => void;
+  onDelete: (backend: Backend) => void;
+}) {
+  return (
+    <section className="space-y-4">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div className="min-w-0 space-y-1">
+          <h3 className="flex items-center gap-2 text-sm font-semibold">
+            <Server className="size-4" aria-hidden="true" />
+            Sync and rate backends
+          </h3>
+          <p className="text-sm text-muted-foreground">
+            Local node, indexer, Liquid, Lightning, and rate endpoints available
+            to the workspace.
+          </p>
+        </div>
+        <Button type="button" size="sm" className="shrink-0" onClick={onAdd}>
+          <Plus className="size-4" aria-hidden="true" />
+          Add backend
+        </Button>
+      </div>
+      <div className="overflow-x-auto rounded-md border bg-background">
+        <Table>
+          <TableHeader>
+            <TableRow className="bg-muted/50 hover:bg-muted/50">
+              <TableHead>Backend</TableHead>
+              <TableHead>Network</TableHead>
+              <TableHead>Health</TableHead>
+              <TableHead>Auth</TableHead>
+              <TableHead className="text-right">Status</TableHead>
+              <TableHead className="text-right">Actions</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {backends.map((backend) => (
+              <TableRow key={backend.id}>
+                <TableCell className="min-w-[240px]">
+                  <div className="font-medium">{backend.name}</div>
+                  <div className="max-w-[360px] truncate text-xs text-muted-foreground">
+                    {backend.url}
+                  </div>
+                </TableCell>
+                <TableCell>
+                  <NetworkBadge net={backend.net} />
+                </TableCell>
+                <TableCell className="text-muted-foreground">
+                  {backend.health}
+                </TableCell>
+                <TableCell className="text-muted-foreground">
+                  {backend.auth}
+                </TableCell>
+                <TableCell className="text-right">
+                  <StatusBadge active={backend.on} />
+                </TableCell>
+                <TableCell className="text-right">
+                  <div className="flex justify-end gap-1">
+                    <Button
+                      type="button"
+                      size="icon-sm"
+                      variant="ghost"
+                      aria-label={`Edit ${backend.name}`}
+                      onClick={() => onEdit(backend)}
+                    >
+                      <Pencil className="size-3.5" aria-hidden="true" />
+                    </Button>
+                    <Button
+                      type="button"
+                      size="icon-sm"
+                      variant="ghost"
+                      aria-label={`Delete ${backend.name}`}
+                      onClick={() => onDelete(backend)}
+                    >
+                      <Trash2 className="size-3.5" aria-hidden="true" />
+                    </Button>
+                  </div>
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </div>
+    </section>
+  );
+}
+
+function DataSettingsPanel({ status }: { status: StatusData | null }) {
+  return (
+    <section className="space-y-4">
+      <div>
+        <h3 className="flex items-center gap-2 text-sm font-semibold">
+          <Database className="size-4" aria-hidden="true" />
+          Data tools
+        </h3>
+        <p className="text-sm text-muted-foreground">
+          Backup, restore, labels, imports, and local database status.
+        </p>
+      </div>
+      <div className="grid gap-2 sm:grid-cols-3">
+        <Button type="button" variant="outline" className="justify-start">
+          <Download className="size-4" aria-hidden="true" />
+          Backup
+        </Button>
+        <Button type="button" variant="outline" className="justify-start">
+          <Upload className="size-4" aria-hidden="true" />
+          Restore
+        </Button>
+        <Button type="button" variant="outline" className="justify-start">
+          <FileInput className="size-4" aria-hidden="true" />
+          Logs
+        </Button>
+      </div>
+      <Separator />
+      <div className="grid gap-2 sm:grid-cols-3">
+        <Button type="button" variant="secondary" className="justify-start">
+          Import BIP-329
+        </Button>
+        <Button type="button" variant="secondary" className="justify-start">
+          Export BIP-329
+        </Button>
+        <Button type="button" variant="secondary" className="justify-start">
+          Import CSV
+        </Button>
+      </div>
+      <div className="grid gap-3 sm:grid-cols-2">
+        <div className="space-y-1.5">
+          <Label htmlFor="settings-data-root">Data root</Label>
+          <Input
+            id="settings-data-root"
+            readOnly
+            value={status?.data_root ?? "loading..."}
+          />
+        </div>
+        <div className="space-y-1.5">
+          <Label htmlFor="settings-db-path">Database</Label>
+          <Input
+            id="settings-db-path"
+            readOnly
+            value={status?.database ?? "loading..."}
+          />
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function AiProvidersPanel() {
   const providersQuery = useDaemon<AiProvidersListData>("ai.providers.list");
   const data = React.useMemo<AiProvidersListData>(
     () =>
@@ -1036,7 +1210,7 @@ function AiProvidersCard() {
 
   const editingProvider = React.useMemo<ExistingAiProvider | null>(() => {
     if (!editingName) return null;
-    const row = data.providers.find((p) => p.name === editingName);
+    const row = data.providers.find((provider) => provider.name === editingName);
     if (!row) return null;
     return {
       name: row.name,
@@ -1047,28 +1221,40 @@ function AiProvidersCard() {
       has_api_key: row.has_api_key,
       acknowledged_at: row.acknowledged_at ?? null,
     };
-  }, [data, editingName]);
+  }, [data.providers, editingName]);
 
   return (
-    <Card>
-      <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <CardTitle className="flex items-center gap-2 text-base">
-            <Sparkles className="size-4" aria-hidden="true" />
-            AI providers
-          </CardTitle>
-          <CardDescription>
-            OpenAI-compatible endpoints for the in-app assistant. Local Ollama
-            runs without a key; remote providers see prompt content.
-          </CardDescription>
+    <div className="space-y-4">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div className="min-w-0 space-y-1">
+          <h3 className="text-sm font-semibold">Provider configuration</h3>
+          <p className="text-sm text-muted-foreground">
+            Configure OpenAI-compatible endpoints for the in-app assistant.
+            Local Ollama runs without a key; remote providers see prompt
+            content.
+          </p>
         </div>
-        <Button type="button" size="sm" onClick={() => setAddOpen(true)}>
+        <Button
+          type="button"
+          size="sm"
+          className="shrink-0"
+          onClick={() => setAddOpen(true)}
+        >
           <Plus className="size-4" aria-hidden="true" />
           Add provider
         </Button>
-      </CardHeader>
-      <CardContent>
-        <div className="overflow-x-auto rounded-md border">
+      </div>
+
+      {providersQuery.isLoading ? (
+        <div className="rounded-md border bg-background p-4 text-sm text-muted-foreground">
+          Loading providers...
+        </div>
+      ) : providersQuery.isError ? (
+        <div className="rounded-md border border-destructive/30 bg-destructive/5 p-4 text-sm text-destructive">
+          Could not load AI providers.
+        </div>
+      ) : (
+        <div className="overflow-x-auto rounded-md border bg-background">
           <Table>
             <TableHeader>
               <TableRow className="bg-muted/50 hover:bg-muted/50">
@@ -1121,8 +1307,8 @@ function AiProvidersCard() {
                           type="button"
                           size="sm"
                           variant="ghost"
-                          onClick={() => clearDefault.mutate(undefined)}
                           disabled={clearDefault.isPending}
+                          onClick={() => clearDefault.mutate(undefined)}
                         >
                           Clear default
                         </Button>
@@ -1131,8 +1317,8 @@ function AiProvidersCard() {
                           type="button"
                           size="sm"
                           variant="outline"
-                          onClick={() => setDefault.mutate({ name: row.name })}
                           disabled={setDefault.isPending}
+                          onClick={() => setDefault.mutate({ name: row.name })}
                         >
                           Set default
                         </Button>
@@ -1173,7 +1359,7 @@ function AiProvidersCard() {
             </TableBody>
           </Table>
         </div>
-      </CardContent>
+      )}
 
       <AiProviderForm
         open={addOpen}
@@ -1186,41 +1372,6 @@ function AiProvidersCard() {
         initial={editingProvider}
         onClose={() => setEditingName(null)}
         onSaved={() => setEditingName(null)}
-      />
-    </Card>
-  );
-}
-
-interface SettingsSwitchRowProps {
-  label: string;
-  description: string;
-  checked: boolean;
-  onCheckedChange: (checked: boolean) => void;
-  disabled?: boolean;
-}
-
-function SettingsSwitchRow({
-  label,
-  description,
-  checked,
-  onCheckedChange,
-  disabled = false,
-}: SettingsSwitchRowProps) {
-  return (
-    <div
-      className={cn(
-        "flex items-start justify-between gap-4",
-        disabled && "opacity-60",
-      )}
-    >
-      <div className="min-w-0 space-y-1">
-        <Label className="text-sm font-medium">{label}</Label>
-        <p className="text-sm text-muted-foreground">{description}</p>
-      </div>
-      <Switch
-        checked={checked}
-        onCheckedChange={onCheckedChange}
-        disabled={disabled}
       />
     </div>
   );

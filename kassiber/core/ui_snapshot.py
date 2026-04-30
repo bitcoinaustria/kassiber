@@ -535,6 +535,7 @@ def _transactions(conn: sqlite3.Connection, profile_id: str) -> list[dict[str, A
         output.append(
             {
                 "id": row["id"],
+                "externalId": row["external_id"],
                 "date": (row["occurred_at"] or "")[:16].replace("T", " "),
                 "type": _transaction_type(
                     row["kind"],
@@ -1815,6 +1816,7 @@ def _transaction_rows_to_ui(
         output.append(
             {
                 "id": row["id"],
+                "externalId": row["external_id"],
                 "date": (row["occurred_at"] or "")[:16].replace("T", " "),
                 "type": _transaction_type(
                     row["kind"],

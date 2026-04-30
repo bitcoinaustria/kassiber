@@ -10,6 +10,7 @@ export type AssistantReturnPath =
   | "/overview"
   | "/transactions"
   | "/reports"
+  | "/source-of-funds"
   | "/connections"
   | "/profiles"
   | "/journals"

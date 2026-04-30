@@ -21,13 +21,13 @@ import { Welcome } from "./routes/Welcome";
 import { Overview } from "./routes/Overview";
 import { Transactions } from "./routes/Transactions";
 import { Reports } from "./routes/Reports";
+import { SourceFunds } from "./routes/SourceFunds";
 import { Journals } from "./routes/Journals";
 import { TaxEvents } from "./routes/TaxEvents";
 import { Quarantine } from "./routes/Quarantine";
 import { Profiles } from "./routes/Profiles";
 import { Connections } from "./routes/Connections";
 import { ConnectionDetail } from "./routes/ConnectionDetail";
-import { Imports } from "./routes/Imports";
 import { Settings } from "./routes/Settings";
 import { Assistant } from "./routes/Assistant";
 import { AppShell } from "./components/kb/AppShell";
@@ -77,6 +77,12 @@ const reportsRoute = createRoute({
   component: Reports,
 });
 
+const sourceFundsRoute = createRoute({
+  getParentRoute: () => appLayoutRoute,
+  path: "/source-of-funds",
+  component: SourceFunds,
+});
+
 const journalsRoute = createRoute({
   getParentRoute: () => appLayoutRoute,
   path: "/journals",
@@ -116,7 +122,9 @@ const connectionDetailRoute = createRoute({
 const importsRoute = createRoute({
   getParentRoute: () => appLayoutRoute,
   path: "/imports",
-  component: Imports,
+  beforeLoad: () => {
+    throw redirect({ to: "/connections" });
+  },
 });
 
 const settingsRoute = createRoute({
@@ -143,7 +151,15 @@ const importsAliasRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/Imports",
   beforeLoad: () => {
-    throw redirect({ to: "/imports" });
+    throw redirect({ to: "/connections" });
+  },
+});
+
+const proofFundsAliasRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/proof-funds",
+  beforeLoad: () => {
+    throw redirect({ to: "/source-of-funds" });
   },
 });
 
@@ -151,10 +167,12 @@ const routeTree = rootRoute.addChildren([
   indexRoute,
   assistantTypoRoute,
   importsAliasRoute,
+  proofFundsAliasRoute,
   appLayoutRoute.addChildren([
     overviewRoute,
     transactionsRoute,
     reportsRoute,
+    sourceFundsRoute,
     journalsRoute,
     taxEventsRoute,
     quarantineRoute,

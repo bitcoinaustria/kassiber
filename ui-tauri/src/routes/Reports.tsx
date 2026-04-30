@@ -289,7 +289,7 @@ function ReportsView({ report, hideSensitive }: ReportsViewProps) {
               </CardHeader>
             </Card>
           )}
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 2xl:grid-cols-4">
             <ReportMetricCard
               label="Proceeds"
               value={
@@ -340,67 +340,75 @@ function ReportsView({ report, hideSensitive }: ReportsViewProps) {
                 Disposal lots for the profile jurisdiction and rp2 method.
               </CardDescription>
             </CardHeader>
-            <CardContent className="overflow-x-auto p-0">
-              <Table>
-                <TableHeader>
-                  <TableRow className="bg-muted/50 hover:bg-muted/50">
-                    <TableHead className="min-w-[112px]">Acquired</TableHead>
-                    <TableHead className="min-w-[112px]">Disposed</TableHead>
-                    <TableHead>Holding</TableHead>
-                    <TableHead className="text-right">Sats</TableHead>
-                    <TableHead className="text-right">Cost {j.ccy}</TableHead>
-                    <TableHead className="text-right">
-                      Proceeds {j.ccy}
-                    </TableHead>
-                    <TableHead className="text-right">Gain {j.ccy}</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {lots.map((lot, index) => (
-                    <ReportLotRow
-                      key={`${lot.acquired}-${lot.disposed}-${index}`}
-                      lot={lot}
-                      hideSensitive={hideSensitive}
-                    />
-                  ))}
-                  <TableRow className="bg-muted/30 font-medium">
-                    <TableCell colSpan={3}>Total</TableCell>
-                    <TableCell
-                      className={cn(
-                        "text-right tabular-nums",
-                        blurClass(hideSensitive),
-                      )}
-                    >
-                      {totals.sats.toLocaleString("en-US")}
-                    </TableCell>
-                    <TableCell
-                      className={cn(
-                        "text-right tabular-nums",
-                        blurClass(hideSensitive),
-                      )}
-                    >
-                      {totals.cost.toFixed(2)}
-                    </TableCell>
-                    <TableCell
-                      className={cn(
-                        "text-right tabular-nums",
-                        blurClass(hideSensitive),
-                      )}
-                    >
-                      {totals.proceeds.toFixed(2)}
-                    </TableCell>
-                    <TableCell
-                      className={cn(
-                        "text-right tabular-nums",
-                        totals.gain >= 0 ? "text-emerald-600" : "text-red-600",
-                        blurClass(hideSensitive),
-                      )}
-                    >
-                      {signedNumber(totals.gain)}
-                    </TableCell>
-                  </TableRow>
-                </TableBody>
-              </Table>
+            <CardContent className="p-4">
+              <div className="overflow-x-auto rounded-md border">
+                <Table className="min-w-[760px]">
+                  <TableHeader>
+                    <TableRow className="bg-muted/50 hover:bg-muted/50">
+                      <TableHead className="min-w-[112px]">Acquired</TableHead>
+                      <TableHead className="min-w-[112px]">Disposed</TableHead>
+                      <TableHead>Holding</TableHead>
+                      <TableHead className="text-right">Sats</TableHead>
+                      <TableHead className="text-right">
+                        Cost {j.ccy}
+                      </TableHead>
+                      <TableHead className="text-right">
+                        Proceeds {j.ccy}
+                      </TableHead>
+                      <TableHead className="text-right">
+                        Gain {j.ccy}
+                      </TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {lots.map((lot, index) => (
+                      <ReportLotRow
+                        key={`${lot.acquired}-${lot.disposed}-${index}`}
+                        lot={lot}
+                        hideSensitive={hideSensitive}
+                      />
+                    ))}
+                    <TableRow className="bg-muted/30 font-medium">
+                      <TableCell colSpan={3}>Total</TableCell>
+                      <TableCell
+                        className={cn(
+                          "text-right tabular-nums",
+                          blurClass(hideSensitive),
+                        )}
+                      >
+                        {totals.sats.toLocaleString("en-US")}
+                      </TableCell>
+                      <TableCell
+                        className={cn(
+                          "text-right tabular-nums",
+                          blurClass(hideSensitive),
+                        )}
+                      >
+                        {totals.cost.toFixed(2)}
+                      </TableCell>
+                      <TableCell
+                        className={cn(
+                          "text-right tabular-nums",
+                          blurClass(hideSensitive),
+                        )}
+                      >
+                        {totals.proceeds.toFixed(2)}
+                      </TableCell>
+                      <TableCell
+                        className={cn(
+                          "text-right tabular-nums",
+                          totals.gain >= 0
+                            ? "text-emerald-600"
+                            : "text-red-600",
+                          blurClass(hideSensitive),
+                        )}
+                      >
+                        {signedNumber(totals.gain)}
+                      </TableCell>
+                    </TableRow>
+                  </TableBody>
+                </Table>
+              </div>
             </CardContent>
           </Card>
 
@@ -726,10 +734,12 @@ interface ReportMetricCardProps {
 
 function ReportMetricCard({ label, value, sub }: ReportMetricCardProps) {
   return (
-    <Card className="gap-3 py-5">
-      <CardContent className="space-y-3">
+    <Card className="min-w-0 gap-3 py-5">
+      <CardContent className="min-w-0 space-y-3">
         <p className="text-xs font-medium text-muted-foreground">{label}</p>
-        <p className="text-2xl font-semibold tracking-tight">{value}</p>
+        <p className="min-w-0 whitespace-nowrap text-xl leading-tight font-semibold tracking-tight tabular-nums sm:text-2xl">
+          {value}
+        </p>
         <p className="text-xs text-muted-foreground">{sub}</p>
       </CardContent>
     </Card>

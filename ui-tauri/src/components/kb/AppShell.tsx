@@ -6,6 +6,7 @@ import {
   useRouterState,
 } from "@tanstack/react-router";
 import {
+  BadgeCheck,
   BarChart3,
   Bell,
   BookOpen,
@@ -13,7 +14,6 @@ import {
   ChevronRight,
   ChevronsUpDown,
   ClipboardList,
-  Download,
   Eye,
   EyeOff,
   Gauge,
@@ -69,7 +69,11 @@ import {
 } from "@/components/ui/sidebar";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { useUiStore } from "@/store/ui";
-import { DAEMON_AUTH_REQUIRED_EVENT, useDaemon } from "@/daemon/client";
+import {
+  DAEMON_AUTH_REQUIRED_EVENT,
+  useDaemon,
+  useDaemonMutation,
+} from "@/daemon/client";
 import { getTransport } from "@/daemon/transport";
 import { cn } from "@/lib/utils";
 import {
@@ -88,12 +92,12 @@ type AppRoutePath =
   | "/overview"
   | "/transactions"
   | "/reports"
+  | "/source-of-funds"
   | "/connections"
   | "/profiles"
   | "/journals"
   | "/tax-events"
   | "/quarantine"
-  | "/imports"
   | "/settings"
   | "/assistant";
 
@@ -125,6 +129,22 @@ type SearchResult = {
   connectionId?: string;
 };
 
+type NotificationItem = {
+  id: string;
+  title: string;
+  body: string;
+  tone: "info" | "success" | "warning" | "error";
+  to?: AppRoutePath;
+  action?: "process-journals";
+  actionLabel?: string;
+};
+
+type JournalProcessResult = {
+  entries_created?: number;
+  quarantined?: number;
+  processed_transactions?: number;
+};
+
 const APP_VERSION = "0.22.0";
 const APP_COMMIT = __APP_COMMIT__;
 const APP_COMMIT_SHORT = APP_COMMIT ? APP_COMMIT.slice(0, 7) : "unknown";
@@ -136,6 +156,7 @@ const NAV_GROUPS: NavGroup[] = [
       { label: "Overview", icon: Gauge, href: "/overview" },
       { label: "Transactions", icon: ClipboardList, href: "/transactions" },
       { label: "Reports", icon: BarChart3, href: "/reports" },
+      { label: "Source of Funds", icon: BadgeCheck, href: "/source-of-funds" },
       { label: "Assistant", icon: MessageSquareText, href: "/assistant" },
     ],
   },
@@ -149,7 +170,6 @@ const NAV_GROUPS: NavGroup[] = [
         children: [
           { label: "Wallets", icon: Wallet, href: "/connections" },
           { label: "Profiles", icon: Users, href: "/profiles" },
-          { label: "Imports", icon: Download, href: "/imports" },
         ],
       },
       { label: "Journals", icon: BookOpen, href: "/journals" },
@@ -181,15 +201,6 @@ const ROUTE_META: Array<[string, RouteMeta]> = [
       icon: Wallet,
       searchLabel: "Search connections",
       searchPlaceholder: "Search wallets, profiles...",
-    },
-  ],
-  [
-    "/imports",
-    {
-      title: "Imports",
-      icon: Download,
-      searchLabel: "Search imports",
-      searchPlaceholder: "Search wallets, services...",
     },
   ],
   [
@@ -226,6 +237,15 @@ const ROUTE_META: Array<[string, RouteMeta]> = [
       icon: BarChart3,
       searchLabel: "Search reports",
       searchPlaceholder: "Search reports, exports...",
+    },
+  ],
+  [
+    "/source-of-funds",
+    {
+      title: "Source of Funds",
+      icon: BadgeCheck,
+      searchLabel: "Search source of funds",
+      searchPlaceholder: "Search sources, wallets...",
     },
   ],
   [
@@ -305,11 +325,11 @@ const STATIC_SEARCH_RESULTS: SearchResult[] = [
     to: "/profiles",
   },
   {
-    id: "route:imports",
-    title: "Imports",
-    detail: "Add wallet sources and integrations",
-    keywords: ["connection", "xpub", "exchange", "csv", "integration"],
-    to: "/imports",
+    id: "route:source-of-funds",
+    title: "Source of Funds",
+    detail: "Wallet sources and local provenance summaries",
+    keywords: ["source", "funds", "wallet", "balance", "provenance"],
+    to: "/source-of-funds",
   },
   {
     id: "route:journals",
@@ -435,15 +455,30 @@ function nextSearchIndex(current: number, delta: number, total: number) {
   return (current + delta + total) % total;
 }
 
+function notificationRouteFor(title: string): AppRoutePath | undefined {
+  const normalized = title.toLowerCase();
+  if (normalized.includes("journal")) return "/journals";
+  if (normalized.includes("quarantine")) return "/quarantine";
+  if (normalized.includes("sync") || normalized.includes("wallet")) {
+    return "/connections";
+  }
+  if (normalized.includes("report") || normalized.includes("export")) {
+    return "/reports";
+  }
+  if (normalized.includes("profile")) return "/profiles";
+  if (normalized.includes("transaction")) return "/transactions";
+  return undefined;
+}
+
 function assistantReturnPathFor(pathname: string): AssistantReturnPath {
   if (pathname.startsWith("/connections")) return "/connections";
   if (pathname === "/transactions") return "/transactions";
   if (pathname === "/reports") return "/reports";
+  if (pathname === "/source-of-funds") return "/source-of-funds";
   if (pathname === "/profiles") return "/profiles";
   if (pathname === "/journals") return "/journals";
   if (pathname === "/tax-events") return "/tax-events";
   if (pathname === "/quarantine") return "/quarantine";
-  if (pathname === "/imports") return "/imports";
   if (pathname === "/settings") return "/settings";
   return "/overview";
 }
@@ -639,6 +674,14 @@ export function AppShell() {
     window.addEventListener("kassiber:lock-app", lockApp);
     return () => window.removeEventListener("kassiber:lock-app", lockApp);
   }, [lockApp]);
+
+  React.useLayoutEffect(() => {
+    if (locked) return;
+    const main = mainRef.current;
+    if (!main) return;
+    main.scrollTo({ top: 0, left: 0 });
+    setAssistantCollapsed(false);
+  }, [locked, pathname]);
 
   React.useEffect(() => {
     const main = mainRef.current;
@@ -1058,7 +1101,10 @@ function AppDashboardHeader({
   const setHideSensitive = useUiStore((s) => s.setHideSensitive);
   const dataMode = useUiStore((s) => s.dataMode);
   const appNotifications = useUiStore((s) => s.notifications);
+  const addNotification = useUiStore((s) => s.addNotification);
   const clearNotifications = useUiStore((s) => s.clearNotifications);
+  const processJournals =
+    useDaemonMutation<JournalProcessResult>("ui.journals.process");
   const [searchQuery, setSearchQuery] = React.useState("");
   const [searchOpen, setSearchOpen] = React.useState(false);
   const [activeSearchIndex, setActiveSearchIndex] = React.useState(0);
@@ -1118,7 +1164,41 @@ function AppDashboardHeader({
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, []);
-  const systemNotificationItems = [
+
+  const runJournalProcessing = React.useCallback(() => {
+    if (processJournals.isPending) return;
+    processJournals.mutate(undefined, {
+      onSuccess: (envelope) => {
+        const payload = envelope.data;
+        const parts = [
+          payload?.processed_transactions !== undefined
+            ? `${payload.processed_transactions} transactions`
+            : null,
+          payload?.entries_created !== undefined
+            ? `${payload.entries_created} entries`
+            : null,
+          payload?.quarantined ? `${payload.quarantined} quarantined` : null,
+        ].filter(Boolean);
+        addNotification({
+          title: "Journals processed",
+          body: parts.join(", ") || "Journal state refreshed.",
+          tone: payload?.quarantined ? "warning" : "success",
+        });
+      },
+      onError: (error) => {
+        addNotification({
+          title: "Journal processing failed",
+          body:
+            error instanceof Error
+              ? error.message
+              : "Could not process journals.",
+          tone: "error",
+        });
+      },
+    });
+  }, [addNotification, processJournals]);
+
+  const systemNotificationItems: NotificationItem[] = [
     ...(snapshot?.status?.needsJournals
       ? [
           {
@@ -1126,6 +1206,9 @@ function AppDashboardHeader({
             title: "Journals need processing",
             body: "Reports are not trusted until journals are processed.",
             tone: "warning" as const,
+            to: "/journals" as const,
+            action: "process-journals" as const,
+            actionLabel: "Process now",
           },
         ]
       : []),
@@ -1136,6 +1219,7 @@ function AppDashboardHeader({
             title: "Transactions quarantined",
             body: `${snapshot?.status?.quarantines ?? 0} transactions need review.`,
             tone: "warning" as const,
+            to: "/quarantine" as const,
           },
         ]
       : []),
@@ -1147,9 +1231,16 @@ function AppDashboardHeader({
           ? "The UI is showing fixture data."
           : "The UI is reading from the local daemon.",
       tone: "info" as const,
+      to: "/settings" as const,
     },
   ];
-  const notificationItems = [...appNotifications, ...systemNotificationItems];
+  const notificationItems: NotificationItem[] = [
+    ...appNotifications.map((item) => ({
+      ...item,
+      to: notificationRouteFor(item.title),
+    })),
+    ...systemNotificationItems,
+  ];
   const notificationCount = notificationItems.filter(
     (item) =>
       item.tone !== "info" ||
@@ -1302,15 +1393,46 @@ function AppDashboardHeader({
             </div>
             <DropdownMenuSeparator />
             {notificationItems.map((item) => (
-              <DropdownMenuItem
-                key={item.id}
-                className="flex flex-col items-start gap-0.5 whitespace-normal"
-              >
-                <span className="font-medium">{item.title}</span>
-                <span className="text-xs text-muted-foreground">
-                  {item.body}
-                </span>
-              </DropdownMenuItem>
+              <div key={item.id} className="px-1 py-1">
+                <DropdownMenuItem
+                  className="flex cursor-pointer items-start justify-between gap-3 whitespace-normal rounded-md"
+                  onSelect={(event) => {
+                    if (!item.to) return;
+                    event.preventDefault();
+                    void navigate({ to: item.to });
+                  }}
+                >
+                  <span className="min-w-0">
+                    <span className="block font-medium">{item.title}</span>
+                    <span className="block text-xs text-muted-foreground">
+                      {item.body}
+                    </span>
+                  </span>
+                  {item.to ? (
+                    <ChevronRight
+                      className="mt-1 size-4 shrink-0 text-muted-foreground"
+                      aria-hidden="true"
+                    />
+                  ) : null}
+                </DropdownMenuItem>
+                {item.action === "process-journals" ? (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="mt-1 h-7 w-full justify-center text-xs"
+                    disabled={processJournals.isPending}
+                    onClick={(event) => {
+                      event.preventDefault();
+                      runJournalProcessing();
+                    }}
+                  >
+                    {processJournals.isPending
+                      ? "Processing..."
+                      : item.actionLabel}
+                  </Button>
+                ) : null}
+              </div>
             ))}
           </DropdownMenuContent>
         </DropdownMenu>

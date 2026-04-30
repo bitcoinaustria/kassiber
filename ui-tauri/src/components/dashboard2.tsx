@@ -11,6 +11,7 @@ import {
   Copy,
   CreditCard,
   Eye,
+  ExternalLink,
   Filter,
   Maximize2,
   MoreHorizontal,
@@ -19,6 +20,7 @@ import {
   RefreshCw,
   RotateCcw,
   Search,
+  ShieldAlert,
   ShoppingCart,
   Wallet,
   X,
@@ -92,6 +94,7 @@ type TransactionDirection = "Receive" | "Send" | "Transfer";
 type Transaction = {
   id: string;
   txnId: string;
+  explorerId?: string;
   amount: number;
   amountBtc?: number;
   counterparty: string;
@@ -902,7 +905,8 @@ function toDashboardTransaction(tx: Tx, index: number): Transaction {
         : "On-chain";
   return {
     id: tx.id,
-    txnId: tx.id || `TX-${index + 1}`,
+    txnId: tx.externalId || tx.id || `TX-${index + 1}`,
+    explorerId: tx.externalId || undefined,
     amount: Math.abs(tx.eur || (tx.amountSat / 100_000_000) * tx.rate),
     amountBtc: Math.abs(tx.amountSat / 100_000_000),
     counterparty: tx.counter || tx.account || "Unassigned",
@@ -950,7 +954,50 @@ function periodLimit(period: PeriodKey) {
 }
 
 function recordsForPeriod(records: Transaction[], period: PeriodKey) {
-  return records.slice(0, periodLimit(period)).reverse();
+  const dated = records
+    .map((record) => ({ record, date: parseTransactionDate(record.date) }))
+    .filter(
+      (entry): entry is { record: Transaction; date: Date } =>
+        entry.date !== null,
+    );
+
+  if (!dated.length) {
+    return records.slice(0, periodLimit(period)).reverse();
+  }
+
+  const latest = dated.reduce(
+    (max, entry) => (entry.date > max ? entry.date : max),
+    dated[0].date,
+  );
+  const start = periodStartDate(latest, period);
+
+  return dated
+    .filter((entry) => entry.date >= start && entry.date <= latest)
+    .sort((a, b) => a.date.getTime() - b.date.getTime())
+    .map((entry) => entry.record);
+}
+
+function parseTransactionDate(value: string) {
+  const normalized = value.includes("T") ? value : value.replace(" ", "T");
+  const parsed = new Date(normalized);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
+function periodStartDate(latest: Date, period: PeriodKey) {
+  const start = new Date(latest);
+  if (period === "30days") {
+    start.setDate(start.getDate() - 30);
+  } else if (period === "3months") {
+    start.setMonth(start.getMonth() - 3);
+  } else if (period === "ytd") {
+    start.setMonth(0, 1);
+    start.setHours(0, 0, 0, 0);
+  } else if (period === "5years") {
+    start.setFullYear(start.getFullYear() - 5);
+  } else {
+    start.setFullYear(start.getFullYear() - 1);
+  }
+  return start;
 }
 
 function buildVolumeRows(
@@ -1604,6 +1651,24 @@ const allPaymentMethods = [
   "Liquid",
 ] as const;
 
+function explorerForTransaction(txn: Transaction) {
+  const id = txn.explorerId?.trim();
+  if (!id) return null;
+  if (txn.paymentMethod === "Liquid") {
+    return {
+      label: "Liquid Network",
+      url: `https://liquid.network/tx/${encodeURIComponent(id)}`,
+    };
+  }
+  if (txn.paymentMethod === "On-chain") {
+    return {
+      label: "mempool.space",
+      url: `https://mempool.space/tx/${encodeURIComponent(id)}`,
+    };
+  }
+  return null;
+}
+
 const dateFilterOptions = [
   { label: "All", value: "all" },
   { label: "Today", value: "today" },
@@ -1632,6 +1697,11 @@ const TransactionsTable = ({
   const [currentPage, setCurrentPage] = React.useState(1);
   const [pageSize, setPageSize] = React.useState(10);
   const [isHydrated, setIsHydrated] = React.useState(false);
+  const [explorerTransaction, setExplorerTransaction] =
+    React.useState<Transaction | null>(null);
+  const explorerTarget = explorerTransaction
+    ? explorerForTransaction(explorerTransaction)
+    : null;
 
   const hasActiveFilters =
     statusFilter !== "all" ||
@@ -1808,7 +1878,8 @@ const TransactionsTable = ({
   };
 
   return (
-    <div className="rounded-xl border bg-card">
+    <>
+      <div className="rounded-xl border bg-card">
       <div className="flex flex-col gap-3 p-3 sm:flex-row sm:items-center sm:gap-4 sm:px-6 sm:py-3.5">
         <div className="flex flex-1 items-center gap-2 sm:gap-2.5">
           <Button
@@ -2028,6 +2099,7 @@ const TransactionsTable = ({
             ) : (
               paginatedTransactions.map((txn) => {
                 const StatusIcon = transactionStatusIcons[txn.status];
+                const explorer = explorerForTransaction(txn);
                 return (
                   <TableRow key={txn.id}>
                     <TableCell
@@ -2036,7 +2108,22 @@ const TransactionsTable = ({
                         blurClass(hideSensitive),
                       )}
                     >
-                      {txn.txnId}
+                      {explorer ? (
+                        <button
+                          type="button"
+                          className="inline-flex max-w-[28ch] items-center gap-1 truncate font-mono text-left underline-offset-4 hover:underline"
+                          title={`Open ${txn.txnId} on ${explorer.label}`}
+                          onClick={() => setExplorerTransaction(txn)}
+                        >
+                          <span className="truncate">{txn.txnId}</span>
+                          <ExternalLink
+                            className="size-3 shrink-0 text-muted-foreground"
+                            aria-hidden="true"
+                          />
+                        </button>
+                      ) : (
+                        <span className="font-mono">{txn.txnId}</span>
+                      )}
                     </TableCell>
                     <TableCell className="hidden md:table-cell">
                       <div className="flex items-center gap-2">
@@ -2244,7 +2331,55 @@ const TransactionsTable = ({
           </Button>
         </div>
       </div>
-    </div>
+      </div>
+      <Dialog
+        open={Boolean(explorerTransaction)}
+        onOpenChange={(open) => {
+          if (!open) setExplorerTransaction(null);
+        }}
+      >
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <div className="mb-2 flex size-10 items-center justify-center rounded-full bg-amber-100 text-amber-700 dark:bg-amber-950/50 dark:text-amber-300">
+              <ShieldAlert className="size-5" aria-hidden="true" />
+            </div>
+            <DialogTitle>Open transaction in a browser?</DialogTitle>
+            <DialogDescription>
+              This opens {explorerTarget?.label ?? "a public explorer"} outside
+              Kassiber. The explorer can see your IP address and the transaction
+              id you request.
+            </DialogDescription>
+          </DialogHeader>
+          {explorerTransaction && explorerTarget ? (
+            <div className="rounded-md border bg-muted/35 p-3 text-sm">
+              <p className="font-medium">{explorerTransaction.txnId}</p>
+              <p className="mt-1 break-all font-mono text-xs text-muted-foreground">
+                {explorerTarget.url}
+              </p>
+            </div>
+          ) : null}
+          <DialogFooter>
+            <DialogClose asChild>
+              <Button type="button" variant="outline">
+                Cancel
+              </Button>
+            </DialogClose>
+            <Button
+              type="button"
+              disabled={!explorerTarget}
+              onClick={() => {
+                if (!explorerTarget || typeof window === "undefined") return;
+                window.open(explorerTarget.url, "_blank", "noopener,noreferrer");
+                setExplorerTransaction(null);
+              }}
+            >
+              <ExternalLink className="size-4" aria-hidden="true" />
+              Open explorer
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 };
 
@@ -2267,6 +2402,10 @@ const Dashboard2 = ({
         ? ledger.txs.map(toDashboardTransaction)
         : transactionRecords,
     [ledger.txs],
+  );
+  const periodRecords = React.useMemo(
+    () => recordsForPeriod(records, period),
+    [records, period],
   );
 
   React.useEffect(() => {
@@ -2389,7 +2528,7 @@ const Dashboard2 = ({
       </div>
 
       <StatsCards
-        records={records}
+        records={periodRecords}
         hideSensitive={hideSensitive}
         currency={currency}
       />

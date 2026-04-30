@@ -47,6 +47,7 @@ interface ModelsListData {
 interface ProviderModelPickerProps {
   value: { provider: string; model: string } | null;
   onChange: (next: { provider: string; model: string } | null) => void;
+  enabled?: boolean;
 }
 
 function rowValue(provider: string, model: string): string {
@@ -59,8 +60,16 @@ function parseRowValue(value: string): { provider: string; model: string } | nul
   return { provider: value.slice(0, idx), model: value.slice(idx + 2) };
 }
 
-export function ProviderModelPicker({ value, onChange }: ProviderModelPickerProps) {
-  const providersQuery = useDaemon<ProvidersListData>("ai.providers.list");
+export function ProviderModelPicker({
+  value,
+  onChange,
+  enabled = true,
+}: ProviderModelPickerProps) {
+  const providersQuery = useDaemon<ProvidersListData>(
+    "ai.providers.list",
+    undefined,
+    { enabled },
+  );
   const providers = React.useMemo<ProviderRow[]>(
     () =>
       providersQuery.data?.kind === "ai.providers.list" &&
@@ -87,7 +96,7 @@ export function ProviderModelPicker({ value, onChange }: ProviderModelPickerProp
     "ai.list_models",
     selectedProvider ? { provider: selectedProvider.name } : undefined,
     {
-      enabled: Boolean(selectedProvider),
+      enabled: enabled && Boolean(selectedProvider),
       // Models lists are stable for the session; don't poll.
       staleTime: 5 * 60 * 1000,
     },
@@ -104,6 +113,7 @@ export function ProviderModelPicker({ value, onChange }: ProviderModelPickerProp
   // user can send a chat without first opening Settings. Prefer the saved
   // `default_model`; otherwise pick the first model the provider advertises.
   React.useEffect(() => {
+    if (!enabled) return;
     if (value || !fallbackProvider) return;
     if (fallbackProvider.default_model) {
       onChange({
@@ -118,7 +128,7 @@ export function ProviderModelPicker({ value, onChange }: ProviderModelPickerProp
         model: models[0].id,
       });
     }
-  }, [fallbackProvider, models, value, onChange]);
+  }, [enabled, fallbackProvider, models, value, onChange]);
 
   const groupedRows = React.useMemo(() => {
     return providers.map((provider) => {
@@ -138,7 +148,9 @@ export function ProviderModelPicker({ value, onChange }: ProviderModelPickerProp
 
   const currentLabel = value
     ? `${value.provider} · ${value.model}`
-    : providers.length === 0
+    : !enabled
+      ? "Select model"
+      : providers.length === 0
       ? "No provider configured"
       : "Select a model";
 
