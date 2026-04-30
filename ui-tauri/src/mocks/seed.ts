@@ -132,7 +132,7 @@ export const MOCK_OVERVIEW: OverviewSnapshot = {
       label: "Home Node (CLN)",
       last: "18s ago",
       balance: 0.04821309,
-      status: "syncing",
+      status: "synced",
       channels: 12,
     },
     {

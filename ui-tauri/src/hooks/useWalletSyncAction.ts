@@ -2,6 +2,7 @@ import * as React from "react";
 
 import { useDaemonMutation } from "@/daemon/client";
 import { useUiStore } from "@/store/ui";
+import { useSyncProgressNotice } from "./useSyncProgressNotice";
 
 interface SyncResult {
   wallet: string;
@@ -12,13 +13,16 @@ export function useWalletSyncAction() {
   const addNotification = useUiStore((state) => state.addNotification);
   const syncWallets =
     useDaemonMutation<{ results: SyncResult[] }>("ui.wallets.sync");
+  const { startSyncNotice, clearSyncNotice } = useSyncProgressNotice();
 
   const syncAll = React.useCallback(() => {
+    if (syncWallets.isPending) return;
     addNotification({
       title: "Wallet sync started",
       body: "Kassiber is syncing all configured wallet sources.",
       tone: "warning",
     });
+    startSyncNotice();
     syncWallets.mutate(
       { all: true },
       {
@@ -56,9 +60,10 @@ export function useWalletSyncAction() {
             tone: "error",
           });
         },
+        onSettled: clearSyncNotice,
       },
     );
-  }, [addNotification, syncWallets]);
+  }, [addNotification, clearSyncNotice, startSyncNotice, syncWallets]);
 
   return {
     syncAll,

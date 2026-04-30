@@ -579,7 +579,7 @@ def resolve_wallet_sync_targets(backend, wallet):
     )
 
 
-def fetch_esplora_history(base_url, resource_path, max_pages=None):
+def fetch_esplora_history(base_url, resource_path, max_pages=None, timeout=30):
     transactions = []
     seen_txids = set()
     last_seen = None
@@ -592,7 +592,7 @@ def fetch_esplora_history(base_url, resource_path, max_pages=None):
             if last_seen
             else append_url_path(base_url, f"{resource_path}/txs/chain")
         )
-        page = http_get_json(chain_url)
+        page = http_get_json(chain_url, timeout=timeout)
         if not page:
             break
         for tx in page:
@@ -605,7 +605,7 @@ def fetch_esplora_history(base_url, resource_path, max_pages=None):
         if len(page) < 25:
             break
     mempool_url = append_url_path(base_url, f"{resource_path}/txs/mempool")
-    for tx in http_get_json(mempool_url):
+    for tx in http_get_json(mempool_url, timeout=timeout):
         txid = tx.get("txid")
         if txid and txid not in seen_txids:
             seen_txids.add(txid)
@@ -613,11 +613,17 @@ def fetch_esplora_history(base_url, resource_path, max_pages=None):
     return transactions
 
 
-def fetch_esplora_scripthash_transactions(base_url, script_pubkey_hex, max_pages=None):
+def fetch_esplora_scripthash_transactions(
+    base_url,
+    script_pubkey_hex,
+    max_pages=None,
+    timeout=30,
+):
     return fetch_esplora_history(
         base_url,
         f"scripthash/{scriptpubkey_scripthash(script_pubkey_hex)}",
         max_pages=max_pages,
+        timeout=timeout,
     )
 
 
@@ -810,9 +816,15 @@ def record_components_from_liquid_tx(
 
 def esplora_records_for_wallet(backend, sync_state: WalletSyncState):
     max_pages = parse_int(backend_value(backend, "maxpages"), default=0) or None
+    timeout = backend_timeout(backend)
     transactions_by_txid = {}
     for target in sync_state.targets:
-        for tx in fetch_esplora_scripthash_transactions(backend["url"], target["script_pubkey"], max_pages=max_pages):
+        for tx in fetch_esplora_scripthash_transactions(
+            backend["url"],
+            target["script_pubkey"],
+            max_pages=max_pages,
+            timeout=timeout,
+        ):
             transactions_by_txid[tx["txid"]] = tx
     records = []
     raw_tx_cache = {}
