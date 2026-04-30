@@ -43,6 +43,7 @@ from .ai.tools import (
     summarize_tool_call,
 )
 from .cli.handlers import _report_hooks, sync_wallet
+from .cli.handlers import process_journals
 from .core import reports as core_reports
 from .core import accounts as core_accounts
 from .core import wallets as core_wallets
@@ -96,6 +97,7 @@ SUPPORTED_KINDS = (
     "ui.journals.snapshot",
     "ui.journals.quarantine",
     "ui.journals.transfers.list",
+    "ui.journals.process",
     "ui.profiles.snapshot",
     "ui.profiles.create",
     "ui.profiles.switch",
@@ -932,6 +934,10 @@ def _wallets_sync_payload(
     }
 
 
+def _journals_process_payload(conn: sqlite3.Connection) -> dict[str, Any]:
+    return process_journals(conn, None, None)
+
+
 def _parse_ai_tool_call(raw: dict[str, Any], index: int) -> ParsedAiToolCall:
     call_id = raw.get("id")
     if not isinstance(call_id, str) or not call_id:
@@ -1067,22 +1073,36 @@ def _execute_mutating_ai_tool(call: ParsedAiToolCall, runtime: AiToolRuntime) ->
     if entry is None or entry.kind_class != "mutating":
         return _tool_result_denied("tool_not_allowed")
     try:
-        # Keep the first mutating surface explicit; switch to a typed dispatcher
-        # when the next mutating tool is added.
-        if entry.daemon_kind != "ui.wallets.sync":
+        if entry.daemon_kind == "ui.wallets.sync":
+            args = _coerce_wallets_sync_args(call.arguments, strict=True)
+
+            def _execute(conn: sqlite3.Connection) -> dict[str, Any]:
+                payload = _wallets_sync_payload(
+                    conn,
+                    runtime.runtime_config,
+                    args,
+                    strict=True,
+                )
+                return {"ok": True, "envelope": build_envelope(entry.daemon_kind, payload)}
+
+            return _run_on_daemon_main_thread(runtime, _execute)
+        if entry.daemon_kind == "ui.journals.process":
+            if call.arguments:
+                unknown = sorted(call.arguments)
+                raise AppError(
+                    "ui.journals.process received unsupported arguments",
+                    code="validation",
+                    details={"unknown": unknown},
+                    retryable=False,
+                )
+
+            def _execute(conn: sqlite3.Connection) -> dict[str, Any]:
+                payload = _journals_process_payload(conn)
+                return {"ok": True, "envelope": build_envelope(entry.daemon_kind, payload)}
+
+            return _run_on_daemon_main_thread(runtime, _execute)
+        else:
             return _tool_result_denied("tool_not_allowed")
-        args = _coerce_wallets_sync_args(call.arguments, strict=True)
-
-        def _execute(conn: sqlite3.Connection) -> dict[str, Any]:
-            payload = _wallets_sync_payload(
-                conn,
-                runtime.runtime_config,
-                args,
-                strict=True,
-            )
-            return {"ok": True, "envelope": build_envelope(entry.daemon_kind, payload)}
-
-        return _run_on_daemon_main_thread(runtime, _execute)
     except AppError as exc:
         return _tool_result_denied(
             exc.code or "tool_error",
@@ -2494,6 +2514,31 @@ def handle_request(
                         strict=False,
                     ),
                 ),
+                request_id,
+            ),
+            False,
+        )
+
+    if kind == "ui.journals.process":
+        args = request.get("args")
+        if args is not None and args != {}:
+            if not isinstance(args, dict):
+                details: dict[str, Any] = {"type": type(args).__name__}
+            else:
+                details = {"unknown": sorted(args)}
+            return (
+                _error_envelope(
+                    "validation",
+                    "ui.journals.process does not accept arguments",
+                    request_id=request_id,
+                    details=details,
+                    retryable=False,
+                ),
+                False,
+            )
+        return (
+            _with_request_id(
+                build_envelope("ui.journals.process", _journals_process_payload(ctx.conn)),
                 request_id,
             ),
             False,

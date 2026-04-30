@@ -141,6 +141,7 @@ class ToolCatalogPromptTest(unittest.TestCase):
             "ui_journals_snapshot",
             "ui_journals_quarantine",
             "ui_journals_transfers_list",
+            "ui_journals_process",
             "ui_rates_summary",
             "ui_workspace_health",
             "ui_next_actions",
@@ -164,7 +165,10 @@ class ToolCatalogPromptTest(unittest.TestCase):
         self.assertEqual(get_tool("ui_rates_summary").kind_class, "read_only")
         self.assertEqual(get_tool("ui_wallets_sync").name, "ui.wallets.sync")
         self.assertEqual(get_tool("ui.wallets.sync").kind_class, "mutating")
+        self.assertEqual(get_tool("ui_journals_process").name, "ui.journals.process")
+        self.assertEqual(get_tool("ui.journals.process").kind_class, "mutating")
         self.assertIn("ui_wallets_sync", tool_names)
+        self.assertIn("ui_journals_process", tool_names)
 
     def test_mutating_tool_preview_redacts_secret_like_arguments(self):
         tool = get_tool("ui.wallets.sync")
@@ -193,6 +197,8 @@ class ToolCatalogPromptTest(unittest.TestCase):
             },
         )
         self.assertEqual(summarize_tool_call(tool, {"wallet": "cold"}), "Sync wallet cold")
+        journal_tool = get_tool("ui.journals.process")
+        self.assertEqual(summarize_tool_call(journal_tool, {}), "Process journals")
 
     def test_read_skill_reference_allowlist(self):
         self.assertIn("index", SKILL_REFERENCE_NAMES)
@@ -217,7 +223,7 @@ class ToolCatalogPromptTest(unittest.TestCase):
         self.assertEqual(messages[0]["role"], "system")
         self.assertIn("read_skill_reference", messages[0]["content"])
         self.assertIn('name "index"', messages[0]["content"])
-        self.assertIn("journals must be reprocessed", messages[0]["content"])
+        self.assertIn("When tools show stale journals", messages[0]["content"])
         self.assertNotIn("kassiber backends create my-esplora", messages[0]["content"])
         self.assertLess(len(DEFAULT_KASSIBER_SYSTEM_PROMPT), 2000)
 

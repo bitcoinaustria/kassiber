@@ -311,6 +311,18 @@ TOOL_CATALOG: tuple[ToolEntry, ...] = (
         daemon_kind="ui.wallets.sync",
         summary_template="Sync wallets",
     ),
+    ToolEntry(
+        name="ui.journals.process",
+        description=(
+            "Rebuild journals for the active profile after the user explicitly "
+            "allows this mutating action, so reports can use fresh processed data."
+        ),
+        parameters=_EMPTY_OBJECT_SCHEMA,
+        kind_class="mutating",
+        wire_name="ui_journals_process",
+        daemon_kind="ui.journals.process",
+        summary_template="Process journals",
+    ),
 )
 
 TOOL_BY_NAME: dict[str, ToolEntry] = {}
@@ -355,6 +367,8 @@ def summarize_tool_call(tool: ToolEntry, arguments: dict[str, Any]) -> str:
         if isinstance(wallet, str) and wallet.strip():
             return f"Sync wallet {wallet.strip()}"
         return "Sync all wallets"
+    if tool.name == "ui.journals.process":
+        return "Process journals"
     return tool.summary_template or tool.name
 
 

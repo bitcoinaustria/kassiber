@@ -28,6 +28,7 @@ const ALLOWED_BRIDGE_KINDS = new Set([
   "ui.journals.snapshot",
   "ui.journals.quarantine",
   "ui.journals.transfers.list",
+  "ui.journals.process",
   "ui.rates.summary",
   "ui.workspace.health",
   "ui.workspace.delete",

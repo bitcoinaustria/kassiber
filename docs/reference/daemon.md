@@ -47,6 +47,7 @@ The first line is always a lifecycle envelope:
       "ui.journals.snapshot",
       "ui.journals.quarantine",
       "ui.journals.transfers.list",
+      "ui.journals.process",
       "ui.profiles.snapshot",
       "ui.profiles.create",
       "ui.profiles.switch",
@@ -137,10 +138,11 @@ the request supplied one. Malformed JSON and non-object requests cannot carry
 a caller request id, so they return `request_id: null`. `daemon.shutdown`
 asks the daemon to write a final shutdown envelope and exit cleanly.
 
-`status`, the `ui.*` snapshots, report export kinds, and `ui.wallets.sync`
-are backed by real data today. Report export kinds write files under the
-managed `exports/reports/` state directory and return the written path plus
-metadata. UI kinds not yet wired return `daemon_unavailable` instead.
+`status`, the `ui.*` snapshots, report export kinds, `ui.wallets.sync`, and
+`ui.journals.process` are backed by real data today. Report export kinds write
+files under the managed `exports/reports/` state directory and return the
+written path plus metadata. UI kinds not yet wired return `daemon_unavailable`
+instead.
 
 ## Encrypted database
 

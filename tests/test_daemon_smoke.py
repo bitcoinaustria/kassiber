@@ -444,6 +444,7 @@ class DaemonSmokeTest(unittest.TestCase):
             self.assertIn("ui.journals.snapshot", ready["data"]["supported_kinds"])
             self.assertIn("ui.journals.quarantine", ready["data"]["supported_kinds"])
             self.assertIn("ui.journals.transfers.list", ready["data"]["supported_kinds"])
+            self.assertIn("ui.journals.process", ready["data"]["supported_kinds"])
             self.assertIn("ui.profiles.snapshot", ready["data"]["supported_kinds"])
             self.assertIn("ui.profiles.create", ready["data"]["supported_kinds"])
             self.assertIn("ui.profiles.switch", ready["data"]["supported_kinds"])
@@ -1200,6 +1201,44 @@ class DaemonSmokeTest(unittest.TestCase):
         self.assertIs(payload_mock.call_args.args[0], conn_marker)
         self.assertEqual(results[0]["envelope"]["kind"], "ui.wallets.sync")
 
+    def test_journal_process_tool_uses_daemon_main_thread_connection(self):
+        task_queue = queue.Queue()
+        runtime = AiToolRuntime(
+            data_root="/not-used",
+            runtime_config={},
+            main_thread_tasks=task_queue,
+        )
+        call = ParsedAiToolCall(
+            call_id="call_1",
+            name="ui.journals.process",
+            arguments={},
+        )
+        results = []
+
+        with (
+            mock.patch(
+                "kassiber.daemon.open_db",
+                side_effect=AssertionError("should use daemon main connection"),
+            ),
+            mock.patch(
+                "kassiber.daemon._journals_process_payload",
+                return_value={"processed_transactions": 1},
+            ) as payload_mock,
+        ):
+            thread = threading.Thread(
+                target=lambda: results.append(_execute_mutating_ai_tool(call, runtime)),
+            )
+            thread.start()
+            task = task_queue.get(timeout=1)
+            conn_marker = object()
+            task.response.put((True, task.callback(conn_marker)))
+            thread.join(timeout=1)
+
+        self.assertFalse(thread.is_alive())
+        payload_mock.assert_called_once()
+        self.assertIs(payload_mock.call_args.args[0], conn_marker)
+        self.assertEqual(results[0]["envelope"]["kind"], "ui.journals.process")
+
     def test_daemon_safe_read_tool_kinds_return_workspace_state(self):
         with tempfile.TemporaryDirectory(prefix="kassiber-daemon-state-") as tmp:
             data_root = Path(tmp) / "data"
@@ -1224,6 +1263,16 @@ class DaemonSmokeTest(unittest.TestCase):
                 next_actions["data"]["suggestions"][0]["id"],
                 "process_journals",
             )
+            self.assertEqual(
+                next_actions["data"]["suggestions"][0]["daemon_kind"],
+                "ui.journals.process",
+            )
+
+            _write_payload(proc, {"request_id": "process-1", "kind": "ui.journals.process"})
+            processed = _read_payload_timeout(proc)
+            self.assertEqual(processed["kind"], "ui.journals.process")
+            self.assertEqual(processed["data"]["processed_transactions"], 1)
+            self.assertEqual(processed["data"]["quarantined"], 0)
 
             _write_payload(proc, {"request_id": "wallets-1", "kind": "ui.wallets.list"})
             wallets = _read_payload_timeout(proc)

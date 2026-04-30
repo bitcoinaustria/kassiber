@@ -26,6 +26,7 @@ const ALLOWED_DAEMON_KINDS: &[&str] = &[
     "ui.journals.snapshot",
     "ui.journals.quarantine",
     "ui.journals.transfers.list",
+    "ui.journals.process",
     "ui.rates.summary",
     "ui.workspace.health",
     "ui.workspace.delete",

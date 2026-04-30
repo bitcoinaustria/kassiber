@@ -238,8 +238,9 @@ restricted to files under `skills/kassiber/references/`: `command-templates`,
 `secrets-and-backup`, `troubleshooting`, `verification`, and
 `wallets-backends`.
 
-The first mutating provider tool is `ui_wallets_sync`, which maps to daemon kind
-`ui.wallets.sync`. When a model requests it, the daemon emits
+Mutating provider tools currently include `ui_wallets_sync`, which maps to
+daemon kind `ui.wallets.sync`, and `ui_journals_process`, which maps to
+`ui.journals.process`. When a model requests one, the daemon emits
 `ai.chat.tool_consent_required` with a short summary and redacted argument
 preview, then waits for:
 

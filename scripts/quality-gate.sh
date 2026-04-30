@@ -42,35 +42,41 @@ run py -m unittest tests.test_secrets_smoke -v
 run py -m unittest tests.test_review_regressions -v
 
 echo
-echo "> CLI help smoke"
-py -m kassiber --help >/dev/null
-py -m kassiber --machine status >/dev/null
-py -m kassiber daemon </dev/null >/dev/null
-py -m kassiber backends list >/dev/null
-py -m kassiber wallets kinds >/dev/null
-py -m kassiber wallets sync-btcpay --help >/dev/null
-py -m kassiber profiles create --help >/dev/null
-py -m kassiber metadata records --help >/dev/null
-py -m kassiber attachments list --help >/dev/null
-py -m kassiber journals events --help >/dev/null
-py -m kassiber reports balance-history --help >/dev/null
-py -m kassiber rates --help >/dev/null
-py -m kassiber diagnostics collect --help >/dev/null
-py -m kassiber ai --help >/dev/null
-py -m kassiber ai providers --help >/dev/null
-py -m kassiber ai providers create --help >/dev/null
-py -m kassiber ai chat --help >/dev/null
-py -m kassiber secrets --help >/dev/null
-py -m kassiber secrets init --help >/dev/null
-py -m kassiber secrets change-passphrase --help >/dev/null
-py -m kassiber secrets verify --help >/dev/null
-py -m kassiber secrets status --help >/dev/null
-py -m kassiber secrets migrate-credentials --help >/dev/null
-py -m kassiber backup --help >/dev/null
-py -m kassiber backup export --help >/dev/null
-py -m kassiber backup import --help >/dev/null
-py -m kassiber backends reveal-token --help >/dev/null
-py -m kassiber wallets reveal-descriptor --help >/dev/null
+SMOKE_HOME="$(mktemp -d "${TMPDIR:-/tmp}/kassiber-quality-gate-home.XXXXXX")"
+trap 'rm -rf "$SMOKE_HOME"' EXIT
+smoke_py() {
+  HOME="$SMOKE_HOME" py "$@"
+}
+
+echo "> CLI help smoke (isolated HOME: $SMOKE_HOME)"
+smoke_py -m kassiber --help >/dev/null
+smoke_py -m kassiber --machine status >/dev/null
+smoke_py -m kassiber daemon </dev/null >/dev/null
+smoke_py -m kassiber backends list >/dev/null
+smoke_py -m kassiber wallets kinds >/dev/null
+smoke_py -m kassiber wallets sync-btcpay --help >/dev/null
+smoke_py -m kassiber profiles create --help >/dev/null
+smoke_py -m kassiber metadata records --help >/dev/null
+smoke_py -m kassiber attachments list --help >/dev/null
+smoke_py -m kassiber journals events --help >/dev/null
+smoke_py -m kassiber reports balance-history --help >/dev/null
+smoke_py -m kassiber rates --help >/dev/null
+smoke_py -m kassiber diagnostics collect --help >/dev/null
+smoke_py -m kassiber ai --help >/dev/null
+smoke_py -m kassiber ai providers --help >/dev/null
+smoke_py -m kassiber ai providers create --help >/dev/null
+smoke_py -m kassiber ai chat --help >/dev/null
+smoke_py -m kassiber secrets --help >/dev/null
+smoke_py -m kassiber secrets init --help >/dev/null
+smoke_py -m kassiber secrets change-passphrase --help >/dev/null
+smoke_py -m kassiber secrets verify --help >/dev/null
+smoke_py -m kassiber secrets status --help >/dev/null
+smoke_py -m kassiber secrets migrate-credentials --help >/dev/null
+smoke_py -m kassiber backup --help >/dev/null
+smoke_py -m kassiber backup export --help >/dev/null
+smoke_py -m kassiber backup import --help >/dev/null
+smoke_py -m kassiber backends reveal-token --help >/dev/null
+smoke_py -m kassiber wallets reveal-descriptor --help >/dev/null
 
 echo
 echo "quality gate passed"

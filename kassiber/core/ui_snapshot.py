@@ -1740,6 +1740,7 @@ def build_next_actions_snapshot(conn: sqlite3.Connection) -> dict[str, Any]:
                 "reason": journals["reason"],
                 "mutating": True,
                 "requires_consent": True,
+                "daemon_kind": "ui.journals.process",
             }
         )
     if journals["quarantine_count"]:
