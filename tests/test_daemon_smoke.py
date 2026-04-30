@@ -235,7 +235,13 @@ def _tool_call_message(name, arguments="{}", call_id="call_1"):
     )
 
 
-def _seed_workspace_with_transaction(data_root, tmp_root):
+def _seed_workspace_with_transaction(
+    data_root,
+    tmp_root,
+    *,
+    tax_country=None,
+    gains_algorithm=None,
+):
     csv_path = Path(tmp_root) / "transactions.csv"
     csv_path.write_text(
         "\n".join(
@@ -249,7 +255,12 @@ def _seed_workspace_with_transaction(data_root, tmp_root):
     )
     _run_cli(data_root, "init")
     _run_cli(data_root, "workspaces", "create", "Demo")
-    _run_cli(data_root, "profiles", "create", "Main", "--fiat-currency", "EUR")
+    profile_args = ["profiles", "create", "Main", "--fiat-currency", "EUR"]
+    if tax_country:
+        profile_args.extend(["--tax-country", tax_country])
+    if gains_algorithm:
+        profile_args.extend(["--gains-algorithm", gains_algorithm])
+    _run_cli(data_root, *profile_args)
     _run_cli(
         data_root,
         "wallets",
@@ -417,6 +428,19 @@ class DaemonSmokeTest(unittest.TestCase):
             self.assertIn("ui.wallets.list", ready["data"]["supported_kinds"])
             self.assertIn("ui.backends.list", ready["data"]["supported_kinds"])
             self.assertIn("ui.reports.capital_gains", ready["data"]["supported_kinds"])
+            self.assertIn("ui.reports.export_pdf", ready["data"]["supported_kinds"])
+            self.assertIn(
+                "ui.reports.export_capital_gains_csv",
+                ready["data"]["supported_kinds"],
+            )
+            self.assertIn(
+                "ui.reports.export_austrian_e1kv_pdf",
+                ready["data"]["supported_kinds"],
+            )
+            self.assertIn(
+                "ui.reports.export_austrian_e1kv_xlsx",
+                ready["data"]["supported_kinds"],
+            )
             self.assertIn("ui.journals.snapshot", ready["data"]["supported_kinds"])
             self.assertIn("ui.journals.quarantine", ready["data"]["supported_kinds"])
             self.assertIn("ui.journals.transfers.list", ready["data"]["supported_kinds"])
@@ -1275,6 +1299,68 @@ class DaemonSmokeTest(unittest.TestCase):
             transfers = _read_payload_timeout(proc)
             self.assertEqual(transfers["kind"], "ui.journals.transfers.list")
             self.assertEqual(transfers["data"]["pairs"], [])
+
+            _write_payload(proc, {"request_id": "shutdown-1", "kind": "daemon.shutdown"})
+            self.assertEqual(_read_payload_timeout(proc)["kind"], "daemon.shutdown")
+            code, stderr = _close_daemon(proc)
+            self.assertEqual(code, 0, stderr)
+            self.assertEqual(stderr, "")
+
+    def test_daemon_report_export_kinds_write_managed_files(self):
+        with tempfile.TemporaryDirectory(prefix="kassiber-daemon-export-") as tmp:
+            data_root = Path(tmp) / "data"
+            _seed_workspace_with_transaction(
+                data_root,
+                tmp,
+                tax_country="at",
+                gains_algorithm="MOVING_AVERAGE_AT",
+            )
+            _run_cli(data_root, "journals", "process")
+            proc = _start_daemon(data_root)
+            self.assertEqual(_read_payload_timeout(proc)["kind"], "daemon.ready")
+
+            _write_payload(
+                proc,
+                {"request_id": "export-pdf", "kind": "ui.reports.export_pdf"},
+            )
+            pdf = _read_payload_timeout(proc)
+            self.assertEqual(pdf["kind"], "ui.reports.export_pdf")
+            pdf_file = Path(pdf["data"]["file"])
+            self.assertTrue(pdf_file.is_file())
+            self.assertEqual(
+                pdf_file.parent.resolve(),
+                (Path(tmp) / "exports" / "reports").resolve(),
+            )
+            self.assertEqual(pdf_file.read_bytes()[:4], b"%PDF")
+            self.assertGreater(pdf["data"]["pages"], 0)
+
+            _write_payload(
+                proc,
+                {
+                    "request_id": "export-csv",
+                    "kind": "ui.reports.export_capital_gains_csv",
+                },
+            )
+            csv_export = _read_payload_timeout(proc)
+            self.assertEqual(csv_export["kind"], "ui.reports.export_capital_gains_csv")
+            csv_file = Path(csv_export["data"]["file"])
+            self.assertTrue(csv_file.is_file())
+            self.assertIn("occurred_at,wallet,transaction_id", csv_file.read_text())
+
+            _write_payload(
+                proc,
+                {
+                    "request_id": "export-xlsx",
+                    "kind": "ui.reports.export_austrian_e1kv_xlsx",
+                    "args": {"year": 2026},
+                },
+            )
+            xlsx = _read_payload_timeout(proc)
+            self.assertEqual(xlsx["kind"], "ui.reports.export_austrian_e1kv_xlsx")
+            xlsx_file = Path(xlsx["data"]["file"])
+            self.assertTrue(xlsx_file.is_file())
+            self.assertEqual(xlsx_file.read_bytes()[:2], b"PK")
+            self.assertEqual(xlsx["data"]["tax_year"], 2026)
 
             _write_payload(proc, {"request_id": "shutdown-1", "kind": "daemon.shutdown"})
             self.assertEqual(_read_payload_timeout(proc)["kind"], "daemon.shutdown")

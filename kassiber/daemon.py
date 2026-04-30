@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import csv
 import json
 import queue
 import sqlite3
@@ -41,7 +42,8 @@ from .ai.tools import (
     redact_tool_arguments,
     summarize_tool_call,
 )
-from .cli.handlers import sync_wallet
+from .cli.handlers import _report_hooks, sync_wallet
+from .core import reports as core_reports
 from .core import accounts as core_accounts
 from .core import wallets as core_wallets
 from .core.repo import current_context_snapshot
@@ -62,11 +64,13 @@ from .core.ui_snapshot import (
 )
 from .backends import load_runtime_config, merge_db_backends
 from .db import (
+    ensure_data_root,
     open_db,
     resolve_config_root,
     resolve_database_path,
     resolve_effective_data_root,
     set_setting,
+    resolve_exports_root,
 )
 from .envelope import build_envelope, build_error_envelope, json_ready
 from .errors import AppError
@@ -85,6 +89,10 @@ SUPPORTED_KINDS = (
     "ui.wallets.list",
     "ui.backends.list",
     "ui.reports.capital_gains",
+    "ui.reports.export_pdf",
+    "ui.reports.export_capital_gains_csv",
+    "ui.reports.export_austrian_e1kv_pdf",
+    "ui.reports.export_austrian_e1kv_xlsx",
     "ui.journals.snapshot",
     "ui.journals.quarantine",
     "ui.journals.transfers.list",
@@ -533,6 +541,166 @@ def _require_conn(ctx: DaemonContext) -> sqlite3.Connection:
             retryable=False,
         )
     return ctx.conn
+
+
+def _managed_report_export_path(data_root: str, stem: str, suffix: str) -> Path:
+    root = ensure_data_root(resolve_exports_root(data_root) / "reports")
+    timestamp = time.strftime("%Y%m%d-%H%M%S", time.gmtime())
+    base = f"{stem}-{timestamp}"
+    candidate = root / f"{base}{suffix}"
+    counter = 2
+    while candidate.exists():
+        candidate = root / f"{base}-{counter}{suffix}"
+        counter += 1
+    return candidate
+
+
+def _write_records_csv(
+    file_path: Path,
+    rows: list[dict[str, Any]],
+    headers: list[str],
+) -> dict[str, Any]:
+    file_path.parent.mkdir(parents=True, exist_ok=True)
+    with file_path.open("w", encoding="utf-8", newline="") as handle:
+        writer = csv.DictWriter(handle, fieldnames=headers, extrasaction="ignore")
+        writer.writeheader()
+        for row in rows:
+            writer.writerow(
+                {header: json_ready(row.get(header)) for header in headers}
+            )
+    return {
+        "file": str(file_path.resolve()),
+        "bytes": file_path.stat().st_size,
+        "rows": len(rows),
+    }
+
+
+def _ui_report_export_payload(
+    ctx: DaemonContext,
+    kind: str,
+    args: dict[str, Any],
+) -> dict[str, Any]:
+    conn = _require_conn(ctx)
+    hooks = _report_hooks()
+    if kind == "ui.reports.export_pdf":
+        path = _managed_report_export_path(ctx.data_root, "kassiber-report", ".pdf")
+        wallet = args.get("wallet")
+        if wallet is not None and not isinstance(wallet, str):
+            raise AppError(
+                "ui.reports.export_pdf wallet must be a string",
+                code="validation",
+            )
+        payload = dict(
+            core_reports.export_pdf_report(
+                conn,
+                None,
+                None,
+                path,
+                hooks,
+                wallet_ref=wallet,
+                history_limit=args.get("history_limit", 0),
+            )
+        )
+        payload.update(
+            {
+                "format": "pdf",
+                "scope": "report",
+                "filename": Path(payload["file"]).name,
+            }
+        )
+        return payload
+
+    if kind == "ui.reports.export_capital_gains_csv":
+        path = _managed_report_export_path(
+            ctx.data_root,
+            "kassiber-capital-gains",
+            ".csv",
+        )
+        rows = core_reports.report_capital_gains(conn, None, None, hooks)
+        payload = _write_records_csv(
+            path,
+            rows,
+            [
+                "occurred_at",
+                "wallet",
+                "transaction_id",
+                "entry_type",
+                "asset",
+                "quantity",
+                "quantity_msat",
+                "proceeds",
+                "cost_basis",
+                "gain_loss",
+                "description",
+                "at_category",
+                "at_kennzahl",
+            ],
+        )
+        payload.update(
+            {
+                "format": "csv",
+                "scope": "capital_gains",
+                "filename": path.name,
+            }
+        )
+        return payload
+
+    if kind == "ui.reports.export_austrian_e1kv_pdf":
+        year = args.get("year")
+        path = _managed_report_export_path(
+            ctx.data_root,
+            f"kassiber-austrian-e1kv-{year}",
+            ".pdf",
+        )
+        payload = dict(
+            core_reports.export_austrian_e1kv_pdf_report(
+                conn,
+                None,
+                None,
+                path,
+                hooks,
+                tax_year=year,
+            )
+        )
+        payload.update(
+            {
+                "format": "pdf",
+                "scope": "austrian_e1kv",
+                "filename": Path(payload["file"]).name,
+            }
+        )
+        return payload
+
+    if kind == "ui.reports.export_austrian_e1kv_xlsx":
+        year = args.get("year")
+        path = _managed_report_export_path(
+            ctx.data_root,
+            f"kassiber-austrian-e1kv-{year}",
+            ".xlsx",
+        )
+        payload = dict(
+            core_reports.export_austrian_e1kv_xlsx_report(
+                conn,
+                None,
+                None,
+                path,
+                hooks,
+                tax_year=year,
+            )
+        )
+        payload.update(
+            {
+                "format": "xlsx",
+                "scope": "austrian_e1kv",
+                "filename": Path(payload["file"]).name,
+            }
+        )
+        return payload
+
+    raise AppError(
+        f"unsupported report export kind {kind}",
+        code="unsupported_kind",
+    )
 
 
 def _open_daemon_connection(
@@ -2095,6 +2263,27 @@ def handle_request(
             False,
         )
 
+    if kind in {
+        "ui.reports.export_pdf",
+        "ui.reports.export_capital_gains_csv",
+        "ui.reports.export_austrian_e1kv_pdf",
+        "ui.reports.export_austrian_e1kv_xlsx",
+    }:
+        return (
+            _with_request_id(
+                build_envelope(
+                    kind,
+                    _ui_report_export_payload(
+                        ctx,
+                        kind,
+                        _coerce_args_dict(request_id, request.get("args")),
+                    ),
+                ),
+                request_id,
+            ),
+            False,
+        )
+
     if kind == "ui.journals.snapshot":
         return (
             _with_request_id(
@@ -2233,45 +2422,17 @@ def handle_request(
                 hint="Ask the user to type the exact current workspace name before deleting it.",
                 details={"expected_workspace": workspace_label},
             )
-        auth = args.get("auth_response")
-        if _database_file_is_encrypted(ctx):
-            passphrase = auth.get("passphrase_secret") if isinstance(auth, dict) else None
-            if not isinstance(passphrase, str) or not passphrase:
-                return (
-                    _with_request_id(
-                        build_envelope(
-                            "auth_required",
-                            {
-                                "scope": "delete_workspace",
-                                "label": f"Re-enter database passphrase to delete workspace {workspace_label!r}",
-                            },
-                        ),
-                        request_id,
-                    ),
-                    False,
-                )
-            verified = _verify_passphrase_with_backoff(
-                ctx, "delete_workspace", passphrase
-            )
-            if not verified:
-                return (
-                    _error_envelope(
-                        "local_auth_denied",
-                        "passphrase verification failed",
-                        request_id=request_id,
-                        retryable=True,
-                    ),
-                    False,
-                )
-        elif (
-            not isinstance(auth, dict)
-            or auth.get("plaintext_delete_ack") != PLAINTEXT_DELETE_ACK
-        ):
-            raise AppError(
-                "ui.workspace.delete requires plaintext delete acknowledgement",
-                code="validation",
-                hint=f"Ask the user to type {PLAINTEXT_DELETE_ACK!r} before deleting a plaintext workspace.",
-            )
+        auth_result = _require_sensitive_local_auth(
+            ctx,
+            args=args,
+            request_id=request_id,
+            scope="delete_workspace",
+            label=f"Re-enter database passphrase to delete workspace {workspace_label!r}",
+            plaintext_ack_key="plaintext_delete_ack",
+            plaintext_ack_value=PLAINTEXT_DELETE_ACK,
+        )
+        if auth_result is not None:
+            return auth_result
         return (
             _with_request_id(
                 build_envelope(

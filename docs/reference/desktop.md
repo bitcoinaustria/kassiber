@@ -14,12 +14,15 @@ daemon.
 
 Current development modes:
 
-- `pnpm dev` in `ui-tauri/` runs the browser dashboard against mock daemon
-  fixtures.
+- `pnpm dev` in `ui-tauri/` runs the browser dashboard. Use
+  `pnpm dev:browser` for mock daemon fixtures, or `pnpm dev:bridge` to proxy
+  daemon requests through the loopback-only Vite bridge.
 - `pnpm tauri:dev` runs the Tauri shell, starts `python -m kassiber daemon`,
   and calls the Rust `daemon_invoke` boundary. The command allowlists the
-  current UI data kinds; `status` is a real daemon round-trip, while UI
-  snapshot kinds return `daemon_unavailable` until typed read models land.
+  current UI data, export, and action kinds. Report exports write under the
+  managed `exports/reports/` state directory, and the desktop shell exposes a
+  narrow `open_exported_file` command that opens completed PDF/XLSX/CSV report
+  files with the system default app.
   The supervisor uses `.venv/bin/python` when present, then `python3`, unless
   `KASSIBER_PYTHON` is set. `KASSIBER_REPO_ROOT` can point a dev shell at a
   different checkout.

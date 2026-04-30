@@ -7,7 +7,13 @@
  */
 
 import { useState, type ReactNode } from "react";
-import { FileSpreadsheet, FileText } from "lucide-react";
+import {
+  CheckCircle2,
+  ExternalLink,
+  FileSpreadsheet,
+  FileText,
+  Loader2,
+} from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -34,7 +40,8 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { useDaemon } from "@/daemon/client";
+import { useDaemon, useDaemonMutation } from "@/daemon/client";
+import { canOpenExportedFiles, openExportedFile } from "@/daemon/transport";
 import { useUiStore } from "@/store/ui";
 import { cn } from "@/lib/utils";
 import {
@@ -84,6 +91,20 @@ function normalizeReportMethod(
   return method && METHOD_LABELS[method] ? method : jurisdiction.defaultMethod;
 }
 
+type ReportExportFormatId = "csv" | "pdf" | "xlsx";
+
+interface ReportExportResult {
+  file?: string;
+  filename?: string;
+  format?: string;
+  scope?: string;
+  bytes?: number;
+  pages?: number;
+  rows?: number;
+  summary_rows?: number;
+  tax_year?: number;
+}
+
 export function Reports() {
   const { data, isLoading } = useDaemon<CapitalGainsReport>(
     "ui.reports.capital_gains",
@@ -127,6 +148,25 @@ function ReportsView({ report, hideSensitive }: ReportsViewProps) {
   const [method, setMethod] = useState<CostBasisMethod>(
     normalizeReportMethod(report.method, j),
   );
+  const [exportStatus, setExportStatus] = useState<{
+    tone: "success" | "error";
+    message: string;
+    path?: string;
+  } | null>(null);
+  const addNotification = useUiStore((s) => s.addNotification);
+  const exportCsv =
+    useDaemonMutation<ReportExportResult>("ui.reports.export_capital_gains_csv");
+  const exportPdf = useDaemonMutation<ReportExportResult>("ui.reports.export_pdf");
+  const exportAustrianPdf =
+    useDaemonMutation<ReportExportResult>("ui.reports.export_austrian_e1kv_pdf");
+  const exportAustrianXlsx =
+    useDaemonMutation<ReportExportResult>("ui.reports.export_austrian_e1kv_xlsx");
+  const [activeExport, setActiveExport] =
+    useState<ReportExportFormatId | null>(null);
+  const [openingExportPath, setOpeningExportPath] = useState<string | null>(
+    null,
+  );
+  const activeProfileIsAustrian = report.jurisdictionCode === "AT";
 
   const fmt = (n: number) =>
     n.toLocaleString(j.locale, {
@@ -145,6 +185,84 @@ function ReportsView({ report, hideSensitive }: ReportsViewProps) {
     { sats: 0, cost: 0, proceeds: 0, gain: 0 },
   );
   const kest = totals.gain * j.rate;
+  const canOpenCurrentExport =
+    exportStatus?.tone === "success" &&
+    canOpenExportPath(exportStatus.path) &&
+    canOpenExportedFiles();
+  const openableExportPath =
+    canOpenCurrentExport && exportStatus?.path ? exportStatus.path : null;
+
+  const handleExport = (format: ReportExportFormatId) => {
+    setExportStatus(null);
+    setActiveExport(format);
+    const mutation =
+      format === "csv"
+        ? exportCsv
+        : format === "xlsx"
+          ? exportAustrianXlsx
+          : activeProfileIsAustrian
+            ? exportAustrianPdf
+            : exportPdf;
+    const args =
+      format === "xlsx" || (format === "pdf" && activeProfileIsAustrian)
+        ? { year }
+        : undefined;
+    mutation.mutate(args, {
+      onSuccess: (envelope) => {
+        const payload = envelope.data;
+        const file = payload?.file ?? "";
+        const filename = payload?.filename ?? file.split("/").pop() ?? "report";
+        const detail =
+          payload?.format === "pdf" && payload.pages
+            ? `${payload.pages} page${payload.pages === 1 ? "" : "s"}`
+            : payload?.format === "xlsx" && payload.rows !== undefined
+              ? `${payload.rows} row${payload.rows === 1 ? "" : "s"}`
+              : payload?.format === "csv" && payload.rows !== undefined
+                ? `${payload.rows} row${payload.rows === 1 ? "" : "s"}`
+                : "Export written";
+        const message = `${filename} saved to the managed exports folder.`;
+        setExportStatus({ tone: "success", message, path: file });
+        addNotification({
+          title: "Report export finished",
+          body: detail,
+          tone: "success",
+        });
+      },
+      onError: (error) => {
+        const message =
+          error instanceof Error ? error.message : "Report export failed";
+        setExportStatus({ tone: "error", message });
+        addNotification({
+          title: "Report export failed",
+          body: message,
+          tone: "error",
+        });
+      },
+      onSettled: () => setActiveExport(null),
+    });
+  };
+
+  const handleOpenExport = (path: string) => {
+    setOpeningExportPath(path);
+    void openExportedFile(path)
+      .then(() => {
+        addNotification({
+          title: "Report opened",
+          body: "Opened with the system default app.",
+          tone: "success",
+        });
+      })
+      .catch((error) => {
+        const message =
+          error instanceof Error ? error.message : "Could not open report";
+        addNotification({
+          title: "Could not open report",
+          body: message,
+          tone: "error",
+        });
+      })
+      .finally(() => setOpeningExportPath(null));
+  };
 
   return (
     <div className="w-full space-y-4 bg-background p-3 sm:space-y-6 sm:p-4 md:p-6">
@@ -286,25 +404,93 @@ function ReportsView({ report, hideSensitive }: ReportsViewProps) {
             </CardContent>
           </Card>
 
+          {exportStatus ? (
+            <div
+              className={cn(
+                "rounded-md border px-3 py-2 text-sm",
+                exportStatus.tone === "error"
+                  ? "border-destructive/35 bg-destructive/10 text-destructive"
+                  : "border-emerald-500/35 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300",
+              )}
+            >
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                <div className="flex min-w-0 items-start gap-2">
+                  {exportStatus.tone === "success" ? (
+                    <CheckCircle2
+                      className="mt-0.5 size-4 shrink-0"
+                      aria-hidden="true"
+                    />
+                  ) : null}
+                  <span className="min-w-0">
+                    {exportStatus.message}
+                    {exportStatus.path ? (
+                      <span className="mt-1 block break-all font-mono text-xs opacity-80">
+                        {exportStatus.path}
+                      </span>
+                    ) : null}
+                  </span>
+                </div>
+                {openableExportPath ? (
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    className="self-start bg-background text-foreground"
+                    disabled={openingExportPath === openableExportPath}
+                    onClick={() => handleOpenExport(openableExportPath)}
+                  >
+                    {openingExportPath === openableExportPath ? (
+                      <Loader2
+                        className="size-4 animate-spin"
+                        aria-hidden="true"
+                      />
+                    ) : (
+                      <ExternalLink className="size-4" aria-hidden="true" />
+                    )}
+                    Open
+                  </Button>
+                ) : null}
+              </div>
+            </div>
+          ) : null}
+
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 2xl:grid-cols-3">
             <ReportExportFormat
               icon={FileSpreadsheet}
+              id="csv"
               name="CSV"
               sub="Spreadsheet"
-              detail="17 columns · UTF-8"
+              detail="Capital gains · UTF-8"
+              loading={activeExport === "csv"}
+              onClick={handleExport}
             />
             <ReportExportFormat
               icon={FileText}
+              id="pdf"
               name="PDF"
               sub="Human-readable"
-              detail={`4 pages · ${j.name} format`}
+              detail={
+                activeProfileIsAustrian
+                  ? `${year} · Austrian E 1kv`
+                  : "Complete report"
+              }
               primary
+              loading={activeExport === "pdf"}
+              onClick={handleExport}
             />
             <ReportExportFormat
               icon={FileSpreadsheet}
+              id="xlsx"
               name="XLSX"
               sub="Spreadsheet"
-              detail="Multi-sheet workbook"
+              detail={
+                activeProfileIsAustrian
+                  ? `${year} · Multi-sheet workbook`
+                  : "Austrian profile only"
+              }
+              disabled={!activeProfileIsAustrian}
+              loading={activeExport === "xlsx"}
+              onClick={handleExport}
             />
           </div>
         </div>
@@ -528,6 +714,10 @@ function signedMoney(
   return `${value >= 0 ? "+" : "-"} ${currency} ${format(Math.abs(value))}`;
 }
 
+function canOpenExportPath(path?: string) {
+  return Boolean(path && (path.startsWith("/") || /^[A-Za-z]:[\\/]/.test(path)));
+}
+
 interface ReportMetricCardProps {
   label: string;
   value: ReactNode;
@@ -583,26 +773,40 @@ function ReportToggleRow({ label, def, disabled }: ReportToggleRowProps) {
 
 interface ReportExportFormatProps {
   icon: React.ComponentType<React.SVGProps<SVGSVGElement>>;
+  id: ReportExportFormatId;
   name: string;
   sub: string;
   detail: string;
   primary?: boolean;
+  loading?: boolean;
+  disabled?: boolean;
+  onClick: (format: ReportExportFormatId) => void;
 }
 
 function ReportExportFormat({
   icon: Icon,
+  id,
   name,
   sub,
   detail,
   primary,
+  loading = false,
+  disabled = false,
+  onClick,
 }: ReportExportFormatProps) {
   return (
     <Button
       type="button"
       variant={primary ? "default" : "outline"}
       className="h-auto min-h-20 min-w-0 justify-start gap-3 whitespace-normal p-4 text-left"
+      disabled={disabled || loading}
+      onClick={() => onClick(id)}
     >
-      <Icon className="size-5 shrink-0" aria-hidden="true" />
+      {loading ? (
+        <Loader2 className="size-5 shrink-0 animate-spin" aria-hidden="true" />
+      ) : (
+        <Icon className="size-5 shrink-0" aria-hidden="true" />
+      )}
       <span className="grid min-w-0 gap-1">
         <span className="font-medium">{name}</span>
         <span

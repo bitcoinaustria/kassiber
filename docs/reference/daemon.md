@@ -40,6 +40,10 @@ The first line is always a lifecycle envelope:
       "ui.wallets.list",
       "ui.backends.list",
       "ui.reports.capital_gains",
+      "ui.reports.export_pdf",
+      "ui.reports.export_capital_gains_csv",
+      "ui.reports.export_austrian_e1kv_pdf",
+      "ui.reports.export_austrian_e1kv_xlsx",
       "ui.journals.snapshot",
       "ui.journals.quarantine",
       "ui.journals.transfers.list",
@@ -133,9 +137,10 @@ the request supplied one. Malformed JSON and non-object requests cannot carry
 a caller request id, so they return `request_id: null`. `daemon.shutdown`
 asks the daemon to write a final shutdown envelope and exit cleanly.
 
-`status`, the `ui.*` snapshots, and `ui.wallets.sync` are backed by real data
-today; their `data` payloads mirror the equivalent `kassiber --machine ...`
-calls. UI kinds not yet wired return `daemon_unavailable` instead.
+`status`, the `ui.*` snapshots, report export kinds, and `ui.wallets.sync`
+are backed by real data today. Report export kinds write files under the
+managed `exports/reports/` state directory and return the written path plus
+metadata. UI kinds not yet wired return `daemon_unavailable` instead.
 
 ## Encrypted database
 

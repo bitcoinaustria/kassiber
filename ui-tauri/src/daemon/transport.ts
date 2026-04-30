@@ -158,6 +158,18 @@ export function makeDaemonRequestId(): string {
   return `req-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
 }
 
+export async function openExportedFile(path: string): Promise<void> {
+  if (DAEMON_MODE !== "tauri") {
+    throw new Error("Opening exported files is available in the desktop app.");
+  }
+  const { invoke } = await import("@tauri-apps/api/core");
+  await invoke("open_exported_file", { path });
+}
+
+export function canOpenExportedFiles(): boolean {
+  return DAEMON_MODE === "tauri";
+}
+
 const tauriDaemon: DaemonTransport = {
   async invoke<T = unknown>(
     req: DaemonRequest,
