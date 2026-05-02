@@ -58,13 +58,16 @@ export function ImportProjectPanel({
 
   const submitUnlock = () => {
     setOpenError(null);
-    void onUnlock(passphrase).catch((unlockError: unknown) => {
-      setOpenError(
-        unlockError instanceof Error
-          ? unlockError.message
-          : "Could not unlock project.",
-      );
-    });
+    const submittedPassphrase = passphrase;
+    void onUnlock(submittedPassphrase)
+      .catch((unlockError: unknown) => {
+        setOpenError(
+          unlockError instanceof Error
+            ? unlockError.message
+            : "Could not unlock project.",
+        );
+      })
+      .finally(() => setPassphrase(""));
   };
 
   const openProfile = async (workspace: Workspace, profile: Profile) => {
@@ -95,6 +98,11 @@ export function ImportProjectPanel({
         taxCountry,
         fiatCurrency: workspace.currency,
         databaseMode: encrypted ? "sqlcipher" : "plaintext",
+        importedProject: {
+          stateRoot: selection.stateRoot,
+          dataRoot: selection.dataRoot,
+          database: selection.database,
+        },
       };
       setDataMode("real");
       setIdentity(identity);
@@ -193,7 +201,10 @@ export function ImportProjectPanel({
             variant="outline"
             className="w-full"
             disabled={loadingProfiles || Boolean(openingProfileId)}
-            onClick={onCancel}
+            onClick={() => {
+              setPassphrase("");
+              onCancel();
+            }}
           >
             Back to new setup
           </Button>
@@ -255,7 +266,9 @@ function ProfileList({
           type="button"
           variant="outline"
           size="sm"
-          onClick={() => void onRefresh()}
+          onClick={() => {
+            void onRefresh().catch(() => {});
+          }}
         >
           Refresh
         </Button>

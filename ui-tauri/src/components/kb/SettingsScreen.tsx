@@ -59,6 +59,7 @@ import {
   type ExistingAiProvider,
 } from "@/components/kb/AiProviderForm";
 import { useDaemon, useDaemonMutation } from "@/daemon/client";
+import { clearImportProject } from "@/daemon/transport";
 import {
   hasSessionUnlockPassphrase,
   setSessionUnlockPassphrase,
@@ -228,8 +229,16 @@ export function SettingsScreen({ onLock }: SettingsScreenProps) {
       "Reset workspace?\n\nThis clears your local identity and returns you to the Welcome screen. Encrypted data on disk is not touched.",
     );
     if (!ok) return;
-    setIdentity(null);
-    void navigate({ to: "/", replace: true });
+    void (async () => {
+      if (identity?.importedProject) {
+        await clearImportProject();
+      }
+      setIdentity(null);
+      void navigate({ to: "/", replace: true });
+    })().catch(() => {
+      setIdentity(null);
+      void navigate({ to: "/", replace: true });
+    });
   };
 
   const lockNow = () => {
@@ -473,6 +482,9 @@ export function SettingsScreen({ onLock }: SettingsScreenProps) {
           ? { passphrase_secret: deletePassphrase }
           : { plaintext_delete_ack: PLAINTEXT_DELETE_ACK },
       });
+      if (identity?.importedProject) {
+        await clearImportProject().catch(() => {});
+      }
       setIdentity(null);
       void navigate({ to: "/", replace: true });
     } catch (error) {

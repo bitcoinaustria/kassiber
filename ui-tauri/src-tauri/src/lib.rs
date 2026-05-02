@@ -3,6 +3,7 @@ mod supervisor;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::env;
+use std::io::ErrorKind;
 use std::io::Read;
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -220,7 +221,7 @@ fn inspect_import_project_directory(path: &Path) -> Result<ImportProjectSelectio
         .expanduser()
         .canonicalize()
         .map_err(|error| format!("Kassiber project folder could not be opened: {error}"))?;
-    let (data_root, database) = resolve_import_data_root(&canonical).ok_or_else(|| {
+    let (data_root, database, encrypted) = resolve_import_data_root(&canonical)?.ok_or_else(|| {
         "Choose a Kassiber project folder containing data/kassiber.sqlite3, or choose the data folder itself."
             .to_string()
     })?;
@@ -237,28 +238,57 @@ fn inspect_import_project_directory(path: &Path) -> Result<ImportProjectSelectio
         state_root: state_root.to_string_lossy().to_string(),
         data_root: data_root.to_string_lossy().to_string(),
         database: database.to_string_lossy().to_string(),
-        encrypted: database_is_encrypted(&database)
-            .map_err(|error| format!("Kassiber database could not be inspected: {error}"))?,
+        encrypted,
     })
 }
 
-fn resolve_import_data_root(path: &Path) -> Option<(PathBuf, PathBuf)> {
+fn resolve_import_data_root(path: &Path) -> Result<Option<(PathBuf, PathBuf, bool)>, String> {
     for filename in DB_FILENAMES {
         let database = path.join(filename);
-        if database.is_file() {
-            return Some((path.to_path_buf(), database));
+        if let Some(encrypted) = inspect_database_candidate(&database)? {
+            return Ok(Some((path.to_path_buf(), database, encrypted)));
         }
     }
 
     let data_root = path.join(DEFAULT_DATA_DIR);
     for filename in DB_FILENAMES {
         let database = data_root.join(filename);
-        if database.is_file() {
-            return Some((data_root.clone(), database));
+        if let Some(encrypted) = inspect_database_candidate(&database)? {
+            return Ok(Some((data_root.clone(), database, encrypted)));
         }
     }
 
-    None
+    Ok(None)
+}
+
+fn inspect_database_candidate(path: &Path) -> Result<Option<bool>, String> {
+    let metadata = match std::fs::symlink_metadata(path) {
+        Ok(metadata) => metadata,
+        Err(error) if error.kind() == ErrorKind::NotFound => return Ok(None),
+        Err(error) => {
+            return Err(format!(
+                "Kassiber database candidate could not be inspected: {error}"
+            ));
+        }
+    };
+    if metadata.file_type().is_symlink() {
+        return Err("Kassiber database files must not be symlinks.".to_string());
+    }
+    if !metadata.file_type().is_file() {
+        return Ok(None);
+    }
+    if metadata.len() == 0 {
+        return Err("Kassiber database file is empty.".to_string());
+    }
+
+    let encrypted = database_is_encrypted(path)
+        .map_err(|error| format!("Kassiber database could not be inspected: {error}"))?;
+    if !encrypted && !plaintext_database_looks_like_kassiber(path)? {
+        return Err(
+            "Selected SQLite file does not contain Kassiber workspace/profile tables.".to_string(),
+        );
+    }
+    Ok(Some(encrypted))
 }
 
 fn database_is_encrypted(path: &Path) -> std::io::Result<bool> {
@@ -272,6 +302,33 @@ fn database_is_encrypted(path: &Path) -> std::io::Result<bool> {
         return Ok(true);
     }
     Ok(header != *b"SQLite format 3\0")
+}
+
+fn plaintext_database_looks_like_kassiber(path: &Path) -> Result<bool, String> {
+    let file = std::fs::File::open(path)
+        .map_err(|error| format!("Kassiber database could not be read: {error}"))?;
+    let mut bytes = Vec::new();
+    file.take(1024 * 1024)
+        .read_to_end(&mut bytes)
+        .map_err(|error| format!("Kassiber database could not be read: {error}"))?;
+    Ok(contains_ascii_case_insensitive(&bytes, b"create table")
+        && contains_ascii_case_insensitive(&bytes, b"settings")
+        && contains_ascii_case_insensitive(&bytes, b"workspaces")
+        && contains_ascii_case_insensitive(&bytes, b"profiles")
+        && contains_ascii_case_insensitive(&bytes, b"workspace_id")
+        && contains_ascii_case_insensitive(&bytes, b"fiat_currency"))
+}
+
+fn contains_ascii_case_insensitive(haystack: &[u8], needle: &[u8]) -> bool {
+    if needle.is_empty() {
+        return true;
+    }
+    haystack.windows(needle.len()).any(|window| {
+        window
+            .iter()
+            .zip(needle)
+            .all(|(left, right)| left.to_ascii_lowercase() == right.to_ascii_lowercase())
+    })
 }
 
 trait ExpandUser {
@@ -536,7 +593,7 @@ mod tests {
         let root = unique_temp_dir("state-root");
         let data = root.join("data");
         fs::create_dir_all(&data).expect("create data dir");
-        fs::write(data.join("kassiber.sqlite3"), b"SQLite format 3\0")
+        fs::write(data.join("kassiber.sqlite3"), fake_kassiber_sqlite_bytes())
             .expect("write sqlite header");
         let root = root.canonicalize().expect("canonical root");
         let data = data.canonicalize().expect("canonical data");
@@ -577,6 +634,44 @@ mod tests {
     }
 
     #[test]
+    fn import_project_rejects_empty_database_file() {
+        let data = unique_temp_dir("empty-db");
+        fs::write(data.join("kassiber.sqlite3"), b"").expect("write empty database");
+
+        let error = inspect_import_project_directory(&data)
+            .expect_err("empty database file should be rejected");
+        assert!(error.contains("empty"));
+    }
+
+    #[test]
+    fn import_project_rejects_unrelated_plaintext_sqlite() {
+        let data = unique_temp_dir("unrelated-db");
+        fs::write(
+            data.join("kassiber.sqlite3"),
+            b"SQLite format 3\0CREATE TABLE unrelated (id TEXT)",
+        )
+        .expect("write unrelated sqlite");
+
+        let error = inspect_import_project_directory(&data)
+            .expect_err("unrelated sqlite file should be rejected");
+        assert!(error.contains("workspace/profile"));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn import_project_rejects_database_symlink() {
+        let data = unique_temp_dir("symlink-db");
+        let target = data.join("target.sqlite3");
+        fs::write(&target, fake_kassiber_sqlite_bytes()).expect("write target sqlite");
+        std::os::unix::fs::symlink(&target, data.join("kassiber.sqlite3"))
+            .expect("create database symlink");
+
+        let error = inspect_import_project_directory(&data)
+            .expect_err("database symlink should be rejected");
+        assert!(error.contains("symlinks"));
+    }
+
+    #[test]
     fn sqlite_header_detection_treats_non_sqlite_as_encrypted() {
         let root = unique_temp_dir("header-detection");
         let sqlite = root.join("plain.sqlite3");
@@ -599,6 +694,10 @@ mod tests {
         ));
         fs::create_dir_all(&path).expect("create temp dir");
         path
+    }
+
+    fn fake_kassiber_sqlite_bytes() -> &'static [u8] {
+        b"SQLite format 3\0CREATE TABLE IF NOT EXISTS settings (key TEXT, value TEXT); CREATE TABLE IF NOT EXISTS workspaces (id TEXT, label TEXT); CREATE TABLE IF NOT EXISTS profiles (id TEXT, workspace_id TEXT, label TEXT, fiat_currency TEXT);"
     }
 }
 

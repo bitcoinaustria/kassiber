@@ -21,6 +21,12 @@ export interface AppLockPolicy {
   lockOnWindowClose: boolean;
 }
 
+export interface ImportedProjectIdentity {
+  stateRoot: string;
+  dataRoot: string;
+  database: string;
+}
+
 /**
  * Captured onboarding intent for the local profile. Only `name`/`workspace`
  * are read by the running UI today (see AppHeader); the remaining fields are
@@ -74,6 +80,7 @@ export interface Identity {
   aiProviderKind?: "local" | "remote" | "tee";
   aiProviderName?: string;
   aiBaseUrl?: string;
+  importedProject?: ImportedProjectIdentity;
 }
 
 interface UiState {
@@ -83,6 +90,7 @@ interface UiState {
   hideSensitive: boolean;
   appLockPolicy: AppLockPolicy;
   identity: Identity | null;
+  daemonSession: number;
   notifications: AppNotification[];
   setLang: (lang: Lang) => void;
   setCurrency: (currency: Currency) => void;
@@ -90,6 +98,7 @@ interface UiState {
   setHideSensitive: (hideSensitive: boolean) => void;
   setAppLockPolicy: (policy: Partial<AppLockPolicy>) => void;
   setIdentity: (identity: Identity | null) => void;
+  bumpDaemonSession: () => void;
   addNotification: (
     notification: Omit<AppNotification, "id" | "createdAt">,
   ) => void;
@@ -111,6 +120,7 @@ export const useUiStore = create<UiState>()(
         lockOnWindowClose: true,
       },
       identity: null,
+      daemonSession: 0,
       notifications: [],
       setLang: (lang) => set({ lang }),
       setCurrency: (currency) => set({ currency }),
@@ -121,6 +131,8 @@ export const useUiStore = create<UiState>()(
           appLockPolicy: { ...state.appLockPolicy, ...policy },
         })),
       setIdentity: (identity) => set({ identity }),
+      bumpDaemonSession: () =>
+        set((state) => ({ daemonSession: state.daemonSession + 1 })),
       addNotification: (notification) =>
         set((state) => ({
           notifications: [

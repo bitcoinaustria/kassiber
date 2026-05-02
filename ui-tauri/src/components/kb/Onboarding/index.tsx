@@ -265,9 +265,12 @@ export const Onboarding = ({ className, steps: customSteps }: OnboardingProps) =
     try {
       const envelope = await getTransport("real").invoke({
         kind: "daemon.unlock",
-        args: passphrase
-          ? { auth_response: { passphrase_secret: passphrase } }
-          : undefined,
+        args: {
+          require_existing_project: true,
+          ...(passphrase
+            ? { auth_response: { passphrase_secret: passphrase } }
+            : {}),
+        },
       });
       if (envelope.kind === "auth_required") {
         return;
@@ -312,17 +315,21 @@ export const Onboarding = ({ className, steps: customSteps }: OnboardingProps) =
   };
 
   const cancelImport = () => {
-    setImportSelection(null);
-    setImportSnapshot(null);
     setImportError(null);
-    setLoadingImportProfiles(false);
-    void clearImportProject().catch((error: unknown) => {
-      setImportError(
-        error instanceof Error
-          ? error.message
-          : "Could not return to the default project root.",
-      );
-    });
+    setLoadingImportProfiles(true);
+    void clearImportProject()
+      .then(() => {
+        setImportSelection(null);
+        setImportSnapshot(null);
+      })
+      .catch((error: unknown) => {
+        setImportError(
+          error instanceof Error
+            ? error.message
+            : "Could not return to the default project root.",
+        );
+      })
+      .finally(() => setLoadingImportProfiles(false));
   };
 
   const skipToMockPreview = () => {
@@ -355,7 +362,7 @@ export const Onboarding = ({ className, steps: customSteps }: OnboardingProps) =
               title={
                 importAvailable
                   ? "Import an existing local Kassiber project"
-                  : "Project import is available in the desktop app"
+                  : "Project import is available in the macOS desktop app"
               }
               onClick={beginImport}
             >

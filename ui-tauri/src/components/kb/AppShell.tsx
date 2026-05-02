@@ -74,7 +74,7 @@ import {
   useDaemon,
   useDaemonMutation,
 } from "@/daemon/client";
-import { getTransport } from "@/daemon/transport";
+import { clearImportProject, getTransport } from "@/daemon/transport";
 import { cn } from "@/lib/utils";
 import {
   clearSessionUnlockPassphrase,
@@ -520,6 +520,11 @@ export function AppShell() {
     void queryClient.cancelQueries({ queryKey: ["daemon"] });
     queryClient.removeQueries({ queryKey: ["daemon"] });
   }, [queryClient]);
+  const clearImportedProjectRoot = React.useCallback(async () => {
+    if (identity?.importedProject) {
+      await clearImportProject();
+    }
+  }, [identity?.importedProject]);
 
   const lockApp = React.useCallback(() => {
     setHideSensitive(true);
@@ -532,13 +537,18 @@ export function AppShell() {
     }
     if (!hasSessionUnlockPassphrase()) {
       clearSessionUnlockPassphrase();
-      setIdentity(null);
-      void navigate({ to: "/", replace: true });
+      void clearImportedProjectRoot()
+        .catch(() => {})
+        .finally(() => {
+          setIdentity(null);
+          void navigate({ to: "/", replace: true });
+        });
       return;
     }
     setLocked(true);
   }, [
     clearDaemonQueryCache,
+    clearImportedProjectRoot,
     navigate,
     requiresDaemonUnlock,
     setHideSensitive,
@@ -552,7 +562,12 @@ export function AppShell() {
       if (requiresDaemonUnlock) {
         const envelope = await getTransport("real").invoke({
           kind: "daemon.unlock",
-          args: { auth_response: { passphrase_secret: passphrase } },
+          args: {
+            ...(identity?.importedProject
+              ? { require_existing_project: true }
+              : {}),
+            auth_response: { passphrase_secret: passphrase },
+          },
         });
         const unlocked = envelope.kind === "daemon.unlock";
         if (unlocked) {
@@ -579,7 +594,7 @@ export function AppShell() {
       }
       return { ok: unlocked, error: null };
     },
-    [queryClient, requiresDaemonUnlock],
+    [identity?.importedProject, queryClient, requiresDaemonUnlock],
   );
 
   const resetLocalUiSession = React.useCallback(() => {
@@ -587,10 +602,15 @@ export function AppShell() {
     clearDaemonQueryCache();
     setDaemonAuthRequired(false);
     setHideSensitive(false);
-    setIdentity(null);
-    void navigate({ to: "/", replace: true });
+    void clearImportedProjectRoot()
+      .catch(() => {})
+      .finally(() => {
+        setIdentity(null);
+        void navigate({ to: "/", replace: true });
+      });
   }, [
     clearDaemonQueryCache,
+    clearImportedProjectRoot,
     navigate,
     setHideSensitive,
     setIdentity,

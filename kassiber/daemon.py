@@ -708,10 +708,15 @@ def _open_daemon_connection(
     ctx: DaemonContext,
     *,
     passphrase: str | None = None,
+    require_existing_schema: bool = False,
 ) -> sqlite3.Connection:
     if ctx.conn is not None:
         return ctx.conn
-    conn = open_db(ctx.data_root, passphrase=passphrase)
+    conn = open_db(
+        ctx.data_root,
+        passphrase=passphrase,
+        require_existing_schema=require_existing_schema,
+    )
     merge_db_backends(conn, ctx.runtime_config)
     ctx.conn = conn
     return conn
@@ -1997,6 +2002,7 @@ def handle_request(
     if kind == "daemon.unlock":
         args = _coerce_args_dict(request_id, request.get("args"))
         passphrase = _passphrase_from_auth(args)
+        require_existing_schema = bool(args.get("require_existing_project"))
         if _database_file_is_encrypted(ctx):
             if not passphrase:
                 return (
@@ -2021,7 +2027,11 @@ def handle_request(
                 )
             if ctx.conn is None:
                 try:
-                    _open_daemon_connection(ctx, passphrase=passphrase)
+                    _open_daemon_connection(
+                        ctx,
+                        passphrase=passphrase,
+                        require_existing_schema=require_existing_schema,
+                    )
                 except AppError as exc:
                     if exc.code == "unlock_failed":
                         return (
@@ -2035,7 +2045,10 @@ def handle_request(
                         )
                     raise
         else:
-            _open_daemon_connection(ctx)
+            _open_daemon_connection(
+                ctx,
+                require_existing_schema=require_existing_schema,
+            )
         return (
             _with_request_id(
                 build_envelope(

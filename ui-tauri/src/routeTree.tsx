@@ -31,6 +31,7 @@ import { ConnectionDetail } from "./routes/ConnectionDetail";
 import { Settings } from "./routes/Settings";
 import { Assistant } from "./routes/Assistant";
 import { AppShell } from "./components/kb/AppShell";
+import { activateImportProject, canImportProjects } from "./daemon/transport";
 import { useUiStore } from "./store/ui";
 
 const rootRoute = createRootRoute({
@@ -51,8 +52,22 @@ const indexRoute = createRoute({
 const appLayoutRoute = createRoute({
   getParentRoute: () => rootRoute,
   id: "_app",
-  beforeLoad: () => {
-    if (!useUiStore.getState().identity) {
+  beforeLoad: async () => {
+    const { identity, setIdentity } = useUiStore.getState();
+    if (!identity) {
+      throw redirect({ to: "/" });
+    }
+    if (!identity.importedProject) {
+      return;
+    }
+    if (!canImportProjects()) {
+      setIdentity(null);
+      throw redirect({ to: "/" });
+    }
+    try {
+      await activateImportProject(identity.importedProject.dataRoot);
+    } catch {
+      setIdentity(null);
       throw redirect({ to: "/" });
     }
   },

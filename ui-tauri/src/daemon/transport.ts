@@ -96,6 +96,8 @@ export interface ImportProjectSelection {
   encrypted: boolean;
 }
 
+let activeImportProjectDataRoot: string | null = null;
+
 function isTerminalEnvelopeKind(kind: string, requestKind: string): boolean {
   return kind === requestKind || kind === "error" || kind === "auth_required";
 }
@@ -192,7 +194,15 @@ export async function activateImportProject(
     throw new Error("Project import is available in the desktop app.");
   }
   const { invoke } = await import("@tauri-apps/api/core");
-  return invoke<ImportProjectSelection>("activate_import_project", { dataRoot });
+  const selection = await invoke<ImportProjectSelection>(
+    "activate_import_project",
+    { dataRoot },
+  );
+  if (activeImportProjectDataRoot !== selection.dataRoot) {
+    activeImportProjectDataRoot = selection.dataRoot;
+    useUiStore.getState().bumpDaemonSession();
+  }
+  return selection;
 }
 
 export async function clearImportProject(): Promise<void> {
@@ -201,10 +211,19 @@ export async function clearImportProject(): Promise<void> {
   }
   const { invoke } = await import("@tauri-apps/api/core");
   await invoke("clear_import_project");
+  if (activeImportProjectDataRoot !== null) {
+    activeImportProjectDataRoot = null;
+    useUiStore.getState().bumpDaemonSession();
+  }
 }
 
 export function canImportProjects(): boolean {
-  return DAEMON_MODE === "tauri";
+  if (DAEMON_MODE !== "tauri" || typeof navigator === "undefined") {
+    return false;
+  }
+  const platform = navigator.platform.toLowerCase();
+  const userAgent = navigator.userAgent.toLowerCase();
+  return platform.includes("mac") || userAgent.includes("mac os");
 }
 
 const tauriDaemon: DaemonTransport = {
