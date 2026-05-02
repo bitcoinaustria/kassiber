@@ -1,13 +1,21 @@
 import { useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
-import { ShieldCheck } from "lucide-react";
+import { FolderOpen, ShieldCheck } from "lucide-react";
 
 import { Wordmark } from "@/components/kb/Wordmark";
 import { Button } from "@/components/ui/button";
-import { getTransport } from "@/daemon/transport";
+import {
+  activateImportProject,
+  canImportProjects,
+  clearImportProject,
+  getTransport,
+  selectImportProjectDirectory,
+  type ImportProjectSelection,
+} from "@/daemon/transport";
 import { cn } from "@/lib/utils";
 import { useUiStore, type Identity } from "@/store/ui";
 import { setSessionUnlockPassphrase } from "@/store/sessionLock";
+import type { ProfilesSnapshot } from "@/mocks/profiles";
 
 import {
   DEFAULT_AI_BASE_URL,
@@ -22,6 +30,7 @@ import { AiStep } from "./steps/AiStep";
 import { ConnectionsStep } from "./steps/ConnectionsStep";
 import { DatabaseStep } from "./steps/DatabaseStep";
 import { IdentityStep } from "./steps/IdentityStep";
+import { ImportProjectPanel } from "./ImportProjectPanel";
 import { TaxStep } from "./steps/TaxStep";
 import type { OnboardingForm, OnboardingStep } from "./types";
 
@@ -107,8 +116,16 @@ export const Onboarding = ({ className, steps: customSteps }: OnboardingProps) =
   const [form, setForm] = useState<OnboardingForm>(DEFAULT_FORM);
   const [submitting, setSubmitting] = useState(false);
   const [finishError, setFinishError] = useState<string | null>(null);
+  const [importSelection, setImportSelection] =
+    useState<ImportProjectSelection | null>(null);
+  const [importSnapshot, setImportSnapshot] =
+    useState<ProfilesSnapshot | null>(null);
+  const [importing, setImporting] = useState(false);
+  const [loadingImportProfiles, setLoadingImportProfiles] = useState(false);
+  const [importError, setImportError] = useState<string | null>(null);
   const activeSteps = customSteps ?? DEFAULT_STEPS;
   const step = activeSteps[currentStep];
+  const importAvailable = canImportProjects();
 
   const update = <K extends keyof OnboardingForm>(
     key: K,
@@ -213,6 +230,101 @@ export const Onboarding = ({ className, steps: customSteps }: OnboardingProps) =
     if (currentStep > 0) setCurrentStep(currentStep - 1);
   };
 
+  const refreshImportedProfiles = async () => {
+    setLoadingImportProfiles(true);
+    setImportError(null);
+    try {
+      const envelope = await getTransport("real").invoke<ProfilesSnapshot>({
+        kind: "ui.profiles.snapshot",
+      });
+      if (envelope.kind === "auth_required") {
+        throw new Error("Database passphrase is required.");
+      }
+      if (envelope.kind === "error" || envelope.error) {
+        throw new Error(envelope.error?.message ?? "Could not load profiles.");
+      }
+      setImportSnapshot(
+        envelope.data ?? { workspaces: [], activeProfileId: "" },
+      );
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Could not load profiles.";
+      setImportError(message);
+      throw error;
+    } finally {
+      setLoadingImportProfiles(false);
+    }
+  };
+
+  const unlockAndLoadImportedProfiles = async (
+    selection: ImportProjectSelection,
+    passphrase: string | null,
+  ) => {
+    setLoadingImportProfiles(true);
+    setImportError(null);
+    try {
+      const envelope = await getTransport("real").invoke({
+        kind: "daemon.unlock",
+        args: passphrase
+          ? { auth_response: { passphrase_secret: passphrase } }
+          : undefined,
+      });
+      if (envelope.kind === "auth_required") {
+        return;
+      }
+      if (envelope.kind === "error" || envelope.error) {
+        throw new Error(envelope.error?.message ?? "Could not open project.");
+      }
+      await setSessionUnlockPassphrase(selection.encrypted ? passphrase : null);
+      await refreshImportedProfiles();
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Could not open project.";
+      setImportError(message);
+      throw error;
+    } finally {
+      setLoadingImportProfiles(false);
+    }
+  };
+
+  const beginImport = () => {
+    if (importing || submitting) return;
+    setFinishError(null);
+    setImportError(null);
+    setImportSnapshot(null);
+    setImporting(true);
+    void (async () => {
+      const picked = await selectImportProjectDirectory();
+      if (!picked) return;
+      setDataMode("real");
+      const activated = await activateImportProject(picked.dataRoot);
+      setImportSelection(activated);
+      if (!activated.encrypted) {
+        await unlockAndLoadImportedProfiles(activated, null);
+      }
+    })()
+      .catch((error: unknown) => {
+        setImportError(
+          error instanceof Error ? error.message : "Could not import project.",
+        );
+      })
+      .finally(() => setImporting(false));
+  };
+
+  const cancelImport = () => {
+    setImportSelection(null);
+    setImportSnapshot(null);
+    setImportError(null);
+    setLoadingImportProfiles(false);
+    void clearImportProject().catch((error: unknown) => {
+      setImportError(
+        error instanceof Error
+          ? error.message
+          : "Could not return to the default project root.",
+      );
+    });
+  };
+
   const skipToMockPreview = () => {
     setDataMode("mock");
     void setSessionUnlockPassphrase(null);
@@ -235,6 +347,21 @@ export const Onboarding = ({ className, steps: customSteps }: OnboardingProps) =
               <ShieldCheck className="size-4" />
               Local-first · watch-only · SQLCipher-aware
             </div>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={!importAvailable || importing || submitting}
+              title={
+                importAvailable
+                  ? "Import an existing local Kassiber project"
+                  : "Project import is available in the desktop app"
+              }
+              onClick={beginImport}
+            >
+              <FolderOpen className="size-4" aria-hidden="true" />
+              {importing ? "Opening..." : "Import"}
+            </Button>
             {import.meta.env.DEV && (
               <Button
                 type="button"
@@ -248,18 +375,33 @@ export const Onboarding = ({ className, steps: customSteps }: OnboardingProps) =
           </div>
         </div>
 
-        <step.component
-          form={form}
-          update={update}
-          onSubmit={handleSubmit}
-          currentStep={currentStep}
-          totalSteps={activeSteps.length}
-          goBack={handleGoBack}
-        />
+        {importSelection ? (
+          <ImportProjectPanel
+            selection={importSelection}
+            encrypted={importSelection.encrypted}
+            snapshot={importSnapshot}
+            loadingProfiles={loadingImportProfiles}
+            error={importError}
+            onCancel={cancelImport}
+            onRefreshProfiles={refreshImportedProfiles}
+            onUnlock={(passphrase) =>
+              unlockAndLoadImportedProfiles(importSelection, passphrase)
+            }
+          />
+        ) : (
+          <step.component
+            form={form}
+            update={update}
+            onSubmit={handleSubmit}
+            currentStep={currentStep}
+            totalSteps={activeSteps.length}
+            goBack={handleGoBack}
+          />
+        )}
 
-        {finishError && (
+        {(finishError || (!importSelection && importError)) && (
           <div className="max-w-2xl rounded-md border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">
-            {finishError}
+            {finishError ?? importError}
           </div>
         )}
 

@@ -3,6 +3,7 @@ mod supervisor;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::env;
+use std::io::Read;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::Arc;
@@ -10,6 +11,9 @@ use supervisor::{DaemonSupervisor, SupervisorError};
 use tauri::{Manager, State};
 
 const SCHEMA_VERSION: u8 = 1;
+const DEFAULT_STATE_DIR: &str = ".kassiber";
+const DEFAULT_DATA_DIR: &str = "data";
+const DB_FILENAMES: &[&str] = &["kassiber.sqlite3", "satbooks.sqlite3"];
 
 const ALLOWED_DAEMON_KINDS: &[&str] = &[
     "status",
@@ -18,6 +22,7 @@ const ALLOWED_DAEMON_KINDS: &[&str] = &[
     "ui.wallets.list",
     "ui.backends.list",
     "ui.profiles.snapshot",
+    "ui.profiles.switch",
     "ui.reports.capital_gains",
     "ui.reports.export_pdf",
     "ui.reports.export_capital_gains_csv",
@@ -88,6 +93,15 @@ pub struct DaemonError {
     #[serde(skip_serializing_if = "Option::is_none")]
     details: Option<Value>,
     retryable: bool,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ImportProjectSelection {
+    state_root: String,
+    data_root: String,
+    database: String,
+    encrypted: bool,
 }
 
 #[tauri::command]
@@ -174,6 +188,183 @@ fn open_exported_file(path: String) -> Result<(), String> {
     }
 
     open_with_default_app(&canonical)
+}
+
+#[tauri::command]
+fn select_import_project_directory() -> Result<Option<ImportProjectSelection>, String> {
+    let Some(selected) = choose_import_project_directory()? else {
+        return Ok(None);
+    };
+    inspect_import_project_directory(&selected).map(Some)
+}
+
+#[tauri::command]
+fn activate_import_project(
+    state: State<'_, Arc<DaemonSupervisor>>,
+    data_root: String,
+) -> Result<ImportProjectSelection, String> {
+    let selection = inspect_import_project_directory(Path::new(&data_root))?;
+    state
+        .set_data_root(PathBuf::from(&selection.data_root))
+        .map_err(|error| error.message)?;
+    Ok(selection)
+}
+
+#[tauri::command]
+fn clear_import_project(state: State<'_, Arc<DaemonSupervisor>>) -> Result<(), String> {
+    state.clear_data_root().map_err(|error| error.message)
+}
+
+fn inspect_import_project_directory(path: &Path) -> Result<ImportProjectSelection, String> {
+    let canonical = path
+        .expanduser()
+        .canonicalize()
+        .map_err(|error| format!("Kassiber project folder could not be opened: {error}"))?;
+    let (data_root, database) = resolve_import_data_root(&canonical).ok_or_else(|| {
+        "Choose a Kassiber project folder containing data/kassiber.sqlite3, or choose the data folder itself."
+            .to_string()
+    })?;
+    let state_root =
+        if data_root.file_name().and_then(|name| name.to_str()) == Some(DEFAULT_DATA_DIR) {
+            data_root
+                .parent()
+                .map(PathBuf::from)
+                .unwrap_or_else(|| data_root.clone())
+        } else {
+            data_root.clone()
+        };
+    Ok(ImportProjectSelection {
+        state_root: state_root.to_string_lossy().to_string(),
+        data_root: data_root.to_string_lossy().to_string(),
+        database: database.to_string_lossy().to_string(),
+        encrypted: database_is_encrypted(&database)
+            .map_err(|error| format!("Kassiber database could not be inspected: {error}"))?,
+    })
+}
+
+fn resolve_import_data_root(path: &Path) -> Option<(PathBuf, PathBuf)> {
+    for filename in DB_FILENAMES {
+        let database = path.join(filename);
+        if database.is_file() {
+            return Some((path.to_path_buf(), database));
+        }
+    }
+
+    let data_root = path.join(DEFAULT_DATA_DIR);
+    for filename in DB_FILENAMES {
+        let database = data_root.join(filename);
+        if database.is_file() {
+            return Some((data_root.clone(), database));
+        }
+    }
+
+    None
+}
+
+fn database_is_encrypted(path: &Path) -> std::io::Result<bool> {
+    let mut file = std::fs::File::open(path)?;
+    let mut header = [0_u8; 16];
+    let count = file.read(&mut header)?;
+    if count == 0 {
+        return Ok(false);
+    }
+    if count < header.len() {
+        return Ok(true);
+    }
+    Ok(header != *b"SQLite format 3\0")
+}
+
+trait ExpandUser {
+    fn expanduser(&self) -> PathBuf;
+}
+
+impl ExpandUser for Path {
+    fn expanduser(&self) -> PathBuf {
+        let raw = self.to_string_lossy();
+        if raw == "~" || raw.starts_with("~/") {
+            if let Some(home) = home_dir() {
+                if raw == "~" {
+                    return home;
+                }
+                return home.join(&raw[2..]);
+            }
+        }
+        self.to_path_buf()
+    }
+}
+
+fn home_dir() -> Option<PathBuf> {
+    env::var_os("HOME")
+        .map(PathBuf::from)
+        .filter(|path| !path.as_os_str().is_empty())
+}
+
+fn default_import_picker_root() -> PathBuf {
+    let state_root = home_dir()
+        .map(|home| home.join(DEFAULT_STATE_DIR))
+        .unwrap_or_else(|| PathBuf::from(DEFAULT_STATE_DIR));
+    if state_root.exists() {
+        state_root
+    } else {
+        home_dir().unwrap_or(state_root)
+    }
+}
+
+fn choose_import_project_directory() -> Result<Option<PathBuf>, String> {
+    #[cfg(target_os = "macos")]
+    {
+        choose_import_project_directory_macos(&default_import_picker_root())
+    }
+
+    #[cfg(not(target_os = "macos"))]
+    {
+        Err(
+            "Project import folder picking is currently available in the macOS desktop app."
+                .to_string(),
+        )
+    }
+}
+
+#[cfg(target_os = "macos")]
+fn choose_import_project_directory_macos(default_root: &Path) -> Result<Option<PathBuf>, String> {
+    let prompt = apple_script_string("Choose a Kassiber project folder");
+    let default_clause = if default_root.exists() {
+        format!(
+            " default location POSIX file {}",
+            apple_script_string(&default_root.to_string_lossy())
+        )
+    } else {
+        String::new()
+    };
+    let script = format!(
+        "try\nset chosenFolder to choose folder with prompt {prompt}{default_clause}\nreturn POSIX path of chosenFolder\non error number -128\nreturn \"__KASSIBER_CANCELLED__\"\nend try"
+    );
+    let output = Command::new("osascript")
+        .arg("-e")
+        .arg(script)
+        .output()
+        .map_err(|error| format!("Could not open the macOS folder picker: {error}"))?;
+    let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
+    if stdout == "__KASSIBER_CANCELLED__" {
+        return Ok(None);
+    }
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+        return Err(if stderr.is_empty() {
+            "The macOS folder picker failed.".to_string()
+        } else {
+            stderr
+        });
+    }
+    if stdout.is_empty() {
+        return Ok(None);
+    }
+    Ok(Some(PathBuf::from(stdout)))
+}
+
+#[cfg(target_os = "macos")]
+fn apple_script_string(value: &str) -> String {
+    format!("\"{}\"", value.replace('\\', "\\\\").replace('"', "\\\""))
 }
 
 fn error_envelope(
@@ -274,7 +465,13 @@ pub fn run() {
             app.manage(Arc::new(DaemonSupervisor::new(resource_dir)));
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![daemon_invoke, open_exported_file])
+        .invoke_handler(tauri::generate_handler![
+            daemon_invoke,
+            open_exported_file,
+            select_import_project_directory,
+            activate_import_project,
+            clear_import_project
+        ])
         .run(tauri::generate_context!())
         .expect("error while running Kassiber desktop shell");
 }
@@ -301,8 +498,13 @@ fn desktop_cli_args() -> Option<Vec<String>> {
 
 #[cfg(test)]
 mod tests {
-    use super::{is_managed_report_export_path, is_supported_export_file};
-    use std::path::Path;
+    use super::{
+        database_is_encrypted, inspect_import_project_directory, is_managed_report_export_path,
+        is_supported_export_file,
+    };
+    use std::fs;
+    use std::path::{Path, PathBuf};
+    use std::time::{SystemTime, UNIX_EPOCH};
 
     #[test]
     fn managed_report_export_paths_are_narrowly_recognized() {
@@ -327,6 +529,76 @@ mod tests {
         assert!(is_supported_export_file(Path::new("report.csv")));
         assert!(!is_supported_export_file(Path::new("report.txt")));
         assert!(!is_supported_export_file(Path::new("report")));
+    }
+
+    #[test]
+    fn import_project_accepts_state_root_with_data_dir() {
+        let root = unique_temp_dir("state-root");
+        let data = root.join("data");
+        fs::create_dir_all(&data).expect("create data dir");
+        fs::write(data.join("kassiber.sqlite3"), b"SQLite format 3\0")
+            .expect("write sqlite header");
+        let root = root.canonicalize().expect("canonical root");
+        let data = data.canonicalize().expect("canonical data");
+
+        let selection = inspect_import_project_directory(&root).expect("inspect project");
+        assert_eq!(selection.state_root, root.to_string_lossy().to_string());
+        assert_eq!(selection.data_root, data.to_string_lossy().to_string());
+        assert_eq!(
+            selection.database,
+            data.join("kassiber.sqlite3").to_string_lossy().to_string()
+        );
+        assert!(!selection.encrypted);
+    }
+
+    #[test]
+    fn import_project_accepts_data_root_directly() {
+        let data = unique_temp_dir("data-root");
+        fs::write(data.join("satbooks.sqlite3"), b"not a sqlite header")
+            .expect("write encrypted-looking database");
+        let data = data.canonicalize().expect("canonical data");
+
+        let selection = inspect_import_project_directory(&data).expect("inspect project");
+        assert_eq!(selection.state_root, data.to_string_lossy().to_string());
+        assert_eq!(selection.data_root, data.to_string_lossy().to_string());
+        assert_eq!(
+            selection.database,
+            data.join("satbooks.sqlite3").to_string_lossy().to_string()
+        );
+        assert!(selection.encrypted);
+    }
+
+    #[test]
+    fn import_project_rejects_folders_without_kassiber_database() {
+        let root = unique_temp_dir("missing-db");
+        let error = inspect_import_project_directory(&root)
+            .expect_err("folder without database should be rejected");
+        assert!(error.contains("data/kassiber.sqlite3"));
+    }
+
+    #[test]
+    fn sqlite_header_detection_treats_non_sqlite_as_encrypted() {
+        let root = unique_temp_dir("header-detection");
+        let sqlite = root.join("plain.sqlite3");
+        let encrypted = root.join("encrypted.sqlite3");
+        fs::write(&sqlite, b"SQLite format 3\0rest").expect("write sqlite");
+        fs::write(&encrypted, b"ciphertext").expect("write encrypted");
+
+        assert!(!database_is_encrypted(&sqlite).expect("read sqlite"));
+        assert!(database_is_encrypted(&encrypted).expect("read encrypted"));
+    }
+
+    fn unique_temp_dir(label: &str) -> PathBuf {
+        let unique = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("clock before epoch")
+            .as_nanos();
+        let path = std::env::temp_dir().join(format!(
+            "kassiber-ui-import-{label}-{}-{unique}",
+            std::process::id()
+        ));
+        fs::create_dir_all(&path).expect("create temp dir");
+        path
     }
 }
 

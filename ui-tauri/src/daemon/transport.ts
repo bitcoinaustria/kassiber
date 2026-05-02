@@ -89,6 +89,13 @@ export interface DaemonTransport {
   ): Promise<DaemonEnvelope<T>>;
 }
 
+export interface ImportProjectSelection {
+  stateRoot: string;
+  dataRoot: string;
+  database: string;
+  encrypted: boolean;
+}
+
 function isTerminalEnvelopeKind(kind: string, requestKind: string): boolean {
   return kind === requestKind || kind === "error" || kind === "auth_required";
 }
@@ -167,6 +174,36 @@ export async function openExportedFile(path: string): Promise<void> {
 }
 
 export function canOpenExportedFiles(): boolean {
+  return DAEMON_MODE === "tauri";
+}
+
+export async function selectImportProjectDirectory(): Promise<ImportProjectSelection | null> {
+  if (DAEMON_MODE !== "tauri") {
+    throw new Error("Project import is available in the desktop app.");
+  }
+  const { invoke } = await import("@tauri-apps/api/core");
+  return invoke<ImportProjectSelection | null>("select_import_project_directory");
+}
+
+export async function activateImportProject(
+  dataRoot: string,
+): Promise<ImportProjectSelection> {
+  if (DAEMON_MODE !== "tauri") {
+    throw new Error("Project import is available in the desktop app.");
+  }
+  const { invoke } = await import("@tauri-apps/api/core");
+  return invoke<ImportProjectSelection>("activate_import_project", { dataRoot });
+}
+
+export async function clearImportProject(): Promise<void> {
+  if (DAEMON_MODE !== "tauri") {
+    return;
+  }
+  const { invoke } = await import("@tauri-apps/api/core");
+  await invoke("clear_import_project");
+}
+
+export function canImportProjects(): boolean {
   return DAEMON_MODE === "tauri";
 }
 

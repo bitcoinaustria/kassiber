@@ -304,7 +304,8 @@ and [docs/plan/04-desktop-ui.md](docs/plan/04-desktop-ui.md).
   lets users choose the default mempool/custom/skip backend setup with an
   explicit skip warning, keeps Austrian onboarding on moving-average-only
   current-rule defaults without profile-level long-term exemption controls,
-  captures optional AI assistant intent with a disable-for-now button, and
+  captures optional AI assistant intent with a disable-for-now button, imports
+  existing local project/profile roots through the native desktop picker, and
   offers a dev-only mock preview shortcut.
 - [x] Replace the Overview mock fixture with a read-only
   `ui.overview.snapshot` daemon kind backed by the current SQLite profile

@@ -24,6 +24,7 @@ const STDERR_TAIL_LIMIT: usize = 16 * 1024;
 pub struct DaemonSupervisor {
     process: Mutex<Option<Arc<DaemonProcess>>>,
     resource_dir: Option<PathBuf>,
+    data_root: Mutex<Option<PathBuf>>,
     next_request_id: AtomicU64,
 }
 
@@ -100,6 +101,7 @@ impl DaemonSupervisor {
         Self {
             process: Mutex::new(None),
             resource_dir,
+            data_root: Mutex::new(None),
             next_request_id: AtomicU64::new(1),
         }
     }
@@ -109,8 +111,34 @@ impl DaemonSupervisor {
         Self {
             process: Mutex::new(Some(Arc::new(process))),
             resource_dir: None,
+            data_root: Mutex::new(None),
             next_request_id: AtomicU64::new(1),
         }
+    }
+
+    pub fn set_data_root(&self, data_root: PathBuf) -> Result<(), SupervisorError> {
+        self.replace_data_root(Some(data_root))
+    }
+
+    pub fn clear_data_root(&self) -> Result<(), SupervisorError> {
+        self.replace_data_root(None)
+    }
+
+    fn replace_data_root(&self, data_root: Option<PathBuf>) -> Result<(), SupervisorError> {
+        let mut slot = self.process.lock().map_err(|_| {
+            SupervisorError::new("daemon_lock_poisoned", "daemon process lock is poisoned")
+                .retryable()
+        })?;
+        if let Some(process) = slot.take() {
+            process.mark_broken();
+            process.kill();
+        }
+        let mut configured = self.data_root.lock().map_err(|_| {
+            SupervisorError::new("daemon_lock_poisoned", "daemon data-root lock is poisoned")
+                .retryable()
+        })?;
+        *configured = data_root;
+        Ok(())
     }
 
     pub fn invoke(
@@ -305,8 +333,20 @@ impl DaemonSupervisor {
         };
 
         if should_restart {
+            let data_root = self
+                .data_root
+                .lock()
+                .map_err(|_| {
+                    SupervisorError::new(
+                        "daemon_lock_poisoned",
+                        "daemon data-root lock is poisoned",
+                    )
+                    .retryable()
+                })?
+                .clone();
             *slot = Some(Arc::new(DaemonProcess::spawn(
                 self.resource_dir.as_deref(),
+                data_root,
             )?));
         }
 
@@ -317,8 +357,17 @@ impl DaemonSupervisor {
 }
 
 impl DaemonProcess {
-    fn spawn(resource_dir: Option<&Path>) -> Result<Self, SupervisorError> {
-        Self::spawn_command(kassiber_command(resource_dir, vec!["daemon".into()]))
+    fn spawn(
+        resource_dir: Option<&Path>,
+        data_root: Option<PathBuf>,
+    ) -> Result<Self, SupervisorError> {
+        let mut args = Vec::new();
+        if let Some(data_root) = data_root {
+            args.push("--data-root".into());
+            args.push(data_root.to_string_lossy().to_string());
+        }
+        args.push("daemon".into());
+        Self::spawn_command(kassiber_command(resource_dir, args))
     }
 
     fn spawn_command(command: DaemonCommand) -> Result<Self, SupervisorError> {
