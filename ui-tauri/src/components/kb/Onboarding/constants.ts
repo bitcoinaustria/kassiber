@@ -69,6 +69,79 @@ export const parseTaxLongTermDays = (raw: string): number | null => {
   return Number.isSafeInteger(days) ? days : null;
 };
 
+const hasHttpUrl = (raw: string): boolean => {
+  try {
+    const parsed = new URL(raw);
+    return parsed.protocol === "http:" || parsed.protocol === "https:";
+  } catch {
+    return false;
+  }
+};
+
+const hasInlineCredential = (raw: string): boolean => {
+  const candidate = raw.includes("://") ? raw : `ssl://${raw}`;
+  try {
+    const parsed = new URL(candidate);
+    return parsed.username.length > 0 || parsed.password.length > 0;
+  } catch {
+    return false;
+  }
+};
+
+const hasSocketEndpoint = (raw: string): boolean => {
+  const candidate = raw.includes("://") ? raw : `ssl://${raw}`;
+  try {
+    const parsed = new URL(candidate);
+    return (
+      (parsed.protocol === "ssl:" || parsed.protocol === "tcp:") &&
+      parsed.hostname.length > 0 &&
+      parsed.port.length > 0
+    );
+  } catch {
+    return false;
+  }
+};
+
+export const backendEndpointDescription = (kind: BackendKind): string => {
+  if (kind === "electrum") {
+    return "Use ssl://host:50002, tcp://host:50001, or host:port.";
+  }
+  if (kind === "bitcoinrpc") {
+    return "Use the RPC URL only; add cookies or passwords after onboarding.";
+  }
+  if (kind === "custom") {
+    return "Use the endpoint format expected by your custom adapter.";
+  }
+  return "Use an http(s) endpoint. Do not include API tokens or auth headers.";
+};
+
+export const backendEndpointHint = (
+  kind: BackendKind,
+  raw: string,
+): string | null => {
+  const trimmed = raw.trim();
+  if (!trimmed) return "Endpoint is required.";
+  if (hasInlineCredential(trimmed)) {
+    return "Do not include usernames or passwords in the endpoint.";
+  }
+  if (kind === "electrum") {
+    return hasSocketEndpoint(trimmed)
+      ? null
+      : "Use ssl://host:50002, tcp://host:50001, or host:port.";
+  }
+  if (kind === "custom") return null;
+  return hasHttpUrl(trimmed) ? null : "Use an http:// or https:// URL.";
+};
+
+export const aiBaseUrlHint = (raw: string): string | null => {
+  const trimmed = raw.trim();
+  if (!trimmed) return "Base URL is required.";
+  if (hasInlineCredential(trimmed)) {
+    return "Do not include usernames or passwords in the endpoint.";
+  }
+  return hasHttpUrl(trimmed) ? null : "Use an http:// or https:// URL.";
+};
+
 export const BACKEND_KINDS: BackendKind[] = [
   "esplora",
   "electrum",

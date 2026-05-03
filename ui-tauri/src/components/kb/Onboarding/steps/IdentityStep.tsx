@@ -14,13 +14,14 @@ export const IdentityStep = ({
   update,
   onSubmit,
   goBack,
+  canContinue = true,
   currentStep,
   totalSteps,
 }: StepComponentProps) => {
   return (
     <OnboardingStepFrame>
       <OnboardingStepLeftWrapper
-        title="Name your local ledger"
+        title="Name this ledger"
         eyebrow="Ledger"
         currentStep={currentStep}
         totalSteps={totalSteps}
@@ -35,7 +36,8 @@ export const IdentityStep = ({
               label="Ledger name"
               name="workspace"
               value={form.workspace}
-              placeholder="Personal"
+              placeholder="Personal ledger"
+              description="This is the local workspace shown in the app header."
               onChange={(value) => update("workspace", value)}
             />
             <details className="group rounded-md border border-line bg-paper-2 px-3 py-2">
@@ -51,14 +53,19 @@ export const IdentityStep = ({
                   onChange={(value) => update("profile", value)}
                 />
                 <p className="m-0 mt-2 text-xs leading-5 text-ink-2">
-                  Most ledgers only need the default profile. Add more profiles
-                  later when a separate tax context is useful.
+                  Keep the default unless you plan to split this ledger into
+                  separate tax contexts later.
                 </p>
               </div>
             </details>
           </div>
 
-          <Button type="submit" onClick={onSubmit} className="mt-4 w-full">
+          <Button
+            type="submit"
+            onClick={onSubmit}
+            className="mt-4 w-full"
+            disabled={!canContinue}
+          >
             Continue
           </Button>
         </form>

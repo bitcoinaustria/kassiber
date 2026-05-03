@@ -17,6 +17,8 @@ import {
   DEFAULT_BACKEND_NAME,
   DEFAULT_BACKEND_URL,
   PUBLIC_BACKEND_DEFAULTS,
+  backendEndpointDescription,
+  backendEndpointHint,
 } from "../constants";
 import {
   CheckRow,
@@ -121,9 +123,13 @@ export const ConnectionsStep = ({
   totalSteps,
   onSubmit,
   goBack,
+  canContinue = true,
 }: StepComponentProps) => {
   const skipSelected = form.backendSetupMode === "skip";
   const customSelected = form.backendSetupMode === "custom";
+  const endpointHint = customSelected
+    ? backendEndpointHint(form.backendKind, form.backendUrl)
+    : null;
   return (
     <OnboardingStepFrame>
       <OnboardingStepLeftWrapper
@@ -138,8 +144,8 @@ export const ConnectionsStep = ({
             <div className="space-y-3">
               <ChoiceCard
                 active={form.backendSetupMode === "default"}
-                title="Use default mempool backend"
-                description="Start with the bundled mempool Esplora endpoint, plus the default Electrum and Liquid helpers. You can replace them later."
+                title="Use built-in public backends"
+                description="Start quickly with the bundled Esplora, Electrum, and Liquid endpoints. You can replace them later."
                 onClick={() => {
                   update("backendSetupMode", "default");
                   update("backendKind", "esplora");
@@ -150,7 +156,7 @@ export const ConnectionsStep = ({
               <ChoiceCard
                 active={customSelected}
                 title="Use a custom backend"
-                description="Point onboarding at your own Esplora, Electrum, Bitcoin Core RPC, BTCPay, Liquid Esplora, or custom endpoint."
+                description="Point Kassiber at your own node, Esplora, Electrum server, BTCPay server, or custom endpoint."
                 onClick={() => {
                   update("backendSetupMode", "custom");
                   if (
@@ -177,6 +183,7 @@ export const ConnectionsStep = ({
                   label="Backend kind"
                   value={form.backendKind}
                   options={BACKEND_KINDS}
+                  description="Credentials are intentionally not collected in onboarding."
                   onChange={(value) => update("backendKind", value)}
                 />
                 <TextField
@@ -184,6 +191,7 @@ export const ConnectionsStep = ({
                   name="backendName"
                   value={form.backendName}
                   placeholder="home-node"
+                  description="A short label shown in Settings and wallet sync screens."
                   onChange={(value) => update("backendName", value)}
                 />
                 <TextField
@@ -191,6 +199,8 @@ export const ConnectionsStep = ({
                   name="backendUrl"
                   value={form.backendUrl}
                   placeholder="https://... or ssl://..."
+                  hint={endpointHint}
+                  description={backendEndpointDescription(form.backendKind)}
                   onChange={(value) => update("backendUrl", value)}
                 />
                 <div className="flex items-start gap-3 rounded-lg border border-line bg-paper p-3 text-xs leading-5 text-ink-2">
@@ -232,7 +242,7 @@ export const ConnectionsStep = ({
             )}
           </div>
 
-          <Button onClick={onSubmit} className="w-full">
+          <Button onClick={onSubmit} className="w-full" disabled={!canContinue}>
             Continue
           </Button>
         </div>

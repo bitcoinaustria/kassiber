@@ -22,6 +22,8 @@ import {
   DEFAULT_AI_PROVIDER_NAME,
   DEFAULT_FORM,
   GAINS_ALGORITHM_DEFAULTS,
+  aiBaseUrlHint,
+  backendEndpointHint,
   databasePassphraseHint,
   gainsAlgorithmsFor,
   parseTaxLongTermDays,
@@ -59,7 +61,10 @@ const DEFAULT_STEPS: OnboardingStep[] = [
         return form.skipBackendsAcknowledged;
       }
       if (form.backendSetupMode === "custom") {
-        return Boolean(form.backendName.trim() && form.backendUrl.trim());
+        return Boolean(
+          form.backendName.trim() &&
+            backendEndpointHint(form.backendKind, form.backendUrl) === null,
+        );
       }
       return true;
     },
@@ -67,10 +72,12 @@ const DEFAULT_STEPS: OnboardingStep[] = [
   {
     component: AiStep,
     isComplete: (form) => {
+      if (form.aiSetupMode !== "disabled") {
+        if (aiBaseUrlHint(form.aiBaseUrl) !== null) return false;
+      }
       if (form.aiSetupMode === "remote") {
         return Boolean(
           form.aiProviderName.trim() &&
-            form.aiBaseUrl.trim() &&
             form.aiRemoteAcknowledged,
         );
       }
@@ -408,6 +415,7 @@ export const Onboarding = ({ className, steps: customSteps }: OnboardingProps) =
             form={form}
             update={update}
             onSubmit={handleSubmit}
+            canContinue={step.isComplete(form) && !submitting}
             currentStep={currentStep}
             totalSteps={activeSteps.length}
             goBack={handleGoBack}

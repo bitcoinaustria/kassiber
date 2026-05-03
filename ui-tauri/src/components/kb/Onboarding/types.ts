@@ -56,6 +56,7 @@ export interface StepComponentProps {
   ) => void;
   onSubmit: () => void;
   goBack?: () => void;
+  canContinue?: boolean;
   currentStep: number;
   totalSteps: number;
 }
