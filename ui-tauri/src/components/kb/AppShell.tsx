@@ -1036,7 +1036,7 @@ function NavMenuItem({
 function NavUser({ onLock }: { onLock: () => void }) {
   const identity = useUiStore((s) => s.identity);
   const name = identity?.workspace ?? "Demo Workspace";
-  const detail = identity?.name ?? "local profile";
+  const detail = identity?.profile ?? identity?.name ?? "local profile";
 
   return (
     <SidebarMenu>

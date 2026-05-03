@@ -61,7 +61,7 @@ export function AppHeader() {
         {identity && (
           <button
             onClick={() => setProfileSwitcherOpen(true)}
-            title={`Workspace · ${identity.workspace} · signed in as ${identity.name}`}
+            title={`Workspace · ${identity.workspace} · Profile · ${identity.profile ?? identity.name}`}
             className="hidden h-6.5 max-w-[200px] cursor-pointer items-center gap-1.5 border border-line bg-transparent px-2.5 md:flex"
           >
             <span className="size-1 shrink-0 bg-accent" />

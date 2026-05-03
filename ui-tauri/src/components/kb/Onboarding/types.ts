@@ -24,7 +24,6 @@ export type BackendKind =
   | "custom";
 
 export interface OnboardingForm {
-  name: string;
   workspace: string;
   profile: string;
   taxCountry: TaxCountry;

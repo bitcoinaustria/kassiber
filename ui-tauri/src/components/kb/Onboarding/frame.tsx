@@ -10,6 +10,7 @@ interface OnboardingStepHeaderProps {
   stepIndex: number;
   totalSteps: number;
   goBack?: () => void;
+  showProgress?: boolean;
 }
 
 export const OnboardingStepHeader = ({
@@ -18,10 +19,11 @@ export const OnboardingStepHeader = ({
   stepIndex,
   totalSteps,
   goBack,
+  showProgress = true,
 }: OnboardingStepHeaderProps) => {
   return (
     <div className="flex items-start gap-2">
-      {goBack && stepIndex > 0 && (
+      {goBack && (
         <Button
           type="button"
           variant="ghost"
@@ -35,7 +37,8 @@ export const OnboardingStepHeader = ({
       )}
       <div>
         <p className="font-mono text-[10px] font-medium uppercase tracking-[0.14em] text-ink-3">
-          {eyebrow} · {stepIndex + 1}/{totalSteps}
+          {eyebrow}
+          {showProgress ? ` · ${stepIndex + 1}/${totalSteps}` : null}
         </p>
         <h3 className="mt-2 text-2xl font-semibold tracking-normal text-ink md:whitespace-nowrap">
           {title}
@@ -59,6 +62,7 @@ export const OnboardingStepLeftWrapper = ({
   currentStep,
   totalSteps,
   goBack,
+  showProgress,
   children,
 }: {
   title: string;
@@ -67,6 +71,7 @@ export const OnboardingStepLeftWrapper = ({
   totalSteps: number;
   children: ReactNode;
   goBack?: () => void;
+  showProgress?: boolean;
 }) => {
   return (
     <div className="flex flex-1/2 justify-center px-5 py-6 sm:px-10 sm:py-10 md:py-16 lg:justify-start lg:pl-20">
@@ -77,6 +82,7 @@ export const OnboardingStepLeftWrapper = ({
           stepIndex={currentStep}
           totalSteps={totalSteps}
           goBack={goBack}
+          showProgress={showProgress}
         />
         {children}
       </div>

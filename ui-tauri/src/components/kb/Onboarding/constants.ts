@@ -17,7 +17,6 @@ export const DEFAULT_AI_BASE_URL = "http://localhost:11434/v1";
 export const MIN_DATABASE_PASSPHRASE_CHARS = 12;
 
 export const DEFAULT_FORM: OnboardingForm = {
-  name: "",
   workspace: "Personal",
   profile: "main",
   taxCountry: "at",

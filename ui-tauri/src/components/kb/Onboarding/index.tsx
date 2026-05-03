@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
-import { FolderOpen, ShieldCheck } from "lucide-react";
+import { ShieldCheck } from "lucide-react";
 
 import { Wordmark } from "@/components/kb/Wordmark";
 import { Button } from "@/components/ui/button";
@@ -31,6 +31,7 @@ import { ConnectionsStep } from "./steps/ConnectionsStep";
 import { DatabaseStep } from "./steps/DatabaseStep";
 import { IdentityStep } from "./steps/IdentityStep";
 import { ImportProjectPanel } from "./ImportProjectPanel";
+import { StartChoicePanel } from "./StartChoicePanel";
 import { TaxStep } from "./steps/TaxStep";
 import type { OnboardingForm, OnboardingStep } from "./types";
 
@@ -43,7 +44,7 @@ const DEFAULT_STEPS: OnboardingStep[] = [
   {
     component: IdentityStep,
     isComplete: (form) =>
-      Boolean(form.name.trim() && form.workspace.trim() && form.profile.trim()),
+      Boolean(form.workspace.trim() && form.profile.trim()),
   },
   {
     component: TaxStep,
@@ -112,6 +113,9 @@ export const Onboarding = ({ className, steps: customSteps }: OnboardingProps) =
   const navigate = useNavigate();
   const setIdentity = useUiStore((state) => state.setIdentity);
   const setDataMode = useUiStore((state) => state.setDataMode);
+  const [flowMode, setFlowMode] = useState<"start" | "setup">(
+    customSteps ? "setup" : "start",
+  );
   const [currentStep, setCurrentStep] = useState(0);
   const [form, setForm] = useState<OnboardingForm>(DEFAULT_FORM);
   const [submitting, setSubmitting] = useState(false);
@@ -164,7 +168,7 @@ export const Onboarding = ({ className, steps: customSteps }: OnboardingProps) =
     }
 
     const identity: Identity = {
-      name: form.name.trim(),
+      name: form.profile.trim() || "main",
       workspace: form.workspace.trim() || "Personal",
       // Legacy field. Today rp2 only ships `at` + `generic` country plugins,
       // so all non-AT picks collapse to "Generic". Prefer `taxCountry` for
@@ -227,7 +231,18 @@ export const Onboarding = ({ className, steps: customSteps }: OnboardingProps) =
   };
 
   const handleGoBack = () => {
-    if (currentStep > 0) setCurrentStep(currentStep - 1);
+    if (currentStep > 0) {
+      setCurrentStep(currentStep - 1);
+      return;
+    }
+    if (!customSteps) setFlowMode("start");
+  };
+
+  const beginSetup = () => {
+    setDataMode("real");
+    setFinishError(null);
+    setImportError(null);
+    setFlowMode("setup");
   };
 
   const refreshImportedProfiles = async () => {
@@ -321,6 +336,7 @@ export const Onboarding = ({ className, steps: customSteps }: OnboardingProps) =
       .then(() => {
         setImportSelection(null);
         setImportSnapshot(null);
+        setFlowMode("start");
       })
       .catch((error: unknown) => {
         setImportError(
@@ -354,21 +370,6 @@ export const Onboarding = ({ className, steps: customSteps }: OnboardingProps) =
               <ShieldCheck className="size-4" />
               Local-first · watch-only · SQLCipher-aware
             </div>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              disabled={!importAvailable || importing || submitting}
-              title={
-                importAvailable
-                  ? "Import an existing local Kassiber project"
-                  : "Project import is available in the macOS desktop app"
-              }
-              onClick={beginImport}
-            >
-              <FolderOpen className="size-4" aria-hidden="true" />
-              {importing ? "Opening..." : "Import"}
-            </Button>
             {import.meta.env.DEV && (
               <Button
                 type="button"
@@ -394,6 +395,13 @@ export const Onboarding = ({ className, steps: customSteps }: OnboardingProps) =
             onUnlock={(passphrase) =>
               unlockAndLoadImportedProfiles(importSelection, passphrase)
             }
+          />
+        ) : flowMode === "start" ? (
+          <StartChoicePanel
+            importAvailable={importAvailable}
+            importing={importing}
+            onSetup={beginSetup}
+            onImport={beginImport}
           />
         ) : (
           <step.component
