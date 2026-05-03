@@ -615,14 +615,14 @@ function CreateProfileDialog({
           )}
 
           <div className="space-y-2">
-            <Label htmlFor="profile-name">Profile name</Label>
+            <Label htmlFor="profile-name">Profile label</Label>
             <Input
               id="profile-name"
               data-testid="profile-name-input"
               autoFocus
               aria-invalid={Boolean(errorMessage)}
               disabled={isSubmitting}
-              placeholder="2026 tax"
+              placeholder="Business"
               value={name}
               onChange={(event) => onNameChange(event.currentTarget.value)}
             />
