@@ -67,7 +67,7 @@ export const DashboardIllustration = ({
             "Connections",
             "Transactions",
             "Reports",
-            "Profiles",
+            "Books",
           ].map((item, index) => (
             <li
               key={item}

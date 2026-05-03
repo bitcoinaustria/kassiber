@@ -91,32 +91,31 @@ require their own passphrase round-trip before the daemon returns raw secret
 material.
 
 `ui.profiles.switch` accepts `{"profile_id":"..."}` and updates the active
-`context_workspace` / `context_profile` settings after the database is already
-unlocked. It does not create a per-profile passphrase boundary; SQLCipher
-encryption is database-level.
+ledger/books (`context_workspace` / `context_profile` internally) after the
+database is already unlocked. It does not create a per-books/profile passphrase
+boundary; SQLCipher encryption is database-level.
 
 `ui.profiles.create` accepts `{"workspace_id":"...","label":"..."}` and creates
-a profile in that workspace. In desktop copy this is shown as creating new
-books inside a ledger; `workspace` and `profile` remain the daemon/API names. It
-inherits fiat currency, tax country, long-term period, and gains algorithm from
-the active profile in that workspace when available; otherwise it uses the first
-profile in the workspace, then generic EUR/FIFO defaults for empty workspaces.
-It can also accept `source_profile_id` to copy those profile settings from a
-specific profile in the same workspace. Wallets, accounts/buckets, and
-transactions are not copied. The new profile becomes active.
+new books in that ledger. `workspace` and `profile` remain the daemon/API names
+for ledger and books. It inherits fiat currency, tax country, long-term period,
+and gains algorithm from the active books/profile in that ledger when available;
+otherwise it uses the first books/profile in the ledger, then generic EUR/FIFO
+defaults for empty ledgers. It can also accept `source_profile_id` to copy those
+settings from a specific books/profile in the same ledger. Wallets,
+accounts/buckets, and transactions are not copied. The new books become active.
 
-`ui.workspace.create` accepts `{"label":"..."}` and creates an empty workspace.
-Desktop copy calls this a new ledger. The daemon makes the new workspace current
-and clears the active profile until the user creates or switches to books inside
-that ledger.
+`ui.workspace.create` accepts `{"label":"..."}` and creates an empty ledger.
+`workspace` remains the daemon/API name. The daemon makes the new ledger current
+and clears the active books/profile until the user creates or switches to books
+inside that ledger.
 
 `ui.workspace.delete` accepts
-`{"confirm":"DELETE","confirm_workspace":"..."}` for the current workspace. Like
+`{"confirm":"DELETE","confirm_workspace":"..."}` for the current ledger. Like
 wallet deletes, encrypted databases require `args.auth_response.passphrase_secret`
 and plaintext databases require `DELETE LOCAL DATA`.
 
 `ui.wallets.update` accepts `{"wallet":"...","label":"..."}` for the active
-profile and currently supports label changes. `ui.wallets.delete` accepts
+books/profile and currently supports label changes. `ui.wallets.delete` accepts
 `{"wallet":"...","confirm":"DELETE","confirm_wallet":"...","cascade":true|false}`.
 Both kinds are sensitive local-state changes: encrypted databases require
 `args.auth_response.passphrase_secret`, verified with the same throwaway

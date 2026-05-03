@@ -13,13 +13,13 @@ describe("chat export", () => {
       {
         id: "user-1",
         role: "user",
-        content: "Summarize my workspace.",
+        content: "Summarize my ledger.",
         status: "done",
       },
       {
         id: "assistant-1",
         role: "assistant",
-        content: "Workspace looks clean.",
+        content: "Ledger looks clean.",
         status: "done",
         toolCalls: [
           {
@@ -42,13 +42,13 @@ describe("chat export", () => {
 
       ## You
 
-      Summarize my workspace.
+      Summarize my ledger.
 
       ---
 
       ## Kassiber
 
-      Workspace looks clean.
+      Ledger looks clean.
       Tools:
       - ui.workspace.health: done
       "

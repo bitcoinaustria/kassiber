@@ -4,7 +4,7 @@ Kassiber separates raw transaction storage from processed journal state. Reports
 
 ## Tax policies
 
-Profiles carry tax defaults through:
+Books carry tax defaults through the internal `profile` row:
 
 - `tax_country`
 - `tax_long_term_days` (generic policy only; Austrian Altbestand handling is wallet-specific)
@@ -26,8 +26,8 @@ python3 -m kassiber journals process
 Important behavior:
 
 - both `generic` and `at` policies currently run through RP2
-- `at` profiles use rp2's Austrian country plugin while Kassiber keeps the normalization, provenance, transfer-preparation, and current report-mapping layer
-- cost basis is pooled per asset across all wallets in a profile
+- Austrian books (`tax_country=at`) use rp2's Austrian country plugin while Kassiber keeps the normalization, provenance, transfer-preparation, and current report-mapping layer
+- cost basis is pooled per asset across all wallets in one set of books
 - self-transfers between user-owned wallets become RP2 `IntraTransaction` moves when Kassiber can prove the relationship
 - explicit inbound `kind` values such as `income`, `interest`, `staking`, `mining`, `airdrop`, `hardfork`, `wages`, `lending_interest`, and `routing_income` are promoted into RP2 earn-like receipts; unlabeled inbound rows stay conservative and process as `BUY`
 - missing or ambiguous tax inputs quarantine instead of being silently guessed
@@ -60,9 +60,9 @@ Current rules:
 - same-asset manual pairs support `--policy carrying-value`
 - same-asset `--policy taxable` is rejected; leave those legs unpaired if you want normal SELL + BUY treatment
 - cross-asset pairs are always stored for audit
-- cross-asset `--policy carrying-value` is supported for Austrian (`tax_country=at`) profiles and feeds the swap-basis-carry path
+- cross-asset `--policy carrying-value` is supported for Austrian books (`tax_country=at`) and feeds the swap-basis-carry path
 - cross-asset `--policy taxable` keeps the normal SELL + BUY treatment
-- non-Austrian profiles still reject cross-asset `--policy carrying-value`
+- non-Austrian books still reject cross-asset `--policy carrying-value`
 - cross-asset swaps are never auto-paired from time / amount heuristics during report generation; use `transfers pair` when those links matter for tax treatment
 
 Manual pairs override auto-detection.
@@ -115,7 +115,7 @@ Reports still use stored transaction and journal pricing rather than querying th
 
 Current Austrian status:
 
-- Austrian profiles process through rp2's `AT` country plugin via the shared RP2 adapter
+- Austrian books process through rp2's `AT` country plugin via the shared RP2 adapter
 - Kassiber keeps normalization, provenance capture, transfer preparation, cross-asset carry wiring, and current disposal-category / Kennzahl mapping
 - Austrian cross-asset `--policy carrying-value` pairs are supported and feed Kassiber's swap-basis-carry path before RP2
 - Austrian E 1kv export is available through `reports austrian-e1kv`, `reports export-austrian-e1kv-pdf`, `reports export-austrian-e1kv-xlsx`, and `reports export-austrian-e1kv-csv`; `reports austrian-tax-summary` and `reports export-austrian` are friendlier aliases for the same annual Austrian handoff

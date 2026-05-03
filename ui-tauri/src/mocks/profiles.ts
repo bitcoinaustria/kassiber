@@ -1,5 +1,5 @@
 /**
- * Mock workspace + profile fixture for the Profiles screen.
+ * Mock ledger + books fixture for the Books screen.
  *
  * Lifted from claude-design/components/strings.jsx (MOCK.workspaces) until
  * the Pydantic→JSON Schema pipeline (Phase 1.2 §2.2) generates fixtures
@@ -36,7 +36,7 @@ export interface ProfilesSnapshot {
   workspaces: Workspace[];
   /** Currently active workspace id — valid even before a workspace has profiles. */
   activeWorkspaceId?: string;
-  /** Currently active profile id — corresponds to the user's session. */
+  /** Currently active books/profile id — corresponds to the user's session. */
   activeProfileId: string;
 }
 

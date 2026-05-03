@@ -80,11 +80,11 @@ function summarizeToolResult(result: unknown): string | null {
         .join("; ");
     }
     case "ui.workspace.health": {
-      const workspace = asRecord(data.workspace)?.label ?? "No workspace";
-      const profile = asRecord(data.profile)?.label ?? "No profile";
+      const ledger = asRecord(data.workspace)?.label ?? "No ledger";
+      const books = asRecord(data.profile)?.label ?? "No books";
       const journals = asRecord(data.journals);
       const reports = asRecord(data.reports);
-      return `${workspace} / ${profile}: journals ${journals?.status ?? "unknown"}, reports ${
+      return `${ledger} / ${books}: journals ${journals?.status ?? "unknown"}, reports ${
         reports?.ready ? "ready" : "not ready"
       }.`;
     }

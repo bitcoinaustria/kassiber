@@ -52,7 +52,7 @@ export const TaxStep = ({
               <ChoiceCard
                 active={form.taxCountry === "generic"}
                 title="Other or generic"
-                description="Use a country-neutral profile with FIFO, LIFO, HIFO, or LOFO lot selection."
+                description="Use country-neutral books with FIFO, LIFO, HIFO, or LOFO lot selection."
                 onClick={() => {
                   if (form.taxCountry === "generic") return;
                   update("taxCountry", "generic");
@@ -66,7 +66,7 @@ export const TaxStep = ({
                 label="Fiat currency"
                 value={form.fiatCurrency}
                 options={FIAT_CURRENCIES}
-                description="Reports and tax summaries use this as the profile currency."
+                description="Reports and tax summaries use this as the books currency."
                 onChange={(value) => update("fiatCurrency", value)}
               />
               {isAustrian ? (
@@ -99,7 +99,7 @@ export const TaxStep = ({
                 min={1}
                 onChange={(value) => update("taxLongTermDays", value)}
                 hint={taxLongTermDaysHint(form.taxLongTermDays)}
-                description="Only used by the generic profile."
+                description="Only used by generic books."
               />
             )}
           </div>

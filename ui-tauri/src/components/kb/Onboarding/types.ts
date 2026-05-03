@@ -6,7 +6,7 @@ export type FiatCurrency = "EUR" | "USD" | "CHF" | "GBP";
 // Algorithm tokens match `kassiber.tax_policy` / rp2 plugins.
 // Generic country exposes FIFO/LIFO/HIFO/LOFO. New Austrian wallets expose
 // only the current-rule moving-average default; Altbestand handling is
-// wallet-specific rather than a profile-level holding-period setting.
+// wallet-specific rather than a books-level holding-period setting.
 export type GenericGainsAlgorithm = "FIFO" | "LIFO" | "HIFO" | "LOFO";
 export type AustrianGainsAlgorithm = "MOVING_AVERAGE_AT";
 export type GainsAlgorithm = GenericGainsAlgorithm | AustrianGainsAlgorithm;

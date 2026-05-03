@@ -331,7 +331,7 @@ python3 -m kassiber reports summary
 python3 -m kassiber reports tax-summary
 python3 -m kassiber reports balance-sheet
 python3 -m kassiber reports capital-gains
-# For Austrian/EUR profiles:
+# For Austrian/EUR books:
 python3 -m kassiber --machine reports austrian-e1kv --year 2024
 python3 -m kassiber --machine reports austrian-tax-summary --year 2024
 python3 -m kassiber reports export-austrian-e1kv-pdf --year 2024 --file e1kv-2024.pdf

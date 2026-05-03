@@ -1,5 +1,5 @@
 /**
- * Profiles / workspaces switcher screen.
+ * Books / ledger switcher screen.
  */
 
 import {

@@ -142,7 +142,7 @@ export const DatabaseStep = ({
                   <p className="m-0 text-xs leading-5 text-ink-2">
                     The passphrase is sent only to the local daemon to create
                     and unlock the database. Kassiber does not store it in the
-                    persisted UI profile.
+                    persisted UI books identity.
                   </p>
                 </div>
                 <CheckRow

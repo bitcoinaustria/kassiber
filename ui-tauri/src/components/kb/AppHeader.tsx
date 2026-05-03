@@ -1,5 +1,5 @@
 /**
- * AppHeader — top navigation, workspace label, hide-sensitive toggle,
+ * AppHeader — top navigation, ledger label, hide-sensitive toggle,
  * and a small overflow menu for currency/language/settings/lock.
  *
  * Translated from claude-design/components/chrome.jsx. The lang and
@@ -61,7 +61,7 @@ export function AppHeader() {
         {identity && (
           <button
             onClick={() => setProfileSwitcherOpen(true)}
-            title={`Workspace · ${identity.workspace} · Profile · ${identity.profile ?? identity.name}`}
+            title={`Ledger · ${identity.workspace} · Books · ${identity.profile ?? identity.name}`}
             className="hidden h-6.5 max-w-[200px] cursor-pointer items-center gap-1.5 border border-line bg-transparent px-2.5 md:flex"
           >
             <span className="size-1 shrink-0 bg-accent" />

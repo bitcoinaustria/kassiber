@@ -68,8 +68,8 @@ export const fixtures: Record<string, unknown> = {
   },
   "ui.journals.snapshot": {
     status: {
-      workspace: "Demo Workspace",
-      profile: "local profile",
+      workspace: "Demo Ledger",
+      profile: "local books",
       transactionCount: MOCK_OVERVIEW.txs.length,
       journalEntryCount: 42,
       needsJournals: false,
@@ -85,7 +85,7 @@ export const fixtures: Record<string, unknown> = {
     recent: [],
   },
   "ui.journals.process": {
-    profile: "local profile",
+    profile: "local books",
     entries_created: 42,
     quarantined: 0,
     transfers_detected: 3,

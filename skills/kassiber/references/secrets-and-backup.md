@@ -248,7 +248,7 @@ kassiber backup import /tmp/snap.kassiber --backup-passphrase-fd 4 \
 `--install` moves any pre-existing live data into a sibling
 `pre-restore-<timestamp>/` directory before overwriting, so an accidental
 restore over a populated data root is recoverable. After a successful
-install, Kassiber removes the decrypted temp restore workspace. Stage-only
+install, Kassiber removes the decrypted temp restore directory. Stage-only
 imports intentionally leave the extracted staging tree in the returned temp
 path for manual inspection.
 

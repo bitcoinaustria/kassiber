@@ -1,6 +1,6 @@
 ---
 name: kassiber
-description: Use this skill when the user wants to use the Kassiber CLI for local-first Bitcoin accounting, wallet onboarding, transaction imports, journal processing, metadata cleanup, or tax and portfolio reports. Applies to requests about Kassiber workspaces, profiles, accounts, wallets, backends, rates, attachments, BIP329 labels, quarantines, generic tax reporting, and Austrian-support planning/questions, even when the user does not say Kassiber by name.
+description: Use this skill when the user wants to use the Kassiber CLI for local-first Bitcoin accounting, wallet onboarding, transaction imports, journal processing, metadata cleanup, or tax and portfolio reports. Applies to requests about Kassiber ledgers/books, internal workspaces/profiles, accounts, wallets, backends, rates, attachments, BIP329 labels, quarantines, generic tax reporting, and Austrian-support planning/questions, even when the user does not say Kassiber by name.
 ---
 
 # Kassiber
@@ -48,8 +48,8 @@ If a fast-path command returns a structured error, inspect the envelope and take
 16. For "largest transaction", "smallest transaction", biggest inbound/outbound, or similar raw transaction rankings, use `kassiber --machine transactions list --sort amount --order desc|asc --direction inbound|outbound --limit <n>` so SQLite ranks the full dataset before limiting. Amounts are unsigned and direction is a separate field, so "largest inbound" and "largest outbound" both use `--order desc`; "smallest" uses `--order asc`. Do not fetch the default recent page and sort it client-side. If a machine response includes `next_cursor`, keep following it only when the user asked for the full list; a correctly sorted first row is already the largest/smallest row for top-N questions.
 17. Processing order is: wallet sync or import -> review likely transfer / swap pairs when relevant -> `kassiber rates sync` when pricing is needed -> `kassiber journals process` -> reports.
 18. Re-run `kassiber journals process` after any transaction import, transfer pairing, note or tag change, exclusion change, rate sync, or rate override before trusting reports.
-19. Do not confuse `kassiber init` with onboarding. It only creates the local state tree; workspace, profile, account, and wallet records are created with their own commands.
-20. Prefer explicit workspace and profile flags until context is verified; use `kassiber context show` or `kassiber status` before assuming the active scope.
+19. Do not confuse `kassiber init` with onboarding. It only creates the local state tree; ledger/books records (`workspace`/`profile` internally), bucket, and wallet records are created with their own commands.
+20. Prefer explicit workspace and profile flags until context is verified; these are the CLI names for the active ledger and books. Use `kassiber context show` or `kassiber status` before assuming the active scope.
 21. For Liquid descriptor wallets, require an explicit backend and private blinding keys. If either is missing, stop and fix that before sync.
 22. If the user already provided a secret-bearing descriptor or token, do not ask them to paste it again and do not quote it back in summaries. Use a local file or direct CLI input once, then rely on allowlisted safe views after creation.
 23. For wallet-connection setup, ask for the wallet or backend type if it is unclear, but otherwise assume a mainnet connection. Only ask about network when the user explicitly says testnet, signet, regtest, or another non-mainnet environment.
@@ -81,7 +81,7 @@ If a fast-path command returns a structured error, inspect the envelope and take
 - Quarantined transactions are omitted from accurate downstream reporting until resolved or excluded.
 - Paginated list commands keep rows under command-specific keys such as `.data.records` and `.data.events`. Do not assume every list response uses the same field name.
 - Follow `next_cursor` only when the user asks for all/full/export/audit output. For top-N, largest/smallest, or summary questions, stop after the correctly sorted first page.
-- Cross-asset `--policy carrying-value` pairing is Austrian-only right now. Outside Austrian profiles, BTC ↔ LBTC manual pairs still stay on the normal SELL + BUY path, so do not describe them as carrying-value.
+- Cross-asset `--policy carrying-value` pairing is Austrian-only right now. Outside Austrian books, BTC ↔ LBTC manual pairs still stay on the normal SELL + BUY path, so do not describe them as carrying-value.
 - `kassiber status` may resolve to a legacy XDG path on machines with older state trees. Use status output, not assumptions, to find the live database.
 - If `journals transfers list` reports `cross_asset_pairs: 0`, no cross-asset swap pair is active yet. Do not describe Austrian carry-value as already applied until that changes.
 - Large `rates sync --days ...` requests may still yield limited history because the upstream source can cap the returned window. Verify actual coverage with `rates range` instead of hand-mathing sample counts.
@@ -93,25 +93,25 @@ If a fast-path command returns a structured error, inspect the envelope and take
 
 Kassiber organizes data as:
 
-`workspace -> profile -> account buckets + wallets -> transactions -> journals -> reports`
+`ledger -> books -> buckets + wallets -> transactions -> journals -> reports`
 
 Related notes:
 
-- `workspace` is the top-level container for an organization, person, or set of books.
-- `profile` is one accounting and tax scope inside a workspace.
+- A **ledger** is the user-facing top-level container for an organization, person, or accounting area. The CLI/API name is `workspace`.
+- **Books** are one accounting and tax scope inside a ledger. The CLI/API name is `profile`.
 - `wallet` is a transaction source that Kassiber syncs or imports; map it to the real underlying wallet, not every external store or export.
 - `account` is a wallet/reporting bucket that wallets can belong to.
 - `backends` define sync transport endpoints.
 - `metadata` covers notes, tags, exclusions, and BIP329 labels.
 - `attachments` are managed separately from wallet config and transaction rows.
-- Cost basis is pooled per asset across all wallets in a profile.
+- Cost basis is pooled per asset across all wallets in one set of books.
 - Balance-sheet output groups holdings by the wallet's assigned bucket, not by account-type rollups or counterpart postings.
 - If multiple BTCPay stores point at the same real wallet, keep them in one Kassiber wallet or holdings will be duplicated.
 
 ## Workflow Routing
 
 - For fragile CLI command shapes and safe invocation patterns, read [references/command-templates.md](references/command-templates.md).
-- For first-run setup, roots, context, and profile creation, read [references/onboarding.md](references/onboarding.md).
+- For first-run setup, roots, context, and ledger/books creation, read [references/onboarding.md](references/onboarding.md).
 - For wallet kinds, descriptor setup, backend selection, and imports, read [references/wallets-backends.md](references/wallets-backends.md).
 - For journal processing, quarantine handling, and transfer pairing, read [references/journal-processing.md](references/journal-processing.md).
 - For notes, tags, exclusions, BIP329 labels, and attachments, read [references/metadata.md](references/metadata.md).

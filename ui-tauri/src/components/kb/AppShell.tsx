@@ -169,7 +169,7 @@ const NAV_GROUPS: NavGroup[] = [
         href: "/connections",
         children: [
           { label: "Wallets", icon: Wallet, href: "/connections" },
-          { label: "Profiles", icon: Users, href: "/profiles" },
+          { label: "Books", icon: Users, href: "/profiles" },
         ],
       },
       { label: "Journals", icon: BookOpen, href: "/journals" },
@@ -191,7 +191,7 @@ const ROUTE_META: Array<[string, RouteMeta]> = [
       title: "Connection Detail",
       icon: Wallet,
       searchLabel: "Search connections",
-      searchPlaceholder: "Search wallets, profiles...",
+      searchPlaceholder: "Search wallets, books...",
     },
   ],
   [
@@ -200,16 +200,16 @@ const ROUTE_META: Array<[string, RouteMeta]> = [
       title: "Connections",
       icon: Wallet,
       searchLabel: "Search connections",
-      searchPlaceholder: "Search wallets, profiles...",
+      searchPlaceholder: "Search wallets, books...",
     },
   ],
   [
     "/profiles",
     {
-      title: "Profiles",
+      title: "Books",
       icon: Users,
-      searchLabel: "Search profiles",
-      searchPlaceholder: "Search profiles, countries...",
+      searchLabel: "Search books",
+      searchPlaceholder: "Search books, countries...",
     },
   ],
   [
@@ -319,9 +319,9 @@ const STATIC_SEARCH_RESULTS: SearchResult[] = [
   },
   {
     id: "route:profiles",
-    title: "Profiles",
-    detail: "Workspaces and tax policy",
-    keywords: ["workspace", "profile", "tax", "country"],
+    title: "Books",
+    detail: "Ledgers and tax settings",
+    keywords: ["ledger", "book", "books", "workspace", "profile", "tax", "country"],
     to: "/profiles",
   },
   {
@@ -465,7 +465,13 @@ function notificationRouteFor(title: string): AppRoutePath | undefined {
   if (normalized.includes("report") || normalized.includes("export")) {
     return "/reports";
   }
-  if (normalized.includes("profile")) return "/profiles";
+  if (
+    normalized.includes("profile") ||
+    normalized.includes("book") ||
+    normalized.includes("ledger")
+  ) {
+    return "/profiles";
+  }
   if (normalized.includes("transaction")) return "/transactions";
   return undefined;
 }
@@ -795,7 +801,7 @@ export function AppShell() {
                   <LockScreen
                     reason={
                       daemonAuthRequired
-                        ? "The daemon needs the database passphrase before it can return live workspace data."
+                        ? "The daemon needs the database passphrase before it can return live ledger data."
                         : undefined
                     }
                     onUnlock={unlockApp}
@@ -1035,8 +1041,8 @@ function NavMenuItem({
 
 function NavUser({ onLock }: { onLock: () => void }) {
   const identity = useUiStore((s) => s.identity);
-  const name = identity?.workspace ?? "Demo Workspace";
-  const detail = identity?.profile ?? identity?.name ?? "local profile";
+  const name = identity?.workspace ?? "Demo Ledger";
+  const detail = identity?.profile ?? identity?.name ?? "local books";
 
   return (
     <SidebarMenu>
@@ -1097,7 +1103,7 @@ function NavUser({ onLock }: { onLock: () => void }) {
             <DropdownMenuItem asChild>
               <Link to="/profiles">
                 <User className="mr-2 size-4" aria-hidden="true" />
-                Profiles
+                Books
               </Link>
             </DropdownMenuItem>
             <DropdownMenuSeparator />

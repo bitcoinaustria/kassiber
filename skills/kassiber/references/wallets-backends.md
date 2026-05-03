@@ -234,7 +234,7 @@ kassiber wallets import-csv --wallet wallet-name --file /path/to/data.csv
 Do not create a second wallet for a BTCPay or Phoenix export when it belongs to a wallet already tracked in Kassiber.
 Do not create one Kassiber wallet per BTCPay store if multiple stores share the same underlying wallet balance.
 
-## Austrian profiles
+## Austrian books
 
 Kassiber does not currently expose Austrian-specific wallet provenance controls.
 
@@ -253,7 +253,7 @@ Current limits to mention:
 - If the installed `rp2` environment lacks `rp2.plugin.country.at`, stop and
   fix the environment instead of guessing.
 
-Do not say BTC ↔ LBTC swaps are already handled just because the profile is
+Do not say BTC ↔ LBTC swaps are already handled just because the books are
 Austrian. The operator still needs an explicit `kassiber transfers pair` for
 cross-asset peg-ins / peg-outs before the carry-basis path can show up in
 journal state.

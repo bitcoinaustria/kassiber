@@ -98,11 +98,11 @@ const DEFAULT_STEPS: OnboardingStep[] = [
 ];
 
 const DEV_MOCK_IDENTITY: Identity = {
-  name: "mock profile",
-  workspace: "Demo Workspace",
+  name: "mock books",
+  workspace: "Demo Ledger",
   country: "AT",
   encrypted: false,
-  profile: "mock",
+  profile: "mock books",
   taxCountry: "at",
   fiatCurrency: "EUR",
   taxLongTermDays: 0,
@@ -263,14 +263,14 @@ export const Onboarding = ({ className, steps: customSteps }: OnboardingProps) =
         throw new Error("Database passphrase is required.");
       }
       if (envelope.kind === "error" || envelope.error) {
-        throw new Error(envelope.error?.message ?? "Could not load profiles.");
+        throw new Error(envelope.error?.message ?? "Could not load books.");
       }
       setImportSnapshot(
         envelope.data ?? { workspaces: [], activeProfileId: "" },
       );
     } catch (error) {
       const message =
-        error instanceof Error ? error.message : "Could not load profiles.";
+        error instanceof Error ? error.message : "Could not load books.";
       setImportError(message);
       throw error;
     } finally {

@@ -28,10 +28,10 @@ export interface ImportedProjectIdentity {
 }
 
 /**
- * Captured onboarding intent for the local profile. Only `name`/`workspace`
+ * Captured onboarding intent for the local books. Only `name`/`workspace`
  * are read by the running UI today (see AppHeader); the remaining fields are
  * captured in the webview so the upcoming native sidecar handoff can seed a
- * profile/backend without re-prompting.
+ * books/backend without re-prompting.
  *
  * `country` is the legacy identity field; new callers should prefer
  * `taxCountry`. Today only `at` and `generic` map to a real rp2 plugin
@@ -106,6 +106,23 @@ interface UiState {
   clearNotifications: () => void;
 }
 
+function normalizeIdentity(identity: Identity | null): Identity | null {
+  if (!identity) return identity;
+  const isLegacyMockIdentity =
+    !identity.importedProject &&
+    identity.workspace === "Demo Workspace" &&
+    (identity.name === "mock profile" || identity.profile === "mock");
+
+  if (!isLegacyMockIdentity) return identity;
+
+  return {
+    ...identity,
+    name: identity.name === "mock profile" ? "mock books" : identity.name,
+    profile: identity.profile === "mock" ? "mock books" : identity.profile,
+    workspace: "Demo Ledger",
+  };
+}
+
 export const useUiStore = create<UiState>()(
   persist(
     (set) => ({
@@ -130,7 +147,7 @@ export const useUiStore = create<UiState>()(
         set((state) => ({
           appLockPolicy: { ...state.appLockPolicy, ...policy },
         })),
-      setIdentity: (identity) => set({ identity }),
+      setIdentity: (identity) => set({ identity: normalizeIdentity(identity) }),
       bumpDaemonSession: () =>
         set((state) => ({ daemonSession: state.daemonSession + 1 })),
       addNotification: (notification) =>
@@ -152,6 +169,16 @@ export const useUiStore = create<UiState>()(
         })),
       clearNotifications: () => set({ notifications: [] }),
     }),
-    { name: "kb.ui" },
+    {
+      name: "kb.ui",
+      merge: (persisted, current) => {
+        const restored = persisted as Partial<UiState>;
+        return {
+          ...current,
+          ...restored,
+          identity: normalizeIdentity(restored.identity ?? current.identity),
+        };
+      },
+    },
   ),
 );

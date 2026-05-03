@@ -886,7 +886,7 @@ const recentActivity: ActivityItem[] = [
   },
   {
     title: "Journal processed",
-    detail: "Austrian profile",
+    detail: "Austrian books",
     time: "2 minutes ago",
   },
   {
@@ -925,7 +925,7 @@ const recentActivity: ActivityItem[] = [
     time: "45 minutes ago",
   },
   {
-    title: "Profile switched",
+    title: "Books switched",
     detail: "Business wallet",
     time: "1 hour ago",
   },
@@ -943,7 +943,7 @@ const WelcomeSection = ({
   snapshot: OverviewSnapshot;
 }) => {
   const reviewCount = snapshot.status?.quarantines ?? 0;
-  const profile = snapshot.status?.profile ?? "local profile";
+  const profile = snapshot.status?.profile ?? "local books";
   const transactionCount = snapshot.status?.transactionCount ?? snapshot.txs.length;
   return (
     <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between sm:gap-6">

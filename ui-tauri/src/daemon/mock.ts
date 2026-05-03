@@ -108,7 +108,7 @@ export const mockDaemon: DaemonTransport = {
         request_id: req.request_id,
         data: {
           deleted: true,
-          workspace: { id: "mock-workspace", label: "Demo Workspace" },
+          workspace: { id: "mock-workspace", label: "Demo Ledger" },
           removed: { profiles: 2, wallets: 4, transactions: 24 },
         } as T,
       };
@@ -136,7 +136,7 @@ export const mockDaemon: DaemonTransport = {
           request_id: req.request_id,
           error: {
             code: "validation",
-            message: "profile not found",
+            message: "books not found",
             retryable: false,
           },
         };
@@ -190,7 +190,7 @@ export const mockDaemon: DaemonTransport = {
           request_id: req.request_id,
           error: {
             code: "validation",
-            message: "workspace not found",
+            message: "ledger not found",
             retryable: false,
           },
         };
@@ -202,7 +202,7 @@ export const mockDaemon: DaemonTransport = {
           request_id: req.request_id,
           error: {
             code: "validation",
-            message: "ui.profiles.create requires label",
+            message: "Books label is required.",
             retryable: false,
           },
         };
@@ -217,7 +217,7 @@ export const mockDaemon: DaemonTransport = {
           request_id: req.request_id,
           error: {
             code: "validation",
-            message: "source profile not found in workspace",
+            message: "source books not found in ledger",
             retryable: false,
           },
         };
@@ -279,7 +279,7 @@ export const mockDaemon: DaemonTransport = {
           request_id: req.request_id,
           error: {
             code: "validation",
-            message: "ui.workspace.create requires label",
+            message: "Ledger name is required.",
             retryable: false,
           },
         };
