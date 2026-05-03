@@ -6,8 +6,9 @@ use std::env;
 use std::io::ErrorKind;
 use std::io::Read;
 use std::path::{Path, PathBuf};
-use std::process::Command;
+use std::process::{Command, Output, Stdio};
 use std::sync::Arc;
+use std::time::Duration;
 use supervisor::{DaemonSupervisor, SupervisorError};
 use tauri::{Manager, State};
 
@@ -15,6 +16,7 @@ const SCHEMA_VERSION: u8 = 1;
 const DEFAULT_STATE_DIR: &str = ".kassiber";
 const DEFAULT_DATA_DIR: &str = "data";
 const DB_FILENAMES: &[&str] = &["kassiber.sqlite3", "satbooks.sqlite3"];
+const IMPORT_PICKER_TIMEOUT: Duration = Duration::from_secs(300);
 
 const ALLOWED_DAEMON_KINDS: &[&str] = &[
     "status",
@@ -192,11 +194,15 @@ fn open_exported_file(path: String) -> Result<(), String> {
 }
 
 #[tauri::command]
-fn select_import_project_directory() -> Result<Option<ImportProjectSelection>, String> {
-    let Some(selected) = choose_import_project_directory()? else {
-        return Ok(None);
-    };
-    inspect_import_project_directory(&selected).map(Some)
+async fn select_import_project_directory() -> Result<Option<ImportProjectSelection>, String> {
+    tauri::async_runtime::spawn_blocking(|| {
+        let Some(selected) = choose_import_project_directory()? else {
+            return Ok(None);
+        };
+        inspect_import_project_directory(&selected).map(Some)
+    })
+    .await
+    .map_err(|error| format!("Project folder picker task failed: {error}"))?
 }
 
 #[tauri::command]
@@ -243,25 +249,75 @@ fn inspect_import_project_directory(path: &Path) -> Result<ImportProjectSelectio
 }
 
 fn resolve_import_data_root(path: &Path) -> Result<Option<(PathBuf, PathBuf, bool)>, String> {
+    let mut direct = None;
     for filename in DB_FILENAMES {
         let database = path.join(filename);
         if let Some(encrypted) = inspect_database_candidate(&database)? {
-            return Ok(Some((path.to_path_buf(), database, encrypted)));
+            direct = Some((path.to_path_buf(), database, encrypted));
+            break;
         }
     }
 
-    let data_root = path.join(DEFAULT_DATA_DIR);
-    let Some(data_root) = inspect_data_root_candidate(&data_root)? else {
-        return Ok(None);
+    let nested_data_root = path.join(DEFAULT_DATA_DIR);
+    let nested = if let Some(data_root) = inspect_data_root_candidate(&nested_data_root)? {
+        let mut nested = None;
+        for filename in DB_FILENAMES {
+            let database = data_root.join(filename);
+            if let Some(encrypted) = inspect_database_candidate(&database)? {
+                nested = Some((data_root.clone(), database, encrypted));
+                break;
+            }
+        }
+        nested
+    } else {
+        None
     };
-    for filename in DB_FILENAMES {
-        let database = data_root.join(filename);
-        if let Some(encrypted) = inspect_database_candidate(&database)? {
-            return Ok(Some((data_root.clone(), database, encrypted)));
+
+    match (direct, nested) {
+        (Some(_), Some(_)) => Err(
+            "Selected folder contains Kassiber databases both directly and under data/. Choose the exact data folder to import."
+                .to_string(),
+        ),
+        (Some(selection), None) | (None, Some(selection)) => Ok(Some(selection)),
+        (None, None) => Ok(None),
+    }
+}
+
+fn command_output_with_timeout(mut command: Command, label: &str) -> Result<Output, String> {
+    let mut child = command
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .map_err(|error| {
+            if error.kind() == ErrorKind::NotFound {
+                format!("{label} program was not found.")
+            } else {
+                format!("Could not open {label}: {error}")
+            }
+        })?;
+    let started = std::time::Instant::now();
+    loop {
+        match child.try_wait() {
+            Ok(Some(_)) => {
+                return child
+                    .wait_with_output()
+                    .map_err(|error| format!("Could not read {label} output: {error}"));
+            }
+            Ok(None) => {
+                if started.elapsed() >= IMPORT_PICKER_TIMEOUT {
+                    let _ = child.kill();
+                    let _ = child.wait();
+                    return Err(format!("{label} timed out."));
+                }
+                std::thread::sleep(Duration::from_millis(50));
+            }
+            Err(error) => {
+                let _ = child.kill();
+                let _ = child.wait();
+                return Err(format!("Could not inspect {label}: {error}"));
+            }
         }
     }
-
-    Ok(None)
 }
 
 fn inspect_data_root_candidate(path: &Path) -> Result<Option<PathBuf>, String> {
@@ -422,11 +478,9 @@ fn choose_import_project_directory_macos(default_root: &Path) -> Result<Option<P
     let script = format!(
         "try\nset chosenFolder to choose folder with prompt {prompt}{default_clause}\nreturn POSIX path of chosenFolder\non error number -128\nreturn \"__KASSIBER_CANCELLED__\"\nend try"
     );
-    let output = Command::new("osascript")
-        .arg("-e")
-        .arg(script)
-        .output()
-        .map_err(|error| format!("Could not open the macOS folder picker: {error}"))?;
+    let mut command = Command::new("osascript");
+    command.arg("-e").arg(script);
+    let output = command_output_with_timeout(command, "the macOS folder picker")?;
     let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
     if stdout == "__KASSIBER_CANCELLED__" {
         return Ok(None);
@@ -463,14 +517,14 @@ fn choose_import_project_directory_windows(default_root: &Path) -> Result<Option
            [Console]::Out.Write($dialog.SelectedPath) \
          }}"
     );
-    let output = Command::new("powershell.exe")
+    let mut command = Command::new("powershell.exe");
+    command
         .arg("-NoProfile")
         .arg("-STA")
         .arg("-NonInteractive")
         .arg("-Command")
-        .arg(script)
-        .output()
-        .map_err(|error| format!("Could not open the Windows folder picker: {error}"))?;
+        .arg(script);
+    let output = command_output_with_timeout(command, "the Windows folder picker")?;
     let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
     if output.status.success() {
         return if stdout.is_empty() {
@@ -542,12 +596,12 @@ fn try_unix_folder_picker(
     program: &str,
     args: &[String],
 ) -> Result<Option<Option<PathBuf>>, String> {
-    let output = match Command::new(program).args(args).output() {
+    let mut command = Command::new(program);
+    command.args(args);
+    let output = match command_output_with_timeout(command, &format!("{program} folder picker")) {
         Ok(output) => output,
-        Err(error) if error.kind() == ErrorKind::NotFound => return Ok(None),
-        Err(error) => {
-            return Err(format!("Could not open {program} folder picker: {error}"));
-        }
+        Err(error) if error.contains("program was not found") => return Ok(None),
+        Err(error) => return Err(error),
     };
     let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
     if output.status.success() {
@@ -759,6 +813,21 @@ mod tests {
             data.join("kassiber.sqlite3").to_string_lossy().to_string()
         );
         assert!(!selection.encrypted);
+    }
+
+    #[test]
+    fn import_project_rejects_ambiguous_direct_and_nested_databases() {
+        let root = unique_temp_dir("ambiguous-root");
+        let data = root.join("data");
+        fs::create_dir_all(&data).expect("create data dir");
+        fs::write(root.join("kassiber.sqlite3"), fake_kassiber_sqlite_bytes())
+            .expect("write root sqlite");
+        fs::write(data.join("kassiber.sqlite3"), fake_kassiber_sqlite_bytes())
+            .expect("write nested sqlite");
+
+        let error = inspect_import_project_directory(&root)
+            .expect_err("ambiguous import roots should be rejected");
+        assert!(error.contains("both directly and under data/"));
     }
 
     #[test]

@@ -1,20 +1,26 @@
 import { useRef, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import { ShieldCheck } from "lucide-react";
 
 import { Wordmark } from "@/components/kb/Wordmark";
 import { Button } from "@/components/ui/button";
+import { DAEMON_AUTH_REQUIRED_EVENT } from "@/daemon/client";
 import {
   activateImportProject,
   canImportProjects,
   clearImportProject,
   getTransport,
   selectImportProjectDirectory,
+  type DaemonEnvelope,
   type ImportProjectSelection,
 } from "@/daemon/transport";
 import { cn } from "@/lib/utils";
 import { useUiStore, type DataMode, type Identity } from "@/store/ui";
-import { setSessionUnlockPassphrase } from "@/store/sessionLock";
+import {
+  clearSessionUnlockPassphrase,
+  setSessionUnlockPassphrase,
+} from "@/store/sessionLock";
 import type { ProfilesSnapshot } from "@/mocks/profiles";
 
 import {
@@ -118,6 +124,7 @@ const DEV_MOCK_IDENTITY: Identity = {
 
 export const Onboarding = ({ className, steps: customSteps }: OnboardingProps) => {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const setIdentity = useUiStore((state) => state.setIdentity);
   const dataMode = useUiStore((state) => state.dataMode);
   const setDataMode = useUiStore((state) => state.setDataMode);
@@ -145,6 +152,21 @@ export const Onboarding = ({ className, steps: customSteps }: OnboardingProps) =
     value: OnboardingForm[K],
   ) => {
     setForm((current) => ({ ...current, [key]: value }));
+  };
+
+  const clearDaemonQueryCache = () => {
+    void queryClient.cancelQueries({ queryKey: ["daemon"] });
+    queryClient.removeQueries({ queryKey: ["daemon"] });
+  };
+
+  const handleAuthRequired = (envelope: DaemonEnvelope) => {
+    clearSessionUnlockPassphrase();
+    clearDaemonQueryCache();
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(
+        new CustomEvent(DAEMON_AUTH_REQUIRED_EVENT, { detail: envelope }),
+      );
+    }
   };
 
   const finish = async () => {
@@ -262,6 +284,7 @@ export const Onboarding = ({ className, steps: customSteps }: OnboardingProps) =
         kind: "ui.profiles.snapshot",
       });
       if (envelope.kind === "auth_required") {
+        handleAuthRequired(envelope);
         throw new Error("Database passphrase is required.");
       }
       if (envelope.kind === "error" || envelope.error) {
@@ -297,7 +320,8 @@ export const Onboarding = ({ className, steps: customSteps }: OnboardingProps) =
         },
       });
       if (envelope.kind === "auth_required") {
-        return;
+        handleAuthRequired(envelope);
+        throw new Error("Database passphrase is required.");
       }
       if (envelope.kind === "error" || envelope.error) {
         throw new Error(envelope.error?.message ?? "Could not open project.");
@@ -330,6 +354,7 @@ export const Onboarding = ({ className, steps: customSteps }: OnboardingProps) =
       }
       setDataMode("real");
       const activated = await activateImportProject(picked.dataRoot);
+      clearDaemonQueryCache();
       setImportSelection(activated);
       activatedImport = true;
       if (!activated.encrypted) {
@@ -359,6 +384,7 @@ export const Onboarding = ({ className, steps: customSteps }: OnboardingProps) =
       .then(async () => {
         const previousDataMode = preImportDataModeRef.current;
         await setSessionUnlockPassphrase(null);
+        clearDaemonQueryCache();
         if (previousDataMode) {
           setDataMode(previousDataMode);
         }

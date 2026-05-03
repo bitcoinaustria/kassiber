@@ -979,14 +979,17 @@ mod tests {
     #[cfg(unix)]
     use std::os::unix::fs::PermissionsExt;
 
+    static TEST_TEMP_COUNTER: AtomicU64 = AtomicU64::new(1);
+
     #[cfg(unix)]
     fn write_stub_daemon() -> (PathBuf, PathBuf) {
         let unique = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .expect("clock before epoch")
             .as_nanos();
+        let counter = TEST_TEMP_COUNTER.fetch_add(1, Ordering::SeqCst);
         let dir = env::temp_dir().join(format!(
-            "kassiber-supervisor-test-{}-{unique}",
+            "kassiber-supervisor-test-{}-{unique}-{counter}",
             std::process::id()
         ));
         fs::create_dir_all(&dir).expect("create temp dir");
