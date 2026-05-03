@@ -171,10 +171,15 @@ export const mockDaemon: DaemonTransport = {
       const args = (req.args ?? {}) as {
         workspace_id?: unknown;
         label?: unknown;
+        source_profile_id?: unknown;
       };
       const workspaceId =
         typeof args.workspace_id === "string" ? args.workspace_id : "";
       const label = typeof args.label === "string" ? args.label.trim() : "";
+      const sourceProfileId =
+        typeof args.source_profile_id === "string"
+          ? args.source_profile_id
+          : "";
       const workspace = mockProfilesSnapshot.workspaces.find(
         (candidate) => candidate.id === workspaceId,
       );
@@ -202,12 +207,30 @@ export const mockDaemon: DaemonTransport = {
           },
         };
       }
+      const sourceProfile = sourceProfileId
+        ? workspace.profiles.find((candidate) => candidate.id === sourceProfileId)
+        : null;
+      if (sourceProfileId && !sourceProfile) {
+        return {
+          kind: "error",
+          schema_version: 1,
+          request_id: req.request_id,
+          error: {
+            code: "validation",
+            message: "source profile not found in workspace",
+            retryable: false,
+          },
+        };
+      }
       const firstProfile = workspace.profiles[0];
       const profile = {
         id: `mock-profile-${Date.now()}`,
         name: label,
         role: "Owner" as const,
-        taxPolicy: firstProfile?.taxPolicy ?? `${workspace.jurisdiction} defaults`,
+        taxPolicy:
+          sourceProfile?.taxPolicy ??
+          firstProfile?.taxPolicy ??
+          `${workspace.jurisdiction} defaults`,
         accounts: 1,
         wallets: 0,
         lastOpened: "Just now",

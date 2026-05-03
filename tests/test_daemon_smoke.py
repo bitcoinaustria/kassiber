@@ -738,6 +738,40 @@ class DaemonSmokeTest(unittest.TestCase):
                 "--gains-algorithm",
                 "HIFO",
             )
+            _run_cli(
+                data_root,
+                "profiles",
+                "create",
+                "Template",
+                "--fiat-currency",
+                "USD",
+                "--tax-long-term-days",
+                "99",
+                "--gains-algorithm",
+                "LOFO",
+            )
+            _run_cli(data_root, "workspaces", "create", "Other")
+            _run_cli(
+                data_root,
+                "profiles",
+                "create",
+                "Other Template",
+                "--fiat-currency",
+                "GBP",
+                "--tax-long-term-days",
+                "14",
+                "--gains-algorithm",
+                "FIFO",
+            )
+            _run_cli(
+                data_root,
+                "context",
+                "set",
+                "--workspace",
+                "Demo",
+                "--profile",
+                "Main",
+            )
 
             proc = _start_daemon(data_root)
             try:
@@ -748,7 +782,18 @@ class DaemonSmokeTest(unittest.TestCase):
                     {"request_id": "profiles-1", "kind": "ui.profiles.snapshot"},
                 )
                 before = _read_payload_timeout(proc)
-                workspace_id = before["data"]["workspaces"][0]["id"]
+                workspaces = {
+                    workspace["name"]: workspace
+                    for workspace in before["data"]["workspaces"]
+                }
+                workspace_id = workspaces["Demo"]["id"]
+                before_profiles = {
+                    profile["name"]: profile
+                    for workspace in before["data"]["workspaces"]
+                    for profile in workspace["profiles"]
+                }
+                template_id = before_profiles["Template"]["id"]
+                other_template_id = before_profiles["Other Template"]["id"]
 
                 _write_payload(
                     proc,
@@ -771,12 +816,60 @@ class DaemonSmokeTest(unittest.TestCase):
 
                 _write_payload(
                     proc,
+                    {
+                        "request_id": "create-profile-2",
+                        "kind": "ui.profiles.create",
+                        "args": {
+                            "workspace_id": workspace_id,
+                            "source_profile_id": template_id,
+                            "label": "Template Copy",
+                        },
+                    },
+                )
+                created_from_template = _read_payload_timeout(proc)
+                self.assertEqual(created_from_template["kind"], "ui.profiles.create")
+                self.assertEqual(
+                    created_from_template["data"]["profile"]["name"],
+                    "Template Copy",
+                )
+                self.assertEqual(
+                    created_from_template["data"]["defaults"]["fiat_currency"],
+                    "USD",
+                )
+                self.assertEqual(
+                    created_from_template["data"]["defaults"]["gains_algorithm"],
+                    "LOFO",
+                )
+                self.assertEqual(
+                    created_from_template["data"]["defaults"]["tax_long_term_days"],
+                    99,
+                )
+
+                _write_payload(
+                    proc,
+                    {
+                        "request_id": "create-profile-cross-workspace",
+                        "kind": "ui.profiles.create",
+                        "args": {
+                            "workspace_id": workspace_id,
+                            "source_profile_id": other_template_id,
+                            "label": "Wrong Workspace Copy",
+                        },
+                    },
+                )
+                rejected = _read_payload_timeout(proc)
+                self.assertEqual(rejected["kind"], "error")
+                self.assertEqual(rejected["error"]["code"], "validation")
+                self.assertIn("source profile", rejected["error"]["message"])
+
+                _write_payload(
+                    proc,
                     {"request_id": "profiles-2", "kind": "ui.profiles.snapshot"},
                 )
                 after = _read_payload_timeout(proc)
                 self.assertEqual(
                     after["data"]["activeProfileId"],
-                    created["data"]["activeProfileId"],
+                    created_from_template["data"]["activeProfileId"],
                 )
                 profiles = {
                     profile["name"]: profile
@@ -788,13 +881,18 @@ class DaemonSmokeTest(unittest.TestCase):
                     profiles["Side"]["taxPolicy"],
                     "Generic - HIFO - CHF - 730 day long-term",
                 )
+                self.assertEqual(
+                    profiles["Template Copy"]["taxPolicy"],
+                    "Generic - LOFO - USD - 99 day long-term",
+                )
                 self.assertEqual(profiles["Side"]["accounts"], 1)
-                self.assertTrue(profiles["Side"]["active"])
+                self.assertEqual(profiles["Template Copy"]["accounts"], 1)
+                self.assertTrue(profiles["Template Copy"]["active"])
 
                 _write_payload(proc, {"request_id": "status-1", "kind": "status"})
                 status = _read_payload_timeout(proc)
                 self.assertEqual(status["data"]["current_workspace"], "Demo")
-                self.assertEqual(status["data"]["current_profile"], "Side")
+                self.assertEqual(status["data"]["current_profile"], "Template Copy")
 
                 _write_payload(
                     proc,

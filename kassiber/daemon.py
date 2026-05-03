@@ -1664,7 +1664,38 @@ def _switch_profile_payload(
 def _profile_defaults_for_workspace(
     conn: sqlite3.Connection,
     workspace_id: str,
+    source_profile_id: str | None = None,
 ) -> dict[str, Any]:
+    if source_profile_id:
+        row = conn.execute(
+            """
+            SELECT
+                id,
+                fiat_currency,
+                tax_country,
+                tax_long_term_days,
+                gains_algorithm
+            FROM profiles
+            WHERE workspace_id = ?
+              AND id = ?
+            """,
+            (workspace_id, source_profile_id),
+        ).fetchone()
+        if row is None:
+            raise AppError(
+                "source profile not found in workspace",
+                code="validation",
+                hint="Choose a profile from the same workspace as the new profile.",
+                details={"source_profile_id": source_profile_id},
+                retryable=False,
+            )
+        return {
+            "fiat_currency": row["fiat_currency"],
+            "tax_country": row["tax_country"],
+            "tax_long_term_days": row["tax_long_term_days"],
+            "gains_algorithm": row["gains_algorithm"],
+        }
+
     context = current_context_snapshot(conn)
     rows = conn.execute(
         """
@@ -1720,7 +1751,21 @@ def _create_profile_payload(
             retryable=False,
         )
     workspace_id = workspace_id.strip()
-    defaults = _profile_defaults_for_workspace(conn, workspace_id)
+    source_profile_id = args.get("source_profile_id")
+    if source_profile_id is not None:
+        if not isinstance(source_profile_id, str) or not source_profile_id.strip():
+            raise AppError(
+                "ui.profiles.create source_profile_id must be a profile id",
+                code="validation",
+                hint="Choose an existing profile to copy settings from.",
+                retryable=False,
+            )
+        source_profile_id = source_profile_id.strip()
+    defaults = _profile_defaults_for_workspace(
+        conn,
+        workspace_id,
+        source_profile_id,
+    )
     profile = core_accounts.create_profile(
         conn,
         workspace_id,

@@ -13,6 +13,7 @@ import {
   ArrowRight,
   BriefcaseBusiness,
   CheckCircle2,
+  Copy,
   FolderPlus,
   Landmark,
   Plus,
@@ -78,6 +79,7 @@ function ProfilesView({ snapshot }: { snapshot: ProfilesSnapshot }) {
   const [profileWorkspace, setProfileWorkspace] = useState<Workspace | null>(
     null,
   );
+  const [profileSource, setProfileSource] = useState<Profile | null>(null);
   const [profileName, setProfileName] = useState("");
   const [workspaceDialogOpen, setWorkspaceDialogOpen] = useState(false);
   const [workspaceName, setWorkspaceName] = useState("");
@@ -118,11 +120,15 @@ function ProfilesView({ snapshot }: { snapshot: ProfilesSnapshot }) {
     setPendingSwitch({ workspace, profile });
   };
 
-  const requestCreateProfile = (workspace: Workspace | null) => {
+  const requestCreateProfile = (
+    workspace: Workspace | null,
+    sourceProfile: Profile | null = null,
+  ) => {
     if (!workspace) return;
     setProfileError(null);
     setProfileName("");
     setProfileWorkspace(workspace);
+    setProfileSource(sourceProfile);
   };
 
   const submitProfile = () => {
@@ -134,11 +140,16 @@ function ProfilesView({ snapshot }: { snapshot: ProfilesSnapshot }) {
     }
     setProfileError(null);
     createProfile.mutate(
-      { workspace_id: profileWorkspace.id, label },
+      {
+        workspace_id: profileWorkspace.id,
+        label,
+        ...(profileSource ? { source_profile_id: profileSource.id } : {}),
+      },
       {
         onSuccess: (response) => {
           setActiveId(response.data?.activeProfileId ?? "");
           setProfileWorkspace(null);
+          setProfileSource(null);
           setProfileName("");
         },
         onError: (error) => {
@@ -217,7 +228,7 @@ function ProfilesView({ snapshot }: { snapshot: ProfilesSnapshot }) {
             onClick={() => requestCreateProfile(activeWorkspace)}
           >
             <UserPlus className="size-4" aria-hidden="true" />
-            Profile
+            New profile
           </Button>
           <Button
             type="button"
@@ -261,6 +272,9 @@ function ProfilesView({ snapshot }: { snapshot: ProfilesSnapshot }) {
             workspace={workspace}
             activeId={activeId}
             onCreateProfile={() => requestCreateProfile(workspace)}
+            onCreateFromProfile={(profile) =>
+              requestCreateProfile(workspace, profile)
+            }
             onPick={(profile) => requestSwitch(workspace, profile)}
           />
         ))}
@@ -283,6 +297,7 @@ function ProfilesView({ snapshot }: { snapshot: ProfilesSnapshot }) {
         isSubmitting={createProfile.isPending}
         name={profileName}
         open={Boolean(profileWorkspace)}
+        sourceProfile={profileSource}
         workspace={profileWorkspace}
         onNameChange={(value) => {
           setProfileName(value);
@@ -292,6 +307,7 @@ function ProfilesView({ snapshot }: { snapshot: ProfilesSnapshot }) {
           if (createProfile.isPending) return;
           if (!open) {
             setProfileWorkspace(null);
+            setProfileSource(null);
             setProfileName("");
             setProfileError(null);
           }
@@ -365,6 +381,7 @@ interface WorkspaceSectionProps {
   workspace: Workspace;
   activeId: string;
   onCreateProfile: () => void;
+  onCreateFromProfile: (profile: Profile) => void;
   onPick: (profile: Profile) => void;
 }
 
@@ -372,6 +389,7 @@ function WorkspaceSection({
   workspace,
   activeId,
   onCreateProfile,
+  onCreateFromProfile,
   onPick,
 }: WorkspaceSectionProps) {
   return (
@@ -395,7 +413,7 @@ function WorkspaceSection({
             onClick={onCreateProfile}
           >
             <Plus className="size-4" aria-hidden="true" />
-            Profile
+            New profile
           </Button>
         </div>
       </CardHeader>
@@ -405,6 +423,7 @@ function WorkspaceSection({
             key={profile.id}
             profile={profile}
             isActive={profile.id === activeId}
+            onCreateFrom={() => onCreateFromProfile(profile)}
             onPick={() => onPick(profile)}
           />
         ))}
@@ -418,7 +437,7 @@ function WorkspaceSection({
             New profile in {workspace.name}
           </span>
           <span className="text-xs text-muted-foreground">
-            Inherit workspace defaults
+            Start from workspace defaults
           </span>
         </button>
       </CardContent>
@@ -429,67 +448,98 @@ function WorkspaceSection({
 interface ProfileCardProps {
   profile: Profile;
   isActive: boolean;
+  onCreateFrom: () => void;
   onPick: () => void;
 }
 
-function ProfileCard({ profile, isActive, onPick }: ProfileCardProps) {
+function ProfileCard({
+  profile,
+  isActive,
+  onCreateFrom,
+  onPick,
+}: ProfileCardProps) {
   return (
-    <button
-      type="button"
-      aria-current={isActive ? "true" : undefined}
-      aria-label={
-        isActive ? `Current profile: ${profile.name}` : `Switch to ${profile.name}`
-      }
-      onClick={onPick}
+    <div
       className={cn(
         "flex min-h-[178px] flex-col justify-between rounded-xl border p-4 text-left transition-colors hover:bg-muted/35",
         isActive ? "border-foreground bg-muted/45" : "bg-background",
       )}
     >
-      <div className="space-y-3">
-        <div className="flex items-start justify-between gap-3">
-          <div className="min-w-0">
-            <p className="truncate font-medium">{profile.name}</p>
-            <p className="mt-1 text-xs text-muted-foreground">
-              {profile.role} · opened {profile.lastOpened}
-            </p>
+      <button
+        type="button"
+        aria-current={isActive ? "true" : undefined}
+        aria-label={
+          isActive
+            ? `Current profile: ${profile.name}`
+            : `Switch to ${profile.name}`
+        }
+        onClick={onPick}
+        className="flex flex-1 flex-col justify-between text-left"
+      >
+        <div className="space-y-3">
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0">
+              <p className="truncate font-medium">{profile.name}</p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                {profile.role} · opened {profile.lastOpened}
+              </p>
+            </div>
+            {isActive && (
+              <span className="inline-flex items-center gap-1 rounded-md border border-emerald-500/25 bg-emerald-500/10 px-2 py-1 text-xs font-medium text-emerald-700 dark:text-emerald-300">
+                <CheckCircle2 className="size-3" aria-hidden="true" />
+                Active
+              </span>
+            )}
           </div>
-          {isActive && (
-            <span className="inline-flex items-center gap-1 rounded-md border border-emerald-500/25 bg-emerald-500/10 px-2 py-1 text-xs font-medium text-emerald-700 dark:text-emerald-300">
-              <CheckCircle2 className="size-3" aria-hidden="true" />
-              Active
+
+          <div className="rounded-lg border bg-muted/30 p-3">
+            <p className="text-xs font-medium text-muted-foreground">
+              Tax policy
+            </p>
+            <p className="mt-1 text-sm">{profile.taxPolicy}</p>
+          </div>
+        </div>
+
+        <div className="mt-4 flex items-end justify-between gap-3">
+          <div className="flex gap-4 text-sm">
+            <span>
+              <span className="block text-xs text-muted-foreground">
+                Accounts
+              </span>
+              {profile.accounts}
             </span>
-          )}
-        </div>
-
-        <div className="rounded-lg border bg-muted/30 p-3">
-          <p className="text-xs font-medium text-muted-foreground">Tax policy</p>
-          <p className="mt-1 text-sm">{profile.taxPolicy}</p>
-        </div>
-      </div>
-
-      <div className="mt-4 flex items-end justify-between gap-3">
-        <div className="flex gap-4 text-sm">
-          <span>
-            <span className="block text-xs text-muted-foreground">Accounts</span>
-            {profile.accounts}
-          </span>
-          <span>
-            <span className="block text-xs text-muted-foreground">Wallets</span>
-            {profile.wallets}
+            <span>
+              <span className="block text-xs text-muted-foreground">
+                Wallets
+              </span>
+              {profile.wallets}
+            </span>
+          </div>
+          <span
+            className={cn(
+              "inline-flex items-center gap-1 text-sm font-medium",
+              isActive ? "text-foreground" : "text-muted-foreground",
+            )}
+          >
+            {isActive ? "Current" : "Switch"}
+            <ArrowRight className="size-4" aria-hidden="true" />
           </span>
         </div>
-        <span
-          className={cn(
-            "inline-flex items-center gap-1 text-sm font-medium",
-            isActive ? "text-foreground" : "text-muted-foreground",
-          )}
+      </button>
+
+      <div className="mt-4 border-t pt-3">
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className="w-full justify-center"
+          onClick={onCreateFrom}
         >
-          {isActive ? "Current" : "Switch"}
-          <ArrowRight className="size-4" aria-hidden="true" />
-        </span>
+          <Copy className="size-4" aria-hidden="true" />
+          New from this
+        </Button>
       </div>
-    </button>
+    </div>
   );
 }
 
@@ -498,6 +548,7 @@ interface CreateProfileDialogProps {
   isSubmitting: boolean;
   name: string;
   open: boolean;
+  sourceProfile: Profile | null;
   workspace: Workspace | null;
   onNameChange: (value: string) => void;
   onOpenChange: (open: boolean) => void;
@@ -509,6 +560,7 @@ function CreateProfileDialog({
   isSubmitting,
   name,
   open,
+  sourceProfile,
   workspace,
   onNameChange,
   onOpenChange,
@@ -527,9 +579,11 @@ function CreateProfileDialog({
           <DialogHeader>
             <DialogTitle>New profile</DialogTitle>
             <DialogDescription>
-              {workspace
-                ? `Create a profile in ${workspace.name} using that workspace's defaults.`
-                : "Create a profile using workspace defaults."}
+              {workspace && sourceProfile
+                ? `Create a profile in ${workspace.name} using ${sourceProfile.name}'s settings.`
+                : workspace
+                  ? `Create a profile in ${workspace.name} using workspace defaults.`
+                  : "Create a profile using workspace defaults."}
             </DialogDescription>
           </DialogHeader>
 
@@ -543,6 +597,23 @@ function CreateProfileDialog({
             </div>
           )}
 
+          {sourceProfile && (
+            <div className="rounded-lg border bg-muted/25 p-3 text-sm">
+              <p className="text-xs font-medium text-muted-foreground">
+                Settings source
+              </p>
+              <p className="mt-1 font-medium">{sourceProfile.name}</p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Copies tax policy, fiat currency, holding period, and lot
+                selection only. Wallets, accounts, and transactions stay in the
+                original profile.
+              </p>
+              <p className="mt-2 rounded-md border bg-background/70 px-2 py-1 text-xs">
+                {sourceProfile.taxPolicy}
+              </p>
+            </div>
+          )}
+
           <div className="space-y-2">
             <Label htmlFor="profile-name">Profile name</Label>
             <Input
@@ -551,7 +622,7 @@ function CreateProfileDialog({
               autoFocus
               aria-invalid={Boolean(errorMessage)}
               disabled={isSubmitting}
-              placeholder="Treasury"
+              placeholder="2026 tax"
               value={name}
               onChange={(event) => onNameChange(event.currentTarget.value)}
             />
