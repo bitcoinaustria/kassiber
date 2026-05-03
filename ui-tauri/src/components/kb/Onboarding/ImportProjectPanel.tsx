@@ -88,7 +88,7 @@ export function ImportProjectPanel({
         throw new Error(envelope.error?.message ?? "Could not open books.");
       }
 
-      const taxCountry = inferTaxCountry(workspace, profile);
+      const taxCountry = normalizeTaxCountry(profile.taxCountry);
       const identity: Identity = {
         name: profile.name,
         workspace: workspace.name,
@@ -96,7 +96,15 @@ export function ImportProjectPanel({
         encrypted,
         profile: profile.name,
         taxCountry,
-        fiatCurrency: workspace.currency,
+        fiatCurrency: profile.fiatCurrency ?? workspace.currency,
+        taxLongTermDays: normalizeTaxLongTermDays(
+          profile.taxLongTermDays,
+          taxCountry,
+        ),
+        gainsAlgorithm: normalizeGainsAlgorithm(
+          profile.gainsAlgorithm,
+          taxCountry,
+        ),
         databaseMode: encrypted ? "sqlcipher" : "plaintext",
         importedProject: {
           stateRoot: selection.stateRoot,
@@ -332,13 +340,37 @@ function ProfileList({
   );
 }
 
-function inferTaxCountry(
-  workspace: Workspace,
-  profile: Profile,
-): "at" | "generic" {
-  const haystack =
-    `${workspace.jurisdiction} ${profile.taxPolicy}`.toLowerCase();
-  return haystack.includes("austria") || /(^|\W)at(\W|$)/.test(haystack)
-    ? "at"
-    : "generic";
+function normalizeTaxCountry(
+  taxCountry: Profile["taxCountry"],
+): NonNullable<Identity["taxCountry"]> {
+  return taxCountry === "at" ? "at" : "generic";
+}
+
+function normalizeTaxLongTermDays(
+  value: Profile["taxLongTermDays"],
+  taxCountry: NonNullable<Identity["taxCountry"]>,
+): number {
+  return typeof value === "number" && Number.isFinite(value)
+    ? value
+    : taxCountry === "at"
+      ? 0
+      : 365;
+}
+
+const GAINS_ALGORITHMS = new Set<NonNullable<Identity["gainsAlgorithm"]>>([
+  "FIFO",
+  "LIFO",
+  "HIFO",
+  "LOFO",
+  "MOVING_AVERAGE_AT",
+]);
+
+function normalizeGainsAlgorithm(
+  value: Profile["gainsAlgorithm"],
+  taxCountry: NonNullable<Identity["taxCountry"]>,
+): NonNullable<Identity["gainsAlgorithm"]> {
+  if (value && GAINS_ALGORITHMS.has(value)) {
+    return value;
+  }
+  return taxCountry === "at" ? "MOVING_AVERAGE_AT" : "FIFO";
 }

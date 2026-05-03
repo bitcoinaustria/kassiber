@@ -251,6 +251,9 @@ fn resolve_import_data_root(path: &Path) -> Result<Option<(PathBuf, PathBuf, boo
     }
 
     let data_root = path.join(DEFAULT_DATA_DIR);
+    let Some(data_root) = inspect_data_root_candidate(&data_root)? else {
+        return Ok(None);
+    };
     for filename in DB_FILENAMES {
         let database = data_root.join(filename);
         if let Some(encrypted) = inspect_database_candidate(&database)? {
@@ -259,6 +262,27 @@ fn resolve_import_data_root(path: &Path) -> Result<Option<(PathBuf, PathBuf, boo
     }
 
     Ok(None)
+}
+
+fn inspect_data_root_candidate(path: &Path) -> Result<Option<PathBuf>, String> {
+    let metadata = match std::fs::symlink_metadata(path) {
+        Ok(metadata) => metadata,
+        Err(error) if error.kind() == ErrorKind::NotFound => return Ok(None),
+        Err(error) => {
+            return Err(format!(
+                "Kassiber data folder candidate could not be inspected: {error}"
+            ));
+        }
+    };
+    if metadata.file_type().is_symlink() {
+        return Err("Kassiber data folders must not be symlinks.".to_string());
+    }
+    if !metadata.file_type().is_dir() {
+        return Ok(None);
+    }
+    path.canonicalize()
+        .map(Some)
+        .map_err(|error| format!("Kassiber data folder could not be opened: {error}"))
 }
 
 fn inspect_database_candidate(path: &Path) -> Result<Option<bool>, String> {
@@ -798,6 +822,25 @@ mod tests {
         let error = inspect_import_project_directory(&data)
             .expect_err("database symlink should be rejected");
         assert!(error.contains("symlinks"));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn import_project_rejects_data_folder_symlink() {
+        let root = unique_temp_dir("symlink-data-root");
+        let target = unique_temp_dir("symlink-data-target");
+        fs::write(
+            target.join("kassiber.sqlite3"),
+            fake_kassiber_sqlite_bytes(),
+        )
+        .expect("write target sqlite");
+        std::os::unix::fs::symlink(&target, root.join("data")).expect("create data folder symlink");
+
+        let error = inspect_import_project_directory(&root)
+            .expect_err("data folder symlink should be rejected");
+        assert!(error.contains("data folders must not be symlinks"));
+
+        let _ = fs::remove_dir_all(target);
     }
 
     #[test]

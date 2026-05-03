@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { ShieldCheck } from "lucide-react";
 
@@ -13,7 +13,7 @@ import {
   type ImportProjectSelection,
 } from "@/daemon/transport";
 import { cn } from "@/lib/utils";
-import { useUiStore, type Identity } from "@/store/ui";
+import { useUiStore, type DataMode, type Identity } from "@/store/ui";
 import { setSessionUnlockPassphrase } from "@/store/sessionLock";
 import type { ProfilesSnapshot } from "@/mocks/profiles";
 
@@ -119,7 +119,9 @@ const DEV_MOCK_IDENTITY: Identity = {
 export const Onboarding = ({ className, steps: customSteps }: OnboardingProps) => {
   const navigate = useNavigate();
   const setIdentity = useUiStore((state) => state.setIdentity);
+  const dataMode = useUiStore((state) => state.dataMode);
   const setDataMode = useUiStore((state) => state.setDataMode);
+  const preImportDataModeRef = useRef<DataMode | null>(null);
   const [flowMode, setFlowMode] = useState<"start" | "setup">(
     customSteps ? "setup" : "start",
   );
@@ -318,17 +320,31 @@ export const Onboarding = ({ className, steps: customSteps }: OnboardingProps) =
     setImportError(null);
     setImportSnapshot(null);
     setImporting(true);
+    preImportDataModeRef.current = dataMode;
+    let activatedImport = false;
     void (async () => {
       const picked = await selectImportProjectDirectory();
-      if (!picked) return;
+      if (!picked) {
+        preImportDataModeRef.current = null;
+        return;
+      }
       setDataMode("real");
       const activated = await activateImportProject(picked.dataRoot);
       setImportSelection(activated);
+      activatedImport = true;
       if (!activated.encrypted) {
         await unlockAndLoadImportedProfiles(activated, null);
       }
     })()
       .catch((error: unknown) => {
+        if (!activatedImport) {
+          const previousDataMode = preImportDataModeRef.current;
+          if (previousDataMode) {
+            setDataMode(previousDataMode);
+          }
+          preImportDataModeRef.current = null;
+          void setSessionUnlockPassphrase(null);
+        }
         setImportError(
           error instanceof Error ? error.message : "Could not import project.",
         );
@@ -340,12 +356,19 @@ export const Onboarding = ({ className, steps: customSteps }: OnboardingProps) =
     setImportError(null);
     setLoadingImportProfiles(true);
     void clearImportProject()
-      .then(() => {
+      .then(async () => {
+        const previousDataMode = preImportDataModeRef.current;
+        await setSessionUnlockPassphrase(null);
+        if (previousDataMode) {
+          setDataMode(previousDataMode);
+        }
+        preImportDataModeRef.current = null;
         setImportSelection(null);
         setImportSnapshot(null);
         setFlowMode("start");
       })
       .catch((error: unknown) => {
+        void setSessionUnlockPassphrase(null);
         setImportError(
           error instanceof Error
             ? error.message

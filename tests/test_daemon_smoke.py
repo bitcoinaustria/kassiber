@@ -885,6 +885,14 @@ class DaemonSmokeTest(unittest.TestCase):
                     profiles["Template Copy"]["taxPolicy"],
                     "Generic - LOFO - USD - 99 day long-term",
                 )
+                self.assertEqual(profiles["Side"]["taxCountry"], "generic")
+                self.assertEqual(profiles["Side"]["fiatCurrency"], "CHF")
+                self.assertEqual(profiles["Side"]["taxLongTermDays"], 730)
+                self.assertEqual(profiles["Side"]["gainsAlgorithm"], "HIFO")
+                self.assertEqual(profiles["Template Copy"]["taxCountry"], "generic")
+                self.assertEqual(profiles["Template Copy"]["fiatCurrency"], "USD")
+                self.assertEqual(profiles["Template Copy"]["taxLongTermDays"], 99)
+                self.assertEqual(profiles["Template Copy"]["gainsAlgorithm"], "LOFO")
                 self.assertEqual(profiles["Side"]["accounts"], 1)
                 self.assertEqual(profiles["Template Copy"]["accounts"], 1)
                 self.assertTrue(profiles["Template Copy"]["active"])

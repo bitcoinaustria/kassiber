@@ -129,14 +129,18 @@ impl DaemonSupervisor {
             SupervisorError::new("daemon_lock_poisoned", "daemon process lock is poisoned")
                 .retryable()
         })?;
-        if let Some(process) = slot.take() {
-            process.mark_broken();
-            process.kill();
-        }
         let mut configured = self.data_root.lock().map_err(|_| {
             SupervisorError::new("daemon_lock_poisoned", "daemon data-root lock is poisoned")
                 .retryable()
         })?;
+        let replacement = Arc::new(DaemonProcess::spawn(
+            self.resource_dir.as_deref(),
+            data_root.clone(),
+        )?);
+        if let Some(process) = slot.replace(replacement) {
+            process.mark_broken();
+            process.kill();
+        }
         *configured = data_root;
         Ok(())
     }
@@ -1126,5 +1130,94 @@ for line in sys.stdin:
             |_| {},
         );
         let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn set_data_root_warms_replacement_daemon_before_returning() {
+        let (dir, script) = write_stub_daemon();
+        let sidecar = dir.join(sidecar_filename().expect("sidecar name"));
+        fs::rename(&script, &sidecar).expect("install stub sidecar");
+        let supervisor = DaemonSupervisor::new(Some(dir.clone()));
+        let data_root = dir.join("imported-data");
+        fs::create_dir_all(&data_root).expect("create data root");
+
+        supervisor
+            .set_data_root(data_root.clone())
+            .expect("warm replacement daemon");
+
+        assert_eq!(
+            supervisor.data_root.lock().expect("data root").clone(),
+            Some(data_root)
+        );
+        let response = supervisor
+            .invoke_inner("fast", None, false, Some(json!("fast-after-root")), |_| {})
+            .expect("replacement daemon is ready");
+        assert_eq!(response.get("kind").and_then(Value::as_str), Some("fast"));
+
+        let _ = supervisor.invoke_inner(
+            "daemon.shutdown",
+            None,
+            false,
+            Some(json!("shutdown-replacement")),
+            |_| {},
+        );
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn set_data_root_keeps_existing_daemon_when_replacement_fails() {
+        let (old_dir, old_script) = write_stub_daemon();
+        let process = DaemonProcess::spawn_command(DaemonCommand {
+            program: old_script,
+            args: Vec::new(),
+            cwd: old_dir.clone(),
+            source: "env_python",
+        })
+        .expect("spawn old daemon");
+        let unique = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("clock before epoch")
+            .as_nanos();
+        let sidecar_dir = env::temp_dir().join(format!(
+            "kassiber-supervisor-bad-sidecar-{}-{unique}",
+            std::process::id()
+        ));
+        fs::create_dir_all(&sidecar_dir).expect("create bad sidecar dir");
+        fs::write(
+            sidecar_dir.join(sidecar_filename().expect("sidecar name")),
+            b"not executable",
+        )
+        .expect("write bad sidecar");
+        let supervisor = DaemonSupervisor {
+            process: Mutex::new(Some(Arc::new(process))),
+            resource_dir: Some(sidecar_dir.clone()),
+            data_root: Mutex::new(None),
+            next_request_id: AtomicU64::new(1),
+        };
+
+        let error = supervisor
+            .set_data_root(sidecar_dir.join("imported-data"))
+            .expect_err("replacement spawn should fail");
+        assert_eq!(error.code, "daemon_spawn_failed");
+        assert_eq!(
+            supervisor.data_root.lock().expect("data root").clone(),
+            None
+        );
+        let response = supervisor
+            .invoke_inner("fast", None, false, Some(json!("fast-after-fail")), |_| {})
+            .expect("old daemon still handles requests");
+        assert_eq!(response.get("kind").and_then(Value::as_str), Some("fast"));
+
+        let _ = supervisor.invoke_inner(
+            "daemon.shutdown",
+            None,
+            false,
+            Some(json!("shutdown-old")),
+            |_| {},
+        );
+        let _ = fs::remove_dir_all(old_dir);
+        let _ = fs::remove_dir_all(sidecar_dir);
     }
 }

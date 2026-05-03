@@ -231,6 +231,22 @@ export const mockDaemon: DaemonTransport = {
           sourceProfile?.taxPolicy ??
           firstProfile?.taxPolicy ??
           `${workspace.jurisdiction} defaults`,
+        fiatCurrency:
+          sourceProfile?.fiatCurrency ??
+          firstProfile?.fiatCurrency ??
+          workspace.currency,
+        taxCountry:
+          sourceProfile?.taxCountry ??
+          firstProfile?.taxCountry ??
+          (workspace.jurisdiction === "Austria" ? "at" : "generic"),
+        taxLongTermDays:
+          sourceProfile?.taxLongTermDays ??
+          firstProfile?.taxLongTermDays ??
+          (workspace.jurisdiction === "Austria" ? 0 : 365),
+        gainsAlgorithm:
+          sourceProfile?.gainsAlgorithm ??
+          firstProfile?.gainsAlgorithm ??
+          (workspace.jurisdiction === "Austria" ? "MOVING_AVERAGE_AT" : "FIFO"),
         accounts: 1,
         wallets: 0,
         lastOpened: "Just now",

@@ -10,12 +10,23 @@
 export type WorkspaceKind = "Personal" | "Business" | "Household";
 
 export type ProfileRole = "Owner" | "Treasurer" | "Auditor";
+export type ProfileTaxCountry = "at" | "generic";
+export type ProfileGainsAlgorithm =
+  | "FIFO"
+  | "LIFO"
+  | "HIFO"
+  | "LOFO"
+  | "MOVING_AVERAGE_AT";
 
 export interface Profile {
   id: string;
   name: string;
   role: ProfileRole;
   taxPolicy: string;
+  fiatCurrency?: string;
+  taxCountry?: ProfileTaxCountry;
+  taxLongTermDays?: number;
+  gainsAlgorithm?: ProfileGainsAlgorithm;
   accounts: number;
   wallets: number;
   lastOpened: string;
@@ -57,6 +68,10 @@ export const MOCK_PROFILES: ProfilesSnapshot = {
           name: "Alice",
           role: "Owner",
           taxPolicy: "Private · AT moving average",
+          fiatCurrency: "EUR",
+          taxCountry: "at",
+          taxLongTermDays: 0,
+          gainsAlgorithm: "MOVING_AVERAGE_AT",
           accounts: 4,
           wallets: 5,
           lastOpened: "Just now",
@@ -67,6 +82,10 @@ export const MOCK_PROFILES: ProfilesSnapshot = {
           name: "Alice · Self-employed",
           role: "Owner",
           taxPolicy: "Self-employed · FIFO · full income tax",
+          fiatCurrency: "EUR",
+          taxCountry: "generic",
+          taxLongTermDays: 365,
+          gainsAlgorithm: "FIFO",
           accounts: 3,
           wallets: 2,
           lastOpened: "3 days ago",
@@ -86,6 +105,10 @@ export const MOCK_PROFILES: ProfilesSnapshot = {
           name: "Hyperion GmbH · Operating",
           role: "Treasurer",
           taxPolicy: "Business · FIFO · corporate income tax",
+          fiatCurrency: "EUR",
+          taxCountry: "generic",
+          taxLongTermDays: 365,
+          gainsAlgorithm: "FIFO",
           accounts: 6,
           wallets: 8,
           lastOpened: "Yesterday",
@@ -95,6 +118,10 @@ export const MOCK_PROFILES: ProfilesSnapshot = {
           name: "Hyperion GmbH · Treasury",
           role: "Treasurer",
           taxPolicy: "Business · FIFO",
+          fiatCurrency: "EUR",
+          taxCountry: "generic",
+          taxLongTermDays: 365,
+          gainsAlgorithm: "FIFO",
           accounts: 2,
           wallets: 3,
           lastOpened: "1 week ago",
@@ -114,6 +141,10 @@ export const MOCK_PROFILES: ProfilesSnapshot = {
           name: "Household",
           role: "Owner",
           taxPolicy: "Private · shared",
+          fiatCurrency: "CHF",
+          taxCountry: "generic",
+          taxLongTermDays: 365,
+          gainsAlgorithm: "FIFO",
           accounts: 2,
           wallets: 3,
           lastOpened: "2 weeks ago",

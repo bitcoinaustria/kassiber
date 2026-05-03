@@ -50,10 +50,6 @@ import {
 } from "@/components/ui/table";
 import { useDaemon, useDaemonMutation } from "@/daemon/client";
 import { cn } from "@/lib/utils";
-import {
-  hasSessionUnlockPassphrase,
-  verifySessionUnlockPassphrase,
-} from "@/store/sessionLock";
 import { useUiStore } from "@/store/ui";
 import { useSyncProgressNotice } from "@/hooks/useSyncProgressNotice";
 import type {
@@ -304,13 +300,6 @@ function ConnectionDetailView({
     if (!passphrase) {
       setError("Enter the database passphrase.");
       return false;
-    }
-    if (hasSessionUnlockPassphrase()) {
-      const verified = await verifySessionUnlockPassphrase(passphrase);
-      if (!verified) {
-        setError("Passphrase did not unlock this session.");
-        return false;
-      }
     }
     return true;
   };

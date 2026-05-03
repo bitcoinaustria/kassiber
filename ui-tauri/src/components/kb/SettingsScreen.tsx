@@ -60,11 +60,7 @@ import {
 } from "@/components/kb/AiProviderForm";
 import { useDaemon, useDaemonMutation } from "@/daemon/client";
 import { clearImportProject } from "@/daemon/transport";
-import {
-  hasSessionUnlockPassphrase,
-  setSessionUnlockPassphrase,
-  verifySessionUnlockPassphrase,
-} from "@/store/sessionLock";
+import { setSessionUnlockPassphrase } from "@/store/sessionLock";
 import { useUiStore, type AppLockPolicy } from "@/store/ui";
 import { cn } from "@/lib/utils";
 import {
@@ -465,15 +461,6 @@ export function SettingsScreen({ onLock }: SettingsScreenProps) {
       setDeleteError(`Type ${workspaceLabel} to confirm ledger deletion.`);
       return;
     }
-    if (encryptedWorkspace && hasSessionUnlockPassphrase()) {
-      const verified = await verifySessionUnlockPassphrase(deletePassphrase);
-      if (!verified) {
-        setDeleteError("Passphrase did not unlock this session.");
-        setDeletePassphrase("");
-        return;
-      }
-    }
-
     try {
       await deleteWorkspace.mutateAsync({
         confirm: "DELETE",
