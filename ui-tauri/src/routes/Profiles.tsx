@@ -13,11 +13,9 @@ import {
   ArrowRight,
   BriefcaseBusiness,
   CheckCircle2,
-  Copy,
   FolderPlus,
   Landmark,
   Plus,
-  UserPlus,
   Users,
   Wallet,
 } from "lucide-react";
@@ -41,6 +39,13 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 import type { ProfilesSnapshot, Profile, Workspace } from "@/mocks/profiles";
 
@@ -88,11 +93,6 @@ function ProfilesView({ snapshot }: { snapshot: ProfilesSnapshot }) {
   const [workspaceError, setWorkspaceError] = useState<string | null>(null);
   const workspaces = snapshot.workspaces;
   const activeProfile = findProfile(workspaces, activeId);
-  const activeWorkspace =
-    workspaces.find((workspace) => workspace.id === snapshot.activeWorkspaceId) ??
-    activeProfile?.workspace ??
-    workspaces[0] ??
-    null;
   const profileCount = workspaces.reduce((a, w) => a + w.profiles.length, 0);
   const walletCount = workspaces.reduce(
     (total, workspace) =>
@@ -224,15 +224,6 @@ function ProfilesView({ snapshot }: { snapshot: ProfilesSnapshot }) {
         <div className="flex flex-wrap gap-2">
           <Button
             type="button"
-            variant="outline"
-            disabled={!activeWorkspace}
-            onClick={() => requestCreateProfile(activeWorkspace)}
-          >
-            <UserPlus className="size-4" aria-hidden="true" />
-            New books
-          </Button>
-          <Button
-            type="button"
             data-testid="create-workspace-button"
             onClick={() => {
               setWorkspaceError(null);
@@ -240,7 +231,7 @@ function ProfilesView({ snapshot }: { snapshot: ProfilesSnapshot }) {
             }}
           >
             <FolderPlus className="size-4" aria-hidden="true" />
-            Ledger
+            New ledger
           </Button>
         </div>
       </div>
@@ -273,9 +264,6 @@ function ProfilesView({ snapshot }: { snapshot: ProfilesSnapshot }) {
             workspace={workspace}
             activeId={activeId}
             onCreateProfile={() => requestCreateProfile(workspace)}
-            onCreateFromProfile={(profile) =>
-              requestCreateProfile(workspace, profile)
-            }
             onPick={(profile) => requestSwitch(workspace, profile)}
           />
         ))}
@@ -302,6 +290,10 @@ function ProfilesView({ snapshot }: { snapshot: ProfilesSnapshot }) {
         workspace={profileWorkspace}
         onNameChange={(value) => {
           setProfileName(value);
+          if (profileError) setProfileError(null);
+        }}
+        onSourceProfileChange={(sourceProfile) => {
+          setProfileSource(sourceProfile);
           if (profileError) setProfileError(null);
         }}
         onOpenChange={(open) => {
@@ -382,7 +374,6 @@ interface WorkspaceSectionProps {
   workspace: Workspace;
   activeId: string;
   onCreateProfile: () => void;
-  onCreateFromProfile: (profile: Profile) => void;
   onPick: (profile: Profile) => void;
 }
 
@@ -390,7 +381,6 @@ function WorkspaceSection({
   workspace,
   activeId,
   onCreateProfile,
-  onCreateFromProfile,
   onPick,
 }: WorkspaceSectionProps) {
   return (
@@ -424,23 +414,9 @@ function WorkspaceSection({
             key={profile.id}
             profile={profile}
             isActive={profile.id === activeId}
-            onCreateFrom={() => onCreateFromProfile(profile)}
             onPick={() => onPick(profile)}
           />
         ))}
-        <button
-          type="button"
-          onClick={onCreateProfile}
-          className="flex min-h-[178px] flex-col items-center justify-center gap-2 rounded-xl border border-dashed bg-muted/20 p-4 text-center transition-colors hover:bg-muted/40"
-        >
-          <Plus className="size-5 text-muted-foreground" aria-hidden="true" />
-          <span className="text-sm font-medium">
-            New books in {workspace.name}
-          </span>
-          <span className="text-xs text-muted-foreground">
-            Start from ledger defaults
-          </span>
-        </button>
       </CardContent>
     </Card>
   );
@@ -449,14 +425,12 @@ function WorkspaceSection({
 interface ProfileCardProps {
   profile: Profile;
   isActive: boolean;
-  onCreateFrom: () => void;
   onPick: () => void;
 }
 
 function ProfileCard({
   profile,
   isActive,
-  onCreateFrom,
   onPick,
 }: ProfileCardProps) {
   return (
@@ -527,19 +501,6 @@ function ProfileCard({
           </span>
         </div>
       </button>
-
-      <div className="mt-4 border-t pt-3">
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          className="w-full justify-center"
-          onClick={onCreateFrom}
-        >
-          <Copy className="size-4" aria-hidden="true" />
-          New from these settings
-        </Button>
-      </div>
     </div>
   );
 }
@@ -553,6 +514,7 @@ interface CreateProfileDialogProps {
   workspace: Workspace | null;
   onNameChange: (value: string) => void;
   onOpenChange: (open: boolean) => void;
+  onSourceProfileChange: (sourceProfile: Profile | null) => void;
   onSubmit: () => void;
 }
 
@@ -565,8 +527,12 @@ function CreateProfileDialog({
   workspace,
   onNameChange,
   onOpenChange,
+  onSourceProfileChange,
   onSubmit,
 }: CreateProfileDialogProps) {
+  const sourceValue = sourceProfile?.id ?? "__ledger_defaults__";
+  const sourceOptions = workspace?.profiles ?? [];
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-md">
@@ -581,9 +547,9 @@ function CreateProfileDialog({
             <DialogTitle>New books</DialogTitle>
             <DialogDescription>
               {workspace && sourceProfile
-                ? `Create separate books in ${workspace.name} using ${sourceProfile.name}'s settings.`
+                ? `Create separate books in ${workspace.name} from ${sourceProfile.name}'s tax settings.`
                 : workspace
-                  ? `Create separate books in ${workspace.name} using ledger defaults.`
+                  ? `Create separate books in ${workspace.name}.`
                   : "Create separate books using ledger defaults."}
             </DialogDescription>
           </DialogHeader>
@@ -598,20 +564,47 @@ function CreateProfileDialog({
             </div>
           )}
 
-          {sourceProfile && (
-            <div className="rounded-lg border bg-muted/25 p-3 text-sm">
-              <p className="text-xs font-medium text-muted-foreground">
-                Settings source
+          {workspace && sourceOptions.length > 0 && (
+            <div className="space-y-2">
+              <Label htmlFor="books-source">Start from</Label>
+              <Select
+                value={sourceValue}
+                disabled={isSubmitting}
+                onValueChange={(value) => {
+                  if (value === "__ledger_defaults__") {
+                    onSourceProfileChange(null);
+                    return;
+                  }
+                  onSourceProfileChange(
+                    sourceOptions.find((profile) => profile.id === value) ??
+                      null,
+                  );
+                }}
+              >
+                <SelectTrigger id="books-source" className="w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__ledger_defaults__">
+                    Ledger defaults
+                  </SelectItem>
+                  {sourceOptions.map((profile) => (
+                    <SelectItem key={profile.id} value={profile.id}>
+                      {profile.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-xs leading-5 text-muted-foreground">
+                Copying settings only copies tax policy, currency, holding
+                period, and lot selection. Wallets, buckets, and transactions
+                stay in the original books.
               </p>
-              <p className="mt-1 font-medium">{sourceProfile.name}</p>
-              <p className="mt-1 text-xs text-muted-foreground">
-                Copies tax policy, fiat currency, holding period, and lot
-                selection only. Wallets, buckets, and transactions stay in the
-                original books.
-              </p>
-              <p className="mt-2 rounded-md border bg-background/70 px-2 py-1 text-xs">
-                {sourceProfile.taxPolicy}
-              </p>
+              {sourceProfile && (
+                <p className="rounded-md border bg-muted/25 px-2 py-1 text-xs">
+                  {sourceProfile.taxPolicy}
+                </p>
+              )}
             </div>
           )}
 
