@@ -96,14 +96,19 @@ unlocked. It does not create a per-profile passphrase boundary; SQLCipher
 encryption is database-level.
 
 `ui.profiles.create` accepts `{"workspace_id":"...","label":"..."}` and creates
-a profile in that workspace. It inherits fiat currency, tax country, long-term
-period, and gains algorithm from the active profile in that workspace when
-available; otherwise it uses the first profile in the workspace, then generic
-EUR/FIFO defaults for empty workspaces. The new profile becomes active.
+a profile in that workspace. In desktop copy this is shown as creating new
+books inside a ledger; `workspace` and `profile` remain the daemon/API names. It
+inherits fiat currency, tax country, long-term period, and gains algorithm from
+the active profile in that workspace when available; otherwise it uses the first
+profile in the workspace, then generic EUR/FIFO defaults for empty workspaces.
+It can also accept `source_profile_id` to copy those profile settings from a
+specific profile in the same workspace. Wallets, accounts/buckets, and
+transactions are not copied. The new profile becomes active.
 
 `ui.workspace.create` accepts `{"label":"..."}` and creates an empty workspace.
-It makes the new workspace current and clears the active profile until the user
-creates or switches to a profile inside that workspace.
+Desktop copy calls this a new ledger. The daemon makes the new workspace current
+and clears the active profile until the user creates or switches to books inside
+that ledger.
 
 `ui.workspace.delete` accepts
 `{"confirm":"DELETE","confirm_workspace":"..."}` for the current workspace. Like

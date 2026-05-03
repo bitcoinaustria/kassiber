@@ -64,7 +64,7 @@ export function ImportProjectPanel({
         setOpenError(
           unlockError instanceof Error
             ? unlockError.message
-            : "Could not unlock project.",
+            : "Could not unlock database.",
         );
       })
       .finally(() => setPassphrase(""));
@@ -85,7 +85,7 @@ export function ImportProjectPanel({
         throw new Error("Database passphrase is required.");
       }
       if (envelope.kind === "error" || envelope.error) {
-        throw new Error(envelope.error?.message ?? "Could not open profile.");
+        throw new Error(envelope.error?.message ?? "Could not open books.");
       }
 
       const taxCountry = inferTaxCountry(workspace, profile);
@@ -111,7 +111,7 @@ export function ImportProjectPanel({
       setOpenError(
         profileError instanceof Error
           ? profileError.message
-          : "Could not open profile.",
+          : "Could not open books.",
       );
     } finally {
       setOpeningProfileId(null);
@@ -121,8 +121,8 @@ export function ImportProjectPanel({
   return (
     <OnboardingStepFrame>
       <OnboardingStepLeftWrapper
-        title="Import local profile"
-        eyebrow="Project"
+        title="Import local ledger"
+        eyebrow="Import"
         currentStep={0}
         totalSteps={1}
       >
@@ -131,7 +131,7 @@ export function ImportProjectPanel({
             <div className="flex items-start gap-3">
               <Database className="mt-0.5 size-4 shrink-0 text-ink" />
               <div className="min-w-0">
-                <p className="font-medium text-ink">Selected project</p>
+                <p className="font-medium text-ink">Selected local data</p>
                 <p className="mt-1 break-all font-mono text-xs text-ink-3">
                   {selection.stateRoot}
                 </p>
@@ -143,7 +143,7 @@ export function ImportProjectPanel({
               </span>
               {profileCount > 0 && (
                 <span className="rounded-md border border-line bg-paper px-2 py-1">
-                  {profileCount} profile{profileCount === 1 ? "" : "s"}
+                  {profileCount} book{profileCount === 1 ? "" : "s"}
                 </span>
               )}
             </div>
@@ -177,7 +177,7 @@ export function ImportProjectPanel({
                 disabled={!passphrase || loadingProfiles}
               >
                 <KeyRound className="size-4" aria-hidden="true" />
-                Unlock project
+                Unlock database
               </Button>
             </form>
           ) : (
@@ -222,8 +222,7 @@ export function ImportProjectPanel({
               </h3>
               <p className="mt-2 text-sm leading-6 text-ink-2">
                 The desktop daemon now points at this selected data root. Once a
-                profile opens, the same local database powers the rest of the
-                app.
+                books open, the same local database powers the rest of the app.
               </p>
             </div>
           </div>
@@ -253,7 +252,7 @@ function ProfileList({
   if (loading) {
     return (
       <div className="rounded-lg border border-line bg-paper-2 px-4 py-8 text-center text-sm text-ink-2">
-        Loading local profiles...
+        Loading local books...
       </div>
     );
   }
@@ -261,7 +260,7 @@ function ProfileList({
   if (!snapshot || snapshot.workspaces.length === 0) {
     return (
       <div className="space-y-3 rounded-lg border border-line bg-paper-2 p-4 text-sm text-ink-2">
-        <p>No profiles were found in this project.</p>
+        <p>No books were found in this local data root.</p>
         <Button
           type="button"
           variant="outline"
@@ -316,7 +315,7 @@ function ProfileList({
                       {profile.taxPolicy}
                     </p>
                     <p className="font-mono text-[10px] uppercase tracking-[0.08em] text-ink-3">
-                      {profile.accounts} accounts · {profile.wallets} wallets
+                      {profile.accounts} buckets · {profile.wallets} wallets
                     </p>
                   </div>
                   <span className="inline-flex shrink-0 items-center gap-1 text-sm font-medium text-ink">

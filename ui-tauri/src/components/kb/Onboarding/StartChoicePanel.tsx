@@ -31,7 +31,7 @@ const START_HIGHLIGHTS: Array<{
   {
     icon: Database,
     title: "One local database",
-    body: "~/.kassiber by default, or an imported project root.",
+    body: "~/.kassiber by default, or an imported ledger root.",
   },
   {
     icon: LockKeyhole,
@@ -41,7 +41,7 @@ const START_HIGHLIGHTS: Array<{
   {
     icon: FolderOpen,
     title: "Import stays local",
-    body: "Existing profiles are listed after the selected root opens.",
+    body: "Existing books are listed after the selected root opens.",
   },
 ];
 
@@ -90,8 +90,8 @@ export function StartChoicePanel({
               onClick={onImport}
               title={
                 importAvailable
-                  ? "Import an existing local Kassiber project"
-                  : "Project import is available in the desktop app"
+                  ? "Import an existing local Kassiber ledger"
+                  : "Ledger import is available in the desktop app"
               }
               className={cn(
                 "group flex min-h-[132px] w-full items-start gap-4 rounded-lg border p-4 text-left transition",
@@ -105,11 +105,11 @@ export function StartChoicePanel({
               </span>
               <span className="min-w-0 flex-1">
                 <span className="block text-base font-semibold text-ink">
-                  {importing ? "Opening project..." : "Import existing project"}
+                  {importing ? "Opening ledger..." : "Import existing ledger"}
                 </span>
                 <span className="mt-2 block text-sm leading-6 text-ink-2">
-                  Open a Kassiber state root or data folder and choose a local
-                  profile.
+                  Open a Kassiber state root or data folder and choose local
+                  books.
                 </span>
                 {!importAvailable && (
                   <span className="mt-3 block font-mono text-[10px] font-medium uppercase tracking-[0.14em] text-ink-3">

@@ -37,7 +37,7 @@ export const IdentityStep = ({
               name="workspace"
               value={form.workspace}
               placeholder="Personal ledger"
-              description="This is the local workspace shown in the app header."
+              description="This is the local ledger shown in the app header."
               onChange={(value) => update("workspace", value)}
             />
             <details className="group rounded-md border border-line bg-paper-2 px-3 py-2">
@@ -46,7 +46,7 @@ export const IdentityStep = ({
               </summary>
               <div className="pt-4">
                 <TextField
-                  label="Profile label"
+                  label="Books label"
                   name="profile"
                   value={form.profile}
                   placeholder="main"
@@ -54,7 +54,7 @@ export const IdentityStep = ({
                 />
                 <p className="m-0 mt-2 text-xs leading-5 text-ink-2">
                   Keep the default unless you plan to split this ledger into
-                  separate tax contexts later.
+                  separate private, business, or tax books later.
                 </p>
               </div>
             </details>

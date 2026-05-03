@@ -52,7 +52,7 @@ export function Profiles() {
   if (isLoading || !data?.data) {
     return (
       <div className="flex flex-1 items-center justify-center text-sm text-muted-foreground">
-        Loading profiles...
+        Loading books...
       </div>
     );
   }
@@ -135,7 +135,7 @@ function ProfilesView({ snapshot }: { snapshot: ProfilesSnapshot }) {
     if (!profileWorkspace || createProfile.isPending) return;
     const label = profileName.trim();
     if (!label) {
-      setProfileError("Enter a profile name.");
+      setProfileError("Enter a books label.");
       return;
     }
     setProfileError(null);
@@ -154,7 +154,7 @@ function ProfilesView({ snapshot }: { snapshot: ProfilesSnapshot }) {
         },
         onError: (error) => {
           setProfileError(
-            error instanceof Error ? error.message : "Could not create profile.",
+            error instanceof Error ? error.message : "Could not create books.",
           );
         },
       },
@@ -177,7 +177,7 @@ function ProfilesView({ snapshot }: { snapshot: ProfilesSnapshot }) {
         },
         onError: (error) => {
           setSwitchError(
-            error instanceof Error ? error.message : "Could not switch profile.",
+            error instanceof Error ? error.message : "Could not switch books.",
           );
         },
       },
@@ -188,7 +188,7 @@ function ProfilesView({ snapshot }: { snapshot: ProfilesSnapshot }) {
     if (createWorkspace.isPending) return;
     const label = workspaceName.trim();
     if (!label) {
-      setWorkspaceError("Enter a workspace name.");
+      setWorkspaceError("Enter a ledger name.");
       return;
     }
     setWorkspaceError(null);
@@ -202,7 +202,7 @@ function ProfilesView({ snapshot }: { snapshot: ProfilesSnapshot }) {
         },
         onError: (error) => {
           setWorkspaceError(
-            error instanceof Error ? error.message : "Could not create workspace.",
+            error instanceof Error ? error.message : "Could not create ledger.",
           );
         },
       },
@@ -214,10 +214,11 @@ function ProfilesView({ snapshot }: { snapshot: ProfilesSnapshot }) {
       <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
         <div className="min-w-0 space-y-2">
           <h2 className="text-2xl font-semibold tracking-tight">
-            Switch profile
+            Switch books
           </h2>
           <p className="max-w-2xl text-sm text-muted-foreground">
-            Profiles keep books, tax policy, accounts, and wallets separated.
+            Books are separate accounting and tax scopes inside a ledger. Use
+            them for private, business, or other activity that should not mix.
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -228,7 +229,7 @@ function ProfilesView({ snapshot }: { snapshot: ProfilesSnapshot }) {
             onClick={() => requestCreateProfile(activeWorkspace)}
           >
             <UserPlus className="size-4" aria-hidden="true" />
-            New profile
+            New books
           </Button>
           <Button
             type="button"
@@ -239,28 +240,28 @@ function ProfilesView({ snapshot }: { snapshot: ProfilesSnapshot }) {
             }}
           >
             <FolderPlus className="size-4" aria-hidden="true" />
-            Workspace
+            Ledger
           </Button>
         </div>
       </div>
 
       <div className="grid gap-3 md:grid-cols-3">
         <SummaryCard
-          label="Workspaces"
+          label="Ledgers"
           value={workspaces.length}
-          detail="Identity scopes"
+          detail="Outer containers"
           icon={BriefcaseBusiness}
         />
         <SummaryCard
-          label="Profiles"
+          label="Books"
           value={profileCount}
-          detail="Tax policies"
+          detail="Accounting scopes"
           icon={Users}
         />
         <SummaryCard
           label="Wallets"
           value={walletCount}
-          detail={`${accountCount} accounts`}
+          detail={`${accountCount} buckets`}
           icon={Wallet}
         />
       </div>
@@ -413,7 +414,7 @@ function WorkspaceSection({
             onClick={onCreateProfile}
           >
             <Plus className="size-4" aria-hidden="true" />
-            New profile
+            New books
           </Button>
         </div>
       </CardHeader>
@@ -434,10 +435,10 @@ function WorkspaceSection({
         >
           <Plus className="size-5 text-muted-foreground" aria-hidden="true" />
           <span className="text-sm font-medium">
-            New profile in {workspace.name}
+            New books in {workspace.name}
           </span>
           <span className="text-xs text-muted-foreground">
-            Start from workspace defaults
+            Start from ledger defaults
           </span>
         </button>
       </CardContent>
@@ -470,8 +471,8 @@ function ProfileCard({
         aria-current={isActive ? "true" : undefined}
         aria-label={
           isActive
-            ? `Current profile: ${profile.name}`
-            : `Switch to ${profile.name}`
+            ? `Current books: ${profile.name}`
+            : `Switch to ${profile.name} books`
         }
         onClick={onPick}
         className="flex flex-1 flex-col justify-between text-left"
@@ -481,7 +482,7 @@ function ProfileCard({
             <div className="min-w-0">
               <p className="truncate font-medium">{profile.name}</p>
               <p className="mt-1 text-xs text-muted-foreground">
-                {profile.role} · opened {profile.lastOpened}
+                Opened {profile.lastOpened}
               </p>
             </div>
             {isActive && (
@@ -504,7 +505,7 @@ function ProfileCard({
           <div className="flex gap-4 text-sm">
             <span>
               <span className="block text-xs text-muted-foreground">
-                Accounts
+                Buckets
               </span>
               {profile.accounts}
             </span>
@@ -536,7 +537,7 @@ function ProfileCard({
           onClick={onCreateFrom}
         >
           <Copy className="size-4" aria-hidden="true" />
-          New from this
+          New from these settings
         </Button>
       </div>
     </div>
@@ -577,13 +578,13 @@ function CreateProfileDialog({
           }}
         >
           <DialogHeader>
-            <DialogTitle>New profile</DialogTitle>
+            <DialogTitle>New books</DialogTitle>
             <DialogDescription>
               {workspace && sourceProfile
-                ? `Create a profile in ${workspace.name} using ${sourceProfile.name}'s settings.`
+                ? `Create separate books in ${workspace.name} using ${sourceProfile.name}'s settings.`
                 : workspace
-                  ? `Create a profile in ${workspace.name} using workspace defaults.`
-                  : "Create a profile using workspace defaults."}
+                  ? `Create separate books in ${workspace.name} using ledger defaults.`
+                  : "Create separate books using ledger defaults."}
             </DialogDescription>
           </DialogHeader>
 
@@ -605,8 +606,8 @@ function CreateProfileDialog({
               <p className="mt-1 font-medium">{sourceProfile.name}</p>
               <p className="mt-1 text-xs text-muted-foreground">
                 Copies tax policy, fiat currency, holding period, and lot
-                selection only. Wallets, accounts, and transactions stay in the
-                original profile.
+                selection only. Wallets, buckets, and transactions stay in the
+                original books.
               </p>
               <p className="mt-2 rounded-md border bg-background/70 px-2 py-1 text-xs">
                 {sourceProfile.taxPolicy}
@@ -615,7 +616,7 @@ function CreateProfileDialog({
           )}
 
           <div className="space-y-2">
-            <Label htmlFor="profile-name">Profile label</Label>
+            <Label htmlFor="profile-name">Books label</Label>
             <Input
               id="profile-name"
               data-testid="profile-name-input"
@@ -644,7 +645,7 @@ function CreateProfileDialog({
               Cancel
             </Button>
             <Button type="submit" disabled={isSubmitting}>
-              Create profile
+              Create books
             </Button>
           </DialogFooter>
         </form>
@@ -682,11 +683,11 @@ function ProfileSwitchDialog({
     >
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>Switch profile?</DialogTitle>
+          <DialogTitle>Switch books?</DialogTitle>
           <DialogDescription>
             {currentProfile && profile
               ? `Switch from ${currentProfile.name} to ${profile.name}.`
-              : "Switch to this profile."}
+              : "Switch to these books."}
           </DialogDescription>
         </DialogHeader>
 
@@ -700,9 +701,6 @@ function ProfileSwitchDialog({
                   {workspace.jurisdiction}
                 </p>
               </div>
-              <span className="rounded-md border bg-background px-2 py-1 text-xs text-muted-foreground">
-                {profile.role}
-              </span>
             </div>
             <div className="mt-3 rounded-md border bg-background/70 p-3">
               <p className="text-xs font-medium text-muted-foreground">
@@ -713,7 +711,7 @@ function ProfileSwitchDialog({
             <div className="mt-3 flex gap-4 text-sm">
               <span>
                 <span className="block text-xs text-muted-foreground">
-                  Accounts
+                  Buckets
                 </span>
                 {profile.accounts}
               </span>
@@ -788,14 +786,14 @@ function CreateWorkspaceDialog({
           }}
         >
           <DialogHeader>
-            <DialogTitle>New workspace</DialogTitle>
+            <DialogTitle>New ledger</DialogTitle>
             <DialogDescription>
-              Create an empty workspace, then add its first profile.
+              Create an empty ledger, then add its first books.
             </DialogDescription>
           </DialogHeader>
 
           <div className="space-y-2">
-            <Label htmlFor="workspace-name">Workspace name</Label>
+            <Label htmlFor="workspace-name">Ledger name</Label>
             <Input
               id="workspace-name"
               data-testid="workspace-name-input"
@@ -824,7 +822,7 @@ function CreateWorkspaceDialog({
               Cancel
             </Button>
             <Button type="submit" disabled={isSubmitting}>
-              Create workspace
+              Create ledger
             </Button>
           </DialogFooter>
         </form>

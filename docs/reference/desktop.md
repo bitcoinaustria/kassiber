@@ -23,14 +23,14 @@ Current development modes:
   managed `exports/reports/` state directory, and the desktop shell exposes a
   narrow `open_exported_file` command that opens completed PDF/XLSX/CSV report
   files with the system default app.
-  The Welcome screen can also import an existing local project: the native
+  The Welcome screen can also import an existing local ledger: the native
   folder picker opens at `~/.kassiber`, accepts either the state root or the
   `data/` folder, restarts the sidecar daemon with that `--data-root`, and then
-  lists local profiles. SQLCipher projects must be unlocked before profile
-  names can be read because workspace/profile rows live inside the encrypted
-  database. macOS uses the system folder picker, Windows uses the system folder
-  dialog through PowerShell/.NET, and Linux desktops use `zenity`, `kdialog`, or
-  `yad` when one of those pickers is installed.
+  lists local books grouped by ledger. SQLCipher databases must be unlocked
+  before book names can be read because the internal workspace/profile rows live
+  inside the encrypted database. macOS uses the system folder picker, Windows
+  uses the system folder dialog through PowerShell/.NET, and Linux desktops use
+  `zenity`, `kdialog`, or `yad` when one of those pickers is installed.
   The supervisor uses `.venv/bin/python` when present, then `python3`, unless
   `KASSIBER_PYTHON` is set. `KASSIBER_REPO_ROOT` can point a dev shell at a
   different checkout.
