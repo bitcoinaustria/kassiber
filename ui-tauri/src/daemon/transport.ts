@@ -218,12 +218,7 @@ export async function clearImportProject(): Promise<void> {
 }
 
 export function canImportProjects(): boolean {
-  if (DAEMON_MODE !== "tauri" || typeof navigator === "undefined") {
-    return false;
-  }
-  const platform = navigator.platform.toLowerCase();
-  const userAgent = navigator.userAgent.toLowerCase();
-  return platform.includes("mac") || userAgent.includes("mac os");
+  return DAEMON_MODE === "tauri";
 }
 
 const tauriDaemon: DaemonTransport = {

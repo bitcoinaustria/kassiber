@@ -28,7 +28,9 @@ Current development modes:
   `data/` folder, restarts the sidecar daemon with that `--data-root`, and then
   lists local profiles. SQLCipher projects must be unlocked before profile
   names can be read because workspace/profile rows live inside the encrypted
-  database.
+  database. macOS uses the system folder picker, Windows uses the system folder
+  dialog through PowerShell/.NET, and Linux desktops use `zenity`, `kdialog`, or
+  `yad` when one of those pickers is installed.
   The supervisor uses `.venv/bin/python` when present, then `python3`, unless
   `KASSIBER_PYTHON` is set. `KASSIBER_REPO_ROOT` can point a dev shell at a
   different checkout.

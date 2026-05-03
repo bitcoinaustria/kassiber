@@ -170,7 +170,7 @@ export const DashboardIllustration = ({
               </TableHeader>
               <TableBody>
                 {[
-                  ["Treasury", "BTC", "watch-only", "local"],
+                  ["Wallet", "BTC", "watch-only", "local"],
                   ["BTCPay", "BTC", "credentials encrypted", "profile"],
                   ["Liquid", "LBTC", "manual pair", "audit"],
                   ["Reports", form.fiatCurrency, form.gainsAlgorithm, "tax"],

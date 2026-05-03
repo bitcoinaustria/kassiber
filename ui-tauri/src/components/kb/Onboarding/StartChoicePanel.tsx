@@ -91,7 +91,7 @@ export function StartChoicePanel({
               title={
                 importAvailable
                   ? "Import an existing local Kassiber project"
-                  : "Project import is available in the macOS desktop app"
+                  : "Project import is available in the desktop app"
               }
               className={cn(
                 "group flex min-h-[132px] w-full items-start gap-4 rounded-lg border p-4 text-left transition",
@@ -113,7 +113,7 @@ export function StartChoicePanel({
                 </span>
                 {!importAvailable && (
                   <span className="mt-3 block font-mono text-[10px] font-medium uppercase tracking-[0.14em] text-ink-3">
-                    macOS desktop app only
+                    desktop app only
                   </span>
                 )}
               </span>

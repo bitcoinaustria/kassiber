@@ -1,5 +1,3 @@
-import { WalletCards } from "lucide-react";
-
 import { Button } from "@/components/ui/button";
 
 import { DashboardIllustration } from "../DashboardIllustration";
@@ -42,7 +40,7 @@ export const IdentityStep = ({
             />
             <details className="group rounded-md border border-line bg-paper-2 px-3 py-2">
               <summary className="cursor-pointer text-sm font-medium text-ink marker:text-ink-3">
-                Advanced tax profile
+                More setup options
               </summary>
               <div className="pt-4">
                 <TextField
@@ -58,15 +56,6 @@ export const IdentityStep = ({
                 </p>
               </div>
             </details>
-          </div>
-
-          <div className="flex items-start gap-3 rounded-lg border border-line bg-paper-2 p-3 text-xs leading-5 text-ink-2">
-            <WalletCards className="mt-0.5 size-4 shrink-0 text-ink" />
-            <p className="m-0">
-              Opening a ledger creates the first wallet/reporting bucket named
-              <span className="font-mono text-ink"> treasury</span>. This is a
-              bucket, not a double-entry chart of accounts.
-            </p>
           </div>
 
           <Button type="submit" onClick={onSubmit} className="mt-4 w-full">

@@ -373,12 +373,14 @@ fn choose_import_project_directory() -> Result<Option<PathBuf>, String> {
         choose_import_project_directory_macos(&default_import_picker_root())
     }
 
-    #[cfg(not(target_os = "macos"))]
+    #[cfg(target_os = "windows")]
     {
-        Err(
-            "Project import folder picking is currently available in the macOS desktop app."
-                .to_string(),
-        )
+        choose_import_project_directory_windows(&default_import_picker_root())
+    }
+
+    #[cfg(all(unix, not(target_os = "macos")))]
+    {
+        choose_import_project_directory_unix(&default_import_picker_root())
     }
 }
 
@@ -422,6 +424,133 @@ fn choose_import_project_directory_macos(default_root: &Path) -> Result<Option<P
 #[cfg(target_os = "macos")]
 fn apple_script_string(value: &str) -> String {
     format!("\"{}\"", value.replace('\\', "\\\\").replace('"', "\\\""))
+}
+
+#[cfg(target_os = "windows")]
+fn choose_import_project_directory_windows(default_root: &Path) -> Result<Option<PathBuf>, String> {
+    let default_path = powershell_single_quoted(&default_root.to_string_lossy());
+    let script = format!(
+        "Add-Type -AssemblyName System.Windows.Forms; \
+         $dialog = New-Object System.Windows.Forms.FolderBrowserDialog; \
+         $dialog.Description = 'Choose a Kassiber project folder'; \
+         $dialog.ShowNewFolderButton = $false; \
+         $dialog.SelectedPath = {default_path}; \
+         if ($dialog.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) {{ \
+           [Console]::Out.Write($dialog.SelectedPath) \
+         }}"
+    );
+    let output = Command::new("powershell.exe")
+        .arg("-NoProfile")
+        .arg("-STA")
+        .arg("-NonInteractive")
+        .arg("-Command")
+        .arg(script)
+        .output()
+        .map_err(|error| format!("Could not open the Windows folder picker: {error}"))?;
+    let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
+    if output.status.success() {
+        return if stdout.is_empty() {
+            Ok(None)
+        } else {
+            Ok(Some(PathBuf::from(stdout)))
+        };
+    }
+    let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+    Err(if stderr.is_empty() {
+        "The Windows folder picker failed.".to_string()
+    } else {
+        stderr
+    })
+}
+
+#[cfg(target_os = "windows")]
+fn powershell_single_quoted(value: &str) -> String {
+    format!("'{}'", value.replace('\'', "''"))
+}
+
+#[cfg(all(unix, not(target_os = "macos")))]
+fn choose_import_project_directory_unix(default_root: &Path) -> Result<Option<PathBuf>, String> {
+    let title = "Choose a Kassiber project folder";
+    let default_dir = picker_default_dir_arg(default_root);
+    let attempts: [(&str, Vec<String>); 3] = [
+        (
+            "zenity",
+            vec![
+                "--file-selection".to_string(),
+                "--directory".to_string(),
+                "--title".to_string(),
+                title.to_string(),
+                "--filename".to_string(),
+                default_dir.clone(),
+            ],
+        ),
+        (
+            "kdialog",
+            vec![
+                "--title".to_string(),
+                title.to_string(),
+                "--getexistingdirectory".to_string(),
+                default_root.to_string_lossy().to_string(),
+            ],
+        ),
+        (
+            "yad",
+            vec![
+                "--file".to_string(),
+                "--directory".to_string(),
+                format!("--title={title}"),
+                format!("--filename={default_dir}"),
+            ],
+        ),
+    ];
+
+    for (program, args) in attempts {
+        if let Some(selection) = try_unix_folder_picker(program, &args)? {
+            return Ok(selection);
+        }
+    }
+
+    Err("No supported folder picker is available. Install zenity, kdialog, or yad to import a Kassiber project from the desktop app.".to_string())
+}
+
+#[cfg(all(unix, not(target_os = "macos")))]
+fn try_unix_folder_picker(
+    program: &str,
+    args: &[String],
+) -> Result<Option<Option<PathBuf>>, String> {
+    let output = match Command::new(program).args(args).output() {
+        Ok(output) => output,
+        Err(error) if error.kind() == ErrorKind::NotFound => return Ok(None),
+        Err(error) => {
+            return Err(format!("Could not open {program} folder picker: {error}"));
+        }
+    };
+    let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
+    if output.status.success() {
+        return Ok(Some(if stdout.is_empty() {
+            None
+        } else {
+            Some(PathBuf::from(stdout))
+        }));
+    }
+    let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+    if stdout.is_empty() && stderr.is_empty() {
+        return Ok(Some(None));
+    }
+    Err(if stderr.is_empty() {
+        format!("The {program} folder picker failed.")
+    } else {
+        stderr
+    })
+}
+
+#[cfg(all(unix, not(target_os = "macos")))]
+fn picker_default_dir_arg(path: &Path) -> String {
+    let mut value = path.to_string_lossy().to_string();
+    if !value.ends_with(std::path::MAIN_SEPARATOR) {
+        value.push(std::path::MAIN_SEPARATOR);
+    }
+    value
 }
 
 fn error_envelope(
