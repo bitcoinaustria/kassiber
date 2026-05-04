@@ -154,7 +154,6 @@ const NAV_GROUPS: NavGroup[] = [
     title: "Main",
     items: [
       { label: "Overview", icon: Gauge, href: "/overview" },
-      { label: "Books", icon: Users, href: "/books" },
       { label: "Transactions", icon: ClipboardList, href: "/transactions" },
       { label: "Wallets", icon: Wallet, href: "/connections" },
       { label: "Reports", icon: BarChart3, href: "/reports" },
@@ -770,6 +769,7 @@ export function AppShell() {
           <AppSidebar
             pathname={pathname}
             onLock={lockApp}
+            daemonEnabled={!locked}
           />
           <div className="min-h-0 w-full overflow-hidden lg:p-2">
             <div className="relative flex h-full w-full flex-col items-center justify-start overflow-hidden bg-background lg:rounded-xl lg:border">
@@ -801,7 +801,7 @@ export function AppShell() {
                     id="app-main"
                     ref={mainRef}
                     tabIndex={-1}
-                    className={`relative min-h-0 w-full flex-1 overflow-auto bg-background transition-[padding-bottom] duration-200 ${
+                    className={`relative min-h-0 w-full flex-1 overflow-auto bg-background ${
                       isAssistantRoute
                         ? "pb-0"
                         : assistantCollapsed
@@ -845,9 +845,11 @@ function RouteTransitionIndicator({ active }: { active: boolean }) {
 function AppSidebar({
   pathname,
   onLock,
+  daemonEnabled,
 }: {
   pathname: string;
   onLock: () => void;
+  daemonEnabled: boolean;
 }) {
   return (
     <Sidebar
@@ -904,7 +906,7 @@ function AppSidebar({
       </SidebarContent>
       <SidebarFooter>
         <SidebarActions pathname={pathname} />
-        <NavUser onLock={onLock} />
+        <NavUser onLock={onLock} daemonEnabled={daemonEnabled} />
         <AppVersion />
       </SidebarFooter>
       <SidebarRail />
@@ -1026,10 +1028,22 @@ function NavMenuItem({
   );
 }
 
-function NavUser({ onLock }: { onLock: () => void }) {
+function NavUser({
+  onLock,
+  daemonEnabled,
+}: {
+  onLock: () => void;
+  daemonEnabled: boolean;
+}) {
   const identity = useUiStore((s) => s.identity);
-  const name = identity?.workspace ?? "My Books";
-  const detail = identity?.profile ?? identity?.name ?? "Private";
+  const { data } = useDaemon<OverviewSnapshot>(
+    "ui.overview.snapshot",
+    undefined,
+    { enabled: daemonEnabled },
+  );
+  const status = data?.data?.status;
+  const name = status?.workspace ?? identity?.workspace ?? "My Books";
+  const detail = status?.profile ?? identity?.profile ?? identity?.name ?? "Private";
 
   return (
     <SidebarMenu>

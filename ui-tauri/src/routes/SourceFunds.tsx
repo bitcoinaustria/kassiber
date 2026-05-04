@@ -8,11 +8,11 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { useDaemon } from "@/daemon/client";
+import { CurrencyToggleText } from "@/components/kb/CurrencyToggleText";
 import {
   fmtCcy,
   formatBtc,
   formatEur,
-  formatSats,
   useCurrency,
 } from "@/lib/currency";
 import { cn } from "@/lib/utils";
@@ -147,7 +147,9 @@ export function SourceFunds() {
                   blurClass(hideSensitive),
                 )}
               >
-                {fmtCcy(totalBtc, currency, snapshot.priceEur)}
+                <CurrencyToggleText>
+                  {fmtCcy(totalBtc, currency, snapshot.priceEur)}
+                </CurrencyToggleText>
               </span>
               <span
                 className={cn(
@@ -155,9 +157,11 @@ export function SourceFunds() {
                   blurClass(hideSensitive),
                 )}
               >
-                {currency === "eur"
-                  ? formatBtc(totalBtc)
-                  : formatEur(totalBtc, snapshot.priceEur)}
+                <CurrencyToggleText>
+                  {currency === "eur"
+                    ? formatBtc(totalBtc)
+                    : formatEur(totalBtc, snapshot.priceEur)}
+                </CurrencyToggleText>
               </span>
             </div>
             <div className="rounded-md border px-3 py-2">
@@ -230,7 +234,9 @@ function SourceWalletRow({
               blurClass(hideSensitive),
             )}
           >
-            {fmtCcy(wallet.balance, currency, priceEur)}
+            <CurrencyToggleText>
+              {fmtCcy(wallet.balance, currency, priceEur)}
+            </CurrencyToggleText>
           </p>
           <p
             className={cn(
@@ -238,12 +244,11 @@ function SourceWalletRow({
               blurClass(hideSensitive),
             )}
           >
-            {currency === "eur"
-              ? `${formatBtc(wallet.balance)} · ${formatSats(wallet.balance)} sat`
-              : `${formatSats(wallet.balance)} sat · ${formatEur(
-                  wallet.balance,
-                  priceEur,
-                )}`}
+            <CurrencyToggleText>
+              {currency === "eur"
+                ? formatBtc(wallet.balance)
+                : formatEur(wallet.balance, priceEur)}
+            </CurrencyToggleText>
           </p>
         </div>
       </div>
