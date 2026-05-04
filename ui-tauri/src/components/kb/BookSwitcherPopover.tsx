@@ -1,5 +1,5 @@
 /**
- * ProfileSwitcherPopover — compact books switcher anchored to the
+ * BookSwitcherPopover — compact books switcher anchored to the
  * books pill in AppHeader.
  *
  * Shares the kassiber-themed Dialog shell used by action confirmations but with
@@ -20,15 +20,15 @@ import { useDaemon, useDaemonMutation } from "@/daemon/client";
 import { cn } from "@/lib/utils";
 import type { ProfilesSnapshot, Profile, Workspace } from "@/mocks/profiles";
 
-interface ProfileSwitcherPopoverProps {
+interface BookSwitcherPopoverProps {
   open: boolean;
   onClose: () => void;
 }
 
-export function ProfileSwitcherPopover({
+export function BookSwitcherPopover({
   open,
   onClose,
-}: ProfileSwitcherPopoverProps) {
+}: BookSwitcherPopoverProps) {
   const { data, isLoading } = useDaemon<ProfilesSnapshot>(
     "ui.profiles.snapshot",
   );
@@ -52,7 +52,7 @@ export function ProfileSwitcherPopover({
             Switch books
           </DialogTitle>
           <DialogDescription className="sr-only">
-            Pick a books set and book to make active.
+            Pick a books set and one book to make active.
           </DialogDescription>
         </DialogHeader>
 

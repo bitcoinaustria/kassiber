@@ -860,7 +860,7 @@ class DaemonSmokeTest(unittest.TestCase):
                 rejected = _read_payload_timeout(proc)
                 self.assertEqual(rejected["kind"], "error")
                 self.assertEqual(rejected["error"]["code"], "validation")
-                self.assertIn("source profile", rejected["error"]["message"])
+                self.assertIn("source book", rejected["error"]["message"])
 
                 _write_payload(
                     proc,

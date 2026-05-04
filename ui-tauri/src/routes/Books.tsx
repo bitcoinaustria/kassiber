@@ -49,7 +49,7 @@ import {
 import { cn } from "@/lib/utils";
 import type { ProfilesSnapshot, Profile, Workspace } from "@/mocks/profiles";
 
-export function Profiles() {
+export function Books() {
   const { data, isLoading } = useDaemon<ProfilesSnapshot>(
     "ui.profiles.snapshot",
   );
@@ -62,10 +62,10 @@ export function Profiles() {
     );
   }
 
-  return <ProfilesView snapshot={data.data} />;
+  return <BooksView snapshot={data.data} />;
 }
 
-function ProfilesView({ snapshot }: { snapshot: ProfilesSnapshot }) {
+function BooksView({ snapshot }: { snapshot: ProfilesSnapshot }) {
   const navigate = useNavigate();
   const switchProfile = useDaemonMutation<{ activeProfileId: string }>(
     "ui.profiles.switch",

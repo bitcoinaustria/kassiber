@@ -493,7 +493,7 @@ Order picked for compounding wins:
 3. **Reports** — `routes/reports/*.tsx`. Read-only readiness + preview.
    Austrian E 1kv preview should match the section layout from
    [06-austrian-tax-engine.md](06-austrian-tax-engine.md).
-4. **Profiles** — `routes/profiles/index.tsx`. Reads `profiles list`
+4. **Books** — `routes/Books.tsx`. Reads `profiles list`
    envelopes; surfaces `tax_country`, `gains_algorithm`,
    `tax_long_term_days`, `fiat_currency`.
 5. **Settings** — `routes/settings/index.tsx`. Path readouts; safe

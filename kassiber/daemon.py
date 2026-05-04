@@ -536,7 +536,7 @@ def _status_payload(ctx: DaemonContext) -> dict[str, Any]:
 def _require_conn(ctx: DaemonContext) -> sqlite3.Connection:
     if ctx.conn is None:
         raise AppError(
-            "database is locked; unlock the daemon before accessing workspace data",
+            "database is locked; unlock the daemon before accessing your books",
             code="passphrase_required",
             hint="Enter the SQLCipher database passphrase to unlock the local daemon session.",
             retryable=False,
@@ -1581,7 +1581,7 @@ def _delete_current_workspace(ctx: "DaemonContext") -> dict[str, Any]:
     workspace_label = context.get("workspace_label")
     if not workspace_id:
         raise AppError(
-            "No current workspace is selected.",
+            "No current books set is selected.",
             code="state_not_ready",
             hint="Reset the local UI identity if you only need to return to the Welcome flow.",
         )
@@ -1620,9 +1620,9 @@ def _switch_profile_payload(
     profile_id = args.get("profile_id")
     if not isinstance(profile_id, str) or not profile_id.strip():
         raise AppError(
-            "ui.profiles.switch requires profile_id",
+            "Book selection is missing.",
             code="validation",
-            hint="Select a profile from the current profiles snapshot.",
+            hint="Select a book from the current books snapshot.",
             retryable=False,
         )
     profile_id = profile_id.strip()
@@ -1642,9 +1642,9 @@ def _switch_profile_payload(
     ).fetchone()
     if not row:
         raise AppError(
-            "profile not found",
+            "Book not found.",
             code="validation",
-            hint="Refresh profiles and choose an existing profile.",
+            hint="Refresh books and choose an existing book.",
             details={"profile_id": profile_id},
             retryable=False,
         )
@@ -1683,9 +1683,9 @@ def _profile_defaults_for_workspace(
         ).fetchone()
         if row is None:
             raise AppError(
-                "source profile not found in workspace",
+                "source book not found in books set",
                 code="validation",
-                hint="Choose a profile from the same workspace as the new profile.",
+                hint="Choose a book from the same books set as the new book.",
                 details={"source_profile_id": source_profile_id},
                 retryable=False,
             )
@@ -1737,17 +1737,17 @@ def _create_profile_payload(
     workspace_id = args.get("workspace_id")
     if not isinstance(workspace_id, str) or not workspace_id.strip():
         raise AppError(
-            "ui.profiles.create requires workspace_id",
+            "Books set selection is missing.",
             code="validation",
-            hint="Choose the workspace that should own the new profile.",
+            hint="Choose the books set that should own the new book.",
             retryable=False,
         )
     label = args.get("label")
     if not isinstance(label, str) or not label.strip():
         raise AppError(
-            "ui.profiles.create requires label",
+            "Book name is required.",
             code="validation",
-            hint="Enter a profile name.",
+            hint="Enter a book name.",
             retryable=False,
         )
     workspace_id = workspace_id.strip()
@@ -1755,9 +1755,9 @@ def _create_profile_payload(
     if source_profile_id is not None:
         if not isinstance(source_profile_id, str) or not source_profile_id.strip():
             raise AppError(
-                "ui.profiles.create source_profile_id must be a profile id",
+                "Book settings source is invalid.",
                 code="validation",
-                hint="Choose an existing profile to copy settings from.",
+                hint="Choose an existing book to copy settings from.",
                 retryable=False,
             )
         source_profile_id = source_profile_id.strip()
@@ -1803,9 +1803,9 @@ def _create_workspace_payload(
     label = args.get("label")
     if not isinstance(label, str) or not label.strip():
         raise AppError(
-            "ui.workspace.create requires label",
+            "Books set name is required.",
             code="validation",
-            hint="Enter a workspace name.",
+            hint="Enter a books set name.",
             retryable=False,
         )
     workspace = core_accounts.create_workspace(conn, label.strip())
@@ -1826,7 +1826,7 @@ def _wallet_ref_from_args(args: dict[str, Any], kind: str) -> str:
         raise AppError(
             f"{kind} requires wallet",
             code="validation",
-            hint="Pass the wallet id or label for the active profile.",
+            hint="Pass the wallet id or label for the active book.",
             retryable=False,
         )
     return wallet_ref.strip()
@@ -2479,24 +2479,24 @@ def handle_request(
         args = _coerce_args_dict(request_id, request.get("args"))
         if args.get("confirm") != "DELETE":
             raise AppError(
-                "ui.workspace.delete requires confirm='DELETE'",
+                "Deletion confirmation is required.",
                 code="validation",
-                hint="Ask the user to confirm the destructive workspace deletion.",
+                hint="Ask the user to confirm the destructive books set deletion.",
             )
         context = current_context_snapshot(ctx.conn)
         workspace_label = context.get("workspace_label")
         if not workspace_label:
             raise AppError(
-                "No current workspace is selected.",
+                "No current books set is selected.",
                 code="validation",
-                hint="Select a workspace before deleting it.",
+                hint="Select a books set before deleting it.",
             )
         confirm_workspace = args.get("confirm_workspace")
         if not isinstance(confirm_workspace, str) or confirm_workspace != workspace_label:
             raise AppError(
-                "ui.workspace.delete requires the current workspace name",
+                "Books set name confirmation is required.",
                 code="validation",
-                hint="Ask the user to type the exact current workspace name before deleting it.",
+                hint="Ask the user to type the exact current books set name before deleting it.",
                 details={"expected_workspace": workspace_label},
             )
         auth_result = _require_sensitive_local_auth(
@@ -2504,7 +2504,7 @@ def handle_request(
             args=args,
             request_id=request_id,
             scope="delete_workspace",
-            label=f"Re-enter database passphrase to delete workspace {workspace_label!r}",
+            label=f"Re-enter database passphrase to delete books set {workspace_label!r}",
             plaintext_ack_key="plaintext_delete_ack",
             plaintext_ack_value=PLAINTEXT_DELETE_ACK,
         )

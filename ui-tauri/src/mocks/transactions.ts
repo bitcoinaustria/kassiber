@@ -59,12 +59,12 @@ const EXTRA_TXS: Tx[] = [
   },
 ];
 
-export interface TransactionsLedger {
+export interface TransactionsList {
   txs: Tx[];
   year: number;
 }
 
-export const MOCK_TRANSACTIONS: TransactionsLedger = {
+export const MOCK_TRANSACTIONS: TransactionsList = {
   txs: [...MOCK_OVERVIEW.txs, ...EXTRA_TXS],
   year: 2026,
 };

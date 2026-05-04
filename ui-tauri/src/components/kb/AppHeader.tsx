@@ -12,7 +12,7 @@ import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
 import { Eye, EyeOff, MoreHorizontal, Settings, Lock } from "lucide-react";
 
 import { Wordmark } from "./Wordmark";
-import { ProfileSwitcherPopover } from "./ProfileSwitcherPopover";
+import { BookSwitcherPopover } from "./BookSwitcherPopover";
 import { useUiStore } from "@/store/ui";
 import { cn } from "@/lib/utils";
 
@@ -84,7 +84,7 @@ export function AppHeader() {
           </button>
         )}
 
-        <ProfileSwitcherPopover
+        <BookSwitcherPopover
           open={profileSwitcherOpen}
           onClose={() => setProfileSwitcherOpen(false)}
         />

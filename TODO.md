@@ -296,7 +296,7 @@ and [docs/plan/04-desktop-ui.md](docs/plan/04-desktop-ui.md).
 - [x] Settings modal restyled with shadcn dialog/card/switch/input/select
   primitives, wider dashboard layout, daemon-backed lock controls, SQLCipher
   passphrase rotation, and passphrase plus workspace-name confirmation before
-  deleting encrypted local workspace data
+  deleting encrypted local books set data
 - [ ] Books screen
 - [x] Welcome/onboarding screen refreshed with a shadcn-style, SQLCipher-aware
   setup flow that captures books/tax defaults and database

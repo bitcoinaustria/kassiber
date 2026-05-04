@@ -94,7 +94,7 @@ type AppRoutePath =
   | "/reports"
   | "/source-of-funds"
   | "/connections"
-  | "/profiles"
+  | "/books"
   | "/journals"
   | "/tax-events"
   | "/quarantine"
@@ -154,7 +154,7 @@ const NAV_GROUPS: NavGroup[] = [
     title: "Main",
     items: [
       { label: "Overview", icon: Gauge, href: "/overview" },
-      { label: "Books", icon: Users, href: "/profiles" },
+      { label: "Books", icon: Users, href: "/books" },
       { label: "Transactions", icon: ClipboardList, href: "/transactions" },
       { label: "Wallets", icon: Wallet, href: "/connections" },
       { label: "Reports", icon: BarChart3, href: "/reports" },
@@ -192,7 +192,7 @@ const ROUTE_META: Array<[string, RouteMeta]> = [
     },
   ],
   [
-    "/profiles",
+    "/books",
     {
       title: "Books",
       icon: Users,
@@ -306,11 +306,11 @@ const STATIC_SEARCH_RESULTS: SearchResult[] = [
     to: "/connections",
   },
   {
-    id: "route:profiles",
+    id: "route:books",
     title: "Books",
     detail: "Books and tax settings",
-    keywords: ["ledger", "book", "books", "workspace", "profile", "tax", "country"],
-    to: "/profiles",
+    keywords: ["book", "books", "tax", "country"],
+    to: "/books",
   },
   {
     id: "route:source-of-funds",
@@ -400,7 +400,7 @@ function buildSearchResults(
       detail: `${tx.account} · ${tx.type} · ${tx.tag}`,
       keywords: [
         "transaction",
-        "ledger",
+        "transactions",
         tx.id,
         tx.account,
         tx.counter,
@@ -454,11 +454,10 @@ function notificationRouteFor(title: string): AppRoutePath | undefined {
     return "/reports";
   }
   if (
-    normalized.includes("profile") ||
     normalized.includes("book") ||
-    normalized.includes("ledger")
+    normalized.includes("books")
   ) {
-    return "/profiles";
+    return "/books";
   }
   if (normalized.includes("transaction")) return "/transactions";
   return undefined;
@@ -469,7 +468,7 @@ function assistantReturnPathFor(pathname: string): AssistantReturnPath {
   if (pathname === "/transactions") return "/transactions";
   if (pathname === "/reports") return "/reports";
   if (pathname === "/source-of-funds") return "/source-of-funds";
-  if (pathname === "/profiles") return "/profiles";
+  if (pathname === "/books" || pathname === "/profiles") return "/books";
   if (pathname === "/journals") return "/journals";
   if (pathname === "/tax-events") return "/tax-events";
   if (pathname === "/quarantine") return "/quarantine";
@@ -1089,7 +1088,7 @@ function NavUser({ onLock }: { onLock: () => void }) {
             </DropdownMenuLabel>
             <DropdownMenuSeparator />
             <DropdownMenuItem asChild>
-              <Link to="/profiles">
+              <Link to="/books">
                 <User className="mr-2 size-4" aria-hidden="true" />
                 Books
               </Link>

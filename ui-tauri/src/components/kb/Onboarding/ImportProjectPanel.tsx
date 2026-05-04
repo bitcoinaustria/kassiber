@@ -139,7 +139,7 @@ export function ImportProjectPanel({
             <div className="flex items-start gap-3">
               <Database className="mt-0.5 size-4 shrink-0 text-ink" />
               <div className="min-w-0">
-                <p className="font-medium text-ink">Selected local data</p>
+                <p className="font-medium text-ink">Selected local books</p>
                 <p className="mt-1 break-all font-mono text-xs text-ink-3">
                   {selection.stateRoot}
                 </p>
@@ -166,7 +166,7 @@ export function ImportProjectPanel({
               }}
             >
               <div className="space-y-2">
-                <Label htmlFor="import-passphrase">Database passphrase</Label>
+                <Label htmlFor="import-passphrase">Books passphrase</Label>
                 <Input
                   id="import-passphrase"
                   autoFocus
@@ -185,7 +185,7 @@ export function ImportProjectPanel({
                 disabled={!passphrase || loadingProfiles}
               >
                 <KeyRound className="size-4" aria-hidden="true" />
-                Unlock database
+                Unlock books
               </Button>
             </form>
           ) : (
@@ -226,7 +226,7 @@ export function ImportProjectPanel({
             </div>
             <div>
               <h3 className="text-xl font-semibold tracking-normal text-ink">
-                Local Kassiber data
+                Local Kassiber books
               </h3>
               <p className="mt-2 text-sm leading-6 text-ink-2">
                 The desktop daemon now points at this selected data root. Once a

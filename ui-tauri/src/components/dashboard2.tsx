@@ -82,7 +82,7 @@ import { formatBtc, useCurrency, type Currency } from "@/lib/currency";
 import { useWalletSyncAction } from "@/hooks/useWalletSyncAction";
 import {
   MOCK_TRANSACTIONS,
-  type TransactionsLedger,
+  type TransactionsList,
 } from "@/mocks/transactions";
 import type { Tx } from "@/mocks/seed";
 import { useUiStore } from "@/store/ui";
@@ -2385,10 +2385,10 @@ const TransactionsTable = ({
 
 const Dashboard2 = ({
   className,
-  ledger = MOCK_TRANSACTIONS,
+  transactions = MOCK_TRANSACTIONS,
 }: {
   className?: string;
-  ledger?: TransactionsLedger;
+  transactions?: TransactionsList;
 }) => {
   const [period, setPeriod] = React.useState<PeriodKey>("1year");
   const [newTxnOpen, setNewTxnOpen] = React.useState(false);
@@ -2398,10 +2398,10 @@ const Dashboard2 = ({
   const { syncAll, isSyncing } = useWalletSyncAction();
   const records = React.useMemo(
     () =>
-      ledger.txs.length
-        ? ledger.txs.map(toDashboardTransaction)
+      transactions.txs.length
+        ? transactions.txs.map(toDashboardTransaction)
         : transactionRecords,
-    [ledger.txs],
+    [transactions.txs],
   );
   const periodRecords = React.useMemo(
     () => recordsForPeriod(records, period),
