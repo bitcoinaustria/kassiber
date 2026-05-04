@@ -41,12 +41,13 @@ function handleAuthRequired(envelope: DaemonEnvelope): never {
 
 export function daemonQueryKey(
   mode: string,
+  session: number,
   kind: string,
   args?: Record<string, unknown>,
 ) {
   return args
-    ? (["daemon", mode, kind, args] as const)
-    : (["daemon", mode, kind] as const);
+    ? (["daemon", mode, session, kind, args] as const)
+    : (["daemon", mode, session, kind] as const);
 }
 
 export function useDaemon<T = unknown>(
@@ -58,8 +59,9 @@ export function useDaemon<T = unknown>(
   >,
 ): UseQueryResult<DaemonEnvelope<T>> {
   const dataMode = useUiStore((state) => state.dataMode);
+  const daemonSession = useUiStore((state) => state.daemonSession);
   return useQuery<DaemonEnvelope<T>>({
-    queryKey: daemonQueryKey(dataMode, kind, args),
+    queryKey: daemonQueryKey(dataMode, daemonSession, kind, args),
     queryFn: async () => {
       const envelope = await getTransport(dataMode).invoke<T>({ kind, args });
       if (envelope.kind === "auth_required") {

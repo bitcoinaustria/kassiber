@@ -1,5 +1,5 @@
 /**
- * AppHeader — top navigation, workspace label, hide-sensitive toggle,
+ * AppHeader — top navigation, books label, hide-sensitive toggle,
  * and a small overflow menu for currency/language/settings/lock.
  *
  * Translated from claude-design/components/chrome.jsx. The lang and
@@ -12,7 +12,7 @@ import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
 import { Eye, EyeOff, MoreHorizontal, Settings, Lock } from "lucide-react";
 
 import { Wordmark } from "./Wordmark";
-import { ProfileSwitcherPopover } from "./ProfileSwitcherPopover";
+import { BookSwitcherPopover } from "./BookSwitcherPopover";
 import { useUiStore } from "@/store/ui";
 import { cn } from "@/lib/utils";
 
@@ -61,7 +61,7 @@ export function AppHeader() {
         {identity && (
           <button
             onClick={() => setProfileSwitcherOpen(true)}
-            title={`Workspace · ${identity.workspace} · signed in as ${identity.name}`}
+            title={`Books · ${identity.workspace} · Book · ${identity.profile ?? identity.name}`}
             className="hidden h-6.5 max-w-[200px] cursor-pointer items-center gap-1.5 border border-line bg-transparent px-2.5 md:flex"
           >
             <span className="size-1 shrink-0 bg-accent" />
@@ -84,7 +84,7 @@ export function AppHeader() {
           </button>
         )}
 
-        <ProfileSwitcherPopover
+        <BookSwitcherPopover
           open={profileSwitcherOpen}
           onClose={() => setProfileSwitcherOpen(false)}
         />

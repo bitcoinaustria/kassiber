@@ -13,14 +13,15 @@ import type { OnboardingForm, StepComponentProps } from "../types";
 
 const DatabasePanel = ({ form }: { form: OnboardingForm }) => {
   const rows: ReadonlyArray<readonly [string, string]> = [
-    ["State root", "~/.kassiber/{data,config,exports,attachments}"],
+    ["State root", "~/.kassiber"],
     [
       "Database",
-      form.databaseMode === "sqlcipher" ? "SQLCipher 4" : "Plain SQLite",
+      form.databaseMode === "sqlcipher"
+        ? "Encrypted SQLCipher"
+        : "Plain SQLite",
     ],
-    ["KDF", "SQLCipher stock kdf_iter 256000"],
-    ["Backup", "tar | age bundle"],
-    ["Outside perimeter", "attachments, exports, dotenv addressing rows"],
+    ["Backups", "Use export after setup"],
+    ["Files", "reports and attachments stay as files"],
   ];
   return (
     <div className="flex h-full items-center">
@@ -36,8 +37,8 @@ const DatabasePanel = ({ form }: { form: OnboardingForm }) => {
           <div>
             <p className="font-semibold text-ink">
               {form.databaseMode === "sqlcipher"
-                ? "Encrypted at rest"
-                : "Plaintext preview"}
+                ? "Books will be encrypted"
+                : "Books will be unencrypted"}
             </p>
             <p className="text-xs text-ink-2">
               Watch-only wallet data stays local.
@@ -71,6 +72,7 @@ export const DatabaseStep = ({
   totalSteps,
   onSubmit,
   goBack,
+  canContinue = true,
 }: StepComponentProps) => {
   const encrypted = form.databaseMode === "sqlcipher";
   const passphraseHint = encrypted
@@ -79,7 +81,7 @@ export const DatabaseStep = ({
         form.databasePassphraseConfirm,
       )
     : null;
-  const canOpenLedger = encrypted
+  const canOpenBooks = encrypted
     ? passphraseHint === null && form.recoveryAcknowledged
     : form.plaintextAcknowledged;
   return (
@@ -96,14 +98,14 @@ export const DatabaseStep = ({
             <div className="space-y-3">
               <ChoiceCard
                 active={encrypted}
-                title="SQLCipher database"
-                description="Recommended for real books. The local SQLite file is encrypted at rest with a passphrase."
+                title="Encrypt these books"
+                description="Recommended for real data. The local SQLite database opens only with your passphrase."
                 onClick={() => update("databaseMode", "sqlcipher")}
               />
               <ChoiceCard
                 active={form.databaseMode === "plaintext"}
-                title="Plaintext preview"
-                description="For mock data or throwaway evaluation only. The database remains readable on disk."
+                title="Leave it unencrypted"
+                description="Useful for throwaway evaluation only. Anyone with disk access can read the database."
                 tone="warning"
                 onClick={() => update("databaseMode", "plaintext")}
               />
@@ -138,9 +140,9 @@ export const DatabaseStep = ({
                     }
                   />
                   <p className="m-0 text-xs leading-5 text-ink-2">
-                    Sent to the local daemon to create and unlock the
-                    SQLCipher database. It is not stored in the persisted UI
-                    profile.
+                    The passphrase is sent only to the local daemon to create
+                    and unlock the database. Kassiber does not store it in the
+                    persisted UI books identity.
                   </p>
                 </div>
                 <CheckRow
@@ -152,15 +154,22 @@ export const DatabaseStep = ({
                   label="I understand there is no passphrase recovery path."
                   description="If the passphrase is lost, the SQLCipher database cannot be opened."
                 />
-                <CheckRow
-                  id="migrate-credentials"
-                  checked={form.migrateCredentials}
-                  onCheckedChange={(checked) =>
-                    update("migrateCredentials", checked)
-                  }
-                  label="Move existing backend credentials into the encrypted DB."
-                  description="Tokens, RPC passwords, auth headers, and usernames should not remain in backends.env."
-                />
+                <details className="rounded-lg border border-line bg-paper-2 p-3">
+                  <summary className="cursor-pointer text-sm font-medium text-ink marker:text-ink-3">
+                    Existing backend credentials
+                  </summary>
+                  <div className="pt-3">
+                    <CheckRow
+                      id="migrate-credentials"
+                      checked={form.migrateCredentials}
+                      onCheckedChange={(checked) =>
+                        update("migrateCredentials", checked)
+                      }
+                      label="Move credentials from backends.env into the encrypted DB."
+                      description="Useful when upgrading an existing CLI setup. New books can leave this checked safely."
+                    />
+                  </div>
+                </details>
               </div>
             ) : (
               <CheckRow
@@ -178,9 +187,9 @@ export const DatabaseStep = ({
           <Button
             onClick={onSubmit}
             className="w-full"
-            disabled={!canOpenLedger}
+            disabled={!canOpenBooks || !canContinue}
           >
-            Open ledger
+            Open books
           </Button>
         </div>
       </OnboardingStepLeftWrapper>

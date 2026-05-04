@@ -32,7 +32,7 @@ Requirements:
 It checks:
 
 - runtime and path resolution
-- current workspace and profile
+- current books set / book (`workspace` and `profile` in CLI output)
 - wallet count
 - journal entry count
 - quarantine count
@@ -49,4 +49,4 @@ kassiber journals quarantined
 kassiber --format plain reports balance-sheet
 ```
 
-For fresh installs, a zero-wallet or zero-journal result is expected. For established workspaces, treat those as investigation prompts rather than silent success.
+For fresh installs, a zero-wallet or zero-journal result is expected. For established books, treat those as investigation prompts rather than silent success.

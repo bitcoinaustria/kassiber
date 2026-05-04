@@ -22,6 +22,7 @@ export const TaxStep = ({
   totalSteps,
   onSubmit,
   goBack,
+  canContinue = true,
 }: StepComponentProps) => {
   const isAustrian = form.taxCountry === "at";
 
@@ -40,7 +41,7 @@ export const TaxStep = ({
               <ChoiceCard
                 active={form.taxCountry === "at"}
                 title="Austria"
-                description="EUR defaults, section 27b buckets, and moving average semantics through rp2's AT plugin."
+                description="Use this if these books belong in an Austrian crypto-tax workflow. EUR and moving-average rules are selected by default."
                 onClick={() => {
                   if (form.taxCountry === "at") return;
                   update("taxCountry", "at");
@@ -50,8 +51,8 @@ export const TaxStep = ({
               />
               <ChoiceCard
                 active={form.taxCountry === "generic"}
-                title="Generic"
-                description="Country-neutral FIFO/LIFO/HIFO/LOFO profile for non-Austrian workflows."
+                title="Other or generic"
+                description="Use country-neutral books with FIFO, LIFO, HIFO, or LOFO lot selection."
                 onClick={() => {
                   if (form.taxCountry === "generic") return;
                   update("taxCountry", "generic");
@@ -65,6 +66,7 @@ export const TaxStep = ({
                 label="Fiat currency"
                 value={form.fiatCurrency}
                 options={FIAT_CURRENCIES}
+                description="Reports and tax summaries use this as the books currency."
                 onChange={(value) => update("fiatCurrency", value)}
               />
               {isAustrian ? (
@@ -76,8 +78,7 @@ export const TaxStep = ({
                     Moving average
                   </div>
                   <p className="m-0 text-xs leading-5 text-ink-2">
-                    New Austrian wallets use moving average. Altbestand is a
-                    wallet flag, not a profile holding-period exemption.
+                    Older holdings can be marked later per wallet when needed.
                   </p>
                 </div>
               ) : (
@@ -98,11 +99,12 @@ export const TaxStep = ({
                 min={1}
                 onChange={(value) => update("taxLongTermDays", value)}
                 hint={taxLongTermDaysHint(form.taxLongTermDays)}
+                description="Only used by generic books."
               />
             )}
           </div>
 
-          <Button onClick={onSubmit} className="w-full">
+          <Button onClick={onSubmit} className="w-full" disabled={!canContinue}>
             Continue
           </Button>
         </div>

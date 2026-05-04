@@ -337,7 +337,7 @@ function ReportsView({ report, hideSensitive }: ReportsViewProps) {
             <CardHeader className="border-b">
               <CardTitle>Disposed lots · {year}</CardTitle>
               <CardDescription>
-                Disposal lots for the profile jurisdiction and rp2 method.
+                Disposal lots for the books' jurisdiction and rp2 method.
               </CardDescription>
             </CardHeader>
             <CardContent className="p-4">
@@ -494,7 +494,7 @@ function ReportsView({ report, hideSensitive }: ReportsViewProps) {
               detail={
                 activeProfileIsAustrian
                   ? `${year} · Multi-sheet workbook`
-                  : "Austrian profile only"
+                  : "Austrian books only"
               }
               disabled={!activeProfileIsAustrian}
               loading={activeExport === "xlsx"}
@@ -543,7 +543,7 @@ function ReportControls({
               {jurisdiction.code} · {jurisdiction.name}
             </span>
             <span className="rounded-md bg-background px-2 py-0.5 text-xs text-muted-foreground">
-              Profile
+              Books
             </span>
           </div>
         </section>
@@ -597,7 +597,7 @@ function ReportControls({
                   </span>
                 </span>
                 <span className="shrink-0 rounded-md bg-background px-2 py-0.5 text-xs text-muted-foreground">
-                  Profile
+                  Books
                 </span>
               </div>
             </div>

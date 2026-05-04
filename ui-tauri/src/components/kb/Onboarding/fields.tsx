@@ -20,6 +20,7 @@ export const TextField = ({
   type = "text",
   autoComplete,
   hint,
+  description,
   onChange,
 }: {
   label: string;
@@ -29,6 +30,7 @@ export const TextField = ({
   type?: string;
   autoComplete?: string;
   hint?: string | null;
+  description?: string | null;
   onChange: (value: string) => void;
 }) => {
   return (
@@ -54,6 +56,9 @@ export const TextField = ({
           {hint}
         </p>
       )}
+      {!hint && description && (
+        <p className="m-0 text-xs leading-5 text-ink-2">{description}</p>
+      )}
     </div>
   );
 };
@@ -66,6 +71,7 @@ export const NumberField = ({
   min,
   onChange,
   hint,
+  description,
 }: {
   label: string;
   name: string;
@@ -74,6 +80,7 @@ export const NumberField = ({
   min?: number;
   onChange: (value: string) => void;
   hint?: string | null;
+  description?: string | null;
 }) => {
   return (
     <div className="space-y-2">
@@ -99,6 +106,9 @@ export const NumberField = ({
           {hint}
         </p>
       )}
+      {!hint && description && (
+        <p className="m-0 text-xs leading-5 text-ink-2">{description}</p>
+      )}
     </div>
   );
 };
@@ -107,11 +117,13 @@ export const SelectField = <T extends string>({
   label,
   value,
   options,
+  description,
   onChange,
 }: {
   label: string;
   value: T;
   options: T[];
+  description?: string | null;
   onChange: (value: T) => void;
 }) => {
   return (
@@ -129,6 +141,9 @@ export const SelectField = <T extends string>({
           ))}
         </SelectContent>
       </Select>
+      {description && (
+        <p className="m-0 text-xs leading-5 text-ink-2">{description}</p>
+      )}
     </div>
   );
 };

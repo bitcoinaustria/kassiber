@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  aiBaseUrlHint,
+  backendEndpointHint,
   databasePassphraseHint,
   gainsAlgorithmsFor,
   parseTaxLongTermDays,
@@ -26,6 +28,43 @@ describe("onboarding tax long-term day parsing", () => {
       expect(parseTaxLongTermDays(value)).toBeNull();
       expect(taxLongTermDaysHint(value)).not.toBeNull();
     }
+  });
+});
+
+describe("onboarding endpoint validation", () => {
+  it("accepts backend endpoint formats by kind", () => {
+    expect(backendEndpointHint("esplora", "https://node.example/api")).toBeNull();
+    expect(backendEndpointHint("btcpay", "http://127.0.0.1:23000")).toBeNull();
+    expect(backendEndpointHint("electrum", "ssl://node.example:50002")).toBeNull();
+    expect(backendEndpointHint("electrum", "node.example:50002")).toBeNull();
+  });
+
+  it("rejects backend endpoint formats that will not work", () => {
+    expect(backendEndpointHint("esplora", "ssl://node.example:50002")).toBe(
+      "Use an http:// or https:// URL.",
+    );
+    expect(backendEndpointHint("electrum", "https://node.example/api")).toBe(
+      "Use ssl://host:50002, tcp://host:50001, or host:port.",
+    );
+    expect(backendEndpointHint("bitcoinrpc", "")).toBe("Endpoint is required.");
+    expect(
+      backendEndpointHint("bitcoinrpc", "http://rpcuser:rpcpass@127.0.0.1:8332"),
+    ).toBe("Do not include usernames or passwords in the endpoint.");
+    expect(backendEndpointHint("electrum", "ssl://user@node.example:50002")).toBe(
+      "Do not include usernames or passwords in the endpoint.",
+    );
+  });
+
+  it("validates OpenAI-compatible base URLs", () => {
+    expect(aiBaseUrlHint("http://localhost:11434/v1")).toBeNull();
+    expect(aiBaseUrlHint("https://api.example/v1")).toBeNull();
+    expect(aiBaseUrlHint("")).toBe("Base URL is required.");
+    expect(aiBaseUrlHint("ollama.local/v1")).toBe(
+      "Use an http:// or https:// URL.",
+    );
+    expect(aiBaseUrlHint("https://sk-secret@example.test/v1")).toBe(
+      "Do not include usernames or passwords in the endpoint.",
+    );
   });
 });
 

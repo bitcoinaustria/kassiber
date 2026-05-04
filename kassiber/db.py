@@ -371,7 +371,36 @@ def resolve_database_path(data_root):
     return legacy
 
 
-def open_db(data_root, *, passphrase=None):
+CORE_SCHEMA_TABLES = frozenset({"settings", "workspaces", "profiles"})
+
+
+def database_has_core_schema(conn):
+    rows = conn.execute(
+        """
+        SELECT name FROM sqlite_master
+        WHERE type = 'table'
+          AND name IN ('settings', 'workspaces', 'profiles')
+        """
+    ).fetchall()
+    names = {row["name"] if hasattr(row, "keys") else row[0] for row in rows}
+    if names != CORE_SCHEMA_TABLES:
+        return False
+    required_columns = {
+        "settings": {"key", "value"},
+        "workspaces": {"id", "label"},
+        "profiles": {"id", "workspace_id", "label", "fiat_currency"},
+    }
+    for table, expected in required_columns.items():
+        columns = {
+            row["name"] if hasattr(row, "keys") else row[1]
+            for row in conn.execute(f"PRAGMA table_info({table})").fetchall()
+        }
+        if not expected.issubset(columns):
+            return False
+    return True
+
+
+def open_db(data_root, *, passphrase=None, require_existing_schema=False):
     """Open (and lazily migrate) the SQLite store rooted at `data_root`.
 
     Returns a connection with `row_factory = Row` and foreign keys
@@ -392,6 +421,14 @@ def open_db(data_root, *, passphrase=None):
     plaintext_header = (
         secrets_sqlcipher.looks_like_plaintext_sqlite(db_path) if file_present else False
     )
+    if require_existing_schema and not file_present:
+        raise AppError(
+            "database does not contain a Kassiber project schema",
+            code="invalid_project_database",
+            hint="Choose an existing Kassiber project database, not an empty or missing database file.",
+            details={"database": str(db_path)},
+            retryable=False,
+        )
 
     if passphrase is None:
         if file_present and not plaintext_header:
@@ -403,6 +440,15 @@ def open_db(data_root, *, passphrase=None):
             )
         conn = sqlite3.connect(db_path)
         conn.row_factory = sqlite3.Row
+        if require_existing_schema and not database_has_core_schema(conn):
+            conn.close()
+            raise AppError(
+                "database does not contain a Kassiber project schema",
+                code="invalid_project_database",
+                hint="Choose an existing Kassiber project database, not an empty or unrelated SQLite file.",
+                details={"database": str(db_path)},
+                retryable=False,
+            )
         conn.executescript(SCHEMA)
         ensure_schema_compat(conn)
         conn.execute("PRAGMA foreign_keys = ON")
@@ -422,6 +468,15 @@ def open_db(data_root, *, passphrase=None):
         passphrase,
         row_factory=secrets_sqlcipher.get_row_class(),
     )
+    if require_existing_schema and not database_has_core_schema(conn):
+        conn.close()
+        raise AppError(
+            "database does not contain a Kassiber project schema",
+            code="invalid_project_database",
+            hint="Choose an existing Kassiber project database, not an empty or unrelated SQLCipher file.",
+            details={"database": str(db_path)},
+            retryable=False,
+        )
     conn.executescript(SCHEMA)
     ensure_schema_compat(conn)
     return conn

@@ -91,27 +91,31 @@ require their own passphrase round-trip before the daemon returns raw secret
 material.
 
 `ui.profiles.switch` accepts `{"profile_id":"..."}` and updates the active
-`context_workspace` / `context_profile` settings after the database is already
-unlocked. It does not create a per-profile passphrase boundary; SQLCipher
-encryption is database-level.
+books set / book (`context_workspace` / `context_profile` internally) after the
+database is already unlocked. It does not create a per-books/profile passphrase
+boundary; SQLCipher encryption is database-level.
 
 `ui.profiles.create` accepts `{"workspace_id":"...","label":"..."}` and creates
-a profile in that workspace. It inherits fiat currency, tax country, long-term
-period, and gains algorithm from the active profile in that workspace when
-available; otherwise it uses the first profile in the workspace, then generic
-EUR/FIFO defaults for empty workspaces. The new profile becomes active.
+a new book in that books set. `workspace` and `profile` remain the daemon/API
+names for books set and book. It inherits fiat currency, tax country, long-term
+period, and gains algorithm from the active book in that set when available;
+otherwise it uses the first book in the set, then generic EUR/FIFO defaults for
+empty sets. It can also accept `source_profile_id` to copy those settings from a
+specific book in the same set. Wallets, accounts/buckets, and transactions are
+not copied. The new book becomes active.
 
-`ui.workspace.create` accepts `{"label":"..."}` and creates an empty workspace.
-It makes the new workspace current and clears the active profile until the user
-creates or switches to a profile inside that workspace.
+`ui.workspace.create` accepts `{"label":"..."}` and creates an empty books set.
+`workspace` remains the daemon/API name. The daemon makes the new books set
+current and clears the active book/profile until the user creates or switches to
+books inside that set.
 
 `ui.workspace.delete` accepts
-`{"confirm":"DELETE","confirm_workspace":"..."}` for the current workspace. Like
+`{"confirm":"DELETE","confirm_workspace":"..."}` for the current books set. Like
 wallet deletes, encrypted databases require `args.auth_response.passphrase_secret`
 and plaintext databases require `DELETE LOCAL DATA`.
 
 `ui.wallets.update` accepts `{"wallet":"...","label":"..."}` for the active
-profile and currently supports label changes. `ui.wallets.delete` accepts
+books/profile and currently supports label changes. `ui.wallets.delete` accepts
 `{"wallet":"...","confirm":"DELETE","confirm_wallet":"...","cascade":true|false}`.
 Both kinds are sensitive local-state changes: encrypted databases require
 `args.auth_response.passphrase_secret`, verified with the same throwaway

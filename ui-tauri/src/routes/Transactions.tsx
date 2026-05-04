@@ -2,17 +2,17 @@ import { Dashboard2 } from "@/components/dashboard2";
 import { useDaemon } from "@/daemon/client";
 import {
   MOCK_TRANSACTIONS,
-  type TransactionsLedger,
+  type TransactionsList,
 } from "@/mocks/transactions";
 
 export function Transactions() {
-  const { data } = useDaemon<TransactionsLedger>("ui.transactions.list", {
+  const { data } = useDaemon<TransactionsList>("ui.transactions.list", {
     limit: 500,
   });
-  const ledger =
+  const transactions =
     data?.kind === "ui.transactions.list" && data.data
       ? data.data
       : MOCK_TRANSACTIONS;
 
-  return <Dashboard2 ledger={ledger} />;
+  return <Dashboard2 transactions={transactions} />;
 }

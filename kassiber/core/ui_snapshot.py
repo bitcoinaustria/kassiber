@@ -350,6 +350,10 @@ def build_profiles_snapshot(conn: sqlite3.Connection) -> dict[str, Any]:
                 "name": row["label"],
                 "role": "Owner",
                 "taxPolicy": _tax_policy_label(row),
+                "fiatCurrency": row["fiat_currency"],
+                "taxCountry": row["tax_country"],
+                "taxLongTermDays": int(row["tax_long_term_days"] or 0),
+                "gainsAlgorithm": row["gains_algorithm"],
                 "accounts": int(row["account_count"] or 0),
                 "wallets": int(row["wallet_count"] or 0),
                 "lastOpened": (

@@ -1,11 +1,11 @@
 /**
- * ProfileSwitcherPopover — compact workspace/profile switcher anchored
- * to the workspace pill in AppHeader.
+ * BookSwitcherPopover — compact books switcher anchored to the
+ * books pill in AppHeader.
  *
  * Shares the kassiber-themed Dialog shell used by action confirmations but with
- * a denser visual layout: each workspace gets a compact header with a
- * jurisdiction chip and a 2-column grid of profile cards. Clicking a
- * profile updates the active daemon context and closes the popover.
+ * a denser visual layout: each books set gets a compact header with a jurisdiction
+ * chip and a 2-column grid of book cards. Clicking a book updates the active
+ * daemon context and closes the popover.
  */
 import { useEffect, useState } from "react";
 
@@ -20,15 +20,15 @@ import { useDaemon, useDaemonMutation } from "@/daemon/client";
 import { cn } from "@/lib/utils";
 import type { ProfilesSnapshot, Profile, Workspace } from "@/mocks/profiles";
 
-interface ProfileSwitcherPopoverProps {
+interface BookSwitcherPopoverProps {
   open: boolean;
   onClose: () => void;
 }
 
-export function ProfileSwitcherPopover({
+export function BookSwitcherPopover({
   open,
   onClose,
-}: ProfileSwitcherPopoverProps) {
+}: BookSwitcherPopoverProps) {
   const { data, isLoading } = useDaemon<ProfilesSnapshot>(
     "ui.profiles.snapshot",
   );
@@ -49,10 +49,10 @@ export function ProfileSwitcherPopover({
       >
         <DialogHeader className="flex-row items-center justify-between gap-2 border-b border-line px-4 py-3">
           <DialogTitle className="font-sans text-sm font-semibold tracking-[-0.005em] text-ink">
-            Switch profile
+            Switch books
           </DialogTitle>
           <DialogDescription className="sr-only">
-            Pick a workspace and profile to make active.
+            Pick a books set and one book to make active.
           </DialogDescription>
         </DialogHeader>
 
@@ -177,13 +177,13 @@ function ProfileCard({ profile, isActive, onPick }: ProfileCardProps) {
           {profile.name}
         </div>
         <div className="mt-0.5 font-mono text-[9px] uppercase tracking-[0.08em] text-ink-3">
-          {profile.role} · {profile.lastOpened}
+          Opened {profile.lastOpened}
         </div>
       </div>
 
       <div className="flex gap-3 font-mono text-[10px] text-ink-2">
-        <span>{profile.accounts}a</span>
-        <span>{profile.wallets}w</span>
+        <span>{profile.accounts} buckets</span>
+        <span>{profile.wallets} wallets</span>
         <span className="flex-1" />
         <span
           className={cn(

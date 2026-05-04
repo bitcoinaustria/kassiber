@@ -1,19 +1,35 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import { ShieldCheck } from "lucide-react";
 
 import { Wordmark } from "@/components/kb/Wordmark";
 import { Button } from "@/components/ui/button";
-import { getTransport } from "@/daemon/transport";
+import { DAEMON_AUTH_REQUIRED_EVENT } from "@/daemon/client";
+import {
+  activateImportProject,
+  canImportProjects,
+  clearImportProject,
+  getTransport,
+  selectImportProjectDirectory,
+  type DaemonEnvelope,
+  type ImportProjectSelection,
+} from "@/daemon/transport";
 import { cn } from "@/lib/utils";
-import { useUiStore, type Identity } from "@/store/ui";
-import { setSessionUnlockPassphrase } from "@/store/sessionLock";
+import { useUiStore, type DataMode, type Identity } from "@/store/ui";
+import {
+  clearSessionUnlockPassphrase,
+  setSessionUnlockPassphrase,
+} from "@/store/sessionLock";
+import type { ProfilesSnapshot } from "@/mocks/profiles";
 
 import {
   DEFAULT_AI_BASE_URL,
   DEFAULT_AI_PROVIDER_NAME,
   DEFAULT_FORM,
   GAINS_ALGORITHM_DEFAULTS,
+  aiBaseUrlHint,
+  backendEndpointHint,
   databasePassphraseHint,
   gainsAlgorithmsFor,
   parseTaxLongTermDays,
@@ -22,6 +38,8 @@ import { AiStep } from "./steps/AiStep";
 import { ConnectionsStep } from "./steps/ConnectionsStep";
 import { DatabaseStep } from "./steps/DatabaseStep";
 import { IdentityStep } from "./steps/IdentityStep";
+import { ImportProjectPanel } from "./ImportProjectPanel";
+import { StartChoicePanel } from "./StartChoicePanel";
 import { TaxStep } from "./steps/TaxStep";
 import type { OnboardingForm, OnboardingStep } from "./types";
 
@@ -34,7 +52,7 @@ const DEFAULT_STEPS: OnboardingStep[] = [
   {
     component: IdentityStep,
     isComplete: (form) =>
-      Boolean(form.name.trim() && form.workspace.trim() && form.profile.trim()),
+      Boolean(form.workspace.trim() && form.profile.trim()),
   },
   {
     component: TaxStep,
@@ -49,7 +67,10 @@ const DEFAULT_STEPS: OnboardingStep[] = [
         return form.skipBackendsAcknowledged;
       }
       if (form.backendSetupMode === "custom") {
-        return Boolean(form.backendName.trim() && form.backendUrl.trim());
+        return Boolean(
+          form.backendName.trim() &&
+            backendEndpointHint(form.backendKind, form.backendUrl) === null,
+        );
       }
       return true;
     },
@@ -57,10 +78,12 @@ const DEFAULT_STEPS: OnboardingStep[] = [
   {
     component: AiStep,
     isComplete: (form) => {
+      if (form.aiSetupMode !== "disabled") {
+        if (aiBaseUrlHint(form.aiBaseUrl) !== null) return false;
+      }
       if (form.aiSetupMode === "remote") {
         return Boolean(
           form.aiProviderName.trim() &&
-            form.aiBaseUrl.trim() &&
             form.aiRemoteAcknowledged,
         );
       }
@@ -81,11 +104,11 @@ const DEFAULT_STEPS: OnboardingStep[] = [
 ];
 
 const DEV_MOCK_IDENTITY: Identity = {
-  name: "mock profile",
-  workspace: "Demo Workspace",
+  name: "mock books",
+  workspace: "My Books",
   country: "AT",
   encrypted: false,
-  profile: "mock",
+  profile: "mock books",
   taxCountry: "at",
   fiatCurrency: "EUR",
   taxLongTermDays: 0,
@@ -101,20 +124,49 @@ const DEV_MOCK_IDENTITY: Identity = {
 
 export const Onboarding = ({ className, steps: customSteps }: OnboardingProps) => {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const setIdentity = useUiStore((state) => state.setIdentity);
+  const dataMode = useUiStore((state) => state.dataMode);
   const setDataMode = useUiStore((state) => state.setDataMode);
+  const preImportDataModeRef = useRef<DataMode | null>(null);
+  const [flowMode, setFlowMode] = useState<"start" | "setup">(
+    customSteps ? "setup" : "start",
+  );
   const [currentStep, setCurrentStep] = useState(0);
   const [form, setForm] = useState<OnboardingForm>(DEFAULT_FORM);
   const [submitting, setSubmitting] = useState(false);
   const [finishError, setFinishError] = useState<string | null>(null);
+  const [importSelection, setImportSelection] =
+    useState<ImportProjectSelection | null>(null);
+  const [importSnapshot, setImportSnapshot] =
+    useState<ProfilesSnapshot | null>(null);
+  const [importing, setImporting] = useState(false);
+  const [loadingImportProfiles, setLoadingImportProfiles] = useState(false);
+  const [importError, setImportError] = useState<string | null>(null);
   const activeSteps = customSteps ?? DEFAULT_STEPS;
   const step = activeSteps[currentStep];
+  const importAvailable = canImportProjects();
 
   const update = <K extends keyof OnboardingForm>(
     key: K,
     value: OnboardingForm[K],
   ) => {
     setForm((current) => ({ ...current, [key]: value }));
+  };
+
+  const clearDaemonQueryCache = () => {
+    void queryClient.cancelQueries({ queryKey: ["daemon"] });
+    queryClient.removeQueries({ queryKey: ["daemon"] });
+  };
+
+  const handleAuthRequired = (envelope: DaemonEnvelope) => {
+    clearSessionUnlockPassphrase();
+    clearDaemonQueryCache();
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(
+        new CustomEvent(DAEMON_AUTH_REQUIRED_EVENT, { detail: envelope }),
+      );
+    }
   };
 
   const finish = async () => {
@@ -147,14 +199,14 @@ export const Onboarding = ({ className, steps: customSteps }: OnboardingProps) =
     }
 
     const identity: Identity = {
-      name: form.name.trim(),
-      workspace: form.workspace.trim() || "Personal",
+      name: form.profile.trim() || "Private",
+      workspace: form.workspace.trim() || "My Books",
       // Legacy field. Today rp2 only ships `at` + `generic` country plugins,
       // so all non-AT picks collapse to "Generic". Prefer `taxCountry` for
       // new callers.
       country: form.taxCountry === "at" ? "AT" : "Generic",
       encrypted: form.databaseMode === "sqlcipher",
-      profile: form.profile.trim() || "main",
+      profile: form.profile.trim() || "Private",
       taxCountry: form.taxCountry,
       fiatCurrency: form.fiatCurrency,
       taxLongTermDays,
@@ -210,7 +262,146 @@ export const Onboarding = ({ className, steps: customSteps }: OnboardingProps) =
   };
 
   const handleGoBack = () => {
-    if (currentStep > 0) setCurrentStep(currentStep - 1);
+    if (currentStep > 0) {
+      setCurrentStep(currentStep - 1);
+      return;
+    }
+    if (!customSteps) setFlowMode("start");
+  };
+
+  const beginSetup = () => {
+    setDataMode("real");
+    setFinishError(null);
+    setImportError(null);
+    setFlowMode("setup");
+  };
+
+  const refreshImportedProfiles = async () => {
+    setLoadingImportProfiles(true);
+    setImportError(null);
+    try {
+      const envelope = await getTransport("real").invoke<ProfilesSnapshot>({
+        kind: "ui.profiles.snapshot",
+      });
+      if (envelope.kind === "auth_required") {
+        handleAuthRequired(envelope);
+        throw new Error("Database passphrase is required.");
+      }
+      if (envelope.kind === "error" || envelope.error) {
+        throw new Error(envelope.error?.message ?? "Could not load books.");
+      }
+      setImportSnapshot(
+        envelope.data ?? { workspaces: [], activeProfileId: "" },
+      );
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Could not load books.";
+      setImportError(message);
+      throw error;
+    } finally {
+      setLoadingImportProfiles(false);
+    }
+  };
+
+  const unlockAndLoadImportedProfiles = async (
+    selection: ImportProjectSelection,
+    passphrase: string | null,
+  ) => {
+    setLoadingImportProfiles(true);
+    setImportError(null);
+    try {
+      const envelope = await getTransport("real").invoke({
+        kind: "daemon.unlock",
+        args: {
+          require_existing_project: true,
+          ...(passphrase
+            ? { auth_response: { passphrase_secret: passphrase } }
+            : {}),
+        },
+      });
+      if (envelope.kind === "auth_required") {
+        handleAuthRequired(envelope);
+        throw new Error("Database passphrase is required.");
+      }
+      if (envelope.kind === "error" || envelope.error) {
+        throw new Error(envelope.error?.message ?? "Could not open project.");
+      }
+      await setSessionUnlockPassphrase(selection.encrypted ? passphrase : null);
+      await refreshImportedProfiles();
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Could not open project.";
+      setImportError(message);
+      throw error;
+    } finally {
+      setLoadingImportProfiles(false);
+    }
+  };
+
+  const beginImport = () => {
+    if (importing || submitting) return;
+    setFinishError(null);
+    setImportError(null);
+    setImportSnapshot(null);
+    setImporting(true);
+    preImportDataModeRef.current = dataMode;
+    let activatedImport = false;
+    void (async () => {
+      const picked = await selectImportProjectDirectory();
+      if (!picked) {
+        preImportDataModeRef.current = null;
+        return;
+      }
+      setDataMode("real");
+      const activated = await activateImportProject(picked.dataRoot);
+      clearDaemonQueryCache();
+      setImportSelection(activated);
+      activatedImport = true;
+      if (!activated.encrypted) {
+        await unlockAndLoadImportedProfiles(activated, null);
+      }
+    })()
+      .catch((error: unknown) => {
+        if (!activatedImport) {
+          const previousDataMode = preImportDataModeRef.current;
+          if (previousDataMode) {
+            setDataMode(previousDataMode);
+          }
+          preImportDataModeRef.current = null;
+          void setSessionUnlockPassphrase(null);
+        }
+        setImportError(
+          error instanceof Error ? error.message : "Could not import project.",
+        );
+      })
+      .finally(() => setImporting(false));
+  };
+
+  const cancelImport = () => {
+    setImportError(null);
+    setLoadingImportProfiles(true);
+    void clearImportProject()
+      .then(async () => {
+        const previousDataMode = preImportDataModeRef.current;
+        await setSessionUnlockPassphrase(null);
+        clearDaemonQueryCache();
+        if (previousDataMode) {
+          setDataMode(previousDataMode);
+        }
+        preImportDataModeRef.current = null;
+        setImportSelection(null);
+        setImportSnapshot(null);
+        setFlowMode("start");
+      })
+      .catch((error: unknown) => {
+        void setSessionUnlockPassphrase(null);
+        setImportError(
+          error instanceof Error
+            ? error.message
+            : "Could not return to the default project root.",
+        );
+      })
+      .finally(() => setLoadingImportProfiles(false));
   };
 
   const skipToMockPreview = () => {
@@ -248,18 +439,41 @@ export const Onboarding = ({ className, steps: customSteps }: OnboardingProps) =
           </div>
         </div>
 
-        <step.component
-          form={form}
-          update={update}
-          onSubmit={handleSubmit}
-          currentStep={currentStep}
-          totalSteps={activeSteps.length}
-          goBack={handleGoBack}
-        />
+        {importSelection ? (
+          <ImportProjectPanel
+            selection={importSelection}
+            encrypted={importSelection.encrypted}
+            snapshot={importSnapshot}
+            loadingProfiles={loadingImportProfiles}
+            error={importError}
+            onCancel={cancelImport}
+            onRefreshProfiles={refreshImportedProfiles}
+            onUnlock={(passphrase) =>
+              unlockAndLoadImportedProfiles(importSelection, passphrase)
+            }
+          />
+        ) : flowMode === "start" ? (
+          <StartChoicePanel
+            importAvailable={importAvailable}
+            importing={importing}
+            onSetup={beginSetup}
+            onImport={beginImport}
+          />
+        ) : (
+          <step.component
+            form={form}
+            update={update}
+            onSubmit={handleSubmit}
+            canContinue={step.isComplete(form) && !submitting}
+            currentStep={currentStep}
+            totalSteps={activeSteps.length}
+            goBack={handleGoBack}
+          />
+        )}
 
-        {finishError && (
+        {(finishError || (!importSelection && importError)) && (
           <div className="max-w-2xl rounded-md border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">
-            {finishError}
+            {finishError ?? importError}
           </div>
         )}
 

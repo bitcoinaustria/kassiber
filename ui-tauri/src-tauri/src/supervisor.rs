@@ -24,6 +24,7 @@ const STDERR_TAIL_LIMIT: usize = 16 * 1024;
 pub struct DaemonSupervisor {
     process: Mutex<Option<Arc<DaemonProcess>>>,
     resource_dir: Option<PathBuf>,
+    data_root: Mutex<Option<PathBuf>>,
     next_request_id: AtomicU64,
 }
 
@@ -100,6 +101,7 @@ impl DaemonSupervisor {
         Self {
             process: Mutex::new(None),
             resource_dir,
+            data_root: Mutex::new(None),
             next_request_id: AtomicU64::new(1),
         }
     }
@@ -109,8 +111,38 @@ impl DaemonSupervisor {
         Self {
             process: Mutex::new(Some(Arc::new(process))),
             resource_dir: None,
+            data_root: Mutex::new(None),
             next_request_id: AtomicU64::new(1),
         }
+    }
+
+    pub fn set_data_root(&self, data_root: PathBuf) -> Result<(), SupervisorError> {
+        self.replace_data_root(Some(data_root))
+    }
+
+    pub fn clear_data_root(&self) -> Result<(), SupervisorError> {
+        self.replace_data_root(None)
+    }
+
+    fn replace_data_root(&self, data_root: Option<PathBuf>) -> Result<(), SupervisorError> {
+        let mut slot = self.process.lock().map_err(|_| {
+            SupervisorError::new("daemon_lock_poisoned", "daemon process lock is poisoned")
+                .retryable()
+        })?;
+        let mut configured = self.data_root.lock().map_err(|_| {
+            SupervisorError::new("daemon_lock_poisoned", "daemon data-root lock is poisoned")
+                .retryable()
+        })?;
+        let replacement = Arc::new(DaemonProcess::spawn(
+            self.resource_dir.as_deref(),
+            data_root.clone(),
+        )?);
+        if let Some(process) = slot.replace(replacement) {
+            process.mark_broken();
+            process.kill();
+        }
+        *configured = data_root;
+        Ok(())
     }
 
     pub fn invoke(
@@ -305,8 +337,20 @@ impl DaemonSupervisor {
         };
 
         if should_restart {
+            let data_root = self
+                .data_root
+                .lock()
+                .map_err(|_| {
+                    SupervisorError::new(
+                        "daemon_lock_poisoned",
+                        "daemon data-root lock is poisoned",
+                    )
+                    .retryable()
+                })?
+                .clone();
             *slot = Some(Arc::new(DaemonProcess::spawn(
                 self.resource_dir.as_deref(),
+                data_root,
             )?));
         }
 
@@ -317,8 +361,17 @@ impl DaemonSupervisor {
 }
 
 impl DaemonProcess {
-    fn spawn(resource_dir: Option<&Path>) -> Result<Self, SupervisorError> {
-        Self::spawn_command(kassiber_command(resource_dir, vec!["daemon".into()]))
+    fn spawn(
+        resource_dir: Option<&Path>,
+        data_root: Option<PathBuf>,
+    ) -> Result<Self, SupervisorError> {
+        let mut args = Vec::new();
+        if let Some(data_root) = data_root {
+            args.push("--data-root".into());
+            args.push(data_root.to_string_lossy().to_string());
+        }
+        args.push("daemon".into());
+        Self::spawn_command(kassiber_command(resource_dir, args))
     }
 
     fn spawn_command(command: DaemonCommand) -> Result<Self, SupervisorError> {
@@ -926,14 +979,17 @@ mod tests {
     #[cfg(unix)]
     use std::os::unix::fs::PermissionsExt;
 
+    static TEST_TEMP_COUNTER: AtomicU64 = AtomicU64::new(1);
+
     #[cfg(unix)]
     fn write_stub_daemon() -> (PathBuf, PathBuf) {
         let unique = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .expect("clock before epoch")
             .as_nanos();
+        let counter = TEST_TEMP_COUNTER.fetch_add(1, Ordering::SeqCst);
         let dir = env::temp_dir().join(format!(
-            "kassiber-supervisor-test-{}-{unique}",
+            "kassiber-supervisor-test-{}-{unique}-{counter}",
             std::process::id()
         ));
         fs::create_dir_all(&dir).expect("create temp dir");
@@ -1077,5 +1133,94 @@ for line in sys.stdin:
             |_| {},
         );
         let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn set_data_root_warms_replacement_daemon_before_returning() {
+        let (dir, script) = write_stub_daemon();
+        let sidecar = dir.join(sidecar_filename().expect("sidecar name"));
+        fs::rename(&script, &sidecar).expect("install stub sidecar");
+        let supervisor = DaemonSupervisor::new(Some(dir.clone()));
+        let data_root = dir.join("imported-data");
+        fs::create_dir_all(&data_root).expect("create data root");
+
+        supervisor
+            .set_data_root(data_root.clone())
+            .expect("warm replacement daemon");
+
+        assert_eq!(
+            supervisor.data_root.lock().expect("data root").clone(),
+            Some(data_root)
+        );
+        let response = supervisor
+            .invoke_inner("fast", None, false, Some(json!("fast-after-root")), |_| {})
+            .expect("replacement daemon is ready");
+        assert_eq!(response.get("kind").and_then(Value::as_str), Some("fast"));
+
+        let _ = supervisor.invoke_inner(
+            "daemon.shutdown",
+            None,
+            false,
+            Some(json!("shutdown-replacement")),
+            |_| {},
+        );
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn set_data_root_keeps_existing_daemon_when_replacement_fails() {
+        let (old_dir, old_script) = write_stub_daemon();
+        let process = DaemonProcess::spawn_command(DaemonCommand {
+            program: old_script,
+            args: Vec::new(),
+            cwd: old_dir.clone(),
+            source: "env_python",
+        })
+        .expect("spawn old daemon");
+        let unique = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("clock before epoch")
+            .as_nanos();
+        let sidecar_dir = env::temp_dir().join(format!(
+            "kassiber-supervisor-bad-sidecar-{}-{unique}",
+            std::process::id()
+        ));
+        fs::create_dir_all(&sidecar_dir).expect("create bad sidecar dir");
+        fs::write(
+            sidecar_dir.join(sidecar_filename().expect("sidecar name")),
+            b"not executable",
+        )
+        .expect("write bad sidecar");
+        let supervisor = DaemonSupervisor {
+            process: Mutex::new(Some(Arc::new(process))),
+            resource_dir: Some(sidecar_dir.clone()),
+            data_root: Mutex::new(None),
+            next_request_id: AtomicU64::new(1),
+        };
+
+        let error = supervisor
+            .set_data_root(sidecar_dir.join("imported-data"))
+            .expect_err("replacement spawn should fail");
+        assert_eq!(error.code, "daemon_spawn_failed");
+        assert_eq!(
+            supervisor.data_root.lock().expect("data root").clone(),
+            None
+        );
+        let response = supervisor
+            .invoke_inner("fast", None, false, Some(json!("fast-after-fail")), |_| {})
+            .expect("old daemon still handles requests");
+        assert_eq!(response.get("kind").and_then(Value::as_str), Some("fast"));
+
+        let _ = supervisor.invoke_inner(
+            "daemon.shutdown",
+            None,
+            false,
+            Some(json!("shutdown-old")),
+            |_| {},
+        );
+        let _ = fs::remove_dir_all(old_dir);
+        let _ = fs::remove_dir_all(sidecar_dir);
     }
 }

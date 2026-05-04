@@ -7,7 +7,7 @@ export function TaxEvents() {
   return (
     <ReviewDataTable
       kind="tax-events"
-      eyebrow="Review · taxable ledger"
+      eyebrow="Review · taxable events"
       title="Tax Events"
       description="Review normalized tax events before journals and reports are trusted. Rows stay focused on classification, basis, and tax impact."
       icon={CircleDollarSign}

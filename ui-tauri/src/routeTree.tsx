@@ -25,12 +25,13 @@ import { SourceFunds } from "./routes/SourceFunds";
 import { Journals } from "./routes/Journals";
 import { TaxEvents } from "./routes/TaxEvents";
 import { Quarantine } from "./routes/Quarantine";
-import { Profiles } from "./routes/Profiles";
+import { Books } from "./routes/Books";
 import { Connections } from "./routes/Connections";
 import { ConnectionDetail } from "./routes/ConnectionDetail";
 import { Settings } from "./routes/Settings";
 import { Assistant } from "./routes/Assistant";
 import { AppShell } from "./components/kb/AppShell";
+import { activateImportProject, canImportProjects } from "./daemon/transport";
 import { useUiStore } from "./store/ui";
 
 const rootRoute = createRootRoute({
@@ -51,8 +52,22 @@ const indexRoute = createRoute({
 const appLayoutRoute = createRoute({
   getParentRoute: () => rootRoute,
   id: "_app",
-  beforeLoad: () => {
-    if (!useUiStore.getState().identity) {
+  beforeLoad: async () => {
+    const { identity, setIdentity } = useUiStore.getState();
+    if (!identity) {
+      throw redirect({ to: "/" });
+    }
+    if (!identity.importedProject) {
+      return;
+    }
+    if (!canImportProjects()) {
+      setIdentity(null);
+      throw redirect({ to: "/" });
+    }
+    try {
+      await activateImportProject(identity.importedProject.dataRoot);
+    } catch {
+      setIdentity(null);
       throw redirect({ to: "/" });
     }
   },
@@ -101,10 +116,18 @@ const quarantineRoute = createRoute({
   component: Quarantine,
 });
 
+const booksRoute = createRoute({
+  getParentRoute: () => appLayoutRoute,
+  path: "/books",
+  component: Books,
+});
+
 const profilesRoute = createRoute({
   getParentRoute: () => appLayoutRoute,
   path: "/profiles",
-  component: Profiles,
+  beforeLoad: () => {
+    throw redirect({ to: "/books" });
+  },
 });
 
 const connectionsRoute = createRoute({
@@ -176,6 +199,7 @@ const routeTree = rootRoute.addChildren([
     journalsRoute,
     taxEventsRoute,
     quarantineRoute,
+    booksRoute,
     profilesRoute,
     connectionsRoute,
     connectionDetailRoute,

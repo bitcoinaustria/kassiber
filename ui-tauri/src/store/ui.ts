@@ -21,11 +21,17 @@ export interface AppLockPolicy {
   lockOnWindowClose: boolean;
 }
 
+export interface ImportedProjectIdentity {
+  stateRoot: string;
+  dataRoot: string;
+  database: string;
+}
+
 /**
- * Captured onboarding intent for the local profile. Only `name`/`workspace`
+ * Captured onboarding intent for the local books. Only `name`/`workspace`
  * are read by the running UI today (see AppHeader); the remaining fields are
  * captured in the webview so the upcoming native sidecar handoff can seed a
- * profile/backend without re-prompting.
+ * books/backend without re-prompting.
  *
  * `country` is the legacy identity field; new callers should prefer
  * `taxCountry`. Today only `at` and `generic` map to a real rp2 plugin
@@ -74,6 +80,7 @@ export interface Identity {
   aiProviderKind?: "local" | "remote" | "tee";
   aiProviderName?: string;
   aiBaseUrl?: string;
+  importedProject?: ImportedProjectIdentity;
 }
 
 interface UiState {
@@ -83,6 +90,7 @@ interface UiState {
   hideSensitive: boolean;
   appLockPolicy: AppLockPolicy;
   identity: Identity | null;
+  daemonSession: number;
   notifications: AppNotification[];
   setLang: (lang: Lang) => void;
   setCurrency: (currency: Currency) => void;
@@ -90,11 +98,29 @@ interface UiState {
   setHideSensitive: (hideSensitive: boolean) => void;
   setAppLockPolicy: (policy: Partial<AppLockPolicy>) => void;
   setIdentity: (identity: Identity | null) => void;
+  bumpDaemonSession: () => void;
   addNotification: (
     notification: Omit<AppNotification, "id" | "createdAt">,
   ) => void;
   clearNotification: (id: string) => void;
   clearNotifications: () => void;
+}
+
+function normalizeIdentity(identity: Identity | null): Identity | null {
+  if (!identity) return identity;
+  const isLegacyMockIdentity =
+    !identity.importedProject &&
+    identity.workspace === "Demo Workspace" &&
+    (identity.name === "mock profile" || identity.profile === "mock");
+
+  if (!isLegacyMockIdentity) return identity;
+
+  return {
+    ...identity,
+    name: identity.name === "mock profile" ? "mock books" : identity.name,
+    profile: identity.profile === "mock" ? "mock books" : identity.profile,
+    workspace: "My Books",
+  };
 }
 
 export const useUiStore = create<UiState>()(
@@ -111,6 +137,7 @@ export const useUiStore = create<UiState>()(
         lockOnWindowClose: true,
       },
       identity: null,
+      daemonSession: 0,
       notifications: [],
       setLang: (lang) => set({ lang }),
       setCurrency: (currency) => set({ currency }),
@@ -120,7 +147,9 @@ export const useUiStore = create<UiState>()(
         set((state) => ({
           appLockPolicy: { ...state.appLockPolicy, ...policy },
         })),
-      setIdentity: (identity) => set({ identity }),
+      setIdentity: (identity) => set({ identity: normalizeIdentity(identity) }),
+      bumpDaemonSession: () =>
+        set((state) => ({ daemonSession: state.daemonSession + 1 })),
       addNotification: (notification) =>
         set((state) => ({
           notifications: [
@@ -140,6 +169,16 @@ export const useUiStore = create<UiState>()(
         })),
       clearNotifications: () => set({ notifications: [] }),
     }),
-    { name: "kb.ui" },
+    {
+      name: "kb.ui",
+      merge: (persisted, current) => {
+        const restored = persisted as Partial<UiState>;
+        return {
+          ...current,
+          ...restored,
+          identity: normalizeIdentity(restored.identity ?? current.identity),
+        };
+      },
+    },
   ),
 );

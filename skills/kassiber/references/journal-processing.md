@@ -99,7 +99,7 @@ kassiber transfers unpair --pair-id <pair-id>
 
 Use `journals transfers list` to inspect the current computed transfer audit directly. It surfaces same-asset transfer matches with exact sent / received / fee amounts, plus any stored cross-asset pair links, so you do not need to infer pairing from `journals process` counts or from journal rows.
 
-Same-asset carrying-value pairs are supported. Cross-asset `--policy carrying-value` pairs are supported for Austrian profiles and feed the swap-basis-carry path; cross-asset `--policy taxable` pairs stay on the normal SELL + BUY path.
+Same-asset carrying-value pairs are supported. Cross-asset `--policy carrying-value` pairs are supported for Austrian books and feed the swap-basis-carry path; cross-asset `--policy taxable` pairs stay on the normal SELL + BUY path.
 
 Auto-detection is intentionally conservative: Kassiber only auto-pairs
 same-asset cross-wallet transfers that share the same `external_id`.

@@ -74,7 +74,7 @@ import {
   useDaemon,
   useDaemonMutation,
 } from "@/daemon/client";
-import { getTransport } from "@/daemon/transport";
+import { clearImportProject, getTransport } from "@/daemon/transport";
 import { cn } from "@/lib/utils";
 import {
   clearSessionUnlockPassphrase,
@@ -94,7 +94,7 @@ type AppRoutePath =
   | "/reports"
   | "/source-of-funds"
   | "/connections"
-  | "/profiles"
+  | "/books"
   | "/journals"
   | "/tax-events"
   | "/quarantine"
@@ -154,30 +154,18 @@ const NAV_GROUPS: NavGroup[] = [
     title: "Main",
     items: [
       { label: "Overview", icon: Gauge, href: "/overview" },
+      { label: "Books", icon: Users, href: "/books" },
       { label: "Transactions", icon: ClipboardList, href: "/transactions" },
+      { label: "Wallets", icon: Wallet, href: "/connections" },
       { label: "Reports", icon: BarChart3, href: "/reports" },
       { label: "Source of Funds", icon: BadgeCheck, href: "/source-of-funds" },
       { label: "Assistant", icon: MessageSquareText, href: "/assistant" },
     ],
   },
   {
-    title: "Ledger",
-    items: [
-      {
-        label: "Connections",
-        icon: Wallet,
-        href: "/connections",
-        children: [
-          { label: "Wallets", icon: Wallet, href: "/connections" },
-          { label: "Profiles", icon: Users, href: "/profiles" },
-        ],
-      },
-      { label: "Journals", icon: BookOpen, href: "/journals" },
-    ],
-  },
-  {
     title: "Review",
     items: [
+      { label: "Journals", icon: BookOpen, href: "/journals" },
       { label: "Tax Events", icon: CircleDollarSign, href: "/tax-events" },
       { label: "Quarantine", icon: ShieldAlert, href: "/quarantine" },
     ],
@@ -191,25 +179,25 @@ const ROUTE_META: Array<[string, RouteMeta]> = [
       title: "Connection Detail",
       icon: Wallet,
       searchLabel: "Search connections",
-      searchPlaceholder: "Search wallets, profiles...",
+      searchPlaceholder: "Search wallets, books...",
     },
   ],
   [
     "/connections",
     {
-      title: "Connections",
+      title: "Wallets",
       icon: Wallet,
-      searchLabel: "Search connections",
-      searchPlaceholder: "Search wallets, profiles...",
+      searchLabel: "Search wallets",
+      searchPlaceholder: "Search wallets, backends...",
     },
   ],
   [
-    "/profiles",
+    "/books",
     {
-      title: "Profiles",
+      title: "Books",
       icon: Users,
-      searchLabel: "Search profiles",
-      searchPlaceholder: "Search profiles, countries...",
+      searchLabel: "Search books",
+      searchPlaceholder: "Search books, countries...",
     },
   ],
   [
@@ -306,23 +294,23 @@ const STATIC_SEARCH_RESULTS: SearchResult[] = [
   {
     id: "route:transactions",
     title: "Transactions",
-    detail: "Ledger rows and filters",
+    detail: "Transaction rows and filters",
     keywords: ["tx", "counterparty", "account", "amount", "import"],
     to: "/transactions",
   },
   {
     id: "route:connections",
-    title: "Connections",
+    title: "Wallets",
     detail: "Wallet sources and sync",
     keywords: ["wallets", "xpub", "backend", "sync"],
     to: "/connections",
   },
   {
-    id: "route:profiles",
-    title: "Profiles",
-    detail: "Workspaces and tax policy",
-    keywords: ["workspace", "profile", "tax", "country"],
-    to: "/profiles",
+    id: "route:books",
+    title: "Books",
+    detail: "Books and tax settings",
+    keywords: ["book", "books", "tax", "country"],
+    to: "/books",
   },
   {
     id: "route:source-of-funds",
@@ -334,7 +322,7 @@ const STATIC_SEARCH_RESULTS: SearchResult[] = [
   {
     id: "route:journals",
     title: "Journals",
-    detail: "Processed tax ledger",
+    detail: "Processed tax journal",
     keywords: ["process", "entries", "fees", "basis"],
     to: "/journals",
   },
@@ -412,7 +400,7 @@ function buildSearchResults(
       detail: `${tx.account} · ${tx.type} · ${tx.tag}`,
       keywords: [
         "transaction",
-        "ledger",
+        "transactions",
         tx.id,
         tx.account,
         tx.counter,
@@ -465,7 +453,12 @@ function notificationRouteFor(title: string): AppRoutePath | undefined {
   if (normalized.includes("report") || normalized.includes("export")) {
     return "/reports";
   }
-  if (normalized.includes("profile")) return "/profiles";
+  if (
+    normalized.includes("book") ||
+    normalized.includes("books")
+  ) {
+    return "/books";
+  }
   if (normalized.includes("transaction")) return "/transactions";
   return undefined;
 }
@@ -475,7 +468,7 @@ function assistantReturnPathFor(pathname: string): AssistantReturnPath {
   if (pathname === "/transactions") return "/transactions";
   if (pathname === "/reports") return "/reports";
   if (pathname === "/source-of-funds") return "/source-of-funds";
-  if (pathname === "/profiles") return "/profiles";
+  if (pathname === "/books" || pathname === "/profiles") return "/books";
   if (pathname === "/journals") return "/journals";
   if (pathname === "/tax-events") return "/tax-events";
   if (pathname === "/quarantine") return "/quarantine";
@@ -520,6 +513,11 @@ export function AppShell() {
     void queryClient.cancelQueries({ queryKey: ["daemon"] });
     queryClient.removeQueries({ queryKey: ["daemon"] });
   }, [queryClient]);
+  const clearImportedProjectRoot = React.useCallback(async () => {
+    if (identity?.importedProject) {
+      await clearImportProject();
+    }
+  }, [identity?.importedProject]);
 
   const lockApp = React.useCallback(() => {
     setHideSensitive(true);
@@ -532,13 +530,18 @@ export function AppShell() {
     }
     if (!hasSessionUnlockPassphrase()) {
       clearSessionUnlockPassphrase();
-      setIdentity(null);
-      void navigate({ to: "/", replace: true });
+      void clearImportedProjectRoot()
+        .catch(() => {})
+        .finally(() => {
+          setIdentity(null);
+          void navigate({ to: "/", replace: true });
+        });
       return;
     }
     setLocked(true);
   }, [
     clearDaemonQueryCache,
+    clearImportedProjectRoot,
     navigate,
     requiresDaemonUnlock,
     setHideSensitive,
@@ -552,7 +555,12 @@ export function AppShell() {
       if (requiresDaemonUnlock) {
         const envelope = await getTransport("real").invoke({
           kind: "daemon.unlock",
-          args: { auth_response: { passphrase_secret: passphrase } },
+          args: {
+            ...(identity?.importedProject
+              ? { require_existing_project: true }
+              : {}),
+            auth_response: { passphrase_secret: passphrase },
+          },
         });
         const unlocked = envelope.kind === "daemon.unlock";
         if (unlocked) {
@@ -579,7 +587,7 @@ export function AppShell() {
       }
       return { ok: unlocked, error: null };
     },
-    [queryClient, requiresDaemonUnlock],
+    [identity?.importedProject, queryClient, requiresDaemonUnlock],
   );
 
   const resetLocalUiSession = React.useCallback(() => {
@@ -587,10 +595,15 @@ export function AppShell() {
     clearDaemonQueryCache();
     setDaemonAuthRequired(false);
     setHideSensitive(false);
-    setIdentity(null);
-    void navigate({ to: "/", replace: true });
+    void clearImportedProjectRoot()
+      .catch(() => {})
+      .finally(() => {
+        setIdentity(null);
+        void navigate({ to: "/", replace: true });
+      });
   }, [
     clearDaemonQueryCache,
+    clearImportedProjectRoot,
     navigate,
     setHideSensitive,
     setIdentity,
@@ -775,7 +788,7 @@ export function AppShell() {
                   <LockScreen
                     reason={
                       daemonAuthRequired
-                        ? "The daemon needs the database passphrase before it can return live workspace data."
+                        ? "The daemon needs the database passphrase before it can return live books data."
                         : undefined
                     }
                     onUnlock={unlockApp}
@@ -1015,8 +1028,8 @@ function NavMenuItem({
 
 function NavUser({ onLock }: { onLock: () => void }) {
   const identity = useUiStore((s) => s.identity);
-  const name = identity?.workspace ?? "Demo Workspace";
-  const detail = identity?.name ?? "local profile";
+  const name = identity?.workspace ?? "My Books";
+  const detail = identity?.profile ?? identity?.name ?? "Private";
 
   return (
     <SidebarMenu>
@@ -1075,9 +1088,9 @@ function NavUser({ onLock }: { onLock: () => void }) {
             </DropdownMenuLabel>
             <DropdownMenuSeparator />
             <DropdownMenuItem asChild>
-              <Link to="/profiles">
+              <Link to="/books">
                 <User className="mr-2 size-4" aria-hidden="true" />
-                Profiles
+                Books
               </Link>
             </DropdownMenuItem>
             <DropdownMenuSeparator />

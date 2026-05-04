@@ -31,18 +31,22 @@ export const DashboardIllustration = ({
   variant = "zoomed-out",
   transformOrigin = "-20% -10%",
 }: DashboardIllustrationProps) => {
-  const workspace = form.workspace.trim() || "Personal";
-  const profile = form.profile.trim() || "main";
-  const scaleClass = variant === "zoomed-in" ? "scale-[1.3]" : "scale-100";
+  const workspace = form.workspace.trim() || "My Books";
+  const profile = form.profile.trim() || "Private";
+  const taxMethod =
+    form.gainsAlgorithm === "MOVING_AVERAGE_AT"
+      ? "Moving average"
+      : form.gainsAlgorithm;
+  const scaleClass = variant === "zoomed-in" ? "scale-[1.02]" : "scale-100";
   return (
     <div
       style={{ transformOrigin }}
       className={cn(
-        "flex h-full min-h-[520px] w-[980px] overflow-hidden rounded-lg border border-line bg-paper shadow-sm transition-transform duration-500 ease-out motion-reduce:transition-none",
+        "flex h-full min-h-[520px] w-full max-w-3xl overflow-hidden rounded-lg border border-line bg-paper shadow-sm transition-transform duration-500 ease-out motion-reduce:transition-none",
         scaleClass,
       )}
     >
-      <div className="h-full w-[280px] shrink-0 overflow-hidden bg-paper-2">
+      <div className="h-full w-56 shrink-0 overflow-hidden bg-paper-2">
         <div className="flex items-center justify-between gap-2 border-b border-line p-4">
           <div className="flex min-w-0 items-center gap-2">
             <div className="flex size-9 shrink-0 items-center justify-center rounded-md bg-ink text-paper">
@@ -63,7 +67,7 @@ export const DashboardIllustration = ({
             "Connections",
             "Transactions",
             "Reports",
-            "Profiles",
+            "Books",
           ].map((item, index) => (
             <li
               key={item}
@@ -91,7 +95,7 @@ export const DashboardIllustration = ({
             </Button>
           </div>
 
-          <div className="grid grid-cols-4 gap-3">
+          <div className="grid grid-cols-2 gap-3">
             {[
               ["Policy", form.taxCountry === "at" ? "Austria" : "Generic"],
               ["Currency", form.fiatCurrency],
@@ -119,7 +123,7 @@ export const DashboardIllustration = ({
             ))}
           </div>
 
-          <div className="grid grid-cols-4 gap-3">
+          <div className="grid grid-cols-2 gap-3">
             {[
               [
                 "Endpoint",
@@ -133,13 +137,13 @@ export const DashboardIllustration = ({
                 "Sync",
                 form.backendSetupMode === "skip" ? "manual import" : "enabled",
               ],
-              ["Secrets", "encrypted path"],
+              ["Secrets", "local only"],
               [
                 "Assistant",
                 form.aiSetupMode === "disabled"
                   ? "disabled"
                   : form.aiSetupMode === "remote"
-                    ? "remote/TEE"
+                    ? "remote"
                     : "local",
               ],
             ].map(([label, value]) => (
@@ -158,7 +162,7 @@ export const DashboardIllustration = ({
             <Table>
               <TableHeader>
                 <TableRow className="bg-paper-2">
-                  {["Source", "Asset", "Status", "Scope"].map((head) => (
+                  {["Source", "Asset", "Note"].map((head) => (
                     <TableHead
                       key={head}
                       className="h-9 border-r last:border-r-0"
@@ -170,10 +174,10 @@ export const DashboardIllustration = ({
               </TableHeader>
               <TableBody>
                 {[
-                  ["Treasury", "BTC", "watch-only", "local"],
-                  ["BTCPay", "BTC", "credentials encrypted", "profile"],
-                  ["Liquid", "LBTC", "manual pair", "audit"],
-                  ["Reports", form.fiatCurrency, form.gainsAlgorithm, "tax"],
+                  ["Wallet", "BTC", "watch-only"],
+                  ["BTCPay", "BTC", "local credentials"],
+                  ["Liquid", "LBTC", "manual pair"],
+                  ["Reports", form.fiatCurrency, taxMethod],
                 ].map((row) => (
                   <TableRow
                     key={row.join("-")}

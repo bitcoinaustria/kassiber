@@ -1,5 +1,3 @@
-import { WalletCards } from "lucide-react";
-
 import { Button } from "@/components/ui/button";
 
 import { DashboardIllustration } from "../DashboardIllustration";
@@ -15,16 +13,19 @@ export const IdentityStep = ({
   form,
   update,
   onSubmit,
+  goBack,
+  canContinue = true,
   currentStep,
   totalSteps,
 }: StepComponentProps) => {
   return (
     <OnboardingStepFrame>
       <OnboardingStepLeftWrapper
-        title="Set up your local workspace"
-        eyebrow="Identity"
+        title="Name your books"
+        eyebrow="Books"
         currentStep={currentStep}
         totalSteps={totalSteps}
+        goBack={goBack}
       >
         <form
           onSubmit={(event) => event.preventDefault()}
@@ -32,38 +33,39 @@ export const IdentityStep = ({
         >
           <div className="space-y-4 border-b border-line pb-6">
             <TextField
-              label="Your name"
-              name="name"
-              value={form.name}
-              placeholder="Alice"
-              onChange={(value) => update("name", value)}
-            />
-            <TextField
-              label="Workspace name"
+              label="Books name"
               name="workspace"
               value={form.workspace}
-              placeholder="Personal"
+              placeholder="My Books"
+              description="This is the local books set shown in the app header."
               onChange={(value) => update("workspace", value)}
             />
-            <TextField
-              label="Profile"
-              name="profile"
-              value={form.profile}
-              placeholder="main"
-              onChange={(value) => update("profile", value)}
-            />
+            <details className="group rounded-md border border-line bg-paper-2 px-3 py-2">
+              <summary className="cursor-pointer text-sm font-medium text-ink marker:text-ink-3">
+                More setup options
+              </summary>
+              <div className="pt-4">
+                <TextField
+                  label="Books label"
+                  name="profile"
+                  value={form.profile}
+                  placeholder="Private"
+                  onChange={(value) => update("profile", value)}
+                />
+                <p className="m-0 mt-2 text-xs leading-5 text-ink-2">
+                  Keep the default unless you plan to split these books into
+                  separate private, business, or tax books later.
+                </p>
+              </div>
+            </details>
           </div>
 
-          <div className="flex items-start gap-3 rounded-lg border border-line bg-paper-2 p-3 text-xs leading-5 text-ink-2">
-            <WalletCards className="mt-0.5 size-4 shrink-0 text-ink" />
-            <p className="m-0">
-              Creating a profile seeds the first wallet/reporting bucket named
-              <span className="font-mono text-ink"> treasury</span>. This is a
-              bucket, not a double-entry chart of accounts.
-            </p>
-          </div>
-
-          <Button type="submit" onClick={onSubmit} className="mt-4 w-full">
+          <Button
+            type="submit"
+            onClick={onSubmit}
+            className="mt-4 w-full"
+            disabled={!canContinue}
+          >
             Continue
           </Button>
         </form>

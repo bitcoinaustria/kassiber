@@ -94,6 +94,53 @@ class OpenDbPlaintextTests(unittest.TestCase):
             db_path = Path(root) / "kassiber.sqlite3"
             self.assertTrue(looks_like_plaintext_sqlite(db_path))
 
+    def test_require_existing_schema_accepts_kassiber_database(self):
+        with tempfile.TemporaryDirectory() as root:
+            open_db(root).close()
+
+            conn = open_db(root, require_existing_schema=True)
+            try:
+                self.assertEqual(
+                    conn.execute("SELECT count(*) FROM profiles").fetchone()[0],
+                    0,
+                )
+            finally:
+                conn.close()
+
+    def test_require_existing_schema_rejects_missing_database(self):
+        with tempfile.TemporaryDirectory() as root:
+            with self.assertRaises(AppError) as ctx:
+                open_db(root, require_existing_schema=True).close()
+
+            self.assertEqual(ctx.exception.code, "invalid_project_database")
+            self.assertFalse((Path(root) / "kassiber.sqlite3").exists())
+
+    def test_require_existing_schema_does_not_migrate_unrelated_sqlite(self):
+        with tempfile.TemporaryDirectory() as root:
+            db_path = Path(root) / "kassiber.sqlite3"
+            seed = sqlite3.connect(db_path)
+            try:
+                seed.execute("CREATE TABLE unrelated(id TEXT)")
+                seed.commit()
+            finally:
+                seed.close()
+
+            with self.assertRaises(AppError) as ctx:
+                open_db(root, require_existing_schema=True).close()
+
+            self.assertEqual(ctx.exception.code, "invalid_project_database")
+            probe = sqlite3.connect(db_path)
+            try:
+                tables = {
+                    row[0]
+                    for row in probe.execute(
+                        "SELECT name FROM sqlite_master WHERE type = 'table'"
+                    ).fetchall()
+                }
+            finally:
+                probe.close()
+            self.assertEqual(tables, {"unrelated"})
+
 
 class OpenDbEncryptedTests(unittest.TestCase):
     def test_encrypted_round_trip(self):

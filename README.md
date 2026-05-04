@@ -39,7 +39,8 @@ kind of report when an error occurs.
 
 - keeps a local SQLite system of record (optionally encrypted at rest via SQLCipher 4 with a passphrase you choose; see `kassiber secrets init`)
 - ships a single-file `tar | age` backup format (`kassiber backup export`) that is recoverable with stock `age` + `tar` + `sqlcipher` if Kassiber stops being maintained
-- supports multiple workspaces, profiles, wallet buckets, and wallets
+- supports local sets of books, separate books for private/business tax scopes,
+  wallet buckets, and wallets
 - syncs from `esplora` and `electrum`, plus `bitcoinrpc` for address-based Bitcoin wallets and confirmed BTCPay Greenfield wallet history
 - imports generic CSV/JSON, BTCPay exports, Phoenix exports, and BIP329 labels
 - pulls confirmed BTCPay on-chain wallet history directly from a BTCPay server via the Greenfield API
@@ -76,30 +77,34 @@ general ledger stay outside Kassiber. See
 
 ## Concepts
 
-Kassiber's model is:
+Kassiber's user model is:
 
 ```text
-workspace
-`-- profile
-    |-- account bucket(s)
+books file / local state
+`-- book(s)
+    |-- wallet bucket(s)
     `-- wallet(s)
 
 wallets -> transactions -> journals -> reports
 ```
 
-- `workspace`: the top-level container for an organization, person, or set of books
-- `profile`: one accounting and tax scope inside a workspace
+- `books file` / `local state`: the local Kassiber data root for one person,
+  business, or client
+- `book`: one separated accounting and tax scope inside that local state
 - `wallet`: a transaction source that Kassiber syncs or imports
 - `account`: a wallet/reporting bucket that wallets can belong to
 
-In practice, a workspace might be an association, with one profile for its BTC
-books, buckets such as `events`, `memberships`, and `store`, and wallets
-mapped to the real underlying wallet sources that actually hold or receive
-funds.
+In the CLI and database these are still named `workspace` and `profile`.
+The desktop UI uses the friendlier names above: a workspace is a local books
+set, and a profile is a book. In practice, "My Books" might contain separate
+books for `private` and `business`, while a company or client should usually
+live in its own Kassiber state root with one main set of BTC books, buckets such
+as `events`, `memberships`, and `store`, and wallets mapped to the real
+underlying wallet sources that actually hold or receive funds.
 
 Transactions flow in from wallets, journals process those transactions into
 tax and accounting state, and reports read from the processed journal state.
-Cost basis is pooled per asset across all wallets in a profile, even though
+Cost basis is pooled per asset across all wallets in a set of books, even though
 reporting can still break holdings and activity down by wallet and account.
 Kassiber accounts are not a double-entry chart of accounts today: fees and
 external counterparties are not posted automatically to separate account rows,
@@ -275,7 +280,7 @@ pnpm tauri:dev
 
 The app boots into the Welcome onboarding flow on first load, persists identity
 to localStorage, and routes through Overview / Connections / Transactions /
-Reports / Tax Events / Quarantine / Profiles. The shared shell hosts global
+Reports / Tax Events / Quarantine / Books. The shared shell hosts global
 search, the hide-sensitive eye, and the Settings modal; display currency lives
 inside Settings.
 
@@ -328,7 +333,7 @@ python3 -m kassiber reports summary
 python3 -m kassiber reports tax-summary
 python3 -m kassiber reports balance-sheet
 python3 -m kassiber reports capital-gains
-# For Austrian/EUR profiles:
+# For Austrian/EUR books:
 python3 -m kassiber --machine reports austrian-e1kv --year 2024
 python3 -m kassiber --machine reports austrian-tax-summary --year 2024
 python3 -m kassiber reports export-austrian-e1kv-pdf --year 2024 --file e1kv-2024.pdf

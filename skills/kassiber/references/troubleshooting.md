@@ -141,7 +141,7 @@ If a command returns:
   did not verify against the on-disk DB. Re-prompt the user; do not retry
   silently.
 - `restore_cleanup_failed` from `kassiber backup import --install` — the live
-  restore completed but the decrypted temp workspace could not be removed.
+  restore completed but the decrypted temp restore directory could not be removed.
   Remove the path from the error details manually before sharing logs or
   leaving the machine unattended.
 - `age_unavailable` from `kassiber backup ...` — neither the `age`/`rage`

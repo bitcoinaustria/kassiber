@@ -411,7 +411,7 @@ def build_parser() -> argparse.ArgumentParser:
     profiles_create.add_argument(
         "--tax-country",
         default=DEFAULT_TAX_COUNTRY,
-        help=f"Tax country for the profile (currently supported: {', '.join(supported_tax_countries())})",
+        help=f"Tax country for the book (CLI profile; currently supported: {', '.join(supported_tax_countries())})",
     )
     profiles_create.add_argument("--tax-long-term-days", type=int, default=DEFAULT_LONG_TERM_DAYS)
     profiles_create.add_argument("--gains-algorithm", choices=list(RP2_ACCOUNTING_METHODS), default="FIFO")
@@ -427,7 +427,7 @@ def build_parser() -> argparse.ArgumentParser:
     profiles_set.add_argument("--fiat-currency")
     profiles_set.add_argument(
         "--tax-country",
-        help=f"Tax country for the profile (currently supported: {', '.join(supported_tax_countries())})",
+        help=f"Tax country for the book (CLI profile; currently supported: {', '.join(supported_tax_countries())})",
     )
     profiles_set.add_argument("--tax-long-term-days", type=int)
     profiles_set.add_argument("--gains-algorithm", choices=list(RP2_ACCOUNTING_METHODS))

@@ -108,7 +108,7 @@ export const mockDaemon: DaemonTransport = {
         request_id: req.request_id,
         data: {
           deleted: true,
-          workspace: { id: "mock-workspace", label: "Demo Workspace" },
+          workspace: { id: "mock-workspace", label: "My Books" },
           removed: { profiles: 2, wallets: 4, transactions: 24 },
         } as T,
       };
@@ -136,7 +136,7 @@ export const mockDaemon: DaemonTransport = {
           request_id: req.request_id,
           error: {
             code: "validation",
-            message: "profile not found",
+            message: "books not found",
             retryable: false,
           },
         };
@@ -171,10 +171,15 @@ export const mockDaemon: DaemonTransport = {
       const args = (req.args ?? {}) as {
         workspace_id?: unknown;
         label?: unknown;
+        source_profile_id?: unknown;
       };
       const workspaceId =
         typeof args.workspace_id === "string" ? args.workspace_id : "";
       const label = typeof args.label === "string" ? args.label.trim() : "";
+      const sourceProfileId =
+        typeof args.source_profile_id === "string"
+          ? args.source_profile_id
+          : "";
       const workspace = mockProfilesSnapshot.workspaces.find(
         (candidate) => candidate.id === workspaceId,
       );
@@ -185,7 +190,7 @@ export const mockDaemon: DaemonTransport = {
           request_id: req.request_id,
           error: {
             code: "validation",
-            message: "workspace not found",
+            message: "books set not found",
             retryable: false,
           },
         };
@@ -197,7 +202,22 @@ export const mockDaemon: DaemonTransport = {
           request_id: req.request_id,
           error: {
             code: "validation",
-            message: "ui.profiles.create requires label",
+            message: "Books label is required.",
+            retryable: false,
+          },
+        };
+      }
+      const sourceProfile = sourceProfileId
+        ? workspace.profiles.find((candidate) => candidate.id === sourceProfileId)
+        : null;
+      if (sourceProfileId && !sourceProfile) {
+        return {
+          kind: "error",
+          schema_version: 1,
+          request_id: req.request_id,
+          error: {
+            code: "validation",
+            message: "source book not found in this books set",
             retryable: false,
           },
         };
@@ -207,7 +227,26 @@ export const mockDaemon: DaemonTransport = {
         id: `mock-profile-${Date.now()}`,
         name: label,
         role: "Owner" as const,
-        taxPolicy: firstProfile?.taxPolicy ?? `${workspace.jurisdiction} defaults`,
+        taxPolicy:
+          sourceProfile?.taxPolicy ??
+          firstProfile?.taxPolicy ??
+          `${workspace.jurisdiction} defaults`,
+        fiatCurrency:
+          sourceProfile?.fiatCurrency ??
+          firstProfile?.fiatCurrency ??
+          workspace.currency,
+        taxCountry:
+          sourceProfile?.taxCountry ??
+          firstProfile?.taxCountry ??
+          (workspace.jurisdiction === "Austria" ? "at" : "generic"),
+        taxLongTermDays:
+          sourceProfile?.taxLongTermDays ??
+          firstProfile?.taxLongTermDays ??
+          (workspace.jurisdiction === "Austria" ? 0 : 365),
+        gainsAlgorithm:
+          sourceProfile?.gainsAlgorithm ??
+          firstProfile?.gainsAlgorithm ??
+          (workspace.jurisdiction === "Austria" ? "MOVING_AVERAGE_AT" : "FIFO"),
         accounts: 1,
         wallets: 0,
         lastOpened: "Just now",
@@ -256,7 +295,7 @@ export const mockDaemon: DaemonTransport = {
           request_id: req.request_id,
           error: {
             code: "validation",
-            message: "ui.workspace.create requires label",
+            message: "Books set name is required.",
             retryable: false,
           },
         };

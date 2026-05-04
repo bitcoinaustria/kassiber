@@ -51,7 +51,7 @@ kassiber rates sync --pair BTC-EUR --days 30
 kassiber journals process
 ```
 
-Rate sync and manual rate overrides mark matching profiles' journals stale.
+Rate sync and manual rate overrides mark matching books' journals stale.
 Re-run `journals process` before trusting reports after any rate change.
 
 If the user has BTC ↔ LBTC peg-ins / peg-outs or submarine swaps, do not
@@ -148,7 +148,7 @@ kassiber --format csv --output capital-gains.csv reports capital-gains
 
 ## Austrian E 1kv
 
-Use this only for Austrian (`tax_country=at`, `fiat_currency=EUR`) profiles
+Use this only for Austrian books (`tax_country=at`, `fiat_currency=EUR`)
 after `journals process`:
 
 ```bash

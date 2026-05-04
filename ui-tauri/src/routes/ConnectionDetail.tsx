@@ -50,10 +50,6 @@ import {
 } from "@/components/ui/table";
 import { useDaemon, useDaemonMutation } from "@/daemon/client";
 import { cn } from "@/lib/utils";
-import {
-  hasSessionUnlockPassphrase,
-  verifySessionUnlockPassphrase,
-} from "@/store/sessionLock";
 import { useUiStore } from "@/store/ui";
 import { useSyncProgressNotice } from "@/hooks/useSyncProgressNotice";
 import type {
@@ -304,13 +300,6 @@ function ConnectionDetailView({
     if (!passphrase) {
       setError("Enter the database passphrase.");
       return false;
-    }
-    if (hasSessionUnlockPassphrase()) {
-      const verified = await verifySessionUnlockPassphrase(passphrase);
-      if (!verified) {
-        setError("Passphrase did not unlock this session.");
-        return false;
-      }
     }
     return true;
   };
@@ -633,7 +622,7 @@ function ConnectionDetailView({
             <DialogDescription>
               {encryptedWorkspace
                 ? "Confirm this change with the local database passphrase."
-                : "This plaintext workspace has no database passphrase; type the explicit local-change challenge to continue."}
+                : "These plaintext books have no database passphrase; type the explicit local-change challenge to continue."}
             </DialogDescription>
           </DialogHeader>
           <form className="space-y-4" onSubmit={onEditSubmit}>

@@ -1,5 +1,5 @@
 /**
- * Mock data for the Transactions ledger screen.
+ * Mock data for the Transactions screen.
  *
  * Until the Pydantic→JSON Schema pipeline lands, this fixture extends
  * MOCK_OVERVIEW.txs with a few extra rows to exercise the secondary
@@ -59,12 +59,12 @@ const EXTRA_TXS: Tx[] = [
   },
 ];
 
-export interface TransactionsLedger {
+export interface TransactionsList {
   txs: Tx[];
   year: number;
 }
 
-export const MOCK_TRANSACTIONS: TransactionsLedger = {
+export const MOCK_TRANSACTIONS: TransactionsList = {
   txs: [...MOCK_OVERVIEW.txs, ...EXTRA_TXS],
   year: 2026,
 };

@@ -223,7 +223,7 @@ and [docs/plan/04-desktop-ui.md](docs/plan/04-desktop-ui.md).
   what they actually use.
 - [x] Replace the old Kassiber nav with the shared shadcn desktop shell:
   sidebar, route header, larger search, privacy toggle, settings/donate/
-  bug-report actions, profile switcher, centered version label, and global
+  bug-report actions, books switcher, centered version label, and global
   pre-alpha banner
 - [x] Add reusable shell-level assistant mockup based on `@blocks-so/ai-02`,
   with local-model selector, Kassiber-specific suggestions, collapsed-on-scroll
@@ -296,15 +296,16 @@ and [docs/plan/04-desktop-ui.md](docs/plan/04-desktop-ui.md).
 - [x] Settings modal restyled with shadcn dialog/card/switch/input/select
   primitives, wider dashboard layout, daemon-backed lock controls, SQLCipher
   passphrase rotation, and passphrase plus workspace-name confirmation before
-  deleting encrypted local workspace data
-- [ ] Profiles screen
+  deleting encrypted local books set data
+- [ ] Books screen
 - [x] Welcome/onboarding screen refreshed with a shadcn-style, SQLCipher-aware
-  setup flow that captures workspace/profile/tax defaults and database
+  setup flow that captures books/tax defaults and database
   protection by initializing the local SQLCipher database through the daemon,
   lets users choose the default mempool/custom/skip backend setup with an
   explicit skip warning, keeps Austrian onboarding on moving-average-only
-  current-rule defaults without profile-level long-term exemption controls,
-  captures optional AI assistant intent with a disable-for-now button, and
+  current-rule defaults without book-level long-term exemption controls,
+  captures optional AI assistant intent with a disable-for-now button, opens
+  existing local Kassiber roots through the native desktop picker, and
   offers a dev-only mock preview shortcut.
 - [x] Replace the Overview mock fixture with a read-only
   `ui.overview.snapshot` daemon kind backed by the current SQLite profile

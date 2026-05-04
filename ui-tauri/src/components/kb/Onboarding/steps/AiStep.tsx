@@ -15,6 +15,7 @@ import {
   AI_PROVIDER_KIND_LABELS,
   DEFAULT_AI_BASE_URL,
   DEFAULT_AI_PROVIDER_NAME,
+  aiBaseUrlHint,
 } from "../constants";
 import {
   CheckRow,
@@ -38,6 +39,11 @@ const AI_PROVIDER_KINDS: AiProviderKind[] = ["remote", "tee"];
 const AiPanel = ({ form }: { form: OnboardingForm }) => {
   const disabled = form.aiSetupMode === "disabled";
   const remote = form.aiSetupMode === "remote";
+  const localProviderName =
+    form.aiProviderName.trim() || DEFAULT_AI_PROVIDER_NAME;
+  const localBaseUrl = form.aiBaseUrl.trim() || DEFAULT_AI_BASE_URL;
+  const remoteProviderName = form.aiProviderName.trim();
+  const remoteBaseUrl = form.aiBaseUrl.trim();
   const rows: ReadonlyArray<readonly [string, string]> = disabled
     ? [
         ["Mode", "Disabled for now"],
@@ -51,15 +57,11 @@ const AiPanel = ({ form }: { form: OnboardingForm }) => {
         ],
         [
           "Provider",
-          remote
-            ? form.aiProviderName.trim() || "provider pending"
-            : DEFAULT_AI_PROVIDER_NAME,
+          remote ? remoteProviderName || "provider pending" : localProviderName,
         ],
         [
           "Base URL",
-          remote
-            ? form.aiBaseUrl.trim() || "endpoint pending"
-            : DEFAULT_AI_BASE_URL,
+          remote ? remoteBaseUrl || "endpoint pending" : localBaseUrl,
         ],
         ["Tool actions", "Consent required"],
       ];
@@ -85,10 +87,10 @@ const AiPanel = ({ form }: { form: OnboardingForm }) => {
           <div>
             <p className="font-semibold text-ink">
               {disabled
-                ? "AI marked off for now"
+                ? "AI disabled for now"
                 : remote
-                  ? "Off-device provider intent"
-                  : "Local assistant intent"}
+                  ? "Remote provider"
+                  : "Local endpoint"}
             </p>
             <p className="text-xs text-ink-2">
               {disabled
@@ -135,9 +137,12 @@ export const AiStep = ({
   totalSteps,
   onSubmit,
   goBack,
+  canContinue = true,
 }: StepComponentProps) => {
+  const localSelected = form.aiSetupMode === "local";
   const remoteSelected = form.aiSetupMode === "remote";
   const disabledSelected = form.aiSetupMode === "disabled";
+  const endpointHint = disabledSelected ? null : aiBaseUrlHint(form.aiBaseUrl);
 
   return (
     <OnboardingStepFrame>
@@ -152,9 +157,9 @@ export const AiStep = ({
           <div className="space-y-5">
             <div className="space-y-3">
               <ChoiceCard
-                active={form.aiSetupMode === "local"}
-                title="Use local AI"
-                description="Prefer local Ollama at the OpenAI-compatible default endpoint. Prompts stay on this machine."
+                active={localSelected}
+                title="Use a local endpoint"
+                description="Default to Ollama on this machine. You can point this at another local OpenAI-compatible server."
                 onClick={() => {
                   update("aiSetupMode", "local");
                   update("aiProviderKind", "local");
@@ -164,8 +169,8 @@ export const AiStep = ({
               />
               <ChoiceCard
                 active={remoteSelected}
-                title="Set provider intent"
-                description="Prepare a remote or TEE OpenAI-compatible provider. Prompts can leave this device."
+                title="Use a remote provider"
+                description="Prepare an OpenAI-compatible endpoint outside this app. Prompts and accounting context may leave this device."
                 tone="warning"
                 onClick={() => {
                   update("aiSetupMode", "remote");
@@ -190,37 +195,47 @@ export const AiStep = ({
               Disable AI for now
             </Button>
 
-            {remoteSelected && (
+            {(localSelected || remoteSelected) && (
               <div className="space-y-4 rounded-lg border border-line bg-paper-2 p-4">
-                <SelectField
-                  label="Provider privacy"
-                  value={form.aiProviderKind}
-                  options={AI_PROVIDER_KINDS}
-                  onChange={(value) => update("aiProviderKind", value)}
-                />
+                {remoteSelected && (
+                  <SelectField
+                    label="Provider privacy"
+                    value={form.aiProviderKind}
+                    options={AI_PROVIDER_KINDS}
+                    description="TEE means the provider claims a trusted-execution path; Kassiber still treats it as off-device."
+                    onChange={(value) => update("aiProviderKind", value)}
+                  />
+                )}
                 <TextField
                   label="Provider name"
                   name="aiProviderName"
                   value={form.aiProviderName}
-                  placeholder="openai or maple"
+                  placeholder={localSelected ? "ollama" : "openai or maple"}
+                  description="A short label shown in AI provider settings."
                   onChange={(value) => update("aiProviderName", value)}
                 />
                 <TextField
                   label="Base URL"
                   name="aiBaseUrl"
                   value={form.aiBaseUrl}
-                  placeholder="https://.../v1"
+                  placeholder={
+                    localSelected ? DEFAULT_AI_BASE_URL : "https://.../v1"
+                  }
+                  hint={endpointHint}
+                  description="Must be an OpenAI-compatible /v1 endpoint."
                   onChange={(value) => update("aiBaseUrl", value)}
                 />
-                <CheckRow
-                  id="ai-remote-ack"
-                  checked={form.aiRemoteAcknowledged}
-                  onCheckedChange={(checked) =>
-                    update("aiRemoteAcknowledged", checked)
-                  }
-                  label="I understand prompts may leave this device."
-                  description="Accounting context, labels, notes, backend hostnames, and report details can be sensitive."
-                />
+                {remoteSelected && (
+                  <CheckRow
+                    id="ai-remote-ack"
+                    checked={form.aiRemoteAcknowledged}
+                    onCheckedChange={(checked) =>
+                      update("aiRemoteAcknowledged", checked)
+                    }
+                    label="I understand prompts may leave this device."
+                    description="Accounting context, labels, notes, backend hostnames, and report details can be sensitive."
+                  />
+                )}
               </div>
             )}
 
@@ -235,7 +250,7 @@ export const AiStep = ({
             )}
           </div>
 
-          <Button onClick={onSubmit} className="w-full">
+          <Button onClick={onSubmit} className="w-full" disabled={!canContinue}>
             Continue
           </Button>
         </div>

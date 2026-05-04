@@ -1,5 +1,5 @@
 /**
- * Profiles / workspaces switcher screen.
+ * Books switcher screen.
  */
 
 import {
@@ -16,7 +16,6 @@ import {
   FolderPlus,
   Landmark,
   Plus,
-  UserPlus,
   Users,
   Wallet,
 } from "lucide-react";
@@ -40,10 +39,17 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 import type { ProfilesSnapshot, Profile, Workspace } from "@/mocks/profiles";
 
-export function Profiles() {
+export function Books() {
   const { data, isLoading } = useDaemon<ProfilesSnapshot>(
     "ui.profiles.snapshot",
   );
@@ -51,15 +57,15 @@ export function Profiles() {
   if (isLoading || !data?.data) {
     return (
       <div className="flex flex-1 items-center justify-center text-sm text-muted-foreground">
-        Loading profiles...
+        Loading books...
       </div>
     );
   }
 
-  return <ProfilesView snapshot={data.data} />;
+  return <BooksView snapshot={data.data} />;
 }
 
-function ProfilesView({ snapshot }: { snapshot: ProfilesSnapshot }) {
+function BooksView({ snapshot }: { snapshot: ProfilesSnapshot }) {
   const navigate = useNavigate();
   const switchProfile = useDaemonMutation<{ activeProfileId: string }>(
     "ui.profiles.switch",
@@ -78,6 +84,7 @@ function ProfilesView({ snapshot }: { snapshot: ProfilesSnapshot }) {
   const [profileWorkspace, setProfileWorkspace] = useState<Workspace | null>(
     null,
   );
+  const [profileSource, setProfileSource] = useState<Profile | null>(null);
   const [profileName, setProfileName] = useState("");
   const [workspaceDialogOpen, setWorkspaceDialogOpen] = useState(false);
   const [workspaceName, setWorkspaceName] = useState("");
@@ -86,11 +93,6 @@ function ProfilesView({ snapshot }: { snapshot: ProfilesSnapshot }) {
   const [workspaceError, setWorkspaceError] = useState<string | null>(null);
   const workspaces = snapshot.workspaces;
   const activeProfile = findProfile(workspaces, activeId);
-  const activeWorkspace =
-    workspaces.find((workspace) => workspace.id === snapshot.activeWorkspaceId) ??
-    activeProfile?.workspace ??
-    workspaces[0] ??
-    null;
   const profileCount = workspaces.reduce((a, w) => a + w.profiles.length, 0);
   const walletCount = workspaces.reduce(
     (total, workspace) =>
@@ -118,32 +120,41 @@ function ProfilesView({ snapshot }: { snapshot: ProfilesSnapshot }) {
     setPendingSwitch({ workspace, profile });
   };
 
-  const requestCreateProfile = (workspace: Workspace | null) => {
+  const requestCreateProfile = (
+    workspace: Workspace | null,
+    sourceProfile: Profile | null = null,
+  ) => {
     if (!workspace) return;
     setProfileError(null);
     setProfileName("");
     setProfileWorkspace(workspace);
+    setProfileSource(sourceProfile);
   };
 
   const submitProfile = () => {
     if (!profileWorkspace || createProfile.isPending) return;
     const label = profileName.trim();
     if (!label) {
-      setProfileError("Enter a profile name.");
+      setProfileError("Enter a book name.");
       return;
     }
     setProfileError(null);
     createProfile.mutate(
-      { workspace_id: profileWorkspace.id, label },
+      {
+        workspace_id: profileWorkspace.id,
+        label,
+        ...(profileSource ? { source_profile_id: profileSource.id } : {}),
+      },
       {
         onSuccess: (response) => {
           setActiveId(response.data?.activeProfileId ?? "");
           setProfileWorkspace(null);
+          setProfileSource(null);
           setProfileName("");
         },
         onError: (error) => {
           setProfileError(
-            error instanceof Error ? error.message : "Could not create profile.",
+            error instanceof Error ? error.message : "Could not create book.",
           );
         },
       },
@@ -166,7 +177,7 @@ function ProfilesView({ snapshot }: { snapshot: ProfilesSnapshot }) {
         },
         onError: (error) => {
           setSwitchError(
-            error instanceof Error ? error.message : "Could not switch profile.",
+            error instanceof Error ? error.message : "Could not switch books.",
           );
         },
       },
@@ -177,7 +188,7 @@ function ProfilesView({ snapshot }: { snapshot: ProfilesSnapshot }) {
     if (createWorkspace.isPending) return;
     const label = workspaceName.trim();
     if (!label) {
-      setWorkspaceError("Enter a workspace name.");
+      setWorkspaceError("Enter a books set name.");
       return;
     }
     setWorkspaceError(null);
@@ -191,7 +202,9 @@ function ProfilesView({ snapshot }: { snapshot: ProfilesSnapshot }) {
         },
         onError: (error) => {
           setWorkspaceError(
-            error instanceof Error ? error.message : "Could not create workspace.",
+            error instanceof Error
+              ? error.message
+              : "Could not create books set.",
           );
         },
       },
@@ -203,22 +216,15 @@ function ProfilesView({ snapshot }: { snapshot: ProfilesSnapshot }) {
       <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
         <div className="min-w-0 space-y-2">
           <h2 className="text-2xl font-semibold tracking-tight">
-            Switch profile
+            Books
           </h2>
           <p className="max-w-2xl text-sm text-muted-foreground">
-            Profiles keep books, tax policy, accounts, and wallets separated.
+            Each book has its own tax and currency settings. Use separate
+            books for private and business activity; use separate Kassiber
+            files for different clients.
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
-          <Button
-            type="button"
-            variant="outline"
-            disabled={!activeWorkspace}
-            onClick={() => requestCreateProfile(activeWorkspace)}
-          >
-            <UserPlus className="size-4" aria-hidden="true" />
-            Profile
-          </Button>
           <Button
             type="button"
             data-testid="create-workspace-button"
@@ -228,28 +234,28 @@ function ProfilesView({ snapshot }: { snapshot: ProfilesSnapshot }) {
             }}
           >
             <FolderPlus className="size-4" aria-hidden="true" />
-            Workspace
+            New books set
           </Button>
         </div>
       </div>
 
       <div className="grid gap-3 md:grid-cols-3">
         <SummaryCard
-          label="Workspaces"
+          label="Sets"
           value={workspaces.length}
-          detail="Identity scopes"
+          detail="Top-level groups"
           icon={BriefcaseBusiness}
         />
         <SummaryCard
-          label="Profiles"
+          label="Books"
           value={profileCount}
-          detail="Tax policies"
+          detail="Accounting scopes"
           icon={Users}
         />
         <SummaryCard
           label="Wallets"
           value={walletCount}
-          detail={`${accountCount} accounts`}
+          detail={`${accountCount} buckets`}
           icon={Wallet}
         />
       </div>
@@ -283,15 +289,21 @@ function ProfilesView({ snapshot }: { snapshot: ProfilesSnapshot }) {
         isSubmitting={createProfile.isPending}
         name={profileName}
         open={Boolean(profileWorkspace)}
+        sourceProfile={profileSource}
         workspace={profileWorkspace}
         onNameChange={(value) => {
           setProfileName(value);
+          if (profileError) setProfileError(null);
+        }}
+        onSourceProfileChange={(sourceProfile) => {
+          setProfileSource(sourceProfile);
           if (profileError) setProfileError(null);
         }}
         onOpenChange={(open) => {
           if (createProfile.isPending) return;
           if (!open) {
             setProfileWorkspace(null);
+            setProfileSource(null);
             setProfileName("");
             setProfileError(null);
           }
@@ -395,7 +407,7 @@ function WorkspaceSection({
             onClick={onCreateProfile}
           >
             <Plus className="size-4" aria-hidden="true" />
-            Profile
+            New book
           </Button>
         </div>
       </CardHeader>
@@ -408,19 +420,6 @@ function WorkspaceSection({
             onPick={() => onPick(profile)}
           />
         ))}
-        <button
-          type="button"
-          onClick={onCreateProfile}
-          className="flex min-h-[178px] flex-col items-center justify-center gap-2 rounded-xl border border-dashed bg-muted/20 p-4 text-center transition-colors hover:bg-muted/40"
-        >
-          <Plus className="size-5 text-muted-foreground" aria-hidden="true" />
-          <span className="text-sm font-medium">
-            New profile in {workspace.name}
-          </span>
-          <span className="text-xs text-muted-foreground">
-            Inherit workspace defaults
-          </span>
-        </button>
       </CardContent>
     </Card>
   );
@@ -432,64 +431,80 @@ interface ProfileCardProps {
   onPick: () => void;
 }
 
-function ProfileCard({ profile, isActive, onPick }: ProfileCardProps) {
+function ProfileCard({
+  profile,
+  isActive,
+  onPick,
+}: ProfileCardProps) {
   return (
-    <button
-      type="button"
-      aria-current={isActive ? "true" : undefined}
-      aria-label={
-        isActive ? `Current profile: ${profile.name}` : `Switch to ${profile.name}`
-      }
-      onClick={onPick}
+    <div
       className={cn(
         "flex min-h-[178px] flex-col justify-between rounded-xl border p-4 text-left transition-colors hover:bg-muted/35",
         isActive ? "border-foreground bg-muted/45" : "bg-background",
       )}
     >
-      <div className="space-y-3">
-        <div className="flex items-start justify-between gap-3">
-          <div className="min-w-0">
-            <p className="truncate font-medium">{profile.name}</p>
-            <p className="mt-1 text-xs text-muted-foreground">
-              {profile.role} · opened {profile.lastOpened}
-            </p>
+      <button
+        type="button"
+        aria-current={isActive ? "true" : undefined}
+        aria-label={
+          isActive
+            ? `Current books: ${profile.name}`
+            : `Switch to ${profile.name} books`
+        }
+        onClick={onPick}
+        className="flex flex-1 flex-col justify-between text-left"
+      >
+        <div className="space-y-3">
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0">
+              <p className="truncate font-medium">{profile.name}</p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Opened {profile.lastOpened}
+              </p>
+            </div>
+            {isActive && (
+              <span className="inline-flex items-center gap-1 rounded-md border border-emerald-500/25 bg-emerald-500/10 px-2 py-1 text-xs font-medium text-emerald-700 dark:text-emerald-300">
+                <CheckCircle2 className="size-3" aria-hidden="true" />
+                Active
+              </span>
+            )}
           </div>
-          {isActive && (
-            <span className="inline-flex items-center gap-1 rounded-md border border-emerald-500/25 bg-emerald-500/10 px-2 py-1 text-xs font-medium text-emerald-700 dark:text-emerald-300">
-              <CheckCircle2 className="size-3" aria-hidden="true" />
-              Active
+
+          <div className="rounded-lg border bg-muted/30 p-3">
+            <p className="text-xs font-medium text-muted-foreground">
+              Tax policy
+            </p>
+            <p className="mt-1 text-sm">{profile.taxPolicy}</p>
+          </div>
+        </div>
+
+        <div className="mt-4 flex items-end justify-between gap-3">
+          <div className="flex gap-4 text-sm">
+            <span>
+              <span className="block text-xs text-muted-foreground">
+                Buckets
+              </span>
+              {profile.accounts}
             </span>
-          )}
-        </div>
-
-        <div className="rounded-lg border bg-muted/30 p-3">
-          <p className="text-xs font-medium text-muted-foreground">Tax policy</p>
-          <p className="mt-1 text-sm">{profile.taxPolicy}</p>
-        </div>
-      </div>
-
-      <div className="mt-4 flex items-end justify-between gap-3">
-        <div className="flex gap-4 text-sm">
-          <span>
-            <span className="block text-xs text-muted-foreground">Accounts</span>
-            {profile.accounts}
-          </span>
-          <span>
-            <span className="block text-xs text-muted-foreground">Wallets</span>
-            {profile.wallets}
+            <span>
+              <span className="block text-xs text-muted-foreground">
+                Wallets
+              </span>
+              {profile.wallets}
+            </span>
+          </div>
+          <span
+            className={cn(
+              "inline-flex items-center gap-1 text-sm font-medium",
+              isActive ? "text-foreground" : "text-muted-foreground",
+            )}
+          >
+            {isActive ? "Current" : "Switch"}
+            <ArrowRight className="size-4" aria-hidden="true" />
           </span>
         </div>
-        <span
-          className={cn(
-            "inline-flex items-center gap-1 text-sm font-medium",
-            isActive ? "text-foreground" : "text-muted-foreground",
-          )}
-        >
-          {isActive ? "Current" : "Switch"}
-          <ArrowRight className="size-4" aria-hidden="true" />
-        </span>
-      </div>
-    </button>
+      </button>
+    </div>
   );
 }
 
@@ -498,9 +513,11 @@ interface CreateProfileDialogProps {
   isSubmitting: boolean;
   name: string;
   open: boolean;
+  sourceProfile: Profile | null;
   workspace: Workspace | null;
   onNameChange: (value: string) => void;
   onOpenChange: (open: boolean) => void;
+  onSourceProfileChange: (sourceProfile: Profile | null) => void;
   onSubmit: () => void;
 }
 
@@ -509,11 +526,16 @@ function CreateProfileDialog({
   isSubmitting,
   name,
   open,
+  sourceProfile,
   workspace,
   onNameChange,
   onOpenChange,
+  onSourceProfileChange,
   onSubmit,
 }: CreateProfileDialogProps) {
+  const sourceValue = sourceProfile?.id ?? "__default_settings__";
+  const sourceOptions = workspace?.profiles ?? [];
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-md">
@@ -525,11 +547,13 @@ function CreateProfileDialog({
           }}
         >
           <DialogHeader>
-            <DialogTitle>New profile</DialogTitle>
+            <DialogTitle>New book</DialogTitle>
             <DialogDescription>
-              {workspace
-                ? `Create a profile in ${workspace.name} using that workspace's defaults.`
-                : "Create a profile using workspace defaults."}
+              {workspace && sourceProfile
+                ? `Create a separate book in ${workspace.name} from ${sourceProfile.name}'s tax settings.`
+                : workspace
+                  ? `Create a separate book in ${workspace.name}.`
+                  : "Create a separate book using default settings."}
             </DialogDescription>
           </DialogHeader>
 
@@ -543,15 +567,59 @@ function CreateProfileDialog({
             </div>
           )}
 
+          {workspace && sourceOptions.length > 0 && (
+            <div className="space-y-2">
+              <Label htmlFor="books-source">Start from</Label>
+              <Select
+                value={sourceValue}
+                disabled={isSubmitting}
+                onValueChange={(value) => {
+                  if (value === "__default_settings__") {
+                    onSourceProfileChange(null);
+                    return;
+                  }
+                  onSourceProfileChange(
+                    sourceOptions.find((profile) => profile.id === value) ??
+                      null,
+                  );
+                }}
+              >
+                <SelectTrigger id="books-source" className="w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__default_settings__">
+                    Default settings
+                  </SelectItem>
+                  {sourceOptions.map((profile) => (
+                    <SelectItem key={profile.id} value={profile.id}>
+                      {profile.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-xs leading-5 text-muted-foreground">
+                Copying settings only copies tax policy, currency, holding
+                period, and lot selection. Wallets, buckets, and transactions
+                stay in the original books.
+              </p>
+              {sourceProfile && (
+                <p className="rounded-md border bg-muted/25 px-2 py-1 text-xs">
+                  {sourceProfile.taxPolicy}
+                </p>
+              )}
+            </div>
+          )}
+
           <div className="space-y-2">
-            <Label htmlFor="profile-name">Profile name</Label>
+            <Label htmlFor="profile-name">Book name</Label>
             <Input
               id="profile-name"
               data-testid="profile-name-input"
               autoFocus
               aria-invalid={Boolean(errorMessage)}
               disabled={isSubmitting}
-              placeholder="Treasury"
+              placeholder="Business"
               value={name}
               onChange={(event) => onNameChange(event.currentTarget.value)}
             />
@@ -573,7 +641,7 @@ function CreateProfileDialog({
               Cancel
             </Button>
             <Button type="submit" disabled={isSubmitting}>
-              Create profile
+              Create book
             </Button>
           </DialogFooter>
         </form>
@@ -611,11 +679,11 @@ function ProfileSwitchDialog({
     >
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>Switch profile?</DialogTitle>
+          <DialogTitle>Switch books?</DialogTitle>
           <DialogDescription>
             {currentProfile && profile
               ? `Switch from ${currentProfile.name} to ${profile.name}.`
-              : "Switch to this profile."}
+              : "Switch to these books."}
           </DialogDescription>
         </DialogHeader>
 
@@ -629,9 +697,6 @@ function ProfileSwitchDialog({
                   {workspace.jurisdiction}
                 </p>
               </div>
-              <span className="rounded-md border bg-background px-2 py-1 text-xs text-muted-foreground">
-                {profile.role}
-              </span>
             </div>
             <div className="mt-3 rounded-md border bg-background/70 p-3">
               <p className="text-xs font-medium text-muted-foreground">
@@ -642,7 +707,7 @@ function ProfileSwitchDialog({
             <div className="mt-3 flex gap-4 text-sm">
               <span>
                 <span className="block text-xs text-muted-foreground">
-                  Accounts
+                  Buckets
                 </span>
                 {profile.accounts}
               </span>
@@ -717,14 +782,15 @@ function CreateWorkspaceDialog({
           }}
         >
           <DialogHeader>
-            <DialogTitle>New workspace</DialogTitle>
+            <DialogTitle>New books set</DialogTitle>
             <DialogDescription>
-              Create an empty workspace, then add its first profile.
+              Create a separate top-level set in this local database, then add
+              its first book. Most users only need one.
             </DialogDescription>
           </DialogHeader>
 
           <div className="space-y-2">
-            <Label htmlFor="workspace-name">Workspace name</Label>
+            <Label htmlFor="workspace-name">Books set name</Label>
             <Input
               id="workspace-name"
               data-testid="workspace-name-input"
@@ -753,7 +819,7 @@ function CreateWorkspaceDialog({
               Cancel
             </Button>
             <Button type="submit" disabled={isSubmitting}>
-              Create workspace
+              Create set
             </Button>
           </DialogFooter>
         </form>

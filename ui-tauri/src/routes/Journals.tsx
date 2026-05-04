@@ -106,7 +106,7 @@ export function Journals() {
         <JournalMetric
           label="Transactions"
           value={status.transactionCount.toLocaleString("en-US")}
-          sub="active ledger rows"
+          sub="active transaction rows"
         />
         <JournalMetric
           label="Journal entries"
@@ -121,7 +121,7 @@ export function Journals() {
         <JournalMetric
           label="Last processed"
           value={status.lastProcessedAt ? status.lastProcessedAt.slice(0, 10) : "never"}
-          sub={status.profile ?? "local profile"}
+          sub={status.profile ?? "local books"}
           sensitiveSub
           hideSensitive={hideSensitive}
         />

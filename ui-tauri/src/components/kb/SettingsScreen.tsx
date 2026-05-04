@@ -59,11 +59,8 @@ import {
   type ExistingAiProvider,
 } from "@/components/kb/AiProviderForm";
 import { useDaemon, useDaemonMutation } from "@/daemon/client";
-import {
-  hasSessionUnlockPassphrase,
-  setSessionUnlockPassphrase,
-  verifySessionUnlockPassphrase,
-} from "@/store/sessionLock";
+import { clearImportProject } from "@/daemon/transport";
+import { setSessionUnlockPassphrase } from "@/store/sessionLock";
 import { useUiStore, type AppLockPolicy } from "@/store/ui";
 import { cn } from "@/lib/utils";
 import {
@@ -225,11 +222,19 @@ export function SettingsScreen({ onLock }: SettingsScreenProps) {
 
   const onResetWorkspace = () => {
     const ok = window.confirm(
-      "Reset workspace?\n\nThis clears your local identity and returns you to the Welcome screen. Encrypted data on disk is not touched.",
+      "Reset Welcome state?\n\nThis clears your local identity and returns you to the Welcome screen. Encrypted data on disk is not touched.",
     );
     if (!ok) return;
-    setIdentity(null);
-    void navigate({ to: "/", replace: true });
+    void (async () => {
+      if (identity?.importedProject) {
+        await clearImportProject();
+      }
+      setIdentity(null);
+      void navigate({ to: "/", replace: true });
+    })().catch(() => {
+      setIdentity(null);
+      void navigate({ to: "/", replace: true });
+    });
   };
 
   const lockNow = () => {
@@ -243,7 +248,7 @@ export function SettingsScreen({ onLock }: SettingsScreenProps) {
   };
 
   const workspaceLabel =
-    status?.current_workspace || identity?.workspace || "current workspace";
+    status?.current_workspace || identity?.workspace || "current books set";
   const encryptedWorkspace =
     Boolean(identity?.encrypted) || identity?.databaseMode === "sqlcipher";
 
@@ -334,7 +339,7 @@ export function SettingsScreen({ onLock }: SettingsScreenProps) {
       {
         id: "security-lock-now",
         image: INTEGRATION_ICONS.AI,
-        title: "Lock workspace",
+        title: "Lock database",
         description: appLockPolicy.autoLockWhenIdle
           ? `Auto-locks after ${appLockPolicy.idleMinutes} minutes of inactivity.`
           : "Auto-lock is disabled for idle sessions.",
@@ -349,7 +354,7 @@ export function SettingsScreen({ onLock }: SettingsScreenProps) {
         title: "Database passphrase",
         description: encryptedWorkspace
           ? "Change the SQLCipher database passphrase."
-          : "This workspace is not using SQLCipher encryption.",
+          : "These books are not using SQLCipher encryption.",
         isConnected: encryptedWorkspace,
         category: "security",
         categoryLabel: "Security",
@@ -453,18 +458,9 @@ export function SettingsScreen({ onLock }: SettingsScreenProps) {
       return;
     }
     if (deleteConfirm.trim() !== workspaceLabel) {
-      setDeleteError(`Type ${workspaceLabel} to confirm workspace deletion.`);
+      setDeleteError(`Type ${workspaceLabel} to confirm deletion.`);
       return;
     }
-    if (encryptedWorkspace && hasSessionUnlockPassphrase()) {
-      const verified = await verifySessionUnlockPassphrase(deletePassphrase);
-      if (!verified) {
-        setDeleteError("Passphrase did not unlock this session.");
-        setDeletePassphrase("");
-        return;
-      }
-    }
-
     try {
       await deleteWorkspace.mutateAsync({
         confirm: "DELETE",
@@ -473,13 +469,16 @@ export function SettingsScreen({ onLock }: SettingsScreenProps) {
           ? { passphrase_secret: deletePassphrase }
           : { plaintext_delete_ack: PLAINTEXT_DELETE_ACK },
       });
+      if (identity?.importedProject) {
+        await clearImportProject().catch(() => {});
+      }
       setIdentity(null);
       void navigate({ to: "/", replace: true });
     } catch (error) {
       window.alert(
         error instanceof Error
           ? error.message
-          : "Workspace delete failed.",
+          : "Books delete failed.",
       );
     }
   };
@@ -522,8 +521,8 @@ export function SettingsScreen({ onLock }: SettingsScreenProps) {
           <div className="space-y-1">
             <h1 className="text-2xl font-semibold tracking-tight">Settings</h1>
             <p className="text-sm text-muted-foreground">
-              Workspace preferences, privacy controls, integrations, and local
-              data tools.
+              Books preferences, privacy controls, integrations, and local data
+              tools.
             </p>
           </div>
 
@@ -531,7 +530,7 @@ export function SettingsScreen({ onLock }: SettingsScreenProps) {
             <SettingsIntegrations4
               className="min-w-0"
               heading="Settings"
-              subHeading="Workspace controls grouped by privacy, display, security, sync, assistant, and data."
+              subHeading="Controls grouped by privacy, display, security, sync, assistant, and data."
               integrations={settingsIntegrations}
               selectedId={selectedIntegrationId ?? undefined}
               onSelect={onIntegrationAction}
@@ -596,7 +595,7 @@ export function SettingsScreen({ onLock }: SettingsScreenProps) {
                     Danger zone
                   </CardTitle>
                   <CardDescription>
-                    Reset the Welcome gate or delete the current local workspace.
+                    Reset the Welcome gate or delete the current local books set.
                   </CardDescription>
                 </div>
               </CardHeader>
@@ -614,16 +613,16 @@ export function SettingsScreen({ onLock }: SettingsScreenProps) {
                     className="shrink-0"
                     onClick={onResetWorkspace}
                   >
-                    Reset workspace
+                    Reset Welcome
                   </Button>
                 </div>
                 <div className="flex flex-col gap-3 rounded-lg border border-destructive/30 bg-destructive/5 p-4 sm:flex-row sm:items-center sm:justify-between">
                   <div className="min-w-0 space-y-1">
                     <p className="text-sm font-medium text-destructive">
-                      Delete workspace
+                      Delete books set
                     </p>
                     <p className="text-sm text-muted-foreground">
-                      Remove the current workspace records from the local database.
+                      Remove the current books records from the local database.
                     </p>
                   </div>
                   <Button
@@ -633,7 +632,7 @@ export function SettingsScreen({ onLock }: SettingsScreenProps) {
                     disabled={deleteWorkspace.isPending}
                     onClick={openDeleteWorkspace}
                   >
-                    Delete workspace
+                    Delete books
                   </Button>
                 </div>
               </CardContent>
@@ -661,12 +660,12 @@ export function SettingsScreen({ onLock }: SettingsScreenProps) {
         >
           <DialogContent className="max-w-md">
             <DialogHeader>
-              <DialogTitle>Delete workspace</DialogTitle>
+              <DialogTitle>Delete books set</DialogTitle>
               <DialogDescription>
                 This removes {workspaceLabel} from the local Kassiber database.
                 {encryptedWorkspace
-                  ? " Enter the database passphrase and the workspace name to continue."
-                  : " This plaintext workspace has no database passphrase; type the explicit local-delete challenge and workspace name to continue."}
+                  ? " Enter the database passphrase and the books set name to continue."
+                  : " These plaintext books have no database passphrase; type the explicit local-delete challenge and books set name to continue."}
               </DialogDescription>
             </DialogHeader>
             <form
@@ -705,7 +704,7 @@ export function SettingsScreen({ onLock }: SettingsScreenProps) {
                 </div>
               )}
               <div className="space-y-2">
-                <Label htmlFor="delete-confirm">Workspace name</Label>
+                <Label htmlFor="delete-confirm">Books set name</Label>
                 <Input
                   id="delete-confirm"
                   value={deleteConfirm}
@@ -1014,7 +1013,7 @@ function SecuritySettingsPanel({
             Security boundary
           </h3>
           <p className="m-0 text-sm leading-6 text-muted-foreground">
-            Lock closes the daemon database handle for encrypted workspaces.
+            Lock closes the daemon database handle for encrypted books.
             Unlocking reopens the local SQLCipher database with the passphrase.
           </p>
         </div>
@@ -1060,7 +1059,7 @@ function BackendSettingsPanel({
           </h3>
           <p className="text-sm text-muted-foreground">
             Local node, indexer, Liquid, Lightning, and rate endpoints available
-            to the workspace.
+            to these books.
           </p>
         </div>
         <Button type="button" size="sm" className="shrink-0" onClick={onAdd}>

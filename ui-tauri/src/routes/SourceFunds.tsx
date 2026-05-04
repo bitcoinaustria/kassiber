@@ -82,7 +82,7 @@ export function SourceFunds() {
   const wallets = snapshot.connections;
   const totalBtc = wallets.reduce((sum, wallet) => sum + wallet.balance, 0);
   const walletsWithBalance = wallets.filter((wallet) => wallet.balance !== 0).length;
-  const activeProfile = snapshot.status?.profile ?? "Active profile";
+  const activeProfile = snapshot.status?.profile ?? "Active books";
   const needsJournals = Boolean(snapshot.status?.needsJournals);
 
   return (
@@ -101,7 +101,7 @@ export function SourceFunds() {
           <CardContent className="space-y-3 p-4">
             {wallets.length === 0 ? (
               <div className="rounded-md border border-dashed p-6 text-center text-sm text-muted-foreground">
-                No wallet sources in this profile yet.
+                No wallet sources in these books yet.
               </div>
             ) : (
               wallets.map((wallet) => (
@@ -161,7 +161,7 @@ export function SourceFunds() {
               </span>
             </div>
             <div className="rounded-md border px-3 py-2">
-              <span className="block text-muted-foreground">Profile</span>
+              <span className="block text-muted-foreground">Books</span>
               <span className="mt-1 block truncate font-medium">
                 {activeProfile}
               </span>

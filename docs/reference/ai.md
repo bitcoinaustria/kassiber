@@ -211,8 +211,8 @@ surfaces:
   and `order`
 - `ui_wallets_list` maps to daemon kind `ui.wallets.list`
 - `ui_backends_list` maps to daemon kind `ui.backends.list`; it is scoped to
-  backends referenced by the active profile and returns URL presence metadata,
-  not exact endpoint URLs
+  backends referenced by the active books/profile and returns URL presence
+  metadata, not exact endpoint URLs
 - `ui_profiles_snapshot` maps to daemon kind `ui.profiles.snapshot`
 - `ui_reports_capital_gains` maps to daemon kind `ui.reports.capital_gains`
 - `ui_journals_snapshot` maps to daemon kind `ui.journals.snapshot`
@@ -224,9 +224,10 @@ surfaces:
 - `ui_next_actions` maps to daemon kind `ui.next_actions`
 - `read_skill_reference`
 
-`ui.workspace.health` summarizes the active workspace/profile, wallet and
-transaction counts, journal freshness, quarantine count, and report-readiness
-hints from the current database. `ui.next_actions` returns structured
+`ui.workspace.health` summarizes the active books set and book
+(`workspace`/`profile` internally), wallet and transaction counts,
+journal freshness, quarantine count,
+and report-readiness hints from the current database. `ui.next_actions` returns structured
 recommendations such as create a wallet, sync/import, process journals, review
 quarantine, or run reports. It only advises; it does not execute those actions.
 
@@ -281,10 +282,10 @@ accounting data off-device.
 Examples of prompt shapes that work well with an AI assistant using the Kassiber
 skill:
 
-- "Use the Kassiber skill to inspect my current workspace and profile, list my wallets, and tell me whether journals need to be reprocessed before I trust the reports."
+- "Use the Kassiber skill to inspect my current books, list my wallets, and tell me whether journals need to be reprocessed before I trust the reports."
 - "Use the Kassiber skill to import this Phoenix CSV into my existing wallet, re-run journals, and show me the summary report."
 - "Use the Kassiber skill to find quarantined journal events, explain what is missing, and suggest the smallest fix."
-- "Use the Kassiber skill to compare wallet balances, bucket allocations, and portfolio output for this profile without doing your own arithmetic."
+- "Use the Kassiber skill to compare wallet balances, bucket allocations, and portfolio output for these books without doing your own arithmetic."
 
 Kassiber accounts are wallet/reporting buckets in the current product. AI
 assistants should not recommend double-entry charts of accounts, automatic fee
