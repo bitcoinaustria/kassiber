@@ -133,6 +133,9 @@ impl DaemonSupervisor {
             SupervisorError::new("daemon_lock_poisoned", "daemon data-root lock is poisoned")
                 .retryable()
         })?;
+        if *configured == data_root {
+            return Ok(());
+        }
         let replacement = Arc::new(DaemonProcess::spawn(
             self.resource_dir.as_deref(),
             data_root.clone(),
@@ -982,6 +985,16 @@ mod tests {
     static TEST_TEMP_COUNTER: AtomicU64 = AtomicU64::new(1);
 
     #[cfg(unix)]
+    fn response_pid(response: &Value) -> i64 {
+        response
+            .get("data")
+            .and_then(Value::as_object)
+            .and_then(|data| data.get("pid"))
+            .and_then(Value::as_i64)
+            .expect("response pid")
+    }
+
+    #[cfg(unix)]
     fn write_stub_daemon() -> (PathBuf, PathBuf) {
         let unique = SystemTime::now()
             .duration_since(UNIX_EPOCH)
@@ -998,6 +1011,7 @@ mod tests {
             &script,
             r#"#!/usr/bin/env python3
 import json
+import os
 import sys
 import threading
 import time
@@ -1025,7 +1039,7 @@ for line in sys.stdin:
     if kind == "slow":
         threading.Thread(target=slow, args=(request_id,), daemon=True).start()
     elif kind == "fast":
-        emit({"kind":"fast","schema_version":1,"request_id":request_id,"data":{"ok":True}})
+        emit({"kind":"fast","schema_version":1,"request_id":request_id,"data":{"ok":True,"pid":os.getpid()}})
     elif kind == "locked":
         emit({"kind":"auth_required","schema_version":1,"request_id":request_id,"data":{"scope":"unlock_database"}})
     elif kind == "daemon.shutdown":
@@ -1163,6 +1177,47 @@ for line in sys.stdin:
             None,
             false,
             Some(json!("shutdown-replacement")),
+            |_| {},
+        );
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn set_data_root_same_root_reuses_existing_daemon() {
+        let (dir, script) = write_stub_daemon();
+        let sidecar = dir.join(sidecar_filename().expect("sidecar name"));
+        fs::rename(&script, &sidecar).expect("install stub sidecar");
+        let supervisor = DaemonSupervisor::new(Some(dir.clone()));
+        let data_root = dir.join("imported-data");
+        fs::create_dir_all(&data_root).expect("create data root");
+
+        supervisor
+            .set_data_root(data_root.clone())
+            .expect("warm replacement daemon");
+        let first = supervisor
+            .invoke_inner("fast", None, false, Some(json!("fast-before-noop")), |_| {})
+            .expect("first daemon response");
+        let first_pid = response_pid(&first);
+
+        supervisor
+            .set_data_root(data_root.clone())
+            .expect("same root is a no-op");
+        let second = supervisor
+            .invoke_inner("fast", None, false, Some(json!("fast-after-noop")), |_| {})
+            .expect("second daemon response");
+
+        assert_eq!(response_pid(&second), first_pid);
+        assert_eq!(
+            supervisor.data_root.lock().expect("data root").clone(),
+            Some(data_root)
+        );
+
+        let _ = supervisor.invoke_inner(
+            "daemon.shutdown",
+            None,
+            false,
+            Some(json!("shutdown-idempotent-root")),
             |_| {},
         );
         let _ = fs::remove_dir_all(dir);
