@@ -1,10 +1,10 @@
 # Onboarding
 
-Use this reference when the user is setting up Kassiber state, creating the first ledger/books, or confirming the active paths and context. The CLI still calls these `workspace` and `profile`.
+Use this reference when the user is setting up Kassiber state, creating the first books, or confirming the active paths and context. The CLI still calls the user-facing books set and book `workspace` and `profile`.
 
 ## Core idea
 
-`kassiber init` is non-interactive. It creates the managed state tree and reports the active paths. It does not create a ledger/books pair.
+`kassiber init` is non-interactive. It creates the managed state tree and reports the active paths. It does not create a books set / book pair.
 
 ## Fresh setup
 
@@ -83,7 +83,7 @@ kassiber --data-root /custom/root/data init
 
 ## Optional: encrypt the local database
 
-After `kassiber init` and basic ledger/books setup, the user can opt
+After `kassiber init` and basic books setup, the user can opt
 into SQLCipher at-rest encryption with:
 
 ```bash

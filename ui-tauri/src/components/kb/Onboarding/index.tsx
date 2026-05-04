@@ -105,7 +105,7 @@ const DEFAULT_STEPS: OnboardingStep[] = [
 
 const DEV_MOCK_IDENTITY: Identity = {
   name: "mock books",
-  workspace: "Demo Ledger",
+  workspace: "My Books",
   country: "AT",
   encrypted: false,
   profile: "mock books",
@@ -199,14 +199,14 @@ export const Onboarding = ({ className, steps: customSteps }: OnboardingProps) =
     }
 
     const identity: Identity = {
-      name: form.profile.trim() || "main",
-      workspace: form.workspace.trim() || "Personal",
+      name: form.profile.trim() || "Private",
+      workspace: form.workspace.trim() || "My Books",
       // Legacy field. Today rp2 only ships `at` + `generic` country plugins,
       // so all non-AT picks collapse to "Generic". Prefer `taxCountry` for
       // new callers.
       country: form.taxCountry === "at" ? "AT" : "Generic",
       encrypted: form.databaseMode === "sqlcipher",
-      profile: form.profile.trim() || "main",
+      profile: form.profile.trim() || "Private",
       taxCountry: form.taxCountry,
       fiatCurrency: form.fiatCurrency,
       taxLongTermDays,

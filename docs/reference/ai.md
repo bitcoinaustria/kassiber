@@ -224,8 +224,9 @@ surfaces:
 - `ui_next_actions` maps to daemon kind `ui.next_actions`
 - `read_skill_reference`
 
-`ui.workspace.health` summarizes the active ledger/books (`workspace`/`profile`
-internally), wallet and transaction counts, journal freshness, quarantine count,
+`ui.workspace.health` summarizes the active books set and book
+(`workspace`/`profile` internally), wallet and transaction counts,
+journal freshness, quarantine count,
 and report-readiness hints from the current database. `ui.next_actions` returns structured
 recommendations such as create a wallet, sync/import, process journals, review
 quarantine, or run reports. It only advises; it does not execute those actions.
@@ -281,7 +282,7 @@ accounting data off-device.
 Examples of prompt shapes that work well with an AI assistant using the Kassiber
 skill:
 
-- "Use the Kassiber skill to inspect my current ledger and books, list my wallets, and tell me whether journals need to be reprocessed before I trust the reports."
+- "Use the Kassiber skill to inspect my current books, list my wallets, and tell me whether journals need to be reprocessed before I trust the reports."
 - "Use the Kassiber skill to import this Phoenix CSV into my existing wallet, re-run journals, and show me the summary report."
 - "Use the Kassiber skill to find quarantined journal events, explain what is missing, and suggest the smallest fix."
 - "Use the Kassiber skill to compare wallet balances, bucket allocations, and portfolio output for these books without doing your own arithmetic."

@@ -31,17 +31,17 @@ const START_HIGHLIGHTS: Array<{
   {
     icon: Database,
     title: "One local database",
-    body: "~/.kassiber by default, or an imported ledger root.",
+    body: "~/.kassiber by default, or an imported Kassiber folder.",
   },
   {
     icon: LockKeyhole,
     title: "Encrypted by default",
-    body: "SQLCipher protects real ledgers at rest.",
+    body: "SQLCipher protects real books at rest.",
   },
   {
     icon: FolderOpen,
     title: "Import stays local",
-    body: "Existing books are listed after the selected root opens.",
+    body: "Existing books are listed after the selected folder opens.",
   },
 ];
 
@@ -54,7 +54,7 @@ export function StartChoicePanel({
   return (
     <OnboardingStepFrame>
       <OnboardingStepLeftWrapper
-        title="Open a local ledger"
+        title="Open your local books"
         eyebrow="Start"
         currentStep={0}
         totalSteps={5}
@@ -72,7 +72,7 @@ export function StartChoicePanel({
               </span>
               <span className="min-w-0 flex-1">
                 <span className="block text-base font-semibold">
-                  Set up new ledger
+                  Create new books
                 </span>
                 <span className="mt-2 block text-sm leading-6 text-paper/75">
                   Create a new local Kassiber database with sensible defaults.
@@ -90,8 +90,8 @@ export function StartChoicePanel({
               onClick={onImport}
               title={
                 importAvailable
-                  ? "Import an existing local Kassiber ledger"
-                  : "Ledger import is available in the desktop app"
+                  ? "Open existing local Kassiber books"
+                  : "Opening existing books is available in the desktop app"
               }
               className={cn(
                 "group flex min-h-[132px] w-full items-start gap-4 rounded-lg border p-4 text-left transition",
@@ -105,7 +105,7 @@ export function StartChoicePanel({
               </span>
               <span className="min-w-0 flex-1">
                 <span className="block text-base font-semibold text-ink">
-                  {importing ? "Opening ledger..." : "Import existing ledger"}
+                  {importing ? "Opening books..." : "Open existing books"}
                 </span>
                 <span className="mt-2 block text-sm leading-6 text-ink-2">
                   Open a Kassiber state root or data folder and choose local

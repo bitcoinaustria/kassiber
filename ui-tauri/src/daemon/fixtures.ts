@@ -68,7 +68,7 @@ export const fixtures: Record<string, unknown> = {
   },
   "ui.journals.snapshot": {
     status: {
-      workspace: "Demo Ledger",
+      workspace: "My Books",
       profile: "local books",
       transactionCount: MOCK_OVERVIEW.txs.length,
       journalEntryCount: 42,

@@ -1,5 +1,5 @@
 /**
- * Books / ledger switcher screen.
+ * Books switcher screen.
  */
 
 import {
@@ -135,7 +135,7 @@ function ProfilesView({ snapshot }: { snapshot: ProfilesSnapshot }) {
     if (!profileWorkspace || createProfile.isPending) return;
     const label = profileName.trim();
     if (!label) {
-      setProfileError("Enter a books label.");
+      setProfileError("Enter a book name.");
       return;
     }
     setProfileError(null);
@@ -154,7 +154,7 @@ function ProfilesView({ snapshot }: { snapshot: ProfilesSnapshot }) {
         },
         onError: (error) => {
           setProfileError(
-            error instanceof Error ? error.message : "Could not create books.",
+            error instanceof Error ? error.message : "Could not create book.",
           );
         },
       },
@@ -188,7 +188,7 @@ function ProfilesView({ snapshot }: { snapshot: ProfilesSnapshot }) {
     if (createWorkspace.isPending) return;
     const label = workspaceName.trim();
     if (!label) {
-      setWorkspaceError("Enter a ledger name.");
+      setWorkspaceError("Enter a books set name.");
       return;
     }
     setWorkspaceError(null);
@@ -202,7 +202,9 @@ function ProfilesView({ snapshot }: { snapshot: ProfilesSnapshot }) {
         },
         onError: (error) => {
           setWorkspaceError(
-            error instanceof Error ? error.message : "Could not create ledger.",
+            error instanceof Error
+              ? error.message
+              : "Could not create books set.",
           );
         },
       },
@@ -214,11 +216,12 @@ function ProfilesView({ snapshot }: { snapshot: ProfilesSnapshot }) {
       <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
         <div className="min-w-0 space-y-2">
           <h2 className="text-2xl font-semibold tracking-tight">
-            Switch books
+            Books
           </h2>
           <p className="max-w-2xl text-sm text-muted-foreground">
-            Books are separate accounting and tax scopes inside a ledger. Use
-            them for private, business, or other activity that should not mix.
+            Each book has its own tax and currency settings. Use separate
+            books for private and business activity; use separate Kassiber
+            files for different clients.
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -231,16 +234,16 @@ function ProfilesView({ snapshot }: { snapshot: ProfilesSnapshot }) {
             }}
           >
             <FolderPlus className="size-4" aria-hidden="true" />
-            New ledger
+            New books set
           </Button>
         </div>
       </div>
 
       <div className="grid gap-3 md:grid-cols-3">
         <SummaryCard
-          label="Ledgers"
+          label="Sets"
           value={workspaces.length}
-          detail="Outer containers"
+          detail="Top-level groups"
           icon={BriefcaseBusiness}
         />
         <SummaryCard
@@ -404,7 +407,7 @@ function WorkspaceSection({
             onClick={onCreateProfile}
           >
             <Plus className="size-4" aria-hidden="true" />
-            New books
+            New book
           </Button>
         </div>
       </CardHeader>
@@ -530,7 +533,7 @@ function CreateProfileDialog({
   onSourceProfileChange,
   onSubmit,
 }: CreateProfileDialogProps) {
-  const sourceValue = sourceProfile?.id ?? "__ledger_defaults__";
+  const sourceValue = sourceProfile?.id ?? "__default_settings__";
   const sourceOptions = workspace?.profiles ?? [];
 
   return (
@@ -544,13 +547,13 @@ function CreateProfileDialog({
           }}
         >
           <DialogHeader>
-            <DialogTitle>New books</DialogTitle>
+            <DialogTitle>New book</DialogTitle>
             <DialogDescription>
               {workspace && sourceProfile
-                ? `Create separate books in ${workspace.name} from ${sourceProfile.name}'s tax settings.`
+                ? `Create a separate book in ${workspace.name} from ${sourceProfile.name}'s tax settings.`
                 : workspace
-                  ? `Create separate books in ${workspace.name}.`
-                  : "Create separate books using ledger defaults."}
+                  ? `Create a separate book in ${workspace.name}.`
+                  : "Create a separate book using default settings."}
             </DialogDescription>
           </DialogHeader>
 
@@ -571,7 +574,7 @@ function CreateProfileDialog({
                 value={sourceValue}
                 disabled={isSubmitting}
                 onValueChange={(value) => {
-                  if (value === "__ledger_defaults__") {
+                  if (value === "__default_settings__") {
                     onSourceProfileChange(null);
                     return;
                   }
@@ -585,8 +588,8 @@ function CreateProfileDialog({
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="__ledger_defaults__">
-                    Ledger defaults
+                  <SelectItem value="__default_settings__">
+                    Default settings
                   </SelectItem>
                   {sourceOptions.map((profile) => (
                     <SelectItem key={profile.id} value={profile.id}>
@@ -609,7 +612,7 @@ function CreateProfileDialog({
           )}
 
           <div className="space-y-2">
-            <Label htmlFor="profile-name">Books label</Label>
+            <Label htmlFor="profile-name">Book name</Label>
             <Input
               id="profile-name"
               data-testid="profile-name-input"
@@ -638,7 +641,7 @@ function CreateProfileDialog({
               Cancel
             </Button>
             <Button type="submit" disabled={isSubmitting}>
-              Create books
+              Create book
             </Button>
           </DialogFooter>
         </form>
@@ -779,14 +782,15 @@ function CreateWorkspaceDialog({
           }}
         >
           <DialogHeader>
-            <DialogTitle>New ledger</DialogTitle>
+            <DialogTitle>New books set</DialogTitle>
             <DialogDescription>
-              Create an empty ledger, then add its first books.
+              Create a separate top-level set in this local database, then add
+              its first book. Most users only need one.
             </DialogDescription>
           </DialogHeader>
 
           <div className="space-y-2">
-            <Label htmlFor="workspace-name">Ledger name</Label>
+            <Label htmlFor="workspace-name">Books set name</Label>
             <Input
               id="workspace-name"
               data-testid="workspace-name-input"
@@ -815,7 +819,7 @@ function CreateWorkspaceDialog({
               Cancel
             </Button>
             <Button type="submit" disabled={isSubmitting}>
-              Create ledger
+              Create set
             </Button>
           </DialogFooter>
         </form>

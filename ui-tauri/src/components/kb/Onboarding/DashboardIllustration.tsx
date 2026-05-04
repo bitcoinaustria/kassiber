@@ -31,8 +31,8 @@ export const DashboardIllustration = ({
   variant = "zoomed-out",
   transformOrigin = "-20% -10%",
 }: DashboardIllustrationProps) => {
-  const workspace = form.workspace.trim() || "Personal";
-  const profile = form.profile.trim() || "main";
+  const workspace = form.workspace.trim() || "My Books";
+  const profile = form.profile.trim() || "Private";
   const taxMethod =
     form.gainsAlgorithm === "MOVING_AVERAGE_AT"
       ? "Moving average"

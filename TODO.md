@@ -299,13 +299,13 @@ and [docs/plan/04-desktop-ui.md](docs/plan/04-desktop-ui.md).
   deleting encrypted local workspace data
 - [ ] Books screen
 - [x] Welcome/onboarding screen refreshed with a shadcn-style, SQLCipher-aware
-  setup flow that captures ledger/books/tax defaults and database
+  setup flow that captures books/tax defaults and database
   protection by initializing the local SQLCipher database through the daemon,
   lets users choose the default mempool/custom/skip backend setup with an
   explicit skip warning, keeps Austrian onboarding on moving-average-only
   current-rule defaults without book-level long-term exemption controls,
-  captures optional AI assistant intent with a disable-for-now button, imports
-  existing local ledger/books roots through the native desktop picker, and
+  captures optional AI assistant intent with a disable-for-now button, opens
+  existing local Kassiber roots through the native desktop picker, and
   offers a dev-only mock preview shortcut.
 - [x] Replace the Overview mock fixture with a read-only
   `ui.overview.snapshot` daemon kind backed by the current SQLite profile

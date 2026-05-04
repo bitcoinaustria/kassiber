@@ -41,7 +41,7 @@ export const TaxStep = ({
               <ChoiceCard
                 active={form.taxCountry === "at"}
                 title="Austria"
-                description="Use this if this ledger belongs in an Austrian crypto-tax workflow. EUR and moving-average rules are selected by default."
+                description="Use this if these books belong in an Austrian crypto-tax workflow. EUR and moving-average rules are selected by default."
                 onClick={() => {
                   if (form.taxCountry === "at") return;
                   update("taxCountry", "at");

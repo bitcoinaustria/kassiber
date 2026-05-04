@@ -23,10 +23,10 @@ Current development modes:
   managed `exports/reports/` state directory, and the desktop shell exposes a
   narrow `open_exported_file` command that opens completed PDF/XLSX/CSV report
   files with the system default app.
-  The Welcome screen can also import an existing local ledger: the native
+  The Welcome screen can also open existing local books: the native
   folder picker opens at `~/.kassiber`, accepts either the state root or the
   `data/` folder, restarts the sidecar daemon with that `--data-root`, and then
-  lists local books grouped by ledger. SQLCipher databases must be unlocked
+  lists local books grouped by books set. SQLCipher databases must be unlocked
   before book names can be read because the internal workspace/profile rows live
   inside the encrypted database. macOS uses the system folder picker, Windows
   uses the system folder dialog through PowerShell/.NET, and Linux desktops use

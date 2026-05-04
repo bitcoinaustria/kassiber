@@ -1,5 +1,5 @@
 /**
- * Mock data for the Transactions ledger screen.
+ * Mock data for the Transactions screen.
  *
  * Until the Pydantic→JSON Schema pipeline lands, this fixture extends
  * MOCK_OVERVIEW.txs with a few extra rows to exercise the secondary

@@ -1,10 +1,10 @@
 /**
- * ProfileSwitcherPopover — compact ledger/books switcher anchored to the
- * ledger pill in AppHeader.
+ * ProfileSwitcherPopover — compact books switcher anchored to the
+ * books pill in AppHeader.
  *
  * Shares the kassiber-themed Dialog shell used by action confirmations but with
- * a denser visual layout: each ledger gets a compact header with a jurisdiction
- * chip and a 2-column grid of books cards. Clicking books updates the active
+ * a denser visual layout: each books set gets a compact header with a jurisdiction
+ * chip and a 2-column grid of book cards. Clicking a book updates the active
  * daemon context and closes the popover.
  */
 import { useEffect, useState } from "react";
@@ -52,7 +52,7 @@ export function ProfileSwitcherPopover({
             Switch books
           </DialogTitle>
           <DialogDescription className="sr-only">
-            Pick a ledger and books to make active.
+            Pick a books set and book to make active.
           </DialogDescription>
         </DialogHeader>
 

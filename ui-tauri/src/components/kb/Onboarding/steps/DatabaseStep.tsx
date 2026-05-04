@@ -37,8 +37,8 @@ const DatabasePanel = ({ form }: { form: OnboardingForm }) => {
           <div>
             <p className="font-semibold text-ink">
               {form.databaseMode === "sqlcipher"
-                ? "Ledger will be encrypted"
-                : "Ledger will be unencrypted"}
+                ? "Books will be encrypted"
+                : "Books will be unencrypted"}
             </p>
             <p className="text-xs text-ink-2">
               Watch-only wallet data stays local.
@@ -81,7 +81,7 @@ export const DatabaseStep = ({
         form.databasePassphraseConfirm,
       )
     : null;
-  const canOpenLedger = encrypted
+  const canOpenBooks = encrypted
     ? passphraseHint === null && form.recoveryAcknowledged
     : form.plaintextAcknowledged;
   return (
@@ -98,7 +98,7 @@ export const DatabaseStep = ({
             <div className="space-y-3">
               <ChoiceCard
                 active={encrypted}
-                title="Encrypt the ledger"
+                title="Encrypt these books"
                 description="Recommended for real data. The local SQLite database opens only with your passphrase."
                 onClick={() => update("databaseMode", "sqlcipher")}
               />
@@ -166,7 +166,7 @@ export const DatabaseStep = ({
                         update("migrateCredentials", checked)
                       }
                       label="Move credentials from backends.env into the encrypted DB."
-                      description="Useful when upgrading an existing CLI setup. New ledgers can leave this checked safely."
+                      description="Useful when upgrading an existing CLI setup. New books can leave this checked safely."
                     />
                   </div>
                 </details>
@@ -187,9 +187,9 @@ export const DatabaseStep = ({
           <Button
             onClick={onSubmit}
             className="w-full"
-            disabled={!canOpenLedger || !canContinue}
+            disabled={!canOpenBooks || !canContinue}
           >
-            Open ledger
+            Open books
           </Button>
         </div>
       </OnboardingStepLeftWrapper>

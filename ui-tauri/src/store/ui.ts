@@ -119,7 +119,7 @@ function normalizeIdentity(identity: Identity | null): Identity | null {
     ...identity,
     name: identity.name === "mock profile" ? "mock books" : identity.name,
     profile: identity.profile === "mock" ? "mock books" : identity.profile,
-    workspace: "Demo Ledger",
+    workspace: "My Books",
   };
 }
 

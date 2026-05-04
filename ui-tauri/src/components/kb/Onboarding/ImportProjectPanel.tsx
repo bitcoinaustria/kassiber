@@ -129,7 +129,7 @@ export function ImportProjectPanel({
   return (
     <OnboardingStepFrame>
       <OnboardingStepLeftWrapper
-        title="Import local ledger"
+        title="Open existing books"
         eyebrow="Import"
         currentStep={0}
         totalSteps={1}
@@ -230,7 +230,7 @@ export function ImportProjectPanel({
               </h3>
               <p className="mt-2 text-sm leading-6 text-ink-2">
                 The desktop daemon now points at this selected data root. Once a
-                books open, the same local database powers the rest of the app.
+                book opens, the same local database powers the rest of the app.
               </p>
             </div>
           </div>

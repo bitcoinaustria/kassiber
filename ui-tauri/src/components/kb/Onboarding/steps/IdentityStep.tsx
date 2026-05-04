@@ -21,8 +21,8 @@ export const IdentityStep = ({
   return (
     <OnboardingStepFrame>
       <OnboardingStepLeftWrapper
-        title="Name this ledger"
-        eyebrow="Ledger"
+        title="Name your books"
+        eyebrow="Books"
         currentStep={currentStep}
         totalSteps={totalSteps}
         goBack={goBack}
@@ -33,11 +33,11 @@ export const IdentityStep = ({
         >
           <div className="space-y-4 border-b border-line pb-6">
             <TextField
-              label="Ledger name"
+              label="Books name"
               name="workspace"
               value={form.workspace}
-              placeholder="Personal ledger"
-              description="This is the local ledger shown in the app header."
+              placeholder="My Books"
+              description="This is the local books set shown in the app header."
               onChange={(value) => update("workspace", value)}
             />
             <details className="group rounded-md border border-line bg-paper-2 px-3 py-2">
@@ -49,11 +49,11 @@ export const IdentityStep = ({
                   label="Books label"
                   name="profile"
                   value={form.profile}
-                  placeholder="main"
+                  placeholder="Private"
                   onChange={(value) => update("profile", value)}
                 />
                 <p className="m-0 mt-2 text-xs leading-5 text-ink-2">
-                  Keep the default unless you plan to split this ledger into
+                  Keep the default unless you plan to split these books into
                   separate private, business, or tax books later.
                 </p>
               </div>

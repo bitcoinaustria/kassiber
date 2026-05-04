@@ -1,5 +1,5 @@
 /**
- * Mock ledger + books fixture for the Books screen.
+ * Mock books fixture for the Books screen.
  *
  * Lifted from claude-design/components/strings.jsx (MOCK.workspaces) until
  * the Pydantic→JSON Schema pipeline (Phase 1.2 §2.2) generates fixtures

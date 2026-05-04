@@ -622,7 +622,7 @@ function ConnectionDetailView({
             <DialogDescription>
               {encryptedWorkspace
                 ? "Confirm this change with the local database passphrase."
-                : "This plaintext ledger has no database passphrase; type the explicit local-change challenge to continue."}
+                : "These plaintext books have no database passphrase; type the explicit local-change challenge to continue."}
             </DialogDescription>
           </DialogHeader>
           <form className="space-y-4" onSubmit={onEditSubmit}>

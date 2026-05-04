@@ -106,7 +106,7 @@ export function Journals() {
         <JournalMetric
           label="Transactions"
           value={status.transactionCount.toLocaleString("en-US")}
-          sub="active ledger rows"
+          sub="active transaction rows"
         />
         <JournalMetric
           label="Journal entries"

@@ -154,30 +154,18 @@ const NAV_GROUPS: NavGroup[] = [
     title: "Main",
     items: [
       { label: "Overview", icon: Gauge, href: "/overview" },
+      { label: "Books", icon: Users, href: "/profiles" },
       { label: "Transactions", icon: ClipboardList, href: "/transactions" },
+      { label: "Wallets", icon: Wallet, href: "/connections" },
       { label: "Reports", icon: BarChart3, href: "/reports" },
       { label: "Source of Funds", icon: BadgeCheck, href: "/source-of-funds" },
       { label: "Assistant", icon: MessageSquareText, href: "/assistant" },
     ],
   },
   {
-    title: "Ledger",
-    items: [
-      {
-        label: "Connections",
-        icon: Wallet,
-        href: "/connections",
-        children: [
-          { label: "Wallets", icon: Wallet, href: "/connections" },
-          { label: "Books", icon: Users, href: "/profiles" },
-        ],
-      },
-      { label: "Journals", icon: BookOpen, href: "/journals" },
-    ],
-  },
-  {
     title: "Review",
     items: [
+      { label: "Journals", icon: BookOpen, href: "/journals" },
       { label: "Tax Events", icon: CircleDollarSign, href: "/tax-events" },
       { label: "Quarantine", icon: ShieldAlert, href: "/quarantine" },
     ],
@@ -197,10 +185,10 @@ const ROUTE_META: Array<[string, RouteMeta]> = [
   [
     "/connections",
     {
-      title: "Connections",
+      title: "Wallets",
       icon: Wallet,
-      searchLabel: "Search connections",
-      searchPlaceholder: "Search wallets, books...",
+      searchLabel: "Search wallets",
+      searchPlaceholder: "Search wallets, backends...",
     },
   ],
   [
@@ -306,13 +294,13 @@ const STATIC_SEARCH_RESULTS: SearchResult[] = [
   {
     id: "route:transactions",
     title: "Transactions",
-    detail: "Ledger rows and filters",
+    detail: "Transaction rows and filters",
     keywords: ["tx", "counterparty", "account", "amount", "import"],
     to: "/transactions",
   },
   {
     id: "route:connections",
-    title: "Connections",
+    title: "Wallets",
     detail: "Wallet sources and sync",
     keywords: ["wallets", "xpub", "backend", "sync"],
     to: "/connections",
@@ -320,7 +308,7 @@ const STATIC_SEARCH_RESULTS: SearchResult[] = [
   {
     id: "route:profiles",
     title: "Books",
-    detail: "Ledgers and tax settings",
+    detail: "Books and tax settings",
     keywords: ["ledger", "book", "books", "workspace", "profile", "tax", "country"],
     to: "/profiles",
   },
@@ -334,7 +322,7 @@ const STATIC_SEARCH_RESULTS: SearchResult[] = [
   {
     id: "route:journals",
     title: "Journals",
-    detail: "Processed tax ledger",
+    detail: "Processed tax journal",
     keywords: ["process", "entries", "fees", "basis"],
     to: "/journals",
   },
@@ -801,7 +789,7 @@ export function AppShell() {
                   <LockScreen
                     reason={
                       daemonAuthRequired
-                        ? "The daemon needs the database passphrase before it can return live ledger data."
+                        ? "The daemon needs the database passphrase before it can return live books data."
                         : undefined
                     }
                     onUnlock={unlockApp}
@@ -1041,8 +1029,8 @@ function NavMenuItem({
 
 function NavUser({ onLock }: { onLock: () => void }) {
   const identity = useUiStore((s) => s.identity);
-  const name = identity?.workspace ?? "Demo Ledger";
-  const detail = identity?.profile ?? identity?.name ?? "local books";
+  const name = identity?.workspace ?? "My Books";
+  const detail = identity?.profile ?? identity?.name ?? "Private";
 
   return (
     <SidebarMenu>

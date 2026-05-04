@@ -108,7 +108,7 @@ export const mockDaemon: DaemonTransport = {
         request_id: req.request_id,
         data: {
           deleted: true,
-          workspace: { id: "mock-workspace", label: "Demo Ledger" },
+          workspace: { id: "mock-workspace", label: "My Books" },
           removed: { profiles: 2, wallets: 4, transactions: 24 },
         } as T,
       };
@@ -190,7 +190,7 @@ export const mockDaemon: DaemonTransport = {
           request_id: req.request_id,
           error: {
             code: "validation",
-            message: "ledger not found",
+            message: "books set not found",
             retryable: false,
           },
         };
@@ -217,7 +217,7 @@ export const mockDaemon: DaemonTransport = {
           request_id: req.request_id,
           error: {
             code: "validation",
-            message: "source books not found in ledger",
+            message: "source book not found in this books set",
             retryable: false,
           },
         };
@@ -295,7 +295,7 @@ export const mockDaemon: DaemonTransport = {
           request_id: req.request_id,
           error: {
             code: "validation",
-            message: "Ledger name is required.",
+            message: "Books set name is required.",
             retryable: false,
           },
         };
