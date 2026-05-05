@@ -302,7 +302,6 @@ def _workspace_jurisdiction(tax_countries: list[str]) -> str:
 
 def _tax_policy_label(profile: sqlite3.Row) -> str:
     country = str(profile["tax_country"] or "generic").strip().upper()
-    algorithm = profile["gains_algorithm"]
     if country == "AT":
         try:
             algorithm = build_tax_policy(profile).default_accounting_method.upper()

@@ -2775,19 +2775,19 @@ const Dashboard2 = ({
         : transactionRecords,
     [transactions.txs],
   );
-  const swapCandidateIds = React.useMemo(
+  const periodRecords = React.useMemo(
+    () => recordsForPeriod(records, period),
+    [records, period],
+  );
+  const periodSwapCandidateIds = React.useMemo(
     () =>
       new Set(
-        buildSwapCandidates(records).flatMap((candidate) => [
+        buildSwapCandidates(periodRecords).flatMap((candidate) => [
           candidate.in.id,
           candidate.out.id,
         ]),
       ),
-    [records],
-  );
-  const periodRecords = React.useMemo(
-    () => recordsForPeriod(records, period),
-    [records, period],
+    [periodRecords],
   );
 
   React.useEffect(() => {
@@ -2907,7 +2907,7 @@ const Dashboard2 = ({
         hideSensitive={hideSensitive}
         currency={currency}
         explorerSettings={explorerSettings}
-        swapCandidateIds={swapCandidateIds}
+        swapCandidateIds={periodSwapCandidateIds}
       />
     </div>
   );
