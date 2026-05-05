@@ -1,6 +1,11 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 
+import {
+  DEFAULT_EXPLORER_SETTINGS,
+  type ExplorerSettings,
+} from "@/lib/explorer";
+
 type Lang = "en" | "de";
 type Currency = "btc" | "eur";
 export type DataMode = "mock" | "real";
@@ -88,6 +93,7 @@ interface UiState {
   currency: Currency;
   dataMode: DataMode;
   hideSensitive: boolean;
+  explorerSettings: ExplorerSettings;
   appLockPolicy: AppLockPolicy;
   identity: Identity | null;
   daemonSession: number;
@@ -96,6 +102,7 @@ interface UiState {
   setCurrency: (currency: Currency) => void;
   setDataMode: (dataMode: DataMode) => void;
   setHideSensitive: (hideSensitive: boolean) => void;
+  setExplorerSettings: (settings: Partial<ExplorerSettings>) => void;
   setAppLockPolicy: (policy: Partial<AppLockPolicy>) => void;
   setIdentity: (identity: Identity | null) => void;
   bumpDaemonSession: () => void;
@@ -130,6 +137,7 @@ export const useUiStore = create<UiState>()(
       currency: "btc",
       dataMode: "real",
       hideSensitive: false,
+      explorerSettings: DEFAULT_EXPLORER_SETTINGS,
       appLockPolicy: {
         autoLockWhenIdle: true,
         idleMinutes: 5,
@@ -143,6 +151,10 @@ export const useUiStore = create<UiState>()(
       setCurrency: (currency) => set({ currency }),
       setDataMode: (dataMode) => set({ dataMode }),
       setHideSensitive: (hideSensitive) => set({ hideSensitive }),
+      setExplorerSettings: (settings) =>
+        set((state) => ({
+          explorerSettings: { ...state.explorerSettings, ...settings },
+        })),
       setAppLockPolicy: (policy) =>
         set((state) => ({
           appLockPolicy: { ...state.appLockPolicy, ...policy },
@@ -176,6 +188,10 @@ export const useUiStore = create<UiState>()(
         return {
           ...current,
           ...restored,
+          explorerSettings: {
+            ...DEFAULT_EXPLORER_SETTINGS,
+            ...(restored.explorerSettings ?? current.explorerSettings),
+          },
           identity: normalizeIdentity(restored.identity ?? current.identity),
         };
       },

@@ -1,19 +1,17 @@
 import {
   ArrowDownRight,
+  ArrowLeftRight,
   ArrowUpRight,
   CheckCircle2,
   ChevronLeft,
   ChevronRight,
   ChevronsLeft,
   ChevronsRight,
-  CircleDollarSign,
   Clock,
   Copy,
-  CreditCard,
   Eye,
   ExternalLink,
   Filter,
-  Maximize2,
   MoreHorizontal,
   Pencil,
   Plus,
@@ -28,8 +26,6 @@ import {
 } from "lucide-react";
 import * as React from "react";
 import {
-  Area,
-  AreaChart,
   Bar,
   BarChart,
   CartesianGrid,
@@ -79,6 +75,11 @@ import {
 } from "@/components/ui/table";
 import { cn } from "@/lib/utils";
 import { formatBtc, useCurrency, type Currency } from "@/lib/currency";
+import {
+  explorerTargetForTransaction,
+  type ExplorerSettings,
+} from "@/lib/explorer";
+import { CurrencyToggleText } from "@/components/kb/CurrencyToggleText";
 import { useWalletSyncAction } from "@/hooks/useWalletSyncAction";
 import {
   MOCK_TRANSACTIONS,
@@ -91,6 +92,8 @@ type TransactionStatus = "completed" | "pending" | "failed" | "review";
 
 type TransactionDirection = "Receive" | "Send" | "Transfer";
 
+type TransactionFlow = "incoming" | "outgoing" | "transfer" | "swap";
+
 type Transaction = {
   id: string;
   txnId: string;
@@ -100,6 +103,9 @@ type Transaction = {
   counterparty: string;
   counterpartyInitials: string;
   direction: TransactionDirection;
+  flow?: TransactionFlow;
+  wallet?: string;
+  tag?: string;
   paymentMethod: "On-chain" | "Exchange" | "Lightning" | "Liquid";
   date: string;
   status: TransactionStatus;
@@ -107,31 +113,24 @@ type Transaction = {
 
 type PeriodKey = "ytd" | "30days" | "3months" | "1year" | "5years";
 
-type VolumeDataPoint = {
-  month: string;
-  revenue: number;
+type FlowChartPoint = {
+  date: string;
+  incoming: number;
+  outgoing: number;
+  transfers: number;
+  swaps: number;
 };
 
-type CostDataPoint = {
-  month: string;
-  cogs: number;
-  operatingExpenses: number;
+type FlowBucket = {
+  key: string;
+  label: string;
 };
 
-type PeriodSummary = {
-  total: number;
-  change: number;
-  isPositive: boolean;
-};
-
-type StatItem = {
-  title: string;
-  previousValue: number;
-  value: number;
-  changePercent: number;
-  isPositive: boolean;
-  icon: React.ComponentType<React.SVGProps<SVGSVGElement>>;
-  format: "currency" | "percentage";
+type SwapCandidate = {
+  in: Transaction;
+  out: Transaction;
+  eur: number;
+  btc: number;
 };
 
 const currencyFormatter = new Intl.NumberFormat("en-US", {
@@ -157,182 +156,44 @@ function formatDisplayMoney(eur: number, btc: number, currency: Currency) {
   return currencyFormatter.format(eur);
 }
 
+function formatShortTxid(txid: string) {
+  if (txid.length <= 18) return txid;
+  return `${txid.slice(0, 10)}...${txid.slice(-6)}`;
+}
+
 function transactionBtc(txn: Transaction) {
   return txn.amountBtc ?? 0;
 }
 
-const percentFormatter = new Intl.NumberFormat("en-US", {
-  style: "percent",
-  minimumFractionDigits: 1,
-  maximumFractionDigits: 1,
-});
+function transactionFlow(txn: Transaction): TransactionFlow {
+  if (txn.flow) return txn.flow;
+  if (txn.tag?.toLowerCase().includes("swap")) return "swap";
+  if (txn.direction === "Transfer") return "transfer";
+  return txn.direction === "Receive" ? "incoming" : "outgoing";
+}
 
-const mixBase = "var(--background)";
-
-const palette = {
-  primary: "var(--primary)",
-  secondary: {
-    light: `color-mix(in oklch, var(--primary) 75%, ${mixBase})`,
-    dark: `color-mix(in oklch, var(--primary) 85%, ${mixBase})`,
-  },
+const flowColors: Record<TransactionFlow, string> = {
+  incoming: "oklch(0.56 0.16 150)",
+  outgoing: "oklch(0.58 0.2 27)",
+  transfer: "oklch(0.56 0.04 260)",
+  swap: "oklch(0.62 0.16 246)",
 };
 
-const revenueChartConfig = {
-  revenue: { label: "Volume", color: palette.primary },
+const flowChartConfig = {
+  incoming: { label: "Incoming", color: flowColors.incoming },
+  outgoing: {
+    label: "Outgoing",
+    color: flowColors.outgoing,
+  },
+  transfers: {
+    label: "Transfers",
+    color: flowColors.transfer,
+  },
+  swaps: {
+    label: "Swaps",
+    color: flowColors.swap,
+  },
 } satisfies ChartConfig;
-
-const costsChartConfig = {
-  cogs: { label: "Cost Basis", color: palette.primary },
-  operatingExpenses: {
-    label: "Fees",
-    theme: palette.secondary,
-  },
-} satisfies ChartConfig;
-
-const volumeData: Record<PeriodKey, VolumeDataPoint[]> = {
-  ytd: [
-    { month: "Jan", revenue: 398000 },
-    { month: "Feb", revenue: 412000 },
-    { month: "Mar", revenue: 445000 },
-    { month: "Apr", revenue: 428000 },
-  ],
-  "30days": [
-    { month: "Week 1", revenue: 87500 },
-    { month: "Week 2", revenue: 95200 },
-    { month: "Week 3", revenue: 102800 },
-    { month: "Week 4", revenue: 91400 },
-    { month: "Week 5", revenue: 110600 },
-  ],
-  "3months": [
-    { month: "Oct", revenue: 342000 },
-    { month: "Nov", revenue: 378000 },
-    { month: "Dec", revenue: 456000 },
-    { month: "Jan", revenue: 398000 },
-    { month: "Feb", revenue: 412000 },
-    { month: "Mar", revenue: 445000 },
-  ],
-  "1year": [
-    { month: "Jan", revenue: 285000 },
-    { month: "Feb", revenue: 312000 },
-    { month: "Mar", revenue: 338000 },
-    { month: "Apr", revenue: 356000 },
-    { month: "May", revenue: 342000 },
-    { month: "Jun", revenue: 378000 },
-    { month: "Jul", revenue: 395000 },
-    { month: "Aug", revenue: 418000 },
-    { month: "Sep", revenue: 432000 },
-    { month: "Oct", revenue: 456000 },
-    { month: "Nov", revenue: 478000 },
-    { month: "Dec", revenue: 512000 },
-  ],
-  "5years": [
-    { month: "2022", revenue: 1620000 },
-    { month: "2023", revenue: 2140000 },
-    { month: "2024", revenue: 3310000 },
-    { month: "2025", revenue: 4702000 },
-    { month: "2026", revenue: 1835000 },
-  ],
-};
-
-const costsData: Record<PeriodKey, CostDataPoint[]> = {
-  ytd: [
-    { month: "Jan", cogs: 143300, operatingExpenses: 79600 },
-    { month: "Feb", cogs: 148300, operatingExpenses: 82400 },
-    { month: "Mar", cogs: 160200, operatingExpenses: 89000 },
-    { month: "Apr", cogs: 154000, operatingExpenses: 85600 },
-  ],
-  "30days": [
-    { month: "Week 1", cogs: 31500, operatingExpenses: 18200 },
-    { month: "Week 2", cogs: 34100, operatingExpenses: 19800 },
-    { month: "Week 3", cogs: 37000, operatingExpenses: 20500 },
-    { month: "Week 4", cogs: 32800, operatingExpenses: 19100 },
-    { month: "Week 5", cogs: 39800, operatingExpenses: 21600 },
-  ],
-  "3months": [
-    { month: "Oct", cogs: 123100, operatingExpenses: 68400 },
-    { month: "Nov", cogs: 136100, operatingExpenses: 75600 },
-    { month: "Dec", cogs: 164200, operatingExpenses: 91200 },
-    { month: "Jan", cogs: 143300, operatingExpenses: 79600 },
-    { month: "Feb", cogs: 148300, operatingExpenses: 82400 },
-    { month: "Mar", cogs: 160200, operatingExpenses: 89000 },
-  ],
-  "1year": [
-    { month: "Jan", cogs: 102600, operatingExpenses: 57000 },
-    { month: "Feb", cogs: 112300, operatingExpenses: 62400 },
-    { month: "Mar", cogs: 121700, operatingExpenses: 67600 },
-    { month: "Apr", cogs: 128200, operatingExpenses: 71200 },
-    { month: "May", cogs: 123100, operatingExpenses: 68400 },
-    { month: "Jun", cogs: 136100, operatingExpenses: 75600 },
-    { month: "Jul", cogs: 142200, operatingExpenses: 79000 },
-    { month: "Aug", cogs: 150500, operatingExpenses: 83600 },
-    { month: "Sep", cogs: 155500, operatingExpenses: 86400 },
-    { month: "Oct", cogs: 164200, operatingExpenses: 91200 },
-    { month: "Nov", cogs: 172100, operatingExpenses: 95600 },
-    { month: "Dec", cogs: 184300, operatingExpenses: 102400 },
-  ],
-  "5years": [
-    { month: "2022", cogs: 583200, operatingExpenses: 324000 },
-    { month: "2023", cogs: 770400, operatingExpenses: 428000 },
-    { month: "2024", cogs: 1191600, operatingExpenses: 662000 },
-    { month: "2025", cogs: 1692720, operatingExpenses: 1013080 },
-    { month: "2026", cogs: 660600, operatingExpenses: 385000 },
-  ],
-};
-
-const volumeSummary: Record<PeriodKey, PeriodSummary> = {
-  ytd: { total: 1683000, change: 15.4, isPositive: true },
-  "30days": { total: 487500, change: 14.2, isPositive: true },
-  "3months": { total: 2431000, change: 11.8, isPositive: true },
-  "1year": { total: 4702000, change: 18.5, isPositive: true },
-  "5years": { total: 13607000, change: 31.7, isPositive: true },
-};
-
-const costsSummary: Record<PeriodKey, PeriodSummary> = {
-  ytd: { total: 942400, change: 10.4, isPositive: false },
-  "30days": { total: 274400, change: 8.6, isPositive: false },
-  "3months": { total: 1361400, change: 9.3, isPositive: false },
-  "1year": { total: 2705800, change: 12.1, isPositive: false },
-  "5years": { total: 6010000, change: 22.8, isPositive: false },
-};
-
-const statsData: StatItem[] = [
-  {
-    title: "Transaction Volume",
-    previousValue: 426800,
-    value: 487500,
-    changePercent: 14.2,
-    isPositive: true,
-    icon: CircleDollarSign,
-    format: "currency",
-  },
-  {
-    title: "Realized Gain",
-    previousValue: 168200,
-    value: 213100,
-    changePercent: 26.7,
-    isPositive: true,
-    icon: Wallet,
-    format: "currency",
-  },
-  {
-    title: "Review Rate",
-    previousValue: 0.042,
-    value: 0.031,
-    changePercent: 26.2,
-    isPositive: true,
-    icon: RotateCcw,
-    format: "percentage",
-  },
-  {
-    title: "Avg Transaction",
-    previousValue: 68.4,
-    value: 74.2,
-    changePercent: 8.5,
-    isPositive: true,
-    icon: CreditCard,
-    format: "currency",
-  },
-];
 
 const transactionRecords: Transaction[] = [
   {
@@ -888,11 +749,25 @@ const transactionRecords: Transaction[] = [
 ];
 
 function toDashboardTransaction(tx: Tx, index: number): Transaction {
-  const direction: TransactionDirection = tx.internal
-    ? "Transfer"
-    : tx.amountSat >= 0
-      ? "Receive"
-      : "Send";
+  const tag = tx.tag || "";
+  const isSwap =
+    tag.toLowerCase().includes("swap") ||
+    tx.type === "Swap" ||
+    tx.type === "Mint" ||
+    tx.type === "Melt";
+  const flow: TransactionFlow = isSwap
+    ? "swap"
+    : tx.internal || tx.type === "Transfer" || tx.type === "Rebalance"
+      ? "transfer"
+      : tx.amountSat >= 0
+        ? "incoming"
+        : "outgoing";
+  const direction: TransactionDirection =
+    flow === "transfer" || flow === "swap"
+      ? "Transfer"
+      : flow === "incoming"
+        ? "Receive"
+        : "Send";
   const status: TransactionStatus = tx.conf > 0 ? "completed" : "pending";
   const paymentMethod =
     tx.account.toLowerCase().includes("lightning") ||
@@ -912,9 +787,12 @@ function toDashboardTransaction(tx: Tx, index: number): Transaction {
     counterparty: tx.counter || tx.account || "Unassigned",
     counterpartyInitials: initials(tx.counter || tx.account || "TX"),
     direction,
+    flow,
+    wallet: tx.account || "Unassigned wallet",
+    tag,
     paymentMethod,
     date: tx.date,
-    status: tx.tag.toLowerCase().includes("review") ? "review" : status,
+    status: tag.toLowerCase().includes("review") ? "review" : status,
   };
 }
 
@@ -959,21 +837,18 @@ function recordsForPeriod(records: Transaction[], period: PeriodKey) {
     .filter(
       (entry): entry is { record: Transaction; date: Date } =>
         entry.date !== null,
-    );
+  );
 
   if (!dated.length) {
-    return records.slice(0, periodLimit(period)).reverse();
+    return records.slice(0, periodLimit(period));
   }
 
-  const latest = dated.reduce(
-    (max, entry) => (entry.date > max ? entry.date : max),
-    dated[0].date,
-  );
-  const start = periodStartDate(latest, period);
+  const end = periodAnchorDate(dated.map((entry) => entry.date));
+  const start = periodStartDate(end, period);
 
   return dated
-    .filter((entry) => entry.date >= start && entry.date <= latest)
-    .sort((a, b) => a.date.getTime() - b.date.getTime())
+    .filter((entry) => entry.date >= start && entry.date <= end)
+    .sort((a, b) => b.date.getTime() - a.date.getTime())
     .map((entry) => entry.record);
 }
 
@@ -983,10 +858,23 @@ function parseTransactionDate(value: string) {
   return Number.isNaN(parsed.getTime()) ? null : parsed;
 }
 
-function periodStartDate(latest: Date, period: PeriodKey) {
-  const start = new Date(latest);
+function startOfLocalDay(date: Date) {
+  const start = new Date(date);
+  start.setHours(0, 0, 0, 0);
+  return start;
+}
+
+function periodAnchorDate(dates: Date[]) {
+  const now = new Date();
+  if (!dates.length) return now;
+  const latest = dates.reduce((max, date) => (date > max ? date : max), dates[0]);
+  return latest > now ? latest : now;
+}
+
+function periodStartDate(end: Date, period: PeriodKey) {
+  const start = startOfLocalDay(end);
   if (period === "30days") {
-    start.setDate(start.getDate() - 30);
+    start.setDate(start.getDate() - 29);
   } else if (period === "3months") {
     start.setMonth(start.getMonth() - 3);
   } else if (period === "ytd") {
@@ -1000,68 +888,261 @@ function periodStartDate(latest: Date, period: PeriodKey) {
   return start;
 }
 
-function buildVolumeRows(
-  records: Transaction[],
-  period: PeriodKey,
-  currency: Currency,
-): VolumeDataPoint[] {
-  if (records.length === 0) return volumeData[period];
-  return recordsForPeriod(records, period).map((txn, index) => ({
-    month: period === "30days" ? `#${index + 1}` : txn.date.slice(0, 10) || `#${index + 1}`,
-    revenue: currency === "btc" ? transactionBtc(txn) : txn.amount,
-  }));
+function startOfIsoWeek(date: Date) {
+  const start = new Date(date);
+  const day = start.getDay() || 7;
+  start.setDate(start.getDate() - day + 1);
+  start.setHours(0, 0, 0, 0);
+  return start;
 }
 
-function buildCostRows(
-  records: Transaction[],
-  period: PeriodKey,
-  currency: Currency,
-): CostDataPoint[] {
-  if (records.length === 0) return costsData[period];
-  return recordsForPeriod(records, period).map((txn, index) => ({
-    month: period === "30days" ? `#${index + 1}` : txn.date.slice(0, 10) || `#${index + 1}`,
-    cogs:
-      txn.direction === "Send"
-        ? currency === "btc"
-          ? transactionBtc(txn)
-          : txn.amount
-        : 0,
-    operatingExpenses:
-      txn.status === "review"
-        ? currency === "btc"
-          ? transactionBtc(txn)
-          : txn.amount
-        : 0,
-  }));
+function monthLabel(date: Date) {
+  return date.toLocaleDateString("en-US", {
+    month: "short",
+    year: "2-digit",
+  });
 }
 
-function summarizeVolume(records: Transaction[], period: PeriodKey): PeriodSummary {
-  if (records.length === 0) return volumeSummary[period];
-  const rows = recordsForPeriod(records, period);
-  const total = rows.reduce((sum, txn) => sum + txn.amount, 0);
-  return { total, change: rows.length, isPositive: true };
+function quarterLabel(date: Date) {
+  return `Q${Math.floor(date.getMonth() / 3) + 1} ${String(
+    date.getFullYear(),
+  ).slice(-2)}`;
 }
 
-function summarizeCosts(records: Transaction[], period: PeriodKey): PeriodSummary {
-  if (records.length === 0) return costsSummary[period];
-  const rows = recordsForPeriod(records, period);
-  const total = rows
-    .filter((txn) => txn.direction === "Send" || txn.status === "review")
-    .reduce((sum, txn) => sum + txn.amount, 0);
-  return { total, change: rows.filter((txn) => txn.status === "review").length, isPositive: total === 0 };
-}
-
-function buildStatsData(records: Transaction[]): StatItem[] {
-  const total = records.reduce((sum, txn) => sum + txn.amount, 0);
-  const reviewed = records.filter((txn) => txn.status === "review").length;
-  const sends = records.filter((txn) => txn.direction === "Send");
-  const avg = records.length ? total / records.length : 0;
+function localDateKey(date: Date) {
   return [
-    { ...statsData[0], value: total, previousValue: 0, changePercent: records.length, isPositive: true },
-    { ...statsData[1], value: sends.reduce((sum, txn) => sum + txn.amount, 0), previousValue: 0, changePercent: sends.length, isPositive: true },
-    { ...statsData[2], value: records.length ? reviewed / records.length : 0, previousValue: 0, changePercent: reviewed, isPositive: reviewed === 0 },
-    { ...statsData[3], value: avg, previousValue: 0, changePercent: records.length, isPositive: true },
-  ];
+    date.getFullYear(),
+    String(date.getMonth() + 1).padStart(2, "0"),
+    String(date.getDate()).padStart(2, "0"),
+  ].join("-");
+}
+
+function addBucketStep(date: Date, period: PeriodKey) {
+  const next = new Date(date);
+  if (period === "30days") {
+    next.setDate(next.getDate() + 1);
+  } else if (period === "3months") {
+    next.setDate(next.getDate() + 7);
+  } else if (period === "5years") {
+    next.setMonth(next.getMonth() + 3);
+  } else {
+    next.setMonth(next.getMonth() + 1);
+  }
+  return next;
+}
+
+function bucketTransactionDate(date: Date, period: PeriodKey): FlowBucket {
+  if (period === "30days") {
+    return {
+      key: localDateKey(date),
+      label: localDateKey(date),
+    };
+  }
+  if (period === "3months") {
+    const week = startOfIsoWeek(date);
+    return {
+      key: localDateKey(week),
+      label: `Week ${week.toLocaleDateString("en-US", {
+        month: "short",
+        day: "numeric",
+      })}`,
+    };
+  }
+  if (period === "5years") {
+    const quarterStart = new Date(date);
+    quarterStart.setMonth(Math.floor(date.getMonth() / 3) * 3, 1);
+    quarterStart.setHours(0, 0, 0, 0);
+    return {
+      key: `${quarterStart.getFullYear()}-Q${
+        Math.floor(quarterStart.getMonth() / 3) + 1
+      }`,
+      label: quarterLabel(quarterStart),
+    };
+  }
+  return {
+    key: `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`,
+    label: monthLabel(date),
+  };
+}
+
+function buildEmptyFlowBuckets(
+  period: PeriodKey,
+  records: Transaction[],
+): Map<string, FlowChartPoint> {
+  const grouped = new Map<string, FlowChartPoint>();
+  const dated = records
+    .map((record) => parseTransactionDate(record.date))
+    .filter((date): date is Date => date !== null);
+  if (!dated.length) return grouped;
+
+  const end = periodAnchorDate(dated);
+  let cursor = periodStartDate(end, period);
+  if (period === "3months") cursor = startOfIsoWeek(cursor);
+  if (period === "5years") {
+    cursor.setMonth(Math.floor(cursor.getMonth() / 3) * 3, 1);
+    cursor.setHours(0, 0, 0, 0);
+  }
+
+  while (cursor <= end) {
+    const bucket = bucketTransactionDate(cursor, period);
+    grouped.set(bucket.key, {
+      date: bucket.label,
+      incoming: 0,
+      outgoing: 0,
+      transfers: 0,
+      swaps: 0,
+    });
+    cursor = addBucketStep(cursor, period);
+  }
+  return grouped;
+}
+
+function flowBucketLabel(period: PeriodKey) {
+  if (period === "30days") return "day";
+  if (period === "3months") return "week";
+  if (period === "5years") return "quarter";
+  return "month";
+}
+
+function sumByFlow(records: Transaction[], flow: TransactionFlow) {
+  const rows = records.filter((txn) => transactionFlow(txn) === flow);
+  return {
+    count: rows.length,
+    eur: rows.reduce((sum, txn) => sum + txn.amount, 0),
+    btc: rows.reduce((sum, txn) => sum + transactionBtc(txn), 0),
+  };
+}
+
+function buildSwapCandidates(records: Transaction[]): SwapCandidate[] {
+  const inbound = records
+    .filter((txn) => transactionFlow(txn) === "incoming")
+    .map((txn) => ({ txn, date: parseTransactionDate(txn.date) }))
+    .filter(
+      (entry): entry is { txn: Transaction; date: Date } => entry.date !== null,
+    );
+  const outbound = records
+    .filter((txn) => transactionFlow(txn) === "outgoing")
+    .map((txn) => ({ txn, date: parseTransactionDate(txn.date) }))
+    .filter(
+      (entry): entry is { txn: Transaction; date: Date } => entry.date !== null,
+    );
+  const usedInbound = new Set<string>();
+  const candidates: SwapCandidate[] = [];
+
+  for (const out of outbound) {
+    let best:
+      | {
+          txn: Transaction;
+          date: Date;
+          score: number;
+        }
+      | null = null;
+    for (const input of inbound) {
+      if (usedInbound.has(input.txn.id)) continue;
+      if (input.txn.wallet === out.txn.wallet) continue;
+      if (input.txn.paymentMethod === out.txn.paymentMethod) continue;
+      const deltaMs = Math.abs(input.date.getTime() - out.date.getTime());
+      if (deltaMs > 6 * 60 * 60 * 1000) continue;
+      const largerBtc = Math.max(transactionBtc(input.txn), transactionBtc(out.txn));
+      const smallerBtc = Math.min(transactionBtc(input.txn), transactionBtc(out.txn));
+      if (largerBtc <= 0) continue;
+      const relativeDiff = (largerBtc - smallerBtc) / largerBtc;
+      if (relativeDiff > 0.03) continue;
+      const score = relativeDiff + deltaMs / (6 * 60 * 60 * 1000);
+      if (!best || score < best.score) {
+        best = { ...input, score };
+      }
+    }
+    if (!best) continue;
+    usedInbound.add(best.txn.id);
+    candidates.push({
+      in: best.txn,
+      out: out.txn,
+      eur: Math.min(best.txn.amount, out.txn.amount),
+      btc: Math.min(transactionBtc(best.txn), transactionBtc(out.txn)),
+    });
+  }
+
+  return candidates;
+}
+
+function swapCandidateDelta(candidate: SwapCandidate) {
+  const inDate = parseTransactionDate(candidate.in.date);
+  const outDate = parseTransactionDate(candidate.out.date);
+  if (!inDate || !outDate) return null;
+  return Math.abs(inDate.getTime() - outDate.getTime());
+}
+
+function formatCandidateDelta(candidate: SwapCandidate) {
+  const deltaMs = swapCandidateDelta(candidate);
+  if (deltaMs === null) return "Unknown timing";
+  const minutes = Math.round(deltaMs / 60_000);
+  if (minutes < 60) return `${minutes} min apart`;
+  const hours = Math.round((minutes / 60) * 10) / 10;
+  return `${hours} h apart`;
+}
+
+function buildFlowChartRows(
+  records: Transaction[],
+  period: PeriodKey,
+  currency: Currency,
+  candidateIds = new Set<string>(),
+): FlowChartPoint[] {
+  const grouped = buildEmptyFlowBuckets(period, records);
+
+  for (const txn of records) {
+    const parsedDate = parseTransactionDate(txn.date);
+    const bucket = parsedDate
+      ? bucketTransactionDate(parsedDate, period)
+      : { key: txn.date || "Unknown", label: txn.date || "Unknown" };
+    const row =
+      grouped.get(bucket.key) ??
+      {
+        date: bucket.label,
+        incoming: 0,
+        outgoing: 0,
+        transfers: 0,
+        swaps: 0,
+      };
+    const value = currency === "btc" ? transactionBtc(txn) : txn.amount;
+    const flow = candidateIds.has(txn.id) ? "swap" : transactionFlow(txn);
+    if (flow === "incoming") row.incoming += value;
+    if (flow === "outgoing") row.outgoing += value;
+    if (flow === "transfer") row.transfers += value;
+    if (flow === "swap") row.swaps += value;
+    grouped.set(bucket.key, row);
+  }
+
+  return Array.from(grouped.values());
+}
+
+function buildBreakdown<T extends string>(
+  records: Transaction[],
+  getKey: (txn: Transaction) => T,
+) {
+  const rows = new Map<T, { key: T; count: number; eur: number; btc: number }>();
+  for (const txn of records) {
+    const key = getKey(txn);
+    const row = rows.get(key) ?? { key, count: 0, eur: 0, btc: 0 };
+    row.count += 1;
+    row.eur += txn.amount;
+    row.btc += transactionBtc(txn);
+    rows.set(key, row);
+  }
+  return Array.from(rows.values()).sort((a, b) => b.eur - a.eur);
+}
+
+function formatMetricValue(
+  eur: number,
+  btc: number,
+  currency: Currency,
+  hideSensitive: boolean,
+) {
+  return (
+    <CurrencyToggleText className={blurClass(hideSensitive)}>
+      {formatDisplayMoney(eur, btc, currency)}
+    </CurrencyToggleText>
+  );
 }
 
 const PeriodTabs = ({
@@ -1076,6 +1157,7 @@ const PeriodTabs = ({
       {periodKeys.map((key) => (
         <button
           key={key}
+          type="button"
           onClick={() => onPeriodChange(key)}
           className={cn(
             "rounded-md px-3 py-1.5 text-xs font-medium transition-all sm:text-sm",
@@ -1104,7 +1186,529 @@ interface ChartTooltipProps {
   currency: Currency;
 }
 
-function VolumeTooltip({
+const TransactionWorkbench = ({
+  period,
+  records,
+  hideSensitive,
+  currency,
+  explorerSettings,
+}: {
+  period: PeriodKey;
+  records: Transaction[];
+  hideSensitive: boolean;
+  currency: Currency;
+  explorerSettings: ExplorerSettings;
+}) => {
+  const [swapDialogOpen, setSwapDialogOpen] = React.useState(false);
+  const [largestExplorerTransaction, setLargestExplorerTransaction] =
+    React.useState<Transaction | null>(null);
+  const largestExplorerTarget = largestExplorerTransaction
+    ? explorerForTransaction(largestExplorerTransaction, explorerSettings)
+    : null;
+  const swapCandidates = buildSwapCandidates(records);
+  const swapCandidateIds = new Set(
+    swapCandidates.flatMap((candidate) => [
+      candidate.in.id,
+      candidate.out.id,
+    ]),
+  );
+  const externalRecords = records.filter((txn) => !swapCandidateIds.has(txn.id));
+  const incoming = sumByFlow(externalRecords, "incoming");
+  const outgoing = sumByFlow(externalRecords, "outgoing");
+  const transfers = sumByFlow(externalRecords, "transfer");
+  const markedSwaps = sumByFlow(records, "swap");
+  const swapCandidateTotals = swapCandidates.reduce(
+    (sum, candidate) => ({
+      count: sum.count + 1,
+      eur: sum.eur + candidate.eur,
+      btc: sum.btc + candidate.btc,
+    }),
+    { count: 0, eur: 0, btc: 0 },
+  );
+  const swaps = {
+    count: markedSwaps.count + swapCandidateTotals.count,
+    eur: markedSwaps.eur + swapCandidateTotals.eur,
+    btc: markedSwaps.btc + swapCandidateTotals.btc,
+  };
+  const netEur = incoming.eur - outgoing.eur;
+  const netBtc = incoming.btc - outgoing.btc;
+  const reviewCount = records.filter((txn) => txn.status === "review").length;
+  const pendingCount = records.filter((txn) => txn.status === "pending").length;
+  const failedCount = records.filter((txn) => txn.status === "failed").length;
+  const withoutExplorer = records.filter((txn) => !txn.explorerId).length;
+  const chartRows = buildFlowChartRows(records, period, currency, swapCandidateIds);
+  const networkRows = buildBreakdown(records, (txn) => txn.paymentMethod);
+  const walletRows = buildBreakdown(records, (txn) => txn.wallet ?? "Unassigned");
+  const maxNetworkValue = Math.max(...networkRows.map((row) => row.eur), 1);
+  const maxWalletValue = Math.max(...walletRows.map((row) => row.eur), 1);
+  const largest = records.reduce<Transaction | null>(
+    (current, txn) => (!current || txn.amount > current.amount ? txn : current),
+    null,
+  );
+  const largestExplorer = largest
+    ? explorerForTransaction(largest, explorerSettings)
+    : null;
+  const metricCards = [
+    {
+      label: "Incoming",
+      value: incoming,
+      meta: `${incoming.count} tx`,
+      icon: ArrowDownRight,
+      tone: "text-emerald-600",
+    },
+    {
+      label: "Outgoing",
+      value: outgoing,
+      meta: `${outgoing.count} tx`,
+      icon: ArrowUpRight,
+      tone: "text-red-600",
+    },
+    {
+      label: "Net flow",
+      value: { eur: netEur, btc: netBtc },
+      meta: netEur >= 0 ? "inflow" : "outflow",
+      icon: ArrowLeftRight,
+      tone: netEur >= 0 ? "text-emerald-600" : "text-red-600",
+    },
+    {
+      label: "Transfers",
+      value: transfers,
+      meta: `${transfers.count} moves`,
+      icon: Wallet,
+      tone: "text-muted-foreground",
+    },
+    {
+      label: "Swap candidates",
+      value: swaps,
+      meta:
+        swapCandidateTotals.count > 0
+          ? `${swapCandidateTotals.count} unpaired`
+          : `${markedSwaps.count} marked`,
+      icon: RefreshCw,
+      tone: swapCandidateTotals.count > 0 ? "text-amber-600" : "text-muted-foreground",
+      onClick:
+        swapCandidateTotals.count > 0
+          ? () => setSwapDialogOpen(true)
+          : undefined,
+    },
+    {
+      label: "Review queue",
+      value: { eur: reviewCount + pendingCount + failedCount, btc: 0 },
+      meta: `${reviewCount} review · ${pendingCount} pending`,
+      icon: ShieldAlert,
+      tone:
+        reviewCount || pendingCount || failedCount
+          ? "text-amber-600"
+          : "text-emerald-600",
+      countOnly: true,
+    },
+  ];
+
+  return (
+    <section className="rounded-xl border bg-card">
+      <div className="grid grid-cols-2 border-b md:grid-cols-3 xl:grid-cols-6">
+        {metricCards.map((metric, index) => {
+          const Icon = metric.icon;
+          const className = cn(
+            "min-w-0 space-y-2 p-3 text-left sm:p-4",
+            index > 0 && "border-l",
+            index === 3 && "md:border-l-0 xl:border-l",
+            metric.onClick &&
+              "w-full cursor-pointer transition-colors hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
+          );
+          const content = (
+            <>
+              <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                <Icon className={cn("size-4", metric.tone)} aria-hidden="true" />
+                <span className="truncate">{metric.label}</span>
+              </div>
+              <div className="truncate text-xl font-semibold tracking-tight">
+                {metric.countOnly
+                  ? `${metric.value.eur}`
+                  : metric.onClick
+                    ? (
+                      <span className={blurClass(hideSensitive)}>
+                        {formatDisplayMoney(
+                          metric.value.eur,
+                          Math.abs(metric.value.btc),
+                          currency,
+                        )}
+                      </span>
+                    )
+                    : formatMetricValue(
+                        metric.value.eur,
+                        Math.abs(metric.value.btc),
+                        currency,
+                        hideSensitive,
+                      )}
+              </div>
+              <div className="truncate text-xs text-muted-foreground">
+                {metric.meta}
+              </div>
+            </>
+          );
+          return metric.onClick ? (
+            <button
+              key={metric.label}
+              type="button"
+              className={className}
+              onClick={metric.onClick}
+              aria-label="Open swap candidates"
+            >
+              {content}
+            </button>
+          ) : (
+            <div key={metric.label} className={className}>
+              {content}
+            </div>
+          );
+        })}
+      </div>
+
+      <Dialog open={swapDialogOpen} onOpenChange={setSwapDialogOpen}>
+        <DialogContent className="sm:max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Swap candidates</DialogTitle>
+            <DialogDescription>
+              Cross-wallet, cross-network legs that match by time and amount.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="max-h-[60vh] space-y-3 overflow-y-auto pr-1">
+            {swapCandidates.map((candidate, index) => (
+              <div
+                key={`${candidate.out.id}-${candidate.in.id}`}
+                className="rounded-lg border bg-background p-3"
+              >
+                <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                  <div>
+                    <p className="text-sm font-medium">Candidate {index + 1}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {formatCandidateDelta(candidate)}
+                    </p>
+                  </div>
+                  <CurrencyToggleText
+                    className={cn(
+                      "text-right text-sm font-semibold",
+                      blurClass(hideSensitive),
+                    )}
+                  >
+                    {formatDisplayMoney(candidate.eur, candidate.btc, currency)}
+                  </CurrencyToggleText>
+                </div>
+                <div className="grid gap-2 sm:grid-cols-2">
+                  <SwapCandidateLeg
+                    title="Outgoing leg"
+                    transaction={candidate.out}
+                    currency={currency}
+                    hideSensitive={hideSensitive}
+                  />
+                  <SwapCandidateLeg
+                    title="Incoming leg"
+                    transaction={candidate.in}
+                    currency={currency}
+                    hideSensitive={hideSensitive}
+                  />
+                </div>
+              </div>
+            ))}
+          </div>
+          <DialogFooter>
+            <DialogClose asChild>
+              <Button type="button" variant="outline">
+                Close
+              </Button>
+            </DialogClose>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <div className="grid gap-0 lg:grid-cols-[minmax(0,1.35fr)_minmax(300px,0.65fr)]">
+        <div className="border-b p-3 lg:border-r lg:border-b-0 sm:p-4">
+          <div className="mb-3 flex items-center justify-between gap-3">
+            <div>
+              <h2 className="text-sm font-semibold">
+                Flow by {flowBucketLabel(period)}
+              </h2>
+              <p className="text-xs text-muted-foreground">
+                Incoming, outgoing, transfers, and swaps by {flowBucketLabel(period)}.
+              </p>
+            </div>
+            <div className="flex flex-wrap justify-end gap-x-3 gap-y-1 text-[10px] text-muted-foreground sm:text-xs">
+              {[
+                ["incoming", "Incoming"],
+                ["outgoing", "Outgoing"],
+                ["transfer", "Transfers"],
+                ["swap", "Swaps"],
+              ].map(([flow, label]) => (
+                <span key={flow} className="inline-flex items-center gap-1.5">
+                  <span
+                    className="size-2.5 rounded-sm"
+                    style={{ backgroundColor: flowColors[flow as TransactionFlow] }}
+                    aria-hidden="true"
+                  />
+                  {label}
+                </span>
+              ))}
+            </div>
+          </div>
+          <div className="h-[190px] min-w-0">
+            <ChartContainer config={flowChartConfig} className="h-full w-full">
+              <BarChart data={chartRows}>
+                <CartesianGrid strokeDasharray="0" vertical={false} />
+                <XAxis
+                  dataKey="date"
+                  axisLine={false}
+                  tickLine={false}
+                  tick={{ fontSize: 10 }}
+                  dy={8}
+                />
+                <YAxis
+                  axisLine={false}
+                  tickLine={false}
+                  tick={{ fontSize: 10 }}
+                  width={56}
+                  tickFormatter={(value) =>
+                    hideSensitive
+                      ? ""
+                      : currency === "btc"
+                        ? formatInlineBtc(Number(value), 4)
+                        : compactCurrencyFormatter.format(value)
+                  }
+                />
+                <Tooltip
+                  cursor={{ fillOpacity: 0.05 }}
+                  content={
+                    <FlowTooltip
+                      hideSensitive={hideSensitive}
+                      currency={currency}
+                    />
+                  }
+                />
+                <Bar
+                  dataKey="incoming"
+                  fill={flowColors.incoming}
+                  radius={[2, 2, 0, 0]}
+                />
+                <Bar
+                  dataKey="outgoing"
+                  fill={flowColors.outgoing}
+                  radius={[2, 2, 0, 0]}
+                />
+                <Bar
+                  dataKey="transfers"
+                  fill={flowColors.transfer}
+                  radius={[2, 2, 0, 0]}
+                />
+                <Bar
+                  dataKey="swaps"
+                  fill={flowColors.swap}
+                  radius={[2, 2, 0, 0]}
+                />
+              </BarChart>
+            </ChartContainer>
+          </div>
+        </div>
+
+        <div className="grid gap-0 sm:grid-cols-2 lg:grid-cols-1">
+          <BreakdownPanel
+            title="Network mix"
+            rows={networkRows}
+            maxValue={maxNetworkValue}
+            currency={currency}
+            hideSensitive={hideSensitive}
+          />
+          <BreakdownPanel
+            title="Wallet/source mix"
+            rows={walletRows.slice(0, 4)}
+            maxValue={maxWalletValue}
+            currency={currency}
+            hideSensitive={hideSensitive}
+          />
+          <div className="border-t p-3 sm:col-span-2 lg:col-span-1 sm:p-4">
+            <h3 className="mb-3 text-sm font-semibold">Accounting checks</h3>
+            <div className="grid grid-cols-2 gap-2 text-xs">
+              <CheckPill label="Needs review" value={reviewCount} />
+              <CheckPill label="Pending conf." value={pendingCount} />
+              <CheckPill
+                label="Swap candidates"
+                value={swapCandidateTotals.count}
+                onClick={
+                  swapCandidateTotals.count > 0
+                    ? () => setSwapDialogOpen(true)
+                    : undefined
+                }
+              />
+              <CheckPill label="No explorer id" value={withoutExplorer} />
+            </div>
+            {largest ? (
+              <button
+                type="button"
+                className={cn(
+                  "mt-3 w-full rounded-lg border bg-background p-2 text-left text-xs",
+                  largestExplorer &&
+                    "cursor-pointer transition-colors hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
+                )}
+                onClick={() => {
+                  if (largestExplorer) setLargestExplorerTransaction(largest);
+                }}
+                disabled={!largestExplorer}
+                title={
+                  largestExplorer
+                    ? `Open ${largest.txnId} on ${largestExplorer.label}`
+                    : undefined
+                }
+              >
+                <div className="text-muted-foreground">Largest transaction</div>
+                <div className="mt-1 flex items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <div className="flex min-w-0 items-center gap-1 font-mono font-medium">
+                      <span className="truncate">
+                        {formatShortTxid(largest.txnId)}
+                      </span>
+                      {largestExplorer ? (
+                        <ExternalLink
+                          className="size-3 shrink-0 text-muted-foreground"
+                          aria-hidden="true"
+                        />
+                      ) : null}
+                    </div>
+                    <div className="mt-0.5 truncate text-muted-foreground">
+                      {largest.wallet} · {largest.paymentMethod} · {largest.date}
+                    </div>
+                  </div>
+                  <span className={cn("font-semibold", blurClass(hideSensitive))}>
+                    {formatDisplayMoney(
+                      largest.amount,
+                      transactionBtc(largest),
+                      currency,
+                    )}
+                  </span>
+                </div>
+              </button>
+            ) : null}
+          </div>
+        </div>
+      </div>
+      <Dialog
+        open={Boolean(largestExplorerTransaction)}
+        onOpenChange={(open) => {
+          if (!open) setLargestExplorerTransaction(null);
+        }}
+      >
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <div className="mb-2 flex size-10 items-center justify-center rounded-full bg-amber-100 text-amber-700 dark:bg-amber-950/50 dark:text-amber-300">
+              <ShieldAlert className="size-5" aria-hidden="true" />
+            </div>
+            <DialogTitle>Open transaction in a browser?</DialogTitle>
+            <DialogDescription>
+              This opens {largestExplorerTarget?.label ?? "a public explorer"} outside
+              Kassiber. The explorer can see your IP address and the transaction
+              id you request.
+            </DialogDescription>
+          </DialogHeader>
+          {largestExplorerTransaction && largestExplorerTarget ? (
+            <div className="rounded-md border bg-muted/35 p-3 text-sm">
+              <p className="font-medium">{largestExplorerTransaction.txnId}</p>
+              <p className="mt-1 break-all font-mono text-xs text-muted-foreground">
+                {largestExplorerTarget.url}
+              </p>
+            </div>
+          ) : null}
+          <DialogFooter>
+            <DialogClose asChild>
+              <Button type="button" variant="outline">
+                Cancel
+              </Button>
+            </DialogClose>
+            <Button
+              type="button"
+              disabled={!largestExplorerTarget}
+              onClick={() => {
+                if (!largestExplorerTarget || typeof window === "undefined") return;
+                window.open(
+                  largestExplorerTarget.url,
+                  "_blank",
+                  "noopener,noreferrer",
+                );
+                setLargestExplorerTransaction(null);
+              }}
+            >
+              <ExternalLink className="size-4" aria-hidden="true" />
+              Open explorer
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </section>
+  );
+};
+
+function SwapCandidateLeg({
+  title,
+  transaction,
+  hideSensitive,
+  currency,
+}: {
+  title: string;
+  transaction: Transaction;
+  hideSensitive: boolean;
+  currency: Currency;
+}) {
+  return (
+    <div className="min-w-0 rounded-md border bg-muted/25 p-3 text-xs">
+      <div className="mb-2 flex items-center justify-between gap-2">
+        <span className="font-medium">{title}</span>
+        <span className="rounded-md border bg-background px-1.5 py-0.5 text-muted-foreground">
+          {transaction.paymentMethod}
+        </span>
+      </div>
+      <div className="space-y-1.5">
+        <div className="flex justify-between gap-3">
+          <span className="text-muted-foreground">Wallet</span>
+          <span className={cn("truncate text-right", blurClass(hideSensitive))}>
+            {transaction.wallet}
+          </span>
+        </div>
+        <div className="flex justify-between gap-3">
+          <span className="text-muted-foreground">Date</span>
+          <span>{transaction.date}</span>
+        </div>
+        <div className="flex justify-between gap-3">
+          <span className="text-muted-foreground">Amount</span>
+          <CurrencyToggleText
+            className={cn("font-medium", blurClass(hideSensitive))}
+          >
+            {formatDisplayMoney(
+              transaction.amount,
+              transactionBtc(transaction),
+              currency,
+            )}
+          </CurrencyToggleText>
+        </div>
+        <div className="flex justify-between gap-3">
+          <span className="text-muted-foreground">Label</span>
+          <span className={cn("truncate text-right", blurClass(hideSensitive))}>
+            {transaction.tag || "Unlabeled"}
+          </span>
+        </div>
+        <div className="flex justify-between gap-3">
+          <span className="text-muted-foreground">Tx</span>
+          <span
+            className={cn(
+              "truncate text-right font-mono",
+              blurClass(hideSensitive),
+            )}
+          >
+            {transaction.txnId}
+          </span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function FlowTooltip({
   active,
   payload,
   label,
@@ -1112,502 +1716,118 @@ function VolumeTooltip({
   currency,
 }: ChartTooltipProps) {
   if (!active || !payload?.length) return null;
-
-  const value = payload[0]?.value || 0;
-
+  const rows = payload.filter((row) => Number(row.value ?? 0) > 0);
   return (
-    <div className="rounded-lg border border-border bg-popover p-2 shadow-lg sm:p-3">
-      <p className="mb-1.5 text-xs font-medium text-foreground sm:mb-2 sm:text-sm">
-        {label}
-      </p>
-      <div className="flex items-center gap-1.5 sm:gap-2">
-        <div className="size-2 rounded-full bg-foreground sm:size-2.5" />
-        <span className="text-[10px] text-muted-foreground sm:text-sm">
-          Volume:
-        </span>
-        <span
-          className={cn(
-            "text-[10px] font-medium text-foreground sm:text-sm",
-            blurClass(hideSensitive),
-          )}
-        >
-          {currency === "btc"
-            ? formatBtc(Number(value))
-            : currencyFormatter.format(Number(value))}
-        </span>
-      </div>
-    </div>
-  );
-}
-
-const VolumeChart = ({
-  period,
-  records,
-  hideSensitive,
-  currency,
-}: {
-  period: PeriodKey;
-  records: Transaction[];
-  hideSensitive: boolean;
-  currency: Currency;
-}) => {
-  const data = buildVolumeRows(records, period, currency);
-  const summary = summarizeVolume(records, period);
-  const summaryBtc = recordsForPeriod(records, period).reduce(
-    (sum, txn) => sum + transactionBtc(txn),
-    0,
-  );
-
-  const renderChartCard = (expanded = false) => {
-    const gradientId = expanded ? "revenueGradientExpanded" : "revenueGradient";
-
-    return (
-    <div className="flex min-w-0 flex-1 flex-col gap-4 rounded-xl border bg-card p-4 sm:gap-5 sm:p-5">
-      <div className="flex items-start justify-between gap-3">
-        <div className="flex flex-col gap-1">
-          <p className="text-xs text-muted-foreground sm:text-sm">
-            Transaction Volume
-          </p>
-          <div className="flex items-center gap-2">
-            <p
-              className={cn(
-                "whitespace-nowrap text-xl leading-tight font-semibold tracking-tight sm:text-2xl",
-                blurClass(hideSensitive),
-              )}
-            >
-              {formatDisplayMoney(summary.total, summaryBtc, currency)}
-            </p>
-            <div className="flex items-center gap-0.5">
-              {summary.isPositive ? (
-                <ArrowUpRight
-                  className="size-3.5 text-emerald-600"
-                  aria-hidden="true"
-                />
-              ) : (
-                <ArrowDownRight
-                  className="size-3.5 text-red-600"
-                  aria-hidden="true"
-                />
-              )}
-              <span
-                className={cn(
-                  "text-xs font-medium",
-                  summary.isPositive ? "text-emerald-600" : "text-red-600",
-                  blurClass(hideSensitive),
-                )}
-              >
-                {summary.isPositive ? "+" : "-"}
-                {summary.change}
-              </span>
-            </div>
-          </div>
-        </div>
-        {!expanded && (
-          <DialogTrigger asChild>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="size-7 sm:size-8"
-              aria-label="Expand transaction volume chart"
-            >
-              <Maximize2 className="size-4" aria-hidden="true" />
-            </Button>
-          </DialogTrigger>
-        )}
-      </div>
-
-      <div
-        className={
-          expanded
-            ? "h-[min(62vh,620px)] w-full min-w-0"
-            : "h-[180px] w-full min-w-0 sm:h-[220px]"
-        }
-      >
-        <ChartContainer config={revenueChartConfig} className="h-full w-full">
-          <AreaChart data={data}>
-            <defs>
-              <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
-                <stop
-                  offset="0%"
-                  stopColor="var(--color-revenue)"
-                  stopOpacity={0.15}
-                />
-                <stop
-                  offset="100%"
-                  stopColor="var(--color-revenue)"
-                  stopOpacity={0.02}
-                />
-              </linearGradient>
-            </defs>
-            <CartesianGrid strokeDasharray="0" vertical={false} />
-            <XAxis
-              dataKey="month"
-              axisLine={false}
-              tickLine={false}
-              tick={{ fontSize: 10 }}
-              dy={8}
+    <div className="rounded-lg border bg-popover p-3 text-xs shadow-lg">
+      <p className="mb-2 font-medium">{label}</p>
+      <div className="space-y-1.5">
+        {rows.map((row) => (
+          <div key={String(row.dataKey)} className="flex items-center gap-2">
+            <span
+              className="size-2 rounded-sm"
+              style={{
+                backgroundColor:
+                  flowColors[
+                    (row.dataKey === "transfers"
+                      ? "transfer"
+                      : row.dataKey === "swaps"
+                        ? "swap"
+                        : row.dataKey) as TransactionFlow
+                  ] ?? "currentColor",
+              }}
+              aria-hidden="true"
             />
-            <YAxis
-              axisLine={false}
-              tickLine={false}
-              tick={{ fontSize: 10 }}
-              dx={-5}
-              tickFormatter={(value) =>
-                hideSensitive
-                  ? ""
-                  : currency === "btc"
-                  ? formatInlineBtc(Number(value), 4)
-                  : compactCurrencyFormatter.format(value)
-              }
-              width={56}
-            />
-            <Tooltip
-              content={
-                <VolumeTooltip
-                  hideSensitive={hideSensitive}
-                  currency={currency}
-                />
-              }
-              cursor={{ strokeOpacity: 0.2 }}
-            />
-            <Area
-              type="monotone"
-              dataKey="revenue"
-              stroke="var(--color-revenue)"
-              strokeWidth={2}
-              fill={`url(#${gradientId})`}
-            />
-          </AreaChart>
-        </ChartContainer>
-      </div>
-    </div>
-    );
-  };
-
-  return (
-    <Dialog>
-      {renderChartCard()}
-      <DialogContent className="max-w-[calc(100vw-2rem)] p-0 sm:max-w-[min(1120px,calc(100vw-2rem))]">
-        <DialogTitle className="sr-only">
-          Expanded transaction volume chart
-        </DialogTitle>
-        {renderChartCard(true)}
-      </DialogContent>
-    </Dialog>
-  );
-};
-
-function CostsTooltip({
-  active,
-  payload,
-  label,
-  colors,
-  hideSensitive,
-  currency,
-}: ChartTooltipProps & {
-  colors: { primary: string; secondary: string };
-}) {
-  if (!active || !payload?.length) return null;
-
-  const cogs = payload.find((p) => p.dataKey === "cogs")?.value || 0;
-  const operatingExpenses =
-    payload.find((p) => p.dataKey === "operatingExpenses")?.value || 0;
-  const total = Number(cogs) + Number(operatingExpenses);
-
-  return (
-    <div className="rounded-lg border border-border bg-popover p-2 shadow-lg sm:p-3">
-      <p className="mb-1.5 text-xs font-medium text-foreground sm:mb-2 sm:text-sm">
-        {label}
-      </p>
-      <div className="space-y-1 sm:space-y-1.5">
-        <div className="flex items-center gap-1.5 sm:gap-2">
-          <div
-            className="size-2 rounded-full sm:size-2.5"
-            style={{ backgroundColor: colors.primary }}
-          />
-          <span className="text-[10px] text-muted-foreground sm:text-sm">
-            COGS:
-          </span>
-          <span
-            className={cn(
-              "text-[10px] font-medium text-foreground sm:text-sm",
-              blurClass(hideSensitive),
-            )}
-          >
-            {currency === "btc"
-              ? formatBtc(Number(cogs))
-              : currencyFormatter.format(Number(cogs))}
-          </span>
-        </div>
-        <div className="flex items-center gap-1.5 sm:gap-2">
-          <div
-            className="size-2 rounded-full sm:size-2.5"
-            style={{ backgroundColor: colors.secondary }}
-          />
-          <span className="text-[10px] text-muted-foreground sm:text-sm">
-            Operating:
-          </span>
-          <span
-            className={cn(
-              "text-[10px] font-medium text-foreground sm:text-sm",
-              blurClass(hideSensitive),
-            )}
-          >
-            {currency === "btc"
-              ? formatBtc(Number(operatingExpenses))
-              : currencyFormatter.format(Number(operatingExpenses))}
-          </span>
-        </div>
-        <div className="mt-1 border-t border-border pt-1">
-          <span
-            className={cn(
-              "text-[10px] font-medium text-foreground sm:text-xs",
-              blurClass(hideSensitive),
-            )}
-          >
-            Total:{" "}
-            {currency === "btc"
-              ? formatBtc(total)
-              : currencyFormatter.format(total)}
-          </span>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-const CostsChart = ({
-  period,
-  records,
-  hideSensitive,
-  currency,
-}: {
-  period: PeriodKey;
-  records: Transaction[];
-  hideSensitive: boolean;
-  currency: Currency;
-}) => {
-  const data = buildCostRows(records, period, currency);
-  const summary = summarizeCosts(records, period);
-  const summaryBtc = recordsForPeriod(records, period)
-    .filter((txn) => txn.direction === "Send" || txn.status === "review")
-    .reduce((sum, txn) => sum + transactionBtc(txn), 0);
-
-  return (
-    <div className="flex min-w-0 flex-1 flex-col gap-4 rounded-xl border bg-card p-4 sm:gap-5 sm:p-5">
-      <div className="flex flex-col gap-1">
-        <div className="flex items-center justify-between">
-          <p className="text-xs text-muted-foreground sm:text-sm">
-            Costs Breakdown
-          </p>
-          <div className="flex items-center gap-3">
-            <div className="flex items-center gap-1.5">
-              <div
-                className="size-2 rounded-full"
-                style={{ backgroundColor: "var(--color-cogs)" }}
-              />
-              <span className="text-[10px] text-muted-foreground sm:text-xs">
-                COGS
-              </span>
-            </div>
-            <div className="flex items-center gap-1.5">
-              <div
-                className="size-2 rounded-full"
-                style={{ backgroundColor: "var(--color-operatingExpenses)" }}
-              />
-              <span className="text-[10px] text-muted-foreground sm:text-xs">
-                Operating Expenses
-              </span>
-            </div>
-          </div>
-        </div>
-        <div className="flex items-center gap-2">
-          <p
-            className={cn(
-              "whitespace-nowrap text-xl leading-tight font-semibold tracking-tight sm:text-2xl",
-              blurClass(hideSensitive),
-            )}
-          >
-            {formatDisplayMoney(summary.total, summaryBtc, currency)}
-          </p>
-          <div className="flex items-center gap-0.5">
-            {summary.isPositive ? (
-              <ArrowUpRight
-                className="size-3.5 text-emerald-600"
-                aria-hidden="true"
-              />
-            ) : (
-              <ArrowDownRight
-                className="size-3.5 text-red-600"
-                aria-hidden="true"
-              />
-            )}
-              <span
-                className={cn(
-                  "text-xs font-medium",
-                  summary.isPositive ? "text-emerald-600" : "text-red-600",
-                  blurClass(hideSensitive),
-                )}
-              >
-              {summary.isPositive ? "+" : "-"}
-              {summary.change}
+            <span className="capitalize text-muted-foreground">
+              {String(row.dataKey)}
+            </span>
+            <span className={cn("ml-auto font-medium", blurClass(hideSensitive))}>
+              {currency === "btc"
+                ? formatBtc(Number(row.value))
+                : currencyFormatter.format(Number(row.value))}
             </span>
           </div>
-        </div>
-      </div>
-
-      <div className="h-[180px] w-full min-w-0 sm:h-[220px]">
-        <ChartContainer config={costsChartConfig} className="h-full w-full">
-          <BarChart data={data}>
-            <CartesianGrid strokeDasharray="0" vertical={false} />
-            <XAxis
-              dataKey="month"
-              axisLine={false}
-              tickLine={false}
-              tick={{ fontSize: 10 }}
-              dy={8}
-            />
-            <YAxis
-              axisLine={false}
-              tickLine={false}
-              tick={{ fontSize: 10 }}
-              dx={-5}
-              tickFormatter={(value) =>
-                hideSensitive
-                  ? ""
-                  : currency === "btc"
-                  ? formatInlineBtc(Number(value), 4)
-                  : compactCurrencyFormatter.format(value)
-              }
-              width={56}
-            />
-            <Tooltip
-              content={
-                <CostsTooltip
-                  colors={{
-                    primary: "var(--color-cogs)",
-                    secondary: "var(--color-operatingExpenses)",
-                  }}
-                  hideSensitive={hideSensitive}
-                  currency={currency}
-                />
-              }
-              cursor={{ fillOpacity: 0.05 }}
-            />
-            <Bar
-              dataKey="cogs"
-              stackId="costs"
-              fill="var(--color-cogs)"
-              radius={[0, 0, 0, 0]}
-            />
-            <Bar
-              dataKey="operatingExpenses"
-              stackId="costs"
-              fill="var(--color-operatingExpenses)"
-              radius={[3, 3, 0, 0]}
-            />
-          </BarChart>
-        </ChartContainer>
+        ))}
       </div>
     </div>
   );
-};
+}
 
-const StatsCards = ({
-  records,
-  hideSensitive,
+function BreakdownPanel({
+  title,
+  rows,
+  maxValue,
   currency,
+  hideSensitive,
 }: {
-  records: Transaction[];
-  hideSensitive: boolean;
+  title: string;
+  rows: Array<{ key: string; count: number; eur: number; btc: number }>;
+  maxValue: number;
   currency: Currency;
-}) => {
-  const stats = buildStatsData(records);
-  const totalBtc = records.reduce((sum, txn) => sum + transactionBtc(txn), 0);
-  const sentBtc = records
-    .filter((txn) => txn.direction === "Send")
-    .reduce((sum, txn) => sum + transactionBtc(txn), 0);
-  const avgBtc = records.length ? totalBtc / records.length : 0;
-  const btcByStat = new Map([
-    ["Transaction Volume", totalBtc],
-    ["Realized Gain", sentBtc],
-    ["Avg Transaction", avgBtc],
-  ]);
+  hideSensitive: boolean;
+}) {
   return (
-    <div className="grid grid-cols-2 gap-3 rounded-xl border bg-card p-4 sm:gap-4 sm:p-5 lg:grid-cols-4 lg:gap-6 lg:p-6">
-      {stats.map((stat, index) => {
-        const formatter =
-          stat.format === "currency" ? currencyFormatter : percentFormatter;
-
-        return (
-          <div key={stat.title} className="flex items-start">
-            <div className="flex-1 space-y-1 sm:space-y-2 lg:space-y-3">
-              <div className="flex items-center gap-1.5 text-muted-foreground sm:gap-2">
-                <stat.icon className="size-3.5 sm:size-4" aria-hidden="true" />
-                <span className="truncate text-[10px] font-medium sm:text-xs lg:text-sm">
-                  {stat.title}
-                </span>
-              </div>
-              <p
-                className={cn(
-                  "hidden whitespace-nowrap text-[10px] text-muted-foreground/70 sm:block sm:text-xs",
-                  blurClass(hideSensitive),
-                )}
-              >
-                {stat.format === "currency"
-                  ? formatDisplayMoney(stat.previousValue, 0, currency)
-                  : formatter.format(stat.previousValue)} previous month
-              </p>
-              <p
-                className={cn(
-                  "whitespace-nowrap text-xl leading-tight font-semibold tracking-tight sm:text-2xl lg:text-[28px]",
-                  blurClass(hideSensitive),
-                )}
-              >
-                {stat.format === "currency"
-                  ? formatDisplayMoney(
-                      stat.value,
-                      btcByStat.get(stat.title) ?? 0,
-                      currency,
-                    )
-                  : formatter.format(stat.value)}
-              </p>
-              <div className="flex flex-wrap items-center gap-x-1 gap-y-0.5 text-[10px] sm:text-xs">
-                {stat.isPositive ? (
-                  <ArrowUpRight
-                    className="size-3 shrink-0 text-emerald-600 sm:size-3.5"
-                    aria-hidden="true"
-                  />
-                ) : (
-                  <ArrowDownRight
-                    className="size-3 shrink-0 text-red-600 sm:size-3.5"
-                    aria-hidden="true"
-                  />
-                )}
-                <span
-                  className={cn(
-                    "whitespace-nowrap",
-                    stat.isPositive ? "text-emerald-600" : "text-red-600",
-                    blurClass(hideSensitive),
-                  )}
-                >
-                  {stat.isPositive ? "+" : "-"}
-                  {stat.changePercent.toFixed(1)}%
-                </span>
-                <span className="whitespace-nowrap text-muted-foreground">
-                  vs last month
-                </span>
-              </div>
+    <div className="border-t p-3 first:border-t-0 sm:p-4 lg:first:border-t">
+      <h3 className="mb-3 text-sm font-semibold">{title}</h3>
+      <div className="space-y-2.5">
+        {rows.map((row) => (
+          <div key={row.key} className="space-y-1">
+            <div className="flex items-center justify-between gap-2 text-xs">
+              <span className="truncate font-medium">{row.key}</span>
+              <span className="shrink-0 text-muted-foreground">
+                {row.count} ·{" "}
+                <CurrencyToggleText className={blurClass(hideSensitive)}>
+                  {formatDisplayMoney(row.eur, row.btc, currency)}
+                </CurrencyToggleText>
+              </span>
             </div>
-            {index < statsData.length - 1 && (
-              <div className="mx-4 hidden h-full w-px bg-border lg:block xl:mx-6" />
-            )}
+            <div className="h-1.5 overflow-hidden rounded-full bg-muted">
+              <div
+                className="h-full rounded-full bg-primary"
+                style={{ width: `${Math.max(6, (row.eur / maxValue) * 100)}%` }}
+              />
+            </div>
           </div>
-        );
-      })}
+        ))}
+      </div>
     </div>
   );
-};
+}
+
+function CheckPill({
+  label,
+  value,
+  onClick,
+}: {
+  label: string;
+  value: number;
+  onClick?: () => void;
+}) {
+  const className = cn(
+    "rounded-lg border bg-background p-2 text-left",
+    onClick &&
+      "w-full cursor-pointer transition-colors hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
+  );
+  const content = (
+    <>
+      <div className="text-muted-foreground">{label}</div>
+      <div
+        className={cn(
+          "mt-1 text-lg font-semibold",
+          value > 0 ? "text-amber-600" : "text-emerald-600",
+        )}
+      >
+        {value}
+      </div>
+    </>
+  );
+  return onClick ? (
+    <button type="button" className={className} onClick={onClick}>
+      {content}
+    </button>
+  ) : (
+    <div className={className}>{content}</div>
+  );
+}
 
 const transactionStatusStyles: Record<TransactionStatus, string> = {
   completed:
@@ -1631,10 +1851,10 @@ const transactionStatusIcons: Record<
 };
 
 const transactionStatusLabels: Record<TransactionStatus, string> = {
-  completed: "Completed",
+  completed: "Confirmed",
   pending: "Pending",
   failed: "Failed",
-  review: "Review",
+  review: "Needs review",
 };
 
 const allTransactionStatuses: TransactionStatus[] = [
@@ -1651,20 +1871,48 @@ const allPaymentMethods = [
   "Liquid",
 ] as const;
 
-function explorerForTransaction(txn: Transaction) {
-  const id = txn.explorerId?.trim();
-  if (!id) return null;
+const transactionFlowLabels: Record<TransactionFlow, string> = {
+  incoming: "Incoming",
+  outgoing: "Outgoing",
+  transfer: "Transfer",
+  swap: "Swap",
+};
+
+const transactionFlowStyles: Record<TransactionFlow, string> = {
+  incoming:
+    "border-emerald-600/20 bg-emerald-50 text-emerald-700 dark:bg-emerald-900/25 dark:text-emerald-300",
+  outgoing:
+    "border-red-600/20 bg-red-50 text-red-700 dark:bg-red-900/25 dark:text-red-300",
+  transfer:
+    "border-zinc-500/20 bg-zinc-50 text-zinc-700 dark:bg-zinc-800/70 dark:text-zinc-300",
+  swap:
+    "border-sky-600/20 bg-sky-50 text-sky-700 dark:bg-sky-900/25 dark:text-sky-300",
+};
+
+const allTransactionFlows: TransactionFlow[] = [
+  "incoming",
+  "outgoing",
+  "transfer",
+  "swap",
+];
+
+function explorerForTransaction(
+  txn: Transaction,
+  settings: ExplorerSettings,
+) {
   if (txn.paymentMethod === "Liquid") {
-    return {
-      label: "Liquid Network",
-      url: `https://liquid.network/tx/${encodeURIComponent(id)}`,
-    };
+    return explorerTargetForTransaction({
+      txid: txn.explorerId,
+      network: "liquid",
+      settings,
+    });
   }
   if (txn.paymentMethod === "On-chain") {
-    return {
-      label: "mempool.space",
-      url: `https://mempool.space/tx/${encodeURIComponent(id)}`,
-    };
+    return explorerTargetForTransaction({
+      txid: txn.explorerId,
+      network: "bitcoin",
+      settings,
+    });
   }
   return null;
 }
@@ -1684,14 +1932,19 @@ const TransactionsTable = ({
   records,
   hideSensitive,
   currency,
+  explorerSettings,
+  swapCandidateIds = new Set<string>(),
 }: {
   records: Transaction[];
   hideSensitive: boolean;
   currency: Currency;
+  explorerSettings: ExplorerSettings;
+  swapCandidateIds?: Set<string>;
 }) => {
   const [searchQuery, setSearchQuery] = React.useState("");
   const [statusFilter, setStatusFilter] = React.useState<string>("all");
   const [dateFilter, setDateFilter] = React.useState<string>("all");
+  const [flowFilter, setFlowFilter] = React.useState<string>("all");
   const [paymentMethodFilter, setPaymentMethodFilter] =
     React.useState<string>("all");
   const [currentPage, setCurrentPage] = React.useState(1);
@@ -1700,17 +1953,24 @@ const TransactionsTable = ({
   const [explorerTransaction, setExplorerTransaction] =
     React.useState<Transaction | null>(null);
   const explorerTarget = explorerTransaction
-    ? explorerForTransaction(explorerTransaction)
+    ? explorerForTransaction(explorerTransaction, explorerSettings)
     : null;
+  const displayFlow = React.useCallback(
+    (txn: Transaction): TransactionFlow =>
+      swapCandidateIds.has(txn.id) ? "swap" : transactionFlow(txn),
+    [swapCandidateIds],
+  );
 
   const hasActiveFilters =
     statusFilter !== "all" ||
     dateFilter !== "all" ||
+    flowFilter !== "all" ||
     paymentMethodFilter !== "all";
 
   const clearFilters = () => {
     setStatusFilter("all");
     setDateFilter("all");
+    setFlowFilter("all");
     setPaymentMethodFilter("all");
   };
 
@@ -1734,6 +1994,15 @@ const TransactionsTable = ({
       dateFilterOptions.some((option) => option.value === nextDate)
     ) {
       setDateFilter(nextDate);
+    }
+
+    const nextFlow = params.get("flow");
+    if (
+      nextFlow &&
+      (nextFlow === "all" ||
+        allTransactionFlows.includes(nextFlow as TransactionFlow))
+    ) {
+      setFlowFilter(nextFlow);
     }
 
     const nextPayment = params.get("payment");
@@ -1768,10 +2037,16 @@ const TransactionsTable = ({
     return records.filter((txn) => {
       const matchesSearch =
         txn.txnId.toLowerCase().includes(query) ||
-        txn.counterparty.toLowerCase().includes(query);
+        txn.counterparty.toLowerCase().includes(query) ||
+        (txn.wallet ?? "").toLowerCase().includes(query) ||
+        (txn.tag ?? "").toLowerCase().includes(query) ||
+        txn.paymentMethod.toLowerCase().includes(query);
 
       const matchesStatus =
         statusFilter === "all" || txn.status === statusFilter;
+
+      const matchesFlow =
+        flowFilter === "all" || displayFlow(txn) === flowFilter;
 
       const matchesPaymentMethod =
         paymentMethodFilter === "all" ||
@@ -1801,10 +2076,22 @@ const TransactionsTable = ({
       }
 
       return (
-        matchesSearch && matchesStatus && matchesPaymentMethod && matchesDate
+        matchesSearch &&
+        matchesStatus &&
+        matchesFlow &&
+        matchesPaymentMethod &&
+        matchesDate
       );
     });
-  }, [records, searchQuery, statusFilter, dateFilter, paymentMethodFilter]);
+  }, [
+    records,
+    searchQuery,
+    statusFilter,
+    dateFilter,
+    flowFilter,
+    paymentMethodFilter,
+    displayFlow,
+  ]);
 
   const totalPages = Math.ceil(filteredTransactions.length / pageSize);
 
@@ -1816,7 +2103,14 @@ const TransactionsTable = ({
 
   React.useEffect(() => {
     setCurrentPage(1);
-  }, [searchQuery, statusFilter, dateFilter, paymentMethodFilter, pageSize]);
+  }, [
+    searchQuery,
+    statusFilter,
+    dateFilter,
+    flowFilter,
+    paymentMethodFilter,
+    pageSize,
+  ]);
 
   React.useEffect(() => {
     if (!isHydrated || typeof window === "undefined") return;
@@ -1838,6 +2132,12 @@ const TransactionsTable = ({
       params.set("date", dateFilter);
     } else {
       params.delete("date");
+    }
+
+    if (flowFilter !== "all") {
+      params.set("flow", flowFilter);
+    } else {
+      params.delete("flow");
     }
 
     if (paymentMethodFilter !== "all") {
@@ -1867,6 +2167,7 @@ const TransactionsTable = ({
     searchQuery,
     statusFilter,
     dateFilter,
+    flowFilter,
     paymentMethodFilter,
     currentPage,
     pageSize,
@@ -1908,7 +2209,7 @@ const TransactionsTable = ({
               inputMode="search"
               autoComplete="off"
               aria-label="Search transactions"
-              placeholder="Search counterparty, tag, account..."
+              placeholder="Search txid, wallet, label, tag..."
               value={searchQuery}
               onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
                 setSearchQuery(e.target.value)
@@ -1978,24 +2279,65 @@ const TransactionsTable = ({
                 size="sm"
                 className={cn(
                   "h-8 gap-1.5 sm:h-9 sm:gap-2",
+                  flowFilter !== "all" && "border-primary",
+                )}
+                aria-label="Filter by flow"
+              >
+                <ArrowLeftRight
+                  className="size-3.5 sm:size-4"
+                  aria-hidden="true"
+                />
+                <span className="hidden sm:inline">Flow</span>
+                {flowFilter !== "all" && (
+                  <span className="size-1.5 rounded-full bg-primary sm:size-2" />
+                )}
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-[190px]">
+              <DropdownMenuLabel>Filter by flow</DropdownMenuLabel>
+              <DropdownMenuCheckboxItem
+                checked={flowFilter === "all"}
+                onCheckedChange={() => setFlowFilter("all")}
+              >
+                All flows
+              </DropdownMenuCheckboxItem>
+              {allTransactionFlows.map((flow) => (
+                <DropdownMenuCheckboxItem
+                  key={flow}
+                  checked={flowFilter === flow}
+                  onCheckedChange={() => setFlowFilter(flow)}
+                >
+                  {transactionFlowLabels[flow]}
+                </DropdownMenuCheckboxItem>
+              ))}
+            </DropdownMenuContent>
+          </DropdownMenu>
+
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                variant="outline"
+                size="sm"
+                className={cn(
+                  "h-8 gap-1.5 sm:h-9 sm:gap-2",
                   paymentMethodFilter !== "all" && "border-primary",
                 )}
                 aria-label="Filter by payment method"
               >
                 <Wallet className="size-3.5 sm:size-4" aria-hidden="true" />
-                <span className="hidden sm:inline">Method</span>
+                <span className="hidden sm:inline">Network</span>
                 {paymentMethodFilter !== "all" && (
                   <span className="size-1.5 rounded-full bg-primary sm:size-2" />
                 )}
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-[200px]">
-              <DropdownMenuLabel>Source</DropdownMenuLabel>
+              <DropdownMenuLabel>Filter by network</DropdownMenuLabel>
               <DropdownMenuCheckboxItem
                 checked={paymentMethodFilter === "all"}
                 onCheckedChange={() => setPaymentMethodFilter("all")}
               >
-                All Methods
+                All networks
               </DropdownMenuCheckboxItem>
               {allPaymentMethods.map((method) => (
                 <DropdownMenuCheckboxItem
@@ -2038,6 +2380,17 @@ const TransactionsTable = ({
               <X className="size-2.5 sm:size-3" aria-hidden="true" />
             </button>
           )}
+          {flowFilter !== "all" && (
+            <button
+              type="button"
+              className={filterChipClassName}
+              onClick={() => setFlowFilter("all")}
+              aria-label={`Clear ${transactionFlowLabels[flowFilter as TransactionFlow]} filter`}
+            >
+              {transactionFlowLabels[flowFilter as TransactionFlow]}
+              <X className="size-2.5 sm:size-3" aria-hidden="true" />
+            </button>
+          )}
           {paymentMethodFilter !== "all" && (
             <button
               type="button"
@@ -2066,16 +2419,16 @@ const TransactionsTable = ({
                 Transaction ID
               </TableHead>
               <TableHead className="hidden min-w-[140px] text-xs font-medium text-muted-foreground sm:text-sm md:table-cell">
-                Counterparty
+                Wallet/source
               </TableHead>
               <TableHead className="min-w-[100px] text-xs font-medium text-muted-foreground sm:text-sm">
                 Amount
               </TableHead>
               <TableHead className="hidden min-w-[100px] text-xs font-medium text-muted-foreground sm:text-sm lg:table-cell">
-                Type
+                Flow
               </TableHead>
               <TableHead className="hidden min-w-[120px] text-xs font-medium text-muted-foreground sm:text-sm md:table-cell">
-                Source
+                Network
               </TableHead>
               <TableHead className="hidden text-xs font-medium text-muted-foreground sm:table-cell sm:text-sm">
                 Date
@@ -2099,7 +2452,8 @@ const TransactionsTable = ({
             ) : (
               paginatedTransactions.map((txn) => {
                 const StatusIcon = transactionStatusIcons[txn.status];
-                const explorer = explorerForTransaction(txn);
+                const explorer = explorerForTransaction(txn, explorerSettings);
+                const flow = displayFlow(txn);
                 return (
                   <TableRow key={txn.id}>
                     <TableCell
@@ -2129,17 +2483,27 @@ const TransactionsTable = ({
                       <div className="flex items-center gap-2">
                         <Avatar className="size-6 bg-muted">
                           <AvatarFallback className="text-[8px] font-semibold text-muted-foreground uppercase">
-                            {txn.counterpartyInitials}
+                            {initials(txn.wallet || txn.counterparty || "TX")}
                           </AvatarFallback>
                         </Avatar>
-                        <span
-                          className={cn(
-                            "text-xs text-muted-foreground sm:text-sm",
-                            blurClass(hideSensitive),
-                          )}
-                        >
-                          {txn.counterparty}
-                        </span>
+                        <div className="min-w-0">
+                          <p
+                            className={cn(
+                              "truncate text-xs text-foreground sm:text-sm",
+                              blurClass(hideSensitive),
+                            )}
+                          >
+                            {txn.wallet || txn.counterparty}
+                          </p>
+                          <p
+                            className={cn(
+                              "truncate text-[10px] text-muted-foreground sm:text-xs",
+                              blurClass(hideSensitive),
+                            )}
+                          >
+                            {txn.counterparty}
+                          </p>
+                        </div>
                       </div>
                     </TableCell>
                     <TableCell
@@ -2148,15 +2512,22 @@ const TransactionsTable = ({
                         blurClass(hideSensitive),
                       )}
                     >
-                      {formatDisplayMoney(
-                        txn.amount,
-                        transactionBtc(txn),
-                        currency,
-                      )}
+                      <CurrencyToggleText>
+                        {formatDisplayMoney(
+                          txn.amount,
+                          transactionBtc(txn),
+                          currency,
+                        )}
+                      </CurrencyToggleText>
                     </TableCell>
                     <TableCell className="hidden lg:table-cell">
-                      <span className="inline-flex items-center rounded-md border px-2 py-0.5 text-[10px] font-normal text-muted-foreground sm:text-xs">
-                        {txn.direction}
+                      <span
+                        className={cn(
+                          "inline-flex items-center rounded-md border px-2 py-0.5 text-[10px] font-normal sm:text-xs",
+                          transactionFlowStyles[flow],
+                        )}
+                      >
+                        {transactionFlowLabels[flow]}
                       </span>
                     </TableCell>
                     <TableCell className="hidden md:table-cell">
@@ -2394,6 +2765,7 @@ const Dashboard2 = ({
   const [newTxnOpen, setNewTxnOpen] = React.useState(false);
   const [txnNote, setTxnNote] = React.useState("");
   const hideSensitive = useUiStore((s) => s.hideSensitive);
+  const explorerSettings = useUiStore((s) => s.explorerSettings);
   const currency = useCurrency();
   const { syncAll, isSyncing } = useWalletSyncAction();
   const records = React.useMemo(
@@ -2406,6 +2778,16 @@ const Dashboard2 = ({
   const periodRecords = React.useMemo(
     () => recordsForPeriod(records, period),
     [records, period],
+  );
+  const periodSwapCandidateIds = React.useMemo(
+    () =>
+      new Set(
+        buildSwapCandidates(periodRecords).flatMap((candidate) => [
+          candidate.in.id,
+          candidate.out.id,
+        ]),
+      ),
+    [periodRecords],
   );
 
   React.useEffect(() => {
@@ -2512,31 +2894,20 @@ const Dashboard2 = ({
         </div>
       </div>
 
-      <div className="flex flex-col gap-4 sm:gap-6 lg:flex-row">
-        <VolumeChart
-          period={period}
-          records={records}
-          hideSensitive={hideSensitive}
-          currency={currency}
-        />
-        <CostsChart
-          period={period}
-          records={records}
-          hideSensitive={hideSensitive}
-          currency={currency}
-        />
-      </div>
-
-      <StatsCards
+      <TransactionWorkbench
+        period={period}
         records={periodRecords}
         hideSensitive={hideSensitive}
         currency={currency}
+        explorerSettings={explorerSettings}
       />
 
       <TransactionsTable
-        records={records}
+        records={periodRecords}
         hideSensitive={hideSensitive}
         currency={currency}
+        explorerSettings={explorerSettings}
+        swapCandidateIds={periodSwapCandidateIds}
       />
     </div>
   );

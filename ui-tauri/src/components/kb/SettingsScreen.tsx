@@ -62,6 +62,7 @@ import { useDaemon, useDaemonMutation } from "@/daemon/client";
 import { clearImportProject } from "@/daemon/transport";
 import { setSessionUnlockPassphrase } from "@/store/sessionLock";
 import { useUiStore, type AppLockPolicy } from "@/store/ui";
+import type { ExplorerSettings } from "@/lib/explorer";
 import { cn } from "@/lib/utils";
 import {
   DEFAULT_BACKEND_NAME,
@@ -179,6 +180,8 @@ export function SettingsScreen({ onLock }: SettingsScreenProps) {
   const setCurrency = useUiStore((s) => s.setCurrency);
   const appLockPolicy = useUiStore((s) => s.appLockPolicy);
   const setAppLockPolicy = useUiStore((s) => s.setAppLockPolicy);
+  const explorerSettings = useUiStore((s) => s.explorerSettings);
+  const setExplorerSettings = useUiStore((s) => s.setExplorerSettings);
   const identity = useUiStore((s) => s.identity);
   const setIdentity = useUiStore((s) => s.setIdentity);
   const navigate = useNavigate();
@@ -571,6 +574,8 @@ export function SettingsScreen({ onLock }: SettingsScreenProps) {
                   return (
                     <BackendSettingsPanel
                       backends={backends}
+                      explorerSettings={explorerSettings}
+                      setExplorerSettings={setExplorerSettings}
                       onAdd={openAddBackend}
                       onEdit={openEditBackend}
                       onDelete={onDeleteBackend}
@@ -1040,11 +1045,15 @@ function SecuritySettingsPanel({
 
 function BackendSettingsPanel({
   backends,
+  explorerSettings,
+  setExplorerSettings,
   onAdd,
   onEdit,
   onDelete,
 }: {
   backends: Backend[];
+  explorerSettings: ExplorerSettings;
+  setExplorerSettings: (settings: Partial<ExplorerSettings>) => void;
   onAdd: () => void;
   onEdit: (backend: Backend) => void;
   onDelete: (backend: Backend) => void;
@@ -1126,6 +1135,32 @@ function BackendSettingsPanel({
             ))}
           </TableBody>
         </Table>
+      </div>
+      <div className="grid gap-3 rounded-md border bg-background p-4 sm:grid-cols-2">
+        <div className="space-y-2">
+          <Label htmlFor="settings-bitcoin-explorer">Bitcoin explorer</Label>
+          <Input
+            id="settings-bitcoin-explorer"
+            value={explorerSettings.bitcoinBaseUrl}
+            onChange={(event) =>
+              setExplorerSettings({ bitcoinBaseUrl: event.target.value })
+            }
+            placeholder="https://mempool.example"
+            inputMode="url"
+          />
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor="settings-liquid-explorer">Liquid explorer</Label>
+          <Input
+            id="settings-liquid-explorer"
+            value={explorerSettings.liquidBaseUrl}
+            onChange={(event) =>
+              setExplorerSettings({ liquidBaseUrl: event.target.value })
+            }
+            placeholder="https://liquid.example"
+            inputMode="url"
+          />
+        </div>
       </div>
     </section>
   );

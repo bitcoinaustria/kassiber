@@ -33,6 +33,7 @@ import {
 
 import { Button } from "@/components/ui/button";
 import { AddConnectionDialog } from "@/components/kb/AddConnectionDialog";
+import { CurrencyToggleText } from "@/components/kb/CurrencyToggleText";
 import { type ChartConfig, ChartContainer } from "@/components/ui/chart";
 import {
   Dialog,
@@ -69,6 +70,10 @@ import {
 } from "@/components/ui/tooltip";
 import { useWalletSyncAction } from "@/hooks/useWalletSyncAction";
 import { formatBtc, useCurrency, type Currency } from "@/lib/currency";
+import {
+  explorerTargetForTransaction,
+  type ExplorerSettings,
+} from "@/lib/explorer";
 import { cn } from "@/lib/utils";
 import {
   MOCK_OVERVIEW,
@@ -338,7 +343,7 @@ function buildStatsData(
         ? "BTC balance"
         : snapshot.fiat.eurCostBasis
           ? "vs cost basis"
-          : "current estimate",
+          : "from loaded rows",
     },
     {
       ...statsData[1],
@@ -1019,7 +1024,13 @@ const StatsCards = ({
             ? `${stat.isPositive ? "+" : "-"}${stat.changePercent.toFixed(1)}%`
             : stat.value === 0
               ? "Clear"
-              : "Current";
+              : stat.title === "Portfolio value"
+                ? "Estimate"
+                : stat.title === "Transactions"
+                  ? "Loaded"
+                  : stat.title === "Connections"
+                    ? "Configured"
+                    : "Open";
           const isBitcoinPortfolio =
             currency === "btc" && stat.title === "Portfolio value";
 
@@ -1030,23 +1041,24 @@ const StatsCards = ({
                   {isBitcoinPortfolio ? "Bitcoin balance" : stat.title}
                 </span>
               </div>
-              <p
-                className={cn(
-                  "text-2xl font-semibold tracking-tight sm:text-[28px]",
-                  stat.format === "currency" && blurClass(hideSensitive),
-                )}
-              >
-                {isBitcoinPortfolio
-                  ? formatBtc(latestPortfolioBalanceBtc(snapshot), {
+              <p className="text-2xl font-semibold tracking-tight sm:text-[28px]">
+                {isBitcoinPortfolio ? (
+                  <CurrencyToggleText className={blurClass(hideSensitive)}>
+                    {formatBtc(latestPortfolioBalanceBtc(snapshot), {
                       precision: 3,
-                    })
-                  : stat.format === "currency"
-                  ? formatCompactDisplayMoney(
+                    })}
+                  </CurrencyToggleText>
+                ) : stat.format === "currency" ? (
+                  <CurrencyToggleText className={blurClass(hideSensitive)}>
+                    {formatCompactDisplayMoney(
                       stat.value,
                       snapshot.priceEur,
                       currency,
-                    )
-                  : formatter.format(stat.value)}
+                    )}
+                  </CurrencyToggleText>
+                ) : (
+                  formatter.format(stat.value)
+                )}
               </p>
               <div className="flex flex-wrap items-center gap-2 text-[10px] sm:text-xs xl:flex-nowrap">
                 <span
@@ -1174,7 +1186,7 @@ const RevenueSourceChart = ({
                 <ShadTooltipContent
                   side="top"
                   sideOffset={8}
-                  className="px-3 py-2"
+                  className="border-zinc-950/25 bg-zinc-950 px-3 py-2 text-white shadow-xl [&_.text-muted-foreground]:text-white/75 dark:border-white/25 dark:bg-zinc-50 dark:text-zinc-950 dark:[&_.text-muted-foreground]:text-zinc-700"
                 >
                   <div className="grid gap-1">
                     <div className="flex items-center gap-2">
@@ -1258,7 +1270,7 @@ const RevenueSourceChart = ({
                 <ShadTooltipContent
                   side="top"
                   sideOffset={8}
-                  className="px-3 py-2"
+                  className="border-zinc-950/25 bg-zinc-950 px-3 py-2 text-white shadow-xl [&_.text-muted-foreground]:text-white/75 dark:border-white/25 dark:bg-zinc-50 dark:text-zinc-950 dark:[&_.text-muted-foreground]:text-zinc-700"
                 >
                   <div className="grid gap-1">
                     <div className="flex items-center gap-2">
@@ -1964,20 +1976,23 @@ function initials(value: string) {
     .join("");
 }
 
-function explorerForOverviewTransaction(txn: Transaction) {
-  const id = txn.explorerId?.trim();
-  if (!id) return null;
+function explorerForOverviewTransaction(
+  txn: Transaction,
+  settings: ExplorerSettings,
+) {
   if (txn.paymentMethod === "Liquid") {
-    return {
-      label: "Liquid Network",
-      url: `https://liquid.network/tx/${encodeURIComponent(id)}`,
-    };
+    return explorerTargetForTransaction({
+      txid: txn.explorerId,
+      network: "liquid",
+      settings,
+    });
   }
   if (txn.paymentMethod === "On-chain") {
-    return {
-      label: "mempool.space",
-      url: `https://mempool.space/tx/${encodeURIComponent(id)}`,
-    };
+    return explorerTargetForTransaction({
+      txid: txn.explorerId,
+      network: "bitcoin",
+      settings,
+    });
   }
   return null;
 }
@@ -1988,12 +2003,14 @@ const RecentTransactionsTable = ({
   hideSensitive,
   currency,
   priceEur,
+  explorerSettings,
 }: {
   className?: string;
   transactions: Transaction[];
   hideSensitive: boolean;
   currency: Currency;
   priceEur: number;
+  explorerSettings: ExplorerSettings;
 }) => {
   const [statusFilter, setStatusFilter] = React.useState<
     TransactionStatus | "all"
@@ -2004,7 +2021,7 @@ const RecentTransactionsTable = ({
     React.useState<Transaction | null>(null);
   const pageSize = 6;
   const explorerTarget = explorerTransaction
-    ? explorerForOverviewTransaction(explorerTransaction)
+    ? explorerForOverviewTransaction(explorerTransaction, explorerSettings)
     : null;
 
   React.useEffect(() => {
@@ -2161,7 +2178,10 @@ const RecentTransactionsTable = ({
               </TableRow>
             ) : (
               paginatedTransactions.map((t) => {
-                const explorer = explorerForOverviewTransaction(t);
+                const explorer = explorerForOverviewTransaction(
+                  t,
+                  explorerSettings,
+                );
                 return (
                   <TableRow key={t.id}>
                     <TableCell
@@ -2201,9 +2221,11 @@ const RecentTransactionsTable = ({
                         blurClass(hideSensitive),
                       )}
                     >
-                      {currency === "btc"
-                        ? formatBtc(transactionBtc(t, priceEur))
-                        : formatDisplayMoney(t.amount, priceEur, currency)}
+                      <CurrencyToggleText>
+                        {currency === "btc"
+                          ? formatBtc(transactionBtc(t, priceEur))
+                          : formatDisplayMoney(t.amount, priceEur, currency)}
+                      </CurrencyToggleText>
                     </TableCell>
                     <TableCell>
                       <span
@@ -2353,6 +2375,7 @@ const Dashboard5 = ({
 }) => {
   const [addConnectionOpen, setAddConnectionOpen] = React.useState(false);
   const hideSensitive = useUiStore((s) => s.hideSensitive);
+  const explorerSettings = useUiStore((s) => s.explorerSettings);
   const currency = useCurrency();
   const { syncAll, isSyncing } = useWalletSyncAction();
   const transactions = React.useMemo(
@@ -2404,6 +2427,7 @@ const Dashboard5 = ({
           hideSensitive={hideSensitive}
           currency={currency}
           priceEur={snapshot.priceEur}
+          explorerSettings={explorerSettings}
         />
         <RecentActivity className="xl:w-[360px]" />
       </div>

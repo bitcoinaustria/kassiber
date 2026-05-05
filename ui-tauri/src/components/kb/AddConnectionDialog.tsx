@@ -3,14 +3,23 @@ import { Database, FileInput, Server, Wallet, Zap } from "lucide-react";
 
 import bitcoinIcon from "@/assets/integrations/bitcoin.svg";
 import bitpandaIcon from "@/assets/integrations/bitpanda.svg";
+import bitboxIcon from "@/assets/integrations/bitbox.svg";
+import bluewalletIcon from "@/assets/integrations/bluewallet.png";
 import btcpayIcon from "@/assets/integrations/btcpay.svg";
+import coldcardIcon from "@/assets/integrations/coldcard.svg";
 import coinfinityIcon from "@/assets/integrations/coinfinity-mark.svg";
 import coinbaseIcon from "@/assets/integrations/coinbase.svg";
 import coreLightningIcon from "@/assets/integrations/core-lightning.svg";
+import foundationPassportIcon from "@/assets/integrations/foundation-passport.svg";
 import krakenIcon from "@/assets/integrations/kraken.svg";
+import ledgerIcon from "@/assets/integrations/ledger.svg";
 import lightningLabsIcon from "@/assets/integrations/lightning-labs.png";
+import lianaIcon from "@/assets/integrations/liana.svg";
 import liquidIcon from "@/assets/integrations/liquid.svg";
+import nunchukIcon from "@/assets/integrations/nunchuk.svg";
 import relaiIcon from "@/assets/integrations/relai.svg";
+import sparrowIcon from "@/assets/integrations/sparrow.png";
+import trezorIcon from "@/assets/integrations/trezor.svg";
 import twentyOneBitcoinIcon from "@/assets/integrations/21bitcoin.png";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -89,6 +98,87 @@ const CONNECTION_SOURCES: ConnectionSource[] = [
     category: "wallets",
     image: liquidIcon,
     imageClassName: "size-8",
+    status: "soon",
+  },
+  {
+    id: "sparrow",
+    title: "Sparrow",
+    description: "Desktop wallet import for PSBT, descriptor, or xpub exports.",
+    category: "wallets",
+    image: sparrowIcon,
+    imageClassName: "size-9",
+    status: "soon",
+  },
+  {
+    id: "bluewallet",
+    title: "BlueWallet",
+    description: "Mobile wallet xpub and transaction export.",
+    category: "wallets",
+    image: bluewalletIcon,
+    imageClassName: "size-9",
+    status: "soon",
+  },
+  {
+    id: "liana",
+    title: "Liana",
+    description: "Timelock multisig descriptor import.",
+    category: "wallets",
+    image: lianaIcon,
+    imageClassName: "size-9",
+    status: "soon",
+  },
+  {
+    id: "nunchuk",
+    title: "Nunchuk",
+    description: "Collaborative multisig wallet export.",
+    category: "wallets",
+    image: nunchukIcon,
+    imageClassName: "size-9",
+    status: "soon",
+  },
+  {
+    id: "bitbox",
+    title: "BitBox",
+    description: "BitBox hardware wallet account export.",
+    category: "wallets",
+    image: bitboxIcon,
+    imageClassName: "size-9",
+    status: "soon",
+  },
+  {
+    id: "trezor",
+    title: "Trezor",
+    description: "Trezor Suite account export.",
+    category: "wallets",
+    image: trezorIcon,
+    imageClassName: "size-9",
+    status: "soon",
+  },
+  {
+    id: "coldcard",
+    title: "Coldcard",
+    description: "Coldcard skeleton wallet or descriptor import.",
+    category: "wallets",
+    image: coldcardIcon,
+    imageClassName: "size-9",
+    status: "soon",
+  },
+  {
+    id: "ledger",
+    title: "Ledger",
+    description: "Ledger Live account export.",
+    category: "wallets",
+    image: ledgerIcon,
+    imageClassName: "size-9",
+    status: "soon",
+  },
+  {
+    id: "foundation-passport",
+    title: "Foundation Passport",
+    description: "Passport wallet export or descriptor import.",
+    category: "wallets",
+    image: foundationPassportIcon,
+    imageClassName: "size-9",
     status: "soon",
   },
   {
@@ -223,7 +313,7 @@ export function AddConnectionDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[920px] lg:max-w-[980px]">
+      <DialogContent className="grid h-[calc(100dvh-2rem)] max-h-[calc(100dvh-2rem)] grid-rows-[auto_minmax(0,1fr)_auto] sm:h-[720px] sm:max-w-[920px] lg:max-w-[980px]">
         <DialogHeader>
           <DialogTitle>Add connection</DialogTitle>
           <DialogDescription>
@@ -231,8 +321,8 @@ export function AddConnectionDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <div className="grid min-h-[420px] grid-cols-1 overflow-hidden rounded-lg border sm:grid-cols-[220px_minmax(0,1fr)]">
-          <div className="border-b bg-muted/30 p-2 sm:border-r sm:border-b-0">
+        <div className="grid min-h-0 grid-cols-1 overflow-hidden rounded-lg border sm:grid-cols-[220px_minmax(0,1fr)]">
+          <div className="overflow-y-auto border-b bg-muted/30 p-2 sm:border-r sm:border-b-0">
             {CATEGORIES.map((category) => {
               const Icon = category.icon;
               const active = activeCategory === category.id;
@@ -255,7 +345,7 @@ export function AddConnectionDialog({
             })}
           </div>
 
-          <div className="space-y-3 p-4">
+          <div className="min-h-0 space-y-3 overflow-y-auto p-4">
             {visibleSources.map((source) => {
               const selectedSource = selectedId === source.id;
               return (

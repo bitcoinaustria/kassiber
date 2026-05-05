@@ -30,6 +30,7 @@ import { useSyncProgressNotice } from "@/hooks/useSyncProgressNotice";
 import { useCurrency, type Currency } from "@/lib/currency";
 import { cn } from "@/lib/utils";
 import { AddConnectionDialog } from "@/components/kb/AddConnectionDialog";
+import { CurrencyToggleText } from "@/components/kb/CurrencyToggleText";
 
 import type {
   Connection,
@@ -245,13 +246,19 @@ export function Connections() {
           label="Total balance"
           value={
             <span className={blurClass(hideSensitive)}>
-              {currency === "eur" ? fmtEur(totalEur) : `₿ ${fmtBtc(totalBtc)}`}
+              <CurrencyToggleText>
+                {currency === "eur"
+                  ? fmtEur(totalEur)
+                  : `₿ ${fmtBtc(totalBtc)}`}
+              </CurrencyToggleText>
             </span>
           }
           sub={
-            currency === "eur"
-              ? `₿ ${fmtBtc(totalBtc)}`
-              : fmtEur(totalEur)
+            <CurrencyToggleText>
+              {currency === "eur"
+                ? `₿ ${fmtBtc(totalBtc)}`
+                : fmtEur(totalEur)}
+            </CurrencyToggleText>
           }
         />
         <ConnectionMetric
@@ -260,9 +267,13 @@ export function Connections() {
           sub={`${snapshot.connections.length} configured sources`}
         />
         <ConnectionMetric
-          label="Active sync"
-          value={syncingN.toLocaleString("en-US")}
-          sub={errorN > 0 ? `${errorN} need attention` : "No errors"}
+          label="Needs attention"
+          value={errorN.toLocaleString("en-US")}
+          sub={
+            syncingN > 0
+              ? `${syncingN.toLocaleString("en-US")} syncing now`
+              : "No failed sources"
+          }
         />
       </div>
 
@@ -310,7 +321,7 @@ export function Connections() {
 interface ConnectionMetricProps {
   label: string;
   value: ReactNode;
-  sub: string;
+  sub: ReactNode;
 }
 
 function ConnectionMetric({ label, value, sub }: ConnectionMetricProps) {
@@ -345,7 +356,6 @@ function ConnectionRow({
   currency,
   onSelect,
 }: ConnectionRowProps) {
-  const sats = Math.round(c.balance * 1e8);
   const pct = totalBtc > 0 ? (c.balance / totalBtc) * 100 : 0;
   const isEur = currency === "eur";
 
@@ -421,7 +431,9 @@ function ConnectionRow({
         <div
           className={cn("font-medium tabular-nums", blurClass(hideSensitive))}
         >
-          {isEur ? fmtEur(c.balance * priceEur) : `₿ ${fmtBtc(c.balance)}`}
+          <CurrencyToggleText>
+            {isEur ? fmtEur(c.balance * priceEur) : `₿ ${fmtBtc(c.balance)}`}
+          </CurrencyToggleText>
         </div>
         <div
           className={cn(
@@ -429,11 +441,9 @@ function ConnectionRow({
             blurClass(hideSensitive),
           )}
         >
-          {isEur
-            ? `₿ ${fmtBtc(c.balance)} · ${sats.toLocaleString("en-US")} sat`
-            : `${sats.toLocaleString("en-US")} sat · ${fmtEur(
-                c.balance * priceEur,
-              )}`}
+          <CurrencyToggleText>
+            {isEur ? `₿ ${fmtBtc(c.balance)}` : fmtEur(c.balance * priceEur)}
+          </CurrencyToggleText>
         </div>
       </TableCell>
     </TableRow>

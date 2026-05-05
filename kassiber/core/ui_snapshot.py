@@ -9,6 +9,7 @@ from typing import Any
 from ..backends import redact_backend_for_output
 from ..errors import AppError
 from ..msat import msat_to_btc
+from ..tax_policy import build_tax_policy
 from ..time_utils import _iso_z, _parse_iso_datetime
 from .repo import current_context_snapshot
 
@@ -302,7 +303,11 @@ def _workspace_jurisdiction(tax_countries: list[str]) -> str:
 def _tax_policy_label(profile: sqlite3.Row) -> str:
     country = str(profile["tax_country"] or "generic").strip().upper()
     if country == "AT":
-        return f"Austria - {profile['gains_algorithm']} - {profile['fiat_currency']}"
+        try:
+            algorithm = build_tax_policy(profile).default_accounting_method.upper()
+        except (AppError, ValueError, ImportError):
+            algorithm = profile["gains_algorithm"]
+        return f"Austria - {algorithm} - {profile['fiat_currency']}"
     elif country == "GENERIC":
         country_label = "Generic"
     else:

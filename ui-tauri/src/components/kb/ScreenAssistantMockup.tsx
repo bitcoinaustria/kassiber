@@ -63,7 +63,10 @@ export function ScreenAssistantMockup({
   return (
     <section
       aria-label="Kassiber assistant"
-      className={cn("pointer-events-none px-3 pb-4 sm:px-4 md:px-6", className)}
+      className={cn(
+        "pointer-events-none relative z-30 px-3 pb-6 sm:px-4 sm:pb-7 md:px-6",
+        className,
+      )}
     >
       <div
         className={cn(
