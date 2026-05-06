@@ -10,7 +10,7 @@ interface KbCardProps {
 }
 
 /**
- * Kassiber Card — hard-edge, paper-2 background, optional title bar.
+ * Kassiber Card — hard-edge, tokenized background, optional title bar.
  *
  * Visually closer to claude-design's `Card` than shadcn's default
  * (rounded-xl + shadow-sm + py-6). When the standard shadcn look is
@@ -27,14 +27,14 @@ export function KbCard({
   return (
     <div
       className={cn(
-        "flex flex-col border border-line bg-paper-2 min-h-0",
+        "flex min-h-0 flex-col border border-border bg-card text-card-foreground",
         className,
       )}
       data-slot="kb-card"
     >
       {title !== undefined && (
-        <div className="flex h-9 flex-shrink-0 items-center justify-between border-b border-line px-3.5">
-          <span className="font-sans text-[13px] font-semibold text-ink tracking-[0.005em]">
+        <div className="flex h-9 flex-shrink-0 items-center justify-between border-b border-border px-3.5">
+          <span className="font-sans text-[13px] font-semibold tracking-[0.005em] text-foreground">
             {title}
           </span>
           {action}

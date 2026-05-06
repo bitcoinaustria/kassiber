@@ -21,11 +21,14 @@ import {
   LockKeyhole,
   LogOut,
   MessageSquareText,
+  Monitor,
+  Moon,
   Search,
   Server,
   Settings,
   CircleDollarSign,
   ShieldAlert,
+  Sun,
   User,
   Users,
   Wallet,
@@ -44,6 +47,8 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuLabel,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
@@ -69,6 +74,7 @@ import {
 } from "@/components/ui/sidebar";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { useUiStore } from "@/store/ui";
+import type { ThemePreference } from "@/store/ui";
 import {
   DAEMON_AUTH_REQUIRED_EVENT,
   useDaemon,
@@ -1487,6 +1493,7 @@ function AppDashboardHeader({
             ))}
           </DropdownMenuContent>
         </DropdownMenu>
+        <ThemeMenu />
         <Button
           variant="outline"
           size="icon"
@@ -1520,6 +1527,49 @@ function AppDashboardHeader({
         </Button>
       </div>
     </header>
+  );
+}
+
+function ThemeMenu() {
+  const theme = useUiStore((state) => state.theme);
+  const setTheme = useUiStore((state) => state.setTheme);
+  const Icon = theme === "dark" ? Moon : theme === "light" ? Sun : Monitor;
+
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button
+          variant="outline"
+          size="icon"
+          className="size-9"
+          aria-label="Theme"
+          title="Theme"
+        >
+          <Icon className="size-4" aria-hidden="true" />
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="w-40">
+        <DropdownMenuLabel>Theme</DropdownMenuLabel>
+        <DropdownMenuSeparator />
+        <DropdownMenuRadioGroup
+          value={theme}
+          onValueChange={(value) => setTheme(value as ThemePreference)}
+        >
+          <DropdownMenuRadioItem value="system">
+            <Monitor className="size-4" aria-hidden="true" />
+            System
+          </DropdownMenuRadioItem>
+          <DropdownMenuRadioItem value="light">
+            <Sun className="size-4" aria-hidden="true" />
+            Light
+          </DropdownMenuRadioItem>
+          <DropdownMenuRadioItem value="dark">
+            <Moon className="size-4" aria-hidden="true" />
+            Dark
+          </DropdownMenuRadioItem>
+        </DropdownMenuRadioGroup>
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }
 
