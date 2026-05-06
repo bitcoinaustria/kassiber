@@ -26,6 +26,7 @@ import shutil
 import subprocess
 import tempfile
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any, Iterable, Iterator
 
 import urllib.error
@@ -42,6 +43,18 @@ REASONING_EFFORTS = {"low", "medium", "high", "max"}
 CLI_MODEL_CHECK_KIND = "binary_presence"
 MODEL_SUPPORT_LIST_LIMIT = 32
 MODEL_SUPPORT_STRING_LIMIT = 96
+CLI_FALLBACK_DIRS = (
+    "/opt/homebrew/bin",
+    "/usr/local/bin",
+    "~/.local/bin",
+    "/opt/local/bin",
+)
+CLI_MODEL_LIST_TIMEOUT_SECONDS = 10
+CLAUDE_CLI_MODEL_ROWS = (
+    {"id": CLI_DEFAULT_MODEL, "check_kind": CLI_MODEL_CHECK_KIND},
+    {"id": "sonnet", "check_kind": "claude_cli_alias"},
+    {"id": "opus", "check_kind": "claude_cli_alias"},
+)
 
 
 @dataclass(frozen=True)
@@ -258,6 +271,83 @@ def _cli_unavailable(command: str) -> AppError:
         hint=f"Install and authenticate `{command}` before using this provider.",
         retryable=True,
     )
+
+
+def _resolve_cli_executable(command: str) -> str | None:
+    resolved = shutil.which(command)
+    if resolved:
+        return resolved
+
+    for directory in CLI_FALLBACK_DIRS:
+        candidate = Path(directory).expanduser() / command
+        if candidate.is_file() and os.access(candidate, os.X_OK):
+            return str(candidate)
+    return None
+
+
+def _cli_default_model_row() -> dict[str, Any]:
+    return {
+        "id": CLI_DEFAULT_MODEL,
+        "check_kind": CLI_MODEL_CHECK_KIND,
+        "supports_reasoning_effort": True,
+        "reasoning_efforts": ["low", "medium", "high"],
+    }
+
+
+def _codex_catalog_models(executable: str) -> list[dict[str, Any]]:
+    try:
+        completed = subprocess.run(
+            [executable, "debug", "models"],
+            text=True,
+            capture_output=True,
+            timeout=CLI_MODEL_LIST_TIMEOUT_SECONDS,
+            check=False,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return []
+    if completed.returncode != 0:
+        return []
+
+    try:
+        payload = json.loads(completed.stdout or "{}")
+    except json.JSONDecodeError:
+        return []
+
+    raw_models = payload.get("models")
+    if not isinstance(raw_models, list):
+        return []
+
+    rows: list[dict[str, Any]] = []
+    for item in raw_models:
+        if not isinstance(item, dict):
+            continue
+        if item.get("visibility") != "list":
+            continue
+        slug = item.get("slug")
+        if not isinstance(slug, str) or not slug.strip():
+            continue
+        raw_levels = item.get("supported_reasoning_levels")
+        if not isinstance(raw_levels, list):
+            raw_levels = []
+        supported_efforts = _safe_string_list(
+            [
+                level.get("effort")
+                for level in raw_levels
+                if isinstance(level, dict)
+            ]
+        )
+        row: dict[str, Any] = {
+            "id": slug.strip(),
+            "check_kind": "codex_model_catalog",
+        }
+        display_name = item.get("display_name")
+        if isinstance(display_name, str) and display_name.strip():
+            row["display_name"] = display_name.strip()[:MODEL_SUPPORT_STRING_LIMIT]
+        if supported_efforts:
+            row["supports_reasoning_effort"] = True
+            row["reasoning_efforts"] = supported_efforts
+        rows.append(row)
+    return rows
 
 
 def _cli_failure(command: str, completed: subprocess.CompletedProcess[str]) -> AppError:
@@ -573,20 +663,22 @@ class CliAIClient:
 
     def list_models(self, *, strict: bool = False) -> list[dict]:
         del strict
-        if not shutil.which(self.command):
+        executable = _resolve_cli_executable(self.command)
+        if not executable:
             raise _cli_unavailable(self.command)
-        return [
-            {
-                "id": CLI_DEFAULT_MODEL,
-                "check_kind": CLI_MODEL_CHECK_KIND,
-                "supports_reasoning_effort": True,
-                "reasoning_efforts": ["low", "medium", "high"],
-            }
-        ]
+        if self.command == "codex":
+            return _codex_catalog_models(executable) or [_cli_default_model_row()]
+        return [dict(row) for row in CLAUDE_CLI_MODEL_ROWS]
 
-    def _claude_args(self, *, model: str, effort: str | None) -> list[str]:
+    def _claude_args(
+        self,
+        *,
+        command: str | None = None,
+        model: str,
+        effort: str | None,
+    ) -> list[str]:
         args = [
-            self.command,
+            command or self.command,
             "--print",
             "--no-session-persistence",
             "--permission-mode",
@@ -605,13 +697,14 @@ class CliAIClient:
     def _codex_args(
         self,
         *,
+        command: str | None = None,
         cwd: str,
         output_path: str,
         model: str,
         effort: str | None,
     ) -> list[str]:
         args = [
-            self.command,
+            command or self.command,
             "exec",
             "--sandbox",
             "read-only",
@@ -640,14 +733,15 @@ class CliAIClient:
         options: dict[str, Any] | None = None,
     ) -> str:
         command = self.command
-        if not shutil.which(command):
+        executable = _resolve_cli_executable(command)
+        if not executable:
             raise _cli_unavailable(command)
         env = dict(os.environ)
         env.setdefault("NO_COLOR", "1")
         effort = _reasoning_effort(options)
         with tempfile.TemporaryDirectory(prefix="kassiber-ai-cli-") as cwd:
             if command == "claude":
-                args = self._claude_args(model=model, effort=effort)
+                args = self._claude_args(command=executable, model=model, effort=effort)
                 completed = subprocess.run(
                     args,
                     input=prompt,
@@ -673,6 +767,7 @@ class CliAIClient:
                 output_path = output.name
             try:
                 args = self._codex_args(
+                    command=executable,
                     cwd=cwd,
                     output_path=output_path,
                     model=model,

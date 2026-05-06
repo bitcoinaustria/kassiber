@@ -94,13 +94,15 @@ export function AppHeader() {
           title={hideSensitive ? "Show sensitive data" : "Hide sensitive data"}
           className={cn(
             "flex size-6.5 cursor-pointer items-center justify-center border",
-            hideSensitive ? "border-ink bg-ink" : "border-line bg-transparent",
+            hideSensitive
+              ? "border-line bg-ink/10 text-ink dark:border-white/15 dark:bg-white/10 dark:text-white"
+              : "border-line bg-transparent text-ink-2",
           )}
         >
           {hideSensitive ? (
-            <EyeOff className="size-3.5 text-paper" />
+            <EyeOff className="size-3.5" />
           ) : (
-            <Eye className="size-3.5 text-ink-2" />
+            <Eye className="size-3.5" />
           )}
         </button>
 

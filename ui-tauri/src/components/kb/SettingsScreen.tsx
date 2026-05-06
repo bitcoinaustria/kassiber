@@ -63,6 +63,7 @@ import { clearImportProject } from "@/daemon/transport";
 import { setSessionUnlockPassphrase } from "@/store/sessionLock";
 import { useUiStore, type AppLockPolicy } from "@/store/ui";
 import type { ExplorerSettings } from "@/lib/explorer";
+import type { AiModelsListData, AiModelRow } from "@/lib/aiCapabilities";
 import { cn } from "@/lib/utils";
 import {
   DEFAULT_BACKEND_NAME,
@@ -115,6 +116,47 @@ const AI_KIND_BADGE: Record<AiProviderRow["kind"], string> = {
     "border-amber-500/25 bg-amber-500/10 text-amber-700 dark:text-amber-300",
   tee: "border-sky-500/25 bg-sky-500/10 text-sky-700 dark:text-sky-300",
 };
+
+function isCliAiProvider(row: AiProviderRow): boolean {
+  return (
+    row.base_url === "claude-cli://default" ||
+    row.base_url === "codex-cli://default"
+  );
+}
+
+function formatModelSummary(models: AiModelRow[]): string {
+  const ids = models
+    .map((model) => model.id)
+    .filter((id, index, values) => id && values.indexOf(id) === index);
+  if (ids.length <= 3) return ids.join(", ");
+  return `${ids.slice(0, 3).join(", ")} +${ids.length - 3}`;
+}
+
+function AiProviderModelSummary({ row }: { row: AiProviderRow }) {
+  const isCli = isCliAiProvider(row);
+  const modelsQuery = useDaemon<AiModelsListData>(
+    "ai.list_models",
+    { provider: row.name },
+    {
+      enabled: isCli,
+      refetchOnMount: "always",
+      staleTime: 5 * 60 * 1000,
+    },
+  );
+
+  if (!isCli) return <>{row.default_model ?? "-"}</>;
+
+  const models =
+    modelsQuery.data?.kind === "ai.list_models" && modelsQuery.data.data
+      ? modelsQuery.data.data.models
+      : [];
+  const summary = formatModelSummary(models);
+  if (summary) return <>{summary}</>;
+  if (modelsQuery.isFetching) {
+    return <span className="text-muted-foreground">Loading...</span>;
+  }
+  return <>{row.default_model ?? "-"}</>;
+}
 
 const DEFAULT_BACKENDS: Backend[] = [
   {
@@ -1237,7 +1279,6 @@ function AiProvidersPanel() {
     [providersQuery.data],
   );
   const setDefault = useDaemonMutation("ai.providers.set_default");
-  const clearDefault = useDaemonMutation("ai.providers.clear_default");
   const deleteProvider = useDaemonMutation("ai.providers.delete");
   const [editingName, setEditingName] = React.useState<string | null>(null);
   const [addOpen, setAddOpen] = React.useState(false);
@@ -1329,23 +1370,22 @@ function AiProvidersPanel() {
                         {row.kind === "tee" ? "TEE" : row.kind}
                       </span>
                     </TableCell>
-                    <TableCell className="font-mono text-xs">
-                      {row.default_model ?? "-"}
+                    <TableCell className="max-w-[340px] whitespace-normal break-words font-mono text-xs">
+                      <AiProviderModelSummary row={row} />
                     </TableCell>
                     <TableCell className="text-muted-foreground">
                       {row.has_api_key ? "Bearer" : "none"}
                     </TableCell>
                     <TableCell className="text-right">
                       {row.is_default ? (
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant="ghost"
-                          disabled={clearDefault.isPending}
-                          onClick={() => clearDefault.mutate(undefined)}
+                        <span
+                          className={cn(
+                            "inline-flex rounded-md border px-2 py-1 text-xs font-medium",
+                            "border-primary/25 bg-primary/10 text-primary",
+                          )}
                         >
-                          Clear default
-                        </Button>
+                          Default
+                        </span>
                       ) : (
                         <Button
                           type="button"

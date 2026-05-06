@@ -20,14 +20,17 @@ import {
   AlertTriangle,
   ArrowUp,
   Brain,
+  Cloud,
   Cpu,
   FileSpreadsheet,
   RefreshCw,
+  ShieldCheck,
   Square,
   Wrench,
   type LucideIcon,
 } from "lucide-react";
 import { useRef, useState } from "react";
+import type { AiProviderKind } from "@/lib/aiCapabilities";
 
 interface PromptOption {
   icon: LucideIcon;
@@ -94,6 +97,8 @@ export default function Ai02({
   modelPickerEnabled = true,
 }: Ai02Props) {
   const [inputValue, setInputValue] = useState("");
+  const [activeProviderKind, setActiveProviderKind] =
+    useState<AiProviderKind | null>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
   const handlePromptClick = (prompt: string) => {
@@ -107,6 +112,12 @@ export default function Ai02({
   const trimmedInput = inputValue.trim();
   const canSend = Boolean(trimmedInput) && Boolean(selection?.model) && !isStreaming;
   const showSuggestions = !trimmedInput && !isStreaming && prompts.length > 0;
+  const ModelIcon =
+    activeProviderKind === "remote"
+      ? Cloud
+      : activeProviderKind === "tee"
+        ? ShieldCheck
+        : Cpu;
 
   const handleSubmit = () => {
     if (!canSend) return;
@@ -169,7 +180,7 @@ export default function Ai02({
         >
           <Context className="min-w-0 flex-1">
             <ContextItem
-              icon={<Cpu className="h-4 w-4 text-muted-foreground" />}
+              icon={<ModelIcon className="h-4 w-4 text-muted-foreground" />}
               label="Model context"
               className="max-w-full"
             >
@@ -177,6 +188,7 @@ export default function Ai02({
                 value={selection}
                 onChange={onSelectionChange}
                 enabled={modelPickerEnabled}
+                onActiveProviderKindChange={setActiveProviderKind}
               />
             </ContextItem>
 

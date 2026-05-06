@@ -10,6 +10,7 @@ from __future__ import annotations
 import io
 import json
 import socket
+import subprocess
 import tempfile
 import unittest
 import urllib.error
@@ -38,6 +39,7 @@ from kassiber.ai.client import (
     parse_sse_chunks,
     _http_error_app_error,
     _network_error_app_error,
+    _resolve_cli_executable,
 )
 from kassiber.ai.prompt import (
     DEFAULT_KASSIBER_SYSTEM_PROMPT,
@@ -332,19 +334,71 @@ class ClientDefaultsTest(unittest.TestCase):
 
 
 class CliAIClientTest(unittest.TestCase):
-    def test_list_models_reports_binary_presence_check(self):
-        with patch("shutil.which", return_value="/usr/local/bin/codex"):
+    def test_codex_list_models_reads_visible_catalog(self):
+        catalog = {
+            "models": [
+                {
+                    "slug": "gpt-5.5",
+                    "display_name": "GPT-5.5",
+                    "visibility": "list",
+                    "supported_reasoning_levels": [
+                        {"effort": "low"},
+                        {"effort": "medium"},
+                        {"effort": "high"},
+                        {"effort": "xhigh"},
+                    ],
+                },
+                {
+                    "slug": "hidden-model",
+                    "display_name": "Hidden",
+                    "visibility": "hide",
+                },
+            ]
+        }
+        completed = subprocess.CompletedProcess(
+            ["codex", "debug", "models"],
+            0,
+            stdout=json.dumps(catalog),
+            stderr="",
+        )
+        with (
+            patch("shutil.which", return_value="/usr/local/bin/codex"),
+            patch("subprocess.run", return_value=completed),
+        ):
             client = CliAIClient(locator="codex-cli://default")
             self.assertEqual(
                 client.list_models(strict=True),
                 [
                     {
-                        "id": CLI_DEFAULT_MODEL,
-                        "check_kind": "binary_presence",
+                        "id": "gpt-5.5",
+                        "check_kind": "codex_model_catalog",
+                        "display_name": "GPT-5.5",
                         "supports_reasoning_effort": True,
-                        "reasoning_efforts": ["low", "medium", "high"],
+                        "reasoning_efforts": ["low", "medium", "high", "xhigh"],
                     }
                 ],
+            )
+
+    def test_cli_resolution_checks_common_gui_fallback_dirs(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            binary = Path(tmp) / "codex"
+            binary.write_text("#!/bin/sh\n", encoding="utf-8")
+            binary.chmod(0o755)
+
+            with (
+                patch("shutil.which", return_value=None),
+                patch("kassiber.ai.client.CLI_FALLBACK_DIRS", (tmp,)),
+            ):
+                self.assertEqual(_resolve_cli_executable("codex"), str(binary))
+                client = CliAIClient(locator="codex-cli://default")
+                self.assertEqual(client.list_models()[0]["id"], CLI_DEFAULT_MODEL)
+
+    def test_claude_list_models_uses_known_cli_aliases(self):
+        with patch("shutil.which", return_value="/usr/local/bin/claude"):
+            client = CliAIClient(locator="claude-cli://default")
+            self.assertEqual(
+                [row["id"] for row in client.list_models()],
+                [CLI_DEFAULT_MODEL, "sonnet", "opus"],
             )
 
     def test_claude_args_keep_normal_cli_auth(self):

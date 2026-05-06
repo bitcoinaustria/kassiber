@@ -1530,7 +1530,7 @@ function AppDashboardHeader({
           size="icon"
           className={
             hideSensitive
-              ? "size-9 bg-primary text-primary-foreground hover:bg-primary/90 hover:text-primary-foreground"
+              ? "size-9 border-border bg-muted text-foreground hover:bg-muted/80 hover:text-foreground dark:border-white/15 dark:bg-white/10 dark:text-white dark:hover:bg-white/15"
               : "size-9"
           }
           aria-label={
