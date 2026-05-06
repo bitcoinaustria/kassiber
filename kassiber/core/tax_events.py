@@ -211,16 +211,25 @@ def normalize_tax_asset_inputs(
                 continue
 
             fee = sent - received
+            spot_price_row = out_row
+            spot_price_wallet_label = from_wallet["label"]
             spot_price = _spot_price_from_row(out_row, msat_to_btc(out_row["amount"]))
             if spot_price is None:
                 spot_price = _spot_price_from_row(in_row, msat_to_btc(in_row["amount"]))
-            if fee > 0 and (_pricing_needs_review(out_row) or _pricing_needs_review(in_row)):
+                spot_price_row = in_row
+                spot_price_wallet_label = to_wallet["label"]
+            if fee > 0 and spot_price is not None and _pricing_needs_review(spot_price_row):
                 quarantines.append(
                     build_tax_quarantine(
                         profile,
-                        out_row,
+                        spot_price_row,
                         "pricing_review_required",
-                        _pricing_review_detail(out_row, from_wallet["label"], asset, "transfer"),
+                        _pricing_review_detail(
+                            spot_price_row,
+                            spot_price_wallet_label,
+                            asset,
+                            "transfer",
+                        ),
                     )
                 )
                 continue

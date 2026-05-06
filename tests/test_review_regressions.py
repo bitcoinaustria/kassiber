@@ -17,9 +17,11 @@ from urllib.parse import parse_qs, urlparse
 from kassiber.cli.main import command_needs_db
 from kassiber.cli.handlers import _attachment_hooks, _audit_transaction_refs
 from kassiber.core import attachments as core_attachments
+from kassiber.core import pricing
 from kassiber.core import rates as core_rates
 from kassiber.core.engines import TaxEngineLedgerInputs, build_tax_engine
 from kassiber.core.runtime import bootstrap_runtime, close_runtime
+from kassiber.core.tax_events import normalize_tax_asset_inputs
 from kassiber.core.ui_snapshot import build_overview_snapshot, build_transactions_snapshot
 from kassiber.db import open_db, set_setting
 from kassiber.errors import AppError
@@ -4601,6 +4603,74 @@ class ReviewRegressionTest(unittest.TestCase):
         self.assertEqual(detail["pricing_quality"], "coarse_fallback")
         self.assertEqual(detail["pricing_granularity"], "daily")
 
+    def test_legacy_cache_price_gets_provenance_backfill_before_review(self):
+        self._bootstrap_wallet(label="LegacyCache")
+        payload, result = self._run_json(
+            "rates", "set", "BTC-USD", "2024-05-01T00:00:00Z", "60000",
+            "--source", "coingecko",
+            "--granularity", "daily",
+            "--method", "market_chart",
+        )
+        self._assert_ok(payload, result, "rates.set")
+        self._insert_transaction(
+            wallet_label="LegacyCache",
+            tx_id="legacy-cache-price-1",
+            occurred_at="2024-05-01T12:00:00Z",
+            amount_msat=1_000_000_000,
+        )
+        conn = sqlite3.connect(self.data_root / "kassiber.sqlite3")
+        conn.execute(
+            """
+            UPDATE transactions
+            SET fiat_rate = 60000.0,
+                fiat_value = 600.0,
+                fiat_price_source = 'rates_cache'
+            WHERE external_id = 'legacy-cache-price-1'
+            """
+        )
+        conn.commit()
+        conn.close()
+
+        payload, result = self._run_json(
+            "journals", "process",
+            "--workspace", "Main",
+            "--profile", "Default",
+        )
+        self._assert_ok(payload, result, "journals.process")
+        self.assertEqual(payload["data"]["auto_priced"], 0)
+        self.assertEqual(payload["data"]["entries_created"], 0)
+        self.assertEqual(payload["data"]["quarantined"], 1)
+
+        conn = sqlite3.connect(self.data_root / "kassiber.sqlite3")
+        conn.row_factory = sqlite3.Row
+        tx = conn.execute(
+            """
+            SELECT fiat_rate_exact, fiat_value_exact, pricing_source_kind,
+                   pricing_provider, pricing_granularity, pricing_method,
+                   pricing_quality
+            FROM transactions
+            WHERE external_id = 'legacy-cache-price-1'
+            """
+        ).fetchone()
+        quarantine = conn.execute(
+            """
+            SELECT reason
+            FROM journal_quarantines
+            WHERE transaction_id = (
+                SELECT id FROM transactions WHERE external_id = 'legacy-cache-price-1'
+            )
+            """
+        ).fetchone()
+        conn.close()
+        self.assertEqual(tx["fiat_rate_exact"], "60000")
+        self.assertEqual(tx["fiat_value_exact"], "600.00")
+        self.assertEqual(tx["pricing_source_kind"], "fmv_provider")
+        self.assertEqual(tx["pricing_provider"], "coingecko")
+        self.assertEqual(tx["pricing_granularity"], "daily")
+        self.assertEqual(tx["pricing_method"], "market_chart")
+        self.assertEqual(tx["pricing_quality"], "coarse_fallback")
+        self.assertEqual(quarantine["reason"], "pricing_review_required")
+
     def test_journals_process_misses_future_only_rate(self):
         self._bootstrap_wallet(label="CacheFuture")
         payload, result = self._run_json(
@@ -5149,6 +5219,55 @@ class ReviewRegressionTest(unittest.TestCase):
         self.assertEqual(state.entries, [])
         self.assertEqual(len(state.quarantines), 1)
         self.assertEqual(state.quarantines[0]["reason"], "insufficient_lots")
+
+    def test_transfer_pricing_review_targets_used_price_leg(self):
+        profile, inputs = self._direct_transfer_engine_inputs()
+        out_row = {
+            **inputs.rows[1],
+            "pricing_source_kind": pricing.SOURCE_MANUAL_RATE_CACHE,
+            "pricing_quality": pricing.QUALITY_EXACT,
+        }
+        unused_coarse_in_row = {
+            **inputs.rows[2],
+            "pricing_source_kind": pricing.SOURCE_FMV_PROVIDER,
+            "pricing_quality": pricing.QUALITY_COARSE_FALLBACK,
+        }
+        normalized = normalize_tax_asset_inputs(
+            profile,
+            "BTC",
+            [out_row, unused_coarse_in_row],
+            inputs.wallet_refs_by_id,
+            [{"out": out_row, "in": unused_coarse_in_row}],
+        )
+        self.assertEqual(normalized.quarantines, [])
+        self.assertEqual(len(normalized.transfers), 1)
+
+        unpriced_out_row = {
+            **out_row,
+            "id": "coarse-source-transfer-out",
+            "fiat_rate": None,
+            "fiat_value": None,
+            "pricing_source_kind": None,
+            "pricing_quality": None,
+        }
+        used_coarse_in_row = {
+            **unused_coarse_in_row,
+            "id": "coarse-source-transfer-in",
+        }
+        normalized = normalize_tax_asset_inputs(
+            profile,
+            "BTC",
+            [unpriced_out_row, used_coarse_in_row],
+            inputs.wallet_refs_by_id,
+            [{"out": unpriced_out_row, "in": used_coarse_in_row}],
+        )
+        self.assertEqual(len(normalized.quarantines), 1)
+        quarantine = normalized.quarantines[0]
+        self.assertEqual(quarantine["transaction_id"], "coarse-source-transfer-in")
+        self.assertEqual(quarantine["reason"], "pricing_review_required")
+        detail = json.loads(quarantine["detail_json"])
+        self.assertEqual(detail["wallet"], "Hot")
+        self.assertEqual(detail["pricing_quality"], pricing.QUALITY_COARSE_FALLBACK)
 
     def test_missing_spot_price_snapshot_matches_fixture(self):
         self._bootstrap_wallet(label="MissingPrice")

@@ -1263,17 +1263,33 @@ def auto_price_transactions_from_rates_cache(conn, profile):
     tx_rows = conn.execute(
         """
         SELECT id, occurred_at, asset, amount, fiat_currency, fiat_rate, fiat_value,
-               fiat_rate_exact, fiat_value_exact, confirmed_at
+               fiat_rate_exact, fiat_value_exact, fiat_price_source,
+               pricing_source_kind, pricing_quality, confirmed_at
         FROM transactions
         WHERE profile_id = ? AND excluded = 0
-          AND fiat_rate IS NULL AND fiat_value IS NULL
-          AND fiat_rate_exact IS NULL AND fiat_value_exact IS NULL
+          AND (
+            (
+              fiat_rate IS NULL AND fiat_value IS NULL
+              AND fiat_rate_exact IS NULL AND fiat_value_exact IS NULL
+            )
+            OR (
+              fiat_price_source = ?
+              AND pricing_source_kind IS NULL
+              AND pricing_quality IS NULL
+            )
+          )
         ORDER BY occurred_at ASC, created_at ASC, id ASC
         """,
-        (profile["id"],),
+        (profile["id"], pricing.LEGACY_SOURCE_RATES_CACHE),
     ).fetchall()
     auto_priced = 0
     for row in tx_rows:
+        price_was_missing = (
+            row["fiat_rate"] is None
+            and row["fiat_value"] is None
+            and row["fiat_rate_exact"] is None
+            and row["fiat_value_exact"] is None
+        )
         pair = core_rates.transaction_rate_pair(row["asset"], row["fiat_currency"] or profile["fiat_currency"])
         if pair is None:
             continue
@@ -1281,8 +1297,19 @@ def auto_price_transactions_from_rates_cache(conn, profile):
         cached_rate = core_rates.get_cached_rate_at_or_before(conn, pair, pricing_at)
         if cached_rate is None:
             continue
-        rate = pricing.decimal_from_exact(cached_rate.get("rate_exact"), cached_rate["rate"])
-        fiat_value = rate * msat_to_btc(row["amount"]) if row["amount"] > 0 else None
+        rate = pricing.decimal_from_exact(
+            row["fiat_rate_exact"],
+            cached_rate.get("rate_exact"),
+            row["fiat_rate"],
+            cached_rate["rate"],
+        )
+        fiat_value = pricing.decimal_from_exact(row["fiat_value_exact"])
+        if fiat_value is None and rate is not None and row["amount"] > 0:
+            fiat_value = rate * msat_to_btc(row["amount"])
+        if fiat_value is None:
+            fiat_value = pricing.decimal_from_exact(row["fiat_value"])
+        if rate is None and fiat_value is not None and row["amount"] > 0:
+            rate = fiat_value / msat_to_btc(row["amount"])
         source_kind = pricing.rate_cache_source_kind(cached_rate)
         quality = pricing.rate_cache_quality(cached_rate)
         payload = pricing.pricing_payload(
@@ -1326,7 +1353,8 @@ def auto_price_transactions_from_rates_cache(conn, profile):
                 row["id"],
             ),
         )
-        auto_priced += 1
+        if price_was_missing:
+            auto_priced += 1
     return auto_priced
 
 

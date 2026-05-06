@@ -21,7 +21,6 @@ from ..wallet_descriptors import normalize_asset_code
 
 INBOUND_DIRECTIONS = {"in", "inbound", "receive", "received", "deposit", "credit", "buy"}
 OUTBOUND_DIRECTIONS = {"out", "outbound", "send", "sent", "withdrawal", "withdraw", "debit", "sell"}
-FIAT_PRICE_SOURCE_IMPORT = pricing.LEGACY_SOURCE_IMPORT
 FIAT_PRICE_SOURCE_RATES_CACHE = pricing.LEGACY_SOURCE_RATES_CACHE
 
 ImportRow = Mapping[str, Any]
