@@ -97,10 +97,12 @@ function ModelSelectorLabel({
   className,
   provider,
   kind,
+  trailing,
   ...props
 }: React.ComponentProps<typeof SelectLabel> & {
   provider?: string;
   kind?: ModelSelectorProviderKind;
+  trailing?: React.ReactNode;
 }) {
   const kindStyle = kind ? KIND_STYLES[kind] : null;
 
@@ -121,6 +123,9 @@ function ModelSelectorLabel({
           {kindStyle.icon}
           {kindStyle.label}
         </span>
+      ) : null}
+      {trailing ? (
+        <span className="ml-auto flex items-center">{trailing}</span>
       ) : null}
     </SelectLabel>
   );

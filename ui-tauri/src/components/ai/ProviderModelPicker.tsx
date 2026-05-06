@@ -159,6 +159,24 @@ export function ProviderModelPicker({
     })();
   };
 
+  const refreshModelsButton = (
+    <Button
+      type="button"
+      variant="ghost"
+      size="icon-xs"
+      className="-mr-1 size-6 text-muted-foreground hover:text-foreground"
+      onClick={handleRefresh}
+      disabled={isRefreshing}
+      aria-label="Refresh AI models"
+      title="Refresh AI models"
+    >
+      <RefreshCw
+        className={cn("h-3.5 w-3.5", isRefreshing && "animate-spin")}
+        aria-hidden="true"
+      />
+    </Button>
+  );
+
   return (
     <ModelSelector
       value={value ? rowValue(value.provider, value.model) : ""}
@@ -168,29 +186,11 @@ export function ProviderModelPicker({
         <ModelSelectorValue>{currentLabel}</ModelSelectorValue>
       </ModelSelectorTrigger>
       <ModelSelectorContent>
-        <div
-          className="flex items-center justify-end border-b border-border/60 px-2 py-1"
-          role="presentation"
-        >
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon-xs"
-            className="size-6 text-muted-foreground hover:text-foreground"
-            onClick={handleRefresh}
-            disabled={isRefreshing}
-            aria-label="Refresh AI models"
-            title="Refresh AI models"
-          >
-            <RefreshCw
-              className={cn("h-3.5 w-3.5", isRefreshing && "animate-spin")}
-              aria-hidden="true"
-            />
-          </Button>
-        </div>
         {groupedRows.length === 0 ? (
           <ModelSelectorGroup>
-            <ModelSelectorLabel>No AI providers configured</ModelSelectorLabel>
+            <ModelSelectorLabel trailing={refreshModelsButton}>
+              No AI providers configured
+            </ModelSelectorLabel>
           </ModelSelectorGroup>
         ) : (
           groupedRows.map(({ provider, models: rows }) => (
@@ -198,6 +198,11 @@ export function ProviderModelPicker({
               <ModelSelectorLabel
                 provider={provider.name}
                 kind={provider.kind}
+                trailing={
+                  provider.name === selectedProvider?.name
+                    ? refreshModelsButton
+                    : null
+                }
               />
               {rows.length === 0 ? (
                 <ModelSelectorItem value={rowValue(provider.name, "__placeholder__")} disabled>
