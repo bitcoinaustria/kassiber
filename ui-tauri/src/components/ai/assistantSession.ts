@@ -24,15 +24,19 @@ export interface AssistantModelSelection {
   model: string;
 }
 
+export type AssistantThinkingEffort = "auto" | "low" | "medium" | "high";
+
 export interface AssistantSessionContextValue {
   messages: AiChatMessage[];
   isStreaming: boolean;
   error: { code: string; message: string } | null;
   pendingConsent: AiToolConsentRequest | null;
   selection: AssistantModelSelection | null;
+  thinkingEffort: AssistantThinkingEffort;
   toolsEnabled: boolean;
   returnPath: AssistantReturnPath;
   setSelection: (next: AssistantModelSelection | null) => void;
+  setThinkingEffort: (next: AssistantThinkingEffort) => void;
   setToolsEnabled: (enabled: boolean) => void;
   sendPrompt: (prompt: string) => void;
   sendConsent: (decision: AiToolConsentDecision) => Promise<void>;

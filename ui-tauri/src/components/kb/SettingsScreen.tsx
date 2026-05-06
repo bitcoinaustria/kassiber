@@ -1263,9 +1263,9 @@ function AiProvidersPanel() {
         <div className="min-w-0 space-y-1">
           <h3 className="text-sm font-semibold">Provider configuration</h3>
           <p className="text-sm text-muted-foreground">
-            Configure OpenAI-compatible endpoints for the in-app assistant.
-            Local Ollama runs without a key; remote providers see prompt
-            content.
+            Configure OpenAI-compatible endpoints or Claude/Codex CLI adapters
+            for the in-app assistant. Local Ollama runs without a key; remote
+            and CLI providers may see prompt content.
           </p>
         </div>
         <Button

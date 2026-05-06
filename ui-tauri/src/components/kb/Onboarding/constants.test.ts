@@ -58,9 +58,11 @@ describe("onboarding endpoint validation", () => {
   it("validates OpenAI-compatible base URLs", () => {
     expect(aiBaseUrlHint("http://localhost:11434/v1")).toBeNull();
     expect(aiBaseUrlHint("https://api.example/v1")).toBeNull();
+    expect(aiBaseUrlHint("claude-cli://default")).toBeNull();
+    expect(aiBaseUrlHint("codex-cli://default")).toBeNull();
     expect(aiBaseUrlHint("")).toBe("Base URL is required.");
     expect(aiBaseUrlHint("ollama.local/v1")).toBe(
-      "Use an http:// or https:// URL.",
+      "Use an http:// or https:// URL, or claude-cli://default / codex-cli://default.",
     );
     expect(aiBaseUrlHint("https://sk-secret@example.test/v1")).toBe(
       "Do not include usernames or passwords in the endpoint.",

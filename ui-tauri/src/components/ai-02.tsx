@@ -1,4 +1,11 @@
 import { Button } from "@/components/ui/button";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import {
@@ -12,6 +19,7 @@ import { cn } from "@/lib/utils";
 import {
   AlertTriangle,
   ArrowUp,
+  Brain,
   Cpu,
   FileSpreadsheet,
   RefreshCw,
@@ -39,6 +47,8 @@ interface Ai02Props {
   isStreaming?: boolean;
   toolsEnabled?: boolean;
   onToolsEnabledChange?: (enabled: boolean) => void;
+  thinkingEffort?: "auto" | "low" | "medium" | "high";
+  onThinkingEffortChange?: (effort: "auto" | "low" | "medium" | "high") => void;
   inputPanelElevated?: boolean;
   modelPickerEnabled?: boolean;
 }
@@ -76,6 +86,8 @@ export default function Ai02({
   isStreaming = false,
   toolsEnabled = true,
   onToolsEnabledChange,
+  thinkingEffort = "auto",
+  onThinkingEffortChange,
   inputPanelElevated = true,
   modelPickerEnabled = true,
 }: Ai02Props) {
@@ -164,6 +176,32 @@ export default function Ai02({
                 onChange={onSelectionChange}
                 enabled={modelPickerEnabled}
               />
+            </ContextItem>
+
+            <ContextItem
+              icon={<Brain className="h-3.5 w-3.5" aria-hidden="true" />}
+              label="Thinking"
+              className="shrink-0"
+            >
+              <Select
+                value={thinkingEffort}
+                onValueChange={(value) =>
+                  onThinkingEffortChange?.(
+                    value as "auto" | "low" | "medium" | "high",
+                  )
+                }
+                disabled={isStreaming || !onThinkingEffortChange}
+              >
+                <SelectTrigger className="h-7 w-[86px] rounded-full border-border bg-background/80 px-2 text-xs shadow-none">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent align="end">
+                  <SelectItem value="auto">Auto</SelectItem>
+                  <SelectItem value="low">Low</SelectItem>
+                  <SelectItem value="medium">Medium</SelectItem>
+                  <SelectItem value="high">High</SelectItem>
+                </SelectContent>
+              </Select>
             </ContextItem>
 
             <ContextItem

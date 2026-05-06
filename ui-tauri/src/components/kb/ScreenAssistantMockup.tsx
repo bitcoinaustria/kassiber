@@ -44,6 +44,8 @@ export function ScreenAssistantMockup({
     sendConsent,
     selection,
     setSelection,
+    thinkingEffort,
+    setThinkingEffort,
     sendPrompt,
     toolsEnabled,
     setToolsEnabled,
@@ -185,6 +187,8 @@ export function ScreenAssistantMockup({
           isStreaming={isStreaming}
           toolsEnabled={toolsEnabled}
           onToolsEnabledChange={setToolsEnabled}
+          thinkingEffort={thinkingEffort}
+          onThinkingEffortChange={setThinkingEffort}
           inputPanelElevated={false}
           modelPickerEnabled={modelPickerEnabled}
         />

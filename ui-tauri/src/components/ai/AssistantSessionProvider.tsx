@@ -23,6 +23,9 @@ export function AssistantSessionProvider({
 }: AssistantSessionProviderProps) {
   const [selection, setSelection] =
     React.useState<AssistantModelSelection | null>(null);
+  const [thinkingEffort, setThinkingEffort] = React.useState<
+    AssistantSessionContextValue["thinkingEffort"]
+  >("auto");
   const [toolsEnabled, setToolsEnabled] = React.useState(true);
   const {
     messages,
@@ -53,6 +56,10 @@ export function AssistantSessionProvider({
           provider: selection.provider,
           model: selection.model,
           messages: next,
+          options:
+            thinkingEffort === "auto"
+              ? undefined
+              : { reasoning_effort: thinkingEffort },
           toolsEnabled,
           toolLoopMaxIterations: 8,
           systemPromptKind: toolsEnabled ? "kassiber" : null,
@@ -60,7 +67,7 @@ export function AssistantSessionProvider({
         prompt,
       );
     },
-    [messages, selection, send, toolsEnabled],
+    [messages, selection, send, thinkingEffort, toolsEnabled],
   );
 
   const typedSendConsent = React.useCallback(
@@ -75,9 +82,11 @@ export function AssistantSessionProvider({
       error,
       pendingConsent,
       selection,
+      thinkingEffort,
       toolsEnabled,
       returnPath,
       setSelection,
+      setThinkingEffort,
       setToolsEnabled,
       sendPrompt,
       sendConsent: typedSendConsent,
@@ -94,6 +103,7 @@ export function AssistantSessionProvider({
       returnPath,
       selection,
       sendPrompt,
+      thinkingEffort,
       toolsEnabled,
       typedSendConsent,
     ],

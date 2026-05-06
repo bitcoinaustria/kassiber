@@ -393,11 +393,11 @@ and [docs/plan/04-desktop-ui.md](docs/plan/04-desktop-ui.md).
   warning into a refusal once no test or example needs the dotenv path for
   secret seeding.
 - [ ] Extend the stdin/fd secret-input pattern to `ai_providers.api_key`:
-  `kassiber ai providers {create,update}` currently only accepts
-  `--api-key <value>` via argv. Add `--api-key-stdin` / `--api-key-fd FD`
-  (matching the backends pattern) and a daemon-side `ai.providers.set_api_key`
-  reveal/rotate flow so hosted agents never have to put raw API keys on the
-  command line.
+  OpenAI-compatible remote providers still accept `--api-key <value>` via argv.
+  Add `--api-key-stdin` / `--api-key-fd FD` (matching the backends pattern) and
+  a daemon-side `ai.providers.set_api_key` reveal/rotate flow so hosted agents
+  never have to put raw API keys on the command line. Claude/Codex CLI providers
+  use local CLI auth and do not add Kassiber API-key storage.
 - [ ] Split wallet descriptor and other sensitive config out of the generic
   `wallets.config_json` blob into typed project-local tables now that
   SQLCipher protects the file at rest.

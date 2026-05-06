@@ -78,6 +78,11 @@ const hasHttpUrl = (raw: string): boolean => {
   }
 };
 
+const hasAiCliLocator = (raw: string): boolean => {
+  const normalized = raw.trim().toLowerCase();
+  return normalized === "claude-cli://default" || normalized === "codex-cli://default";
+};
+
 const hasInlineCredential = (raw: string): boolean => {
   const candidate = raw.includes("://") ? raw : `ssl://${raw}`;
   try {
@@ -139,7 +144,9 @@ export const aiBaseUrlHint = (raw: string): string | null => {
   if (hasInlineCredential(trimmed)) {
     return "Do not include usernames or passwords in the endpoint.";
   }
-  return hasHttpUrl(trimmed) ? null : "Use an http:// or https:// URL.";
+  return hasHttpUrl(trimmed) || hasAiCliLocator(trimmed)
+    ? null
+    : "Use an http:// or https:// URL, or claude-cli://default / codex-cli://default.";
 };
 
 export const BACKEND_KINDS: BackendKind[] = [

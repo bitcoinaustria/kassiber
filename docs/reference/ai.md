@@ -17,9 +17,9 @@ Two surfaces ship today:
   [`../../skills/kassiber/`](../../skills/kassiber/) for AI coding and terminal
   assistants.
 - An **in-app assistant** in the desktop UI that streams chat from an
-  OpenAI-compatible endpoint, plus a parallel CLI surface
-  (`kassiber ai providers …`, `kassiber ai models`, `kassiber ai chat`) that
-  reuses the same provider config.
+  OpenAI-compatible endpoint or fixed Claude/Codex CLI adapter, plus a
+  parallel CLI surface (`kassiber ai providers …`, `kassiber ai models`,
+  `kassiber ai chat`) that reuses the same provider config.
 
 The repo-local skill helps an AI assistant use the Kassiber CLI safely and
 correctly for:
@@ -69,6 +69,12 @@ acceptable for your threat model.
 
 If in doubt, keep inference local.
 
+Claude CLI and Codex CLI are supported for convenience, but they are not a
+local-privacy guarantee. Kassiber launches them in a narrow non-interactive mode
+that still uses their normal local authentication/config, telemetry, and
+model-provider routing. Treat them as off-device unless your local CLI setup is
+explicitly backed by a local or confidential provider.
+
 ## Recommended inference setup
 
 Local inference is the recommended default.
@@ -89,6 +95,18 @@ Local testing so far has used `qwen3.6:35b` with good results for Kassiber-style
 assistant flows. Smaller and less powerful models can still be useful for
 narrower tasks, and should become more practical as Kassiber's prompts, skill
 bundle, and workflows get tighter.
+
+Claude CLI and Codex CLI can be added with fixed provider locators:
+
+```bash
+kassiber ai providers create claude-cli --base-url claude-cli://default --kind remote --acknowledge --default-model default
+kassiber ai providers create codex-cli --base-url codex-cli://default --kind remote --acknowledge --default-model default
+```
+
+For these providers, `--model` / `default_model` is forwarded to the CLI when it
+is not `default`. The assistant's thinking selector sends `reasoning_effort` for
+OpenAI-compatible providers, maps to Claude CLI `--effort`, and maps to Codex
+CLI's `model_reasoning_effort` config override.
 
 ## In-app surface
 
@@ -117,6 +135,7 @@ Provider configuration is mirrored in the CLI:
 ```bash
 kassiber ai providers list
 kassiber ai providers create openai --base-url https://api.openai.com/v1 --kind remote --acknowledge --api-key $OPENAI_API_KEY --default-model gpt-4o-mini
+kassiber ai providers create claude-cli --base-url claude-cli://default --kind remote --acknowledge --default-model default
 kassiber ai providers set-default openai
 kassiber ai models
 kassiber ai chat "Summarise the last week of imports."
@@ -140,12 +159,15 @@ Models that don't emit either pass through unchanged.
 Settings → AI providers exposes a **Test connection** action. It calls the
 daemon's `ai.test_connection` kind with the *currently entered* base URL and
 API key (or, when editing without changing the API-key field, the saved key)
-and reports the model count without persisting anything.
+and reports the model count without persisting anything. For Claude/Codex CLI
+locators, this only verifies that the CLI executable is present; authentication
+and model reachability are checked when chat starts.
 
-Remote and TEE providers require explicit acknowledgement before chat. The CLI
-uses `kassiber ai providers update <name> --acknowledge` (or
-`--acknowledge` during `create`), and the desktop Settings form prompts before
-saving an off-device provider. Without that acknowledgement, `ai.chat` returns
+Remote, TEE, Claude CLI, and Codex CLI providers require explicit
+acknowledgement before chat. The CLI uses
+`kassiber ai providers update <name> --acknowledge` (or `--acknowledge` during
+`create`), and the desktop Settings form prompts before saving an off-device
+provider. Without that acknowledgement, `ai.chat` returns
 `ai_remote_ack_required` before sending any prompt content.
 
 Streaming is demuxed by `request_id`: the Tauri supervisor keeps one daemon

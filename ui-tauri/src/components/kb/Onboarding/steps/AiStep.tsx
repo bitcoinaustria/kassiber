@@ -170,7 +170,7 @@ export const AiStep = ({
               <ChoiceCard
                 active={remoteSelected}
                 title="Use a remote provider"
-                description="Prepare an OpenAI-compatible endpoint outside this app. Prompts and accounting context may leave this device."
+                description="Prepare an OpenAI-compatible endpoint or Claude/Codex CLI. Prompts and accounting context may leave this device."
                 tone="warning"
                 onClick={() => {
                   update("aiSetupMode", "remote");
@@ -219,10 +219,10 @@ export const AiStep = ({
                   name="aiBaseUrl"
                   value={form.aiBaseUrl}
                   placeholder={
-                    localSelected ? DEFAULT_AI_BASE_URL : "https://.../v1"
+                    localSelected ? DEFAULT_AI_BASE_URL : "https://.../v1 or claude-cli://default"
                   }
                   hint={endpointHint}
-                  description="Must be an OpenAI-compatible /v1 endpoint."
+                  description="Use an OpenAI-compatible /v1 endpoint or a supported CLI locator."
                   onChange={(value) => update("aiBaseUrl", value)}
                 />
                 {remoteSelected && (

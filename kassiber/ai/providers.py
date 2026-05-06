@@ -3,7 +3,8 @@
 Mirrors `kassiber.backends` for the `ai_providers` table. The stored shape:
 
     name              TEXT PRIMARY KEY  (lowercase)
-    base_url          TEXT NOT NULL     (OpenAI-compatible root, e.g. http://localhost:11434/v1)
+    base_url          TEXT NOT NULL     (OpenAI-compatible root, e.g. http://localhost:11434/v1,
+                                        or fixed CLI locator claude-cli://default / codex-cli://default)
     api_key           TEXT              (nullable; never echoed in envelopes)
     default_model     TEXT              (nullable)
     kind              TEXT NOT NULL     (local | remote | tee)
@@ -31,6 +32,8 @@ from ..util import str_or_none
 AI_PROVIDER_KINDS = ("local", "remote", "tee")
 DEFAULT_AI_PROVIDER_SETTING = "default_ai_provider"
 AI_PROVIDERS_SEEDED_SETTING = "ai_providers_seeded"
+
+CLI_PROVIDER_LOCATORS = ("claude-cli://default", "codex-cli://default")
 
 DEFAULT_BOOTSTRAP_PROVIDER = {
     "name": "ollama",
@@ -74,28 +77,60 @@ def _normalize_kind(value: Any) -> str:
     return kind
 
 
+def _validate_locator_kind(base_url: str, kind: str) -> None:
+    if is_cli_provider_locator(base_url) and kind == "local":
+        raise AppError(
+            "Claude/Codex CLI providers cannot be marked local",
+            code="validation",
+            hint=(
+                "Use --kind remote (or tee if your configured CLI path has documented "
+                "confidential inference). These CLIs may send prompts to external model providers."
+            ),
+        )
+
+
+def is_cli_provider_locator(value: Any) -> bool:
+    base = str_or_none(value)
+    if base is None:
+        return False
+    base = base.strip().lower()
+    return base in CLI_PROVIDER_LOCATORS
+
+
 def normalize_base_url(value: Any) -> str:
-    """Validate and canonicalize an OpenAI-compatible base URL.
+    """Validate and canonicalize an AI provider locator.
 
     Strips whitespace and trailing slashes, requires a scheme, and raises
-    `AppError(code='validation')` on bad input. Used by both the persisted
-    CRUD path and the transient `ai.test_connection` handler.
+    `AppError(code='validation')` on bad input. Most providers use an
+    OpenAI-compatible HTTP root; fixed local CLI adapters use
+    ``claude-cli://default`` or ``codex-cli://default``.
     """
     base = str_or_none(value)
     if base is None:
         raise AppError(
             "AI provider base_url is required",
             code="validation",
-            hint="Use the OpenAI-compatible root, e.g. http://localhost:11434/v1",
+            hint=(
+                "Use an OpenAI-compatible root, e.g. http://localhost:11434/v1, "
+                "or claude-cli://default / codex-cli://default."
+            ),
         )
     base = base.strip().rstrip("/")
     if not base:
         raise AppError("AI provider base_url is required", code="validation")
+    if is_cli_provider_locator(base):
+        return base.lower()
     if "://" not in base:
         raise AppError(
             f"AI provider base_url '{base}' is missing a scheme",
             code="validation",
-            hint="Include http:// or https:// in the URL.",
+            hint="Include http://, https://, claude-cli://, or codex-cli://.",
+        )
+    if not (base.startswith("http://") or base.startswith("https://")):
+        raise AppError(
+            f"Unsupported AI provider locator '{base}'",
+            code="validation",
+            hint="Use http(s)://, claude-cli://default, or codex-cli://default.",
         )
     return base
 
@@ -222,6 +257,7 @@ def create_db_ai_provider(
     name = _normalize_name(name)
     base_url = normalize_base_url(base_url)
     kind = _normalize_kind(kind)
+    _validate_locator_kind(base_url, kind)
     api_key = str_or_none(api_key)
     default_model = str_or_none(default_model)
     notes = str_or_none(notes)
@@ -311,6 +347,7 @@ def update_db_ai_provider(conn, name: str, updates: dict) -> dict:
         "notes": resolved("notes", row["notes"]),
         "acknowledged_at": new_acknowledged_at,
     }
+    _validate_locator_kind(merged["base_url"], merged["kind"])
     conn.execute(
         """
         UPDATE ai_providers
