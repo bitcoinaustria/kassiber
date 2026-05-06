@@ -197,8 +197,8 @@ export function ReviewDataTable({
             className={cn(
               "font-medium",
               row.original.impact.startsWith("-")
-                ? "text-red-600"
-                : "text-emerald-600",
+                ? "text-red-600 dark:text-red-400"
+                : "text-emerald-600 dark:text-emerald-400",
               blurClass(hideSensitive),
             )}
           >

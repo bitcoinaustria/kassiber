@@ -313,7 +313,9 @@ function ReportsView({ report, hideSensitive }: ReportsViewProps) {
               value={
                 <span
                   className={cn(
-                    totals.gain >= 0 ? "text-emerald-600" : "text-red-600",
+                    totals.gain >= 0
+                      ? "text-emerald-600 dark:text-emerald-400"
+                      : "text-red-600 dark:text-red-400",
                     blurClass(hideSensitive),
                   )}
                 >
@@ -398,8 +400,8 @@ function ReportsView({ report, hideSensitive }: ReportsViewProps) {
                         className={cn(
                           "text-right tabular-nums",
                           totals.gain >= 0
-                            ? "text-emerald-600"
-                            : "text-red-600",
+                            ? "text-emerald-600 dark:text-emerald-400"
+                            : "text-red-600 dark:text-red-400",
                           blurClass(hideSensitive),
                         )}
                       >
@@ -700,7 +702,9 @@ function ReportLotRow({ lot, hideSensitive }: ReportLotRowProps) {
       <TableCell
         className={cn(
           "text-right tabular-nums",
-          gain >= 0 ? "text-emerald-600" : "text-red-600",
+          gain >= 0
+            ? "text-emerald-600 dark:text-emerald-400"
+            : "text-red-600 dark:text-red-400",
           blurClass(hideSensitive),
         )}
       >

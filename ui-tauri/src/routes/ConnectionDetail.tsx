@@ -493,7 +493,9 @@ function ConnectionDetailView({
                     <TableCell
                       className={cn(
                         "text-right font-mono text-xs tabular-nums",
-                        tx.amountSat > 0 ? "text-emerald-600" : "text-foreground",
+                        tx.amountSat > 0
+                          ? "text-emerald-600 dark:text-emerald-400"
+                          : "text-foreground",
                         blurClass(hideSensitive),
                       )}
                     >
@@ -867,7 +869,10 @@ function CopyButton({
       onClick={onCopy}
     >
       {copied ? (
-        <Check className="size-3 text-emerald-600" aria-hidden="true" />
+        <Check
+          className="size-3 text-emerald-600 dark:text-emerald-400"
+          aria-hidden="true"
+        />
       ) : (
         <Copy className="size-3" aria-hidden="true" />
       )}
