@@ -1888,7 +1888,9 @@ function BackendModal({
                   {testState === "testing" ? "Testing" : "Test connection"}
                 </Button>
                 {testState === "ok" && (
-                  <span className="text-emerald-600">Connected - 142 ms</span>
+                  <span className="text-emerald-600 dark:text-emerald-400">
+                    Connected - 142 ms
+                  </span>
                 )}
                 {testState === "fail" && (
                   <span className="text-destructive">

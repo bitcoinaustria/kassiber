@@ -9,6 +9,7 @@ import {
 type Lang = "en" | "de";
 type Currency = "btc" | "eur";
 export type DataMode = "mock" | "real";
+export type ThemePreference = "system" | "light" | "dark";
 export type NotificationTone = "info" | "success" | "warning" | "error";
 
 export interface AppNotification {
@@ -92,6 +93,7 @@ interface UiState {
   lang: Lang;
   currency: Currency;
   dataMode: DataMode;
+  theme: ThemePreference;
   hideSensitive: boolean;
   explorerSettings: ExplorerSettings;
   appLockPolicy: AppLockPolicy;
@@ -101,6 +103,7 @@ interface UiState {
   setLang: (lang: Lang) => void;
   setCurrency: (currency: Currency) => void;
   setDataMode: (dataMode: DataMode) => void;
+  setTheme: (theme: ThemePreference) => void;
   setHideSensitive: (hideSensitive: boolean) => void;
   setExplorerSettings: (settings: Partial<ExplorerSettings>) => void;
   setAppLockPolicy: (policy: Partial<AppLockPolicy>) => void;
@@ -136,6 +139,7 @@ export const useUiStore = create<UiState>()(
       lang: "en",
       currency: "btc",
       dataMode: "real",
+      theme: "system",
       hideSensitive: false,
       explorerSettings: DEFAULT_EXPLORER_SETTINGS,
       appLockPolicy: {
@@ -150,6 +154,7 @@ export const useUiStore = create<UiState>()(
       setLang: (lang) => set({ lang }),
       setCurrency: (currency) => set({ currency }),
       setDataMode: (dataMode) => set({ dataMode }),
+      setTheme: (theme) => set({ theme }),
       setHideSensitive: (hideSensitive) => set({ hideSensitive }),
       setExplorerSettings: (settings) =>
         set((state) => ({

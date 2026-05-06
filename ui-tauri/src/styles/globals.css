@@ -81,8 +81,8 @@
   }
   body {
     font-family: var(--font-sans);
-    color: var(--color-ink);
-    background-color: var(--color-paper);
+    color: var(--foreground);
+    background-color: var(--background);
     -webkit-font-smoothing: antialiased;
   }
 }
@@ -116,6 +116,16 @@
  */
 
 .dark {
+  --color-paper: #101010;
+  --color-paper-2: #171717;
+  --color-ink: #f4f4f5;
+  --color-ink-2: #c7c7c9;
+  --color-ink-3: #a1a1aa;
+  --color-line: #2a2a2d;
+  --color-line-2: #424248;
+  --color-accent: #ff3341;
+  --color-accent-2: #ff6a73;
+
   --background: oklch(0.145 0 0);
   --foreground: oklch(0.985 0 0);
   --card: oklch(0.205 0 0);
