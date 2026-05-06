@@ -49,6 +49,7 @@ interface Ai02Props {
   onToolsEnabledChange?: (enabled: boolean) => void;
   thinkingEffort?: "auto" | "low" | "medium" | "high";
   onThinkingEffortChange?: (effort: "auto" | "low" | "medium" | "high") => void;
+  showThinkingEffort?: boolean;
   inputPanelElevated?: boolean;
   modelPickerEnabled?: boolean;
 }
@@ -88,6 +89,7 @@ export default function Ai02({
   onToolsEnabledChange,
   thinkingEffort = "auto",
   onThinkingEffortChange,
+  showThinkingEffort = false,
   inputPanelElevated = true,
   modelPickerEnabled = true,
 }: Ai02Props) {
@@ -178,31 +180,33 @@ export default function Ai02({
               />
             </ContextItem>
 
-            <ContextItem
-              icon={<Brain className="h-3.5 w-3.5" aria-hidden="true" />}
-              label="Thinking"
-              className="shrink-0"
-            >
-              <Select
-                value={thinkingEffort}
-                onValueChange={(value) =>
-                  onThinkingEffortChange?.(
-                    value as "auto" | "low" | "medium" | "high",
-                  )
-                }
-                disabled={isStreaming || !onThinkingEffortChange}
+            {showThinkingEffort ? (
+              <ContextItem
+                icon={<Brain className="h-3.5 w-3.5" aria-hidden="true" />}
+                label="Thinking"
+                className="shrink-0"
               >
-                <SelectTrigger className="h-7 w-[86px] rounded-full border-border bg-background/80 px-2 text-xs shadow-none">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent align="end">
-                  <SelectItem value="auto">Auto</SelectItem>
-                  <SelectItem value="low">Low</SelectItem>
-                  <SelectItem value="medium">Medium</SelectItem>
-                  <SelectItem value="high">High</SelectItem>
-                </SelectContent>
-              </Select>
-            </ContextItem>
+                <Select
+                  value={thinkingEffort}
+                  onValueChange={(value) =>
+                    onThinkingEffortChange?.(
+                      value as "auto" | "low" | "medium" | "high",
+                    )
+                  }
+                  disabled={isStreaming || !onThinkingEffortChange}
+                >
+                  <SelectTrigger className="h-auto! min-h-0 w-14 border-none bg-transparent! p-0 text-xs leading-none text-muted-foreground shadow-none hover:text-foreground focus:ring-0 focus-visible:border-transparent focus-visible:ring-0 [&_svg]:size-3">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent align="end">
+                    <SelectItem value="auto">Auto</SelectItem>
+                    <SelectItem value="low">Low</SelectItem>
+                    <SelectItem value="medium">Medium</SelectItem>
+                    <SelectItem value="high">High</SelectItem>
+                  </SelectContent>
+                </Select>
+              </ContextItem>
+            ) : null}
 
             <ContextItem
               icon={<Wrench className="h-3.5 w-3.5" aria-hidden="true" />}

@@ -24,28 +24,12 @@ import {
 } from "@/components/ai-elements";
 import { Button } from "@/components/ui/button";
 import { useDaemon } from "@/daemon/client";
+import type {
+  AiModelsListData,
+  AiProviderRow,
+  AiProvidersListData,
+} from "@/lib/aiCapabilities";
 import { cn } from "@/lib/utils";
-
-export interface ProviderRow {
-  name: string;
-  base_url: string;
-  kind: "local" | "remote" | "tee";
-  default_model?: string | null;
-  notes?: string | null;
-  acknowledged_at?: string | null;
-  has_api_key: boolean;
-  is_default: boolean;
-}
-
-interface ProvidersListData {
-  providers: ProviderRow[];
-  default: string | null;
-}
-
-interface ModelsListData {
-  provider: string;
-  models: { id: string; owned_by?: string }[];
-}
 
 interface ProviderModelPickerProps {
   value: { provider: string; model: string } | null;
@@ -68,12 +52,12 @@ export function ProviderModelPicker({
   onChange,
   enabled = true,
 }: ProviderModelPickerProps) {
-  const providersQuery = useDaemon<ProvidersListData>(
+  const providersQuery = useDaemon<AiProvidersListData>(
     "ai.providers.list",
     undefined,
     { enabled },
   );
-  const providers = React.useMemo<ProviderRow[]>(
+  const providers = React.useMemo<AiProviderRow[]>(
     () =>
       providersQuery.data?.kind === "ai.providers.list" &&
       providersQuery.data.data
@@ -95,7 +79,7 @@ export function ProviderModelPicker({
     ? providers.find((p) => p.name === value.provider)
     : fallbackProvider;
 
-  const modelsQuery = useDaemon<ModelsListData>(
+  const modelsQuery = useDaemon<AiModelsListData>(
     "ai.list_models",
     selectedProvider ? { provider: selectedProvider.name } : undefined,
     {

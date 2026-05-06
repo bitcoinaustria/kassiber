@@ -21,6 +21,7 @@ import Ai02 from "@/components/ai-02";
 import { useAssistantSession } from "@/components/ai/assistantSession";
 import { ChatThread } from "@/components/ai/ChatThread";
 import { ToolConsentDialog } from "@/components/ai/ToolConsentDialog";
+import { useReasoningEffortSupport } from "@/components/ai/useReasoningEffortSupport";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
@@ -55,12 +56,32 @@ export function ScreenAssistantMockup({
   const hasThread = messages.length > 0;
   const showThread = hasThread && !isThreadCollapsed;
   const modelPickerEnabled = isInteracting || hasThread || isStreaming;
+  const thinkingEffortSupport = useReasoningEffortSupport(
+    selection,
+    modelPickerEnabled || Boolean(selection?.provider),
+  );
+  const supportsThinkingEffort = thinkingEffortSupport.supported;
 
   React.useEffect(() => {
     if (!hasThread) {
       setIsThreadCollapsed(false);
     }
   }, [hasThread]);
+
+  React.useEffect(() => {
+    if (
+      thinkingEffortSupport.resolved &&
+      !supportsThinkingEffort &&
+      thinkingEffort !== "auto"
+    ) {
+      setThinkingEffort("auto");
+    }
+  }, [
+    thinkingEffortSupport.resolved,
+    supportsThinkingEffort,
+    thinkingEffort,
+    setThinkingEffort,
+  ]);
 
   return (
     <section
@@ -188,7 +209,10 @@ export function ScreenAssistantMockup({
           toolsEnabled={toolsEnabled}
           onToolsEnabledChange={setToolsEnabled}
           thinkingEffort={thinkingEffort}
-          onThinkingEffortChange={setThinkingEffort}
+          onThinkingEffortChange={
+            supportsThinkingEffort ? setThinkingEffort : undefined
+          }
+          showThinkingEffort={supportsThinkingEffort}
           inputPanelElevated={false}
           modelPickerEnabled={modelPickerEnabled}
         />

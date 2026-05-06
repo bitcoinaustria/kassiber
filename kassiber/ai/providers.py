@@ -142,6 +142,7 @@ def redact_ai_provider_for_output(provider: dict, *, default_name: str | None = 
         if field in provider:
             payload[field] = provider[field]
     payload["has_api_key"] = bool(str_or_none(provider.get("api_key")))
+    payload["supports_reasoning_effort"] = is_cli_provider_locator(provider.get("base_url"))
     if default_name is not None:
         payload["is_default"] = provider.get("name") == default_name
     return payload
