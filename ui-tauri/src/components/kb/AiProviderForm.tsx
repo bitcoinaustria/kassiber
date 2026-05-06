@@ -11,6 +11,7 @@ import { Loader2, ShieldAlert, Sparkles } from "lucide-react";
 import * as React from "react";
 
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Dialog,
   DialogContent,
@@ -93,6 +94,7 @@ export function AiProviderForm({
   const [defaultModel, setDefaultModel] = React.useState(initial?.default_model ?? "");
   const [kind, setKind] = React.useState<AiProviderInput["kind"]>(initial?.kind ?? "local");
   const [notes, setNotes] = React.useState(initial?.notes ?? "");
+  const [remoteAcknowledged, setRemoteAcknowledged] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
   const [testStatus, setTestStatus] = React.useState<
     | { state: "idle" }
@@ -111,6 +113,7 @@ export function AiProviderForm({
     setDefaultModel(initial?.default_model ?? "");
     setKind(initial?.kind ?? "local");
     setNotes(initial?.notes ?? "");
+    setRemoteAcknowledged(false);
     setError(null);
     setTestStatus({ state: "idle" });
   }, [open, initial]);
@@ -165,10 +168,9 @@ export function AiProviderForm({
         throw new Error("Claude/Codex CLI providers may send prompts off-device. Choose remote or TEE.");
       }
       if (needsRemoteAck) {
-        const ok = window.confirm(
-          "Prompts sent to this provider may leave this device through the configured AI service or CLI. Acknowledge this privacy decision before saving?",
-        );
-        if (!ok) return;
+        if (!remoteAcknowledged) {
+          throw new Error("Acknowledge that prompts may leave this device before saving.");
+        }
       }
       if (editing && initial) {
         const args: Record<string, unknown> = {
@@ -210,6 +212,9 @@ export function AiProviderForm({
   };
 
   const isBusy = createProvider.isPending || updateProvider.isPending;
+  const needsRemoteAck =
+    kind !== "local" && (!initial || initial.kind === "local" || !initial.acknowledged_at);
+  const canSubmit = !isBusy && (!needsRemoteAck || remoteAcknowledged);
 
   return (
     <Dialog open={open} onOpenChange={(next) => !next && onClose()}>
@@ -243,6 +248,7 @@ export function AiProviderForm({
                           ? "Local Ollama endpoint."
                           : `${preset.label}; prompts may leave this device.`,
                       );
+                      setRemoteAcknowledged(false);
                     }}
                     className="rounded-md border border-border bg-background px-3 py-2 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted"
                   >
@@ -334,18 +340,39 @@ export function AiProviderForm({
             />
           </div>
           {kind !== "local" ? (
-            <div className="flex items-start gap-2 rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs text-amber-700 dark:text-amber-300">
-              <ShieldAlert
-                className="mt-0.5 size-4 shrink-0"
-                aria-hidden="true"
-              />
-              <span>
-                Prompts may leave this device. Claude/Codex CLI providers use
-                your local CLI authentication/config and can forward Kassiber
-                context to external model services. Do not paste raw
-                credentials, wallet exports, or private descriptors unless your
-                threat model allows it.
-              </span>
+            <div className="grid gap-3 rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs text-amber-700 dark:text-amber-300">
+              <div className="flex items-start gap-2">
+                <ShieldAlert
+                  className="mt-0.5 size-4 shrink-0"
+                  aria-hidden="true"
+                />
+                <span>
+                  Prompts may leave this device. Claude/Codex CLI providers use
+                  your local CLI authentication/config and can forward Kassiber
+                  context to external model services. Do not paste raw
+                  credentials, wallet exports, or private descriptors unless your
+                  threat model allows it.
+                </span>
+              </div>
+              {needsRemoteAck ? (
+                <label
+                  htmlFor="ai-form-remote-ack"
+                  className="flex cursor-pointer items-start gap-2 text-amber-800 dark:text-amber-200"
+                >
+                  <Checkbox
+                    id="ai-form-remote-ack"
+                    checked={remoteAcknowledged}
+                    onCheckedChange={(checked) => {
+                      setRemoteAcknowledged(checked === true);
+                    }}
+                    className="mt-0.5"
+                  />
+                  <span>
+                    I understand prompts and selected Kassiber context may leave
+                    this device through this provider.
+                  </span>
+                </label>
+              ) : null}
             </div>
           ) : null}
           {error ? (
@@ -387,7 +414,7 @@ export function AiProviderForm({
             <Button type="button" variant="ghost" onClick={onClose} disabled={isBusy}>
               Cancel
             </Button>
-            <Button type="submit" disabled={isBusy}>
+            <Button type="submit" disabled={!canSubmit}>
               {editing ? "Save" : "Add provider"}
             </Button>
           </DialogFooter>
