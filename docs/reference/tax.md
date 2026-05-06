@@ -100,12 +100,19 @@ Quarantine causes typically include:
 
 If transactions do not already include usable fiat pricing, Kassiber first tries to fill them from the local rates cache during journal processing. When a transaction has a known `confirmed_at` timestamp, Kassiber prices from that confirmation time; otherwise it falls back to `occurred_at`. `LBTC` / `L-BTC` transactions use the BTC fiat rate because Liquid Bitcoin is pegged one-to-one with BTC.
 
+Pricing now carries provenance alongside the legacy numeric fields: source kind,
+provider, pair, source timestamp, fetched timestamp, granularity, method, and
+quality. Imported source prices can outrank cache-derived FMV. Daily or otherwise
+coarse provider fallback is kept on the transaction for audit context but
+quarantines with `pricing_review_required` before it can drive tax entries.
+
 Useful commands:
 
 ```bash
 python3 -m kassiber rates pairs
 python3 -m kassiber rates sync --pair BTC-USD --days 30
 python3 -m kassiber rates set BTC-EUR 2026-01-01T00:00:00Z 95000
+python3 -m kassiber rates set BTC-EUR 2026-01-01T12:34:00Z 95000 --granularity exact
 python3 -m kassiber rates latest BTC-EUR
 ```
 

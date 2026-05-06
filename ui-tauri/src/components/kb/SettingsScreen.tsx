@@ -1452,6 +1452,8 @@ interface BackendPreset {
   name: string;
   url: string;
   scheme: string;
+  disabled?: boolean;
+  status?: string;
 }
 
 interface BackendType {
@@ -1564,12 +1566,16 @@ const BACKEND_TYPES: BackendType[] = [
         name: "Kraken",
         url: "https://api.kraken.com/0/public",
         scheme: "REST",
+        disabled: true,
+        status: "planned",
       },
       {
         id: "bitstamp",
         name: "Bitstamp",
         url: "https://www.bitstamp.net/api/v2",
         scheme: "REST",
+        disabled: true,
+        status: "planned",
       },
     ],
   },
@@ -1669,7 +1675,10 @@ function BackendModal({
       return;
     }
     const nextType = BACKEND_TYPES.find((candidate) => candidate.id === id);
-    setPresetId(nextType?.presets[0]?.id ?? "custom");
+    setPresetId(
+      nextType?.presets.find((candidate) => !candidate.disabled)?.id ??
+        "custom",
+    );
   };
 
   const testConnection = () => {
@@ -1772,11 +1781,12 @@ function BackendModal({
                         presetId === backendPreset.id ? "default" : "outline"
                       }
                       size="sm"
+                      disabled={backendPreset.disabled}
                       onClick={() => setPresetId(backendPreset.id)}
                     >
                       {backendPreset.name}
                       <span className="text-xs opacity-70">
-                        {backendPreset.scheme}
+                        {backendPreset.status ?? backendPreset.scheme}
                       </span>
                     </Button>
                   ))}

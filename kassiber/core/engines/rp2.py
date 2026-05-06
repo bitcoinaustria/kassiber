@@ -21,6 +21,7 @@ from ..austrian import (
     kennzahl_for_disposal_category,
     resolve_pool_id,
 )
+from .. import pricing
 from ..tax_events import NormalizedTaxAssetInputs, build_tax_quarantine, normalize_tax_asset_inputs
 from .base import TaxEngineLedgerInputs, TaxEngineLedgerResult
 
@@ -234,28 +235,41 @@ def _row_sort_key(row: Mapping[str, Any]) -> tuple[str, str, str]:
 
 
 def _spot_price_from_row(row: Mapping[str, Any], quantity: Decimal) -> Decimal | None:
-    if hasattr(row, "keys") and "fiat_rate" in row.keys() and row["fiat_rate"] is not None:
-        rate = dec(row["fiat_rate"])
+    rate = pricing.decimal_from_exact(
+        _row_get(row, "fiat_rate_exact"),
+        _row_get(row, "fiat_rate"),
+    )
+    if rate is not None:
         if rate > 0:
             return rate
-    if (
-        hasattr(row, "keys")
-        and "fiat_value" in row.keys()
-        and row["fiat_value"] is not None
-        and quantity > 0
-    ):
-        value = dec(row["fiat_value"])
+    value = pricing.decimal_from_exact(
+        _row_get(row, "fiat_value_exact"),
+        _row_get(row, "fiat_value"),
+    )
+    if value is not None and quantity > 0:
         if value > 0:
             return value / quantity
     return None
 
 
 def _basis_from_row(row: Mapping[str, Any], quantity: Decimal, spot_price: Decimal | None) -> Decimal | None:
-    if hasattr(row, "keys") and "fiat_value" in row.keys() and row["fiat_value"] is not None:
-        return dec(row["fiat_value"])
+    value = pricing.decimal_from_exact(
+        _row_get(row, "fiat_value_exact"),
+        _row_get(row, "fiat_value"),
+    )
+    if value is not None:
+        return value
     if spot_price is None:
         return None
     return quantity * spot_price
+
+
+def _row_get(row: Mapping[str, Any], key: str) -> Any:
+    if hasattr(row, "keys") and key not in row.keys():
+        return None
+    if hasattr(row, "get"):
+        return row.get(key)
+    return row[key]
 
 
 def _make_rp2_country(profile: Mapping[str, Any]):
