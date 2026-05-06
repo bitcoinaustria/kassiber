@@ -1,5 +1,6 @@
 import * as React from "react";
 
+import type { AssistantThinkingEffort } from "@/components/ai/assistantSession";
 import { useDaemon } from "@/daemon/client";
 import {
   providerSupportsReasoningEffort,
@@ -67,4 +68,31 @@ export function useReasoningEffortSupport(
       (!selectedProvider || modelsQuery.isError || Boolean(hasModelsResponse)));
 
   return { supported, resolved };
+}
+
+export function useSupportedReasoningEffort({
+  selection,
+  thinkingEffort,
+  setThinkingEffort,
+  enabled = true,
+}: {
+  selection: AssistantModelSelection;
+  thinkingEffort: AssistantThinkingEffort;
+  setThinkingEffort: (effort: AssistantThinkingEffort) => void;
+  enabled?: boolean;
+}): boolean {
+  const support = useReasoningEffortSupport(selection, enabled);
+
+  React.useEffect(() => {
+    if (support.resolved && !support.supported && thinkingEffort !== "auto") {
+      setThinkingEffort("auto");
+    }
+  }, [
+    support.resolved,
+    support.supported,
+    thinkingEffort,
+    setThinkingEffort,
+  ]);
+
+  return support.supported;
 }

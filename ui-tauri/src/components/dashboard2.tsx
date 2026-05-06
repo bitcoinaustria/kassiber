@@ -79,6 +79,7 @@ import { formatBtc, useCurrency, type Currency } from "@/lib/currency";
 import {
   explorerTargetForTransaction,
   type ExplorerSettings,
+  type ExplorerTarget,
 } from "@/lib/explorer";
 import { CurrencyToggleText } from "@/components/kb/CurrencyToggleText";
 import { useWalletSyncAction } from "@/hooks/useWalletSyncAction";
@@ -1203,27 +1204,9 @@ const TransactionWorkbench = ({
   const [swapDialogOpen, setSwapDialogOpen] = React.useState(false);
   const [largestExplorerTransaction, setLargestExplorerTransaction] =
     React.useState<Transaction | null>(null);
-  const [largestExplorerOpenError, setLargestExplorerOpenError] =
-    React.useState<string | null>(null);
-  const [largestExplorerOpening, setLargestExplorerOpening] =
-    React.useState(false);
   const largestExplorerTarget = largestExplorerTransaction
     ? explorerForTransaction(largestExplorerTransaction, explorerSettings)
     : null;
-  const openLargestExplorer = async () => {
-    const target = largestExplorerTarget;
-    if (!target) return;
-    setLargestExplorerOpenError(null);
-    setLargestExplorerOpening(true);
-    try {
-      await openExternalUrl(target.url);
-      setLargestExplorerTransaction(null);
-    } catch (error) {
-      setLargestExplorerOpenError(explorerOpenErrorMessage(error));
-    } finally {
-      setLargestExplorerOpening(false);
-    }
-  };
   const swapCandidates = buildSwapCandidates(records);
   const swapCandidateIds = new Set(
     swapCandidates.flatMap((candidate) => [
@@ -1569,7 +1552,6 @@ const TransactionWorkbench = ({
                 )}
                 onClick={() => {
                   if (largestExplorer) {
-                    setLargestExplorerOpenError(null);
                     setLargestExplorerTransaction(largest);
                   }
                 }}
@@ -1611,60 +1593,11 @@ const TransactionWorkbench = ({
           </div>
         </div>
       </div>
-      <Dialog
-        open={Boolean(largestExplorerTransaction)}
-        onOpenChange={(open) => {
-          if (!open) {
-            setLargestExplorerOpenError(null);
-            setLargestExplorerTransaction(null);
-          }
-        }}
-      >
-        <DialogContent className="sm:max-w-lg">
-          <DialogHeader>
-            <div className="mb-2 flex size-10 items-center justify-center rounded-full bg-amber-100 text-amber-700 dark:bg-amber-950/50 dark:text-amber-300">
-              <ShieldAlert className="size-5" aria-hidden="true" />
-            </div>
-            <DialogTitle>Open transaction in a browser?</DialogTitle>
-            <DialogDescription>
-              This opens {largestExplorerTarget?.label ?? "a public explorer"} outside
-              Kassiber. The explorer can see your IP address and the transaction
-              id you request.
-            </DialogDescription>
-          </DialogHeader>
-          {largestExplorerTransaction && largestExplorerTarget ? (
-            <div className="rounded-md border bg-muted/35 p-3 text-sm">
-              <p className="font-medium">{largestExplorerTransaction.txnId}</p>
-              <p className="mt-1 break-all font-mono text-xs text-muted-foreground">
-                {largestExplorerTarget.url}
-              </p>
-            </div>
-          ) : null}
-          {largestExplorerOpenError ? (
-            <p
-              role="alert"
-              className="rounded-md border border-destructive/25 bg-destructive/10 px-3 py-2 text-sm text-destructive"
-            >
-              {largestExplorerOpenError}
-            </p>
-          ) : null}
-          <DialogFooter>
-            <DialogClose asChild>
-              <Button type="button" variant="outline">
-                Cancel
-              </Button>
-            </DialogClose>
-            <Button
-              type="button"
-              disabled={!largestExplorerTarget || largestExplorerOpening}
-              onClick={() => void openLargestExplorer()}
-            >
-              <ExternalLink className="size-4" aria-hidden="true" />
-              {largestExplorerOpening ? "Opening..." : "Open explorer"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <ExplorerOpenDialog
+        transaction={largestExplorerTransaction}
+        target={largestExplorerTarget}
+        onTransactionChange={setLargestExplorerTransaction}
+      />
     </section>
   );
 };
@@ -1948,6 +1881,95 @@ function explorerOpenErrorMessage(error: unknown) {
   return "Could not open explorer in the default browser.";
 }
 
+function ExplorerOpenDialog({
+  transaction,
+  target,
+  onTransactionChange,
+}: {
+  transaction: Transaction | null;
+  target: ExplorerTarget | null;
+  onTransactionChange: (transaction: Transaction | null) => void;
+}) {
+  const [openError, setOpenError] = React.useState<string | null>(null);
+  const [opening, setOpening] = React.useState(false);
+
+  React.useEffect(() => {
+    if (!transaction) {
+      setOpenError(null);
+    }
+  }, [transaction]);
+
+  const openExplorer = async () => {
+    if (!target) return;
+    setOpenError(null);
+    setOpening(true);
+    try {
+      await openExternalUrl(target.url);
+      onTransactionChange(null);
+    } catch (error) {
+      setOpenError(explorerOpenErrorMessage(error));
+    } finally {
+      setOpening(false);
+    }
+  };
+
+  return (
+    <Dialog
+      open={Boolean(transaction)}
+      onOpenChange={(open) => {
+        if (!open) {
+          onTransactionChange(null);
+        }
+      }}
+    >
+      <DialogContent className="sm:max-w-lg">
+        <DialogHeader>
+          <div className="mb-2 flex size-10 items-center justify-center rounded-full bg-amber-100 text-amber-700 dark:bg-amber-950/50 dark:text-amber-300">
+            <ShieldAlert className="size-5" aria-hidden="true" />
+          </div>
+          <DialogTitle>Open transaction in a browser?</DialogTitle>
+          <DialogDescription>
+            This opens {target?.label ?? "a public explorer"} outside Kassiber.
+            The explorer can see your IP address and the transaction id you
+            request.
+          </DialogDescription>
+        </DialogHeader>
+        {transaction && target ? (
+          <div className="rounded-md border bg-muted/35 p-3 text-sm">
+            <p className="font-medium">{transaction.txnId}</p>
+            <p className="mt-1 break-all font-mono text-xs text-muted-foreground">
+              {target.url}
+            </p>
+          </div>
+        ) : null}
+        {openError ? (
+          <p
+            role="alert"
+            className="rounded-md border border-destructive/25 bg-destructive/10 px-3 py-2 text-sm text-destructive"
+          >
+            {openError}
+          </p>
+        ) : null}
+        <DialogFooter>
+          <DialogClose asChild>
+            <Button type="button" variant="outline">
+              Cancel
+            </Button>
+          </DialogClose>
+          <Button
+            type="button"
+            disabled={!target || opening}
+            onClick={() => void openExplorer()}
+          >
+            <ExternalLink className="size-4" aria-hidden="true" />
+            {opening ? "Opening..." : "Open explorer"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 const dateFilterOptions = [
   { label: "All", value: "all" },
   { label: "Today", value: "today" },
@@ -1983,26 +2005,9 @@ const TransactionsTable = ({
   const [isHydrated, setIsHydrated] = React.useState(false);
   const [explorerTransaction, setExplorerTransaction] =
     React.useState<Transaction | null>(null);
-  const [explorerOpenError, setExplorerOpenError] =
-    React.useState<string | null>(null);
-  const [explorerOpening, setExplorerOpening] = React.useState(false);
   const explorerTarget = explorerTransaction
     ? explorerForTransaction(explorerTransaction, explorerSettings)
     : null;
-  const openSelectedExplorer = async () => {
-    const target = explorerTarget;
-    if (!target) return;
-    setExplorerOpenError(null);
-    setExplorerOpening(true);
-    try {
-      await openExternalUrl(target.url);
-      setExplorerTransaction(null);
-    } catch (error) {
-      setExplorerOpenError(explorerOpenErrorMessage(error));
-    } finally {
-      setExplorerOpening(false);
-    }
-  };
   const displayFlow = React.useCallback(
     (txn: Transaction): TransactionFlow =>
       swapCandidateIds.has(txn.id) ? "swap" : transactionFlow(txn),
@@ -2516,7 +2521,6 @@ const TransactionsTable = ({
                           className="inline-flex max-w-[28ch] items-center gap-1 truncate font-mono text-left underline-offset-4 hover:underline"
                           title={`Open ${txn.txnId} on ${explorer.label}`}
                           onClick={() => {
-                            setExplorerOpenError(null);
                             setExplorerTransaction(txn);
                           }}
                         >
@@ -2754,60 +2758,11 @@ const TransactionsTable = ({
         </div>
       </div>
       </div>
-      <Dialog
-        open={Boolean(explorerTransaction)}
-        onOpenChange={(open) => {
-          if (!open) {
-            setExplorerOpenError(null);
-            setExplorerTransaction(null);
-          }
-        }}
-      >
-        <DialogContent className="sm:max-w-lg">
-          <DialogHeader>
-            <div className="mb-2 flex size-10 items-center justify-center rounded-full bg-amber-100 text-amber-700 dark:bg-amber-950/50 dark:text-amber-300">
-              <ShieldAlert className="size-5" aria-hidden="true" />
-            </div>
-            <DialogTitle>Open transaction in a browser?</DialogTitle>
-            <DialogDescription>
-              This opens {explorerTarget?.label ?? "a public explorer"} outside
-              Kassiber. The explorer can see your IP address and the transaction
-              id you request.
-            </DialogDescription>
-          </DialogHeader>
-          {explorerTransaction && explorerTarget ? (
-            <div className="rounded-md border bg-muted/35 p-3 text-sm">
-              <p className="font-medium">{explorerTransaction.txnId}</p>
-              <p className="mt-1 break-all font-mono text-xs text-muted-foreground">
-                {explorerTarget.url}
-              </p>
-            </div>
-          ) : null}
-          {explorerOpenError ? (
-            <p
-              role="alert"
-              className="rounded-md border border-destructive/25 bg-destructive/10 px-3 py-2 text-sm text-destructive"
-            >
-              {explorerOpenError}
-            </p>
-          ) : null}
-          <DialogFooter>
-            <DialogClose asChild>
-              <Button type="button" variant="outline">
-                Cancel
-              </Button>
-            </DialogClose>
-            <Button
-              type="button"
-              disabled={!explorerTarget || explorerOpening}
-              onClick={() => void openSelectedExplorer()}
-            >
-              <ExternalLink className="size-4" aria-hidden="true" />
-              {explorerOpening ? "Opening..." : "Open explorer"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <ExplorerOpenDialog
+        transaction={explorerTransaction}
+        target={explorerTarget}
+        onTransactionChange={setExplorerTransaction}
+      />
     </>
   );
 };

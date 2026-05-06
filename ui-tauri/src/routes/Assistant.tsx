@@ -5,7 +5,7 @@ import Ai02 from "@/components/ai-02";
 import { useAssistantSession } from "@/components/ai/assistantSession";
 import { ChatThread } from "@/components/ai/ChatThread";
 import { ToolConsentDialog } from "@/components/ai/ToolConsentDialog";
-import { useReasoningEffortSupport } from "@/components/ai/useReasoningEffortSupport";
+import { useSupportedReasoningEffort } from "@/components/ai/useReasoningEffortSupport";
 import { Button } from "@/components/ui/button";
 import { saveChatExport } from "@/lib/chatExport";
 import { cn } from "@/lib/utils";
@@ -28,23 +28,11 @@ export function Assistant() {
   } = useAssistantSession();
   const hasMessages = messages.length > 0;
   const [exportStatus, setExportStatus] = React.useState<string | null>(null);
-  const thinkingEffortSupport = useReasoningEffortSupport(selection);
-  const supportsThinkingEffort = thinkingEffortSupport.supported;
-
-  React.useEffect(() => {
-    if (
-      thinkingEffortSupport.resolved &&
-      !supportsThinkingEffort &&
-      thinkingEffort !== "auto"
-    ) {
-      setThinkingEffort("auto");
-    }
-  }, [
-    thinkingEffortSupport.resolved,
-    supportsThinkingEffort,
+  const supportsThinkingEffort = useSupportedReasoningEffort({
+    selection,
     thinkingEffort,
     setThinkingEffort,
-  ]);
+  });
 
   const exportChat = React.useCallback(async () => {
     if (messages.length === 0) return;
