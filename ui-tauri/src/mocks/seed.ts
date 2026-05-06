@@ -155,9 +155,9 @@ export const MOCK_OVERVIEW: OverviewSnapshot = {
     },
   ],
   txs: [
-    { id: "tx1", date: "2026-04-18 14:22", type: "Income", account: "Cold Storage", counter: "Invoice · ACME GmbH", amountSat: 2_450_000, eur: 1749.79, rate: 71420.18, tag: "Revenue", conf: 41 },
+    { id: "tx1", externalId: "tx1", explorerId: "0000000000000000000000000000000000000000000000000000000000000001", date: "2026-04-18 14:22", type: "Income", account: "Cold Storage", counter: "Invoice · ACME GmbH", amountSat: 2_450_000, eur: 1749.79, rate: 71420.18, tag: "Revenue", conf: 41 },
     { id: "tx2", date: "2026-04-17 09:08", type: "Expense", account: "Home Node (CLN)", counter: "Server rental · Hetzner", amountSat: -120_431, eur: -86.0, rate: 71432.10, tag: "Hosting", conf: 140 },
-    { id: "tx3", date: "2026-04-16 16:51", type: "Transfer", account: "Cold Storage → Vault", counter: "Internal transfer", amountSat: -50_000_000, eur: -35710.09, rate: 71420.18, tag: "Transfer", conf: 220, internal: true },
+    { id: "tx3", externalId: "tx3", explorerId: "0000000000000000000000000000000000000000000000000000000000000003", date: "2026-04-16 16:51", type: "Transfer", account: "Cold Storage → Vault", counter: "Internal transfer", amountSat: -50_000_000, eur: -35710.09, rate: 71420.18, tag: "Transfer", conf: 220, internal: true },
     { id: "tx4", date: "2026-04-15 11:14", type: "Income", account: "NWC · Alby", counter: "Client payment · LN", amountSat: 92_808, eur: 66.27, rate: 71398.42, tag: "Revenue", conf: 1 },
     { id: "tx5", date: "2026-04-14 22:02", type: "Expense", account: "Multisig Vault", counter: "Equipment · BitcoinStore", amountSat: -890_210, eur: -635.71, rate: 71412.0, tag: "Capex", conf: 420 },
     { id: "tx6", date: "2026-04-12 08:30", type: "Income", account: "Cold Storage", counter: "Sale · Consulting", amountSat: 3_800_000, eur: 2713.97, rate: 71420.18, tag: "Revenue", conf: 612 },

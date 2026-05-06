@@ -10,7 +10,7 @@ use std::process::{Command, Output, Stdio};
 use std::sync::Arc;
 use std::time::Duration;
 use supervisor::{DaemonSupervisor, SupervisorError};
-use tauri::{Manager, State};
+use tauri::{Manager, State, Url};
 
 const SCHEMA_VERSION: u8 = 1;
 const DEFAULT_STATE_DIR: &str = ".kassiber";
@@ -191,6 +191,12 @@ fn open_exported_file(path: String) -> Result<(), String> {
     }
 
     open_with_default_app(&canonical)
+}
+
+#[tauri::command]
+fn open_external_url(url: String) -> Result<(), String> {
+    let validated = validated_external_url(&url)?;
+    open_url_with_default_browser(&validated)
 }
 
 #[tauri::command]
@@ -696,6 +702,29 @@ fn open_with_default_app(path: &Path) -> Result<(), String> {
         .map_err(|error| format!("Could not open report export with the default app: {error}"))
 }
 
+fn validated_external_url(url: &str) -> Result<String, String> {
+    let parsed = Url::parse(url.trim())
+        .map_err(|_| "Only absolute HTTP or HTTPS explorer URLs can be opened.".to_string())?;
+    if parsed.scheme() != "http" && parsed.scheme() != "https" {
+        return Err("Only HTTP or HTTPS explorer URLs can be opened.".to_string());
+    }
+    if parsed.host_str().is_none() {
+        return Err("Explorer URLs must include a host.".to_string());
+    }
+    if !parsed.username().is_empty() || parsed.password().is_some() {
+        return Err("Explorer URLs with embedded credentials cannot be opened.".to_string());
+    }
+    Ok(parsed.as_str().to_string())
+}
+
+fn open_url_with_default_browser(url: &str) -> Result<(), String> {
+    let mut command = default_browser_command(url);
+    command
+        .spawn()
+        .map(|_| ())
+        .map_err(|error| format!("Could not open explorer URL with the default browser: {error}"))
+}
+
 #[cfg(target_os = "macos")]
 fn default_app_command(path: &Path) -> Command {
     let mut command = Command::new("open");
@@ -717,6 +746,27 @@ fn default_app_command(path: &Path) -> Command {
     command
 }
 
+#[cfg(target_os = "macos")]
+fn default_browser_command(url: &str) -> Command {
+    let mut command = Command::new("open");
+    command.arg(url);
+    command
+}
+
+#[cfg(target_os = "windows")]
+fn default_browser_command(url: &str) -> Command {
+    let mut command = Command::new("explorer");
+    command.arg(url);
+    command
+}
+
+#[cfg(all(unix, not(target_os = "macos")))]
+fn default_browser_command(url: &str) -> Command {
+    let mut command = Command::new("xdg-open");
+    command.arg(url);
+    command
+}
+
 pub fn run() {
     let cli_args = desktop_cli_args();
     tauri::Builder::default()
@@ -732,6 +782,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             daemon_invoke,
             open_exported_file,
+            open_external_url,
             select_import_project_directory,
             activate_import_project,
             clear_import_project
@@ -764,7 +815,7 @@ fn desktop_cli_args() -> Option<Vec<String>> {
 mod tests {
     use super::{
         database_is_encrypted, inspect_import_project_directory, is_managed_report_export_path,
-        is_supported_export_file,
+        is_supported_export_file, validated_external_url,
     };
     use std::fs;
     use std::path::{Path, PathBuf};
@@ -793,6 +844,48 @@ mod tests {
         assert!(is_supported_export_file(Path::new("report.csv")));
         assert!(!is_supported_export_file(Path::new("report.txt")));
         assert!(!is_supported_export_file(Path::new("report")));
+    }
+
+    #[test]
+    fn external_url_validation_accepts_http_and_https_urls() {
+        assert_eq!(
+            validated_external_url(" https://mempool.space/tx/abc123 ").unwrap(),
+            "https://mempool.space/tx/abc123"
+        );
+        assert_eq!(
+            validated_external_url("http://127.0.0.1:3002/tx/abc123").unwrap(),
+            "http://127.0.0.1:3002/tx/abc123"
+        );
+    }
+
+    #[test]
+    fn external_url_validation_rejects_non_browser_urls() {
+        for url in [
+            "",
+            "/tx/abc123",
+            "file:///tmp/report.pdf",
+            "ftp://example.test/tx/abc123",
+            "javascript:alert(1)",
+            "mailto:dev@example.test",
+        ] {
+            assert!(
+                validated_external_url(url).is_err(),
+                "{url:?} should be rejected"
+            );
+        }
+    }
+
+    #[test]
+    fn external_url_validation_rejects_embedded_credentials() {
+        for url in [
+            "https://dev@example.test/tx/abc123",
+            "https://dev:secret@example.test/tx/abc123",
+        ] {
+            assert!(
+                validated_external_url(url).is_err(),
+                "{url:?} should be rejected"
+            );
+        }
     }
 
     #[test]

@@ -20,6 +20,17 @@ export interface AppNotification {
   createdAt: string;
 }
 
+export type AppLogLevel = "debug" | "info" | "warning" | "error";
+
+export interface AppLogEntry {
+  id: string;
+  createdAt: string;
+  level: AppLogLevel;
+  source: string;
+  message: string;
+  details?: unknown;
+}
+
 export interface AppLockPolicy {
   autoLockWhenIdle: boolean;
   idleMinutes: number;
@@ -100,6 +111,7 @@ interface UiState {
   identity: Identity | null;
   daemonSession: number;
   notifications: AppNotification[];
+  logEntries: AppLogEntry[];
   setLang: (lang: Lang) => void;
   setCurrency: (currency: Currency) => void;
   setDataMode: (dataMode: DataMode) => void;
@@ -114,7 +126,16 @@ interface UiState {
   ) => void;
   clearNotification: (id: string) => void;
   clearNotifications: () => void;
+  addLogEntry: (entry: Omit<AppLogEntry, "id" | "createdAt">) => void;
+  clearLogEntries: () => void;
 }
+
+const DEFAULT_APP_LOCK_POLICY: AppLockPolicy = {
+  autoLockWhenIdle: true,
+  idleMinutes: 5,
+  requirePassphraseOnLaunch: true,
+  lockOnWindowClose: true,
+};
 
 function normalizeIdentity(identity: Identity | null): Identity | null {
   if (!identity) return identity;
@@ -142,15 +163,11 @@ export const useUiStore = create<UiState>()(
       theme: "system",
       hideSensitive: false,
       explorerSettings: DEFAULT_EXPLORER_SETTINGS,
-      appLockPolicy: {
-        autoLockWhenIdle: true,
-        idleMinutes: 5,
-        requirePassphraseOnLaunch: true,
-        lockOnWindowClose: true,
-      },
+      appLockPolicy: DEFAULT_APP_LOCK_POLICY,
       identity: null,
       daemonSession: 0,
       notifications: [],
+      logEntries: [],
       setLang: (lang) => set({ lang }),
       setCurrency: (currency) => set({ currency }),
       setDataMode: (dataMode) => set({ dataMode }),
@@ -185,9 +202,32 @@ export const useUiStore = create<UiState>()(
           ),
         })),
       clearNotifications: () => set({ notifications: [] }),
+      addLogEntry: (entry) =>
+        set((state) => ({
+          logEntries: [
+            {
+              ...entry,
+              id: `${Date.now()}-${state.logEntries.length}`,
+              createdAt: new Date().toISOString(),
+            },
+            ...state.logEntries,
+          ].slice(0, 300),
+        })),
+      clearLogEntries: () => set({ logEntries: [] }),
     }),
     {
       name: "kb.ui",
+      partialize: (state) => ({
+        lang: state.lang,
+        currency: state.currency,
+        dataMode: state.dataMode,
+        hideSensitive: state.hideSensitive,
+        explorerSettings: state.explorerSettings,
+        appLockPolicy: state.appLockPolicy,
+        identity: state.identity,
+        daemonSession: state.daemonSession,
+        notifications: state.notifications,
+      }),
       merge: (persisted, current) => {
         const restored = persisted as Partial<UiState>;
         return {
@@ -197,7 +237,12 @@ export const useUiStore = create<UiState>()(
             ...DEFAULT_EXPLORER_SETTINGS,
             ...(restored.explorerSettings ?? current.explorerSettings),
           },
+          appLockPolicy: {
+            ...DEFAULT_APP_LOCK_POLICY,
+            ...(restored.appLockPolicy ?? current.appLockPolicy),
+          },
           identity: normalizeIdentity(restored.identity ?? current.identity),
+          logEntries: current.logEntries,
         };
       },
     },

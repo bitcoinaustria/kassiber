@@ -37,6 +37,7 @@ import {
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { type ChartConfig, ChartContainer } from "@/components/ui/chart";
+import { openExternalUrl } from "@/daemon/transport";
 import {
   DropdownMenu,
   DropdownMenuCheckboxItem,
@@ -1202,9 +1203,27 @@ const TransactionWorkbench = ({
   const [swapDialogOpen, setSwapDialogOpen] = React.useState(false);
   const [largestExplorerTransaction, setLargestExplorerTransaction] =
     React.useState<Transaction | null>(null);
+  const [largestExplorerOpenError, setLargestExplorerOpenError] =
+    React.useState<string | null>(null);
+  const [largestExplorerOpening, setLargestExplorerOpening] =
+    React.useState(false);
   const largestExplorerTarget = largestExplorerTransaction
     ? explorerForTransaction(largestExplorerTransaction, explorerSettings)
     : null;
+  const openLargestExplorer = async () => {
+    const target = largestExplorerTarget;
+    if (!target) return;
+    setLargestExplorerOpenError(null);
+    setLargestExplorerOpening(true);
+    try {
+      await openExternalUrl(target.url);
+      setLargestExplorerTransaction(null);
+    } catch (error) {
+      setLargestExplorerOpenError(explorerOpenErrorMessage(error));
+    } finally {
+      setLargestExplorerOpening(false);
+    }
+  };
   const swapCandidates = buildSwapCandidates(records);
   const swapCandidateIds = new Set(
     swapCandidates.flatMap((candidate) => [
@@ -1549,7 +1568,10 @@ const TransactionWorkbench = ({
                     "cursor-pointer transition-colors hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
                 )}
                 onClick={() => {
-                  if (largestExplorer) setLargestExplorerTransaction(largest);
+                  if (largestExplorer) {
+                    setLargestExplorerOpenError(null);
+                    setLargestExplorerTransaction(largest);
+                  }
                 }}
                 disabled={!largestExplorer}
                 title={
@@ -1592,7 +1614,10 @@ const TransactionWorkbench = ({
       <Dialog
         open={Boolean(largestExplorerTransaction)}
         onOpenChange={(open) => {
-          if (!open) setLargestExplorerTransaction(null);
+          if (!open) {
+            setLargestExplorerOpenError(null);
+            setLargestExplorerTransaction(null);
+          }
         }}
       >
         <DialogContent className="sm:max-w-lg">
@@ -1615,6 +1640,14 @@ const TransactionWorkbench = ({
               </p>
             </div>
           ) : null}
+          {largestExplorerOpenError ? (
+            <p
+              role="alert"
+              className="rounded-md border border-destructive/25 bg-destructive/10 px-3 py-2 text-sm text-destructive"
+            >
+              {largestExplorerOpenError}
+            </p>
+          ) : null}
           <DialogFooter>
             <DialogClose asChild>
               <Button type="button" variant="outline">
@@ -1623,19 +1656,11 @@ const TransactionWorkbench = ({
             </DialogClose>
             <Button
               type="button"
-              disabled={!largestExplorerTarget}
-              onClick={() => {
-                if (!largestExplorerTarget || typeof window === "undefined") return;
-                window.open(
-                  largestExplorerTarget.url,
-                  "_blank",
-                  "noopener,noreferrer",
-                );
-                setLargestExplorerTransaction(null);
-              }}
+              disabled={!largestExplorerTarget || largestExplorerOpening}
+              onClick={() => void openLargestExplorer()}
             >
               <ExternalLink className="size-4" aria-hidden="true" />
-              Open explorer
+              {largestExplorerOpening ? "Opening..." : "Open explorer"}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -1917,6 +1942,12 @@ function explorerForTransaction(
   return null;
 }
 
+function explorerOpenErrorMessage(error: unknown) {
+  if (error instanceof Error && error.message) return error.message;
+  if (typeof error === "string" && error) return error;
+  return "Could not open explorer in the default browser.";
+}
+
 const dateFilterOptions = [
   { label: "All", value: "all" },
   { label: "Today", value: "today" },
@@ -1952,9 +1983,26 @@ const TransactionsTable = ({
   const [isHydrated, setIsHydrated] = React.useState(false);
   const [explorerTransaction, setExplorerTransaction] =
     React.useState<Transaction | null>(null);
+  const [explorerOpenError, setExplorerOpenError] =
+    React.useState<string | null>(null);
+  const [explorerOpening, setExplorerOpening] = React.useState(false);
   const explorerTarget = explorerTransaction
     ? explorerForTransaction(explorerTransaction, explorerSettings)
     : null;
+  const openSelectedExplorer = async () => {
+    const target = explorerTarget;
+    if (!target) return;
+    setExplorerOpenError(null);
+    setExplorerOpening(true);
+    try {
+      await openExternalUrl(target.url);
+      setExplorerTransaction(null);
+    } catch (error) {
+      setExplorerOpenError(explorerOpenErrorMessage(error));
+    } finally {
+      setExplorerOpening(false);
+    }
+  };
   const displayFlow = React.useCallback(
     (txn: Transaction): TransactionFlow =>
       swapCandidateIds.has(txn.id) ? "swap" : transactionFlow(txn),
@@ -2467,7 +2515,10 @@ const TransactionsTable = ({
                           type="button"
                           className="inline-flex max-w-[28ch] items-center gap-1 truncate font-mono text-left underline-offset-4 hover:underline"
                           title={`Open ${txn.txnId} on ${explorer.label}`}
-                          onClick={() => setExplorerTransaction(txn)}
+                          onClick={() => {
+                            setExplorerOpenError(null);
+                            setExplorerTransaction(txn);
+                          }}
                         >
                           <span className="truncate">{txn.txnId}</span>
                           <ExternalLink
@@ -2706,7 +2757,10 @@ const TransactionsTable = ({
       <Dialog
         open={Boolean(explorerTransaction)}
         onOpenChange={(open) => {
-          if (!open) setExplorerTransaction(null);
+          if (!open) {
+            setExplorerOpenError(null);
+            setExplorerTransaction(null);
+          }
         }}
       >
         <DialogContent className="sm:max-w-lg">
@@ -2729,6 +2783,14 @@ const TransactionsTable = ({
               </p>
             </div>
           ) : null}
+          {explorerOpenError ? (
+            <p
+              role="alert"
+              className="rounded-md border border-destructive/25 bg-destructive/10 px-3 py-2 text-sm text-destructive"
+            >
+              {explorerOpenError}
+            </p>
+          ) : null}
           <DialogFooter>
             <DialogClose asChild>
               <Button type="button" variant="outline">
@@ -2737,15 +2799,11 @@ const TransactionsTable = ({
             </DialogClose>
             <Button
               type="button"
-              disabled={!explorerTarget}
-              onClick={() => {
-                if (!explorerTarget || typeof window === "undefined") return;
-                window.open(explorerTarget.url, "_blank", "noopener,noreferrer");
-                setExplorerTransaction(null);
-              }}
+              disabled={!explorerTarget || explorerOpening}
+              onClick={() => void openSelectedExplorer()}
             >
               <ExternalLink className="size-4" aria-hidden="true" />
-              Open explorer
+              {explorerOpening ? "Opening..." : "Open explorer"}
             </Button>
           </DialogFooter>
         </DialogContent>

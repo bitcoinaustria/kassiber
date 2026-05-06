@@ -27,6 +27,50 @@ export class DaemonAuthRequiredError extends Error {
   }
 }
 
+interface DaemonErrorFormatOptions {
+  includeDetails?: boolean;
+}
+
+export class DaemonRequestError extends Error {
+  envelope: DaemonEnvelope;
+
+  constructor(kind: string, envelope: DaemonEnvelope) {
+    super(formatDaemonEnvelopeError(envelope) ?? `daemon ${kind} failed`);
+    this.name = "DaemonRequestError";
+    this.envelope = envelope;
+  }
+}
+
+export function formatDaemonEnvelopeError(
+  envelope: DaemonEnvelope,
+  options: DaemonErrorFormatOptions = {},
+): string | null {
+  const error = envelope.error;
+  if (!error) return null;
+
+  const parts = [error.message || error.code].filter(Boolean);
+  if (error.hint) {
+    parts.push(error.hint);
+  }
+  const detailText = options.includeDetails
+    ? formatErrorDetails(error.details)
+    : null;
+  if (detailText) {
+    parts.push(detailText);
+  }
+  return parts.join("\n\n");
+}
+
+function formatErrorDetails(details: unknown): string | null {
+  if (details === null || details === undefined) return null;
+  if (typeof details === "string") return details;
+  try {
+    return JSON.stringify(details, null, 2);
+  } catch {
+    return String(details);
+  }
+}
+
 function handleAuthRequired(envelope: DaemonEnvelope): never {
   if (typeof window !== "undefined") {
     const event = () =>
@@ -67,6 +111,9 @@ export function useDaemon<T = unknown>(
       if (envelope.kind === "auth_required") {
         handleAuthRequired(envelope);
       }
+      if (envelope.kind === "error" || envelope.error) {
+        throw new DaemonRequestError(kind, envelope);
+      }
       return envelope;
     },
     staleTime: 5 * 60 * 1000,
@@ -90,7 +137,7 @@ export function useDaemonMutation<T = unknown>(
         handleAuthRequired(envelope);
       }
       if (envelope.kind === "error" || envelope.error) {
-        throw new Error(envelope.error?.message ?? `daemon ${kind} failed`);
+        throw new DaemonRequestError(kind, envelope);
       }
       return envelope;
     },

@@ -77,6 +77,7 @@ import { useUiStore } from "@/store/ui";
 import type { ThemePreference } from "@/store/ui";
 import {
   DAEMON_AUTH_REQUIRED_EVENT,
+  formatDaemonEnvelopeError,
   useDaemon,
   useDaemonMutation,
 } from "@/daemon/client";
@@ -104,6 +105,7 @@ type AppRoutePath =
   | "/journals"
   | "/tax-events"
   | "/quarantine"
+  | "/diagnostics"
   | "/settings"
   | "/assistant";
 
@@ -212,6 +214,15 @@ const ROUTE_META: Array<[string, RouteMeta]> = [
       icon: BookOpen,
       searchLabel: "Search journals",
       searchPlaceholder: "Search entry type, wallet, asset...",
+    },
+  ],
+  [
+    "/diagnostics",
+    {
+      title: "Diagnostics",
+      icon: Bug,
+      searchLabel: "Search diagnostics",
+      searchPlaceholder: "Search daemon errors, logs...",
     },
   ],
   [
@@ -353,6 +364,13 @@ const STATIC_SEARCH_RESULTS: SearchResult[] = [
     to: "/settings",
   },
   {
+    id: "route:diagnostics",
+    title: "Diagnostics",
+    detail: "Daemon log and troubleshooting export",
+    keywords: ["log", "logs", "error", "daemon", "download"],
+    to: "/diagnostics",
+  },
+  {
     id: "route:assistant",
     title: "Assistant",
     detail: "Ask Kassiber",
@@ -465,6 +483,13 @@ function notificationRouteFor(title: string): AppRoutePath | undefined {
     return "/books";
   }
   if (normalized.includes("transaction")) return "/transactions";
+  if (
+    normalized.includes("error") ||
+    normalized.includes("failed") ||
+    normalized.includes("daemon")
+  ) {
+    return "/diagnostics";
+  }
   return undefined;
 }
 
@@ -477,6 +502,7 @@ function assistantReturnPathFor(pathname: string): AssistantReturnPath {
   if (pathname === "/journals") return "/journals";
   if (pathname === "/tax-events") return "/tax-events";
   if (pathname === "/quarantine") return "/quarantine";
+  if (pathname === "/diagnostics") return "/diagnostics";
   if (pathname === "/settings") return "/settings";
   return "/overview";
 }
@@ -525,7 +551,6 @@ export function AppShell() {
   }, [identity?.importedProject]);
 
   const lockApp = React.useCallback(() => {
-    setHideSensitive(true);
     if (requiresDaemonUnlock) {
       clearSessionUnlockPassphrase();
       clearDaemonQueryCache();
@@ -549,7 +574,6 @@ export function AppShell() {
     clearImportedProjectRoot,
     navigate,
     requiresDaemonUnlock,
-    setHideSensitive,
     setIdentity,
   ]);
 
@@ -579,7 +603,7 @@ export function AppShell() {
         return {
           ok: unlocked,
           error:
-            envelope.error?.message ??
+            formatDaemonEnvelopeError(envelope) ??
             (envelope.kind === "auth_required"
               ? "Database passphrase is required."
               : null),
@@ -625,7 +649,6 @@ export function AppShell() {
       setDaemonAuthRequired(true);
       clearSessionUnlockPassphrase();
       clearDaemonQueryCache();
-      setHideSensitive(true);
       setLocked(true);
     };
 
@@ -633,7 +656,7 @@ export function AppShell() {
     return () => {
       window.removeEventListener(DAEMON_AUTH_REQUIRED_EVENT, onAuthRequired);
     };
-  }, [clearDaemonQueryCache, setHideSensitive]);
+  }, [clearDaemonQueryCache]);
 
   React.useEffect(() => {
     if (!encryptedWorkspace) return;
@@ -679,16 +702,9 @@ export function AppShell() {
   React.useEffect(() => {
     if (!encryptedWorkspace || !appLockPolicy.lockOnWindowClose) return;
 
-    const lockOnHidden = () => {
-      if (document.visibilityState === "hidden") {
-        lockApp();
-      }
-    };
     window.addEventListener("pagehide", lockApp);
-    document.addEventListener("visibilitychange", lockOnHidden);
     return () => {
       window.removeEventListener("pagehide", lockApp);
-      document.removeEventListener("visibilitychange", lockOnHidden);
     };
   }, [appLockPolicy.lockOnWindowClose, encryptedWorkspace, lockApp]);
 
@@ -942,6 +958,18 @@ function SidebarActions({ pathname }: { pathname: string }) {
             className="group-data-[collapsible=icon]:hidden"
           />
         </div>
+      </SidebarMenuItem>
+      <SidebarMenuItem>
+        <SidebarMenuButton
+          asChild
+          isActive={pathname === "/diagnostics"}
+          tooltip="Diagnostics"
+        >
+          <Link to="/diagnostics">
+            <Bug className="size-4" aria-hidden="true" />
+            <span>Diagnostics</span>
+          </Link>
+        </SidebarMenuButton>
       </SidebarMenuItem>
       <SidebarMenuItem>
         <SidebarMenuButton asChild tooltip="Donate sats">
@@ -1294,7 +1322,10 @@ function AppDashboardHeader({
   const notificationItems: NotificationItem[] = [
     ...appNotifications.map((item) => ({
       ...item,
-      to: notificationRouteFor(item.title),
+      to:
+        item.tone === "error"
+          ? ("/diagnostics" as const)
+          : notificationRouteFor(item.title),
     })),
     ...systemNotificationItems,
   ];

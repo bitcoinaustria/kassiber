@@ -194,6 +194,9 @@ and [docs/plan/04-desktop-ui.md](docs/plan/04-desktop-ui.md).
   so every consumer sees the same redaction
 - [ ] Add `~/.kassiber/logs/` (or per-project `logs/`) with rotation; teach
   `diagnostics collect` to fold all logs
+  - [x] Add a redacted in-app daemon log screen with a downloadable JSON
+    export so prerelease/dev desktop failures can be inspected without losing
+    the terse notification surface
 
 ### 1.1 Daemon mode (no UI yet)
 
@@ -263,6 +266,9 @@ and [docs/plan/04-desktop-ui.md](docs/plan/04-desktop-ui.md).
 - [x] Transactions screen now uses `@shadcnblocks/dashboard2` as the
   transaction dashboard, with ordered period controls, enlarged search copy,
   and privacy visibility toggle in the header
+- [x] Route transaction explorer modal opens through a validated desktop
+  external URL opener so packaged builds use the system default browser without
+  widening the file-opening boundary
 - [x] Initial Tauri 2 shell bootstrap with `ui-tauri/src-tauri/`, a locked
   CSP, a minimal capability file, and a whitelisted `daemon_invoke` command
   wired to the React daemon transport
@@ -317,6 +323,8 @@ and [docs/plan/04-desktop-ui.md](docs/plan/04-desktop-ui.md).
 - [x] Wire Reports export cards to daemon-backed managed exports for PDF,
   capital-gains CSV, and Austrian E 1kv XLSX, with default-app opening for
   completed files
+- [x] Add a Diagnostics screen that shows the recent redacted daemon/transport
+  log and lets users download it for local debugging
 - [ ] Replace remaining Settings mock fixture data with typed daemon calls once
   phase 1.1 exists
 
