@@ -24,28 +24,12 @@ import {
 } from "@/components/ai-elements";
 import { Button } from "@/components/ui/button";
 import { useDaemon } from "@/daemon/client";
+import type {
+  AiModelsListData,
+  AiProviderRow,
+  AiProvidersListData,
+} from "@/lib/aiCapabilities";
 import { cn } from "@/lib/utils";
-
-export interface ProviderRow {
-  name: string;
-  base_url: string;
-  kind: "local" | "remote" | "tee";
-  default_model?: string | null;
-  notes?: string | null;
-  acknowledged_at?: string | null;
-  has_api_key: boolean;
-  is_default: boolean;
-}
-
-interface ProvidersListData {
-  providers: ProviderRow[];
-  default: string | null;
-}
-
-interface ModelsListData {
-  provider: string;
-  models: { id: string; owned_by?: string }[];
-}
 
 interface ProviderModelPickerProps {
   value: { provider: string; model: string } | null;
@@ -68,12 +52,12 @@ export function ProviderModelPicker({
   onChange,
   enabled = true,
 }: ProviderModelPickerProps) {
-  const providersQuery = useDaemon<ProvidersListData>(
+  const providersQuery = useDaemon<AiProvidersListData>(
     "ai.providers.list",
     undefined,
     { enabled },
   );
-  const providers = React.useMemo<ProviderRow[]>(
+  const providers = React.useMemo<AiProviderRow[]>(
     () =>
       providersQuery.data?.kind === "ai.providers.list" &&
       providersQuery.data.data
@@ -95,7 +79,7 @@ export function ProviderModelPicker({
     ? providers.find((p) => p.name === value.provider)
     : fallbackProvider;
 
-  const modelsQuery = useDaemon<ModelsListData>(
+  const modelsQuery = useDaemon<AiModelsListData>(
     "ai.list_models",
     selectedProvider ? { provider: selectedProvider.name } : undefined,
     {
@@ -175,63 +159,71 @@ export function ProviderModelPicker({
     })();
   };
 
+  const refreshModelsButton = (
+    <Button
+      type="button"
+      variant="ghost"
+      size="icon-xs"
+      className="-mr-1 size-6 text-muted-foreground hover:text-foreground"
+      onClick={handleRefresh}
+      disabled={isRefreshing}
+      aria-label="Refresh AI models"
+      title="Refresh AI models"
+    >
+      <RefreshCw
+        className={cn("h-3.5 w-3.5", isRefreshing && "animate-spin")}
+        aria-hidden="true"
+      />
+    </Button>
+  );
+
   return (
-    <div className="flex min-w-0 items-center gap-1">
-      <ModelSelector
-        value={value ? rowValue(value.provider, value.model) : ""}
-        onValueChange={handleChange}
-      >
-        <ModelSelectorTrigger>
-          <ModelSelectorValue>{currentLabel}</ModelSelectorValue>
-        </ModelSelectorTrigger>
-        <ModelSelectorContent>
-          {groupedRows.length === 0 ? (
-            <ModelSelectorGroup>
-              <ModelSelectorLabel>No AI providers configured</ModelSelectorLabel>
-            </ModelSelectorGroup>
-          ) : (
-            groupedRows.map(({ provider, models: rows }) => (
-              <ModelSelectorGroup key={provider.name}>
-                <ModelSelectorLabel
-                  provider={provider.name}
-                  kind={provider.kind}
-                />
-                {rows.length === 0 ? (
-                  <ModelSelectorItem value={rowValue(provider.name, "__placeholder__")} disabled>
-                    <ModelSelectorEmpty>
-                      No models found · open Settings to set a default
-                    </ModelSelectorEmpty>
+    <ModelSelector
+      value={value ? rowValue(value.provider, value.model) : ""}
+      onValueChange={handleChange}
+    >
+      <ModelSelectorTrigger>
+        <ModelSelectorValue>{currentLabel}</ModelSelectorValue>
+      </ModelSelectorTrigger>
+      <ModelSelectorContent>
+        {groupedRows.length === 0 ? (
+          <ModelSelectorGroup>
+            <ModelSelectorLabel trailing={refreshModelsButton}>
+              No AI providers configured
+            </ModelSelectorLabel>
+          </ModelSelectorGroup>
+        ) : (
+          groupedRows.map(({ provider, models: rows }) => (
+            <ModelSelectorGroup key={provider.name}>
+              <ModelSelectorLabel
+                provider={provider.name}
+                kind={provider.kind}
+                trailing={
+                  provider.name === selectedProvider?.name
+                    ? refreshModelsButton
+                    : null
+                }
+              />
+              {rows.length === 0 ? (
+                <ModelSelectorItem value={rowValue(provider.name, "__placeholder__")} disabled>
+                  <ModelSelectorEmpty>
+                    No models found · open Settings to set a default
+                  </ModelSelectorEmpty>
+                </ModelSelectorItem>
+              ) : (
+                rows.map((model) => (
+                  <ModelSelectorItem
+                    key={`${provider.name}-${model.id}`}
+                    value={rowValue(provider.name, model.id)}
+                  >
+                    <ModelSelectorName>{model.id}</ModelSelectorName>
                   </ModelSelectorItem>
-                ) : (
-                  rows.map((model) => (
-                    <ModelSelectorItem
-                      key={`${provider.name}-${model.id}`}
-                      value={rowValue(provider.name, model.id)}
-                    >
-                      <ModelSelectorName>{model.id}</ModelSelectorName>
-                    </ModelSelectorItem>
-                  ))
-                )}
-              </ModelSelectorGroup>
-            ))
-          )}
-        </ModelSelectorContent>
-      </ModelSelector>
-      <Button
-        type="button"
-        variant="ghost"
-        size="icon-xs"
-        className="size-5 text-muted-foreground hover:text-foreground"
-        onClick={handleRefresh}
-        disabled={!enabled || isRefreshing}
-        aria-label="Refresh AI models"
-        title="Refresh AI models"
-      >
-        <RefreshCw
-          className={cn("h-3.5 w-3.5", isRefreshing && "animate-spin")}
-          aria-hidden="true"
-        />
-      </Button>
-    </div>
+                ))
+              )}
+            </ModelSelectorGroup>
+          ))
+        )}
+      </ModelSelectorContent>
+    </ModelSelector>
   );
 }

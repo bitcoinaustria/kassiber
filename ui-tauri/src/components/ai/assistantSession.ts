@@ -17,6 +17,7 @@ export type AssistantReturnPath =
   | "/tax-events"
   | "/quarantine"
   | "/imports"
+  | "/diagnostics"
   | "/settings";
 
 export interface AssistantModelSelection {

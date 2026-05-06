@@ -5,6 +5,7 @@ import Ai02 from "@/components/ai-02";
 import { useAssistantSession } from "@/components/ai/assistantSession";
 import { ChatThread } from "@/components/ai/ChatThread";
 import { ToolConsentDialog } from "@/components/ai/ToolConsentDialog";
+import { useSupportedReasoningEffort } from "@/components/ai/useReasoningEffortSupport";
 import { Button } from "@/components/ui/button";
 import { saveChatExport } from "@/lib/chatExport";
 import { cn } from "@/lib/utils";
@@ -27,6 +28,11 @@ export function Assistant() {
   } = useAssistantSession();
   const hasMessages = messages.length > 0;
   const [exportStatus, setExportStatus] = React.useState<string | null>(null);
+  const supportsThinkingEffort = useSupportedReasoningEffort({
+    selection,
+    thinkingEffort,
+    setThinkingEffort,
+  });
 
   const exportChat = React.useCallback(async () => {
     if (messages.length === 0) return;
@@ -60,7 +66,10 @@ export function Assistant() {
       toolsEnabled={toolsEnabled}
       onToolsEnabledChange={setToolsEnabled}
       thinkingEffort={thinkingEffort}
-      onThinkingEffortChange={setThinkingEffort}
+      onThinkingEffortChange={
+        supportsThinkingEffort ? setThinkingEffort : undefined
+      }
+      showThinkingEffort={supportsThinkingEffort}
       {...(hasMessages ? { prompts: [] } : {})}
     />
   );

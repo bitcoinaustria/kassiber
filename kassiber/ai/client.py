@@ -40,6 +40,8 @@ SSE_DONE_SENTINEL = "[DONE]"
 CLI_DEFAULT_MODEL = "default"
 REASONING_EFFORTS = {"low", "medium", "high", "max"}
 CLI_MODEL_CHECK_KIND = "binary_presence"
+MODEL_SUPPORT_LIST_LIMIT = 32
+MODEL_SUPPORT_STRING_LIMIT = 96
 
 
 @dataclass(frozen=True)
@@ -290,6 +292,58 @@ def _reasoning_effort(options: dict[str, Any] | None) -> str | None:
     return None
 
 
+def _safe_string_list(value: Any) -> list[str] | None:
+    if not isinstance(value, list):
+        return None
+    out: list[str] = []
+    for item in value:
+        if not isinstance(item, str):
+            continue
+        text = item.strip()
+        if not text:
+            continue
+        out.append(text[:MODEL_SUPPORT_STRING_LIMIT])
+        if len(out) >= MODEL_SUPPORT_LIST_LIMIT:
+            break
+    return out or None
+
+
+def _safe_capability_value(value: Any) -> bool | str | list[str] | None:
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        text = value.strip()
+        return text[:MODEL_SUPPORT_STRING_LIMIT] if text else None
+    return _safe_string_list(value)
+
+
+def _safe_model_capabilities(item: dict[str, Any]) -> dict[str, Any]:
+    metadata: dict[str, Any] = {}
+    supports_reasoning_effort = item.get("supports_reasoning_effort")
+    if isinstance(supports_reasoning_effort, bool):
+        metadata["supports_reasoning_effort"] = supports_reasoning_effort
+
+    supported_parameters = _safe_string_list(item.get("supported_parameters"))
+    if supported_parameters is not None:
+        metadata["supported_parameters"] = supported_parameters
+
+    reasoning_efforts = _safe_string_list(item.get("reasoning_efforts"))
+    if reasoning_efforts is not None:
+        metadata["reasoning_efforts"] = reasoning_efforts
+
+    capabilities = item.get("capabilities")
+    if isinstance(capabilities, dict):
+        safe_capabilities: dict[str, Any] = {}
+        for key in ("reasoning_effort", "reasoning_efforts", "supported_parameters"):
+            raw = capabilities.get(key)
+            safe = _safe_capability_value(raw)
+            if safe is not None:
+                safe_capabilities[key] = safe
+        if safe_capabilities:
+            metadata["capabilities"] = safe_capabilities
+    return metadata
+
+
 @dataclass
 class OpenAICompatClient:
     """Minimal OpenAI-compatible HTTP client.
@@ -389,6 +443,7 @@ class OpenAICompatClient:
             owned_by = item.get("owned_by")
             if isinstance(owned_by, str):
                 row["owned_by"] = owned_by
+            row.update(_safe_model_capabilities(item))
             models.append(row)
         return models
 
@@ -520,7 +575,14 @@ class CliAIClient:
         del strict
         if not shutil.which(self.command):
             raise _cli_unavailable(self.command)
-        return [{"id": CLI_DEFAULT_MODEL, "check_kind": CLI_MODEL_CHECK_KIND}]
+        return [
+            {
+                "id": CLI_DEFAULT_MODEL,
+                "check_kind": CLI_MODEL_CHECK_KIND,
+                "supports_reasoning_effort": True,
+                "reasoning_efforts": ["low", "medium", "high"],
+            }
+        ]
 
     def _claude_args(self, *, model: str, effort: str | None) -> list[str]:
         args = [

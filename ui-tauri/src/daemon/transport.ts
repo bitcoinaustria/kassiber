@@ -175,12 +175,216 @@ export function makeDaemonRequestId(): string {
   return `req-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
 }
 
+const SENSITIVE_LOG_KEYS = [
+  "api_key",
+  "auth_response",
+  "auth_header",
+  "cookie",
+  "descriptor",
+  "new_passphrase_secret",
+  "passphrase",
+  "passphrase_secret",
+  "private",
+  "secret",
+  "token",
+  "xprv",
+];
+
+const SENSITIVE_LOG_PATTERNS: Array<[RegExp, string]> = [
+  [
+    /\b(?:xprv|tprv|yprv|zprv|uprv|vprv)[1-9A-HJ-NP-Za-km-z]{20,}\b/g,
+    "[redacted-private-key]",
+  ],
+  [
+    /\b(?:xpub|tpub|ypub|zpub|upub|vpub)[1-9A-HJ-NP-Za-km-z]{20,}\b/g,
+    "[redacted-extended-key]",
+  ],
+  [
+    /\b(?:wpkh|sh|wsh|tr|pkh|combo)\([^)\n]{16,}\)/gi,
+    "[redacted-descriptor]",
+  ],
+  [/\b[Bb]earer\s+[A-Za-z0-9._~+/-]+=*/g, "Bearer [redacted]"],
+  [
+    /\b(api[_-]?key|auth[_-]?header|cookie|descriptor|passphrase|password|secret|token)\b(\s*[:=]\s*)([^\s,;"']+)/gi,
+    "$1$2[redacted]",
+  ],
+];
+
+export function redactForLog(value: unknown, depth = 0): unknown {
+  if (depth > 8) return "[truncated]";
+  if (Array.isArray(value)) {
+    return value.map((item) => redactForLog(item, depth + 1));
+  }
+  if (typeof value === "string") {
+    return redactStringForLog(value);
+  }
+  if (!value || typeof value !== "object") {
+    return value;
+  }
+  return Object.fromEntries(
+    Object.entries(value).map(([key, child]) => {
+      const normalized = key.toLowerCase();
+      if (
+        SENSITIVE_LOG_KEYS.some((sensitive) =>
+          normalized.includes(sensitive),
+        )
+      ) {
+        return [key, "[redacted]"];
+      }
+      return [key, redactForLog(child, depth + 1)];
+    }),
+  );
+}
+
+function redactStringForLog(value: string): string {
+  return SENSITIVE_LOG_PATTERNS.reduce(
+    (current, [pattern, replacement]) => current.replace(pattern, replacement),
+    value,
+  );
+}
+
+function summarizeRequestForLog(req: DaemonRequest): unknown {
+  const args = req.args ?? {};
+  return {
+    request_id: req.request_id ?? null,
+    arg_keys: Object.keys(args),
+  };
+}
+
+function recordDaemonLog(
+  level: "debug" | "info" | "warning" | "error",
+  source: string,
+  message: string,
+  details?: unknown,
+) {
+  useUiStore.getState().addLogEntry({
+    level,
+    source,
+    message,
+    details: redactForLog(details),
+  });
+}
+
+function envelopeLogLevel(envelope: DaemonEnvelope): "info" | "warning" | "error" {
+  if (envelope.kind === "error" || envelope.error) return "error";
+  if (envelope.kind === "auth_required") return "warning";
+  return "info";
+}
+
+function summarizeEnvelopeForLog(envelope: DaemonEnvelope): unknown {
+  const summary: Record<string, unknown> = {
+    kind: envelope.kind,
+    schema_version: envelope.schema_version,
+    request_id: envelope.request_id ?? null,
+  };
+  if (envelope.error) {
+    summary.error = envelope.error;
+  } else if (envelope.data && typeof envelope.data === "object") {
+    summary.data_keys = Object.keys(envelope.data as Record<string, unknown>);
+  } else if (envelope.data !== undefined) {
+    summary.data_type = typeof envelope.data;
+  }
+  return summary;
+}
+
+function withDaemonLogging(
+  transport: DaemonTransport,
+  source: string,
+): DaemonTransport {
+  return {
+    async invoke<T = unknown>(
+      req: DaemonRequest,
+    ): Promise<DaemonEnvelope<T>> {
+      recordDaemonLog(
+        "debug",
+        source,
+        `invoke ${req.kind}`,
+        summarizeRequestForLog(req),
+      );
+      try {
+        const envelope = await transport.invoke<T>(req);
+        recordDaemonLog(
+          envelopeLogLevel(envelope),
+          source,
+          `terminal ${envelope.kind}`,
+          summarizeEnvelopeForLog(envelope),
+        );
+        return envelope;
+      } catch (error) {
+        recordDaemonLog("error", source, `invoke ${req.kind} threw`, {
+          message: error instanceof Error ? error.message : String(error),
+        });
+        throw error;
+      }
+    },
+    async stream<T = unknown, R = unknown>(
+      req: DaemonRequest,
+      options?: DaemonStreamOptions<R>,
+    ): Promise<DaemonEnvelope<T>> {
+      recordDaemonLog(
+        "debug",
+        source,
+        `stream ${req.kind}`,
+        summarizeRequestForLog(req),
+      );
+      try {
+        const envelope = await transport.stream<T, R>(req, options);
+        recordDaemonLog(
+          envelopeLogLevel(envelope),
+          source,
+          `terminal ${envelope.kind}`,
+          summarizeEnvelopeForLog(envelope),
+        );
+        return envelope;
+      } catch (error) {
+        recordDaemonLog("error", source, `stream ${req.kind} threw`, {
+          message: error instanceof Error ? error.message : String(error),
+        });
+        throw error;
+      }
+    },
+  };
+}
+
 export async function openExportedFile(path: string): Promise<void> {
   if (DAEMON_MODE !== "tauri") {
     throw new Error("Opening exported files is available in the desktop app.");
   }
   const { invoke } = await import("@tauri-apps/api/core");
   await invoke("open_exported_file", { path });
+}
+
+export function normalizeExternalBrowserUrl(url: string): string {
+  const trimmed = url.trim();
+  let parsed: URL;
+  try {
+    parsed = new URL(trimmed);
+  } catch {
+    throw new Error("Only absolute HTTP or HTTPS explorer URLs can be opened.");
+  }
+  if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+    throw new Error("Only HTTP or HTTPS explorer URLs can be opened.");
+  }
+  if (!parsed.host) {
+    throw new Error("Explorer URLs must include a host.");
+  }
+  if (parsed.username || parsed.password) {
+    throw new Error("Explorer URLs with embedded credentials cannot be opened.");
+  }
+  return parsed.toString();
+}
+
+export async function openExternalUrl(url: string): Promise<void> {
+  const normalized = normalizeExternalBrowserUrl(url);
+  if (DAEMON_MODE !== "tauri") {
+    if (typeof window === "undefined") {
+      throw new Error("Opening explorer URLs requires a browser window.");
+    }
+    window.open(normalized, "_blank", "noopener,noreferrer");
+    return;
+  }
+  const { invoke } = await import("@tauri-apps/api/core");
+  await invoke("open_external_url", { url: normalized });
 }
 
 export function canOpenExportedFiles(): boolean {
@@ -319,15 +523,21 @@ const bridgeDaemon: DaemonTransport = {
 
 export function getTransport(dataMode?: DataMode): DaemonTransport {
   if ((dataMode ?? useUiStore.getState().dataMode) === "mock") {
-    return { invoke: mockDaemon.invoke, stream: mockStream };
+    return withDaemonLogging(
+      { invoke: mockDaemon.invoke, stream: mockStream },
+      "daemon:mock",
+    );
   }
 
   switch (DAEMON_MODE) {
     case "mock":
-      return { invoke: mockDaemon.invoke, stream: mockStream };
+      return withDaemonLogging(
+        { invoke: mockDaemon.invoke, stream: mockStream },
+        "daemon:mock",
+      );
     case "bridge":
-      return bridgeDaemon;
+      return withDaemonLogging(bridgeDaemon, "daemon:bridge");
     case "tauri":
-      return tauriDaemon;
+      return withDaemonLogging(tauriDaemon, "daemon:tauri");
   }
 }

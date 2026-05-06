@@ -22,7 +22,10 @@ Current development modes:
   current UI data, export, and action kinds. Report exports write under the
   managed `exports/reports/` state directory, and the desktop shell exposes a
   narrow `open_exported_file` command that opens completed PDF/XLSX/CSV report
-  files with the system default app.
+  files with the system default app. Transaction explorer links use a separate
+  `open_external_url` command that only accepts absolute HTTP/HTTPS URLs with a
+  host and no embedded credentials before handing them to the system default
+  browser.
   The Welcome screen can also open existing local books: the native
   folder picker opens at `~/.kassiber`, accepts either the state root or the
   `data/` folder, restarts the sidecar daemon with that `--data-root`, and then
@@ -40,6 +43,12 @@ sidecar built with PyInstaller. At runtime the supervisor prefers
 `KASSIBER_PYTHON` when it is explicitly set, then the bundled sidecar from the
 app resources, then the development Python fallback above. The same
 `KASSIBER_PYTHON` override applies to installed-app CLI forwarding.
+
+The authenticated shell includes a Diagnostics screen with a redacted
+daemon/transport activity log and a downloadable JSON export. It is meant for
+prerelease and development troubleshooting: request logs include argument keys,
+not argument values, while terminal daemon errors keep their structured
+message, hint, and redacted details when the daemon exposes them.
 
 The GUI executable also works as a CLI forwarder when launched with
 `--cli ...`. Examples:

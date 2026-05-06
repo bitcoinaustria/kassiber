@@ -25,6 +25,7 @@ import { SourceFunds } from "./routes/SourceFunds";
 import { Journals } from "./routes/Journals";
 import { TaxEvents } from "./routes/TaxEvents";
 import { Quarantine } from "./routes/Quarantine";
+import { Diagnostics } from "./routes/Diagnostics";
 import { Books } from "./routes/Books";
 import { Connections } from "./routes/Connections";
 import { ConnectionDetail } from "./routes/ConnectionDetail";
@@ -116,6 +117,12 @@ const quarantineRoute = createRoute({
   component: Quarantine,
 });
 
+const diagnosticsRoute = createRoute({
+  getParentRoute: () => appLayoutRoute,
+  path: "/diagnostics",
+  component: Diagnostics,
+});
+
 const booksRoute = createRoute({
   getParentRoute: () => appLayoutRoute,
   path: "/books",
@@ -199,6 +206,7 @@ const routeTree = rootRoute.addChildren([
     journalsRoute,
     taxEventsRoute,
     quarantineRoute,
+    diagnosticsRoute,
     booksRoute,
     profilesRoute,
     connectionsRoute,

@@ -337,7 +337,14 @@ class CliAIClientTest(unittest.TestCase):
             client = CliAIClient(locator="codex-cli://default")
             self.assertEqual(
                 client.list_models(strict=True),
-                [{"id": CLI_DEFAULT_MODEL, "check_kind": "binary_presence"}],
+                [
+                    {
+                        "id": CLI_DEFAULT_MODEL,
+                        "check_kind": "binary_presence",
+                        "supports_reasoning_effort": True,
+                        "reasoning_efforts": ["low", "medium", "high"],
+                    }
+                ],
             )
 
     def test_claude_args_keep_normal_cli_auth(self):
@@ -447,6 +454,41 @@ class ListModelsStrictModeTest(unittest.TestCase):
             with self.assertRaises(AppError) as ctx:
                 client.list_models(strict=True)
             self.assertEqual(ctx.exception.code, "ai_auth_failed")
+
+    def test_list_models_keeps_safe_reasoning_capability_metadata(self):
+        payload = {
+            "data": [
+                {
+                    "id": "reasoner",
+                    "owned_by": "provider",
+                    "supports_reasoning_effort": True,
+                    "supported_parameters": ["reasoning_effort", "stream"],
+                    "reasoning_efforts": ["low", "medium", "high"],
+                    "capabilities": {
+                        "reasoning_effort": "supported",
+                        "unsafe_blob": {"nested": "ignored"},
+                    },
+                }
+            ]
+        }
+        with patch(
+            "urllib.request.urlopen",
+            return_value=self._FakeResponse(json.dumps(payload).encode("utf-8")),
+        ):
+            client = OpenAICompatClient(base_url="http://x/v1")
+            self.assertEqual(
+                client.list_models(),
+                [
+                    {
+                        "id": "reasoner",
+                        "owned_by": "provider",
+                        "supports_reasoning_effort": True,
+                        "supported_parameters": ["reasoning_effort", "stream"],
+                        "reasoning_efforts": ["low", "medium", "high"],
+                        "capabilities": {"reasoning_effort": "supported"},
+                    }
+                ],
+            )
 
 
 class ChatBodyContractTest(unittest.TestCase):
@@ -707,6 +749,7 @@ class ProvidersCrudTest(unittest.TestCase):
                 self.assertNotIn("api_key", redacted)
                 self.assertTrue(redacted["has_api_key"])
                 self.assertFalse(redacted["is_default"])
+                self.assertFalse(redacted["supports_reasoning_effort"])
 
                 with self.assertRaises(AppError) as ctx:
                     require_ai_provider_acknowledged(fetched)
