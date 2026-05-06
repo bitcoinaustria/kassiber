@@ -24,7 +24,7 @@ from .ai import (
     clear_default_ai_provider,
     update_db_ai_provider,
 )
-from .ai.client import OpenAICompatClient
+from .ai.client import ai_client_for_locator
 from .ai.prompt import (
     build_chat_messages,
     build_openai_tools,
@@ -1148,7 +1148,7 @@ def _write_ai_chat_status(
 
 def _stream_ai_chat_tool_turn(
     request_id: object,
-    client: OpenAICompatClient,
+    client,
     validated: dict[str, Any],
     messages: list[dict[str, Any]],
     tools: list[dict[str, Any]],
@@ -1227,7 +1227,7 @@ def _write_ai_chat_terminal(
 
 def _run_ai_chat_tool_loop(
     request_id: object,
-    client: OpenAICompatClient,
+    client,
     provider_snapshot: dict[str, Any],
     validated: dict[str, Any],
     out: _OutputChannel,
@@ -1404,7 +1404,7 @@ def _run_ai_chat_stream(
                 phase="preparing",
                 label="Preparing chat",
             )
-            client = OpenAICompatClient(
+            client = ai_client_for_locator(
                 base_url=provider_snapshot["base_url"],
                 api_key=provider_snapshot.get("api_key"),
             )
@@ -2738,7 +2738,7 @@ def handle_request(
         if provider_name is not None and not isinstance(provider_name, str):
             raise AppError("ai.list_models provider must be a string", code="validation")
         provider = resolve_ai_provider(ctx.conn, provider_name)
-        client = OpenAICompatClient(
+        client = ai_client_for_locator(
             base_url=provider["base_url"],
             api_key=provider.get("api_key"),
         )
@@ -2791,7 +2791,7 @@ def handle_request(
         # the Tauri supervisor's `DAEMON_INVOKE_TIMEOUT` (15s) kills the
         # daemon process. Test connection is interactive — a 10s ceiling
         # matches what the user expects from a "does this work?" probe.
-        client = OpenAICompatClient(
+        client = ai_client_for_locator(
             base_url=canonical_url,
             api_key=api_key_text or None,
             timeout=10.0,

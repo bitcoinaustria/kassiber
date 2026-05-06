@@ -17,6 +17,8 @@ export function Assistant() {
     pendingConsent,
     selection,
     setSelection,
+    thinkingEffort,
+    setThinkingEffort,
     sendPrompt,
     toolsEnabled,
     setToolsEnabled,
@@ -57,6 +59,8 @@ export function Assistant() {
       isStreaming={isStreaming}
       toolsEnabled={toolsEnabled}
       onToolsEnabledChange={setToolsEnabled}
+      thinkingEffort={thinkingEffort}
+      onThinkingEffortChange={setThinkingEffort}
       {...(hasMessages ? { prompts: [] } : {})}
     />
   );

@@ -20,7 +20,7 @@ from ..ai import (
     set_default_ai_provider,
     update_db_ai_provider,
 )
-from ..ai.client import OpenAICompatClient
+from ..ai.client import CLI_DEFAULT_MODEL, ai_client_for_locator, is_cli_provider_locator
 from ..ai.providers import (
     list_with_default as list_ai_providers_with_default,
 )
@@ -124,11 +124,20 @@ def _ai_chat_options(args: argparse.Namespace) -> dict | None:
     return options or None
 
 
-def _ai_client_for(provider: dict) -> OpenAICompatClient:
-    return OpenAICompatClient(
+def _ai_client_for(provider: dict):
+    return ai_client_for_locator(
         base_url=provider["base_url"],
         api_key=provider.get("api_key"),
     )
+
+
+def _ai_model_for(provider: dict, explicit_model: str | None) -> str | None:
+    model = explicit_model or provider.get("default_model")
+    if model:
+        return model
+    if is_cli_provider_locator(provider["base_url"]):
+        return CLI_DEFAULT_MODEL
+    return None
 
 
 def _backend_extra_config(args: argparse.Namespace) -> dict[str, object] | None:
@@ -915,7 +924,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     ai = sub.add_parser(
         "ai",
-        description="AI provider configuration and chat over OpenAI-compatible APIs.",
+        description="AI provider configuration and chat over OpenAI-compatible APIs or fixed CLI adapters.",
     )
     ai_sub = ai.add_subparsers(dest="ai_command", required=True)
 
@@ -928,7 +937,14 @@ def build_parser() -> argparse.ArgumentParser:
 
     ai_providers_create = ai_providers_sub.add_parser("create")
     ai_providers_create.add_argument("name")
-    ai_providers_create.add_argument("--base-url", required=True, help="OpenAI-compatible root, e.g. http://localhost:11434/v1")
+    ai_providers_create.add_argument(
+        "--base-url",
+        required=True,
+        help=(
+            "OpenAI-compatible root, e.g. http://localhost:11434/v1; "
+            "or claude-cli://default / codex-cli://default"
+        ),
+    )
     ai_providers_create.add_argument("--api-key", help="Bearer token; omit for keyless local providers")
     ai_providers_create.add_argument("--default-model")
     ai_providers_create.add_argument(
@@ -1815,7 +1831,7 @@ def dispatch(conn: sqlite3.Connection | None, args: argparse.Namespace) -> Any:
             return emit(args, {"provider": provider["name"], "models": client.list_models()})
         if args.ai_command == "chat":
             provider = resolve_ai_provider(conn, args.provider)
-            model = args.model or provider.get("default_model")
+            model = _ai_model_for(provider, args.model)
             if not model:
                 raise AppError(
                     "AI chat requires a model",

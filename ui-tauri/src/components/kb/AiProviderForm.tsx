@@ -48,9 +48,38 @@ interface AiProviderFormProps {
 
 const PROVIDER_KIND_HINTS: Record<AiProviderInput["kind"], string> = {
   local: "Runs on this machine. No data leaves the device.",
-  remote: "Cloud or LAN provider. Prompts leave the device.",
+  remote: "Cloud, LAN, or vendor CLI provider. Prompts may leave the device.",
   tee: "Encrypted attestation provider (e.g. Maple AI). Off-device but with documented confidentiality guarantees.",
 };
+
+const CLI_LOCATORS = ["claude-cli://default", "codex-cli://default"] as const;
+const PROVIDER_PRESETS = [
+  {
+    name: "ollama",
+    label: "Ollama",
+    base_url: "http://localhost:11434/v1",
+    kind: "local" as const,
+    default_model: "qwen3.6:35b",
+  },
+  {
+    name: "claude-cli",
+    label: "Claude CLI",
+    base_url: "claude-cli://default",
+    kind: "remote" as const,
+    default_model: "default",
+  },
+  {
+    name: "codex-cli",
+    label: "Codex CLI",
+    base_url: "codex-cli://default",
+    kind: "remote" as const,
+    default_model: "default",
+  },
+];
+
+function isCliLocator(value: string) {
+  return CLI_LOCATORS.some((locator) => value.trim().toLowerCase() === locator);
+}
 
 export function AiProviderForm({
   open,
@@ -96,8 +125,8 @@ export function AiProviderForm({
       if (!trimmedUrl) {
         throw new Error("Base URL is required");
       }
-      if (!/^https?:\/\//.test(trimmedUrl)) {
-        throw new Error("Base URL needs a scheme (http:// or https://)");
+      if (!/^https?:\/\//.test(trimmedUrl) && !isCliLocator(trimmedUrl)) {
+        throw new Error("Use http(s)://, claude-cli://default, or codex-cli://default");
       }
       const args: Record<string, unknown> = { base_url: trimmedUrl };
       const trimmedKey = apiKey.trim();
@@ -130,9 +159,12 @@ export function AiProviderForm({
     try {
       const needsRemoteAck =
         kind !== "local" && (!initial || initial.kind === "local" || !initial.acknowledged_at);
+      if (kind === "local" && isCliLocator(baseUrl)) {
+        throw new Error("Claude/Codex CLI providers may send prompts off-device. Choose remote or TEE.");
+      }
       if (needsRemoteAck) {
         const ok = window.confirm(
-          "Prompts sent to this provider leave this device. Acknowledge this privacy decision before saving?",
+          "Prompts sent to this provider may leave this device through the configured AI service or CLI. Acknowledge this privacy decision before saving?",
         );
         if (!ok) return;
       }
@@ -186,11 +218,38 @@ export function AiProviderForm({
             {editing ? "Edit AI provider" : "Add AI provider"}
           </DialogTitle>
           <DialogDescription>
-            OpenAI-compatible endpoints only. Local Ollama runs on
-            <code className="mx-1 rounded bg-muted px-1 py-0.5 text-[11px]">http://localhost:11434/v1</code>.
+            Use an OpenAI-compatible endpoint, or route through Claude/Codex CLI.
+            CLI providers may still send prompts to their configured model service.
           </DialogDescription>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="grid gap-4">
+          {!editing ? (
+            <div className="grid gap-2">
+              <Label>Preset</Label>
+              <div className="grid grid-cols-3 gap-2">
+                {PROVIDER_PRESETS.map((preset) => (
+                  <button
+                    key={preset.name}
+                    type="button"
+                    onClick={() => {
+                      setName(preset.name);
+                      setBaseUrl(preset.base_url);
+                      setKind(preset.kind);
+                      setDefaultModel(preset.default_model);
+                      setNotes(
+                        preset.kind === "local"
+                          ? "Local Ollama endpoint."
+                          : `${preset.label}; prompts may leave this device.`,
+                      );
+                    }}
+                    className="rounded-md border border-border bg-background px-3 py-2 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted"
+                  >
+                    {preset.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          ) : null}
           <div className="grid gap-2">
             <Label htmlFor="ai-form-name">Name</Label>
             <Input
@@ -204,12 +263,12 @@ export function AiProviderForm({
             />
           </div>
           <div className="grid gap-2">
-            <Label htmlFor="ai-form-url">Base URL</Label>
+            <Label htmlFor="ai-form-url">Base URL or CLI locator</Label>
             <Input
               id="ai-form-url"
               value={baseUrl}
               onChange={(event) => setBaseUrl(event.target.value)}
-              placeholder="http://localhost:11434/v1"
+              placeholder="http://localhost:11434/v1 or claude-cli://default"
               required
             />
           </div>
@@ -279,9 +338,11 @@ export function AiProviderForm({
                 aria-hidden="true"
               />
               <span>
-                Prompts will leave this device. Do not paste raw credentials,
-                wallet exports, or private descriptors unless your threat model
-                allows it.
+                Prompts may leave this device. Claude/Codex CLI providers use
+                your local CLI authentication/config and can forward Kassiber
+                context to external model services. Do not paste raw
+                credentials, wallet exports, or private descriptors unless your
+                threat model allows it.
               </span>
             </div>
           ) : null}

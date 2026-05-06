@@ -756,6 +756,32 @@ class ProvidersCrudTest(unittest.TestCase):
             finally:
                 conn.close()
 
+    def test_cli_provider_requires_off_device_kind(self):
+        with tempfile.TemporaryDirectory(prefix="kassiber-ai-cli-kind-") as tmp:
+            conn = open_db(str(Path(tmp) / "data"))
+            try:
+                with self.assertRaises(AppError) as ctx:
+                    create_db_ai_provider(
+                        conn,
+                        "claude-cli",
+                        "claude-cli://default",
+                        kind="local",
+                    )
+                self.assertEqual(ctx.exception.code, "validation")
+
+                created = create_db_ai_provider(
+                    conn,
+                    "codex-cli",
+                    "codex-cli://default",
+                    kind="remote",
+                    default_model="default",
+                )
+                self.assertEqual(created["base_url"], "codex-cli://default")
+                self.assertEqual(created["kind"], "remote")
+                self.assertIsNone(created["acknowledged_at"])
+            finally:
+                conn.close()
+
     def test_delete_refuses_active_default(self):
         with tempfile.TemporaryDirectory(prefix="kassiber-ai-delete-") as tmp:
             conn = open_db(str(Path(tmp) / "data"))

@@ -127,13 +127,14 @@ for coding and terminal assistants. It helps an assistant use the Kassiber CLI
 safely for onboarding, imports, journal processing, reports, metadata cleanup,
 and troubleshooting.
 
-The desktop app ships an in-app assistant that streams chat over an
-OpenAI-compatible endpoint configured in **Settings → AI providers**. The
-default seed entry is local Ollama (`http://localhost:11434/v1`). Add remote
-providers (OpenAI, Maple AI, OpenRouter, …) when you want them; remote
-prompts leave the device, so the picker tags each provider as `local`,
-`remote`, or `tee`, and chat requires explicit acknowledgement before any
-off-device prompt is sent. The same surface is reachable from the CLI via
+The desktop app ships an in-app assistant configured in
+**Settings → AI providers**. The default seed entry is local Ollama
+(`http://localhost:11434/v1`), and you can also add OpenAI-compatible remote
+providers or fixed Claude/Codex CLI adapters (`claude-cli://default`,
+`codex-cli://default`). Remote and CLI prompts may leave the device, so the
+picker tags each provider as `local`, `remote`, or `tee`, and chat requires
+explicit acknowledgement before any off-device prompt is sent. The same surface
+is reachable from the CLI via
 `kassiber ai providers …`, `kassiber ai models`, and `kassiber ai chat`.
 
 AI is optional. Kassiber's core accounting flow does not depend on a model, and
@@ -142,8 +143,10 @@ suggestions should stay review-gated.
 
 If you use AI with Kassiber, treat prompts as sensitive accounting data. Local
 inference is the recommended default. [Ollama](https://ollama.com/) is a good
-fit for local models, and if remote inference is needed, prefer a provider with
-documented encrypted inference such as
+fit for local models. Claude CLI and Codex CLI are convenient if you already
+use them, but Kassiber treats them as off-device because their configured model
+providers may receive prompt content. If remote inference is needed, prefer a
+provider with documented encrypted inference such as
 [Maple Proxy](https://blog.trymaple.ai/maple-proxy-documentation/).
 
 See [docs/reference/ai.md](docs/reference/ai.md) for setup notes, example
