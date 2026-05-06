@@ -21,7 +21,6 @@ import {
   LockKeyhole,
   LogOut,
   MessageSquareText,
-  Monitor,
   Moon,
   Search,
   Server,
@@ -29,6 +28,7 @@ import {
   CircleDollarSign,
   ShieldAlert,
   Sun,
+  SunMoon,
   User,
   Users,
   Wallet,
@@ -1533,7 +1533,7 @@ function AppDashboardHeader({
 function ThemeMenu() {
   const theme = useUiStore((state) => state.theme);
   const setTheme = useUiStore((state) => state.setTheme);
-  const Icon = theme === "dark" ? Moon : theme === "light" ? Sun : Monitor;
+  const Icon = theme === "dark" ? Moon : theme === "light" ? Sun : SunMoon;
 
   return (
     <DropdownMenu>
@@ -1556,7 +1556,7 @@ function ThemeMenu() {
           onValueChange={(value) => setTheme(value as ThemePreference)}
         >
           <DropdownMenuRadioItem value="system">
-            <Monitor className="size-4" aria-hidden="true" />
+            <SunMoon className="size-4" aria-hidden="true" />
             System
           </DropdownMenuRadioItem>
           <DropdownMenuRadioItem value="light">
