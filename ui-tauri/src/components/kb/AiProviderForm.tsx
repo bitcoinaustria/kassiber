@@ -97,7 +97,7 @@ export function AiProviderForm({
   const [testStatus, setTestStatus] = React.useState<
     | { state: "idle" }
     | { state: "running" }
-    | { state: "ok"; modelCount: number }
+    | { state: "ok"; modelCount: number; checkKind?: string }
     | { state: "fail"; message: string }
   >({ state: "idle" });
 
@@ -138,6 +138,7 @@ export function AiProviderForm({
         args.provider = initial.name;
       }
       const envelope = await getTransport().invoke<{
+        check_kind?: string;
         model_count?: number;
       }>({ kind: "ai.test_connection", args });
       if (envelope.kind === "error" || envelope.error) {
@@ -145,6 +146,7 @@ export function AiProviderForm({
       }
       setTestStatus({
         state: "ok",
+        checkKind: envelope.data?.check_kind,
         modelCount: envelope.data?.model_count ?? 0,
       });
     } catch (caught) {
@@ -367,7 +369,9 @@ export function AiProviderForm({
                 </span>
               )}
               {testStatus.state === "ok" &&
-                `Connected — ${testStatus.modelCount} model${testStatus.modelCount === 1 ? "" : "s"} reachable.`}
+                (testStatus.checkKind === "binary_presence"
+                  ? `CLI found — model availability and authentication are checked when chat starts.`
+                  : `Connected — ${testStatus.modelCount} model${testStatus.modelCount === 1 ? "" : "s"} reachable.`)}
               {testStatus.state === "fail" && `Test failed: ${testStatus.message}`}
             </p>
           ) : null}

@@ -39,6 +39,7 @@ DEFAULT_INACTIVITY_TIMEOUT_SECONDS = 90
 SSE_DONE_SENTINEL = "[DONE]"
 CLI_DEFAULT_MODEL = "default"
 REASONING_EFFORTS = {"low", "medium", "high", "max"}
+CLI_MODEL_CHECK_KIND = "binary_presence"
 
 
 @dataclass(frozen=True)
@@ -519,7 +520,55 @@ class CliAIClient:
         del strict
         if not shutil.which(self.command):
             raise _cli_unavailable(self.command)
-        return [{"id": CLI_DEFAULT_MODEL}]
+        return [{"id": CLI_DEFAULT_MODEL, "check_kind": CLI_MODEL_CHECK_KIND}]
+
+    def _claude_args(self, *, model: str, effort: str | None) -> list[str]:
+        args = [
+            self.command,
+            "--print",
+            "--no-session-persistence",
+            "--permission-mode",
+            "dontAsk",
+            "--tools",
+            "",
+            "--output-format",
+            "json",
+        ]
+        if model and model != CLI_DEFAULT_MODEL:
+            args.extend(["--model", model])
+        if effort:
+            args.extend(["--effort", effort])
+        return args
+
+    def _codex_args(
+        self,
+        *,
+        cwd: str,
+        output_path: str,
+        model: str,
+        effort: str | None,
+    ) -> list[str]:
+        args = [
+            self.command,
+            "exec",
+            "--sandbox",
+            "read-only",
+            "--cd",
+            cwd,
+            "--skip-git-repo-check",
+            "--ephemeral",
+            "--ignore-rules",
+            "--color",
+            "never",
+            "--output-last-message",
+            output_path,
+        ]
+        if model and model != CLI_DEFAULT_MODEL:
+            args.extend(["--model", model])
+        if effort:
+            args.extend(["-c", f'model_reasoning_effort="{effort}"'])
+        args.append("-")
+        return args
 
     def _run(
         self,
@@ -536,22 +585,7 @@ class CliAIClient:
         effort = _reasoning_effort(options)
         with tempfile.TemporaryDirectory(prefix="kassiber-ai-cli-") as cwd:
             if command == "claude":
-                args = [
-                    command,
-                    "--print",
-                    "--bare",
-                    "--no-session-persistence",
-                    "--permission-mode",
-                    "dontAsk",
-                    "--tools",
-                    "",
-                    "--output-format",
-                    "json",
-                ]
-                if model and model != CLI_DEFAULT_MODEL:
-                    args.extend(["--model", model])
-                if effort:
-                    args.extend(["--effort", effort])
+                args = self._claude_args(model=model, effort=effort)
                 completed = subprocess.run(
                     args,
                     input=prompt,
@@ -576,28 +610,12 @@ class CliAIClient:
             with tempfile.NamedTemporaryFile("r", encoding="utf-8", delete=False) as output:
                 output_path = output.name
             try:
-                args = [
-                    command,
-                    "exec",
-                    "--sandbox",
-                    "read-only",
-                    "--ask-for-approval",
-                    "never",
-                    "--cd",
-                    cwd,
-                    "--skip-git-repo-check",
-                    "--ephemeral",
-                    "--ignore-rules",
-                    "--color",
-                    "never",
-                    "--output-last-message",
-                    output_path,
-                ]
-                if model and model != CLI_DEFAULT_MODEL:
-                    args.extend(["--model", model])
-                if effort:
-                    args.extend(["-c", f'model_reasoning_effort="{effort}"'])
-                args.append("-")
+                args = self._codex_args(
+                    cwd=cwd,
+                    output_path=output_path,
+                    model=model,
+                    effort=effort,
+                )
                 completed = subprocess.run(
                     args,
                     input=prompt,

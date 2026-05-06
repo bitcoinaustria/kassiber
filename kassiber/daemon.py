@@ -2808,6 +2808,14 @@ def handle_request(
                         "base_url": canonical_url,
                         "model_count": len(models),
                         "models": models,
+                        "check_kind": (
+                            "binary_presence"
+                            if any(
+                                model.get("check_kind") == "binary_presence"
+                                for model in models
+                            )
+                            else "models"
+                        ),
                     },
                 ),
                 request_id,

@@ -70,8 +70,8 @@ acceptable for your threat model.
 If in doubt, keep inference local.
 
 Claude CLI and Codex CLI are supported for convenience, but they are not a
-local-privacy guarantee. Kassiber launches them in a narrow non-interactive
-mode, yet those CLIs still use their own authentication, config, telemetry, and
+local-privacy guarantee. Kassiber launches them in a narrow non-interactive mode
+that still uses their normal local authentication/config, telemetry, and
 model-provider routing. Treat them as off-device unless your local CLI setup is
 explicitly backed by a local or confidential provider.
 
@@ -159,7 +159,9 @@ Models that don't emit either pass through unchanged.
 Settings → AI providers exposes a **Test connection** action. It calls the
 daemon's `ai.test_connection` kind with the *currently entered* base URL and
 API key (or, when editing without changing the API-key field, the saved key)
-and reports the model count without persisting anything.
+and reports the model count without persisting anything. For Claude/Codex CLI
+locators, this only verifies that the CLI executable is present; authentication
+and model reachability are checked when chat starts.
 
 Remote, TEE, Claude CLI, and Codex CLI providers require explicit
 acknowledgement before chat. The CLI uses

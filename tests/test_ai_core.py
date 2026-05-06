@@ -30,6 +30,8 @@ from kassiber.ai import (
     seed_default_ai_provider_if_empty,
 )
 from kassiber.ai.client import (
+    CLI_DEFAULT_MODEL,
+    CliAIClient,
     DEFAULT_TIMEOUT_SECONDS,
     OpenAICompatClient,
     ToolCallAccumulator,
@@ -327,6 +329,49 @@ class ClientDefaultsTest(unittest.TestCase):
         headers = client._headers(json_body=False, accept_sse=True)
         self.assertEqual(headers["Authorization"], "Bearer sk-test")
         self.assertEqual(headers["Accept"], "text/event-stream")
+
+
+class CliAIClientTest(unittest.TestCase):
+    def test_list_models_reports_binary_presence_check(self):
+        with patch("shutil.which", return_value="/usr/local/bin/codex"):
+            client = CliAIClient(locator="codex-cli://default")
+            self.assertEqual(
+                client.list_models(strict=True),
+                [{"id": CLI_DEFAULT_MODEL, "check_kind": "binary_presence"}],
+            )
+
+    def test_claude_args_keep_normal_cli_auth(self):
+        client = CliAIClient(locator="claude-cli://default")
+        args = client._claude_args(model="sonnet", effort="high")
+        self.assertEqual(args[0], "claude")
+        self.assertIn("--no-session-persistence", args)
+        self.assertIn("--permission-mode", args)
+        self.assertIn("--tools", args)
+        self.assertIn("--model", args)
+        self.assertIn("--effort", args)
+        self.assertNotIn("--bare", args)
+
+    def test_codex_args_use_current_exec_flags(self):
+        client = CliAIClient(locator="codex-cli://default")
+        args = client._codex_args(
+            cwd="/tmp/kassiber-ai-cli",
+            output_path="/tmp/kassiber-ai-cli-output",
+            model="gpt-5.4",
+            effort="medium",
+        )
+        self.assertEqual(args[:2], ["codex", "exec"])
+        self.assertIn("--sandbox", args)
+        self.assertIn("read-only", args)
+        self.assertIn("--skip-git-repo-check", args)
+        self.assertIn("--ephemeral", args)
+        self.assertIn("--ignore-rules", args)
+        self.assertIn("--output-last-message", args)
+        self.assertIn("--model", args)
+        self.assertIn("gpt-5.4", args)
+        self.assertIn("-c", args)
+        self.assertIn('model_reasoning_effort="medium"', args)
+        self.assertEqual(args[-1], "-")
+        self.assertNotIn("--ask-for-approval", args)
 
 
 class ListModelsStrictModeTest(unittest.TestCase):
