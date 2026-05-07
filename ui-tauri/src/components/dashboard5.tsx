@@ -1,5 +1,7 @@
 import { Link } from "@tanstack/react-router";
 import {
+  ArrowDownRight,
+  ArrowLeftRight,
   ArrowUpRight,
   Bell,
   ChevronLeft,
@@ -55,14 +57,6 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
-import {
   Tooltip as ShadTooltip,
   TooltipContent as ShadTooltipContent,
   TooltipProvider as ShadTooltipProvider,
@@ -113,6 +107,7 @@ type RevenueFlowColors = {
 };
 
 type TransactionStatus = "confirmed" | "pending" | "review" | "failed";
+type OverviewTransactionFlow = "incoming" | "outgoing" | "transfer" | "swap";
 
 type Transaction = {
   id: string;
@@ -123,6 +118,7 @@ type Transaction = {
   paymentMethod?: "On-chain" | "Lightning" | "Liquid" | "Other";
   tags: string[];
   status: TransactionStatus;
+  flow?: OverviewTransactionFlow;
   amount: number;
   amountBtc?: number;
   date: string;
@@ -157,6 +153,18 @@ function btcFromEur(eur: number, priceEur: number) {
 function formatDisplayMoney(eur: number, priceEur: number, currency: Currency) {
   if (currency === "btc") return formatBtc(btcFromEur(eur, priceEur));
   return currencyFormatter.format(eur);
+}
+
+function formatSignedDisplayMoney(
+  eur: number,
+  priceEur: number,
+  currency: Currency,
+) {
+  if (currency === "btc") {
+    return formatBtc(btcFromEur(eur, priceEur), { sign: true });
+  }
+  const prefix = eur >= 0 ? "+ " : "− ";
+  return `${prefix}${currencyFormatter.format(Math.abs(eur))}`;
 }
 
 function formatCompactDisplayMoney(
@@ -415,6 +423,48 @@ const periodKeys: TimePeriod[] = [
   "1year",
   "5years",
 ];
+
+function normalizeTimePeriodParam(value: string | null): TimePeriod | null {
+  if (!value) return null;
+  const normalized = value.toLowerCase().replace(/[\s_-]/g, "");
+  if (normalized === "30days" || normalized === "30day" || normalized === "30d") {
+    return "30days";
+  }
+  if (
+    normalized === "3months" ||
+    normalized === "3month" ||
+    normalized === "3mos" ||
+    normalized === "3mo" ||
+    normalized === "3m"
+  ) {
+    return "3months";
+  }
+  if (normalized === "ytd") return "ytd";
+  if (
+    normalized === "1year" ||
+    normalized === "1years" ||
+    normalized === "1yr" ||
+    normalized === "1y"
+  ) {
+    return "1year";
+  }
+  if (
+    normalized === "5years" ||
+    normalized === "5year" ||
+    normalized === "5yrs" ||
+    normalized === "5yr" ||
+    normalized === "5y"
+  ) {
+    return "5years";
+  }
+  return null;
+}
+
+function initialTimePeriodFromUrl(): TimePeriod {
+  if (typeof window === "undefined") return "1year";
+  const params = new URLSearchParams(window.location.search);
+  return normalizeTimePeriodParam(params.get("period")) ?? "1year";
+}
 
 function fallbackPortfolioData(
   data: Array<{ month: string; thisYear: number; prevYear: number }>,
@@ -1621,7 +1671,8 @@ const RevenueFlowChart = ({
   hideSensitive: boolean;
   currency: Currency;
 }) => {
-  const [period, setPeriod] = React.useState<TimePeriod>("1year");
+  const [period, setPeriod] =
+    React.useState<TimePeriod>(initialTimePeriodFromUrl);
   const { active: activeSeries, handleHover } = useHoverHighlight<
     "thisYear" | "prevYear"
   >();
@@ -1647,20 +1698,7 @@ const RevenueFlowChart = ({
   React.useEffect(() => {
     if (typeof window === "undefined") return;
     const params = new URLSearchParams(window.location.search);
-    const nextPeriod = params.get("period");
-    if (periodKeys.includes(nextPeriod as TimePeriod)) {
-      setPeriod(nextPeriod as TimePeriod);
-    }
-  }, []);
-
-  React.useEffect(() => {
-    if (typeof window === "undefined") return;
-    const params = new URLSearchParams(window.location.search);
-    if (period !== "1year") {
-      params.set("period", period);
-    } else {
-      params.delete("period");
-    }
+    params.set("period", period);
     const nextQuery = params.toString();
     const nextUrl = nextQuery
       ? `${window.location.pathname}?${nextQuery}`
@@ -1922,8 +1960,40 @@ const statusLabels: Record<TransactionStatus, string> = {
   failed: "Failed",
 };
 
+const overviewFlowLabels: Record<OverviewTransactionFlow, string> = {
+  incoming: "Incoming",
+  outgoing: "Outgoing",
+  transfer: "Transfer",
+  swap: "Swap",
+};
+
+const overviewFlowStyles: Record<OverviewTransactionFlow, string> = {
+  incoming:
+    "bg-emerald-50 text-emerald-700 ring-1 ring-inset ring-emerald-600/20 dark:bg-emerald-900/25 dark:text-emerald-300 dark:ring-emerald-400/20",
+  outgoing:
+    "bg-red-50 text-red-700 ring-1 ring-inset ring-red-600/15 dark:bg-red-900/25 dark:text-red-300 dark:ring-red-400/20",
+  transfer:
+    "bg-zinc-50 text-zinc-700 ring-1 ring-inset ring-zinc-500/20 dark:bg-zinc-800/70 dark:text-zinc-300 dark:ring-zinc-400/20",
+  swap: "bg-sky-50 text-sky-700 ring-1 ring-inset ring-sky-600/20 dark:bg-sky-900/25 dark:text-sky-300 dark:ring-sky-400/20",
+};
+
+function flowForOverviewTx(tx: OverviewTx): OverviewTransactionFlow {
+  if (
+    tx.internal ||
+    tx.type === "Transfer" ||
+    tx.type === "Consolidation" ||
+    tx.type === "Rebalance"
+  ) {
+    return "transfer";
+  }
+  if (tx.type === "Swap" || tx.type === "Mint" || tx.type === "Melt") {
+    return "swap";
+  }
+  return tx.amountSat >= 0 ? "incoming" : "outgoing";
+}
+
 function toDashboardTransaction(tx: OverviewTx, index: number): Transaction {
-  const amount = Math.abs(tx.eur || (tx.amountSat / 100_000_000) * tx.rate);
+  const amount = tx.eur || (tx.amountSat / 100_000_000) * tx.rate;
   const account = tx.account || tx.counter || "Unassigned";
   const accountLower = account.toLowerCase();
   const paymentMethod = accountLower.includes("liquid")
@@ -1961,8 +2031,9 @@ function toDashboardTransaction(tx: OverviewTx, index: number): Transaction {
           .filter(Boolean)
       : [tx.type],
     status,
+    flow: flowForOverviewTx(tx),
     amount,
-    amountBtc: Math.abs(tx.amountSat / 100_000_000),
+    amountBtc: tx.amountSat / 100_000_000,
     date: tx.date,
   };
 }
@@ -1995,6 +2066,17 @@ function explorerForOverviewTransaction(
     });
   }
   return null;
+}
+
+function transactionDetailHref(transactionId: string) {
+  const params = new URLSearchParams();
+  if (typeof window !== "undefined") {
+    const currentParams = new URLSearchParams(window.location.search);
+    const period = currentParams.get("period");
+    if (period) params.set("period", period);
+  }
+  params.set("tx", transactionId);
+  return `/transactions?${params.toString()}`;
 }
 
 const RecentTransactionsTable = ({
@@ -2149,100 +2231,136 @@ const RecentTransactionsTable = ({
       </div>
 
       <div className="px-4 pt-3 pb-4 sm:px-6">
-        <Table>
-          <TableHeader>
-            <TableRow className="bg-muted/50 hover:bg-muted/50">
-              <TableHead className="text-xs font-medium text-muted-foreground sm:text-sm">
-                Record
-              </TableHead>
-              <TableHead className="text-xs font-medium text-muted-foreground sm:text-sm">
-                Account
-              </TableHead>
-              <TableHead className="text-xs font-medium text-muted-foreground sm:text-sm">
-                Total
-              </TableHead>
-              <TableHead className="text-xs font-medium text-muted-foreground sm:text-sm">
-                Status
-              </TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {paginatedTransactions.length === 0 ? (
-              <TableRow>
-                <TableCell
-                  colSpan={4}
-                  className="h-20 text-center text-sm text-muted-foreground"
-                >
-                  No transactions found.
-                </TableCell>
-              </TableRow>
-            ) : (
-              paginatedTransactions.map((t) => {
-                const explorer = explorerForOverviewTransaction(
-                  t,
-                  explorerSettings,
-                );
-                return (
-                  <TableRow key={t.id}>
-                    <TableCell
+        {paginatedTransactions.length === 0 ? (
+          <div className="flex h-24 items-center justify-center rounded-lg border border-dashed text-sm text-muted-foreground">
+            No transactions found.
+          </div>
+        ) : (
+          <div className="divide-y rounded-lg border bg-background/50">
+            {paginatedTransactions.map((t) => {
+              const explorer = explorerForOverviewTransaction(
+                t,
+                explorerSettings,
+              );
+              const flow = t.flow ?? "incoming";
+              const FlowIcon =
+                flow === "incoming"
+                  ? ArrowDownRight
+                  : flow === "outgoing"
+                    ? ArrowUpRight
+                    : ArrowLeftRight;
+              const amountBtc = transactionBtc(t, priceEur);
+              const primaryAmount =
+                currency === "btc"
+                  ? formatBtc(amountBtc, { sign: true })
+                  : formatSignedDisplayMoney(t.amount, priceEur, currency);
+              const secondaryAmount =
+                currency === "btc"
+                  ? currencyFormatter.format(Math.abs(t.amount))
+                  : formatBtc(amountBtc);
+              const amountTone =
+                flow === "incoming"
+                  ? "text-emerald-700 dark:text-emerald-300"
+                  : flow === "outgoing"
+                    ? "text-red-700 dark:text-red-300"
+                    : "text-muted-foreground";
+              const primaryTag = t.tags[0] ?? overviewFlowLabels[flow];
+              const extraTags = Math.max(0, t.tags.length - 1);
+              return (
+                <div key={t.id} className="flex items-stretch">
+                  <a
+                    href={transactionDetailHref(t.id)}
+                    className="group flex min-w-0 flex-1 items-center gap-3 px-3 py-3 transition-colors hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:px-4"
+                  >
+                    <span
                       className={cn(
-                        "text-xs font-medium text-muted-foreground sm:text-sm",
-                        blurClass(hideSensitive),
+                        "flex size-8 shrink-0 items-center justify-center rounded-md",
+                        overviewFlowStyles[flow],
                       )}
+                      aria-hidden="true"
                     >
-                      {explorer ? (
-                        <button
-                          type="button"
-                          className="inline-flex max-w-[32ch] items-center gap-1 truncate font-mono text-left underline-offset-4 hover:underline"
-                          title={`Open ${t.txid} on ${explorer.label}`}
-                          onClick={() => setExplorerTransaction(t)}
-                        >
-                          <span className="truncate">{t.txid}</span>
-                          <ExternalLink
-                            className="size-3 shrink-0 text-muted-foreground"
-                            aria-hidden="true"
-                          />
-                        </button>
-                      ) : (
-                        <span className="font-mono">{t.txid}</span>
-                      )}
-                    </TableCell>
-                    <TableCell
-                      className={cn(
-                        "text-xs text-muted-foreground sm:text-sm",
-                        blurClass(hideSensitive),
-                      )}
-                    >
-                      {t.counterparty}
-                    </TableCell>
-                    <TableCell
-                      className={cn(
-                        "text-xs text-foreground tabular-nums sm:text-sm",
-                        blurClass(hideSensitive),
-                      )}
-                    >
-                      <CurrencyToggleText>
-                        {currency === "btc"
-                          ? formatBtc(transactionBtc(t, priceEur))
-                          : formatDisplayMoney(t.amount, priceEur, currency)}
-                      </CurrencyToggleText>
-                    </TableCell>
-                    <TableCell>
+                      <FlowIcon className="size-4" />
+                    </span>
+                    <span className="min-w-0 flex-1">
                       <span
                         className={cn(
-                          "inline-flex items-center rounded-md px-2 py-1 text-[10px] font-medium sm:text-xs",
-                          statusStyles[t.status],
+                          "block truncate text-sm font-medium text-foreground",
+                          blurClass(hideSensitive),
                         )}
                       >
-                        {statusLabels[t.status]}
+                        {t.counterparty}
                       </span>
-                    </TableCell>
-                  </TableRow>
-                );
-              })
-            )}
-          </TableBody>
-        </Table>
+                      <span className="mt-1 flex min-w-0 flex-wrap items-center gap-1.5">
+                        <span
+                          className={cn(
+                            "inline-flex items-center rounded-md px-1.5 py-0.5 text-[10px] font-medium",
+                            overviewFlowStyles[flow],
+                          )}
+                        >
+                          {primaryTag}
+                        </span>
+                        {extraTags > 0 && (
+                          <span className="text-[10px] text-muted-foreground">
+                            +{extraTags}
+                          </span>
+                        )}
+                        <span
+                          className={cn(
+                            "inline-flex items-center rounded-md px-1.5 py-0.5 text-[10px] font-medium",
+                            statusStyles[t.status],
+                          )}
+                        >
+                          {statusLabels[t.status]}
+                        </span>
+                        <span className="truncate text-[10px] text-muted-foreground">
+                          {t.date}
+                        </span>
+                      </span>
+                      <span
+                        className={cn(
+                          "mt-1 hidden truncate font-mono text-[10px] text-muted-foreground sm:block",
+                          blurClass(hideSensitive),
+                        )}
+                      >
+                        {overviewFlowLabels[flow]} · {t.txid}
+                      </span>
+                    </span>
+                    <span className="ml-auto flex shrink-0 flex-col items-end gap-0.5 pl-2 text-right">
+                      <CurrencyToggleText
+                        className={cn(
+                          "text-sm font-semibold tabular-nums",
+                          amountTone,
+                          blurClass(hideSensitive),
+                        )}
+                      >
+                        {primaryAmount}
+                      </CurrencyToggleText>
+                      <span
+                        className={cn(
+                          "text-[10px] text-muted-foreground tabular-nums",
+                          blurClass(hideSensitive),
+                        )}
+                      >
+                        {secondaryAmount}
+                      </span>
+                    </span>
+                  </a>
+                  {explorer ? (
+                    <button
+                      type="button"
+                      className="flex w-10 shrink-0 items-center justify-center text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                      title={`Open ${t.txid} on ${explorer.label}`}
+                      aria-label={`Open ${t.txid} on ${explorer.label}`}
+                      onClick={() => setExplorerTransaction(t)}
+                    >
+                      <ExternalLink className="size-3.5" aria-hidden="true" />
+                    </button>
+                  ) : null}
+                </div>
+              );
+            })}
+          </div>
+        )}
       </div>
 
       <div className="flex items-center justify-between border-t px-4 py-3 text-[10px] text-muted-foreground sm:px-6 sm:text-xs">

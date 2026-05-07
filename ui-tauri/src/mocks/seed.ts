@@ -63,9 +63,11 @@ export interface Tx {
   account: string;
   counter: string;
   amountSat: number;
+  feeSat?: number;
   eur: number;
   rate: number;
   tag: string;
+  note?: string;
   conf: number;
   internal?: boolean;
 }
