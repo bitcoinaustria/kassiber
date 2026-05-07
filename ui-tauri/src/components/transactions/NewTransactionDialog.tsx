@@ -62,6 +62,7 @@ import {
   uniqueTags,
   type NewTransactionDraft,
   type NewTransactionEvidence,
+  type PricingDraftField,
   type PricingSelectionValue,
   type TransactionFlow,
   type TransactionStatus,
@@ -126,10 +127,7 @@ export function NewTransactionDialog({
     [draft, onDraftChange],
   );
   const updatePricingField = React.useCallback(
-    (
-      field: "amountSats" | "pricePerBtc" | "totalValue",
-      value: string,
-    ) => {
+    (field: PricingDraftField, value: string) => {
       onDraftChange(calculateNewTransactionPricing({ ...draft, [field]: value }, field));
     },
     [draft, onDraftChange],
@@ -469,7 +467,7 @@ export function NewTransactionDialog({
                           inputMode="numeric"
                           value={draft.sendAmountSats}
                           onChange={(event) =>
-                            updateDraft({ sendAmountSats: event.target.value })
+                            updatePricingField("sendAmountSats", event.target.value)
                           }
                           placeholder="2450000"
                         />
@@ -499,7 +497,7 @@ export function NewTransactionDialog({
                           inputMode="numeric"
                           value={draft.receiveAmountSats}
                           onChange={(event) =>
-                            updateDraft({ receiveAmountSats: event.target.value })
+                            updatePricingField("receiveAmountSats", event.target.value)
                           }
                           placeholder="2450000"
                         />
