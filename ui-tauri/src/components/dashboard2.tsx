@@ -151,8 +151,10 @@ type TransactionEditDraft = {
   label: string;
   tags: string[];
   note: string;
-  taxTreatment: string;
-  priceMode: "imported" | "rate-cache" | "manual" | "missing";
+  atRegime: AustrianDraftRegime;
+  atCategory: AustrianDraftCategory;
+  pricingSourceKind: PricingSourceKind | null;
+  pricingQuality: PricingQuality;
   manualCurrency: string;
   manualPrice: string;
   manualValue: string;
@@ -162,7 +164,49 @@ type TransactionEditDraft = {
   excluded: boolean;
 };
 
+type PricingSourceKind =
+  | "generic_import"
+  | "wallet_export"
+  | "exchange_execution"
+  | "btcpay_wallet_export"
+  | "btcpay_invoice"
+  | "btcpay_payment"
+  | "manual_override"
+  | "manual_rate_cache"
+  | "fmv_provider";
+
+type PricingQuality =
+  | "exact"
+  | "provider_sample"
+  | "coarse_fallback"
+  | "missing";
+
+type PricingSelectionValue = PricingSourceKind | "missing";
+
+type AustrianDraftRegime = "neu" | "alt" | "outside";
+
+type AustrianDraftCategory =
+  | "income_general"
+  | "income_capital_yield"
+  | "neu_gain"
+  | "neu_loss"
+  | "neu_swap"
+  | "alt_spekulation"
+  | "alt_taxfree"
+  | "none";
+
+type DraftPricingOption = {
+  value: PricingSelectionValue;
+  sourceKind: PricingSourceKind | null;
+  quality: PricingQuality;
+  label: string;
+  description?: string;
+  external?: boolean;
+};
+
 type NewTransactionDraft = {
+  // Presenter/demo state only. Durable saves should map to core contract fields:
+  // direction, pricing_source_kind/pricing_quality, at_regime, and at_category.
   sourceKind: "onchain" | "offchain" | "exchange" | "manual" | "internal";
   flow: TransactionFlow;
   occurredAt: string;
@@ -189,27 +233,21 @@ type NewTransactionDraft = {
     | "Ecash"
     | "Exchange"
     | "Other";
-  priceSource: NewTransactionPriceSource;
-  fiatCurrency: "EUR";
+  pricingSourceKind: PricingSourceKind | null;
+  pricingQuality: PricingQuality;
+  fiatCurrency: string;
   pricePerBtc: string;
   totalValue: string;
   movementId: string;
   label: string;
-  taxTreatment: string;
+  atRegime: AustrianDraftRegime;
+  atCategory: AustrianDraftCategory;
   tags: string;
   note: string;
   reviewStatus: TransactionStatus;
   taxable: boolean;
   evidence: NewTransactionEvidence;
 };
-
-type NewTransactionPriceSource =
-  | "manual"
-  | "coingecko"
-  | "exchange-csv"
-  | "btcpay"
-  | "wallet-import"
-  | "missing";
 
 type NewTransactionEvidence = {
   btcpayInvoiceId: string;
@@ -2126,110 +2164,167 @@ const tagSuggestions = [
   "accountant",
 ];
 
-const taxTreatmentOptions = [
-  "Unreviewed",
-  "Taxable disposal",
-  "Income receipt",
-  "Expense / fee",
-  "Non-taxable transfer",
-  "Austrian carry basis",
+const transactionPricingOptions: DraftPricingOption[] = [
+  {
+    value: "generic_import",
+    sourceKind: "generic_import",
+    quality: "exact",
+    label: "Source price",
+    description: "Use source-provided price",
+  },
+  {
+    value: "fmv_provider",
+    sourceKind: "fmv_provider",
+    quality: "provider_sample",
+    label: "FMV provider",
+    description: "Use a sampled market rate",
+  },
+  {
+    value: "manual_override",
+    sourceKind: "manual_override",
+    quality: "exact",
+    label: "Manual override",
+    description: "Use invoice or receipt evidence",
+  },
+  {
+    value: "missing",
+    sourceKind: null,
+    quality: "missing",
+    label: "Missing / review",
+    description: "Keep in review queue",
+  },
 ];
 
-const priceModeOptions: Array<{
-  value: TransactionEditDraft["priceMode"];
-  label: string;
-}> = [
-  { value: "imported", label: "Source price" },
-  { value: "rate-cache", label: "Rate cache" },
-  { value: "manual", label: "Manual override" },
-  { value: "missing", label: "Missing / review" },
-];
-
-const priceModeStyles: Record<TransactionEditDraft["priceMode"], string> = {
-  imported:
+const pricingSourceStyles: Record<PricingSelectionValue, string> = {
+  generic_import:
     "bg-emerald-50 text-emerald-700 ring-1 ring-inset ring-emerald-600/20 dark:bg-emerald-900/30 dark:text-emerald-400 dark:ring-emerald-400/20",
-  "rate-cache":
-    "bg-sky-50 text-sky-700 ring-1 ring-inset ring-sky-600/20 dark:bg-sky-900/30 dark:text-sky-400 dark:ring-sky-400/20",
-  manual:
-    "bg-violet-50 text-violet-700 ring-1 ring-inset ring-violet-600/20 dark:bg-violet-900/30 dark:text-violet-300 dark:ring-violet-400/20",
-  missing:
-    "bg-amber-50 text-amber-700 ring-1 ring-inset ring-amber-600/20 dark:bg-amber-900/30 dark:text-amber-400 dark:ring-amber-400/20",
-};
-
-const newTransactionPriceSourceOptions: Array<{
-  value: NewTransactionPriceSource;
-  label: string;
-  external: boolean;
-}> = [
-  { value: "manual", label: "Manual entry", external: false },
-  { value: "coingecko", label: "CoinGecko daily rate", external: true },
-  { value: "exchange-csv", label: "Exchange CSV row", external: true },
-  { value: "btcpay", label: "BTCPay invoice fiat", external: true },
-  { value: "wallet-import", label: "Wallet import exact fiat", external: true },
-  { value: "missing", label: "Needs pricing", external: false },
-];
-
-const newTransactionPriceSourceStyles: Record<NewTransactionPriceSource, string> = {
-  manual:
-    "bg-zinc-100 text-zinc-700 ring-1 ring-inset ring-zinc-500/20 dark:bg-zinc-800 dark:text-zinc-300 dark:ring-zinc-400/20",
-  coingecko:
-    "bg-sky-50 text-sky-700 ring-1 ring-inset ring-sky-600/20 dark:bg-sky-900/30 dark:text-sky-400 dark:ring-sky-400/20",
-  "exchange-csv":
-    "bg-emerald-50 text-emerald-700 ring-1 ring-inset ring-emerald-600/20 dark:bg-emerald-900/30 dark:text-emerald-400 dark:ring-emerald-400/20",
-  btcpay:
-    "bg-orange-50 text-orange-700 ring-1 ring-inset ring-orange-600/20 dark:bg-orange-900/25 dark:text-orange-300 dark:ring-orange-400/20",
-  "wallet-import":
+  wallet_export:
     "bg-indigo-50 text-indigo-700 ring-1 ring-inset ring-indigo-600/20 dark:bg-indigo-900/25 dark:text-indigo-300 dark:ring-indigo-400/20",
+  exchange_execution:
+    "bg-emerald-50 text-emerald-700 ring-1 ring-inset ring-emerald-600/20 dark:bg-emerald-900/30 dark:text-emerald-400 dark:ring-emerald-400/20",
+  btcpay_wallet_export:
+    "bg-orange-50 text-orange-700 ring-1 ring-inset ring-orange-600/20 dark:bg-orange-900/25 dark:text-orange-300 dark:ring-orange-400/20",
+  btcpay_invoice:
+    "bg-orange-50 text-orange-700 ring-1 ring-inset ring-orange-600/20 dark:bg-orange-900/25 dark:text-orange-300 dark:ring-orange-400/20",
+  btcpay_payment:
+    "bg-orange-50 text-orange-700 ring-1 ring-inset ring-orange-600/20 dark:bg-orange-900/25 dark:text-orange-300 dark:ring-orange-400/20",
+  manual_rate_cache:
+    "bg-sky-50 text-sky-700 ring-1 ring-inset ring-sky-600/20 dark:bg-sky-900/30 dark:text-sky-400 dark:ring-sky-400/20",
+  manual_override:
+    "bg-violet-50 text-violet-700 ring-1 ring-inset ring-violet-600/20 dark:bg-violet-900/30 dark:text-violet-300 dark:ring-violet-400/20",
+  fmv_provider:
+    "bg-sky-50 text-sky-700 ring-1 ring-inset ring-sky-600/20 dark:bg-sky-900/30 dark:text-sky-400 dark:ring-sky-400/20",
   missing:
     "bg-amber-50 text-amber-700 ring-1 ring-inset ring-amber-600/20 dark:bg-amber-900/30 dark:text-amber-400 dark:ring-amber-400/20",
 };
 
-const austrianTaxTreatmentOptions: Array<{
+const newTransactionPricingOptions: DraftPricingOption[] = [
+  {
+    value: "manual_override",
+    sourceKind: "manual_override",
+    quality: "exact",
+    label: "Manual entry",
+    external: false,
+  },
+  {
+    value: "fmv_provider",
+    sourceKind: "fmv_provider",
+    quality: "provider_sample",
+    label: "FMV provider sample",
+    external: true,
+  },
+  {
+    value: "exchange_execution",
+    sourceKind: "exchange_execution",
+    quality: "exact",
+    label: "Exchange execution",
+    external: true,
+  },
+  {
+    value: "btcpay_invoice",
+    sourceKind: "btcpay_invoice",
+    quality: "exact",
+    label: "BTCPay invoice fiat",
+    external: true,
+  },
+  {
+    value: "wallet_export",
+    sourceKind: "wallet_export",
+    quality: "exact",
+    label: "Wallet import exact fiat",
+    external: true,
+  },
+  {
+    value: "missing",
+    sourceKind: null,
+    quality: "missing",
+    label: "Needs pricing",
+    external: false,
+  },
+];
+
+const austrianTaxClassificationOptions: Array<{
   value: string;
   label: string;
   shortLabel: string;
+  atRegime: AustrianDraftRegime;
+  atCategory: AustrianDraftCategory;
   taxable: boolean;
 }> = [
   {
-    value: "section27b-taxable-disposal",
-    label: "§27b taxable disposal",
-    shortLabel: "Taxable disposal",
+    value: "neu:neu_gain",
+    label: "§27b Neu taxable disposal",
+    shortLabel: "Neu gain",
+    atRegime: "neu",
+    atCategory: "neu_gain",
     taxable: true,
   },
   {
-    value: "section27b-income",
+    value: "neu:income_general",
     label: "§27b income receipt",
     shortLabel: "Income receipt",
+    atRegime: "neu",
+    atCategory: "income_general",
     taxable: true,
   },
   {
-    value: "section27b-expense-fee",
-    label: "§27b expense / fee",
-    shortLabel: "Expense / fee",
+    value: "neu:neu_loss",
+    label: "§27b disposal loss / fee review",
+    shortLabel: "Neu loss",
+    atRegime: "neu",
+    atCategory: "neu_loss",
     taxable: true,
   },
   {
-    value: "section27b-transfer",
-    label: "§27b own-wallet transfer",
+    value: "outside:none",
+    label: "Own-wallet transfer / outside §27b",
     shortLabel: "Own-wallet transfer",
+    atRegime: "outside",
+    atCategory: "none",
     taxable: false,
   },
   {
-    value: "section27b-layer-transition",
-    label: "§27b layer transition / peg",
-    shortLabel: "Layer transition",
+    value: "neu:neu_swap",
+    label: "§27b carrying-value swap / layer transition",
+    shortLabel: "Neu swap",
+    atRegime: "neu",
+    atCategory: "neu_swap",
     taxable: false,
   },
   {
-    value: "section27b-carrying-value-swap",
-    label: "§27b carrying-value swap",
-    shortLabel: "Carrying-value swap",
-    taxable: false,
+    value: "alt:alt_spekulation",
+    label: "Altbestand within speculation period",
+    shortLabel: "Alt taxable",
+    atRegime: "alt",
+    atCategory: "alt_spekulation",
+    taxable: true,
   },
   {
-    value: "outside-section27b",
-    label: "Outside §27b / Altbestand",
-    shortLabel: "Outside §27b",
+    value: "alt:alt_taxfree",
+    label: "Altbestand tax-free",
+    shortLabel: "Alt tax-free",
+    atRegime: "alt",
+    atCategory: "alt_taxfree",
     taxable: false,
   },
 ];
@@ -2289,14 +2384,7 @@ const mockNewTransactionMovementCandidates = [
 function draftForTransaction(txn: Transaction): TransactionEditDraft {
   const flow = transactionFlow(txn);
   const initialTags = splitDraftTags(txn.tag || "");
-  const defaultTaxTreatment =
-    flow === "transfer"
-      ? "Non-taxable transfer"
-      : flow === "incoming"
-        ? "Income receipt"
-        : flow === "swap"
-          ? "Austrian carry basis"
-          : "Taxable disposal";
+  const defaultTaxClassification = nextTaxClassificationForFlow(flow);
   return {
     label:
       classificationOptions.find((option) => initialTags.includes(option)) ??
@@ -2313,8 +2401,10 @@ function draftForTransaction(txn: Transaction): TransactionEditDraft {
       initialTags.filter((tag) => !classificationOptions.includes(tag)),
     ),
     note: txn.note || "",
-    taxTreatment: defaultTaxTreatment,
-    priceMode: txn.rate ? "imported" : "missing",
+    atRegime: defaultTaxClassification.atRegime,
+    atCategory: defaultTaxClassification.atCategory,
+    pricingSourceKind: txn.rate ? "generic_import" : null,
+    pricingQuality: txn.rate ? "exact" : "missing",
     manualCurrency: "EUR",
     manualPrice: txn.rate ? String(txn.rate) : "",
     manualValue: txn.amount ? String(txn.amount) : "",
@@ -2336,28 +2426,63 @@ function uniqueTags(tags: string[]) {
   return Array.from(new Set(tags.map((tag) => tag.trim()).filter(Boolean)));
 }
 
-function priceModeLabel(mode: TransactionEditDraft["priceMode"]) {
-  return priceModeOptions.find((option) => option.value === mode)?.label ?? mode;
+function pricingSelectionValue(
+  sourceKind: PricingSourceKind | null,
+  quality: PricingQuality,
+): PricingSelectionValue {
+  return quality === "missing" || !sourceKind ? "missing" : sourceKind;
 }
 
-function newTransactionPriceSourceLabel(source: NewTransactionPriceSource) {
-  return (
-    newTransactionPriceSourceOptions.find((option) => option.value === source)
-      ?.label ?? source
-  );
+function pricingSourceLabel(
+  sourceKind: PricingSourceKind | null,
+  quality: PricingQuality,
+  options = transactionPricingOptions,
+) {
+  const value = pricingSelectionValue(sourceKind, quality);
+  return options.find((option) => option.value === value)?.label ?? value;
 }
 
-function isExternalPriceSource(source: NewTransactionPriceSource) {
+function pricingOptionForValue(
+  value: PricingSelectionValue,
+  options = transactionPricingOptions,
+) {
+  return options.find((option) => option.value === value) ?? options[0];
+}
+
+function isExternalPricingSource(
+  sourceKind: PricingSourceKind | null,
+  quality: PricingQuality,
+  options = newTransactionPricingOptions,
+) {
+  const value = pricingSelectionValue(sourceKind, quality);
   return Boolean(
-    newTransactionPriceSourceOptions.find((option) => option.value === source)
-      ?.external,
+    options.find((option) => option.value === value && option.external),
   );
 }
 
-function austrianTaxTreatmentFor(value: string) {
+function austrianSelectionValue(
+  atRegime: AustrianDraftRegime,
+  atCategory: AustrianDraftCategory,
+) {
+  return `${atRegime}:${atCategory}`;
+}
+
+function austrianTaxClassificationFor(
+  atRegime: AustrianDraftRegime,
+  atCategory: AustrianDraftCategory,
+) {
   return (
-    austrianTaxTreatmentOptions.find((option) => option.value === value) ??
-    austrianTaxTreatmentOptions[0]
+    austrianTaxClassificationOptions.find(
+      (option) =>
+        option.atRegime === atRegime && option.atCategory === atCategory,
+    ) ?? austrianTaxClassificationOptions[0]
+  );
+}
+
+function austrianTaxClassificationForValue(value: string) {
+  return (
+    austrianTaxClassificationOptions.find((option) => option.value === value) ??
+    austrianTaxClassificationOptions[0]
   );
 }
 
@@ -2420,13 +2545,15 @@ function createNewTransactionDraft(): NewTransactionDraft {
     receiveAmountSats: "",
     feeSats: "",
     network: "Bitcoin",
-    priceSource: "manual",
+    pricingSourceKind: "manual_override",
+    pricingQuality: "exact",
     fiatCurrency: "EUR",
     pricePerBtc: "",
     totalValue: "",
     movementId: "",
     label: "Income",
-    taxTreatment: "section27b-income",
+    atRegime: "neu",
+    atCategory: "income_general",
     tags: "",
     note: "",
     reviewStatus: "review",
@@ -2453,12 +2580,17 @@ function btcFromSatsInput(value: string) {
   return sats === null ? null : sats / SATS_PER_BTC;
 }
 
-function nextTaxTreatmentForFlow(flow: TransactionFlow) {
-  if (flow === "incoming") return "section27b-income";
-  if (flow === "transfer") return "section27b-transfer";
-  if (flow === "swap") return "section27b-carrying-value-swap";
-  if (flow === "layer-transition") return "section27b-layer-transition";
-  return "section27b-taxable-disposal";
+function nextTaxClassificationForFlow(flow: TransactionFlow) {
+  if (flow === "incoming") {
+    return austrianTaxClassificationFor("neu", "income_general");
+  }
+  if (flow === "transfer") {
+    return austrianTaxClassificationFor("outside", "none");
+  }
+  if (flow === "swap" || flow === "layer-transition") {
+    return austrianTaxClassificationFor("neu", "neu_swap");
+  }
+  return austrianTaxClassificationFor("neu", "neu_gain");
 }
 
 function nextLabelForFlow(flow: TransactionFlow) {
@@ -2575,7 +2707,7 @@ function NewTransactionDialog({
   );
   const updateFlow = React.useCallback(
     (flow: TransactionFlow) => {
-      const taxTreatment = nextTaxTreatmentForFlow(flow);
+      const taxClassification = nextTaxClassificationForFlow(flow);
       const fallbackWallet =
         draft.wallet && draft.wallet !== "External" ? draft.wallet : "Cold Storage";
       const fromWallet =
@@ -2590,8 +2722,9 @@ function NewTransactionDialog({
         fromWallet,
         toWallet: draft.toWallet === "External" ? fallbackWallet : draft.toWallet,
         label: nextLabelForFlow(flow),
-        taxTreatment,
-        taxable: austrianTaxTreatmentFor(taxTreatment).taxable,
+        atRegime: taxClassification.atRegime,
+        atCategory: taxClassification.atCategory,
+        taxable: taxClassification.taxable,
       });
     },
     [draft, onDraftChange],
@@ -2620,7 +2753,10 @@ function NewTransactionDialog({
   const totalValue = parseManualDecimal(draft.totalValue);
   const priceValue = parseManualDecimal(draft.pricePerBtc);
   const tags = uniqueTags(splitDraftTags(draft.tags));
-  const taxTreatment = austrianTaxTreatmentFor(draft.taxTreatment);
+  const taxClassification = austrianTaxClassificationFor(
+    draft.atRegime,
+    draft.atCategory,
+  );
   const selectedMovement = mockNewTransactionMovementCandidates.find(
     (candidate) => candidate.id === draft.movementId,
   );
@@ -3058,16 +3194,26 @@ function NewTransactionDialog({
                 <div className="grid gap-1.5 md:col-span-2 xl:col-span-1">
                   <Label>Pricing method</Label>
                   <Select
-                    value={draft.priceSource}
-                    onValueChange={(value) =>
-                      updateDraft({ priceSource: value as NewTransactionPriceSource })
-                    }
+                    value={pricingSelectionValue(
+                      draft.pricingSourceKind,
+                      draft.pricingQuality,
+                    )}
+                    onValueChange={(value) => {
+                      const option = pricingOptionForValue(
+                        value as PricingSelectionValue,
+                        newTransactionPricingOptions,
+                      );
+                      updateDraft({
+                        pricingSourceKind: option.sourceKind,
+                        pricingQuality: option.quality,
+                      });
+                    }}
                   >
                     <SelectTrigger>
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      {newTransactionPriceSourceOptions.map((option) => (
+                      {newTransactionPricingOptions.map((option) => (
                         <SelectItem key={option.value} value={option.value}>
                           {option.label}
                         </SelectItem>
@@ -3128,8 +3274,8 @@ function NewTransactionDialog({
             <section className="rounded-lg border p-2">
               <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
                 <h3 className="text-sm font-semibold">Classification</h3>
-                <Badge variant={taxTreatment.taxable ? "default" : "outline"}>
-                  {taxTreatment.taxable ? "Taxable" : "Not taxable"}
+                <Badge variant={taxClassification.taxable ? "default" : "outline"}>
+                  {taxClassification.taxable ? "Taxable" : "Not taxable"}
                 </Badge>
               </div>
               <div className="grid gap-2 md:grid-cols-[minmax(150px,0.8fr)_minmax(220px,1.2fr)]">
@@ -3154,19 +3300,24 @@ function NewTransactionDialog({
                 <div className="grid gap-1.5">
                   <Label>Tax treatment</Label>
                   <Select
-                    value={draft.taxTreatment}
-                    onValueChange={(value) =>
+                    value={austrianSelectionValue(
+                      draft.atRegime,
+                      draft.atCategory,
+                    )}
+                    onValueChange={(value) => {
+                      const option = austrianTaxClassificationForValue(value);
                       updateDraft({
-                        taxTreatment: value,
-                        taxable: austrianTaxTreatmentFor(value).taxable,
-                      })
-                    }
+                        atRegime: option.atRegime,
+                        atCategory: option.atCategory,
+                        taxable: option.taxable,
+                      });
+                    }}
                   >
                     <SelectTrigger className="w-full">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      {austrianTaxTreatmentOptions.map((option) => (
+                      {austrianTaxClassificationOptions.map((option) => (
                         <SelectItem key={option.value} value={option.value}>
                           {option.label}
                         </SelectItem>
@@ -3266,9 +3417,25 @@ function NewTransactionDialog({
                   {fromDisplay} → {toDisplay}
                 </p>
               </div>
-              {isExternalPriceSource(draft.priceSource) ? (
-                <Badge className={cn(newTransactionPriceSourceStyles[draft.priceSource])}>
-                  {newTransactionPriceSourceLabel(draft.priceSource)}
+              {isExternalPricingSource(
+                draft.pricingSourceKind,
+                draft.pricingQuality,
+              ) ? (
+                <Badge
+                  className={cn(
+                    pricingSourceStyles[
+                      pricingSelectionValue(
+                        draft.pricingSourceKind,
+                        draft.pricingQuality,
+                      )
+                    ],
+                  )}
+                >
+                  {pricingSourceLabel(
+                    draft.pricingSourceKind,
+                    draft.pricingQuality,
+                    newTransactionPricingOptions,
+                  )}
                 </Badge>
               ) : null}
             </div>
@@ -3378,9 +3545,13 @@ function NewTransactionDialog({
               />
               <PreviewRow
                 label="Pricing"
-                value={newTransactionPriceSourceLabel(draft.priceSource)}
+                value={pricingSourceLabel(
+                  draft.pricingSourceKind,
+                  draft.pricingQuality,
+                  newTransactionPricingOptions,
+                )}
               />
-              <PreviewRow label="Tax" value={taxTreatment.shortLabel} />
+              <PreviewRow label="Tax" value={taxClassification.shortLabel} />
               {primaryEvidence ? (
                 <PreviewRow label="Evidence" value={primaryEvidence} />
               ) : null}
@@ -3409,8 +3580,8 @@ function NewTransactionDialog({
 
             <div className="flex flex-wrap gap-1">
               <Badge variant="secondary">{draft.label}</Badge>
-              <Badge variant={taxTreatment.taxable ? "default" : "outline"}>
-                {taxTreatment.taxable ? "Taxable" : "Not taxable"}
+              <Badge variant={taxClassification.taxable ? "default" : "outline"}>
+                {taxClassification.taxable ? "Taxable" : "Not taxable"}
               </Badge>
               {tags.map((tag) => (
                 <Badge key={tag} variant="outline">
@@ -3422,17 +3593,17 @@ function NewTransactionDialog({
           </div>
         </div>
 
-        <DialogFooter className="shrink-0 border-t bg-background/95 px-5 py-2.5 backdrop-blur">
+        <DialogFooter className="shrink-0 border-t bg-background/95 px-5 py-2.5 backdrop-blur sm:items-center sm:justify-between">
+          <div className="text-left text-xs text-muted-foreground">
+            Demo only: kept in this UI session, not written to the database.
+          </div>
           <DialogClose asChild>
             <Button type="button" variant="outline">
               Cancel
             </Button>
           </DialogClose>
-          <Button type="button" variant="secondary" onClick={onSaveDraft}>
-            Save draft
-          </Button>
           <Button type="button" onClick={onSaveDraft}>
-            Save and review
+            Save local demo draft
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -3567,6 +3738,14 @@ function TransactionDetailSheet({
   const signedPrefix =
     flow === "incoming" ? "+" : flow === "outgoing" ? "-" : "";
   const tags = localDraft.tags;
+  const taxClassification = austrianTaxClassificationFor(
+    localDraft.atRegime,
+    localDraft.atCategory,
+  );
+  const pricingValue = pricingSelectionValue(
+    localDraft.pricingSourceKind,
+    localDraft.pricingQuality,
+  );
 
   const updateDraft = <K extends keyof TransactionEditDraft>(
     key: K,
@@ -3597,7 +3776,8 @@ function TransactionDetailSheet({
       current
         ? {
             ...current,
-            priceMode: "manual",
+            pricingSourceKind: "manual_override",
+            pricingQuality: "exact",
             manualPrice: rawPrice,
             manualValue:
               parsedPrice !== null && amountBtc > 0
@@ -3613,7 +3793,8 @@ function TransactionDetailSheet({
       current
         ? {
             ...current,
-            priceMode: "manual",
+            pricingSourceKind: "manual_override",
+            pricingQuality: "exact",
             manualValue: rawValue,
             manualPrice:
               parsedValue !== null && amountBtc > 0
@@ -3713,7 +3894,8 @@ function TransactionDetailSheet({
                 <DetailField
                   label="Price"
                   value={
-                    localDraft.priceMode === "manual" && localDraft.manualPrice
+                    localDraft.pricingSourceKind === "manual_override" &&
+                    localDraft.manualPrice
                       ? `${localDraft.manualPrice} ${localDraft.manualCurrency}/BTC`
                       : transaction.rate
                       ? `${currencyFormatter.format(transaction.rate)} / BTC`
@@ -3752,7 +3934,12 @@ function TransactionDetailSheet({
                         label="Tags"
                         value={
                           tags.length ? (
-                            <div className="flex flex-wrap justify-end gap-1">
+                            <div
+                              className={cn(
+                                "flex flex-wrap justify-end gap-1",
+                                blurClass(hideSensitive),
+                              )}
+                            >
                               {tags.map((tag) => (
                                 <Badge key={tag} variant="secondary" className="rounded-md">
                                   {tag}
@@ -3775,7 +3962,12 @@ function TransactionDetailSheet({
                     <div className="mb-2 text-xs font-medium text-muted-foreground">
                       Note
                     </div>
-                    <p className="min-h-10 whitespace-pre-wrap text-sm">
+                    <p
+                      className={cn(
+                        "min-h-10 whitespace-pre-wrap text-sm",
+                        blurClass(hideSensitive),
+                      )}
+                    >
                       {localDraft.note || "-"}
                     </p>
                   </div>
@@ -3828,26 +4020,23 @@ function TransactionDetailSheet({
                 <TabsContent value="pricing" className="mt-4">
                   <div className="grid gap-4">
                     <div className="grid gap-3 md:grid-cols-4">
-                      {priceModeOptions.map((option) => (
+                      {transactionPricingOptions.map((option) => (
                         <button
                           key={option.value}
                           type="button"
                           className={cn(
                             "rounded-md border p-3 text-left transition-colors hover:bg-muted/40",
-                            localDraft.priceMode === option.value &&
+                            pricingValue === option.value &&
                               "border-primary bg-muted/60",
                           )}
-                          onClick={() => updateDraft("priceMode", option.value)}
+                          onClick={() => {
+                            updateDraft("pricingSourceKind", option.sourceKind);
+                            updateDraft("pricingQuality", option.quality);
+                          }}
                         >
                           <div className="text-sm font-medium">{option.label}</div>
                           <div className="mt-1 text-xs text-muted-foreground">
-                            {option.value === "manual"
-                              ? "Use invoice or receipt evidence"
-                              : option.value === "rate-cache"
-                                ? "Use cached market rate"
-                                : option.value === "missing"
-                                  ? "Keep in review queue"
-                                  : "Use source-provided price"}
+                            {option.description}
                           </div>
                         </button>
                       ))}
@@ -3855,21 +4044,27 @@ function TransactionDetailSheet({
                     <div className="grid gap-3 rounded-md border bg-muted/20 p-3">
                       <div className="flex flex-wrap items-center justify-between gap-2">
                         <div>
-                          <div className="text-sm font-medium">Manual price override</div>
+                          <div className="text-sm font-medium">
+                            Manual price override
+                          </div>
                           <div className="text-xs text-muted-foreground">
-                            Calculated from the fixed amount: {formatBtcAmount(amountBtc)}.
+                            Calculated from the fixed amount:{" "}
+                            {formatBtcAmount(amountBtc)}.
                           </div>
                         </div>
                         <Badge
                           variant="outline"
                           className={cn(
                             "rounded-md",
-                            localDraft.priceMode === "manual"
+                            localDraft.pricingSourceKind === "manual_override"
                               ? "border-amber-600/30 bg-amber-50 text-amber-700 dark:bg-amber-900/25 dark:text-amber-300"
                               : "text-muted-foreground",
                           )}
                         >
-                          {priceModeLabel(localDraft.priceMode)}
+                          {pricingSourceLabel(
+                            localDraft.pricingSourceKind,
+                            localDraft.pricingQuality,
+                          )}
                         </Badge>
                       </div>
                       <div className="grid gap-3 md:grid-cols-[100px_1fr_1fr]">
@@ -3893,7 +4088,10 @@ function TransactionDetailSheet({
                             id="tx-manual-price"
                             inputMode="decimal"
                             value={localDraft.manualPrice}
-                            onFocus={() => updateDraft("priceMode", "manual")}
+                            onFocus={() => {
+                              updateDraft("pricingSourceKind", "manual_override");
+                              updateDraft("pricingQuality", "exact");
+                            }}
                             onChange={(event) => updateManualPrice(event.target.value)}
                             placeholder="69453.46"
                           />
@@ -3904,7 +4102,10 @@ function TransactionDetailSheet({
                             id="tx-manual-value"
                             inputMode="decimal"
                             value={localDraft.manualValue}
-                            onFocus={() => updateDraft("priceMode", "manual")}
+                            onFocus={() => {
+                              updateDraft("pricingSourceKind", "manual_override");
+                              updateDraft("pricingQuality", "exact");
+                            }}
                             onChange={(event) => updateManualValue(event.target.value)}
                             placeholder="17086.29"
                           />
@@ -3915,7 +4116,11 @@ function TransactionDetailSheet({
                         <Input
                           id="tx-manual-source"
                           value={localDraft.manualSource}
-                          onFocus={() => updateDraft("priceMode", "manual")}
+                          className={blurClass(hideSensitive)}
+                          onFocus={() => {
+                            updateDraft("pricingSourceKind", "manual_override");
+                            updateDraft("pricingQuality", "exact");
+                          }}
                           onChange={(event) =>
                             updateDraft("manualSource", event.target.value)
                           }
@@ -3941,18 +4146,26 @@ function TransactionDetailSheet({
                       <DetailField
                         label="Manual source"
                         value={localDraft.manualSource || "-"}
+                        hidden={hideSensitive}
                       />
                     </div>
                   </div>
                 </TabsContent>
 
                 <TabsContent value="tax" className="mt-4 space-y-3">
-                  <div className="grid gap-3 md:grid-cols-3">
-                    <DetailField label="Treatment" value={localDraft.taxTreatment} />
+                  <div className="grid gap-3 md:grid-cols-4">
+                    <DetailField label="AT regime" value={localDraft.atRegime} />
+                    <DetailField
+                      label="AT category"
+                      value={taxClassification.shortLabel}
+                    />
                     <DetailField label="Taxable" value={localDraft.taxable ? "Yes" : "No"} />
                     <DetailField
                       label="Price source"
-                      value={priceModeLabel(localDraft.priceMode)}
+                      value={pricingSourceLabel(
+                        localDraft.pricingSourceKind,
+                        localDraft.pricingQuality,
+                      )}
                     />
                   </div>
                   <div className="overflow-hidden rounded-md border">
@@ -3978,17 +4191,17 @@ function TransactionDetailSheet({
                     />
                     <LedgerRow
                       label="Austrian bucket"
-                      value={
-                        localDraft.taxTreatment === "Austrian carry basis"
-                          ? "Swap basis carry"
-                          : "Standard"
-                      }
+                      value={taxClassification.label}
                       align="right"
                     />
-                    {localDraft.priceMode === "manual" ? (
+                    {localDraft.pricingSourceKind === "manual_override" ? (
                       <LedgerRow
                         label="Manual price evidence"
-                        value={localDraft.manualSource || "Source missing"}
+                        value={
+                          <span className={blurClass(hideSensitive)}>
+                            {localDraft.manualSource || "Source missing"}
+                          </span>
+                        }
                         align="right"
                         muted
                       />
@@ -4045,7 +4258,10 @@ function TransactionDetailSheet({
                               <button
                                 key={tag}
                                 type="button"
-                                className="inline-flex items-center gap-1 rounded-md bg-secondary px-2 py-1 text-xs font-medium text-secondary-foreground"
+                                className={cn(
+                                  "inline-flex items-center gap-1 rounded-md bg-secondary px-2 py-1 text-xs font-medium text-secondary-foreground",
+                                  blurClass(hideSensitive),
+                                )}
                                 onClick={() => removeTag(tag)}
                                 aria-label={`Remove ${tag} tag`}
                               >
@@ -4063,6 +4279,7 @@ function TransactionDetailSheet({
                           <Input
                             id="tx-tag-input"
                             value={tagInput}
+                            className={blurClass(hideSensitive)}
                             onChange={(event) => setTagInput(event.target.value)}
                             onKeyDown={(event) => {
                               if (event.key === "Enter" || event.key === ",") {
@@ -4109,20 +4326,27 @@ function TransactionDetailSheet({
                       </div>
                       <div className="grid gap-3 xl:grid-cols-[minmax(220px,0.9fr)_minmax(0,1fr)_minmax(0,1fr)]">
                         <div className="grid gap-2">
-                          <Label htmlFor="tx-tax-treatment">Tax treatment</Label>
+                          <Label htmlFor="tx-tax-treatment">Austrian category</Label>
                           <Select
-                            value={localDraft.taxTreatment}
-                            onValueChange={(value) =>
-                              updateDraft("taxTreatment", value)
-                            }
+                            value={austrianSelectionValue(
+                              localDraft.atRegime,
+                              localDraft.atCategory,
+                            )}
+                            onValueChange={(value) => {
+                              const option =
+                                austrianTaxClassificationForValue(value);
+                              updateDraft("atRegime", option.atRegime);
+                              updateDraft("atCategory", option.atCategory);
+                              updateDraft("taxable", option.taxable);
+                            }}
                           >
                             <SelectTrigger id="tx-tax-treatment">
                               <SelectValue />
                             </SelectTrigger>
                             <SelectContent>
-                              {taxTreatmentOptions.map((option) => (
-                                <SelectItem key={option} value={option}>
-                                  {option}
+                              {austrianTaxClassificationOptions.map((option) => (
+                                <SelectItem key={option.value} value={option.value}>
+                                  {option.label}
                                 </SelectItem>
                               ))}
                             </SelectContent>
@@ -4166,8 +4390,8 @@ function TransactionDetailSheet({
                         id="tx-note"
                         value={localDraft.note}
                         onChange={(event) => updateDraft("note", event.target.value)}
-                        className="min-h-28 resize-none"
-                        placeholder="Receipt, invoice, counterparty, or review context"
+                          className={cn("min-h-28 resize-none", blurClass(hideSensitive))}
+                          placeholder="Receipt, invoice, counterparty, or review context"
                       />
                     </div>
                   </div>
@@ -4188,12 +4412,17 @@ function TransactionDetailSheet({
                   </div>
                   <div className="flex items-center justify-between gap-2">
                     <span className="text-muted-foreground">Tax</span>
-                    <span className="text-right font-medium">{localDraft.taxTreatment}</span>
+                    <span className="text-right font-medium">
+                      {taxClassification.shortLabel}
+                    </span>
                   </div>
                   <div className="flex items-center justify-between gap-2">
                     <span className="text-muted-foreground">Price</span>
                     <span className="text-right font-medium">
-                      {priceModeLabel(localDraft.priceMode)}
+                      {pricingSourceLabel(
+                        localDraft.pricingSourceKind,
+                        localDraft.pricingQuality,
+                      )}
                     </span>
                   </div>
                   <div className="flex items-center justify-between gap-2">
@@ -4242,7 +4471,11 @@ function TransactionDetailSheet({
                 <div className="flex min-h-8 flex-wrap gap-1.5">
                   {tags.length ? (
                     tags.map((tag) => (
-                      <Badge key={tag} variant="secondary" className="rounded-md">
+                      <Badge
+                        key={tag}
+                        variant="secondary"
+                        className={cn("rounded-md", blurClass(hideSensitive))}
+                      >
                         {tag}
                       </Badge>
                     ))
@@ -4258,7 +4491,7 @@ function TransactionDetailSheet({
         <SheetFooter className="border-t p-3 sm:flex-row sm:items-center sm:justify-between sm:px-6">
           <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
             <BookMarked className="size-4" aria-hidden="true" />
-            <span>Metadata changes require journal reprocessing.</span>
+            <span>Demo only: changes stay local until persistence is wired.</span>
           </div>
           <div className="flex justify-end gap-2">
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
@@ -4273,7 +4506,7 @@ function TransactionDetailSheet({
               }}
             >
               <Save className="size-4" aria-hidden="true" />
-              Save draft
+              Save local draft
             </Button>
           </div>
         </SheetFooter>
@@ -4890,6 +5123,14 @@ const TransactionsTable = ({
             ) : (
               paginatedTransactions.map((txn) => {
                 const draft = getDraft(txn);
+                const rowTaxClassification = austrianTaxClassificationFor(
+                  draft.atRegime,
+                  draft.atCategory,
+                );
+                const rowPricingValue = pricingSelectionValue(
+                  draft.pricingSourceKind,
+                  draft.pricingQuality,
+                );
                 const StatusIcon = transactionStatusIcons[draft.reviewStatus];
                 const explorer = explorerForTransaction(txn, explorerSettings);
                 const flow = displayFlow(txn);
@@ -5020,7 +5261,11 @@ const TransactionsTable = ({
                     <TableCell className="hidden md:table-cell">
                       <div className="flex max-w-[210px] flex-wrap gap-1">
                         {tagPreview.slice(0, 2).map((tag) => (
-                          <Badge key={tag} variant="outline" className="rounded-md">
+                          <Badge
+                            key={tag}
+                            variant="outline"
+                            className={cn("rounded-md", blurClass(hideSensitive))}
+                          >
                             {tag}
                           </Badge>
                         ))}
@@ -5031,17 +5276,20 @@ const TransactionsTable = ({
                         )}
                       </div>
                       <p className="mt-1 truncate text-[10px] text-muted-foreground sm:text-xs">
-                        {draft.taxTreatment}
+                        {rowTaxClassification.shortLabel}
                       </p>
                     </TableCell>
                     <TableCell className="hidden lg:table-cell">
                       <span
                         className={cn(
                           "inline-flex items-center rounded-md px-2 py-1 text-[10px] font-medium sm:text-xs",
-                          priceModeStyles[draft.priceMode],
+                          pricingSourceStyles[rowPricingValue],
                         )}
                       >
-                        {priceModeLabel(draft.priceMode)}
+                        {pricingSourceLabel(
+                          draft.pricingSourceKind,
+                          draft.pricingQuality,
+                        )}
                       </span>
                       <p
                         className={cn(
@@ -5049,7 +5297,7 @@ const TransactionsTable = ({
                           blurClass(hideSensitive),
                         )}
                       >
-                        {draft.priceMode === "manual"
+                        {draft.pricingSourceKind === "manual_override"
                           ? `${draft.manualCurrency} ${draft.manualValue || "value pending"}`
                           : txn.rate
                             ? `${currencyFormatter.format(txn.rate)} / BTC`
@@ -5360,7 +5608,6 @@ const Dashboard2 = ({
             onDraftChange={setNewTransactionDraft}
             onSaveDraft={() => {
               setNewTxnOpen(false);
-              setNewTransactionDraft(createNewTransactionDraft());
             }}
           />
         </div>
