@@ -584,6 +584,12 @@ def _ui_report_export_payload(
     conn = _require_conn(ctx)
     hooks = _report_hooks()
     if kind == "ui.reports.export_pdf":
+        if "year" in args or "tax_year" in args:
+            raise AppError(
+                "ui.reports.export_pdf does not support a tax year; "
+                "use an annual tax export instead",
+                code="validation",
+            )
         path = _managed_report_export_path(ctx.data_root, "kassiber-report", ".pdf")
         wallet = args.get("wallet")
         if wallet is not None and not isinstance(wallet, str):
@@ -612,12 +618,24 @@ def _ui_report_export_payload(
         return payload
 
     if kind == "ui.reports.export_capital_gains_csv":
+        year = args.get("year")
+        stem = (
+            f"kassiber-capital-gains-{year}"
+            if year is not None
+            else "kassiber-capital-gains"
+        )
         path = _managed_report_export_path(
             ctx.data_root,
-            "kassiber-capital-gains",
+            stem,
             ".csv",
         )
-        rows = core_reports.report_capital_gains(conn, None, None, hooks)
+        rows = core_reports.report_capital_gains(
+            conn,
+            None,
+            None,
+            hooks,
+            tax_year=year,
+        )
         payload = _write_records_csv(
             path,
             rows,
@@ -641,6 +659,7 @@ def _ui_report_export_payload(
             {
                 "format": "csv",
                 "scope": "capital_gains",
+                "tax_year": year,
                 "filename": path.name,
             }
         )

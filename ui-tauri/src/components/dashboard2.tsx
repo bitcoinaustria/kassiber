@@ -68,6 +68,7 @@ import {
 import { cn } from "@/lib/utils";
 import { formatBtc, useCurrency, type Currency } from "@/lib/currency";
 import { type ExplorerSettings } from "@/lib/explorer";
+import { screenShellClassName } from "@/lib/screen-layout";
 import { CurrencyToggleText } from "@/components/kb/CurrencyToggleText";
 import { useWalletSyncAction } from "@/hooks/useWalletSyncAction";
 import {
@@ -2811,10 +2812,7 @@ const Dashboard2 = ({
 
   return (
     <div
-      className={cn(
-        "w-full space-y-4 bg-background p-3 sm:space-y-6 sm:p-4 md:p-6",
-        className,
-      )}
+      className={cn(screenShellClassName, className)}
     >
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <PeriodTabs activePeriod={period} onPeriodChange={setPeriod} />

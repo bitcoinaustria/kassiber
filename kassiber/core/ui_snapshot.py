@@ -11,6 +11,7 @@ from ..errors import AppError
 from ..msat import msat_to_btc
 from ..tax_policy import build_tax_policy
 from ..time_utils import _iso_z, _parse_iso_datetime
+from . import reports as report_builders
 from .repo import current_context_snapshot
 
 
@@ -984,14 +985,65 @@ def _snapshot_year(rows: list[sqlite3.Row]) -> int:
     return datetime.now(timezone.utc).year
 
 
+def _capital_gains_available_years(conn: sqlite3.Connection, profile_id: str) -> list[int]:
+    rows = conn.execute(
+        """
+        SELECT DISTINCT substr(occurred_at, 1, 4) AS year
+        FROM journal_entries
+        WHERE profile_id = ?
+          AND (entry_type = 'disposal' OR at_kennzahl IS NOT NULL)
+          AND occurred_at IS NOT NULL
+          AND length(occurred_at) >= 4
+        ORDER BY year DESC
+        """,
+        (profile_id,),
+    ).fetchall()
+    years: list[int] = []
+    for row in rows:
+        year = row["year"] or ""
+        if str(year).isdigit():
+            years.append(int(year))
+    return years
+
+
+def _austrian_kennzahl_snapshot_rows(
+    conn: sqlite3.Connection,
+    profile: sqlite3.Row,
+    tax_year: int,
+) -> list[dict[str, Any]]:
+    if str(profile["tax_country"] or "").lower() != "at":
+        return []
+
+    summary_rows = report_builders.build_austrian_kennzahl_summary(
+        conn,
+        profile,
+        tax_year,
+    )
+    return [
+        {
+            "code": str(row["kennzahl"]),
+            "label": row["label"],
+            "form": row.get("form", ""),
+            "formSection": row.get("form_section", ""),
+            "amount": int(row["amount_eur_cents"] or 0) / 100,
+            "amountEurCents": int(row["amount_eur_cents"] or 0),
+            "rowCount": int(row["row_count"] or 0),
+            "source": "daemon",
+        }
+        for row in summary_rows
+    ]
+
+
 def build_capital_gains_snapshot(conn: sqlite3.Connection) -> dict[str, Any]:
     context = current_context_snapshot(conn)
     if not context["workspace_id"] or not context["profile_id"]:
         return {
             "jurisdictionCode": "AT",
             "year": datetime.now(timezone.utc).year,
+            "availableYears": [datetime.now(timezone.utc).year],
             "method": "fifo",
             "lots": [],
+            "kennzahlRows": [],
             "status": {
                 "needsJournals": False,
                 "quarantines": 0,
@@ -1006,8 +1058,10 @@ def build_capital_gains_snapshot(conn: sqlite3.Connection) -> dict[str, Any]:
         return {
             "jurisdictionCode": "AT",
             "year": datetime.now(timezone.utc).year,
+            "availableYears": [datetime.now(timezone.utc).year],
             "method": "fifo",
             "lots": [],
+            "kennzahlRows": [],
             "status": {
                 "needsJournals": False,
                 "quarantines": 0,
@@ -1036,13 +1090,16 @@ def build_capital_gains_snapshot(conn: sqlite3.Connection) -> dict[str, Any]:
         SELECT occurred_at, quantity, cost_basis, proceeds, gain_loss
         FROM journal_entries
         WHERE profile_id = ?
-          AND entry_type IN ('disposal', 'fee', 'transfer_fee')
+          AND entry_type = 'disposal'
         ORDER BY occurred_at DESC, created_at DESC, id DESC
         LIMIT 200
         """,
         (profile["id"],),
     ).fetchall()
-    latest_year = _snapshot_year(rows)
+    available_years = _capital_gains_available_years(conn, profile["id"])
+    latest_year = available_years[0] if available_years else _snapshot_year(rows)
+    if latest_year not in available_years:
+        available_years = [latest_year, *available_years]
     lots = [
         {
             "acquired": "",
@@ -1058,8 +1115,10 @@ def build_capital_gains_snapshot(conn: sqlite3.Connection) -> dict[str, Any]:
     return {
         "jurisdictionCode": (profile["tax_country"] or "AT").upper(),
         "year": latest_year,
+        "availableYears": available_years,
         "method": str(profile["gains_algorithm"] or "fifo").lower(),
         "lots": lots,
+        "kennzahlRows": _austrian_kennzahl_snapshot_rows(conn, profile, latest_year),
         "status": {
             "needsJournals": needs_journals,
             "quarantines": int(quarantines or 0),

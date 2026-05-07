@@ -1492,14 +1492,29 @@ class DaemonSmokeTest(unittest.TestCase):
             _write_payload(
                 proc,
                 {
+                    "request_id": "export-pdf-year",
+                    "kind": "ui.reports.export_pdf",
+                    "args": {"year": 2026},
+                },
+            )
+            rejected_pdf = _read_payload_timeout(proc)
+            self.assertEqual(rejected_pdf["kind"], "error")
+            self.assertEqual(rejected_pdf["error"]["code"], "validation")
+
+            _write_payload(
+                proc,
+                {
                     "request_id": "export-csv",
                     "kind": "ui.reports.export_capital_gains_csv",
+                    "args": {"year": 2026},
                 },
             )
             csv_export = _read_payload_timeout(proc)
             self.assertEqual(csv_export["kind"], "ui.reports.export_capital_gains_csv")
+            self.assertEqual(csv_export["data"]["tax_year"], 2026)
             csv_file = Path(csv_export["data"]["file"])
             self.assertTrue(csv_file.is_file())
+            self.assertIn("2026", csv_file.name)
             self.assertIn("occurred_at,wallet,transaction_id", csv_file.read_text())
 
             _write_payload(

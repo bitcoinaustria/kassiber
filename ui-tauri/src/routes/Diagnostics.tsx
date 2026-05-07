@@ -37,7 +37,7 @@ export function Diagnostics() {
   };
 
   return (
-    <main className="flex h-full min-h-0 flex-col gap-4 p-4 sm:p-6">
+    <main className="flex h-full min-h-0 flex-col gap-3 bg-background p-3 sm:gap-4 sm:p-4 md:p-5">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div className="min-w-0 space-y-1">
           <h2 className="text-base font-semibold">Daemon log</h2>

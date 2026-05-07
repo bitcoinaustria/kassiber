@@ -15,6 +15,7 @@ import {
   formatEur,
   useCurrency,
 } from "@/lib/currency";
+import { screenShellClassName } from "@/lib/screen-layout";
 import { cn } from "@/lib/utils";
 import { useUiStore } from "@/store/ui";
 
@@ -86,7 +87,7 @@ export function SourceFunds() {
   const needsJournals = Boolean(snapshot.status?.needsJournals);
 
   return (
-    <div className="w-full space-y-4 bg-background p-3 sm:space-y-6 sm:p-4 md:p-6">
+    <div className={screenShellClassName}>
       <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_320px]">
         <Card>
           <CardHeader className="border-b">

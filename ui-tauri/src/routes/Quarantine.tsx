@@ -9,7 +9,7 @@ export function Quarantine() {
       kind="quarantine"
       eyebrow="Review · blocked records"
       title="Quarantine"
-      description="Resolve under-specified transactions, missing prices, and manual-pair decisions before they reach reports."
+      description="Resolve under-specified transactions, missing prices, and manual-pair decisions that are being held out of trusted reports."
       icon={ShieldAlert}
       rows={MOCK_QUARANTINE_EVENTS}
     />

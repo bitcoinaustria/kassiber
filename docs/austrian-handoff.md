@@ -85,12 +85,13 @@ Current Kassiber mapping:
 | `ALT_SPEKULATION` | `alt_spekulation` | `801` |
 | `ALT_TAXFREE` | `alt_taxfree` | none |
 
-This mapping targets the current ausländisch / self-custody slice of
-E 1kv. Kassiber does not yet persist structured domestic-provider
-withheld-KESt metadata, so it cannot populate domestic-provider
-Kennzahlen such as 171, 173, or 175. CLI/PDF E 1kv
-exports must surface that assumption until the data model can represent
-withheld tax.
+Kennzahlen 172, 174, and 176 target the current ausländisch / self-custody
+slice of E 1kv. Kennzahl 801 is old-stock speculation income for E 1 and is
+carried in the same Austrian handoff as an outside-E-1kv row, not as an E 1kv
+field. Kassiber does not yet persist structured domestic-provider withheld-KESt
+metadata, so it cannot populate domestic-provider Kennzahlen such as 171, 173,
+or 175. CLI/PDF exports must surface that assumption until the data model can
+represent withheld tax.
 
 `kassiber reports austrian-e1kv` is the canonical annual export. The
 friendlier `reports austrian-tax-summary` and `reports export-austrian`

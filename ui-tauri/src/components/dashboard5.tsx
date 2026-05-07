@@ -3,14 +3,15 @@ import {
   ArrowDownRight,
   ArrowLeftRight,
   ArrowUpRight,
-  Bell,
   ChevronLeft,
   ChevronRight,
+  CheckCircle2,
   CircleDollarSign,
   ClipboardList,
   CreditCard,
   ExternalLink,
   Filter,
+  FileText,
   Landmark,
   Maximize2,
   MoreHorizontal,
@@ -18,6 +19,7 @@ import {
   Plus,
   RefreshCw,
   ShieldAlert,
+  WalletCards,
   Users,
 } from "lucide-react";
 import * as React from "react";
@@ -55,7 +57,6 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   Tooltip as ShadTooltip,
   TooltipContent as ShadTooltipContent,
@@ -68,6 +69,7 @@ import {
   explorerTargetForTransaction,
   type ExplorerSettings,
 } from "@/lib/explorer";
+import { screenShellClassName } from "@/lib/screen-layout";
 import { cn } from "@/lib/utils";
 import {
   MOCK_OVERVIEW,
@@ -108,6 +110,13 @@ type RevenueFlowColors = {
 
 type TransactionStatus = "confirmed" | "pending" | "review" | "failed";
 type OverviewTransactionFlow = "incoming" | "outgoing" | "transfer" | "swap";
+type OverviewHealthTone = "good" | "warning" | "alert" | "neutral";
+type OverviewHref =
+  | "/connections"
+  | "/journals"
+  | "/quarantine"
+  | "/reports"
+  | "/transactions";
 
 type Transaction = {
   id: string;
@@ -124,10 +133,21 @@ type Transaction = {
   date: string;
 };
 
-type ActivityItem = {
+type OverviewHealthItem = {
+  key: string;
+  title: string;
+  value: string;
+  detail: string;
+  href: OverviewHref;
+  icon: React.ComponentType<React.SVGProps<SVGSVGElement>>;
+  tone: OverviewHealthTone;
+};
+
+type OverviewReadiness = {
   title: string;
   detail: string;
-  time: string;
+  icon: React.ComponentType<React.SVGProps<SVGSVGElement>>;
+  tone: OverviewHealthTone;
 };
 
 const currencyFormatter = new Intl.NumberFormat("en-US", {
@@ -142,6 +162,13 @@ const compactCurrencyFormatter = new Intl.NumberFormat("en-US", {
   currency: "EUR",
   notation: "compact",
   maximumFractionDigits: 0,
+});
+
+const shortDateTimeFormatter = new Intl.DateTimeFormat("en-US", {
+  month: "short",
+  day: "numeric",
+  hour: "2-digit",
+  minute: "2-digit",
 });
 
 const blurClass = (hidden: boolean) => (hidden ? "sensitive" : "");
@@ -933,58 +960,14 @@ const transactionRecords: Transaction[] = [
   },
 ];
 
-const recentActivity: ActivityItem[] = [
-  {
-    title: "Wallet sync completed",
-    detail: "Cold Storage",
-    time: "2 minutes ago",
-  },
-  {
-    title: "Journal processed",
-    detail: "Austrian books",
-    time: "2 minutes ago",
-  },
-  {
-    title: "Transaction priced",
-    detail: "BTC-EUR rate cache",
-    time: "2 minutes ago",
-  },
-  {
-    title: "Report exported",
-    detail: "Capital gains",
-    time: "6 minutes ago",
-  },
-  {
-    title: "Label imported",
-    detail: "BIP329",
-    time: "12 minutes ago",
-  },
-  {
-    title: "Review item opened",
-    detail: "Missing fiat price",
-    time: "18 minutes ago",
-  },
-  {
-    title: "Attachment verified",
-    detail: "Receipt hash matched",
-    time: "24 minutes ago",
-  },
-  {
-    title: "Manual pair added",
-    detail: "BTC to LBTC peg-out",
-    time: "32 minutes ago",
-  },
-  {
-    title: "Diagnostics collected",
-    detail: "Public-safe bundle",
-    time: "45 minutes ago",
-  },
-  {
-    title: "Books switched",
-    detail: "Business wallet",
-    time: "1 hour ago",
-  },
-];
+const readinessToneStyles: Record<OverviewHealthTone, string> = {
+  good:
+    "border-emerald-500/25 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300",
+  warning:
+    "border-amber-500/25 bg-amber-500/10 text-amber-700 dark:text-amber-300",
+  alert: "border-red-500/25 bg-red-500/10 text-red-700 dark:text-red-300",
+  neutral: "border-border bg-muted/45 text-foreground",
+};
 
 const WelcomeSection = ({
   onAddConnection,
@@ -997,29 +980,24 @@ const WelcomeSection = ({
   isSyncing: boolean;
   snapshot: OverviewSnapshot;
 }) => {
-  const reviewCount = snapshot.status?.quarantines ?? 0;
-  const profile = snapshot.status?.profile ?? "local books";
-  const transactionCount = snapshot.status?.transactionCount ?? snapshot.txs.length;
+  const readiness = buildOverviewReadiness(snapshot);
+  const ReadinessIcon = readiness.icon;
+
   return (
-    <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between sm:gap-6">
-      <div className="space-y-2 sm:space-y-5">
-        <h2 className="text-lg leading-relaxed font-semibold sm:text-[22px]">
-          {profile}
-        </h2>
-        <p className="text-sm text-muted-foreground sm:text-base">
-          Current view has{" "}
-          <span className="font-medium text-foreground">
-            {transactionCount} transactions
-          </span>
-          ,{" "}
-          <span className="font-medium text-foreground">
-            {snapshot.connections.length} connections
-          </span>
-          , and{" "}
-          <span className="font-medium text-foreground">
-            {reviewCount} review items
-          </span>
-        </p>
+    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
+      <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-2">
+        <span
+          className={cn(
+            "inline-flex h-8 shrink-0 items-center gap-2 rounded-md border px-2.5 text-sm font-medium",
+            readinessToneStyles[readiness.tone],
+          )}
+        >
+          <ReadinessIcon className="size-4" aria-hidden="true" />
+          {readiness.title}
+        </span>
+        <span className="min-w-0 truncate text-xs text-muted-foreground sm:text-sm">
+          {readiness.detail}
+        </span>
       </div>
 
       <div className="flex flex-wrap items-center gap-2 sm:gap-3">
@@ -1085,13 +1063,13 @@ const StatsCards = ({
             currency === "btc" && stat.title === "Portfolio value";
 
           return (
-            <div key={stat.title} className="space-y-4 p-4 sm:p-6">
+            <div key={stat.title} className="space-y-2.5 p-3 sm:p-4">
               <div className="text-muted-foreground">
                 <span className="text-xs font-medium sm:text-sm">
                   {isBitcoinPortfolio ? "Bitcoin balance" : stat.title}
                 </span>
               </div>
-              <p className="text-2xl font-semibold tracking-tight sm:text-[28px]">
+              <p className="text-xl font-semibold tracking-tight sm:text-2xl">
                 {isBitcoinPortfolio ? (
                   <CurrencyToggleText className={blurClass(hideSensitive)}>
                     {formatBtc(latestPortfolioBalanceBtc(snapshot), {
@@ -1165,20 +1143,20 @@ const RevenueSourceChart = ({
   const { total, items: revenueSourceItems } = buildRevenueSourceItems(snapshot);
 
   return (
-    <div className="flex flex-col gap-4 rounded-xl border bg-card p-4 sm:p-5">
+    <div className="flex flex-col gap-3 rounded-xl border bg-card p-4">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2 sm:gap-2.5">
           <Button
             variant="outline"
             size="icon"
             className="size-7 sm:size-8"
-            aria-label="Revenue by source"
+            aria-label="Flow by rail"
           >
             <Landmark className="size-4 text-muted-foreground sm:size-[18px]" />
           </Button>
           <div>
             <span className="text-sm font-medium sm:text-base">
-              Revenue by Source
+              Flow by Rail
             </span>
             <p
               className={cn(
@@ -1186,7 +1164,7 @@ const RevenueSourceChart = ({
                 blurClass(hideSensitive),
               )}
             >
-              {formatCompactDisplayMoney(total, snapshot.priceEur, currency)} in loaded rows
+              {formatCompactDisplayMoney(total, snapshot.priceEur, currency)} moved in loaded rows
             </p>
           </div>
         </div>
@@ -1388,14 +1366,14 @@ const SalesByCategoryChart = ({
   );
 
   return (
-    <div className="flex flex-1 flex-col gap-4 rounded-xl border bg-card p-4 sm:p-5">
+    <div className="flex flex-1 flex-col gap-3 rounded-xl border bg-card p-4">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2 sm:gap-2.5">
           <Button
             variant="outline"
             size="icon"
             className="size-7 sm:size-8"
-            aria-label="Sales by category"
+            aria-label="Holdings by source"
           >
             <PieChartIcon className="size-4 text-muted-foreground sm:size-[18px]" />
           </Button>
@@ -1444,8 +1422,8 @@ const SalesByCategoryChart = ({
         </Button>
       </div>
 
-      <div className="flex flex-1 items-center gap-4 sm:gap-6">
-        <div className="relative size-[100px] shrink-0 sm:size-[120px]">
+      <div className="grid flex-1 items-center gap-3 sm:grid-cols-[minmax(136px,1.2fr)_minmax(0,0.8fr)] sm:gap-4">
+        <div className="relative mx-auto size-[128px] shrink-0 sm:size-[152px] xl:size-[160px]">
           <ChartContainer
             config={salesCategoryChartConfig}
             className="h-full w-full"
@@ -1474,7 +1452,7 @@ const SalesByCategoryChart = ({
           <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
             <span
               className={cn(
-                "max-w-[76px] whitespace-nowrap text-center leading-tight font-semibold tabular-nums sm:max-w-[88px]",
+                "max-w-[96px] whitespace-nowrap text-center leading-tight font-semibold tabular-nums sm:max-w-[116px]",
                 donutCenterValueClass(totalSalesLabel),
                 blurClass(hideSensitive),
               )}
@@ -1487,7 +1465,7 @@ const SalesByCategoryChart = ({
           </div>
         </div>
 
-        <div className="flex flex-1 flex-col gap-2 sm:gap-3">
+        <div className="flex min-w-0 flex-col gap-2 sm:gap-3">
           {salesCategoryData.map((item, index) => (
             <div
               key={item.name}
@@ -1498,16 +1476,16 @@ const SalesByCategoryChart = ({
               onMouseEnter={() => setHoveredSlice(index)}
               onMouseLeave={() => setHoveredSlice(null)}
             >
-              <div className="flex items-center gap-2">
+              <div className="flex min-w-0 items-center gap-2">
                 <div
                   className="size-2 rounded-full sm:size-2.5"
                   style={{ backgroundColor: item.color }}
                 />
-                <span className="text-[10px] text-muted-foreground sm:text-xs">
+                <span className="min-w-0 truncate text-[10px] text-muted-foreground sm:text-xs">
                   {item.name}
                 </span>
               </div>
-              <div className="flex items-center gap-2 text-[10px] sm:text-xs">
+              <div className="flex shrink-0 items-center gap-1.5 text-[10px] sm:text-xs">
                 <span
                   className={cn(
                     "font-medium tabular-nums",
@@ -1538,16 +1516,23 @@ const SalesByCategoryChart = ({
 };
 
 const SideChartsSection = ({
+  className,
   snapshot,
   hideSensitive,
   currency,
 }: {
+  className?: string;
   snapshot: OverviewSnapshot;
   hideSensitive: boolean;
   currency: Currency;
 }) => {
   return (
-    <div className="flex w-full flex-col gap-4 xl:w-[410px]">
+    <div
+      className={cn(
+        "grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-1",
+        className,
+      )}
+    >
       <RevenueSourceChart
         snapshot={snapshot}
         hideSensitive={hideSensitive}
@@ -1715,8 +1700,8 @@ const RevenueFlowChart = ({
         : snapshot.fiat.eurBalance;
 
   const renderChartCard = (expanded = false) => (
-    <div className="flex min-w-0 flex-1 flex-col gap-4 rounded-xl border bg-card p-4 sm:gap-6 sm:p-6">
-      <div className="flex flex-wrap items-center gap-2 sm:gap-4">
+    <div className="flex min-w-0 flex-1 flex-col gap-3 rounded-xl border bg-card p-4 sm:gap-4 sm:p-5">
+      <div className="flex flex-wrap items-center gap-2 sm:gap-3">
         <div className="flex flex-1 flex-col gap-1">
           <p
             className={cn(
@@ -1800,7 +1785,7 @@ const RevenueFlowChart = ({
         className={
           expanded
             ? "h-[min(62vh,620px)] w-full min-w-0"
-            : "h-[200px] w-full min-w-0 sm:h-[240px] lg:h-[280px]"
+            : "h-[180px] w-full min-w-0 sm:h-[220px] lg:h-[240px]"
         }
       >
         <ChartContainer
@@ -2077,6 +2062,221 @@ function transactionDetailHref(transactionId: string) {
   }
   params.set("tx", transactionId);
   return `/transactions?${params.toString()}`;
+}
+
+function parseOverviewDate(value: string | undefined) {
+  if (!value) return null;
+  const normalized = value.includes("T") ? value : value.replace(" ", "T");
+  const parsed = new Date(normalized);
+  return Number.isNaN(parsed.valueOf()) ? null : parsed;
+}
+
+function formatOverviewDate(value: string | undefined) {
+  const parsed = parseOverviewDate(value);
+  return parsed ? shortDateTimeFormatter.format(parsed) : (value ?? "No rows");
+}
+
+function latestOverviewTx(snapshot: OverviewSnapshot) {
+  return [...snapshot.txs]
+    .sort((a, b) => b.date.localeCompare(a.date))
+    .at(0);
+}
+
+function buildOverviewReadiness(snapshot: OverviewSnapshot): OverviewReadiness {
+  const status = snapshot.status;
+  const needsJournals = Boolean(status?.needsJournals);
+  const quarantines = status?.quarantines ?? 0;
+  const latestTx = latestOverviewTx(snapshot);
+  const latestDetail = latestTx
+    ? `Latest row ${formatOverviewDate(latestTx.date)}`
+    : "No rows loaded yet";
+  const totalConnections = snapshot.connections.length;
+  const syncedConnections = snapshot.connections.filter(
+    (connection) => connection.status === "synced",
+  ).length;
+  const syncingConnections = snapshot.connections.filter(
+    (connection) => connection.status === "syncing",
+  ).length;
+  const erroredConnections = snapshot.connections.filter(
+    (connection) => connection.status === "error",
+  ).length;
+  const sourceDetail = totalConnections
+    ? `${syncedConnections}/${totalConnections} source${
+        totalConnections === 1 ? "" : "s"
+      } synced`
+    : "No sources connected";
+
+  if (!snapshot.txs.length && !totalConnections) {
+    return {
+      title: "Connect a source",
+      detail: "Sync a wallet or import rows to populate this book.",
+      icon: Plus,
+      tone: "neutral",
+    };
+  }
+
+  if (erroredConnections) {
+    return {
+      title: "Source attention",
+      detail: `${erroredConnections} source${
+        erroredConnections === 1 ? "" : "s"
+      } needs attention · ${latestDetail}`,
+      icon: WalletCards,
+      tone: "alert",
+    };
+  }
+
+  if (needsJournals) {
+    return {
+      title: "Reprocess journals",
+      detail: `Reports need a fresh journal state · ${latestDetail}`,
+      icon: RefreshCw,
+      tone: "warning",
+    };
+  }
+
+  if (quarantines > 0) {
+    return {
+      title: "Review queue open",
+      detail: `${quarantines} item${
+        quarantines === 1 ? "" : "s"
+      } before reports · ${latestDetail}`,
+      icon: ShieldAlert,
+      tone: "alert",
+    };
+  }
+
+  if (syncingConnections) {
+    return {
+      title: "Sync in progress",
+      detail: `${sourceDetail} · ${latestDetail}`,
+      icon: RefreshCw,
+      tone: "warning",
+    };
+  }
+
+  return {
+    title: "Ready for reports",
+    detail: `${sourceDetail} · ${latestDetail}`,
+    icon: CheckCircle2,
+    tone: "good",
+  };
+}
+
+function buildOverviewHealthItems(snapshot: OverviewSnapshot): OverviewHealthItem[] {
+  const status = snapshot.status;
+  const needsJournals = Boolean(status?.needsJournals);
+  const quarantines = status?.quarantines ?? 0;
+  const totalConnections = snapshot.connections.length;
+  const syncingConnections = snapshot.connections.filter(
+    (connection) => connection.status === "syncing",
+  ).length;
+  const erroredConnections = snapshot.connections.filter(
+    (connection) => connection.status === "error",
+  ).length;
+  const syncedConnections = snapshot.connections.filter(
+    (connection) => connection.status === "synced",
+  ).length;
+  const latestTx = latestOverviewTx(snapshot);
+
+  return [
+    {
+      key: "journals",
+      title: "Journal state",
+      value: needsJournals ? "Reprocess" : "Current",
+      detail: needsJournals
+        ? "Reports should wait for a fresh journal run."
+        : "Reports are ready from the current journal state.",
+      href: "/journals",
+      icon: needsJournals ? RefreshCw : CheckCircle2,
+      tone: needsJournals ? "warning" : "good",
+    },
+    {
+      key: "review",
+      title: "Review queue",
+      value: quarantines ? `${quarantines} open` : "Clear",
+      detail: quarantines
+        ? "Resolve quarantined rows before tax reporting."
+        : "No quarantined transactions in this book.",
+      href: "/quarantine",
+      icon: quarantines ? ShieldAlert : CheckCircle2,
+      tone: quarantines ? "alert" : "good",
+    },
+    {
+      key: "connections",
+      title: "Connections",
+      value: erroredConnections
+        ? `${erroredConnections} issue${erroredConnections === 1 ? "" : "s"}`
+        : syncingConnections
+          ? `${syncingConnections} syncing`
+          : totalConnections
+            ? `${syncedConnections}/${totalConnections} synced`
+            : "None yet",
+      detail: totalConnections
+        ? `${totalConnections} configured source${totalConnections === 1 ? "" : "s"}`
+        : "Add a wallet, exchange, or import source.",
+      href: "/connections",
+      icon: WalletCards,
+      tone: erroredConnections
+        ? "alert"
+        : syncingConnections
+          ? "warning"
+          : totalConnections
+            ? "good"
+            : "neutral",
+    },
+    {
+      key: "latest",
+      title: "Latest row",
+      value: latestTx ? formatOverviewDate(latestTx.date) : "No rows",
+      detail: latestTx
+        ? `${latestTx.type} · ${latestTx.account || latestTx.counter}`
+        : "Sync or import transactions to begin.",
+      href: "/transactions",
+      icon: ClipboardList,
+      tone: latestTx ? "neutral" : "warning",
+    },
+  ];
+}
+
+function buildPrimaryOverviewAction(snapshot: OverviewSnapshot) {
+  const status = snapshot.status;
+  if (status?.needsJournals) {
+    return {
+      title: "Process journals",
+      detail: "Refresh tax events and report state before trusting summaries.",
+      href: "/journals",
+      icon: RefreshCw,
+      tone: "warning" as const,
+    };
+  }
+  if ((status?.quarantines ?? 0) > 0) {
+    return {
+      title: "Review quarantines",
+      detail: "Clear missing prices or unsupported semantics first.",
+      href: "/quarantine",
+      icon: ShieldAlert,
+      tone: "alert" as const,
+    };
+  }
+  if (snapshot.connections.some((connection) => connection.status === "error")) {
+    return {
+      title: "Check connections",
+      detail: "One or more sources need attention before the next sync.",
+      href: "/connections",
+      icon: WalletCards,
+      tone: "alert" as const,
+    };
+  }
+  return {
+    title: snapshot.txs.length ? "Open reports" : "Add a connection",
+    detail: snapshot.txs.length
+      ? "Move from overview into the report package for the current book."
+      : "Connect a source or import rows to start the book.",
+    href: snapshot.txs.length ? "/reports" : "/connections",
+    icon: snapshot.txs.length ? FileText : Plus,
+    tone: "good" as const,
+  };
 }
 
 const RecentTransactionsTable = ({
@@ -2442,7 +2642,27 @@ const RecentTransactionsTable = ({
   );
 };
 
-const RecentActivity = ({ className }: { className?: string }) => {
+const healthToneStyles: Record<OverviewHealthTone, string> = {
+  good: "bg-emerald-50 text-emerald-700 ring-emerald-600/20 dark:bg-emerald-900/25 dark:text-emerald-300 dark:ring-emerald-400/20",
+  warning:
+    "bg-amber-50 text-amber-700 ring-amber-600/20 dark:bg-amber-900/25 dark:text-amber-300 dark:ring-amber-400/20",
+  alert:
+    "bg-red-50 text-red-700 ring-red-600/15 dark:bg-red-900/25 dark:text-red-300 dark:ring-red-400/20",
+  neutral:
+    "bg-zinc-50 text-zinc-700 ring-zinc-500/20 dark:bg-zinc-800/70 dark:text-zinc-300 dark:ring-zinc-400/20",
+};
+
+const BooksHealthPanel = ({
+  className,
+  snapshot,
+}: {
+  className?: string;
+  snapshot: OverviewSnapshot;
+}) => {
+  const healthItems = buildOverviewHealthItems(snapshot);
+  const primaryAction = buildPrimaryOverviewAction(snapshot);
+  const PrimaryIcon = primaryAction.icon;
+
   return (
     <div className={cn("rounded-xl border bg-card", className)}>
       <div className="flex items-center justify-between gap-3 px-4 pt-4 sm:px-6">
@@ -2451,35 +2671,82 @@ const RecentActivity = ({ className }: { className?: string }) => {
             variant="outline"
             size="icon"
             className="size-7 shrink-0 sm:size-8"
-            aria-label="Recent activity"
+            aria-label="Books health"
           >
-            <Bell className="size-4 text-muted-foreground sm:size-[18px]" />
+            <CheckCircle2 className="size-4 text-muted-foreground sm:size-[18px]" />
           </Button>
-          <span className="text-sm font-medium sm:text-base">
-            Recent Activity
-          </span>
+          <div>
+            <span className="text-sm font-medium sm:text-base">
+              Books Health
+            </span>
+            <p className="text-[10px] text-muted-foreground sm:text-xs">
+              What needs attention before reports
+            </p>
+          </div>
         </div>
       </div>
 
-      <ScrollArea className="h-[360px] px-4 pt-2 pb-4 text-xs sm:px-6 sm:text-sm">
-        <div className="divide-y">
-          {recentActivity.map((item) => (
-            <div key={`${item.title}-${item.time}`} className="py-3">
-              <div className="flex items-center justify-between gap-3">
-                <span className="font-medium text-foreground">
-                  {item.title}
+      <div className="space-y-3 px-4 pt-3 pb-4 sm:px-6">
+        <Link
+          to={primaryAction.href}
+          className={cn(
+            "group flex items-start gap-3 rounded-lg p-3 ring-1 ring-inset transition-colors hover:bg-muted/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+            healthToneStyles[primaryAction.tone],
+          )}
+        >
+          <span className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-md bg-background/70">
+            <PrimaryIcon className="size-4" aria-hidden="true" />
+          </span>
+          <span className="min-w-0">
+            <span className="block text-sm font-semibold">
+              {primaryAction.title}
+            </span>
+            <span className="mt-0.5 block text-xs leading-5 opacity-80">
+              {primaryAction.detail}
+            </span>
+          </span>
+        </Link>
+
+        <div className="divide-y rounded-lg border bg-background/50">
+          {healthItems.map((item) => {
+            const ItemIcon = item.icon;
+            return (
+              <Link
+                key={item.key}
+                to={item.href}
+                className="group flex items-center gap-3 px-3 py-3 transition-colors first:rounded-t-lg last:rounded-b-lg hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              >
+                <span
+                  className={cn(
+                    "flex size-8 shrink-0 items-center justify-center rounded-md ring-1 ring-inset",
+                    healthToneStyles[item.tone],
+                  )}
+                >
+                  <ItemIcon className="size-4" aria-hidden="true" />
                 </span>
-                <span className="text-[10px] text-muted-foreground sm:text-xs">
-                  {item.time}
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-xs font-medium text-muted-foreground">
+                    {item.title}
+                  </span>
+                  <span className="mt-0.5 block truncate text-sm font-semibold text-foreground">
+                    {item.value}
+                  </span>
                 </span>
-              </div>
-              <span className="text-[10px] text-muted-foreground sm:text-xs">
-                {item.detail}
-              </span>
-            </div>
-          ))}
+                <span className="hidden max-w-[140px] text-right text-[10px] leading-4 text-muted-foreground sm:block">
+                  {item.detail}
+                </span>
+              </Link>
+            );
+          })}
         </div>
-      </ScrollArea>
+
+        <Button asChild variant="ghost" size="sm" className="h-8 w-full">
+          <Link to="/reports">
+            <FileText className="size-4" aria-hidden="true" />
+            Reports
+          </Link>
+        </Button>
+      </div>
     </div>
   );
 };
@@ -2506,10 +2773,7 @@ const Dashboard5 = ({
 
   return (
     <div
-      className={cn(
-        "w-full space-y-4 bg-background p-3 sm:space-y-6 sm:p-4 md:p-6",
-        className,
-      )}
+      className={cn(screenShellClassName, className)}
     >
       <WelcomeSection
         snapshot={snapshot}
@@ -2526,28 +2790,30 @@ const Dashboard5 = ({
         hideSensitive={hideSensitive}
         currency={currency}
       />
-      <div className="flex flex-col gap-4 sm:gap-6 xl:flex-row">
-        <RevenueFlowChart
-          snapshot={snapshot}
-          hideSensitive={hideSensitive}
-          currency={currency}
-        />
-        <SideChartsSection
-          snapshot={snapshot}
-          hideSensitive={hideSensitive}
-          currency={currency}
-        />
-      </div>
-      <div className="flex flex-col gap-4 xl:flex-row">
-        <RecentTransactionsTable
-          className="flex-1"
-          transactions={transactions}
-          hideSensitive={hideSensitive}
-          currency={currency}
-          priceEur={snapshot.priceEur}
-          explorerSettings={explorerSettings}
-        />
-        <RecentActivity className="xl:w-[360px]" />
+      <div className="grid grid-cols-1 items-start gap-3 sm:gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(340px,380px)] 2xl:grid-cols-[minmax(0,1fr)_400px]">
+        <div className="grid min-w-0 gap-3 sm:gap-4">
+          <RevenueFlowChart
+            snapshot={snapshot}
+            hideSensitive={hideSensitive}
+            currency={currency}
+          />
+          <RecentTransactionsTable
+            className="min-w-0"
+            transactions={transactions}
+            hideSensitive={hideSensitive}
+            currency={currency}
+            priceEur={snapshot.priceEur}
+            explorerSettings={explorerSettings}
+          />
+        </div>
+        <div className="grid min-w-0 gap-3 sm:gap-4">
+          <SideChartsSection
+            snapshot={snapshot}
+            hideSensitive={hideSensitive}
+            currency={currency}
+          />
+          <BooksHealthPanel snapshot={snapshot} />
+        </div>
       </div>
     </div>
   );
