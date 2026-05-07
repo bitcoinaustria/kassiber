@@ -95,6 +95,7 @@ import {
 import type { OverviewSnapshot } from "@/mocks/seed";
 import { AssistantSessionProvider } from "@/components/ai/AssistantSessionProvider";
 import type { AssistantReturnPath } from "@/components/ai/assistantSession";
+import kLedgerMarkUrl from "@/assets/k-ledger-mark-transparent.svg";
 import { ScreenAssistantMockup } from "./ScreenAssistantMockup";
 import { PreAlphaBanner } from "./PreAlphaBanner";
 
@@ -1377,10 +1378,12 @@ function AppDashboardHeader({
             sidebarCollapsed ? "w-8 justify-center" : "gap-2 pr-1.5",
           )}
         >
-          <span className="flex aspect-square size-8 shrink-0 items-center justify-center rounded-sm bg-primary">
-            <Wallet
-              className="size-5 text-primary-foreground"
+          <span className="kledger-app-icon size-8 shrink-0">
+            <img
+              src={kLedgerMarkUrl}
+              alt=""
               aria-hidden="true"
+              className="kledger-app-icon__mark"
             />
           </span>
           <span

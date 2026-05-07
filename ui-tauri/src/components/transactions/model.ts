@@ -788,7 +788,23 @@ export function inferredAssetForDraft(draft: NewTransactionDraft) {
   return "BTC";
 }
 
-export function pricingAmountSatsForDraft(draft: NewTransactionDraft) {
+export type PricingDraftField =
+  | "amountSats"
+  | "sendAmountSats"
+  | "receiveAmountSats"
+  | "pricePerBtc"
+  | "totalValue";
+
+export function pricingAmountSatsForDraft(
+  draft: NewTransactionDraft,
+  preferredAmountField?: Extract<
+    PricingDraftField,
+    "amountSats" | "sendAmountSats" | "receiveAmountSats"
+  >,
+): string {
+  if (preferredAmountField) {
+    return draft[preferredAmountField] || pricingAmountSatsForDraft(draft);
+  }
   if (isTwoLegNewTransactionFlow(draft.flow)) {
     return draft.receiveAmountSats || draft.sendAmountSats || draft.amountSats;
   }
@@ -797,21 +813,31 @@ export function pricingAmountSatsForDraft(draft: NewTransactionDraft) {
 
 export function calculateNewTransactionPricing(
   draft: NewTransactionDraft,
-  changed: "amountSats" | "pricePerBtc" | "totalValue",
+  changed: PricingDraftField,
 ): NewTransactionDraft {
-  const btc = btcFromSatsInput(pricingAmountSatsForDraft(draft));
+  const preferredAmountField =
+    changed === "amountSats" ||
+    changed === "sendAmountSats" ||
+    changed === "receiveAmountSats"
+      ? changed
+      : undefined;
+  const btc = btcFromSatsInput(pricingAmountSatsForDraft(draft, preferredAmountField));
   const price = parseManualDecimal(draft.pricePerBtc);
   const total = parseManualDecimal(draft.totalValue);
+  const amountChanged =
+    changed === "amountSats" ||
+    changed === "sendAmountSats" ||
+    changed === "receiveAmountSats";
 
   if (!btc || btc <= 0) return draft;
 
-  if ((changed === "amountSats" || changed === "pricePerBtc") && price !== null) {
+  if ((amountChanged || changed === "pricePerBtc") && price !== null) {
     return {
       ...draft,
       totalValue: formatManualFiat(btc * price),
     };
   }
-  if ((changed === "amountSats" || changed === "totalValue") && total !== null) {
+  if ((amountChanged || changed === "totalValue") && total !== null) {
     return {
       ...draft,
       pricePerBtc: formatManualPrice(total / btc),
