@@ -96,7 +96,10 @@ export interface DisposedLot {
 export interface KennzahlRow {
   code: string;
   label: string;
+  form?: string;
+  formSection?: string;
   amount: number | null;
+  amountEurCents?: number;
   rowCount: number;
   source?: "daemon" | "mock" | "pending";
   note?: string;

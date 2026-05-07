@@ -125,7 +125,11 @@ Current Austrian status:
 - Austrian books process through rp2's `AT` country plugin via the shared RP2 adapter
 - Kassiber keeps normalization, provenance capture, transfer preparation, cross-asset carry wiring, and current disposal-category / Kennzahl mapping
 - Austrian cross-asset `--policy carrying-value` pairs are supported and feed Kassiber's swap-basis-carry path before RP2
-- Austrian E 1kv export is available through `reports austrian-e1kv`, `reports export-austrian-e1kv-pdf`, `reports export-austrian-e1kv-xlsx`, and `reports export-austrian-e1kv-csv`; `reports austrian-tax-summary` and `reports export-austrian` are friendlier aliases for the same annual Austrian handoff
+- Austrian E 1kv export is available through `reports austrian-e1kv`,
+  `reports export-austrian-e1kv-pdf`, `reports export-austrian-e1kv-xlsx`,
+  and `reports export-austrian-e1kv-csv`; `reports austrian-tax-summary` and
+  `reports export-austrian` are friendlier aliases for the same annual Austrian
+  handoff, including outside-E-1kv rows such as KZ 801 when present
 - Austrian output should remain review-gated; Kassiber is not tax advice
 
 The E 1kv export is annual and review-oriented:

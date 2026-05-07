@@ -44,7 +44,20 @@ AUSTRIAN_E1KV_KENNZAHL_LABELS = {
     176: "Auslaendische realisierte Wertverluste",
     801: "Spekulationsgeschaefte Altbestand (outside E 1kv)",
 }
-AUSTRIAN_E1KV_SUPPORTED_KENNZAHL_ORDER = (172, 174, 176, 801)
+AUSTRIAN_E1KV_SUPPORTED_KENNZAHL_ORDER = (172, 174, 176)
+AUSTRIAN_OUTSIDE_E1KV_KENNZAHL_ORDER = (801,)
+AUSTRIAN_KENNZAHL_FORM_BY_CODE = {
+    172: "E 1kv",
+    174: "E 1kv",
+    176: "E 1kv",
+    801: "E 1",
+}
+AUSTRIAN_KENNZAHL_FORM_SECTION_BY_CODE = {
+    172: AUSTRIAN_E1KV_FORM_SECTION,
+    174: AUSTRIAN_E1KV_FORM_SECTION,
+    176: AUSTRIAN_E1KV_FORM_SECTION,
+    801: "E 1 Spekulationsgeschaefte",
+}
 AUSTRIAN_E1KV_CATEGORY_LABELS = {
     "income_general": "Laufende Einkuenfte aus Kryptowaehrungen",
     "income_capital_yield": "Laufende Einkuenfte aus Ueberlassung von Kryptowaehrungen",
@@ -254,11 +267,17 @@ def report_portfolio_summary(conn, workspace_ref, profile_ref, hooks: ReportHook
     return rows
 
 
-def report_capital_gains(conn, workspace_ref, profile_ref, hooks: ReportHooks):
+def report_capital_gains(conn, workspace_ref, profile_ref, hooks: ReportHooks, tax_year=None):
     _, profile = _resolve_report_scope(conn, workspace_ref, profile_ref, hooks)
     hooks.require_processed_journals(conn, profile)
+    where = ["je.profile_id = ?", "je.entry_type IN ('disposal', 'fee', 'transfer_fee', 'income')"]
+    params: list[Any] = [profile["id"]]
+    if tax_year is not None:
+        normalized_year = _normalize_tax_year(tax_year)
+        where.append("substr(je.occurred_at, 1, 4) = ?")
+        params.append(str(normalized_year))
     rows = conn.execute(
-        """
+        f"""
         SELECT
             je.occurred_at,
             w.label AS wallet,
@@ -274,10 +293,10 @@ def report_capital_gains(conn, workspace_ref, profile_ref, hooks: ReportHooks):
             je.at_kennzahl
         FROM journal_entries je
         JOIN wallets w ON w.id = je.wallet_id
-        WHERE je.profile_id = ? AND je.entry_type IN ('disposal', 'fee', 'transfer_fee', 'income')
+        WHERE {' AND '.join(where)}
         ORDER BY je.occurred_at ASC, je.created_at ASC, je.id ASC
         """,
-        (profile["id"],),
+        params,
     ).fetchall()
     results = []
     for row in rows:
@@ -1040,6 +1059,14 @@ def _austrian_e1kv_form_amount(row, kennzahl):
     return Decimal("0")
 
 
+def _austrian_kennzahl_form(kennzahl):
+    return AUSTRIAN_KENNZAHL_FORM_BY_CODE.get(kennzahl, "")
+
+
+def _austrian_kennzahl_form_section(kennzahl):
+    return AUSTRIAN_KENNZAHL_FORM_SECTION_BY_CODE.get(kennzahl, "")
+
+
 def _austrian_e1kv_detail_row(row):
     category = row["at_category"]
     kennzahl = kennzahl_for_disposal_category(category)
@@ -1077,7 +1104,8 @@ def _austrian_e1kv_detail_row(row):
         "holding_period_days": None,
         "kennzahl": kennzahl,
         "stored_kennzahl": row["at_kennzahl"],
-        "form_section": AUSTRIAN_E1KV_FORM_SECTION if kennzahl in {172, 174, 176} else "",
+        "form": _austrian_kennzahl_form(kennzahl),
+        "form_section": _austrian_kennzahl_form_section(kennzahl),
         "note": note,
     }
 
@@ -1149,7 +1177,10 @@ def _austrian_e1kv_summary_rows(rows):
         totals[kennzahl]["amount"] += int(row["form_amount_eur_cents"] or 0)
         totals[kennzahl]["count"] += 1
 
-    codes = list(AUSTRIAN_E1KV_SUPPORTED_KENNZAHL_ORDER)
+    codes = [
+        *AUSTRIAN_E1KV_SUPPORTED_KENNZAHL_ORDER,
+        *AUSTRIAN_OUTSIDE_E1KV_KENNZAHL_ORDER,
+    ]
     for code in sorted(code for code in totals if code not in codes):
         codes.append(code)
 
@@ -1157,6 +1188,8 @@ def _austrian_e1kv_summary_rows(rows):
         {
             "kennzahl": code,
             "label": AUSTRIAN_E1KV_KENNZAHL_LABELS.get(code, ""),
+            "form": _austrian_kennzahl_form(code),
+            "form_section": _austrian_kennzahl_form_section(code),
             "row_count": totals[code]["count"],
             "amount_eur_cents": totals[code]["amount"],
         }
@@ -1168,11 +1201,21 @@ def _austrian_e1kv_kennzahl_totals(summary_rows):
     return {
         str(row["kennzahl"]): {
             "label": row["label"],
+            "form": row.get("form", ""),
+            "form_section": row.get("form_section", ""),
             "row_count": row["row_count"],
             "amount_eur_cents": row["amount_eur_cents"],
         }
         for row in summary_rows
     }
+
+
+def build_austrian_kennzahl_summary(conn, profile, tax_year):
+    _require_austrian_e1kv_profile(profile)
+    normalized_year = _normalize_tax_year(tax_year)
+    return _austrian_e1kv_summary_rows(
+        _austrian_e1kv_rows(conn, profile, normalized_year)
+    )
 
 
 def _austrian_tax_empty_section(section_id):
@@ -1405,6 +1448,18 @@ def _austrian_e1kv_mismatch_table_rows(report):
     ]
 
 
+def _austrian_kennzahl_table_rows(summary_rows):
+    return [
+        [
+            str(row["kennzahl"]),
+            row["label"],
+            _report_count(row["row_count"]),
+            _report_eur_cents(row["amount_eur_cents"]),
+        ]
+        for row in summary_rows
+    ]
+
+
 def report_austrian_e1kv(conn, workspace_ref, profile_ref, hooks: ReportHooks, tax_year=None):
     workspace, profile = _resolve_report_scope(conn, workspace_ref, profile_ref, hooks)
     _require_austrian_e1kv_profile(profile)
@@ -1458,21 +1513,29 @@ def _build_austrian_e1kv_report_lines(conn, workspace_ref, profile_ref, hooks: R
     for assumption in report["assumptions"]:
         lines.append(f"{assumption['code']}: {assumption['message']}")
 
-    lines.extend(["", "FinanzOnline Kennzahlen", "-----------------------"])
+    e1kv_rows = [row for row in report["summary_rows"] if row.get("form") == "E 1kv"]
+    outside_rows = [row for row in report["summary_rows"] if row.get("form") != "E 1kv"]
+    lines.extend(["", "E 1kv Kennzahlen", "-----------------"])
     lines.extend(
         _markdown_table_lines(
             ["KZ", "Description", "Rows", "Amount EUR"],
-            [
-                [
-                    str(row["kennzahl"]),
-                    row["label"],
-                    _report_count(row["row_count"]),
-                    _report_eur_cents(row["amount_eur_cents"]),
-                ]
-                for row in report["summary_rows"]
-            ],
+            _austrian_kennzahl_table_rows(e1kv_rows),
         )
     )
+    if outside_rows:
+        lines.extend(["", "Other Austrian Kennzahlen", "-------------------------"])
+        lines.extend(
+            _markdown_table_lines(
+                ["Form", "KZ", "Description", "Rows", "Amount EUR"],
+                [
+                    [
+                        row.get("form") or "Other",
+                        *_austrian_kennzahl_table_rows([row])[0],
+                    ]
+                    for row in outside_rows
+                ],
+            )
+        )
 
     lines.extend(["", "I. Übersicht", "------------"])
     for entry in _austrian_e1kv_overview_entries(report):

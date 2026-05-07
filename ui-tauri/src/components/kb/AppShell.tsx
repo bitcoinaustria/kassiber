@@ -174,7 +174,6 @@ const NAV_GROUPS: NavGroup[] = [
         icon: Wallet,
         href: "/connections",
         children: [
-          { label: "Connections", icon: Wallet, href: "/connections" },
           { label: "Source of Funds", icon: BadgeCheck, href: "/source-of-funds" },
         ],
       },

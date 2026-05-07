@@ -7,7 +7,7 @@
  */
 
 import { Link } from "@tanstack/react-router";
-import { useState, type ReactNode } from "react";
+import { Fragment, useState, type ReactNode } from "react";
 import {
   AlertTriangle,
   CalendarDays,
@@ -78,21 +78,25 @@ const METHOD_LABELS: Record<CostBasisMethod, { name: string; desc: string }> =
     },
   };
 
-const AUSTRIAN_TAX_FIELD_COPY: Record<string, { label: string; note?: string }> =
-  {
-    "172": { label: "Foreign recurring crypto income" },
-    "174": { label: "Foreign realized crypto gains" },
-    "176": { label: "Foreign realized crypto losses" },
-    "801": {
-      label: "Legacy holdings speculation gains",
-      note: "Outside E 1kv",
-    },
-  };
+const AUSTRIAN_TAX_FIELD_COPY: Record<
+  string,
+  { label: string; form: string; note?: string }
+> = {
+  "172": { label: "Foreign recurring crypto income", form: "E 1kv" },
+  "174": { label: "Foreign realized crypto gains", form: "E 1kv" },
+  "176": { label: "Foreign realized crypto losses", form: "E 1kv" },
+  "801": {
+    label: "Legacy holdings speculation gains",
+    form: "E 1",
+    note: "Outside E 1kv",
+  },
+};
 
 const AUSTRIAN_KENNZAHL_PLACEHOLDER_ROWS: KennzahlRow[] = [
   {
     code: "172",
     label: AUSTRIAN_TAX_FIELD_COPY["172"].label,
+    form: AUSTRIAN_TAX_FIELD_COPY["172"].form,
     amount: null,
     rowCount: 0,
     source: "pending",
@@ -100,6 +104,7 @@ const AUSTRIAN_KENNZAHL_PLACEHOLDER_ROWS: KennzahlRow[] = [
   {
     code: "174",
     label: AUSTRIAN_TAX_FIELD_COPY["174"].label,
+    form: AUSTRIAN_TAX_FIELD_COPY["174"].form,
     amount: null,
     rowCount: 0,
     source: "pending",
@@ -107,6 +112,7 @@ const AUSTRIAN_KENNZAHL_PLACEHOLDER_ROWS: KennzahlRow[] = [
   {
     code: "176",
     label: AUSTRIAN_TAX_FIELD_COPY["176"].label,
+    form: AUSTRIAN_TAX_FIELD_COPY["176"].form,
     amount: null,
     rowCount: 0,
     source: "pending",
@@ -114,6 +120,7 @@ const AUSTRIAN_KENNZAHL_PLACEHOLDER_ROWS: KennzahlRow[] = [
   {
     code: "801",
     label: AUSTRIAN_TAX_FIELD_COPY["801"].label,
+    form: AUSTRIAN_TAX_FIELD_COPY["801"].form,
     amount: null,
     rowCount: 0,
     source: "pending",
@@ -246,7 +253,8 @@ function ReportsView({ report, hideSensitive }: ReportsViewProps) {
           : activeProfileIsAustrian
             ? exportAustrianPdf
             : exportPdf;
-    const args = { year };
+    const args =
+      format === "pdf" && !activeProfileIsAustrian ? {} : { year };
 
     mutation.mutate(args, {
       onSuccess: (envelope) => {
@@ -534,6 +542,20 @@ function KennzahlOverviewPanel({
   const hasMockRows = rows.some((row) => row.source === "mock");
   const hasPendingRows = rows.some((row) => row.source === "pending");
   const sourceLabel = hasPendingRows ? "Pending" : hasMockRows ? "Preview" : "Daemon";
+  const rowGroups = rows.reduce<Array<{ form: string; rows: KennzahlRow[] }>>(
+    (groups, row) => {
+      const fallbackForm = AUSTRIAN_TAX_FIELD_COPY[row.code]?.form ?? "E 1kv";
+      const form = row.form || fallbackForm;
+      const existing = groups.find((group) => group.form === form);
+      if (existing) {
+        existing.rows.push(row);
+      } else {
+        groups.push({ form, rows: [row] });
+      }
+      return groups;
+    },
+    [],
+  );
 
   return (
     <div className="rounded-xl border bg-card">
@@ -567,55 +589,66 @@ function KennzahlOverviewPanel({
       </div>
 
       <div className="grid gap-2 px-4 pb-4 sm:grid-cols-2 sm:px-5">
-        {rows.map((row) => {
-          const displayCopy = AUSTRIAN_TAX_FIELD_COPY[row.code];
-          const displayLabel = displayCopy?.label ?? row.label;
-          const displayNote = displayCopy?.note ?? row.note;
-          const amount = row.amount;
-          const isPending = amount === null;
-          const isEmpty =
-            amount !== null && row.rowCount === 0 && Math.abs(amount) < 0.005;
-          return (
-            <div
-              key={row.code}
-              className={cn(
-                "rounded-lg border bg-background/50 p-3",
-                isEmpty && "text-muted-foreground",
-              )}
-            >
-              <div className="flex items-start justify-between gap-3">
-                <div className="min-w-0">
-                  <div className="flex min-w-0 items-center gap-2">
-                    <Badge variant="outline" className="rounded-md">
-                      Field {row.code}
-                    </Badge>
-                    <span className="text-[10px] text-muted-foreground sm:text-xs">
-                      {row.rowCount} row{row.rowCount === 1 ? "" : "s"}
-                    </span>
-                  </div>
-                  <p className="mt-2 text-xs leading-5 text-muted-foreground">
-                    {displayLabel}
-                  </p>
-                  {displayNote ? (
-                    <p className="mt-1 text-[10px] text-muted-foreground">
-                      {displayNote}
-                    </p>
-                  ) : null}
-                </div>
+        {rowGroups.map((group) => (
+          <Fragment key={group.form}>
+            {rowGroups.length > 1 ? (
+              <div className="pt-1 text-[10px] font-medium tracking-wide text-muted-foreground uppercase sm:col-span-2">
+                {group.form === "E 1kv"
+                  ? "E 1kv filing fields"
+                  : `${group.form} fields outside E 1kv`}
+              </div>
+            ) : null}
+            {group.rows.map((row) => {
+              const displayCopy = AUSTRIAN_TAX_FIELD_COPY[row.code];
+              const displayLabel = displayCopy?.label ?? row.label;
+              const displayNote = displayCopy?.note ?? row.note;
+              const amount = row.amount;
+              const isPending = amount === null;
+              const isEmpty =
+                amount !== null && row.rowCount === 0 && Math.abs(amount) < 0.005;
+              return (
                 <div
+                  key={row.code}
                   className={cn(
-                    "shrink-0 text-right text-sm font-semibold tabular-nums",
-                    blurClass(hideSensitive),
+                    "rounded-lg border bg-background/50 p-3",
+                    isEmpty && "text-muted-foreground",
                   )}
                 >
-                  {isPending
-                    ? "—"
-                    : formatMoney(jurisdiction.ccy, amount, formatNumber)}
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <div className="flex min-w-0 items-center gap-2">
+                        <Badge variant="outline" className="rounded-md">
+                          Field {row.code}
+                        </Badge>
+                        <span className="text-[10px] text-muted-foreground sm:text-xs">
+                          {row.rowCount} row{row.rowCount === 1 ? "" : "s"}
+                        </span>
+                      </div>
+                      <p className="mt-2 text-xs leading-5 text-muted-foreground">
+                        {displayLabel}
+                      </p>
+                      {displayNote ? (
+                        <p className="mt-1 text-[10px] text-muted-foreground">
+                          {displayNote}
+                        </p>
+                      ) : null}
+                    </div>
+                    <div
+                      className={cn(
+                        "shrink-0 text-right text-sm font-semibold tabular-nums",
+                        blurClass(hideSensitive),
+                      )}
+                    >
+                      {isPending
+                        ? "—"
+                        : formatMoney(jurisdiction.ccy, amount, formatNumber)}
+                    </div>
+                  </div>
                 </div>
-              </div>
-            </div>
-          );
-        })}
+              );
+            })}
+          </Fragment>
+        ))}
       </div>
     </div>
   );
@@ -705,7 +738,7 @@ function ReportFilesPanel({
             id="csv"
             icon={FileArchive}
             title="Capital gains CSV"
-            detail="UTF-8 rows for spreadsheet review"
+            detail={`${year} · UTF-8 rows for spreadsheet review`}
             loading={activeExport === "csv"}
             disabled={Boolean(activeExport)}
             onExport={onExport}

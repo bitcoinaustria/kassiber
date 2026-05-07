@@ -991,6 +991,7 @@ def _capital_gains_available_years(conn: sqlite3.Connection, profile_id: str) ->
         SELECT DISTINCT substr(occurred_at, 1, 4) AS year
         FROM journal_entries
         WHERE profile_id = ?
+          AND (entry_type = 'disposal' OR at_kennzahl IS NOT NULL)
           AND occurred_at IS NOT NULL
           AND length(occurred_at) >= 4
         ORDER BY year DESC
@@ -1013,13 +1014,19 @@ def _austrian_kennzahl_snapshot_rows(
     if str(profile["tax_country"] or "").lower() != "at":
         return []
 
-    rows = report_builders._austrian_e1kv_rows(conn, profile, tax_year)
-    summary_rows = report_builders._austrian_e1kv_summary_rows(rows)
+    summary_rows = report_builders.build_austrian_kennzahl_summary(
+        conn,
+        profile,
+        tax_year,
+    )
     return [
         {
             "code": str(row["kennzahl"]),
             "label": row["label"],
+            "form": row.get("form", ""),
+            "formSection": row.get("form_section", ""),
             "amount": int(row["amount_eur_cents"] or 0) / 100,
+            "amountEurCents": int(row["amount_eur_cents"] or 0),
             "rowCount": int(row["row_count"] or 0),
             "source": "daemon",
         }

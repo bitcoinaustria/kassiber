@@ -543,6 +543,206 @@ class ReviewRegressionTest(unittest.TestCase):
         self.assertEqual(transactions["txs"][1]["amountSat"], 100_000_000)
         self.assertEqual(transactions["txs"][1]["eur"], 50_000)
 
+    def test_capital_gains_snapshot_uses_latest_reportable_year_and_forms(self):
+        conn = open_db(self.data_root)
+        self.addCleanup(conn.close)
+        now = "2026-01-01T00:00:00Z"
+        conn.execute(
+            "INSERT INTO workspaces(id, label, created_at) VALUES(?, ?, ?)",
+            ("ws-at-years", "Main", now),
+        )
+        conn.execute(
+            """
+            INSERT INTO profiles(
+                id, workspace_id, label, fiat_currency, tax_country,
+                tax_long_term_days, gains_algorithm, last_processed_at,
+                last_processed_tx_count, created_at
+            ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                "pf-at-years",
+                "ws-at-years",
+                "Default",
+                "EUR",
+                "at",
+                365,
+                "moving_average_at",
+                "2026-01-01T01:00:00Z",
+                2,
+                now,
+            ),
+        )
+        conn.execute(
+            """
+            INSERT INTO wallets(
+                id, workspace_id, profile_id, label, kind, config_json, created_at
+            ) VALUES(?, ?, ?, ?, ?, ?, ?)
+            """,
+            ("wal-at-years", "ws-at-years", "pf-at-years", "Cold", "address", "{}", now),
+        )
+        conn.executemany(
+            """
+            INSERT INTO transactions(
+                id, workspace_id, profile_id, wallet_id, external_id, fingerprint,
+                occurred_at, confirmed_at, direction, asset, amount, fee,
+                fiat_currency, fiat_rate, fiat_value, fiat_price_source, kind,
+                description, counterparty, note, excluded, raw_json, created_at
+            ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            [
+                (
+                    "tx-alt-sale",
+                    "ws-at-years",
+                    "pf-at-years",
+                    "wal-at-years",
+                    "alt-sale",
+                    "fp-alt-sale",
+                    "2024-06-01T12:00:00Z",
+                    "2024-06-01T12:05:00Z",
+                    "outbound",
+                    "BTC",
+                    -btc_to_msat("0.1"),
+                    0,
+                    "EUR",
+                    1_400,
+                    140,
+                    "import",
+                    "sell",
+                    "Legacy sale",
+                    None,
+                    None,
+                    0,
+                    "{}",
+                    "2024-06-01T12:00:00Z",
+                ),
+                (
+                    "tx-transfer-only",
+                    "ws-at-years",
+                    "pf-at-years",
+                    "wal-at-years",
+                    "transfer-only",
+                    "fp-transfer-only",
+                    "2025-02-01T12:00:00Z",
+                    "2025-02-01T12:05:00Z",
+                    "outbound",
+                    "BTC",
+                    -btc_to_msat("0.01"),
+                    0,
+                    "EUR",
+                    1_500,
+                    15,
+                    "import",
+                    "transfer",
+                    "Transfer only",
+                    None,
+                    None,
+                    0,
+                    "{}",
+                    "2025-02-01T12:00:00Z",
+                ),
+            ],
+        )
+        conn.executemany(
+            """
+            INSERT INTO journal_entries(
+                id, workspace_id, profile_id, transaction_id, wallet_id,
+                occurred_at, entry_type, asset, quantity, fiat_value, unit_cost,
+                cost_basis, proceeds, gain_loss, description, at_category,
+                at_kennzahl, created_at
+            ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            [
+                (
+                    "je-alt-sale",
+                    "ws-at-years",
+                    "pf-at-years",
+                    "tx-alt-sale",
+                    "wal-at-years",
+                    "2024-06-01T12:00:00Z",
+                    "disposal",
+                    "BTC",
+                    -btc_to_msat("0.1"),
+                    -140,
+                    1_000,
+                    100,
+                    140,
+                    40,
+                    "Legacy sale",
+                    "alt_spekulation",
+                    801,
+                    "2024-06-01T12:00:00Z",
+                ),
+                (
+                    "je-transfer-only",
+                    "ws-at-years",
+                    "pf-at-years",
+                    "tx-transfer-only",
+                    "wal-at-years",
+                    "2025-02-01T12:00:00Z",
+                    "transfer_fee",
+                    "BTC",
+                    -btc_to_msat("0.01"),
+                    -15,
+                    1_500,
+                    10,
+                    15,
+                    5,
+                    "Transfer only",
+                    None,
+                    None,
+                    "2025-02-01T12:00:00Z",
+                ),
+            ],
+        )
+        set_setting(conn, "context_workspace", "ws-at-years")
+        set_setting(conn, "context_profile", "pf-at-years")
+        conn.commit()
+
+        snapshot = build_capital_gains_snapshot(conn)
+        self.assertEqual(snapshot["year"], 2024)
+        self.assertEqual(snapshot["availableYears"], [2024])
+        self.assertEqual(len(snapshot["lots"]), 1)
+        snapshot_rows = {row["code"]: row for row in snapshot["kennzahlRows"]}
+        self.assertEqual(snapshot_rows["801"]["amountEurCents"], 4_000)
+        self.assertEqual(snapshot_rows["801"]["form"], "E 1")
+        self.assertEqual(snapshot_rows["801"]["formSection"], "E 1 Spekulationsgeschaefte")
+
+        payload, result = self._run_json(
+            "reports",
+            "austrian-e1kv",
+            "--workspace",
+            "Main",
+            "--profile",
+            "Default",
+            "--year",
+            "2024",
+        )
+        self._assert_ok(payload, result, "reports.austrian-e1kv")
+        report = payload["data"]
+        summary_by_kennzahl = {row["kennzahl"]: row for row in report["summary_rows"]}
+        self.assertEqual(summary_by_kennzahl[801]["amount_eur_cents"], 4_000)
+        self.assertEqual(summary_by_kennzahl[801]["form"], "E 1")
+        self.assertEqual(summary_by_kennzahl[801]["form_section"], "E 1 Spekulationsgeschaefte")
+        self.assertEqual(report["kennzahl_totals"]["801"]["form"], "E 1")
+        self.assertEqual(report["rows"][0]["form"], "E 1")
+
+        plain_result = self._run_cli(
+            "--format",
+            "plain",
+            "reports",
+            "austrian-e1kv",
+            "--workspace",
+            "Main",
+            "--profile",
+            "Default",
+            "--year",
+            "2024",
+        )
+        self.assertEqual(plain_result.returncode, 0, msg=plain_result.stderr)
+        self.assertIn("E 1kv Kennzahlen", plain_result.stdout)
+        self.assertIn("Other Austrian Kennzahlen", plain_result.stdout)
+        self.assertIn("| E 1 | 801 |", plain_result.stdout)
+
     def _bootstrap_runtime_state(self, *, env_file=None, persist_bootstrap=False):
         args = Namespace(
             data_root=str(self.data_root),
@@ -5840,7 +6040,10 @@ class ReviewRegressionTest(unittest.TestCase):
         self.assertEqual(summary_by_kennzahl[174]["amount_eur_cents"], 1000)
         self.assertEqual(summary_by_kennzahl[176]["amount_eur_cents"], 0)
         self.assertEqual(summary_by_kennzahl[801]["amount_eur_cents"], 0)
+        self.assertEqual(summary_by_kennzahl[172]["form"], "E 1kv")
+        self.assertEqual(summary_by_kennzahl[801]["form"], "E 1")
         self.assertEqual(report["kennzahl_totals"]["172"]["amount_eur_cents"], 800)
+        self.assertEqual(report["kennzahl_totals"]["801"]["form"], "E 1")
         self.assertIn("2.1", report["sections"])
         self.assertEqual(report["sections"]["2.1"]["totals"]["amount_eur_cents"], 800)
         self.assertEqual(report["sections"]["3.3"]["status"], "not_modelled")
@@ -5876,6 +6079,8 @@ class ReviewRegressionTest(unittest.TestCase):
         self.assertEqual(snapshot_rows["176"]["amount"], 0.0)
         self.assertEqual(snapshot_rows["801"]["amount"], 0.0)
         self.assertEqual(snapshot_rows["172"]["source"], "daemon")
+        self.assertEqual(snapshot_rows["172"]["form"], "E 1kv")
+        self.assertEqual(snapshot_rows["801"]["form"], "E 1")
 
         payload, result = self._run_json(
             "reports", "austrian-tax-summary",
