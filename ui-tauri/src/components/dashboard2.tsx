@@ -2,27 +2,21 @@ import {
   ArrowDownRight,
   ArrowLeftRight,
   ArrowUpRight,
-  CheckCircle2,
   ChevronLeft,
   ChevronRight,
   ChevronsLeft,
   ChevronsRight,
-  Clock,
   Copy,
   Eye,
   ExternalLink,
   Filter,
   MoreHorizontal,
   Pencil,
-  Plus,
   RefreshCw,
-  RotateCcw,
   Search,
   ShieldAlert,
-  ShoppingCart,
   Wallet,
   X,
-  XCircle,
 } from "lucide-react";
 import * as React from "react";
 import {
@@ -34,10 +28,9 @@ import {
   YAxis,
 } from "recharts";
 
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { type ChartConfig, ChartContainer } from "@/components/ui/chart";
-import { openExternalUrl } from "@/daemon/transport";
 import {
   DropdownMenu,
   DropdownMenuCheckboxItem,
@@ -55,10 +48,8 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import {
   Select,
   SelectContent,
@@ -76,42 +67,54 @@ import {
 } from "@/components/ui/table";
 import { cn } from "@/lib/utils";
 import { formatBtc, useCurrency, type Currency } from "@/lib/currency";
-import {
-  explorerTargetForTransaction,
-  type ExplorerSettings,
-  type ExplorerTarget,
-} from "@/lib/explorer";
+import { type ExplorerSettings } from "@/lib/explorer";
 import { CurrencyToggleText } from "@/components/kb/CurrencyToggleText";
 import { useWalletSyncAction } from "@/hooks/useWalletSyncAction";
 import {
   MOCK_TRANSACTIONS,
   type TransactionsList,
 } from "@/mocks/transactions";
-import type { Tx } from "@/mocks/seed";
+import { type Tx } from "@/mocks/seed";
 import { useUiStore } from "@/store/ui";
-
-type TransactionStatus = "completed" | "pending" | "failed" | "review";
-
-type TransactionDirection = "Receive" | "Send" | "Transfer";
-
-type TransactionFlow = "incoming" | "outgoing" | "transfer" | "swap";
-
-type Transaction = {
-  id: string;
-  txnId: string;
-  explorerId?: string;
-  amount: number;
-  amountBtc?: number;
-  counterparty: string;
-  counterpartyInitials: string;
-  direction: TransactionDirection;
-  flow?: TransactionFlow;
-  wallet?: string;
-  tag?: string;
-  paymentMethod: "On-chain" | "Exchange" | "Lightning" | "Liquid";
-  date: string;
-  status: TransactionStatus;
-};
+import {
+  ExplorerOpenDialog,
+  NewTransactionDialog,
+  TransactionDetailSheet,
+  allPaymentMethods,
+  allTransactionFlows,
+  allTransactionStatuses,
+  austrianTaxClassificationFor,
+  blurClass,
+  compactCurrencyFormatter,
+  copyText,
+  createNewTransactionDraft,
+  currencyFormatter,
+  draftForTransaction,
+  explorerForTransaction,
+  formatCounterDisplayMoney,
+  formatDisplayMoney,
+  formatInlineBtc,
+  formatShortTxid,
+  formatSignedDisplayMoney,
+  mockNewTransactionWalletSourceOptions,
+  pricingSelectionValue,
+  pricingSourceLabel,
+  pricingSourceStyles,
+  SATS_PER_BTC,
+  transactionBtc,
+  transactionFlow,
+  transactionFlowLabels,
+  transactionFlowStyles,
+  transactionStatusIcons,
+  transactionStatusLabels,
+  transactionStatusStyles,
+  type NewTransactionDraft,
+  type Transaction,
+  type TransactionDirection,
+  type TransactionEditDraft,
+  type TransactionFlow,
+  type TransactionStatus,
+} from "@/components/transactions";
 
 type PeriodKey = "ytd" | "30days" | "3months" | "1year" | "5years";
 
@@ -135,50 +138,12 @@ type SwapCandidate = {
   btc: number;
 };
 
-const currencyFormatter = new Intl.NumberFormat("en-US", {
-  style: "currency",
-  currency: "EUR",
-});
-
-const compactCurrencyFormatter = new Intl.NumberFormat("en-US", {
-  style: "currency",
-  currency: "EUR",
-  notation: "compact",
-  maximumFractionDigits: 0,
-});
-
-const blurClass = (hidden: boolean) => (hidden ? "sensitive" : "");
-
-function formatInlineBtc(btc: number, precision = 8) {
-  return `₿${Math.abs(btc).toFixed(precision)}`;
-}
-
-function formatDisplayMoney(eur: number, btc: number, currency: Currency) {
-  if (currency === "btc") return formatInlineBtc(btc);
-  return currencyFormatter.format(eur);
-}
-
-function formatShortTxid(txid: string) {
-  if (txid.length <= 18) return txid;
-  return `${txid.slice(0, 10)}...${txid.slice(-6)}`;
-}
-
-function transactionBtc(txn: Transaction) {
-  return txn.amountBtc ?? 0;
-}
-
-function transactionFlow(txn: Transaction): TransactionFlow {
-  if (txn.flow) return txn.flow;
-  if (txn.tag?.toLowerCase().includes("swap")) return "swap";
-  if (txn.direction === "Transfer") return "transfer";
-  return txn.direction === "Receive" ? "incoming" : "outgoing";
-}
-
 const flowColors: Record<TransactionFlow, string> = {
   incoming: "oklch(0.56 0.16 150)",
   outgoing: "oklch(0.58 0.2 27)",
   transfer: "oklch(0.56 0.04 260)",
   swap: "oklch(0.62 0.16 246)",
+  "layer-transition": "oklch(0.65 0.11 185)",
 };
 
 const flowChartConfig = {
@@ -784,14 +749,20 @@ function toDashboardTransaction(tx: Tx, index: number): Transaction {
     id: tx.id,
     txnId: tx.externalId || tx.id || `TX-${index + 1}`,
     explorerId: tx.explorerId || undefined,
-    amount: Math.abs(tx.eur || (tx.amountSat / 100_000_000) * tx.rate),
-    amountBtc: Math.abs(tx.amountSat / 100_000_000),
+    amount: Math.abs(tx.eur || (tx.amountSat / SATS_PER_BTC) * tx.rate),
+    amountBtc: Math.abs(tx.amountSat / SATS_PER_BTC),
+    feeBtc: tx.feeSat ? Math.abs(tx.feeSat / SATS_PER_BTC) : 0,
+    feeEur: tx.feeSat ? Math.abs((tx.feeSat / SATS_PER_BTC) * tx.rate) : 0,
+    asset: "BTC",
+    rate: tx.rate,
+    note: tx.note,
     counterparty: tx.counter || tx.account || "Unassigned",
     counterpartyInitials: initials(tx.counter || tx.account || "TX"),
     direction,
     flow,
     wallet: tx.account || "Unassigned wallet",
     tag,
+    sourceType: tx.type,
     paymentMethod,
     date: tx.date,
     status: tag.toLowerCase().includes("review") ? "review" : status,
@@ -824,6 +795,48 @@ const periodKeys: PeriodKey[] = [
   "1year",
   "5years",
 ];
+
+function normalizePeriodParam(value: string | null): PeriodKey | null {
+  if (!value) return null;
+  const normalized = value.toLowerCase().replace(/[\s_-]/g, "");
+  if (normalized === "30days" || normalized === "30day" || normalized === "30d") {
+    return "30days";
+  }
+  if (
+    normalized === "3months" ||
+    normalized === "3month" ||
+    normalized === "3mos" ||
+    normalized === "3mo" ||
+    normalized === "3m"
+  ) {
+    return "3months";
+  }
+  if (normalized === "ytd") return "ytd";
+  if (
+    normalized === "1year" ||
+    normalized === "1years" ||
+    normalized === "1yr" ||
+    normalized === "1y"
+  ) {
+    return "1year";
+  }
+  if (
+    normalized === "5years" ||
+    normalized === "5year" ||
+    normalized === "5yrs" ||
+    normalized === "5yr" ||
+    normalized === "5y"
+  ) {
+    return "5years";
+  }
+  return null;
+}
+
+function initialPeriodFromUrl(): PeriodKey {
+  if (typeof window === "undefined") return "1year";
+  const params = new URLSearchParams(window.location.search);
+  return normalizePeriodParam(params.get("period")) ?? "1year";
+}
 
 function periodLimit(period: PeriodKey) {
   if (period === "30days") return 10;
@@ -1110,7 +1123,9 @@ function buildFlowChartRows(
     const flow = candidateIds.has(txn.id) ? "swap" : transactionFlow(txn);
     if (flow === "incoming") row.incoming += value;
     if (flow === "outgoing") row.outgoing += value;
-    if (flow === "transfer") row.transfers += value;
+    if (flow === "transfer" || flow === "layer-transition") {
+      row.transfers += value;
+    }
     if (flow === "swap") row.swaps += value;
     grouped.set(bucket.key, row);
   }
@@ -1193,20 +1208,13 @@ const TransactionWorkbench = ({
   records,
   hideSensitive,
   currency,
-  explorerSettings,
 }: {
   period: PeriodKey;
   records: Transaction[];
   hideSensitive: boolean;
   currency: Currency;
-  explorerSettings: ExplorerSettings;
 }) => {
   const [swapDialogOpen, setSwapDialogOpen] = React.useState(false);
-  const [largestExplorerTransaction, setLargestExplorerTransaction] =
-    React.useState<Transaction | null>(null);
-  const largestExplorerTarget = largestExplorerTransaction
-    ? explorerForTransaction(largestExplorerTransaction, explorerSettings)
-    : null;
   const swapCandidates = buildSwapCandidates(records);
   const swapCandidateIds = new Set(
     swapCandidates.flatMap((candidate) => [
@@ -1238,18 +1246,14 @@ const TransactionWorkbench = ({
   const pendingCount = records.filter((txn) => txn.status === "pending").length;
   const failedCount = records.filter((txn) => txn.status === "failed").length;
   const withoutExplorer = records.filter((txn) => !txn.explorerId).length;
+  const missingPriceCount = records.filter((txn) => !txn.rate).length;
   const chartRows = buildFlowChartRows(records, period, currency, swapCandidateIds);
+  const activeChartRows = chartRows.filter((row) => flowPointTotal(row) > 0);
+  const visibleChartRows = activeChartRows.length ? activeChartRows : chartRows;
   const networkRows = buildBreakdown(records, (txn) => txn.paymentMethod);
   const walletRows = buildBreakdown(records, (txn) => txn.wallet ?? "Unassigned");
   const maxNetworkValue = Math.max(...networkRows.map((row) => row.eur), 1);
   const maxWalletValue = Math.max(...walletRows.map((row) => row.eur), 1);
-  const largest = records.reduce<Transaction | null>(
-    (current, txn) => (!current || txn.amount > current.amount ? txn : current),
-    null,
-  );
-  const largestExplorer = largest
-    ? explorerForTransaction(largest, explorerSettings)
-    : null;
   const metricCards = [
     {
       label: "Incoming",
@@ -1307,14 +1311,15 @@ const TransactionWorkbench = ({
   ];
 
   return (
-    <section className="rounded-xl border bg-card">
-      <div className="grid grid-cols-2 border-b md:grid-cols-3 xl:grid-cols-6">
+    <>
+      <section className="grid grid-cols-2 overflow-hidden rounded-xl border bg-card md:grid-cols-3 xl:grid-cols-6">
         {metricCards.map((metric, index) => {
           const Icon = metric.icon;
           const className = cn(
-            "min-w-0 space-y-2 p-3 text-left sm:p-4",
-            index > 0 && "border-l",
-            index === 3 && "md:border-l-0 xl:border-l",
+            "min-w-0 space-y-2 border-b p-3 text-left sm:p-4",
+            index % 2 === 1 && "border-l",
+            index % 3 === 0 ? "md:border-l-0" : "md:border-l",
+            index > 0 ? "xl:border-l" : "xl:border-l-0",
             metric.onClick &&
               "w-full cursor-pointer transition-colors hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
           );
@@ -1365,7 +1370,130 @@ const TransactionWorkbench = ({
             </div>
           );
         })}
-      </div>
+
+        <div className="col-span-2 border-b p-3 sm:p-4 md:col-span-3 xl:col-span-4 xl:border-b-0">
+          <div className="mb-3 flex items-center justify-between gap-3">
+            <div>
+              <h2 className="text-sm font-semibold">
+                Flow by active {flowBucketLabel(period)}
+              </h2>
+              <p className="text-xs text-muted-foreground">
+                {records.length} tx across {activeChartRows.length} active{" "}
+                {activeChartRows.length === 1
+                  ? flowBucketLabel(period)
+                  : `${flowBucketLabel(period)}s`}
+              </p>
+            </div>
+            <div className="flex flex-wrap justify-end gap-x-3 gap-y-1 text-[10px] text-muted-foreground sm:text-xs">
+              {[
+                ["incoming", "Incoming"],
+                ["outgoing", "Outgoing"],
+                ["transfer", "Transfers"],
+                ["swap", "Swaps"],
+              ].map(([flow, label]) => (
+                <span key={flow} className="inline-flex items-center gap-1.5">
+                  <span
+                    className="size-2.5 rounded-sm"
+                    style={{ backgroundColor: flowColors[flow as TransactionFlow] }}
+                    aria-hidden="true"
+                  />
+                  {label}
+                </span>
+              ))}
+            </div>
+          </div>
+          <div className="h-[185px] min-w-0">
+            <ChartContainer config={flowChartConfig} className="h-full w-full">
+              <BarChart data={visibleChartRows}>
+                <CartesianGrid strokeDasharray="0" vertical={false} />
+                <XAxis
+                  dataKey="date"
+                  axisLine={false}
+                  tickLine={false}
+                  tick={{ fontSize: 10 }}
+                  dy={8}
+                />
+                <YAxis
+                  axisLine={false}
+                  tickLine={false}
+                  tick={{ fontSize: 10 }}
+                  width={56}
+                  tickFormatter={(value) =>
+                    hideSensitive
+                      ? ""
+                      : currency === "btc"
+                        ? formatInlineBtc(Number(value), 4)
+                        : compactCurrencyFormatter.format(value)
+                  }
+                />
+                <Tooltip
+                  cursor={{ fillOpacity: 0.05 }}
+                  content={
+                    <FlowTooltip
+                      hideSensitive={hideSensitive}
+                      currency={currency}
+                    />
+                  }
+                />
+                <Bar
+                  dataKey="incoming"
+                  fill={flowColors.incoming}
+                  radius={[2, 2, 0, 0]}
+                />
+                <Bar
+                  dataKey="outgoing"
+                  fill={flowColors.outgoing}
+                  radius={[2, 2, 0, 0]}
+                />
+                <Bar
+                  dataKey="transfers"
+                  fill={flowColors.transfer}
+                  radius={[2, 2, 0, 0]}
+                />
+                <Bar
+                  dataKey="swaps"
+                  fill={flowColors.swap}
+                  radius={[2, 2, 0, 0]}
+                />
+              </BarChart>
+            </ChartContainer>
+          </div>
+        </div>
+
+        <div className="col-span-2 grid gap-0 sm:grid-cols-2 md:col-span-3 xl:col-span-2 xl:grid-cols-1 xl:border-l">
+          <BreakdownPanel
+            title="Network mix"
+            rows={networkRows}
+            maxValue={maxNetworkValue}
+            currency={currency}
+            hideSensitive={hideSensitive}
+          />
+          <BreakdownPanel
+            title="Wallet/source mix"
+            rows={walletRows.slice(0, 4)}
+            maxValue={maxWalletValue}
+            currency={currency}
+            hideSensitive={hideSensitive}
+          />
+          <div className="border-t p-3 sm:col-span-2 lg:col-span-1 sm:p-4">
+            <h3 className="mb-2 text-sm font-semibold">Data quality</h3>
+            <div className="divide-y text-xs">
+              <QualityRow label="No explorer id" value={withoutExplorer} />
+              <QualityRow label="Missing price" value={missingPriceCount} />
+              <QualityRow label="Failed import" value={failedCount} />
+              <QualityRow
+                label="Swap candidates"
+                value={swapCandidateTotals.count}
+                onClick={
+                  swapCandidateTotals.count > 0
+                    ? () => setSwapDialogOpen(true)
+                    : undefined
+                }
+              />
+            </div>
+          </div>
+        </div>
+      </section>
 
       <Dialog open={swapDialogOpen} onOpenChange={setSwapDialogOpen}>
         <DialogContent className="sm:max-w-2xl">
@@ -1424,181 +1552,7 @@ const TransactionWorkbench = ({
         </DialogContent>
       </Dialog>
 
-      <div className="grid gap-0 lg:grid-cols-[minmax(0,1.35fr)_minmax(300px,0.65fr)]">
-        <div className="border-b p-3 lg:border-r lg:border-b-0 sm:p-4">
-          <div className="mb-3 flex items-center justify-between gap-3">
-            <div>
-              <h2 className="text-sm font-semibold">
-                Flow by {flowBucketLabel(period)}
-              </h2>
-              <p className="text-xs text-muted-foreground">
-                Incoming, outgoing, transfers, and swaps by {flowBucketLabel(period)}.
-              </p>
-            </div>
-            <div className="flex flex-wrap justify-end gap-x-3 gap-y-1 text-[10px] text-muted-foreground sm:text-xs">
-              {[
-                ["incoming", "Incoming"],
-                ["outgoing", "Outgoing"],
-                ["transfer", "Transfers"],
-                ["swap", "Swaps"],
-              ].map(([flow, label]) => (
-                <span key={flow} className="inline-flex items-center gap-1.5">
-                  <span
-                    className="size-2.5 rounded-sm"
-                    style={{ backgroundColor: flowColors[flow as TransactionFlow] }}
-                    aria-hidden="true"
-                  />
-                  {label}
-                </span>
-              ))}
-            </div>
-          </div>
-          <div className="h-[190px] min-w-0">
-            <ChartContainer config={flowChartConfig} className="h-full w-full">
-              <BarChart data={chartRows}>
-                <CartesianGrid strokeDasharray="0" vertical={false} />
-                <XAxis
-                  dataKey="date"
-                  axisLine={false}
-                  tickLine={false}
-                  tick={{ fontSize: 10 }}
-                  dy={8}
-                />
-                <YAxis
-                  axisLine={false}
-                  tickLine={false}
-                  tick={{ fontSize: 10 }}
-                  width={56}
-                  tickFormatter={(value) =>
-                    hideSensitive
-                      ? ""
-                      : currency === "btc"
-                        ? formatInlineBtc(Number(value), 4)
-                        : compactCurrencyFormatter.format(value)
-                  }
-                />
-                <Tooltip
-                  cursor={{ fillOpacity: 0.05 }}
-                  content={
-                    <FlowTooltip
-                      hideSensitive={hideSensitive}
-                      currency={currency}
-                    />
-                  }
-                />
-                <Bar
-                  dataKey="incoming"
-                  fill={flowColors.incoming}
-                  radius={[2, 2, 0, 0]}
-                />
-                <Bar
-                  dataKey="outgoing"
-                  fill={flowColors.outgoing}
-                  radius={[2, 2, 0, 0]}
-                />
-                <Bar
-                  dataKey="transfers"
-                  fill={flowColors.transfer}
-                  radius={[2, 2, 0, 0]}
-                />
-                <Bar
-                  dataKey="swaps"
-                  fill={flowColors.swap}
-                  radius={[2, 2, 0, 0]}
-                />
-              </BarChart>
-            </ChartContainer>
-          </div>
-        </div>
-
-        <div className="grid gap-0 sm:grid-cols-2 lg:grid-cols-1">
-          <BreakdownPanel
-            title="Network mix"
-            rows={networkRows}
-            maxValue={maxNetworkValue}
-            currency={currency}
-            hideSensitive={hideSensitive}
-          />
-          <BreakdownPanel
-            title="Wallet/source mix"
-            rows={walletRows.slice(0, 4)}
-            maxValue={maxWalletValue}
-            currency={currency}
-            hideSensitive={hideSensitive}
-          />
-          <div className="border-t p-3 sm:col-span-2 lg:col-span-1 sm:p-4">
-            <h3 className="mb-3 text-sm font-semibold">Accounting checks</h3>
-            <div className="grid grid-cols-2 gap-2 text-xs">
-              <CheckPill label="Needs review" value={reviewCount} />
-              <CheckPill label="Pending conf." value={pendingCount} />
-              <CheckPill
-                label="Swap candidates"
-                value={swapCandidateTotals.count}
-                onClick={
-                  swapCandidateTotals.count > 0
-                    ? () => setSwapDialogOpen(true)
-                    : undefined
-                }
-              />
-              <CheckPill label="No explorer id" value={withoutExplorer} />
-            </div>
-            {largest ? (
-              <button
-                type="button"
-                className={cn(
-                  "mt-3 w-full rounded-lg border bg-background p-2 text-left text-xs",
-                  largestExplorer &&
-                    "cursor-pointer transition-colors hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
-                )}
-                onClick={() => {
-                  if (largestExplorer) {
-                    setLargestExplorerTransaction(largest);
-                  }
-                }}
-                disabled={!largestExplorer}
-                title={
-                  largestExplorer
-                    ? `Open ${largest.txnId} on ${largestExplorer.label}`
-                    : undefined
-                }
-              >
-                <div className="text-muted-foreground">Largest transaction</div>
-                <div className="mt-1 flex items-start justify-between gap-2">
-                  <div className="min-w-0">
-                    <div className="flex min-w-0 items-center gap-1 font-mono font-medium">
-                      <span className="truncate">
-                        {formatShortTxid(largest.txnId)}
-                      </span>
-                      {largestExplorer ? (
-                        <ExternalLink
-                          className="size-3 shrink-0 text-muted-foreground"
-                          aria-hidden="true"
-                        />
-                      ) : null}
-                    </div>
-                    <div className="mt-0.5 truncate text-muted-foreground">
-                      {largest.wallet} · {largest.paymentMethod} · {largest.date}
-                    </div>
-                  </div>
-                  <span className={cn("font-semibold", blurClass(hideSensitive))}>
-                    {formatDisplayMoney(
-                      largest.amount,
-                      transactionBtc(largest),
-                      currency,
-                    )}
-                  </span>
-                </div>
-              </button>
-            ) : null}
-          </div>
-        </div>
-      </div>
-      <ExplorerOpenDialog
-        transaction={largestExplorerTransaction}
-        target={largestExplorerTarget}
-        onTransactionChange={setLargestExplorerTransaction}
-      />
-    </section>
+    </>
   );
 };
 
@@ -1710,6 +1664,19 @@ function FlowTooltip({
   );
 }
 
+function flowPointEntries(row: FlowChartPoint) {
+  return [
+    ["incoming", row.incoming],
+    ["outgoing", row.outgoing],
+    ["transfer", row.transfers],
+    ["swap", row.swaps],
+  ] as const;
+}
+
+function flowPointTotal(row: FlowChartPoint) {
+  return flowPointEntries(row).reduce((sum, [, value]) => sum + value, 0);
+}
+
 function BreakdownPanel({
   title,
   rows,
@@ -1724,7 +1691,7 @@ function BreakdownPanel({
   hideSensitive: boolean;
 }) {
   return (
-    <div className="border-t p-3 first:border-t-0 sm:p-4 lg:first:border-t">
+    <div className="border-t p-3 first:border-t-0 sm:p-4">
       <h3 className="mb-3 text-sm font-semibold">{title}</h3>
       <div className="space-y-2.5">
         {rows.map((row) => (
@@ -1751,7 +1718,7 @@ function BreakdownPanel({
   );
 }
 
-function CheckPill({
+function QualityRow({
   label,
   value,
   onClick,
@@ -1760,22 +1727,18 @@ function CheckPill({
   value: number;
   onClick?: () => void;
 }) {
+  const tone = value > 0 ? "text-amber-600" : "text-emerald-600";
   const className = cn(
-    "rounded-lg border bg-background p-2 text-left",
+    "flex w-full items-center justify-between gap-3 py-2 text-left",
     onClick &&
-      "w-full cursor-pointer transition-colors hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
+      "cursor-pointer rounded-md px-1 transition-colors hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
   );
   const content = (
     <>
-      <div className="text-muted-foreground">{label}</div>
-      <div
-        className={cn(
-          "mt-1 text-lg font-semibold",
-          value > 0 ? "text-amber-600" : "text-emerald-600",
-        )}
-      >
+      <span className="text-muted-foreground">{label}</span>
+      <span className={cn("font-semibold tabular-nums", tone)}>
         {value}
-      </div>
+      </span>
     </>
   );
   return onClick ? (
@@ -1784,189 +1747,6 @@ function CheckPill({
     </button>
   ) : (
     <div className={className}>{content}</div>
-  );
-}
-
-const transactionStatusStyles: Record<TransactionStatus, string> = {
-  completed:
-    "bg-emerald-50 text-emerald-700 ring-1 ring-inset ring-emerald-600/20 dark:bg-emerald-900/30 dark:text-emerald-400 dark:ring-emerald-400/20",
-  pending:
-    "bg-amber-50 text-amber-700 ring-1 ring-inset ring-amber-600/20 dark:bg-amber-900/30 dark:text-amber-400 dark:ring-amber-400/20",
-  failed:
-    "bg-red-50 text-red-700 ring-1 ring-inset ring-red-600/20 dark:bg-red-900/30 dark:text-red-400 dark:ring-red-400/20",
-  review:
-    "bg-blue-50 text-blue-700 ring-1 ring-inset ring-blue-700/10 dark:bg-blue-900/30 dark:text-blue-400 dark:ring-blue-400/20",
-};
-
-const transactionStatusIcons: Record<
-  TransactionStatus,
-  React.ComponentType<React.SVGProps<SVGSVGElement>>
-> = {
-  completed: CheckCircle2,
-  pending: Clock,
-  failed: XCircle,
-  review: RotateCcw,
-};
-
-const transactionStatusLabels: Record<TransactionStatus, string> = {
-  completed: "Confirmed",
-  pending: "Pending",
-  failed: "Failed",
-  review: "Needs review",
-};
-
-const allTransactionStatuses: TransactionStatus[] = [
-  "completed",
-  "pending",
-  "failed",
-  "review",
-];
-
-const allPaymentMethods = [
-  "On-chain",
-  "Exchange",
-  "Lightning",
-  "Liquid",
-] as const;
-
-const transactionFlowLabels: Record<TransactionFlow, string> = {
-  incoming: "Incoming",
-  outgoing: "Outgoing",
-  transfer: "Transfer",
-  swap: "Swap",
-};
-
-const transactionFlowStyles: Record<TransactionFlow, string> = {
-  incoming:
-    "border-emerald-600/20 bg-emerald-50 text-emerald-700 dark:bg-emerald-900/25 dark:text-emerald-300",
-  outgoing:
-    "border-red-600/20 bg-red-50 text-red-700 dark:bg-red-900/25 dark:text-red-300",
-  transfer:
-    "border-zinc-500/20 bg-zinc-50 text-zinc-700 dark:bg-zinc-800/70 dark:text-zinc-300",
-  swap:
-    "border-sky-600/20 bg-sky-50 text-sky-700 dark:bg-sky-900/25 dark:text-sky-300",
-};
-
-const allTransactionFlows: TransactionFlow[] = [
-  "incoming",
-  "outgoing",
-  "transfer",
-  "swap",
-];
-
-function explorerForTransaction(
-  txn: Transaction,
-  settings: ExplorerSettings,
-) {
-  if (txn.paymentMethod === "Liquid") {
-    return explorerTargetForTransaction({
-      txid: txn.explorerId,
-      network: "liquid",
-      settings,
-    });
-  }
-  if (txn.paymentMethod === "On-chain") {
-    return explorerTargetForTransaction({
-      txid: txn.explorerId,
-      network: "bitcoin",
-      settings,
-    });
-  }
-  return null;
-}
-
-function explorerOpenErrorMessage(error: unknown) {
-  if (error instanceof Error && error.message) return error.message;
-  if (typeof error === "string" && error) return error;
-  return "Could not open explorer in the default browser.";
-}
-
-function ExplorerOpenDialog({
-  transaction,
-  target,
-  onTransactionChange,
-}: {
-  transaction: Transaction | null;
-  target: ExplorerTarget | null;
-  onTransactionChange: (transaction: Transaction | null) => void;
-}) {
-  const [openError, setOpenError] = React.useState<string | null>(null);
-  const [opening, setOpening] = React.useState(false);
-
-  React.useEffect(() => {
-    if (!transaction) {
-      setOpenError(null);
-    }
-  }, [transaction]);
-
-  const openExplorer = async () => {
-    if (!target) return;
-    setOpenError(null);
-    setOpening(true);
-    try {
-      await openExternalUrl(target.url);
-      onTransactionChange(null);
-    } catch (error) {
-      setOpenError(explorerOpenErrorMessage(error));
-    } finally {
-      setOpening(false);
-    }
-  };
-
-  return (
-    <Dialog
-      open={Boolean(transaction)}
-      onOpenChange={(open) => {
-        if (!open) {
-          onTransactionChange(null);
-        }
-      }}
-    >
-      <DialogContent className="sm:max-w-lg">
-        <DialogHeader>
-          <div className="mb-2 flex size-10 items-center justify-center rounded-full bg-amber-100 text-amber-700 dark:bg-amber-950/50 dark:text-amber-300">
-            <ShieldAlert className="size-5" aria-hidden="true" />
-          </div>
-          <DialogTitle>Open transaction in a browser?</DialogTitle>
-          <DialogDescription>
-            This opens {target?.label ?? "a public explorer"} outside Kassiber.
-            The explorer can see your IP address and the transaction id you
-            request.
-          </DialogDescription>
-        </DialogHeader>
-        {transaction && target ? (
-          <div className="rounded-md border bg-muted/35 p-3 text-sm">
-            <p className="font-medium">{transaction.txnId}</p>
-            <p className="mt-1 break-all font-mono text-xs text-muted-foreground">
-              {target.url}
-            </p>
-          </div>
-        ) : null}
-        {openError ? (
-          <p
-            role="alert"
-            className="rounded-md border border-destructive/25 bg-destructive/10 px-3 py-2 text-sm text-destructive"
-          >
-            {openError}
-          </p>
-        ) : null}
-        <DialogFooter>
-          <DialogClose asChild>
-            <Button type="button" variant="outline">
-              Cancel
-            </Button>
-          </DialogClose>
-          <Button
-            type="button"
-            disabled={!target || opening}
-            onClick={() => void openExplorer()}
-          >
-            <ExternalLink className="size-4" aria-hidden="true" />
-            {opening ? "Opening..." : "Open explorer"}
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
   );
 }
 
@@ -1980,6 +1760,55 @@ const dateFilterOptions = [
 
 const filterChipClassName =
   "inline-flex h-5 cursor-pointer items-center gap-1 rounded-md bg-gray-50 px-2 text-[10px] font-medium text-gray-600 ring-1 ring-inset ring-gray-500/10 sm:h-6 sm:text-xs dark:bg-gray-800/50 dark:text-gray-400 dark:ring-gray-400/20";
+
+const detailTabValues = ["details", "classify", "pricing", "tax", "ledger"] as const;
+
+function readTransactionDetailParams() {
+  if (typeof window === "undefined") return { transactionId: null, tab: "details" };
+  const params = new URLSearchParams(window.location.search);
+  const tab = params.get("tab");
+  return {
+    transactionId:
+      params.get("tx") ?? params.get("transaction") ?? params.get("transactionId"),
+    tab: detailTabValues.includes(tab as (typeof detailTabValues)[number])
+      ? tab ?? "details"
+      : "details",
+  };
+}
+
+function updateTransactionDetailParams(
+  transactionId: string | null,
+  tab = "details",
+) {
+  if (typeof window === "undefined") return;
+  const params = new URLSearchParams(window.location.search);
+  if (transactionId) {
+    params.set("tx", transactionId);
+    if (tab !== "details") {
+      params.set("tab", tab);
+    } else {
+      params.delete("tab");
+    }
+  } else {
+    params.delete("tx");
+    params.delete("transaction");
+    params.delete("transactionId");
+    params.delete("tab");
+  }
+  const nextQuery = params.toString();
+  window.history.replaceState(
+    null,
+    "",
+    nextQuery ? `${window.location.pathname}?${nextQuery}` : window.location.pathname,
+  );
+}
+
+function matchesTransactionDeepLink(txn: Transaction, transactionId: string) {
+  const target = transactionId.trim().toLowerCase();
+  return [txn.id, txn.txnId, txn.explorerId]
+    .filter(Boolean)
+    .some((value) => value?.toLowerCase() === target);
+}
 
 const TransactionsTable = ({
   records,
@@ -2005,6 +1834,13 @@ const TransactionsTable = ({
   const [isHydrated, setIsHydrated] = React.useState(false);
   const [explorerTransaction, setExplorerTransaction] =
     React.useState<Transaction | null>(null);
+  const [detailTransaction, setDetailTransaction] =
+    React.useState<Transaction | null>(null);
+  const [detailInitialTab, setDetailInitialTab] = React.useState("details");
+  const pendingDetailLinkRef = React.useRef(readTransactionDetailParams());
+  const [drafts, setDrafts] = React.useState<Record<string, TransactionEditDraft>>(
+    {},
+  );
   const explorerTarget = explorerTransaction
     ? explorerForTransaction(explorerTransaction, explorerSettings)
     : null;
@@ -2012,6 +1848,19 @@ const TransactionsTable = ({
     (txn: Transaction): TransactionFlow =>
       swapCandidateIds.has(txn.id) ? "swap" : transactionFlow(txn),
     [swapCandidateIds],
+  );
+  const getDraft = React.useCallback(
+    (txn: Transaction) => drafts[txn.id] ?? draftForTransaction(txn),
+    [drafts],
+  );
+
+  const openTransactionDetail = React.useCallback(
+    (txn: Transaction, tab = "details") => {
+      setDetailInitialTab(tab);
+      setDetailTransaction(txn);
+      updateTransactionDetailParams(txn.id, tab);
+    },
+    [],
   );
 
   const hasActiveFilters =
@@ -2085,18 +1934,32 @@ const TransactionsTable = ({
     setIsHydrated(true);
   }, []);
 
+  React.useEffect(() => {
+    const pending = pendingDetailLinkRef.current;
+    if (!pending.transactionId) return;
+    const transaction = records.find((txn) =>
+      matchesTransactionDeepLink(txn, pending.transactionId ?? ""),
+    );
+    if (!transaction) return;
+    pendingDetailLinkRef.current = { transactionId: null, tab: "details" };
+    openTransactionDetail(transaction, pending.tab);
+  }, [records, openTransactionDetail]);
+
   const filteredTransactions = React.useMemo(() => {
     const query = searchQuery.toLowerCase();
     return records.filter((txn) => {
+      const draft = getDraft(txn);
       const matchesSearch =
         txn.txnId.toLowerCase().includes(query) ||
         txn.counterparty.toLowerCase().includes(query) ||
         (txn.wallet ?? "").toLowerCase().includes(query) ||
-        (txn.tag ?? "").toLowerCase().includes(query) ||
+        (draft.label ?? "").toLowerCase().includes(query) ||
+        draft.tags.join(" ").toLowerCase().includes(query) ||
+        (draft.note ?? "").toLowerCase().includes(query) ||
         txn.paymentMethod.toLowerCase().includes(query);
 
       const matchesStatus =
-        statusFilter === "all" || txn.status === statusFilter;
+        statusFilter === "all" || draft.reviewStatus === statusFilter;
 
       const matchesFlow =
         flowFilter === "all" || displayFlow(txn) === flowFilter;
@@ -2138,6 +2001,7 @@ const TransactionsTable = ({
     });
   }, [
     records,
+    getDraft,
     searchQuery,
     statusFilter,
     dateFilter,
@@ -2235,15 +2099,7 @@ const TransactionsTable = ({
     <>
       <div className="rounded-xl border bg-card">
       <div className="flex flex-col gap-3 p-3 sm:flex-row sm:items-center sm:gap-4 sm:px-6 sm:py-3.5">
-        <div className="flex flex-1 items-center gap-2 sm:gap-2.5">
-          <Button
-            variant="outline"
-            size="icon"
-            className="size-7 shrink-0 sm:size-8"
-            aria-label="Transactions"
-          >
-            <ShoppingCart className="size-4 text-muted-foreground sm:size-[18px]" />
-          </Button>
+        <div className="flex flex-1 items-center gap-2">
           <span className="text-sm font-medium sm:text-base">Transactions</span>
           <span className="ml-1 inline-flex items-center rounded-md bg-gray-50 px-2 py-1 text-[10px] font-medium text-gray-600 ring-1 ring-gray-500/10 ring-inset sm:text-xs dark:bg-gray-800/50 dark:text-gray-400 dark:ring-gray-400/20">
             {filteredTransactions.length}
@@ -2465,26 +2321,23 @@ const TransactionsTable = ({
       )}
 
       <div className="overflow-x-auto px-3 pb-3 sm:px-6 sm:pb-4">
-        <Table>
+        <Table className="min-w-[980px]">
           <TableHeader>
             <TableRow className="bg-muted/50 hover:bg-muted/50">
-              <TableHead className="min-w-[100px] text-xs font-medium text-muted-foreground sm:text-sm">
-                Transaction ID
+              <TableHead className="min-w-[280px] text-xs font-medium text-muted-foreground sm:text-sm">
+                Transaction
               </TableHead>
-              <TableHead className="hidden min-w-[140px] text-xs font-medium text-muted-foreground sm:text-sm md:table-cell">
-                Wallet/source
-              </TableHead>
-              <TableHead className="min-w-[100px] text-xs font-medium text-muted-foreground sm:text-sm">
+              <TableHead className="min-w-[140px] text-right text-xs font-medium text-muted-foreground sm:text-sm">
                 Amount
               </TableHead>
-              <TableHead className="hidden min-w-[100px] text-xs font-medium text-muted-foreground sm:text-sm lg:table-cell">
-                Flow
+              <TableHead className="hidden min-w-[190px] text-xs font-medium text-muted-foreground sm:text-sm md:table-cell">
+                Accounting
               </TableHead>
-              <TableHead className="hidden min-w-[120px] text-xs font-medium text-muted-foreground sm:text-sm md:table-cell">
+              <TableHead className="hidden min-w-[150px] text-xs font-medium text-muted-foreground sm:text-sm lg:table-cell">
+                Pricing
+              </TableHead>
+              <TableHead className="hidden min-w-[150px] text-xs font-medium text-muted-foreground sm:text-sm xl:table-cell">
                 Network
-              </TableHead>
-              <TableHead className="hidden text-xs font-medium text-muted-foreground sm:table-cell sm:text-sm">
-                Date
               </TableHead>
               <TableHead className="min-w-[100px] text-xs font-medium text-muted-foreground sm:text-sm">
                 Status
@@ -2496,7 +2349,7 @@ const TransactionsTable = ({
             {paginatedTransactions.length === 0 ? (
               <TableRow>
                 <TableCell
-                  colSpan={8}
+                  colSpan={7}
                   className="h-24 text-center text-sm text-muted-foreground"
                 >
                   No transactions found matching your filters.
@@ -2504,105 +2357,220 @@ const TransactionsTable = ({
               </TableRow>
             ) : (
               paginatedTransactions.map((txn) => {
-                const StatusIcon = transactionStatusIcons[txn.status];
+                const draft = getDraft(txn);
+                const rowTaxClassification = austrianTaxClassificationFor(
+                  draft.atRegime,
+                  draft.atCategory,
+                );
+                const rowPricingValue = pricingSelectionValue(
+                  draft.pricingSourceKind,
+                  draft.pricingQuality,
+                );
+                const StatusIcon = transactionStatusIcons[draft.reviewStatus];
                 const explorer = explorerForTransaction(txn, explorerSettings);
                 const flow = displayFlow(txn);
+                const tagPreview = draft.tags;
+                const amountBtc = transactionBtc(txn);
+                const signedAmountBtc =
+                  flow === "outgoing" ? -amountBtc : amountBtc;
+                const signedAmountEur =
+                  flow === "outgoing" ? -txn.amount : txn.amount;
+                const primaryAmount =
+                  flow === "incoming" || flow === "outgoing"
+                    ? formatSignedDisplayMoney(
+                        signedAmountEur,
+                        signedAmountBtc,
+                        currency,
+                      )
+                    : formatDisplayMoney(txn.amount, amountBtc, currency);
+                const FlowIcon =
+                  flow === "incoming"
+                    ? ArrowDownRight
+                    : flow === "outgoing"
+                      ? ArrowUpRight
+                      : ArrowLeftRight;
+                const amountTone =
+                  flow === "incoming"
+                    ? "text-emerald-700 dark:text-emerald-300"
+                    : flow === "outgoing"
+                      ? "text-red-700 dark:text-red-300"
+                      : "text-muted-foreground";
                 return (
-                  <TableRow key={txn.id}>
-                    <TableCell
-                      className={cn(
-                        "text-xs font-medium sm:text-sm",
-                        blurClass(hideSensitive),
-                      )}
-                    >
-                      {explorer ? (
-                        <button
-                          type="button"
-                          className="inline-flex max-w-[28ch] items-center gap-1 truncate font-mono text-left underline-offset-4 hover:underline"
-                          title={`Open ${txn.txnId} on ${explorer.label}`}
-                          onClick={() => {
-                            setExplorerTransaction(txn);
-                          }}
+                  <TableRow
+                    key={txn.id}
+                    className="cursor-pointer align-top hover:bg-muted/35"
+                    onClick={() => openTransactionDetail(txn)}
+                  >
+                    <TableCell className="min-w-[280px]">
+                      <div className="flex min-w-0 items-start gap-3">
+                        <span
+                          className={cn(
+                            "mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-md border",
+                            transactionFlowStyles[flow],
+                          )}
+                          aria-hidden="true"
                         >
-                          <span className="truncate">{txn.txnId}</span>
-                          <ExternalLink
-                            className="size-3 shrink-0 text-muted-foreground"
-                            aria-hidden="true"
-                          />
-                        </button>
-                      ) : (
-                        <span className="font-mono">{txn.txnId}</span>
-                      )}
-                    </TableCell>
-                    <TableCell className="hidden md:table-cell">
-                      <div className="flex items-center gap-2">
-                        <Avatar className="size-6 bg-muted">
-                          <AvatarFallback className="text-[8px] font-semibold text-muted-foreground uppercase">
-                            {initials(txn.wallet || txn.counterparty || "TX")}
-                          </AvatarFallback>
-                        </Avatar>
+                          <FlowIcon className="size-4" />
+                        </span>
                         <div className="min-w-0">
-                          <p
-                            className={cn(
-                              "truncate text-xs text-foreground sm:text-sm",
-                              blurClass(hideSensitive),
+                          <div className="flex min-w-0 flex-wrap items-center gap-1.5">
+                            <span
+                              className={cn(
+                                "truncate text-sm font-medium text-foreground",
+                                blurClass(hideSensitive),
+                              )}
+                            >
+                              {txn.counterparty}
+                            </span>
+                            <Badge variant="secondary" className="rounded-md">
+                              {draft.label}
+                            </Badge>
+                          </div>
+                          <div className="mt-1 flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-1 text-[10px] text-muted-foreground sm:text-xs">
+                            <span
+                              className={cn("truncate", blurClass(hideSensitive))}
+                            >
+                              {txn.wallet || txn.paymentMethod}
+                            </span>
+                            <span aria-hidden="true">·</span>
+                            <span>{txn.date}</span>
+                            <span aria-hidden="true">·</span>
+                            {explorer ? (
+                              <button
+                                type="button"
+                                className={cn(
+                                  "inline-flex max-w-[20ch] items-center gap-1 truncate font-mono text-left underline-offset-4 hover:underline",
+                                  blurClass(hideSensitive),
+                                )}
+                                title={`Open ${txn.txnId} on ${explorer.label}`}
+                                onClick={(event) => {
+                                  event.stopPropagation();
+                                  setExplorerTransaction(txn);
+                                }}
+                              >
+                                <span className="truncate">
+                                  {formatShortTxid(txn.txnId)}
+                                </span>
+                                <ExternalLink
+                                  className="size-3 shrink-0 text-muted-foreground"
+                                  aria-hidden="true"
+                                />
+                              </button>
+                            ) : (
+                              <span
+                                className={cn(
+                                  "truncate font-mono",
+                                  blurClass(hideSensitive),
+                                )}
+                              >
+                                {formatShortTxid(txn.txnId)}
+                              </span>
                             )}
-                          >
-                            {txn.wallet || txn.counterparty}
-                          </p>
-                          <p
-                            className={cn(
-                              "truncate text-[10px] text-muted-foreground sm:text-xs",
-                              blurClass(hideSensitive),
-                            )}
-                          >
-                            {txn.counterparty}
-                          </p>
+                          </div>
                         </div>
                       </div>
                     </TableCell>
-                    <TableCell
-                      className={cn(
-                        "text-xs text-foreground tabular-nums sm:text-sm",
-                        blurClass(hideSensitive),
-                      )}
-                    >
-                      <CurrencyToggleText>
-                        {formatDisplayMoney(
+                    <TableCell className="min-w-[140px] text-right">
+                      <CurrencyToggleText
+                        className={cn(
+                          "text-sm font-semibold tabular-nums",
+                          amountTone,
+                          blurClass(hideSensitive),
+                        )}
+                      >
+                        {primaryAmount}
+                      </CurrencyToggleText>
+                      <div
+                        className={cn(
+                          "mt-1 text-[10px] text-muted-foreground tabular-nums sm:text-xs",
+                          blurClass(hideSensitive),
+                        )}
+                      >
+                        {formatCounterDisplayMoney(
                           txn.amount,
-                          transactionBtc(txn),
+                          amountBtc,
                           currency,
                         )}
-                      </CurrencyToggleText>
+                      </div>
+                    </TableCell>
+                    <TableCell className="hidden md:table-cell">
+                      <div className="flex max-w-[210px] flex-wrap gap-1">
+                        {tagPreview.slice(0, 2).map((tag) => (
+                          <Badge
+                            key={tag}
+                            variant="outline"
+                            className={cn("rounded-md", blurClass(hideSensitive))}
+                          >
+                            {tag}
+                          </Badge>
+                        ))}
+                        {tagPreview.length > 2 && (
+                          <Badge variant="outline" className="rounded-md">
+                            +{tagPreview.length - 2}
+                          </Badge>
+                        )}
+                      </div>
+                      <p className="mt-1 truncate text-[10px] text-muted-foreground sm:text-xs">
+                        {rowTaxClassification.shortLabel}
+                      </p>
                     </TableCell>
                     <TableCell className="hidden lg:table-cell">
                       <span
                         className={cn(
-                          "inline-flex items-center rounded-md border px-2 py-0.5 text-[10px] font-normal sm:text-xs",
-                          transactionFlowStyles[flow],
+                          "inline-flex items-center rounded-md px-2 py-1 text-[10px] font-medium sm:text-xs",
+                          pricingSourceStyles[rowPricingValue],
                         )}
                       >
-                        {transactionFlowLabels[flow]}
+                        {pricingSourceLabel(
+                          draft.pricingSourceKind,
+                          draft.pricingQuality,
+                        )}
                       </span>
+                      <p
+                        className={cn(
+                          "mt-1 truncate text-[10px] text-muted-foreground sm:text-xs",
+                          blurClass(hideSensitive),
+                        )}
+                      >
+                        {draft.pricingSourceKind === "manual_override"
+                          ? `${draft.manualCurrency} ${draft.manualValue || "value pending"}`
+                          : txn.rate
+                            ? `${currencyFormatter.format(txn.rate)} / BTC`
+                            : "Awaiting price"}
+                      </p>
                     </TableCell>
-                    <TableCell className="hidden md:table-cell">
-                      <span className="inline-flex items-center rounded-md border px-2 py-0.5 text-[10px] font-normal text-muted-foreground sm:text-xs">
-                        {txn.paymentMethod}
-                      </span>
+                    <TableCell className="hidden xl:table-cell">
+                      <div className="flex flex-wrap gap-1">
+                        <span
+                          className={cn(
+                            "inline-flex items-center rounded-md border px-2 py-0.5 text-[10px] font-normal sm:text-xs",
+                            transactionFlowStyles[flow],
+                          )}
+                        >
+                          {transactionFlowLabels[flow]}
+                        </span>
+                        <span className="inline-flex items-center rounded-md border px-2 py-0.5 text-[10px] font-normal text-muted-foreground sm:text-xs">
+                          {txn.paymentMethod}
+                        </span>
+                      </div>
                     </TableCell>
-                    <TableCell className="hidden text-xs text-muted-foreground sm:table-cell sm:text-sm">
-                      {txn.date}
-                    </TableCell>
-                    <TableCell>
+                    <TableCell className="min-w-[120px]">
                       <span
                         className={cn(
                           "inline-flex items-center gap-1 rounded-md px-2 py-1 text-[10px] font-medium sm:text-xs",
-                          transactionStatusStyles[txn.status],
+                          transactionStatusStyles[draft.reviewStatus],
                         )}
                       >
                         <StatusIcon className="size-3" aria-hidden="true" />
-                        {transactionStatusLabels[txn.status]}
+                        {transactionStatusLabels[draft.reviewStatus]}
                       </span>
+                      <p className="mt-1 hidden text-[10px] text-muted-foreground sm:block sm:text-xs">
+                        {draft.excluded
+                          ? "Excluded"
+                          : draft.taxable
+                            ? "Taxable"
+                            : "Not taxable"}
+                      </p>
                     </TableCell>
                     <TableCell>
                       <DropdownMenu>
@@ -2612,25 +2580,30 @@ const TransactionsTable = ({
                             size="icon"
                             className="size-7 text-muted-foreground hover:text-foreground sm:size-8"
                             aria-label={`Open actions for ${txn.txnId}`}
+                            onClick={(event) => event.stopPropagation()}
                           >
                             <MoreHorizontal className="size-3.5 sm:size-4" />
                           </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
-                          <DropdownMenuItem>
+                          <DropdownMenuItem onSelect={() => openTransactionDetail(txn)}>
                             <Eye className="mr-2 size-4" aria-hidden="true" />
                             View Details
                           </DropdownMenuItem>
-                          <DropdownMenuItem>
+                          <DropdownMenuItem
+                            onSelect={() => openTransactionDetail(txn, "classify")}
+                          >
                             <Pencil
                               className="mr-2 size-4"
                               aria-hidden="true"
                             />
-                            Edit Metadata
+                            Classify
                           </DropdownMenuItem>
-                          <DropdownMenuItem>
+                          <DropdownMenuItem
+                            onSelect={() => copyText(txn.explorerId ?? txn.txnId)}
+                          >
                             <Copy className="mr-2 size-4" aria-hidden="true" />
-                            Duplicate
+                            Copy ID
                           </DropdownMenuItem>
                           <DropdownMenuSeparator />
                           <DropdownMenuItem
@@ -2763,6 +2736,27 @@ const TransactionsTable = ({
         target={explorerTarget}
         onTransactionChange={setExplorerTransaction}
       />
+      <TransactionDetailSheet
+        transaction={detailTransaction}
+        draft={detailTransaction ? getDraft(detailTransaction) : null}
+        initialTab={detailInitialTab}
+        hideSensitive={hideSensitive}
+        currency={currency}
+        explorerSettings={explorerSettings}
+        onOpenChange={(open) => {
+          if (!open) {
+            setDetailTransaction(null);
+            updateTransactionDetailParams(null);
+          }
+        }}
+        onOpenExplorer={(transaction) => setExplorerTransaction(transaction)}
+        onSave={(transactionId, draft) =>
+          setDrafts((current) => ({
+            ...current,
+            [transactionId]: draft,
+          }))
+        }
+      />
     </>
   );
 };
@@ -2774,9 +2768,10 @@ const Dashboard2 = ({
   className?: string;
   transactions?: TransactionsList;
 }) => {
-  const [period, setPeriod] = React.useState<PeriodKey>("1year");
+  const [period, setPeriod] = React.useState<PeriodKey>(initialPeriodFromUrl);
   const [newTxnOpen, setNewTxnOpen] = React.useState(false);
-  const [txnNote, setTxnNote] = React.useState("");
+  const [newTransactionDraft, setNewTransactionDraft] =
+    React.useState<NewTransactionDraft>(createNewTransactionDraft);
   const hideSensitive = useUiStore((s) => s.hideSensitive);
   const explorerSettings = useUiStore((s) => s.explorerSettings);
   const currency = useCurrency();
@@ -2806,20 +2801,7 @@ const Dashboard2 = ({
   React.useEffect(() => {
     if (typeof window === "undefined") return;
     const params = new URLSearchParams(window.location.search);
-    const nextPeriod = params.get("period");
-    if (periodKeys.includes(nextPeriod as PeriodKey)) {
-      setPeriod(nextPeriod as PeriodKey);
-    }
-  }, []);
-
-  React.useEffect(() => {
-    if (typeof window === "undefined") return;
-    const params = new URLSearchParams(window.location.search);
-    if (period !== "1year") {
-      params.set("period", period);
-    } else {
-      params.delete("period");
-    }
+    params.set("period", period);
     const nextQuery = params.toString();
     const nextUrl = nextQuery
       ? `${window.location.pathname}?${nextQuery}`
@@ -2853,57 +2835,16 @@ const Dashboard2 = ({
               {isSyncing ? "Syncing" : "Sync"}
             </span>
           </Button>
-          <Dialog open={newTxnOpen} onOpenChange={setNewTxnOpen}>
-            <DialogTrigger asChild>
-              <Button
-                size="sm"
-                className="h-8 gap-2 sm:h-9"
-                aria-label="New transaction"
-              >
-                <Plus className="size-4" aria-hidden="true" />
-                <span className="hidden sm:inline">New transaction</span>
-              </Button>
-            </DialogTrigger>
-            <DialogContent className="sm:max-w-md">
-              <DialogHeader>
-                <DialogTitle>Record a transaction</DialogTitle>
-                <DialogDescription>
-                  Capture a quick note for your close checklist. This demo does
-                  not persist data.
-                </DialogDescription>
-              </DialogHeader>
-              <div className="grid gap-4 py-2">
-                <div className="grid gap-2">
-                  <Label htmlFor="dashboard2-txn-note">Description</Label>
-                  <Input
-                    id="dashboard2-txn-note"
-                    name="txn-note"
-                    value={txnNote}
-                    onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
-                      setTxnNote(e.target.value)
-                    }
-                    placeholder="e.g. Wire — Q1 tax payment"
-                  />
-                </div>
-              </div>
-              <DialogFooter>
-                <DialogClose asChild>
-                  <Button type="button" variant="outline">
-                    Cancel
-                  </Button>
-                </DialogClose>
-                <Button
-                  type="button"
-                  onClick={() => {
-                    setNewTxnOpen(false);
-                    setTxnNote("");
-                  }}
-                >
-                  Save draft
-                </Button>
-              </DialogFooter>
-            </DialogContent>
-          </Dialog>
+          <NewTransactionDialog
+            open={newTxnOpen}
+            draft={newTransactionDraft}
+            walletSourceOptions={mockNewTransactionWalletSourceOptions}
+            onOpenChange={setNewTxnOpen}
+            onDraftChange={setNewTransactionDraft}
+            onSaveDraft={() => {
+              setNewTxnOpen(false);
+            }}
+          />
         </div>
       </div>
 
@@ -2912,7 +2853,6 @@ const Dashboard2 = ({
         records={periodRecords}
         hideSensitive={hideSensitive}
         currency={currency}
-        explorerSettings={explorerSettings}
       />
 
       <TransactionsTable
