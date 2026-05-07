@@ -985,13 +985,24 @@ def _snapshot_year(rows: list[sqlite3.Row]) -> int:
     return datetime.now(timezone.utc).year
 
 
-def _capital_gains_available_years(conn: sqlite3.Connection, profile_id: str) -> list[int]:
+def _capital_gains_available_years(
+    conn: sqlite3.Connection,
+    profile_id: str,
+    *,
+    primary_only: bool = False,
+) -> list[int]:
+    reportable_filter = (
+        "(entry_type = 'disposal' OR at_kennzahl IS NOT NULL)"
+        if primary_only
+        else "(entry_type IN ('disposal', 'income', 'fee', 'transfer_fee') "
+        "OR at_kennzahl IS NOT NULL)"
+    )
     rows = conn.execute(
-        """
+        f"""
         SELECT DISTINCT substr(occurred_at, 1, 4) AS year
         FROM journal_entries
         WHERE profile_id = ?
-          AND (entry_type = 'disposal' OR at_kennzahl IS NOT NULL)
+          AND {reportable_filter}
           AND occurred_at IS NOT NULL
           AND length(occurred_at) >= 4
         ORDER BY year DESC
@@ -1097,7 +1108,17 @@ def build_capital_gains_snapshot(conn: sqlite3.Connection) -> dict[str, Any]:
         (profile["id"],),
     ).fetchall()
     available_years = _capital_gains_available_years(conn, profile["id"])
-    latest_year = available_years[0] if available_years else _snapshot_year(rows)
+    primary_years = _capital_gains_available_years(
+        conn,
+        profile["id"],
+        primary_only=True,
+    )
+    if primary_years:
+        latest_year = primary_years[0]
+    elif available_years:
+        latest_year = available_years[0]
+    else:
+        latest_year = _snapshot_year(rows)
     if latest_year not in available_years:
         available_years = [latest_year, *available_years]
     lots = [

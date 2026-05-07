@@ -700,7 +700,7 @@ class ReviewRegressionTest(unittest.TestCase):
 
         snapshot = build_capital_gains_snapshot(conn)
         self.assertEqual(snapshot["year"], 2024)
-        self.assertEqual(snapshot["availableYears"], [2024])
+        self.assertEqual(snapshot["availableYears"], [2025, 2024])
         self.assertEqual(len(snapshot["lots"]), 1)
         snapshot_rows = {row["code"]: row for row in snapshot["kennzahlRows"]}
         self.assertEqual(snapshot_rows["801"]["amountEurCents"], 4_000)
@@ -742,6 +742,123 @@ class ReviewRegressionTest(unittest.TestCase):
         self.assertIn("E 1kv Kennzahlen", plain_result.stdout)
         self.assertIn("Other Austrian Kennzahlen", plain_result.stdout)
         self.assertIn("| E 1 | 801 |", plain_result.stdout)
+
+    def test_capital_gains_snapshot_discovers_income_only_report_year(self):
+        conn = open_db(self.data_root)
+        self.addCleanup(conn.close)
+        now = "2026-01-01T00:00:00Z"
+        conn.execute(
+            "INSERT INTO workspaces(id, label, created_at) VALUES(?, ?, ?)",
+            ("ws-income-year", "Main", now),
+        )
+        conn.execute(
+            """
+            INSERT INTO profiles(
+                id, workspace_id, label, fiat_currency, tax_country,
+                tax_long_term_days, gains_algorithm, last_processed_at,
+                last_processed_tx_count, created_at
+            ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                "pf-income-year",
+                "ws-income-year",
+                "Default",
+                "EUR",
+                "generic",
+                365,
+                "FIFO",
+                "2026-01-01T01:00:00Z",
+                1,
+                now,
+            ),
+        )
+        conn.execute(
+            """
+            INSERT INTO wallets(
+                id, workspace_id, profile_id, label, kind, config_json, created_at
+            ) VALUES(?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                "wal-income-year",
+                "ws-income-year",
+                "pf-income-year",
+                "Node",
+                "manual",
+                "{}",
+                now,
+            ),
+        )
+        conn.execute(
+            """
+            INSERT INTO transactions(
+                id, workspace_id, profile_id, wallet_id, external_id, fingerprint,
+                occurred_at, confirmed_at, direction, asset, amount, fee,
+                fiat_currency, fiat_rate, fiat_value, fiat_price_source, kind,
+                description, counterparty, note, excluded, raw_json, created_at
+            ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                "tx-income-only",
+                "ws-income-year",
+                "pf-income-year",
+                "wal-income-year",
+                "income-only",
+                "fp-income-only",
+                "2024-03-01T12:00:00Z",
+                "2024-03-01T12:05:00Z",
+                "inbound",
+                "BTC",
+                btc_to_msat("0.01"),
+                0,
+                "EUR",
+                4_000,
+                40,
+                "import",
+                "income",
+                "Income only",
+                None,
+                None,
+                0,
+                "{}",
+                "2024-03-01T12:00:00Z",
+            ),
+        )
+        conn.execute(
+            """
+            INSERT INTO journal_entries(
+                id, workspace_id, profile_id, transaction_id, wallet_id,
+                occurred_at, entry_type, asset, quantity, fiat_value, unit_cost,
+                cost_basis, proceeds, gain_loss, description, created_at
+            ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                "je-income-only",
+                "ws-income-year",
+                "pf-income-year",
+                "tx-income-only",
+                "wal-income-year",
+                "2024-03-01T12:00:00Z",
+                "income",
+                "BTC",
+                btc_to_msat("0.01"),
+                40,
+                4_000,
+                None,
+                None,
+                40,
+                "Income only",
+                "2024-03-01T12:00:00Z",
+            ),
+        )
+        set_setting(conn, "context_workspace", "ws-income-year")
+        set_setting(conn, "context_profile", "pf-income-year")
+        conn.commit()
+
+        snapshot = build_capital_gains_snapshot(conn)
+
+        self.assertEqual(snapshot["year"], 2024)
+        self.assertEqual(snapshot["availableYears"], [2024])
+        self.assertEqual(snapshot["lots"], [])
 
     def _bootstrap_runtime_state(self, *, env_file=None, persist_bootstrap=False):
         args = Namespace(
