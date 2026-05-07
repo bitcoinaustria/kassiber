@@ -92,6 +92,7 @@ import {
 import type { OverviewSnapshot } from "@/mocks/seed";
 import { AssistantSessionProvider } from "@/components/ai/AssistantSessionProvider";
 import type { AssistantReturnPath } from "@/components/ai/assistantSession";
+import kLedgerMarkUrl from "@/assets/k-ledger-mark-transparent.svg";
 import { ScreenAssistantMockup } from "./ScreenAssistantMockup";
 import { PreAlphaBanner } from "./PreAlphaBanner";
 
@@ -893,10 +894,12 @@ function AppSidebar({
                   to="/overview"
                   className="min-w-0 group-data-[collapsible=icon]:justify-center"
                 >
-                  <div className="flex aspect-square size-8 shrink-0 items-center justify-center rounded-sm bg-primary group-data-[collapsible=icon]:size-9">
-                    <Wallet
-                      className="size-5 text-primary-foreground"
+                  <div className="kledger-app-icon size-8 shrink-0 group-data-[collapsible=icon]:size-9">
+                    <img
+                      src={kLedgerMarkUrl}
+                      alt=""
                       aria-hidden="true"
+                      className="kledger-app-icon__mark"
                     />
                   </div>
                   <div className="flex min-w-0 flex-col gap-0.5 leading-none group-data-[collapsible=icon]:hidden">

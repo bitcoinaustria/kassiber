@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024" role="img" aria-labelledby="title desc">
+  <title id="title">K Ledger transparent vector mark</title>
+  <desc id="desc">Transparent vector source mark: dark navy K, orange Bitcoin wedge, and outlined white Bitcoin symbol. No background, shadow, glass, or dock treatment is baked in.</desc>
+  <g id="k-ledger-mark" fill-rule="nonzero">
+    <path id="k-shape" d="M 862.75 150.9 L 644.25 153.2 L 324.55 484.4 L 319.95 155.5 L 129.05 155.5 L 129.05 870.8 L 317.65 873.1 L 319.95 739.7 Z" fill="#101E28"/>
+    <path id="bitcoin-wedge" d="M 405.05 735.1 L 533.85 873.1 L 894.95 873.1 L 582.15 548.8 Z" fill="#F7931A"/>
+    <path id="bitcoin-symbol" d="M 558.909 819.1 L 569.649 819.1 L 569.649 802.326 L 583.449 802.326 L 583.449 819.1 L 594.276 819.1 L 594.276 802.239 C 621.703 800.969 637.207 785.552 637.207 764.794 C 637.207 745.306 623.147 733.122 606.979 732.487 L 606.979 731.044 C 621.617 728.07 631.981 717.417 631.981 701.999 C 631.981 683.58 619.163 670.415 594.276 668.249 L 594.276 651.1 L 583.449 651.1 L 583.449 667.903 L 569.649 667.903 L 569.649 651.1 L 558.909 651.1 L 558.909 667.903 L 530.673 667.903 L 530.673 802.326 L 558.909 802.326 L 558.909 819.1 Z M 562.518 776.602 L 562.518 743.949 L 583.709 743.949 C 596.239 743.949 604.005 750.705 604.005 761.185 C 604.005 770.741 597.336 776.602 583.074 776.602 L 562.518 776.602 Z M 562.518 723.277 L 562.518 693.338 L 581.544 693.338 C 592.544 693.338 599.502 699.026 599.502 708.033 C 599.502 717.705 591.735 723.277 580.995 723.277 L 562.518 723.277 Z" fill="#FFFFFF" transform="rotate(14 583.94 735.1)"/>
+  </g>
+</svg>

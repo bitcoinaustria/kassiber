@@ -1,12 +1,12 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024" role="img" aria-label="Kassiber app icon">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024" role="img" aria-label="Kassiber dark app icon">
   <defs>
     <linearGradient id="glass-bg" x1="0" y1="0" x2="1024" y2="1024" gradientUnits="userSpaceOnUse">
-      <stop offset="0%" stop-color="#F7F9FC" stop-opacity="0.90"/>
-      <stop offset="48%" stop-color="#F2F6FB" stop-opacity="0.86"/>
-      <stop offset="100%" stop-color="#E2E8F1" stop-opacity="0.78"/>
+      <stop offset="0%" stop-color="#3A4451" stop-opacity="0.92"/>
+      <stop offset="48%" stop-color="#242D38" stop-opacity="0.88"/>
+      <stop offset="100%" stop-color="#111820" stop-opacity="0.84"/>
     </linearGradient>
     <linearGradient id="top-glass" x1="120" y1="40" x2="850" y2="940" gradientUnits="userSpaceOnUse">
-      <stop offset="0%" stop-color="#FFFFFF" stop-opacity="0.34"/>
+      <stop offset="0%" stop-color="#FFFFFF" stop-opacity="0.18"/>
       <stop offset="62%" stop-color="#FFFFFF" stop-opacity="0.02"/>
       <stop offset="100%" stop-color="#101E2C" stop-opacity="0.04"/>
     </linearGradient>
@@ -14,22 +14,22 @@
       <feGaussianBlur stdDeviation="6"/>
     </filter>
     <filter id="mark-shadow" x="-5%" y="-5%" width="110%" height="110%" color-interpolation-filters="sRGB">
-      <feDropShadow dx="0" dy="1" stdDeviation="1" flood-color="#101E2C" flood-opacity="0.08"/>
+      <feDropShadow dx="0" dy="1" stdDeviation="1" flood-color="#101E2C" flood-opacity="0.18"/>
     </filter>
     <clipPath id="tile-clip">
       <rect width="1024" height="1024" rx="230" ry="230"/>
     </clipPath>
   </defs>
   <g clip-path="url(#tile-clip)">
-    <rect width="1024" height="1024" fill="#F2F6FB"/>
+    <rect width="1024" height="1024" fill="#1A222D"/>
     <rect x="-24" y="-24" width="1072" height="1072" rx="254" ry="254" fill="url(#glass-bg)" filter="url(#glass-soften)"/>
-    <path d="M0 0H1024V286C768 254 580 126 330 126C188 126 78 162 0 203Z" fill="#FFFFFF" fill-opacity="0.34" filter="url(#glass-soften)"/>
+    <path d="M0 0H1024V286C768 254 580 126 330 126C188 126 78 162 0 203Z" fill="#FFFFFF" fill-opacity="0.18" filter="url(#glass-soften)"/>
     <path d="M0 676C201 723 396 673 585 708C742 737 889 832 1024 818V1024H0Z" fill="#101E2C" fill-opacity="0.035" filter="url(#glass-soften)"/>
-    <rect x="1" y="1" width="1022" height="1022" rx="229" ry="229" fill="#FFFFFF" fill-opacity="0.12"/>
-    <path d="M232 2H792" stroke="#FFFFFF" stroke-opacity="0.62" stroke-width="4" stroke-linecap="round"/>
-    <path d="M232 1022H792" stroke="#101E2C" stroke-opacity="0.08" stroke-width="4" stroke-linecap="round"/>
+    <rect x="1" y="1" width="1022" height="1022" rx="229" ry="229" fill="#FFFFFF" fill-opacity="0.20"/>
+    <path d="M232 2H792" stroke="#FFFFFF" stroke-opacity="0.22" stroke-width="4" stroke-linecap="round"/>
+    <path d="M232 1022H792" stroke="#000000" stroke-opacity="0.24" stroke-width="4" stroke-linecap="round"/>
   </g>
-  <rect x="1" y="1" width="1022" height="1022" rx="229" ry="229" fill="none" stroke="#101E2C" stroke-opacity="0.06" stroke-width="2"/>
+  <rect x="1" y="1" width="1022" height="1022" rx="229" ry="229" fill="none" stroke="#FFFFFF" stroke-opacity="0.10" stroke-width="2"/>
   <g filter="url(#mark-shadow)">
     <g id="k-ledger-mark" fill-rule="nonzero">
     <path id="k-shape" d="M 862.75 150.9 L 644.25 153.2 L 324.55 484.4 L 319.95 155.5 L 129.05 155.5 L 129.05 870.8 L 317.65 873.1 L 319.95 739.7 Z" fill="#101E28"/>
