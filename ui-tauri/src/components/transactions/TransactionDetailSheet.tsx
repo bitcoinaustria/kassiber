@@ -154,6 +154,70 @@ function LedgerRow({
   );
 }
 
+function SourceRecordRow({
+  icon,
+  label,
+  value,
+  copyValue,
+  hidden,
+  action,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  value: React.ReactNode;
+  copyValue?: string;
+  hidden?: boolean;
+  action?: {
+    label: string;
+    onClick: () => void;
+  };
+}) {
+  return (
+    <div className="flex min-w-0 items-center gap-2 rounded-md border px-2 py-2">
+      <span className="flex size-6 shrink-0 items-center justify-center rounded-md bg-muted text-muted-foreground">
+        {icon}
+      </span>
+      <div className="min-w-0 flex-1">
+        <div className="text-[10px] font-medium uppercase text-muted-foreground">
+          {label}
+        </div>
+        <div
+          className={cn(
+            "truncate text-xs font-medium text-foreground",
+            hidden && "sensitive",
+          )}
+        >
+          {value}
+        </div>
+      </div>
+      {copyValue ? (
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          className="size-7 shrink-0 text-muted-foreground"
+          aria-label={`Copy ${label}`}
+          onClick={() => copyText(copyValue)}
+        >
+          <Copy className="size-3.5" aria-hidden="true" />
+        </Button>
+      ) : null}
+      {action ? (
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          className="size-7 shrink-0 text-muted-foreground"
+          aria-label={action.label}
+          onClick={action.onClick}
+        >
+          <ExternalLink className="size-3.5" aria-hidden="true" />
+        </Button>
+      ) : null}
+    </div>
+  );
+}
+
 export function TransactionDetailSheet({
   transaction,
   draft,
@@ -207,6 +271,10 @@ export function TransactionDetailSheet({
     localDraft.pricingSourceKind,
     localDraft.pricingQuality,
   );
+  const sourceRecordId = transaction.explorerId ?? transaction.txnId;
+  const sourceName = transaction.wallet || transaction.paymentMethod;
+  const sourceType = transaction.sourceType ?? transaction.paymentMethod;
+  const settlementLabel = transactionStatusLabels[transaction.status];
 
   const updateDraft = <K extends keyof TransactionEditDraft>(
     key: K,
@@ -901,27 +969,54 @@ export function TransactionDetailSheet({
               <div className="rounded-md border bg-card p-3">
                 <div className="mb-3 flex items-center gap-2 text-sm font-semibold">
                   <Hash className="size-4 text-muted-foreground" aria-hidden="true" />
-                  Identity
+                  Source record
                 </div>
-                <div className="space-y-2 text-xs text-muted-foreground">
-                  <button
-                    type="button"
-                    className="flex w-full min-w-0 items-center justify-between gap-2 rounded-md border px-2 py-2 text-left hover:bg-muted/40"
-                    onClick={() => copyText(transaction.txnId)}
-                  >
-                    <span>Transaction</span>
-                    <span className={cn("truncate font-mono", blurClass(hideSensitive))}>
-                      {formatShortTxid(transaction.txnId)}
-                    </span>
-                  </button>
-                  <div className="flex items-center gap-2 rounded-md border px-2 py-2">
-                    <CalendarClock className="size-3.5" aria-hidden="true" />
-                    <span>{transaction.date}</span>
-                  </div>
-                  <div className="flex items-center gap-2 rounded-md border px-2 py-2">
-                    <Link2 className="size-3.5" aria-hidden="true" />
-                    <span>{explorer ? explorer.label : "No public explorer"}</span>
-                  </div>
+                <div className="space-y-2">
+                  <SourceRecordRow
+                    icon={<Hash className="size-3.5" aria-hidden="true" />}
+                    label="Kassiber row"
+                    value={transaction.id}
+                    copyValue={transaction.id}
+                    hidden={hideSensitive}
+                  />
+                  <SourceRecordRow
+                    icon={<Link2 className="size-3.5" aria-hidden="true" />}
+                    label="Source id"
+                    value={
+                      <span className="font-mono">
+                        {formatShortTxid(sourceRecordId)}
+                      </span>
+                    }
+                    copyValue={sourceRecordId}
+                    hidden={hideSensitive}
+                  />
+                  <SourceRecordRow
+                    icon={<BookMarked className="size-3.5" aria-hidden="true" />}
+                    label="Source"
+                    value={`${sourceName} · ${sourceType}`}
+                    hidden={hideSensitive}
+                  />
+                  <SourceRecordRow
+                    icon={
+                      <CalendarClock className="size-3.5" aria-hidden="true" />
+                    }
+                    label="Settlement"
+                    value={`${settlementLabel} · ${transaction.date}`}
+                    hidden={hideSensitive}
+                  />
+                  <SourceRecordRow
+                    icon={<ExternalLink className="size-3.5" aria-hidden="true" />}
+                    label="Explorer"
+                    value={explorer ? explorer.label : "No public explorer"}
+                    action={
+                      explorer
+                        ? {
+                            label: `Open ${transaction.txnId} on ${explorer.label}`,
+                            onClick: () => onOpenExplorer(transaction),
+                          }
+                        : undefined
+                    }
+                  />
                 </div>
               </div>
               <div className="rounded-md border bg-card p-3">
