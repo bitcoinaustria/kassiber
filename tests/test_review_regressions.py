@@ -22,7 +22,11 @@ from kassiber.core import rates as core_rates
 from kassiber.core.engines import TaxEngineLedgerInputs, build_tax_engine
 from kassiber.core.runtime import bootstrap_runtime, close_runtime
 from kassiber.core.tax_events import normalize_tax_asset_inputs
-from kassiber.core.ui_snapshot import build_overview_snapshot, build_transactions_snapshot
+from kassiber.core.ui_snapshot import (
+    build_capital_gains_snapshot,
+    build_overview_snapshot,
+    build_transactions_snapshot,
+)
 from kassiber.db import open_db, set_setting
 from kassiber.errors import AppError
 from kassiber.msat import btc_to_msat
@@ -5835,6 +5839,7 @@ class ReviewRegressionTest(unittest.TestCase):
         self.assertEqual(summary_by_kennzahl[172]["amount_eur_cents"], 800)
         self.assertEqual(summary_by_kennzahl[174]["amount_eur_cents"], 1000)
         self.assertEqual(summary_by_kennzahl[176]["amount_eur_cents"], 0)
+        self.assertEqual(summary_by_kennzahl[801]["amount_eur_cents"], 0)
         self.assertEqual(report["kennzahl_totals"]["172"]["amount_eur_cents"], 800)
         self.assertIn("2.1", report["sections"])
         self.assertEqual(report["sections"]["2.1"]["totals"]["amount_eur_cents"], 800)
@@ -5857,6 +5862,20 @@ class ReviewRegressionTest(unittest.TestCase):
                 }
             ],
         )
+
+        db = sqlite3.connect(self.data_root / "kassiber.sqlite3")
+        db.row_factory = sqlite3.Row
+        try:
+            snapshot = build_capital_gains_snapshot(db)
+        finally:
+            db.close()
+        snapshot_rows = {row["code"]: row for row in snapshot["kennzahlRows"]}
+        self.assertEqual(snapshot["year"], 2024)
+        self.assertEqual(snapshot_rows["172"]["amount"], 8.0)
+        self.assertEqual(snapshot_rows["174"]["amount"], 10.0)
+        self.assertEqual(snapshot_rows["176"]["amount"], 0.0)
+        self.assertEqual(snapshot_rows["801"]["amount"], 0.0)
+        self.assertEqual(snapshot_rows["172"]["source"], "daemon")
 
         payload, result = self._run_json(
             "reports", "austrian-tax-summary",

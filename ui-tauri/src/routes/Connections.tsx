@@ -28,6 +28,7 @@ import { useDaemon, useDaemonMutation } from "@/daemon/client";
 import { useUiStore } from "@/store/ui";
 import { useSyncProgressNotice } from "@/hooks/useSyncProgressNotice";
 import { useCurrency, type Currency } from "@/lib/currency";
+import { screenShellClassName } from "@/lib/screen-layout";
 import { cn } from "@/lib/utils";
 import { AddConnectionDialog } from "@/components/kb/AddConnectionDialog";
 import { CurrencyToggleText } from "@/components/kb/CurrencyToggleText";
@@ -183,7 +184,7 @@ export function Connections() {
     });
 
   return (
-    <div className="w-full space-y-4 bg-background p-3 sm:space-y-6 sm:p-4 md:p-6">
+    <div className={screenShellClassName}>
       <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div className="min-w-0 space-y-1">
           <p className="text-xs font-medium tracking-wide text-muted-foreground uppercase">

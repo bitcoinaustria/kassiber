@@ -38,7 +38,7 @@ export const JURISDICTIONS: Record<string, Jurisdiction> = {
     rateLabel: "KESt 27,5 %",
     defaultMethod: "moving_average_at",
     methodLocked: true,
-    methodNote: "FIFO old stock · AVCO new stock",
+    methodNote: "Old stock: FIFO; new stock: average cost",
     internalsNonTaxable: true,
     longTermDays: 365,
     ccy: "€",
@@ -93,6 +93,15 @@ export interface DisposedLot {
   type: LotType;
 }
 
+export interface KennzahlRow {
+  code: string;
+  label: string;
+  amount: number | null;
+  rowCount: number;
+  source?: "daemon" | "mock" | "pending";
+  note?: string;
+}
+
 export const MOCK_LOTS: DisposedLot[] = [
   { acquired: "2022-03-18", disposed: "2025-11-04", sats: 12_000_000, costEur: 3_851.20, proceedsEur: 8_204.18, type: "LT" },
   { acquired: "2023-07-02", disposed: "2025-11-04", sats: 8_000_000, costEur: 2_412.00, proceedsEur: 5_469.45, type: "LT" },
@@ -104,8 +113,10 @@ export const MOCK_LOTS: DisposedLot[] = [
 export interface CapitalGainsReport {
   jurisdictionCode: string;
   year: number;
+  availableYears?: number[];
   method: CostBasisMethod;
   lots: DisposedLot[];
+  kennzahlRows?: KennzahlRow[];
   status?: {
     needsJournals: boolean;
     quarantines: number;
@@ -115,6 +126,38 @@ export interface CapitalGainsReport {
 export const MOCK_CAPITAL_GAINS: CapitalGainsReport = {
   jurisdictionCode: "AT",
   year: 2025,
+  availableYears: [2026, 2025],
   method: "moving_average_at",
   lots: MOCK_LOTS,
+  kennzahlRows: [
+    {
+      code: "172",
+      label: "Foreign recurring crypto income",
+      amount: 239.74,
+      rowCount: 2,
+      source: "mock",
+    },
+    {
+      code: "174",
+      label: "Foreign realized crypto gains",
+      amount: 3535.55,
+      rowCount: 3,
+      source: "mock",
+    },
+    {
+      code: "176",
+      label: "Foreign realized crypto losses",
+      amount: 0,
+      rowCount: 0,
+      source: "mock",
+    },
+    {
+      code: "801",
+      label: "Legacy holdings speculation gains",
+      amount: 7410.43,
+      rowCount: 2,
+      source: "mock",
+      note: "Outside E 1kv",
+    },
+  ],
 };

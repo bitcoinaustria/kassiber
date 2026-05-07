@@ -6,6 +6,8 @@ import {
   useRouterState,
 } from "@tanstack/react-router";
 import {
+  ArrowLeft,
+  ArrowRight,
   BadgeCheck,
   BarChart3,
   Bell,
@@ -18,6 +20,7 @@ import {
   EyeOff,
   Gauge,
   Heart,
+  LifeBuoy,
   LockKeyhole,
   LogOut,
   MessageSquareText,
@@ -61,7 +64,6 @@ import {
   SidebarGroup,
   SidebarGroupContent,
   SidebarGroupLabel,
-  SidebarHeader,
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
@@ -71,6 +73,7 @@ import {
   SidebarProvider,
   SidebarRail,
   SidebarTrigger,
+  useSidebar,
 } from "@/components/ui/sidebar";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { useUiStore } from "@/store/ui";
@@ -156,6 +159,8 @@ type JournalProcessResult = {
 const APP_VERSION = "0.22.0";
 const APP_COMMIT = __APP_COMMIT__;
 const APP_COMMIT_SHORT = APP_COMMIT ? APP_COMMIT.slice(0, 7) : "unknown";
+const topNavIconButtonClassName =
+  "size-8 text-sidebar-foreground/75 hover:bg-sidebar-accent hover:text-sidebar-foreground";
 
 const NAV_GROUPS: NavGroup[] = [
   {
@@ -163,18 +168,25 @@ const NAV_GROUPS: NavGroup[] = [
     items: [
       { label: "Overview", icon: Gauge, href: "/overview" },
       { label: "Transactions", icon: ClipboardList, href: "/transactions" },
-      { label: "Wallets", icon: Wallet, href: "/connections" },
+      {
+        label: "Inputs",
+        icon: Wallet,
+        href: "/connections",
+        children: [
+          { label: "Connections", icon: Wallet, href: "/connections" },
+          { label: "Source of Funds", icon: BadgeCheck, href: "/source-of-funds" },
+        ],
+      },
       { label: "Reports", icon: BarChart3, href: "/reports" },
-      { label: "Source of Funds", icon: BadgeCheck, href: "/source-of-funds" },
       { label: "Assistant", icon: MessageSquareText, href: "/assistant" },
     ],
   },
   {
     title: "Review",
     items: [
+      { label: "Quarantine", icon: ShieldAlert, href: "/quarantine" },
       { label: "Journals", icon: BookOpen, href: "/journals" },
       { label: "Tax Events", icon: CircleDollarSign, href: "/tax-events" },
-      { label: "Quarantine", icon: ShieldAlert, href: "/quarantine" },
     ],
   },
 ];
@@ -192,10 +204,10 @@ const ROUTE_META: Array<[string, RouteMeta]> = [
   [
     "/connections",
     {
-      title: "Wallets",
+      title: "Connections",
       icon: Wallet,
-      searchLabel: "Search wallets",
-      searchPlaceholder: "Search wallets, backends...",
+      searchLabel: "Search connections",
+      searchPlaceholder: "Search wallets, imports, backends...",
     },
   ],
   [
@@ -316,9 +328,9 @@ const STATIC_SEARCH_RESULTS: SearchResult[] = [
   },
   {
     id: "route:connections",
-    title: "Wallets",
-    detail: "Wallet sources and sync",
-    keywords: ["wallets", "xpub", "backend", "sync"],
+    title: "Connections",
+    detail: "Wallets, imports, backends, and sync",
+    keywords: ["connections", "wallets", "xpub", "backend", "sync"],
     to: "/connections",
   },
   {
@@ -781,67 +793,69 @@ export function AppShell() {
     <TooltipProvider>
       <div className="flex h-svh flex-col overflow-hidden bg-sidebar">
         <PreAlphaBanner className="shrink-0" />
-        <SidebarProvider className="min-h-0 flex-1 bg-sidebar">
+        <SidebarProvider className="min-h-0 flex-1 flex-col bg-sidebar">
           <a
             href="#app-main"
             className="sr-only focus:not-sr-only focus:absolute focus:top-4 focus:left-4 focus:z-50 focus:rounded-md focus:bg-background focus:px-3 focus:py-2 focus:text-sm focus:text-foreground focus:ring-2 focus:ring-ring"
           >
             Skip to main content
           </a>
-          <AppSidebar
-            pathname={pathname}
+          <AppDashboardHeader
+            meta={routeMeta}
             onLock={lockApp}
             daemonEnabled={!locked}
           />
-          <div className="min-h-0 w-full overflow-hidden lg:p-2">
-            <div className="relative flex h-full w-full flex-col items-center justify-start overflow-hidden bg-background lg:rounded-xl lg:border">
-              <AppDashboardHeader
-                meta={routeMeta}
-                onLock={lockApp}
-                daemonEnabled={!locked}
-              />
-              {locked ? (
-                <main
-                  id="app-main"
-                  ref={mainRef}
-                  tabIndex={-1}
-                  className="relative min-h-0 w-full flex-1 overflow-auto bg-background"
-                >
-                  <LockScreen
-                    reason={
-                      daemonAuthRequired
-                        ? "The daemon needs the database passphrase before it can return live books data."
-                        : undefined
-                    }
-                    onUnlock={unlockApp}
-                    onReset={resetLocalUiSession}
-                  />
-                </main>
-              ) : (
-                <AssistantSessionProvider returnPath={assistantReturnPath}>
+          <div className="flex min-h-0 flex-1">
+            <AppSidebar
+              pathname={pathname}
+              onLock={lockApp}
+              daemonEnabled={!locked}
+            />
+            <div className="min-h-0 w-full overflow-hidden lg:pt-1.5 lg:pr-1.5 lg:pb-1.5">
+              <div className="relative flex h-full w-full flex-col items-center justify-start overflow-hidden bg-background lg:rounded-tl-xl lg:rounded-tr-xl">
+                {locked ? (
                   <main
                     id="app-main"
                     ref={mainRef}
                     tabIndex={-1}
-                    className={`relative min-h-0 w-full flex-1 overflow-auto bg-background ${
-                      isAssistantRoute
-                        ? "pb-0"
-                        : assistantCollapsed
-                          ? "pb-[150px]"
-                          : "pb-[240px]"
-                    }`}
+                    className="relative min-h-0 w-full flex-1 overflow-auto bg-background"
                   >
-                    <RouteTransitionIndicator active={shellBusy} />
-                    <Outlet />
-                  </main>
-                  {isAssistantRoute ? null : (
-                    <ScreenAssistantMockup
-                      collapsed={assistantCollapsed}
-                      className="absolute inset-x-0 bottom-0 z-20"
+                    <LockScreen
+                      reason={
+                        daemonAuthRequired
+                          ? "The daemon needs the database passphrase before it can return live books data."
+                          : undefined
+                      }
+                      onUnlock={unlockApp}
+                      onReset={resetLocalUiSession}
                     />
-                  )}
-                </AssistantSessionProvider>
-              )}
+                  </main>
+                ) : (
+                  <AssistantSessionProvider returnPath={assistantReturnPath}>
+                    <main
+                      id="app-main"
+                      ref={mainRef}
+                      tabIndex={-1}
+                      className={`relative min-h-0 w-full flex-1 overflow-auto bg-background ${
+                        isAssistantRoute
+                          ? "pb-0"
+                          : assistantCollapsed
+                            ? "pb-[150px]"
+                            : "pb-[240px]"
+                      }`}
+                    >
+                      <RouteTransitionIndicator active={shellBusy} />
+                      <Outlet />
+                    </main>
+                    {isAssistantRoute ? null : (
+                      <ScreenAssistantMockup
+                        collapsed={assistantCollapsed}
+                        className="absolute inset-x-0 bottom-0 z-20"
+                      />
+                    )}
+                  </AssistantSessionProvider>
+                )}
+              </div>
             </div>
           </div>
         </SidebarProvider>
@@ -875,43 +889,10 @@ function AppSidebar({
 }) {
   return (
     <Sidebar
-      variant="inset"
+      variant="sidebar"
       collapsible="icon"
-      className="top-9 h-[calc(100svh-2.25rem)]"
+      className="top-[4.5rem] h-[calc(100svh-4.5rem)] !border-r-0 group-data-[side=left]:!border-r-0"
     >
-      <SidebarHeader>
-        <div className="flex items-center gap-2 group-data-[collapsible=icon]:flex-col group-data-[collapsible=icon]:items-center">
-          <SidebarMenu>
-            <SidebarMenuItem>
-              <SidebarMenuButton
-                size="lg"
-                tooltip="Kassiber"
-                asChild
-                className="group-data-[collapsible=icon]:size-9! group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:p-0!"
-              >
-                <Link
-                  to="/overview"
-                  className="min-w-0 group-data-[collapsible=icon]:justify-center"
-                >
-                  <div className="flex aspect-square size-8 shrink-0 items-center justify-center rounded-sm bg-primary group-data-[collapsible=icon]:size-9">
-                    <Wallet
-                      className="size-5 text-primary-foreground"
-                      aria-hidden="true"
-                    />
-                  </div>
-                  <div className="flex min-w-0 flex-col gap-0.5 leading-none group-data-[collapsible=icon]:hidden">
-                    <span className="truncate font-medium">Kassiber</span>
-                    <span className="truncate text-xs text-muted-foreground">
-                      Private Bitcoin Books
-                    </span>
-                  </div>
-                </Link>
-              </SidebarMenuButton>
-            </SidebarMenuItem>
-          </SidebarMenu>
-          <SidebarTrigger className="ml-auto group-data-[collapsible=icon]:ml-0" />
-        </div>
-      </SidebarHeader>
       <SidebarContent>
         {NAV_GROUPS.map((group) => (
           <SidebarGroup key={group.title}>
@@ -931,7 +912,7 @@ function AppSidebar({
         <NavUser onLock={onLock} daemonEnabled={daemonEnabled} />
         <AppVersion />
       </SidebarFooter>
-      <SidebarRail />
+      <SidebarRail className="after:hidden" />
     </Sidebar>
   );
 }
@@ -940,6 +921,7 @@ function SidebarActions({ pathname }: { pathname: string }) {
   const dataMode = useUiStore((state) => state.dataMode);
   const setDataMode = useUiStore((state) => state.setDataMode);
   const isRealData = dataMode === "real";
+  const supportActive = pathname === "/diagnostics";
 
   return (
     <SidebarMenu>
@@ -960,36 +942,52 @@ function SidebarActions({ pathname }: { pathname: string }) {
         </div>
       </SidebarMenuItem>
       <SidebarMenuItem>
-        <SidebarMenuButton
-          asChild
-          isActive={pathname === "/diagnostics"}
-          tooltip="Diagnostics"
-        >
-          <Link to="/diagnostics">
-            <Bug className="size-4" aria-hidden="true" />
-            <span>Diagnostics</span>
-          </Link>
-        </SidebarMenuButton>
-      </SidebarMenuItem>
-      <SidebarMenuItem>
-        <SidebarMenuButton asChild tooltip="Donate sats">
-          <a href="#donate">
-            <Heart className="size-4" aria-hidden="true" />
-            <span>Donate sats</span>
-          </a>
-        </SidebarMenuButton>
-      </SidebarMenuItem>
-      <SidebarMenuItem>
-        <SidebarMenuButton asChild tooltip="Bug report">
-          <a
-            href="https://github.com/bitcoinaustria/kassiber/issues"
-            target="_blank"
-            rel="noreferrer"
-          >
-            <Bug className="size-4" aria-hidden="true" />
-            <span>Bug report</span>
-          </a>
-        </SidebarMenuButton>
+        <Collapsible asChild defaultOpen={supportActive} className="group/collapsible">
+          <div>
+            <CollapsibleTrigger asChild>
+              <SidebarMenuButton isActive={supportActive} tooltip="Support">
+                <LifeBuoy className="size-4" aria-hidden="true" />
+                <span>Support</span>
+                <ChevronRight className="ml-auto size-4 transition-transform duration-200 group-data-[state=open]/collapsible:rotate-90 group-data-[collapsible=icon]:hidden" />
+              </SidebarMenuButton>
+            </CollapsibleTrigger>
+            <CollapsibleContent>
+              <SidebarMenuSub>
+                <SidebarMenuSubItem>
+                  <SidebarMenuSubButton
+                    asChild
+                    isActive={pathname === "/diagnostics"}
+                  >
+                    <Link to="/diagnostics">
+                      <Bug className="size-3.5" aria-hidden="true" />
+                      <span>Diagnostics</span>
+                    </Link>
+                  </SidebarMenuSubButton>
+                </SidebarMenuSubItem>
+                <SidebarMenuSubItem>
+                  <SidebarMenuSubButton asChild>
+                    <a
+                      href="https://github.com/bitcoinaustria/kassiber/issues"
+                      target="_blank"
+                      rel="noreferrer"
+                    >
+                      <Bug className="size-3.5" aria-hidden="true" />
+                      <span>Bug report</span>
+                    </a>
+                  </SidebarMenuSubButton>
+                </SidebarMenuSubItem>
+                <SidebarMenuSubItem>
+                  <SidebarMenuSubButton asChild>
+                    <a href="#donate">
+                      <Heart className="size-3.5" aria-hidden="true" />
+                      <span>Donate sats</span>
+                    </a>
+                  </SidebarMenuSubButton>
+                </SidebarMenuSubItem>
+              </SidebarMenuSub>
+            </CollapsibleContent>
+          </div>
+        </Collapsible>
       </SidebarMenuItem>
       <SidebarMenuItem>
         <SidebarMenuButton
@@ -1015,7 +1013,18 @@ function NavMenuItem({
   pathname: string;
 }) {
   const Icon = item.icon;
-  const active = pathname === item.href || pathname.startsWith(`${item.href}/`);
+  const childActive = item.children?.some(
+    (child) => pathname === child.href || pathname.startsWith(`${child.href}/`),
+  );
+  const active =
+    pathname === item.href ||
+    pathname.startsWith(`${item.href}/`) ||
+    Boolean(childActive);
+  const [open, setOpen] = React.useState(active);
+
+  React.useEffect(() => {
+    if (active) setOpen(true);
+  }, [active]);
 
   if (!item.children?.length) {
     return (
@@ -1031,13 +1040,18 @@ function NavMenuItem({
   }
 
   return (
-    <Collapsible asChild defaultOpen={active} className="group/collapsible">
+    <Collapsible
+      asChild
+      open={open}
+      onOpenChange={setOpen}
+      className="group/collapsible"
+    >
       <SidebarMenuItem>
         <CollapsibleTrigger asChild>
           <SidebarMenuButton isActive={active} tooltip={item.label}>
             <Icon className="size-4" aria-hidden="true" />
             <span>{item.label}</span>
-            <ChevronRight className="ml-auto size-4 transition-transform duration-200 group-data-[state=open]/collapsible:rotate-90" />
+            <ChevronRight className="ml-auto size-4 transition-transform duration-200 group-data-[state=open]/collapsible:rotate-90 group-data-[collapsible=icon]:hidden" />
           </SidebarMenuButton>
         </CollapsibleTrigger>
         <CollapsibleContent>
@@ -1180,8 +1194,8 @@ function AppDashboardHeader({
   onLock: () => void;
   daemonEnabled: boolean;
 }) {
+  const { state: sidebarState } = useSidebar();
   const navigate = useNavigate();
-  const Icon = meta.icon;
   const hideSensitive = useUiStore((s) => s.hideSensitive);
   const setHideSensitive = useUiStore((s) => s.setHideSensitive);
   const dataMode = useUiStore((s) => s.dataMode);
@@ -1334,28 +1348,112 @@ function AppDashboardHeader({
       item.tone !== "info" ||
       item.title.toLowerCase().includes("sync"),
   ).length;
+  const bookLabel =
+    snapshot?.status?.profile ?? snapshot?.status?.workspace ?? "Local books";
+  const reviewCount = snapshot?.status?.quarantines ?? 0;
+  const sidebarCollapsed = sidebarState === "collapsed";
+  const needsJournals = Boolean(snapshot?.status?.needsJournals);
+  const notificationAlertClassName =
+    reviewCount > 0
+      ? "border border-red-500/35 bg-red-500/10 text-red-700 hover:bg-red-500/15 hover:text-red-700 dark:text-red-300 dark:hover:text-red-300"
+      : needsJournals
+        ? "border border-amber-500/35 bg-amber-500/10 text-amber-700 hover:bg-amber-500/15 hover:text-amber-700 dark:text-amber-300 dark:hover:text-amber-300"
+        : "";
+  const notificationLabel =
+    notificationCount > 0
+      ? `Notifications (${notificationCount} active)`
+      : "Notifications";
 
   return (
-    <header className="flex w-full items-center gap-3 border-b bg-background px-4 py-4 sm:px-6">
-      <Icon className="size-5" aria-hidden="true" />
-      <h1 className="text-base font-medium">{meta.title}</h1>
-
-      <div className="ml-auto flex items-center gap-2">
-        <div
-          ref={searchRootRef}
-          className="relative hidden w-80 lg:block lg:w-96 xl:w-[28rem]"
-          onBlur={(event) => {
-            if (
-              event.relatedTarget instanceof Node &&
-              searchRootRef.current?.contains(event.relatedTarget)
-            ) {
-              return;
-            }
-            setSearchOpen(false);
-          }}
+    <header
+      className="grid h-12 w-full grid-cols-[minmax(0,1fr)_auto] items-center gap-2 bg-sidebar px-2 text-sidebar-foreground md:grid-cols-[minmax(0,1fr)_minmax(10rem,28rem)_minmax(0,1fr)] 2xl:grid-cols-[minmax(0,1fr)_minmax(16rem,38rem)_minmax(0,1fr)]"
+    >
+      <div className="flex min-w-0 items-center gap-1.5 sm:gap-2">
+        <Link
+          to="/overview"
+          aria-label="Kassiber overview"
+          className={cn(
+            "flex h-8 shrink-0 items-center rounded-md text-sidebar-foreground hover:text-sidebar-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none",
+            sidebarCollapsed ? "w-8 justify-center" : "gap-2 pr-1.5",
+          )}
         >
+          <span className="flex aspect-square size-8 shrink-0 items-center justify-center rounded-sm bg-primary">
+            <Wallet
+              className="size-5 text-primary-foreground"
+              aria-hidden="true"
+            />
+          </span>
+          <span
+            className={cn(
+              "hidden text-sm font-semibold leading-none sm:inline",
+              sidebarCollapsed && "sm:hidden",
+            )}
+          >
+            Kassiber
+          </span>
+        </Link>
+        <SidebarTrigger
+          className={cn(
+            "size-8 shrink-0 rounded-md border border-sidebar-border/70 bg-sidebar-accent/35",
+            topNavIconButtonClassName,
+          )}
+        />
+        <div className="hidden items-center gap-0.5 sm:flex">
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            className={topNavIconButtonClassName}
+            aria-label="Back"
+            onClick={() => window.history.back()}
+          >
+            <ArrowLeft className="size-4" aria-hidden="true" />
+          </Button>
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            className={topNavIconButtonClassName}
+            aria-label="Forward"
+            onClick={() => window.history.forward()}
+          >
+            <ArrowRight className="size-4" aria-hidden="true" />
+          </Button>
+        </div>
+        <div className="min-w-0 pl-1">
+          <div className="flex min-w-0 items-center gap-1.5">
+            <span className="truncate text-sm font-semibold text-sidebar-foreground">
+              {bookLabel}
+            </span>
+            <ChevronsUpDown
+              className="hidden size-3.5 shrink-0 text-sidebar-foreground/55 sm:block"
+              aria-hidden="true"
+            />
+            <span className="hidden text-sidebar-foreground/35 lg:inline">
+              /
+            </span>
+            <span className="hidden truncate text-sm text-sidebar-foreground/65 lg:inline">
+              {meta.title}
+            </span>
+          </div>
+        </div>
+      </div>
+
+      <div
+        ref={searchRootRef}
+        className="relative hidden w-full min-w-0 md:block"
+        onBlur={(event) => {
+          if (
+            event.relatedTarget instanceof Node &&
+            searchRootRef.current?.contains(event.relatedTarget)
+          ) {
+            return;
+          }
+          setSearchOpen(false);
+        }}
+      >
           <Search
-            className="absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground"
+            className="absolute top-1/2 left-3 size-4 -translate-y-1/2 text-sidebar-foreground/55"
             aria-hidden="true"
           />
           <Input
@@ -1368,7 +1466,7 @@ function AppDashboardHeader({
             aria-expanded={searchOpen}
             aria-controls={searchListId}
             aria-activedescendant={searchActiveId}
-            placeholder={meta.searchPlaceholder}
+            placeholder="Search Kassiber"
             value={searchQuery}
             onChange={(event) => {
               setSearchQuery(event.target.value);
@@ -1396,9 +1494,9 @@ function AppDashboardHeader({
                 searchInputRef.current?.blur();
               }
             }}
-            className="h-10 w-full pr-14 pl-9 text-sm"
+            className="h-8 w-full border-sidebar-border/75 bg-background/10 pr-14 pl-9 text-sm text-sidebar-foreground shadow-none placeholder:text-sidebar-foreground/50 focus-visible:bg-background focus-visible:text-foreground focus-visible:placeholder:text-muted-foreground"
           />
-          <kbd className="pointer-events-none absolute top-1/2 right-2 hidden -translate-y-1/2 rounded-md border bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground md:inline-flex">
+          <kbd className="pointer-events-none absolute top-1/2 right-2 hidden h-5 -translate-y-1/2 items-center gap-1 rounded-md border border-sidebar-border bg-sidebar-accent px-1.5 font-mono text-[11px] font-semibold leading-none text-sidebar-foreground shadow-sm md:inline-flex">
             {"\u2318"}
             {"\u00a0"}K
           </kbd>
@@ -1443,14 +1541,20 @@ function AppDashboardHeader({
               )}
             </div>
           )}
-        </div>
+      </div>
+      <div className="flex min-w-0 items-center justify-end gap-2">
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button
-              variant="outline"
+              variant="ghost"
               size="icon"
-              className="relative size-9"
-              aria-label="Notifications"
+              className={cn(
+                "relative",
+                topNavIconButtonClassName,
+                notificationAlertClassName,
+              )}
+              aria-label={notificationLabel}
+              title={notificationLabel}
             >
               <Bell className="size-4" aria-hidden="true" />
               {notificationCount > 0 && (
@@ -1526,12 +1630,12 @@ function AppDashboardHeader({
         </DropdownMenu>
         <ThemeMenu />
         <Button
-          variant="outline"
+          variant="ghost"
           size="icon"
           className={
             hideSensitive
-              ? "size-9 border-border bg-muted text-foreground hover:bg-muted/80 hover:text-foreground dark:border-white/15 dark:bg-white/10 dark:text-white dark:hover:bg-white/15"
-              : "size-9"
+              ? "size-8 bg-sidebar-accent text-sidebar-foreground hover:bg-sidebar-accent/85 hover:text-sidebar-foreground"
+              : topNavIconButtonClassName
           }
           aria-label={
             hideSensitive ? "Show sensitive data" : "Hide sensitive data"
@@ -1547,9 +1651,9 @@ function AppDashboardHeader({
           )}
         </Button>
         <Button
-          variant="outline"
+          variant="ghost"
           size="icon"
-          className="size-9"
+          className={topNavIconButtonClassName}
           aria-label="Lock Kassiber"
           title="Lock Kassiber (Cmd/Ctrl+L)"
           onClick={onLock}
@@ -1570,9 +1674,9 @@ function ThemeMenu() {
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
         <Button
-          variant="outline"
+          variant="ghost"
           size="icon"
-          className="size-9"
+          className={topNavIconButtonClassName}
           aria-label="Theme"
           title="Theme"
         >

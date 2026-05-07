@@ -38,6 +38,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { screenShellClassName } from "@/lib/screen-layout";
 import { Label } from "@/components/ui/label";
 import {
   Select,
@@ -212,7 +213,7 @@ function BooksView({ snapshot }: { snapshot: ProfilesSnapshot }) {
   };
 
   return (
-    <div className="w-full space-y-4 p-4 sm:p-6">
+    <div className={screenShellClassName}>
       <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
         <div className="min-w-0 space-y-2">
           <h2 className="text-2xl font-semibold tracking-tight">

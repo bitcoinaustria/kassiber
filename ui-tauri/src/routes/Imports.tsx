@@ -14,6 +14,7 @@ import {
   type IntegrationItem,
 } from "@/components/shadcnblocks/settings-integrations4";
 import { Button } from "@/components/ui/button";
+import { screenShellClassName } from "@/lib/screen-layout";
 
 const sourceIcon = (label: string, background: string, foreground: string) =>
   `data:image/svg+xml,${encodeURIComponent(
@@ -163,7 +164,7 @@ export function Imports() {
   const [selectedId, setSelectedId] = useState("xpub");
 
   return (
-    <div className="w-full space-y-4 bg-background p-3 sm:space-y-6 sm:p-4 md:p-6">
+    <div className={screenShellClassName}>
       <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div className="min-w-0 space-y-1">
           <p className="text-xs font-medium tracking-wide text-muted-foreground uppercase">

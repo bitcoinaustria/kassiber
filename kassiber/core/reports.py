@@ -44,7 +44,7 @@ AUSTRIAN_E1KV_KENNZAHL_LABELS = {
     176: "Auslaendische realisierte Wertverluste",
     801: "Spekulationsgeschaefte Altbestand (outside E 1kv)",
 }
-AUSTRIAN_E1KV_SUPPORTED_KENNZAHL_ORDER = (172, 174, 176)
+AUSTRIAN_E1KV_SUPPORTED_KENNZAHL_ORDER = (172, 174, 176, 801)
 AUSTRIAN_E1KV_CATEGORY_LABELS = {
     "income_general": "Laufende Einkuenfte aus Kryptowaehrungen",
     "income_capital_yield": "Laufende Einkuenfte aus Ueberlassung von Kryptowaehrungen",

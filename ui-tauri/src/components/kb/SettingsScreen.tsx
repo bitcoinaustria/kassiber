@@ -64,6 +64,7 @@ import { setSessionUnlockPassphrase } from "@/store/sessionLock";
 import { useUiStore, type AppLockPolicy } from "@/store/ui";
 import type { ExplorerSettings } from "@/lib/explorer";
 import type { AiModelsListData, AiModelRow } from "@/lib/aiCapabilities";
+import { screenPanelClassName } from "@/lib/screen-layout";
 import { cn } from "@/lib/utils";
 import {
   DEFAULT_BACKEND_NAME,
@@ -561,7 +562,7 @@ export function SettingsScreen({ onLock }: SettingsScreenProps) {
 
   return (
     <>
-      <div className="w-full bg-background p-3 sm:p-4 md:p-6">
+      <div className={screenPanelClassName}>
         <div className="mx-auto flex w-full max-w-[1500px] min-w-0 flex-col gap-4 lg:gap-6">
           <div className="space-y-1">
             <h1 className="text-2xl font-semibold tracking-tight">Settings</h1>
