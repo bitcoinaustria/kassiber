@@ -70,6 +70,8 @@ CREATE TABLE IF NOT EXISTS profiles (
     tax_country TEXT NOT NULL DEFAULT 'generic',
     tax_long_term_days INTEGER NOT NULL DEFAULT 365,
     gains_algorithm TEXT NOT NULL DEFAULT 'FIFO',
+    journal_input_version INTEGER NOT NULL DEFAULT 0,
+    last_processed_input_version INTEGER NOT NULL DEFAULT 0,
     last_processed_at TEXT,
     last_processed_tx_count INTEGER NOT NULL DEFAULT 0,
     created_at TEXT NOT NULL,
@@ -538,6 +540,8 @@ def ensure_schema_compat(conn):
     """
     ensure_column(conn, "profiles", "tax_country", f"TEXT NOT NULL DEFAULT '{DEFAULT_TAX_COUNTRY}'")
     ensure_column(conn, "profiles", "tax_long_term_days", f"INTEGER NOT NULL DEFAULT {DEFAULT_LONG_TERM_DAYS}")
+    ensure_column(conn, "profiles", "journal_input_version", "INTEGER NOT NULL DEFAULT 0")
+    ensure_column(conn, "profiles", "last_processed_input_version", "INTEGER NOT NULL DEFAULT 0")
     ensure_column(conn, "backends", "batch_size", "INTEGER")
     ensure_column(conn, "backends", "config_json", "TEXT NOT NULL DEFAULT '{}'")
     ensure_column(conn, "journal_entries", "at_category", "TEXT")
@@ -775,7 +779,10 @@ def _backfill_liquid_asset_codes(conn):
             )
     profile_placeholders = ",".join("?" for _ in affected_profile_ids)
     conn.execute(
-        f"UPDATE profiles SET last_processed_at = NULL, last_processed_tx_count = 0 "
+        f"UPDATE profiles "
+        f"SET last_processed_at = NULL, "
+        f"last_processed_tx_count = 0, "
+        f"journal_input_version = journal_input_version + 1 "
         f"WHERE id IN ({profile_placeholders})",
         affected_profile_ids,
     )

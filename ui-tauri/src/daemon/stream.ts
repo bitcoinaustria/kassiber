@@ -34,6 +34,21 @@ export interface AiChatMessage {
   finishReason?: string | null;
   provider?: string;
   model?: string;
+  provenance?: AiAnswerProvenance;
+}
+
+export interface AiAnswerProvenance {
+  generated_at?: string;
+  provider?: string;
+  model?: string;
+  tools_used?: string[];
+  active_transactions?: number | null;
+  quarantines?: number | null;
+  missing_price_transactions?: number | null;
+  journals_processed_at?: string | null;
+  auto_journal_processed?: boolean;
+  auto_sync_attempted?: boolean;
+  auto_sync_ok?: boolean | null;
 }
 
 export type AiToolCallStatus =
@@ -100,6 +115,7 @@ interface AiChatTerminalShape {
   provider?: string;
   model?: string;
   finish_reason?: string | null;
+  provenance?: AiAnswerProvenance;
 }
 
 export interface AiChatToolCallShape {
@@ -609,6 +625,7 @@ export function useAiChatStream(): UseAiChatStreamResult {
           finishReason,
           provider: envelope.data?.provider ?? request.provider,
           model: envelope.data?.model ?? request.model,
+          provenance: envelope.data?.provenance,
         }));
       } catch (caught) {
         if (!mountedRef.current) return;

@@ -255,6 +255,13 @@ and [docs/plan/04-desktop-ui.md](docs/plan/04-desktop-ui.md).
   tools for wallets, backends, quarantine, transfers, rates, workspace health,
   next actions, and filtered transactions, and keep raw shell/filesystem/CLI
   access out of scope.
+- [x] In-app AI reliability pass: auto-read exact local context before the
+  provider for common accounting questions, add deterministic report summary /
+  balance / portfolio / tax / history tools, add transaction extremes/search,
+  auto-refresh stale local journals before AI read/report tools, expose sat/msat
+  fields, add report-blocker / rate-coverage / change-audit / maintenance
+  tools, expose answer provenance in GUI/export, and export tool args/results
+  for debugging inaccurate small-model answers.
 - [x] Dev browser bridge for real local AI: Vite keeps a loopback-only Python
   daemon supervisor, demuxes JSONL by `request_id`, and streams `ai.chat`
   records to browser clients as NDJSON so Codex/browser tools can test local

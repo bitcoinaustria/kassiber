@@ -144,6 +144,105 @@ TOOL_CATALOG: tuple[ToolEntry, ...] = (
         summary_template="Read recent transactions",
     ),
     ToolEntry(
+        name="ui.transactions.extremes",
+        description=(
+            "Read exact largest and smallest transactions by amount for the active "
+            "profile, with sorting applied before the limit."
+        ),
+        parameters={
+            "type": "object",
+            "additionalProperties": False,
+            "properties": {
+                "limit": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 20,
+                    "description": "Maximum rows to return for each of largest and smallest.",
+                },
+                "direction": {
+                    "type": "string",
+                    "enum": ["inbound", "outbound"],
+                    "description": "Optional transaction direction filter.",
+                },
+                "asset": {
+                    "type": "string",
+                    "description": "Optional asset code filter, for example BTC or LBTC.",
+                },
+                "wallet": {
+                    "type": "string",
+                    "description": "Optional wallet id or label filter.",
+                },
+                "since": {
+                    "type": "string",
+                    "description": "Optional RFC3339 lower bound on occurred_at.",
+                },
+            },
+        },
+        kind_class="read_only",
+        wire_name="ui_transactions_extremes",
+        daemon_kind="ui.transactions.extremes",
+        summary_template="Read transaction extremes",
+    ),
+    ToolEntry(
+        name="ui.transactions.search",
+        description=(
+            "Search transactions by id, txid, wallet, note, description, counterparty, "
+            "kind, or tag with safe bounded filters."
+        ),
+        parameters={
+            "type": "object",
+            "additionalProperties": False,
+            "required": ["query"],
+            "properties": {
+                "query": {
+                    "type": "string",
+                    "description": "Search text to match against transaction metadata.",
+                },
+                "limit": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 100,
+                    "description": "Maximum transactions to return.",
+                },
+                "direction": {
+                    "type": "string",
+                    "enum": ["inbound", "outbound"],
+                    "description": "Optional transaction direction filter.",
+                },
+                "asset": {
+                    "type": "string",
+                    "description": "Optional asset code filter, for example BTC or LBTC.",
+                },
+                "wallet": {
+                    "type": "string",
+                    "description": "Optional wallet id or label filter.",
+                },
+                "since": {
+                    "type": "string",
+                    "description": "Optional RFC3339 lower bound on occurred_at.",
+                },
+                "until": {
+                    "type": "string",
+                    "description": "Optional RFC3339 upper bound on occurred_at.",
+                },
+                "sort": {
+                    "type": "string",
+                    "enum": ["occurred-at", "amount", "fiat-value", "fee"],
+                    "description": "Sort column applied before the limit.",
+                },
+                "order": {
+                    "type": "string",
+                    "enum": ["asc", "desc"],
+                    "description": "Sort direction.",
+                },
+            },
+        },
+        kind_class="read_only",
+        wire_name="ui_transactions_search",
+        daemon_kind="ui.transactions.search",
+        summary_template="Search transactions",
+    ),
+    ToolEntry(
         name="ui.wallets.list",
         description=(
             "Read configured wallets, labels, kinds, safe backend names/kinds, "
@@ -185,6 +284,122 @@ TOOL_CATALOG: tuple[ToolEntry, ...] = (
         wire_name="ui_reports_capital_gains",
         daemon_kind="ui.reports.capital_gains",
         summary_template="Read capital gains snapshot",
+    ),
+    ToolEntry(
+        name="ui.reports.summary",
+        description=(
+            "Read exact processed all-time summary totals for the active profile, "
+            "including asset_flow and wallet_flow with BTC, sat, and msat amounts."
+        ),
+        parameters={
+            "type": "object",
+            "additionalProperties": False,
+            "properties": {
+                "wallet": {
+                    "type": "string",
+                    "description": "Optional wallet id or label to scope the summary.",
+                },
+            },
+        },
+        kind_class="read_only",
+        wire_name="ui_reports_summary",
+        daemon_kind="ui.reports.summary",
+        summary_template="Read summary report",
+    ),
+    ToolEntry(
+        name="ui.reports.balance_sheet",
+        description=(
+            "Read exact processed current holdings by reporting bucket/account for "
+            "the active profile, including BTC, sat, msat, cost basis, and value."
+        ),
+        parameters=_EMPTY_OBJECT_SCHEMA,
+        kind_class="read_only",
+        wire_name="ui_reports_balance_sheet",
+        daemon_kind="ui.reports.balance_sheet",
+        summary_template="Read balance sheet",
+    ),
+    ToolEntry(
+        name="ui.reports.portfolio_summary",
+        description=(
+            "Read exact processed current holdings by wallet, including BTC, sat, "
+            "msat, average cost, cost basis, market value, and unrealized PnL."
+        ),
+        parameters=_EMPTY_OBJECT_SCHEMA,
+        kind_class="read_only",
+        wire_name="ui_reports_portfolio_summary",
+        daemon_kind="ui.reports.portfolio_summary",
+        summary_template="Read portfolio summary",
+    ),
+    ToolEntry(
+        name="ui.reports.tax_summary",
+        description=(
+            "Read exact processed tax-summary rows by year and asset, including "
+            "proceeds, cost basis, and gain/loss."
+        ),
+        parameters={
+            "type": "object",
+            "additionalProperties": False,
+            "properties": {
+                "year": {
+                    "type": "integer",
+                    "minimum": 1900,
+                    "maximum": 9999,
+                    "description": "Optional tax year to return.",
+                },
+            },
+        },
+        kind_class="read_only",
+        wire_name="ui_reports_tax_summary",
+        daemon_kind="ui.reports.tax_summary",
+        summary_template="Read tax summary",
+    ),
+    ToolEntry(
+        name="ui.reports.balance_history",
+        description=(
+            "Read processed balance history for trends over time, with bounded "
+            "interval and scope filters."
+        ),
+        parameters={
+            "type": "object",
+            "additionalProperties": False,
+            "properties": {
+                "interval": {
+                    "type": "string",
+                    "enum": ["hour", "day", "week", "month"],
+                    "description": "Bucket interval; month is a good default.",
+                },
+                "start": {
+                    "type": "string",
+                    "description": "Optional RFC3339 lower bound.",
+                },
+                "end": {
+                    "type": "string",
+                    "description": "Optional RFC3339 upper bound.",
+                },
+                "wallet": {
+                    "type": "string",
+                    "description": "Optional wallet id or label filter.",
+                },
+                "account": {
+                    "type": "string",
+                    "description": "Optional account code or label filter.",
+                },
+                "asset": {
+                    "type": "string",
+                    "description": "Optional asset code filter.",
+                },
+                "limit": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 500,
+                    "description": "Maximum latest buckets to return.",
+                },
+            },
+        },
+        kind_class="read_only",
+        wire_name="ui_reports_balance_history",
+        daemon_kind="ui.reports.balance_history",
+        summary_template="Read balance history",
     ),
     ToolEntry(
         name="ui.journals.snapshot",
@@ -246,6 +461,74 @@ TOOL_CATALOG: tuple[ToolEntry, ...] = (
         wire_name="ui_rates_summary",
         daemon_kind="ui.rates.summary",
         summary_template="Read rates summary",
+    ),
+    ToolEntry(
+        name="ui.rates.coverage",
+        description=(
+            "Read transaction pricing coverage for the active profile, including "
+            "missing fiat price rows and whether the local rates cache can cover them."
+        ),
+        parameters={
+            "type": "object",
+            "additionalProperties": False,
+            "properties": {
+                "limit": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 100,
+                    "description": "Maximum missing-price transactions to return.",
+                },
+            },
+        },
+        kind_class="read_only",
+        wire_name="ui_rates_coverage",
+        daemon_kind="ui.rates.coverage",
+        summary_template="Read rate coverage",
+    ),
+    ToolEntry(
+        name="ui.report.blockers",
+        description=(
+            "Read deterministic report-readiness blockers: missing workspace/profile, "
+            "wallets, transactions, stale journals, quarantine, and pricing coverage."
+        ),
+        parameters=_EMPTY_OBJECT_SCHEMA,
+        kind_class="read_only",
+        wire_name="ui_report_blockers",
+        daemon_kind="ui.report.blockers",
+        summary_template="Read report blockers",
+    ),
+    ToolEntry(
+        name="ui.audit.changes_since_last_answer",
+        description=(
+            "Read whether transactions, wallets, journals, quarantines, or rates "
+            "changed since an optional prior answer timestamp."
+        ),
+        parameters={
+            "type": "object",
+            "additionalProperties": False,
+            "properties": {
+                "since": {
+                    "type": "string",
+                    "description": "Optional RFC3339 timestamp from a previous answer provenance record.",
+                },
+            },
+        },
+        kind_class="read_only",
+        wire_name="ui_audit_changes_since_last_answer",
+        daemon_kind="ui.audit.changes_since_last_answer",
+        summary_template="Read changes since last answer",
+    ),
+    ToolEntry(
+        name="ui.maintenance.settings",
+        description=(
+            "Read AI maintenance settings for the active profile, including whether "
+            "wallet sync is allowed before report reads."
+        ),
+        parameters=_EMPTY_OBJECT_SCHEMA,
+        kind_class="read_only",
+        wire_name="ui_maintenance_settings",
+        daemon_kind="ui.maintenance.settings",
+        summary_template="Read maintenance settings",
     ),
     ToolEntry(
         name="ui.workspace.health",
@@ -323,6 +606,56 @@ TOOL_CATALOG: tuple[ToolEntry, ...] = (
         daemon_kind="ui.journals.process",
         summary_template="Process journals",
     ),
+    ToolEntry(
+        name="ui.maintenance.configure",
+        description=(
+            "Change AI maintenance settings after explicit consent. Currently "
+            "controls whether wallet sync may run automatically before report reads."
+        ),
+        parameters={
+            "type": "object",
+            "additionalProperties": False,
+            "required": ["auto_sync_before_report_reads"],
+            "properties": {
+                "auto_sync_before_report_reads": {
+                    "type": "boolean",
+                    "description": (
+                        "When true, report/read tools may sync configured wallets "
+                        "before refreshing journals."
+                    ),
+                },
+            },
+        },
+        kind_class="mutating",
+        wire_name="ui_maintenance_configure",
+        daemon_kind="ui.maintenance.configure",
+        summary_template="Configure AI maintenance",
+    ),
+    ToolEntry(
+        name="ui.maintenance.run",
+        description=(
+            "Run local maintenance after explicit consent: optional wallet sync "
+            "and journal processing, then return report blockers."
+        ),
+        parameters={
+            "type": "object",
+            "additionalProperties": False,
+            "properties": {
+                "sync": {
+                    "type": "string",
+                    "enum": ["never", "if_enabled", "always"],
+                    "description": (
+                        "Use never for local-only journal refresh, if_enabled to "
+                        "respect settings, or always for an explicit sync request."
+                    ),
+                },
+            },
+        },
+        kind_class="mutating",
+        wire_name="ui_maintenance_run",
+        daemon_kind="ui.maintenance.run",
+        summary_template="Run AI maintenance",
+    ),
 )
 
 TOOL_BY_NAME: dict[str, ToolEntry] = {}
@@ -369,6 +702,20 @@ def summarize_tool_call(tool: ToolEntry, arguments: dict[str, Any]) -> str:
         return "Sync all wallets"
     if tool.name == "ui.journals.process":
         return "Process journals"
+    if tool.name == "ui.maintenance.configure":
+        enabled = arguments.get("auto_sync_before_report_reads")
+        return (
+            "Enable automatic wallet sync before report reads"
+            if enabled is True
+            else "Disable automatic wallet sync before report reads"
+        )
+    if tool.name == "ui.maintenance.run":
+        sync_mode = arguments.get("sync", "if_enabled")
+        if sync_mode == "always":
+            return "Sync wallets and process journals"
+        if sync_mode == "never":
+            return "Process journals without wallet sync"
+        return "Run maintenance using current settings"
     return tool.summary_template or tool.name
 
 
@@ -385,9 +732,26 @@ export or back up.
 
 Before answering workspace-specific questions, use safe read tools such as
 ui.workspace.health, ui.next_actions, ui.wallets.list, ui.backends.list,
-ui.transactions.list, ui.journals.quarantine, ui.journals.transfers.list,
-ui.rates.summary, and report snapshots. Do not invent calculations when
+ui.transactions.list, ui.transactions.extremes, ui.transactions.search,
+ui.journals.quarantine, ui.journals.transfers.list, ui.rates.summary,
+ui.rates.coverage, ui.report.blockers, ui.audit.changes_since_last_answer,
+ui.maintenance.settings, ui.reports.summary, ui.reports.balance_sheet,
+ui.reports.portfolio_summary, ui.reports.tax_summary,
+ui.reports.balance_history, and report snapshots. Use
+ui.reports.summary for exact all-time inflow/outflow rollups,
+ui.reports.balance_sheet for current bucket holdings,
+ui.reports.portfolio_summary for current wallet holdings,
+ui.transactions.extremes for largest/smallest transactions, and
+ui.transactions.search for specific notes, counterparties, tags, ids, or txids.
+Use ui.report.blockers before saying reports are ready, ui.rates.coverage for
+missing-price questions, and ui.audit.changes_since_last_answer when checking
+whether a previous answer is still current. Do not invent calculations when
 Kassiber can read program-derived output.
+
+Stale local journals are maintenance, not a question for the user; read/report
+tools may refresh them before answering. Wallet sync contacts external services,
+so use ui.maintenance.settings to inspect the active-profile setting and
+ui.maintenance.run or ui.wallets.sync only after explicit consent.
 
 Read command-templates for exact CLI command shapes and common fast paths.
 Read onboarding for first-run setup, data roots, and context selection.

@@ -68,6 +68,12 @@ def resolve_scope(conn, workspace_ref=None, profile_ref=None):
 
 def invalidate_journals(conn, profile_id):
     conn.execute(
-        "UPDATE profiles SET last_processed_at = NULL, last_processed_tx_count = 0 WHERE id = ?",
+        """
+        UPDATE profiles
+        SET last_processed_at = NULL,
+            last_processed_tx_count = 0,
+            journal_input_version = journal_input_version + 1
+        WHERE id = ?
+        """,
         (profile_id,),
     )

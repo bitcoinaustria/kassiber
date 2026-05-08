@@ -232,7 +232,9 @@ def _invalidate_profile_journals_for_pair(conn, pair):
     conn.execute(
         """
         UPDATE profiles
-        SET last_processed_at = NULL, last_processed_tx_count = 0
+        SET last_processed_at = NULL,
+            last_processed_tx_count = 0,
+            journal_input_version = journal_input_version + 1
         WHERE upper(fiat_currency) = ?
         """,
         (fiat.upper(),),

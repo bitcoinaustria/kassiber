@@ -17,6 +17,13 @@ from .repo import current_context_snapshot
 
 MAX_UI_LIST_LIMIT = 500
 MAX_UI_PREVIEW_LIMIT = 100
+_AUDIT_PROFILE_TABLE_COLUMNS = {
+    "transactions": "created_at",
+    "journal_entries": "created_at",
+    "journal_quarantines": "created_at",
+    "wallets": "created_at",
+}
+_AUDIT_GLOBAL_TABLE_COLUMNS = {"rates_cache": "fetched_at"}
 
 
 def _empty_overview_snapshot() -> dict[str, Any]:
@@ -184,6 +191,16 @@ def _active_context_and_profile(
     return context, profile
 
 
+def _row_int(row: sqlite3.Row, key: str, default: int = 0) -> int:
+    try:
+        if key not in row.keys():
+            return default
+        value = row[key]
+    except (IndexError, KeyError):
+        return default
+    return int(value or default)
+
+
 def _journal_freshness(
     conn: sqlite3.Connection,
     profile: sqlite3.Row | None,
@@ -194,6 +211,8 @@ def _journal_freshness(
             "needs_processing": False,
             "last_processed_at": None,
             "last_processed_tx_count": 0,
+            "journal_input_version": 0,
+            "last_processed_input_version": 0,
             "active_transaction_count": 0,
             "journal_entry_count": 0,
             "quarantine_count": 0,
@@ -217,7 +236,9 @@ def _journal_freshness(
         (profile["id"],),
     ).fetchone()["count"]
     last_processed_at = profile["last_processed_at"]
-    last_processed_tx_count = int(profile["last_processed_tx_count"] or 0)
+    last_processed_tx_count = _row_int(profile, "last_processed_tx_count")
+    journal_input_version = _row_int(profile, "journal_input_version")
+    last_processed_input_version = _row_int(profile, "last_processed_input_version")
     active_count = int(active_transactions or 0)
     if active_count == 0:
         status = "no_transactions"
@@ -228,14 +249,19 @@ def _journal_freshness(
     elif last_processed_tx_count != active_count:
         status = "stale"
         reason = "active transaction count changed since last processing"
+    elif journal_input_version != last_processed_input_version:
+        status = "stale"
+        reason = "journal inputs changed since last processing"
     else:
         status = "current"
-        reason = "journals match the active transaction count"
+        reason = "journals match the active transaction count and input version"
     return {
         "status": status,
         "needs_processing": status in {"not_processed", "stale"},
         "last_processed_at": last_processed_at,
         "last_processed_tx_count": last_processed_tx_count,
+        "journal_input_version": journal_input_version,
+        "last_processed_input_version": last_processed_input_version,
         "active_transaction_count": active_count,
         "journal_entry_count": int(journal_entries or 0),
         "quarantine_count": int(quarantines or 0),
@@ -784,11 +810,7 @@ def build_overview_snapshot(conn: sqlite3.Connection) -> dict[str, Any]:
         """,
         (profile["id"],),
     ).fetchone()["count"]
-    needs_journals = (
-        not profile["last_processed_at"]
-        or int(profile["last_processed_tx_count"] or 0)
-        != int(active_transactions or 0)
-    )
+    needs_journals = _journal_freshness(conn, profile)["needs_processing"]
     quarantines = conn.execute(
         "SELECT COUNT(*) AS count FROM journal_quarantines WHERE profile_id = ?",
         (profile["id"],),
@@ -977,6 +999,242 @@ def build_transactions_snapshot(
     }
 
 
+def build_transactions_extremes_snapshot(
+    conn: sqlite3.Connection,
+    args: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    raw_args = _coerce_args(args)
+    unknown = sorted(
+        set(raw_args)
+        - {
+            "limit",
+            "direction",
+            "asset",
+            "wallet",
+            "since",
+        }
+    )
+    if unknown:
+        raise AppError(
+            "ui.transactions.extremes received unsupported filters",
+            code="validation",
+            details={"unknown": unknown},
+            retryable=False,
+        )
+    limit = _coerce_limit(raw_args, default=3, maximum=20)
+    base_args = {
+        key: value
+        for key, value in raw_args.items()
+        if key in {"direction", "asset", "wallet", "since"}
+    }
+    largest = build_transactions_snapshot(
+        conn,
+        {**base_args, "limit": limit, "sort": "amount", "order": "desc"},
+    )
+    smallest = build_transactions_snapshot(
+        conn,
+        {**base_args, "limit": limit, "sort": "amount", "order": "asc"},
+    )
+    return {
+        "largest": largest["txs"],
+        "smallest": smallest["txs"],
+        "filters": {
+            "limit": limit,
+            "direction": largest.get("filters", {}).get("direction"),
+            "asset": largest.get("filters", {}).get("asset"),
+            "wallet": largest.get("filters", {}).get("wallet"),
+            "since": largest.get("filters", {}).get("since"),
+            "sort": "amount",
+            "scope": "all_time_before_limit",
+        },
+    }
+
+
+def build_transactions_search_snapshot(
+    conn: sqlite3.Connection,
+    args: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    context = current_context_snapshot(conn)
+    if not context["workspace_id"] or not context["profile_id"]:
+        return {"txs": [], "filters": {"query": "", "limit": 0}}
+
+    raw_args = _coerce_args(args)
+    unknown = sorted(
+        set(raw_args)
+        - {
+            "query",
+            "limit",
+            "direction",
+            "asset",
+            "wallet",
+            "since",
+            "until",
+            "sort",
+            "order",
+        }
+    )
+    if unknown:
+        raise AppError(
+            "ui.transactions.search received unsupported filters",
+            code="validation",
+            details={"unknown": unknown},
+            retryable=False,
+        )
+    query = raw_args.get("query")
+    if not isinstance(query, str) or not query.strip():
+        raise AppError(
+            "ui.transactions.search query must be a non-empty string",
+            code="validation",
+            retryable=False,
+        )
+    query = query.strip()
+    limit = _coerce_limit(raw_args, default=25, maximum=100)
+
+    filters = ["t.profile_id = ?"]
+    params: list[Any] = [context["profile_id"]]
+    direction = raw_args.get("direction")
+    if direction is not None:
+        if direction not in {"inbound", "outbound"}:
+            raise AppError(
+                "direction must be inbound or outbound",
+                code="validation",
+                details={"direction": direction},
+                retryable=False,
+            )
+        filters.append("t.direction = ?")
+        params.append(direction)
+    asset = raw_args.get("asset")
+    asset_filter = None
+    if asset is not None:
+        if not isinstance(asset, str) or not asset.strip():
+            raise AppError("asset must be a non-empty string", code="validation")
+        asset_filter = asset.strip().upper()
+        filters.append("upper(t.asset) = ?")
+        params.append(asset_filter)
+    wallet = raw_args.get("wallet")
+    wallet_filter = None
+    if wallet is not None:
+        if not isinstance(wallet, str) or not wallet.strip():
+            raise AppError("wallet must be a non-empty string", code="validation")
+        wallet_filter = wallet.strip()
+        filters.append("(t.wallet_id = ? OR lower(w.label) = lower(?))")
+        params.extend([wallet_filter, wallet_filter])
+    since = raw_args.get("since")
+    since_filter = None
+    if since is not None:
+        if not isinstance(since, str) or not since.strip():
+            raise AppError("since must be an RFC3339 timestamp", code="validation")
+        since_filter = _iso_z(_parse_iso_datetime(since, "since"))
+        filters.append("t.occurred_at >= ?")
+        params.append(since_filter)
+    until = raw_args.get("until")
+    until_filter = None
+    if until is not None:
+        if not isinstance(until, str) or not until.strip():
+            raise AppError("until must be an RFC3339 timestamp", code="validation")
+        until_filter = _iso_z(_parse_iso_datetime(until, "until"))
+        filters.append("t.occurred_at <= ?")
+        params.append(until_filter)
+
+    filters.append(
+        """
+        (
+          lower(t.id) LIKE ?
+          OR lower(COALESCE(t.external_id, '')) LIKE ?
+          OR lower(COALESCE(t.kind, '')) LIKE ?
+          OR lower(COALESCE(t.description, '')) LIKE ?
+          OR lower(COALESCE(t.counterparty, '')) LIKE ?
+          OR lower(COALESCE(t.note, '')) LIKE ?
+          OR lower(w.label) LIKE ?
+          OR EXISTS (
+            SELECT 1
+            FROM transaction_tags tt
+            JOIN tags ON tags.id = tt.tag_id
+            WHERE tt.transaction_id = t.id
+              AND lower(tags.label) LIKE ?
+          )
+        )
+        """
+    )
+    like = f"%{query.lower()}%"
+    params.extend([like] * 8)
+
+    sort = raw_args.get("sort", "occurred-at")
+    sort_columns = {
+        "occurred-at": "t.occurred_at",
+        "amount": "t.amount",
+        "fiat-value": "COALESCE(t.fiat_value, 0)",
+        "fee": "t.fee",
+    }
+    if sort not in sort_columns:
+        raise AppError(
+            "sort must be one of: occurred-at, amount, fiat-value, fee",
+            code="validation",
+            details={"sort": sort},
+            retryable=False,
+        )
+    order = raw_args.get("order", "desc")
+    if order not in {"asc", "desc"}:
+        raise AppError(
+            "order must be asc or desc",
+            code="validation",
+            details={"order": order},
+            retryable=False,
+        )
+    order_sql = str(order).upper()
+    if sort == "occurred-at":
+        order_by = f"t.occurred_at {order_sql}, t.created_at {order_sql}, t.id {order_sql}"
+    else:
+        order_by = (
+            f"{sort_columns[sort]} {order_sql}, "
+            "t.occurred_at DESC, t.created_at DESC, t.id DESC"
+        )
+    params.append(limit)
+
+    rows = conn.execute(
+        f"""
+        SELECT
+            t.id,
+            t.external_id AS external_id,
+            t.occurred_at,
+            t.confirmed_at,
+            w.label AS wallet,
+            t.direction,
+            t.asset,
+            t.amount,
+            t.fee,
+            COALESCE(t.fiat_value, 0) AS fiat_value,
+            COALESCE(t.fiat_rate, 0) AS fiat_rate,
+            COALESCE(t.kind, '') AS kind,
+            COALESCE(t.description, '') AS description,
+            COALESCE(t.counterparty, '') AS counterparty,
+            COALESCE(t.note, '') AS note,
+            jq.reason AS quarantine_reason
+        FROM transactions t
+        JOIN wallets w ON w.id = t.wallet_id
+        LEFT JOIN journal_quarantines jq ON jq.transaction_id = t.id
+        WHERE {' AND '.join(filters)}
+        ORDER BY {order_by}
+        LIMIT ?
+        """,
+        params,
+    ).fetchall()
+    return {
+        "txs": _transaction_rows_to_ui(conn, rows),
+        "filters": {
+            "query": query,
+            "limit": limit,
+            "direction": direction,
+            "asset": asset_filter,
+            "wallet": wallet_filter,
+            "since": since_filter,
+            "until": until_filter,
+            "sort": sort,
+            "order": order,
+        },
+    }
+
+
 def _snapshot_year(rows: list[sqlite3.Row]) -> int:
     for row in rows:
         occurred_at = row["occurred_at"] or ""
@@ -1087,11 +1345,7 @@ def build_capital_gains_snapshot(conn: sqlite3.Connection) -> dict[str, Any]:
         """,
         (profile["id"],),
     ).fetchone()["count"]
-    needs_journals = (
-        not profile["last_processed_at"]
-        or int(profile["last_processed_tx_count"] or 0)
-        != int(active_transactions or 0)
-    )
+    needs_journals = _journal_freshness(conn, profile)["needs_processing"]
     quarantines = conn.execute(
         "SELECT COUNT(*) AS count FROM journal_quarantines WHERE profile_id = ?",
         (profile["id"],),
@@ -1199,11 +1453,7 @@ def build_journals_snapshot(conn: sqlite3.Connection) -> dict[str, Any]:
         "SELECT COUNT(*) AS count FROM journal_quarantines WHERE profile_id = ?",
         (profile["id"],),
     ).fetchone()["count"]
-    needs_journals = (
-        not profile["last_processed_at"]
-        or int(profile["last_processed_tx_count"] or 0)
-        != int(active_transactions or 0)
-    )
+    needs_journals = _journal_freshness(conn, profile)["needs_processing"]
     entry_rows = conn.execute(
         """
         SELECT entry_type, COUNT(*) AS count, SUM(COALESCE(gain_loss, 0)) AS gain_loss
@@ -1722,6 +1972,141 @@ def build_rates_summary_snapshot(conn: sqlite3.Connection) -> dict[str, Any]:
     return {"pairs": pairs, "summary": {"cached_pair_count": len(pairs)}}
 
 
+def build_rates_coverage_snapshot(
+    conn: sqlite3.Connection,
+    args: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    raw_args = _coerce_args(args)
+    unknown = sorted(set(raw_args) - {"limit"})
+    if unknown:
+        raise AppError(
+            "ui.rates.coverage received unsupported filters",
+            code="validation",
+            details={"unknown": unknown},
+            retryable=False,
+        )
+    limit = _coerce_limit(raw_args, default=25, maximum=100)
+    context, profile = _active_context_and_profile(conn)
+    empty_summary = {
+        "active_transactions": 0,
+        "priced_transactions": 0,
+        "missing_price_transactions": 0,
+        "cache_coverable_missing": 0,
+        "cache_uncovered_missing": 0,
+    }
+    if profile is None:
+        return {
+            "workspace": None,
+            "profile": None,
+            "summary": empty_summary,
+            "items": [],
+            "filters": {"limit": limit},
+        }
+
+    active_count = int(
+        conn.execute(
+            "SELECT COUNT(*) AS count FROM transactions WHERE profile_id = ? AND excluded = 0",
+            (profile["id"],),
+        ).fetchone()["count"]
+        or 0
+    )
+    missing_rows_all = conn.execute(
+        """
+        SELECT
+            t.id,
+            t.external_id,
+            t.occurred_at,
+            t.direction,
+            t.asset,
+            t.amount,
+            t.fiat_currency,
+            t.fiat_rate,
+            t.fiat_value,
+            w.label AS wallet
+        FROM transactions t
+        JOIN wallets w ON w.id = t.wallet_id
+        WHERE t.profile_id = ? AND t.excluded = 0
+          AND (t.fiat_rate IS NULL OR t.fiat_value IS NULL)
+        ORDER BY t.occurred_at ASC, t.created_at ASC, t.id ASC
+        """,
+        (profile["id"],),
+    ).fetchall()
+
+    def cache_lookup(row: sqlite3.Row) -> tuple[str, sqlite3.Row | None]:
+        asset = str(row["asset"] or "").upper()
+        fiat = str(row["fiat_currency"] or profile["fiat_currency"] or "EUR").upper()
+        pair_asset = "BTC" if asset == "LBTC" else asset
+        pair = f"{pair_asset}-{fiat}"
+        cache_row = conn.execute(
+            """
+            SELECT rate, timestamp
+            FROM rates_cache
+            WHERE pair = ? AND timestamp <= ?
+            ORDER BY timestamp DESC, fetched_at DESC
+            LIMIT 1
+            """,
+            (pair, row["occurred_at"]),
+        ).fetchone()
+        return pair, cache_row
+
+    cache_coverable_total = 0
+    cache_uncovered_total = 0
+    cache_by_id: dict[str, tuple[str, sqlite3.Row | None]] = {}
+    for row in missing_rows_all:
+        pair, cache_row = cache_lookup(row)
+        cache_by_id[row["id"]] = (pair, cache_row)
+        if cache_row:
+            cache_coverable_total += 1
+        else:
+            cache_uncovered_total += 1
+
+    items = []
+    for row in missing_rows_all[:limit]:
+        pair, cache_row = cache_by_id[row["id"]]
+        sign = 1 if row["direction"] == "inbound" else -1
+        amount_msat = sign * int(row["amount"] or 0)
+        amount_sat = (
+            amount_msat // 1000
+            if amount_msat % 1000 == 0
+            else amount_msat / 1000
+        )
+        asset = str(row["asset"] or "").upper()
+        fiat = str(row["fiat_currency"] or profile["fiat_currency"] or "EUR").upper()
+        items.append(
+            {
+                "id": row["id"],
+                "externalId": row["external_id"],
+                "date": row["occurred_at"],
+                "wallet": row["wallet"],
+                "direction": row["direction"],
+                "asset": asset,
+                "amountSat": amount_sat,
+                "amountMsat": amount_msat,
+                "fiatCurrency": fiat,
+                "missingFiatRate": row["fiat_rate"] is None,
+                "missingFiatValue": row["fiat_value"] is None,
+                "cachePair": pair,
+                "cacheHasRate": bool(cache_row),
+                "cacheRateAt": cache_row["timestamp"] if cache_row else None,
+            }
+        )
+
+    missing_count = len(missing_rows_all)
+    return {
+        "workspace": context["workspace_label"] or None,
+        "profile": context["profile_label"] or None,
+        "summary": {
+            "active_transactions": active_count,
+            "priced_transactions": active_count - missing_count,
+            "missing_price_transactions": missing_count,
+            "cache_coverable_missing": cache_coverable_total,
+            "cache_uncovered_missing": cache_uncovered_total,
+        },
+        "items": items,
+        "filters": {"limit": limit},
+    }
+
+
 def build_workspace_health_snapshot(conn: sqlite3.Connection) -> dict[str, Any]:
     context, profile = _active_context_and_profile(conn)
     if profile is None:
@@ -1797,6 +2182,215 @@ def build_workspace_health_snapshot(conn: sqlite3.Connection) -> dict[str, Any]:
         "reports": {
             "ready": reports_ready,
             "hints": hints,
+        },
+    }
+
+
+def build_report_blockers_snapshot(conn: sqlite3.Connection) -> dict[str, Any]:
+    health = build_workspace_health_snapshot(conn)
+    rates_coverage = build_rates_coverage_snapshot(conn, {"limit": 10})
+    blockers: list[dict[str, Any]] = []
+    if health["profile"] is None:
+        blockers.append(
+            {
+                "id": "no_active_profile",
+                "severity": "blocking",
+                "title": "No active profile",
+                "detail": "Create or select a workspace and profile first.",
+                "daemon_kind": "ui.profiles.snapshot",
+            }
+        )
+    else:
+        counts = health["counts"]
+        journals = health["journals"]
+        if counts["wallets"] == 0:
+            blockers.append(
+                {
+                    "id": "no_wallets",
+                    "severity": "blocking",
+                    "title": "No wallets",
+                    "detail": "Create a wallet before syncing, importing, or reporting.",
+                    "daemon_kind": "ui.wallets.list",
+                }
+            )
+        if counts["transactions"] == 0:
+            blockers.append(
+                {
+                    "id": "no_transactions",
+                    "severity": "blocking",
+                    "title": "No transactions",
+                    "detail": "Sync wallets or import transactions before reports can be useful.",
+                    "daemon_kind": "ui.wallets.sync",
+                }
+            )
+        if journals["needs_processing"]:
+            blockers.append(
+                {
+                    "id": "journals_stale",
+                    "severity": "blocking",
+                    "title": "Journals need processing",
+                    "detail": journals["reason"],
+                    "daemon_kind": "ui.journals.process",
+                }
+            )
+        if journals["quarantine_count"]:
+            blockers.append(
+                {
+                    "id": "journal_quarantine",
+                    "severity": "blocking",
+                    "title": "Quarantined journal rows",
+                    "detail": f"{journals['quarantine_count']} transaction(s) need review.",
+                    "daemon_kind": "ui.journals.quarantine",
+                }
+            )
+        missing_prices = rates_coverage["summary"]["missing_price_transactions"]
+        if missing_prices:
+            blockers.append(
+                {
+                    "id": "missing_prices",
+                    "severity": "review",
+                    "title": "Missing transaction prices",
+                    "detail": f"{missing_prices} transaction(s) are missing fiat price fields.",
+                    "daemon_kind": "ui.rates.coverage",
+                }
+            )
+    return {
+        "ready": not blockers,
+        "blockers": blockers,
+        "health": health,
+        "rates_coverage": rates_coverage,
+    }
+
+
+def build_audit_changes_since_last_answer_snapshot(
+    conn: sqlite3.Connection,
+    args: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    raw_args = _coerce_args(args)
+    unknown = sorted(set(raw_args) - {"since"})
+    if unknown:
+        raise AppError(
+            "ui.audit.changes_since_last_answer received unsupported filters",
+            code="validation",
+            details={"unknown": unknown},
+            retryable=False,
+        )
+    since = raw_args.get("since")
+    since_filter = None
+    if since is not None:
+        if not isinstance(since, str) or not since.strip():
+            raise AppError("since must be an RFC3339 timestamp", code="validation")
+        since_filter = _iso_z(_parse_iso_datetime(since, "since"))
+
+    context, profile = _active_context_and_profile(conn)
+    if profile is None:
+        status = "no_active_profile" if since_filter is not None else "baseline_required"
+        return {
+            "status": status,
+            "changed": False if status == "no_active_profile" else None,
+            "baseline": {"since": since_filter},
+            "workspace": None,
+            "profile": None,
+            "counts_since": {},
+            "latest": {},
+        }
+    if since_filter is None:
+        freshness = _journal_freshness(conn, profile)
+        return {
+            "status": "baseline_required",
+            "changed": None,
+            "baseline": {"since": None, "required": True},
+            "workspace": context["workspace_label"] or None,
+            "profile": context["profile_label"] or None,
+            "counts_since": {},
+            "latest": {
+                "transactions": None,
+                "journal_entries": None,
+                "journal_quarantines": None,
+                "wallets": None,
+                "rates": None,
+                "journals_processed_at": profile["last_processed_at"],
+            },
+            "current": {
+                "generated_at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+                "active_transactions": freshness["active_transaction_count"],
+                "journals_processed_at": profile["last_processed_at"],
+                "quarantines": freshness["quarantine_count"],
+            },
+        }
+
+    def profile_column(table: str, column: str = "created_at") -> str:
+        allowed = _AUDIT_PROFILE_TABLE_COLUMNS.get(table)
+        if allowed != column:
+            raise AssertionError(f"unsupported audit table/column: {table}.{column}")
+        return allowed
+
+    def global_column(table: str, column: str) -> str:
+        allowed = _AUDIT_GLOBAL_TABLE_COLUMNS.get(table)
+        if allowed != column:
+            raise AssertionError(f"unsupported audit table/column: {table}.{column}")
+        return allowed
+
+    def count_since(table: str, column: str = "created_at") -> int:
+        if since_filter is None:
+            return 0
+        column = profile_column(table, column)
+        return int(
+            conn.execute(
+                f"SELECT COUNT(*) AS count FROM {table} WHERE profile_id = ? AND {column} > ?",
+                (profile["id"], since_filter),
+            ).fetchone()["count"]
+            or 0
+        )
+
+    def latest(table: str, column: str = "created_at") -> str | None:
+        if table == "rates_cache":
+            column = global_column(table, column)
+            row = conn.execute(f"SELECT MAX({column}) AS latest FROM {table}").fetchone()
+        else:
+            column = profile_column(table, column)
+            row = conn.execute(
+                f"SELECT MAX({column}) AS latest FROM {table} WHERE profile_id = ?",
+                (profile["id"],),
+            ).fetchone()
+        return row["latest"] if row and row["latest"] else None
+
+    counts_since = {
+        "transactions": count_since("transactions"),
+        "journal_entries": count_since("journal_entries"),
+        "journal_quarantines": count_since("journal_quarantines"),
+        "wallets": count_since("wallets"),
+        "rates": int(
+            conn.execute(
+                "SELECT COUNT(*) AS count FROM rates_cache WHERE fetched_at > ?",
+                (since_filter,),
+            ).fetchone()["count"]
+            or 0
+        )
+        if since_filter
+        else 0,
+    }
+    freshness = _journal_freshness(conn, profile)
+    return {
+        "status": "compared",
+        "changed": any(value > 0 for value in counts_since.values()),
+        "baseline": {"since": since_filter},
+        "workspace": context["workspace_label"] or None,
+        "profile": context["profile_label"] or None,
+        "counts_since": counts_since,
+        "latest": {
+            "transactions": latest("transactions"),
+            "journal_entries": latest("journal_entries"),
+            "journal_quarantines": latest("journal_quarantines"),
+            "wallets": latest("wallets"),
+            "rates": latest("rates_cache", "fetched_at"),
+            "journals_processed_at": profile["last_processed_at"],
+        },
+        "current": {
+            "generated_at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+            "active_transactions": freshness["active_transaction_count"],
+            "journals_processed_at": profile["last_processed_at"],
+            "quarantines": freshness["quarantine_count"],
         },
     }
 
