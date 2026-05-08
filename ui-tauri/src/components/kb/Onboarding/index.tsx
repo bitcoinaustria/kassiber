@@ -5,7 +5,7 @@ import { ShieldCheck } from "lucide-react";
 
 import { Wordmark } from "@/components/kb/Wordmark";
 import { Button } from "@/components/ui/button";
-import { DAEMON_AUTH_REQUIRED_EVENT } from "@/daemon/client";
+import { dispatchDaemonAuthRequired } from "@/daemon/client";
 import {
   activateImportProject,
   canImportProjects,
@@ -162,11 +162,10 @@ export const Onboarding = ({ className, steps: customSteps }: OnboardingProps) =
   const handleAuthRequired = (envelope: DaemonEnvelope) => {
     clearSessionUnlockPassphrase();
     clearDaemonQueryCache();
-    if (typeof window !== "undefined") {
-      window.dispatchEvent(
-        new CustomEvent(DAEMON_AUTH_REQUIRED_EVENT, { detail: envelope }),
-      );
-    }
+    dispatchDaemonAuthRequired(
+      envelope,
+      useUiStore.getState().daemonSession,
+    );
   };
 
   const finish = async () => {
@@ -310,6 +309,9 @@ export const Onboarding = ({ className, steps: customSteps }: OnboardingProps) =
     setLoadingImportProfiles(true);
     setImportError(null);
     try {
+      if (selection.encrypted) {
+        useUiStore.getState().bumpDaemonSession();
+      }
       const envelope = await getTransport("real").invoke({
         kind: "daemon.unlock",
         args: {

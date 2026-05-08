@@ -81,6 +81,7 @@ import type { ThemePreference } from "@/store/ui";
 import {
   DAEMON_AUTH_REQUIRED_EVENT,
   formatDaemonEnvelopeError,
+  shouldHandleDaemonAuthRequiredEvent,
   useDaemon,
   useDaemonMutation,
 } from "@/daemon/client";
@@ -527,6 +528,7 @@ export function AppShell() {
   const appLockPolicy = useUiStore((s) => s.appLockPolicy);
   const setIdentity = useUiStore((s) => s.setIdentity);
   const setHideSensitive = useUiStore((s) => s.setHideSensitive);
+  const bumpDaemonSession = useUiStore((s) => s.bumpDaemonSession);
   const encryptedWorkspace =
     Boolean(identity?.encrypted) || identity?.databaseMode === "sqlcipher";
   const [daemonAuthRequired, setDaemonAuthRequired] = React.useState(false);
@@ -594,6 +596,7 @@ export function AppShell() {
       passphrase: string,
     ): Promise<{ ok: boolean; error?: string | null }> => {
       if (requiresDaemonUnlock) {
+        bumpDaemonSession();
         const envelope = await getTransport("real").invoke({
           kind: "daemon.unlock",
           args: {
@@ -628,7 +631,7 @@ export function AppShell() {
       }
       return { ok: unlocked, error: null };
     },
-    [identity?.importedProject, queryClient, requiresDaemonUnlock],
+    [bumpDaemonSession, identity?.importedProject, queryClient, requiresDaemonUnlock],
   );
 
   const resetLocalUiSession = React.useCallback(() => {
@@ -657,7 +660,15 @@ export function AppShell() {
   }, [identity, navigate]);
 
   React.useEffect(() => {
-    const onAuthRequired = () => {
+    const onAuthRequired = (event: Event) => {
+      if (
+        !shouldHandleDaemonAuthRequiredEvent(
+          (event as CustomEvent).detail,
+          useUiStore.getState().daemonSession,
+        )
+      ) {
+        return;
+      }
       setDaemonAuthRequired(true);
       clearSessionUnlockPassphrase();
       clearDaemonQueryCache();
