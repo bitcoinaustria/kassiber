@@ -214,12 +214,23 @@ such as pending work, sync readiness, totals, inflow/outflow, balances, tax
 summaries, largest/smallest transactions, transaction search, quarantine,
 transfers, and pricing. Matching read-only tool results are streamed to the UI
 and inserted into the model context as exact local data, so small local models
-can answer from program output instead of doing their own arithmetic.
+can answer from program output instead of doing their own arithmetic. That
+auto-read context is sent as untrusted accounting data, not as system
+instructions, and is bounded per tool so large reports cannot silently crowd
+out everything else.
 When one of those reads needs current reports or journal-derived state,
 Kassiber refreshes stale local journals first and includes the
 `ui.journals.process` result in the tool result metadata. This refresh is local
-and deterministic; wallet/backend sync remains explicit because it can contact
+and deterministic, and the same refresh path applies when the desktop GUI reads
+journal-derived daemon kinds such as `ui.reports.*` or `ui.report.blockers`
+directly. Wallet/backend sync remains explicit unless the active profile has
+enabled automatic sync-before-report maintenance, because sync can contact
 external services and import new transactions.
+
+Quoted or search-like questions can trigger `ui.transactions.search` before the
+provider is called. Matching transaction notes, descriptions, counterparties,
+tags, and values may then be included in the provider context; keep inference
+local when those fields are sensitive.
 
 The in-app prompt is a digest, not a full dump of
 `skills/kassiber/SKILL.md`. It teaches the model the local-first accounting

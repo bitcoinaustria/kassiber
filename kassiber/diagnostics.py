@@ -374,6 +374,8 @@ def _profile_summary(conn: sqlite3.Connection) -> dict[str, Any]:
             p.gains_algorithm,
             p.last_processed_at,
             p.last_processed_tx_count,
+            p.journal_input_version,
+            p.last_processed_input_version,
             COUNT(t.id) AS active_transactions
         FROM profiles p
         LEFT JOIN transactions t ON t.profile_id = p.id AND t.excluded = 0
@@ -389,7 +391,11 @@ def _profile_summary(conn: sqlite3.Connection) -> dict[str, Any]:
         by_country[row["tax_country"] or "unknown"] += 1
         by_currency[row["fiat_currency"] or "unknown"] += 1
         by_algorithm[row["gains_algorithm"] or "unknown"] += 1
-        if row["last_processed_at"] and row["active_transactions"] == row["last_processed_tx_count"]:
+        if (
+            row["last_processed_at"]
+            and row["active_transactions"] == row["last_processed_tx_count"]
+            and row["journal_input_version"] == row["last_processed_input_version"]
+        ):
             processed += 1
         else:
             stale += 1

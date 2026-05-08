@@ -17,6 +17,13 @@ from .repo import current_context_snapshot
 
 MAX_UI_LIST_LIMIT = 500
 MAX_UI_PREVIEW_LIMIT = 100
+_AUDIT_PROFILE_TABLE_COLUMNS = {
+    "transactions": "created_at",
+    "journal_entries": "created_at",
+    "journal_quarantines": "created_at",
+    "wallets": "created_at",
+}
+_AUDIT_GLOBAL_TABLE_COLUMNS = {"rates_cache": "fetched_at"}
 
 
 def _empty_overview_snapshot() -> dict[str, Any]:
@@ -184,6 +191,16 @@ def _active_context_and_profile(
     return context, profile
 
 
+def _row_int(row: sqlite3.Row, key: str, default: int = 0) -> int:
+    try:
+        if key not in row.keys():
+            return default
+        value = row[key]
+    except (IndexError, KeyError):
+        return default
+    return int(value or default)
+
+
 def _journal_freshness(
     conn: sqlite3.Connection,
     profile: sqlite3.Row | None,
@@ -194,6 +211,8 @@ def _journal_freshness(
             "needs_processing": False,
             "last_processed_at": None,
             "last_processed_tx_count": 0,
+            "journal_input_version": 0,
+            "last_processed_input_version": 0,
             "active_transaction_count": 0,
             "journal_entry_count": 0,
             "quarantine_count": 0,
@@ -217,7 +236,9 @@ def _journal_freshness(
         (profile["id"],),
     ).fetchone()["count"]
     last_processed_at = profile["last_processed_at"]
-    last_processed_tx_count = int(profile["last_processed_tx_count"] or 0)
+    last_processed_tx_count = _row_int(profile, "last_processed_tx_count")
+    journal_input_version = _row_int(profile, "journal_input_version")
+    last_processed_input_version = _row_int(profile, "last_processed_input_version")
     active_count = int(active_transactions or 0)
     if active_count == 0:
         status = "no_transactions"
@@ -228,14 +249,19 @@ def _journal_freshness(
     elif last_processed_tx_count != active_count:
         status = "stale"
         reason = "active transaction count changed since last processing"
+    elif journal_input_version != last_processed_input_version:
+        status = "stale"
+        reason = "journal inputs changed since last processing"
     else:
         status = "current"
-        reason = "journals match the active transaction count"
+        reason = "journals match the active transaction count and input version"
     return {
         "status": status,
         "needs_processing": status in {"not_processed", "stale"},
         "last_processed_at": last_processed_at,
         "last_processed_tx_count": last_processed_tx_count,
+        "journal_input_version": journal_input_version,
+        "last_processed_input_version": last_processed_input_version,
         "active_transaction_count": active_count,
         "journal_entry_count": int(journal_entries or 0),
         "quarantine_count": int(quarantines or 0),
@@ -784,11 +810,7 @@ def build_overview_snapshot(conn: sqlite3.Connection) -> dict[str, Any]:
         """,
         (profile["id"],),
     ).fetchone()["count"]
-    needs_journals = (
-        not profile["last_processed_at"]
-        or int(profile["last_processed_tx_count"] or 0)
-        != int(active_transactions or 0)
-    )
+    needs_journals = _journal_freshness(conn, profile)["needs_processing"]
     quarantines = conn.execute(
         "SELECT COUNT(*) AS count FROM journal_quarantines WHERE profile_id = ?",
         (profile["id"],),
@@ -1323,11 +1345,7 @@ def build_capital_gains_snapshot(conn: sqlite3.Connection) -> dict[str, Any]:
         """,
         (profile["id"],),
     ).fetchone()["count"]
-    needs_journals = (
-        not profile["last_processed_at"]
-        or int(profile["last_processed_tx_count"] or 0)
-        != int(active_transactions or 0)
-    )
+    needs_journals = _journal_freshness(conn, profile)["needs_processing"]
     quarantines = conn.execute(
         "SELECT COUNT(*) AS count FROM journal_quarantines WHERE profile_id = ?",
         (profile["id"],),
@@ -1435,11 +1453,7 @@ def build_journals_snapshot(conn: sqlite3.Connection) -> dict[str, Any]:
         "SELECT COUNT(*) AS count FROM journal_quarantines WHERE profile_id = ?",
         (profile["id"],),
     ).fetchone()["count"]
-    needs_journals = (
-        not profile["last_processed_at"]
-        or int(profile["last_processed_tx_count"] or 0)
-        != int(active_transactions or 0)
-    )
+    needs_journals = _journal_freshness(conn, profile)["needs_processing"]
     entry_rows = conn.execute(
         """
         SELECT entry_type, COUNT(*) AS count, SUM(COALESCE(gain_loss, 0)) AS gain_loss
@@ -2279,9 +2293,22 @@ def build_audit_changes_since_last_answer_snapshot(
             "latest": {},
         }
 
+    def profile_column(table: str, column: str = "created_at") -> str:
+        allowed = _AUDIT_PROFILE_TABLE_COLUMNS.get(table)
+        if allowed != column:
+            raise AssertionError(f"unsupported audit table/column: {table}.{column}")
+        return allowed
+
+    def global_column(table: str, column: str) -> str:
+        allowed = _AUDIT_GLOBAL_TABLE_COLUMNS.get(table)
+        if allowed != column:
+            raise AssertionError(f"unsupported audit table/column: {table}.{column}")
+        return allowed
+
     def count_since(table: str, column: str = "created_at") -> int:
         if since_filter is None:
             return 0
+        column = profile_column(table, column)
         return int(
             conn.execute(
                 f"SELECT COUNT(*) AS count FROM {table} WHERE profile_id = ? AND {column} > ?",
@@ -2292,8 +2319,10 @@ def build_audit_changes_since_last_answer_snapshot(
 
     def latest(table: str, column: str = "created_at") -> str | None:
         if table == "rates_cache":
+            column = global_column(table, column)
             row = conn.execute(f"SELECT MAX({column}) AS latest FROM {table}").fetchone()
         else:
+            column = profile_column(table, column)
             row = conn.execute(
                 f"SELECT MAX({column}) AS latest FROM {table} WHERE profile_id = ?",
                 (profile["id"],),

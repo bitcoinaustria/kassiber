@@ -264,8 +264,41 @@ def resolve_tag(conn, profile_id, ref):
 
 def invalidate_journals(conn, profile_id):
     conn.execute(
-        "UPDATE profiles SET last_processed_at = NULL, last_processed_tx_count = 0 WHERE id = ?",
+        """
+        UPDATE profiles
+        SET last_processed_at = NULL,
+            last_processed_tx_count = 0,
+            journal_input_version = journal_input_version + 1
+        WHERE id = ?
+        """,
         (profile_id,),
+    )
+
+
+def _row_int(row, key, default=0):
+    try:
+        if hasattr(row, "keys") and key not in row.keys():
+            return default
+        value = row[key]
+    except (IndexError, KeyError):
+        return default
+    return int(value or default)
+
+
+def _journals_current_for_profile(conn, profile):
+    current_count = conn.execute(
+        "SELECT COUNT(*) AS count FROM transactions WHERE profile_id = ? AND excluded = 0",
+        (profile["id"],),
+    ).fetchone()["count"]
+    input_version = _row_int(profile, "journal_input_version")
+    processed_version = _row_int(profile, "last_processed_input_version")
+    return (
+        int(current_count or 0),
+        bool(
+            profile["last_processed_at"]
+            and int(current_count or 0) == _row_int(profile, "last_processed_tx_count")
+            and input_version == processed_version
+        ),
     )
 
 
@@ -1495,7 +1528,13 @@ def process_journals(conn, workspace_ref, profile_ref):
         (profile["id"],),
     ).fetchone()["count"]
     conn.execute(
-        "UPDATE profiles SET last_processed_at = ?, last_processed_tx_count = ? WHERE id = ?",
+        """
+        UPDATE profiles
+        SET last_processed_at = ?,
+            last_processed_tx_count = ?,
+            last_processed_input_version = journal_input_version
+        WHERE id = ?
+        """,
         (created_at, tx_count, profile["id"]),
     )
     conn.commit()
@@ -1513,17 +1552,14 @@ def process_journals(conn, workspace_ref, profile_ref):
 
 
 def _journal_processing_status(conn, profile):
-    current_count = conn.execute(
-        "SELECT COUNT(*) AS count FROM transactions WHERE profile_id = ? AND excluded = 0",
-        (profile["id"],),
-    ).fetchone()["count"]
+    current_count, processed_current = _journals_current_for_profile(conn, profile)
     return {
         "last_processed_at": profile["last_processed_at"],
-        "last_processed_tx_count": int(profile["last_processed_tx_count"] or 0),
+        "last_processed_tx_count": _row_int(profile, "last_processed_tx_count"),
+        "journal_input_version": _row_int(profile, "journal_input_version"),
+        "last_processed_input_version": _row_int(profile, "last_processed_input_version"),
         "current_active_tx_count": int(current_count or 0),
-        "processed_journals_current": bool(
-            profile["last_processed_at"] and current_count == profile["last_processed_tx_count"]
-        ),
+        "processed_journals_current": processed_current,
     }
 
 
@@ -2198,11 +2234,8 @@ def clear_quarantine(conn, workspace_ref, profile_ref, tx_ref):
 
 
 def require_processed_journals(conn, profile):
-    current_count = conn.execute(
-        "SELECT COUNT(*) AS count FROM transactions WHERE profile_id = ? AND excluded = 0",
-        (profile["id"],),
-    ).fetchone()["count"]
-    if not profile["last_processed_at"] or current_count != profile["last_processed_tx_count"]:
+    _, processed_current = _journals_current_for_profile(conn, profile)
+    if not processed_current:
         raise AppError("Reports require fresh journals. Run `kassiber journals process` first.")
 
 
@@ -2225,7 +2258,9 @@ def get_profile_details(conn, workspace_ref=None, profile_ref=None):
         "tax_long_term_days": profile["tax_long_term_days"],
         "gains_algorithm": profile["gains_algorithm"],
         "last_processed_at": profile["last_processed_at"],
-        "last_processed_tx_count": profile["last_processed_tx_count"],
+        "last_processed_tx_count": _row_int(profile, "last_processed_tx_count"),
+        "journal_input_version": _row_int(profile, "journal_input_version"),
+        "last_processed_input_version": _row_int(profile, "last_processed_input_version"),
         "created_at": profile["created_at"],
         "is_current": profile["id"] == current_profile_id and profile["workspace_id"] == current_workspace_id,
     }

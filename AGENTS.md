@@ -90,8 +90,9 @@ Kassiber is currently in **dev mode**: renaming commands, breaking flags, and re
   `asset`, `wallet`, `since`, `sort`, and `order`. `ui.backends.list` is
   scoped to the active profile and exposes URL presence metadata, not exact
   endpoint URLs. Stale local journals may be automatically refreshed before
-  AI read/report tools, with the `ui.journals.process` result included in tool
-  result metadata. Wallet/backend sync can be allowed per active profile via
+  AI read/report tools and direct GUI reads of journal-derived report kinds,
+  with the `ui.journals.process` result included in tool result metadata for
+  AI calls. Wallet/backend sync can be allowed per active profile via
   `ui.maintenance.configure`, and `ui.maintenance.run` can explicitly sync and
   refresh journals after consent; otherwise sync remains explicit because it
   contacts external services and imports new transactions. Do not expose raw shell,
