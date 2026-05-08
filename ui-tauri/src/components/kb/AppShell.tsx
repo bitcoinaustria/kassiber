@@ -596,6 +596,7 @@ export function AppShell() {
       passphrase: string,
     ): Promise<{ ok: boolean; error?: string | null }> => {
       if (requiresDaemonUnlock) {
+        bumpDaemonSession();
         const envelope = await getTransport("real").invoke({
           kind: "daemon.unlock",
           args: {
@@ -609,7 +610,6 @@ export function AppShell() {
         if (unlocked) {
           await setSessionUnlockPassphrase(passphrase);
           setDaemonAuthRequired(false);
-          bumpDaemonSession();
           await queryClient.invalidateQueries({
             queryKey: ["daemon"],
           });

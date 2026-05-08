@@ -76,7 +76,7 @@ function formatErrorDetails(details: unknown): string | null {
   }
 }
 
-function isDaemonEnvelope(value: unknown): value is DaemonEnvelope {
+function isAuthRequiredEnvelope(value: unknown): value is DaemonEnvelope {
   if (!value || typeof value !== "object") return false;
   const candidate = value as Partial<DaemonEnvelope>;
   return (
@@ -88,13 +88,13 @@ function isDaemonEnvelope(value: unknown): value is DaemonEnvelope {
 export function parseDaemonAuthRequiredEventDetail(
   detail: unknown,
 ): DaemonAuthRequiredEventDetail | null {
-  if (isDaemonEnvelope(detail)) {
+  if (isAuthRequiredEnvelope(detail)) {
     return { envelope: detail };
   }
   if (!detail || typeof detail !== "object") return null;
 
   const candidate = detail as Partial<DaemonAuthRequiredEventDetail>;
-  if (!isDaemonEnvelope(candidate.envelope)) return null;
+  if (!isAuthRequiredEnvelope(candidate.envelope)) return null;
   return {
     envelope: candidate.envelope,
     daemonSession:

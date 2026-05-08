@@ -309,6 +309,9 @@ export const Onboarding = ({ className, steps: customSteps }: OnboardingProps) =
     setLoadingImportProfiles(true);
     setImportError(null);
     try {
+      if (selection.encrypted) {
+        useUiStore.getState().bumpDaemonSession();
+      }
       const envelope = await getTransport("real").invoke({
         kind: "daemon.unlock",
         args: {
