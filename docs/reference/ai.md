@@ -208,6 +208,19 @@ sends OpenAI-style tool definitions, emits `ai.chat.tool_call`,
 `role: "tool"` messages, and finishes with the normal terminal `ai.chat`
 envelope.
 
+Before the provider is called, Kassiber also runs a small deterministic
+read-only router for Kassiber questions. It looks for common accounting intents
+such as pending work, sync readiness, totals, inflow/outflow, balances, tax
+summaries, largest/smallest transactions, transaction search, quarantine,
+transfers, and pricing. Matching read-only tool results are streamed to the UI
+and inserted into the model context as exact local data, so small local models
+can answer from program output instead of doing their own arithmetic.
+When one of those reads needs current reports or journal-derived state,
+Kassiber refreshes stale local journals first and includes the
+`ui.journals.process` result in the tool result metadata. This refresh is local
+and deterministic; wallet/backend sync remains explicit because it can contact
+external services and import new transactions.
+
 The in-app prompt is a digest, not a full dump of
 `skills/kassiber/SKILL.md`. It teaches the model the local-first accounting
 role, the normal workflow order, the journal reprocessing rule, and the
@@ -231,17 +244,48 @@ surfaces:
 - `ui_transactions_list` maps to daemon kind `ui.transactions.list` with
   bounded filters for `limit`, `direction`, `asset`, `wallet`, `since`, `sort`,
   and `order`
+- `ui_transactions_extremes` maps to daemon kind
+  `ui.transactions.extremes`; it returns the exact largest and smallest
+  transactions after sorting before the limit
+- `ui_transactions_search` maps to daemon kind `ui.transactions.search`; it
+  searches safe transaction metadata such as ids, txids, wallet labels, notes,
+  descriptions, counterparties, kinds, and tags
 - `ui_wallets_list` maps to daemon kind `ui.wallets.list`
 - `ui_backends_list` maps to daemon kind `ui.backends.list`; it is scoped to
   backends referenced by the active books/profile and returns URL presence
   metadata, not exact endpoint URLs
 - `ui_profiles_snapshot` maps to daemon kind `ui.profiles.snapshot`
 - `ui_reports_capital_gains` maps to daemon kind `ui.reports.capital_gains`
+- `ui_reports_summary` maps to daemon kind `ui.reports.summary`; it returns
+  exact processed all-time summary totals, including asset and wallet
+  inflow/outflow fields in BTC, sat, and msat
+- `ui_reports_balance_sheet` maps to daemon kind `ui.reports.balance_sheet`;
+  it returns exact processed current holdings by reporting bucket/account,
+  including BTC, sat, msat, cost basis, market value, and unrealized PnL
+- `ui_reports_portfolio_summary` maps to daemon kind
+  `ui.reports.portfolio_summary`; it returns exact processed holdings by wallet
+- `ui_reports_tax_summary` maps to daemon kind `ui.reports.tax_summary`; it
+  returns exact processed tax-summary rows by year and asset
+- `ui_reports_balance_history` maps to daemon kind
+  `ui.reports.balance_history`; it returns processed balance-history buckets
+  for trend questions
 - `ui_journals_snapshot` maps to daemon kind `ui.journals.snapshot`
 - `ui_journals_quarantine` maps to daemon kind `ui.journals.quarantine`
 - `ui_journals_transfers_list` maps to daemon kind
   `ui.journals.transfers.list`
 - `ui_rates_summary` maps to daemon kind `ui.rates.summary`
+- `ui_rates_coverage` maps to daemon kind `ui.rates.coverage`; it returns
+  transaction pricing coverage, missing fiat price rows, and whether local
+  rates-cache samples can cover those gaps
+- `ui_report_blockers` maps to daemon kind `ui.report.blockers`; it returns a
+  deterministic report-readiness answer with blockers for missing scope,
+  wallets, transactions, stale journals, quarantine, or missing prices
+- `ui_audit_changes_since_last_answer` maps to daemon kind
+  `ui.audit.changes_since_last_answer`; it answers whether transactions,
+  wallets, journals, quarantines, or rates changed since an optional RFC3339
+  answer timestamp
+- `ui_maintenance_settings` maps to daemon kind `ui.maintenance.settings`; it
+  reads the active profile's AI maintenance settings
 - `ui_workspace_health` maps to daemon kind `ui.workspace.health`
 - `ui_next_actions` maps to daemon kind `ui.next_actions`
 - `read_skill_reference`
@@ -262,8 +306,15 @@ restricted to files under `skills/kassiber/references/`: `command-templates`,
 `wallets-backends`.
 
 Mutating provider tools currently include `ui_wallets_sync`, which maps to
-daemon kind `ui.wallets.sync`, and `ui_journals_process`, which maps to
-`ui.journals.process`. When a model requests one, the daemon emits
+daemon kind `ui.wallets.sync`, `ui_journals_process`, which maps to
+`ui.journals.process`, `ui_maintenance_configure`, which changes active-profile
+AI maintenance settings, and `ui_maintenance_run`, which runs optional sync plus
+journal maintenance and returns report blockers. Stale journals may also be
+refreshed automatically before read/report tools as local maintenance. Wallet
+sync before report reads is disabled by default; it runs automatically only
+after `ui_maintenance_configure` enables that active-profile setting, or when
+the user explicitly approves a maintenance/sync call. When a model requests a
+mutating tool, the daemon emits
 `ai.chat.tool_consent_required` with a short summary and redacted argument
 preview, then waits for:
 
@@ -285,6 +336,13 @@ not respond before the consent timeout, the daemon feeds a tool result back to
 the model with `ok: false` and `reason: "user_denied"` or
 `"consent_timeout"`. Unknown tools still return `tool_not_allowed` and are not
 executed.
+
+The terminal `ai.chat` record includes a compact `provenance` object with the
+provider/model, generation timestamp, local tool names used, journal refresh
+status, sync-attempt status, and counts learned from health/report-blocker
+tools. The GUI uses that object and the exact tool payloads to render source
+chips beside the assistant answer, so small models can be checked against
+program-derived facts.
 
 ## Remote inference
 
@@ -308,6 +366,7 @@ skill:
 - "Use the Kassiber skill to import this Phoenix CSV into my existing wallet, re-run journals, and show me the summary report."
 - "Use the Kassiber skill to find quarantined journal events, explain what is missing, and suggest the smallest fix."
 - "Use the Kassiber skill to compare wallet balances, bucket allocations, and portfolio output for these books without doing your own arithmetic."
+- "Find transactions tagged revenue, show my total inflow/outflow, largest transaction, current balance, and 2026 tax summary from tool output only."
 
 Kassiber accounts are wallet/reporting buckets in the current product. AI
 assistants should not recommend double-entry charts of accounts, automatic fee

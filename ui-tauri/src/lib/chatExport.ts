@@ -47,12 +47,13 @@ export function buildChatExportMarkdown(
         ? [
             "",
             "Tools:",
-            ...message.toolCalls.map(
-              (tool) => `- ${tool.name}: ${tool.status}`,
-            ),
+            ...message.toolCalls.flatMap(formatToolExportLines),
           ].join("\n")
         : "";
-      return `${header}\n\n${body}${tools}`;
+      const provenance = message.provenance
+        ? ["", "Provenance:", formatJsonForExport(message.provenance)].join("\n")
+        : "";
+      return `${header}\n\n${body}${tools}${provenance}`;
     })
     .join("\n\n---\n\n");
   return `# Kassiber chat export\n\nExported: ${exportedAt.toISOString()}\n\n${transcript}\n`;
@@ -107,4 +108,34 @@ export async function saveChatExport(
   }
 
   return triggerAnchorDownload(filename, contents);
+}
+
+function formatToolExportLines(
+  tool: NonNullable<AiChatMessage["toolCalls"]>[number],
+): string[] {
+  const lines = [`- ${tool.name}: ${tool.status}`];
+  if (Object.keys(tool.arguments).length > 0) {
+    lines.push(`  Arguments: ${formatJsonForExport(tool.arguments)}`);
+  }
+  if (tool.result !== undefined && tool.result !== null) {
+    lines.push(`  Result: ${formatJsonForExport(tool.result)}`);
+  }
+  if (tool.reason) {
+    lines.push(`  Reason: ${tool.reason}`);
+  }
+  return lines;
+}
+
+function formatJsonForExport(value: unknown): string {
+  let text: string;
+  try {
+    text = JSON.stringify(value);
+  } catch {
+    text = String(value);
+  }
+  const maxLength = 4000;
+  if (text.length > maxLength) {
+    text = `${text.slice(0, maxLength)}...<truncated>`;
+  }
+  return text;
 }

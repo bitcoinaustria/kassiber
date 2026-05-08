@@ -21,14 +21,29 @@ describe("chat export", () => {
         role: "assistant",
         content: "Books look clean.",
         status: "done",
+        provenance: {
+          generated_at: "2026-04-28T12:34:55Z",
+          provider: "ollama",
+          model: "gemma4:e4b",
+          tools_used: ["ui.reports.summary"],
+          active_transactions: 1,
+          quarantines: 0,
+          auto_journal_processed: true,
+        },
         toolCalls: [
           {
             callId: "tool-1",
-            name: "ui.workspace.health",
-            arguments: {},
+            name: "ui.reports.summary",
+            arguments: { wallet: "Cold" },
             kindClass: "read_only",
             needsConsent: false,
             status: "done",
+            result: {
+              kind: "ui.reports.summary",
+              data: {
+                asset_flow: [{ asset: "BTC", inbound_amount_msat: 1000 }],
+              },
+            },
           },
         ],
       },
@@ -50,7 +65,11 @@ describe("chat export", () => {
 
       Books look clean.
       Tools:
-      - ui.workspace.health: done
+      - ui.reports.summary: done
+        Arguments: {"wallet":"Cold"}
+        Result: {"kind":"ui.reports.summary","data":{"asset_flow":[{"asset":"BTC","inbound_amount_msat":1000}]}}
+      Provenance:
+      {"generated_at":"2026-04-28T12:34:55Z","provider":"ollama","model":"gemma4:e4b","tools_used":["ui.reports.summary"],"active_transactions":1,"quarantines":0,"auto_journal_processed":true}
       "
     `);
   });

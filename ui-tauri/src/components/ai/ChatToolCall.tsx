@@ -129,9 +129,94 @@ function summarizeToolResult(result: unknown): string | null {
       const pairs = Array.isArray(data.pairs) ? data.pairs : [];
       return `${pairs.length} cached rate pair(s).`;
     }
+    case "ui.rates.coverage": {
+      const summary = asRecord(data.summary);
+      return `${summary?.missing_price_transactions ?? 0} missing price transaction(s), ${
+        summary?.cache_coverable_missing ?? 0
+      } coverable from cache.`;
+    }
+    case "ui.report.blockers": {
+      const blockers = Array.isArray(data.blockers) ? data.blockers : [];
+      return data.ready
+        ? "Reports are ready."
+        : `${blockers.length} report blocker(s).`;
+    }
+    case "ui.audit.changes_since_last_answer": {
+      const counts = asRecord(data.counts_since);
+      const changed = data.changed ? "changed" : "unchanged";
+      return `Workspace ${changed}; ${counts?.transactions ?? 0} transaction change(s), ${
+        counts?.journal_entries ?? 0
+      } journal change(s).`;
+    }
+    case "ui.maintenance.settings": {
+      const settings = asRecord(data.settings);
+      return settings?.auto_sync_before_report_reads
+        ? "Automatic wallet sync before report reads is enabled."
+        : "Automatic wallet sync before report reads is disabled.";
+    }
+    case "ui.maintenance.configure": {
+      const settings = asRecord(data.settings);
+      return settings?.auto_sync_before_report_reads
+        ? "Enabled automatic wallet sync before report reads."
+        : "Disabled automatic wallet sync before report reads.";
+    }
+    case "ui.maintenance.run": {
+      const blockers = Array.isArray(data.blockers) ? data.blockers : [];
+      return data.ready
+        ? `Maintenance complete; reports ready.`
+        : `Maintenance complete; ${blockers.length} blocker(s) remain.`;
+    }
     case "ui.transactions.list": {
       const txs = Array.isArray(data.txs) ? data.txs : [];
       return `${txs.length} transaction(s).`;
+    }
+    case "ui.transactions.extremes": {
+      const largest = Array.isArray(data.largest) ? data.largest : [];
+      const smallest = Array.isArray(data.smallest) ? data.smallest : [];
+      return `${largest.length} largest transaction(s), ${smallest.length} smallest transaction(s).`;
+    }
+    case "ui.transactions.search": {
+      const txs = Array.isArray(data.txs) ? data.txs : [];
+      return `${txs.length} matching transaction(s).`;
+    }
+    case "ui.reports.summary": {
+      const metrics = asRecord(data.metrics);
+      const assetFlow = Array.isArray(data.asset_flow) ? data.asset_flow : [];
+      const wallets = Array.isArray(data.wallet_flow) ? data.wallet_flow : [];
+      const activeTransactions = Number(
+        metrics?.active_transactions ?? 0,
+      ).toLocaleString("en-US");
+      return [
+        `${activeTransactions} active transaction(s)`,
+        `${assetFlow.length} asset flow row(s)`,
+        `${wallets.length} wallet flow row(s)`,
+      ].join(", ") + ".";
+    }
+    case "ui.reports.balance_sheet": {
+      const rows = Array.isArray(data.rows) ? data.rows : [];
+      const totals = Array.isArray(data.totals_by_asset)
+        ? data.totals_by_asset
+        : [];
+      return `${rows.length} balance row(s), ${totals.length} asset total(s).`;
+    }
+    case "ui.reports.portfolio_summary": {
+      const rows = Array.isArray(data.rows) ? data.rows : [];
+      const totals = Array.isArray(data.totals_by_asset)
+        ? data.totals_by_asset
+        : [];
+      return `${rows.length} wallet holding row(s), ${totals.length} asset total(s).`;
+    }
+    case "ui.reports.tax_summary": {
+      const rows = Array.isArray(data.rows) ? data.rows : [];
+      const years = Array.isArray(data.available_years)
+        ? data.available_years
+        : [];
+      return `${rows.length} tax row(s), ${years.length} year(s).`;
+    }
+    case "ui.reports.balance_history": {
+      const rows = Array.isArray(data.rows) ? data.rows : [];
+      const filters = asRecord(data.filters);
+      return `${rows.length} ${filters?.interval ?? "history"} balance bucket(s).`;
     }
     default:
       return null;

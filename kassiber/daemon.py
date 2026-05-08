@@ -3,12 +3,14 @@ from __future__ import annotations
 import csv
 import json
 import queue
+import re
 import sqlite3
 import sys
 import threading
 import time
 import traceback
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable, TextIO
 
@@ -49,6 +51,7 @@ from .core import wallets as core_wallets
 from .core.repo import current_context_snapshot
 from .core.runtime import build_status_payload
 from .core.ui_snapshot import (
+    build_audit_changes_since_last_answer_snapshot,
     build_backends_list_snapshot,
     build_capital_gains_snapshot,
     build_journals_snapshot,
@@ -57,7 +60,11 @@ from .core.ui_snapshot import (
     build_next_actions_snapshot,
     build_overview_snapshot,
     build_profiles_snapshot,
+    build_rates_coverage_snapshot,
     build_rates_summary_snapshot,
+    build_report_blockers_snapshot,
+    build_transactions_extremes_snapshot,
+    build_transactions_search_snapshot,
     build_transactions_snapshot,
     build_wallets_list_snapshot,
     build_workspace_health_snapshot,
@@ -69,6 +76,7 @@ from .db import (
     resolve_config_root,
     resolve_database_path,
     resolve_effective_data_root,
+    get_setting,
     set_setting,
     resolve_exports_root,
 )
@@ -86,9 +94,16 @@ SUPPORTED_KINDS = (
     "status",
     "ui.overview.snapshot",
     "ui.transactions.list",
+    "ui.transactions.extremes",
+    "ui.transactions.search",
     "ui.wallets.list",
     "ui.backends.list",
     "ui.reports.capital_gains",
+    "ui.reports.summary",
+    "ui.reports.balance_sheet",
+    "ui.reports.portfolio_summary",
+    "ui.reports.tax_summary",
+    "ui.reports.balance_history",
     "ui.reports.export_pdf",
     "ui.reports.export_capital_gains_csv",
     "ui.reports.export_austrian_e1kv_pdf",
@@ -101,6 +116,12 @@ SUPPORTED_KINDS = (
     "ui.profiles.create",
     "ui.profiles.switch",
     "ui.rates.summary",
+    "ui.rates.coverage",
+    "ui.report.blockers",
+    "ui.audit.changes_since_last_answer",
+    "ui.maintenance.settings",
+    "ui.maintenance.configure",
+    "ui.maintenance.run",
     "ui.workspace.health",
     "ui.workspace.create",
     "ui.workspace.delete",
@@ -129,6 +150,32 @@ SUPPORTED_KINDS = (
     "backends.reveal_token",
     "daemon.shutdown",
 )
+_AI_AUTO_JOURNAL_REFRESH_TOOL_NAMES = {
+    "ui.workspace.health",
+    "ui.next_actions",
+    "ui.overview.snapshot",
+    "ui.reports.capital_gains",
+    "ui.reports.summary",
+    "ui.reports.balance_sheet",
+    "ui.reports.portfolio_summary",
+    "ui.reports.tax_summary",
+    "ui.reports.balance_history",
+    "ui.journals.snapshot",
+    "ui.journals.quarantine",
+    "ui.journals.transfers.list",
+    "ui.rates.coverage",
+    "ui.report.blockers",
+    "ui.audit.changes_since_last_answer",
+}
+_DIRECT_AUTO_JOURNAL_REFRESH_KINDS = {
+    "ui.reports.capital_gains",
+    "ui.reports.summary",
+    "ui.reports.balance_sheet",
+    "ui.reports.portfolio_summary",
+    "ui.reports.tax_summary",
+    "ui.reports.balance_history",
+    "ui.report.blockers",
+}
 PENDING_AI_CANCEL_TTL_SECONDS = 30.0
 MAX_PENDING_AI_CANCELS = 128
 AI_TOOL_CONSENT_TIMEOUT_SECONDS = 300.0
@@ -395,6 +442,7 @@ class AiToolRuntime:
     data_root: str
     runtime_config: dict[str, object]
     main_thread_tasks: queue.Queue[_DaemonMainThreadTask]
+    maintenance_state: dict[str, Any]
 
 
 @dataclass(frozen=True)
@@ -403,6 +451,12 @@ class ParsedAiToolCall:
     name: str
     arguments: dict[str, Any]
     argument_error: str | None = None
+
+
+@dataclass(frozen=True)
+class AutoReadToolCall:
+    name: str
+    arguments: dict[str, Any]
 
 
 class _OutputChannel:
@@ -961,6 +1015,455 @@ def _journals_process_payload(conn: sqlite3.Connection) -> dict[str, Any]:
     return process_journals(conn, None, None)
 
 
+def _active_profile_row(conn: sqlite3.Connection) -> sqlite3.Row | None:
+    context = current_context_snapshot(conn)
+    profile_id = context.get("profile_id")
+    if not profile_id:
+        return None
+    return conn.execute("SELECT * FROM profiles WHERE id = ?", (profile_id,)).fetchone()
+
+
+def _auto_sync_setting_key(profile_id: str) -> str:
+    return f"ai.auto_sync_before_report_reads.profile.{profile_id}"
+
+
+def _setting_bool(conn: sqlite3.Connection, key: str, *, default: bool = False) -> bool:
+    value = get_setting(conn, key)
+    if value is None:
+        return default
+    return str(value).strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _maintenance_settings_payload(conn: sqlite3.Connection) -> dict[str, Any]:
+    context = current_context_snapshot(conn)
+    profile = _active_profile_row(conn)
+    if profile is None:
+        return {
+            "workspace": context.get("workspace_label") or None,
+            "profile": None,
+            "settings": {"auto_sync_before_report_reads": False},
+        }
+    key = _auto_sync_setting_key(profile["id"])
+    return {
+        "workspace": context.get("workspace_label") or None,
+        "profile": {
+            "id": profile["id"],
+            "label": profile["label"],
+        },
+        "settings": {
+            "auto_sync_before_report_reads": _setting_bool(conn, key),
+            "setting_key": key,
+        },
+    }
+
+
+def _maintenance_configure_payload(
+    conn: sqlite3.Connection,
+    raw_args: dict[str, Any],
+) -> dict[str, Any]:
+    unknown = sorted(set(raw_args) - {"auto_sync_before_report_reads"})
+    if unknown:
+        raise AppError(
+            "ui.maintenance.configure received unsupported arguments",
+            code="validation",
+            details={"unknown": unknown},
+            retryable=False,
+        )
+    value = raw_args.get("auto_sync_before_report_reads")
+    if not isinstance(value, bool):
+        raise AppError(
+            "ui.maintenance.configure auto_sync_before_report_reads must be a boolean",
+            code="validation",
+            details={"type": type(value).__name__},
+            retryable=False,
+        )
+    profile = _active_profile_row(conn)
+    if profile is None:
+        raise AppError(
+            "ui.maintenance.configure requires an active profile",
+            code="validation",
+            retryable=False,
+        )
+    set_setting(conn, _auto_sync_setting_key(profile["id"]), "true" if value else "false")
+    conn.commit()
+    return _maintenance_settings_payload(conn)
+
+
+def _auto_process_journals_if_needed(conn: sqlite3.Connection) -> dict[str, Any] | None:
+    profile = _active_profile_row(conn)
+    if profile is None:
+        return None
+    profile_id = profile["id"]
+    active_count = conn.execute(
+        "SELECT COUNT(*) AS count FROM transactions WHERE profile_id = ? AND excluded = 0",
+        (profile_id,),
+    ).fetchone()["count"]
+    active_count = int(active_count or 0)
+    if active_count == 0:
+        return None
+    if profile["last_processed_at"] and int(profile["last_processed_tx_count"] or 0) == active_count:
+        return None
+    return _journals_process_payload(conn)
+
+
+def _auto_sync_wallets_if_enabled(
+    conn: sqlite3.Connection,
+    runtime_config: dict[str, object],
+    *,
+    state: dict[str, Any] | None = None,
+    force: bool = False,
+) -> dict[str, Any] | None:
+    state = state if state is not None else {}
+    if state.get("auto_sync_attempted") and not force:
+        return None
+    profile = _active_profile_row(conn)
+    if profile is None:
+        return None
+    enabled = _setting_bool(conn, _auto_sync_setting_key(profile["id"]))
+    if not enabled and not force:
+        return None
+    state["auto_sync_attempted"] = True
+    try:
+        payload = _wallets_sync_payload(
+            conn,
+            runtime_config,
+            {"all": True},
+            strict=False,
+        )
+        state["auto_sync"] = {"ok": True, "payload": payload}
+        return payload
+    except AppError as exc:
+        payload = {
+            "ok": False,
+            "reason": exc.code or "sync_failed",
+            "message": str(exc),
+        }
+        state["auto_sync"] = payload
+        return payload
+
+
+def _auto_maintain_for_read(
+    conn: sqlite3.Connection,
+    runtime_config: dict[str, object],
+    *,
+    state: dict[str, Any] | None = None,
+    sync_if_enabled: bool = True,
+) -> dict[str, Any]:
+    metadata: dict[str, Any] = {}
+    if sync_if_enabled:
+        auto_sync = _auto_sync_wallets_if_enabled(conn, runtime_config, state=state)
+        if auto_sync is not None:
+            metadata["auto_sync"] = build_envelope("ui.wallets.sync", auto_sync)
+    auto_journal_process = _auto_process_journals_if_needed(conn)
+    if auto_journal_process is not None:
+        if state is not None:
+            state["auto_journal_process"] = auto_journal_process
+        metadata["auto_journal_process"] = build_envelope(
+            "ui.journals.process",
+            auto_journal_process,
+        )
+    return metadata
+
+
+def _maintenance_run_payload(
+    conn: sqlite3.Connection,
+    runtime_config: dict[str, object],
+    raw_args: dict[str, Any] | None = None,
+    *,
+    state: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    args = raw_args or {}
+    unknown = sorted(set(args) - {"sync"})
+    if unknown:
+        raise AppError(
+            "ui.maintenance.run received unsupported arguments",
+            code="validation",
+            details={"unknown": unknown},
+            retryable=False,
+        )
+    sync_mode = args.get("sync", "if_enabled")
+    if sync_mode not in {"never", "if_enabled", "always"}:
+        raise AppError(
+            "ui.maintenance.run sync must be never, if_enabled, or always",
+            code="validation",
+            details={"sync": sync_mode},
+            retryable=False,
+        )
+    metadata: dict[str, Any] = {}
+    if sync_mode == "always":
+        auto_sync = _auto_sync_wallets_if_enabled(
+            conn,
+            runtime_config,
+            state=state,
+            force=True,
+        )
+        if auto_sync is not None:
+            metadata["sync"] = build_envelope("ui.wallets.sync", auto_sync)
+    elif sync_mode == "if_enabled":
+        auto_sync = _auto_sync_wallets_if_enabled(conn, runtime_config, state=state)
+        if auto_sync is not None:
+            metadata["sync"] = build_envelope("ui.wallets.sync", auto_sync)
+    journal_process = _auto_process_journals_if_needed(conn)
+    if journal_process is not None:
+        metadata["journals"] = build_envelope("ui.journals.process", journal_process)
+    blockers = build_report_blockers_snapshot(conn)
+    return {
+        "ready": blockers["ready"],
+        "sync_mode": sync_mode,
+        "maintenance": metadata,
+        "blockers": blockers["blockers"],
+        "health": blockers["health"],
+        "settings": _maintenance_settings_payload(conn)["settings"],
+    }
+
+
+def _reports_summary_payload(
+    conn: sqlite3.Connection,
+    raw_args: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    args = raw_args or {}
+    unknown = sorted(set(args) - {"wallet"})
+    if unknown:
+        raise AppError(
+            "ui.reports.summary received unsupported arguments",
+            code="validation",
+            details={"unknown": unknown},
+            retryable=False,
+        )
+    wallet = args.get("wallet")
+    if wallet is not None and (not isinstance(wallet, str) or not wallet.strip()):
+        raise AppError(
+            "ui.reports.summary wallet must be a non-empty string",
+            code="validation",
+            retryable=False,
+        )
+    return core_reports.report_summary(
+        conn,
+        None,
+        None,
+        _report_hooks(),
+        wallet_ref=wallet.strip() if isinstance(wallet, str) else None,
+    )
+
+
+def _reports_balance_sheet_payload(conn: sqlite3.Connection) -> dict[str, Any]:
+    rows = core_reports.report_balance_sheet(conn, None, None, _report_hooks())
+    totals_by_asset: dict[str, dict[str, Any]] = {}
+    for row in rows:
+        asset = str(row.get("asset") or "")
+        bucket = totals_by_asset.setdefault(
+            asset,
+            {
+                "asset": asset,
+                "quantity": 0.0,
+                "quantity_msat": 0,
+                "cost_basis": 0.0,
+                "market_value": 0.0,
+                "unrealized_pnl": 0.0,
+            },
+        )
+        bucket["quantity"] += float(row.get("quantity") or 0)
+        bucket["quantity_msat"] += int(row.get("quantity_msat") or 0)
+        bucket["cost_basis"] += float(row.get("cost_basis") or 0)
+        bucket["market_value"] += float(row.get("market_value") or 0)
+        bucket["unrealized_pnl"] += float(row.get("unrealized_pnl") or 0)
+    for bucket in totals_by_asset.values():
+        quantity_msat = int(bucket["quantity_msat"])
+        bucket["quantity_sat"] = (
+            quantity_msat // 1000
+            if quantity_msat % 1000 == 0
+            else quantity_msat / 1000
+        )
+    return {
+        "rows": rows,
+        "totals_by_asset": [
+            totals_by_asset[key] for key in sorted(totals_by_asset)
+        ],
+        "summary": {
+            "row_count": len(rows),
+            "asset_count": len(totals_by_asset),
+        },
+    }
+
+
+def _reports_portfolio_summary_payload(conn: sqlite3.Connection) -> dict[str, Any]:
+    rows = core_reports.report_portfolio_summary(conn, None, None, _report_hooks())
+    totals_by_asset: dict[str, dict[str, Any]] = {}
+    for row in rows:
+        asset = str(row.get("asset") or "")
+        bucket = totals_by_asset.setdefault(
+            asset,
+            {
+                "asset": asset,
+                "quantity": 0.0,
+                "quantity_msat": 0,
+                "cost_basis": 0.0,
+                "market_value": 0.0,
+                "unrealized_pnl": 0.0,
+            },
+        )
+        bucket["quantity"] += float(row.get("quantity") or 0)
+        bucket["quantity_msat"] += int(row.get("quantity_msat") or 0)
+        bucket["cost_basis"] += float(row.get("cost_basis") or 0)
+        bucket["market_value"] += float(row.get("market_value") or 0)
+        bucket["unrealized_pnl"] += float(row.get("unrealized_pnl") or 0)
+    for bucket in totals_by_asset.values():
+        quantity_msat = int(bucket["quantity_msat"])
+        bucket["quantity_sat"] = (
+            quantity_msat // 1000
+            if quantity_msat % 1000 == 0
+            else quantity_msat / 1000
+        )
+    return {
+        "rows": rows,
+        "totals_by_asset": [
+            totals_by_asset[key] for key in sorted(totals_by_asset)
+        ],
+        "summary": {
+            "row_count": len(rows),
+            "asset_count": len(totals_by_asset),
+        },
+    }
+
+
+def _reports_tax_summary_payload(
+    conn: sqlite3.Connection,
+    raw_args: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    args = raw_args or {}
+    unknown = sorted(set(args) - {"year"})
+    if unknown:
+        raise AppError(
+            "ui.reports.tax_summary received unsupported arguments",
+            code="validation",
+            details={"unknown": unknown},
+            retryable=False,
+        )
+    year = args.get("year")
+    if year is not None:
+        try:
+            year = int(year)
+        except (TypeError, ValueError):
+            raise AppError(
+                "ui.reports.tax_summary year must be an integer",
+                code="validation",
+                details={"year": year},
+                retryable=False,
+            ) from None
+    rows = core_reports.report_tax_summary(conn, None, None, _report_hooks())
+    available_years = sorted(
+        {
+            int(row["year"])
+            for row in rows
+            if row.get("year") is not None and str(row.get("year")).isdigit()
+        }
+    )
+    if year is not None:
+        rows = [
+            row
+            for row in rows
+            if _row_year_matches(row, year) or row.get("row_type") == "grand_total"
+        ]
+    return {
+        "rows": rows,
+        "available_years": available_years,
+        "filters": {"year": year},
+        "summary": {
+            "row_count": len(rows),
+            "available_year_count": len(available_years),
+        },
+    }
+
+
+def _row_year_matches(row: dict[str, Any], year: int) -> bool:
+    try:
+        return int(row.get("year")) == year
+    except (TypeError, ValueError):
+        return False
+
+
+def _reports_balance_history_payload(
+    conn: sqlite3.Connection,
+    raw_args: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    args = raw_args or {}
+    unknown = sorted(
+        set(args) - {"interval", "start", "end", "wallet", "account", "asset", "limit"}
+    )
+    if unknown:
+        raise AppError(
+            "ui.reports.balance_history received unsupported arguments",
+            code="validation",
+            details={"unknown": unknown},
+            retryable=False,
+        )
+    interval = args.get("interval", "month")
+    if interval not in core_reports.INTERVAL_CHOICES:
+        raise AppError(
+            "ui.reports.balance_history interval is unsupported",
+            code="validation",
+            details={"interval": interval, "supported": core_reports.INTERVAL_CHOICES},
+            retryable=False,
+        )
+    limit = _coerce_positive_int(
+        args.get("limit", 120),
+        "ui.reports.balance_history limit",
+        maximum=500,
+    )
+    rows = core_reports.report_balance_history(
+        conn,
+        None,
+        None,
+        _report_hooks(),
+        interval=interval,
+        start=args.get("start"),
+        end=args.get("end"),
+        wallet_ref=args.get("wallet"),
+        account_ref=args.get("account"),
+        asset=args.get("asset"),
+    )
+    total_rows = len(rows)
+    if len(rows) > limit:
+        rows = rows[-limit:]
+    return {
+        "rows": rows,
+        "filters": {
+            "interval": interval,
+            "start": args.get("start"),
+            "end": args.get("end"),
+            "wallet": args.get("wallet"),
+            "account": args.get("account"),
+            "asset": args.get("asset"),
+            "limit": limit,
+        },
+        "summary": {
+            "row_count": len(rows),
+            "total_row_count": total_rows,
+            "truncated": total_rows > len(rows),
+        },
+    }
+
+
+def _coerce_positive_int(raw: Any, label: str, *, maximum: int) -> int:
+    try:
+        value = int(raw)
+    except (TypeError, ValueError):
+        raise AppError(
+            f"{label} must be an integer",
+            code="validation",
+            details={"value": raw},
+            retryable=False,
+        ) from None
+    if value < 1:
+        raise AppError(
+            f"{label} must be positive",
+            code="validation",
+            details={"value": raw},
+            retryable=False,
+        )
+    return min(value, maximum)
+
+
 def _parse_ai_tool_call(raw: dict[str, Any], index: int) -> ParsedAiToolCall:
     call_id = raw.get("id")
     if not isinstance(call_id, str) or not call_id:
@@ -1040,6 +1543,13 @@ def _execute_read_only_ai_tool(call: ParsedAiToolCall, runtime: AiToolRuntime) -
             return _tool_result_denied("tool_not_allowed")
 
         def _read(conn: sqlite3.Connection) -> dict[str, Any]:
+            maintenance_metadata: dict[str, Any] = {}
+            if call.name in _AI_AUTO_JOURNAL_REFRESH_TOOL_NAMES:
+                maintenance_metadata = _auto_maintain_for_read(
+                    conn,
+                    runtime.runtime_config,
+                    state=runtime.maintenance_state,
+                )
             if entry.daemon_kind == "status":
                 payload = _status_payload_from_parts(
                     conn,
@@ -1050,6 +1560,10 @@ def _execute_read_only_ai_tool(call: ParsedAiToolCall, runtime: AiToolRuntime) -
                 payload = build_overview_snapshot(conn)
             elif entry.daemon_kind == "ui.transactions.list":
                 payload = build_transactions_snapshot(conn, call.arguments)
+            elif entry.daemon_kind == "ui.transactions.extremes":
+                payload = build_transactions_extremes_snapshot(conn, call.arguments)
+            elif entry.daemon_kind == "ui.transactions.search":
+                payload = build_transactions_search_snapshot(conn, call.arguments)
             elif entry.daemon_kind == "ui.wallets.list":
                 payload = build_wallets_list_snapshot(conn, runtime.runtime_config)
             elif entry.daemon_kind == "ui.backends.list":
@@ -1058,6 +1572,16 @@ def _execute_read_only_ai_tool(call: ParsedAiToolCall, runtime: AiToolRuntime) -
                 payload = build_profiles_snapshot(conn)
             elif entry.daemon_kind == "ui.reports.capital_gains":
                 payload = build_capital_gains_snapshot(conn)
+            elif entry.daemon_kind == "ui.reports.summary":
+                payload = _reports_summary_payload(conn, call.arguments)
+            elif entry.daemon_kind == "ui.reports.balance_sheet":
+                payload = _reports_balance_sheet_payload(conn)
+            elif entry.daemon_kind == "ui.reports.portfolio_summary":
+                payload = _reports_portfolio_summary_payload(conn)
+            elif entry.daemon_kind == "ui.reports.tax_summary":
+                payload = _reports_tax_summary_payload(conn, call.arguments)
+            elif entry.daemon_kind == "ui.reports.balance_history":
+                payload = _reports_balance_history_payload(conn, call.arguments)
             elif entry.daemon_kind == "ui.journals.snapshot":
                 payload = build_journals_snapshot(conn)
             elif entry.daemon_kind == "ui.journals.quarantine":
@@ -1066,13 +1590,26 @@ def _execute_read_only_ai_tool(call: ParsedAiToolCall, runtime: AiToolRuntime) -
                 payload = build_journals_transfers_list_snapshot(conn, call.arguments)
             elif entry.daemon_kind == "ui.rates.summary":
                 payload = build_rates_summary_snapshot(conn)
+            elif entry.daemon_kind == "ui.rates.coverage":
+                payload = build_rates_coverage_snapshot(conn, call.arguments)
+            elif entry.daemon_kind == "ui.report.blockers":
+                payload = build_report_blockers_snapshot(conn)
+            elif entry.daemon_kind == "ui.audit.changes_since_last_answer":
+                payload = build_audit_changes_since_last_answer_snapshot(conn, call.arguments)
+            elif entry.daemon_kind == "ui.maintenance.settings":
+                payload = _maintenance_settings_payload(conn)
             elif entry.daemon_kind == "ui.workspace.health":
                 payload = build_workspace_health_snapshot(conn)
             elif entry.daemon_kind == "ui.next_actions":
                 payload = build_next_actions_snapshot(conn)
             else:
                 return _tool_result_denied("tool_not_allowed")
-            return {"ok": True, "envelope": build_envelope(entry.daemon_kind, payload)}
+            result: dict[str, Any] = {
+                "ok": True,
+                "envelope": build_envelope(entry.daemon_kind, payload),
+            }
+            result.update(maintenance_metadata)
+            return result
 
         return _run_on_daemon_main_thread(runtime, _read)
     except AppError as exc:
@@ -1124,6 +1661,23 @@ def _execute_mutating_ai_tool(call: ParsedAiToolCall, runtime: AiToolRuntime) ->
                 return {"ok": True, "envelope": build_envelope(entry.daemon_kind, payload)}
 
             return _run_on_daemon_main_thread(runtime, _execute)
+        if entry.daemon_kind == "ui.maintenance.configure":
+            def _execute(conn: sqlite3.Connection) -> dict[str, Any]:
+                payload = _maintenance_configure_payload(conn, call.arguments)
+                return {"ok": True, "envelope": build_envelope(entry.daemon_kind, payload)}
+
+            return _run_on_daemon_main_thread(runtime, _execute)
+        if entry.daemon_kind == "ui.maintenance.run":
+            def _execute(conn: sqlite3.Connection) -> dict[str, Any]:
+                payload = _maintenance_run_payload(
+                    conn,
+                    runtime.runtime_config,
+                    call.arguments,
+                    state=runtime.maintenance_state,
+                )
+                return {"ok": True, "envelope": build_envelope(entry.daemon_kind, payload)}
+
+            return _run_on_daemon_main_thread(runtime, _execute)
         else:
             return _tool_result_denied("tool_not_allowed")
     except AppError as exc:
@@ -1142,6 +1696,593 @@ def _execute_mutating_ai_tool(call: ParsedAiToolCall, runtime: AiToolRuntime) ->
 
 def _tool_result_content_for_model(result: dict[str, Any]) -> str:
     return json.dumps(json_ready(result), sort_keys=True, separators=(",", ":"))
+
+
+def _utc_now_iso() -> str:
+    return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+
+
+def _record_ai_tool_usage(
+    runtime: AiToolRuntime,
+    tool_name: str,
+    result: dict[str, Any],
+) -> None:
+    state = runtime.maintenance_state
+    tools_used = state.setdefault("tools_used", [])
+    if isinstance(tools_used, list):
+        tools_used.append(tool_name)
+
+    for metadata_key in ("auto_journal_process", "auto_sync"):
+        envelope = result.get(metadata_key)
+        if isinstance(envelope, dict):
+            _record_ai_provenance_envelope(state, envelope, automatic=True)
+
+    envelope = result.get("envelope")
+    if isinstance(envelope, dict):
+        _record_ai_provenance_envelope(state, envelope, automatic=False)
+
+
+def _record_ai_provenance_envelope(
+    state: dict[str, Any],
+    envelope: dict[str, Any],
+    *,
+    automatic: bool,
+) -> None:
+    kind = envelope.get("kind")
+    data = envelope.get("data")
+    if not isinstance(kind, str) or not isinstance(data, dict):
+        return
+    if kind == "ui.workspace.health":
+        _record_ai_health_provenance(state, data)
+    elif kind == "ui.report.blockers":
+        health = data.get("health")
+        if isinstance(health, dict):
+            _record_ai_health_provenance(state, health)
+        rates_coverage = data.get("rates_coverage")
+        if isinstance(rates_coverage, dict):
+            _record_ai_rates_provenance(state, rates_coverage)
+    elif kind == "ui.rates.coverage":
+        _record_ai_rates_provenance(state, data)
+    elif kind == "ui.journals.process":
+        if automatic:
+            state["auto_journal_processed"] = True
+        processed_at = data.get("processed_at")
+        if isinstance(processed_at, str):
+            state["journals_processed_at"] = processed_at
+        if isinstance(data.get("processed_transactions"), int):
+            state["active_transactions"] = data["processed_transactions"]
+        if isinstance(data.get("quarantined"), int):
+            state["quarantines"] = data["quarantined"]
+    elif kind == "ui.wallets.sync":
+        state["auto_sync_attempted"] = True
+        state["auto_sync_ok"] = data.get("ok") is not False
+        results = data.get("results")
+        if isinstance(results, list):
+            state["sync_wallet_count"] = len(results)
+    elif kind == "ui.maintenance.run":
+        health = data.get("health")
+        if isinstance(health, dict):
+            _record_ai_health_provenance(state, health)
+        maintenance = data.get("maintenance")
+        if isinstance(maintenance, dict):
+            journals = maintenance.get("journals")
+            sync = maintenance.get("sync")
+            if isinstance(journals, dict):
+                _record_ai_provenance_envelope(state, journals, automatic=True)
+            if isinstance(sync, dict):
+                _record_ai_provenance_envelope(state, sync, automatic=True)
+
+
+def _record_ai_health_provenance(
+    state: dict[str, Any],
+    health: dict[str, Any],
+) -> None:
+    counts = health.get("counts")
+    if isinstance(counts, dict):
+        if isinstance(counts.get("active_transactions"), int):
+            state["active_transactions"] = counts["active_transactions"]
+        if isinstance(counts.get("quarantines"), int):
+            state["quarantines"] = counts["quarantines"]
+    journals = health.get("journals")
+    if isinstance(journals, dict):
+        processed_at = journals.get("last_processed_at")
+        if isinstance(processed_at, str):
+            state["journals_processed_at"] = processed_at
+        if isinstance(journals.get("quarantine_count"), int):
+            state["quarantines"] = journals["quarantine_count"]
+
+
+def _record_ai_rates_provenance(
+    state: dict[str, Any],
+    rates_coverage: dict[str, Any],
+) -> None:
+    summary = rates_coverage.get("summary")
+    if not isinstance(summary, dict):
+        return
+    if isinstance(summary.get("missing_price_transactions"), int):
+        state["missing_price_transactions"] = summary["missing_price_transactions"]
+    if isinstance(summary.get("active_transactions"), int):
+        state.setdefault("active_transactions", summary["active_transactions"])
+
+
+def _ai_answer_provenance(
+    provider_snapshot: dict[str, Any],
+    validated: dict[str, Any],
+    runtime: AiToolRuntime,
+) -> dict[str, Any]:
+    state = runtime.maintenance_state
+    raw_tools = state.get("tools_used", [])
+    tools_used: list[str] = []
+    if isinstance(raw_tools, list):
+        for raw in raw_tools:
+            if isinstance(raw, str) and raw not in tools_used:
+                tools_used.append(raw)
+    return {
+        "generated_at": _utc_now_iso(),
+        "provider": provider_snapshot["name"],
+        "model": validated["model"],
+        "tools_used": tools_used,
+        "active_transactions": state.get("active_transactions"),
+        "quarantines": state.get("quarantines"),
+        "missing_price_transactions": state.get("missing_price_transactions"),
+        "journals_processed_at": state.get("journals_processed_at"),
+        "auto_journal_processed": bool(state.get("auto_journal_processed")),
+        "auto_sync_attempted": bool(state.get("auto_sync_attempted")),
+        "auto_sync_ok": state.get("auto_sync_ok"),
+    }
+
+
+def _latest_user_message_content(messages: list[dict[str, Any]]) -> str:
+    for message in reversed(messages):
+        if message.get("role") == "user":
+            content = message.get("content")
+            return content if isinstance(content, str) else ""
+    return ""
+
+
+def _message_has_any(text: str, *needles: str) -> bool:
+    return any(needle in text for needle in needles)
+
+
+def _extract_year_from_text(text: str) -> int | None:
+    match = re.search(r"\b(19\d{2}|20\d{2})\b", text)
+    return int(match.group(1)) if match else None
+
+
+def _extract_transaction_search_query(text: str) -> str | None:
+    quoted = re.search(r"[\"'`]([^\"'`]{2,80})[\"'`]", text)
+    if quoted:
+        return quoted.group(1).strip()
+
+    marker_patterns = (
+        r"\bsearch(?: transactions| txs)? for\s+",
+        r"\bfind(?: transactions| txs)?(?: for| with| matching)?\s+",
+        r"\blook for\s+",
+        r"\bshow(?: me)? transactions for\s+",
+        r"\bshow(?: me)? txs for\s+",
+    )
+    for pattern in marker_patterns:
+        match = re.search(pattern, text)
+        if not match:
+            continue
+        fragment = text[match.end() :]
+        fragment = re.split(
+            r"\b(?:and|then|tell|in|from|since|before|after|sorted|ordered|limit)\b|[?.!,;]",
+            fragment,
+            maxsplit=1,
+        )[0].strip()
+        fragment = re.sub(r"\s+", " ", fragment)
+        if _useful_search_fragment(fragment):
+            return fragment[:80]
+
+    field_match = re.search(
+        r"\b(?:counterparty|merchant|note|tag|tagged|label|txid|invoice|external id)\s+"
+        r"(?:is|contains|called|named|for|matching)?\s*([a-z0-9][\w./:@-]{1,80})",
+        text,
+    )
+    if field_match:
+        fragment = field_match.group(1).strip()
+        if _useful_search_fragment(fragment):
+            return fragment[:80]
+
+    txid_match = re.search(r"\b[0-9a-f]{12,64}\b", text)
+    if txid_match:
+        return txid_match.group(0)
+
+    return None
+
+
+def _useful_search_fragment(fragment: str) -> bool:
+    fragment = fragment.strip().strip(":")
+    if len(fragment) < 2:
+        return False
+    generic = {
+        "all",
+        "balance",
+        "fee",
+        "fees",
+        "latest",
+        "largest",
+        "recent",
+        "smallest",
+        "summary",
+        "tax",
+        "transaction",
+        "transactions",
+        "tx",
+        "txs",
+    }
+    return fragment not in generic
+
+
+def _balance_history_interval(text: str) -> str:
+    if _message_has_any(text, "hourly", "hour by hour"):
+        return "hour"
+    if _message_has_any(text, "daily", "day by day"):
+        return "day"
+    if _message_has_any(text, "weekly", "week by week"):
+        return "week"
+    return "month"
+
+
+def _planned_auto_read_tools(validated: dict[str, Any]) -> list[AutoReadToolCall]:
+    if validated.get("system_prompt_kind") != "kassiber":
+        return []
+
+    text = _latest_user_message_content(validated["messages"]).lower()
+    if not text.strip():
+        return []
+
+    planned: list[AutoReadToolCall] = []
+    seen: set[str] = set()
+
+    def add(name: str, arguments: dict[str, Any] | None = None) -> None:
+        args = arguments or {}
+        key = json.dumps([name, args], sort_keys=True, separators=(",", ":"))
+        if key in seen:
+            return
+        seen.add(key)
+        planned.append(AutoReadToolCall(name, args))
+
+    domain_question = _message_has_any(
+        text,
+        "balance",
+        "backend",
+        "blocker",
+        "capital gain",
+        "change",
+        "cost basis",
+        "connection",
+        "counterparty",
+        "description",
+        "export",
+        "history",
+        "fee",
+        "fiat",
+        "gain",
+        "health",
+        "holding",
+        "inflow",
+        "invoice",
+        "journal",
+        "label",
+        "largest",
+        "maintenance",
+        "merchant",
+        "missing",
+        "next",
+        "note",
+        "outflow",
+        "pending",
+        "portfolio",
+        "price",
+        "quarantine",
+        "rate",
+        "ready",
+        "report",
+        "smallest",
+        "source",
+        "stale",
+        "summary",
+        "sync",
+        "tag",
+        "tax",
+        "transaction",
+        "trend",
+        "trust",
+        "wallet",
+    ) or "tx" in text
+    if domain_question:
+        add("ui.workspace.health")
+
+    if _message_has_any(
+        text,
+        "pending",
+        "next",
+        "to do",
+        "todo",
+        "ready",
+        "report",
+        "summary",
+        "balance",
+        "holding",
+        "holdings",
+        "portfolio",
+        "tax",
+        "capital gain",
+        "gain",
+        "loss",
+        "stale",
+        "prepare",
+        "what should",
+        "journal",
+        "quarantine",
+        "sync",
+    ):
+        add("ui.next_actions")
+
+    if _message_has_any(
+        text,
+        "accurate",
+        "blocker",
+        "blocked",
+        "can i trust",
+        "export",
+        "inaccurate",
+        "ready",
+        "report",
+        "trust",
+        "trustworthy",
+    ):
+        add("ui.report.blockers")
+
+    if _message_has_any(
+        text,
+        "auto sync",
+        "automatic sync",
+        "maintenance",
+        "setting",
+        "settings",
+        "sync before",
+    ):
+        add("ui.maintenance.settings")
+
+    if _message_has_any(
+        text,
+        "changed",
+        "changes since",
+        "different since",
+        "last answer",
+        "since last",
+        "still current",
+    ):
+        add("ui.audit.changes_since_last_answer")
+
+    if _message_has_any(text, "wallet", "connection", "source", "backend", "sync"):
+        add("ui.wallets.list")
+    if _message_has_any(
+        text,
+        "backend",
+        "connection",
+        "esplora",
+        "electrum",
+        "fulcrum",
+        "rpc",
+        "source",
+    ):
+        add("ui.backends.list")
+
+    if _message_has_any(
+        text,
+        "largest",
+        "smallest",
+        "biggest",
+        "highest",
+        "lowest",
+        "top",
+        "bottom",
+    ):
+        add("ui.transactions.extremes", {"limit": 3})
+    elif _message_has_any(text, "recent", "latest", "last") and (
+        "transaction" in text or "tx" in text
+    ):
+        add("ui.transactions.list", {"limit": 20, "sort": "occurred-at", "order": "desc"})
+
+    search_query = _extract_transaction_search_query(text)
+    if search_query:
+        add("ui.transactions.search", {"query": search_query, "limit": 25})
+
+    if _message_has_any(
+        text,
+        "total",
+        "inflow",
+        "outflow",
+        "flow",
+        "all-time",
+        "all time",
+        "summary",
+        "volume",
+        "fee",
+    ):
+        add("ui.reports.summary")
+
+    if _message_has_any(
+        text,
+        "balance",
+        "holding",
+        "holdings",
+        "portfolio",
+        "current",
+    ):
+        add("ui.reports.balance_sheet")
+    if _message_has_any(
+        text,
+        "by wallet",
+        "per wallet",
+        "portfolio",
+        "wallet holding",
+        "wallet holdings",
+    ):
+        add("ui.reports.portfolio_summary")
+
+    if _message_has_any(
+        text,
+        "tax summary",
+        "tax total",
+        "tax totals",
+        "tax year",
+        "proceeds",
+        "cost basis",
+        "realized",
+    ):
+        year = _extract_year_from_text(text)
+        add("ui.reports.tax_summary", {"year": year} if year is not None else {})
+
+    if _message_has_any(
+        text,
+        "capital gain",
+        "capital gains",
+        "disposal",
+        "disposed",
+        "gain",
+        "loss",
+        "lot",
+        "e1kv",
+        "kennzahl",
+    ):
+        add("ui.reports.capital_gains")
+
+    if _message_has_any(
+        text,
+        "balance history",
+        "history",
+        "trend",
+        "over time",
+        "timeline",
+        "monthly",
+        "month by month",
+        "weekly",
+        "week by week",
+        "daily",
+        "day by day",
+        "hourly",
+        "hour by hour",
+    ):
+        add(
+            "ui.reports.balance_history",
+            {"interval": _balance_history_interval(text), "limit": 120},
+        )
+
+    if _message_has_any(text, "journal", "quarantine", "stale"):
+        add("ui.journals.snapshot")
+    if "quarantine" in text:
+        add("ui.journals.quarantine", {"limit": 10})
+    if _message_has_any(text, "transfer", "swap", "pair", "peg"):
+        add("ui.journals.transfers.list", {"limit": 10})
+
+    if _message_has_any(
+        text,
+        "coverage",
+        "missing price",
+        "missing pricing",
+        "price",
+        "pricing",
+        "fiat",
+        "rate",
+    ):
+        add("ui.rates.coverage", {"limit": 25})
+
+    if _message_has_any(text, "rate", "price", "pricing", "fiat", "eur", "usd"):
+        add("ui.rates.summary")
+
+    return planned[:12]
+
+
+def _auto_tool_context_for_model(context: list[dict[str, Any]]) -> str:
+    content = json.dumps(
+        {"auto_read_tools": json_ready(context)},
+        sort_keys=True,
+        separators=(",", ":"),
+    )
+    max_chars = 24000
+    if len(content) > max_chars:
+        content = (
+            content[:max_chars]
+            + '...<truncated>; if an exact field is missing, call the specific tool again.'
+        )
+    return (
+        "Kassiber automatically read this local, read-only context before "
+        "calling the model. Prefer these exact tool fields over reasoning or "
+        "estimates; if a requested number is absent, call a specific tool or say "
+        f"it is unavailable.\n{content}"
+    )
+
+
+def _run_auto_read_tools(
+    *,
+    request_id: object,
+    messages: list[dict[str, Any]],
+    validated: dict[str, Any],
+    out: _OutputChannel,
+    runtime: AiToolRuntime,
+    cancel_event: threading.Event,
+) -> None:
+    planned = _planned_auto_read_tools(validated)
+    if not planned:
+        return
+    _write_ai_chat_status(
+        out,
+        request_id,
+        phase="reading_local_context",
+        label="Reading local context",
+    )
+    context: list[dict[str, Any]] = []
+    for index, planned_call in enumerate(planned, start=1):
+        if cancel_event.is_set():
+            return
+        call = ParsedAiToolCall(
+            call_id=f"auto_read_{index}",
+            name=planned_call.name,
+            arguments=planned_call.arguments,
+        )
+        entry = get_tool(call.name)
+        if entry is None or entry.kind_class != "read_only":
+            continue
+        out.write(
+            _with_request_id(
+                build_envelope(
+                    "ai.chat.tool_call",
+                    {
+                        "call_id": call.call_id,
+                        "name": entry.name,
+                        "arguments": call.arguments,
+                        "kind_class": entry.kind_class,
+                        "needs_consent": False,
+                    },
+                ),
+                request_id,
+            )
+        )
+        result = _execute_read_only_ai_tool(call, runtime)
+        _record_ai_tool_usage(runtime, entry.name, result)
+        out.write(
+            _with_request_id(
+                build_envelope(
+                    "ai.chat.tool_result",
+                    {"call_id": call.call_id, **result},
+                ),
+                request_id,
+            )
+        )
+        context.append(
+            {
+                "tool": entry.name,
+                "arguments": call.arguments,
+                "result": result,
+            }
+        )
+    if context and not cancel_event.is_set():
+        messages.append({"role": "system", "content": _auto_tool_context_for_model(context)})
 
 
 def _write_ai_chat_status(
@@ -1228,6 +2369,7 @@ def _write_ai_chat_terminal(
     provider_snapshot: dict[str, Any],
     validated: dict[str, Any],
     finish_reason: str | None,
+    runtime: AiToolRuntime,
 ) -> None:
     out.write(
         _with_request_id(
@@ -1237,6 +2379,11 @@ def _write_ai_chat_terminal(
                     "provider": provider_snapshot["name"],
                     "model": validated["model"],
                     "finish_reason": finish_reason,
+                    "provenance": _ai_answer_provenance(
+                        provider_snapshot,
+                        validated,
+                        runtime,
+                    ),
                 },
             ),
             request_id,
@@ -1260,6 +2407,14 @@ def _run_ai_chat_tool_loop(
         system_prompt=validated["system_prompt"],
     )
     tools = build_openai_tools()
+    _run_auto_read_tools(
+        request_id=request_id,
+        messages=messages,
+        validated=validated,
+        out=out,
+        runtime=runtime,
+        cancel_event=cancel_event,
+    )
     finish_reason = None
     for _iteration in range(validated["tool_loop_max_iterations"]):
         if cancel_event.is_set():
@@ -1373,6 +2528,7 @@ def _run_ai_chat_tool_loop(
                     result = _execute_mutating_ai_tool(call, runtime)
             else:
                 result = _execute_read_only_ai_tool(call, runtime)
+            _record_ai_tool_usage(runtime, display_name, result)
             out.write(
                 _with_request_id(
                     build_envelope(
@@ -1399,7 +2555,14 @@ def _run_ai_chat_tool_loop(
 
     if cancel_event.is_set():
         finish_reason = "cancelled"
-    _write_ai_chat_terminal(out, request_id, provider_snapshot, validated, finish_reason)
+    _write_ai_chat_terminal(
+        out,
+        request_id,
+        provider_snapshot,
+        validated,
+        finish_reason,
+        runtime,
+    )
 
 
 def _run_ai_chat_stream(
@@ -1477,7 +2640,14 @@ def _run_ai_chat_stream(
                     break
         if cancel_event.is_set():
             finish_reason = "cancelled"
-        _write_ai_chat_terminal(out, request_id, provider_snapshot, validated, finish_reason)
+        _write_ai_chat_terminal(
+            out,
+            request_id,
+            provider_snapshot,
+            validated,
+            finish_reason,
+            runtime,
+        )
     except AppError as exc:
         out.write(
             _error_envelope(
@@ -2323,6 +3493,30 @@ def handle_request(
             False,
         )
 
+    if kind == "ui.transactions.extremes":
+        return (
+            _with_request_id(
+                build_envelope(
+                    "ui.transactions.extremes",
+                    build_transactions_extremes_snapshot(ctx.conn, request.get("args")),
+                ),
+                request_id,
+            ),
+            False,
+        )
+
+    if kind == "ui.transactions.search":
+        return (
+            _with_request_id(
+                build_envelope(
+                    "ui.transactions.search",
+                    build_transactions_search_snapshot(ctx.conn, request.get("args")),
+                ),
+                request_id,
+            ),
+            False,
+        )
+
     if kind == "ui.wallets.list":
         return (
             _with_request_id(
@@ -2347,12 +3541,84 @@ def handle_request(
             False,
         )
 
+    if kind in _DIRECT_AUTO_JOURNAL_REFRESH_KINDS:
+        _auto_maintain_for_read(ctx.conn, ctx.runtime_config, state={})
+
     if kind == "ui.reports.capital_gains":
         return (
             _with_request_id(
                 build_envelope(
                     "ui.reports.capital_gains",
                     build_capital_gains_snapshot(ctx.conn),
+                ),
+                request_id,
+            ),
+            False,
+        )
+
+    if kind == "ui.reports.summary":
+        return (
+            _with_request_id(
+                build_envelope(
+                    "ui.reports.summary",
+                    _reports_summary_payload(
+                        ctx.conn,
+                        _coerce_args_dict(request_id, request.get("args")),
+                    ),
+                ),
+                request_id,
+            ),
+            False,
+        )
+
+    if kind == "ui.reports.balance_sheet":
+        return (
+            _with_request_id(
+                build_envelope(
+                    "ui.reports.balance_sheet",
+                    _reports_balance_sheet_payload(ctx.conn),
+                ),
+                request_id,
+            ),
+            False,
+        )
+
+    if kind == "ui.reports.portfolio_summary":
+        return (
+            _with_request_id(
+                build_envelope(
+                    "ui.reports.portfolio_summary",
+                    _reports_portfolio_summary_payload(ctx.conn),
+                ),
+                request_id,
+            ),
+            False,
+        )
+
+    if kind == "ui.reports.tax_summary":
+        return (
+            _with_request_id(
+                build_envelope(
+                    "ui.reports.tax_summary",
+                    _reports_tax_summary_payload(
+                        ctx.conn,
+                        _coerce_args_dict(request_id, request.get("args")),
+                    ),
+                ),
+                request_id,
+            ),
+            False,
+        )
+
+    if kind == "ui.reports.balance_history":
+        return (
+            _with_request_id(
+                build_envelope(
+                    "ui.reports.balance_history",
+                    _reports_balance_history_payload(
+                        ctx.conn,
+                        _coerce_args_dict(request_id, request.get("args")),
+                    ),
                 ),
                 request_id,
             ),
@@ -2462,6 +3728,89 @@ def handle_request(
         return (
             _with_request_id(
                 build_envelope("ui.rates.summary", build_rates_summary_snapshot(ctx.conn)),
+                request_id,
+            ),
+            False,
+        )
+
+    if kind == "ui.rates.coverage":
+        return (
+            _with_request_id(
+                build_envelope(
+                    "ui.rates.coverage",
+                    build_rates_coverage_snapshot(ctx.conn, request.get("args")),
+                ),
+                request_id,
+            ),
+            False,
+        )
+
+    if kind == "ui.report.blockers":
+        return (
+            _with_request_id(
+                build_envelope(
+                    "ui.report.blockers",
+                    build_report_blockers_snapshot(ctx.conn),
+                ),
+                request_id,
+            ),
+            False,
+        )
+
+    if kind == "ui.audit.changes_since_last_answer":
+        return (
+            _with_request_id(
+                build_envelope(
+                    "ui.audit.changes_since_last_answer",
+                    build_audit_changes_since_last_answer_snapshot(
+                        ctx.conn,
+                        request.get("args"),
+                    ),
+                ),
+                request_id,
+            ),
+            False,
+        )
+
+    if kind == "ui.maintenance.settings":
+        return (
+            _with_request_id(
+                build_envelope(
+                    "ui.maintenance.settings",
+                    _maintenance_settings_payload(ctx.conn),
+                ),
+                request_id,
+            ),
+            False,
+        )
+
+    if kind == "ui.maintenance.configure":
+        return (
+            _with_request_id(
+                build_envelope(
+                    "ui.maintenance.configure",
+                    _maintenance_configure_payload(
+                        ctx.conn,
+                        _coerce_args_dict(request_id, request.get("args")),
+                    ),
+                ),
+                request_id,
+            ),
+            False,
+        )
+
+    if kind == "ui.maintenance.run":
+        return (
+            _with_request_id(
+                build_envelope(
+                    "ui.maintenance.run",
+                    _maintenance_run_payload(
+                        ctx.conn,
+                        ctx.runtime_config,
+                        _coerce_args_dict(request_id, request.get("args")),
+                        state={},
+                    ),
+                ),
                 request_id,
             ),
             False,
@@ -2860,6 +4209,7 @@ def handle_request(
             data_root=ctx.data_root,
             runtime_config=dict(ctx.runtime_config),
             main_thread_tasks=ctx.main_thread_tasks,
+            maintenance_state={},
         )
         registry_key, active_chat = ctx.active_ai_chats.register(request_id)
         thread = threading.Thread(
