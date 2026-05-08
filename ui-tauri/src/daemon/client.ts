@@ -17,6 +17,11 @@ import { useUiStore, type DataMode } from "@/store/ui";
 
 export const DAEMON_AUTH_REQUIRED_EVENT = "kassiber:auth-required";
 
+export interface DaemonAuthRequiredEventDetail {
+  envelope: DaemonEnvelope;
+  daemonSession?: number;
+}
+
 export class DaemonAuthRequiredError extends Error {
   envelope: DaemonEnvelope;
 
@@ -71,15 +76,69 @@ function formatErrorDetails(details: unknown): string | null {
   }
 }
 
-function handleAuthRequired(envelope: DaemonEnvelope): never {
+function isDaemonEnvelope(value: unknown): value is DaemonEnvelope {
+  if (!value || typeof value !== "object") return false;
+  const candidate = value as Partial<DaemonEnvelope>;
+  return (
+    candidate.kind === "auth_required" &&
+    typeof candidate.schema_version === "number"
+  );
+}
+
+export function parseDaemonAuthRequiredEventDetail(
+  detail: unknown,
+): DaemonAuthRequiredEventDetail | null {
+  if (isDaemonEnvelope(detail)) {
+    return { envelope: detail };
+  }
+  if (!detail || typeof detail !== "object") return null;
+
+  const candidate = detail as Partial<DaemonAuthRequiredEventDetail>;
+  if (!isDaemonEnvelope(candidate.envelope)) return null;
+  return {
+    envelope: candidate.envelope,
+    daemonSession:
+      typeof candidate.daemonSession === "number"
+        ? candidate.daemonSession
+        : undefined,
+  };
+}
+
+export function shouldHandleDaemonAuthRequiredEvent(
+  detail: unknown,
+  currentDaemonSession: number,
+): boolean {
+  const parsed = parseDaemonAuthRequiredEventDetail(detail);
+  if (!parsed) return false;
+  return (
+    parsed.daemonSession === undefined ||
+    parsed.daemonSession === currentDaemonSession
+  );
+}
+
+export function dispatchDaemonAuthRequired(
+  envelope: DaemonEnvelope,
+  daemonSession?: number,
+): void {
   if (typeof window !== "undefined") {
+    const detail: DaemonAuthRequiredEventDetail = {
+      envelope,
+      daemonSession,
+    };
     const event = () =>
       window.dispatchEvent(
-        new CustomEvent(DAEMON_AUTH_REQUIRED_EVENT, { detail: envelope }),
+        new CustomEvent(DAEMON_AUTH_REQUIRED_EVENT, { detail }),
       );
     event();
     window.setTimeout(event, 0);
   }
+}
+
+function handleAuthRequired(
+  envelope: DaemonEnvelope,
+  daemonSession?: number,
+): never {
+  dispatchDaemonAuthRequired(envelope, daemonSession);
   throw new DaemonAuthRequiredError(envelope);
 }
 
@@ -109,7 +168,7 @@ export function useDaemon<T = unknown>(
     queryFn: async () => {
       const envelope = await getTransport(dataMode).invoke<T>({ kind, args });
       if (envelope.kind === "auth_required") {
-        handleAuthRequired(envelope);
+        handleAuthRequired(envelope, daemonSession);
       }
       if (envelope.kind === "error" || envelope.error) {
         throw new DaemonRequestError(kind, envelope);
@@ -132,9 +191,10 @@ export function useDaemonMutation<T = unknown>(
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (args?: Record<string, unknown>) => {
+      const daemonSession = useUiStore.getState().daemonSession;
       const envelope = await getTransport(dataMode).invoke<T>({ kind, args });
       if (envelope.kind === "auth_required") {
-        handleAuthRequired(envelope);
+        handleAuthRequired(envelope, daemonSession);
       }
       if (envelope.kind === "error" || envelope.error) {
         throw new DaemonRequestError(kind, envelope);
