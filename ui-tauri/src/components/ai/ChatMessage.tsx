@@ -226,11 +226,15 @@ function collectDeterministicFacts(message: AiChatMessage): DeterministicFact[] 
         detail: `${formatCount(summary?.cache_coverable_missing)} coverable from cache`,
       });
     } else if (kind === "ui.audit.changes_since_last_answer") {
+      let label = "No changes since baseline";
+      if (data.status === "baseline_required") {
+        label = "Baseline required";
+      } else if (data.changed) {
+        label = "Changed since baseline";
+      }
       facts.push({
         source: "Change audit",
-        label: data.changed
-          ? "Changed since baseline"
-          : "No changes since baseline",
+        label,
       });
     } else if (kind === "ui.maintenance.run") {
       const blockers = Array.isArray(data.blockers) ? data.blockers : [];

@@ -2284,13 +2284,39 @@ def build_audit_changes_since_last_answer_snapshot(
 
     context, profile = _active_context_and_profile(conn)
     if profile is None:
+        status = "no_active_profile" if since_filter is not None else "baseline_required"
         return {
-            "changed": False,
+            "status": status,
+            "changed": False if status == "no_active_profile" else None,
             "baseline": {"since": since_filter},
             "workspace": None,
             "profile": None,
             "counts_since": {},
             "latest": {},
+        }
+    if since_filter is None:
+        freshness = _journal_freshness(conn, profile)
+        return {
+            "status": "baseline_required",
+            "changed": None,
+            "baseline": {"since": None, "required": True},
+            "workspace": context["workspace_label"] or None,
+            "profile": context["profile_label"] or None,
+            "counts_since": {},
+            "latest": {
+                "transactions": None,
+                "journal_entries": None,
+                "journal_quarantines": None,
+                "wallets": None,
+                "rates": None,
+                "journals_processed_at": profile["last_processed_at"],
+            },
+            "current": {
+                "generated_at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+                "active_transactions": freshness["active_transaction_count"],
+                "journals_processed_at": profile["last_processed_at"],
+                "quarantines": freshness["quarantine_count"],
+            },
         }
 
     def profile_column(table: str, column: str = "created_at") -> str:
@@ -2346,6 +2372,7 @@ def build_audit_changes_since_last_answer_snapshot(
     }
     freshness = _journal_freshness(conn, profile)
     return {
+        "status": "compared",
         "changed": any(value > 0 for value in counts_since.values()),
         "baseline": {"since": since_filter},
         "workspace": context["workspace_label"] or None,

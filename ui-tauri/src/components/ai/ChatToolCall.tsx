@@ -143,6 +143,9 @@ function summarizeToolResult(result: unknown): string | null {
     }
     case "ui.audit.changes_since_last_answer": {
       const counts = asRecord(data.counts_since);
+      if (data.status === "baseline_required") {
+        return "No previous-answer baseline available.";
+      }
       const changed = data.changed ? "changed" : "unchanged";
       return `Workspace ${changed}; ${counts?.transactions ?? 0} transaction change(s), ${
         counts?.journal_entries ?? 0

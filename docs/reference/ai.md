@@ -225,12 +225,19 @@ and deterministic, and the same refresh path applies when the desktop GUI reads
 journal-derived daemon kinds such as `ui.reports.*` or `ui.report.blockers`
 directly. Wallet/backend sync remains explicit unless the active profile has
 enabled automatic sync-before-report maintenance, because sync can contact
-external services and import new transactions.
+external services and import new transactions. Automatic sync results are
+redacted before they enter AI/UI tool metadata; exact backend URLs are not sent
+to the provider. If any wallet sync row fails, the maintenance/report-blocker
+path returns a blocking `sync_failed` item instead of saying reports are ready.
 
 Quoted or search-like questions can trigger `ui.transactions.search` before the
 provider is called. Matching transaction notes, descriptions, counterparties,
 tags, and values may then be included in the provider context; keep inference
 local when those fields are sensitive.
+
+Change-audit reads require an explicit previous-answer timestamp. Without a
+baseline, `ui.audit.changes_since_last_answer` returns
+`status: "baseline_required"` rather than claiming that nothing changed.
 
 The in-app prompt is a digest, not a full dump of
 `skills/kassiber/SKILL.md`. It teaches the model the local-first accounting

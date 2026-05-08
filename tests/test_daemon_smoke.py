@@ -17,9 +17,11 @@ from kassiber.daemon import (
     AiToolRuntime,
     MAX_REQUEST_LINE_CHARS,
     ParsedAiToolCall,
+    _auto_sync_wallets_if_enabled,
     _auto_tool_context_for_model,
     _auto_process_journals_if_needed,
     _execute_mutating_ai_tool,
+    _maintenance_run_payload,
     _planned_auto_read_tools,
     _reports_tax_summary_payload,
 )
@@ -1477,6 +1479,108 @@ class DaemonSmokeTest(unittest.TestCase):
             self.assertEqual(result, {"processed": True})
             process_mock.assert_called_once_with(conn)
 
+    def test_auto_sync_redacts_backend_urls_and_marks_partial_errors(self):
+        with tempfile.TemporaryDirectory(prefix="kassiber-daemon-state-") as tmp:
+            data_root = Path(tmp) / "data"
+            _seed_workspace_with_transaction(data_root, tmp)
+            conn = sqlite3.connect(data_root / "kassiber.sqlite3")
+            conn.row_factory = sqlite3.Row
+            self.addCleanup(conn.close)
+            profile = conn.execute("SELECT * FROM profiles WHERE label = 'Main'").fetchone()
+            conn.execute(
+                """
+                INSERT INTO settings(key, value)
+                VALUES(?, 'true')
+                """,
+                (f"ai.auto_sync_before_report_reads.profile.{profile['id']}",),
+            )
+            conn.commit()
+            raw_sync = {
+                "results": [
+                    {
+                        "wallet": "Cold",
+                        "status": "error",
+                        "backend_url": "http://private-node.local/secret-path",
+                        "message": "offline",
+                    }
+                ]
+            }
+
+            with mock.patch("kassiber.daemon._wallets_sync_payload", return_value=raw_sync):
+                state: dict[str, object] = {}
+                payload = _auto_sync_wallets_if_enabled(conn, {}, state=state)
+                cached_payload = _auto_sync_wallets_if_enabled(conn, {}, state={})
+
+            encoded = json.dumps(payload, sort_keys=True)
+            self.assertFalse(payload["ok"])
+            self.assertFalse(cached_payload["ok"])
+            self.assertEqual(cached_payload["reason"], "auto_sync_rate_limited")
+            self.assertNotIn("private-node.local", encoded)
+            self.assertNotIn("secret-path", encoded)
+            self.assertTrue(payload["results"][0]["has_backend_url"])
+            self.assertFalse(state["auto_sync"]["ok"])  # type: ignore[index]
+
+    def test_auto_sync_rate_limits_repeated_profile_attempts(self):
+        with tempfile.TemporaryDirectory(prefix="kassiber-daemon-state-") as tmp:
+            data_root = Path(tmp) / "data"
+            _seed_workspace_with_transaction(data_root, tmp)
+            conn = sqlite3.connect(data_root / "kassiber.sqlite3")
+            conn.row_factory = sqlite3.Row
+            self.addCleanup(conn.close)
+            profile = conn.execute("SELECT * FROM profiles WHERE label = 'Main'").fetchone()
+            conn.execute(
+                """
+                INSERT INTO settings(key, value)
+                VALUES(?, 'true')
+                """,
+                (f"ai.auto_sync_before_report_reads.profile.{profile['id']}",),
+            )
+            conn.commit()
+
+            with mock.patch(
+                "kassiber.daemon._wallets_sync_payload",
+                return_value={"results": [{"wallet": "Cold", "status": "synced"}]},
+            ) as sync_mock:
+                first = _auto_sync_wallets_if_enabled(conn, {}, state={})
+                second = _auto_sync_wallets_if_enabled(conn, {}, state={})
+
+            self.assertTrue(first["ok"])
+            self.assertEqual(second["reason"], "auto_sync_rate_limited")
+            sync_mock.assert_called_once()
+
+    def test_maintenance_run_blocks_ready_when_auto_sync_has_row_errors(self):
+        with tempfile.TemporaryDirectory(prefix="kassiber-daemon-state-") as tmp:
+            data_root = Path(tmp) / "data"
+            _seed_workspace_with_transaction(data_root, tmp)
+            _run_cli(data_root, "journals", "process")
+            conn = sqlite3.connect(data_root / "kassiber.sqlite3")
+            conn.row_factory = sqlite3.Row
+            self.addCleanup(conn.close)
+            raw_sync = {
+                "results": [
+                    {
+                        "wallet": "Cold",
+                        "status": "error",
+                        "backend_url": "http://private-node.local/secret-path",
+                        "message": "offline",
+                    }
+                ]
+            }
+
+            with mock.patch("kassiber.daemon._wallets_sync_payload", return_value=raw_sync):
+                payload = _maintenance_run_payload(
+                    conn,
+                    {},
+                    {"sync": "always"},
+                    state={},
+                )
+
+            self.assertFalse(payload["ready"])
+            self.assertIn("sync_failed", [item["id"] for item in payload["blockers"]])
+            encoded = json.dumps(payload, sort_keys=True)
+            self.assertNotIn("private-node.local", encoded)
+            self.assertNotIn("secret-path", encoded)
+
     def test_daemon_safe_read_tool_kinds_return_workspace_state(self):
         with tempfile.TemporaryDirectory(prefix="kassiber-daemon-state-") as tmp:
             data_root = Path(tmp) / "data"
@@ -1727,6 +1831,18 @@ class DaemonSmokeTest(unittest.TestCase):
             self.assertEqual(changes["kind"], "ui.audit.changes_since_last_answer")
             self.assertFalse(changes["data"]["changed"])
             self.assertEqual(changes["data"]["current"]["active_transactions"], 1)
+
+            _write_payload(
+                proc,
+                {
+                    "request_id": "changes-no-baseline",
+                    "kind": "ui.audit.changes_since_last_answer",
+                },
+            )
+            no_baseline = _read_payload_timeout(proc)
+            self.assertEqual(no_baseline["kind"], "ui.audit.changes_since_last_answer")
+            self.assertEqual(no_baseline["data"]["status"], "baseline_required")
+            self.assertIsNone(no_baseline["data"]["changed"])
 
             _write_payload(
                 proc,

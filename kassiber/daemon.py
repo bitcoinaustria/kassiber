@@ -93,6 +93,10 @@ AUTO_CONTEXT_MAX_CHARS = 24_000
 AUTO_CONTEXT_ENTRY_MAX_CHARS = 6_000
 AUTO_CONTEXT_LIST_LIMIT = 25
 AUTO_CONTEXT_STRING_LIMIT = 2_000
+AUTO_SYNC_PROFILE_MIN_INTERVAL_SECONDS = 60
+_AUTO_SYNC_PROFILE_LAST_ATTEMPT: dict[str, float] = {}
+_AUTO_SYNC_PROFILE_LAST_RESULT: dict[str, dict[str, Any]] = {}
+_AUTO_SYNC_PROFILE_LOCK = threading.Lock()
 _REQUEST_ID_MISSING = object()
 SUPPORTED_KINDS = (
     "status",
@@ -1003,7 +1007,7 @@ def _wallets_sync_payload(
     context = current_context_snapshot(conn)
     if not context["workspace_id"] or not context["profile_id"]:
         return {"results": []}
-    return {
+    payload = {
         "results": sync_wallet(
             conn,
             runtime_config,
@@ -1013,6 +1017,76 @@ def _wallets_sync_payload(
             sync_all=args["all"],
         )
     }
+    return _redact_sync_payload_for_ui(payload)
+
+
+def _redact_sync_payload_for_ui(value: Any) -> Any:
+    if isinstance(value, dict):
+        redacted: dict[str, Any] = {}
+        for key, item in value.items():
+            if key == "backend_url":
+                redacted["has_backend_url"] = bool(item)
+                continue
+            redacted[key] = _redact_sync_payload_for_ui(item)
+        if "results" in redacted:
+            redacted.setdefault("ok", not _sync_payload_has_errors(redacted))
+        return redacted
+    if isinstance(value, list):
+        return [_redact_sync_payload_for_ui(item) for item in value]
+    return value
+
+
+def _sync_error_rows(payload: dict[str, Any] | None) -> list[dict[str, Any]]:
+    if not isinstance(payload, dict):
+        return []
+    results = payload.get("results")
+    if not isinstance(results, list):
+        return []
+    return [
+        row
+        for row in results
+        if isinstance(row, dict) and str(row.get("status") or "").lower() == "error"
+    ]
+
+
+def _sync_payload_has_errors(payload: dict[str, Any] | None) -> bool:
+    if not isinstance(payload, dict):
+        return False
+    return payload.get("ok") is False or bool(_sync_error_rows(payload))
+
+
+def _sync_failure_blocker(payload: dict[str, Any] | None) -> dict[str, Any] | None:
+    if not _sync_payload_has_errors(payload):
+        return None
+    errors = _sync_error_rows(payload)
+    detail = (
+        f"Automatic wallet sync failed for {len(errors)} wallet(s); reports may be stale."
+        if errors
+        else "Automatic wallet sync failed; reports may be stale."
+    )
+    return {
+        "id": "sync_failed",
+        "severity": "blocking",
+        "title": "Wallet sync failed",
+        "detail": detail,
+        "daemon_kind": "ui.wallets.sync",
+    }
+
+
+def _apply_sync_failure_blocker(
+    payload: dict[str, Any],
+    sync_payload: dict[str, Any] | None,
+) -> dict[str, Any]:
+    blocker = _sync_failure_blocker(sync_payload)
+    if blocker is None:
+        return payload
+    updated = dict(payload)
+    blockers = list(updated.get("blockers") or [])
+    if not any(isinstance(item, dict) and item.get("id") == blocker["id"] for item in blockers):
+        blockers.insert(0, blocker)
+    updated["blockers"] = blockers
+    updated["ready"] = False
+    return updated
 
 
 def _journals_process_payload(conn: sqlite3.Connection) -> dict[str, Any]:
@@ -1142,6 +1216,32 @@ def _auto_sync_wallets_if_enabled(
     if not enabled and not force:
         return None
     state["auto_sync_attempted"] = True
+    if not force:
+        now = time.monotonic()
+        with _AUTO_SYNC_PROFILE_LOCK:
+            last_attempt = _AUTO_SYNC_PROFILE_LAST_ATTEMPT.get(profile["id"])
+            if (
+                last_attempt is not None
+                and now - last_attempt < AUTO_SYNC_PROFILE_MIN_INTERVAL_SECONDS
+            ):
+                cached = _AUTO_SYNC_PROFILE_LAST_RESULT.get(profile["id"])
+                if cached is None:
+                    payload = {
+                        "ok": True,
+                        "status": "skipped",
+                        "reason": "auto_sync_rate_limited",
+                    }
+                else:
+                    payload = json.loads(json.dumps(cached))
+                    payload["status"] = "cached"
+                    payload["reason"] = "auto_sync_rate_limited"
+                payload["retry_after_seconds"] = int(
+                    AUTO_SYNC_PROFILE_MIN_INTERVAL_SECONDS - (now - last_attempt)
+                )
+                ok = not _sync_payload_has_errors(payload)
+                state["auto_sync"] = {"ok": ok, "payload": payload}
+                return payload
+            _AUTO_SYNC_PROFILE_LAST_ATTEMPT[profile["id"]] = now
     try:
         payload = _wallets_sync_payload(
             conn,
@@ -1149,7 +1249,13 @@ def _auto_sync_wallets_if_enabled(
             {"all": True},
             strict=False,
         )
-        state["auto_sync"] = {"ok": True, "payload": payload}
+        payload = _redact_sync_payload_for_ui(payload)
+        ok = not _sync_payload_has_errors(payload)
+        payload["ok"] = ok
+        state["auto_sync"] = {"ok": ok, "payload": payload}
+        if not force:
+            with _AUTO_SYNC_PROFILE_LOCK:
+                _AUTO_SYNC_PROFILE_LAST_RESULT[profile["id"]] = dict(payload)
         return payload
     except AppError as exc:
         payload = {
@@ -1158,6 +1264,9 @@ def _auto_sync_wallets_if_enabled(
             "message": str(exc),
         }
         state["auto_sync"] = payload
+        if not force:
+            with _AUTO_SYNC_PROFILE_LOCK:
+                _AUTO_SYNC_PROFILE_LAST_RESULT[profile["id"]] = dict(payload)
         return payload
 
 
@@ -1209,6 +1318,7 @@ def _maintenance_run_payload(
             retryable=False,
         )
     metadata: dict[str, Any] = {}
+    sync_payload: dict[str, Any] | None = None
     if sync_mode == "always":
         auto_sync = _auto_sync_wallets_if_enabled(
             conn,
@@ -1217,15 +1327,20 @@ def _maintenance_run_payload(
             force=True,
         )
         if auto_sync is not None:
+            sync_payload = auto_sync
             metadata["sync"] = build_envelope("ui.wallets.sync", auto_sync)
     elif sync_mode == "if_enabled":
         auto_sync = _auto_sync_wallets_if_enabled(conn, runtime_config, state=state)
         if auto_sync is not None:
+            sync_payload = auto_sync
             metadata["sync"] = build_envelope("ui.wallets.sync", auto_sync)
     journal_process = _auto_process_journals_if_needed(conn)
     if journal_process is not None:
         metadata["journals"] = build_envelope("ui.journals.process", journal_process)
-    blockers = build_report_blockers_snapshot(conn)
+    blockers = _apply_sync_failure_blocker(
+        build_report_blockers_snapshot(conn),
+        sync_payload,
+    )
     return {
         "ready": blockers["ready"],
         "sync_mode": sync_mode,
@@ -1265,6 +1380,10 @@ def _reports_summary_payload(
     )
 
 
+def _msat_to_sat_value(value: Any) -> float:
+    return int(value or 0) / 1000.0
+
+
 def _reports_balance_sheet_payload(conn: sqlite3.Connection) -> dict[str, Any]:
     rows = core_reports.report_balance_sheet(conn, None, None, _report_hooks())
     totals_by_asset: dict[str, dict[str, Any]] = {}
@@ -1287,12 +1406,7 @@ def _reports_balance_sheet_payload(conn: sqlite3.Connection) -> dict[str, Any]:
         bucket["market_value"] += float(row.get("market_value") or 0)
         bucket["unrealized_pnl"] += float(row.get("unrealized_pnl") or 0)
     for bucket in totals_by_asset.values():
-        quantity_msat = int(bucket["quantity_msat"])
-        bucket["quantity_sat"] = (
-            quantity_msat // 1000
-            if quantity_msat % 1000 == 0
-            else quantity_msat / 1000
-        )
+        bucket["quantity_sat"] = _msat_to_sat_value(bucket["quantity_msat"])
     return {
         "rows": rows,
         "totals_by_asset": [
@@ -1327,12 +1441,7 @@ def _reports_portfolio_summary_payload(conn: sqlite3.Connection) -> dict[str, An
         bucket["market_value"] += float(row.get("market_value") or 0)
         bucket["unrealized_pnl"] += float(row.get("unrealized_pnl") or 0)
     for bucket in totals_by_asset.values():
-        quantity_msat = int(bucket["quantity_msat"])
-        bucket["quantity_sat"] = (
-            quantity_msat // 1000
-            if quantity_msat % 1000 == 0
-            else quantity_msat / 1000
-        )
+        bucket["quantity_sat"] = _msat_to_sat_value(bucket["quantity_msat"])
     return {
         "rows": rows,
         "totals_by_asset": [
@@ -1623,6 +1732,23 @@ def _execute_read_only_ai_tool(call: ParsedAiToolCall, runtime: AiToolRuntime) -
                 "ok": True,
                 "envelope": build_envelope(entry.daemon_kind, payload),
             }
+            auto_sync_envelope = maintenance_metadata.get("auto_sync")
+            auto_sync_data = (
+                auto_sync_envelope.get("data")
+                if isinstance(auto_sync_envelope, dict)
+                else None
+            )
+            if entry.daemon_kind == "ui.report.blockers":
+                payload = _apply_sync_failure_blocker(payload, auto_sync_data)
+                result["envelope"] = build_envelope(entry.daemon_kind, payload)
+            elif _sync_payload_has_errors(auto_sync_data):
+                result["auto_report_blockers"] = build_envelope(
+                    "ui.report.blockers",
+                    _apply_sync_failure_blocker(
+                        build_report_blockers_snapshot(conn),
+                        auto_sync_data,
+                    ),
+                )
             result.update(maintenance_metadata)
             return result
 
@@ -3719,8 +3845,13 @@ def handle_request(
             False,
         )
 
+    direct_maintenance_metadata: dict[str, Any] = {}
     if kind in _DIRECT_AUTO_JOURNAL_REFRESH_KINDS:
-        _auto_maintain_for_read(ctx.conn, ctx.runtime_config, state={})
+        direct_maintenance_metadata = _auto_maintain_for_read(
+            ctx.conn,
+            ctx.runtime_config,
+            state={},
+        )
 
     if kind == "ui.reports.capital_gains":
         return (
@@ -3924,11 +4055,20 @@ def handle_request(
         )
 
     if kind == "ui.report.blockers":
+        auto_sync_envelope = direct_maintenance_metadata.get("auto_sync")
+        auto_sync_data = (
+            auto_sync_envelope.get("data")
+            if isinstance(auto_sync_envelope, dict)
+            else None
+        )
         return (
             _with_request_id(
                 build_envelope(
                     "ui.report.blockers",
-                    build_report_blockers_snapshot(ctx.conn),
+                    _apply_sync_failure_blocker(
+                        build_report_blockers_snapshot(ctx.conn),
+                        auto_sync_data,
+                    ),
                 ),
                 request_id,
             ),

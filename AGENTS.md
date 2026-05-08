@@ -95,10 +95,11 @@ Kassiber is currently in **dev mode**: renaming commands, breaking flags, and re
   AI calls. Wallet/backend sync can be allowed per active profile via
   `ui.maintenance.configure`, and `ui.maintenance.run` can explicitly sync and
   refresh journals after consent; otherwise sync remains explicit because it
-  contacts external services and imports new transactions. Do not expose raw shell,
-  raw filesystem, arbitrary CLI
-  execution, descriptors, xpub material, secrets, env files, wallet config JSON,
-  or raw wallet files through AI tools.
+  contacts external services and imports new transactions. AI/UI sync metadata
+  must not expose exact backend URLs, and partial sync errors must surface as
+  blocking report-readiness state. Do not expose raw shell, raw filesystem,
+  arbitrary CLI execution, descriptors, xpub material, secrets, env files,
+  wallet config JSON, or raw wallet files through AI tools.
 - Browser dev mode can exercise the real daemon over the Vite loopback bridge:
   `pnpm --dir ui-tauri run dev:bridge` serves the React app at
   `http://127.0.0.1:5173`, forwards invokes through `/__kassiber__/daemon`,

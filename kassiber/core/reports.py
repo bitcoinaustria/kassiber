@@ -724,9 +724,7 @@ def _summary_flow_rows(rows):
 
 def _msat_to_sat(value):
     msat = int(value or 0)
-    if msat % 1000 == 0:
-        return msat // 1000
-    return msat / 1000
+    return msat / 1000.0
 
 
 def _summary_wallet_flow_rows(rows):
