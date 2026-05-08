@@ -138,19 +138,32 @@ class ToolCatalogPromptTest(unittest.TestCase):
             "status",
             "ui_overview_snapshot",
             "ui_transactions_list",
+            "ui_transactions_extremes",
+            "ui_transactions_search",
             "ui_wallets_list",
             "ui_backends_list",
             "ui_profiles_snapshot",
             "ui_reports_capital_gains",
+            "ui_reports_summary",
+            "ui_reports_balance_sheet",
+            "ui_reports_portfolio_summary",
+            "ui_reports_tax_summary",
+            "ui_reports_balance_history",
             "ui_journals_snapshot",
             "ui_journals_quarantine",
             "ui_journals_transfers_list",
             "ui_journals_process",
             "ui_rates_summary",
+            "ui_rates_coverage",
+            "ui_report_blockers",
+            "ui_audit_changes_since_last_answer",
+            "ui_maintenance_settings",
             "ui_workspace_health",
             "ui_next_actions",
             "read_skill_reference",
             "ui_wallets_sync",
+            "ui_maintenance_configure",
+            "ui_maintenance_run",
         }
         tool_names = {
             tool["function"]["name"]
@@ -163,16 +176,49 @@ class ToolCatalogPromptTest(unittest.TestCase):
         self.assertEqual(get_tool("ui_overview_snapshot").name, "ui.overview.snapshot")
         self.assertEqual(get_tool("ui_workspace_health").name, "ui.workspace.health")
         self.assertEqual(get_tool("ui_next_actions").kind_class, "read_only")
+        self.assertEqual(get_tool("ui_transactions_extremes").name, "ui.transactions.extremes")
+        self.assertEqual(get_tool("ui_transactions_search").name, "ui.transactions.search")
         self.assertEqual(get_tool("ui_wallets_list").kind_class, "read_only")
         self.assertEqual(get_tool("ui_backends_list").kind_class, "read_only")
+        self.assertEqual(get_tool("ui_reports_summary").name, "ui.reports.summary")
+        self.assertEqual(get_tool("ui_reports_summary").kind_class, "read_only")
+        self.assertEqual(get_tool("ui_reports_balance_sheet").name, "ui.reports.balance_sheet")
+        self.assertEqual(
+            get_tool("ui_reports_portfolio_summary").name,
+            "ui.reports.portfolio_summary",
+        )
+        self.assertEqual(get_tool("ui_reports_tax_summary").name, "ui.reports.tax_summary")
+        self.assertEqual(
+            get_tool("ui_reports_balance_history").name,
+            "ui.reports.balance_history",
+        )
         self.assertEqual(get_tool("ui_journals_quarantine").kind_class, "read_only")
         self.assertEqual(get_tool("ui_rates_summary").kind_class, "read_only")
+        self.assertEqual(get_tool("ui_rates_coverage").name, "ui.rates.coverage")
+        self.assertEqual(get_tool("ui_report_blockers").name, "ui.report.blockers")
+        self.assertEqual(
+            get_tool("ui_audit_changes_since_last_answer").name,
+            "ui.audit.changes_since_last_answer",
+        )
+        self.assertEqual(
+            get_tool("ui_maintenance_settings").name,
+            "ui.maintenance.settings",
+        )
         self.assertEqual(get_tool("ui_wallets_sync").name, "ui.wallets.sync")
         self.assertEqual(get_tool("ui.wallets.sync").kind_class, "mutating")
         self.assertEqual(get_tool("ui_journals_process").name, "ui.journals.process")
         self.assertEqual(get_tool("ui.journals.process").kind_class, "mutating")
+        self.assertEqual(
+            get_tool("ui_maintenance_configure").name,
+            "ui.maintenance.configure",
+        )
+        self.assertEqual(get_tool("ui_maintenance_configure").kind_class, "mutating")
+        self.assertEqual(get_tool("ui_maintenance_run").name, "ui.maintenance.run")
+        self.assertEqual(get_tool("ui_maintenance_run").kind_class, "mutating")
         self.assertIn("ui_wallets_sync", tool_names)
         self.assertIn("ui_journals_process", tool_names)
+        self.assertIn("ui_maintenance_configure", tool_names)
+        self.assertIn("ui_maintenance_run", tool_names)
 
     def test_mutating_tool_preview_redacts_secret_like_arguments(self):
         tool = get_tool("ui.wallets.sync")
@@ -203,6 +249,19 @@ class ToolCatalogPromptTest(unittest.TestCase):
         self.assertEqual(summarize_tool_call(tool, {"wallet": "cold"}), "Sync wallet cold")
         journal_tool = get_tool("ui.journals.process")
         self.assertEqual(summarize_tool_call(journal_tool, {}), "Process journals")
+        maintenance_tool = get_tool("ui.maintenance.run")
+        self.assertEqual(
+            summarize_tool_call(maintenance_tool, {"sync": "never"}),
+            "Process journals without wallet sync",
+        )
+        configure_tool = get_tool("ui.maintenance.configure")
+        self.assertEqual(
+            summarize_tool_call(
+                configure_tool,
+                {"auto_sync_before_report_reads": True},
+            ),
+            "Enable automatic wallet sync before report reads",
+        )
 
     def test_read_skill_reference_allowlist(self):
         self.assertIn("index", SKILL_REFERENCE_NAMES)
@@ -227,7 +286,10 @@ class ToolCatalogPromptTest(unittest.TestCase):
         self.assertEqual(messages[0]["role"], "system")
         self.assertIn("read_skill_reference", messages[0]["content"])
         self.assertIn('name "index"', messages[0]["content"])
-        self.assertIn("When tools show stale journals", messages[0]["content"])
+        self.assertIn("automatically refresh stale local journals", messages[0]["content"])
+        self.assertIn("report blockers", messages[0]["content"])
+        self.assertIn("Never output placeholders", messages[0]["content"])
+        self.assertIn("summary report tool", messages[0]["content"])
         self.assertNotIn("kassiber backends create my-esplora", messages[0]["content"])
         self.assertLess(len(DEFAULT_KASSIBER_SYSTEM_PROMPT), 2000)
 

@@ -425,9 +425,16 @@ class DaemonSmokeTest(unittest.TestCase):
             self.assertIn("status", ready["data"]["supported_kinds"])
             self.assertIn("ui.overview.snapshot", ready["data"]["supported_kinds"])
             self.assertIn("ui.transactions.list", ready["data"]["supported_kinds"])
+            self.assertIn("ui.transactions.extremes", ready["data"]["supported_kinds"])
+            self.assertIn("ui.transactions.search", ready["data"]["supported_kinds"])
             self.assertIn("ui.wallets.list", ready["data"]["supported_kinds"])
             self.assertIn("ui.backends.list", ready["data"]["supported_kinds"])
             self.assertIn("ui.reports.capital_gains", ready["data"]["supported_kinds"])
+            self.assertIn("ui.reports.summary", ready["data"]["supported_kinds"])
+            self.assertIn("ui.reports.balance_sheet", ready["data"]["supported_kinds"])
+            self.assertIn("ui.reports.portfolio_summary", ready["data"]["supported_kinds"])
+            self.assertIn("ui.reports.tax_summary", ready["data"]["supported_kinds"])
+            self.assertIn("ui.reports.balance_history", ready["data"]["supported_kinds"])
             self.assertIn("ui.reports.export_pdf", ready["data"]["supported_kinds"])
             self.assertIn(
                 "ui.reports.export_capital_gains_csv",
@@ -449,6 +456,15 @@ class DaemonSmokeTest(unittest.TestCase):
             self.assertIn("ui.profiles.create", ready["data"]["supported_kinds"])
             self.assertIn("ui.profiles.switch", ready["data"]["supported_kinds"])
             self.assertIn("ui.rates.summary", ready["data"]["supported_kinds"])
+            self.assertIn("ui.rates.coverage", ready["data"]["supported_kinds"])
+            self.assertIn("ui.report.blockers", ready["data"]["supported_kinds"])
+            self.assertIn(
+                "ui.audit.changes_since_last_answer",
+                ready["data"]["supported_kinds"],
+            )
+            self.assertIn("ui.maintenance.settings", ready["data"]["supported_kinds"])
+            self.assertIn("ui.maintenance.configure", ready["data"]["supported_kinds"])
+            self.assertIn("ui.maintenance.run", ready["data"]["supported_kinds"])
             self.assertIn("ui.workspace.health", ready["data"]["supported_kinds"])
             self.assertIn("ui.workspace.create", ready["data"]["supported_kinds"])
             self.assertIn("ui.workspace.delete", ready["data"]["supported_kinds"])
@@ -1275,6 +1291,7 @@ class DaemonSmokeTest(unittest.TestCase):
             data_root="/not-used",
             runtime_config={},
             main_thread_tasks=task_queue,
+            maintenance_state={},
         )
         call = ParsedAiToolCall(
             call_id="call_1",
@@ -1313,6 +1330,7 @@ class DaemonSmokeTest(unittest.TestCase):
             data_root="/not-used",
             runtime_config={},
             main_thread_tasks=task_queue,
+            maintenance_state={},
         )
         call = ParsedAiToolCall(
             call_id="call_1",
@@ -1425,10 +1443,211 @@ class DaemonSmokeTest(unittest.TestCase):
             self.assertEqual(len(transactions["data"]["txs"]), 1)
             self.assertEqual(transactions["data"]["filters"]["wallet"], "Cold")
 
+            _write_payload(
+                proc,
+                {
+                    "request_id": "tx-extremes-1",
+                    "kind": "ui.transactions.extremes",
+                    "args": {"limit": 2},
+                },
+            )
+            extremes = _read_payload_timeout(proc)
+            self.assertEqual(extremes["kind"], "ui.transactions.extremes")
+            self.assertEqual(len(extremes["data"]["largest"]), 1)
+            self.assertEqual(len(extremes["data"]["smallest"]), 1)
+            self.assertEqual(extremes["data"]["largest"][0]["amountSat"], 10_000_000)
+            self.assertEqual(
+                extremes["data"]["filters"]["scope"],
+                "all_time_before_limit",
+            )
+
+            _write_payload(
+                proc,
+                {
+                    "request_id": "tx-search-1",
+                    "kind": "ui.transactions.search",
+                    "args": {"query": "Seed", "limit": 5},
+                },
+            )
+            search = _read_payload_timeout(proc)
+            self.assertEqual(search["kind"], "ui.transactions.search")
+            self.assertEqual(search["data"]["filters"]["query"], "Seed")
+            self.assertEqual(len(search["data"]["txs"]), 1)
+
+            _write_payload(proc, {"request_id": "summary-1", "kind": "ui.reports.summary"})
+            summary = _read_payload_timeout(proc)
+            self.assertEqual(summary["kind"], "ui.reports.summary")
+            self.assertEqual(summary["data"]["metrics"]["active_transactions"], 1)
+            self.assertEqual(summary["data"]["asset_flow"][0]["asset"], "BTC")
+            self.assertEqual(
+                summary["data"]["asset_flow"][0]["inbound_amount_sat"],
+                10_000_000,
+            )
+            self.assertEqual(
+                summary["data"]["asset_flow"][0]["inbound_amount_msat"],
+                10_000_000_000,
+            )
+            self.assertEqual(summary["data"]["wallet_flow"][0]["wallet"], "Cold")
+            self.assertEqual(
+                summary["data"]["wallet_flow"][0]["inbound_amount_sat"],
+                10_000_000,
+            )
+            self.assertEqual(
+                summary["data"]["wallet_flow"][0]["inbound_amount_msat"],
+                10_000_000_000,
+            )
+
+            _write_payload(
+                proc,
+                {
+                    "request_id": "summary-wallet-1",
+                    "kind": "ui.reports.summary",
+                    "args": {"wallet": "Cold"},
+                },
+            )
+            wallet_summary = _read_payload_timeout(proc)
+            self.assertEqual(wallet_summary["kind"], "ui.reports.summary")
+            self.assertEqual(wallet_summary["data"]["wallet"], "Cold")
+            self.assertEqual(
+                wallet_summary["data"]["asset_flow"][0]["inbound_amount_sat"],
+                10_000_000,
+            )
+            self.assertEqual(
+                wallet_summary["data"]["asset_flow"][0]["inbound_amount_msat"],
+                10_000_000_000,
+            )
+
+            _write_payload(
+                proc,
+                {"request_id": "balance-sheet-1", "kind": "ui.reports.balance_sheet"},
+            )
+            balance_sheet = _read_payload_timeout(proc)
+            self.assertEqual(balance_sheet["kind"], "ui.reports.balance_sheet")
+            self.assertEqual(
+                balance_sheet["data"]["totals_by_asset"][0]["quantity_sat"],
+                10_000_000,
+            )
+            self.assertEqual(
+                balance_sheet["data"]["totals_by_asset"][0]["quantity_msat"],
+                10_000_000_000,
+            )
+
+            _write_payload(
+                proc,
+                {
+                    "request_id": "portfolio-summary-1",
+                    "kind": "ui.reports.portfolio_summary",
+                },
+            )
+            portfolio_summary = _read_payload_timeout(proc)
+            self.assertEqual(portfolio_summary["kind"], "ui.reports.portfolio_summary")
+            self.assertEqual(
+                portfolio_summary["data"]["totals_by_asset"][0]["quantity_sat"],
+                10_000_000,
+            )
+
+            _write_payload(
+                proc,
+                {
+                    "request_id": "tax-summary-1",
+                    "kind": "ui.reports.tax_summary",
+                    "args": {"year": 2026},
+                },
+            )
+            tax_summary = _read_payload_timeout(proc)
+            self.assertEqual(tax_summary["kind"], "ui.reports.tax_summary")
+            self.assertEqual(tax_summary["data"]["filters"]["year"], 2026)
+            self.assertEqual(tax_summary["data"]["rows"], [])
+
+            _write_payload(
+                proc,
+                {
+                    "request_id": "balance-history-1",
+                    "kind": "ui.reports.balance_history",
+                    "args": {"interval": "month", "limit": 5},
+                },
+            )
+            balance_history = _read_payload_timeout(proc)
+            self.assertEqual(balance_history["kind"], "ui.reports.balance_history")
+            self.assertEqual(balance_history["data"]["filters"]["interval"], "month")
+            self.assertGreaterEqual(balance_history["data"]["summary"]["row_count"], 1)
+
             _write_payload(proc, {"request_id": "rates-1", "kind": "ui.rates.summary"})
             rates = _read_payload_timeout(proc)
             self.assertEqual(rates["kind"], "ui.rates.summary")
             self.assertEqual(rates["data"]["pairs"][0]["pair"], "BTC-EUR")
+
+            _write_payload(
+                proc,
+                {
+                    "request_id": "rates-coverage-1",
+                    "kind": "ui.rates.coverage",
+                    "args": {"limit": 5},
+                },
+            )
+            rates_coverage = _read_payload_timeout(proc)
+            self.assertEqual(rates_coverage["kind"], "ui.rates.coverage")
+            self.assertEqual(
+                rates_coverage["data"]["summary"]["missing_price_transactions"],
+                0,
+            )
+
+            _write_payload(
+                proc,
+                {"request_id": "report-blockers-1", "kind": "ui.report.blockers"},
+            )
+            blockers = _read_payload_timeout(proc)
+            self.assertEqual(blockers["kind"], "ui.report.blockers")
+            self.assertTrue(blockers["data"]["ready"])
+            self.assertEqual(blockers["data"]["blockers"], [])
+
+            _write_payload(
+                proc,
+                {
+                    "request_id": "changes-1",
+                    "kind": "ui.audit.changes_since_last_answer",
+                    "args": {"since": "2030-01-01T00:00:00Z"},
+                },
+            )
+            changes = _read_payload_timeout(proc)
+            self.assertEqual(changes["kind"], "ui.audit.changes_since_last_answer")
+            self.assertFalse(changes["data"]["changed"])
+            self.assertEqual(changes["data"]["current"]["active_transactions"], 1)
+
+            _write_payload(
+                proc,
+                {"request_id": "maintenance-settings-1", "kind": "ui.maintenance.settings"},
+            )
+            settings = _read_payload_timeout(proc)
+            self.assertEqual(settings["kind"], "ui.maintenance.settings")
+            self.assertFalse(settings["data"]["settings"]["auto_sync_before_report_reads"])
+
+            _write_payload(
+                proc,
+                {
+                    "request_id": "maintenance-configure-1",
+                    "kind": "ui.maintenance.configure",
+                    "args": {"auto_sync_before_report_reads": True},
+                },
+            )
+            configured = _read_payload_timeout(proc)
+            self.assertEqual(configured["kind"], "ui.maintenance.configure")
+            self.assertTrue(
+                configured["data"]["settings"]["auto_sync_before_report_reads"]
+            )
+
+            _write_payload(
+                proc,
+                {
+                    "request_id": "maintenance-run-1",
+                    "kind": "ui.maintenance.run",
+                    "args": {"sync": "never"},
+                },
+            )
+            maintenance = _read_payload_timeout(proc)
+            self.assertEqual(maintenance["kind"], "ui.maintenance.run")
+            self.assertTrue(maintenance["data"]["ready"])
+            self.assertEqual(maintenance["data"]["sync_mode"], "never")
 
             _write_payload(
                 proc,
@@ -1454,6 +1673,36 @@ class DaemonSmokeTest(unittest.TestCase):
             transfers = _read_payload_timeout(proc)
             self.assertEqual(transfers["kind"], "ui.journals.transfers.list")
             self.assertEqual(transfers["data"]["pairs"], [])
+
+            _write_payload(proc, {"request_id": "shutdown-1", "kind": "daemon.shutdown"})
+            self.assertEqual(_read_payload_timeout(proc)["kind"], "daemon.shutdown")
+            code, stderr = _close_daemon(proc)
+            self.assertEqual(code, 0, stderr)
+            self.assertEqual(stderr, "")
+
+    def test_daemon_report_read_tools_auto_process_stale_journals(self):
+        with tempfile.TemporaryDirectory(prefix="kassiber-daemon-") as tmp:
+            data_root = Path(tmp) / "data"
+            _seed_workspace_with_transaction(data_root, tmp)
+            proc = _start_daemon(data_root)
+
+            ready = _read_payload(proc)
+            self.assertEqual(ready["kind"], "daemon.ready")
+
+            _write_payload(proc, {"request_id": "health-before", "kind": "ui.workspace.health"})
+            health_before = _read_payload_timeout(proc)
+            self.assertTrue(health_before["data"]["journals"]["needs_processing"])
+
+            _write_payload(proc, {"request_id": "summary-auto", "kind": "ui.reports.summary"})
+            summary = _read_payload_timeout(proc)
+            self.assertEqual(summary["kind"], "ui.reports.summary")
+            self.assertEqual(summary["data"]["metrics"]["active_transactions"], 1)
+
+            _write_payload(proc, {"request_id": "health-after", "kind": "ui.workspace.health"})
+            health_after = _read_payload_timeout(proc)
+            self.assertFalse(health_after["data"]["journals"]["needs_processing"])
+            self.assertEqual(health_after["data"]["journals"]["status"], "current")
+            self.assertTrue(health_after["data"]["reports"]["ready"])
 
             _write_payload(proc, {"request_id": "shutdown-1", "kind": "daemon.shutdown"})
             self.assertEqual(_read_payload_timeout(proc)["kind"], "daemon.shutdown")
@@ -1830,7 +2079,7 @@ class DaemonSmokeTest(unittest.TestCase):
                             "provider": "tool-local",
                             "model": "test-model",
                             "tools_enabled": True,
-                            "messages": [{"role": "user", "content": "What is pending?"}],
+                            "messages": [{"role": "user", "content": "hello"}],
                         },
                     },
                 )
@@ -1892,8 +2141,6 @@ class DaemonSmokeTest(unittest.TestCase):
     def test_ai_chat_pending_question_uses_health_and_next_actions_tools(self):
         server = _start_tool_chat_server(
             [
-                (_tool_call_message("ui_workspace_health", call_id="call_health"), 0.0),
-                (_tool_call_message("ui_next_actions", call_id="call_next"), 0.0),
                 (
                     _chat_completion_response(
                         {"role": "assistant", "content": "Create a workspace first."},
@@ -1949,6 +2196,10 @@ class DaemonSmokeTest(unittest.TestCase):
 
                 self.assertIsNotNone(terminal)
                 self.assertEqual(terminal["data"]["finish_reason"], "stop")
+                self.assertEqual(
+                    terminal["data"]["provenance"]["tools_used"],
+                    ["ui.workspace.health", "ui.next_actions"],
+                )
                 tool_results = [
                     record
                     for record in records
@@ -1958,7 +2209,7 @@ class DaemonSmokeTest(unittest.TestCase):
                     [record["data"]["envelope"]["kind"] for record in tool_results],
                     ["ui.workspace.health", "ui.next_actions"],
                 )
-                self.assertEqual(len(server.requests), 3)  # type: ignore[attr-defined]
+                self.assertEqual(len(server.requests), 1)  # type: ignore[attr-defined]
                 first_tool_names = {
                     tool["function"]["name"]
                     for tool in server.requests[0]["tools"]  # type: ignore[attr-defined]
@@ -1967,18 +2218,128 @@ class DaemonSmokeTest(unittest.TestCase):
                 self.assertIn("ui_next_actions", first_tool_names)
                 self.assertTrue(
                     any(
-                        message.get("role") == "tool"
-                        and message.get("tool_call_id") == "call_health"
-                        for message in server.requests[1]["messages"]  # type: ignore[attr-defined]
+                        message.get("role") == "system"
+                        and "auto_read_tools" in str(message.get("content"))
+                        for message in server.requests[0]["messages"]  # type: ignore[attr-defined]
                     )
                 )
-                self.assertTrue(
-                    any(
-                        message.get("role") == "tool"
-                        and message.get("tool_call_id") == "call_next"
-                        for message in server.requests[2]["messages"]  # type: ignore[attr-defined]
-                    )
+
+                _write_payload(proc, {"request_id": "shutdown-1", "kind": "daemon.shutdown"})
+                self.assertEqual(_read_payload_timeout(proc)["kind"], "daemon.shutdown")
+                code, stderr = _close_daemon(proc)
+                self.assertEqual(code, 0, stderr)
+                self.assertEqual(stderr, "")
+        finally:
+            server.shutdown()
+            server.server_close()
+
+    def test_ai_chat_auto_reads_exact_report_and_transaction_context(self):
+        server = _start_tool_chat_server(
+            [
+                (
+                    _chat_completion_response(
+                        {"role": "assistant", "content": "I used the local context."},
+                    ),
+                    0.0,
+                ),
+            ]
+        )
+        base_url = f"http://127.0.0.1:{server.server_port}/v1"
+        try:
+            with tempfile.TemporaryDirectory(prefix="kassiber-daemon-") as tmp:
+                data_root = Path(tmp) / "data"
+                _seed_workspace_with_transaction(data_root, tmp)
+                proc = _start_daemon(data_root)
+                self.assertEqual(_read_payload_timeout(proc)["kind"], "daemon.ready")
+
+                _write_payload(
+                    proc,
+                    {
+                        "request_id": "provider-1",
+                        "kind": "ai.providers.create",
+                        "args": {
+                            "name": "tool-local",
+                            "base_url": base_url,
+                            "kind": "local",
+                        },
+                    },
                 )
+                self.assertEqual(_read_payload_timeout(proc)["kind"], "ai.providers.create")
+
+                _write_payload(
+                    proc,
+                    {
+                        "request_id": "chat-context-1",
+                        "kind": "ai.chat",
+                        "args": {
+                            "provider": "tool-local",
+                            "model": "small-local",
+                            "tools_enabled": True,
+                            "messages": [
+                                {
+                                    "role": "user",
+                                    "content": (
+                                        "Find Seed and tell me the total inflow/outflow, "
+                                        "largest transaction, current balance, tax summary "
+                                        "for 2026, and monthly balance history."
+                                    ),
+                                }
+                            ],
+                        },
+                    },
+                )
+
+                records = []
+                terminal = None
+                deadline = time.time() + 5
+                while time.time() < deadline and terminal is None:
+                    payload = _read_payload_timeout(proc, max(0.1, deadline - time.time()))
+                    if payload.get("request_id") != "chat-context-1":
+                        continue
+                    records.append(payload)
+                    if payload.get("kind") == "ai.chat":
+                        terminal = payload
+
+                self.assertIsNotNone(terminal)
+                self.assertEqual(terminal["data"]["finish_reason"], "stop")
+                provenance = terminal["data"]["provenance"]
+                self.assertEqual(provenance["provider"], "tool-local")
+                self.assertEqual(provenance["model"], "small-local")
+                self.assertTrue(provenance["auto_journal_processed"])
+                self.assertEqual(provenance["active_transactions"], 1)
+                self.assertEqual(provenance["quarantines"], 0)
+                self.assertIn("ui.reports.summary", provenance["tools_used"])
+                tool_result_kinds = [
+                    record["data"]["envelope"]["kind"]
+                    for record in records
+                    if record["kind"] == "ai.chat.tool_result"
+                ]
+                self.assertEqual(
+                    tool_result_kinds,
+                    [
+                        "ui.workspace.health",
+                        "ui.next_actions",
+                        "ui.transactions.extremes",
+                        "ui.transactions.search",
+                        "ui.reports.summary",
+                        "ui.reports.balance_sheet",
+                        "ui.reports.tax_summary",
+                        "ui.reports.balance_history",
+                    ],
+                )
+                self.assertEqual(len(server.requests), 1)  # type: ignore[attr-defined]
+                auto_context_messages = [
+                    message
+                    for message in server.requests[0]["messages"]  # type: ignore[attr-defined]
+                    if message.get("role") == "system"
+                    and "auto_read_tools" in str(message.get("content"))
+                ]
+                self.assertEqual(len(auto_context_messages), 1)
+                auto_context = str(auto_context_messages[0]["content"])
+                self.assertIn("auto_journal_process", auto_context)
+                self.assertIn("ui.reports.summary", auto_context)
+                self.assertIn("ui.transactions.search", auto_context)
+                self.assertIn("10_000_000", auto_context.replace("10000000", "10_000_000"))
 
                 _write_payload(proc, {"request_id": "shutdown-1", "kind": "daemon.shutdown"})
                 self.assertEqual(_read_payload_timeout(proc)["kind"], "daemon.shutdown")

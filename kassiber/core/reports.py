@@ -228,6 +228,8 @@ def report_balance_sheet(conn, workspace_ref, profile_ref, hooks: ReportHooks):
                 "account": account_code or account_label,
                 "asset": asset,
                 "quantity": float(quantity),
+                "quantity_sat": _msat_to_sat(btc_to_msat(quantity)),
+                "quantity_msat": btc_to_msat(quantity),
                 "cost_basis": float(cost_basis),
                 "market_value": float(market_value),
                 "unrealized_pnl": float(market_value - cost_basis),
@@ -258,6 +260,8 @@ def report_portfolio_summary(conn, workspace_ref, profile_ref, hooks: ReportHook
                 "account": account_code,
                 "asset": asset,
                 "quantity": float(quantity),
+                "quantity_sat": _msat_to_sat(btc_to_msat(quantity)),
+                "quantity_msat": btc_to_msat(quantity),
                 "avg_cost": float(avg_cost),
                 "cost_basis": float(cost_basis),
                 "market_value": float(market_value),
@@ -705,11 +709,45 @@ def _summary_flow_rows(rows):
             "inbound_count": int(row["inbound_count"] or 0),
             "outbound_count": int(row["outbound_count"] or 0),
             "inbound_amount": float(msat_to_btc(row["inbound_amount"] or 0)),
+            "inbound_amount_sat": _msat_to_sat(row["inbound_amount"] or 0),
             "inbound_amount_msat": int(row["inbound_amount"] or 0),
             "outbound_amount": float(msat_to_btc(row["outbound_amount"] or 0)),
+            "outbound_amount_sat": _msat_to_sat(row["outbound_amount"] or 0),
             "outbound_amount_msat": int(row["outbound_amount"] or 0),
             "fee_amount": float(msat_to_btc(row["fee_amount"] or 0)),
+            "fee_amount_sat": _msat_to_sat(row["fee_amount"] or 0),
             "fee_amount_msat": int(row["fee_amount"] or 0),
+        }
+        for row in rows
+    ]
+
+
+def _msat_to_sat(value):
+    msat = int(value or 0)
+    if msat % 1000 == 0:
+        return msat // 1000
+    return msat / 1000
+
+
+def _summary_wallet_flow_rows(rows):
+    return [
+        {
+            "wallet": row["wallet"],
+            "asset": row["asset"],
+            "tx_count": int(row["tx_count"] or 0),
+            "inbound_count": int(row["inbound_count"] or 0),
+            "outbound_count": int(row["outbound_count"] or 0),
+            "inbound_amount": float(msat_to_btc(row["inbound_amount"] or 0)),
+            "inbound_amount_sat": _msat_to_sat(row["inbound_amount"] or 0),
+            "inbound_amount_msat": int(row["inbound_amount"] or 0),
+            "outbound_amount": float(msat_to_btc(row["outbound_amount"] or 0)),
+            "outbound_amount_sat": _msat_to_sat(row["outbound_amount"] or 0),
+            "outbound_amount_msat": int(row["outbound_amount"] or 0),
+            "fee_amount": float(msat_to_btc(row["fee_amount"] or 0)),
+            "fee_amount_sat": _msat_to_sat(row["fee_amount"] or 0),
+            "fee_amount_msat": int(row["fee_amount"] or 0),
+            "first_transaction_at": row["first_at"],
+            "last_transaction_at": row["last_at"],
         }
         for row in rows
     ]
@@ -786,6 +824,7 @@ def report_summary(conn, workspace_ref, profile_ref, hooks: ReportHooks, wallet_
         "holdings": rollups["holdings"],
         "realized": rollups["realized"],
         "asset_flow": _summary_flow_rows(query_rows["flow_by_asset"]),
+        "wallet_flow": _summary_wallet_flow_rows(query_rows["flow_by_wallet"]),
     }
 
 

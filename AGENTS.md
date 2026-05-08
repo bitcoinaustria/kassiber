@@ -74,17 +74,28 @@ Kassiber is currently in **dev mode**: renaming commands, breaking flags, and re
   `request_id`; cancelled chats finish with `finish_reason: "cancelled"`.
 - In-app AI read tools are explicit daemon kinds, not generic CLI or daemon
   dispatch. Current read-only AI kinds are `status`,
-  `ui.overview.snapshot`, `ui.transactions.list`, `ui.wallets.list`,
+  `ui.overview.snapshot`, `ui.transactions.list`,
+  `ui.transactions.extremes`, `ui.transactions.search`, `ui.wallets.list`,
   `ui.backends.list`, `ui.profiles.snapshot`, `ui.reports.capital_gains`,
-  `ui.journals.snapshot`, `ui.journals.quarantine`,
-  `ui.journals.transfers.list`, `ui.rates.summary`,
+  `ui.reports.summary`, `ui.reports.balance_sheet`,
+  `ui.reports.portfolio_summary`, `ui.reports.tax_summary`,
+  `ui.reports.balance_history`, `ui.journals.snapshot`,
+  `ui.journals.quarantine`, `ui.journals.transfers.list`, `ui.rates.summary`,
+  `ui.rates.coverage`, `ui.report.blockers`,
+  `ui.audit.changes_since_last_answer`, `ui.maintenance.settings`,
   `ui.workspace.health`, `ui.next_actions`, and virtual
   `read_skill_reference`. `read_skill_reference("index")` returns only the
   compact in-app skill routing document; deeper references stay allowlisted.
   `ui.transactions.list` supports bounded filters for `limit`, `direction`,
   `asset`, `wallet`, `since`, `sort`, and `order`. `ui.backends.list` is
   scoped to the active profile and exposes URL presence metadata, not exact
-  endpoint URLs. Do not expose raw shell, raw filesystem, arbitrary CLI
+  endpoint URLs. Stale local journals may be automatically refreshed before
+  AI read/report tools, with the `ui.journals.process` result included in tool
+  result metadata. Wallet/backend sync can be allowed per active profile via
+  `ui.maintenance.configure`, and `ui.maintenance.run` can explicitly sync and
+  refresh journals after consent; otherwise sync remains explicit because it
+  contacts external services and imports new transactions. Do not expose raw shell,
+  raw filesystem, arbitrary CLI
   execution, descriptors, xpub material, secrets, env files, wallet config JSON,
   or raw wallet files through AI tools.
 - Browser dev mode can exercise the real daemon over the Vite loopback bridge:

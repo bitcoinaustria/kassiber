@@ -79,6 +79,8 @@
       "cost_basis": 29940.0,
       "market_value": 32435.0,
       "quantity": 0.499,
+      "quantity_msat": 49900000000,
+      "quantity_sat": 49900000,
       "unrealized_pnl": 2495.0,
       "wallet": "Cold"
     },
@@ -89,6 +91,8 @@
       "cost_basis": 30000.0,
       "market_value": 32500.0,
       "quantity": 0.5,
+      "quantity_msat": 50000000000,
+      "quantity_sat": 50000000,
       "unrealized_pnl": 2500.0,
       "wallet": "Hot"
     }
