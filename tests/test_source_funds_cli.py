@@ -850,6 +850,30 @@ class SourceFundsCliTest(unittest.TestCase):
         )["data"]
         self.assertEqual(exported["snapshot_hash"], preview["case"]["snapshot_hash"])
 
+    def test_cases_list_snapshots_target_external_id(self):
+        """A later rename of the target transaction's external_id must
+        not rewrite history in cases list. Snapshot the value once at
+        save time."""
+        self._seed_exportable_disclosure_path()
+        preview = self._source_funds_report(save_case=True)
+        case_id = preview["case"]["id"]
+        with self._db() as conn:
+            conn.execute(
+                "UPDATE transactions SET external_id = ? WHERE external_id = ?",
+                ("renamed-after-save", "disclosure-target"),
+            )
+        listing = self.cli(
+            "source-funds",
+            "cases",
+            "list",
+            "--workspace",
+            "Sof",
+            "--profile",
+            "Default",
+        )["data"]
+        case = next(item for item in listing if item["id"] == case_id)
+        self.assertEqual(case["target_external_id"], "disclosure-target")
+
     def test_self_link_rejected_at_create_time(self):
         self._seed_cycle_wallets()
         error = self.cli_error(

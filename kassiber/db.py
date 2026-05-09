@@ -344,6 +344,7 @@ CREATE TABLE IF NOT EXISTS source_funds_cases (
     workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
     profile_id TEXT NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
     target_transaction_id TEXT NOT NULL REFERENCES transactions(id) ON DELETE CASCADE,
+    target_external_id TEXT,
     target_amount INTEGER NOT NULL,
     asset TEXT NOT NULL,
     label TEXT,
@@ -683,10 +684,33 @@ def ensure_schema_compat(conn):
     ensure_column(conn, "source_funds_cases", "recipient_label_snapshot", "TEXT")
     ensure_column(conn, "source_funds_cases", "recipient_kind_snapshot", "TEXT")
     ensure_column(conn, "source_funds_cases", "recipient_reveal_mode_snapshot", "TEXT")
+    ensure_column(conn, "source_funds_cases", "target_external_id", "TEXT")
+    _backfill_source_funds_target_external_id(conn)
     ensure_column(conn, "source_funds_recipients", "active", "INTEGER NOT NULL DEFAULT 1")
     _drop_legacy_source_funds_recipients_unique(conn)
     _migrate_msat_columns(conn)
     _backfill_liquid_asset_codes(conn)
+
+
+def _backfill_source_funds_target_external_id(conn):
+    """Persist the target's external_id at save time on each case row.
+
+    list_cases used to live-join transactions.external_id, which let a
+    later txn rename rewrite history. Snapshot the value once so the
+    case row is the authoritative answer.
+    """
+    conn.execute(
+        """
+        UPDATE source_funds_cases
+        SET target_external_id = (
+            SELECT t.external_id
+            FROM transactions t
+            WHERE t.id = source_funds_cases.target_transaction_id
+        )
+        WHERE target_external_id IS NULL
+        """
+    )
+    conn.commit()
 
 
 def _drop_legacy_source_funds_recipients_unique(conn):
@@ -737,6 +761,7 @@ def _drop_legacy_source_funds_recipients_unique(conn):
         "CREATE UNIQUE INDEX IF NOT EXISTS idx_source_funds_recipients_active_label "
         "ON source_funds_recipients(profile_id, label) WHERE active = 1"
     )
+    conn.commit()
 
 
 def _column_is_real(conn, table_name, column_name):

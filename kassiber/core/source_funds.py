@@ -1907,6 +1907,7 @@ def build_report(
             "exportable" if not blockers else "blocked",
             envelope,
             label=case_label,
+            target_external_id=target["external_id"] or "",
             recipient_id=recipient["id"] if recipient else None,
             recipient_label_snapshot=recipient["label"] if recipient else None,
             recipient_kind_snapshot=recipient["kind"] if recipient else None,
@@ -1933,6 +1934,7 @@ def save_case_snapshot(
     snapshot: Mapping[str, Any],
     *,
     label: str | None = None,
+    target_external_id: str | None = None,
     recipient_id: str | None = None,
     recipient_label_snapshot: str | None = None,
     recipient_kind_snapshot: str | None = None,
@@ -1946,17 +1948,18 @@ def save_case_snapshot(
     conn.execute(
         """
         INSERT INTO source_funds_cases(
-            id, workspace_id, profile_id, target_transaction_id, target_amount,
-            asset, label, reveal_mode, status, snapshot_hash, snapshot_json,
+            id, workspace_id, profile_id, target_transaction_id, target_external_id,
+            target_amount, asset, label, reveal_mode, status, snapshot_hash, snapshot_json,
             created_at, updated_at, recipient_id,
             recipient_label_snapshot, recipient_kind_snapshot, recipient_reveal_mode_snapshot
-        ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
         (
             case_id,
             workspace_id,
             profile_id,
             target_transaction_id,
+            target_external_id,
             target_amount_msat,
             asset,
             label,
@@ -1993,11 +1996,10 @@ def list_cases(conn: sqlite3.Connection, workspace_ref: str | None, profile_ref:
     _, profile = hooks.resolve_scope(conn, workspace_ref, profile_ref)
     rows = conn.execute(
         """
-        SELECT c.*, t.external_id
-        FROM source_funds_cases c
-        JOIN transactions t ON t.id = c.target_transaction_id
-        WHERE c.profile_id = ?
-        ORDER BY c.created_at DESC, c.id DESC
+        SELECT *
+        FROM source_funds_cases
+        WHERE profile_id = ?
+        ORDER BY created_at DESC, id DESC
         """,
         (profile["id"],),
     ).fetchall()
@@ -2010,12 +2012,13 @@ def list_cases(conn: sqlite3.Connection, workspace_ref: str | None, profile_ref:
         snapshot_label = row["recipient_label_snapshot"] if "recipient_label_snapshot" in keys else None
         snapshot_kind = row["recipient_kind_snapshot"] if "recipient_kind_snapshot" in keys else None
         snapshot_reveal = row["recipient_reveal_mode_snapshot"] if "recipient_reveal_mode_snapshot" in keys else None
+        target_external = row["target_external_id"] if "target_external_id" in keys else None
         cases.append(
             {
                 "id": row["id"],
                 "label": row["label"] or "",
                 "target_transaction_id": row["target_transaction_id"],
-                "target_external_id": row["external_id"] or "",
+                "target_external_id": target_external or "",
                 "target_amount": _btc_value(row["target_amount"]),
                 "target_amount_msat": row["target_amount"],
                 "asset": row["asset"],
