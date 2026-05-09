@@ -150,26 +150,21 @@ class RecipientCrudTests(unittest.TestCase):
         self.assertEqual(updated["notes"], "treats us nicely")
         self.assertEqual(updated["kind"], "bank")  # unchanged
 
-    def test_delete_clears_recipient_id_on_existing_cases(self):
-        recipient = source_funds_recipients.create_recipient(
-            self.conn,
-            self.workspace_id,
-            self.profile_id,
-            label="Bank Z",
-            kind="bank",
-        )
-        # Insert a fake case row with this recipient_id, then assert it's
-        # nulled on delete.
+    def _insert_case_with_recipient(self, recipient_id: str, *, snapshot: dict[str, str]) -> str:
+        """Insert a stub case row referencing the recipient.
+
+        Includes the snapshot columns so list_cases-style consumers
+        return preserved historical attribution.
+        """
         case_id = str(uuid.uuid4())
-        # Need a transactions row for the FK; insert a stub.
         self.conn.execute(
             "INSERT INTO accounts(id, workspace_id, profile_id, code, label, account_type, created_at)"
-            " VALUES (?, ?, ?, ?, ?, ?, ?)",
+            " VALUES (?, ?, ?, ?, ?, ?, ?) ON CONFLICT(id) DO NOTHING",
             ("acct-x", self.workspace_id, self.profile_id, "x", "x", "personal", "2026-04-01T00:00:00Z"),
         )
         self.conn.execute(
             "INSERT INTO wallets(id, workspace_id, profile_id, account_id, label, kind, created_at)"
-            " VALUES (?, ?, ?, ?, ?, ?, ?)",
+            " VALUES (?, ?, ?, ?, ?, ?, ?) ON CONFLICT(id) DO NOTHING",
             ("wal-x", self.workspace_id, self.profile_id, "acct-x", "Wallet X", "personal", "2026-04-01T00:00:00Z"),
         )
         tx_id = str(uuid.uuid4())
@@ -184,7 +179,7 @@ class RecipientCrudTests(unittest.TestCase):
                 self.workspace_id,
                 self.profile_id,
                 "wal-x",
-                "ext-x",
+                f"ext-{tx_id[:8]}",
                 f"fp-{tx_id}",
                 "2026-04-01T09:00:00Z",
                 "inbound",
@@ -198,8 +193,9 @@ class RecipientCrudTests(unittest.TestCase):
             """
             INSERT INTO source_funds_cases(id, workspace_id, profile_id, target_transaction_id,
                 target_amount, asset, label, reveal_mode, status, snapshot_hash, snapshot_json,
-                created_at, updated_at, recipient_id)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                created_at, updated_at, recipient_id,
+                recipient_label_snapshot, recipient_kind_snapshot, recipient_reveal_mode_snapshot)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 case_id,
@@ -215,16 +211,80 @@ class RecipientCrudTests(unittest.TestCase):
                 "{}",
                 "2026-04-01T09:00:00Z",
                 "2026-04-01T09:00:00Z",
-                recipient["id"],
+                recipient_id,
+                snapshot["label"],
+                snapshot["kind"],
+                snapshot["default_reveal_mode"],
             ),
         )
         self.conn.commit()
+        return case_id
+
+    def test_delete_clears_recipient_id_but_preserves_snapshot(self):
+        recipient = source_funds_recipients.create_recipient(
+            self.conn,
+            self.workspace_id,
+            self.profile_id,
+            label="Bank Z",
+            kind="bank",
+        )
+        case_id = self._insert_case_with_recipient(
+            recipient["id"],
+            snapshot={"label": recipient["label"], "kind": recipient["kind"], "default_reveal_mode": recipient["default_reveal_mode"]},
+        )
         source_funds_recipients.delete_recipient(self.conn, self.profile_id, recipient["id"])
         row = self.conn.execute(
-            "SELECT recipient_id FROM source_funds_cases WHERE id = ?",
+            """
+            SELECT recipient_id, recipient_label_snapshot, recipient_kind_snapshot,
+                recipient_reveal_mode_snapshot
+            FROM source_funds_cases WHERE id = ?
+            """,
             (case_id,),
         ).fetchone()
+        # FK reference is cleared so the live recipients table can be deleted...
         self.assertIsNone(row["recipient_id"])
+        # ...but the audit trail of who got this disclosure is preserved.
+        self.assertEqual(row["recipient_label_snapshot"], "Bank Z")
+        self.assertEqual(row["recipient_kind_snapshot"], "bank")
+        self.assertEqual(row["recipient_reveal_mode_snapshot"], "standard")
+
+    def test_rename_does_not_rewrite_historical_case_attribution(self):
+        recipient = source_funds_recipients.create_recipient(
+            self.conn,
+            self.workspace_id,
+            self.profile_id,
+            label="Original Label",
+            kind="bank",
+            default_reveal_mode="minimal",
+        )
+        case_id = self._insert_case_with_recipient(
+            recipient["id"],
+            snapshot={
+                "label": recipient["label"],
+                "kind": recipient["kind"],
+                "default_reveal_mode": recipient["default_reveal_mode"],
+            },
+        )
+        source_funds_recipients.update_recipient(
+            self.conn,
+            self.profile_id,
+            recipient["id"],
+            label="Renamed Label",
+            kind="exchange",
+            default_reveal_mode="full",
+        )
+        row = self.conn.execute(
+            """
+            SELECT recipient_label_snapshot, recipient_kind_snapshot,
+                recipient_reveal_mode_snapshot
+            FROM source_funds_cases WHERE id = ?
+            """,
+            (case_id,),
+        ).fetchone()
+        # Historical case row keeps the recipient state at the time of save.
+        self.assertEqual(row["recipient_label_snapshot"], "Original Label")
+        self.assertEqual(row["recipient_kind_snapshot"], "bank")
+        self.assertEqual(row["recipient_reveal_mode_snapshot"], "minimal")
 
     def test_effective_reveal_mode_explicit_wins(self):
         created = source_funds_recipients.create_recipient(

@@ -523,8 +523,10 @@ class CoverageCoreTests(unittest.TestCase):
 
     def test_truncation_flags_when_inbound_count_exceeds_cap(self):
         """When a profile has more inbound rows than max_transactions,
-        the coverage envelope must surface the truncation flag and the
-        unclassified totals so the UI can prompt for explicit recompute."""
+        the coverage envelope must surface the truncation flag, count
+        unclassified rows under the not_classified bucket, and include
+        them in totals so callers cannot read the classified subset as
+        100% of the profile."""
         for i in range(3):
             self._add_inbound_tx(f"tx-{i}", 100_000)
         coverage = compute_coverage(
@@ -538,8 +540,17 @@ class CoverageCoreTests(unittest.TestCase):
         self.assertEqual(coverage["truncation"]["inbound_total_count"], 3)
         self.assertEqual(coverage["truncation"]["not_classified_count"], 1)
         self.assertEqual(coverage["truncation"]["not_classified_msat"], 100_000)
-        # Only the first two are classified; totals reflect that.
-        self.assertEqual(coverage["totals"]["tx_count"], 2)
+        # Totals include not_classified so percentages can't lie.
+        self.assertEqual(coverage["totals"]["tx_count"], 3)
+        self.assertEqual(coverage["totals"]["amount_msat"], 300_000)
+        self.assertEqual(
+            coverage["totals"]["buckets"]["not_classified"]["tx_count"],
+            1,
+        )
+        self.assertEqual(
+            coverage["totals"]["buckets"]["not_classified"]["amount_msat"],
+            100_000,
+        )
 
     def test_no_truncation_flag_when_under_cap(self):
         for i in range(2):

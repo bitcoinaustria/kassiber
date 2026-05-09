@@ -81,6 +81,7 @@ type SourceFundsCoverageBuckets = {
   attested: SourceFundsCoverageBucket;
   in_review: SourceFundsCoverageBucket;
   untraced: SourceFundsCoverageBucket;
+  not_classified: SourceFundsCoverageBucket;
 };
 
 type SourceFundsCoverage = {
@@ -2218,6 +2219,7 @@ const COVERAGE_BUCKET_ORDER: (keyof SourceFundsCoverageBuckets)[] = [
   "attested",
   "in_review",
   "untraced",
+  "not_classified",
 ];
 
 const COVERAGE_BUCKET_LABELS: Record<keyof SourceFundsCoverageBuckets, string> = {
@@ -2225,6 +2227,7 @@ const COVERAGE_BUCKET_LABELS: Record<keyof SourceFundsCoverageBuckets, string> =
   attested: "Attested",
   in_review: "In review",
   untraced: "Untraced",
+  not_classified: "Not classified",
 };
 
 const COVERAGE_BUCKET_TONES: Record<keyof SourceFundsCoverageBuckets, string> = {
@@ -2232,6 +2235,7 @@ const COVERAGE_BUCKET_TONES: Record<keyof SourceFundsCoverageBuckets, string> = 
   attested: "text-sky-700 dark:text-sky-300",
   in_review: "text-amber-700 dark:text-amber-300",
   untraced: "text-rose-700 dark:text-rose-300",
+  not_classified: "text-muted-foreground",
 };
 
 function CoveragePanel({
@@ -2274,7 +2278,7 @@ function CoveragePanel({
                 with a higher --max-transactions to compute the full set.
               </div>
             )}
-            <div className="grid gap-4 md:grid-cols-4">
+            <div className="grid gap-4 md:grid-cols-5">
               {COVERAGE_BUCKET_ORDER.map((name) => {
                 const bucket = buckets?.[name];
                 const amount = bucket?.amount ?? 0;

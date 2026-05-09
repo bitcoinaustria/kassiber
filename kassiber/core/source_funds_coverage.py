@@ -17,6 +17,11 @@ Buckets:
 - ``in_review``: ``build_report`` would emit at least one blocker, but
   some non-rejected link exists.
 - ``untraced``: no non-rejected links exist for this transaction.
+- ``not_classified``: the transaction was skipped because the
+  ``max_transactions`` cap was hit. Counted into totals so that
+  percentages computed off ``totals.amount`` always sum to 100;
+  truncated responses must surface this so users don't read a
+  partial classification as full coverage.
 
 By delegating classification to ``build_report``, coverage stays in
 lockstep with the export gate. Anything ``build_report`` would block
@@ -37,7 +42,7 @@ from ..msat import msat_to_btc
 from .source_funds import ATTESTATION_SOURCE_TYPES, SourceFundsHooks, build_report
 
 
-COVERAGE_BUCKETS = ("fully_traced", "attested", "in_review", "untraced")
+COVERAGE_BUCKETS = ("fully_traced", "attested", "in_review", "untraced", "not_classified")
 # Match build_report's default so a path that would be path_truncated on
 # export does not look fully_traced in coverage.
 DEFAULT_MAX_DEPTH = 8
@@ -223,17 +228,28 @@ def compute_coverage(
     not_classified_count = 0
 
     for index, row in enumerate(inbound_rows):
-        if index >= max_transactions:
-            truncated = True
-            not_classified_count = inbound_total_count - index
-            not_classified_msat = sum(int(r["amount"]) for r in inbound_rows[index:])
-            break
         tx_id = row["id"]
         wallet_id = row["wallet_id"]
         wallet_label = row["wallet_label"]
         asset = row["asset"]
         amount = int(row["amount"])
         wallet_label_by_id[wallet_id] = wallet_label
+        wallet_key = (wallet_id, wallet_label, asset)
+
+        if index >= max_transactions:
+            truncated = True
+            not_classified_count += 1
+            not_classified_msat += amount
+            by_wallet_asset[wallet_key]["not_classified"]["amount_msat"] += amount
+            by_wallet_asset[wallet_key]["not_classified"]["tx_count"] += 1
+            by_asset[asset]["not_classified"]["amount_msat"] += amount
+            by_asset[asset]["not_classified"]["tx_count"] += 1
+            totals["not_classified"]["amount_msat"] += amount
+            totals["not_classified"]["tx_count"] += 1
+            wallet_total_inbound[wallet_key] += amount
+            asset_total_inbound[asset] += amount
+            tx_count_total += 1
+            continue
         bucket = _classify_transaction(
             conn,
             workspace_ref,
@@ -244,7 +260,6 @@ def compute_coverage(
             max_depth=max_depth,
         )
 
-        wallet_key = (wallet_id, wallet_label, asset)
         by_wallet_asset[wallet_key][bucket]["amount_msat"] += amount
         by_wallet_asset[wallet_key][bucket]["tx_count"] += 1
         by_asset[asset][bucket]["amount_msat"] += amount

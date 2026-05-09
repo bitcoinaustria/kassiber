@@ -1906,6 +1906,9 @@ def build_report(
             envelope,
             label=case_label,
             recipient_id=recipient["id"] if recipient else None,
+            recipient_label_snapshot=recipient["label"] if recipient else None,
+            recipient_kind_snapshot=recipient["kind"] if recipient else None,
+            recipient_reveal_mode_snapshot=recipient["default_reveal_mode"] if recipient else None,
         )
         envelope["case"] = case
     return envelope
@@ -1929,6 +1932,9 @@ def save_case_snapshot(
     *,
     label: str | None = None,
     recipient_id: str | None = None,
+    recipient_label_snapshot: str | None = None,
+    recipient_kind_snapshot: str | None = None,
+    recipient_reveal_mode_snapshot: str | None = None,
 ) -> dict[str, Any]:
     case_id = str(uuid.uuid4())
     snapshot_id = str(uuid.uuid4())
@@ -1940,8 +1946,9 @@ def save_case_snapshot(
         INSERT INTO source_funds_cases(
             id, workspace_id, profile_id, target_transaction_id, target_amount,
             asset, label, reveal_mode, status, snapshot_hash, snapshot_json,
-            created_at, updated_at, recipient_id
-        ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            created_at, updated_at, recipient_id,
+            recipient_label_snapshot, recipient_kind_snapshot, recipient_reveal_mode_snapshot
+        ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
         (
             case_id,
@@ -1958,6 +1965,9 @@ def save_case_snapshot(
             created_at,
             created_at,
             recipient_id,
+            recipient_label_snapshot,
+            recipient_kind_snapshot,
+            recipient_reveal_mode_snapshot,
         ),
     )
     conn.execute(
@@ -1981,35 +1991,44 @@ def list_cases(conn: sqlite3.Connection, workspace_ref: str | None, profile_ref:
     _, profile = hooks.resolve_scope(conn, workspace_ref, profile_ref)
     rows = conn.execute(
         """
-        SELECT c.*, t.external_id, r.label AS recipient_label, r.kind AS recipient_kind
+        SELECT c.*, t.external_id
         FROM source_funds_cases c
         JOIN transactions t ON t.id = c.target_transaction_id
-        LEFT JOIN source_funds_recipients r ON r.id = c.recipient_id
         WHERE c.profile_id = ?
         ORDER BY c.created_at DESC, c.id DESC
         """,
         (profile["id"],),
     ).fetchall()
-    return [
-        {
-            "id": row["id"],
-            "label": row["label"] or "",
-            "target_transaction_id": row["target_transaction_id"],
-            "target_external_id": row["external_id"] or "",
-            "target_amount": _btc_value(row["target_amount"]),
-            "target_amount_msat": row["target_amount"],
-            "asset": row["asset"],
-            "reveal_mode": row["reveal_mode"],
-            "status": row["status"],
-            "snapshot_hash": row["snapshot_hash"],
-            "recipient_id": row["recipient_id"] if "recipient_id" in row.keys() else None,
-            "recipient_label": (row["recipient_label"] or "") if "recipient_label" in row.keys() else "",
-            "recipient_kind": (row["recipient_kind"] or "") if "recipient_kind" in row.keys() else "",
-            "created_at": row["created_at"],
-            "updated_at": row["updated_at"],
-        }
-        for row in rows
-    ]
+    cases: list[dict[str, Any]] = []
+    for row in rows:
+        keys = row.keys()
+        recipient_id = row["recipient_id"] if "recipient_id" in keys else None
+        # Use the snapshot fields written at save time so a later
+        # rename or delete of the recipient cannot rewrite history.
+        snapshot_label = row["recipient_label_snapshot"] if "recipient_label_snapshot" in keys else None
+        snapshot_kind = row["recipient_kind_snapshot"] if "recipient_kind_snapshot" in keys else None
+        snapshot_reveal = row["recipient_reveal_mode_snapshot"] if "recipient_reveal_mode_snapshot" in keys else None
+        cases.append(
+            {
+                "id": row["id"],
+                "label": row["label"] or "",
+                "target_transaction_id": row["target_transaction_id"],
+                "target_external_id": row["external_id"] or "",
+                "target_amount": _btc_value(row["target_amount"]),
+                "target_amount_msat": row["target_amount"],
+                "asset": row["asset"],
+                "reveal_mode": row["reveal_mode"],
+                "status": row["status"],
+                "snapshot_hash": row["snapshot_hash"],
+                "recipient_id": recipient_id,
+                "recipient_label": snapshot_label or "",
+                "recipient_kind": snapshot_kind or "",
+                "recipient_reveal_mode": snapshot_reveal or "",
+                "created_at": row["created_at"],
+                "updated_at": row["updated_at"],
+            }
+        )
+    return cases
 
 
 def load_case_snapshot(conn: sqlite3.Connection, workspace_ref: str | None, profile_ref: str | None, hooks: SourceFundsHooks, case_ref: str):

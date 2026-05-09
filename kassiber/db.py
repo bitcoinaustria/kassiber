@@ -680,6 +680,9 @@ def ensure_schema_compat(conn):
     ensure_column(conn, "rates_cache", "granularity", "TEXT")
     ensure_column(conn, "rates_cache", "method", "TEXT")
     ensure_column(conn, "source_funds_cases", "recipient_id", "TEXT")
+    ensure_column(conn, "source_funds_cases", "recipient_label_snapshot", "TEXT")
+    ensure_column(conn, "source_funds_cases", "recipient_kind_snapshot", "TEXT")
+    ensure_column(conn, "source_funds_cases", "recipient_reveal_mode_snapshot", "TEXT")
     _migrate_msat_columns(conn)
     _backfill_liquid_asset_codes(conn)
 
