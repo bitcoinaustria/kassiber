@@ -345,6 +345,61 @@ python3 -m kassiber reports export-austrian-e1kv-xlsx --year 2024 --file e1kv-20
 python3 -m kassiber reports export-austrian-e1kv-csv --year 2024 --dir e1kv-2024-csv
 ```
 
+Build a reviewed source-of-funds report:
+
+```bash
+# Choose a purpose. For a planned exchange sale, the target transaction is the
+# current funds-history anchor, not the future exchange deposit txid.
+python3 -m kassiber --machine reports source-funds \
+  --purpose planned_exchange_sale \
+  --target-transaction <current-funds-txid-or-id> \
+  --target-amount 1.00000000 \
+  --planned-destination "Exchange or broker" \
+  --planned-note "Pre-disclosure before expected bank proceeds"
+
+# Seed suggestions from existing transfers, pairs, provider ids, and
+# tight time/amount matches. Suggestions are review items, not proof.
+python3 -m kassiber source-funds suggest --target-transaction <txid-or-id>
+
+# Deterministic same-external-id hops, reviewed transaction_pairs, and shared
+# provider/import ids can be accepted in bulk; weak matches remain manual.
+python3 -m kassiber source-funds links bulk-review
+
+# Add reviewed root evidence and explicit flow allocations.
+python3 -m kassiber source-funds sources create \
+  --type fiat_purchase \
+  --label "Reviewed exchange purchase" \
+  --asset BTC \
+  --amount 0.10000000
+python3 -m kassiber source-funds links create \
+  --from-source <source-id> \
+  --to-transaction <transaction-id> \
+  --type manual_source \
+  --allocation-amount 0.10000000
+
+# Preview gates and disclosure before export.
+python3 -m kassiber --machine reports source-funds \
+  --target-transaction <target-txid-or-id> \
+  --reveal-mode standard \
+  --save-case
+python3 -m kassiber reports export-source-funds-pdf \
+  --case <case-id> \
+  --file source-of-funds.pdf
+```
+
+Source-of-funds PDFs only render reviewed evidence. Kassiber does not claim
+chain heuristics prove ownership, does not expose descriptors/xpubs/wallet
+files/seeds/backend tokens, and treats opening balances as attested
+prior-history stops rather than real root sources.
+
+The desktop Source of Funds screen provides the same workflow with a target
+purpose picker for planned exchange sales versus completed transactions,
+deterministic-hop bulk review for consolidation chains, suggested-link review
+queue, explicit allocation editor, existing evidence attachment picker,
+root-source / missing-history editor, disclosure narrative, and gated PDF export.
+For planned sales, fiat-funds evidence for the original bitcoin purchase
+remains a separate source attachment.
+
 ## Docs
 
 Reference docs:

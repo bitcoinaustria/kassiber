@@ -272,6 +272,100 @@ CREATE TABLE IF NOT EXISTS attachments (
 CREATE INDEX IF NOT EXISTS idx_attachments_profile_tx_created
     ON attachments(profile_id, transaction_id, created_at DESC);
 
+CREATE TABLE IF NOT EXISTS source_funds_sources (
+    id TEXT PRIMARY KEY,
+    workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+    profile_id TEXT NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+    source_type TEXT NOT NULL,
+    label TEXT NOT NULL,
+    asset TEXT NOT NULL,
+    amount INTEGER,
+    fiat_currency TEXT,
+    fiat_value REAL,
+    acquired_at TEXT,
+    description TEXT,
+    review_state TEXT NOT NULL DEFAULT 'reviewed',
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_source_funds_sources_profile_type
+    ON source_funds_sources(profile_id, source_type, created_at DESC);
+
+CREATE TABLE IF NOT EXISTS source_funds_links (
+    id TEXT PRIMARY KEY,
+    workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+    profile_id TEXT NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+    from_source_id TEXT REFERENCES source_funds_sources(id) ON DELETE CASCADE,
+    from_transaction_id TEXT REFERENCES transactions(id) ON DELETE CASCADE,
+    to_transaction_id TEXT NOT NULL REFERENCES transactions(id) ON DELETE CASCADE,
+    link_type TEXT NOT NULL,
+    state TEXT NOT NULL DEFAULT 'suggested',
+    confidence TEXT NOT NULL DEFAULT 'unknown',
+    method TEXT NOT NULL DEFAULT 'manual',
+    asset TEXT NOT NULL,
+    allocation_amount INTEGER,
+    from_asset TEXT,
+    from_allocation_amount INTEGER,
+    allocation_policy TEXT NOT NULL DEFAULT 'unknown',
+    explanation TEXT,
+    uses_chain_observation INTEGER NOT NULL DEFAULT 0,
+    chain_data_confirmed INTEGER NOT NULL DEFAULT 1,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    CHECK (
+        (from_source_id IS NOT NULL AND from_transaction_id IS NULL)
+        OR (from_source_id IS NULL AND from_transaction_id IS NOT NULL)
+    )
+);
+
+CREATE INDEX IF NOT EXISTS idx_source_funds_links_profile_to
+    ON source_funds_links(profile_id, to_transaction_id, state);
+
+CREATE INDEX IF NOT EXISTS idx_source_funds_links_profile_from_tx
+    ON source_funds_links(profile_id, from_transaction_id);
+
+CREATE TABLE IF NOT EXISTS source_funds_link_attachments (
+    link_id TEXT NOT NULL REFERENCES source_funds_links(id) ON DELETE CASCADE,
+    attachment_id TEXT NOT NULL REFERENCES attachments(id) ON DELETE CASCADE,
+    created_at TEXT NOT NULL,
+    PRIMARY KEY (link_id, attachment_id)
+);
+
+CREATE TABLE IF NOT EXISTS source_funds_source_attachments (
+    source_id TEXT NOT NULL REFERENCES source_funds_sources(id) ON DELETE CASCADE,
+    attachment_id TEXT NOT NULL REFERENCES attachments(id) ON DELETE CASCADE,
+    created_at TEXT NOT NULL,
+    PRIMARY KEY (source_id, attachment_id)
+);
+
+CREATE TABLE IF NOT EXISTS source_funds_cases (
+    id TEXT PRIMARY KEY,
+    workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+    profile_id TEXT NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+    target_transaction_id TEXT NOT NULL REFERENCES transactions(id) ON DELETE CASCADE,
+    target_amount INTEGER NOT NULL,
+    asset TEXT NOT NULL,
+    label TEXT,
+    reveal_mode TEXT NOT NULL,
+    status TEXT NOT NULL,
+    snapshot_hash TEXT NOT NULL,
+    snapshot_json TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_source_funds_cases_profile_created
+    ON source_funds_cases(profile_id, created_at DESC);
+
+CREATE TABLE IF NOT EXISTS source_funds_snapshots (
+    id TEXT PRIMARY KEY,
+    case_id TEXT NOT NULL REFERENCES source_funds_cases(id) ON DELETE CASCADE,
+    snapshot_hash TEXT NOT NULL,
+    snapshot_json TEXT NOT NULL,
+    created_at TEXT NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS ai_providers (
     name TEXT PRIMARY KEY,
     base_url TEXT NOT NULL,

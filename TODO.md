@@ -181,6 +181,21 @@ top of the monolith.
 - [x] Persist BTCPay confirmed wallet-sync config on wallets so `wallets sync` / `wallets sync --all` can reuse store-backed sources without retyping `--store-id`
 - [ ] Keep BTCPay file import conservative (`deposit` / `withdrawal`) until a confirmed document match or explicit review step reclassifies the transaction
 
+### 0.5g - Source-of-funds reports
+
+- [x] Add [docs/plan/09-source-of-funds.md](docs/plan/09-source-of-funds.md) follow-through in code and schema rather than generating compliance PDFs from unreviewed heuristics
+- [x] Add reviewed root-source and transaction-flow-link tables that reuse the existing attachment store for evidence
+- [x] Add explicit allocation, immutable case snapshot, and PDF export-gate semantics before schema work hardens
+- [x] Add CLI review surfaces for source-funds sources, link suggestions, manual links, and data-quality gaps
+- [x] Add `reports source-funds --target-transaction ...` as a machine-readable path graph with `explain_gates` blockers before adding a PDF renderer
+- [x] Add plain/table rendering for source-funds gaps and graph review before PDF export work
+- [x] Add `reports export-source-funds-pdf` only after graph nodes, edge allocations, reveal modes, and missing-history markers are stable
+- [x] Deepen desktop source-funds editing beyond the first daemon-backed preview/export screen: accept/reject links, edit allocations, attach evidence, and mark reviewed missing-history gaps in-app
+- [x] Make report purpose explicit in the desktop workflow and report payload: planned exchange sale / bank pre-disclosure versus already-completed transaction
+- [x] Add deterministic-hop bulk review for consolidation/self-transfer chains while keeping weak time/amount and chain-observation suggestions manual
+- [ ] Add graph visualization polish for dense source-funds cases after real-user feedback; keep the current editor workflow as the source of truth
+- [ ] Add optional configured-backend chain observations with an explicit public-backend privacy warning; keep them weak suggestions unless reviewed
+
 ## Phase 1 - Desktop UI
 
 Goal: build the desktop UI as Tauri 2 + React + TypeScript with a Python

@@ -37,6 +37,7 @@ py() {
 run py -m py_compile kassiber/*.py kassiber/secrets/*.py kassiber/backup/*.py
 
 run py -m unittest tests.test_cli_smoke -v
+run py -m unittest tests.test_source_funds_cli -v
 run py -m unittest tests.test_daemon_smoke -v
 run py -m unittest tests.test_secrets_smoke -v
 run py -m unittest tests.test_review_regressions -v
@@ -58,7 +59,12 @@ smoke_py -m kassiber wallets sync-btcpay --help >/dev/null
 smoke_py -m kassiber profiles create --help >/dev/null
 smoke_py -m kassiber metadata records --help >/dev/null
 smoke_py -m kassiber attachments list --help >/dev/null
+smoke_py -m kassiber source-funds --help >/dev/null
+smoke_py -m kassiber source-funds sources create --help >/dev/null
+smoke_py -m kassiber source-funds links review --help >/dev/null
 smoke_py -m kassiber journals events --help >/dev/null
+smoke_py -m kassiber reports source-funds --help >/dev/null
+smoke_py -m kassiber reports export-source-funds-pdf --help >/dev/null
 smoke_py -m kassiber reports balance-history --help >/dev/null
 smoke_py -m kassiber rates --help >/dev/null
 smoke_py -m kassiber diagnostics collect --help >/dev/null
