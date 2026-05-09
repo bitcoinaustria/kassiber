@@ -608,12 +608,23 @@ function TransactionTargetHeader() {
 
 export function SourceFunds() {
   const addNotification = useUiStore((state) => state.addNotification);
-  const [currentStep, setCurrentStep] = useState<WizardStep>("setup");
+  const profileKey = useUiStore(
+    (state) => state.identity?.profile ?? "default",
+  );
+  const persistedDraft = useUiStore(
+    (state) => state.sourceFundsDrafts[profileKey] ?? null,
+  );
+  const setSourceFundsDraft = useUiStore((state) => state.setSourceFundsDraft);
+  const [currentStep, setCurrentStep] = useState<WizardStep>(
+    persistedDraft?.currentStep ?? "setup",
+  );
   const [reportPurpose, setReportPurpose] = useState<
     "planned_exchange_sale" | "existing_transaction"
-  >("planned_exchange_sale");
-  const [target, setTarget] = useState("");
-  const [targetAmount, setTargetAmount] = useState("");
+  >(persistedDraft?.reportPurpose ?? "planned_exchange_sale");
+  const [target, setTarget] = useState(persistedDraft?.target ?? "");
+  const [targetAmount, setTargetAmount] = useState(
+    persistedDraft?.targetAmount ?? "",
+  );
   const [targetSearch, setTargetSearch] = useState("");
   const [targetDirectionFilter, setTargetDirectionFilter] = useState("all");
   const [targetDateFilter, setTargetDateFilter] = useState("all");
@@ -621,10 +632,18 @@ export function SourceFunds() {
   const [targetNetworkFilter, setTargetNetworkFilter] = useState("all");
   const [targetAssetFilter, setTargetAssetFilter] = useState("all");
   const [targetWalletFilter, setTargetWalletFilter] = useState("all");
-  const [plannedDestination, setPlannedDestination] = useState("");
-  const [plannedNote, setPlannedNote] = useState("");
-  const [revealMode, setRevealMode] = useState("standard");
-  const [selectedRecipientId, setSelectedRecipientId] = useState<string>("");
+  const [plannedDestination, setPlannedDestination] = useState(
+    persistedDraft?.plannedDestination ?? "",
+  );
+  const [plannedNote, setPlannedNote] = useState(
+    persistedDraft?.plannedNote ?? "",
+  );
+  const [revealMode, setRevealMode] = useState(
+    persistedDraft?.revealMode ?? "standard",
+  );
+  const [selectedRecipientId, setSelectedRecipientId] = useState<string>(
+    persistedDraft?.selectedRecipientId ?? "",
+  );
   const [selectedLinkId, setSelectedLinkId] = useState("");
   const [linkForm, setLinkForm] = useState({
     link_type: "self_transfer",
@@ -890,6 +909,30 @@ export function SourceFunds() {
       void runSuggestions(false);
     }
   };
+
+  useEffect(() => {
+    setSourceFundsDraft(profileKey, {
+      target,
+      targetAmount,
+      reportPurpose,
+      plannedDestination,
+      plannedNote,
+      revealMode,
+      selectedRecipientId,
+      currentStep,
+    });
+  }, [
+    profileKey,
+    setSourceFundsDraft,
+    target,
+    targetAmount,
+    reportPurpose,
+    plannedDestination,
+    plannedNote,
+    revealMode,
+    selectedRecipientId,
+    currentStep,
+  ]);
 
   useEffect(() => {
     if (!selectedTarget) return;
