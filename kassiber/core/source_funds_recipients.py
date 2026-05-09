@@ -187,7 +187,7 @@ def resolve_recipient(
     if by_id is not None:
         return _row_to_dict(by_id)
     by_label = conn.execute(
-        "SELECT * FROM source_funds_recipients WHERE profile_id = ? AND label = ?",
+        "SELECT * FROM source_funds_recipients WHERE profile_id = ? AND label = ? AND active = 1",
         (profile_id, ref_value),
     ).fetchone()
     if by_label is not None:
@@ -267,6 +267,36 @@ def delete_recipient(
     conn.commit()
     refreshed = get_recipient(conn, profile_id, recipient_id)
     return refreshed
+
+
+def restore_recipient(
+    conn: sqlite3.Connection,
+    profile_id: str,
+    recipient_id: str,
+) -> dict[str, Any]:
+    """Re-activate a soft-deleted recipient.
+
+    Pairs with :func:`delete_recipient`. Fails the partial unique index
+    if the user already created a new recipient with the same label
+    after the soft delete.
+    """
+    existing = get_recipient(conn, profile_id, recipient_id)
+    if existing["active"]:
+        return existing
+    timestamp = now_iso()
+    try:
+        conn.execute(
+            "UPDATE source_funds_recipients SET active = 1, updated_at = ? WHERE profile_id = ? AND id = ?",
+            (timestamp, profile_id, recipient_id),
+        )
+    except sqlite3.IntegrityError as exc:
+        raise AppError(
+            f"A recipient labelled '{existing['label']}' already exists in this profile.",
+            code="validation",
+            hint="Rename or remove the existing recipient before restoring this one.",
+        ) from exc
+    conn.commit()
+    return get_recipient(conn, profile_id, recipient_id)
 
 
 def effective_reveal_mode(

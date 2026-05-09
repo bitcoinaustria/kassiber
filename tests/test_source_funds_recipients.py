@@ -258,7 +258,7 @@ class RecipientCrudTests(unittest.TestCase):
         )
 
     def test_default_list_hides_inactive_recipients(self):
-        active = source_funds_recipients.create_recipient(
+        source_funds_recipients.create_recipient(
             self.conn, self.workspace_id, self.profile_id, label="Active", kind="bank",
         )
         retired = source_funds_recipients.create_recipient(
@@ -272,6 +272,70 @@ class RecipientCrudTests(unittest.TestCase):
             self.conn, self.profile_id, include_inactive=True,
         )
         self.assertEqual({row["label"] for row in with_inactive}, {"Active", "Retired"})
+
+    def test_can_recreate_recipient_after_soft_delete_with_same_label(self):
+        original = source_funds_recipients.create_recipient(
+            self.conn, self.workspace_id, self.profile_id,
+            label="Bank Austria", kind="bank",
+        )
+        source_funds_recipients.delete_recipient(self.conn, self.profile_id, original["id"])
+        replacement = source_funds_recipients.create_recipient(
+            self.conn, self.workspace_id, self.profile_id,
+            label="Bank Austria", kind="bank",
+        )
+        self.assertNotEqual(replacement["id"], original["id"])
+        active_listing = source_funds_recipients.list_recipients(
+            self.conn, self.profile_id,
+        )
+        self.assertEqual({row["id"] for row in active_listing}, {replacement["id"]})
+
+    def test_resolve_recipient_by_label_skips_inactive(self):
+        retired = source_funds_recipients.create_recipient(
+            self.conn, self.workspace_id, self.profile_id,
+            label="Retired Recipient", kind="bank",
+        )
+        source_funds_recipients.delete_recipient(self.conn, self.profile_id, retired["id"])
+        with self.assertRaises(AppError) as cm:
+            source_funds_recipients.resolve_recipient(
+                self.conn, self.profile_id, "Retired Recipient",
+            )
+        self.assertEqual(cm.exception.code, "not_found")
+        # by-id still resolves so retrospective lookups (e.g., from a case
+        # row's recipient_id) keep working.
+        by_id = source_funds_recipients.resolve_recipient(
+            self.conn, self.profile_id, retired["id"],
+        )
+        self.assertEqual(by_id["id"], retired["id"])
+        self.assertFalse(by_id["active"])
+
+    def test_restore_recipient_reactivates_soft_deleted_row(self):
+        recipient = source_funds_recipients.create_recipient(
+            self.conn, self.workspace_id, self.profile_id,
+            label="Bank Restore", kind="bank",
+        )
+        source_funds_recipients.delete_recipient(self.conn, self.profile_id, recipient["id"])
+        restored = source_funds_recipients.restore_recipient(
+            self.conn, self.profile_id, recipient["id"],
+        )
+        self.assertTrue(restored["active"])
+        listing = source_funds_recipients.list_recipients(self.conn, self.profile_id)
+        self.assertEqual({row["id"] for row in listing}, {recipient["id"]})
+
+    def test_restore_recipient_blocks_when_label_already_active(self):
+        retired = source_funds_recipients.create_recipient(
+            self.conn, self.workspace_id, self.profile_id,
+            label="Same Label", kind="bank",
+        )
+        source_funds_recipients.delete_recipient(self.conn, self.profile_id, retired["id"])
+        source_funds_recipients.create_recipient(
+            self.conn, self.workspace_id, self.profile_id,
+            label="Same Label", kind="bank",
+        )
+        with self.assertRaises(AppError) as cm:
+            source_funds_recipients.restore_recipient(
+                self.conn, self.profile_id, retired["id"],
+            )
+        self.assertEqual(cm.exception.code, "validation")
 
     def test_rename_does_not_rewrite_historical_case_attribution(self):
         recipient = source_funds_recipients.create_recipient(

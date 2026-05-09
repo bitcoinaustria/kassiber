@@ -374,13 +374,13 @@ CREATE TABLE IF NOT EXISTS source_funds_recipients (
     kind TEXT NOT NULL,
     default_reveal_mode TEXT NOT NULL DEFAULT 'standard',
     notes TEXT,
+    active INTEGER NOT NULL DEFAULT 1,
     created_at TEXT NOT NULL,
-    updated_at TEXT NOT NULL,
-    UNIQUE (profile_id, label)
+    updated_at TEXT NOT NULL
 );
 
-CREATE INDEX IF NOT EXISTS idx_source_funds_recipients_profile_label
-    ON source_funds_recipients(profile_id, label);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_source_funds_recipients_active_label
+    ON source_funds_recipients(profile_id, label) WHERE active = 1;
 
 CREATE TABLE IF NOT EXISTS ai_providers (
     name TEXT PRIMARY KEY,
@@ -684,8 +684,59 @@ def ensure_schema_compat(conn):
     ensure_column(conn, "source_funds_cases", "recipient_kind_snapshot", "TEXT")
     ensure_column(conn, "source_funds_cases", "recipient_reveal_mode_snapshot", "TEXT")
     ensure_column(conn, "source_funds_recipients", "active", "INTEGER NOT NULL DEFAULT 1")
+    _drop_legacy_source_funds_recipients_unique(conn)
     _migrate_msat_columns(conn)
     _backfill_liquid_asset_codes(conn)
+
+
+def _drop_legacy_source_funds_recipients_unique(conn):
+    """Replace the table-level UNIQUE (profile_id, label) constraint with a
+    partial unique index that excludes soft-deleted rows.
+
+    Without this, ``delete_recipient`` (which marks rows ``active = 0``)
+    leaves the legacy unique covering the inactive row, so a later
+    create with the same label hits IntegrityError.
+    """
+    row = conn.execute(
+        "SELECT sql FROM sqlite_master WHERE type='table' AND name='source_funds_recipients'"
+    ).fetchone()
+    if not row:
+        return
+    table_sql = (row["sql"] if hasattr(row, "keys") else row[0]) or ""
+    if "UNIQUE (profile_id, label)" not in table_sql:
+        return
+    conn.execute("ALTER TABLE source_funds_recipients RENAME TO source_funds_recipients_legacy")
+    conn.execute(
+        """
+        CREATE TABLE source_funds_recipients (
+            id TEXT PRIMARY KEY,
+            workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+            profile_id TEXT NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+            label TEXT NOT NULL,
+            kind TEXT NOT NULL,
+            default_reveal_mode TEXT NOT NULL DEFAULT 'standard',
+            notes TEXT,
+            active INTEGER NOT NULL DEFAULT 1,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        )
+        """
+    )
+    conn.execute(
+        """
+        INSERT INTO source_funds_recipients
+        (id, workspace_id, profile_id, label, kind, default_reveal_mode, notes,
+         active, created_at, updated_at)
+        SELECT id, workspace_id, profile_id, label, kind, default_reveal_mode, notes,
+               COALESCE(active, 1), created_at, updated_at
+        FROM source_funds_recipients_legacy
+        """
+    )
+    conn.execute("DROP TABLE source_funds_recipients_legacy")
+    conn.execute(
+        "CREATE UNIQUE INDEX IF NOT EXISTS idx_source_funds_recipients_active_label "
+        "ON source_funds_recipients(profile_id, label) WHERE active = 1"
+    )
 
 
 def _column_is_real(conn, table_name, column_name):
