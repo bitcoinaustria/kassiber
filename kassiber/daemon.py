@@ -954,7 +954,13 @@ def _ui_source_funds_payload(
 
     if kind == "ui.source_funds.recipients.list":
         _, profile = hooks.resolve_scope(conn, None, None)
-        return {"recipients": core_source_funds_recipients.list_recipients(conn, profile["id"])}
+        return {
+            "recipients": core_source_funds_recipients.list_recipients(
+                conn,
+                profile["id"],
+                include_inactive=bool(args.get("include_inactive")),
+            )
+        }
 
     if kind == "ui.source_funds.recipients.create":
         workspace, profile = hooks.resolve_scope(conn, None, None)

@@ -66,6 +66,7 @@ type SourceFundsRecipient = {
   kind: string;
   default_reveal_mode: string;
   notes?: string;
+  active?: boolean;
   created_at?: string;
   updated_at?: string;
 };
@@ -765,6 +766,7 @@ export function SourceFunds() {
   );
   const recipientsQuery = useDaemon<{ recipients: SourceFundsRecipient[] }>(
     "ui.source_funds.recipients.list",
+    { include_inactive: true },
   );
   const selectedRecipient = useMemo<SourceFundsRecipient | null>(() => {
     const all = recipientsQuery.data?.data?.recipients ?? [];
@@ -2348,16 +2350,21 @@ function RecipientPicker({
         value={selectedRecipientId}
         onChange={(event) => {
           const next = recipients.find((r) => r.id === event.target.value) ?? null;
+          if (next && next.active === false) return;
           onSelectRecipient(next);
         }}
         aria-label="Recipient"
       >
         <option value="">(no recipient)</option>
-        {recipients.map((recipient) => (
-          <option key={recipient.id} value={recipient.id}>
-            {recipient.label} - {pretty(recipient.kind)} - {pretty(recipient.default_reveal_mode)}
-          </option>
-        ))}
+        {recipients.map((recipient) => {
+          const inactive = recipient.active === false;
+          return (
+            <option key={recipient.id} value={recipient.id} disabled={inactive}>
+              {recipient.label} - {pretty(recipient.kind)} - {pretty(recipient.default_reveal_mode)}
+              {inactive ? " (inactive)" : ""}
+            </option>
+          );
+        })}
       </select>
       {selected && selected.notes && (
         <div className="mt-2 text-xs opacity-80">{selected.notes}</div>
