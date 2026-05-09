@@ -366,6 +366,22 @@ CREATE TABLE IF NOT EXISTS source_funds_snapshots (
     created_at TEXT NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS source_funds_recipients (
+    id TEXT PRIMARY KEY,
+    workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+    profile_id TEXT NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+    label TEXT NOT NULL,
+    kind TEXT NOT NULL,
+    default_reveal_mode TEXT NOT NULL DEFAULT 'standard',
+    notes TEXT,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    UNIQUE (profile_id, label)
+);
+
+CREATE INDEX IF NOT EXISTS idx_source_funds_recipients_profile_label
+    ON source_funds_recipients(profile_id, label);
+
 CREATE TABLE IF NOT EXISTS ai_providers (
     name TEXT PRIMARY KEY,
     base_url TEXT NOT NULL,
@@ -663,6 +679,7 @@ def ensure_schema_compat(conn):
     ensure_column(conn, "rates_cache", "rate_exact", "TEXT")
     ensure_column(conn, "rates_cache", "granularity", "TEXT")
     ensure_column(conn, "rates_cache", "method", "TEXT")
+    ensure_column(conn, "source_funds_cases", "recipient_id", "TEXT")
     _migrate_msat_columns(conn)
     _backfill_liquid_asset_codes(conn)
 

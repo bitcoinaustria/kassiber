@@ -78,6 +78,7 @@ from ..core import rates as core_rates
 from ..core import reports as core_reports
 from ..core import source_funds as core_source_funds
 from ..core import source_funds_coverage as core_source_funds_coverage
+from ..core import source_funds_recipients as core_source_funds_recipients
 from ..core import wallets as core_wallets
 from ..core.runtime import bootstrap_runtime, close_runtime, emit_error, resolve_output_format
 from ..diagnostics import (
@@ -948,6 +949,47 @@ def build_parser() -> argparse.ArgumentParser:
     sf_coverage.add_argument("--workspace")
     sf_coverage.add_argument("--profile")
 
+    sf_recipients = source_funds_sub.add_parser("recipients")
+    sf_recipients_sub = sf_recipients.add_subparsers(
+        dest="source_funds_recipients_command", required=True
+    )
+    sf_recipients_list = sf_recipients_sub.add_parser("list")
+    sf_recipients_list.add_argument("--workspace")
+    sf_recipients_list.add_argument("--profile")
+    sf_recipients_create = sf_recipients_sub.add_parser("create")
+    sf_recipients_create.add_argument("--workspace")
+    sf_recipients_create.add_argument("--profile")
+    sf_recipients_create.add_argument("--label", required=True)
+    sf_recipients_create.add_argument(
+        "--kind",
+        required=True,
+        choices=list(core_source_funds_recipients.RECIPIENT_KINDS),
+    )
+    sf_recipients_create.add_argument(
+        "--default-reveal-mode",
+        choices=list(core_source_funds.REVEAL_MODES),
+        default="standard",
+    )
+    sf_recipients_create.add_argument("--notes")
+    sf_recipients_update = sf_recipients_sub.add_parser("update")
+    sf_recipients_update.add_argument("--workspace")
+    sf_recipients_update.add_argument("--profile")
+    sf_recipients_update.add_argument("--recipient", required=True)
+    sf_recipients_update.add_argument("--label")
+    sf_recipients_update.add_argument(
+        "--kind",
+        choices=list(core_source_funds_recipients.RECIPIENT_KINDS),
+    )
+    sf_recipients_update.add_argument(
+        "--default-reveal-mode",
+        choices=list(core_source_funds.REVEAL_MODES),
+    )
+    sf_recipients_update.add_argument("--notes")
+    sf_recipients_delete = sf_recipients_sub.add_parser("delete")
+    sf_recipients_delete.add_argument("--workspace")
+    sf_recipients_delete.add_argument("--profile")
+    sf_recipients_delete.add_argument("--recipient", required=True)
+
     reports = sub.add_parser("reports")
     reports_sub = reports.add_subparsers(dest="reports_command", required=True)
     for report_name in ["summary", "tax-summary", "balance-sheet", "portfolio-summary", "capital-gains", "journal-entries"]:
@@ -989,10 +1031,11 @@ def build_parser() -> argparse.ArgumentParser:
     )
     source_funds_report.add_argument("--planned-destination")
     source_funds_report.add_argument("--planned-note")
-    source_funds_report.add_argument("--reveal-mode", choices=list(core_source_funds.REVEAL_MODES), default="standard")
+    source_funds_report.add_argument("--reveal-mode", choices=list(core_source_funds.REVEAL_MODES))
     source_funds_report.add_argument("--max-depth", type=int, default=8)
     source_funds_report.add_argument("--save-case", action="store_true")
     source_funds_report.add_argument("--case-label")
+    source_funds_report.add_argument("--recipient")
 
     export_source_funds_pdf = reports_sub.add_parser("export-source-funds-pdf")
     export_source_funds_pdf.add_argument("--workspace")
@@ -1899,6 +1942,43 @@ def dispatch(conn: sqlite3.Connection | None, args: argparse.Namespace) -> Any:
             if args.format in {"table", "plain"}:
                 return emit(args, "\n".join(core_source_funds_coverage.coverage_summary_text(coverage)))
             return emit(args, coverage)
+        if args.source_funds_command == "recipients":
+            workspace, profile = source_funds_hooks.resolve_scope(conn, args.workspace, args.profile)
+            if args.source_funds_recipients_command == "list":
+                return emit(args, core_source_funds_recipients.list_recipients(conn, profile["id"]))
+            if args.source_funds_recipients_command == "create":
+                return emit(
+                    args,
+                    core_source_funds_recipients.create_recipient(
+                        conn,
+                        workspace["id"],
+                        profile["id"],
+                        label=args.label,
+                        kind=args.kind,
+                        default_reveal_mode=args.default_reveal_mode,
+                        notes=args.notes,
+                    ),
+                )
+            if args.source_funds_recipients_command == "update":
+                recipient = core_source_funds_recipients.resolve_recipient(conn, profile["id"], args.recipient)
+                return emit(
+                    args,
+                    core_source_funds_recipients.update_recipient(
+                        conn,
+                        profile["id"],
+                        recipient["id"],
+                        label=args.label,
+                        kind=args.kind,
+                        default_reveal_mode=args.default_reveal_mode,
+                        notes=args.notes,
+                    ),
+                )
+            if args.source_funds_recipients_command == "delete":
+                recipient = core_source_funds_recipients.resolve_recipient(conn, profile["id"], args.recipient)
+                return emit(
+                    args,
+                    core_source_funds_recipients.delete_recipient(conn, profile["id"], recipient["id"]),
+                )
     if args.command == "reports":
         report_hooks = _report_hooks()
         if args.reports_command == "summary":
@@ -2010,6 +2090,7 @@ def dispatch(conn: sqlite3.Connection | None, args: argparse.Namespace) -> Any:
                 max_depth=args.max_depth,
                 save_case=args.save_case,
                 case_label=args.case_label,
+                recipient_ref=args.recipient,
             )
             if args.format in {"table", "plain"}:
                 return emit(args, "\n".join(core_source_funds.build_report_lines(report, source_funds_hooks)))

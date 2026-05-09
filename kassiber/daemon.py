@@ -48,6 +48,7 @@ from .cli.handlers import _report_hooks, process_journals, resolve_scope, resolv
 from .core import reports as core_reports
 from .core import source_funds as core_source_funds
 from .core import source_funds_coverage as core_source_funds_coverage
+from .core import source_funds_recipients as core_source_funds_recipients
 from .core import accounts as core_accounts
 from .core import wallets as core_wallets
 from .core.repo import current_context_snapshot
@@ -131,6 +132,10 @@ SUPPORTED_KINDS = (
     "ui.source_funds.evidence.list",
     "ui.source_funds.export_pdf",
     "ui.source_funds.coverage",
+    "ui.source_funds.recipients.list",
+    "ui.source_funds.recipients.create",
+    "ui.source_funds.recipients.update",
+    "ui.source_funds.recipients.delete",
     "ui.journals.snapshot",
     "ui.journals.quarantine",
     "ui.journals.transfers.list",
@@ -878,6 +883,9 @@ def _ui_source_funds_payload(
                 "ui.source_funds.preview requires args.target_transaction",
                 code="validation",
             )
+        recipient_arg = args.get("recipient")
+        recipient_ref = recipient_arg.strip() if isinstance(recipient_arg, str) and recipient_arg.strip() else None
+        explicit_reveal = args.get("reveal_mode")
         return core_source_funds.build_report(
             conn,
             None,
@@ -888,15 +896,56 @@ def _ui_source_funds_payload(
             report_purpose=str(args.get("report_purpose") or "existing_transaction"),
             planned_destination=args.get("planned_destination") if isinstance(args.get("planned_destination"), str) else None,
             planned_note=args.get("planned_note") if isinstance(args.get("planned_note"), str) else None,
-            reveal_mode=str(args.get("reveal_mode") or "standard"),
+            reveal_mode=str(explicit_reveal) if isinstance(explicit_reveal, str) and explicit_reveal else None,
             max_depth=int(args.get("max_depth") or 8),
             save_case=bool(args.get("save_case")),
             case_label=args.get("case_label"),
+            recipient_ref=recipient_ref,
         )
 
     if kind == "ui.source_funds.coverage":
         _, profile = hooks.resolve_scope(conn, None, None)
         return core_source_funds_coverage.compute_coverage(conn, profile["id"])
+
+    if kind == "ui.source_funds.recipients.list":
+        _, profile = hooks.resolve_scope(conn, None, None)
+        return {"recipients": core_source_funds_recipients.list_recipients(conn, profile["id"])}
+
+    if kind == "ui.source_funds.recipients.create":
+        workspace, profile = hooks.resolve_scope(conn, None, None)
+        return core_source_funds_recipients.create_recipient(
+            conn,
+            workspace["id"],
+            profile["id"],
+            label=str(args.get("label") or ""),
+            kind=str(args.get("kind") or ""),
+            default_reveal_mode=str(args.get("default_reveal_mode") or "standard"),
+            notes=args.get("notes") if isinstance(args.get("notes"), str) else None,
+        )
+
+    if kind == "ui.source_funds.recipients.update":
+        _, profile = hooks.resolve_scope(conn, None, None)
+        recipient_ref = args.get("recipient")
+        if not isinstance(recipient_ref, str) or not recipient_ref.strip():
+            raise AppError("ui.source_funds.recipients.update requires args.recipient", code="validation")
+        recipient = core_source_funds_recipients.resolve_recipient(conn, profile["id"], recipient_ref.strip())
+        return core_source_funds_recipients.update_recipient(
+            conn,
+            profile["id"],
+            recipient["id"],
+            label=args.get("label") if isinstance(args.get("label"), str) else None,
+            kind=args.get("kind") if isinstance(args.get("kind"), str) else None,
+            default_reveal_mode=args.get("default_reveal_mode") if isinstance(args.get("default_reveal_mode"), str) else None,
+            notes=args.get("notes") if isinstance(args.get("notes"), str) else None,
+        )
+
+    if kind == "ui.source_funds.recipients.delete":
+        _, profile = hooks.resolve_scope(conn, None, None)
+        recipient_ref = args.get("recipient")
+        if not isinstance(recipient_ref, str) or not recipient_ref.strip():
+            raise AppError("ui.source_funds.recipients.delete requires args.recipient", code="validation")
+        recipient = core_source_funds_recipients.resolve_recipient(conn, profile["id"], recipient_ref.strip())
+        return core_source_funds_recipients.delete_recipient(conn, profile["id"], recipient["id"])
 
     if kind == "ui.source_funds.export_pdf":
         case_ref = args.get("case")
@@ -4265,6 +4314,10 @@ def handle_request(
         "ui.source_funds.evidence.list",
         "ui.source_funds.export_pdf",
         "ui.source_funds.coverage",
+        "ui.source_funds.recipients.list",
+        "ui.source_funds.recipients.create",
+        "ui.source_funds.recipients.update",
+        "ui.source_funds.recipients.delete",
     }:
         return (
             _with_request_id(

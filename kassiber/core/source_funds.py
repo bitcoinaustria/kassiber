@@ -1462,14 +1462,22 @@ def build_report(
     report_purpose: str = "existing_transaction",
     planned_destination: str | None = None,
     planned_note: str | None = None,
-    reveal_mode: str = "standard",
+    reveal_mode: str | None = "standard",
     max_depth: int = 8,
     save_case: bool = False,
     case_label: str | None = None,
+    recipient_ref: str | None = None,
 ) -> dict[str, Any]:
     workspace, profile = hooks.resolve_scope(conn, workspace_ref, profile_ref)
     target = hooks.resolve_transaction(conn, profile["id"], target_transaction_ref)
-    mode = _normalize_reveal_mode(reveal_mode)
+    from .source_funds_recipients import effective_reveal_mode
+    resolved_mode, recipient = effective_reveal_mode(
+        conn,
+        profile["id"],
+        explicit_reveal_mode=reveal_mode if reveal_mode is not None and reveal_mode != "" else None,
+        recipient_ref=recipient_ref,
+    )
+    mode = _normalize_reveal_mode(resolved_mode)
     purpose = _normalize_report_purpose(report_purpose)
     target_amount_msat = _amount_msat(target_amount, label="--target-amount") if target_amount not in (None, "") else int(target["amount"])
     if target_amount_msat <= 0:
@@ -1878,6 +1886,13 @@ def build_report(
             ],
         },
     }
+    if recipient is not None:
+        envelope["recipient"] = {
+            "id": recipient["id"],
+            "label": recipient["label"],
+            "kind": recipient["kind"],
+            "default_reveal_mode": recipient["default_reveal_mode"],
+        }
     if save_case:
         case = save_case_snapshot(
             conn,
@@ -1890,6 +1905,7 @@ def build_report(
             "exportable" if not blockers else "blocked",
             envelope,
             label=case_label,
+            recipient_id=recipient["id"] if recipient else None,
         )
         envelope["case"] = case
     return envelope
@@ -1912,6 +1928,7 @@ def save_case_snapshot(
     snapshot: Mapping[str, Any],
     *,
     label: str | None = None,
+    recipient_id: str | None = None,
 ) -> dict[str, Any]:
     case_id = str(uuid.uuid4())
     snapshot_id = str(uuid.uuid4())
@@ -1923,8 +1940,8 @@ def save_case_snapshot(
         INSERT INTO source_funds_cases(
             id, workspace_id, profile_id, target_transaction_id, target_amount,
             asset, label, reveal_mode, status, snapshot_hash, snapshot_json,
-            created_at, updated_at
-        ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            created_at, updated_at, recipient_id
+        ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
         (
             case_id,
@@ -1940,6 +1957,7 @@ def save_case_snapshot(
             snapshot_json,
             created_at,
             created_at,
+            recipient_id,
         ),
     )
     conn.execute(
@@ -1963,9 +1981,10 @@ def list_cases(conn: sqlite3.Connection, workspace_ref: str | None, profile_ref:
     _, profile = hooks.resolve_scope(conn, workspace_ref, profile_ref)
     rows = conn.execute(
         """
-        SELECT c.*, t.external_id
+        SELECT c.*, t.external_id, r.label AS recipient_label, r.kind AS recipient_kind
         FROM source_funds_cases c
         JOIN transactions t ON t.id = c.target_transaction_id
+        LEFT JOIN source_funds_recipients r ON r.id = c.recipient_id
         WHERE c.profile_id = ?
         ORDER BY c.created_at DESC, c.id DESC
         """,
@@ -1983,6 +2002,9 @@ def list_cases(conn: sqlite3.Connection, workspace_ref: str | None, profile_ref:
             "reveal_mode": row["reveal_mode"],
             "status": row["status"],
             "snapshot_hash": row["snapshot_hash"],
+            "recipient_id": row["recipient_id"] if "recipient_id" in row.keys() else None,
+            "recipient_label": (row["recipient_label"] or "") if "recipient_label" in row.keys() else "",
+            "recipient_kind": (row["recipient_kind"] or "") if "recipient_kind" in row.keys() else "",
             "created_at": row["created_at"],
             "updated_at": row["updated_at"],
         }

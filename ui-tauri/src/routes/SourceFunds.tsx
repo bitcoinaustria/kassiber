@@ -60,6 +60,16 @@ type TransactionRow = {
   description?: string;
 };
 
+type SourceFundsRecipient = {
+  id: string;
+  label: string;
+  kind: string;
+  default_reveal_mode: string;
+  notes?: string;
+  created_at?: string;
+  updated_at?: string;
+};
+
 type SourceFundsCoverageBucket = {
   amount: number;
   amount_msat: number;
@@ -601,6 +611,7 @@ export function SourceFunds() {
   const [plannedDestination, setPlannedDestination] = useState("");
   const [plannedNote, setPlannedNote] = useState("");
   const [revealMode, setRevealMode] = useState("standard");
+  const [selectedRecipientId, setSelectedRecipientId] = useState<string>("");
   const [selectedLinkId, setSelectedLinkId] = useState("");
   const [linkForm, setLinkForm] = useState({
     link_type: "self_transfer",
@@ -721,6 +732,7 @@ export function SourceFunds() {
     planned_note:
       reportPurpose === "planned_exchange_sale" ? plannedNote || undefined : undefined,
     reveal_mode: revealMode,
+    recipient: selectedRecipientId || undefined,
     save_case: currentStep === "disclosure" || currentStep === "export",
   };
   const preview = useDaemon<SourceFundsPreview>(
@@ -739,6 +751,9 @@ export function SourceFunds() {
   );
   const coverageQuery = useDaemon<SourceFundsCoverage>(
     "ui.source_funds.coverage",
+  );
+  const recipientsQuery = useDaemon<{ recipients: SourceFundsRecipient[] }>(
+    "ui.source_funds.recipients.list",
   );
   const suggestLinks = useDaemonMutation<{ inserted: number }>(
     "ui.source_funds.suggest",
@@ -1331,9 +1346,19 @@ export function SourceFunds() {
               )}
 
               {currentStep === "disclosure" && (
-                <div className="rounded-md border bg-muted/30 px-3 py-3 text-sm text-muted-foreground">
-                  Review what the report will expose before exporting. Change
-                  reveal mode in the previous step if the disclosure is too broad.
+                <div className="space-y-3">
+                  <RecipientPicker
+                    recipients={recipientsQuery.data?.data?.recipients ?? []}
+                    selectedRecipientId={selectedRecipientId}
+                    onSelectRecipient={(recipient) => {
+                      setSelectedRecipientId(recipient?.id ?? "");
+                      if (recipient) setRevealMode(recipient.default_reveal_mode);
+                    }}
+                  />
+                  <div className="rounded-md border bg-muted/30 px-3 py-3 text-sm text-muted-foreground">
+                    Review what the report will expose before exporting. Change
+                    reveal mode in the previous step if the disclosure is too broad.
+                  </div>
                 </div>
               )}
 
@@ -2250,6 +2275,56 @@ function CoveragePanel({
         )}
       </CardContent>
     </Card>
+  );
+}
+
+function RecipientPicker({
+  recipients,
+  selectedRecipientId,
+  onSelectRecipient,
+}: {
+  recipients: SourceFundsRecipient[];
+  selectedRecipientId: string;
+  onSelectRecipient: (recipient: SourceFundsRecipient | null) => void;
+}) {
+  if (recipients.length === 0) {
+    return (
+      <div className="rounded-md border bg-muted/30 px-3 py-3 text-sm text-muted-foreground">
+        No recipients defined yet. Run{" "}
+        <code className="text-xs">source-funds recipients create</code> to set
+        a sticky reveal-mode default per recipient.
+      </div>
+    );
+  }
+  const selected = recipients.find((r) => r.id === selectedRecipientId) ?? null;
+  return (
+    <div className="rounded-md border px-3 py-3 text-sm">
+      <div className="mb-1 font-medium">Recipient</div>
+      <div className="mb-2 text-xs text-muted-foreground">
+        Selecting a recipient sets the disclosure reveal mode to that
+        recipient's default. Override per-export by changing reveal mode
+        afterward.
+      </div>
+      <select
+        className="h-9 w-full rounded-md border bg-background px-3 text-sm"
+        value={selectedRecipientId}
+        onChange={(event) => {
+          const next = recipients.find((r) => r.id === event.target.value) ?? null;
+          onSelectRecipient(next);
+        }}
+        aria-label="Recipient"
+      >
+        <option value="">(no recipient)</option>
+        {recipients.map((recipient) => (
+          <option key={recipient.id} value={recipient.id}>
+            {recipient.label} - {pretty(recipient.kind)} - {pretty(recipient.default_reveal_mode)}
+          </option>
+        ))}
+      </select>
+      {selected && selected.notes && (
+        <div className="mt-2 text-xs opacity-80">{selected.notes}</div>
+      )}
+    </div>
   );
 }
 
