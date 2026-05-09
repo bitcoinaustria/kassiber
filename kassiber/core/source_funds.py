@@ -608,7 +608,7 @@ def create_link(
     allocation_policy: str = "explicit",
     explanation: str | None = None,
     uses_chain_observation: bool = False,
-    chain_data_confirmed: bool = True,
+    chain_data_confirmed: bool = False,
     attachment_ids: Sequence[str] | None = None,
     commit: bool = True,
 ) -> dict[str, Any]:

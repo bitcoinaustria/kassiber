@@ -761,7 +761,7 @@ def _ui_source_funds_payload(
             allocation_policy=str(args.get("allocation_policy") or "explicit"),
             explanation=args.get("explanation") if isinstance(args.get("explanation"), str) else None,
             uses_chain_observation=bool(args.get("uses_chain_observation")),
-            chain_data_confirmed=bool(args.get("chain_data_confirmed", True)),
+            chain_data_confirmed=bool(args.get("chain_data_confirmed", False)),
             attachment_ids=[str(item) for item in attachment_ids],
         )
 

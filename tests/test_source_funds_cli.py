@@ -1002,6 +1002,46 @@ class SourceFundsCliTest(unittest.TestCase):
         self.assertIn("source_overallocation", blockers)
         self.assertFalse(report["explain_gates"]["exportable"])
 
+    def test_links_create_chain_observation_defaults_to_unconfirmed(self):
+        """A manually-created chain_observation link must not satisfy
+        the export gate by default. The user has to explicitly mark
+        the observation as confirmed via --chain-data-confirmed."""
+        self._init_default_workspace()
+        for wallet, csv_name, txid in [
+            ("Origin", "origin-tx.csv", "origin-tx"),
+            ("Target", "target-tx.csv", "target-tx"),
+        ]:
+            self._write_csv(
+                csv_name,
+                "date,txid,direction,asset,amount,fee,fiat_rate,description\n"
+                f"2026-04-01T09:00:00Z,{txid},inbound,BTC,0.10000000,0,50000,row\n",
+            )
+            self._create_wallet_and_import(wallet, csv_name)
+        link = self.cli(
+            "source-funds",
+            "links",
+            "create",
+            "--workspace",
+            "Sof",
+            "--profile",
+            "Default",
+            "--from-transaction",
+            "origin-tx",
+            "--to-transaction",
+            "target-tx",
+            "--type",
+            "self_transfer",
+            "--allocation-amount",
+            "0.10000000",
+            "--from-amount",
+            "0.10000000",
+            "--allocation-policy",
+            "explicit",
+            "--uses-chain-observation",
+        )["data"]
+        self.assertTrue(link["uses_chain_observation"])
+        self.assertFalse(link["chain_data_confirmed"])
+
     def test_export_blocks_when_attestation_source_with_amount_overallocates(self):
         self._seed_single_target("0.20000000")
         source = self.cli(

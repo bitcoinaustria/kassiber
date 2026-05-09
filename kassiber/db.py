@@ -310,7 +310,7 @@ CREATE TABLE IF NOT EXISTS source_funds_links (
     allocation_policy TEXT NOT NULL DEFAULT 'unknown',
     explanation TEXT,
     uses_chain_observation INTEGER NOT NULL DEFAULT 0,
-    chain_data_confirmed INTEGER NOT NULL DEFAULT 1,
+    chain_data_confirmed INTEGER NOT NULL DEFAULT 0,
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL,
     CHECK (

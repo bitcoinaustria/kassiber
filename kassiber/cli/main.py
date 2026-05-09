@@ -905,7 +905,13 @@ def build_parser() -> argparse.ArgumentParser:
     sf_links_create.add_argument("--allocation-policy", choices=list(core_source_funds.ALLOCATION_POLICIES), default="explicit")
     sf_links_create.add_argument("--explanation")
     sf_links_create.add_argument("--uses-chain-observation", action="store_true")
-    sf_links_create.add_argument("--unconfirmed-chain-data", action="store_true")
+    sf_links_create.add_argument(
+        "--chain-data-confirmed",
+        action="store_true",
+        help="Mark this chain observation as independently confirmed; "
+        "without this flag the link is created unconfirmed and "
+        "cannot satisfy the export gate.",
+    )
     sf_links_create.add_argument("--attachment", action="append", default=[], dest="attachments")
     sf_links_review = sf_links_sub.add_parser("review")
     sf_links_review.add_argument("--workspace")
@@ -1875,7 +1881,7 @@ def dispatch(conn: sqlite3.Connection | None, args: argparse.Namespace) -> Any:
                         allocation_policy=args.allocation_policy,
                         explanation=args.explanation,
                         uses_chain_observation=args.uses_chain_observation,
-                        chain_data_confirmed=not args.unconfirmed_chain_data,
+                        chain_data_confirmed=args.chain_data_confirmed,
                         attachment_ids=args.attachments,
                     ),
                 )
