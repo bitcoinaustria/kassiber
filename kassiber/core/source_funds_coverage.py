@@ -38,7 +38,17 @@ from .source_funds import ATTESTATION_SOURCE_TYPES, SourceFundsHooks, build_repo
 
 
 COVERAGE_BUCKETS = ("fully_traced", "attested", "in_review", "untraced")
-DEFAULT_MAX_DEPTH = 16
+# Match build_report's default so a path that would be path_truncated on
+# export does not look fully_traced in coverage.
+DEFAULT_MAX_DEPTH = 8
+# Hard cap on the number of inbound transactions classified per call.
+# Coverage delegates to build_report per tx, which walks the whole link
+# subtree; on profiles with thousands of inbound rows the synchronous
+# request would stall the UI. When this cap is hit, the response carries
+# `truncated=True` and the remaining inbound amount is bucketed into a
+# new ``not_classified`` total so the UI can prompt for an explicit
+# full recompute instead of silently misreporting readiness.
+DEFAULT_MAX_TRANSACTIONS = 2000
 
 
 def _btc(msat: int | None) -> float:
@@ -161,6 +171,7 @@ def compute_coverage(
     hooks: SourceFundsHooks,
     *,
     max_depth: int = DEFAULT_MAX_DEPTH,
+    max_transactions: int = DEFAULT_MAX_TRANSACTIONS,
 ) -> dict[str, Any]:
     """Compute coverage buckets for every inbound transaction in a profile.
 
@@ -205,8 +216,18 @@ def compute_coverage(
     wallet_total_inbound: dict[tuple[str, str, str], int] = defaultdict(int)
     asset_total_inbound: dict[str, int] = defaultdict(int)
     tx_count_total = 0
+    inbound_total_msat = sum(int(row["amount"]) for row in inbound_rows)
+    inbound_total_count = len(inbound_rows)
+    truncated = False
+    not_classified_msat = 0
+    not_classified_count = 0
 
-    for row in inbound_rows:
+    for index, row in enumerate(inbound_rows):
+        if index >= max_transactions:
+            truncated = True
+            not_classified_count = inbound_total_count - index
+            not_classified_msat = sum(int(r["amount"]) for r in inbound_rows[index:])
+            break
         tx_id = row["id"]
         wallet_id = row["wallet_id"]
         wallet_label = row["wallet_label"]
@@ -274,6 +295,19 @@ def compute_coverage(
             "amount_msat": totals_msat,
             "amount": _btc(totals_msat),
         },
+        "limits": {
+            "max_depth": max_depth,
+            "max_transactions": max_transactions,
+        },
+        "truncation": {
+            "truncated": truncated,
+            "inbound_total_count": inbound_total_count,
+            "inbound_total_msat": inbound_total_msat,
+            "inbound_total": _btc(inbound_total_msat),
+            "not_classified_count": not_classified_count,
+            "not_classified_msat": not_classified_msat,
+            "not_classified": _btc(not_classified_msat),
+        },
     }
 
 
@@ -283,6 +317,14 @@ def coverage_summary_text(coverage: Mapping[str, Any]) -> list[str]:
     totals = coverage.get("totals", {})
     buckets = totals.get("buckets", {})
     tx_count = int(totals.get("tx_count", 0))
+    truncation = coverage.get("truncation") or {}
+    if truncation.get("truncated"):
+        not_classified_count = int(truncation.get("not_classified_count", 0))
+        inbound_total_count = int(truncation.get("inbound_total_count", 0))
+        lines.append(
+            f"Coverage truncated: classified {tx_count} of {inbound_total_count} inbound tx; "
+            f"{not_classified_count} not classified."
+        )
     lines.append(f"Inbound transactions: {tx_count}")
     for name in COVERAGE_BUCKETS:
         bucket = buckets.get(name, {})

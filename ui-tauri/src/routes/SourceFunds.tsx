@@ -104,6 +104,19 @@ type SourceFundsCoverage = {
     amount: number;
     amount_msat: number;
   };
+  limits?: {
+    max_depth?: number;
+    max_transactions?: number;
+  };
+  truncation?: {
+    truncated: boolean;
+    inbound_total_count: number;
+    inbound_total_msat: number;
+    inbound_total: number;
+    not_classified_count: number;
+    not_classified_msat: number;
+    not_classified: number;
+  };
 };
 
 type SourceFundsFindingNextStep = {
@@ -2251,27 +2264,38 @@ function CoveragePanel({
         ) : !coverage || totalTxCount === 0 ? (
           <EmptyState text="No inbound transactions in this profile yet." />
         ) : (
-          <div className="grid gap-4 md:grid-cols-4">
-            {COVERAGE_BUCKET_ORDER.map((name) => {
-              const bucket = buckets?.[name];
-              const amount = bucket?.amount ?? 0;
-              const txCount = bucket?.tx_count ?? 0;
-              const percent = denominator > 0 ? (amount / denominator) * 100 : 0;
-              return (
-                <div key={name} className="space-y-1">
-                  <div className="text-xs uppercase tracking-wide opacity-70">
-                    {COVERAGE_BUCKET_LABELS[name]}
+          <>
+            {coverage.truncation?.truncated && (
+              <div className="mb-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900 dark:border-amber-900/60 dark:bg-amber-950/40 dark:text-amber-100">
+                Coverage truncated to {totalTxCount} of{" "}
+                {coverage.truncation.inbound_total_count} inbound transactions
+                ({coverage.truncation.not_classified_count} not classified).
+                Run <code className="text-[10px]">source-funds coverage</code>{" "}
+                with a higher --max-transactions to compute the full set.
+              </div>
+            )}
+            <div className="grid gap-4 md:grid-cols-4">
+              {COVERAGE_BUCKET_ORDER.map((name) => {
+                const bucket = buckets?.[name];
+                const amount = bucket?.amount ?? 0;
+                const txCount = bucket?.tx_count ?? 0;
+                const percent = denominator > 0 ? (amount / denominator) * 100 : 0;
+                return (
+                  <div key={name} className="space-y-1">
+                    <div className="text-xs uppercase tracking-wide opacity-70">
+                      {COVERAGE_BUCKET_LABELS[name]}
+                    </div>
+                    <div className={`text-lg font-semibold ${COVERAGE_BUCKET_TONES[name]}`}>
+                      {amount.toFixed(8)}
+                    </div>
+                    <div className="text-xs opacity-80">
+                      {txCount} tx · {percent.toFixed(1)}%
+                    </div>
                   </div>
-                  <div className={`text-lg font-semibold ${COVERAGE_BUCKET_TONES[name]}`}>
-                    {amount.toFixed(8)}
-                  </div>
-                  <div className="text-xs opacity-80">
-                    {txCount} tx · {percent.toFixed(1)}%
-                  </div>
-                </div>
-              );
-            })}
-          </div>
+                );
+              })}
+            </div>
+          </>
         )}
       </CardContent>
     </Card>

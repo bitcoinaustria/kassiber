@@ -487,6 +487,82 @@ class CoverageCoreTests(unittest.TestCase):
         for bucket in COVERAGE_BUCKETS:
             self.assertTrue(any(bucket in line for line in lines), f"missing bucket {bucket} in output")
 
+    def test_default_max_depth_matches_build_report(self):
+        """Coverage and build_report must agree on the default depth limit.
+
+        If they disagree, a 9-16 hop chain shows fully_traced under
+        coverage but path_truncated under build_report - false readiness.
+        """
+        from kassiber.core.source_funds_coverage import DEFAULT_MAX_DEPTH
+
+        # build_report's default in source_funds.build_report is 8.
+        self.assertEqual(DEFAULT_MAX_DEPTH, 8)
+
+    def test_path_just_beyond_default_depth_classifies_as_in_review(self):
+        """A chain longer than the default max-depth must classify as
+        in_review (matches the path_truncated blocker the export gate
+        would emit). Builds a 9-hop chain (target -> 8 parents) so depth
+        crosses the limit before reaching a real source."""
+        # Build chain target <- p1 <- p2 <- ... <- p9 <- src
+        prev = self._add_inbound_tx("target-deep", 100_000, occurred_at="2026-04-10T09:00:00Z")
+        target_id = prev
+        for hop in range(1, 10):
+            day = 10 - hop
+            parent = self._add_inbound_tx(
+                f"hop-{hop}",
+                100_000,
+                occurred_at=f"2026-04-{day:02d}T09:00:00Z",
+            )
+            self._add_link(to_tx_id=prev, from_tx_id=parent, allocation_msat=100_000)
+            prev = parent
+        # Real source at the top of the chain:
+        src = self._add_source("fiat_purchase", amount_msat=100_000, acquired_at="2026-03-25T00:00:00Z")
+        self._add_link(to_tx_id=prev, from_source_id=src, allocation_msat=100_000)
+        # With default depth (8), the deepest hops cannot reach the source:
+        self.assertEqual(self._classify(target_id), "in_review")
+
+    def test_truncation_flags_when_inbound_count_exceeds_cap(self):
+        """When a profile has more inbound rows than max_transactions,
+        the coverage envelope must surface the truncation flag and the
+        unclassified totals so the UI can prompt for explicit recompute."""
+        for i in range(3):
+            self._add_inbound_tx(f"tx-{i}", 100_000)
+        coverage = compute_coverage(
+            self.conn,
+            self.workspace_id,
+            self.profile_id,
+            self._build_hooks(),
+            max_transactions=2,
+        )
+        self.assertTrue(coverage["truncation"]["truncated"])
+        self.assertEqual(coverage["truncation"]["inbound_total_count"], 3)
+        self.assertEqual(coverage["truncation"]["not_classified_count"], 1)
+        self.assertEqual(coverage["truncation"]["not_classified_msat"], 100_000)
+        # Only the first two are classified; totals reflect that.
+        self.assertEqual(coverage["totals"]["tx_count"], 2)
+
+    def test_no_truncation_flag_when_under_cap(self):
+        for i in range(2):
+            self._add_inbound_tx(f"tx-{i}", 100_000)
+        coverage = self._coverage()
+        self.assertFalse(coverage["truncation"]["truncated"])
+        self.assertEqual(coverage["truncation"]["not_classified_count"], 0)
+        self.assertEqual(coverage["totals"]["tx_count"], 2)
+
+    def test_summary_text_announces_truncation(self):
+        for i in range(3):
+            self._add_inbound_tx(f"tx-{i}", 100_000)
+        coverage = compute_coverage(
+            self.conn,
+            self.workspace_id,
+            self.profile_id,
+            self._build_hooks(),
+            max_transactions=1,
+        )
+        lines = coverage_summary_text(coverage)
+        joined = "\n".join(lines)
+        self.assertIn("truncated", joined.lower())
+
 
 class CoverageCliSmokeTest(unittest.TestCase):
     """Smoke test that the CLI subcommand wiring is alive."""

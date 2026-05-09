@@ -948,6 +948,8 @@ def build_parser() -> argparse.ArgumentParser:
     sf_coverage = source_funds_sub.add_parser("coverage")
     sf_coverage.add_argument("--workspace")
     sf_coverage.add_argument("--profile")
+    sf_coverage.add_argument("--max-depth", type=int, default=core_source_funds_coverage.DEFAULT_MAX_DEPTH)
+    sf_coverage.add_argument("--max-transactions", type=int, default=core_source_funds_coverage.DEFAULT_MAX_TRANSACTIONS)
 
     sf_recipients = source_funds_sub.add_parser("recipients")
     sf_recipients_sub = sf_recipients.add_subparsers(
@@ -1942,6 +1944,8 @@ def dispatch(conn: sqlite3.Connection | None, args: argparse.Namespace) -> Any:
                 args.workspace,
                 args.profile,
                 source_funds_hooks,
+                max_depth=args.max_depth,
+                max_transactions=args.max_transactions,
             )
             if args.format in {"table", "plain"}:
                 return emit(args, "\n".join(core_source_funds_coverage.coverage_summary_text(coverage)))

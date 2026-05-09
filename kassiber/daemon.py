@@ -904,7 +904,16 @@ def _ui_source_funds_payload(
         )
 
     if kind == "ui.source_funds.coverage":
-        return core_source_funds_coverage.compute_coverage(conn, None, None, hooks)
+        max_transactions = args.get("max_transactions")
+        max_depth = args.get("max_depth")
+        return core_source_funds_coverage.compute_coverage(
+            conn,
+            None,
+            None,
+            hooks,
+            max_depth=int(max_depth) if isinstance(max_depth, int) and max_depth > 0 else core_source_funds_coverage.DEFAULT_MAX_DEPTH,
+            max_transactions=int(max_transactions) if isinstance(max_transactions, int) and max_transactions > 0 else core_source_funds_coverage.DEFAULT_MAX_TRANSACTIONS,
+        )
 
     if kind == "ui.source_funds.recipients.list":
         _, profile = hooks.resolve_scope(conn, None, None)
