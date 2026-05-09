@@ -60,6 +60,42 @@ type TransactionRow = {
   description?: string;
 };
 
+type SourceFundsCoverageBucket = {
+  amount: number;
+  amount_msat: number;
+  tx_count: number;
+};
+
+type SourceFundsCoverageBuckets = {
+  fully_traced: SourceFundsCoverageBucket;
+  attested: SourceFundsCoverageBucket;
+  in_review: SourceFundsCoverageBucket;
+  untraced: SourceFundsCoverageBucket;
+};
+
+type SourceFundsCoverage = {
+  by_wallet: {
+    wallet_id: string;
+    wallet_label: string;
+    asset: string;
+    buckets: SourceFundsCoverageBuckets;
+    total_inbound: number;
+    total_inbound_msat: number;
+  }[];
+  by_asset: {
+    asset: string;
+    buckets: SourceFundsCoverageBuckets;
+    total_inbound: number;
+    total_inbound_msat: number;
+  }[];
+  totals: {
+    buckets: SourceFundsCoverageBuckets;
+    tx_count: number;
+    amount: number;
+    amount_msat: number;
+  };
+};
+
 type SourceFundsFindingNextStep = {
   headline?: string;
   action?: string;
@@ -701,6 +737,9 @@ export function SourceFunds() {
   const evidenceQuery = useDaemon<{ attachments: EvidenceAttachment[] }>(
     "ui.source_funds.evidence.list",
   );
+  const coverageQuery = useDaemon<SourceFundsCoverage>(
+    "ui.source_funds.coverage",
+  );
   const suggestLinks = useDaemonMutation<{ inserted: number }>(
     "ui.source_funds.suggest",
   );
@@ -986,6 +1025,7 @@ export function SourceFunds() {
     <div className={screenShellClassName}>
       <div className="grid gap-4">
         <div className="space-y-4">
+          <CoveragePanel coverage={coverageQuery.data?.data} loading={coverageQuery.isLoading} />
           <Card>
             <CardHeader className="border-b">
               <CardTitle className="flex items-center gap-2">
@@ -2132,6 +2172,84 @@ function isBulkReviewableLink(link: SourceFundsLink) {
     (link.confidence === "exact" || link.confidence === "strong") &&
     typeof link.allocation_amount === "number" &&
     !link.uses_chain_observation
+  );
+}
+
+const COVERAGE_BUCKET_ORDER: (keyof SourceFundsCoverageBuckets)[] = [
+  "fully_traced",
+  "attested",
+  "in_review",
+  "untraced",
+];
+
+const COVERAGE_BUCKET_LABELS: Record<keyof SourceFundsCoverageBuckets, string> = {
+  fully_traced: "Fully traced",
+  attested: "Attested",
+  in_review: "In review",
+  untraced: "Untraced",
+};
+
+const COVERAGE_BUCKET_TONES: Record<keyof SourceFundsCoverageBuckets, string> = {
+  fully_traced: "text-emerald-700 dark:text-emerald-300",
+  attested: "text-sky-700 dark:text-sky-300",
+  in_review: "text-amber-700 dark:text-amber-300",
+  untraced: "text-rose-700 dark:text-rose-300",
+};
+
+function CoveragePanel({
+  coverage,
+  loading,
+}: {
+  coverage?: SourceFundsCoverage;
+  loading?: boolean;
+}) {
+  const totals = coverage?.totals;
+  const totalAmount = totals?.amount ?? 0;
+  const totalTxCount = totals?.tx_count ?? 0;
+  const buckets = totals?.buckets;
+  const denominator = totalAmount > 0 ? totalAmount : 0;
+  return (
+    <Card>
+      <CardHeader className="border-b">
+        <CardTitle className="flex items-center gap-2 text-base">
+          <GitBranch className="size-4" aria-hidden="true" />
+          Coverage
+        </CardTitle>
+        <CardDescription>
+          Of inbound transactions in this profile, how much is traced to a
+          reviewed root source.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="p-4">
+        {loading && !coverage ? (
+          <EmptyState text="Computing coverage..." />
+        ) : !coverage || totalTxCount === 0 ? (
+          <EmptyState text="No inbound transactions in this profile yet." />
+        ) : (
+          <div className="grid gap-4 md:grid-cols-4">
+            {COVERAGE_BUCKET_ORDER.map((name) => {
+              const bucket = buckets?.[name];
+              const amount = bucket?.amount ?? 0;
+              const txCount = bucket?.tx_count ?? 0;
+              const percent = denominator > 0 ? (amount / denominator) * 100 : 0;
+              return (
+                <div key={name} className="space-y-1">
+                  <div className="text-xs uppercase tracking-wide opacity-70">
+                    {COVERAGE_BUCKET_LABELS[name]}
+                  </div>
+                  <div className={`text-lg font-semibold ${COVERAGE_BUCKET_TONES[name]}`}>
+                    {amount.toFixed(8)}
+                  </div>
+                  <div className="text-xs opacity-80">
+                    {txCount} tx · {percent.toFixed(1)}%
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </CardContent>
+    </Card>
   );
 }
 

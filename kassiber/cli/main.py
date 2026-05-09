@@ -77,6 +77,7 @@ from ..core import metadata as core_metadata
 from ..core import rates as core_rates
 from ..core import reports as core_reports
 from ..core import source_funds as core_source_funds
+from ..core import source_funds_coverage as core_source_funds_coverage
 from ..core import wallets as core_wallets
 from ..core.runtime import bootstrap_runtime, close_runtime, emit_error, resolve_output_format
 from ..diagnostics import (
@@ -942,6 +943,10 @@ def build_parser() -> argparse.ArgumentParser:
     sf_cases_list = sf_cases_sub.add_parser("list")
     sf_cases_list.add_argument("--workspace")
     sf_cases_list.add_argument("--profile")
+
+    sf_coverage = source_funds_sub.add_parser("coverage")
+    sf_coverage.add_argument("--workspace")
+    sf_coverage.add_argument("--profile")
 
     reports = sub.add_parser("reports")
     reports_sub = reports.add_subparsers(dest="reports_command", required=True)
@@ -1888,6 +1893,12 @@ def dispatch(conn: sqlite3.Connection | None, args: argparse.Namespace) -> Any:
         if args.source_funds_command == "cases":
             if args.source_funds_cases_command == "list":
                 return emit(args, core_source_funds.list_cases(conn, args.workspace, args.profile, source_funds_hooks))
+        if args.source_funds_command == "coverage":
+            workspace, profile = source_funds_hooks.resolve_scope(conn, args.workspace, args.profile)
+            coverage = core_source_funds_coverage.compute_coverage(conn, profile["id"])
+            if args.format in {"table", "plain"}:
+                return emit(args, "\n".join(core_source_funds_coverage.coverage_summary_text(coverage)))
+            return emit(args, coverage)
     if args.command == "reports":
         report_hooks = _report_hooks()
         if args.reports_command == "summary":

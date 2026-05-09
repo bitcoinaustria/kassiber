@@ -47,6 +47,7 @@ from .ai.tools import (
 from .cli.handlers import _report_hooks, process_journals, resolve_scope, resolve_transaction, sync_wallet
 from .core import reports as core_reports
 from .core import source_funds as core_source_funds
+from .core import source_funds_coverage as core_source_funds_coverage
 from .core import accounts as core_accounts
 from .core import wallets as core_wallets
 from .core.repo import current_context_snapshot
@@ -129,6 +130,7 @@ SUPPORTED_KINDS = (
     "ui.source_funds.suggest",
     "ui.source_funds.evidence.list",
     "ui.source_funds.export_pdf",
+    "ui.source_funds.coverage",
     "ui.journals.snapshot",
     "ui.journals.quarantine",
     "ui.journals.transfers.list",
@@ -891,6 +893,10 @@ def _ui_source_funds_payload(
             save_case=bool(args.get("save_case")),
             case_label=args.get("case_label"),
         )
+
+    if kind == "ui.source_funds.coverage":
+        _, profile = hooks.resolve_scope(conn, None, None)
+        return core_source_funds_coverage.compute_coverage(conn, profile["id"])
 
     if kind == "ui.source_funds.export_pdf":
         case_ref = args.get("case")
@@ -4258,6 +4264,7 @@ def handle_request(
         "ui.source_funds.suggest",
         "ui.source_funds.evidence.list",
         "ui.source_funds.export_pdf",
+        "ui.source_funds.coverage",
     }:
         return (
             _with_request_id(
