@@ -449,6 +449,23 @@ class CoverageCoreTests(unittest.TestCase):
         self._add_link(to_tx_id=parent, from_source_id=src, allocation_msat=100_000)
         self.assertEqual(self._classify(target), "in_review")
 
+    def test_classify_buckets_in_review_on_sqlite_error(self):
+        from unittest import mock
+
+        tx = self._add_inbound_tx("erratic", 100_000)
+        src = self._add_source("fiat_purchase", amount_msat=100_000)
+        self._add_link(to_tx_id=tx, from_source_id=src, allocation_msat=100_000)
+        with mock.patch(
+            "kassiber.core.source_funds_coverage.build_report",
+            side_effect=sqlite3.Error("malformed link row"),
+        ):
+            self.assertEqual(self._classify(tx), "in_review")
+        with mock.patch(
+            "kassiber.core.source_funds_coverage.build_report",
+            side_effect=KeyError("missing field"),
+        ):
+            self.assertEqual(self._classify(tx), "in_review")
+
     def test_cycle_classifies_as_in_review_not_fully_traced(self):
         a = self._add_inbound_tx("a", 100_000)
         b = self._add_inbound_tx("b", 100_000)

@@ -149,7 +149,12 @@ def _classify_transaction(
             max_depth=max_depth,
             save_case=False,
         )
-    except AppError:
+    except (AppError, sqlite3.Error, KeyError):
+        # build_report can raise sqlite3.Error on a malformed link row
+        # (FK target gone, NULL where the schema does not require it)
+        # or KeyError when the snapshot envelope is missing a field.
+        # Treat both like AppError - bucket the row so a single bad
+        # link cannot blow up the whole coverage sweep.
         return "in_review"
     return _classify_via_report(report)
 
