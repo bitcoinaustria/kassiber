@@ -57,6 +57,23 @@ const ALLOWED_DAEMON_KINDS: &[&str] = &[
     "ai.chat",
     "ai.chat.cancel",
     "ai.tool_call.consent",
+    "ui.source_funds.preview",
+    "ui.source_funds.sources.list",
+    "ui.source_funds.sources.create",
+    "ui.source_funds.sources.attach",
+    "ui.source_funds.links.list",
+    "ui.source_funds.links.create",
+    "ui.source_funds.links.review",
+    "ui.source_funds.links.bulk_review",
+    "ui.source_funds.links.attach",
+    "ui.source_funds.suggest",
+    "ui.source_funds.evidence.list",
+    "ui.source_funds.export_pdf",
+    "ui.source_funds.coverage",
+    "ui.source_funds.recipients.list",
+    "ui.source_funds.recipients.create",
+    "ui.source_funds.recipients.update",
+    "ui.source_funds.recipients.delete",
 ];
 
 /// Kinds that may emit intermediate stream records (kind = "<request_kind>.delta",
@@ -815,11 +832,45 @@ fn desktop_cli_args() -> Option<Vec<String>> {
 mod tests {
     use super::{
         database_is_encrypted, inspect_import_project_directory, is_managed_report_export_path,
-        is_supported_export_file, validated_external_url,
+        is_supported_export_file, validated_external_url, ALLOWED_DAEMON_KINDS,
     };
     use std::fs;
     use std::path::{Path, PathBuf};
     use std::time::{SystemTime, UNIX_EPOCH};
+
+    #[test]
+    fn source_funds_daemon_kinds_are_in_allowlist() {
+        // The Tauri shell forwards only kinds in ALLOWED_DAEMON_KINDS to
+        // the daemon. If a UI daemon kind is missing here, packaged
+        // desktop mode returns kind_not_allowed and the feature breaks
+        // silently. Pin the source-funds set so future additions to
+        // SourceFunds.tsx come with an explicit allowlist update.
+        let required: &[&str] = &[
+            "ui.source_funds.preview",
+            "ui.source_funds.sources.list",
+            "ui.source_funds.sources.create",
+            "ui.source_funds.sources.attach",
+            "ui.source_funds.links.list",
+            "ui.source_funds.links.create",
+            "ui.source_funds.links.review",
+            "ui.source_funds.links.bulk_review",
+            "ui.source_funds.links.attach",
+            "ui.source_funds.suggest",
+            "ui.source_funds.evidence.list",
+            "ui.source_funds.export_pdf",
+            "ui.source_funds.coverage",
+            "ui.source_funds.recipients.list",
+            "ui.source_funds.recipients.create",
+            "ui.source_funds.recipients.update",
+            "ui.source_funds.recipients.delete",
+        ];
+        for kind in required {
+            assert!(
+                ALLOWED_DAEMON_KINDS.contains(kind),
+                "daemon kind missing from Tauri allowlist: {kind}"
+            );
+        }
+    }
 
     #[test]
     fn managed_report_export_paths_are_narrowly_recognized() {
