@@ -2255,11 +2255,13 @@ function CoveragePanel({
       <CardHeader className="border-b">
         <CardTitle className="flex items-center gap-2 text-base">
           <GitBranch className="size-4" aria-hidden="true" />
-          Coverage
+          Historical inbound coverage
         </CardTitle>
         <CardDescription>
-          Of inbound transactions in this profile, how much is traced to a
-          reviewed root source.
+          Across every inbound transaction in this profile, how much is
+          traced under the current export gate. Not a current-holdings
+          view: self-transfers count at each hop, already-spent inflows
+          still appear here.
         </CardDescription>
       </CardHeader>
       <CardContent className="p-4">

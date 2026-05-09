@@ -1,11 +1,20 @@
-"""Source-funds coverage view.
+"""Source-funds coverage view (historical inbound aggregation).
 
-Aggregates each profile's inbound transactions into four buckets so users
-can see, at a glance, how much of their holdings is actually traced
-versus how much is still in review or untraced. This is the
-proactive-counterpart to the existing reactive review queue: instead of
-"here are 47 suggestions to look at", it answers "of your X BTC
-holdings, Y is fully traced and Z still needs evidence".
+**Important semantic.** This module classifies every non-excluded
+**inbound transaction** in a profile, summed by amount. It is *not*
+a current-holdings report:
+- self-transfers between owned wallets are double-counted (out leg
+  is excluded but in leg is counted, and the upstream parent's in
+  leg is also counted),
+- already-spent / already-sold inflows still appear in the totals,
+- there is no FIFO/LIFO accounting against outbound spends.
+
+The view answers "across every inbound row in your history, how
+many are traced under the current export gate?" - which is exactly
+the right question for "how ready am I to disclose if asked about
+any past inflow?" but the wrong question for "how much of my
+current holdings is traced?". UI/CLI copy must avoid the word
+"holdings" for that reason.
 
 Buckets:
 - ``fully_traced``: ``build_report`` would emit ``exportable=True`` for
@@ -302,6 +311,12 @@ def compute_coverage(
 
     totals_msat = sum(int(values["amount_msat"]) for values in totals.values())
     return {
+        "scope": "historical_inbound",
+        "scope_note": (
+            "Counts every inbound transaction. Not a current-holdings view: "
+            "self-transfers between owned wallets are counted at each hop, "
+            "and already-spent inflows still appear in the totals."
+        ),
         "by_wallet": by_wallet_out,
         "by_asset": by_asset_out,
         "totals": {

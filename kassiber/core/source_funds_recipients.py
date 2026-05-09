@@ -55,12 +55,15 @@ def _normalize_kind(value: str | None) -> str:
 
 
 def _row_to_dict(row: Mapping[str, Any]) -> dict[str, Any]:
+    keys = row.keys()
+    active = bool(row["active"]) if "active" in keys else True
     return {
         "id": row["id"],
         "label": row["label"],
         "kind": row["kind"],
         "default_reveal_mode": row["default_reveal_mode"],
         "notes": row["notes"] or "",
+        "active": active,
         "created_at": row["created_at"],
         "updated_at": row["updated_at"],
     }
@@ -120,16 +123,29 @@ def create_recipient(
 def list_recipients(
     conn: sqlite3.Connection,
     profile_id: str,
+    *,
+    include_inactive: bool = False,
 ) -> list[dict[str, Any]]:
-    rows = conn.execute(
-        """
-        SELECT *
-        FROM source_funds_recipients
-        WHERE profile_id = ?
-        ORDER BY label COLLATE NOCASE ASC, id ASC
-        """,
-        (profile_id,),
-    ).fetchall()
+    if include_inactive:
+        rows = conn.execute(
+            """
+            SELECT *
+            FROM source_funds_recipients
+            WHERE profile_id = ?
+            ORDER BY active DESC, label COLLATE NOCASE ASC, id ASC
+            """,
+            (profile_id,),
+        ).fetchall()
+    else:
+        rows = conn.execute(
+            """
+            SELECT *
+            FROM source_funds_recipients
+            WHERE profile_id = ? AND active = 1
+            ORDER BY label COLLATE NOCASE ASC, id ASC
+            """,
+            (profile_id,),
+        ).fetchall()
     return [_row_to_dict(row) for row in rows]
 
 
@@ -230,17 +246,27 @@ def delete_recipient(
     profile_id: str,
     recipient_id: str,
 ) -> dict[str, Any]:
+    """Soft-delete a recipient.
+
+    Hard delete would erase the stable ``recipient_id`` foreign key on
+    saved disclosure cases, which means a future audit cannot answer
+    "was this case sent to recipient id X?" - even if the snapshot
+    label/kind survive, the unique identifier is gone, and a new
+    recipient created later with the same label is indistinguishable
+    from the deleted one.
+
+    Soft delete preserves the row (and the FK target) but marks it
+    ``active = 0`` so it disappears from default lists/UI pickers.
+    """
     existing = get_recipient(conn, profile_id, recipient_id)
+    timestamp = now_iso()
     conn.execute(
-        "UPDATE source_funds_cases SET recipient_id = NULL WHERE profile_id = ? AND recipient_id = ?",
-        (profile_id, recipient_id),
-    )
-    conn.execute(
-        "DELETE FROM source_funds_recipients WHERE profile_id = ? AND id = ?",
-        (profile_id, recipient_id),
+        "UPDATE source_funds_recipients SET active = 0, updated_at = ? WHERE profile_id = ? AND id = ?",
+        (timestamp, profile_id, recipient_id),
     )
     conn.commit()
-    return existing
+    refreshed = get_recipient(conn, profile_id, recipient_id)
+    return refreshed
 
 
 def effective_reveal_mode(

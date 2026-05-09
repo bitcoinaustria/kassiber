@@ -220,7 +220,7 @@ class RecipientCrudTests(unittest.TestCase):
         self.conn.commit()
         return case_id
 
-    def test_delete_clears_recipient_id_but_preserves_snapshot(self):
+    def test_delete_is_soft_and_preserves_recipient_id_on_cases(self):
         recipient = source_funds_recipients.create_recipient(
             self.conn,
             self.workspace_id,
@@ -232,7 +232,8 @@ class RecipientCrudTests(unittest.TestCase):
             recipient["id"],
             snapshot={"label": recipient["label"], "kind": recipient["kind"], "default_reveal_mode": recipient["default_reveal_mode"]},
         )
-        source_funds_recipients.delete_recipient(self.conn, self.profile_id, recipient["id"])
+        result = source_funds_recipients.delete_recipient(self.conn, self.profile_id, recipient["id"])
+        self.assertFalse(result["active"])
         row = self.conn.execute(
             """
             SELECT recipient_id, recipient_label_snapshot, recipient_kind_snapshot,
@@ -241,12 +242,36 @@ class RecipientCrudTests(unittest.TestCase):
             """,
             (case_id,),
         ).fetchone()
-        # FK reference is cleared so the live recipients table can be deleted...
-        self.assertIsNone(row["recipient_id"])
-        # ...but the audit trail of who got this disclosure is preserved.
+        # Stable identifier survives so audit consumers can still answer
+        # "was this case sent to recipient X?"
+        self.assertEqual(row["recipient_id"], recipient["id"])
+        # Snapshot fields are also preserved.
         self.assertEqual(row["recipient_label_snapshot"], "Bank Z")
         self.assertEqual(row["recipient_kind_snapshot"], "bank")
         self.assertEqual(row["recipient_reveal_mode_snapshot"], "standard")
+        # The recipient row itself still exists (soft delete) but is inactive.
+        self.assertFalse(
+            self.conn.execute(
+                "SELECT active FROM source_funds_recipients WHERE id = ?",
+                (recipient["id"],),
+            ).fetchone()["active"]
+        )
+
+    def test_default_list_hides_inactive_recipients(self):
+        active = source_funds_recipients.create_recipient(
+            self.conn, self.workspace_id, self.profile_id, label="Active", kind="bank",
+        )
+        retired = source_funds_recipients.create_recipient(
+            self.conn, self.workspace_id, self.profile_id, label="Retired", kind="bank",
+        )
+        source_funds_recipients.delete_recipient(self.conn, self.profile_id, retired["id"])
+        listing = source_funds_recipients.list_recipients(self.conn, self.profile_id)
+        labels = {row["label"] for row in listing}
+        self.assertEqual(labels, {"Active"})
+        with_inactive = source_funds_recipients.list_recipients(
+            self.conn, self.profile_id, include_inactive=True,
+        )
+        self.assertEqual({row["label"] for row in with_inactive}, {"Active", "Retired"})
 
     def test_rename_does_not_rewrite_historical_case_attribution(self):
         recipient = source_funds_recipients.create_recipient(

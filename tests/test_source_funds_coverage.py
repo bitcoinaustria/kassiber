@@ -560,6 +560,23 @@ class CoverageCoreTests(unittest.TestCase):
         self.assertEqual(coverage["truncation"]["not_classified_count"], 0)
         self.assertEqual(coverage["totals"]["tx_count"], 2)
 
+    def test_inbound_total_counts_each_hop_separately(self):
+        """The coverage view is documented as historical inbound, not
+        current holdings. A self-transfer A->B counts inbound on B AND
+        on the upstream's parent; an outbound spend does not subtract.
+        Pin that explicitly so the docstring and the UI copy stay in
+        sync with what the totals actually represent.
+        """
+        self._add_inbound_tx("hop1", 100_000)
+        self._add_inbound_tx("hop2", 100_000)
+        self._add_outbound_tx("spend-noise", 100_000)
+        coverage = self._coverage()
+        # 2 inbound rows = 2 in totals.tx_count, even if they represent
+        # the same 1 BTC moved between wallets.
+        self.assertEqual(coverage["totals"]["tx_count"], 2)
+        self.assertEqual(coverage["totals"]["amount_msat"], 200_000)
+        self.assertEqual(coverage["scope"], "historical_inbound")
+
     def test_summary_text_announces_truncation(self):
         for i in range(3):
             self._add_inbound_tx(f"tx-{i}", 100_000)
