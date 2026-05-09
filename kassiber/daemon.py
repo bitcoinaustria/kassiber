@@ -208,13 +208,21 @@ _DIRECT_AUTO_JOURNAL_REFRESH_KINDS = {
 }
 PENDING_AI_CANCEL_TTL_SECONDS = 30.0
 MAX_PENDING_AI_CANCELS = 128
-# Hard caps for the coverage daemon kind. The compute_coverage worker
-# calls build_report once per inbound transaction with the supplied
-# max_depth, and each build_report walk holds a sqlite cursor open.
-# Cap caller-supplied values so a malicious or buggy desktop client
-# can't run an unbounded sweep that pins the daemon thread.
-_COVERAGE_MAX_DEPTH_CAP = 32
+# Hard caps for source-funds daemon kinds that drive build_report. The
+# core function already clamps internally (_MAX_BUILD_REPORT_DEPTH=64),
+# but the daemon boundary is the right place to reject runaway desktop
+# requests early — the same depth ceiling applies to preview,
+# cases.save, and coverage. The transactions cap is coverage-specific.
+_DAEMON_REPORT_DEPTH_CAP = 32
 _COVERAGE_MAX_TRANSACTIONS_CAP = 50_000
+
+
+def _resolve_report_depth(max_depth: Any, default: int = 8) -> int:
+    if isinstance(max_depth, int) and max_depth > 0:
+        resolved = max_depth
+    else:
+        resolved = default
+    return min(resolved, _DAEMON_REPORT_DEPTH_CAP)
 AI_TOOL_CONSENT_TIMEOUT_SECONDS = 300.0
 PLAINTEXT_DELETE_ACK = "DELETE LOCAL DATA"
 PLAINTEXT_CHANGE_ACK = "CHANGE LOCAL DATA"
@@ -906,7 +914,7 @@ def _ui_source_funds_payload(
             planned_destination=args.get("planned_destination") if isinstance(args.get("planned_destination"), str) else None,
             planned_note=args.get("planned_note") if isinstance(args.get("planned_note"), str) else None,
             reveal_mode=str(explicit_reveal) if isinstance(explicit_reveal, str) and explicit_reveal else None,
-            max_depth=int(args.get("max_depth") or 8),
+            max_depth=_resolve_report_depth(args.get("max_depth")),
             save_case=False,
             recipient_ref=recipient_ref,
         )
@@ -938,7 +946,7 @@ def _ui_source_funds_payload(
             planned_destination=args.get("planned_destination") if isinstance(args.get("planned_destination"), str) else None,
             planned_note=args.get("planned_note") if isinstance(args.get("planned_note"), str) else None,
             reveal_mode=str(explicit_reveal) if isinstance(explicit_reveal, str) and explicit_reveal else None,
-            max_depth=int(args.get("max_depth") or 8),
+            max_depth=_resolve_report_depth(args.get("max_depth")),
             save_case=True,
             case_label=case_label,
             recipient_ref=recipient_ref,
@@ -949,12 +957,6 @@ def _ui_source_funds_payload(
 
     if kind == "ui.source_funds.coverage":
         max_transactions = args.get("max_transactions")
-        max_depth = args.get("max_depth")
-        resolved_depth = (
-            int(max_depth)
-            if isinstance(max_depth, int) and max_depth > 0
-            else core_source_funds_coverage.DEFAULT_MAX_DEPTH
-        )
         resolved_transactions = (
             int(max_transactions)
             if isinstance(max_transactions, int) and max_transactions > 0
@@ -965,7 +967,10 @@ def _ui_source_funds_payload(
             None,
             None,
             hooks,
-            max_depth=min(resolved_depth, _COVERAGE_MAX_DEPTH_CAP),
+            max_depth=_resolve_report_depth(
+                args.get("max_depth"),
+                default=core_source_funds_coverage.DEFAULT_MAX_DEPTH,
+            ),
             max_transactions=min(resolved_transactions, _COVERAGE_MAX_TRANSACTIONS_CAP),
         )
 

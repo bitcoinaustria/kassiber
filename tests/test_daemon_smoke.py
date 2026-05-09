@@ -420,6 +420,27 @@ def _seed_sensitive_ai_surface(data_root):
         conn.close()
 
 
+class DaemonReportDepthClampTest(unittest.TestCase):
+    """Unit-level guard for the daemon's shared report-depth clamp."""
+
+    def test_resolve_report_depth_caps_oversized_caller_value(self):
+        from kassiber.daemon import _DAEMON_REPORT_DEPTH_CAP, _resolve_report_depth
+
+        self.assertEqual(_resolve_report_depth(999_999), _DAEMON_REPORT_DEPTH_CAP)
+        # in-range values pass through unchanged.
+        self.assertEqual(_resolve_report_depth(8), 8)
+        self.assertEqual(_resolve_report_depth(_DAEMON_REPORT_DEPTH_CAP), _DAEMON_REPORT_DEPTH_CAP)
+        # zero / negative / non-int fall back to the default and stay
+        # within the cap.
+        self.assertEqual(_resolve_report_depth(0), 8)
+        self.assertEqual(_resolve_report_depth(-3), 8)
+        self.assertEqual(_resolve_report_depth("not-an-int"), 8)
+        self.assertEqual(_resolve_report_depth(None), 8)
+        # explicit default overrides the 8 fallback (used by coverage).
+        self.assertEqual(_resolve_report_depth(None, default=16), 16)
+        self.assertEqual(_resolve_report_depth(99_999, default=16), _DAEMON_REPORT_DEPTH_CAP)
+
+
 class DaemonSmokeTest(unittest.TestCase):
     def test_daemon_ready_status_and_shutdown_jsonl(self):
         with tempfile.TemporaryDirectory(prefix="kassiber-daemon-") as tmp:
