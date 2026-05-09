@@ -318,6 +318,21 @@ class SourceFundsCliTest(unittest.TestCase):
         }
 
     def _source_funds_report(self, *, reveal_mode: str = "standard", save_case: bool = False):
+        return self._source_funds_report_for_target(
+            target="disclosure-target",
+            amount="0.10000000",
+            reveal_mode=reveal_mode,
+            save_case=save_case,
+        )
+
+    def _source_funds_report_for_target(
+        self,
+        *,
+        target: str,
+        amount: str,
+        reveal_mode: str = "standard",
+        save_case: bool = False,
+    ):
         args = [
             "reports",
             "source-funds",
@@ -326,9 +341,9 @@ class SourceFundsCliTest(unittest.TestCase):
             "--profile",
             "Default",
             "--target-transaction",
-            "disclosure-target",
+            target,
             "--target-amount",
-            "0.10000000",
+            amount,
             "--reveal-mode",
             reveal_mode,
         ]
@@ -783,6 +798,127 @@ class SourceFundsCliTest(unittest.TestCase):
                 report = self._source_funds_report(reveal_mode=mode)
                 serialized = json.dumps(report)
                 self.assertIn("Reviewed path row", serialized)
+
+    def test_reveal_modes_redact_provider_ids_in_link_explanations(self):
+        """Suggestion-builder explanations carry provider key/value
+        pairs (trade ID, order ID, ...). Those values would leak through
+        the edge.explanation field on the report envelope at every
+        reveal mode if the publisher never redacted free text. Pin the
+        gate so labels_only and minimal mode never serialize the
+        provider ID, while standard and full keep it visible."""
+        self._init_default_workspace()
+        # Two same-asset trades that share a provider trade_id pair.
+        for wallet, csv_name, txid, direction, raw in [
+            (
+                "Exchange Out",
+                "provider-out.csv",
+                "exchange-trade-1",
+                "outbound",
+                '{"trade_id":"PROVIDER-TRADE-LEAK"}',
+            ),
+            (
+                "Exchange In",
+                "provider-in.csv",
+                "exchange-trade-2",
+                "inbound",
+                '{"trade_id":"PROVIDER-TRADE-LEAK"}',
+            ),
+        ]:
+            self._write_csv(
+                csv_name,
+                "date,txid,direction,asset,amount,fee,fiat_rate,description,raw_json\n"
+                f"2026-04-01T09:00:00Z,{txid},{direction},BTC,0.10000000,0,50000,row,{raw}\n",
+            )
+            self._create_wallet_and_import(wallet, csv_name)
+        # Run suggest, then promote the suggested link to reviewed and
+        # set explicit allocation. (Suggested state would block export
+        # via unreviewed_link.)
+        self.cli(
+            "source-funds", "suggest", "--workspace", "Sof", "--profile", "Default",
+        )
+        links = self.cli(
+            "source-funds", "links", "list", "--workspace", "Sof", "--profile", "Default",
+        )["data"]
+        leaked = next(
+            (link for link in links if "PROVIDER-TRADE-LEAK" in (link.get("explanation") or "")),
+            None,
+        )
+        if leaked is None:
+            self.skipTest("Suggestion seed did not produce a provider-id link")
+        self.cli(
+            "source-funds",
+            "links",
+            "review",
+            "--workspace",
+            "Sof",
+            "--profile",
+            "Default",
+            "--link",
+            leaked["id"],
+            "--state",
+            "reviewed",
+            "--allocation-policy",
+            "explicit",
+            "--allocation-amount",
+            "0.10000000",
+        )
+        # Need a reviewed source to root the reviewed path.
+        source = self.cli(
+            "source-funds",
+            "sources",
+            "create",
+            "--workspace",
+            "Sof",
+            "--profile",
+            "Default",
+            "--type",
+            "fiat_purchase",
+            "--label",
+            "Provider source",
+            "--asset",
+            "BTC",
+            "--amount",
+            "0.10000000",
+        )["data"]
+        self.cli(
+            "source-funds",
+            "links",
+            "create",
+            "--workspace",
+            "Sof",
+            "--profile",
+            "Default",
+            "--from-source",
+            source["id"],
+            "--to-transaction",
+            "exchange-trade-1",
+            "--type",
+            "manual_source",
+            "--allocation-amount",
+            "0.10000000",
+            "--allocation-policy",
+            "explicit",
+        )
+        for mode in ("labels_only", "minimal"):
+            with self.subTest(mode=mode):
+                report = self._source_funds_report_for_target(
+                    target="exchange-trade-2",
+                    amount="0.10000000",
+                    reveal_mode=mode,
+                )
+                serialized = json.dumps(report)
+                self.assertNotIn("PROVIDER-TRADE-LEAK", serialized)
+                for edge in report["graph"]["edges"]:
+                    self.assertEqual(edge.get("explanation", ""), "")
+        for mode in ("standard", "full"):
+            with self.subTest(mode=mode):
+                report = self._source_funds_report_for_target(
+                    target="exchange-trade-2",
+                    amount="0.10000000",
+                    reveal_mode=mode,
+                )
+                serialized = json.dumps(report)
+                self.assertIn("PROVIDER-TRADE-LEAK", serialized)
 
     def test_export_requires_saved_case_snapshot(self):
         self._seed_exportable_disclosure_path()

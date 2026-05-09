@@ -249,6 +249,24 @@ def _public_tx_id(row: Mapping[str, Any], reveal_mode: str, *, is_target: bool =
     return row["external_id"] or row["id"]
 
 
+def _public_explanation(text: str | None, reveal_mode: str) -> str:
+    """Redact the link explanation under reveal modes that disallow free text.
+
+    Suggestion-builder explanations include provider key/value pairs
+    (trade ID, order ID, payment ID), and reviewed links inherit any
+    free text the user typed into ``--explanation``. labels_only and
+    minimal modes already redact txids and free-text description /
+    counterparty fields; the explanation deserves the same treatment.
+    Standard and full keep the original text so the recipient can read
+    why the link was reviewed.
+    """
+    if not text:
+        return ""
+    if reveal_mode in {"standard", "full"}:
+        return text
+    return ""
+
+
 def _tx_label(row: Mapping[str, Any], reveal_mode: str, *, is_target: bool = False) -> str:
     wallet = row["wallet_label"] if "wallet_label" in row.keys() else row.get("wallet", "")
     public_id = _public_tx_id(row, reveal_mode, is_target=is_target)
@@ -1860,7 +1878,7 @@ def build_report(
                     "from_allocation_amount": _btc_value(link["from_allocation_amount"]),
                     "from_allocation_amount_msat": link["from_allocation_amount"],
                     "allocation_policy": link["allocation_policy"],
-                    "explanation": link["explanation"] or "",
+                    "explanation": _public_explanation(link["explanation"], mode),
                     "attachments": [_attachment_summary(attachment, mode) for attachment in attachment_rows],
                 }
             )
