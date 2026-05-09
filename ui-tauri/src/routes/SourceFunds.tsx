@@ -768,6 +768,10 @@ export function SourceFunds() {
   const recipientsQuery = useDaemon<{ recipients: SourceFundsRecipient[] }>(
     "ui.source_funds.recipients.list",
   );
+  const selectedRecipient = useMemo<SourceFundsRecipient | null>(() => {
+    const all = recipientsQuery.data?.data?.recipients ?? [];
+    return all.find((item) => item.id === selectedRecipientId) ?? null;
+  }, [recipientsQuery.data, selectedRecipientId]);
   const suggestLinks = useDaemonMutation<{ inserted: number }>(
     "ui.source_funds.suggest",
   );
@@ -1376,8 +1380,12 @@ export function SourceFunds() {
                     selectedRecipientId={selectedRecipientId}
                     onSelectRecipient={(recipient) => {
                       setSelectedRecipientId(recipient?.id ?? "");
-                      if (recipient) setRevealMode(recipient.default_reveal_mode);
                     }}
+                  />
+                  <RecipientPreferenceAdvisory
+                    recipient={selectedRecipient}
+                    currentRevealMode={revealMode}
+                    onApply={(mode) => setRevealMode(mode)}
                   />
                   <div className="rounded-md border bg-muted/30 px-3 py-3 text-sm text-muted-foreground">
                     Review what the report will expose before exporting. Change
@@ -2342,9 +2350,8 @@ function RecipientPicker({
     <div className="rounded-md border px-3 py-3 text-sm">
       <div className="mb-1 font-medium">Recipient</div>
       <div className="mb-2 text-xs text-muted-foreground">
-        Selecting a recipient sets the disclosure reveal mode to that
-        recipient's default. Override per-export by changing reveal mode
-        afterward.
+        The recipient's preferred reveal mode is shown as advisory below;
+        your reveal-mode choice is what gets exported.
       </div>
       <select
         className="h-9 w-full rounded-md border bg-background px-3 text-sm"
@@ -2365,6 +2372,39 @@ function RecipientPicker({
       {selected && selected.notes && (
         <div className="mt-2 text-xs opacity-80">{selected.notes}</div>
       )}
+    </div>
+  );
+}
+
+function RecipientPreferenceAdvisory({
+  recipient,
+  currentRevealMode,
+  onApply,
+}: {
+  recipient: SourceFundsRecipient | null;
+  currentRevealMode: string;
+  onApply: (mode: string) => void;
+}) {
+  if (!recipient) return null;
+  const preferred = recipient.default_reveal_mode;
+  if (!preferred || preferred === currentRevealMode) return null;
+  return (
+    <div className="flex items-center justify-between gap-3 rounded-md border bg-muted/30 px-3 py-2 text-xs">
+      <span className="text-muted-foreground">
+        {recipient.label} prefers{" "}
+        <span className="font-medium text-foreground">{pretty(preferred)}</span>
+        . Your current reveal mode is{" "}
+        <span className="font-medium text-foreground">{pretty(currentRevealMode)}</span>
+        .
+      </span>
+      <Button
+        type="button"
+        size="sm"
+        variant="outline"
+        onClick={() => onApply(preferred)}
+      >
+        Apply preference
+      </Button>
     </div>
   );
 }
