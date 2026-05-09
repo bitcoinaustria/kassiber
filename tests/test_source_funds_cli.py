@@ -764,6 +764,26 @@ class SourceFundsCliTest(unittest.TestCase):
                     self.assertIn("source_url", url_attachment)
                     self.assertEqual(url_attachment["source_url"], "https://exchange.example/source-statement")
 
+    def test_reveal_modes_redact_free_text_description(self):
+        """Free-text fields (description, counterparty) leak personal
+        memos. labels_only and minimal modes must drop them; standard
+        and full modes keep them."""
+        self._seed_exportable_disclosure_path()
+        for mode in ("labels_only", "minimal"):
+            with self.subTest(mode=mode):
+                report = self._source_funds_report(reveal_mode=mode)
+                serialized = json.dumps(report)
+                self.assertNotIn("Reviewed path row", serialized)
+                for node in report["graph"]["nodes"]:
+                    if node.get("node_type") == "transaction":
+                        self.assertEqual(node.get("description"), "")
+                        self.assertEqual(node.get("counterparty"), "")
+        for mode in ("standard", "full"):
+            with self.subTest(mode=mode):
+                report = self._source_funds_report(reveal_mode=mode)
+                serialized = json.dumps(report)
+                self.assertIn("Reviewed path row", serialized)
+
     def test_export_requires_saved_case_snapshot(self):
         self._seed_exportable_disclosure_path()
         error = self.cli_error(

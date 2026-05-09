@@ -1395,6 +1395,7 @@ def _tx_node(
     *,
     is_target: bool = False,
 ) -> dict[str, Any]:
+    free_text_visible = reveal_mode in {"standard", "full"}
     node = {
         "id": f"tx:{row['id']}",
         "node_type": "transaction",
@@ -1412,8 +1413,8 @@ def _tx_node(
         "fiat_currency": row["fiat_currency"] or "",
         "fiat_value": row["fiat_value"],
         "pricing_source_kind": row["pricing_source_kind"] or row["fiat_price_source"] or "",
-        "description": row["description"] or "",
-        "counterparty": row["counterparty"] or "",
+        "description": row["description"] or "" if free_text_visible else "",
+        "counterparty": row["counterparty"] or "" if free_text_visible else "",
     }
     if reveal_mode == "full":
         node["internal_transaction_id"] = row["id"]
@@ -1422,6 +1423,7 @@ def _tx_node(
 
 def _source_node(source: Mapping[str, Any], reveal_mode: str, required_msat: int | None) -> dict[str, Any]:
     label = source["label"] if reveal_mode != "labels_only" else source["source_type"].replace("_", " ")
+    free_text_visible = reveal_mode in {"standard", "full"}
     return {
         "id": f"source:{source['id']}",
         "node_type": "source",
@@ -1436,7 +1438,7 @@ def _source_node(source: Mapping[str, Any], reveal_mode: str, required_msat: int
         "fiat_currency": source["fiat_currency"] or "",
         "fiat_value": source["fiat_value"],
         "acquired_at": source["acquired_at"] or "",
-        "description": source["description"] or "",
+        "description": source["description"] or "" if free_text_visible else "",
         "review_state": source["review_state"],
     }
 
