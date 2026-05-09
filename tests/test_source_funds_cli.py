@@ -1599,6 +1599,106 @@ class SourceFundsCliTest(unittest.TestCase):
         self.assertEqual(first_link["state"], "reviewed")
         self.assertEqual(second_link["state"], "suggested")
 
+    def test_bulk_review_skips_same_external_id_when_third_row_appears(self):
+        self._init_default_workspace()
+        for wallet, csv_name, direction in [
+            ("Pair Out", "stale-pair-out.csv", "outbound"),
+            ("Pair In", "stale-pair-in.csv", "inbound"),
+        ]:
+            self._write_csv(
+                csv_name,
+                "date,txid,direction,asset,amount,fee,fiat_rate,description\n"
+                f"2026-03-01T09:00:00Z,stale-pair,{direction},BTC,0.10000000,0,50000,{wallet}\n",
+            )
+            self._create_wallet_and_import(wallet, csv_name)
+        target_id = self._tx_id("Pair In", "stale-pair")
+        suggested = self.cli(
+            "source-funds",
+            "suggest",
+            "--workspace",
+            "Sof",
+            "--profile",
+            "Default",
+            "--target-transaction",
+            target_id,
+        )["data"]["links"]
+        self.assertEqual(len([link for link in suggested if link["method"] == "same_external_id"]), 1)
+        self._write_csv(
+            "stale-third-in.csv",
+            "date,txid,direction,asset,amount,fee,fiat_rate,description\n"
+            "2026-03-01T09:05:00Z,stale-pair,inbound,BTC,0.10000000,0,50000,Third matching row\n",
+        )
+        self._create_wallet_and_import("Pair Third", "stale-third-in.csv")
+        reviewed = self.cli(
+            "source-funds",
+            "links",
+            "bulk-review",
+            "--workspace",
+            "Sof",
+            "--profile",
+            "Default",
+            "--target-transaction",
+            target_id,
+        )["data"]
+        self.assertEqual(reviewed["reviewed"], 0)
+        link = self.cli("source-funds", "links", "list", "--workspace", "Sof", "--profile", "Default")["data"][0]
+        self.assertEqual(link["state"], "suggested")
+
+    def test_bulk_review_skips_transaction_pair_when_pair_row_deleted(self):
+        self._init_default_workspace()
+        for wallet, csv_name, txid, direction in [
+            ("Pair Out", "deleted-pair-out.csv", "deleted-pair-out", "outbound"),
+            ("Pair In", "deleted-pair-in.csv", "deleted-pair-in", "inbound"),
+        ]:
+            self._write_csv(
+                csv_name,
+                "date,txid,direction,asset,amount,fee,fiat_rate,description\n"
+                f"2026-03-01T09:00:00Z,{txid},{direction},BTC,0.10000000,0,50000,{wallet}\n",
+            )
+            self._create_wallet_and_import(wallet, csv_name)
+        out_id = self._tx_id("Pair Out", "deleted-pair-out")
+        in_id = self._tx_id("Pair In", "deleted-pair-in")
+        self.cli(
+            "transfers",
+            "pair",
+            "--workspace",
+            "Sof",
+            "--profile",
+            "Default",
+            "--tx-out",
+            out_id,
+            "--tx-in",
+            in_id,
+            "--kind",
+            "manual",
+            "--policy",
+            "carrying-value",
+        )
+        self.cli(
+            "source-funds",
+            "suggest",
+            "--workspace",
+            "Sof",
+            "--profile",
+            "Default",
+            "--target-transaction",
+            in_id,
+        )
+        with self._db() as conn:
+            conn.execute("DELETE FROM transaction_pairs")
+        reviewed = self.cli(
+            "source-funds",
+            "links",
+            "bulk-review",
+            "--workspace",
+            "Sof",
+            "--profile",
+            "Default",
+            "--target-transaction",
+            in_id,
+        )["data"]
+        self.assertEqual(reviewed["reviewed"], 0)
+
     def test_suggest_links_with_target_does_not_write_unrelated_suggestions(self):
         self._init_default_workspace()
         for wallet, csv_name, txid, direction in [
@@ -1657,6 +1757,273 @@ class SourceFundsCliTest(unittest.TestCase):
         self.assertEqual(error["error"]["code"], "validation")
         links = self.cli("source-funds", "links", "list", "--workspace", "Sof", "--profile", "Default")["data"]
         self.assertEqual(links, [])
+
+    def test_create_link_rejects_parent_after_child(self):
+        self._init_default_workspace()
+        self._write_csv(
+            "child-early.csv",
+            "date,txid,direction,asset,amount,fee,fiat_rate,description\n"
+            "2026-02-01T09:00:00Z,child-early,inbound,BTC,0.10000000,0,50000,Child transaction\n",
+        )
+        self._write_csv(
+            "parent-late.csv",
+            "date,txid,direction,asset,amount,fee,fiat_rate,description\n"
+            "2026-03-01T09:00:00Z,parent-late,inbound,BTC,0.10000000,0,50000,Future parent\n",
+        )
+        self._create_wallet_and_import("Child", "child-early.csv")
+        self._create_wallet_and_import("Parent", "parent-late.csv")
+        error = self.cli_error(
+            "source-funds",
+            "links",
+            "create",
+            "--workspace",
+            "Sof",
+            "--profile",
+            "Default",
+            "--from-transaction",
+            "parent-late",
+            "--to-transaction",
+            "child-early",
+            "--type",
+            "self_transfer",
+            "--allocation-amount",
+            "0.10000000",
+            "--from-amount",
+            "0.10000000",
+            "--allocation-policy",
+            "explicit",
+        )
+        self.assertEqual(error["error"]["code"], "validation")
+
+    def test_create_link_rejects_source_acquired_after_child(self):
+        self._seed_single_target("0.10000000")
+        source = self.cli(
+            "source-funds",
+            "sources",
+            "create",
+            "--workspace",
+            "Sof",
+            "--profile",
+            "Default",
+            "--type",
+            "fiat_purchase",
+            "--label",
+            "Future purchase",
+            "--asset",
+            "BTC",
+            "--amount",
+            "0.10000000",
+            "--acquired-at",
+            "2026-03-01T00:00:00Z",
+        )["data"]
+        error = self.cli_error(
+            "source-funds",
+            "links",
+            "create",
+            "--workspace",
+            "Sof",
+            "--profile",
+            "Default",
+            "--from-source",
+            source["id"],
+            "--to-transaction",
+            "target-basic",
+            "--type",
+            "manual_source",
+            "--allocation-amount",
+            "0.10000000",
+            "--allocation-policy",
+            "explicit",
+        )
+        self.assertEqual(error["error"]["code"], "validation")
+
+    def test_export_blocks_chronology_violation_on_existing_reviewed_link(self):
+        self._init_default_workspace()
+        self._write_csv(
+            "target-chronology.csv",
+            "date,txid,direction,asset,amount,fee,fiat_rate,description\n"
+            "2026-04-01T09:00:00Z,target-chronology,inbound,BTC,0.10000000,0,50000,Target\n",
+        )
+        self._write_csv(
+            "parent-chronology.csv",
+            "date,txid,direction,asset,amount,fee,fiat_rate,description\n"
+            "2026-03-01T09:00:00Z,parent-chronology,inbound,BTC,0.10000000,0,50000,Parent\n",
+        )
+        self._create_wallet_and_import("Target", "target-chronology.csv")
+        self._create_wallet_and_import("Parent", "parent-chronology.csv")
+        source = self.cli(
+            "source-funds",
+            "sources",
+            "create",
+            "--workspace",
+            "Sof",
+            "--profile",
+            "Default",
+            "--type",
+            "fiat_purchase",
+            "--label",
+            "Chronology source",
+            "--asset",
+            "BTC",
+            "--amount",
+            "0.10000000",
+            "--acquired-at",
+            "2026-02-01T00:00:00Z",
+        )["data"]
+        self.cli(
+            "source-funds",
+            "links",
+            "create",
+            "--workspace",
+            "Sof",
+            "--profile",
+            "Default",
+            "--from-source",
+            source["id"],
+            "--to-transaction",
+            "parent-chronology",
+            "--type",
+            "manual_source",
+            "--allocation-amount",
+            "0.10000000",
+            "--allocation-policy",
+            "explicit",
+        )
+        self.cli(
+            "source-funds",
+            "links",
+            "create",
+            "--workspace",
+            "Sof",
+            "--profile",
+            "Default",
+            "--from-transaction",
+            "parent-chronology",
+            "--to-transaction",
+            "target-chronology",
+            "--type",
+            "self_transfer",
+            "--allocation-amount",
+            "0.10000000",
+            "--from-amount",
+            "0.10000000",
+            "--allocation-policy",
+            "explicit",
+        )
+        with self._db() as conn:
+            conn.execute(
+                "UPDATE transactions SET occurred_at = ? WHERE external_id = ?",
+                ("2026-05-01T09:00:00Z", "parent-chronology"),
+            )
+        blockers, _ = self._report_blockers("target-chronology", "0.10000000")
+        self.assertIn("chronology_violation", blockers)
+
+    def test_same_timestamp_link_is_allowed(self):
+        self._seed_cycle_wallets()
+        source = self.cli(
+            "source-funds",
+            "sources",
+            "create",
+            "--workspace",
+            "Sof",
+            "--profile",
+            "Default",
+            "--type",
+            "fiat_purchase",
+            "--label",
+            "Same timestamp source",
+            "--asset",
+            "BTC",
+            "--amount",
+            "0.20000000",
+            "--acquired-at",
+            "2026-02-01T09:00:00Z",
+        )["data"]
+        self.cli(
+            "source-funds",
+            "links",
+            "create",
+            "--workspace",
+            "Sof",
+            "--profile",
+            "Default",
+            "--from-source",
+            source["id"],
+            "--to-transaction",
+            "parent-b",
+            "--type",
+            "manual_source",
+            "--allocation-amount",
+            "0.20000000",
+            "--allocation-policy",
+            "explicit",
+        )
+        self.cli(
+            "source-funds",
+            "links",
+            "create",
+            "--workspace",
+            "Sof",
+            "--profile",
+            "Default",
+            "--from-transaction",
+            "parent-b",
+            "--to-transaction",
+            "target-a",
+            "--type",
+            "self_transfer",
+            "--allocation-amount",
+            "0.20000000",
+            "--from-amount",
+            "0.20000000",
+            "--allocation-policy",
+            "explicit",
+        )
+        blockers, report = self._report_blockers("target-a", "0.20000000")
+        self.assertNotIn("chronology_violation", blockers)
+        self.assertTrue(report["explain_gates"]["exportable"], blockers)
+
+    def test_undated_attestation_source_emits_warning_not_blocker(self):
+        self._seed_single_target("0.10000000")
+        source = self.cli(
+            "source-funds",
+            "sources",
+            "create",
+            "--workspace",
+            "Sof",
+            "--profile",
+            "Default",
+            "--type",
+            "opening_balance_attestation",
+            "--label",
+            "Reviewed prior history",
+            "--asset",
+            "BTC",
+        )["data"]
+        self.cli(
+            "source-funds",
+            "links",
+            "create",
+            "--workspace",
+            "Sof",
+            "--profile",
+            "Default",
+            "--from-source",
+            source["id"],
+            "--to-transaction",
+            "target-basic",
+            "--type",
+            "manual_source",
+            "--allocation-amount",
+            "0.10000000",
+            "--allocation-policy",
+            "explicit",
+        )
+        blockers, report = self._report_blockers("target-basic", "0.10000000")
+        warning_codes = {item["code"] for item in report["explain_gates"]["warnings"]}
+        self.assertNotIn("chronology_violation", blockers)
+        self.assertIn("opening_balance_attestation", warning_codes)
+        self.assertTrue(report["explain_gates"]["exportable"], blockers)
 
     def _seed_provider_rows(self, *, out_rows: list[tuple[str, str, str]], in_rows: list[tuple[str, str, str]], headers: str):
         self._init_default_workspace()
@@ -1725,6 +2092,43 @@ class SourceFundsCliTest(unittest.TestCase):
         )["data"]
         self.assertEqual(reviewed["reviewed"], 1)
         self.assertEqual(reviewed["links"][0]["method"], "provider_trade_id")
+
+    def test_bulk_review_skips_provider_trade_id_when_imports_made_it_n_to_m(self):
+        self._seed_provider_rows(
+            out_rows=[("trade-out", "0.10000000", "trade-1")],
+            in_rows=[("trade-in", "0.10000000", "trade-1")],
+            headers="trade_id",
+        )
+        target_id = self._tx_id("Provider In", "trade-in")
+        suggested = self.cli(
+            "source-funds",
+            "suggest",
+            "--workspace",
+            "Sof",
+            "--profile",
+            "Default",
+            "--target-transaction",
+            target_id,
+        )["data"]["links"]
+        self.assertEqual(len([link for link in suggested if link["method"] == "provider_trade_id"]), 1)
+        self._write_csv(
+            "provider-extra-out.csv",
+            "date,txid,direction,asset,amount,fee,fiat_rate,description,trade_id\n"
+            "2026-03-01T09:02:00Z,trade-extra-out,outbound,BTC,0.10000000,0,50000,extra,trade-1\n",
+        )
+        self._create_wallet_and_import("Provider Extra", "provider-extra-out.csv")
+        reviewed = self.cli(
+            "source-funds",
+            "links",
+            "bulk-review",
+            "--workspace",
+            "Sof",
+            "--profile",
+            "Default",
+            "--target-transaction",
+            target_id,
+        )["data"]
+        self.assertEqual(reviewed["reviewed"], 0)
 
     def test_broad_provider_id_requires_explicit_opt_in(self):
         self._seed_provider_rows(

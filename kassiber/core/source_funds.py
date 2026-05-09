@@ -11,7 +11,7 @@ from typing import Any, Callable, Mapping, Sequence
 from ..envelope import json_ready
 from ..errors import AppError
 from ..msat import btc_to_msat, dec, msat_to_btc
-from ..time_utils import now_iso
+from ..time_utils import UNKNOWN_OCCURRED_AT, now_iso, parse_timestamp
 from ..wallet_descriptors import normalize_asset_code
 
 
@@ -210,6 +210,24 @@ def _safe_json_loads(value: str | None) -> Any:
         return {}
 
 
+def _canonical_optional_timestamp(value: Any) -> str | None:
+    if value in (None, ""):
+        return None
+    try:
+        parsed = parse_timestamp(value)
+    except AppError:
+        return None
+    if parsed == UNKNOWN_OCCURRED_AT:
+        return None
+    return parsed
+
+
+def _timestamp_after(left: Any, right: Any) -> bool:
+    left_ts = _canonical_optional_timestamp(left)
+    right_ts = _canonical_optional_timestamp(right)
+    return bool(left_ts and right_ts and left_ts > right_ts)
+
+
 def _public_tx_id(row: Mapping[str, Any], reveal_mode: str, *, is_target: bool = False) -> str:
     if reveal_mode == "labels_only":
         return ""
@@ -392,6 +410,7 @@ def create_source(
     source_type = _normalize_source_type(source_type)
     fiat = None if fiat_value in (None, "") else float(dec(fiat_value))
     currency = (fiat_currency or profile["fiat_currency"] or "").strip().upper() or None
+    stored_acquired_at = parse_timestamp(acquired_at) if acquired_at not in (None, "") else None
     label = str(label or "").strip()
     if not label:
         raise AppError("--label cannot be empty", code="validation")
@@ -413,7 +432,7 @@ def create_source(
             amount_msat,
             currency,
             fiat,
-            acquired_at,
+            stored_acquired_at,
             description,
             created_at,
             created_at,
@@ -507,6 +526,7 @@ def _validate_transaction_link_for_review(
     *,
     link_type: str,
     from_tx: Mapping[str, Any] | None,
+    source: Mapping[str, Any] | None = None,
     to_tx: Mapping[str, Any],
     asset: str,
     from_asset: str | None,
@@ -518,11 +538,21 @@ def _validate_transaction_link_for_review(
             "A source-funds link allocation cannot exceed the target transaction amount.",
             code="validation",
         )
+    if source and _timestamp_after(source["acquired_at"], to_tx["occurred_at"]):
+        raise AppError(
+            "A source-funds source cannot be acquired after the transaction it funds.",
+            code="validation",
+        )
     if not from_tx:
         return
     if from_tx["id"] == to_tx["id"]:
         raise AppError(
             "A source-funds link's from-transaction and to-transaction must differ.",
+            code="validation",
+        )
+    if _timestamp_after(from_tx["occurred_at"], to_tx["occurred_at"]):
+        raise AppError(
+            "A source-funds link's parent transaction occurs after the child.",
             code="validation",
         )
     parent_required = (
@@ -601,6 +631,7 @@ def create_link(
     _validate_transaction_link_for_review(
         link_type=link_type,
         from_tx=from_tx,
+        source=source,
         to_tx=to_tx,
         asset=normalized_asset,
         from_asset=normalized_from_asset,
@@ -715,10 +746,19 @@ def update_link_review(
     if candidate_state == "reviewed":
         from_tx = _transaction_by_id(conn, profile["id"], link["from_transaction_id"])
         to_tx = _transaction_by_id(conn, profile["id"], link["to_transaction_id"])
+        source = (
+            conn.execute(
+                "SELECT * FROM source_funds_sources WHERE id = ?",
+                (link["from_source_id"],),
+            ).fetchone()
+            if link["from_source_id"]
+            else None
+        )
         if to_tx:
             _validate_transaction_link_for_review(
                 link_type=candidate_link_type,
                 from_tx=from_tx,
+                source=source,
                 to_tx=to_tx,
                 asset=updates.get("asset", link["asset"]),
                 from_asset=updates.get("from_asset", link["from_asset"]),
@@ -806,6 +846,119 @@ def _is_bulk_reviewable_suggestion(row: Mapping[str, Any]) -> bool:
     )
 
 
+def _same_external_id_still_deterministic(
+    conn: sqlite3.Connection,
+    profile_id: str,
+    row: Mapping[str, Any],
+    from_tx: Mapping[str, Any] | None,
+    to_tx: Mapping[str, Any],
+) -> bool:
+    if not from_tx:
+        return False
+    external_id = from_tx["external_id"]
+    if not external_id or external_id != to_tx["external_id"]:
+        return False
+    if normalize_asset_code(from_tx["asset"]) != normalize_asset_code(to_tx["asset"]):
+        return False
+    group = [
+        tx
+        for tx in _active_transaction_rows(conn, profile_id)
+        if tx["external_id"] == external_id
+        and normalize_asset_code(tx["asset"]) == normalize_asset_code(to_tx["asset"])
+    ]
+    outs = [tx for tx in group if tx["direction"] == "outbound"]
+    ins = [tx for tx in group if tx["direction"] == "inbound"]
+    return (
+        len(outs) == 1
+        and len(ins) == 1
+        and outs[0]["id"] == row["from_transaction_id"] == from_tx["id"]
+        and ins[0]["id"] == row["to_transaction_id"] == to_tx["id"]
+        and outs[0]["wallet_id"] != ins[0]["wallet_id"]
+    )
+
+
+def _transaction_pair_still_deterministic(
+    conn: sqlite3.Connection,
+    profile_id: str,
+    row: Mapping[str, Any],
+    from_tx: Mapping[str, Any] | None,
+    to_tx: Mapping[str, Any],
+) -> bool:
+    if not from_tx:
+        return False
+    return bool(
+        conn.execute(
+            """
+            SELECT 1
+            FROM transaction_pairs
+            WHERE profile_id = ? AND out_transaction_id = ? AND in_transaction_id = ?
+            LIMIT 1
+            """,
+            (profile_id, from_tx["id"], to_tx["id"]),
+        ).fetchone()
+    )
+
+
+def _provider_values_for_method(row: Mapping[str, Any], method: str) -> set[str]:
+    return {
+        value
+        for key, value in _raw_evidence_values(row)
+        if key in PROVIDER_UNIQUE_KEYS and _normalize_provider_method(key) == method
+    }
+
+
+def _provider_key_still_deterministic(
+    conn: sqlite3.Connection,
+    profile_id: str,
+    row: Mapping[str, Any],
+    from_tx: Mapping[str, Any] | None,
+    to_tx: Mapping[str, Any],
+) -> bool:
+    if not from_tx:
+        return False
+    method = str(row["method"] or "")
+    if method not in DETERMINISTIC_BULK_REVIEW_METHODS or not method.startswith("provider_"):
+        return False
+    shared_values = _provider_values_for_method(from_tx, method) & _provider_values_for_method(to_tx, method)
+    if not shared_values:
+        return False
+    active_rows = _active_transaction_rows(conn, profile_id)
+    for value in shared_values:
+        group = [
+            tx
+            for tx in active_rows
+            if value in _provider_values_for_method(tx, method)
+        ]
+        outs = [tx for tx in group if tx["direction"] == "outbound"]
+        ins = [tx for tx in group if tx["direction"] == "inbound"]
+        if (
+            len(outs) == 1
+            and len(ins) == 1
+            and outs[0]["id"] == row["from_transaction_id"] == from_tx["id"]
+            and ins[0]["id"] == row["to_transaction_id"] == to_tx["id"]
+            and _same_asset_amount_close(from_tx, to_tx)
+        ):
+            return True
+    return False
+
+
+def _suggestion_still_deterministic(
+    conn: sqlite3.Connection,
+    profile_id: str,
+    row: Mapping[str, Any],
+    from_tx: Mapping[str, Any] | None,
+    to_tx: Mapping[str, Any],
+) -> bool:
+    method = str(row["method"] or "")
+    if method == "same_external_id":
+        return _same_external_id_still_deterministic(conn, profile_id, row, from_tx, to_tx)
+    if method == "transaction_pair":
+        return _transaction_pair_still_deterministic(conn, profile_id, row, from_tx, to_tx)
+    if method.startswith("provider_"):
+        return _provider_key_still_deterministic(conn, profile_id, row, from_tx, to_tx)
+    return False
+
+
 def _target_scoped_link_rows(
     conn: sqlite3.Connection,
     profile_id: str,
@@ -852,6 +1005,8 @@ def _validated_bulk_review_candidates(
             if row["from_transaction_id"]
             else None
         )
+        if not _suggestion_still_deterministic(conn, profile_id, row, from_tx, to_tx):
+            continue
         try:
             _validate_transaction_link_for_review(
                 link_type=row["link_type"],
@@ -1486,6 +1641,14 @@ def build_report(
                         "A reviewed link allocates a different asset than its source record.",
                         ref=link["id"],
                     )
+                if _timestamp_after(source["acquired_at"], tx["occurred_at"]):
+                    _add_finding(
+                        findings,
+                        "chronology_violation",
+                        "blocker",
+                        "A reviewed source is dated after the transaction it funds.",
+                        ref=link["id"],
+                    )
                 source_consumption_msat[source["id"]] += source_required
                 if source["source_type"] not in ATTESTATION_SOURCE_TYPES:
                     if source["amount"] is None:
@@ -1544,6 +1707,14 @@ def build_report(
                 from_tx_id = from_tx["id"]
                 parent_required = int(link["from_allocation_amount"] or allocation_msat)
                 link_from_asset = normalize_asset_code(link["from_asset"] or from_tx["asset"])
+                if _timestamp_after(from_tx["occurred_at"], tx["occurred_at"]):
+                    _add_finding(
+                        findings,
+                        "chronology_violation",
+                        "blocker",
+                        "A reviewed parent transaction occurs after the child transaction it funds.",
+                        ref=link["id"],
+                    )
                 if link["link_type"] == "self_transfer":
                     from_tx_asset = normalize_asset_code(from_tx["asset"])
                     to_tx_asset = normalize_asset_code(tx["asset"])

@@ -30,6 +30,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { useDaemon, useDaemonMutation } from "@/daemon/client";
 import { screenShellClassName } from "@/lib/screen-layout";
+import { sourceFundsExportArgs } from "@/lib/sourceFundsExport";
 import { useUiStore } from "@/store/ui";
 
 type TransactionRow = {
@@ -714,6 +715,7 @@ export function SourceFunds() {
   const exportPdf = useDaemonMutation("ui.source_funds.export_pdf");
 
   const report = preview.data?.data;
+  const exportArgs = sourceFundsExportArgs(report);
   const links = linksQuery.data?.data?.links ?? [];
   const sources = sourcesQuery.data?.data?.sources ?? [];
   const evidence = evidenceQuery.data?.data?.attachments ?? [];
@@ -1306,23 +1308,16 @@ export function SourceFunds() {
                 {currentStep === "export" ? (
                   <Button
                     type="button"
-                    disabled={!report?.explain_gates.exportable || exportPdf.isPending}
-                    onClick={() =>
-                      exportPdf.mutate({
-                        target_transaction: selectedTarget,
-                        target_amount: targetAmount || undefined,
-                        report_purpose: reportPurpose,
-                        planned_destination:
-                          reportPurpose === "planned_exchange_sale"
-                            ? plannedDestination || undefined
-                            : undefined,
-                        planned_note:
-                          reportPurpose === "planned_exchange_sale"
-                            ? plannedNote || undefined
-                            : undefined,
-                        reveal_mode: revealMode,
-                      })
+                    disabled={
+                      !report?.explain_gates.exportable ||
+                      !exportArgs ||
+                      exportPdf.isPending
                     }
+                    onClick={() => {
+                      const args = sourceFundsExportArgs(report);
+                      if (!args) return;
+                      exportPdf.mutate(args);
+                    }}
                   >
                     <FileDown className="mr-2 size-4" aria-hidden="true" />
                     Export PDF
@@ -1840,14 +1835,13 @@ export function SourceFunds() {
                 className="w-full"
                 disabled={
                   !report?.explain_gates.exportable ||
-                  !report.case?.id ||
+                  !exportArgs ||
                   exportPdf.isPending
                 }
                 onClick={() => {
-                  if (!report?.case?.id) return;
-                  exportPdf.mutate({
-                    case: report.case.id,
-                  });
+                  const args = sourceFundsExportArgs(report);
+                  if (!args) return;
+                  exportPdf.mutate(args);
                 }}
               >
                 <FileDown className="mr-2 size-4" aria-hidden="true" />

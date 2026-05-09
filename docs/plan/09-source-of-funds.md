@@ -172,6 +172,9 @@ already reachable from the target through non-rejected source-funds links.
 Broad account-scoped provider ids and same-day time/amount matches are not
 persisted unless the user explicitly opts into broad hints. Every suggestion
 run has a hard write cap and aborts without committing when the cap is exceeded.
+Batch review must re-check deterministic predicates against the live database
+before promotion. A stale `same_external_id`, deleted `transaction_pair`, or
+provider id that is no longer one-to-one remains `suggested` for manual review.
 
 Walkers must keep a visited set keyed by transaction and asset, enforce depth
 and node-count caps, and emit `path_truncated` instead of silently stopping.
@@ -237,6 +240,8 @@ must share the same immutable disclosure payload. It should also refuse when:
   than the reviewed link consumes
 - a reviewed path requires more value from a transaction than that transaction
   contains
+- a reviewed parent transaction or root source is dated after the transaction
+  it claims to fund
 - a `self_transfer` link declares an asset that differs from either transaction
 - unconfirmed chain data is used as proof instead of context
 - selected reveal mode would include unreviewed chain observations
@@ -331,8 +336,9 @@ deterministic suggestions from same external ids, existing `transaction_pairs`,
 and one-to-one per-transaction provider/import ids may be batch-reviewed by the
 user so long consolidation chains do not require one-click-per-hop review.
 Batch review is target-scoped: it only promotes deterministic suggestions
-reachable from the selected report target. Broad provider account ids, weak
-time/amount matches, amount-mismatched provider rows, and chain-observation
+reachable from the selected report target and still deterministic at review
+time. Broad provider account ids, weak time/amount matches, stale provider or
+external-id matches, amount-mismatched provider rows, and chain-observation
 hints stay manual.
 
 ## Implementation Order
