@@ -1001,6 +1001,50 @@ class SourceFundsCliTest(unittest.TestCase):
         blockers, _ = self._report_blockers("target-basic", "0.20000000")
         self.assertIn("source_overallocation", blockers)
 
+    def test_export_blocks_when_attestation_source_with_amount_overallocates(self):
+        self._seed_single_target("0.20000000")
+        source = self.cli(
+            "source-funds",
+            "sources",
+            "create",
+            "--workspace",
+            "Sof",
+            "--profile",
+            "Default",
+            "--type",
+            "opening_balance_attestation",
+            "--label",
+            "Opening balance attestation",
+            "--asset",
+            "BTC",
+            "--amount",
+            "0.10000000",
+        )["data"]
+        for method in ("attest-a", "attest-b"):
+            self.cli(
+                "source-funds",
+                "links",
+                "create",
+                "--workspace",
+                "Sof",
+                "--profile",
+                "Default",
+                "--from-source",
+                source["id"],
+                "--to-transaction",
+                "target-basic",
+                "--type",
+                "manual_source",
+                "--method",
+                method,
+                "--allocation-amount",
+                "0.10000000",
+                "--allocation-policy",
+                "explicit",
+            )
+        blockers, _ = self._report_blockers("target-basic", "0.20000000")
+        self.assertIn("source_overallocation", blockers)
+
     def test_export_blocks_when_concrete_source_has_null_amount(self):
         self._seed_single_target("0.10000000")
         source = self.cli(

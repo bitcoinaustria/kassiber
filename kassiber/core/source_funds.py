@@ -1659,8 +1659,8 @@ def build_report(
                         ref=link["id"],
                     )
                 source_consumption_msat[source["id"]] += source_required
-                if source["source_type"] not in ATTESTATION_SOURCE_TYPES:
-                    if source["amount"] is None:
+                if source["amount"] is None:
+                    if source["source_type"] not in ATTESTATION_SOURCE_TYPES:
                         _add_finding(
                             findings,
                             "source_amount_missing",
@@ -1668,14 +1668,14 @@ def build_report(
                             "A concrete source record needs an amount before it can support export.",
                             ref=source["id"],
                         )
-                    elif source_consumption_msat[source["id"]] > int(source["amount"]):
-                        _add_finding(
-                            findings,
-                            "source_overallocation",
-                            "blocker",
-                            "Reviewed links allocate more funds than the source record contains.",
-                            ref=source["id"],
-                        )
+                elif source_consumption_msat[source["id"]] > int(source["amount"]):
+                    _add_finding(
+                        findings,
+                        "source_overallocation",
+                        "blocker",
+                        "Reviewed links allocate more funds than the source record contains.",
+                        ref=source["id"],
+                    )
                 source_node_id = f"source:{source['id']}"
                 nodes[source_node_id] = _source_node(source, mode, source_required)
                 if source["source_type"] == "missing_history":
