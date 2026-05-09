@@ -10,13 +10,11 @@ so every call site is covered with one test.
 
 from __future__ import annotations
 
-import sqlite3
 import tempfile
 import unittest
+import unittest.mock
 import uuid
 from pathlib import Path
-from typing import Mapping
-from unittest import mock
 
 from kassiber.core import source_funds as sf
 from kassiber.core.source_funds import SourceFundsHooks
@@ -150,7 +148,7 @@ class SuggestLinksClampTest(unittest.TestCase):
             self._tx(wallet_a, external_id, "outbound")
             self._tx(wallet_b, external_id, "inbound")
 
-        with mock.patch.object(sf, "SUGGESTION_WRITE_CAP", 1):
+        with unittest.mock.patch.object(sf, "SUGGESTION_WRITE_CAP", 1):
             with self.assertRaises(AppError) as cm:
                 sf.suggest_links(
                     self.conn,

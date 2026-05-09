@@ -4,6 +4,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+import unittest.mock
 import uuid
 from pathlib import Path
 
@@ -453,8 +454,6 @@ class CoverageCoreTests(unittest.TestCase):
         """A wide reviewed graph that fits inside max_depth but exceeds
         the per-report node cap must still bail with a path_truncated
         blocker, not run unbounded synchronous work."""
-        from unittest import mock
-
         from kassiber.core import source_funds as sf
 
         target = self._add_inbound_tx(
@@ -475,7 +474,7 @@ class CoverageCoreTests(unittest.TestCase):
                 allocation_msat=100_000 // 8,
             )
 
-        with mock.patch.object(sf, "_MAX_BUILD_REPORT_NODES", 4):
+        with unittest.mock.patch.object(sf, "_MAX_BUILD_REPORT_NODES", 4):
             report = sf.build_report(
                 self.conn,
                 self.workspace_id,
@@ -493,8 +492,6 @@ class CoverageCoreTests(unittest.TestCase):
         """Same contract on the edge axis: a graph that grows wide via
         edges per node must trip path_truncated when the edge cap is
         hit, even if the node count is still within budget."""
-        from unittest import mock
-
         from kassiber.core import source_funds as sf
 
         target = self._add_inbound_tx(
@@ -514,7 +511,7 @@ class CoverageCoreTests(unittest.TestCase):
                 allocation_msat=1_000_000 // 8,
             )
 
-        with mock.patch.object(sf, "_MAX_BUILD_REPORT_EDGES", 3):
+        with unittest.mock.patch.object(sf, "_MAX_BUILD_REPORT_EDGES", 3):
             report = sf.build_report(
                 self.conn,
                 self.workspace_id,
@@ -528,17 +525,15 @@ class CoverageCoreTests(unittest.TestCase):
         self.assertFalse(report["explain_gates"]["exportable"])
 
     def test_classify_buckets_in_review_on_sqlite_error(self):
-        from unittest import mock
-
         tx = self._add_inbound_tx("erratic", 100_000)
         src = self._add_source("fiat_purchase", amount_msat=100_000)
         self._add_link(to_tx_id=tx, from_source_id=src, allocation_msat=100_000)
-        with mock.patch(
+        with unittest.mock.patch(
             "kassiber.core.source_funds_coverage.build_report",
             side_effect=sqlite3.Error("malformed link row"),
         ):
             self.assertEqual(self._classify(tx), "in_review")
-        with mock.patch(
+        with unittest.mock.patch(
             "kassiber.core.source_funds_coverage.build_report",
             side_effect=KeyError("missing field"),
         ):
