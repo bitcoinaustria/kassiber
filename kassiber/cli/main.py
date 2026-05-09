@@ -1052,7 +1052,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     export_source_funds_pdf.add_argument("--planned-destination")
     export_source_funds_pdf.add_argument("--planned-note")
-    export_source_funds_pdf.add_argument("--reveal-mode", choices=list(core_source_funds.REVEAL_MODES), default="standard")
+    export_source_funds_pdf.add_argument("--reveal-mode", choices=list(core_source_funds.REVEAL_MODES))
     export_source_funds_pdf.add_argument("--file", required=True)
 
     for report_name in ("export-austrian-e1kv-pdf", "export-austrian"):

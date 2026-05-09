@@ -999,6 +999,7 @@ def _ui_source_funds_payload(
             raise AppError("ui.source_funds.export_pdf case must be a string", code="validation")
         if target is not None and not isinstance(target, str):
             raise AppError("ui.source_funds.export_pdf target_transaction must be a string", code="validation")
+        explicit_export_reveal = args.get("reveal_mode")
         path = _managed_report_export_path(ctx.data_root, "kassiber-source-funds", ".pdf")
         payload = dict(
             core_source_funds.export_pdf(
@@ -1013,7 +1014,7 @@ def _ui_source_funds_payload(
                 report_purpose=str(args.get("report_purpose") or "existing_transaction"),
                 planned_destination=args.get("planned_destination") if isinstance(args.get("planned_destination"), str) else None,
                 planned_note=args.get("planned_note") if isinstance(args.get("planned_note"), str) else None,
-                reveal_mode=str(args.get("reveal_mode") or "standard"),
+                reveal_mode=str(explicit_export_reveal) if isinstance(explicit_export_reveal, str) and explicit_export_reveal else None,
             )
         )
         payload.update(

@@ -1462,7 +1462,7 @@ def build_report(
     report_purpose: str = "existing_transaction",
     planned_destination: str | None = None,
     planned_note: str | None = None,
-    reveal_mode: str | None = "standard",
+    reveal_mode: str | None = None,
     max_depth: int = 8,
     save_case: bool = False,
     case_label: str | None = None,
@@ -2165,7 +2165,7 @@ def export_pdf(
     report_purpose: str = "existing_transaction",
     planned_destination: str | None = None,
     planned_note: str | None = None,
-    reveal_mode: str = "standard",
+    reveal_mode: str | None = None,
 ) -> dict[str, Any]:
     if not case_ref:
         raise AppError(
