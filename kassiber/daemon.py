@@ -208,6 +208,13 @@ _DIRECT_AUTO_JOURNAL_REFRESH_KINDS = {
 }
 PENDING_AI_CANCEL_TTL_SECONDS = 30.0
 MAX_PENDING_AI_CANCELS = 128
+# Hard caps for the coverage daemon kind. The compute_coverage worker
+# calls build_report once per inbound transaction with the supplied
+# max_depth, and each build_report walk holds a sqlite cursor open.
+# Cap caller-supplied values so a malicious or buggy desktop client
+# can't run an unbounded sweep that pins the daemon thread.
+_COVERAGE_MAX_DEPTH_CAP = 32
+_COVERAGE_MAX_TRANSACTIONS_CAP = 50_000
 AI_TOOL_CONSENT_TIMEOUT_SECONDS = 300.0
 PLAINTEXT_DELETE_ACK = "DELETE LOCAL DATA"
 PLAINTEXT_CHANGE_ACK = "CHANGE LOCAL DATA"
@@ -943,13 +950,23 @@ def _ui_source_funds_payload(
     if kind == "ui.source_funds.coverage":
         max_transactions = args.get("max_transactions")
         max_depth = args.get("max_depth")
+        resolved_depth = (
+            int(max_depth)
+            if isinstance(max_depth, int) and max_depth > 0
+            else core_source_funds_coverage.DEFAULT_MAX_DEPTH
+        )
+        resolved_transactions = (
+            int(max_transactions)
+            if isinstance(max_transactions, int) and max_transactions > 0
+            else core_source_funds_coverage.DEFAULT_MAX_TRANSACTIONS
+        )
         return core_source_funds_coverage.compute_coverage(
             conn,
             None,
             None,
             hooks,
-            max_depth=int(max_depth) if isinstance(max_depth, int) and max_depth > 0 else core_source_funds_coverage.DEFAULT_MAX_DEPTH,
-            max_transactions=int(max_transactions) if isinstance(max_transactions, int) and max_transactions > 0 else core_source_funds_coverage.DEFAULT_MAX_TRANSACTIONS,
+            max_depth=min(resolved_depth, _COVERAGE_MAX_DEPTH_CAP),
+            max_transactions=min(resolved_transactions, _COVERAGE_MAX_TRANSACTIONS_CAP),
         )
 
     if kind == "ui.source_funds.recipients.list":
