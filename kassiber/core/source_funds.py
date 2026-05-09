@@ -48,17 +48,26 @@ LINK_STATES = ("suggested", "reviewed", "rejected")
 CONFIDENCE_LEVELS = ("exact", "strong", "weak", "unknown")
 ALLOCATION_POLICIES = ("explicit", "heuristic", "unknown")
 PRIVACY_LINK_TYPES = {"coinjoin", "payjoin"}
-DETERMINISTIC_BULK_REVIEW_METHODS = {"same_external_id", "transaction_pair"}
-DETERMINISTIC_BULK_REVIEW_PREFIXES = ("provider_",)
-PROVIDER_EVIDENCE_KEYS = (
+ATTESTATION_SOURCE_TYPES = {"missing_history", "opening_balance_attestation"}
+DETERMINISTIC_BULK_REVIEW_METHODS = {
+    "same_external_id",
+    "transaction_pair",
+    "provider_trade_id",
+    "provider_order_id",
+    "provider_payment_id",
+    "provider_exchange_order_id",
+    "provider_ledger_id",
+}
+PROVIDER_UNIQUE_KEYS = (
     "trade_id",
     "order_id",
     "payment_id",
-    "provider_id",
     "provider_trade_id",
     "exchange_order_id",
     "ledger_id",
 )
+PROVIDER_BROAD_KEYS = ("provider_id",)
+PROVIDER_EVIDENCE_KEYS = PROVIDER_UNIQUE_KEYS + PROVIDER_BROAD_KEYS
 
 ScopeResolver = Callable[[sqlite3.Connection, str | None, str | None], tuple[Mapping[str, Any], Mapping[str, Any]]]
 TransactionResolver = Callable[..., Mapping[str, Any]]
@@ -168,6 +177,22 @@ def _amount_msat(value: Any, *, label: str, required: bool = False) -> int | Non
     if amount < 0:
         raise AppError(f"{label} must not be negative", code="validation")
     return amount
+
+
+def _normalize_provider_method(key: str) -> str:
+    normalized = str(key or "").strip().lower()
+    if normalized.startswith("provider_"):
+        return normalized
+    return f"provider_{normalized}"
+
+
+def _same_asset_amount_close(out_tx: Mapping[str, Any], in_tx: Mapping[str, Any]) -> bool:
+    if normalize_asset_code(out_tx["asset"]) != normalize_asset_code(in_tx["asset"]):
+        return False
+    out_amount = abs(int(out_tx["amount"]))
+    in_amount = abs(int(in_tx["amount"]))
+    tolerance = max(1000, max(out_amount, in_amount) // 100)
+    return abs(out_amount - in_amount) <= tolerance
 
 
 def _btc_value(msat: int | None) -> float | None:
@@ -471,6 +496,45 @@ def _find_existing_link(
     ).fetchone()
 
 
+def _validate_transaction_link_for_review(
+    *,
+    link_type: str,
+    from_tx: Mapping[str, Any] | None,
+    to_tx: Mapping[str, Any],
+    asset: str,
+    from_asset: str | None,
+) -> None:
+    if not from_tx:
+        return
+    if from_tx["id"] == to_tx["id"]:
+        raise AppError(
+            "A source-funds link's from-transaction and to-transaction must differ.",
+            code="validation",
+        )
+    if link_type != "self_transfer":
+        return
+    from_tx_asset = normalize_asset_code(from_tx["asset"])
+    to_tx_asset = normalize_asset_code(to_tx["asset"])
+    link_asset = normalize_asset_code(asset)
+    link_from_asset = normalize_asset_code(from_asset or from_tx_asset)
+    if from_tx_asset != to_tx_asset:
+        raise AppError(
+            "Self-transfer source-funds links require the same asset on both transactions.",
+            code="validation",
+            hint="Use a swap, peg-in, or peg-out link for cross-asset flows.",
+        )
+    if link_asset != to_tx_asset:
+        raise AppError(
+            "A self-transfer link's asset must match the target transaction asset.",
+            code="validation",
+        )
+    if link_from_asset != from_tx_asset:
+        raise AppError(
+            "A self-transfer link's from-asset must match the parent transaction asset.",
+            code="validation",
+        )
+
+
 def create_link(
     conn: sqlite3.Connection,
     workspace_ref: str | None,
@@ -512,6 +576,13 @@ def create_link(
     normalized_from_asset = normalize_asset_code(from_asset or (from_tx["asset"] if from_tx else source["asset"]))
     allocation_msat = _amount_msat(allocation_amount, label="--allocation-amount")
     from_allocation_msat = _amount_msat(from_allocation_amount, label="--from-amount")
+    _validate_transaction_link_for_review(
+        link_type=link_type,
+        from_tx=from_tx,
+        to_tx=to_tx,
+        asset=normalized_asset,
+        from_asset=normalized_from_asset,
+    )
     existing = _find_existing_link(
         conn,
         profile["id"],
@@ -615,6 +686,19 @@ def update_link_review(
         updates["chain_data_confirmed"] = 1 if chain_data_confirmed else 0
     if not updates:
         raise AppError("source-funds links review requires at least one update", code="validation")
+    candidate_state = updates.get("state", link["state"])
+    candidate_link_type = updates.get("link_type", link["link_type"])
+    if candidate_state == "reviewed" and link["from_transaction_id"]:
+        from_tx = _transaction_by_id(conn, profile["id"], link["from_transaction_id"])
+        to_tx = _transaction_by_id(conn, profile["id"], link["to_transaction_id"])
+        if to_tx:
+            _validate_transaction_link_for_review(
+                link_type=candidate_link_type,
+                from_tx=from_tx,
+                to_tx=to_tx,
+                asset=link["asset"],
+                from_asset=link["from_asset"],
+            )
     updates["updated_at"] = _now()
     assignments = ", ".join(f"{key} = ?" for key in updates)
     conn.execute(
@@ -684,12 +768,9 @@ def list_links(
 
 def _is_bulk_reviewable_suggestion(row: Mapping[str, Any]) -> bool:
     method = str(row["method"] or "")
-    deterministic_method = method in DETERMINISTIC_BULK_REVIEW_METHODS or method.startswith(
-        DETERMINISTIC_BULK_REVIEW_PREFIXES
-    )
     return (
         row["state"] == "suggested"
-        and deterministic_method
+        and method in DETERMINISTIC_BULK_REVIEW_METHODS
         and row["confidence"] in {"exact", "strong"}
         and row["allocation_amount"] is not None
         and not bool(row["uses_chain_observation"])
@@ -705,8 +786,9 @@ def bulk_review_suggestions(
     """Accept deterministic source-funds suggestions as user-reviewed links.
 
     This is intentionally narrow: exact external-id matches, already-reviewed
-    transaction_pairs, and provider/import-id joins can be accepted in bulk.
-    Weak time/amount guesses and chain-observation hints stay manual.
+    transaction_pairs, and one-to-one provider/import ids can be accepted in
+    bulk. Broad account ids, weak time/amount guesses, and chain-observation
+    hints stay manual.
     """
     _, profile = hooks.resolve_scope(conn, workspace_ref, profile_ref)
     rows = conn.execute(
@@ -740,8 +822,8 @@ def bulk_review_suggestions(
         "links": [_link_row_to_dict(conn, row) for row in reviewed_rows if row],
         "policy": (
             "Bulk review only accepts exact/strong deterministic suggestions from same external ids, "
-            "existing transaction_pairs, or shared provider/import ids. Weak time/amount matches and "
-            "chain observations remain manual review items."
+            "existing transaction_pairs, or one-to-one per-transaction provider/import ids. "
+            "Weak time/amount matches, broad provider ids, and chain observations remain manual review items."
         ),
     }
 
@@ -905,10 +987,16 @@ def suggest_links(
             continue
         outs = [row for row in group if row["direction"] == "outbound"]
         ins = [row for row in group if row["direction"] == "inbound"]
+        method = _normalize_provider_method(key)
+        is_unique_key = key in PROVIDER_UNIQUE_KEYS
+        is_one_to_one = len(outs) == 1 and len(ins) == 1
         for out_tx in outs:
             for in_tx in ins:
                 if out_tx["id"] == in_tx["id"]:
                     continue
+                same_asset = normalize_asset_code(out_tx["asset"]) == normalize_asset_code(in_tx["asset"])
+                amount_close = _same_asset_amount_close(out_tx, in_tx) if same_asset else False
+                confidence = "strong" if is_unique_key and is_one_to_one and amount_close else "weak"
                 link = _insert_suggestion(
                     conn,
                     workspace["id"],
@@ -916,11 +1004,14 @@ def suggest_links(
                     from_tx=out_tx,
                     to_tx=in_tx,
                     link_type="trade" if out_tx["asset"] == in_tx["asset"] else "swap",
-                    method=f"provider_{key}",
-                    confidence="strong",
+                    method=method,
+                    confidence=confidence,
                     allocation_msat=int(in_tx["amount"]),
                     from_allocation_msat=int(out_tx["amount"]),
-                    explanation=f"Both imports carry {key}={value}.",
+                    explanation=(
+                        f"Both imports carry {key}={value}."
+                        + (" One-to-one amount match." if confidence == "strong" else " Manual review required.")
+                    ),
                 )
                 if link:
                     inserted.append(link)
@@ -1071,13 +1162,14 @@ def build_report(
     edges: list[dict[str, Any]] = []
     findings: list[dict[str, Any]] = []
     source_mix = defaultdict(lambda: {"amount_msat": 0, "count": 0})
+    source_consumption_msat = defaultdict(int)
     disclosure_txids: set[str] = set()
     disclosure_attachments: dict[str, dict[str, Any]] = {}
     visited: set[str] = set()
-    queue = deque([(target["id"], target_amount_msat, target["asset"], 0)])
+    queue = deque([(target["id"], target_amount_msat, target["asset"], 0, (target["id"],))])
 
     while queue:
-        tx_id, required_msat, required_asset, depth = queue.popleft()
+        tx_id, required_msat, required_asset, depth, path = queue.popleft()
         tx = _transaction_by_id(conn, profile["id"], tx_id)
         if tx is None:
             _add_finding(findings, "missing_history", "blocker", "Referenced transaction is no longer present.", ref=tx_id)
@@ -1094,6 +1186,14 @@ def build_report(
                 "missing_pricing",
                 "blocker",
                 "A transaction on the disclosed path has no fiat pricing.",
+                ref=tx_id,
+            )
+        if normalize_asset_code(required_asset) != normalize_asset_code(tx["asset"]):
+            _add_finding(
+                findings,
+                "asset_mismatch",
+                "blocker",
+                "A reviewed path declares a different asset than the transaction being consumed.",
                 ref=tx_id,
             )
         if depth >= max_depth:
@@ -1194,7 +1294,34 @@ def build_report(
                 if not source:
                     _add_finding(findings, "missing_history", "blocker", "Reviewed source record is missing.", ref=link["id"])
                     continue
-                source_required = link["from_allocation_amount"] or allocation_msat
+                source_required = int(link["from_allocation_amount"] or allocation_msat)
+                link_from_asset = normalize_asset_code(link["from_asset"] or link["asset"])
+                if normalize_asset_code(source["asset"]) != link_from_asset:
+                    _add_finding(
+                        findings,
+                        "source_asset_mismatch",
+                        "blocker",
+                        "A reviewed link allocates a different asset than its source record.",
+                        ref=link["id"],
+                    )
+                source_consumption_msat[source["id"]] += source_required
+                if source["source_type"] not in ATTESTATION_SOURCE_TYPES:
+                    if source["amount"] is None:
+                        _add_finding(
+                            findings,
+                            "source_amount_missing",
+                            "blocker",
+                            "A concrete source record needs an amount before it can support export.",
+                            ref=source["id"],
+                        )
+                    elif source_consumption_msat[source["id"]] > int(source["amount"]):
+                        _add_finding(
+                            findings,
+                            "source_overallocation",
+                            "blocker",
+                            "Reviewed links allocate more funds than the source record contains.",
+                            ref=source["id"],
+                        )
                 source_node_id = f"source:{source['id']}"
                 nodes[source_node_id] = _source_node(source, mode, source_required)
                 if source["source_type"] == "missing_history":
@@ -1214,7 +1341,7 @@ def build_report(
                         ref=source["id"],
                     )
                 mix = source_mix[source["source_type"]]
-                mix["amount_msat"] += int(source_required or 0)
+                mix["amount_msat"] += source_required
                 mix["count"] += 1
                 for attachment in conn.execute(
                     """
@@ -1232,9 +1359,33 @@ def build_report(
                 if not from_tx:
                     _add_finding(findings, "missing_history", "blocker", "Reviewed parent transaction is missing.", ref=link["id"])
                     continue
-                parent_required = link["from_allocation_amount"] or allocation_msat
+                parent_required = int(link["from_allocation_amount"] or allocation_msat)
+                link_from_asset = normalize_asset_code(link["from_asset"] or from_tx["asset"])
+                if link["link_type"] == "self_transfer":
+                    from_tx_asset = normalize_asset_code(from_tx["asset"])
+                    to_tx_asset = normalize_asset_code(tx["asset"])
+                    link_asset = normalize_asset_code(link["asset"])
+                    if from_tx_asset != to_tx_asset or link_asset != to_tx_asset or link_from_asset != from_tx_asset:
+                        _add_finding(
+                            findings,
+                            "asset_mismatch",
+                            "blocker",
+                            "A self-transfer link declares a different asset than its parent or target transaction.",
+                            ref=link["id"],
+                        )
                 nodes[f"tx:{from_tx['id']}"] = _tx_node(from_tx, mode, int(parent_required))
-                queue.append((from_tx["id"], int(parent_required), link["from_asset"] or from_tx["asset"], depth + 1))
+                if from_tx["id"] in path:
+                    _add_finding(
+                        findings,
+                        "path_cycle",
+                        "blocker",
+                        "A reviewed source-funds path forms a cycle.",
+                        ref=link["id"],
+                    )
+                else:
+                    queue.append(
+                        (from_tx["id"], parent_required, link_from_asset, depth + 1, (*path, from_tx["id"]))
+                    )
                 from_id = f"tx:{from_tx['id']}"
             edges.append(
                 {

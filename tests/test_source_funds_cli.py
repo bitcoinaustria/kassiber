@@ -1,4 +1,5 @@
 import json
+import sqlite3
 import subprocess
 import sys
 import tempfile
@@ -119,6 +120,53 @@ class SourceFundsCliTest(unittest.TestCase):
             str(self.root / csv_name),
         )
 
+    def _init_default_workspace(self):
+        self.cli("init")
+        self.cli("workspaces", "create", "Sof")
+        self.cli(
+            "profiles",
+            "create",
+            "--workspace",
+            "Sof",
+            "--fiat-currency",
+            "EUR",
+            "--tax-country",
+            "generic",
+            "Default",
+        )
+
+    def _write_csv(self, name: str, content: str):
+        (self.root / name).write_text(content, encoding="utf-8")
+
+    def _seed_cycle_wallets(self):
+        self._init_default_workspace()
+        for label, name, txid in [
+            ("Target", "target-a.csv", "target-a"),
+            ("Parent B", "parent-b.csv", "parent-b"),
+            ("Parent C", "parent-c.csv", "parent-c"),
+            ("Parent D", "parent-d.csv", "parent-d"),
+        ]:
+            self._write_csv(
+                name,
+                "date,txid,direction,asset,amount,fee,fiat_rate,description\n"
+                f"2026-02-01T09:00:00Z,{txid},inbound,BTC,0.20000000,0,50000,{txid}\n",
+            )
+            self._create_wallet_and_import(label, name)
+
+    def _seed_single_target(self, amount: str = "0.20000000"):
+        self._init_default_workspace()
+        self._write_csv(
+            "target-basic.csv",
+            "date,txid,direction,asset,amount,fee,fiat_rate,description\n"
+            f"2026-02-01T09:00:00Z,target-basic,inbound,BTC,{amount},0,50000,Target deposit\n",
+        )
+        self._create_wallet_and_import("Target", "target-basic.csv")
+
+    def _db(self):
+        conn = sqlite3.connect(self.data_root / "kassiber.sqlite3")
+        conn.row_factory = sqlite3.Row
+        return conn
+
     def _tx_id(self, wallet: str, external_id: str) -> str:
         payload = self.cli(
             "transactions",
@@ -138,20 +186,26 @@ class SourceFundsCliTest(unittest.TestCase):
                 return row["id"]
         self.fail(f"transaction {external_id} not found in wallet {wallet}")
 
-    def test_source_funds_review_gates_snapshot_and_pdf(self):
-        self.cli("init")
-        self.cli("workspaces", "create", "Sof")
-        self.cli(
-            "profiles",
-            "create",
+    def _report_blockers(self, target: str = "target-basic", amount: str = "0.20000000", *, max_depth: str | None = None):
+        args = [
+            "reports",
+            "source-funds",
             "--workspace",
             "Sof",
-            "--fiat-currency",
-            "EUR",
-            "--tax-country",
-            "generic",
+            "--profile",
             "Default",
-        )
+            "--target-transaction",
+            target,
+            "--target-amount",
+            amount,
+        ]
+        if max_depth:
+            args.extend(["--max-depth", max_depth])
+        report = self.cli(*args)["data"]
+        return {item["code"] for item in report["explain_gates"]["blockers"]}, report
+
+    def test_source_funds_review_gates_snapshot_and_pdf(self):
+        self._init_default_workspace()
         for label, csv_name in [
             ("Exchange", "exchange.csv"),
             ("Cold", "cold.csv"),
@@ -523,6 +577,378 @@ class SourceFundsCliTest(unittest.TestCase):
         self.assertTrue(pdf_path.exists())
         self.assertGreater(pdf_path.stat().st_size, 1000)
         self.assertTrue(pdf_path.read_bytes().startswith(b"%PDF-1.4"))
+
+    def test_self_link_rejected_at_create_time(self):
+        self._seed_cycle_wallets()
+        error = self.cli_error(
+            "source-funds",
+            "links",
+            "create",
+            "--workspace",
+            "Sof",
+            "--profile",
+            "Default",
+            "--from-transaction",
+            "target-a",
+            "--to-transaction",
+            "target-a",
+            "--type",
+            "self_transfer",
+            "--allocation-amount",
+            "0.10000000",
+            "--allocation-policy",
+            "explicit",
+        )
+        self.assertEqual(error["error"]["code"], "validation")
+
+    def test_two_node_cycle_emits_path_cycle_blocker(self):
+        self._seed_cycle_wallets()
+        for from_tx, to_tx in [("parent-b", "target-a"), ("target-a", "parent-b")]:
+            self.cli(
+                "source-funds",
+                "links",
+                "create",
+                "--workspace",
+                "Sof",
+                "--profile",
+                "Default",
+                "--from-transaction",
+                from_tx,
+                "--to-transaction",
+                to_tx,
+                "--type",
+                "self_transfer",
+                "--allocation-amount",
+                "0.20000000",
+                "--from-amount",
+                "0.20000000",
+                "--allocation-policy",
+                "explicit",
+            )
+        blockers, report = self._report_blockers("target-a", "0.20000000")
+        self.assertIn("path_cycle", blockers)
+        self.assertFalse(report["explain_gates"]["exportable"])
+
+    def test_long_cycle_caught_before_path_truncated(self):
+        self._seed_cycle_wallets()
+        for from_tx, to_tx in [
+            ("parent-b", "target-a"),
+            ("parent-c", "parent-b"),
+            ("parent-d", "parent-c"),
+            ("target-a", "parent-d"),
+        ]:
+            self.cli(
+                "source-funds",
+                "links",
+                "create",
+                "--workspace",
+                "Sof",
+                "--profile",
+                "Default",
+                "--from-transaction",
+                from_tx,
+                "--to-transaction",
+                to_tx,
+                "--type",
+                "self_transfer",
+                "--allocation-amount",
+                "0.20000000",
+                "--from-amount",
+                "0.20000000",
+                "--allocation-policy",
+                "explicit",
+            )
+        blockers, _ = self._report_blockers("target-a", "0.20000000", max_depth="10")
+        self.assertIn("path_cycle", blockers)
+        self.assertNotIn("path_truncated", blockers)
+
+    def test_export_blocks_when_source_asset_differs_from_link_asset(self):
+        self._seed_single_target("0.10000000")
+        source = self.cli(
+            "source-funds",
+            "sources",
+            "create",
+            "--workspace",
+            "Sof",
+            "--profile",
+            "Default",
+            "--type",
+            "fiat_purchase",
+            "--label",
+            "Liquid purchase",
+            "--asset",
+            "L-BTC",
+            "--amount",
+            "0.10000000",
+        )["data"]
+        self.cli(
+            "source-funds",
+            "links",
+            "create",
+            "--workspace",
+            "Sof",
+            "--profile",
+            "Default",
+            "--from-source",
+            source["id"],
+            "--to-transaction",
+            "target-basic",
+            "--type",
+            "manual_source",
+            "--allocation-amount",
+            "0.10000000",
+            "--from-asset",
+            "BTC",
+            "--allocation-policy",
+            "explicit",
+        )
+        blockers, _ = self._report_blockers("target-basic", "0.10000000")
+        self.assertIn("source_asset_mismatch", blockers)
+
+    def test_export_blocks_when_two_links_overallocate_one_source(self):
+        self._seed_single_target("0.20000000")
+        source = self.cli(
+            "source-funds",
+            "sources",
+            "create",
+            "--workspace",
+            "Sof",
+            "--profile",
+            "Default",
+            "--type",
+            "fiat_purchase",
+            "--label",
+            "Small purchase",
+            "--asset",
+            "BTC",
+            "--amount",
+            "0.10000000",
+        )["data"]
+        for method in ("manual-a", "manual-b"):
+            self.cli(
+                "source-funds",
+                "links",
+                "create",
+                "--workspace",
+                "Sof",
+                "--profile",
+                "Default",
+                "--from-source",
+                source["id"],
+                "--to-transaction",
+                "target-basic",
+                "--type",
+                "manual_source",
+                "--method",
+                method,
+                "--allocation-amount",
+                "0.10000000",
+                "--allocation-policy",
+                "explicit",
+            )
+        blockers, _ = self._report_blockers("target-basic", "0.20000000")
+        self.assertIn("source_overallocation", blockers)
+
+    def test_export_blocks_when_concrete_source_has_null_amount(self):
+        self._seed_single_target("0.10000000")
+        source = self.cli(
+            "source-funds",
+            "sources",
+            "create",
+            "--workspace",
+            "Sof",
+            "--profile",
+            "Default",
+            "--type",
+            "fiat_purchase",
+            "--label",
+            "Unquantified purchase",
+            "--asset",
+            "BTC",
+        )["data"]
+        self.cli(
+            "source-funds",
+            "links",
+            "create",
+            "--workspace",
+            "Sof",
+            "--profile",
+            "Default",
+            "--from-source",
+            source["id"],
+            "--to-transaction",
+            "target-basic",
+            "--type",
+            "manual_source",
+            "--allocation-amount",
+            "0.10000000",
+            "--allocation-policy",
+            "explicit",
+        )
+        blockers, _ = self._report_blockers("target-basic", "0.10000000")
+        self.assertIn("source_amount_missing", blockers)
+
+    def test_export_allows_under_allocation_against_source_with_amount(self):
+        self._seed_single_target("0.10000000")
+        source = self.cli(
+            "source-funds",
+            "sources",
+            "create",
+            "--workspace",
+            "Sof",
+            "--profile",
+            "Default",
+            "--type",
+            "fiat_purchase",
+            "--label",
+            "Larger purchase",
+            "--asset",
+            "BTC",
+            "--amount",
+            "0.20000000",
+        )["data"]
+        self.cli(
+            "source-funds",
+            "links",
+            "create",
+            "--workspace",
+            "Sof",
+            "--profile",
+            "Default",
+            "--from-source",
+            source["id"],
+            "--to-transaction",
+            "target-basic",
+            "--type",
+            "manual_source",
+            "--allocation-amount",
+            "0.10000000",
+            "--allocation-policy",
+            "explicit",
+        )
+        blockers, report = self._report_blockers("target-basic", "0.10000000")
+        self.assertNotIn("source_overallocation", blockers)
+        self.assertNotIn("source_amount_missing", blockers)
+        self.assertTrue(report["explain_gates"]["exportable"], blockers)
+
+    def test_self_transfer_link_rejects_asset_mismatch_at_create(self):
+        self._seed_cycle_wallets()
+        error = self.cli_error(
+            "source-funds",
+            "links",
+            "create",
+            "--workspace",
+            "Sof",
+            "--profile",
+            "Default",
+            "--from-transaction",
+            "parent-b",
+            "--to-transaction",
+            "target-a",
+            "--type",
+            "self_transfer",
+            "--from-asset",
+            "EUR",
+            "--allocation-amount",
+            "0.20000000",
+            "--from-amount",
+            "0.20000000",
+            "--allocation-policy",
+            "explicit",
+        )
+        self.assertEqual(error["error"]["code"], "validation")
+
+    def test_self_transfer_link_blocks_export_on_asset_mismatch(self):
+        self._seed_cycle_wallets()
+        link = self.cli(
+            "source-funds",
+            "links",
+            "create",
+            "--workspace",
+            "Sof",
+            "--profile",
+            "Default",
+            "--from-transaction",
+            "parent-b",
+            "--to-transaction",
+            "target-a",
+            "--type",
+            "self_transfer",
+            "--allocation-amount",
+            "0.20000000",
+            "--from-amount",
+            "0.20000000",
+            "--allocation-policy",
+            "explicit",
+        )["data"]
+        with self._db() as conn:
+            conn.execute("UPDATE source_funds_links SET from_asset = 'EUR' WHERE id = ?", (link["id"],))
+        blockers, _ = self._report_blockers("target-a", "0.20000000")
+        self.assertIn("asset_mismatch", blockers)
+
+    def _seed_provider_rows(self, *, out_rows: list[tuple[str, str, str]], in_rows: list[tuple[str, str, str]], headers: str):
+        self._init_default_workspace()
+        out_lines = ["date,txid,direction,asset,amount,fee,fiat_rate,description," + headers]
+        for txid, amount, extra in out_rows:
+            out_lines.append(f"2026-03-01T09:00:00Z,{txid},outbound,BTC,{amount},0,50000,{txid},{extra}")
+        in_lines = ["date,txid,direction,asset,amount,fee,fiat_rate,description," + headers]
+        for txid, amount, extra in in_rows:
+            in_lines.append(f"2026-03-01T09:05:00Z,{txid},inbound,BTC,{amount},0,50000,{txid},{extra}")
+        self._write_csv("provider-out.csv", "\n".join(out_lines) + "\n")
+        self._write_csv("provider-in.csv", "\n".join(in_lines) + "\n")
+        self._create_wallet_and_import("Provider Out", "provider-out.csv")
+        self._create_wallet_and_import("Provider In", "provider-in.csv")
+
+    def test_provider_id_with_three_outs_three_ins_does_not_bulk_review(self):
+        self._seed_provider_rows(
+            out_rows=[("out-1", "0.10000000", "acct-1"), ("out-2", "0.20000000", "acct-1"), ("out-3", "0.30000000", "acct-1")],
+            in_rows=[("in-1", "0.10000000", "acct-1"), ("in-2", "0.20000000", "acct-1"), ("in-3", "0.30000000", "acct-1")],
+            headers="provider_id",
+        )
+        suggested = self.cli("source-funds", "suggest", "--workspace", "Sof", "--profile", "Default")["data"]["links"]
+        provider_links = [link for link in suggested if link["method"] == "provider_id"]
+        self.assertEqual(len(provider_links), 9)
+        self.assertTrue(all(link["confidence"] == "weak" for link in provider_links))
+        reviewed = self.cli("source-funds", "links", "bulk-review", "--workspace", "Sof", "--profile", "Default")["data"]
+        self.assertEqual(reviewed["reviewed"], 0)
+
+    def test_provider_trade_id_one_to_one_still_bulk_reviews(self):
+        self._seed_provider_rows(
+            out_rows=[("trade-out", "0.10000000", "trade-1")],
+            in_rows=[("trade-in", "0.10000000", "trade-1")],
+            headers="trade_id",
+        )
+        suggested = self.cli("source-funds", "suggest", "--workspace", "Sof", "--profile", "Default")["data"]["links"]
+        trade_links = [link for link in suggested if link["method"] == "provider_trade_id"]
+        self.assertEqual(len(trade_links), 1)
+        self.assertEqual(trade_links[0]["confidence"], "strong")
+        reviewed = self.cli("source-funds", "links", "bulk-review", "--workspace", "Sof", "--profile", "Default")["data"]
+        self.assertEqual(reviewed["reviewed"], 1)
+        self.assertEqual(reviewed["links"][0]["method"], "provider_trade_id")
+
+    def test_provider_id_suggestion_confidence_is_weak(self):
+        self._seed_provider_rows(
+            out_rows=[("provider-out", "0.10000000", "acct-1")],
+            in_rows=[("provider-in", "0.10000000", "acct-1")],
+            headers="provider_id",
+        )
+        suggested = self.cli("source-funds", "suggest", "--workspace", "Sof", "--profile", "Default")["data"]["links"]
+        provider_links = [link for link in suggested if link["method"] == "provider_id"]
+        self.assertEqual(len(provider_links), 1)
+        self.assertEqual(provider_links[0]["confidence"], "weak")
+
+    def test_bulk_review_skips_amount_mismatched_suggestions(self):
+        self._seed_provider_rows(
+            out_rows=[("mismatch-out", "0.10000000", "trade-1")],
+            in_rows=[("mismatch-in", "0.50000000", "trade-1")],
+            headers="trade_id",
+        )
+        suggested = self.cli("source-funds", "suggest", "--workspace", "Sof", "--profile", "Default")["data"]["links"]
+        trade_links = [link for link in suggested if link["method"] == "provider_trade_id"]
+        self.assertEqual(len(trade_links), 1)
+        self.assertEqual(trade_links[0]["confidence"], "weak")
+        reviewed = self.cli("source-funds", "links", "bulk-review", "--workspace", "Sof", "--profile", "Default")["data"]
+        self.assertEqual(reviewed["reviewed"], 0)
 
 
 if __name__ == "__main__":

@@ -66,6 +66,16 @@ type SourceFundsFinding = {
   ref?: string;
 };
 
+const BULK_REVIEWABLE_METHODS = new Set([
+  "same_external_id",
+  "transaction_pair",
+  "provider_trade_id",
+  "provider_order_id",
+  "provider_payment_id",
+  "provider_exchange_order_id",
+  "provider_ledger_id",
+]);
+
 type SourceFundsPreview = {
   purpose?: {
     type: "existing_transaction" | "planned_exchange_sale";
@@ -2104,10 +2114,7 @@ function StatusPill({ state }: { state: string }) {
 
 function isBulkReviewableLink(link: SourceFundsLink) {
   const method = link.method || "";
-  const deterministic =
-    method === "same_external_id" ||
-    method === "transaction_pair" ||
-    method.startsWith("provider_");
+  const deterministic = BULK_REVIEWABLE_METHODS.has(method);
   return (
     link.state === "suggested" &&
     deterministic &&

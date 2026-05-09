@@ -220,9 +220,13 @@ summary.
 `reports export-source-funds-pdf` should refuse when:
 
 - a path edge is still `suggested`
+- a reviewed path forms a cycle or self-link
 - the target amount has any unallocated or heuristic-only remainder
 - a leaf is not a reviewed root source or a reviewed `missing_history` gap
 - required pricing is missing for an amount included in the source mix
+- a concrete source has no amount, is over-allocated, or uses a different asset
+  than the reviewed link consumes
+- a `self_transfer` link declares an asset that differs from either transaction
 - unconfirmed chain data is used as proof instead of context
 - selected reveal mode would include unreviewed chain observations
 
@@ -305,9 +309,10 @@ The v1 suggestion pass seeds separate source-funds links from same
 `external_id` transfers, existing `transaction_pairs`, provider/import ids in
 `raw_json`, and tight same-day amount matches. These links stay suggested until
 reviewed; PDF export does not use them as proof. Exact/strong deterministic
-suggestions from same external ids, existing `transaction_pairs`, and shared
-provider/import ids may be batch-reviewed by the user so long consolidation
-chains do not require one-click-per-hop review. Weak time/amount matches and
+suggestions from same external ids, existing `transaction_pairs`, and one-to-one
+per-transaction provider/import ids may be batch-reviewed by the user so long
+consolidation chains do not require one-click-per-hop review. Broad provider
+account ids, weak time/amount matches, amount-mismatched provider rows, and
 chain-observation hints stay manual.
 
 ## Implementation Order

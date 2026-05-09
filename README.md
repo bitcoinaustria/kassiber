@@ -357,12 +357,13 @@ python3 -m kassiber --machine reports source-funds \
   --planned-destination "Exchange or broker" \
   --planned-note "Pre-disclosure before expected bank proceeds"
 
-# Seed suggestions from existing transfers, pairs, provider ids, and
+# Seed suggestions from existing transfers, pairs, provider/import ids, and
 # tight time/amount matches. Suggestions are review items, not proof.
 python3 -m kassiber source-funds suggest --target-transaction <txid-or-id>
 
-# Deterministic same-external-id hops, reviewed transaction_pairs, and shared
-# provider/import ids can be accepted in bulk; weak matches remain manual.
+# Deterministic same-external-id hops, reviewed transaction_pairs, and
+# one-to-one per-transaction provider/import ids can be accepted in bulk;
+# broad account ids and weak matches remain manual.
 python3 -m kassiber source-funds links bulk-review
 
 # Add reviewed root evidence and explicit flow allocations.
@@ -390,7 +391,9 @@ python3 -m kassiber reports export-source-funds-pdf \
 Source-of-funds PDFs only render reviewed evidence. Kassiber does not claim
 chain heuristics prove ownership, does not expose descriptors/xpubs/wallet
 files/seeds/backend tokens, and treats opening balances as attested
-prior-history stops rather than real root sources.
+prior-history stops rather than real root sources. Export gates also reject
+cycle paths, self-transfer asset mismatches, source/edge asset mismatches,
+concrete sources without amounts, and cumulative source over-allocation.
 
 The desktop Source of Funds screen provides the same workflow with a target
 purpose picker for planned exchange sales versus completed transactions,
