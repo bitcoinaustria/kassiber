@@ -226,6 +226,8 @@ summary.
 - required pricing is missing for an amount included in the source mix
 - a concrete source has no amount, is over-allocated, or uses a different asset
   than the reviewed link consumes
+- a reviewed path requires more value from a transaction than that transaction
+  contains
 - a `self_transfer` link declares an asset that differs from either transaction
 - unconfirmed chain data is used as proof instead of context
 - selected reveal mode would include unreviewed chain observations
@@ -311,9 +313,10 @@ The v1 suggestion pass seeds separate source-funds links from same
 reviewed; PDF export does not use them as proof. Exact/strong deterministic
 suggestions from same external ids, existing `transaction_pairs`, and one-to-one
 per-transaction provider/import ids may be batch-reviewed by the user so long
-consolidation chains do not require one-click-per-hop review. Broad provider
-account ids, weak time/amount matches, amount-mismatched provider rows, and
-chain-observation hints stay manual.
+consolidation chains do not require one-click-per-hop review. Batch review is
+target-scoped: it only promotes deterministic suggestions reachable from the
+selected report target. Broad provider account ids, weak time/amount matches,
+amount-mismatched provider rows, and chain-observation hints stay manual.
 
 ## Implementation Order
 

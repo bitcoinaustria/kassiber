@@ -362,9 +362,10 @@ python3 -m kassiber --machine reports source-funds \
 python3 -m kassiber source-funds suggest --target-transaction <txid-or-id>
 
 # Deterministic same-external-id hops, reviewed transaction_pairs, and
-# one-to-one per-transaction provider/import ids can be accepted in bulk;
-# broad account ids and weak matches remain manual.
-python3 -m kassiber source-funds links bulk-review
+# one-to-one per-transaction provider/import ids can be accepted in bulk for
+# this target path; broad account ids and weak matches remain manual.
+python3 -m kassiber source-funds links bulk-review \
+  --target-transaction <target-txid-or-id>
 
 # Add reviewed root evidence and explicit flow allocations.
 python3 -m kassiber source-funds sources create \
@@ -393,7 +394,8 @@ chain heuristics prove ownership, does not expose descriptors/xpubs/wallet
 files/seeds/backend tokens, and treats opening balances as attested
 prior-history stops rather than real root sources. Export gates also reject
 cycle paths, self-transfer asset mismatches, source/edge asset mismatches,
-concrete sources without amounts, and cumulative source over-allocation.
+concrete sources without amounts, cumulative source over-allocation, and
+reviewed paths that require more value from a transaction than it contains.
 
 The desktop Source of Funds screen provides the same workflow with a target
 purpose picker for planned exchange sales versus completed transactions,

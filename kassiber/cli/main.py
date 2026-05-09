@@ -928,6 +928,7 @@ def build_parser() -> argparse.ArgumentParser:
     sf_links_bulk_review = sf_links_sub.add_parser("bulk-review")
     sf_links_bulk_review.add_argument("--workspace")
     sf_links_bulk_review.add_argument("--profile")
+    sf_links_bulk_review.add_argument("--target-transaction", required=True)
 
     sf_suggest = source_funds_sub.add_parser("suggest")
     sf_suggest.add_argument("--workspace")
@@ -1866,6 +1867,7 @@ def dispatch(conn: sqlite3.Connection | None, args: argparse.Namespace) -> Any:
                         args.workspace,
                         args.profile,
                         source_funds_hooks,
+                        target_transaction_ref=args.target_transaction,
                     ),
                 )
         if args.source_funds_command == "suggest":

@@ -352,6 +352,7 @@ export const fixtures: Record<string, unknown> = {
   "ui.source_funds.links.bulk_review": {
     reviewed: 1,
     skipped: 1,
+    target_transaction_id: "tx19",
     links: [
       {
         id: "link:3",

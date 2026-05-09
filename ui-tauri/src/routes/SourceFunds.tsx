@@ -765,9 +765,14 @@ export function SourceFunds() {
   const selectedSource = sources.find(
     (source) => source.id === selectedLink?.from_source_id,
   );
-  const bulkReviewableSuggestions = links.filter(isBulkReviewableLink);
+  const bulkReviewableSuggestions = links.filter(
+    (link) => reachableLinkIds.has(link.id) && isBulkReviewableLink(link),
+  );
   const manualSuggestionCount = links.filter(
-    (link) => link.state === "suggested" && !isBulkReviewableLink(link),
+    (link) =>
+      reachableLinkIds.has(link.id) &&
+      link.state === "suggested" &&
+      !isBulkReviewableLink(link),
   ).length;
   const exportedPdf = exportPdf.data?.data as { filename?: string } | undefined;
   const planned = reportPurpose === "planned_exchange_sale";
@@ -846,7 +851,10 @@ export function SourceFunds() {
   }
 
   const bulkReviewDeterministicLinks = async () => {
-    const envelope = await bulkReviewLinks.mutateAsync({});
+    if (!selectedTarget) return;
+    const envelope = await bulkReviewLinks.mutateAsync({
+      target_transaction: selectedTarget,
+    });
     const reviewed = envelope.data?.reviewed ?? 0;
     const skipped = envelope.data?.skipped ?? 0;
     addNotification({
@@ -1230,6 +1238,7 @@ export function SourceFunds() {
                   variant="outline"
                   onClick={() => void bulkReviewDeterministicLinks()}
                   disabled={
+                    !selectedTarget ||
                     bulkReviewLinks.isPending ||
                     bulkReviewableSuggestions.length === 0
                   }

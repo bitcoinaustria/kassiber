@@ -502,12 +502,27 @@ def _validate_transaction_link_for_review(
     to_tx: Mapping[str, Any],
     asset: str,
     from_asset: str | None,
+    allocation_msat: int | None,
+    from_allocation_msat: int | None,
 ) -> None:
+    if allocation_msat is not None and allocation_msat > int(to_tx["amount"]):
+        raise AppError(
+            "A source-funds link allocation cannot exceed the target transaction amount.",
+            code="validation",
+        )
     if not from_tx:
         return
     if from_tx["id"] == to_tx["id"]:
         raise AppError(
             "A source-funds link's from-transaction and to-transaction must differ.",
+            code="validation",
+        )
+    parent_required = (
+        from_allocation_msat if from_allocation_msat is not None else allocation_msat
+    )
+    if parent_required is not None and parent_required > int(from_tx["amount"]):
+        raise AppError(
+            "A source-funds link from-allocation cannot exceed the parent transaction amount.",
             code="validation",
         )
     if link_type != "self_transfer":
@@ -581,6 +596,8 @@ def create_link(
         to_tx=to_tx,
         asset=normalized_asset,
         from_asset=normalized_from_asset,
+        allocation_msat=allocation_msat,
+        from_allocation_msat=from_allocation_msat,
     )
     existing = _find_existing_link(
         conn,
@@ -687,7 +704,7 @@ def update_link_review(
         raise AppError("source-funds links review requires at least one update", code="validation")
     candidate_state = updates.get("state", link["state"])
     candidate_link_type = updates.get("link_type", link["link_type"])
-    if candidate_state == "reviewed" and link["from_transaction_id"]:
+    if candidate_state == "reviewed":
         from_tx = _transaction_by_id(conn, profile["id"], link["from_transaction_id"])
         to_tx = _transaction_by_id(conn, profile["id"], link["to_transaction_id"])
         if to_tx:
@@ -695,8 +712,13 @@ def update_link_review(
                 link_type=candidate_link_type,
                 from_tx=from_tx,
                 to_tx=to_tx,
-                asset=link["asset"],
-                from_asset=link["from_asset"],
+                asset=updates.get("asset", link["asset"]),
+                from_asset=updates.get("from_asset", link["from_asset"]),
+                allocation_msat=updates.get("allocation_amount", link["allocation_amount"]),
+                from_allocation_msat=updates.get(
+                    "from_allocation_amount",
+                    link["from_allocation_amount"],
+                ),
             )
     updates["updated_at"] = _now()
     assignments = ", ".join(f"{key} = ?" for key in updates)
@@ -776,11 +798,75 @@ def _is_bulk_reviewable_suggestion(row: Mapping[str, Any]) -> bool:
     )
 
 
+def _target_scoped_link_rows(
+    conn: sqlite3.Connection,
+    profile_id: str,
+    target_transaction_id: str,
+) -> list[Mapping[str, Any]]:
+    by_id: dict[str, Mapping[str, Any]] = {}
+    visited_transactions = set()
+    queue = deque([target_transaction_id])
+    while queue:
+        tx_id = queue.popleft()
+        if tx_id in visited_transactions:
+            continue
+        visited_transactions.add(tx_id)
+        rows = conn.execute(
+            """
+            SELECT *
+            FROM source_funds_links
+            WHERE profile_id = ? AND to_transaction_id = ? AND state != 'rejected'
+            ORDER BY created_at ASC, id ASC
+            """,
+            (profile_id, tx_id),
+        ).fetchall()
+        for row in rows:
+            by_id.setdefault(row["id"], row)
+            if row["from_transaction_id"]:
+                queue.append(row["from_transaction_id"])
+    return list(by_id.values())
+
+
+def _validated_bulk_review_candidates(
+    conn: sqlite3.Connection,
+    profile_id: str,
+    rows: Sequence[Mapping[str, Any]],
+) -> list[Mapping[str, Any]]:
+    candidates: list[Mapping[str, Any]] = []
+    for row in rows:
+        if not _is_bulk_reviewable_suggestion(row):
+            continue
+        to_tx = _transaction_by_id(conn, profile_id, row["to_transaction_id"])
+        if not to_tx:
+            continue
+        from_tx = (
+            _transaction_by_id(conn, profile_id, row["from_transaction_id"])
+            if row["from_transaction_id"]
+            else None
+        )
+        try:
+            _validate_transaction_link_for_review(
+                link_type=row["link_type"],
+                from_tx=from_tx,
+                to_tx=to_tx,
+                asset=row["asset"],
+                from_asset=row["from_asset"],
+                allocation_msat=row["allocation_amount"],
+                from_allocation_msat=row["from_allocation_amount"],
+            )
+        except AppError:
+            continue
+        candidates.append(row)
+    return candidates
+
+
 def bulk_review_suggestions(
     conn: sqlite3.Connection,
     workspace_ref: str | None,
     profile_ref: str | None,
     hooks: SourceFundsHooks,
+    *,
+    target_transaction_ref: str,
 ) -> dict[str, Any]:
     """Accept deterministic source-funds suggestions as user-reviewed links.
 
@@ -790,16 +876,13 @@ def bulk_review_suggestions(
     hints stay manual.
     """
     _, profile = hooks.resolve_scope(conn, workspace_ref, profile_ref)
-    rows = conn.execute(
-        """
-        SELECT *
-        FROM source_funds_links
-        WHERE profile_id = ? AND state = 'suggested'
-        ORDER BY created_at ASC, id ASC
-        """,
-        (profile["id"],),
-    ).fetchall()
-    reviewable = [row for row in rows if _is_bulk_reviewable_suggestion(row)]
+    target = hooks.resolve_transaction(conn, profile["id"], target_transaction_ref)
+    rows = [
+        row
+        for row in _target_scoped_link_rows(conn, profile["id"], target["id"])
+        if row["state"] == "suggested"
+    ]
+    reviewable = _validated_bulk_review_candidates(conn, profile["id"], rows)
     now = _now()
     for row in reviewable:
         conn.execute(
@@ -818,6 +901,7 @@ def bulk_review_suggestions(
     return {
         "reviewed": len(reviewed_rows),
         "skipped": len(rows) - len(reviewed_rows),
+        "target_transaction_id": target["id"],
         "links": [_link_row_to_dict(conn, row) for row in reviewed_rows if row],
         "policy": (
             "Bulk review only accepts exact/strong deterministic suggestions from same external ids, "
@@ -1204,6 +1288,14 @@ def build_report(
                 "A reviewed path declares a different asset than the transaction being consumed.",
                 ref=tx_id,
             )
+        if required_msat > int(tx["amount"]):
+            _add_finding(
+                findings,
+                "transaction_overallocation",
+                "blocker",
+                "A reviewed path requires more value than this transaction holds.",
+                ref=tx_id,
+            )
         if depth >= max_depth:
             _add_finding(findings, "path_truncated", "blocker", "Maximum source-funds path depth reached.", ref=tx_id)
             continue
@@ -1404,6 +1496,14 @@ def build_report(
                     tx_required_assets[from_tx_id] = existing_asset or link_from_asset
                     tx_requirements_msat[from_tx_id] += parent_required
                     nodes[f"tx:{from_tx_id}"] = _tx_node(from_tx, mode, int(tx_requirements_msat[from_tx_id]))
+                    if tx_requirements_msat[from_tx_id] > int(from_tx["amount"]):
+                        _add_finding(
+                            findings,
+                            "transaction_overallocation",
+                            "blocker",
+                            "A reviewed path requires more value than this transaction holds.",
+                            ref=from_tx_id,
+                        )
                     if from_tx_id in visited:
                         _add_finding(
                             findings,

@@ -585,6 +585,7 @@ class DaemonSmokeTest(unittest.TestCase):
                 {
                     "request_id": "bulk-review-links",
                     "kind": "ui.source_funds.links.bulk_review",
+                    "args": {"target_transaction": "seed-inbound-1"},
                 },
             )
             bulk_reviewed = _read_payload(proc)

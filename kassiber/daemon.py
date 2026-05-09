@@ -778,7 +778,19 @@ def _ui_source_funds_payload(
         )
 
     if kind == "ui.source_funds.links.bulk_review":
-        return core_source_funds.bulk_review_suggestions(conn, None, None, hooks)
+        target = args.get("target_transaction") or args.get("target_transaction_ref")
+        if not isinstance(target, str) or not target.strip():
+            raise AppError(
+                "ui.source_funds.links.bulk_review requires args.target_transaction",
+                code="validation",
+            )
+        return core_source_funds.bulk_review_suggestions(
+            conn,
+            None,
+            None,
+            hooks,
+            target_transaction_ref=target.strip(),
+        )
 
     if kind == "ui.source_funds.links.attach":
         link_ref = args.get("link")
