@@ -72,7 +72,8 @@ a sale, refund, owner contribution, supplier payment, or treasury movement.
 ## Data Model Direction
 
 Use the shipped `attachments` table/store for files and URLs. Do not create a
-second blob store.
+second blob store. Source-of-funds evidence follows the same rule by joining
+reviewed sources and flow links to existing attachment rows.
 
 Likely future tables:
 

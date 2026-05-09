@@ -14,7 +14,8 @@ and [04-desktop-ui.md](04-desktop-ui.md) for the implementation plan.
 
 It owns wallet sync/import, local storage, provenance, metadata, attachments,
 transfer pairing, review/quarantine workflows, CLI/desktop UX, and
-accountant-facing BTC subledger exports.
+accountant-facing BTC subledger exports. Source-of-funds reporting is in scope
+as a reviewed, path-scoped provenance report, not as chain-surveillance scoring.
 
 RP2 owns tax computation. Kassiber prepares and explains; RP2 computes.
 
@@ -62,6 +63,7 @@ Out of scope unless a future design says otherwise:
 | Desktop UI | In progress | Tauri 2 + React + TypeScript with a Python sidecar daemon, per [01-stack-decision.md](01-stack-decision.md) and [04-desktop-ui.md](04-desktop-ui.md) |
 | Project storage | Target-state | app-wide to per-project migration still needs a focused plan |
 | External documents | Design | reconcile BTC evidence without becoming ERP/invoicing |
+| Source of funds | v1 landed | desktop review workstation, reviewed transaction-flow links, disclosure preview, immutable snapshots, and gated PDF export |
 | Packaging | In progress | Unsigned prerelease desktop bundles now carry a PyInstaller CLI sidecar; signed production packaging and any `python-build-standalone` replacement are still open |
 
 ## Stack
@@ -82,6 +84,7 @@ See [01-stack-decision.md](01-stack-decision.md) for the stack decision and
 - `06-austrian-tax-engine.md`: Austrian RP2 boundary and E 1kv direction
 - `07-austrian-tax-open-questions.md`: unresolved AT assumptions and review gates
 - `08-external-document-reconciliation.md`: BTC-side evidence/reconciliation boundary
+- `09-source-of-funds.md`: source-of-funds report boundary and flow-link design
 
 ## Highest-Risk Drift Points
 
@@ -89,6 +92,8 @@ See [01-stack-decision.md](01-stack-decision.md) for the stack decision and
 - implementing schema sketches without checking shipped tables
 - describing target project storage as current behavior
 - expanding Kassiber into invoicing/VAT/general-ledger territory
+- treating source-of-funds reports as automatic proof when reviewed links or
+  source evidence are missing
 - adding Austrian tax math in Kassiber instead of RP2
 - relying on VCS-pinned RP2 for packaged builds without testing
 - forgetting to re-run journals after metadata, pricing, pairing, or exclusion

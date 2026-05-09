@@ -35,6 +35,9 @@ workflow needs it.
 ## Schema Direction
 
 The shipped `attachments` table is the default primitive for files and URLs.
+Source-of-funds evidence reuses this store through
+`source_funds_source_attachments` and `source_funds_link_attachments`; it does
+not introduce another blob store.
 
 Do **not** add a separate `transaction_links` table just because an older sketch
 mentioned it. Add one only if a future project-bundle migration deliberately

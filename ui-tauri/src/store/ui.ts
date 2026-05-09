@@ -100,6 +100,17 @@ export interface Identity {
   importedProject?: ImportedProjectIdentity;
 }
 
+export interface SourceFundsDraft {
+  target?: string;
+  targetAmount?: string;
+  reportPurpose?: "existing_transaction" | "planned_exchange_sale";
+  plannedDestination?: string;
+  plannedNote?: string;
+  revealMode?: string;
+  selectedRecipientId?: string;
+  currentStep?: "setup" | "review" | "export";
+}
+
 interface UiState {
   lang: Lang;
   currency: Currency;
@@ -112,6 +123,7 @@ interface UiState {
   daemonSession: number;
   notifications: AppNotification[];
   logEntries: AppLogEntry[];
+  sourceFundsDrafts: Record<string, SourceFundsDraft>;
   setLang: (lang: Lang) => void;
   setCurrency: (currency: Currency) => void;
   setDataMode: (dataMode: DataMode) => void;
@@ -128,6 +140,8 @@ interface UiState {
   clearNotifications: () => void;
   addLogEntry: (entry: Omit<AppLogEntry, "id" | "createdAt">) => void;
   clearLogEntries: () => void;
+  setSourceFundsDraft: (profileKey: string, draft: SourceFundsDraft) => void;
+  clearSourceFundsDraft: (profileKey: string) => void;
 }
 
 const DEFAULT_APP_LOCK_POLICY: AppLockPolicy = {
@@ -168,6 +182,7 @@ export const useUiStore = create<UiState>()(
       daemonSession: 0,
       notifications: [],
       logEntries: [],
+      sourceFundsDrafts: {},
       setLang: (lang) => set({ lang }),
       setCurrency: (currency) => set({ currency }),
       setDataMode: (dataMode) => set({ dataMode }),
@@ -214,6 +229,23 @@ export const useUiStore = create<UiState>()(
           ].slice(0, 300),
         })),
       clearLogEntries: () => set({ logEntries: [] }),
+      setSourceFundsDraft: (profileKey, draft) =>
+        set((state) => {
+          const existing = state.sourceFundsDrafts[profileKey] ?? {};
+          return {
+            sourceFundsDrafts: {
+              ...state.sourceFundsDrafts,
+              [profileKey]: { ...existing, ...draft },
+            },
+          };
+        }),
+      clearSourceFundsDraft: (profileKey) =>
+        set((state) => {
+          if (!(profileKey in state.sourceFundsDrafts)) return state;
+          const next = { ...state.sourceFundsDrafts };
+          delete next[profileKey];
+          return { sourceFundsDrafts: next };
+        }),
     }),
     {
       name: "kb.ui",
@@ -227,6 +259,7 @@ export const useUiStore = create<UiState>()(
         identity: state.identity,
         daemonSession: state.daemonSession,
         notifications: state.notifications,
+        sourceFundsDrafts: state.sourceFundsDrafts,
       }),
       merge: (persisted, current) => {
         const restored = persisted as Partial<UiState>;
@@ -242,6 +275,8 @@ export const useUiStore = create<UiState>()(
             ...(restored.appLockPolicy ?? current.appLockPolicy),
           },
           identity: normalizeIdentity(restored.identity ?? current.identity),
+          sourceFundsDrafts:
+            restored.sourceFundsDrafts ?? current.sourceFundsDrafts,
           logEntries: current.logEntries,
         };
       },

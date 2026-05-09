@@ -64,6 +64,7 @@ from .handlers import (
     normalize_network_value,
     process_journals,
     resolve_scope,
+    resolve_transaction,
     resolve_quarantine_exclude,
     resolve_quarantine_price_override,
     show_quarantine,
@@ -75,6 +76,9 @@ from ..core import attachments as core_attachments
 from ..core import metadata as core_metadata
 from ..core import rates as core_rates
 from ..core import reports as core_reports
+from ..core import source_funds as core_source_funds
+from ..core import source_funds_coverage as core_source_funds_coverage
+from ..core import source_funds_recipients as core_source_funds_recipients
 from ..core import wallets as core_wallets
 from ..core.runtime import bootstrap_runtime, close_runtime, emit_error, resolve_output_format
 from ..diagnostics import (
@@ -193,6 +197,16 @@ def _add_austrian_e1kv_report_args(parser: argparse.ArgumentParser) -> None:
 def _add_austrian_e1kv_pdf_args(parser: argparse.ArgumentParser) -> None:
     _add_austrian_e1kv_report_args(parser)
     parser.add_argument("--file", required=True)
+
+
+def _source_funds_hooks() -> core_source_funds.SourceFundsHooks:
+    report_hooks = _report_hooks()
+    return core_source_funds.SourceFundsHooks(
+        resolve_scope=resolve_scope,
+        resolve_transaction=resolve_transaction,
+        write_text_pdf=report_hooks.write_text_pdf,
+        format_table=report_hooks.format_table,
+    )
 
 
 def _emit_austrian_e1kv_report(
@@ -841,6 +855,149 @@ def build_parser() -> argparse.ArgumentParser:
     transfers_unpair.add_argument("--profile")
     transfers_unpair.add_argument("--pair-id", required=True, dest="pair_id")
 
+    source_funds = sub.add_parser("source-funds")
+    source_funds_sub = source_funds.add_subparsers(dest="source_funds_command", required=True)
+
+    sf_sources = source_funds_sub.add_parser("sources")
+    sf_sources_sub = sf_sources.add_subparsers(dest="source_funds_sources_command", required=True)
+    sf_sources_list = sf_sources_sub.add_parser("list")
+    sf_sources_list.add_argument("--workspace")
+    sf_sources_list.add_argument("--profile")
+    sf_sources_create = sf_sources_sub.add_parser("create")
+    sf_sources_create.add_argument("--workspace")
+    sf_sources_create.add_argument("--profile")
+    sf_sources_create.add_argument("--type", required=True, dest="source_type", choices=list(core_source_funds.SOURCE_TYPES))
+    sf_sources_create.add_argument("--label", required=True)
+    sf_sources_create.add_argument("--asset", default="BTC")
+    sf_sources_create.add_argument("--amount")
+    sf_sources_create.add_argument("--fiat-currency")
+    sf_sources_create.add_argument("--fiat-value")
+    sf_sources_create.add_argument("--acquired-at")
+    sf_sources_create.add_argument("--description")
+    sf_sources_create.add_argument("--attachment", action="append", default=[], dest="attachments")
+    sf_sources_attach = sf_sources_sub.add_parser("attach")
+    sf_sources_attach.add_argument("--workspace")
+    sf_sources_attach.add_argument("--profile")
+    sf_sources_attach.add_argument("--source", required=True)
+    sf_sources_attach.add_argument("--attachment", required=True)
+
+    sf_links = source_funds_sub.add_parser("links")
+    sf_links_sub = sf_links.add_subparsers(dest="source_funds_links_command", required=True)
+    sf_links_list = sf_links_sub.add_parser("list")
+    sf_links_list.add_argument("--workspace")
+    sf_links_list.add_argument("--profile")
+    sf_links_list.add_argument("--target-transaction")
+    sf_links_list.add_argument("--state", choices=list(core_source_funds.LINK_STATES))
+    sf_links_create = sf_links_sub.add_parser("create")
+    sf_links_create.add_argument("--workspace")
+    sf_links_create.add_argument("--profile")
+    sf_links_create.add_argument("--from-transaction")
+    sf_links_create.add_argument("--from-source")
+    sf_links_create.add_argument("--to-transaction", required=True)
+    sf_links_create.add_argument("--type", required=True, dest="link_type", choices=list(core_source_funds.LINK_TYPES))
+    sf_links_create.add_argument("--state", choices=list(core_source_funds.LINK_STATES), default="reviewed")
+    sf_links_create.add_argument("--confidence", choices=list(core_source_funds.CONFIDENCE_LEVELS), default="strong")
+    sf_links_create.add_argument("--method", default="manual")
+    sf_links_create.add_argument("--asset")
+    sf_links_create.add_argument("--allocation-amount")
+    sf_links_create.add_argument("--from-asset")
+    sf_links_create.add_argument("--from-amount", dest="from_amount")
+    sf_links_create.add_argument("--allocation-policy", choices=list(core_source_funds.ALLOCATION_POLICIES), default="explicit")
+    sf_links_create.add_argument("--explanation")
+    sf_links_create.add_argument("--uses-chain-observation", action="store_true")
+    sf_links_create.add_argument(
+        "--chain-data-confirmed",
+        action="store_true",
+        help="Mark this chain observation as independently confirmed; "
+        "without this flag the link is created unconfirmed and "
+        "cannot satisfy the export gate.",
+    )
+    sf_links_create.add_argument("--attachment", action="append", default=[], dest="attachments")
+    sf_links_review = sf_links_sub.add_parser("review")
+    sf_links_review.add_argument("--workspace")
+    sf_links_review.add_argument("--profile")
+    sf_links_review.add_argument("--link", required=True)
+    sf_links_review.add_argument("--state", choices=list(core_source_funds.LINK_STATES))
+    sf_links_review.add_argument("--type", dest="link_type", choices=list(core_source_funds.LINK_TYPES))
+    sf_links_review.add_argument("--confidence", choices=list(core_source_funds.CONFIDENCE_LEVELS))
+    sf_links_review.add_argument("--allocation-amount")
+    sf_links_review.add_argument("--from-amount", dest="from_amount")
+    sf_links_review.add_argument("--allocation-policy", choices=list(core_source_funds.ALLOCATION_POLICIES))
+    sf_links_review.add_argument("--explanation")
+    sf_links_review.add_argument("--uses-chain-observation", action="store_true", default=None)
+    sf_links_review.add_argument("--no-chain-observation", action="store_false", dest="uses_chain_observation")
+    sf_links_review.add_argument("--chain-data-confirmed", action="store_true", default=None)
+    sf_links_review.add_argument("--unconfirmed-chain-data", action="store_false", dest="chain_data_confirmed")
+    sf_links_attach = sf_links_sub.add_parser("attach")
+    sf_links_attach.add_argument("--workspace")
+    sf_links_attach.add_argument("--profile")
+    sf_links_attach.add_argument("--link", required=True)
+    sf_links_attach.add_argument("--attachment", required=True)
+    sf_links_bulk_review = sf_links_sub.add_parser("bulk-review")
+    sf_links_bulk_review.add_argument("--workspace")
+    sf_links_bulk_review.add_argument("--profile")
+    sf_links_bulk_review.add_argument("--target-transaction", required=True)
+
+    sf_suggest = source_funds_sub.add_parser("suggest")
+    sf_suggest.add_argument("--workspace")
+    sf_suggest.add_argument("--profile")
+    sf_suggest.add_argument("--target-transaction")
+    sf_suggest.add_argument("--include-broad-hints", action="store_true")
+    sf_suggest.add_argument("--max-suggestions", type=int, default=core_source_funds.SUGGESTION_WRITE_CAP)
+
+    sf_cases = source_funds_sub.add_parser("cases")
+    sf_cases_sub = sf_cases.add_subparsers(dest="source_funds_cases_command", required=True)
+    sf_cases_list = sf_cases_sub.add_parser("list")
+    sf_cases_list.add_argument("--workspace")
+    sf_cases_list.add_argument("--profile")
+
+    sf_coverage = source_funds_sub.add_parser("coverage")
+    sf_coverage.add_argument("--workspace")
+    sf_coverage.add_argument("--profile")
+    sf_coverage.add_argument("--max-depth", type=int, default=core_source_funds_coverage.DEFAULT_MAX_DEPTH)
+    sf_coverage.add_argument("--max-transactions", type=int, default=core_source_funds_coverage.DEFAULT_MAX_TRANSACTIONS)
+
+    sf_recipients = source_funds_sub.add_parser("recipients")
+    sf_recipients_sub = sf_recipients.add_subparsers(
+        dest="source_funds_recipients_command", required=True
+    )
+    sf_recipients_list = sf_recipients_sub.add_parser("list")
+    sf_recipients_list.add_argument("--workspace")
+    sf_recipients_list.add_argument("--profile")
+    sf_recipients_create = sf_recipients_sub.add_parser("create")
+    sf_recipients_create.add_argument("--workspace")
+    sf_recipients_create.add_argument("--profile")
+    sf_recipients_create.add_argument("--label", required=True)
+    sf_recipients_create.add_argument(
+        "--kind",
+        required=True,
+        choices=list(core_source_funds_recipients.RECIPIENT_KINDS),
+    )
+    sf_recipients_create.add_argument(
+        "--default-reveal-mode",
+        choices=list(core_source_funds.REVEAL_MODES),
+        default="standard",
+    )
+    sf_recipients_create.add_argument("--notes")
+    sf_recipients_update = sf_recipients_sub.add_parser("update")
+    sf_recipients_update.add_argument("--workspace")
+    sf_recipients_update.add_argument("--profile")
+    sf_recipients_update.add_argument("--recipient", required=True)
+    sf_recipients_update.add_argument("--label")
+    sf_recipients_update.add_argument(
+        "--kind",
+        choices=list(core_source_funds_recipients.RECIPIENT_KINDS),
+    )
+    sf_recipients_update.add_argument(
+        "--default-reveal-mode",
+        choices=list(core_source_funds.REVEAL_MODES),
+    )
+    sf_recipients_update.add_argument("--notes")
+    sf_recipients_delete = sf_recipients_sub.add_parser("delete")
+    sf_recipients_delete.add_argument("--workspace")
+    sf_recipients_delete.add_argument("--profile")
+    sf_recipients_delete.add_argument("--recipient", required=True)
+
     reports = sub.add_parser("reports")
     reports_sub = reports.add_subparsers(dest="reports_command", required=True)
     for report_name in ["summary", "tax-summary", "balance-sheet", "portfolio-summary", "capital-gains", "journal-entries"]:
@@ -869,6 +1026,40 @@ def build_parser() -> argparse.ArgumentParser:
     export_pdf.add_argument("--wallet")
     export_pdf.add_argument("--file", required=True)
     export_pdf.add_argument("--history-limit", type=int, default=0)
+
+    source_funds_report = reports_sub.add_parser("source-funds")
+    source_funds_report.add_argument("--workspace")
+    source_funds_report.add_argument("--profile")
+    source_funds_report.add_argument("--target-transaction", required=True)
+    source_funds_report.add_argument("--target-amount")
+    source_funds_report.add_argument(
+        "--purpose",
+        choices=list(core_source_funds.REPORT_PURPOSES),
+        default="existing_transaction",
+    )
+    source_funds_report.add_argument("--planned-destination")
+    source_funds_report.add_argument("--planned-note")
+    source_funds_report.add_argument("--reveal-mode", choices=list(core_source_funds.REVEAL_MODES))
+    source_funds_report.add_argument("--max-depth", type=int, default=8)
+    source_funds_report.add_argument("--save-case", action="store_true")
+    source_funds_report.add_argument("--case-label")
+    source_funds_report.add_argument("--recipient")
+
+    export_source_funds_pdf = reports_sub.add_parser("export-source-funds-pdf")
+    export_source_funds_pdf.add_argument("--workspace")
+    export_source_funds_pdf.add_argument("--profile")
+    export_source_funds_pdf.add_argument("--case")
+    export_source_funds_pdf.add_argument("--target-transaction")
+    export_source_funds_pdf.add_argument("--target-amount")
+    export_source_funds_pdf.add_argument(
+        "--purpose",
+        choices=list(core_source_funds.REPORT_PURPOSES),
+        default="existing_transaction",
+    )
+    export_source_funds_pdf.add_argument("--planned-destination")
+    export_source_funds_pdf.add_argument("--planned-note")
+    export_source_funds_pdf.add_argument("--reveal-mode", choices=list(core_source_funds.REVEAL_MODES))
+    export_source_funds_pdf.add_argument("--file", required=True)
 
     for report_name in ("export-austrian-e1kv-pdf", "export-austrian"):
         _add_austrian_e1kv_pdf_args(reports_sub.add_parser(report_name))
@@ -1619,6 +1810,189 @@ def dispatch(conn: sqlite3.Connection | None, args: argparse.Namespace) -> Any:
                 args,
                 delete_transaction_pair(conn, args.workspace, args.profile, args.pair_id),
             )
+    if args.command == "source-funds":
+        source_funds_hooks = _source_funds_hooks()
+        if args.source_funds_command == "sources":
+            if args.source_funds_sources_command == "list":
+                return emit(args, core_source_funds.list_sources(conn, args.workspace, args.profile, source_funds_hooks))
+            if args.source_funds_sources_command == "create":
+                return emit(
+                    args,
+                    core_source_funds.create_source(
+                        conn,
+                        args.workspace,
+                        args.profile,
+                        source_funds_hooks,
+                        source_type=args.source_type,
+                        label=args.label,
+                        asset=args.asset,
+                        amount=args.amount,
+                        fiat_value=args.fiat_value,
+                        fiat_currency=args.fiat_currency,
+                        acquired_at=args.acquired_at,
+                        description=args.description,
+                        attachment_ids=args.attachments,
+                    ),
+                )
+            if args.source_funds_sources_command == "attach":
+                return emit(
+                    args,
+                    core_source_funds.attach_source_evidence(
+                        conn,
+                        args.workspace,
+                        args.profile,
+                        source_funds_hooks,
+                        source_ref=args.source,
+                        attachment_id=args.attachment,
+                    ),
+                )
+        if args.source_funds_command == "links":
+            if args.source_funds_links_command == "list":
+                return emit(
+                    args,
+                    core_source_funds.list_links(
+                        conn,
+                        args.workspace,
+                        args.profile,
+                        source_funds_hooks,
+                        target_transaction_ref=args.target_transaction,
+                        state=args.state,
+                    ),
+                )
+            if args.source_funds_links_command == "create":
+                return emit(
+                    args,
+                    core_source_funds.create_link(
+                        conn,
+                        args.workspace,
+                        args.profile,
+                        source_funds_hooks,
+                        from_transaction_ref=args.from_transaction,
+                        from_source_ref=args.from_source,
+                        to_transaction_ref=args.to_transaction,
+                        link_type=args.link_type,
+                        state=args.state,
+                        confidence=args.confidence,
+                        method=args.method,
+                        asset=args.asset,
+                        allocation_amount=args.allocation_amount,
+                        from_asset=args.from_asset,
+                        from_allocation_amount=args.from_amount,
+                        allocation_policy=args.allocation_policy,
+                        explanation=args.explanation,
+                        uses_chain_observation=args.uses_chain_observation,
+                        chain_data_confirmed=args.chain_data_confirmed,
+                        attachment_ids=args.attachments,
+                    ),
+                )
+            if args.source_funds_links_command == "review":
+                return emit(
+                    args,
+                    core_source_funds.update_link_review(
+                        conn,
+                        args.workspace,
+                        args.profile,
+                        source_funds_hooks,
+                        link_ref=args.link,
+                        state=args.state,
+                        link_type=args.link_type,
+                        confidence=args.confidence,
+                        allocation_amount=args.allocation_amount,
+                        from_allocation_amount=args.from_amount,
+                        allocation_policy=args.allocation_policy,
+                        explanation=args.explanation,
+                        uses_chain_observation=args.uses_chain_observation,
+                        chain_data_confirmed=args.chain_data_confirmed,
+                    ),
+                )
+            if args.source_funds_links_command == "attach":
+                return emit(
+                    args,
+                    core_source_funds.attach_link_evidence(
+                        conn,
+                        args.workspace,
+                        args.profile,
+                        source_funds_hooks,
+                        link_ref=args.link,
+                        attachment_id=args.attachment,
+                    ),
+                )
+            if args.source_funds_links_command == "bulk-review":
+                return emit(
+                    args,
+                    core_source_funds.bulk_review_suggestions(
+                        conn,
+                        args.workspace,
+                        args.profile,
+                        source_funds_hooks,
+                        target_transaction_ref=args.target_transaction,
+                    ),
+                )
+        if args.source_funds_command == "suggest":
+            return emit(
+                args,
+                core_source_funds.suggest_links(
+                    conn,
+                    args.workspace,
+                    args.profile,
+                    source_funds_hooks,
+                    target_transaction_ref=args.target_transaction,
+                    include_broad_hints=args.include_broad_hints,
+                    max_suggestions=args.max_suggestions,
+                ),
+            )
+        if args.source_funds_command == "cases":
+            if args.source_funds_cases_command == "list":
+                return emit(args, core_source_funds.list_cases(conn, args.workspace, args.profile, source_funds_hooks))
+        if args.source_funds_command == "coverage":
+            coverage = core_source_funds_coverage.compute_coverage(
+                conn,
+                args.workspace,
+                args.profile,
+                source_funds_hooks,
+                max_depth=args.max_depth,
+                max_transactions=args.max_transactions,
+            )
+            if args.format in {"table", "plain"}:
+                return emit(args, "\n".join(core_source_funds_coverage.coverage_summary_text(coverage)))
+            return emit(args, coverage)
+        if args.source_funds_command == "recipients":
+            workspace, profile = source_funds_hooks.resolve_scope(conn, args.workspace, args.profile)
+            if args.source_funds_recipients_command == "list":
+                return emit(args, core_source_funds_recipients.list_recipients(conn, profile["id"]))
+            if args.source_funds_recipients_command == "create":
+                return emit(
+                    args,
+                    core_source_funds_recipients.create_recipient(
+                        conn,
+                        workspace["id"],
+                        profile["id"],
+                        label=args.label,
+                        kind=args.kind,
+                        default_reveal_mode=args.default_reveal_mode,
+                        notes=args.notes,
+                    ),
+                )
+            if args.source_funds_recipients_command == "update":
+                recipient = core_source_funds_recipients.resolve_recipient(conn, profile["id"], args.recipient)
+                return emit(
+                    args,
+                    core_source_funds_recipients.update_recipient(
+                        conn,
+                        profile["id"],
+                        recipient["id"],
+                        label=args.label,
+                        kind=args.kind,
+                        default_reveal_mode=args.default_reveal_mode,
+                        notes=args.notes,
+                    ),
+                )
+            if args.source_funds_recipients_command == "delete":
+                recipient = core_source_funds_recipients.resolve_recipient(conn, profile["id"], args.recipient)
+                return emit(
+                    args,
+                    core_source_funds_recipients.delete_recipient(conn, profile["id"], recipient["id"]),
+                )
     if args.command == "reports":
         report_hooks = _report_hooks()
         if args.reports_command == "summary":
@@ -1712,6 +2086,45 @@ def dispatch(conn: sqlite3.Connection | None, args: argparse.Namespace) -> Any:
                     report_hooks,
                     wallet_ref=args.wallet,
                     history_limit=args.history_limit,
+                ),
+            )
+        if args.reports_command == "source-funds":
+            source_funds_hooks = _source_funds_hooks()
+            report = core_source_funds.build_report(
+                conn,
+                args.workspace,
+                args.profile,
+                source_funds_hooks,
+                target_transaction_ref=args.target_transaction,
+                target_amount=args.target_amount,
+                report_purpose=args.purpose,
+                planned_destination=args.planned_destination,
+                planned_note=args.planned_note,
+                reveal_mode=args.reveal_mode,
+                max_depth=args.max_depth,
+                save_case=args.save_case,
+                case_label=args.case_label,
+                recipient_ref=args.recipient,
+            )
+            if args.format in {"table", "plain"}:
+                return emit(args, "\n".join(core_source_funds.build_report_lines(report, source_funds_hooks)))
+            return emit(args, report)
+        if args.reports_command == "export-source-funds-pdf":
+            return emit(
+                args,
+                core_source_funds.export_pdf(
+                    conn,
+                    args.workspace,
+                    args.profile,
+                    args.file,
+                    _source_funds_hooks(),
+                    case_ref=args.case,
+                    target_transaction_ref=args.target_transaction,
+                    target_amount=args.target_amount,
+                    report_purpose=args.purpose,
+                    planned_destination=args.planned_destination,
+                    planned_note=args.planned_note,
+                    reveal_mode=args.reveal_mode,
                 ),
             )
         if args.reports_command in {"export-austrian-e1kv-pdf", "export-austrian"}:

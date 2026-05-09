@@ -420,6 +420,27 @@ def _seed_sensitive_ai_surface(data_root):
         conn.close()
 
 
+class DaemonReportDepthClampTest(unittest.TestCase):
+    """Unit-level guard for the daemon's shared report-depth clamp."""
+
+    def test_resolve_report_depth_caps_oversized_caller_value(self):
+        from kassiber.daemon import _DAEMON_REPORT_DEPTH_CAP, _resolve_report_depth
+
+        self.assertEqual(_resolve_report_depth(999_999), _DAEMON_REPORT_DEPTH_CAP)
+        # in-range values pass through unchanged.
+        self.assertEqual(_resolve_report_depth(8), 8)
+        self.assertEqual(_resolve_report_depth(_DAEMON_REPORT_DEPTH_CAP), _DAEMON_REPORT_DEPTH_CAP)
+        # zero / negative / non-int fall back to the default and stay
+        # within the cap.
+        self.assertEqual(_resolve_report_depth(0), 8)
+        self.assertEqual(_resolve_report_depth(-3), 8)
+        self.assertEqual(_resolve_report_depth("not-an-int"), 8)
+        self.assertEqual(_resolve_report_depth(None), 8)
+        # explicit default overrides the 8 fallback (used by coverage).
+        self.assertEqual(_resolve_report_depth(None, default=16), 16)
+        self.assertEqual(_resolve_report_depth(99_999, default=16), _DAEMON_REPORT_DEPTH_CAP)
+
+
 class DaemonSmokeTest(unittest.TestCase):
     def test_daemon_ready_status_and_shutdown_jsonl(self):
         with tempfile.TemporaryDirectory(prefix="kassiber-daemon-") as tmp:
@@ -455,6 +476,20 @@ class DaemonSmokeTest(unittest.TestCase):
                 "ui.reports.export_austrian_e1kv_xlsx",
                 ready["data"]["supported_kinds"],
             )
+            self.assertIn("ui.source_funds.preview", ready["data"]["supported_kinds"])
+            self.assertIn("ui.source_funds.cases.save", ready["data"]["supported_kinds"])
+            self.assertIn("ui.source_funds.cases.list", ready["data"]["supported_kinds"])
+            self.assertIn("ui.source_funds.sources.list", ready["data"]["supported_kinds"])
+            self.assertIn("ui.source_funds.sources.create", ready["data"]["supported_kinds"])
+            self.assertIn("ui.source_funds.sources.attach", ready["data"]["supported_kinds"])
+            self.assertIn("ui.source_funds.links.list", ready["data"]["supported_kinds"])
+            self.assertIn("ui.source_funds.links.create", ready["data"]["supported_kinds"])
+            self.assertIn("ui.source_funds.links.review", ready["data"]["supported_kinds"])
+            self.assertIn("ui.source_funds.links.bulk_review", ready["data"]["supported_kinds"])
+            self.assertIn("ui.source_funds.links.attach", ready["data"]["supported_kinds"])
+            self.assertIn("ui.source_funds.suggest", ready["data"]["supported_kinds"])
+            self.assertIn("ui.source_funds.evidence.list", ready["data"]["supported_kinds"])
+            self.assertIn("ui.source_funds.export_pdf", ready["data"]["supported_kinds"])
             self.assertIn("ui.journals.snapshot", ready["data"]["supported_kinds"])
             self.assertIn("ui.journals.quarantine", ready["data"]["supported_kinds"])
             self.assertIn("ui.journals.transfers.list", ready["data"]["supported_kinds"])
@@ -497,6 +532,101 @@ class DaemonSmokeTest(unittest.TestCase):
             self.assertEqual(status["schema_version"], 1)
             self.assertEqual(status["data"]["auth"]["mode"], "local")
             self.assertEqual(status["data"]["data_root"], str(data_root))
+
+            _write_payload(proc, {"request_id": "shutdown-1", "kind": "daemon.shutdown"})
+            shutdown = _read_payload(proc)
+            self.assertEqual(shutdown["request_id"], "shutdown-1")
+            self.assertEqual(shutdown["kind"], "daemon.shutdown")
+
+            code, stderr = _close_daemon(proc)
+            self.assertEqual(code, 0, stderr)
+            self.assertEqual(stderr, "")
+
+    def test_ui_source_funds_editor_roundtrip(self):
+        with tempfile.TemporaryDirectory(prefix="kassiber-daemon-") as tmp:
+            data_root = Path(tmp) / "data"
+            _seed_workspace_with_transaction(data_root, tmp)
+            proc = _start_daemon(data_root)
+
+            ready = _read_payload(proc)
+            self.assertEqual(ready["kind"], "daemon.ready")
+
+            _write_payload(
+                proc,
+                {
+                    "request_id": "create-source",
+                    "kind": "ui.source_funds.sources.create",
+                    "args": {
+                        "source_type": "fiat_purchase",
+                        "label": "Reviewed fiat purchase",
+                        "asset": "BTC",
+                        "amount": "0.10000000",
+                        "description": "Seeded source-funds editor test evidence.",
+                    },
+                },
+            )
+            source = _read_payload(proc)
+            self.assertEqual(source["request_id"], "create-source")
+            self.assertEqual(source["kind"], "ui.source_funds.sources.create")
+
+            _write_payload(
+                proc,
+                {
+                    "request_id": "create-link",
+                    "kind": "ui.source_funds.links.create",
+                    "args": {
+                        "from_source": source["data"]["id"],
+                        "to_transaction": "seed-inbound-1",
+                        "link_type": "manual_source",
+                        "state": "reviewed",
+                        "confidence": "strong",
+                        "allocation_amount": "0.10000000",
+                        "allocation_policy": "explicit",
+                        "explanation": "Reviewed source for target acquisition.",
+                    },
+                },
+            )
+            link = _read_payload(proc)
+            self.assertEqual(link["request_id"], "create-link")
+            self.assertEqual(link["kind"], "ui.source_funds.links.create")
+            self.assertEqual(link["data"]["state"], "reviewed")
+
+            _write_payload(
+                proc,
+                {
+                    "request_id": "list-links",
+                    "kind": "ui.source_funds.links.list",
+                    "args": {"target_transaction": "seed-inbound-1"},
+                },
+            )
+            listed = _read_payload(proc)
+            self.assertEqual(listed["request_id"], "list-links")
+            self.assertEqual(len(listed["data"]["links"]), 1)
+
+            _write_payload(
+                proc,
+                {
+                    "request_id": "bulk-review-links",
+                    "kind": "ui.source_funds.links.bulk_review",
+                    "args": {"target_transaction": "seed-inbound-1"},
+                },
+            )
+            bulk_reviewed = _read_payload(proc)
+            self.assertEqual(bulk_reviewed["request_id"], "bulk-review-links")
+            self.assertEqual(bulk_reviewed["kind"], "ui.source_funds.links.bulk_review")
+            self.assertEqual(bulk_reviewed["data"]["reviewed"], 0)
+
+            _write_payload(
+                proc,
+                {
+                    "request_id": "preview-source-funds",
+                    "kind": "ui.source_funds.preview",
+                    "args": {"target_transaction": "seed-inbound-1"},
+                },
+            )
+            preview = _read_payload(proc)
+            self.assertEqual(preview["request_id"], "preview-source-funds")
+            self.assertTrue(preview["data"]["explain_gates"]["exportable"])
 
             _write_payload(proc, {"request_id": "shutdown-1", "kind": "daemon.shutdown"})
             shutdown = _read_payload(proc)

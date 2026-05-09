@@ -89,7 +89,10 @@ Kassiber is currently in **dev mode**: renaming commands, breaking flags, and re
   `ui.transactions.list` supports bounded filters for `limit`, `direction`,
   `asset`, `wallet`, `since`, `sort`, and `order`. `ui.backends.list` is
   scoped to the active profile and exposes URL presence metadata, not exact
-  endpoint URLs. Stale local journals may be automatically refreshed before
+  endpoint URLs. `ui.source_funds.*` exposes the reviewed source-of-funds
+  workstation: source/link/evidence listing, suggestion seeding, explicit link
+  review, report preview, and gated PDF export without adding generic CLI
+  dispatch. Stale local journals may be automatically refreshed before
   AI read/report tools and direct GUI reads of journal-derived report kinds,
   with the `ui.journals.process` result included in tool result metadata for
   AI calls. Wallet/backend sync can be allowed per active profile via
@@ -126,7 +129,8 @@ Kassiber is currently in **dev mode**: renaming commands, breaking flags, and re
 - `metadata bip329 {import,list,export}`
 - `journals {process,list,transfers {list},quarantined,events {list,get},quarantine {show,clear,resolve {price-override,exclude}}}`
 - `transfers {pair,list,unpair}`
-- `reports {summary,tax-summary,balance-sheet,portfolio-summary,capital-gains,journal-entries,balance-history,austrian-e1kv,austrian-tax-summary,export-pdf,export-austrian,export-austrian-e1kv-pdf,export-austrian-e1kv-xlsx,export-austrian-e1kv-csv}`
+- `source-funds {sources {list,create,attach},links {list,create,review,attach,bulk-review},suggest,cases {list}}`
+- `reports {summary,tax-summary,balance-sheet,portfolio-summary,capital-gains,journal-entries,balance-history,source-funds,austrian-e1kv,austrian-tax-summary,export-pdf,export-source-funds-pdf,export-austrian,export-austrian-e1kv-pdf,export-austrian-e1kv-xlsx,export-austrian-e1kv-csv}`
 - `rates {pairs,sync,latest,range,set}`
 - `diagnostics {collect}`
 - `ai providers {list,get,create,update,delete,set-default,clear-default}`

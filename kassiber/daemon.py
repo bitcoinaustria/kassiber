@@ -44,8 +44,11 @@ from .ai.tools import (
     redact_tool_arguments,
     summarize_tool_call,
 )
-from .cli.handlers import _report_hooks, process_journals, sync_wallet
+from .cli.handlers import _report_hooks, process_journals, resolve_scope, resolve_transaction, sync_wallet
 from .core import reports as core_reports
+from .core import source_funds as core_source_funds
+from .core import source_funds_coverage as core_source_funds_coverage
+from .core import source_funds_recipients as core_source_funds_recipients
 from .core import accounts as core_accounts
 from .core import wallets as core_wallets
 from .core.repo import current_context_snapshot
@@ -116,6 +119,25 @@ SUPPORTED_KINDS = (
     "ui.reports.export_capital_gains_csv",
     "ui.reports.export_austrian_e1kv_pdf",
     "ui.reports.export_austrian_e1kv_xlsx",
+    "ui.source_funds.preview",
+    "ui.source_funds.cases.save",
+    "ui.source_funds.cases.list",
+    "ui.source_funds.sources.list",
+    "ui.source_funds.sources.create",
+    "ui.source_funds.sources.attach",
+    "ui.source_funds.links.list",
+    "ui.source_funds.links.create",
+    "ui.source_funds.links.review",
+    "ui.source_funds.links.bulk_review",
+    "ui.source_funds.links.attach",
+    "ui.source_funds.suggest",
+    "ui.source_funds.evidence.list",
+    "ui.source_funds.export_pdf",
+    "ui.source_funds.coverage",
+    "ui.source_funds.recipients.list",
+    "ui.source_funds.recipients.create",
+    "ui.source_funds.recipients.update",
+    "ui.source_funds.recipients.delete",
     "ui.journals.snapshot",
     "ui.journals.quarantine",
     "ui.journals.transfers.list",
@@ -186,6 +208,21 @@ _DIRECT_AUTO_JOURNAL_REFRESH_KINDS = {
 }
 PENDING_AI_CANCEL_TTL_SECONDS = 30.0
 MAX_PENDING_AI_CANCELS = 128
+# Hard caps for source-funds daemon kinds that drive build_report. The
+# core function already clamps internally (_MAX_BUILD_REPORT_DEPTH=64),
+# but the daemon boundary is the right place to reject runaway desktop
+# requests early — the same depth ceiling applies to preview,
+# cases.save, and coverage. The transactions cap is coverage-specific.
+_DAEMON_REPORT_DEPTH_CAP = 32
+_COVERAGE_MAX_TRANSACTIONS_CAP = 50_000
+
+
+def _resolve_report_depth(max_depth: Any, default: int = 8) -> int:
+    if isinstance(max_depth, int) and max_depth > 0:
+        resolved = max_depth
+    else:
+        resolved = default
+    return min(resolved, _DAEMON_REPORT_DEPTH_CAP)
 AI_TOOL_CONSENT_TIMEOUT_SECONDS = 300.0
 PLAINTEXT_DELETE_ACK = "DELETE LOCAL DATA"
 PLAINTEXT_CHANGE_ACK = "CHANGE LOCAL DATA"
@@ -636,6 +673,388 @@ def _write_records_csv(
         "bytes": file_path.stat().st_size,
         "rows": len(rows),
     }
+
+
+def _source_funds_hooks() -> core_source_funds.SourceFundsHooks:
+    report_hooks = _report_hooks()
+    return core_source_funds.SourceFundsHooks(
+        resolve_scope=resolve_scope,
+        resolve_transaction=resolve_transaction,
+        write_text_pdf=report_hooks.write_text_pdf,
+        format_table=report_hooks.format_table,
+    )
+
+
+def _ui_source_funds_payload(
+    ctx: DaemonContext,
+    kind: str,
+    args: dict[str, Any],
+) -> dict[str, Any]:
+    conn = _require_conn(ctx)
+    hooks = _source_funds_hooks()
+    if kind == "ui.source_funds.sources.list":
+        return {
+            "sources": core_source_funds.list_sources(conn, None, None, hooks),
+        }
+
+    if kind == "ui.source_funds.sources.create":
+        attachment_ids = args.get("attachment_ids")
+        if attachment_ids is None:
+            attachment_id = args.get("attachment_id")
+            attachment_ids = [attachment_id] if isinstance(attachment_id, str) and attachment_id else []
+        if not isinstance(attachment_ids, list):
+            raise AppError("ui.source_funds.sources.create attachment_ids must be a list", code="validation")
+        return core_source_funds.create_source(
+            conn,
+            None,
+            None,
+            hooks,
+            source_type=str(args.get("source_type") or ""),
+            label=str(args.get("label") or ""),
+            asset=str(args.get("asset") or "BTC"),
+            amount=args.get("amount"),
+            fiat_value=args.get("fiat_value"),
+            fiat_currency=args.get("fiat_currency"),
+            acquired_at=args.get("acquired_at"),
+            description=args.get("description"),
+            attachment_ids=[str(item) for item in attachment_ids],
+        )
+
+    if kind == "ui.source_funds.sources.attach":
+        source_ref = args.get("source")
+        attachment_id = args.get("attachment_id")
+        if not isinstance(source_ref, str) or not source_ref.strip():
+            raise AppError("ui.source_funds.sources.attach requires args.source", code="validation")
+        if not isinstance(attachment_id, str) or not attachment_id.strip():
+            raise AppError("ui.source_funds.sources.attach requires args.attachment_id", code="validation")
+        return core_source_funds.attach_source_evidence(
+            conn,
+            None,
+            None,
+            hooks,
+            source_ref=source_ref.strip(),
+            attachment_id=attachment_id.strip(),
+        )
+
+    if kind == "ui.source_funds.links.list":
+        target = args.get("target_transaction")
+        state = args.get("state")
+        return {
+            "links": core_source_funds.list_links(
+                conn,
+                None,
+                None,
+                hooks,
+                target_transaction_ref=target.strip() if isinstance(target, str) and target.strip() else None,
+                state=state.strip() if isinstance(state, str) and state.strip() else None,
+            ),
+        }
+
+    if kind == "ui.source_funds.links.create":
+        attachment_ids = args.get("attachment_ids")
+        if attachment_ids is None:
+            attachment_id = args.get("attachment_id")
+            attachment_ids = [attachment_id] if isinstance(attachment_id, str) and attachment_id else []
+        if not isinstance(attachment_ids, list):
+            raise AppError("ui.source_funds.links.create attachment_ids must be a list", code="validation")
+        return core_source_funds.create_link(
+            conn,
+            None,
+            None,
+            hooks,
+            to_transaction_ref=str(args.get("to_transaction") or ""),
+            from_transaction_ref=args.get("from_transaction") if isinstance(args.get("from_transaction"), str) else None,
+            from_source_ref=args.get("from_source") if isinstance(args.get("from_source"), str) else None,
+            link_type=str(args.get("link_type") or "self_transfer"),
+            state=str(args.get("state") or "reviewed"),
+            confidence=str(args.get("confidence") or "strong"),
+            method=str(args.get("method") or "manual"),
+            asset=args.get("asset") if isinstance(args.get("asset"), str) else None,
+            allocation_amount=args.get("allocation_amount"),
+            from_asset=args.get("from_asset") if isinstance(args.get("from_asset"), str) else None,
+            from_allocation_amount=args.get("from_allocation_amount"),
+            allocation_policy=str(args.get("allocation_policy") or "explicit"),
+            explanation=args.get("explanation") if isinstance(args.get("explanation"), str) else None,
+            uses_chain_observation=bool(args.get("uses_chain_observation")),
+            chain_data_confirmed=bool(args.get("chain_data_confirmed", False)),
+            attachment_ids=[str(item) for item in attachment_ids],
+        )
+
+    if kind == "ui.source_funds.links.review":
+        link_ref = args.get("link")
+        if not isinstance(link_ref, str) or not link_ref.strip():
+            raise AppError("ui.source_funds.links.review requires args.link", code="validation")
+        return core_source_funds.update_link_review(
+            conn,
+            None,
+            None,
+            hooks,
+            link_ref=link_ref.strip(),
+            state=args.get("state") if isinstance(args.get("state"), str) else None,
+            link_type=args.get("link_type") if isinstance(args.get("link_type"), str) else None,
+            confidence=args.get("confidence") if isinstance(args.get("confidence"), str) else None,
+            allocation_amount=args.get("allocation_amount"),
+            from_allocation_amount=args.get("from_allocation_amount"),
+            allocation_policy=args.get("allocation_policy") if isinstance(args.get("allocation_policy"), str) else None,
+            explanation=args.get("explanation") if isinstance(args.get("explanation"), str) else None,
+            uses_chain_observation=args.get("uses_chain_observation") if isinstance(args.get("uses_chain_observation"), bool) else None,
+            chain_data_confirmed=args.get("chain_data_confirmed") if isinstance(args.get("chain_data_confirmed"), bool) else None,
+        )
+
+    if kind == "ui.source_funds.links.bulk_review":
+        target = args.get("target_transaction") or args.get("target_transaction_ref")
+        if not isinstance(target, str) or not target.strip():
+            raise AppError(
+                "ui.source_funds.links.bulk_review requires args.target_transaction",
+                code="validation",
+            )
+        return core_source_funds.bulk_review_suggestions(
+            conn,
+            None,
+            None,
+            hooks,
+            target_transaction_ref=target.strip(),
+        )
+
+    if kind == "ui.source_funds.links.attach":
+        link_ref = args.get("link")
+        attachment_id = args.get("attachment_id")
+        if not isinstance(link_ref, str) or not link_ref.strip():
+            raise AppError("ui.source_funds.links.attach requires args.link", code="validation")
+        if not isinstance(attachment_id, str) or not attachment_id.strip():
+            raise AppError("ui.source_funds.links.attach requires args.attachment_id", code="validation")
+        return core_source_funds.attach_link_evidence(
+            conn,
+            None,
+            None,
+            hooks,
+            link_ref=link_ref.strip(),
+            attachment_id=attachment_id.strip(),
+        )
+
+    if kind == "ui.source_funds.suggest":
+        target = args.get("target_transaction")
+        return core_source_funds.suggest_links(
+            conn,
+            None,
+            None,
+            hooks,
+            target_transaction_ref=target.strip() if isinstance(target, str) and target.strip() else None,
+            include_broad_hints=bool(args.get("include_broad_hints")),
+            max_suggestions=int(args.get("max_suggestions") or core_source_funds.SUGGESTION_WRITE_CAP),
+        )
+
+    if kind == "ui.source_funds.evidence.list":
+        _, profile = resolve_scope(conn, None, None)
+        rows = conn.execute(
+            """
+            SELECT
+                a.id,
+                a.attachment_type,
+                a.label,
+                a.original_filename,
+                a.source_url,
+                a.media_type,
+                a.size_bytes,
+                a.sha256,
+                a.created_at,
+                t.id AS transaction_id,
+                t.external_id,
+                t.occurred_at,
+                t.asset,
+                w.label AS wallet
+            FROM attachments a
+            JOIN transactions t ON t.id = a.transaction_id
+            JOIN wallets w ON w.id = t.wallet_id
+            WHERE a.profile_id = ?
+            ORDER BY a.created_at DESC, a.id DESC
+            """,
+            (profile["id"],),
+        ).fetchall()
+        return {
+            "attachments": [
+                {
+                    "id": row["id"],
+                    "attachment_type": row["attachment_type"],
+                    "label": row["label"],
+                    "original_filename": row["original_filename"],
+                    "source_url": row["source_url"],
+                    "media_type": row["media_type"],
+                    "size_bytes": row["size_bytes"],
+                    "sha256": row["sha256"],
+                    "created_at": row["created_at"],
+                    "transaction_id": row["transaction_id"],
+                    "external_id": row["external_id"],
+                    "occurred_at": row["occurred_at"],
+                    "asset": row["asset"],
+                    "wallet": row["wallet"],
+                }
+                for row in rows
+            ],
+        }
+
+    if kind == "ui.source_funds.preview":
+        target = args.get("target_transaction")
+        if not isinstance(target, str) or not target.strip():
+            raise AppError(
+                "ui.source_funds.preview requires args.target_transaction",
+                code="validation",
+            )
+        recipient_arg = args.get("recipient")
+        recipient_ref = recipient_arg.strip() if isinstance(recipient_arg, str) and recipient_arg.strip() else None
+        explicit_reveal = args.get("reveal_mode")
+        return core_source_funds.build_report(
+            conn,
+            None,
+            None,
+            hooks,
+            target_transaction_ref=target.strip(),
+            target_amount=args.get("target_amount"),
+            report_purpose=str(args.get("report_purpose") or "existing_transaction"),
+            planned_destination=args.get("planned_destination") if isinstance(args.get("planned_destination"), str) else None,
+            planned_note=args.get("planned_note") if isinstance(args.get("planned_note"), str) else None,
+            reveal_mode=str(explicit_reveal) if isinstance(explicit_reveal, str) and explicit_reveal else None,
+            max_depth=_resolve_report_depth(args.get("max_depth")),
+            save_case=False,
+            recipient_ref=recipient_ref,
+        )
+
+    if kind == "ui.source_funds.cases.save":
+        target = args.get("target_transaction")
+        if not isinstance(target, str) or not target.strip():
+            raise AppError(
+                "ui.source_funds.cases.save requires args.target_transaction",
+                code="validation",
+            )
+        recipient_arg = args.get("recipient")
+        recipient_ref = recipient_arg.strip() if isinstance(recipient_arg, str) and recipient_arg.strip() else None
+        explicit_reveal = args.get("reveal_mode")
+        case_label = args.get("case_label")
+        if case_label is not None and not isinstance(case_label, str):
+            raise AppError(
+                "ui.source_funds.cases.save case_label must be a string",
+                code="validation",
+            )
+        return core_source_funds.build_report(
+            conn,
+            None,
+            None,
+            hooks,
+            target_transaction_ref=target.strip(),
+            target_amount=args.get("target_amount"),
+            report_purpose=str(args.get("report_purpose") or "existing_transaction"),
+            planned_destination=args.get("planned_destination") if isinstance(args.get("planned_destination"), str) else None,
+            planned_note=args.get("planned_note") if isinstance(args.get("planned_note"), str) else None,
+            reveal_mode=str(explicit_reveal) if isinstance(explicit_reveal, str) and explicit_reveal else None,
+            max_depth=_resolve_report_depth(args.get("max_depth")),
+            save_case=True,
+            case_label=case_label,
+            recipient_ref=recipient_ref,
+        )
+
+    if kind == "ui.source_funds.cases.list":
+        return {"cases": core_source_funds.list_cases(conn, None, None, hooks)}
+
+    if kind == "ui.source_funds.coverage":
+        max_transactions = args.get("max_transactions")
+        resolved_transactions = (
+            int(max_transactions)
+            if isinstance(max_transactions, int) and max_transactions > 0
+            else core_source_funds_coverage.DEFAULT_MAX_TRANSACTIONS
+        )
+        return core_source_funds_coverage.compute_coverage(
+            conn,
+            None,
+            None,
+            hooks,
+            max_depth=_resolve_report_depth(
+                args.get("max_depth"),
+                default=core_source_funds_coverage.DEFAULT_MAX_DEPTH,
+            ),
+            max_transactions=min(resolved_transactions, _COVERAGE_MAX_TRANSACTIONS_CAP),
+        )
+
+    if kind == "ui.source_funds.recipients.list":
+        _, profile = hooks.resolve_scope(conn, None, None)
+        return {
+            "recipients": core_source_funds_recipients.list_recipients(
+                conn,
+                profile["id"],
+                include_inactive=bool(args.get("include_inactive")),
+            )
+        }
+
+    if kind == "ui.source_funds.recipients.create":
+        workspace, profile = hooks.resolve_scope(conn, None, None)
+        return core_source_funds_recipients.create_recipient(
+            conn,
+            workspace["id"],
+            profile["id"],
+            label=str(args.get("label") or ""),
+            kind=str(args.get("kind") or ""),
+            default_reveal_mode=str(args.get("default_reveal_mode") or "standard"),
+            notes=args.get("notes") if isinstance(args.get("notes"), str) else None,
+        )
+
+    if kind == "ui.source_funds.recipients.update":
+        _, profile = hooks.resolve_scope(conn, None, None)
+        recipient_ref = args.get("recipient")
+        if not isinstance(recipient_ref, str) or not recipient_ref.strip():
+            raise AppError("ui.source_funds.recipients.update requires args.recipient", code="validation")
+        recipient = core_source_funds_recipients.resolve_recipient(conn, profile["id"], recipient_ref.strip())
+        return core_source_funds_recipients.update_recipient(
+            conn,
+            profile["id"],
+            recipient["id"],
+            label=args.get("label") if isinstance(args.get("label"), str) else None,
+            kind=args.get("kind") if isinstance(args.get("kind"), str) else None,
+            default_reveal_mode=args.get("default_reveal_mode") if isinstance(args.get("default_reveal_mode"), str) else None,
+            notes=args.get("notes") if isinstance(args.get("notes"), str) else None,
+        )
+
+    if kind == "ui.source_funds.recipients.delete":
+        _, profile = hooks.resolve_scope(conn, None, None)
+        recipient_ref = args.get("recipient")
+        if not isinstance(recipient_ref, str) or not recipient_ref.strip():
+            raise AppError("ui.source_funds.recipients.delete requires args.recipient", code="validation")
+        recipient = core_source_funds_recipients.resolve_recipient(conn, profile["id"], recipient_ref.strip())
+        return core_source_funds_recipients.delete_recipient(conn, profile["id"], recipient["id"])
+
+    if kind == "ui.source_funds.export_pdf":
+        case_ref = args.get("case")
+        target = args.get("target_transaction")
+        if case_ref is not None and not isinstance(case_ref, str):
+            raise AppError("ui.source_funds.export_pdf case must be a string", code="validation")
+        if target is not None and not isinstance(target, str):
+            raise AppError("ui.source_funds.export_pdf target_transaction must be a string", code="validation")
+        explicit_export_reveal = args.get("reveal_mode")
+        path = _managed_report_export_path(ctx.data_root, "kassiber-source-funds", ".pdf")
+        payload = dict(
+            core_source_funds.export_pdf(
+                conn,
+                None,
+                None,
+                path,
+                hooks,
+                case_ref=case_ref,
+                target_transaction_ref=target,
+                target_amount=args.get("target_amount"),
+                report_purpose=str(args.get("report_purpose") or "existing_transaction"),
+                planned_destination=args.get("planned_destination") if isinstance(args.get("planned_destination"), str) else None,
+                planned_note=args.get("planned_note") if isinstance(args.get("planned_note"), str) else None,
+                reveal_mode=str(explicit_export_reveal) if isinstance(explicit_export_reveal, str) and explicit_export_reveal else None,
+            )
+        )
+        payload.update(
+            {
+                "format": "pdf",
+                "scope": "source_funds",
+                "filename": Path(payload["file"]).name,
+            }
+        )
+        return payload
+
+    raise AppError(f"unsupported source-funds daemon export kind: {kind}", code="validation")
 
 
 def _ui_report_export_payload(
@@ -3945,6 +4364,42 @@ def handle_request(
                 build_envelope(
                     kind,
                     _ui_report_export_payload(
+                        ctx,
+                        kind,
+                        _coerce_args_dict(request_id, request.get("args")),
+                    ),
+                ),
+                request_id,
+            ),
+            False,
+        )
+
+    if kind in {
+        "ui.source_funds.preview",
+        "ui.source_funds.cases.save",
+        "ui.source_funds.cases.list",
+        "ui.source_funds.sources.list",
+        "ui.source_funds.sources.create",
+        "ui.source_funds.sources.attach",
+        "ui.source_funds.links.list",
+        "ui.source_funds.links.create",
+        "ui.source_funds.links.review",
+        "ui.source_funds.links.bulk_review",
+        "ui.source_funds.links.attach",
+        "ui.source_funds.suggest",
+        "ui.source_funds.evidence.list",
+        "ui.source_funds.export_pdf",
+        "ui.source_funds.coverage",
+        "ui.source_funds.recipients.list",
+        "ui.source_funds.recipients.create",
+        "ui.source_funds.recipients.update",
+        "ui.source_funds.recipients.delete",
+    }:
+        return (
+            _with_request_id(
+                build_envelope(
+                    kind,
+                    _ui_source_funds_payload(
                         ctx,
                         kind,
                         _coerce_args_dict(request_id, request.get("args")),
