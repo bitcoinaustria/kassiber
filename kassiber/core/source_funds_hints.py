@@ -62,6 +62,12 @@ _FINDING_HINTS: dict[str, dict[str, Any]] = {
         "action_args": {"focus": "allocation"},
         "doc_anchor": "over-allocation",
     },
+    "source_amount_missing": {
+        "headline": "Set the source's amount before exporting",
+        "action": "open_source",
+        "action_args": {"focus": "amount"},
+        "doc_anchor": "source-amount",
+    },
     "path_truncated": {
         "headline": "Resolve the upstream path or attest a missing-history stop",
         "action": "open_source_creator",

@@ -78,6 +78,7 @@ class HintCoverageTests(unittest.TestCase):
         "source_asset_mismatch",
         "transaction_overallocation",
         "source_overallocation",
+        "source_amount_missing",
         "path_truncated",
         "path_cycle",
         "unreviewed_link",
