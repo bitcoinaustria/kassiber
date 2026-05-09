@@ -120,6 +120,8 @@ SUPPORTED_KINDS = (
     "ui.reports.export_austrian_e1kv_pdf",
     "ui.reports.export_austrian_e1kv_xlsx",
     "ui.source_funds.preview",
+    "ui.source_funds.cases.save",
+    "ui.source_funds.cases.list",
     "ui.source_funds.sources.list",
     "ui.source_funds.sources.create",
     "ui.source_funds.sources.attach",
@@ -898,10 +900,45 @@ def _ui_source_funds_payload(
             planned_note=args.get("planned_note") if isinstance(args.get("planned_note"), str) else None,
             reveal_mode=str(explicit_reveal) if isinstance(explicit_reveal, str) and explicit_reveal else None,
             max_depth=int(args.get("max_depth") or 8),
-            save_case=bool(args.get("save_case")),
-            case_label=args.get("case_label"),
+            save_case=False,
             recipient_ref=recipient_ref,
         )
+
+    if kind == "ui.source_funds.cases.save":
+        target = args.get("target_transaction")
+        if not isinstance(target, str) or not target.strip():
+            raise AppError(
+                "ui.source_funds.cases.save requires args.target_transaction",
+                code="validation",
+            )
+        recipient_arg = args.get("recipient")
+        recipient_ref = recipient_arg.strip() if isinstance(recipient_arg, str) and recipient_arg.strip() else None
+        explicit_reveal = args.get("reveal_mode")
+        case_label = args.get("case_label")
+        if case_label is not None and not isinstance(case_label, str):
+            raise AppError(
+                "ui.source_funds.cases.save case_label must be a string",
+                code="validation",
+            )
+        return core_source_funds.build_report(
+            conn,
+            None,
+            None,
+            hooks,
+            target_transaction_ref=target.strip(),
+            target_amount=args.get("target_amount"),
+            report_purpose=str(args.get("report_purpose") or "existing_transaction"),
+            planned_destination=args.get("planned_destination") if isinstance(args.get("planned_destination"), str) else None,
+            planned_note=args.get("planned_note") if isinstance(args.get("planned_note"), str) else None,
+            reveal_mode=str(explicit_reveal) if isinstance(explicit_reveal, str) and explicit_reveal else None,
+            max_depth=int(args.get("max_depth") or 8),
+            save_case=True,
+            case_label=case_label,
+            recipient_ref=recipient_ref,
+        )
+
+    if kind == "ui.source_funds.cases.list":
+        return {"cases": core_source_funds.list_cases(conn, None, None, hooks)}
 
     if kind == "ui.source_funds.coverage":
         max_transactions = args.get("max_transactions")
@@ -4310,6 +4347,8 @@ def handle_request(
 
     if kind in {
         "ui.source_funds.preview",
+        "ui.source_funds.cases.save",
+        "ui.source_funds.cases.list",
         "ui.source_funds.sources.list",
         "ui.source_funds.sources.create",
         "ui.source_funds.sources.attach",

@@ -456,6 +456,8 @@ class DaemonSmokeTest(unittest.TestCase):
                 ready["data"]["supported_kinds"],
             )
             self.assertIn("ui.source_funds.preview", ready["data"]["supported_kinds"])
+            self.assertIn("ui.source_funds.cases.save", ready["data"]["supported_kinds"])
+            self.assertIn("ui.source_funds.cases.list", ready["data"]["supported_kinds"])
             self.assertIn("ui.source_funds.sources.list", ready["data"]["supported_kinds"])
             self.assertIn("ui.source_funds.sources.create", ready["data"]["supported_kinds"])
             self.assertIn("ui.source_funds.sources.attach", ready["data"]["supported_kinds"])

@@ -747,7 +747,6 @@ export function SourceFunds() {
       reportPurpose === "planned_exchange_sale" ? plannedNote || undefined : undefined,
     reveal_mode: revealMode,
     recipient: selectedRecipientId || undefined,
-    save_case: currentStep === "disclosure" || currentStep === "export",
   };
   const preview = useDaemon<SourceFundsPreview>(
     "ui.source_funds.preview",
@@ -788,10 +787,21 @@ export function SourceFunds() {
   const createSource = useDaemonMutation<SourceFundsSource>(
     "ui.source_funds.sources.create",
   );
+  const casesSave = useDaemonMutation<SourceFundsPreview>(
+    "ui.source_funds.cases.save",
+  );
   const exportPdf = useDaemonMutation("ui.source_funds.export_pdf");
 
   const report = preview.data?.data;
-  const exportArgs = sourceFundsExportArgs(report);
+  const savedCase = casesSave.data?.data?.case ?? null;
+  const handleExportPdf = async () => {
+    if (!report?.explain_gates.exportable) return;
+    if (casesSave.isPending || exportPdf.isPending) return;
+    const saved = await casesSave.mutateAsync(previewArgs);
+    const args = sourceFundsExportArgs(saved.data);
+    if (!args) return;
+    exportPdf.mutate(args);
+  };
   const links = linksQuery.data?.data?.links ?? [];
   const sources = sourcesQuery.data?.data?.sources ?? [];
   const evidence = evidenceQuery.data?.data?.attachments ?? [];
@@ -1397,17 +1407,15 @@ export function SourceFunds() {
                     type="button"
                     disabled={
                       !report?.explain_gates.exportable ||
-                      !exportArgs ||
+                      casesSave.isPending ||
                       exportPdf.isPending
                     }
                     onClick={() => {
-                      const args = sourceFundsExportArgs(report);
-                      if (!args) return;
-                      exportPdf.mutate(args);
+                      void handleExportPdf();
                     }}
                   >
                     <FileDown className="mr-2 size-4" aria-hidden="true" />
-                    Export PDF
+                    {casesSave.isPending ? "Saving case…" : "Save & Export PDF"}
                   </Button>
                 ) : (
                   <Button type="button" onClick={goForward} disabled={!selectedTarget}>
@@ -1922,18 +1930,21 @@ export function SourceFunds() {
                 className="w-full"
                 disabled={
                   !report?.explain_gates.exportable ||
-                  !exportArgs ||
+                  casesSave.isPending ||
                   exportPdf.isPending
                 }
                 onClick={() => {
-                  const args = sourceFundsExportArgs(report);
-                  if (!args) return;
-                  exportPdf.mutate(args);
+                  void handleExportPdf();
                 }}
               >
                 <FileDown className="mr-2 size-4" aria-hidden="true" />
-                Export PDF
+                {casesSave.isPending ? "Saving case…" : "Save & Export PDF"}
               </Button>
+              {savedCase && (
+                <p className="text-xs text-muted-foreground">
+                  Saved case {savedCase.id} ({savedCase.status})
+                </p>
+              )}
               {exportedPdf && (
                 <p className="text-xs text-muted-foreground">
                   {exportedPdf.filename}

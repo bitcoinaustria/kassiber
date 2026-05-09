@@ -58,6 +58,8 @@ const ALLOWED_DAEMON_KINDS: &[&str] = &[
     "ai.chat.cancel",
     "ai.tool_call.consent",
     "ui.source_funds.preview",
+    "ui.source_funds.cases.save",
+    "ui.source_funds.cases.list",
     "ui.source_funds.sources.list",
     "ui.source_funds.sources.create",
     "ui.source_funds.sources.attach",
@@ -847,6 +849,8 @@ mod tests {
         // SourceFunds.tsx come with an explicit allowlist update.
         let required: &[&str] = &[
             "ui.source_funds.preview",
+            "ui.source_funds.cases.save",
+            "ui.source_funds.cases.list",
             "ui.source_funds.sources.list",
             "ui.source_funds.sources.create",
             "ui.source_funds.sources.attach",

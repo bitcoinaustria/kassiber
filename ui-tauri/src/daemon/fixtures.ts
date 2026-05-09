@@ -215,10 +215,63 @@ export const fixtures: Record<string, unknown> = {
       fiat_value: 10713.03,
     },
     reveal_mode: "standard",
+    graph: {
+      nodes: [
+        { id: "source:1", node_type: "source", source_type: "fiat_purchase", label: "Reviewed exchange purchase", asset: "BTC" },
+        { id: "tx:1", node_type: "transaction", label: "withdraw-1", wallet: "Exchange", asset: "BTC" },
+        { id: "tx:2", node_type: "transaction", label: "target deposit", wallet: "Multisig Vault", asset: "BTC" },
+      ],
+      edges: [
+        { id: "link:1", link_type: "manual_source", state: "reviewed", method: "manual", allocation_amount: 0.15, asset: "BTC", allocation_policy: "explicit" },
+      ],
+    },
+    allocations: {
+      target_amount: 0.15,
+      target_amount_msat: 15_000_000_000,
+      asset: "BTC",
+      reviewed_edge_count: 1,
+    },
+    source_mix: [{ source_type: "fiat_purchase", amount: 0.15, amount_msat: 15_000_000_000, count: 1 }],
+    gaps: [{ code: "missing_history", severity: "warning", message: "Reviewed prior-history gap included.", ref: "source:gap" }],
+    findings: [{ code: "missing_history", severity: "warning", message: "Reviewed prior-history gap included.", ref: "source:gap" }],
+    explain_gates: { exportable: true, blockers: [], warnings: [{ code: "missing_history", severity: "warning", message: "Reviewed prior-history gap included.", ref: "source:gap" }] },
+    disclosure_preview: {
+      txids: ["mock-target-deposit", "withdraw-1"],
+      attachments: [{ id: "att:1", label: "Exchange statement", attachment_type: "file" }],
+      privacy_note: "Txids disclose on-chain neighbors to the recipient. Chain observations are context, not proof of ownership.",
+      excluded: ["descriptors", "xpubs", "wallet files", "seeds", "backend tokens", "unrelated wallet history"],
+    },
+  },
+  "ui.source_funds.cases.save": {
+    workspace: "My Books",
+    profile: "local books",
+    purpose: {
+      type: "planned_exchange_sale",
+      label: "Planned exchange sale",
+      anchor_role: "funds_history_anchor",
+      planned_destination: "Mock Exchange",
+      planned_note: "Pre-disclosure before expected EUR proceeds arrive.",
+      fiat_purchase_note: "If the bitcoin was bought on an exchange, fiat-source evidence for that original purchase is separate supporting evidence.",
+    },
+    target: {
+      transaction_id: "tx19",
+      label: "Vault migration",
+      external_id: "mock-target-deposit",
+      wallet: "Multisig Vault",
+      occurred_at: "2024-11-05T10:12:00Z",
+      direction: "inbound",
+      asset: "BTC",
+      required_amount: 0.15,
+      required_amount_msat: 15_000_000_000,
+      fiat_value: 10713.03,
+    },
+    reveal_mode: "standard",
     case: {
       id: "case:source-funds-demo",
+      snapshot_id: "snapshot:source-funds-demo",
       status: "exportable",
       snapshot_hash: "mock-source-funds-snapshot",
+      created_at: "2024-11-05T10:30:00Z",
     },
     graph: {
       nodes: [
@@ -246,6 +299,28 @@ export const fixtures: Record<string, unknown> = {
       privacy_note: "Txids disclose on-chain neighbors to the recipient. Chain observations are context, not proof of ownership.",
       excluded: ["descriptors", "xpubs", "wallet files", "seeds", "backend tokens", "unrelated wallet history"],
     },
+  },
+  "ui.source_funds.cases.list": {
+    cases: [
+      {
+        id: "case:source-funds-demo",
+        label: "Demo disclosure",
+        target_transaction_id: "tx19",
+        target_external_id: "mock-target-deposit",
+        target_amount: 0.15,
+        target_amount_msat: 15_000_000_000,
+        asset: "BTC",
+        reveal_mode: "standard",
+        status: "exportable",
+        snapshot_hash: "mock-source-funds-snapshot",
+        recipient_id: null,
+        recipient_label: "",
+        recipient_kind: "",
+        recipient_reveal_mode: "",
+        created_at: "2024-11-05T10:30:00Z",
+        updated_at: "2024-11-05T10:30:00Z",
+      },
+    ],
   },
   "ui.source_funds.sources.list": {
     sources: [
