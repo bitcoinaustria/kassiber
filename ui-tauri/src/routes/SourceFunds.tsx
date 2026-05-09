@@ -213,7 +213,6 @@ type SourceFundsLink = {
   allocation_policy: string;
   explanation?: string;
   uses_chain_observation?: boolean;
-  chain_data_confirmed?: boolean;
   attachments?: EvidenceAttachment[];
 };
 
@@ -2450,7 +2449,7 @@ function RecipientPreferenceAdvisory({
 }
 
 function GateRow({ finding }: { finding: SourceFundsFinding }) {
-  const blocker = finding.severity === "blocker" || !finding.severity;
+  const blocker = finding.severity === "blocker";
   const headline = finding.next_step?.headline?.trim();
   const docAnchor = finding.next_step?.doc_anchor?.trim();
   return (

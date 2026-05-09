@@ -69,6 +69,11 @@ PROVIDER_UNIQUE_KEYS = (
 PROVIDER_BROAD_KEYS = ("provider_id",)
 PROVIDER_EVIDENCE_KEYS = PROVIDER_UNIQUE_KEYS + PROVIDER_BROAD_KEYS
 SUGGESTION_WRITE_CAP = 500
+# Hard cap for build_report's max_depth so a caller cannot run an
+# unbounded BFS through transaction history. Real audit chains are
+# well below this; the cap exists to prevent runaway sweeps when a
+# malformed --max-depth, daemon arg, or coverage call slips through.
+_MAX_BUILD_REPORT_DEPTH = 64
 
 ScopeResolver = Callable[[sqlite3.Connection, str | None, str | None], tuple[Mapping[str, Any], Mapping[str, Any]]]
 TransactionResolver = Callable[..., Mapping[str, Any]]
@@ -737,8 +742,18 @@ def update_link_review(
     if explanation is not None:
         updates["explanation"] = explanation
     if uses_chain_observation is not None:
+        if not isinstance(uses_chain_observation, bool):
+            raise AppError(
+                "uses_chain_observation must be a boolean",
+                code="validation",
+            )
         updates["uses_chain_observation"] = 1 if uses_chain_observation else 0
     if chain_data_confirmed is not None:
+        if not isinstance(chain_data_confirmed, bool):
+            raise AppError(
+                "chain_data_confirmed must be a boolean",
+                code="validation",
+            )
         updates["chain_data_confirmed"] = 1 if chain_data_confirmed else 0
     if not updates:
         raise AppError("source-funds links review requires at least one update", code="validation")
@@ -1470,6 +1485,10 @@ def build_report(
     case_label: str | None = None,
     recipient_ref: str | None = None,
 ) -> dict[str, Any]:
+    if max_depth <= 0:
+        max_depth = 1
+    elif max_depth > _MAX_BUILD_REPORT_DEPTH:
+        max_depth = _MAX_BUILD_REPORT_DEPTH
     workspace, profile = hooks.resolve_scope(conn, workspace_ref, profile_ref)
     target = hooks.resolve_transaction(conn, profile["id"], target_transaction_ref)
     from .source_funds_recipients import effective_reveal_mode

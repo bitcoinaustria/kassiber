@@ -257,8 +257,13 @@ def delete_recipient(
 
     Soft delete preserves the row (and the FK target) but marks it
     ``active = 0`` so it disappears from default lists/UI pickers.
+
+    Saved cases reference the recipient by id but already snapshot the
+    label/kind/default_reveal_mode at save time, so renaming or
+    soft-deleting a recipient does not retroactively rewrite history -
+    the snapshot is the contract.
     """
-    existing = get_recipient(conn, profile_id, recipient_id)
+    get_recipient(conn, profile_id, recipient_id)  # raise not_found early
     timestamp = now_iso()
     conn.execute(
         "UPDATE source_funds_recipients SET active = 0, updated_at = ? WHERE profile_id = ? AND id = ?",
