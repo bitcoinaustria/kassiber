@@ -289,5 +289,36 @@ class RecipientCliSmokeTest(unittest.TestCase):
         self.assertIn("--default-reveal-mode", result.stdout)
 
 
+class RecipientEnvelopeKindTest(unittest.TestCase):
+    """Pin the machine-output envelope kind for nested recipient subcommands.
+
+    Without source_funds_recipients_command in _KIND_SUBCOMMAND_ATTRS,
+    every recipient subcommand collapsed to the same kind, breaking
+    deterministic command identity for machine consumers.
+    """
+
+    def test_each_subcommand_gets_a_distinct_kind(self):
+        import argparse
+
+        from kassiber.envelope import derive_kind
+
+        kinds = {
+            sub: derive_kind(
+                argparse.Namespace(
+                    command="source-funds",
+                    source_funds_command="recipients",
+                    source_funds_recipients_command=sub,
+                )
+            )
+            for sub in ("list", "create", "update", "delete")
+        }
+        self.assertEqual(kinds["list"], "source-funds.recipients.list")
+        self.assertEqual(kinds["create"], "source-funds.recipients.create")
+        self.assertEqual(kinds["update"], "source-funds.recipients.update")
+        self.assertEqual(kinds["delete"], "source-funds.recipients.delete")
+        # Distinct kinds is the contract.
+        self.assertEqual(len(set(kinds.values())), 4)
+
+
 if __name__ == "__main__":
     unittest.main()

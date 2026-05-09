@@ -75,6 +75,7 @@ _KIND_SUBCOMMAND_ATTRS = (
     "source_funds_sources_command",
     "source_funds_links_command",
     "source_funds_cases_command",
+    "source_funds_recipients_command",
     "events_command",
     "quarantine_command",
     "quarantine_resolve_command",

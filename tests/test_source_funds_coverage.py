@@ -235,14 +235,39 @@ class CoverageCoreTests(unittest.TestCase):
         bucket = _classify_transaction(self.conn, self.profile_id, tx)
         self.assertEqual(bucket, "in_review")
 
-    def test_real_source_wins_over_attestation(self):
+    def test_partial_reviewed_allocation_is_in_review_not_fully_traced(self):
+        # codex round-5 finding: a 1 BTC inbound with a 0.01 BTC reviewed
+        # allocation must not classify as fully_traced. Coverage must
+        # mirror the export gate's allocation requirement.
+        tx = self._add_inbound_tx("partial", 100_000)
+        src = self._add_source("fiat_purchase")
+        self._add_link(to_tx_id=tx, from_source_id=src, allocation_msat=1_000)
+        bucket = _classify_transaction(self.conn, self.profile_id, tx)
+        self.assertEqual(bucket, "in_review")
+
+    def test_overallocated_reviewed_link_is_in_review(self):
+        tx = self._add_inbound_tx("over", 100_000)
+        src = self._add_source("fiat_purchase")
+        self._add_link(to_tx_id=tx, from_source_id=src, allocation_msat=200_000)
+        bucket = _classify_transaction(self.conn, self.profile_id, tx)
+        self.assertEqual(bucket, "in_review")
+
+    def test_two_partial_reviewed_links_summing_to_full_is_fully_traced(self):
+        tx = self._add_inbound_tx("split", 100_000)
+        src = self._add_source("fiat_purchase")
+        self._add_link(to_tx_id=tx, from_source_id=src, allocation_msat=60_000)
+        self._add_link(to_tx_id=tx, from_source_id=src, allocation_msat=40_000)
+        bucket = _classify_transaction(self.conn, self.profile_id, tx)
+        self.assertEqual(bucket, "fully_traced")
+
+    def test_mixed_real_and_attestation_is_attested(self):
         tx = self._add_inbound_tx("mixed", 100_000)
         attest = self._add_source("missing_history")
         real = self._add_source("fiat_purchase")
-        self._add_link(to_tx_id=tx, from_source_id=attest, allocation_msat=100_000)
-        self._add_link(to_tx_id=tx, from_source_id=real, allocation_msat=100_000)
+        self._add_link(to_tx_id=tx, from_source_id=attest, allocation_msat=50_000)
+        self._add_link(to_tx_id=tx, from_source_id=real, allocation_msat=50_000)
         bucket = _classify_transaction(self.conn, self.profile_id, tx)
-        self.assertEqual(bucket, "fully_traced")
+        self.assertEqual(bucket, "attested")
 
     def test_walks_through_parent_transaction_to_root(self):
         target = self._add_inbound_tx("target", 100_000)
@@ -252,6 +277,16 @@ class CoverageCoreTests(unittest.TestCase):
         self._add_link(to_tx_id=parent, from_source_id=src, allocation_msat=100_000)
         bucket = _classify_transaction(self.conn, self.profile_id, target)
         self.assertEqual(bucket, "fully_traced")
+
+    def test_parent_with_partial_coverage_propagates_in_review(self):
+        target = self._add_inbound_tx("target", 100_000)
+        parent = self._add_inbound_tx("parent", 100_000)
+        src = self._add_source("fiat_purchase")
+        self._add_link(to_tx_id=target, from_tx_id=parent, allocation_msat=100_000)
+        # parent only partially covered upstream
+        self._add_link(to_tx_id=parent, from_source_id=src, allocation_msat=10_000)
+        bucket = _classify_transaction(self.conn, self.profile_id, target)
+        self.assertEqual(bucket, "in_review")
 
     def test_cycle_does_not_loop(self):
         a = self._add_inbound_tx("a", 100_000)

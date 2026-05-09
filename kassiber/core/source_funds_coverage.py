@@ -43,6 +43,100 @@ def _btc(msat: int | None) -> float:
     return float(msat_to_btc(int(msat)))
 
 
+def _classify_branch(
+    conn: sqlite3.Connection,
+    profile_id: str,
+    tx_id: str,
+    visited: set[str],
+    depth: int,
+    max_depth: int,
+) -> str:
+    """Classify the branch rooted at ``tx_id`` reached via a reviewed link.
+
+    Returns one of ``{"real", "attested", "incomplete"}``:
+    - ``real``: every reviewed allocation flowing into ``tx_id`` is
+      backed (transitively) by a non-attestation source, and the
+      reviewed allocations cover ``tx_id``'s amount.
+    - ``attested``: the same coverage holds but at least one terminal
+      source is an attestation type.
+    - ``incomplete``: reviewed allocations do not cover ``tx_id``'s
+      amount, or some path dead-ends without a terminal source.
+
+    A branch's "incomplete" status is what the export gate would
+    surface as ``ambiguous_allocation`` or ``missing_history``. The
+    coverage view treats those branches as ``in_review`` upstream.
+    """
+    if tx_id in visited or depth > max_depth:
+        return "incomplete"
+    visited = visited | {tx_id}
+
+    tx_row = conn.execute(
+        "SELECT amount FROM transactions WHERE profile_id = ? AND id = ?",
+        (profile_id, tx_id),
+    ).fetchone()
+    if tx_row is None:
+        return "incomplete"
+    required = int(tx_row["amount"])
+
+    link_rows = conn.execute(
+        """
+        SELECT id, from_source_id, from_transaction_id, state, allocation_amount
+        FROM source_funds_links
+        WHERE profile_id = ? AND to_transaction_id = ? AND state = 'reviewed'
+        """,
+        (profile_id, tx_id),
+    ).fetchall()
+    if not link_rows:
+        return "incomplete"
+
+    reviewed_total = 0
+    saw_attestation = False
+    saw_real = False
+    for row in link_rows:
+        allocation = row["allocation_amount"]
+        if allocation is None:
+            return "incomplete"
+        reviewed_total += int(allocation)
+        if row["from_source_id"]:
+            source_row = conn.execute(
+                "SELECT source_type FROM source_funds_sources WHERE id = ?",
+                (row["from_source_id"],),
+            ).fetchone()
+            if source_row is None:
+                return "incomplete"
+            if source_row["source_type"] in ATTESTATION_SOURCE_TYPES:
+                saw_attestation = True
+            else:
+                saw_real = True
+        elif row["from_transaction_id"]:
+            child = _classify_branch(
+                conn,
+                profile_id,
+                row["from_transaction_id"],
+                visited,
+                depth + 1,
+                max_depth,
+            )
+            if child == "incomplete":
+                return "incomplete"
+            if child == "attested":
+                saw_attestation = True
+            else:
+                saw_real = True
+        else:
+            return "incomplete"
+
+    if reviewed_total != required:
+        return "incomplete"
+    if saw_real and not saw_attestation:
+        return "real"
+    if saw_attestation and not saw_real:
+        return "attested"
+    if saw_real and saw_attestation:
+        return "attested"
+    return "incomplete"
+
+
 def _classify_transaction(
     conn: sqlite3.Connection,
     profile_id: str,
@@ -52,69 +146,39 @@ def _classify_transaction(
 ) -> str:
     """Return the coverage bucket for one inbound transaction.
 
-    The walk follows non-rejected links upward. ``visited`` is a tx-id
-    set so we never spin on cycles (the report builder enforces no
-    cycles via ``path_cycle``, but the classifier should be defensive
-    anyway because reviewed-state changes asynchronously).
+    Buckets:
+    - ``fully_traced``: reviewed allocations exactly cover the
+      transaction amount AND every upstream branch terminates at a
+      non-attestation source.
+    - ``attested``: same coverage condition, but at least one terminal
+      source is an attestation type (``missing_history``,
+      ``opening_balance_attestation``).
+    - ``in_review``: there are non-rejected links but coverage is
+      partial (reviewed allocations do not exactly equal the tx
+      amount, or some branch dead-ends).
+    - ``untraced``: no non-rejected links at all.
+
+    The coverage condition mirrors the report builder's
+    ``ambiguous_allocation`` blocker: a transaction whose coverage
+    isn't exact would block export today. Counting it as
+    ``fully_traced`` would mislead the user about readiness.
     """
-    queue: list[tuple[str, int]] = [(target_tx_id, 0)]
-    visited: set[str] = set()
-    saw_any_link = False
-    saw_suggestion = False
-    saw_reviewed_real_source = False
-    saw_reviewed_attestation = False
-    saw_reviewed_parent_without_source = False
-
-    while queue:
-        tx_id, depth = queue.pop()
-        if tx_id in visited:
-            continue
-        visited.add(tx_id)
-        if depth > max_depth:
-            saw_suggestion = saw_suggestion or False
-            continue
-
-        rows = conn.execute(
-            """
-            SELECT id, from_source_id, from_transaction_id, state
-            FROM source_funds_links
-            WHERE profile_id = ? AND to_transaction_id = ? AND state != 'rejected'
-            """,
-            (profile_id, tx_id),
-        ).fetchall()
-        if not rows:
-            continue
-        saw_any_link = True
-
-        for row in rows:
-            if row["state"] == "suggested":
-                saw_suggestion = True
-                continue
-            # state == "reviewed"
-            if row["from_source_id"]:
-                source_row = conn.execute(
-                    "SELECT source_type FROM source_funds_sources WHERE id = ?",
-                    (row["from_source_id"],),
-                ).fetchone()
-                if source_row is None:
-                    continue
-                if source_row["source_type"] in ATTESTATION_SOURCE_TYPES:
-                    saw_reviewed_attestation = True
-                else:
-                    saw_reviewed_real_source = True
-            elif row["from_transaction_id"]:
-                queue.append((row["from_transaction_id"], depth + 1))
-                saw_reviewed_parent_without_source = True
-
-    if saw_reviewed_real_source:
-        return "fully_traced"
-    if saw_reviewed_attestation and not saw_suggestion:
-        return "attested"
-    if not saw_any_link:
+    any_links = conn.execute(
+        """
+        SELECT 1 FROM source_funds_links
+        WHERE profile_id = ? AND to_transaction_id = ? AND state != 'rejected'
+        LIMIT 1
+        """,
+        (profile_id, target_tx_id),
+    ).fetchone()
+    if any_links is None:
         return "untraced"
-    # Reviewed parents but no terminal source reached, or only suggestions left.
-    if saw_reviewed_parent_without_source and not saw_reviewed_real_source and not saw_reviewed_attestation:
-        return "in_review"
+
+    branch = _classify_branch(conn, profile_id, target_tx_id, set(), 0, max_depth)
+    if branch == "real":
+        return "fully_traced"
+    if branch == "attested":
+        return "attested"
     return "in_review"
 
 
