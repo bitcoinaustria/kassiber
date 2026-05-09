@@ -449,6 +449,84 @@ class CoverageCoreTests(unittest.TestCase):
         self._add_link(to_tx_id=parent, from_source_id=src, allocation_msat=100_000)
         self.assertEqual(self._classify(target), "in_review")
 
+    def test_build_report_emits_path_truncated_when_node_cap_trips(self):
+        """A wide reviewed graph that fits inside max_depth but exceeds
+        the per-report node cap must still bail with a path_truncated
+        blocker, not run unbounded synchronous work."""
+        from unittest import mock
+
+        from kassiber.core import source_funds as sf
+
+        target = self._add_inbound_tx(
+            "wide-target", 100_000, occurred_at="2026-04-10T09:00:00Z",
+        )
+        # Build a single-hop fan-in with several reviewed parents. With
+        # the node cap patched down to 4 (target + first 3 nodes), the
+        # walker must stop before consuming all parents.
+        for index in range(8):
+            parent = self._add_inbound_tx(
+                f"wide-parent-{index}",
+                100_000,
+                occurred_at="2026-04-09T09:00:00Z",
+            )
+            self._add_link(
+                to_tx_id=target,
+                from_tx_id=parent,
+                allocation_msat=100_000 // 8,
+            )
+
+        with mock.patch.object(sf, "_MAX_BUILD_REPORT_NODES", 4):
+            report = sf.build_report(
+                self.conn,
+                self.workspace_id,
+                self.profile_id,
+                self._build_hooks(),
+                target_transaction_ref=target,
+                save_case=False,
+            )
+        codes = {finding["code"] for finding in report["findings"]}
+        self.assertIn("path_truncated", codes)
+        self.assertFalse(report["explain_gates"]["exportable"])
+        self.assertLessEqual(len(report["graph"]["nodes"]), 4)
+
+    def test_build_report_emits_path_truncated_when_edge_cap_trips(self):
+        """Same contract on the edge axis: a graph that grows wide via
+        edges per node must trip path_truncated when the edge cap is
+        hit, even if the node count is still within budget."""
+        from unittest import mock
+
+        from kassiber.core import source_funds as sf
+
+        target = self._add_inbound_tx(
+            "edge-target", 1_000_000, occurred_at="2026-04-10T09:00:00Z",
+        )
+        # Eight reviewed parents → eight edges to the target. With the
+        # edge cap patched to 3, the walker must bail.
+        for index in range(8):
+            parent = self._add_inbound_tx(
+                f"edge-parent-{index}",
+                1_000_000,
+                occurred_at="2026-04-09T09:00:00Z",
+            )
+            self._add_link(
+                to_tx_id=target,
+                from_tx_id=parent,
+                allocation_msat=1_000_000 // 8,
+            )
+
+        with mock.patch.object(sf, "_MAX_BUILD_REPORT_EDGES", 3):
+            report = sf.build_report(
+                self.conn,
+                self.workspace_id,
+                self.profile_id,
+                self._build_hooks(),
+                target_transaction_ref=target,
+                save_case=False,
+            )
+        codes = {finding["code"] for finding in report["findings"]}
+        self.assertIn("path_truncated", codes)
+        self.assertFalse(report["explain_gates"]["exportable"])
+
     def test_classify_buckets_in_review_on_sqlite_error(self):
         from unittest import mock
 

@@ -74,6 +74,13 @@ SUGGESTION_WRITE_CAP = 500
 # well below this; the cap exists to prevent runaway sweeps when a
 # malformed --max-depth, daemon arg, or coverage call slips through.
 _MAX_BUILD_REPORT_DEPTH = 64
+# Hard caps on the report graph itself. Depth is one bound, but a
+# wide reviewed graph (or unreviewed suggestions still hanging on a
+# target) can grow nodes/edges within the depth budget. Treat both
+# as blocking truncation events: emit path_truncated once and stop
+# walking so preview/cases.save/coverage stay bounded synchronously.
+_MAX_BUILD_REPORT_NODES = 5_000
+_MAX_BUILD_REPORT_EDGES = 5_000
 
 ScopeResolver = Callable[[sqlite3.Connection, str | None, str | None], tuple[Mapping[str, Any], Mapping[str, Any]]]
 TransactionResolver = Callable[..., Mapping[str, Any]]
@@ -1528,8 +1535,32 @@ def build_report(
     tx_paths = {target["id"]: (target["id"],)}
     tx_requirements_msat[target["id"]] = target_amount_msat
     queue = deque([target["id"]])
+    truncated_by_size = False
+
+    def _graph_over_budget() -> bool:
+        return (
+            len(nodes) >= _MAX_BUILD_REPORT_NODES
+            or len(edges) >= _MAX_BUILD_REPORT_EDGES
+        )
+
+    def _emit_size_truncation() -> None:
+        nonlocal truncated_by_size
+        if truncated_by_size:
+            return
+        _add_finding(
+            findings,
+            "path_truncated",
+            "blocker",
+            "Source-funds graph exceeded the per-report node/edge cap; review the upstream "
+            "suggestions or split the disclosure into a narrower target before retrying.",
+            ref=target["id"],
+        )
+        truncated_by_size = True
 
     while queue:
+        if truncated_by_size or _graph_over_budget():
+            _emit_size_truncation()
+            break
         tx_id = queue.popleft()
         queued.discard(tx_id)
         required_msat = int(tx_requirements_msat[tx_id])
@@ -1606,6 +1637,9 @@ def build_report(
             )
             continue
         for link in reviewed:
+            if _graph_over_budget():
+                _emit_size_truncation()
+                break
             allocation_msat = link["allocation_amount"]
             if allocation_msat is None:
                 _add_finding(
