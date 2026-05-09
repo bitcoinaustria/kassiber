@@ -499,6 +499,84 @@ export const fixtures: Record<string, unknown> = {
     bytes: 18432,
     exportable: true,
   },
+  "ui.source_funds.coverage": {
+    scope: "historical_inbound",
+    scope_note:
+      "Counts every inbound transaction. Not a current-holdings view: self-transfers between owned wallets are counted at each hop, and already-spent inflows still appear in the totals.",
+    by_wallet: [
+      {
+        wallet_id: "wallet:multisig-vault",
+        wallet_label: "Multisig Vault",
+        asset: "BTC",
+        buckets: {
+          fully_traced: { amount_msat: 15_000_000_000, amount: 0.15, tx_count: 1 },
+          attested: { amount_msat: 0, amount: 0, tx_count: 0 },
+          in_review: { amount_msat: 0, amount: 0, tx_count: 0 },
+          untraced: { amount_msat: 0, amount: 0, tx_count: 0 },
+          not_classified: { amount_msat: 0, amount: 0, tx_count: 0 },
+        },
+        total_inbound_msat: 15_000_000_000,
+        total_inbound: 0.15,
+      },
+    ],
+    by_asset: [
+      {
+        asset: "BTC",
+        buckets: {
+          fully_traced: { amount_msat: 15_000_000_000, amount: 0.15, tx_count: 1 },
+          attested: { amount_msat: 0, amount: 0, tx_count: 0 },
+          in_review: { amount_msat: 0, amount: 0, tx_count: 0 },
+          untraced: { amount_msat: 0, amount: 0, tx_count: 0 },
+          not_classified: { amount_msat: 0, amount: 0, tx_count: 0 },
+        },
+        total_inbound_msat: 15_000_000_000,
+        total_inbound: 0.15,
+      },
+    ],
+    totals: {
+      buckets: {
+        fully_traced: { amount_msat: 15_000_000_000, amount: 0.15, tx_count: 1 },
+        attested: { amount_msat: 0, amount: 0, tx_count: 0 },
+        in_review: { amount_msat: 0, amount: 0, tx_count: 0 },
+        untraced: { amount_msat: 0, amount: 0, tx_count: 0 },
+        not_classified: { amount_msat: 0, amount: 0, tx_count: 0 },
+      },
+      tx_count: 1,
+      amount_msat: 15_000_000_000,
+      amount: 0.15,
+    },
+    limits: { max_depth: 8, max_transactions: 5000 },
+    truncation: {
+      truncated: false,
+      inbound_total_count: 1,
+      inbound_total_msat: 15_000_000_000,
+      inbound_total: 0.15,
+      not_classified_count: 0,
+      not_classified_msat: 0,
+      not_classified: 0,
+    },
+  },
+  "ui.source_funds.recipients.list": {
+    recipients: [
+      {
+        id: "recipient:bank-austria",
+        label: "Bank Austria",
+        kind: "bank",
+        default_reveal_mode: "minimal",
+        notes: "Account manager prefers minimal disclosure.",
+        created_at: "2024-09-01T08:00:00Z",
+        updated_at: "2024-09-01T08:00:00Z",
+      },
+      {
+        id: "recipient:mock-exchange",
+        label: "Mock Exchange",
+        kind: "exchange",
+        default_reveal_mode: "standard",
+        created_at: "2024-09-01T08:00:00Z",
+        updated_at: "2024-09-01T08:00:00Z",
+      },
+    ],
+  },
   "ui.journals.snapshot": {
     status: {
       workspace: "My Books",

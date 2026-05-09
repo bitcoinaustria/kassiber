@@ -257,10 +257,8 @@ const CONFIDENCE_LEVELS = ["exact", "strong", "weak", "unknown"];
 const REVEAL_MODES = ["labels_only", "minimal", "standard", "full"];
 const NO_ATTACHMENT = "__none__";
 const WIZARD_STEPS = [
-  { id: "purpose", label: "Purpose" },
-  { id: "anchor", label: "Funds" },
-  { id: "review", label: "Evidence" },
-  { id: "disclosure", label: "Disclosure" },
+  { id: "setup", label: "Setup" },
+  { id: "review", label: "Review" },
   { id: "export", label: "Export" },
 ] as const;
 
@@ -609,7 +607,7 @@ function TransactionTargetHeader() {
 
 export function SourceFunds() {
   const addNotification = useUiStore((state) => state.addNotification);
-  const [currentStep, setCurrentStep] = useState<WizardStep>("purpose");
+  const [currentStep, setCurrentStep] = useState<WizardStep>("setup");
   const [reportPurpose, setReportPurpose] = useState<
     "planned_exchange_sale" | "existing_transaction"
   >("planned_exchange_sale");
@@ -875,20 +873,18 @@ export function SourceFunds() {
   const exportedPdf = exportPdf.data?.data as { filename?: string } | undefined;
   const planned = reportPurpose === "planned_exchange_sale";
   const showStepContext =
-    currentStep === "review" ||
-    currentStep === "disclosure" ||
-    currentStep === "export";
+    currentStep === "review" || currentStep === "export";
   const targetLabel = planned ? "Funds history anchor" : "Completed transaction";
   const amountLabel = planned ? "Planned sale amount" : "Report amount";
   const stepIndex = WIZARD_STEPS.findIndex((step) => step.id === currentStep);
   const goBack = () => {
-    const previous = WIZARD_STEPS[Math.max(0, stepIndex - 1)]?.id ?? "purpose";
+    const previous = WIZARD_STEPS[Math.max(0, stepIndex - 1)]?.id ?? "setup";
     setCurrentStep(previous);
   };
   const goForward = () => {
     const next = WIZARD_STEPS[Math.min(WIZARD_STEPS.length - 1, stepIndex + 1)]?.id ?? "export";
     setCurrentStep(next);
-    if (currentStep === "anchor" && next === "review" && selectedTarget) {
+    if (currentStep === "setup" && next === "review" && selectedTarget) {
       void runSuggestions(false);
     }
   };
@@ -1081,7 +1077,7 @@ export function SourceFunds() {
             </CardHeader>
             <CardContent className="space-y-4 p-4">
               <WizardProgress currentStep={currentStep} onStep={setCurrentStep} />
-              {currentStep === "purpose" && (
+              {currentStep === "setup" && (
                 <div className="grid gap-3 md:grid-cols-2">
                 <PurposeButton
                   active={reportPurpose === "planned_exchange_sale"}
@@ -1097,7 +1093,7 @@ export function SourceFunds() {
                 />
                 </div>
               )}
-              {currentStep === "purpose" && planned && (
+              {currentStep === "setup" && planned && (
                 <div className="rounded-md border bg-muted/30 px-3 py-2 text-sm text-muted-foreground">
                   Planned reports prove the reviewed history of the bitcoin you
                   intend to sell. If those sats were originally bought on an
@@ -1105,7 +1101,7 @@ export function SourceFunds() {
                   separate evidence item.
                 </div>
               )}
-              {currentStep === "anchor" && (
+              {currentStep === "setup" && (
               planned ? (
                 <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_160px_150px]">
                   <Field label={targetLabel} htmlFor="sof-target">
@@ -1287,7 +1283,7 @@ export function SourceFunds() {
                 </div>
               )
               )}
-              {currentStep === "anchor" && planned && (
+              {currentStep === "setup" && planned && (
                 <div className="grid gap-3 md:grid-cols-[220px_minmax(0,1fr)]">
                   <Field label="Exchange or broker" htmlFor="planned-destination">
                     <Input
@@ -1373,7 +1369,7 @@ export function SourceFunds() {
               </div>
               )}
 
-              {currentStep === "disclosure" && (
+              {currentStep === "export" && (
                 <div className="space-y-3">
                   <RecipientPicker
                     recipients={recipientsQuery.data?.data?.recipients ?? []}
@@ -1388,16 +1384,10 @@ export function SourceFunds() {
                     onApply={(mode) => setRevealMode(mode)}
                   />
                   <div className="rounded-md border bg-muted/30 px-3 py-3 text-sm text-muted-foreground">
-                    Review what the report will expose before exporting. Change
-                    reveal mode in the previous step if the disclosure is too broad.
+                    Review what the report will expose before exporting. Export
+                    is available only when all blockers are cleared, and the PDF
+                    includes reviewed evidence only.
                   </div>
-                </div>
-              )}
-
-              {currentStep === "export" && (
-                <div className="rounded-md border bg-muted/30 px-3 py-3 text-sm text-muted-foreground">
-                  Export is available only when all blockers are cleared. The
-                  PDF includes reviewed evidence only.
                 </div>
               )}
 
@@ -1904,7 +1894,7 @@ export function SourceFunds() {
           </Card>
           )}
 
-          {(currentStep === "disclosure" || currentStep === "export") && (
+          {currentStep === "export" && (
           <Card>
             <CardHeader className="border-b">
               <CardTitle className="flex items-center gap-2 text-base">
@@ -1962,7 +1952,7 @@ export function SourceFunds() {
           </Card>
           )}
 
-          {currentStep === "disclosure" && (
+          {currentStep === "export" && (
           <Card>
             <CardHeader className="border-b">
               <CardTitle className="text-base">Source Mix</CardTitle>
@@ -1990,7 +1980,7 @@ export function SourceFunds() {
           </Card>
           )}
 
-          {currentStep === "disclosure" && (
+          {currentStep === "export" && (
           <Card>
             <CardHeader className="border-b">
               <CardTitle className="text-base">Reviewed Flow</CardTitle>
@@ -2042,7 +2032,7 @@ function WizardProgress({
 }) {
   const currentIndex = WIZARD_STEPS.findIndex((step) => step.id === currentStep);
   return (
-    <div className="grid gap-2 md:grid-cols-5">
+    <div className="grid gap-2 md:grid-cols-3">
       {WIZARD_STEPS.map((step, index) => {
         const active = step.id === currentStep;
         const done = index < currentIndex;
