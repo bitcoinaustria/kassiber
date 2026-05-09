@@ -13,6 +13,7 @@ from ..errors import AppError
 from ..msat import btc_to_msat, dec, msat_to_btc
 from ..time_utils import UNKNOWN_OCCURRED_AT, now_iso, parse_timestamp
 from ..wallet_descriptors import normalize_asset_code
+from .source_funds_hints import enrich_findings_with_next_steps
 
 
 REVEAL_MODES = ("labels_only", "minimal", "standard", "full")
@@ -1802,6 +1803,7 @@ def build_report(
                 ref=tx_id,
             )
 
+    enrich_findings_with_next_steps(findings)
     blockers = [finding for finding in findings if finding["severity"] == "blocker"]
     warnings = [finding for finding in findings if finding["severity"] == "warning"]
     source_mix_rows = [
@@ -2070,6 +2072,9 @@ def build_report_lines(report: Mapping[str, Any], hooks: SourceFundsHooks) -> li
     if report["findings"]:
         for finding in report["findings"]:
             lines.append(f"{finding['severity'].upper()} {finding['code']}: {finding['message']} {finding['ref']}".rstrip())
+            next_step = finding.get("next_step") if isinstance(finding, dict) else None
+            if isinstance(next_step, dict) and next_step.get("headline"):
+                lines.append(f"  -> {next_step['headline']}")
     else:
         lines.append("No blockers or warnings.")
     lines.extend(["", "Flow Links", "----------"])

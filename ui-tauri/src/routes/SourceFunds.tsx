@@ -60,11 +60,19 @@ type TransactionRow = {
   description?: string;
 };
 
+type SourceFundsFindingNextStep = {
+  headline?: string;
+  action?: string;
+  action_args?: Record<string, unknown>;
+  doc_anchor?: string;
+};
+
 type SourceFundsFinding = {
   code: string;
   severity?: string;
   message: string;
   ref?: string;
+  next_step?: SourceFundsFindingNextStep;
 };
 
 const BULK_REVIEWABLE_METHODS = new Set([
@@ -2129,6 +2137,8 @@ function isBulkReviewableLink(link: SourceFundsLink) {
 
 function GateRow({ finding }: { finding: SourceFundsFinding }) {
   const blocker = finding.severity === "blocker" || !finding.severity;
+  const headline = finding.next_step?.headline?.trim();
+  const docAnchor = finding.next_step?.doc_anchor?.trim();
   return (
     <div
       className={[
@@ -2140,6 +2150,14 @@ function GateRow({ finding }: { finding: SourceFundsFinding }) {
     >
       <div className="font-medium">{pretty(finding.code)}</div>
       <div className="mt-1 text-xs opacity-80">{finding.message}</div>
+      {headline && (
+        <div className="mt-2 text-xs font-medium opacity-90">
+          Next step: {headline}
+          {docAnchor && (
+            <span className="ml-1 opacity-70">(see docs: {docAnchor})</span>
+          )}
+        </div>
+      )}
     </div>
   );
 }
