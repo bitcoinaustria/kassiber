@@ -904,8 +904,7 @@ def _ui_source_funds_payload(
         )
 
     if kind == "ui.source_funds.coverage":
-        _, profile = hooks.resolve_scope(conn, None, None)
-        return core_source_funds_coverage.compute_coverage(conn, profile["id"])
+        return core_source_funds_coverage.compute_coverage(conn, None, None, hooks)
 
     if kind == "ui.source_funds.recipients.list":
         _, profile = hooks.resolve_scope(conn, None, None)

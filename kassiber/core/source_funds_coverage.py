@@ -8,19 +8,22 @@ proactive-counterpart to the existing reactive review queue: instead of
 holdings, Y is fully traced and Z still needs evidence".
 
 Buckets:
-- ``fully_traced``: walking back along reviewed links reaches at least
-  one non-attestation root source (e.g. a fiat purchase, exchange
-  withdrawal, mining payout).
-- ``attested``: reachable roots are only attestation source types
-  (``missing_history``, ``opening_balance_attestation``). Acceptable
-  evidence for some recipients, weaker than primary documents.
-- ``in_review``: there are suggestions, or partial reviewed coverage,
-  but no reviewed path to a root source yet.
-- ``untraced``: no links exist for this transaction at all.
+- ``fully_traced``: ``build_report`` would emit ``exportable=True`` for
+  this transaction AND the resulting source_mix contains only
+  non-attestation source types.
+- ``attested``: ``build_report`` would emit ``exportable=True`` AND at
+  least one source_mix entry is an attestation source type
+  (``missing_history``, ``opening_balance_attestation``).
+- ``in_review``: ``build_report`` would emit at least one blocker, but
+  some non-rejected link exists.
+- ``untraced``: no non-rejected links exist for this transaction.
 
-The classifier is intentionally O(links + transactions) per profile and
-reuses the same reviewed-link traversal shape as ``build_report``.
-Bounded by ``MAX_DEPTH`` to match the report walker.
+By delegating classification to ``build_report``, coverage stays in
+lockstep with the export gate. Anything ``build_report`` would block
+(heuristic allocation, unreviewed suggestion, asset/chronology
+mismatch, unconfirmed chain observation, source over-allocation,
+path_truncated, ...) classifies as ``in_review`` here. There is no
+separate predicate to drift.
 """
 
 from __future__ import annotations
@@ -29,8 +32,9 @@ import sqlite3
 from collections import defaultdict
 from typing import Any, Mapping
 
+from ..errors import AppError
 from ..msat import msat_to_btc
-from .source_funds import ATTESTATION_SOURCE_TYPES
+from .source_funds import ATTESTATION_SOURCE_TYPES, SourceFundsHooks, build_report
 
 
 COVERAGE_BUCKETS = ("fully_traced", "attested", "in_review", "untraced")
@@ -43,143 +47,87 @@ def _btc(msat: int | None) -> float:
     return float(msat_to_btc(int(msat)))
 
 
-def _classify_branch(
-    conn: sqlite3.Connection,
-    profile_id: str,
-    tx_id: str,
-    visited: set[str],
-    depth: int,
-    max_depth: int,
-) -> str:
-    """Classify the branch rooted at ``tx_id`` reached via a reviewed link.
-
-    Returns one of ``{"real", "attested", "incomplete"}``:
-    - ``real``: every reviewed allocation flowing into ``tx_id`` is
-      backed (transitively) by a non-attestation source, and the
-      reviewed allocations cover ``tx_id``'s amount.
-    - ``attested``: the same coverage holds but at least one terminal
-      source is an attestation type.
-    - ``incomplete``: reviewed allocations do not cover ``tx_id``'s
-      amount, or some path dead-ends without a terminal source.
-
-    A branch's "incomplete" status is what the export gate would
-    surface as ``ambiguous_allocation`` or ``missing_history``. The
-    coverage view treats those branches as ``in_review`` upstream.
-    """
-    if tx_id in visited or depth > max_depth:
-        return "incomplete"
-    visited = visited | {tx_id}
-
-    tx_row = conn.execute(
-        "SELECT amount FROM transactions WHERE profile_id = ? AND id = ?",
-        (profile_id, tx_id),
-    ).fetchone()
-    if tx_row is None:
-        return "incomplete"
-    required = int(tx_row["amount"])
-
-    link_rows = conn.execute(
-        """
-        SELECT id, from_source_id, from_transaction_id, state, allocation_amount
-        FROM source_funds_links
-        WHERE profile_id = ? AND to_transaction_id = ? AND state = 'reviewed'
-        """,
-        (profile_id, tx_id),
-    ).fetchall()
-    if not link_rows:
-        return "incomplete"
-
-    reviewed_total = 0
-    saw_attestation = False
-    saw_real = False
-    for row in link_rows:
-        allocation = row["allocation_amount"]
-        if allocation is None:
-            return "incomplete"
-        reviewed_total += int(allocation)
-        if row["from_source_id"]:
-            source_row = conn.execute(
-                "SELECT source_type FROM source_funds_sources WHERE id = ?",
-                (row["from_source_id"],),
-            ).fetchone()
-            if source_row is None:
-                return "incomplete"
-            if source_row["source_type"] in ATTESTATION_SOURCE_TYPES:
-                saw_attestation = True
-            else:
-                saw_real = True
-        elif row["from_transaction_id"]:
-            child = _classify_branch(
-                conn,
-                profile_id,
-                row["from_transaction_id"],
-                visited,
-                depth + 1,
-                max_depth,
-            )
-            if child == "incomplete":
-                return "incomplete"
-            if child == "attested":
-                saw_attestation = True
-            else:
-                saw_real = True
-        else:
-            return "incomplete"
-
-    if reviewed_total != required:
-        return "incomplete"
-    if saw_real and not saw_attestation:
-        return "real"
-    if saw_attestation and not saw_real:
-        return "attested"
-    if saw_real and saw_attestation:
-        return "attested"
-    return "incomplete"
-
-
-def _classify_transaction(
-    conn: sqlite3.Connection,
-    profile_id: str,
-    target_tx_id: str,
-    *,
-    max_depth: int = DEFAULT_MAX_DEPTH,
-) -> str:
-    """Return the coverage bucket for one inbound transaction.
-
-    Buckets:
-    - ``fully_traced``: reviewed allocations exactly cover the
-      transaction amount AND every upstream branch terminates at a
-      non-attestation source.
-    - ``attested``: same coverage condition, but at least one terminal
-      source is an attestation type (``missing_history``,
-      ``opening_balance_attestation``).
-    - ``in_review``: there are non-rejected links but coverage is
-      partial (reviewed allocations do not exactly equal the tx
-      amount, or some branch dead-ends).
-    - ``untraced``: no non-rejected links at all.
-
-    The coverage condition mirrors the report builder's
-    ``ambiguous_allocation`` blocker: a transaction whose coverage
-    isn't exact would block export today. Counting it as
-    ``fully_traced`` would mislead the user about readiness.
-    """
-    any_links = conn.execute(
+def _has_any_link(conn: sqlite3.Connection, profile_id: str, tx_id: str) -> bool:
+    row = conn.execute(
         """
         SELECT 1 FROM source_funds_links
         WHERE profile_id = ? AND to_transaction_id = ? AND state != 'rejected'
         LIMIT 1
         """,
-        (profile_id, target_tx_id),
+        (profile_id, tx_id),
     ).fetchone()
-    if any_links is None:
-        return "untraced"
+    return row is not None
 
-    branch = _classify_branch(conn, profile_id, target_tx_id, set(), 0, max_depth)
-    if branch == "real":
+
+def _classify_via_report(
+    report: Mapping[str, Any],
+) -> str:
+    """Return the coverage bucket given a ``build_report`` envelope.
+
+    The mapping is deliberate: anything the export gate would block
+    classifies as ``in_review`` here. A transaction is only
+    ``fully_traced`` when its source_mix is composed entirely of
+    non-attestation sources (i.e. a recipient that rejects
+    attestations would still accept this disclosure).
+    """
+    explain_gates = report.get("explain_gates") or {}
+    if not explain_gates.get("exportable"):
+        return "in_review"
+    source_mix = report.get("source_mix") or []
+    has_real = any(
+        item.get("source_type") not in ATTESTATION_SOURCE_TYPES
+        for item in source_mix
+    )
+    has_attestation = any(
+        item.get("source_type") in ATTESTATION_SOURCE_TYPES
+        for item in source_mix
+    )
+    if has_real and not has_attestation:
         return "fully_traced"
-    if branch == "attested":
+    if has_attestation:
         return "attested"
+    # Exportable with no source_mix entries shouldn't happen in practice,
+    # but if it does (e.g. a future report shape), treat conservatively.
     return "in_review"
+
+
+def _classify_transaction(
+    conn: sqlite3.Connection,
+    workspace_ref: str | None,
+    profile_ref: str | None,
+    hooks: SourceFundsHooks,
+    profile_id: str,
+    target_tx_id: str,
+    *,
+    max_depth: int = DEFAULT_MAX_DEPTH,
+) -> str:
+    """Classify one inbound transaction by delegating to ``build_report``.
+
+    Coverage classification reuses the same gate the export PDF uses,
+    so any drift is impossible by construction. ``build_report`` is
+    called with ``save_case=False`` so coverage is read-only.
+
+    On any AppError (invalid target, depth overflow with no path,
+    pricing missing, etc.), the transaction is classified by its link
+    presence: links exist => ``in_review``, no links => ``untraced``.
+    This mirrors what users see in the wizard for that transaction.
+    """
+    if not _has_any_link(conn, profile_id, target_tx_id):
+        return "untraced"
+    try:
+        report = build_report(
+            conn,
+            workspace_ref,
+            profile_ref,
+            hooks,
+            target_transaction_ref=target_tx_id,
+            reveal_mode="standard",
+            max_depth=max_depth,
+            save_case=False,
+        )
+    except AppError:
+        return "in_review"
+    return _classify_via_report(report)
 
 
 def _empty_bucket() -> dict[str, Any]:
@@ -208,7 +156,9 @@ def _materialize(buckets: Mapping[str, Mapping[str, Any]]) -> dict[str, dict[str
 
 def compute_coverage(
     conn: sqlite3.Connection,
-    profile_id: str,
+    workspace_ref: str | None,
+    profile_ref: str | None,
+    hooks: SourceFundsHooks,
     *,
     max_depth: int = DEFAULT_MAX_DEPTH,
 ) -> dict[str, Any]:
@@ -230,7 +180,13 @@ def compute_coverage(
 
     Buckets are mutually exclusive and exhaustive over the inbound tx
     set, which makes the percentages users see in the UI add up to 100.
+
+    Each transaction is classified by running ``build_report`` against
+    it. This guarantees coverage and the export gate cannot drift -
+    everything the gate would block falls to ``in_review``.
     """
+    _, profile = hooks.resolve_scope(conn, workspace_ref, profile_ref)
+    profile_id = profile["id"]
     inbound_rows = conn.execute(
         """
         SELECT t.id, t.wallet_id, t.asset, t.amount, w.label AS wallet_label
@@ -257,7 +213,15 @@ def compute_coverage(
         asset = row["asset"]
         amount = int(row["amount"])
         wallet_label_by_id[wallet_id] = wallet_label
-        bucket = _classify_transaction(conn, profile_id, tx_id, max_depth=max_depth)
+        bucket = _classify_transaction(
+            conn,
+            workspace_ref,
+            profile_ref,
+            hooks,
+            profile_id,
+            tx_id,
+            max_depth=max_depth,
+        )
 
         wallet_key = (wallet_id, wallet_label, asset)
         by_wallet_asset[wallet_key][bucket]["amount_msat"] += amount

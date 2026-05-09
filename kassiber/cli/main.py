@@ -1937,8 +1937,12 @@ def dispatch(conn: sqlite3.Connection | None, args: argparse.Namespace) -> Any:
             if args.source_funds_cases_command == "list":
                 return emit(args, core_source_funds.list_cases(conn, args.workspace, args.profile, source_funds_hooks))
         if args.source_funds_command == "coverage":
-            workspace, profile = source_funds_hooks.resolve_scope(conn, args.workspace, args.profile)
-            coverage = core_source_funds_coverage.compute_coverage(conn, profile["id"])
+            coverage = core_source_funds_coverage.compute_coverage(
+                conn,
+                args.workspace,
+                args.profile,
+                source_funds_hooks,
+            )
             if args.format in {"table", "plain"}:
                 return emit(args, "\n".join(core_source_funds_coverage.coverage_summary_text(coverage)))
             return emit(args, coverage)
