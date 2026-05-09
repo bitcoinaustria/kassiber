@@ -185,6 +185,7 @@ class SourceFundsCliTest(unittest.TestCase):
             if row["external_id"] == external_id:
                 return row["id"]
         self.fail(f"transaction {external_id} not found in wallet {wallet}")
+        raise AssertionError(f"transaction {external_id} not found in wallet {wallet}")
 
     def _report_blockers(self, target: str = "target-basic", amount: str = "0.20000000", *, max_depth: str | None = None):
         args = [
@@ -829,6 +830,166 @@ class SourceFundsCliTest(unittest.TestCase):
         blockers, report = self._report_blockers("target-basic", "0.10000000")
         self.assertNotIn("source_overallocation", blockers)
         self.assertNotIn("source_amount_missing", blockers)
+        self.assertTrue(report["explain_gates"]["exportable"], blockers)
+
+    def test_repeated_parent_allocations_sum_before_upstream_gate(self):
+        self._init_default_workspace()
+        self._write_csv(
+            "target-repeat.csv",
+            "date,txid,direction,asset,amount,fee,fiat_rate,description\n"
+            "2026-04-01T09:00:00Z,target-repeat,inbound,BTC,1.00000000,0,50000,Target deposit\n",
+        )
+        self._write_csv(
+            "parent-repeat.csv",
+            "date,txid,direction,asset,amount,fee,fiat_rate,description\n"
+            "2026-03-01T09:00:00Z,parent-repeat,inbound,BTC,1.00000000,0,40000,Parent funds\n",
+        )
+        self._create_wallet_and_import("Target", "target-repeat.csv")
+        self._create_wallet_and_import("Parent", "parent-repeat.csv")
+        source = self.cli(
+            "source-funds",
+            "sources",
+            "create",
+            "--workspace",
+            "Sof",
+            "--profile",
+            "Default",
+            "--type",
+            "fiat_purchase",
+            "--label",
+            "Partial parent source",
+            "--asset",
+            "BTC",
+            "--amount",
+            "0.50000000",
+        )["data"]
+        self.cli(
+            "source-funds",
+            "links",
+            "create",
+            "--workspace",
+            "Sof",
+            "--profile",
+            "Default",
+            "--from-source",
+            source["id"],
+            "--to-transaction",
+            "parent-repeat",
+            "--type",
+            "manual_source",
+            "--allocation-amount",
+            "0.50000000",
+            "--allocation-policy",
+            "explicit",
+        )
+        for method in ("split-a", "split-b"):
+            self.cli(
+                "source-funds",
+                "links",
+                "create",
+                "--workspace",
+                "Sof",
+                "--profile",
+                "Default",
+                "--from-transaction",
+                "parent-repeat",
+                "--to-transaction",
+                "target-repeat",
+                "--type",
+                "self_transfer",
+                "--method",
+                method,
+                "--allocation-amount",
+                "0.50000000",
+                "--from-amount",
+                "0.50000000",
+                "--allocation-policy",
+                "explicit",
+            )
+        blockers, report = self._report_blockers("target-repeat", "1.00000000")
+        self.assertIn("ambiguous_allocation", blockers)
+        parent_node = next(
+            node for node in report["graph"]["nodes"] if node.get("transaction_id") and node["label"] == "parent-repeat"
+        )
+        self.assertEqual(parent_node["required_amount_msat"], 100_000_000_000)
+        self.assertFalse(report["explain_gates"]["exportable"])
+
+    def test_repeated_parent_allocations_pass_with_summed_evidence(self):
+        self._init_default_workspace()
+        self._write_csv(
+            "target-repeat.csv",
+            "date,txid,direction,asset,amount,fee,fiat_rate,description\n"
+            "2026-04-01T09:00:00Z,target-repeat,inbound,BTC,1.00000000,0,50000,Target deposit\n",
+        )
+        self._write_csv(
+            "parent-repeat.csv",
+            "date,txid,direction,asset,amount,fee,fiat_rate,description\n"
+            "2026-03-01T09:00:00Z,parent-repeat,inbound,BTC,1.00000000,0,40000,Parent funds\n",
+        )
+        self._create_wallet_and_import("Target", "target-repeat.csv")
+        self._create_wallet_and_import("Parent", "parent-repeat.csv")
+        source = self.cli(
+            "source-funds",
+            "sources",
+            "create",
+            "--workspace",
+            "Sof",
+            "--profile",
+            "Default",
+            "--type",
+            "fiat_purchase",
+            "--label",
+            "Complete parent source",
+            "--asset",
+            "BTC",
+            "--amount",
+            "1.00000000",
+        )["data"]
+        self.cli(
+            "source-funds",
+            "links",
+            "create",
+            "--workspace",
+            "Sof",
+            "--profile",
+            "Default",
+            "--from-source",
+            source["id"],
+            "--to-transaction",
+            "parent-repeat",
+            "--type",
+            "manual_source",
+            "--allocation-amount",
+            "1.00000000",
+            "--allocation-policy",
+            "explicit",
+        )
+        for method in ("split-a", "split-b"):
+            self.cli(
+                "source-funds",
+                "links",
+                "create",
+                "--workspace",
+                "Sof",
+                "--profile",
+                "Default",
+                "--from-transaction",
+                "parent-repeat",
+                "--to-transaction",
+                "target-repeat",
+                "--type",
+                "self_transfer",
+                "--method",
+                method,
+                "--allocation-amount",
+                "0.50000000",
+                "--from-amount",
+                "0.50000000",
+                "--allocation-policy",
+                "explicit",
+            )
+        blockers, report = self._report_blockers("target-repeat", "1.00000000")
+        self.assertNotIn("ambiguous_allocation", blockers)
         self.assertTrue(report["explain_gates"]["exportable"], blockers)
 
     def test_self_transfer_link_rejects_asset_mismatch_at_create(self):

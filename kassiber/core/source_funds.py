@@ -6,7 +6,6 @@ import sqlite3
 import uuid
 from collections import defaultdict, deque
 from dataclasses import dataclass
-from decimal import Decimal
 from typing import Any, Callable, Mapping, Sequence
 
 from ..envelope import json_ready
@@ -1166,18 +1165,27 @@ def build_report(
     disclosure_txids: set[str] = set()
     disclosure_attachments: dict[str, dict[str, Any]] = {}
     visited: set[str] = set()
-    queue = deque([(target["id"], target_amount_msat, target["asset"], 0, (target["id"],))])
+    queued: set[str] = {target["id"]}
+    tx_requirements_msat = defaultdict(int)
+    tx_required_assets = {target["id"]: normalize_asset_code(target["asset"])}
+    tx_depths = {target["id"]: 0}
+    tx_paths = {target["id"]: (target["id"],)}
+    tx_requirements_msat[target["id"]] = target_amount_msat
+    queue = deque([target["id"]])
 
     while queue:
-        tx_id, required_msat, required_asset, depth, path = queue.popleft()
+        tx_id = queue.popleft()
+        queued.discard(tx_id)
+        required_msat = int(tx_requirements_msat[tx_id])
+        required_asset = tx_required_assets[tx_id]
+        depth = tx_depths[tx_id]
+        path = tx_paths[tx_id]
         tx = _transaction_by_id(conn, profile["id"], tx_id)
         if tx is None:
             _add_finding(findings, "missing_history", "blocker", "Referenced transaction is no longer present.", ref=tx_id)
             continue
         node_id = f"tx:{tx_id}"
-        previous_required = nodes.get(node_id, {}).get("required_amount_msat")
-        combined_required = required_msat if previous_required is None else max(int(previous_required), required_msat)
-        nodes[node_id] = _tx_node(tx, mode, combined_required)
+        nodes[node_id] = _tx_node(tx, mode, required_msat)
         if mode != "labels_only" and tx["external_id"]:
             disclosure_txids.add(tx["external_id"])
         if tx["fiat_value"] is None and tx["fiat_rate"] is None:
@@ -1359,6 +1367,7 @@ def build_report(
                 if not from_tx:
                     _add_finding(findings, "missing_history", "blocker", "Reviewed parent transaction is missing.", ref=link["id"])
                     continue
+                from_tx_id = from_tx["id"]
                 parent_required = int(link["from_allocation_amount"] or allocation_msat)
                 link_from_asset = normalize_asset_code(link["from_asset"] or from_tx["asset"])
                 if link["link_type"] == "self_transfer":
@@ -1373,8 +1382,8 @@ def build_report(
                             "A self-transfer link declares a different asset than its parent or target transaction.",
                             ref=link["id"],
                         )
-                nodes[f"tx:{from_tx['id']}"] = _tx_node(from_tx, mode, int(parent_required))
-                if from_tx["id"] in path:
+                nodes[f"tx:{from_tx_id}"] = _tx_node(from_tx, mode, int(parent_required))
+                if from_tx_id in path:
                     _add_finding(
                         findings,
                         "path_cycle",
@@ -1383,10 +1392,34 @@ def build_report(
                         ref=link["id"],
                     )
                 else:
-                    queue.append(
-                        (from_tx["id"], parent_required, link_from_asset, depth + 1, (*path, from_tx["id"]))
-                    )
-                from_id = f"tx:{from_tx['id']}"
+                    existing_asset = tx_required_assets.get(from_tx_id)
+                    if existing_asset and existing_asset != link_from_asset:
+                        _add_finding(
+                            findings,
+                            "asset_mismatch",
+                            "blocker",
+                            "A repeated upstream transaction is required with conflicting assets.",
+                            ref=from_tx_id,
+                        )
+                    tx_required_assets[from_tx_id] = existing_asset or link_from_asset
+                    tx_requirements_msat[from_tx_id] += parent_required
+                    nodes[f"tx:{from_tx_id}"] = _tx_node(from_tx, mode, int(tx_requirements_msat[from_tx_id]))
+                    if from_tx_id in visited:
+                        _add_finding(
+                            findings,
+                            "ambiguous_allocation",
+                            "blocker",
+                            "A repeated upstream transaction received additional required amount after it was reviewed.",
+                            ref=from_tx_id,
+                        )
+                    elif from_tx_id not in queued:
+                        tx_depths[from_tx_id] = depth + 1
+                        tx_paths[from_tx_id] = (*path, from_tx_id)
+                        queue.append(from_tx_id)
+                        queued.add(from_tx_id)
+                    else:
+                        tx_depths[from_tx_id] = max(tx_depths[from_tx_id], depth + 1)
+                from_id = f"tx:{from_tx_id}"
             edges.append(
                 {
                     "id": link["id"],
