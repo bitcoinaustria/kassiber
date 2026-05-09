@@ -1182,6 +1182,116 @@ class SourceFundsCliTest(unittest.TestCase):
         self.assertIn("source_overallocation", blockers)
         self.assertFalse(report["explain_gates"]["exportable"])
 
+    def test_export_blocks_when_chain_observation_link_is_unconfirmed(self):
+        """End-to-end gate: a reviewed self-transfer link with
+        uses_chain_observation=1 and chain_data_confirmed=0 must keep
+        the case blocked, surface unconfirmed_chain_data in blockers,
+        and refuse export-source-funds-pdf even after a save-case."""
+        self._init_default_workspace()
+        for wallet, csv_name, txid, occurred_at in [
+            ("ChainParent", "chain-parent.csv", "chain-parent", "2026-04-01T09:00:00Z"),
+            ("ChainTarget", "chain-target.csv", "chain-target", "2026-04-02T09:00:00Z"),
+        ]:
+            self._write_csv(
+                csv_name,
+                "date,txid,direction,asset,amount,fee,fiat_rate,description\n"
+                f"{occurred_at},{txid},inbound,BTC,0.10000000,0,50000,row\n",
+            )
+            self._create_wallet_and_import(wallet, csv_name)
+        # Root the parent in a reviewed source so the only outstanding
+        # gate is the unconfirmed chain observation on the parent->target
+        # link.
+        source = self.cli(
+            "source-funds",
+            "sources",
+            "create",
+            "--workspace",
+            "Sof",
+            "--profile",
+            "Default",
+            "--type",
+            "fiat_purchase",
+            "--label",
+            "Reviewed root",
+            "--asset",
+            "BTC",
+            "--amount",
+            "0.10000000",
+        )["data"]
+        self.cli(
+            "source-funds",
+            "links",
+            "create",
+            "--workspace",
+            "Sof",
+            "--profile",
+            "Default",
+            "--from-source",
+            source["id"],
+            "--to-transaction",
+            "chain-parent",
+            "--type",
+            "manual_source",
+            "--allocation-amount",
+            "0.10000000",
+            "--allocation-policy",
+            "explicit",
+        )
+        # Reviewed self-transfer link with chain observation but no
+        # confirmation. --chain-data-confirmed is omitted on purpose
+        # so the link records uses_chain_observation=1,
+        # chain_data_confirmed=0 (the failure mode the gate guards).
+        self.cli(
+            "source-funds",
+            "links",
+            "create",
+            "--workspace",
+            "Sof",
+            "--profile",
+            "Default",
+            "--from-transaction",
+            "chain-parent",
+            "--to-transaction",
+            "chain-target",
+            "--type",
+            "self_transfer",
+            "--allocation-amount",
+            "0.10000000",
+            "--from-amount",
+            "0.10000000",
+            "--allocation-policy",
+            "explicit",
+            "--uses-chain-observation",
+        )
+        blockers, report = self._report_blockers("chain-target", "0.10000000")
+        self.assertIn("unconfirmed_chain_data", blockers)
+        self.assertFalse(report["explain_gates"]["exportable"])
+        # Save-case path also stamps blocked, and the export gate
+        # refuses the saved snapshot.
+        preview = self._source_funds_report_for_target(
+            target="chain-target",
+            amount="0.10000000",
+            save_case=True,
+        )
+        self.assertEqual(preview["case"]["status"], "blocked")
+        error = self.cli_error(
+            "reports",
+            "export-source-funds-pdf",
+            "--workspace",
+            "Sof",
+            "--profile",
+            "Default",
+            "--case",
+            preview["case"]["id"],
+            "--file",
+            str(self.root / "unconfirmed-chain.pdf"),
+        )
+        self.assertEqual(error["error"]["code"], "export_blocked")
+        details_blockers = {
+            item["code"] for item in error["error"]["details"]["blockers"]
+        }
+        self.assertIn("unconfirmed_chain_data", details_blockers)
+
     def test_links_create_chain_observation_defaults_to_unconfirmed(self):
         """A manually-created chain_observation link must not satisfy
         the export gate by default. The user has to explicitly mark
