@@ -433,6 +433,22 @@ class CoverageCoreTests(unittest.TestCase):
         self._add_link(to_tx_id=tx, from_source_id=src, allocation_msat=100_000)
         self.assertEqual(self._classify(tx), "in_review")
 
+    def test_asset_mismatch_classifies_as_in_review(self):
+        # Self-transfer link declares an asset that differs from the
+        # parent and target transactions. build_report emits
+        # asset_mismatch as a blocker, so coverage must mirror that.
+        target = self._add_inbound_tx("asset-target", 100_000, occurred_at="2026-04-02T09:00:00Z")
+        parent = self._add_inbound_tx("asset-parent", 100_000, occurred_at="2026-04-01T09:00:00Z")
+        src = self._add_source("fiat_purchase", amount_msat=100_000)
+        self._add_link(
+            to_tx_id=target,
+            from_tx_id=parent,
+            allocation_msat=100_000,
+            asset="LBTC",
+        )
+        self._add_link(to_tx_id=parent, from_source_id=src, allocation_msat=100_000)
+        self.assertEqual(self._classify(target), "in_review")
+
     def test_cycle_classifies_as_in_review_not_fully_traced(self):
         a = self._add_inbound_tx("a", 100_000)
         b = self._add_inbound_tx("b", 100_000)
@@ -551,6 +567,31 @@ class CoverageCoreTests(unittest.TestCase):
             coverage["totals"]["buckets"]["not_classified"]["amount_msat"],
             100_000,
         )
+        # by_wallet and by_asset rollups must include the not_classified
+        # slice too — without that, callers reading either rollup as a
+        # closed set would silently understate the profile.
+        wallet_rollup = coverage["by_wallet"][0]
+        self.assertEqual(wallet_rollup["wallet_label"], "Target")
+        self.assertEqual(
+            wallet_rollup["buckets"]["not_classified"]["tx_count"],
+            1,
+        )
+        self.assertEqual(
+            wallet_rollup["buckets"]["not_classified"]["amount_msat"],
+            100_000,
+        )
+        self.assertEqual(wallet_rollup["total_inbound_msat"], 300_000)
+        asset_rollup = coverage["by_asset"][0]
+        self.assertEqual(asset_rollup["asset"], "BTC")
+        self.assertEqual(
+            asset_rollup["buckets"]["not_classified"]["tx_count"],
+            1,
+        )
+        self.assertEqual(
+            asset_rollup["buckets"]["not_classified"]["amount_msat"],
+            100_000,
+        )
+        self.assertEqual(asset_rollup["total_inbound_msat"], 300_000)
 
     def test_no_truncation_flag_when_under_cap(self):
         for i in range(2):

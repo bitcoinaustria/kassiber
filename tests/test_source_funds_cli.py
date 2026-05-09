@@ -998,8 +998,9 @@ class SourceFundsCliTest(unittest.TestCase):
                 "--allocation-policy",
                 "explicit",
             )
-        blockers, _ = self._report_blockers("target-basic", "0.20000000")
+        blockers, report = self._report_blockers("target-basic", "0.20000000")
         self.assertIn("source_overallocation", blockers)
+        self.assertFalse(report["explain_gates"]["exportable"])
 
     def test_export_blocks_when_attestation_source_with_amount_overallocates(self):
         self._seed_single_target("0.20000000")
@@ -1042,8 +1043,9 @@ class SourceFundsCliTest(unittest.TestCase):
                 "--allocation-policy",
                 "explicit",
             )
-        blockers, _ = self._report_blockers("target-basic", "0.20000000")
+        blockers, report = self._report_blockers("target-basic", "0.20000000")
         self.assertIn("source_overallocation", blockers)
+        self.assertFalse(report["explain_gates"]["exportable"])
 
     def test_export_blocks_when_concrete_source_has_null_amount(self):
         self._seed_single_target("0.10000000")
