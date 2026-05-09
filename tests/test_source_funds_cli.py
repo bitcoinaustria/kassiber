@@ -205,6 +205,137 @@ class SourceFundsCliTest(unittest.TestCase):
         report = self.cli(*args)["data"]
         return {item["code"] for item in report["explain_gates"]["blockers"]}, report
 
+    def _seed_exportable_disclosure_path(self):
+        self._init_default_workspace()
+        for wallet, csv_name, txid in [
+            ("Grandparent", "disclosure-grand.csv", "disclosure-grand"),
+            ("Parent", "disclosure-parent.csv", "disclosure-parent"),
+            ("Target", "disclosure-target.csv", "disclosure-target"),
+        ]:
+            self._write_csv(
+                csv_name,
+                "date,txid,direction,asset,amount,fee,fiat_rate,description\n"
+                f"2026-04-01T09:00:00Z,{txid},inbound,BTC,0.10000000,0,50000,Reviewed path row\n",
+            )
+            self._create_wallet_and_import(wallet, csv_name)
+        file_attachment = self.cli(
+            "attachments",
+            "add",
+            "--workspace",
+            "Sof",
+            "--profile",
+            "Default",
+            "--transaction",
+            self._tx_id("Grandparent", "disclosure-grand"),
+            "--file",
+            str(self.evidence_file),
+            "--label",
+            "Disclosure file evidence",
+        )["data"]
+        url_attachment = self.cli(
+            "attachments",
+            "add",
+            "--workspace",
+            "Sof",
+            "--profile",
+            "Default",
+            "--transaction",
+            self._tx_id("Grandparent", "disclosure-grand"),
+            "--url",
+            "https://exchange.example/source-statement",
+            "--label",
+            "Disclosure URL evidence",
+        )["data"]
+        source = self.cli(
+            "source-funds",
+            "sources",
+            "create",
+            "--workspace",
+            "Sof",
+            "--profile",
+            "Default",
+            "--type",
+            "fiat_purchase",
+            "--label",
+            "Reviewed disclosure source",
+            "--asset",
+            "BTC",
+            "--amount",
+            "0.10000000",
+            "--attachment",
+            file_attachment["id"],
+            "--attachment",
+            url_attachment["id"],
+        )["data"]
+        self.cli(
+            "source-funds",
+            "links",
+            "create",
+            "--workspace",
+            "Sof",
+            "--profile",
+            "Default",
+            "--from-source",
+            source["id"],
+            "--to-transaction",
+            "disclosure-grand",
+            "--type",
+            "manual_source",
+            "--allocation-amount",
+            "0.10000000",
+            "--allocation-policy",
+            "explicit",
+        )
+        for from_tx, to_tx in [
+            ("disclosure-grand", "disclosure-parent"),
+            ("disclosure-parent", "disclosure-target"),
+        ]:
+            self.cli(
+                "source-funds",
+                "links",
+                "create",
+                "--workspace",
+                "Sof",
+                "--profile",
+                "Default",
+                "--from-transaction",
+                from_tx,
+                "--to-transaction",
+                to_tx,
+                "--type",
+                "self_transfer",
+                "--allocation-amount",
+                "0.10000000",
+                "--from-amount",
+                "0.10000000",
+                "--allocation-policy",
+                "explicit",
+            )
+        return {
+            "target": "disclosure-target",
+            "file_attachment": file_attachment["id"],
+            "url_attachment": url_attachment["id"],
+        }
+
+    def _source_funds_report(self, *, reveal_mode: str = "standard", save_case: bool = False):
+        args = [
+            "reports",
+            "source-funds",
+            "--workspace",
+            "Sof",
+            "--profile",
+            "Default",
+            "--target-transaction",
+            "disclosure-target",
+            "--target-amount",
+            "0.10000000",
+            "--reveal-mode",
+            reveal_mode,
+        ]
+        if save_case:
+            args.append("--save-case")
+        return self.cli(*args)["data"]
+
     def test_source_funds_review_gates_snapshot_and_pdf(self):
         self._init_default_workspace()
         for label, csv_name in [
@@ -240,8 +371,6 @@ class SourceFundsCliTest(unittest.TestCase):
             "Sof",
             "--profile",
             "Default",
-            "--target-transaction",
-            "target-deposit-1",
         )
         methods = {row["method"] for row in suggested["data"]["links"]}
         self.assertIn("same_external_id", methods)
@@ -584,6 +713,122 @@ class SourceFundsCliTest(unittest.TestCase):
         self.assertTrue(pdf_path.exists())
         self.assertGreater(pdf_path.stat().st_size, 1000)
         self.assertTrue(pdf_path.read_bytes().startswith(b"%PDF-1.4"))
+
+    def test_reveal_modes_redact_txids_and_attachment_paths(self):
+        self._seed_exportable_disclosure_path()
+        expected_txids = {
+            "labels_only": [],
+            "minimal": ["disclosure-target"],
+            "standard": ["disclosure-grand", "disclosure-parent", "disclosure-target"],
+            "full": ["disclosure-grand", "disclosure-parent", "disclosure-target"],
+        }
+        for mode, txids in expected_txids.items():
+            with self.subTest(mode=mode):
+                report = self._source_funds_report(reveal_mode=mode)
+                self.assertEqual(report["disclosure_preview"]["txids"], txids)
+                serialized = json.dumps(report)
+                if mode == "labels_only":
+                    self.assertNotIn("disclosure-target", serialized)
+                if mode in {"labels_only", "minimal"}:
+                    self.assertNotIn("disclosure-parent", serialized)
+                    self.assertNotIn("disclosure-grand", serialized)
+                attachments = {
+                    item["label"]: item
+                    for item in report["disclosure_preview"]["attachments"]
+                }
+                self.assertIn("Disclosure file evidence", attachments)
+                self.assertIn("Disclosure URL evidence", attachments)
+                for attachment in attachments.values():
+                    if mode != "full":
+                        self.assertNotIn("source_url", attachment)
+                        self.assertNotIn("stored_relpath", attachment)
+                    if mode in {"labels_only", "minimal"}:
+                        self.assertNotIn("sha256", attachment)
+                        self.assertNotIn("media_type", attachment)
+                    else:
+                        self.assertIn("sha256", attachment)
+                        self.assertIn("media_type", attachment)
+                if mode == "full":
+                    file_attachment = next(
+                        item
+                        for item in report["disclosure_preview"]["attachments"]
+                        if item["label"] == "Disclosure file evidence"
+                    )
+                    url_attachment = next(
+                        item
+                        for item in report["disclosure_preview"]["attachments"]
+                        if item["label"] == "Disclosure URL evidence"
+                    )
+                    self.assertIn("stored_relpath", file_attachment)
+                    self.assertTrue(file_attachment["stored_relpath"])
+                    self.assertIn("source_url", url_attachment)
+                    self.assertEqual(url_attachment["source_url"], "https://exchange.example/source-statement")
+
+    def test_export_requires_saved_case_snapshot(self):
+        self._seed_exportable_disclosure_path()
+        error = self.cli_error(
+            "reports",
+            "export-source-funds-pdf",
+            "--workspace",
+            "Sof",
+            "--profile",
+            "Default",
+            "--target-transaction",
+            "disclosure-target",
+            "--target-amount",
+            "0.10000000",
+            "--file",
+            str(self.root / "live-export.pdf"),
+        )
+        self.assertEqual(error["error"]["code"], "validation")
+
+    def test_export_via_case_matches_preview_snapshot_hash(self):
+        self._seed_exportable_disclosure_path()
+        preview = self._source_funds_report(save_case=True)
+        pdf_path = self.root / "case-export.pdf"
+        exported = self.cli(
+            "reports",
+            "export-source-funds-pdf",
+            "--workspace",
+            "Sof",
+            "--profile",
+            "Default",
+            "--case",
+            preview["case"]["id"],
+            "--file",
+            str(pdf_path),
+        )["data"]
+        self.assertEqual(exported["snapshot_hash"], preview["case"]["snapshot_hash"])
+        self.assertTrue(pdf_path.exists())
+
+    def test_export_case_uses_frozen_snapshot_after_live_mutation(self):
+        self._seed_exportable_disclosure_path()
+        preview = self._source_funds_report(save_case=True)
+        with self._db() as conn:
+            conn.execute(
+                """
+                UPDATE source_funds_links
+                SET state = 'rejected'
+                WHERE to_transaction_id = (
+                    SELECT id FROM transactions WHERE external_id = 'disclosure-target'
+                )
+                """
+            )
+        live = self._source_funds_report()
+        self.assertFalse(live["explain_gates"]["exportable"])
+        exported = self.cli(
+            "reports",
+            "export-source-funds-pdf",
+            "--workspace",
+            "Sof",
+            "--profile",
+            "Default",
+            "--case",
+            preview["case"]["id"],
+            "--file",
+            str(self.root / "frozen-export.pdf"),
+        )["data"]
+        self.assertEqual(exported["snapshot_hash"], preview["case"]["snapshot_hash"])
 
     def test_self_link_rejected_at_create_time(self):
         self._seed_cycle_wallets()
@@ -1354,6 +1599,65 @@ class SourceFundsCliTest(unittest.TestCase):
         self.assertEqual(first_link["state"], "reviewed")
         self.assertEqual(second_link["state"], "suggested")
 
+    def test_suggest_links_with_target_does_not_write_unrelated_suggestions(self):
+        self._init_default_workspace()
+        for wallet, csv_name, txid, direction in [
+            ("First Out", "first-out.csv", "pair-one", "outbound"),
+            ("First In", "first-in.csv", "pair-one", "inbound"),
+            ("Second Out", "second-out.csv", "pair-two", "outbound"),
+            ("Second In", "second-in.csv", "pair-two", "inbound"),
+        ]:
+            self._write_csv(
+                csv_name,
+                "date,txid,direction,asset,amount,fee,fiat_rate,description\n"
+                f"2026-03-01T09:00:00Z,{txid},{direction},BTC,0.10000000,0,50000,{wallet}\n",
+            )
+            self._create_wallet_and_import(wallet, csv_name)
+        first_target = self._tx_id("First In", "pair-one")
+        second_target = self._tx_id("Second In", "pair-two")
+        suggested = self.cli(
+            "source-funds",
+            "suggest",
+            "--workspace",
+            "Sof",
+            "--profile",
+            "Default",
+            "--target-transaction",
+            first_target,
+        )["data"]["links"]
+        self.assertEqual(len(suggested), 1)
+        self.assertEqual(suggested[0]["to_transaction_id"], first_target)
+        links = self.cli("source-funds", "links", "list", "--workspace", "Sof", "--profile", "Default")["data"]
+        self.assertFalse(any(link["to_transaction_id"] == second_target for link in links))
+
+    def test_suggest_links_caps_writes_per_call(self):
+        self._init_default_workspace()
+        for wallet, csv_name, txid, direction in [
+            ("First Out", "cap-first-out.csv", "cap-one", "outbound"),
+            ("First In", "cap-first-in.csv", "cap-one", "inbound"),
+            ("Second Out", "cap-second-out.csv", "cap-two", "outbound"),
+            ("Second In", "cap-second-in.csv", "cap-two", "inbound"),
+        ]:
+            self._write_csv(
+                csv_name,
+                "date,txid,direction,asset,amount,fee,fiat_rate,description\n"
+                f"2026-03-01T09:00:00Z,{txid},{direction},BTC,0.10000000,0,50000,{wallet}\n",
+            )
+            self._create_wallet_and_import(wallet, csv_name)
+        error = self.cli_error(
+            "source-funds",
+            "suggest",
+            "--workspace",
+            "Sof",
+            "--profile",
+            "Default",
+            "--max-suggestions",
+            "1",
+        )
+        self.assertEqual(error["error"]["code"], "validation")
+        links = self.cli("source-funds", "links", "list", "--workspace", "Sof", "--profile", "Default")["data"]
+        self.assertEqual(links, [])
+
     def _seed_provider_rows(self, *, out_rows: list[tuple[str, str, str]], in_rows: list[tuple[str, str, str]], headers: str):
         self._init_default_workspace()
         out_lines = ["date,txid,direction,asset,amount,fee,fiat_rate,description," + headers]
@@ -1373,7 +1677,15 @@ class SourceFundsCliTest(unittest.TestCase):
             in_rows=[("in-1", "0.10000000", "acct-1"), ("in-2", "0.20000000", "acct-1"), ("in-3", "0.30000000", "acct-1")],
             headers="provider_id",
         )
-        suggested = self.cli("source-funds", "suggest", "--workspace", "Sof", "--profile", "Default")["data"]["links"]
+        suggested = self.cli(
+            "source-funds",
+            "suggest",
+            "--workspace",
+            "Sof",
+            "--profile",
+            "Default",
+            "--include-broad-hints",
+        )["data"]["links"]
         provider_links = [link for link in suggested if link["method"] == "provider_id"]
         self.assertEqual(len(provider_links), 9)
         self.assertTrue(all(link["confidence"] == "weak" for link in provider_links))
@@ -1414,13 +1726,24 @@ class SourceFundsCliTest(unittest.TestCase):
         self.assertEqual(reviewed["reviewed"], 1)
         self.assertEqual(reviewed["links"][0]["method"], "provider_trade_id")
 
-    def test_provider_id_suggestion_confidence_is_weak(self):
+    def test_broad_provider_id_requires_explicit_opt_in(self):
         self._seed_provider_rows(
             out_rows=[("provider-out", "0.10000000", "acct-1")],
             in_rows=[("provider-in", "0.10000000", "acct-1")],
             headers="provider_id",
         )
         suggested = self.cli("source-funds", "suggest", "--workspace", "Sof", "--profile", "Default")["data"]["links"]
+        provider_links = [link for link in suggested if link["method"] == "provider_id"]
+        self.assertEqual(provider_links, [])
+        suggested = self.cli(
+            "source-funds",
+            "suggest",
+            "--workspace",
+            "Sof",
+            "--profile",
+            "Default",
+            "--include-broad-hints",
+        )["data"]["links"]
         provider_links = [link for link in suggested if link["method"] == "provider_id"]
         self.assertEqual(len(provider_links), 1)
         self.assertEqual(provider_links[0]["confidence"], "weak")

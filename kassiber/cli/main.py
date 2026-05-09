@@ -934,6 +934,8 @@ def build_parser() -> argparse.ArgumentParser:
     sf_suggest.add_argument("--workspace")
     sf_suggest.add_argument("--profile")
     sf_suggest.add_argument("--target-transaction")
+    sf_suggest.add_argument("--include-broad-hints", action="store_true")
+    sf_suggest.add_argument("--max-suggestions", type=int, default=core_source_funds.SUGGESTION_WRITE_CAP)
 
     sf_cases = source_funds_sub.add_parser("cases")
     sf_cases_sub = sf_cases.add_subparsers(dest="source_funds_cases_command", required=True)
@@ -1879,6 +1881,8 @@ def dispatch(conn: sqlite3.Connection | None, args: argparse.Namespace) -> Any:
                     args.profile,
                     source_funds_hooks,
                     target_transaction_ref=args.target_transaction,
+                    include_broad_hints=args.include_broad_hints,
+                    max_suggestions=args.max_suggestions,
                 ),
             )
         if args.source_funds_command == "cases":

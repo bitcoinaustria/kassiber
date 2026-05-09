@@ -357,8 +357,9 @@ python3 -m kassiber --machine reports source-funds \
   --planned-destination "Exchange or broker" \
   --planned-note "Pre-disclosure before expected bank proceeds"
 
-# Seed suggestions from existing transfers, pairs, provider/import ids, and
-# tight time/amount matches. Suggestions are review items, not proof.
+# Seed target-scoped suggestions from existing transfers, pairs, and
+# one-to-one provider/import ids. Suggestions are review items, not proof.
+# Broad account ids and time/amount heuristics require --include-broad-hints.
 python3 -m kassiber source-funds suggest --target-transaction <txid-or-id>
 
 # Deterministic same-external-id hops, reviewed transaction_pairs, and
@@ -379,11 +380,12 @@ python3 -m kassiber source-funds links create \
   --type manual_source \
   --allocation-amount 0.10000000
 
-# Preview gates and disclosure before export.
+# Preview gates and disclosure, saving an immutable case before export.
 python3 -m kassiber --machine reports source-funds \
   --target-transaction <target-txid-or-id> \
   --reveal-mode standard \
   --save-case
+# Export only renders a saved case snapshot, never live mutable tables.
 python3 -m kassiber reports export-source-funds-pdf \
   --case <case-id> \
   --file source-of-funds.pdf

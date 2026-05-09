@@ -67,6 +67,7 @@ PROVIDER_UNIQUE_KEYS = (
 )
 PROVIDER_BROAD_KEYS = ("provider_id",)
 PROVIDER_EVIDENCE_KEYS = PROVIDER_UNIQUE_KEYS + PROVIDER_BROAD_KEYS
+SUGGESTION_WRITE_CAP = 500
 
 ScopeResolver = Callable[[sqlite3.Connection, str | None, str | None], tuple[Mapping[str, Any], Mapping[str, Any]]]
 TransactionResolver = Callable[..., Mapping[str, Any]]
@@ -209,17 +210,20 @@ def _safe_json_loads(value: str | None) -> Any:
         return {}
 
 
-def _public_tx_id(row: Mapping[str, Any], reveal_mode: str) -> str:
+def _public_tx_id(row: Mapping[str, Any], reveal_mode: str, *, is_target: bool = False) -> str:
     if reveal_mode == "labels_only":
+        return ""
+    if reveal_mode == "minimal" and not is_target:
         return ""
     return row["external_id"] or row["id"]
 
 
-def _tx_label(row: Mapping[str, Any], reveal_mode: str) -> str:
+def _tx_label(row: Mapping[str, Any], reveal_mode: str, *, is_target: bool = False) -> str:
     wallet = row["wallet_label"] if "wallet_label" in row.keys() else row.get("wallet", "")
-    if reveal_mode == "labels_only":
-        return f"{wallet} {row['direction']} {row['asset']} {float(msat_to_btc(row['amount'])):.8f}"
-    return row["external_id"] or row["id"]
+    public_id = _public_tx_id(row, reveal_mode, is_target=is_target)
+    if public_id:
+        return public_id
+    return f"{wallet} {row['direction']} {row['asset']} {float(msat_to_btc(row['amount'])):.8f}"
 
 
 def _row_dict(row: Mapping[str, Any] | None) -> dict[str, Any] | None:
@@ -228,17 +232,21 @@ def _row_dict(row: Mapping[str, Any] | None) -> dict[str, Any] | None:
     return {key: row[key] for key in row.keys()}
 
 
-def _attachment_summary(row: Mapping[str, Any]) -> dict[str, Any]:
-    return {
+def _attachment_summary(row: Mapping[str, Any], reveal_mode: str = "full") -> dict[str, Any]:
+    mode = _normalize_reveal_mode(reveal_mode)
+    item = {
         "id": row["id"],
-        "transaction_id": row["transaction_id"],
         "attachment_type": row["attachment_type"],
         "label": row["label"],
-        "media_type": row["media_type"] or "",
-        "sha256": row["sha256"] or "",
-        "source_url": row["source_url"] or "",
-        "stored_relpath": row["stored_relpath"] or "",
     }
+    if mode in {"standard", "full"}:
+        item["transaction_id"] = row["transaction_id"]
+        item["media_type"] = row["media_type"] or ""
+        item["sha256"] = row["sha256"] or ""
+    if mode == "full":
+        item["source_url"] = row["source_url"] or ""
+        item["stored_relpath"] = row["stored_relpath"] or ""
+    return item
 
 
 def _source_row_to_dict(conn: sqlite3.Connection, row: Mapping[str, Any]) -> dict[str, Any]:
@@ -993,6 +1001,31 @@ def _raw_evidence_values(row: Mapping[str, Any]) -> list[tuple[str, str]]:
     return values
 
 
+def _target_scoped_transaction_ids(
+    conn: sqlite3.Connection,
+    profile_id: str,
+    target_transaction_id: str,
+) -> set[str]:
+    found: set[str] = {target_transaction_id}
+    queue = deque([target_transaction_id])
+    while queue:
+        tx_id = queue.popleft()
+        rows = conn.execute(
+            """
+            SELECT from_transaction_id
+            FROM source_funds_links
+            WHERE profile_id = ? AND to_transaction_id = ? AND state != 'rejected'
+            """,
+            (profile_id, tx_id),
+        ).fetchall()
+        for row in rows:
+            from_tx_id = row["from_transaction_id"]
+            if from_tx_id and from_tx_id not in found:
+                found.add(from_tx_id)
+                queue.append(from_tx_id)
+    return found
+
+
 def suggest_links(
     conn: sqlite3.Connection,
     workspace_ref: str | None,
@@ -1000,12 +1033,43 @@ def suggest_links(
     hooks: SourceFundsHooks,
     *,
     target_transaction_ref: str | None = None,
+    include_broad_hints: bool = False,
+    max_suggestions: int = SUGGESTION_WRITE_CAP,
 ) -> dict[str, Any]:
     workspace, profile = hooks.resolve_scope(conn, workspace_ref, profile_ref)
     target = hooks.resolve_transaction(conn, profile["id"], target_transaction_ref) if target_transaction_ref else None
+    if max_suggestions <= 0:
+        raise AppError("--max-suggestions must be positive", code="validation")
     rows = _active_transaction_rows(conn, profile["id"])
     rows_by_id = {row["id"]: row for row in rows}
+    scoped_tx_ids = (
+        _target_scoped_transaction_ids(conn, profile["id"], target["id"])
+        if target
+        else set(rows_by_id)
+    )
     inserted = []
+
+    def in_scope(*txs: Mapping[str, Any]) -> bool:
+        return not target or any(tx["id"] in scoped_tx_ids for tx in txs)
+
+    def remember(link: Mapping[str, Any] | None) -> None:
+        if not link:
+            return
+        inserted.append(link)
+        if len(inserted) > max_suggestions:
+            conn.rollback()
+            raise AppError(
+                "source-funds suggestion write cap exceeded",
+                code="validation",
+                hint=(
+                    "Run suggestions for a narrower --target-transaction, review or reject existing "
+                    "suggestions, then try again."
+                ),
+                details={"max_suggestions": max_suggestions},
+            )
+        if target:
+            scoped_tx_ids.add(link["from_transaction_id"])
+            scoped_tx_ids.add(link["to_transaction_id"])
 
     by_external = defaultdict(list)
     for row in rows:
@@ -1018,6 +1082,8 @@ def suggest_links(
             continue
         out_tx, in_tx = outs[0], ins[0]
         if out_tx["wallet_id"] == in_tx["wallet_id"]:
+            continue
+        if not in_scope(out_tx, in_tx):
             continue
         link = _insert_suggestion(
             conn,
@@ -1032,8 +1098,7 @@ def suggest_links(
             from_allocation_msat=int(out_tx["amount"]),
             explanation="Same external transaction id appears as an outbound and inbound row in two owned wallets.",
         )
-        if link:
-            inserted.append(link)
+        remember(link)
 
     pair_rows = conn.execute(
         "SELECT * FROM transaction_pairs WHERE profile_id = ? ORDER BY created_at ASC, id ASC",
@@ -1043,6 +1108,8 @@ def suggest_links(
         out_tx = rows_by_id.get(pair["out_transaction_id"])
         in_tx = rows_by_id.get(pair["in_transaction_id"])
         if not out_tx or not in_tx:
+            continue
+        if not in_scope(out_tx, in_tx):
             continue
         link_type = "self_transfer" if out_tx["asset"] == in_tx["asset"] else "swap"
         link = _insert_suggestion(
@@ -1058,8 +1125,7 @@ def suggest_links(
             from_allocation_msat=int(out_tx["amount"]),
             explanation=f"Existing reviewed transaction_pair ({pair['kind']}, {pair['policy']}) links these rows.",
         )
-        if link:
-            inserted.append(link)
+        remember(link)
 
     by_provider_key = defaultdict(list)
     for row in rows:
@@ -1072,10 +1138,14 @@ def suggest_links(
         ins = [row for row in group if row["direction"] == "inbound"]
         method = _normalize_provider_method(key)
         is_unique_key = key in PROVIDER_UNIQUE_KEYS
+        if not is_unique_key and not include_broad_hints:
+            continue
         is_one_to_one = len(outs) == 1 and len(ins) == 1
         for out_tx in outs:
             for in_tx in ins:
                 if out_tx["id"] == in_tx["id"]:
+                    continue
+                if not in_scope(out_tx, in_tx):
                     continue
                 same_asset = normalize_asset_code(out_tx["asset"]) == normalize_asset_code(in_tx["asset"])
                 amount_close = _same_asset_amount_close(out_tx, in_tx) if same_asset else False
@@ -1096,33 +1166,34 @@ def suggest_links(
                         + (" One-to-one amount match." if confidence == "strong" else " Manual review required.")
                     ),
                 )
-                if link:
-                    inserted.append(link)
+                remember(link)
 
-    for out_tx in [row for row in rows if row["direction"] == "outbound"]:
-        out_time = str(out_tx["occurred_at"])
-        for in_tx in [row for row in rows if row["direction"] == "inbound" and row["asset"] == out_tx["asset"]]:
-            if out_tx["wallet_id"] == in_tx["wallet_id"] or out_tx["id"] == in_tx["id"]:
-                continue
-            if out_time[:10] != str(in_tx["occurred_at"])[:10]:
-                continue
-            if abs(int(out_tx["amount"]) - int(in_tx["amount"])) > max(1000, int(in_tx["amount"]) // 100):
-                continue
-            link = _insert_suggestion(
-                conn,
-                workspace["id"],
-                profile["id"],
-                from_tx=out_tx,
-                to_tx=in_tx,
-                link_type="self_transfer",
-                method="tight_time_amount_match",
-                confidence="weak",
-                allocation_msat=int(in_tx["amount"]),
-                from_allocation_msat=int(out_tx["amount"]),
-                explanation="Same-day same-asset amount match across owned wallets; review before using as evidence.",
-            )
-            if link:
-                inserted.append(link)
+    if include_broad_hints:
+        for out_tx in [row for row in rows if row["direction"] == "outbound"]:
+            out_time = str(out_tx["occurred_at"])
+            for in_tx in [row for row in rows if row["direction"] == "inbound" and row["asset"] == out_tx["asset"]]:
+                if out_tx["wallet_id"] == in_tx["wallet_id"] or out_tx["id"] == in_tx["id"]:
+                    continue
+                if not in_scope(out_tx, in_tx):
+                    continue
+                if out_time[:10] != str(in_tx["occurred_at"])[:10]:
+                    continue
+                if abs(int(out_tx["amount"]) - int(in_tx["amount"])) > max(1000, int(in_tx["amount"]) // 100):
+                    continue
+                link = _insert_suggestion(
+                    conn,
+                    workspace["id"],
+                    profile["id"],
+                    from_tx=out_tx,
+                    to_tx=in_tx,
+                    link_type="self_transfer",
+                    method="tight_time_amount_match",
+                    confidence="weak",
+                    allocation_msat=int(in_tx["amount"]),
+                    from_allocation_msat=int(out_tx["amount"]),
+                    explanation="Same-day same-asset amount match across owned wallets; review before using as evidence.",
+                )
+                remember(link)
 
     conn.commit()
     links = [_link_row_to_dict(conn, row) for row in inserted]
@@ -1161,12 +1232,18 @@ def _reachable_link_ids(conn: sqlite3.Connection, profile_id: str, target_transa
     return found
 
 
-def _tx_node(row: Mapping[str, Any], reveal_mode: str, required_msat: int | None) -> dict[str, Any]:
-    return {
+def _tx_node(
+    row: Mapping[str, Any],
+    reveal_mode: str,
+    required_msat: int | None,
+    *,
+    is_target: bool = False,
+) -> dict[str, Any]:
+    node = {
         "id": f"tx:{row['id']}",
         "node_type": "transaction",
         "transaction_id": row["id"],
-        "label": _tx_label(row, reveal_mode),
+        "label": _tx_label(row, reveal_mode, is_target=is_target),
         "wallet": row["wallet_label"],
         "occurred_at": row["occurred_at"],
         "direction": row["direction"],
@@ -1175,13 +1252,16 @@ def _tx_node(row: Mapping[str, Any], reveal_mode: str, required_msat: int | None
         "amount_msat": int(row["amount"]),
         "required_amount": _btc_value(required_msat),
         "required_amount_msat": required_msat,
-        "external_id": _public_tx_id(row, reveal_mode),
+        "external_id": _public_tx_id(row, reveal_mode, is_target=is_target),
         "fiat_currency": row["fiat_currency"] or "",
         "fiat_value": row["fiat_value"],
         "pricing_source_kind": row["pricing_source_kind"] or row["fiat_price_source"] or "",
         "description": row["description"] or "",
         "counterparty": row["counterparty"] or "",
     }
+    if reveal_mode == "full":
+        node["internal_transaction_id"] = row["id"]
+    return node
 
 
 def _source_node(source: Mapping[str, Any], reveal_mode: str, required_msat: int | None) -> dict[str, Any]:
@@ -1269,9 +1349,11 @@ def build_report(
             _add_finding(findings, "missing_history", "blocker", "Referenced transaction is no longer present.", ref=tx_id)
             continue
         node_id = f"tx:{tx_id}"
-        nodes[node_id] = _tx_node(tx, mode, required_msat)
-        if mode != "labels_only" and tx["external_id"]:
-            disclosure_txids.add(tx["external_id"])
+        is_target_tx = tx_id == target["id"]
+        nodes[node_id] = _tx_node(tx, mode, required_msat, is_target=is_target_tx)
+        disclosed_txid = _public_tx_id(tx, mode, is_target=is_target_tx)
+        if disclosed_txid:
+            disclosure_txids.add(disclosed_txid)
         if tx["fiat_value"] is None and tx["fiat_rate"] is None:
             _add_finding(
                 findings,
@@ -1385,7 +1467,7 @@ def build_report(
                 (link["id"],),
             ).fetchall()
             for attachment in attachment_rows:
-                disclosure_attachments[attachment["id"]] = _attachment_summary(attachment)
+                disclosure_attachments[attachment["id"]] = _attachment_summary(attachment, mode)
             if link["from_source_id"]:
                 source = conn.execute(
                     "SELECT * FROM source_funds_sources WHERE id = ?",
@@ -1452,7 +1534,7 @@ def build_report(
                     """,
                     (source["id"],),
                 ).fetchall():
-                    disclosure_attachments[attachment["id"]] = _attachment_summary(attachment)
+                    disclosure_attachments[attachment["id"]] = _attachment_summary(attachment, mode)
                 from_id = source_node_id
             else:
                 from_tx = _transaction_by_id(conn, profile["id"], link["from_transaction_id"])
@@ -1537,7 +1619,7 @@ def build_report(
                     "from_allocation_amount_msat": link["from_allocation_amount"],
                     "allocation_policy": link["allocation_policy"],
                     "explanation": link["explanation"] or "",
-                    "attachments": [_attachment_summary(attachment) for attachment in attachment_rows],
+                    "attachments": [_attachment_summary(attachment, mode) for attachment in attachment_rows],
                 }
             )
         if reviewed_total != required_msat:
@@ -1576,7 +1658,18 @@ def build_report(
                 else ""
             ),
         },
-        "target": _tx_node({**_row_dict(target), "wallet_label": conn.execute("SELECT label FROM wallets WHERE id = ?", (target["wallet_id"],)).fetchone()["label"]}, mode, target_amount_msat),
+        "target": _tx_node(
+            {
+                **_row_dict(target),
+                "wallet_label": conn.execute(
+                    "SELECT label FROM wallets WHERE id = ?",
+                    (target["wallet_id"],),
+                ).fetchone()["label"],
+            },
+            mode,
+            target_amount_msat,
+            is_target=True,
+        ),
         "reveal_mode": mode,
         "graph": {
             "nodes": sorted(nodes.values(), key=lambda row: (row["node_type"], row["label"], row["id"])),
@@ -1857,27 +1950,16 @@ def export_pdf(
     planned_note: str | None = None,
     reveal_mode: str = "standard",
 ) -> dict[str, Any]:
-    if case_ref:
-        report = load_case_snapshot(conn, workspace_ref, profile_ref, hooks, case_ref)
-    else:
-        if not target_transaction_ref:
-            raise AppError(
-                "export-source-funds-pdf requires --case or --target-transaction",
-                code="validation",
-            )
-        report = build_report(
-            conn,
-            workspace_ref,
-            profile_ref,
-            hooks,
-            target_transaction_ref=target_transaction_ref,
-            target_amount=target_amount,
-            report_purpose=report_purpose,
-            planned_destination=planned_destination,
-            planned_note=planned_note,
-            reveal_mode=reveal_mode,
-            save_case=False,
+    if not case_ref:
+        raise AppError(
+            "export-source-funds-pdf requires --case from a saved source-funds preview",
+            code="validation",
+            hint=(
+                "Run `reports source-funds --save-case ...` first, review the "
+                "disclosure preview, then export that case id."
+            ),
         )
+    report = load_case_snapshot(conn, workspace_ref, profile_ref, hooks, case_ref)
     if not report["explain_gates"]["exportable"]:
         raise AppError(
             "Source-of-funds PDF export is blocked by unresolved review gates",

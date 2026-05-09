@@ -816,6 +816,8 @@ def _ui_source_funds_payload(
             None,
             hooks,
             target_transaction_ref=target.strip() if isinstance(target, str) and target.strip() else None,
+            include_broad_hints=bool(args.get("include_broad_hints")),
+            max_suggestions=int(args.get("max_suggestions") or core_source_funds.SUGGESTION_WRITE_CAP),
         )
 
     if kind == "ui.source_funds.evidence.list":

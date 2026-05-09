@@ -98,6 +98,11 @@ type SourceFundsPreview = {
     edges: Record<string, unknown>[];
   };
   source_mix: { source_type: string; amount: number; count: number }[];
+  case?: {
+    id: string;
+    status: string;
+    snapshot_hash: string;
+  };
   findings: SourceFundsFinding[];
   explain_gates: {
     exportable: boolean;
@@ -671,6 +676,7 @@ export function SourceFunds() {
     planned_note:
       reportPurpose === "planned_exchange_sale" ? plannedNote || undefined : undefined,
     reveal_mode: revealMode,
+    save_case: currentStep === "disclosure" || currentStep === "export",
   };
   const preview = useDaemon<SourceFundsPreview>(
     "ui.source_funds.preview",
@@ -1832,23 +1838,17 @@ export function SourceFunds() {
               )}
               <Button
                 className="w-full"
-                disabled={!report?.explain_gates.exportable || exportPdf.isPending}
-                onClick={() =>
-                  exportPdf.mutate({
-                    target_transaction: selectedTarget,
-                    target_amount: targetAmount || undefined,
-                    report_purpose: reportPurpose,
-                    planned_destination:
-                      reportPurpose === "planned_exchange_sale"
-                        ? plannedDestination || undefined
-                        : undefined,
-                    planned_note:
-                      reportPurpose === "planned_exchange_sale"
-                        ? plannedNote || undefined
-                        : undefined,
-                    reveal_mode: revealMode,
-                  })
+                disabled={
+                  !report?.explain_gates.exportable ||
+                  !report.case?.id ||
+                  exportPdf.isPending
                 }
+                onClick={() => {
+                  if (!report?.case?.id) return;
+                  exportPdf.mutate({
+                    case: report.case.id,
+                  });
+                }}
               >
                 <FileDown className="mr-2 size-4" aria-hidden="true" />
                 Export PDF

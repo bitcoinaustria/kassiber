@@ -159,12 +159,19 @@ Deterministic suggestions should run in this order:
 2. Existing manual `transaction_pairs`, including cross-asset swap links.
 3. Provider/import evidence such as trade ids, order ids, payment ids, or
    exchange ledger ids when stored in `raw_json`.
-4. Tight time and amount matches across owned wallets.
+4. Tight time and amount matches across owned wallets, as opt-in broad hints.
 5. Chain observations from configured Esplora, Electrum, or Bitcoin Core
    backends, stored as evidence only unless the ownership link is reviewed.
    Public Esplora or third-party Electrum usage must show a privacy warning
    because the queried txids reveal the report target and investigation path to
    that backend.
+
+When a target transaction is supplied, suggestion writes are target-scoped:
+Kassiber only persists candidate links that touch the target or transactions
+already reachable from the target through non-rejected source-funds links.
+Broad account-scoped provider ids and same-day time/amount matches are not
+persisted unless the user explicitly opts into broad hints. Every suggestion
+run has a hard write cap and aborts without committing when the cap is exceeded.
 
 Walkers must keep a visited set keyed by transaction and asset, enforce depth
 and node-count caps, and emit `path_truncated` instead of silently stopping.
@@ -217,7 +224,9 @@ supporting evidence."
 return the full machine envelope, including blockers and an `explain_gates`
 summary.
 
-`reports export-source-funds-pdf` should refuse when:
+`reports export-source-funds-pdf` renders saved case snapshots only. It should
+refuse live target-argument exports because the reviewed preview and the PDF
+must share the same immutable disclosure payload. It should also refuse when:
 
 - a path edge is still `suggested`
 - a reviewed path forms a cycle or self-link
@@ -244,11 +253,17 @@ credentials.
 
 Reveal modes:
 
-- `labels_only`: source labels, dates, amounts, and evidence types; no txids
-- `minimal`: source labels, dates, amounts, evidence types, and selected txids
-- `standard`: full path txids/external ids and wallet/source labels, no
-  unrelated addresses
-- `full`: include addresses and raw chain observations where explicitly chosen
+- `labels_only`: source labels, dates, amounts, evidence labels/types, and no
+  txids/external ids; attachment URLs, managed paths, hashes, and media types
+  are omitted
+- `minimal`: the selected target txid/external id, source labels, dates,
+  amounts, and evidence labels/types; ancestor txids and attachment URLs,
+  managed paths, hashes, and media types are omitted
+- `standard`: full path txids/external ids plus wallet/source labels; evidence
+  labels/types, media types, and hashes are included, but attachment URLs and
+  managed storage paths are omitted
+- `full`: full path txids/external ids and full attachment metadata including
+  URLs and managed storage paths
 
 Including a txid is already meaningful on-chain disclosure: a recipient can
 inspect its inputs, outputs, amounts, and neighbors. The user should see a
@@ -296,8 +311,8 @@ The first implementation adds the conservative, testable core path:
 - `reports source-funds --target-transaction ...` with graph nodes, edges,
   allocations, source mix, gaps, findings, disclosure preview, and
   `explain_gates`
-- `reports export-source-funds-pdf ...`, which refuses unresolved blockers and
-  renders only reviewed evidence
+- `reports export-source-funds-pdf --case ...`, which refuses unresolved
+  blockers and renders only the immutable saved case snapshot
 - immutable case snapshots for later re-rendering
 - daemon kinds for source/link/evidence review, suggestion seeding, report
   preview, and PDF export
@@ -308,15 +323,17 @@ The first implementation adds the conservative, testable core path:
   preview, disclosure preview, and PDF export
 
 The v1 suggestion pass seeds separate source-funds links from same
-`external_id` transfers, existing `transaction_pairs`, provider/import ids in
-`raw_json`, and tight same-day amount matches. These links stay suggested until
-reviewed; PDF export does not use them as proof. Exact/strong deterministic
-suggestions from same external ids, existing `transaction_pairs`, and one-to-one
-per-transaction provider/import ids may be batch-reviewed by the user so long
-consolidation chains do not require one-click-per-hop review. Batch review is
-target-scoped: it only promotes deterministic suggestions reachable from the
-selected report target. Broad provider account ids, weak time/amount matches,
-amount-mismatched provider rows, and chain-observation hints stay manual.
+`external_id` transfers, existing `transaction_pairs`, and one-to-one
+provider/import ids in `raw_json`; broad provider account ids and tight
+same-day amount matches require explicit broad-hint opt-in. These links stay
+suggested until reviewed; PDF export does not use them as proof. Exact/strong
+deterministic suggestions from same external ids, existing `transaction_pairs`,
+and one-to-one per-transaction provider/import ids may be batch-reviewed by the
+user so long consolidation chains do not require one-click-per-hop review.
+Batch review is target-scoped: it only promotes deterministic suggestions
+reachable from the selected report target. Broad provider account ids, weak
+time/amount matches, amount-mismatched provider rows, and chain-observation
+hints stay manual.
 
 ## Implementation Order
 

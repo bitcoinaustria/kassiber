@@ -215,6 +215,11 @@ export const fixtures: Record<string, unknown> = {
       fiat_value: 10713.03,
     },
     reveal_mode: "standard",
+    case: {
+      id: "case:source-funds-demo",
+      status: "exportable",
+      snapshot_hash: "mock-source-funds-snapshot",
+    },
     graph: {
       nodes: [
         { id: "source:1", node_type: "source", source_type: "fiat_purchase", label: "Reviewed exchange purchase", asset: "BTC" },
