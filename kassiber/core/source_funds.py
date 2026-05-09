@@ -299,6 +299,13 @@ def _attachment_summary(row: Mapping[str, Any], reveal_mode: str = "full") -> di
 
 
 def _source_row_to_dict(conn: sqlite3.Connection, row: Mapping[str, Any]) -> dict[str, Any]:
+    # _source_row_to_dict and _link_row_to_dict back the editor list
+    # endpoints (`source-funds sources/links list`). Those views serve
+    # the user's own desktop on their own data — the user is the
+    # disclosure boundary, not a recipient — so attachment metadata is
+    # rendered in full (`reveal_mode="full"` on `_attachment_summary`).
+    # Disclosure-side redaction lives on `build_report`; do not change
+    # this without thinking through the editor UX.
     attachments = conn.execute(
         """
         SELECT a.*
@@ -1442,6 +1449,14 @@ def _tx_node(
     *,
     is_target: bool = False,
 ) -> dict[str, Any]:
+    # ``id`` and ``transaction_id`` carry the Kassiber-internal UUID at
+    # every reveal mode. The UUID is random per database, has no
+    # relationship to on-chain data, and the recipient already knows
+    # the disclosure came from this user, so it is treated as a
+    # non-secret graph identifier rather than disclosure surface.
+    # ``internal_transaction_id`` is kept gated on ``full`` only so the
+    # original (renamed-from) row id stays available for editor flows
+    # without becoming a redundant copy at lower modes.
     free_text_visible = reveal_mode in {"standard", "full"}
     node = {
         "id": f"tx:{row['id']}",
