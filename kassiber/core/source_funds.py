@@ -1211,6 +1211,13 @@ def suggest_links(
     target = hooks.resolve_transaction(conn, profile["id"], target_transaction_ref) if target_transaction_ref else None
     if max_suggestions <= 0:
         raise AppError("--max-suggestions must be positive", code="validation")
+    # SUGGESTION_WRITE_CAP is an absolute ceiling, not a default. A caller
+    # passing a larger value (CLI --max-suggestions, daemon args) would
+    # otherwise let provider-id / time-amount Cartesian products spam the
+    # link table. Clamp here so every callsite is covered by the same
+    # ceiling regardless of how the request reaches us.
+    if max_suggestions > SUGGESTION_WRITE_CAP:
+        max_suggestions = SUGGESTION_WRITE_CAP
     rows = _active_transaction_rows(conn, profile["id"])
     rows_by_id = {row["id"]: row for row in rows}
     scoped_tx_ids = (
