@@ -98,7 +98,7 @@ from .secrets.credentials import migrate_dotenv_credentials
 from .secrets.migration import create_empty_encrypted_database, migrate_plaintext_to_encrypted
 from .secrets.passphrase import change_database_passphrase
 from .secrets.sqlcipher import looks_like_plaintext_sqlite, open_encrypted, sqlcipher_available
-from .sync_btcpay import fetch_btcpay_records
+from .sync_btcpay import fetch_btcpay_records, probe_btcpay_wallet
 from .wallet_descriptors import (
     derive_descriptor_targets,
     load_descriptor_plan,
@@ -4097,31 +4097,39 @@ def _test_btcpay_connection_payload(
     )
     conn = _require_conn(ctx)
     normalized_backend = backend_ref.lower()
-    raw_backend = ctx.runtime_config["backends"].get(normalized_backend)
-    if not isinstance(raw_backend, dict):
+    try:
+        backend = core_accounts.reveal_backend_secrets(
+            conn,
+            ctx.runtime_config,
+            normalized_backend,
+        )
+    except AppError as exc:
+        if exc.code != "not_found":
+            raise
         raise AppError(
             f"Backend '{backend_ref}' is not configured",
             code="not_found",
             hint="Choose an existing BTCPay backend or add one in Settings.",
             retryable=False,
-        )
-    if str(raw_backend.get("kind") or "").strip().lower() != "btcpay":
+        ) from exc
+    if str(backend.get("kind") or "").strip().lower() != "btcpay":
         raise AppError(
             f"Backend '{backend_ref}' is not a BTCPay backend",
             code="validation",
             retryable=False,
         )
-    backend = core_accounts.get_backend_details(conn, ctx.runtime_config, normalized_backend)
-    # page_size=1 keeps the round-trip cheap while still surfacing 401/403/404
-    # via the existing AppError mapping in fetch_btcpay_records.
-    fetch_btcpay_records(
+    safe_backend = core_accounts.get_backend_details(
+        conn,
+        ctx.runtime_config,
+        normalized_backend,
+    )
+    probe_btcpay_wallet(
         backend,
         store_id,
         payment_method_id=payment_method_id,
-        page_size=1,
     )
     return {
-        "backend": backend["name"],
+        "backend": safe_backend["name"],
         "store_id": store_id,
         "payment_method_id": payment_method_id,
         "ok": True,

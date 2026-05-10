@@ -1991,6 +1991,7 @@ class AccountBucketBehaviorTest(unittest.TestCase):
         self.assertEqual(buy["pricing_source_kind"], "exchange_execution")
         self.assertEqual(buy["pricing_provider"], "River")
         self.assertEqual(buy["pricing_method"], "river_csv")
+        self.assertEqual(buy["pricing_pair"], "BTC-USD")
         self.assertEqual(buy["fiat_value_exact"], "1005.00")
         self.assertIn({"code": "river:buy", "label": "Buy"}, buy["tags"])
 

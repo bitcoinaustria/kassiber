@@ -862,6 +862,95 @@ class DaemonSmokeTest(unittest.TestCase):
                 if proc.poll() is None:
                     proc.kill()
 
+    def test_ui_btcpay_connection_test_uses_raw_token_and_single_probe(self):
+        received = []
+
+        class Handler(BaseHTTPRequestHandler):
+            def do_GET(self):
+                received.append(
+                    {
+                        "path": self.path,
+                        "auth": self.headers.get("Authorization"),
+                    }
+                )
+                body = json.dumps(
+                    [
+                        {
+                            "transactionHash": "probe-tx",
+                            "amount": "0.001",
+                            "timestamp": 1704067200,
+                            "status": "Confirmed",
+                            "confirmations": 1,
+                            "labels": [],
+                        }
+                    ]
+                ).encode("utf-8")
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+
+            def log_message(self, *_args):
+                return
+
+        server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+        port = server.server_address[1]
+        server_thread = threading.Thread(target=server.serve_forever, daemon=True)
+        server_thread.start()
+        try:
+            with tempfile.TemporaryDirectory(prefix="kassiber-daemon-btcpay-test-") as tmp:
+                data_root = Path(tmp) / "data"
+                _seed_workspace_with_transaction(data_root, tmp)
+                _run_cli(
+                    data_root,
+                    "backends",
+                    "create",
+                    "btcpay-probe",
+                    "--kind",
+                    "btcpay",
+                    "--url",
+                    f"http://127.0.0.1:{port}",
+                    "--token",
+                    "probe-secret",
+                )
+                proc = _start_daemon(data_root)
+                try:
+                    self.assertEqual(_read_payload_timeout(proc)["kind"], "daemon.ready")
+                    _write_payload(
+                        proc,
+                        {
+                            "request_id": "btcpay-test",
+                            "kind": "ui.connections.btcpay.test",
+                            "args": {
+                                "backend": "btcpay-probe",
+                                "store_id": "STORE1",
+                            },
+                        },
+                    )
+                    envelope = _read_payload_timeout(proc)
+                    self.assertEqual(envelope["kind"], "ui.connections.btcpay.test")
+                    self.assertTrue(envelope["data"]["ok"])
+                    self.assertEqual(len(received), 1)
+                    self.assertEqual(received[0]["auth"], "token probe-secret")
+                    self.assertIn("skip=0", received[0]["path"])
+                    self.assertIn("limit=1", received[0]["path"])
+                finally:
+                    if proc.poll() is None:
+                        proc.terminate()
+                        try:
+                            proc.wait(timeout=5)
+                        except subprocess.TimeoutExpired:
+                            proc.kill()
+                            proc.wait(timeout=5)
+                    for stream in (proc.stdin, proc.stdout, proc.stderr):
+                        if stream is not None:
+                            stream.close()
+        finally:
+            server.shutdown()
+            server.server_close()
+            server_thread.join(timeout=5)
+
     def test_ui_connection_setup_creates_file_btcpay_and_bip329_connections(self):
         with tempfile.TemporaryDirectory(prefix="kassiber-daemon-setup-") as tmp:
             data_root = Path(tmp) / "data"

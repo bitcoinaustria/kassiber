@@ -76,6 +76,38 @@ def fetch_btcpay_records(
     return records
 
 
+def probe_btcpay_wallet(
+    backend,
+    store_id,
+    payment_method_id=DEFAULT_PAYMENT_METHOD_ID,
+    opener=None,
+):
+    """Validate one BTCPay wallet-history request without walking the paginator."""
+
+    if not store_id:
+        raise AppError("BTCPay store id is required", code="validation")
+    base = backend_value(backend, "url")
+    if not base:
+        raise AppError("BTCPay backend is missing 'url'", code="config_error")
+    token = backend_value(backend, "token")
+    if not token:
+        raise AppError(
+            "BTCPay backend is missing 'token' (api key)",
+            code="config_error",
+            hint="Store the api key with `kassiber backends update --token <key>` or KASSIBER_BACKEND_<NAME>_TOKEN.",
+        )
+    timeout = backend_timeout(backend)
+    http_opener = opener or urlrequest.build_opener()
+    url = _build_list_url(base, store_id, payment_method_id, 0, 1)
+    page = _http_get_json(http_opener, url, token, timeout)
+    if not isinstance(page, list):
+        raise AppError(
+            f"BTCPay response for {url} was not a JSON array",
+            code="protocol_error",
+        )
+    return {"checked": True, "rows_seen": len(page)}
+
+
 def _build_list_url(base, store_id, payment_method_id, skip, limit):
     base = base.rstrip("/")
     store_q = urlparse.quote(store_id, safe="")

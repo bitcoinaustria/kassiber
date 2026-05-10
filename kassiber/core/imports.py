@@ -176,6 +176,60 @@ def _transaction_merge_updates(existing: Mapping[str, Any], normalized: Mapping[
     return updates
 
 
+def _normalized_fiat_currency(value: Any) -> str:
+    return str(value or "").strip().upper()
+
+
+def _import_price_currency(record: ImportRow) -> str:
+    return _normalized_fiat_currency(record.get("fiat_currency"))
+
+
+def _validate_import_price_currency(
+    profile: Mapping[str, Any],
+    normalized: Mapping[str, Any],
+) -> None:
+    import_currency = _normalized_fiat_currency(normalized.get("fiat_currency"))
+    if not import_currency:
+        return
+    has_price = normalized["fiat_rate"] is not None or normalized["fiat_value"] is not None
+    if not has_price:
+        return
+    profile_currency = _normalized_fiat_currency(profile["fiat_currency"])
+    if import_currency == profile_currency:
+        return
+    raise AppError(
+        f"Imported price currency {import_currency} does not match profile fiat currency {profile_currency}",
+        code="validation",
+        hint=(
+            "Import the file into a profile with the same fiat currency, or remove "
+            "the imported fiat price values and price the transactions separately."
+        ),
+        retryable=False,
+    )
+
+
+def _emit_import_progress(
+    progress: ProgressCallback,
+    *,
+    wallet_label: str,
+    processed: int,
+    total: int,
+    imported: int | None = None,
+    skipped: int | None = None,
+) -> None:
+    payload: dict[str, Any] = {
+        "phase": "importing",
+        "wallet": wallet_label,
+        "processed": processed,
+        "total": total,
+    }
+    if imported is not None:
+        payload["imported"] = imported
+    if skipped is not None:
+        payload["skipped"] = skipped
+    progress(payload)
+
+
 def normalize_import_record(record: ImportRow, source_label: str = "") -> dict[str, Any]:
     raw_amount = dec(record.get("amount"))
     direction = normalize_import_direction(record.get("direction"), raw_amount)
@@ -230,6 +284,7 @@ def normalize_import_record(record: ImportRow, source_label: str = "") -> dict[s
         "asset": normalize_asset_code(record.get("asset") or "BTC"),
         "amount": amount,
         "fee": fee,
+        "fiat_currency": _import_price_currency(record),
         **payload,
         "kind": record.get("kind"),
         "description": record.get("description"),
@@ -253,16 +308,15 @@ def insert_wallet_records(
     total = len(records)
     progress = sync_progress_emitter.get()
     if progress is not None:
-        progress(
-            {
-                "phase": "importing",
-                "wallet": wallet["label"],
-                "processed": 0,
-                "total": total,
-            }
+        _emit_import_progress(
+            progress,
+            wallet_label=wallet["label"],
+            processed=0,
+            total=total,
         )
     for index, record in enumerate(records, start=1):
         normalized = normalize_import_record(record, source_label=source_label)
+        _validate_import_price_currency(profile, normalized)
         fingerprint = make_transaction_fingerprint(
             wallet["id"],
             normalized["external_id"],
@@ -283,15 +337,13 @@ def insert_wallet_records(
                 )
             skipped += 1
             if progress is not None and (index % 200 == 0 or index == total):
-                progress(
-                    {
-                        "phase": "importing",
-                        "wallet": wallet["label"],
-                        "processed": index,
-                        "total": total,
-                        "imported": imported,
-                        "skipped": skipped,
-                    }
+                _emit_import_progress(
+                    progress,
+                    wallet_label=wallet["label"],
+                    processed=index,
+                    total=total,
+                    imported=imported,
+                    skipped=skipped,
                 )
             continue
         tx_id = str(uuid.uuid4())
@@ -320,7 +372,7 @@ def insert_wallet_records(
                 normalized["asset"],
                 btc_to_msat(normalized["amount"]),
                 btc_to_msat(normalized["fee"]),
-                profile["fiat_currency"],
+                normalized["fiat_currency"] or profile["fiat_currency"],
                 normalized["fiat_rate"],
                 normalized["fiat_value"],
                 normalized["fiat_price_source"],
@@ -344,15 +396,13 @@ def insert_wallet_records(
         )
         imported += 1
         if progress is not None and (index % 200 == 0 or index == total):
-            progress(
-                {
-                    "phase": "importing",
-                    "wallet": wallet["label"],
-                    "processed": index,
-                    "total": total,
-                    "imported": imported,
-                    "skipped": skipped,
-                }
+            _emit_import_progress(
+                progress,
+                wallet_label=wallet["label"],
+                processed=index,
+                total=total,
+                imported=imported,
+                skipped=skipped,
             )
     hooks.invalidate_journals(conn, profile["id"])
     if commit:

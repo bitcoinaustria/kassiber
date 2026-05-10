@@ -363,7 +363,7 @@ def _clean_decimal_text(value):
     if text.startswith("(") and text.endswith(")"):
         negative = True
         text = text[1:-1].strip()
-    for symbol in ("$", "€", "£", "CHF", "USD", "EUR", "GBP", "BTC"):
+    for symbol in ("$", "€", "£", "CHF", "USD", "EUR", "GBP", "BTC", "XBT"):
         text = text.replace(symbol, "")
     text = text.replace(",", "").replace(" ", "").strip()
     if not text:
@@ -481,6 +481,7 @@ def normalize_river_record(record):
         "fee": fee_btc,
         "fiat_rate": fiat_rate,
         "fiat_value": fiat_value,
+        "fiat_currency": fiat_currency,
         "pricing_source_kind": "exchange_execution"
         if cash_leg_pricing
         else "fmv_provider"

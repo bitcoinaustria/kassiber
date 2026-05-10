@@ -79,6 +79,11 @@ interface BackendOptionsData {
 }
 
 type DialogStep = "source" | "setup";
+const DESCRIPTOR_BACKEND_KINDS = new Set(["esplora", "electrum"]);
+
+function supportsDescriptorSync(backend: BackendOption) {
+  return DESCRIPTOR_BACKEND_KINDS.has(backend.kind);
+}
 
 function sourceFileFilters(source: ConnectionSource) {
   if (source.sourceFormat === "phoenix_csv") {
@@ -293,12 +298,12 @@ export function AddConnectionDialog({
   const allBackends = backendOptions.data?.data?.backends ?? [];
   const bitcoinBackends = allBackends.filter(
     (backend) =>
-      backend.kind !== "btcpay" &&
+      supportsDescriptorSync(backend) &&
       (!backend.chain || backend.chain === "bitcoin"),
   );
   const liquidBackends = allBackends.filter(
     (backend) =>
-      backend.kind !== "btcpay" &&
+      supportsDescriptorSync(backend) &&
       backend.chain === "liquid",
   );
   const btcpayBackends = allBackends.filter(
