@@ -1217,14 +1217,20 @@ fn set_menu_state(
     handles: tauri::State<'_, AppMenuHandles>,
     ai_features_enabled: bool,
     has_workspace: bool,
+    locked: bool,
 ) -> Result<(), String> {
-    let assistant_enabled = ai_features_enabled && has_workspace;
+    // While locked the daemon refuses mutating calls, so workflow menu items
+    // would only ever produce auth_required errors. Disable them alongside
+    // the no-workspace case to keep the menu state aligned with what the user
+    // can actually do right now.
+    let workflows_enabled = has_workspace && !locked;
+    let assistant_enabled = ai_features_enabled && workflows_enabled;
     handles
         .assistant
         .set_enabled(assistant_enabled)
         .map_err(|error| error.to_string())?;
     for item in &handles.workspace_gated {
-        item.set_enabled(has_workspace)
+        item.set_enabled(workflows_enabled)
             .map_err(|error| error.to_string())?;
     }
     Ok(())

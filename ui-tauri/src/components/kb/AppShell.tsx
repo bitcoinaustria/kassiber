@@ -983,6 +983,7 @@ export function AppShell() {
         return invoke("set_menu_state", {
           aiFeaturesEnabled,
           hasWorkspace,
+          locked,
         });
       })
       .catch((error) => {
@@ -991,7 +992,7 @@ export function AppShell() {
     return () => {
       disposed = true;
     };
-  }, [aiFeaturesEnabled, identity]);
+  }, [aiFeaturesEnabled, identity, locked]);
 
   React.useEffect(() => {
     if (aiFeaturesEnabled || !isAssistantRoute) return;
@@ -1023,23 +1024,6 @@ export function AppShell() {
       main.removeEventListener("scroll", syncAssistantState);
     };
   }, [locked, pathname]);
-
-  React.useEffect(() => {
-    const openSettings = (event: Event) => {
-      const detail = (event as CustomEvent<{ section?: SettingsMenuSection }>)
-        .detail;
-      void navigate({
-        to: "/settings",
-        hash: detail?.section ?? undefined,
-      });
-    };
-
-    window.addEventListener("kassiber:open-settings", openSettings);
-
-    return () => {
-      window.removeEventListener("kassiber:open-settings", openSettings);
-    };
-  }, [navigate]);
 
   if (!identity) return null;
 

@@ -118,22 +118,7 @@ const AI_KIND_BADGE: Record<AiProviderRow["kind"], string> = {
   tee: "border-sky-500/25 bg-sky-500/10 text-sky-700 dark:text-sky-300",
 };
 
-const SETTINGS_SECTION_INTEGRATION: Record<string, string> = {
-  privacy: "privacy-sensitive",
-  display: "display-currency",
-  security: "security-lock-now",
-  backends: "sync-add-backend",
-  sync: "sync-add-backend",
-  rates: "b4",
-  ai: "ai-providers",
-  assistant: "ai-providers",
-  data: "data-root",
-};
-
-function selectedIntegrationForHash(hash: string): string | null {
-  const normalized = hash.replace(/^#/, "").trim().toLowerCase();
-  return SETTINGS_SECTION_INTEGRATION[normalized] ?? null;
-}
+import { selectedIntegrationForHash } from "./settingsSections";
 
 function isCliAiProvider(row: AiProviderRow): boolean {
   return (
