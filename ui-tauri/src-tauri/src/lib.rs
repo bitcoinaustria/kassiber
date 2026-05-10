@@ -62,10 +62,24 @@ const ISSUES_URL: &str = "https://github.com/bitcoinaustria/kassiber/issues";
 
 const DEEP_LINK_SCHEME: &str = "kassiber";
 
-// Hosts that resolve to a route navigation. The host (after the scheme) maps
-// 1:1 to a top-level route slug — `kassiber://transactions` → `/transactions`.
-// Restricting to a fixed allowlist means an attacker cannot deep-link the user
-// into an unintended route by encoding it in a URL.
+// Public URL contract for `kassiber://`. Once `bundle.active` flips to true,
+// every form below becomes part of the app's external API — emails, websites,
+// and third-party tools will start linking against it. Treat additions as
+// non-breaking and removals as breaking changes; rename via deprecation, not
+// in-place edits.
+//
+// Currently supported forms (case-insensitive, host + first segment are
+// normalized to ASCII lowercase before matching):
+//   kassiber://<route>                        navigates to /<route>
+//   kassiber://settings                       opens Settings (no section)
+//   kassiber://settings/<section>             opens Settings, focuses panel
+//   kassiber://workflow/sync-all              triggers wallet sync
+//   kassiber://workflow/process-journals      rebuilds journal state
+//   kassiber://lock                           locks the workspace
+//
+// Restricting hosts and sections to fixed allowlists keeps a malicious URL
+// from deep-linking the user into an unintended route or section.
+
 const DEEP_LINK_ROUTE_HOSTS: &[(&str, &str)] = &[
     ("overview", "/overview"),
     ("transactions", "/transactions"),
@@ -950,22 +964,29 @@ fn menu_action_for_deep_link(url: &Url) -> Option<MenuActionPayload> {
         return None;
     }
 
-    let host = url.host_str()?.to_ascii_lowercase();
-    let segments: Vec<&str> = url
+    // `url::Url` already normalizes the host to lowercase; the path is left
+    // case-sensitive so we lowercase ourselves. URLs in emails / chat /
+    // mailing lists are routinely auto-capitalized, so treating
+    // `kassiber://settings/Privacy` differently from `.../privacy` would be
+    // a footgun once the scheme is public API.
+    let host = url.host_str()?;
+    let segments: Vec<String> = url
         .path_segments()
-        .map(|iter| iter.filter(|segment| !segment.is_empty()).collect())
+        .map(|iter| {
+            iter.filter(|segment| !segment.is_empty())
+                .map(|segment| segment.to_ascii_lowercase())
+                .collect()
+        })
         .unwrap_or_default();
+    let first_segment = segments.first().map(String::as_str);
 
-    match host.as_str() {
+    match host {
         "lock" if segments.is_empty() => Some(menu_action("lock-app")),
         "settings" => {
-            let section = segments
-                .first()
-                .copied()
-                .and_then(deep_link_settings_section);
+            let section = first_segment.and_then(deep_link_settings_section);
             Some(open_settings_action(section))
         }
-        "workflow" => match segments.first().copied() {
+        "workflow" => match first_segment {
             Some("sync-all") | Some("sync") => Some(menu_action("sync-all-wallets")),
             Some("process-journals") => Some(menu_action("process-journals")),
             _ => None,
@@ -1525,6 +1546,29 @@ mod tests {
             Some(menu_action("process-journals"))
         );
         assert_eq!(parse("kassiber://lock"), Some(menu_action("lock-app")));
+    }
+
+    #[test]
+    fn deep_links_normalize_segment_case() {
+        // URLs auto-capitalized by mail clients, chat apps, or the user
+        // mistyping a segment must still resolve. Without this normalization
+        // `kassiber://settings/Privacy` silently falls through to the
+        // sectionless Settings open and the user wonders why their link
+        // doesn't focus the panel.
+        let parse = |s: &str| menu_action_for_deep_link(&Url::parse(s).unwrap());
+
+        assert_eq!(
+            parse("kassiber://settings/Privacy"),
+            Some(open_settings_action(Some("privacy")))
+        );
+        assert_eq!(
+            parse("kassiber://workflow/Sync-All"),
+            Some(menu_action("sync-all-wallets"))
+        );
+        assert_eq!(
+            parse("kassiber://workflow/PROCESS-JOURNALS"),
+            Some(menu_action("process-journals"))
+        );
     }
 
     #[test]
