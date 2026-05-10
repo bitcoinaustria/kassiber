@@ -75,13 +75,20 @@ export function Assistant() {
   );
 
   return (
-    <div className="mx-auto flex min-h-full w-full max-w-6xl flex-col px-4 py-3 sm:px-6 sm:py-4">
+    <div
+      className={cn(
+        "mx-auto flex w-full max-w-6xl flex-col px-4 sm:px-6",
+        hasMessages
+          ? "h-full min-h-0 pt-3 pb-0 sm:pt-4"
+          : "min-h-full py-3 sm:py-4",
+      )}
+    >
       <section
         aria-label="Assistant conversation"
-        className="flex min-h-full flex-1 flex-col bg-background"
+        className="flex min-h-0 flex-1 flex-col bg-background"
       >
         {hasMessages ? (
-          <div className="mx-auto flex w-full max-w-4xl items-center justify-end gap-2 px-1 pb-3">
+          <div className="mx-auto flex w-full max-w-4xl shrink-0 items-center justify-end gap-2 px-1 pb-3">
             {isStreaming ? (
               <span className="mr-auto rounded-full bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary">
                 Generating
@@ -112,22 +119,23 @@ export function Assistant() {
         <div
           className={cn(
             "flex-1",
-            hasMessages ? "" : "grid min-h-[480px] place-items-center",
+            hasMessages
+              ? "min-h-0 overflow-hidden"
+              : "grid min-h-[480px] place-items-center",
           )}
         >
           <div
             className={cn(
               "mx-auto w-full",
               hasMessages
-                ? "flex max-w-4xl flex-col"
+                ? "flex h-full min-h-0 max-w-4xl flex-col"
                 : "flex max-w-3xl -translate-y-6 flex-col items-center gap-7 px-1 text-center sm:-translate-y-10",
             )}
           >
             {hasMessages ? (
               <ChatThread
                 messages={messages}
-                scrollable={false}
-                className="p-1 sm:p-2"
+                className="min-h-0 p-1 sm:p-2"
               />
             ) : (
               <>
@@ -147,8 +155,8 @@ export function Assistant() {
         ) : null}
 
         {hasMessages ? (
-          <div className="mx-auto mt-4 w-full max-w-4xl shrink-0 border-t border-border/60 pt-3">
-            {composer}
+          <div className="sticky bottom-0 z-20 -mx-4 mt-3 shrink-0 border-t border-border/60 bg-background/95 px-4 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] backdrop-blur sm:-mx-6 sm:px-6">
+            <div className="mx-auto w-full max-w-4xl">{composer}</div>
           </div>
         ) : null}
       </section>

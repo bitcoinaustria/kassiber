@@ -110,15 +110,17 @@ export function shouldHandleDaemonAuthRequiredEvent(
 ): boolean {
   const parsed = parseDaemonAuthRequiredEventDetail(detail);
   if (!parsed) return false;
+  if (parsed.daemonSession === undefined) {
+    return currentDaemonSession === 0;
+  }
   return (
-    parsed.daemonSession === undefined ||
     parsed.daemonSession === currentDaemonSession
   );
 }
 
 export function dispatchDaemonAuthRequired(
   envelope: DaemonEnvelope,
-  daemonSession?: number,
+  daemonSession: number,
 ): void {
   if (typeof window !== "undefined") {
     const detail: DaemonAuthRequiredEventDetail = {
@@ -136,7 +138,7 @@ export function dispatchDaemonAuthRequired(
 
 function handleAuthRequired(
   envelope: DaemonEnvelope,
-  daemonSession?: number,
+  daemonSession: number,
 ): never {
   dispatchDaemonAuthRequired(envelope, daemonSession);
   throw new DaemonAuthRequiredError(envelope);

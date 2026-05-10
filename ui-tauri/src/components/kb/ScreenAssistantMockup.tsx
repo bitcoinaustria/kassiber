@@ -200,7 +200,7 @@ export function ScreenAssistantMockup({
           }
           showThinkingEffort={supportsThinkingEffort}
           inputPanelElevated={false}
-          modelPickerEnabled={modelPickerEnabled}
+          modelPickerEnabled={modelPickerEnabled || Boolean(selection?.provider)}
         />
         <ToolConsentDialog
           request={pendingConsent}

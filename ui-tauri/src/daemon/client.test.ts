@@ -15,11 +15,15 @@ const authEnvelope: DaemonEnvelope = {
 };
 
 describe("daemon auth-required event detail", () => {
-  it("keeps legacy envelope-only events current", () => {
+  it("keeps legacy envelope-only events current before the first session bump", () => {
     expect(parseDaemonAuthRequiredEventDetail(authEnvelope)).toEqual({
       envelope: authEnvelope,
     });
-    expect(shouldHandleDaemonAuthRequiredEvent(authEnvelope, 7)).toBe(true);
+    expect(shouldHandleDaemonAuthRequiredEvent(authEnvelope, 0)).toBe(true);
+  });
+
+  it("ignores legacy envelope-only events after the daemon session advances", () => {
+    expect(shouldHandleDaemonAuthRequiredEvent(authEnvelope, 1)).toBe(false);
   });
 
   it("handles events from the current daemon session", () => {
