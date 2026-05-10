@@ -9,7 +9,6 @@ import {
   CircleDollarSign,
   ClipboardList,
   CreditCard,
-  ExternalLink,
   Filter,
   FileText,
   Landmark,
@@ -21,15 +20,18 @@ import {
   ShieldAlert,
   WalletCards,
   Users,
+  X,
 } from "lucide-react";
 import * as React from "react";
 import {
   Area,
   AreaChart,
+  Brush,
   CartesianGrid,
   Cell,
   Pie,
   PieChart,
+  ReferenceLine,
   Tooltip,
   XAxis,
   YAxis,
@@ -43,9 +45,6 @@ import {
   Dialog,
   DialogClose,
   DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
@@ -65,10 +64,6 @@ import {
 } from "@/components/ui/tooltip";
 import { useWalletSyncAction } from "@/hooks/useWalletSyncAction";
 import { formatBtc, useCurrency, type Currency } from "@/lib/currency";
-import {
-  explorerTargetForTransaction,
-  type ExplorerSettings,
-} from "@/lib/explorer";
 import { screenShellClassName } from "@/lib/screen-layout";
 import { cn } from "@/lib/utils";
 import {
@@ -90,7 +85,7 @@ type StatItem = {
   comparisonLabel: string;
 };
 
-type SalesCategoryItem = {
+type HoldingsItem = {
   name: string;
   value: number;
   percent: number;
@@ -98,14 +93,22 @@ type SalesCategoryItem = {
 };
 
 type PortfolioChartPoint = {
+  date: string;
   month: string;
+  detailLabel: string;
   thisYear: number;
   prevYear?: number;
+  balanceBtc: number;
+  valueEur: number;
+  costBasisEur: number;
+  unrealizedEur: number;
 };
 
-type RevenueFlowColors = {
-  thisYear: string;
-  prevYear: string;
+type PortfolioChartMetric = "value" | "btc" | "basis" | "unrealized";
+type PortfolioChartShape = "step" | "line";
+
+type PortfolioChartMouseState = {
+  activePayload?: Array<{ payload?: PortfolioChartPoint }>;
 };
 
 type TransactionStatus = "confirmed" | "pending" | "review" | "failed";
@@ -162,13 +165,6 @@ const compactCurrencyFormatter = new Intl.NumberFormat("en-US", {
   currency: "EUR",
   notation: "compact",
   maximumFractionDigits: 0,
-});
-
-const shortDateTimeFormatter = new Intl.DateTimeFormat("en-US", {
-  month: "short",
-  day: "numeric",
-  hour: "2-digit",
-  minute: "2-digit",
 });
 
 const blurClass = (hidden: boolean) => (hidden ? "sensitive" : "");
@@ -234,6 +230,17 @@ function formatCompactPortfolioMoney(
   return formatCompactDisplayMoney(amount, priceEur, currency);
 }
 
+function formatDetailedPortfolioMoney(
+  amount: number,
+  priceEur: number,
+  currency: Currency,
+) {
+  if (currency === "btc") {
+    return formatBtc(amount, { precision: Math.abs(amount) < 0.01 ? 8 : 4 });
+  }
+  return formatDisplayMoney(amount, priceEur, currency);
+}
+
 function formatAxisPortfolioMoney(
   amount: number,
   priceEur: number,
@@ -278,6 +285,11 @@ const mixBase = "var(--background)";
 
 const palette = {
   primary: "var(--primary)",
+  risk: {
+    main: "var(--color-accent)",
+    soft: `color-mix(in oklch, var(--color-accent) 16%, transparent)`,
+    light: `color-mix(in oklch, var(--color-accent) 70%, ${mixBase})`,
+  },
   secondary: {
     light: `color-mix(in oklch, var(--primary) 75%, ${mixBase})`,
     dark: `color-mix(in oklch, var(--primary) 85%, ${mixBase})`,
@@ -292,7 +304,9 @@ const palette = {
   },
 };
 
-const salesCategoryChartConfig = {
+const costBasisChartColor = `color-mix(in oklch, var(--muted-foreground) 72%, ${mixBase})`;
+
+const holdingsChartConfig = {
   onchain: { label: "On-chain BTC", color: palette.primary },
   lightning: { label: "Lightning", theme: palette.secondary },
   liquid: { label: "Liquid", theme: palette.tertiary },
@@ -301,7 +315,10 @@ const salesCategoryChartConfig = {
 
 const revenueFlowChartConfig = {
   thisYear: { label: "Value", color: palette.primary },
-  prevYear: { label: "Cost Basis", theme: palette.secondary },
+  prevYear: {
+    label: "Cost Basis",
+    color: costBasisChartColor,
+  },
 } satisfies ChartConfig;
 
 const statsData: StatItem[] = [
@@ -433,7 +450,7 @@ const fiveYearData = [
   { month: "2026", thisYear: 337000, prevYear: 291000 },
 ];
 
-type TimePeriod = "30days" | "3months" | "ytd" | "1year" | "5years";
+type TimePeriod = "30days" | "3months" | "ytd" | "1year" | "5years" | "all";
 
 const periodLabels: Record<TimePeriod, string> = {
   "30days": "30 Days",
@@ -441,6 +458,28 @@ const periodLabels: Record<TimePeriod, string> = {
   ytd: "YTD",
   "1year": "1 Year",
   "5years": "5 Years",
+  all: "All",
+};
+
+const periodShortLabels: Record<TimePeriod, string> = {
+  "30days": "30D",
+  "3months": "3M",
+  ytd: "YTD",
+  "1year": "1Y",
+  "5years": "5Y",
+  all: "All",
+};
+
+const portfolioMetricLabels: Record<PortfolioChartMetric, string> = {
+  value: "Value",
+  btc: "BTC",
+  basis: "Cost Basis",
+  unrealized: "Unrealized",
+};
+
+const portfolioShapeLabels: Record<PortfolioChartShape, string> = {
+  step: "Step",
+  line: "Line",
 };
 
 const periodKeys: TimePeriod[] = [
@@ -449,6 +488,7 @@ const periodKeys: TimePeriod[] = [
   "ytd",
   "1year",
   "5years",
+  "all",
 ];
 
 function normalizeTimePeriodParam(value: string | null): TimePeriod | null {
@@ -484,6 +524,7 @@ function normalizeTimePeriodParam(value: string | null): TimePeriod | null {
   ) {
     return "5years";
   }
+  if (normalized === "all" || normalized === "max") return "all";
   return null;
 }
 
@@ -496,32 +537,53 @@ function initialTimePeriodFromUrl(): TimePeriod {
 function fallbackPortfolioData(
   data: Array<{ month: string; thisYear: number; prevYear: number }>,
   snapshot: OverviewSnapshot,
+  metric: PortfolioChartMetric,
   currency: Currency,
 ): PortfolioChartPoint[] {
-  if (currency === "btc") {
-    return data.map((point) => ({
-      month: point.month,
-      thisYear: btcFromEur(point.thisYear, snapshot.priceEur),
-    }));
-  }
-  return data;
+  const scoped =
+    data === fiveYearData
+      ? data
+      : expandFallbackYearData(data, snapshot.priceEur);
+  return scoped.map((point, index) => {
+    const valueEur = point.thisYear;
+    const costBasisEur = point.prevYear;
+    const balanceBtc = btcFromEur(valueEur, snapshot.priceEur);
+    return buildPortfolioChartPoint(
+      {
+        date: `fallback-${index}`,
+        label: point.month,
+        balanceBtc,
+        valueEur,
+        costBasisEur,
+      },
+      point.month,
+      point.month,
+      metric,
+      currency,
+    );
+  });
 }
 
 function getDataForPeriod(
   period: TimePeriod,
   snapshot: OverviewSnapshot,
+  metric: PortfolioChartMetric,
   currency: Currency,
+  density: "compact" | "detailed",
 ): PortfolioChartPoint[] {
   const fallback = fallbackPortfolioData(
     period === "5years" ? fiveYearData : fullYearData,
     snapshot,
+    metric,
     currency,
   );
   if (snapshot.portfolioSeries?.length) {
     const points = buildDatedPortfolioPoints(
       snapshot.portfolioSeries,
       period,
+      metric,
       currency,
+      density,
     );
     if (points.length) return points;
   }
@@ -549,12 +611,6 @@ function getDataForPeriod(
           "Dec",
         ];
   const points = snapshot.balanceSeries.map((btc, index) => {
-    if (currency === "btc") {
-      return {
-        month: labels[index % labels.length],
-        thisYear: btc,
-      };
-    }
     const isLatestPoint = index === snapshot.balanceSeries.length - 1;
     const value = isLatestPoint
       ? snapshot.fiat.eurBalance
@@ -563,12 +619,21 @@ function getDataForPeriod(
       snapshot.fiat.eurBalance > 0
         ? value / snapshot.fiat.eurBalance
         : index / Math.max(1, snapshot.balanceSeries.length - 1);
-    return {
-      month: labels[index % labels.length],
-      thisYear: value,
-      prevYear:
-        snapshot.fiat.eurCostBasis * Math.max(0, Math.min(1, basisShare)),
-    };
+    const label = labels[index % labels.length];
+    return buildPortfolioChartPoint(
+      {
+        date: `series-${index}`,
+        label,
+        balanceBtc: btc,
+        valueEur: value,
+        costBasisEur:
+          snapshot.fiat.eurCostBasis * Math.max(0, Math.min(1, basisShare)),
+      },
+      label,
+      label,
+      metric,
+      currency,
+    );
   });
   if (period === "30days") return points.slice(-4);
   if (period === "3months") return points.slice(-3);
@@ -584,25 +649,28 @@ function getDataForPeriod(
 function buildDatedPortfolioPoints(
   series: PortfolioPoint[],
   period: TimePeriod,
+  metric: PortfolioChartMetric,
   currency: Currency,
+  density: "compact" | "detailed",
 ): PortfolioChartPoint[] {
   const sorted = [...series].sort((a, b) => a.date.localeCompare(b.date));
   const latestDate = parseSeriesDate(sorted[sorted.length - 1]?.date);
-  const filtered = sorted.filter((point) =>
-    isPointInPeriod(point.date, latestDate, period),
-  );
+  const filtered =
+    period === "all"
+      ? sorted
+      : sorted.filter((point) =>
+          isPointInPeriod(point.date, latestDate, period),
+        );
   const scoped = filtered.length ? filtered : sorted.slice(-1);
-  const points =
-    period === "5years"
-      ? latestPointPerYear(scoped)
-      : period === "1year" || period === "ytd"
-        ? latestPointPerMonth(scoped)
-        : scoped;
-  return points.map((point) => ({
-    month: formatPortfolioLabel(point.date, period),
-    thisYear: currency === "btc" ? point.balanceBtc : point.valueEur,
-    prevYear: currency === "btc" ? undefined : point.costBasisEur,
-  }));
+  return samplePortfolioPoints(scoped, period, density).map((point) =>
+    buildPortfolioChartPoint(
+      point,
+      formatPortfolioTick(point.date, period),
+      formatPortfolioDetailLabel(point.date),
+      metric,
+      currency,
+    ),
+  );
 }
 
 function parseSeriesDate(value: string | undefined) {
@@ -626,32 +694,121 @@ function isPointInPeriod(
     start.setUTCMonth(start.getUTCMonth() - 3);
   } else if (period === "1year") {
     start.setUTCFullYear(start.getUTCFullYear() - 1);
-  } else {
+  } else if (period === "5years") {
     start.setUTCFullYear(start.getUTCFullYear() - 5);
+  } else {
+    return true;
   }
   return pointDate >= start && pointDate <= latestDate;
 }
 
-function latestPointPerYear(points: PortfolioPoint[]) {
-  const byYear = new Map<string, PortfolioPoint>();
-  for (const point of points) {
-    byYear.set(point.date.slice(0, 4), point);
-  }
-  return [...byYear.values()].slice(-5);
+function buildPortfolioChartPoint(
+  point: Pick<
+    PortfolioPoint,
+    "date" | "label" | "balanceBtc" | "valueEur" | "costBasisEur"
+  >,
+  month: string,
+  detailLabel: string,
+  metric: PortfolioChartMetric,
+  currency: Currency,
+): PortfolioChartPoint {
+  const unrealizedEur = point.valueEur - point.costBasisEur;
+  const chartCurrency = chartCurrencyForMetric(metric, currency);
+  const thisYear =
+    metric === "btc"
+      ? point.balanceBtc
+      : metric === "basis"
+        ? point.costBasisEur
+        : metric === "unrealized"
+          ? unrealizedEur
+          : chartCurrency === "btc"
+            ? point.balanceBtc
+            : point.valueEur;
+  const prevYear =
+    metric === "value" && chartCurrency === "eur"
+      ? point.costBasisEur
+      : undefined;
+  return {
+    date: point.date,
+    month,
+    detailLabel,
+    thisYear,
+    prevYear,
+    balanceBtc: point.balanceBtc,
+    valueEur: point.valueEur,
+    costBasisEur: point.costBasisEur,
+    unrealizedEur,
+  };
 }
 
-function latestPointPerMonth(points: PortfolioPoint[]) {
-  const byMonth = new Map<string, PortfolioPoint>();
-  for (const point of points) {
-    byMonth.set(point.date.slice(0, 7), point);
-  }
-  return [...byMonth.values()];
+function chartCurrencyForMetric(
+  metric: PortfolioChartMetric,
+  currency: Currency,
+): Currency {
+  if (metric === "btc") return "btc";
+  if (metric === "value") return currency;
+  return "eur";
 }
 
-function formatPortfolioLabel(value: string, period: TimePeriod) {
+function expandFallbackYearData(
+  data: Array<{ month: string; thisYear: number; prevYear: number }>,
+  priceEur: number,
+) {
+  return data.flatMap((point, index) => {
+    if (index === 0) return [point];
+    const previous = data[index - 1];
+    const swing = Math.sin(index * 2.43) * 0.06;
+    const midValue =
+      previous.thisYear + (point.thisYear - previous.thisYear) * 0.52;
+    const midBasis =
+      previous.prevYear + (point.prevYear - previous.prevYear) * 0.52;
+    return [
+      {
+        month: `${point.month} · 1`,
+        thisYear: Math.max(0, midValue * (1 + swing)),
+        prevYear: Math.max(0, midBasis),
+      },
+      point,
+    ];
+  }).map((point) => ({
+    ...point,
+    thisYear: Math.round(point.thisYear * 100) / 100,
+    prevYear: Math.round(point.prevYear * 100) / 100,
+    balanceBtc: btcFromEur(point.thisYear, priceEur),
+  }));
+}
+
+function samplePortfolioPoints(
+  points: PortfolioPoint[],
+  period: TimePeriod,
+  density: "compact" | "detailed",
+) {
+  const maxPoints =
+    density === "detailed"
+      ? period === "all" || period === "5years"
+        ? 720
+        : 420
+      : period === "30days"
+        ? 90
+        : period === "3months"
+          ? 120
+          : 180;
+  if (points.length <= maxPoints) return points;
+  const step = Math.ceil((points.length - 2) / Math.max(1, maxPoints - 2));
+  return points.filter(
+    (_, index) =>
+      index === 0 || index === points.length - 1 || index % step === 0,
+  );
+}
+
+function formatPortfolioTick(value: string, period: TimePeriod) {
   const date = parseSeriesDate(value);
   if (period === "5years") {
-    return String(date.getUTCFullYear());
+    return date.toLocaleDateString("en-US", {
+      month: "short",
+      year: "2-digit",
+      timeZone: "UTC",
+    });
   }
   if (period === "30days" || period === "3months") {
     return date.toLocaleDateString("en-US", {
@@ -667,19 +824,14 @@ function formatPortfolioLabel(value: string, period: TimePeriod) {
   });
 }
 
-function sourceForLabel(label: string) {
-  const value = label.toLowerCase();
-  if (value.includes("liquid") || value.includes("lbtc")) return "liquid";
-  if (
-    value.includes("lightning") ||
-    value.includes("ln") ||
-    value.includes("phoenix") ||
-    value.includes("nwc") ||
-    value.includes("core-ln")
-  ) {
-    return "lightning";
-  }
-  return "onchain";
+function formatPortfolioDetailLabel(value: string) {
+  const date = parseSeriesDate(value);
+  return date.toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    timeZone: "UTC",
+  });
 }
 
 function percentOf(value: number, total: number) {
@@ -687,67 +839,112 @@ function percentOf(value: number, total: number) {
   return Math.round((value / total) * 100);
 }
 
-function buildRevenueSourceItems(snapshot: OverviewSnapshot) {
-  const bySource = { onchain: 0, lightning: 0, liquid: 0, manual: 0 };
-  for (const tx of snapshot.txs) {
-    const key = sourceForLabel(`${tx.account} ${tx.counter}`) as keyof typeof bySource;
-    bySource[key] += Math.abs(tx.eur || (tx.amountSat / 100_000_000) * tx.rate);
+type BalanceRail = "onchain" | "lightning" | "liquid" | "other";
+
+function railForConnection(kind: string, label: string): BalanceRail {
+  const value = `${kind} ${label}`.toLowerCase();
+  if (value.includes("liquid") || value.includes("lbtc")) return "liquid";
+  if (
+    value.includes("lightning") ||
+    value.includes("phoenix") ||
+    value.includes("nwc") ||
+    value.includes("core-ln") ||
+    value.includes("lnd")
+  ) {
+    return "lightning";
   }
-  const total = Object.values(bySource).reduce((sum, value) => sum + value, 0);
+  if (
+    value.includes("xpub") ||
+    value.includes("address") ||
+    value.includes("descriptor") ||
+    value.includes("btcpay") ||
+    value.includes("cold") ||
+    value.includes("vault")
+  ) {
+    return "onchain";
+  }
+  return "other";
+}
+
+function buildBalanceRailItems(snapshot: OverviewSnapshot) {
+  const byRail: Record<BalanceRail, number> = {
+    onchain: 0,
+    lightning: 0,
+    liquid: 0,
+    other: 0,
+  };
+  for (const connection of snapshot.connections) {
+    if (connection.balance <= 0) continue;
+    const rail = railForConnection(connection.kind, connection.label);
+    byRail[rail] += connection.balance * snapshot.priceEur;
+  }
+  const total = Object.values(byRail).reduce((sum, value) => sum + value, 0);
   return {
     total,
     items: [
-      { key: "onchain", label: "On-chain", value: bySource.onchain, percent: percentOf(bySource.onchain, total), color: palette.primary },
-      { key: "lightning", label: "Lightning", value: bySource.lightning, percent: percentOf(bySource.lightning, total), color: palette.secondary.light },
-      { key: "liquid", label: "Liquid", value: bySource.liquid, percent: percentOf(bySource.liquid, total), color: palette.tertiary.light },
-      { key: "manual", label: "Manual", value: bySource.manual, percent: percentOf(bySource.manual, total), color: `color-mix(in oklch, var(--primary) 42%, ${mixBase})` },
+      {
+        key: "onchain",
+        label: "On-chain",
+        value: byRail.onchain,
+        percent: percentOf(byRail.onchain, total),
+        color: palette.primary,
+      },
+      {
+        key: "lightning",
+        label: "Lightning",
+        value: byRail.lightning,
+        percent: percentOf(byRail.lightning, total),
+        color: palette.secondary.light,
+      },
+      {
+        key: "liquid",
+        label: "Liquid",
+        value: byRail.liquid,
+        percent: percentOf(byRail.liquid, total),
+        color: palette.tertiary.light,
+      },
+      {
+        key: "other",
+        label: "Other",
+        value: byRail.other,
+        percent: percentOf(byRail.other, total),
+        color: `color-mix(in oklch, var(--muted-foreground) 70%, ${mixBase})`,
+      },
     ],
   };
 }
 
-function buildHoldingsBySource(snapshot: OverviewSnapshot): SalesCategoryItem[] {
-  const bySource = {
-    onchain: { balance: 0, value: 0 },
-    lightning: { balance: 0, value: 0 },
-    liquid: { balance: 0, value: 0 },
-    other: { balance: 0, value: 0 },
-  };
-  for (const connection of snapshot.connections) {
-    if (connection.balance <= 0) continue;
-    const value = connection.balance * snapshot.priceEur;
-    const source = sourceForLabel(`${connection.kind} ${connection.label}`);
-    bySource[source as keyof typeof bySource].balance += connection.balance;
-    bySource[source as keyof typeof bySource].value += value;
-  }
-  const total = Object.values(bySource).reduce(
-    (sum, source) => sum + source.value,
-    0,
-  );
-  return [
-    { name: "On-chain BTC", source: bySource.onchain, color: palette.primary },
-    {
-      name: "Lightning",
-      source: bySource.lightning,
-      color: `color-mix(in oklch, var(--primary) 80%, ${mixBase})`,
-    },
-    {
-      name: "Liquid",
-      source: bySource.liquid,
-      color: `color-mix(in oklch, var(--primary) 60%, ${mixBase})`,
-    },
-    {
-      name: "Other",
-      source: bySource.other,
-      color: `color-mix(in oklch, var(--primary) 42%, ${mixBase})`,
-    },
-  ]
-    .filter((item) => item.source.balance > 0)
-    .map((item) => ({
-      name: item.name,
-      value: item.source.value,
-      percent: percentOf(item.source.value, total),
-      color: item.color,
-    }));
+function buildHoldingsBySource(snapshot: OverviewSnapshot): HoldingsItem[] {
+  const rows = snapshot.connections
+    .filter((connection) => connection.balance > 0)
+    .map((connection) => ({
+      name: connection.label,
+      value: connection.balance * snapshot.priceEur,
+    }))
+    .sort((a, b) => b.value - a.value);
+  const total = rows.reduce((sum, item) => sum + item.value, 0);
+  const visibleRows =
+    rows.length > 4
+      ? [
+          ...rows.slice(0, 3),
+          {
+            name: "Other sources",
+            value: rows.slice(3).reduce((sum, item) => sum + item.value, 0),
+          },
+        ]
+      : rows;
+  const colors = [
+    palette.primary,
+    palette.secondary.light,
+    palette.tertiary.light,
+    `color-mix(in oklch, var(--muted-foreground) 70%, ${mixBase})`,
+  ];
+  return visibleRows.map((item, index) => ({
+    name: item.name,
+    value: item.value,
+    percent: percentOf(item.value, total),
+    color: colors[index] ?? colors[colors.length - 1],
+  }));
 }
 
 const transactionStatuses: TransactionStatus[] = [
@@ -1130,7 +1327,7 @@ const StatsCards = ({
   );
 };
 
-const RevenueSourceChart = ({
+const BalanceRailChart = ({
   snapshot,
   hideSensitive,
   currency,
@@ -1140,7 +1337,7 @@ const RevenueSourceChart = ({
   currency: Currency;
 }) => {
   const { active: activeSegment, handleHover } = useHoverHighlight<number>();
-  const { total, items: revenueSourceItems } = buildRevenueSourceItems(snapshot);
+  const { total, items: balanceRailItems } = buildBalanceRailItems(snapshot);
 
   return (
     <div className="flex flex-col gap-3 rounded-xl border bg-card p-4">
@@ -1150,13 +1347,13 @@ const RevenueSourceChart = ({
             variant="outline"
             size="icon"
             className="size-7 sm:size-8"
-            aria-label="Flow by rail"
+            aria-label="Balance by rail"
           >
             <Landmark className="size-4 text-muted-foreground sm:size-[18px]" />
           </Button>
           <div>
             <span className="text-sm font-medium sm:text-base">
-              Flow by Rail
+              Balance by Rail
             </span>
             <p
               className={cn(
@@ -1164,7 +1361,7 @@ const RevenueSourceChart = ({
                 blurClass(hideSensitive),
               )}
             >
-              {formatCompactDisplayMoney(total, snapshot.priceEur, currency)} moved in loaded rows
+              {formatCompactDisplayMoney(total, snapshot.priceEur, currency)} current balance
             </p>
           </div>
         </div>
@@ -1180,7 +1377,7 @@ const RevenueSourceChart = ({
 
       <div className="space-y-3">
         <div className="flex h-3 w-full overflow-hidden rounded-full sm:h-4">
-          {revenueSourceItems.map((item, index) => (
+          {balanceRailItems.map((item, index) => (
             <ShadTooltipProvider key={item.key}>
               <ShadTooltip>
                 <ShadTooltipTrigger asChild>
@@ -1252,7 +1449,7 @@ const RevenueSourceChart = ({
         </div>
 
         <div className="flex items-center justify-between text-[10px] sm:text-xs">
-          {revenueSourceItems.map((item, index) => (
+          {balanceRailItems.map((item, index) => (
             <span
               key={item.key}
               className={cn(
@@ -1269,7 +1466,7 @@ const RevenueSourceChart = ({
         </div>
 
         <div className="flex flex-wrap items-center gap-3 sm:gap-4">
-          {revenueSourceItems.map((item, index) => (
+          {balanceRailItems.map((item, index) => (
             <ShadTooltipProvider key={item.key}>
               <ShadTooltip>
                 <ShadTooltipTrigger asChild>
@@ -1339,7 +1536,7 @@ const RevenueSourceChart = ({
   );
 };
 
-const SalesByCategoryChart = ({
+const HoldingsBySourceChart = ({
   snapshot,
   hideSensitive,
   currency,
@@ -1351,16 +1548,16 @@ const SalesByCategoryChart = ({
   const isBitcoinMode = currency === "btc";
   const { active: activeSlice, handleHover: setHoveredSlice } =
     useHoverHighlight<number>();
-  const salesCategoryData = buildHoldingsBySource(snapshot);
+  const holdingsData = buildHoldingsBySource(snapshot);
   const unrealizedPercent = snapshot.fiat.eurCostBasis
     ? (snapshot.fiat.eurUnrealized / snapshot.fiat.eurCostBasis) * 100
     : 0;
-  const totalSales = salesCategoryData.reduce(
+  const totalHoldings = holdingsData.reduce(
     (acc, item) => acc + item.value,
     0,
   );
-  const totalSalesLabel = formatCompactDisplayMoney(
-    totalSales,
+  const totalHoldingsLabel = formatCompactDisplayMoney(
+    totalHoldings,
     snapshot.priceEur,
     currency,
   );
@@ -1425,12 +1622,12 @@ const SalesByCategoryChart = ({
       <div className="grid flex-1 items-center gap-3 sm:grid-cols-[minmax(136px,1.2fr)_minmax(0,0.8fr)] sm:gap-4">
         <div className="relative mx-auto size-[128px] shrink-0 sm:size-[152px] xl:size-[160px]">
           <ChartContainer
-            config={salesCategoryChartConfig}
+            config={holdingsChartConfig}
             className="h-full w-full"
           >
             <PieChart>
               <Pie
-                data={salesCategoryData}
+                data={holdingsData}
                 cx="50%"
                 cy="50%"
                 innerRadius="55%"
@@ -1443,7 +1640,7 @@ const SalesByCategoryChart = ({
                 }
                 onMouseLeave={() => setHoveredSlice(null)}
               >
-                {salesCategoryData.map((entry) => (
+                {holdingsData.map((entry) => (
                   <Cell key={entry.name} fill={entry.color} />
                 ))}
               </Pie>
@@ -1453,11 +1650,11 @@ const SalesByCategoryChart = ({
             <span
               className={cn(
                 "max-w-[96px] whitespace-nowrap text-center leading-tight font-semibold tabular-nums sm:max-w-[116px]",
-                donutCenterValueClass(totalSalesLabel),
+                donutCenterValueClass(totalHoldingsLabel),
                 blurClass(hideSensitive),
               )}
             >
-              {totalSalesLabel}
+              {totalHoldingsLabel}
             </span>
             <span className="text-[8px] text-muted-foreground sm:text-[10px]">
               Total
@@ -1466,7 +1663,7 @@ const SalesByCategoryChart = ({
         </div>
 
         <div className="flex min-w-0 flex-col gap-2 sm:gap-3">
-          {salesCategoryData.map((item, index) => (
+          {holdingsData.map((item, index) => (
             <div
               key={item.name}
               className={cn(
@@ -1533,12 +1730,12 @@ const SideChartsSection = ({
         className,
       )}
     >
-      <RevenueSourceChart
+      <BalanceRailChart
         snapshot={snapshot}
         hideSensitive={hideSensitive}
         currency={currency}
       />
-      <SalesByCategoryChart
+      <HoldingsBySourceChart
         snapshot={snapshot}
         hideSensitive={hideSensitive}
         currency={currency}
@@ -1550,99 +1747,335 @@ const SideChartsSection = ({
 interface RevenueTooltipPayload {
   dataKey?: string | number;
   value?: number | string;
+  payload?: PortfolioChartPoint;
 }
 
 interface RevenueTooltipProps {
   active?: boolean;
   payload?: RevenueTooltipPayload[];
   label?: string | number;
-  colors: RevenueFlowColors;
   hideSensitive: boolean;
   currency: Currency;
   priceEur: number;
   showCostBasis: boolean;
   valueLabel: string;
+  metric: PortfolioChartMetric;
 }
 
 function CustomTooltip({
   active,
   payload,
   label,
-  colors,
   hideSensitive,
   currency,
   priceEur,
   showCostBasis,
   valueLabel,
+  metric,
 }: RevenueTooltipProps) {
   if (!active || !payload?.length) return null;
 
   const thisYear = payload.find((p) => p.dataKey === "thisYear")?.value || 0;
   const prevYear = payload.find((p) => p.dataKey === "prevYear")?.value;
+  const point = payload.find((p) => p.payload)?.payload;
   const hasCostBasis = showCostBasis && prevYear !== undefined;
-  const diff = Number(thisYear) - Number(prevYear ?? 0);
+  const diff = point
+    ? point.unrealizedEur
+    : Number(thisYear) - Number(prevYear ?? 0);
   const percentage =
-    hasCostBasis && Number(prevYear)
-      ? Math.round((diff / Number(prevYear)) * 100)
+    (hasCostBasis && Number(prevYear)) || point?.costBasisEur
+      ? (diff / Math.abs(Number(prevYear ?? point?.costBasisEur ?? 0))) * 100
       : 0;
+  const chartCurrency = chartCurrencyForMetric(metric, currency);
+  const primaryValue =
+    point && metric === "value" && chartCurrency === "btc"
+      ? point.balanceBtc
+      : Number(thisYear);
+  const signedUnrealized = `${diff >= 0 ? "+ " : "− "}${formatPortfolioMoney(
+    Math.abs(diff),
+    priceEur,
+    "eur",
+  )}`;
 
   return (
-    <div className="rounded-lg border border-border bg-popover p-2 shadow-lg sm:p-3">
-      <p className="mb-1.5 text-xs font-medium text-foreground sm:mb-2 sm:text-sm">
-        {label}
+    <div className="min-w-[180px] rounded-lg border border-border bg-popover p-2.5 text-xs shadow-lg">
+      <p className="mb-2 font-medium text-foreground">
+        {point?.detailLabel ?? label}
       </p>
-      <div className="space-y-1 sm:space-y-1.5">
-        <div className="flex items-center gap-1.5 sm:gap-2">
-          <div
-            className="size-2 rounded-full sm:size-2.5"
-            style={{ backgroundColor: colors.thisYear }}
-          />
-          <span className="text-[10px] text-muted-foreground sm:text-sm">
-            {valueLabel}:
-          </span>
-          <span
-            className={cn(
-              "text-[10px] font-medium text-foreground sm:text-sm",
-              blurClass(hideSensitive),
-            )}
-          >
-            {formatPortfolioMoney(Number(thisYear), priceEur, currency)}
-          </span>
-        </div>
+      <div className="space-y-1.5">
+        <TooltipMetricRow
+          label={valueLabel}
+          value={formatPortfolioMoney(primaryValue, priceEur, chartCurrency)}
+          hidden={hideSensitive}
+        />
         {hasCostBasis && (
           <>
-            <div className="flex items-center gap-1.5 sm:gap-2">
-              <div
-                className="size-2 rounded-full sm:size-2.5"
-                style={{ backgroundColor: colors.prevYear }}
-              />
-              <span className="text-[10px] text-muted-foreground sm:text-sm">
-                Cost Basis:
-              </span>
-              <span
-                className={cn(
-                  "text-[10px] font-medium text-foreground sm:text-sm",
-                  blurClass(hideSensitive),
-                )}
-              >
-                {formatPortfolioMoney(Number(prevYear), priceEur, currency)}
-              </span>
-            </div>
-            <div className="mt-1 border-t border-border pt-1">
-              <span
-                className={cn(
-                  "text-[10px] font-medium sm:text-xs",
-                  diff >= 0 ? "text-emerald-500" : "text-red-500",
-                  blurClass(hideSensitive),
-                )}
-              >
-                {diff >= 0 ? "+" : ""}
-                {percentage}% vs basis
-              </span>
-            </div>
+            <TooltipMetricRow
+              label="Cost basis"
+              value={formatPortfolioMoney(Number(prevYear), priceEur, "eur")}
+              hidden={hideSensitive}
+            />
+            <TooltipMetricRow
+              label="Unrealized"
+              value={`${signedUnrealized} (${percentage >= 0 ? "+" : "−"}${Math.abs(
+                percentage,
+              ).toFixed(1)}%)`}
+              tone={diff >= 0 ? "good" : "bad"}
+              hidden={hideSensitive}
+            />
           </>
         )}
+        {metric === "unrealized" && point && (
+          <>
+            <TooltipMetricRow
+              label="Value"
+              value={formatPortfolioMoney(point.valueEur, priceEur, "eur")}
+              hidden={hideSensitive}
+            />
+            <TooltipMetricRow
+              label="Cost basis"
+              value={formatPortfolioMoney(point.costBasisEur, priceEur, "eur")}
+              hidden={hideSensitive}
+            />
+          </>
+        )}
+        {metric === "basis" && point && (
+          <>
+            <TooltipMetricRow
+              label="Value"
+              value={formatPortfolioMoney(point.valueEur, priceEur, "eur")}
+              hidden={hideSensitive}
+            />
+            <TooltipMetricRow
+              label="Unrealized"
+              value={signedUnrealized}
+              tone={diff >= 0 ? "good" : "bad"}
+              hidden={hideSensitive}
+            />
+          </>
+        )}
+        {point && metric !== "btc" && chartCurrency !== "btc" && (
+          <TooltipMetricRow
+            label="BTC"
+            value={formatBtc(point.balanceBtc, { precision: 8 })}
+            hidden={hideSensitive}
+          />
+        )}
+        {point && chartCurrency === "btc" && (
+          <TooltipMetricRow
+            label="Fiat value"
+            value={formatPortfolioMoney(point.valueEur, priceEur, "eur")}
+            hidden={hideSensitive}
+          />
+        )}
       </div>
+    </div>
+  );
+}
+
+function TooltipMetricRow({
+  label,
+  value,
+  tone = "neutral",
+  hidden,
+}: {
+  label: string;
+  value: string;
+  tone?: "good" | "bad" | "neutral";
+  hidden: boolean;
+}) {
+  return (
+    <div className="flex items-baseline justify-between gap-4">
+      <span className="text-muted-foreground">{label}</span>
+      <span
+        className={cn(
+          "font-medium tabular-nums",
+          tone === "good" && "text-emerald-500",
+          tone === "bad" && "text-[var(--color-accent)]",
+          blurClass(hidden),
+        )}
+      >
+        {value}
+      </span>
+    </div>
+  );
+}
+
+function buildPortfolioChartStats(points: PortfolioChartPoint[]) {
+  if (!points.length) return null;
+  const values = points.map((point) => point.thisYear);
+  const first = values[0] ?? 0;
+  const last = values[values.length - 1] ?? first;
+  const delta = last - first;
+  const highPoint = points.reduce((highest, point) =>
+    point.thisYear > highest.thisYear ? point : highest,
+  );
+  const lowPoint = points.reduce((lowest, point) =>
+    point.thisYear < lowest.thisYear ? point : lowest,
+  );
+  return {
+    first,
+    last,
+    delta,
+    pct: first !== 0 ? (delta / Math.abs(first)) * 100 : null,
+    highPoint,
+    lowPoint,
+  };
+}
+
+function ChartStat({
+  label,
+  value,
+  detail,
+  prefix = "",
+  tone = "neutral",
+  hidden,
+}: {
+  label: string;
+  value: string;
+  detail?: string;
+  prefix?: string;
+  tone?: "good" | "bad" | "neutral";
+  hidden: boolean;
+}) {
+  return (
+    <div className="min-w-0 rounded-md bg-background/70 px-2.5 py-2">
+      <div className="text-[10px] font-medium text-muted-foreground">
+        {label}
+      </div>
+      <div
+        className={cn(
+          "mt-0.5 truncate text-sm font-semibold tabular-nums",
+          tone === "good" && "text-emerald-600 dark:text-emerald-400",
+          tone === "bad" && "text-[var(--color-accent)]",
+          blurClass(hidden),
+        )}
+      >
+        {prefix}
+        {value}
+      </div>
+      {detail && (
+        <div className="mt-0.5 truncate text-[10px] text-muted-foreground">
+          {detail}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function PortfolioInspector({
+  point,
+  previousPoint,
+  hideSensitive,
+  priceEur,
+  chartCurrency,
+}: {
+  point: PortfolioChartPoint | null;
+  previousPoint: PortfolioChartPoint | null;
+  hideSensitive: boolean;
+  priceEur: number;
+  chartCurrency: Currency;
+}) {
+  const priorValue = previousPoint?.valueEur ?? point?.valueEur ?? 0;
+  const pointValue = point?.valueEur ?? 0;
+  const delta = pointValue - priorValue;
+  const deltaPct = priorValue ? (delta / Math.abs(priorValue)) * 100 : null;
+  const btcDelta =
+    point && previousPoint ? point.balanceBtc - previousPoint.balanceBtc : 0;
+
+  return (
+    <aside className="flex min-h-0 flex-col gap-3 rounded-lg border bg-background/65 p-3 xl:max-h-[min(64vh,620px)] xl:overflow-y-auto">
+      <div>
+        <p className="text-[10px] font-medium tracking-wide text-muted-foreground uppercase">
+          Selected point
+        </p>
+        <p className="mt-1 text-sm font-semibold">
+          {point?.detailLabel ?? "No point selected"}
+        </p>
+      </div>
+
+      <div className="grid gap-2">
+        <InspectorMetric
+          label="Value"
+          value={formatPortfolioMoney(point?.valueEur ?? 0, priceEur, "eur")}
+          hidden={hideSensitive}
+        />
+        <InspectorMetric
+          label="BTC"
+          value={formatBtc(point?.balanceBtc ?? 0, { precision: 8 })}
+          hidden={hideSensitive}
+        />
+        <InspectorMetric
+          label="Cost basis"
+          value={formatPortfolioMoney(point?.costBasisEur ?? 0, priceEur, "eur")}
+          hidden={hideSensitive}
+        />
+        <InspectorMetric
+          label="Unrealized"
+          value={`${(point?.unrealizedEur ?? 0) >= 0 ? "+ " : "− "}${formatPortfolioMoney(
+            Math.abs(point?.unrealizedEur ?? 0),
+            priceEur,
+            "eur",
+          )}`}
+          tone={(point?.unrealizedEur ?? 0) >= 0 ? "good" : "bad"}
+          hidden={hideSensitive}
+        />
+      </div>
+
+      <div className="rounded-md border bg-muted/20 p-2.5">
+        <p className="text-[10px] font-medium text-muted-foreground">
+          Since previous point
+        </p>
+        <div
+          className={cn(
+            "mt-1 text-sm font-semibold tabular-nums",
+            delta >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-[var(--color-accent)]",
+            blurClass(hideSensitive),
+          )}
+        >
+          {delta >= 0 ? "+ " : "− "}
+          {formatDetailedPortfolioMoney(
+            Math.abs(chartCurrency === "btc" ? btcFromEur(delta, priceEur) : delta),
+            priceEur,
+            chartCurrency,
+          )}
+        </div>
+        <p className="mt-1 text-[10px] text-muted-foreground">
+          {deltaPct === null
+            ? "Start of selected range"
+            : `${deltaPct >= 0 ? "+" : "−"}${Math.abs(deltaPct).toFixed(1)}%`}{" "}
+          · {btcDelta >= 0 ? "+" : "−"}
+          {formatBtc(Math.abs(btcDelta), { precision: 8 })}
+        </p>
+      </div>
+    </aside>
+  );
+}
+
+function InspectorMetric({
+  label,
+  value,
+  tone = "neutral",
+  hidden,
+}: {
+  label: string;
+  value: string;
+  tone?: "good" | "bad" | "neutral";
+  hidden: boolean;
+}) {
+  return (
+    <div className="rounded-md bg-muted/25 px-2.5 py-2">
+      <p className="text-[10px] font-medium text-muted-foreground">{label}</p>
+      <p
+        className={cn(
+          "mt-0.5 truncate text-sm font-semibold tabular-nums",
+          tone === "good" && "text-emerald-600 dark:text-emerald-400",
+          tone === "bad" && "text-[var(--color-accent)]",
+          blurClass(hidden),
+        )}
+      >
+        {value}
+      </p>
     </div>
   );
 }
@@ -1658,15 +2091,29 @@ const RevenueFlowChart = ({
 }) => {
   const [period, setPeriod] =
     React.useState<TimePeriod>(initialTimePeriodFromUrl);
+  const [metric, setMetric] = React.useState<PortfolioChartMetric>("value");
+  const [shape, setShape] = React.useState<PortfolioChartShape>("step");
+  const [expandedPointDate, setExpandedPointDate] = React.useState<string | null>(
+    null,
+  );
   const { active: activeSeries, handleHover } = useHoverHighlight<
     "thisYear" | "prevYear"
   >();
-  const showCostBasis = currency !== "btc";
+  const chartCurrency = chartCurrencyForMetric(metric, currency);
+  const showCostBasis = metric === "value" && chartCurrency === "eur";
+  const chartAttentionItems = buildOverviewHealthItems(snapshot)
+    .filter((item) => item.tone === "warning" || item.tone === "alert")
+    .slice(0, 3);
 
   const legendItems = [
     {
       key: "thisYear" as const,
-      label: currency === "btc" ? "BTC balance" : "Value",
+      label:
+        metric === "value"
+          ? chartCurrency === "btc"
+            ? "BTC balance"
+            : "Value"
+          : portfolioMetricLabels[metric],
       color: palette.primary,
     },
     ...(showCostBasis
@@ -1674,7 +2121,7 @@ const RevenueFlowChart = ({
           {
             key: "prevYear" as const,
             label: "Cost Basis",
-            color: palette.secondary.light,
+            color: costBasisChartColor,
           },
         ]
       : []),
@@ -1691,108 +2138,345 @@ const RevenueFlowChart = ({
     window.history.replaceState(null, "", nextUrl);
   }, [period]);
 
-  const chartData = getDataForPeriod(period, snapshot, currency);
+  React.useEffect(() => {
+    setExpandedPointDate(null);
+  }, [currency, metric, period]);
+
+  const chartType = shape === "step" ? "stepAfter" : "linear";
+  const chartData = getDataForPeriod(
+    period,
+    snapshot,
+    metric,
+    currency,
+    "compact",
+  );
+  const expandedChartData = getDataForPeriod(
+    period,
+    snapshot,
+    metric,
+    currency,
+    "detailed",
+  );
+  const chartStats = buildPortfolioChartStats(expandedChartData);
   const latestPortfolioValue =
     chartData.length > 0
       ? chartData[chartData.length - 1]?.thisYear
-      : currency === "btc"
+      : chartCurrency === "btc"
         ? latestPortfolioBalanceBtc(snapshot)
         : snapshot.fiat.eurBalance;
 
-  const renderChartCard = (expanded = false) => (
-    <div className="flex min-w-0 flex-1 flex-col gap-3 rounded-xl border bg-card p-4 sm:gap-4 sm:p-5">
-      <div className="flex flex-wrap items-center gap-2 sm:gap-3">
-        <div className="flex flex-1 flex-col gap-1">
-          <p
-            className={cn(
-              "text-xl leading-tight font-semibold tracking-tight sm:text-2xl",
-              blurClass(hideSensitive),
-            )}
-          >
-            {formatCompactPortfolioMoney(
-              latestPortfolioValue,
-              snapshot.priceEur,
-              currency,
-            )}
-          </p>
-          <p className="text-xs text-muted-foreground">
-            {`${currency === "btc" ? "BTC Balance" : "Portfolio Value"} (${periodLabels[period]})`}
-          </p>
-        </div>
-        <div className="hidden items-center gap-3 sm:flex sm:gap-5">
-          {legendItems.map((item) => (
-            <div
-              key={item.key}
-              className={cn(
-                "flex items-center gap-1.5 transition-opacity duration-200 motion-reduce:transition-none",
-                activeSeries !== null &&
-                  activeSeries !== item.key &&
-                  "opacity-40",
-              )}
-              onMouseEnter={() => handleHover(item.key)}
-              onMouseLeave={() => handleHover(null)}
-            >
-              <div
-                className="size-2.5 rounded-full sm:size-3"
-                style={{ backgroundColor: item.color }}
-              />
-              <span className="text-[10px] text-muted-foreground sm:text-xs">
-                {item.label}
-              </span>
-            </div>
-          ))}
-        </div>
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="size-7 sm:size-8"
-              aria-label="Select time period"
-            >
-              <MoreHorizontal className="size-4" />
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-48">
-            <DropdownMenuLabel>Time Period</DropdownMenuLabel>
-            <DropdownMenuSeparator />
-            {periodKeys.map((key) => (
-              <DropdownMenuCheckboxItem
-                key={key}
-                checked={period === key}
-                onCheckedChange={() => setPeriod(key)}
-              >
-                {periodLabels[key]}
-              </DropdownMenuCheckboxItem>
-            ))}
-          </DropdownMenuContent>
-        </DropdownMenu>
-        {!expanded && (
-          <DialogTrigger asChild>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="size-7 sm:size-8"
-              aria-label="Expand portfolio value chart"
-            >
-              <Maximize2 className="size-4" aria-hidden="true" />
-            </Button>
-          </DialogTrigger>
-        )}
-      </div>
+  const renderChartCard = (expanded = false) => {
+    const visibleData = expanded ? expandedChartData : chartData;
+    const visibleLatest =
+      visibleData.length > 0
+        ? visibleData[visibleData.length - 1]?.thisYear
+        : latestPortfolioValue;
+    const chartTitle =
+      metric === "value"
+        ? chartCurrency === "btc"
+          ? "BTC Balance"
+          : "Portfolio Value"
+        : portfolioMetricLabels[metric];
+    const valueTone =
+      metric === "unrealized" && visibleLatest < 0
+        ? palette.risk.main
+      : "var(--color-thisYear)";
+    const valueFill =
+      metric === "unrealized" && visibleLatest < 0
+        ? palette.risk.soft
+        : undefined;
+    const statPeriodLabel = periodShortLabels[period];
+    const selectedPoint = expanded
+      ? (visibleData.find((point) => point.date === expandedPointDate) ??
+        visibleData.at(-1) ??
+        null)
+      : null;
+    const selectedPointIndex = selectedPoint
+      ? visibleData.findIndex((point) => point.date === selectedPoint.date)
+      : -1;
+    const previousPoint =
+      selectedPointIndex > 0 ? visibleData[selectedPointIndex - 1] : null;
+    const handleExpandedChartMove = (state: PortfolioChartMouseState) => {
+      if (!expanded) return;
+      const point = state.activePayload?.find((item) => item.payload)?.payload;
+      if (point) setExpandedPointDate(point.date);
+    };
 
+    return (
+      <div className="flex min-w-0 flex-1 flex-col gap-3 rounded-xl border bg-card p-4 sm:gap-4 sm:p-5">
+        <div className="flex flex-wrap items-center gap-2 sm:gap-3">
+          <div className="flex flex-1 flex-col gap-1">
+            {metric === "value" ? (
+              <CurrencyToggleText
+                className={cn(
+                  "block w-fit text-xl leading-tight font-semibold tracking-tight sm:text-2xl",
+                  blurClass(hideSensitive),
+                )}
+              >
+                {formatCompactPortfolioMoney(
+                  visibleLatest,
+                  snapshot.priceEur,
+                  chartCurrency,
+                )}
+              </CurrencyToggleText>
+            ) : (
+              <p
+                className={cn(
+                  "text-xl leading-tight font-semibold tracking-tight sm:text-2xl",
+                  blurClass(hideSensitive),
+                )}
+              >
+                {formatCompactPortfolioMoney(
+                  visibleLatest,
+                  snapshot.priceEur,
+                  chartCurrency,
+                )}
+              </p>
+            )}
+            <p className="text-xs text-muted-foreground">
+              {`${chartTitle} (${periodLabels[period]})`}
+            </p>
+          </div>
+          <div className="hidden items-center gap-3 sm:flex sm:gap-5">
+            {legendItems.map((item) => (
+              <div
+                key={item.key}
+                className={cn(
+                  "flex items-center gap-1.5 transition-opacity duration-200 motion-reduce:transition-none",
+                  activeSeries !== null &&
+                    activeSeries !== item.key &&
+                    "opacity-40",
+                )}
+                onMouseEnter={() => handleHover(item.key)}
+                onMouseLeave={() => handleHover(null)}
+              >
+                <div
+                  className="size-2.5 rounded-full sm:size-3"
+                  style={{ backgroundColor: item.color }}
+                />
+                <span className="text-[10px] text-muted-foreground sm:text-xs">
+                  {item.label}
+                </span>
+              </div>
+            ))}
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-8 px-2 text-xs"
+                  aria-label="Select time period"
+                >
+                  {periodLabels[period]}
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-48">
+                <DropdownMenuLabel>Time Period</DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                {periodKeys.map((key) => (
+                  <DropdownMenuCheckboxItem
+                    key={key}
+                    checked={period === key}
+                    onCheckedChange={() => setPeriod(key)}
+                  >
+                    {periodLabels[key]}
+                  </DropdownMenuCheckboxItem>
+                ))}
+              </DropdownMenuContent>
+            </DropdownMenu>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-8 px-2 text-xs"
+                  aria-label="Select chart metric"
+                >
+                  {portfolioMetricLabels[metric]}
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-48">
+                <DropdownMenuLabel>Metric</DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                {(
+                  [
+                    "value",
+                    "btc",
+                    "basis",
+                    "unrealized",
+                  ] satisfies PortfolioChartMetric[]
+                ).map((key) => (
+                  <DropdownMenuCheckboxItem
+                    key={key}
+                    checked={metric === key}
+                    onCheckedChange={() => setMetric(key)}
+                  >
+                    {portfolioMetricLabels[key]}
+                  </DropdownMenuCheckboxItem>
+                ))}
+              </DropdownMenuContent>
+            </DropdownMenu>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-8 px-2 text-xs"
+                  aria-label="Select chart shape"
+                >
+                  {portfolioShapeLabels[shape]}
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-44">
+                <DropdownMenuLabel>Shape</DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                {(["step", "line"] satisfies PortfolioChartShape[]).map(
+                  (key) => (
+                    <DropdownMenuCheckboxItem
+                      key={key}
+                      checked={shape === key}
+                      onCheckedChange={() => setShape(key)}
+                    >
+                      {portfolioShapeLabels[key]}
+                    </DropdownMenuCheckboxItem>
+                  ),
+                )}
+              </DropdownMenuContent>
+            </DropdownMenu>
+            {!expanded && (
+              <DialogTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="size-7 sm:size-8"
+                  aria-label="Expand portfolio value chart"
+                >
+                  <Maximize2 className="size-4" aria-hidden="true" />
+                </Button>
+              </DialogTrigger>
+            )}
+            {expanded && (
+              <DialogClose asChild>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="size-7 sm:size-8"
+                  aria-label="Close expanded portfolio value chart"
+                >
+                  <X className="size-4" aria-hidden="true" />
+                </Button>
+              </DialogClose>
+            )}
+          </div>
+        </div>
+
+        {chartAttentionItems.length > 0 && (
+          <div className="grid gap-2 sm:grid-cols-3">
+            {chartAttentionItems.map((item) => {
+              const ItemIcon = item.icon;
+              return (
+                <Link
+                  key={item.key}
+                  to={item.href}
+                  className={cn(
+                    "flex min-w-0 items-center gap-2 rounded-md px-2.5 py-2 text-xs ring-1 ring-inset transition-colors hover:bg-muted/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                    healthToneStyles[item.tone],
+                  )}
+                >
+                  <ItemIcon className="size-3.5 shrink-0" aria-hidden="true" />
+                  <span className="min-w-0">
+                    <span className="block truncate font-medium">
+                      {item.title}
+                    </span>
+                    <span className="block truncate opacity-80">
+                      {item.value}
+                    </span>
+                  </span>
+                </Link>
+              );
+            })}
+          </div>
+        )}
+
+        {expanded && chartStats && (
+          <div className="grid gap-2 rounded-lg border bg-muted/25 p-2 sm:grid-cols-3">
+            <ChartStat
+              label={`Change in ${chartTitle}`}
+              value={formatDetailedPortfolioMoney(
+                Math.abs(chartStats.delta),
+                snapshot.priceEur,
+                chartCurrency,
+              )}
+              detail={
+                chartStats.pct === null
+                  ? statPeriodLabel
+                  : `${statPeriodLabel} · ${chartStats.pct >= 0 ? "+" : "−"}${Math.abs(
+                      chartStats.pct,
+                    ).toFixed(1)}%`
+              }
+              tone={chartStats.delta >= 0 ? "good" : "bad"}
+              prefix={chartStats.delta >= 0 ? "+ " : "− "}
+              hidden={hideSensitive}
+            />
+            <ChartStat
+              label={`Highest ${chartTitle} point`}
+              value={formatDetailedPortfolioMoney(
+                chartStats.highPoint.thisYear,
+                snapshot.priceEur,
+                chartCurrency,
+              )}
+              detail={`${statPeriodLabel} · ${chartStats.highPoint.detailLabel}`}
+              hidden={hideSensitive}
+            />
+            <ChartStat
+              label={`Lowest ${chartTitle} point`}
+              value={formatDetailedPortfolioMoney(
+                chartStats.lowPoint.thisYear,
+                snapshot.priceEur,
+                chartCurrency,
+              )}
+              detail={`${statPeriodLabel} · ${chartStats.lowPoint.detailLabel}`}
+              hidden={hideSensitive}
+            />
+          </div>
+        )}
+
+      <div
+        className={cn(
+          "min-w-0",
+          expanded
+            ? "grid gap-3 xl:grid-cols-[minmax(0,1fr)_300px]"
+            : "w-full",
+        )}
+      >
       <div
         className={
           expanded
-            ? "h-[min(62vh,620px)] w-full min-w-0"
+            ? "h-[min(64vh,620px)] w-full min-w-0"
             : "h-[180px] w-full min-w-0 sm:h-[220px] lg:h-[240px]"
         }
       >
         <ChartContainer
           config={revenueFlowChartConfig}
-          className="h-full w-full"
+          className="h-full w-full overflow-visible [&_.recharts-tooltip-wrapper]:!z-30 [&_.recharts-wrapper]:!overflow-visible"
         >
-          <AreaChart data={chartData}>
+          <AreaChart
+            data={visibleData}
+            onMouseMove={
+              expanded
+                ? (state) =>
+                    handleExpandedChartMove(state as PortfolioChartMouseState)
+                : undefined
+            }
+            margin={{
+              top: expanded ? 24 : 18,
+              right: expanded ? 56 : 44,
+              bottom: expanded ? 4 : 0,
+              left: expanded ? 8 : 0,
+            }}
+          >
             <defs>
               <linearGradient
                 id={expanded ? "thisYearGradientExpanded" : "thisYearGradient"}
@@ -1803,12 +2487,12 @@ const RevenueFlowChart = ({
               >
                 <stop
                   offset="0%"
-                  stopColor="var(--color-thisYear)"
+                  stopColor={valueFill ?? valueTone}
                   stopOpacity={0.3}
                 />
                 <stop
                   offset="100%"
-                  stopColor="var(--color-thisYear)"
+                  stopColor={valueFill ?? valueTone}
                   stopOpacity={0.05}
                 />
               </linearGradient>
@@ -1837,11 +2521,17 @@ const RevenueFlowChart = ({
             </defs>
             <CartesianGrid strokeDasharray="0" vertical={false} />
             <XAxis
-              dataKey="month"
+              dataKey="date"
               axisLine={false}
               tickLine={false}
               tick={{ fontSize: 10 }}
               dy={8}
+              minTickGap={expanded ? 22 : 28}
+              interval="preserveStartEnd"
+              tickFormatter={(value) =>
+                visibleData.find((point) => point.date === value)?.month ??
+                String(value)
+              }
             />
             <YAxis
               axisLine={false}
@@ -1855,31 +2545,59 @@ const RevenueFlowChart = ({
                   : formatAxisPortfolioMoney(
                       Number(value),
                       snapshot.priceEur,
-                      currency,
+                      chartCurrency,
                     )
               }
               width={58}
             />
-            <Tooltip
-              content={
-                <CustomTooltip
-                  colors={{
-                    thisYear: "var(--color-thisYear)",
-                    prevYear: "var(--color-prevYear)",
-                  }}
-                  hideSensitive={hideSensitive}
-                  currency={currency}
-                  priceEur={snapshot.priceEur}
-                  showCostBasis={showCostBasis}
-                  valueLabel={currency === "btc" ? "BTC Balance" : "Value"}
-                />
-              }
-              cursor={{ strokeOpacity: 0.2 }}
-            />
+            {metric === "unrealized" && (
+              <ReferenceLine
+                y={0}
+                stroke={palette.risk.main}
+                strokeOpacity={0.45}
+                strokeWidth={1}
+              />
+            )}
+            {expanded && selectedPoint && (
+              <ReferenceLine
+                x={selectedPoint.date}
+                stroke="var(--foreground)"
+                strokeDasharray="2 3"
+                strokeOpacity={0.5}
+                strokeWidth={1.5}
+              />
+            )}
+            {!expanded && (
+              <Tooltip
+                allowEscapeViewBox={{ x: true, y: true }}
+                content={
+                  <CustomTooltip
+                    hideSensitive={hideSensitive}
+                    currency={currency}
+                    priceEur={snapshot.priceEur}
+                    showCostBasis={showCostBasis}
+                    valueLabel={
+                      metric === "value"
+                        ? chartCurrency === "btc"
+                          ? "BTC Balance"
+                          : "Value"
+                        : portfolioMetricLabels[metric]
+                    }
+                    metric={metric}
+                  />
+                }
+                cursor={{ strokeOpacity: 0.2 }}
+                offset={32}
+                wrapperStyle={{
+                  pointerEvents: "none",
+                  zIndex: 30,
+                }}
+              />
+            )}
             <Area
-              type="monotone"
+              type={chartType}
               dataKey="thisYear"
-              stroke="var(--color-thisYear)"
+              stroke={valueTone}
               strokeWidth={activeSeries === "thisYear" ? 3 : 2}
               fill={`url(#${expanded ? "thisYearGradientExpanded" : "thisYearGradient"})`}
               fillOpacity={
@@ -1888,10 +2606,13 @@ const RevenueFlowChart = ({
               strokeOpacity={
                 activeSeries === null || activeSeries === "thisYear" ? 1 : 0.3
               }
+              dot={expanded || visibleData.length <= 36 ? { r: 2 } : false}
+              activeDot={{ r: 4 }}
+              isAnimationActive={false}
             />
             {showCostBasis && (
               <Area
-                type="monotone"
+                type={chartType}
                 dataKey="prevYear"
                 stroke="var(--color-prevYear)"
                 strokeWidth={activeSeries === "prevYear" ? 3 : 2}
@@ -1906,18 +2627,43 @@ const RevenueFlowChart = ({
                     ? 1
                     : 0.3
                 }
+                dot={expanded || visibleData.length <= 36 ? { r: 2 } : false}
+                activeDot={{ r: 4 }}
+                isAnimationActive={false}
+              />
+            )}
+            {expanded && visibleData.length > 18 && (
+              <Brush
+                dataKey="month"
+                height={22}
+                travellerWidth={8}
+                stroke="var(--color-thisYear)"
               />
             )}
           </AreaChart>
         </ChartContainer>
       </div>
+      {expanded && (
+        <PortfolioInspector
+          point={selectedPoint}
+          previousPoint={previousPoint}
+          hideSensitive={hideSensitive}
+          priceEur={snapshot.priceEur}
+          chartCurrency={chartCurrency}
+        />
+      )}
     </div>
-  );
+    </div>
+    );
+  };
 
   return (
     <Dialog>
       {renderChartCard()}
-      <DialogContent className="max-w-[calc(100vw-2rem)] p-0 sm:max-w-[min(1120px,calc(100vw-2rem))]">
+      <DialogContent
+        showCloseButton={false}
+        className="max-w-[calc(100vw-2rem)] p-0 sm:max-w-[min(1120px,calc(100vw-2rem))]"
+      >
         <DialogTitle className="sr-only">
           Expanded portfolio value chart
         </DialogTitle>
@@ -2032,27 +2778,6 @@ function initials(value: string) {
     .join("");
 }
 
-function explorerForOverviewTransaction(
-  txn: Transaction,
-  settings: ExplorerSettings,
-) {
-  if (txn.paymentMethod === "Liquid") {
-    return explorerTargetForTransaction({
-      txid: txn.explorerId,
-      network: "liquid",
-      settings,
-    });
-  }
-  if (txn.paymentMethod === "On-chain") {
-    return explorerTargetForTransaction({
-      txid: txn.explorerId,
-      network: "bitcoin",
-      settings,
-    });
-  }
-  return null;
-}
-
 function transactionDetailHref(transactionId: string) {
   const params = new URLSearchParams();
   if (typeof window !== "undefined") {
@@ -2064,32 +2789,10 @@ function transactionDetailHref(transactionId: string) {
   return `/transactions?${params.toString()}`;
 }
 
-function parseOverviewDate(value: string | undefined) {
-  if (!value) return null;
-  const normalized = value.includes("T") ? value : value.replace(" ", "T");
-  const parsed = new Date(normalized);
-  return Number.isNaN(parsed.valueOf()) ? null : parsed;
-}
-
-function formatOverviewDate(value: string | undefined) {
-  const parsed = parseOverviewDate(value);
-  return parsed ? shortDateTimeFormatter.format(parsed) : (value ?? "No rows");
-}
-
-function latestOverviewTx(snapshot: OverviewSnapshot) {
-  return [...snapshot.txs]
-    .sort((a, b) => b.date.localeCompare(a.date))
-    .at(0);
-}
-
 function buildOverviewReadiness(snapshot: OverviewSnapshot): OverviewReadiness {
   const status = snapshot.status;
   const needsJournals = Boolean(status?.needsJournals);
   const quarantines = status?.quarantines ?? 0;
-  const latestTx = latestOverviewTx(snapshot);
-  const latestDetail = latestTx
-    ? `Latest row ${formatOverviewDate(latestTx.date)}`
-    : "No rows loaded yet";
   const totalConnections = snapshot.connections.length;
   const syncedConnections = snapshot.connections.filter(
     (connection) => connection.status === "synced",
@@ -2120,7 +2823,7 @@ function buildOverviewReadiness(snapshot: OverviewSnapshot): OverviewReadiness {
       title: "Source attention",
       detail: `${erroredConnections} source${
         erroredConnections === 1 ? "" : "s"
-      } needs attention · ${latestDetail}`,
+      } needs attention`,
       icon: WalletCards,
       tone: "alert",
     };
@@ -2129,7 +2832,7 @@ function buildOverviewReadiness(snapshot: OverviewSnapshot): OverviewReadiness {
   if (needsJournals) {
     return {
       title: "Reprocess journals",
-      detail: `Reports need a fresh journal state · ${latestDetail}`,
+      detail: "Reports need a fresh journal state",
       icon: RefreshCw,
       tone: "warning",
     };
@@ -2140,7 +2843,7 @@ function buildOverviewReadiness(snapshot: OverviewSnapshot): OverviewReadiness {
       title: "Review queue open",
       detail: `${quarantines} item${
         quarantines === 1 ? "" : "s"
-      } before reports · ${latestDetail}`,
+      } before reports`,
       icon: ShieldAlert,
       tone: "alert",
     };
@@ -2149,7 +2852,7 @@ function buildOverviewReadiness(snapshot: OverviewSnapshot): OverviewReadiness {
   if (syncingConnections) {
     return {
       title: "Sync in progress",
-      detail: `${sourceDetail} · ${latestDetail}`,
+      detail: sourceDetail,
       icon: RefreshCw,
       tone: "warning",
     };
@@ -2157,7 +2860,7 @@ function buildOverviewReadiness(snapshot: OverviewSnapshot): OverviewReadiness {
 
   return {
     title: "Ready for reports",
-    detail: `${sourceDetail} · ${latestDetail}`,
+    detail: sourceDetail,
     icon: CheckCircle2,
     tone: "good",
   };
@@ -2177,7 +2880,6 @@ function buildOverviewHealthItems(snapshot: OverviewSnapshot): OverviewHealthIte
   const syncedConnections = snapshot.connections.filter(
     (connection) => connection.status === "synced",
   ).length;
-  const latestTx = latestOverviewTx(snapshot);
 
   return [
     {
@@ -2224,17 +2926,6 @@ function buildOverviewHealthItems(snapshot: OverviewSnapshot): OverviewHealthIte
           : totalConnections
             ? "good"
             : "neutral",
-    },
-    {
-      key: "latest",
-      title: "Latest row",
-      value: latestTx ? formatOverviewDate(latestTx.date) : "No rows",
-      detail: latestTx
-        ? `${latestTx.type} · ${latestTx.account || latestTx.counter}`
-        : "Sync or import transactions to begin.",
-      href: "/transactions",
-      icon: ClipboardList,
-      tone: latestTx ? "neutral" : "warning",
     },
   ];
 }
@@ -2285,26 +2976,19 @@ const RecentTransactionsTable = ({
   hideSensitive,
   currency,
   priceEur,
-  explorerSettings,
 }: {
   className?: string;
   transactions: Transaction[];
   hideSensitive: boolean;
   currency: Currency;
   priceEur: number;
-  explorerSettings: ExplorerSettings;
 }) => {
   const [statusFilter, setStatusFilter] = React.useState<
     TransactionStatus | "all"
   >("all");
   const [currentPage, setCurrentPage] = React.useState(1);
   const [isHydrated, setIsHydrated] = React.useState(false);
-  const [explorerTransaction, setExplorerTransaction] =
-    React.useState<Transaction | null>(null);
   const pageSize = 6;
-  const explorerTarget = explorerTransaction
-    ? explorerForOverviewTransaction(explorerTransaction, explorerSettings)
-    : null;
 
   React.useEffect(() => {
     if (typeof window === "undefined") return;
@@ -2438,10 +3122,6 @@ const RecentTransactionsTable = ({
         ) : (
           <div className="divide-y rounded-lg border bg-background/50">
             {paginatedTransactions.map((t) => {
-              const explorer = explorerForOverviewTransaction(
-                t,
-                explorerSettings,
-              );
               const flow = t.flow ?? "incoming";
               const FlowIcon =
                 flow === "incoming"
@@ -2467,96 +3147,84 @@ const RecentTransactionsTable = ({
               const primaryTag = t.tags[0] ?? overviewFlowLabels[flow];
               const extraTags = Math.max(0, t.tags.length - 1);
               return (
-                <div key={t.id} className="flex items-stretch">
-                  <a
-                    href={transactionDetailHref(t.id)}
-                    className="group flex min-w-0 flex-1 items-center gap-3 px-3 py-3 transition-colors hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:px-4"
+                <a
+                  key={t.id}
+                  href={transactionDetailHref(t.id)}
+                  className="group flex min-w-0 items-center gap-3 px-3 py-3 transition-colors hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:px-4"
+                >
+                  <span
+                    className={cn(
+                      "flex size-8 shrink-0 items-center justify-center rounded-md",
+                      overviewFlowStyles[flow],
+                    )}
+                    aria-hidden="true"
                   >
+                    <FlowIcon className="size-4" />
+                  </span>
+                  <span className="min-w-0 flex-1">
                     <span
                       className={cn(
-                        "flex size-8 shrink-0 items-center justify-center rounded-md",
-                        overviewFlowStyles[flow],
+                        "block truncate text-sm font-medium text-foreground",
+                        blurClass(hideSensitive),
                       )}
-                      aria-hidden="true"
                     >
-                      <FlowIcon className="size-4" />
+                      {t.counterparty}
                     </span>
-                    <span className="min-w-0 flex-1">
+                    <span className="mt-1 flex min-w-0 flex-wrap items-center gap-1.5">
                       <span
                         className={cn(
-                          "block truncate text-sm font-medium text-foreground",
-                          blurClass(hideSensitive),
+                          "inline-flex items-center rounded-md px-1.5 py-0.5 text-[10px] font-medium",
+                          overviewFlowStyles[flow],
                         )}
                       >
-                        {t.counterparty}
+                        {primaryTag}
                       </span>
-                      <span className="mt-1 flex min-w-0 flex-wrap items-center gap-1.5">
-                        <span
-                          className={cn(
-                            "inline-flex items-center rounded-md px-1.5 py-0.5 text-[10px] font-medium",
-                            overviewFlowStyles[flow],
-                          )}
-                        >
-                          {primaryTag}
+                      {extraTags > 0 && (
+                        <span className="text-[10px] text-muted-foreground">
+                          +{extraTags}
                         </span>
-                        {extraTags > 0 && (
-                          <span className="text-[10px] text-muted-foreground">
-                            +{extraTags}
-                          </span>
-                        )}
-                        <span
-                          className={cn(
-                            "inline-flex items-center rounded-md px-1.5 py-0.5 text-[10px] font-medium",
-                            statusStyles[t.status],
-                          )}
-                        >
-                          {statusLabels[t.status]}
-                        </span>
-                        <span className="truncate text-[10px] text-muted-foreground">
-                          {t.date}
-                        </span>
-                      </span>
+                      )}
                       <span
                         className={cn(
-                          "mt-1 hidden truncate font-mono text-[10px] text-muted-foreground sm:block",
-                          blurClass(hideSensitive),
+                          "inline-flex items-center rounded-md px-1.5 py-0.5 text-[10px] font-medium",
+                          statusStyles[t.status],
                         )}
                       >
-                        {overviewFlowLabels[flow]} · {t.txid}
+                        {statusLabels[t.status]}
+                      </span>
+                      <span className="truncate text-[10px] text-muted-foreground">
+                        {t.date}
                       </span>
                     </span>
-                    <span className="ml-auto flex shrink-0 flex-col items-end gap-0.5 pl-2 text-right">
-                      <CurrencyToggleText
-                        className={cn(
-                          "text-sm font-semibold tabular-nums",
-                          amountTone,
-                          blurClass(hideSensitive),
-                        )}
-                      >
-                        {primaryAmount}
-                      </CurrencyToggleText>
-                      <span
-                        className={cn(
-                          "text-[10px] text-muted-foreground tabular-nums",
-                          blurClass(hideSensitive),
-                        )}
-                      >
-                        {secondaryAmount}
-                      </span>
-                    </span>
-                  </a>
-                  {explorer ? (
-                    <button
-                      type="button"
-                      className="flex w-10 shrink-0 items-center justify-center text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                      title={`Open ${t.txid} on ${explorer.label}`}
-                      aria-label={`Open ${t.txid} on ${explorer.label}`}
-                      onClick={() => setExplorerTransaction(t)}
+                    <span
+                      className={cn(
+                        "mt-1 hidden truncate font-mono text-[10px] text-muted-foreground sm:block",
+                        blurClass(hideSensitive),
+                      )}
                     >
-                      <ExternalLink className="size-3.5" aria-hidden="true" />
-                    </button>
-                  ) : null}
-                </div>
+                      {overviewFlowLabels[flow]} · {t.txid}
+                    </span>
+                  </span>
+                  <span className="ml-auto flex shrink-0 flex-col items-end gap-0.5 pl-2 text-right">
+                    <CurrencyToggleText
+                      className={cn(
+                        "text-sm font-semibold tabular-nums",
+                        amountTone,
+                        blurClass(hideSensitive),
+                      )}
+                    >
+                      {primaryAmount}
+                    </CurrencyToggleText>
+                    <span
+                      className={cn(
+                        "text-[10px] text-muted-foreground tabular-nums",
+                        blurClass(hideSensitive),
+                      )}
+                    >
+                      {secondaryAmount}
+                    </span>
+                  </span>
+                </a>
               );
             })}
           </div>
@@ -2591,53 +3259,6 @@ const RecentTransactionsTable = ({
         </div>
       </div>
       </div>
-      <Dialog
-        open={Boolean(explorerTransaction)}
-        onOpenChange={(open) => {
-          if (!open) setExplorerTransaction(null);
-        }}
-      >
-        <DialogContent className="sm:max-w-lg">
-          <DialogHeader>
-            <div className="mb-2 flex size-10 items-center justify-center rounded-full bg-amber-100 text-amber-700 dark:bg-amber-950/50 dark:text-amber-300">
-              <ShieldAlert className="size-5" aria-hidden="true" />
-            </div>
-            <DialogTitle>Open transaction in a browser?</DialogTitle>
-            <DialogDescription>
-              This opens {explorerTarget?.label ?? "a public explorer"} outside
-              Kassiber. The explorer can see your IP address and the transaction
-              id you request.
-            </DialogDescription>
-          </DialogHeader>
-          {explorerTransaction && explorerTarget ? (
-            <div className="rounded-md border bg-muted/35 p-3 text-sm">
-              <p className="font-medium">{explorerTransaction.txid}</p>
-              <p className="mt-1 break-all font-mono text-xs text-muted-foreground">
-                {explorerTarget.url}
-              </p>
-            </div>
-          ) : null}
-          <DialogFooter>
-            <DialogClose asChild>
-              <Button type="button" variant="outline">
-                Cancel
-              </Button>
-            </DialogClose>
-            <Button
-              type="button"
-              disabled={!explorerTarget}
-              onClick={() => {
-                if (!explorerTarget || typeof window === "undefined") return;
-                window.open(explorerTarget.url, "_blank", "noopener,noreferrer");
-                setExplorerTransaction(null);
-              }}
-            >
-              <ExternalLink className="size-4" aria-hidden="true" />
-              Open explorer
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </>
   );
 };
@@ -2760,7 +3381,6 @@ const Dashboard5 = ({
 }) => {
   const [addConnectionOpen, setAddConnectionOpen] = React.useState(false);
   const hideSensitive = useUiStore((s) => s.hideSensitive);
-  const explorerSettings = useUiStore((s) => s.explorerSettings);
   const currency = useCurrency();
   const { syncAll, isSyncing } = useWalletSyncAction();
   const transactions = React.useMemo(
@@ -2803,7 +3423,6 @@ const Dashboard5 = ({
             hideSensitive={hideSensitive}
             currency={currency}
             priceEur={snapshot.priceEur}
-            explorerSettings={explorerSettings}
           />
         </div>
         <div className="grid min-w-0 gap-3 sm:gap-4">

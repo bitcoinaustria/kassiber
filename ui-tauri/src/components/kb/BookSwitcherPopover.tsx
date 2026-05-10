@@ -1,18 +1,20 @@
-/**
- * BookSwitcherPopover — compact books switcher anchored to the
- * books pill in AppHeader.
- *
- * Shares the kassiber-themed Dialog shell used by action confirmations but with
- * a denser visual layout: each books set gets a compact header with a jurisdiction
- * chip and a 2-column grid of book cards. Clicking a book updates the active
- * daemon context and closes the popover.
- */
+import { Link } from "@tanstack/react-router";
+import { Loader2 } from "lucide-react";
 import { useEffect, useState } from "react";
 
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import {
   Dialog,
   DialogContent,
   DialogDescription,
+  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
@@ -29,8 +31,10 @@ export function BookSwitcherPopover({
   open,
   onClose,
 }: BookSwitcherPopoverProps) {
-  const { data, isLoading } = useDaemon<ProfilesSnapshot>(
+  const { data, error, isLoading } = useDaemon<ProfilesSnapshot>(
     "ui.profiles.snapshot",
+    undefined,
+    { enabled: open },
   );
 
   return (
@@ -40,29 +44,42 @@ export function BookSwitcherPopover({
         if (!next) onClose();
       }}
     >
-      <DialogContent
-        className={cn(
-          "max-h-[80vh] w-full max-w-[520px] gap-0 overflow-y-auto",
-          "rounded-none border-ink bg-paper p-0 shadow-hard-ink",
-          "data-[state=open]:zoom-in-100 data-[state=closed]:zoom-out-100",
-        )}
-      >
-        <DialogHeader className="flex-row items-center justify-between gap-2 border-b border-line px-4 py-3">
-          <DialogTitle className="font-sans text-sm font-semibold tracking-[-0.005em] text-ink">
-            Switch books
-          </DialogTitle>
-          <DialogDescription className="sr-only">
-            Pick a books set and one book to make active.
+      <DialogContent className="flex max-h-[min(82vh,720px)] flex-col gap-0 overflow-hidden p-0 sm:max-w-2xl">
+        <DialogHeader className="border-b px-4 py-3 sm:px-5">
+          <DialogTitle className="text-base">Switch books</DialogTitle>
+          <DialogDescription>
+            Pick the active book/profile for every screen in this window.
           </DialogDescription>
         </DialogHeader>
 
-        {isLoading || !data?.data ? (
-          <div className="flex items-center justify-center px-4 py-10 font-mono text-xs text-ink-3">
-            loading…
-          </div>
-        ) : (
-          <SwitcherBody snapshot={data.data} onClose={onClose} />
-        )}
+        <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4 sm:px-5">
+          {isLoading ? (
+            <div className="flex min-h-[180px] items-center justify-center text-sm text-muted-foreground">
+              <Loader2 className="mr-2 size-4 animate-spin" aria-hidden="true" />
+              Loading books...
+            </div>
+          ) : error ? (
+            <div className="rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">
+              {error instanceof Error
+                ? error.message
+                : "Could not load books."}
+            </div>
+          ) : data?.data ? (
+            <SwitcherBody snapshot={data.data} onClose={onClose} />
+          ) : (
+            <div className="rounded-lg border bg-muted/35 p-3 text-sm text-muted-foreground">
+              No books were found in this data root.
+            </div>
+          )}
+        </div>
+
+        <DialogFooter className="border-t bg-muted/25 px-4 py-3 sm:px-5">
+          <Button variant="outline" size="sm" asChild>
+            <Link to="/books" onClick={onClose}>
+              Manage books
+            </Link>
+          </Button>
+        </DialogFooter>
       </DialogContent>
     </Dialog>
   );
@@ -78,9 +95,8 @@ function SwitcherBody({ snapshot, onClose }: SwitcherBodyProps) {
     "ui.profiles.switch",
   );
   const [activeId, setActiveId] = useState(snapshot.activeProfileId);
+  const [pendingId, setPendingId] = useState<string | null>(null);
 
-  // Keep the local active id in sync if the underlying snapshot changes
-  // while the popover is mounted (e.g. another tab updated identity).
   useEffect(() => {
     setActiveId(snapshot.activeProfileId);
   }, [snapshot.activeProfileId]);
@@ -90,6 +106,7 @@ function SwitcherBody({ snapshot, onClose }: SwitcherBodyProps) {
       onClose();
       return;
     }
+    setPendingId(profile.id);
     switchProfile.mutate(
       { profile_id: profile.id },
       {
@@ -97,20 +114,30 @@ function SwitcherBody({ snapshot, onClose }: SwitcherBodyProps) {
           setActiveId(profile.id);
           onClose();
         },
+        onSettled: () => setPendingId(null),
       },
     );
   };
 
   return (
-    <div className="flex flex-col gap-4 p-4">
-      {snapshot.workspaces.map((ws) => (
+    <div className="space-y-4">
+      {snapshot.workspaces.map((workspace) => (
         <WorkspaceBlock
-          key={ws.id}
-          workspace={ws}
+          key={workspace.id}
+          workspace={workspace}
           activeId={activeId}
+          pendingId={pendingId}
+          switching={switchProfile.isPending}
           onPick={handlePick}
         />
       ))}
+      {switchProfile.error ? (
+        <div className="rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">
+          {switchProfile.error instanceof Error
+            ? switchProfile.error.message
+            : "Could not switch books."}
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -118,82 +145,98 @@ function SwitcherBody({ snapshot, onClose }: SwitcherBodyProps) {
 interface WorkspaceBlockProps {
   workspace: Workspace;
   activeId: string;
+  pendingId: string | null;
+  switching: boolean;
   onPick: (profile: Profile) => void;
 }
 
-function WorkspaceBlock({ workspace, activeId, onPick }: WorkspaceBlockProps) {
+function WorkspaceBlock({
+  workspace,
+  activeId,
+  pendingId,
+  switching,
+  onPick,
+}: WorkspaceBlockProps) {
   return (
-    <div>
-      <div className="mb-2 flex items-baseline gap-2 border-b border-ink pb-1">
-        <span className="font-sans text-[14px] tracking-[-0.005em] text-ink">
-          {workspace.name}
-        </span>
-        <span className="border border-line px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-[0.1em] text-ink-2">
-          {workspace.jurisdiction}
-        </span>
-        <span className="font-mono text-[9px] uppercase tracking-[0.08em] text-ink-3">
-          {workspace.kind} · {workspace.currency}
-        </span>
-      </div>
-
-      <div className="grid grid-cols-2 gap-2">
-        {workspace.profiles.map((p) => (
-          <ProfileCard
-            key={p.id}
-            profile={p}
-            isActive={p.id === activeId}
-            onPick={() => onPick(p)}
+    <Card className="gap-3 rounded-lg py-0">
+      <CardHeader className="gap-2 px-3 py-3 sm:px-4">
+        <div className="flex min-w-0 flex-wrap items-center gap-2">
+          <CardTitle className="min-w-0 truncate text-sm">
+            {workspace.name}
+          </CardTitle>
+          <Badge variant="outline">{workspace.jurisdiction}</Badge>
+          <Badge variant="secondary">
+            {workspace.kind} · {workspace.currency}
+          </Badge>
+        </div>
+      </CardHeader>
+      <CardContent className="grid gap-2 px-3 pb-3 sm:grid-cols-2 sm:px-4">
+        {workspace.profiles.map((profile) => (
+          <ProfileOption
+            key={profile.id}
+            profile={profile}
+            isActive={profile.id === activeId}
+            isPending={profile.id === pendingId}
+            disabled={switching}
+            onPick={() => onPick(profile)}
           />
         ))}
-      </div>
-    </div>
+      </CardContent>
+    </Card>
   );
 }
 
-interface ProfileCardProps {
+interface ProfileOptionProps {
   profile: Profile;
   isActive: boolean;
+  isPending: boolean;
+  disabled: boolean;
   onPick: () => void;
 }
 
-function ProfileCard({ profile, isActive, onPick }: ProfileCardProps) {
+function ProfileOption({
+  profile,
+  isActive,
+  isPending,
+  disabled,
+  onPick,
+}: ProfileOptionProps) {
   return (
-    <button
-      onClick={onPick}
+    <Button
+      type="button"
+      variant={isActive ? "secondary" : "outline"}
       className={cn(
-        "relative flex cursor-pointer flex-col gap-1.5 border px-3 py-2.5 text-left font-sans",
-        isActive ? "border-ink bg-paper-2" : "border-line bg-paper",
+        "relative h-auto min-h-[116px] items-stretch justify-start whitespace-normal rounded-lg px-3 py-3 text-left",
+        isActive &&
+          "border-primary bg-primary/15 text-foreground ring-2 ring-primary/35",
       )}
+      disabled={disabled}
+      aria-current={isActive ? "true" : undefined}
+      onClick={onPick}
     >
-      {isActive && (
-        <span className="absolute right-2 top-2 flex items-center gap-1 font-mono text-[8px] uppercase tracking-[0.14em] text-accent">
-          <span className="size-1 rounded-full bg-accent" />
-          Active
+      <span className="grid min-w-0 flex-1 grid-rows-[auto_auto_minmax(1.25rem,auto)] gap-2">
+        <span className="flex min-w-0 items-start justify-between gap-2">
+          <span className="min-w-0">
+            <span className="block truncate font-medium">{profile.name}</span>
+            <span className="mt-0.5 block text-xs text-muted-foreground">
+              Opened {profile.lastOpened}
+            </span>
+          </span>
+          {isPending ? (
+            <Loader2
+              className="mt-0.5 size-4 shrink-0 animate-spin text-muted-foreground"
+              aria-hidden="true"
+            />
+          ) : null}
         </span>
-      )}
-
-      <div>
-        <div className="font-sans text-[13px] tracking-[-0.005em] text-ink">
-          {profile.name}
-        </div>
-        <div className="mt-0.5 font-mono text-[9px] uppercase tracking-[0.08em] text-ink-3">
-          Opened {profile.lastOpened}
-        </div>
-      </div>
-
-      <div className="flex gap-3 font-mono text-[10px] text-ink-2">
-        <span>{profile.accounts} buckets</span>
-        <span>{profile.wallets} wallets</span>
-        <span className="flex-1" />
-        <span
-          className={cn(
-            "text-[9px] uppercase tracking-[0.08em]",
-            isActive ? "text-accent" : "text-ink-3",
-          )}
-        >
-          {isActive ? "Current" : "Switch →"}
+        <span className="flex min-w-0 flex-wrap gap-x-3 gap-y-1 text-xs text-muted-foreground">
+          <span>{profile.accounts} buckets</span>
+          <span>{profile.wallets} wallets</span>
         </span>
-      </div>
-    </button>
+        <span className="line-clamp-2 min-w-0 text-xs text-muted-foreground">
+          {profile.taxPolicy}
+        </span>
+      </span>
+    </Button>
   );
 }
