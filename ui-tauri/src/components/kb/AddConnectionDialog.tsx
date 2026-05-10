@@ -211,6 +211,8 @@ export function AddConnectionDialog({
   const [activeCategory, setActiveCategory] =
     React.useState<ConnectionCategory>("wallets");
   const [selectedId, setSelectedId] = React.useState("xpub");
+  const [sourceQuery, setSourceQuery] = React.useState("");
+  const [hidePlanned, setHidePlanned] = React.useState(false);
   const [step, setStep] = React.useState<DialogStep>("source");
   const [form, setForm] = React.useState(() =>
     formDefaultsFor(CONNECTION_SOURCES[0]),
@@ -227,11 +229,18 @@ export function AddConnectionDialog({
     { ok: true; storeId: string } | { ok: false; message: string } | null
   >(null);
 
-  const visibleSources = React.useMemo(
-    () =>
-      CONNECTION_SOURCES.filter((source) => source.category === activeCategory),
-    [activeCategory],
-  );
+  const visibleSources = React.useMemo(() => {
+    const query = sourceQuery.trim().toLowerCase();
+    const isSearching = query.length > 0;
+    return CONNECTION_SOURCES.filter((source) => {
+      if (hidePlanned && source.status !== "ready") return false;
+      if (isSearching) {
+        const haystack = `${source.title} ${source.description} ${source.id}`.toLowerCase();
+        return haystack.includes(query);
+      }
+      return source.category === activeCategory;
+    });
+  }, [activeCategory, hidePlanned, sourceQuery]);
   const selected =
     CONNECTION_SOURCES.find((source) => source.id === selectedId) ??
     CONNECTION_SOURCES[0];
@@ -296,6 +305,8 @@ export function AddConnectionDialog({
     setSelectedId(source.id);
     setStep(initialSourceId && source.status === "ready" ? "setup" : "source");
     setSetupError(null);
+    setSourceQuery("");
+    setHidePlanned(false);
   }, [initialSourceId, open]);
 
   React.useEffect(() => {
@@ -936,7 +947,7 @@ export function AddConnectionDialog({
       <div className="overflow-y-auto border-b bg-muted/30 p-2 lg:border-r lg:border-b-0">
         {CONNECTION_CATEGORIES.map((category) => {
           const Icon = category.icon;
-          const active = activeCategory === category.id;
+          const active = activeCategory === category.id && !sourceQuery.trim();
           return (
             <button
               key={category.id}
@@ -947,7 +958,10 @@ export function AddConnectionDialog({
                   ? "bg-background text-foreground shadow-sm"
                   : "text-muted-foreground hover:bg-background/70 hover:text-foreground",
               )}
-              onClick={() => selectCategory(category.id)}
+              onClick={() => {
+                setSourceQuery("");
+                selectCategory(category.id);
+              }}
             >
               <Icon className="size-4" aria-hidden="true" />
               {category.label}
@@ -957,7 +971,31 @@ export function AddConnectionDialog({
       </div>
 
       <div className="grid min-h-0 grid-cols-1 lg:grid-cols-[minmax(0,1fr)_320px]">
-        <div className="min-h-0 space-y-3 overflow-y-auto border-b p-4 lg:border-r lg:border-b-0">
+        <div className="flex min-h-0 flex-col overflow-hidden border-b lg:border-r lg:border-b-0">
+          <div className="flex flex-wrap items-center gap-2 border-b bg-muted/20 px-4 py-3">
+            <Input
+              type="search"
+              value={sourceQuery}
+              onChange={(event) => setSourceQuery(event.target.value)}
+              placeholder="Search sources (e.g. river, descriptor, btcpay)…"
+              className="h-9 max-w-sm"
+            />
+            <label className="ml-auto flex items-center gap-2 text-xs text-muted-foreground">
+              <Checkbox
+                checked={hidePlanned}
+                onCheckedChange={(checked) => setHidePlanned(checked === true)}
+              />
+              Hide planned
+            </label>
+          </div>
+          <div className="min-h-0 flex-1 space-y-3 overflow-y-auto p-4">
+          {visibleSources.length === 0 ? (
+            <p className="text-sm text-muted-foreground">
+              {sourceQuery.trim()
+                ? "No sources match that search."
+                : "No sources match this filter."}
+            </p>
+          ) : null}
           {visibleSources.map((source) => {
             const selectedSource = selectedId === source.id;
             return (
@@ -991,6 +1029,7 @@ export function AddConnectionDialog({
               </button>
             );
           })}
+          </div>
         </div>
 
         <div className="min-h-0 overflow-y-auto bg-muted/20 p-4">
