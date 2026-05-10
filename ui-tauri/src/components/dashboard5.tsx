@@ -539,11 +539,11 @@ function fallbackPortfolioData(
   snapshot: OverviewSnapshot,
   metric: PortfolioChartMetric,
   currency: Currency,
+  { densify }: { densify: boolean },
 ): PortfolioChartPoint[] {
-  const scoped =
-    data === fiveYearData
-      ? data
-      : expandFallbackYearData(data, snapshot.priceEur);
+  const scoped = densify
+    ? expandFallbackYearData(data, snapshot.priceEur)
+    : data;
   return scoped.map((point, index) => {
     const valueEur = point.thisYear;
     const costBasisEur = point.prevYear;
@@ -576,6 +576,7 @@ function getDataForPeriod(
     snapshot,
     metric,
     currency,
+    { densify: period !== "5years" },
   );
   if (snapshot.portfolioSeries?.length) {
     const points = buildDatedPortfolioPoints(
@@ -842,6 +843,29 @@ function percentOf(value: number, total: number) {
 type BalanceRail = "onchain" | "lightning" | "liquid" | "other";
 
 function railForConnection(kind: string, label: string): BalanceRail {
+  const kindKey = kind.toLowerCase();
+  switch (kindKey) {
+    case "xpub":
+    case "address":
+    case "descriptor":
+    case "btcpay":
+      return "onchain";
+    case "core-ln":
+    case "lnd":
+    case "nwc":
+    case "phoenix":
+      return "lightning";
+    case "cashu":
+    case "kraken":
+    case "bitstamp":
+    case "coinbase":
+    case "bitpanda":
+    case "river":
+    case "strike":
+    case "csv":
+    case "bip329":
+      return "other";
+  }
   const value = `${kind} ${label}`.toLowerCase();
   if (value.includes("liquid") || value.includes("lbtc")) return "liquid";
   if (
@@ -853,17 +877,7 @@ function railForConnection(kind: string, label: string): BalanceRail {
   ) {
     return "lightning";
   }
-  if (
-    value.includes("xpub") ||
-    value.includes("address") ||
-    value.includes("descriptor") ||
-    value.includes("btcpay") ||
-    value.includes("cold") ||
-    value.includes("vault")
-  ) {
-    return "onchain";
-  }
-  return "other";
+  return "onchain";
 }
 
 function buildBalanceRailItems(snapshot: OverviewSnapshot) {
@@ -1976,12 +1990,29 @@ function PortfolioInspector({
   priceEur: number;
   chartCurrency: Currency;
 }) {
-  const priorValue = previousPoint?.valueEur ?? point?.valueEur ?? 0;
-  const pointValue = point?.valueEur ?? 0;
-  const delta = pointValue - priorValue;
-  const deltaPct = priorValue ? (delta / Math.abs(priorValue)) * 100 : null;
+  const isBtc = chartCurrency === "btc";
+  const priorValueEur = previousPoint?.valueEur ?? point?.valueEur ?? 0;
+  const pointValueEur = point?.valueEur ?? 0;
+  const eurDelta = pointValueEur - priorValueEur;
+  const priorBtc = previousPoint?.balanceBtc ?? point?.balanceBtc ?? 0;
   const btcDelta =
     point && previousPoint ? point.balanceBtc - previousPoint.balanceBtc : 0;
+  const primaryDelta = isBtc ? btcDelta : eurDelta;
+  const primaryPrior = isBtc ? priorBtc : priorValueEur;
+  const deltaPct = previousPoint && primaryPrior
+    ? (primaryDelta / Math.abs(primaryPrior)) * 100
+    : null;
+  const secondaryDelta = isBtc ? eurDelta : btcDelta;
+  const secondaryLabel = isBtc
+    ? `${secondaryDelta >= 0 ? "+" : "−"}${formatPortfolioMoney(
+        Math.abs(secondaryDelta),
+        priceEur,
+        "eur",
+      )}`
+    : `${secondaryDelta >= 0 ? "+" : "−"}${formatBtc(
+        Math.abs(secondaryDelta),
+        { precision: 8 },
+      )}`;
 
   return (
     <aside className="flex min-h-0 flex-col gap-3 rounded-lg border bg-background/65 p-3 xl:max-h-[min(64vh,620px)] xl:overflow-y-auto">
@@ -2029,13 +2060,13 @@ function PortfolioInspector({
         <div
           className={cn(
             "mt-1 text-sm font-semibold tabular-nums",
-            delta >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-[var(--color-accent)]",
+            primaryDelta >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-[var(--color-accent)]",
             blurClass(hideSensitive),
           )}
         >
-          {delta >= 0 ? "+ " : "− "}
+          {primaryDelta >= 0 ? "+ " : "− "}
           {formatDetailedPortfolioMoney(
-            Math.abs(chartCurrency === "btc" ? btcFromEur(delta, priceEur) : delta),
+            Math.abs(primaryDelta),
             priceEur,
             chartCurrency,
           )}
@@ -2044,8 +2075,7 @@ function PortfolioInspector({
           {deltaPct === null
             ? "Start of selected range"
             : `${deltaPct >= 0 ? "+" : "−"}${Math.abs(deltaPct).toFixed(1)}%`}{" "}
-          · {btcDelta >= 0 ? "+" : "−"}
-          {formatBtc(Math.abs(btcDelta), { precision: 8 })}
+          · {secondaryLabel}
         </p>
       </div>
     </aside>
@@ -2634,10 +2664,14 @@ const RevenueFlowChart = ({
             )}
             {expanded && visibleData.length > 18 && (
               <Brush
-                dataKey="month"
+                dataKey="date"
                 height={22}
                 travellerWidth={8}
                 stroke="var(--color-thisYear)"
+                tickFormatter={(value) =>
+                  visibleData.find((point) => point.date === value)?.month ??
+                  String(value)
+                }
               />
             )}
           </AreaChart>
