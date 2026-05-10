@@ -11,12 +11,16 @@ time. This test parses the catalog and verifies alignment.
 
 from __future__ import annotations
 
+import inspect
 import re
 import unittest
 from pathlib import Path
 
 from kassiber.core.wallets import WALLET_KINDS
-from kassiber.daemon import _UI_WALLET_SOURCE_FORMATS
+from kassiber.daemon import (
+    _UI_WALLET_SOURCE_FORMATS,
+    _create_btcpay_connection_payload,
+)
 
 
 _CATALOG_PATH = (
@@ -73,6 +77,29 @@ class ConnectionCatalogDriftTests(unittest.TestCase):
         self.assertTrue(
             _CATALOG_PATH.exists(),
             f"Connection catalog missing at {_CATALOG_PATH}",
+        )
+
+    def test_btcpay_create_uses_a_known_wallet_kind(self):
+        """The BTCPay setup path hard-codes its wallet kind in
+        ``_create_btcpay_connection_payload`` rather than reading it
+        from the catalog. Make sure that hard-coded value still
+        resolves to a real wallet kind so the catalog's BTCPay entry
+        keeps working even after refactors there.
+        """
+        source = inspect.getsource(_create_btcpay_connection_payload)
+        match = re.search(
+            r"core_wallets\.create_wallet\([^)]*?wallet_label,\s*\"(?P<kind>[^\"]+)\"",
+            source,
+            re.DOTALL,
+        )
+        self.assertIsNotNone(
+            match,
+            "could not locate hard-coded wallet kind in _create_btcpay_connection_payload",
+        )
+        self.assertIn(
+            match.group("kind"),
+            WALLET_KINDS,
+            "BTCPay setup hard-codes a wallet kind that WALLET_KINDS no longer contains",
         )
 
     def test_ready_entries_reference_known_wallet_kinds(self):

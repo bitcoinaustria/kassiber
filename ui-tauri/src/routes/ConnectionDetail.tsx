@@ -53,6 +53,7 @@ import { useDaemon, useDaemonMutation } from "@/daemon/client";
 import { screenShellClassName } from "@/lib/screen-layout";
 import { cn } from "@/lib/utils";
 import { isFilePickerAvailable, pickFile } from "@/lib/filePicker";
+import { detectWalletMaterial } from "@/lib/walletMaterialFormat";
 import { useUiStore } from "@/store/ui";
 import { useSyncProgressNotice } from "@/hooks/useSyncProgressNotice";
 import type {
@@ -208,6 +209,9 @@ function ConnectionDetailView({
     useDaemonMutation<UpdateWalletResult>("ui.wallets.update");
   const deleteWallet =
     useDaemonMutation<DeleteWalletResult>("ui.wallets.delete");
+  const backendOptionsQuery = useDaemon<{
+    backends: { name: string; kind: string; is_default?: boolean }[];
+  }>("ui.backends.options");
   const { startSyncNotice, clearSyncNotice } = useSyncProgressNotice();
   const [syncMessage, setSyncMessage] = useState<string | null>(null);
   const [editOpen, setEditOpen] = useState(false);
@@ -216,6 +220,7 @@ function ConnectionDetailView({
   const [editPlaintextAck, setEditPlaintextAck] = useState("");
   const [editWalletMaterial, setEditWalletMaterial] = useState("");
   const [editStoreId, setEditStoreId] = useState("");
+  const [editBackend, setEditBackend] = useState("");
   const [editSourceFile, setEditSourceFile] = useState("");
   const [editError, setEditError] = useState<string | null>(null);
   const [deleteOpen, setDeleteOpen] = useState(false);
@@ -288,10 +293,16 @@ function ConnectionDetailView({
     setEditPlaintextAck("");
     setEditWalletMaterial("");
     setEditStoreId("");
+    setEditBackend("");
     setEditSourceFile("");
     setEditError(null);
     setEditOpen(true);
   };
+
+  const allBackendOptions = backendOptionsQuery.data?.data?.backends ?? [];
+  const btcpayBackendOptions = allBackendOptions.filter(
+    (backend) => backend.kind === "btcpay",
+  );
 
   const editConfigKind: "descriptor" | "btcpay" | "file-wallet" | null =
     connection.kind === "descriptor" || connection.kind === "xpub"
@@ -340,13 +351,20 @@ function ConnectionDetailView({
     const labelChanged = nextLabel !== connection.label;
     const walletMaterial = editWalletMaterial.trim();
     const storeId = editStoreId.trim();
+    const backend = editBackend.trim();
     const sourceFile = editSourceFile.trim();
     const configChanges: Record<string, unknown> = {};
     if (editConfigKind === "descriptor" && walletMaterial) {
+      const detection = detectWalletMaterial(walletMaterial);
+      if (detection.kind === "bare-xpub" || detection.kind === "unknown") {
+        setEditError(detection.hint ?? detection.label);
+        return;
+      }
       configChanges.wallet_material = walletMaterial;
     }
-    if (editConfigKind === "btcpay" && storeId) {
-      configChanges.store_id = storeId;
+    if (editConfigKind === "btcpay") {
+      if (storeId) configChanges.store_id = storeId;
+      if (backend) configChanges.backend = backend;
     }
     if (editConfigKind === "file-wallet" && sourceFile) {
       configChanges.source_file = sourceFile;
@@ -692,21 +710,57 @@ function ConnectionDetailView({
                   }
                   placeholder="Paste a fresh descriptor or extended public key to overwrite"
                 />
-                <p className="text-xs text-muted-foreground">
-                  Leave empty to keep the current descriptors.
-                </p>
+                {editWalletMaterial.trim()
+                  ? (() => {
+                      const detection = detectWalletMaterial(editWalletMaterial);
+                      const tone =
+                        detection.kind === "bare-xpub" ||
+                        detection.kind === "unknown"
+                          ? "text-amber-700 dark:text-amber-300"
+                          : "text-emerald-700 dark:text-emerald-300";
+                      return (
+                        <p className={cn("text-xs", tone)}>
+                          Detected: {detection.label}
+                          {detection.hint ? ` — ${detection.hint}` : ""}
+                        </p>
+                      );
+                    })()
+                  : (
+                      <p className="text-xs text-muted-foreground">
+                        Leave empty to keep the current descriptors.
+                      </p>
+                    )}
               </div>
             ) : null}
             {editConfigKind === "btcpay" ? (
-              <div className="space-y-2">
-                <Label htmlFor="connection-edit-store">BTCPay store ID</Label>
-                <Input
-                  id="connection-edit-store"
-                  value={editStoreId}
-                  onChange={(event) => setEditStoreId(event.target.value)}
-                  placeholder="Leave empty to keep the current store ID"
-                />
-              </div>
+              <>
+                <div className="space-y-2">
+                  <Label htmlFor="connection-edit-backend">BTCPay backend</Label>
+                  <select
+                    id="connection-edit-backend"
+                    className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
+                    value={editBackend}
+                    onChange={(event) => setEditBackend(event.target.value)}
+                  >
+                    <option value="">Keep current backend</option>
+                    {btcpayBackendOptions.map((backend) => (
+                      <option key={backend.name} value={backend.name}>
+                        {backend.name}
+                        {backend.is_default ? " (default)" : ""}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="connection-edit-store">BTCPay store ID</Label>
+                  <Input
+                    id="connection-edit-store"
+                    value={editStoreId}
+                    onChange={(event) => setEditStoreId(event.target.value)}
+                    placeholder="Leave empty to keep the current store ID"
+                  />
+                </div>
+              </>
             ) : null}
             {editConfigKind === "file-wallet" ? (
               <div className="space-y-2">

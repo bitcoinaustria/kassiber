@@ -228,6 +228,20 @@ export function AddConnectionDialog({
   const [btcpayTestStatus, setBtcpayTestStatus] = React.useState<
     { ok: true; storeId: string } | { ok: false; message: string } | null
   >(null);
+  const [copiedAddress, setCopiedAddress] = React.useState<string | null>(null);
+  const copyAddress = React.useCallback(async (address: string) => {
+    try {
+      await navigator.clipboard?.writeText(address);
+      setCopiedAddress(address);
+      window.setTimeout(
+        () =>
+          setCopiedAddress((current) => (current === address ? null : current)),
+        1500,
+      );
+    } catch {
+      // Clipboard may be denied; silently ignore — the address is still on screen.
+    }
+  }, []);
 
   const visibleSources = React.useMemo(() => {
     const query = sourceQuery.trim().toLowerCase();
@@ -614,11 +628,22 @@ export function AddConnectionDialog({
         </p>
         <ul className="space-y-1 font-mono">
           {previewAddresses.map((entry) => (
-            <li key={`${entry.branch}-${entry.index}`} className="flex gap-2">
-              <span className="text-muted-foreground">
+            <li
+              key={`${entry.branch}-${entry.index}`}
+              className="flex items-center gap-2"
+            >
+              <span className="w-16 shrink-0 text-muted-foreground">
                 {entry.branch === "change" ? "change/0" : `recv/${entry.index}`}
               </span>
-              <span className="truncate">{entry.address}</span>
+              <span className="min-w-0 flex-1 truncate">{entry.address}</span>
+              <button
+                type="button"
+                className="rounded border px-2 py-0.5 text-[10px] uppercase tracking-wide text-muted-foreground hover:bg-muted/40"
+                onClick={() => void copyAddress(entry.address)}
+                title="Copy address"
+              >
+                {copiedAddress === entry.address ? "Copied" : "Copy"}
+              </button>
             </li>
           ))}
         </ul>
