@@ -972,7 +972,7 @@ class DaemonSmokeTest(unittest.TestCase):
                 "\n".join(
                     [
                         "Date,Reference Code,Transaction Type,Sent Amount,Sent Currency,Received Amount,Received Currency,Fee Amount,Fee Currency,Total Amount,Total Currency,Method,Source,Destination,Cost Basis Amount,Cost Basis Currency,Bitcoin Price Amount,Bitcoin Price Currency,Transaction ID,Recurring,Tag",
-                        "2026-01-02T12:00:00Z,RIV-BUY-UI,Buy,1000.00,USD,0.01000000,BTC,5.00,USD,-1005.00,USD,ACH,Linked bank,Bitcoin balance,,,100000.00,USD,,False,Buy",
+                        "2026-01-02T12:00:00Z,RIV-BUY-UI,Buy,1000.00,EUR,0.01000000,BTC,5.00,EUR,-1005.00,EUR,ACH,Linked bank,Bitcoin balance,,,100000.00,EUR,,False,Buy",
                         "",
                     ]
                 ),
