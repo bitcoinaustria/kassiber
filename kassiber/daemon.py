@@ -98,7 +98,7 @@ from .secrets.credentials import migrate_dotenv_credentials
 from .secrets.migration import create_empty_encrypted_database, migrate_plaintext_to_encrypted
 from .secrets.passphrase import change_database_passphrase
 from .secrets.sqlcipher import looks_like_plaintext_sqlite, open_encrypted, sqlcipher_available
-from .sync_btcpay import fetch_btcpay_records, probe_btcpay_wallet
+from .sync_btcpay import probe_btcpay_wallet
 from .wallet_descriptors import (
     derive_descriptor_targets,
     load_descriptor_plan,
