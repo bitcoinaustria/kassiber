@@ -8,7 +8,14 @@ Kassiber can ingest transactions and metadata from several sources. Imported dat
 - BTCPay CSV / JSON exports
 - BTCPay Greenfield confirmed wallet history
 - Phoenix CSV exports
+- River Bitcoin Activity / Account Activity CSV exports
 - BIP329 JSONL labels
+
+Format references used by the dedicated importers:
+
+- BTCPay Greenfield API: <https://docs.btcpayserver.org/Development/GreenFieldExample/>
+- River Account Activity CSV: <https://support.river.com/hc/en-us/articles/45513824178963-How-do-I-download-my-account-activity>
+- BIP329 labels JSONL: <https://bips.xyz/329>
 
 ## Generic transaction imports
 
@@ -143,6 +150,44 @@ python3 -m kassiber wallets create \
   --kind phoenix \
   --source-file /path/to/phoenix-export.csv \
   --source-format phoenix_csv
+```
+
+## River
+
+Kassiber supports River's Bitcoin Activity and Account Activity CSV exports.
+Use Account Activity when available because it carries both BTC and cash legs.
+
+Import directly:
+
+```bash
+python3 -m kassiber wallets import-river \
+  --wallet river \
+  --file /path/to/river-account-activity.csv
+```
+
+Behavior:
+
+- BTC rows become Kassiber transactions; fiat-only cash rows are skipped
+- buys and sells preserve the paired cash leg as exact `exchange_execution`
+  pricing from provider `River`
+- rows without a paired cash leg use River's exported Bitcoin price as an
+  `fmv_provider` sample when present
+- USD/EUR/etc. fees on buys are included in cost basis; fiat fees on sells
+  reduce proceeds
+- BTC fees become Kassiber BTC fees
+- `Transaction Type` / `Tag` becomes the transaction kind and a `river:*` tag
+- `Method`, `Source`, and `Destination` are preserved in the description/note
+
+You can also create a wallet whose source file is a River export:
+
+```bash
+python3 -m kassiber wallets create \
+  --label river \
+  --kind river \
+  --source-file /path/to/river-account-activity.csv \
+  --source-format river_csv
+
+python3 -m kassiber wallets sync --wallet river
 ```
 
 ## BIP329

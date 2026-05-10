@@ -56,6 +56,7 @@ smoke_py -m kassiber daemon </dev/null >/dev/null
 smoke_py -m kassiber backends list >/dev/null
 smoke_py -m kassiber wallets kinds >/dev/null
 smoke_py -m kassiber wallets sync-btcpay --help >/dev/null
+smoke_py -m kassiber wallets import-river --help >/dev/null
 smoke_py -m kassiber profiles create --help >/dev/null
 smoke_py -m kassiber metadata records --help >/dev/null
 smoke_py -m kassiber attachments list --help >/dev/null

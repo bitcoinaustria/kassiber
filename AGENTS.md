@@ -84,8 +84,18 @@ Kassiber is currently in **dev mode**: renaming commands, breaking flags, and re
   `ui.rates.coverage`, `ui.report.blockers`,
   `ui.audit.changes_since_last_answer`, `ui.maintenance.settings`,
   `ui.workspace.health`, `ui.next_actions`, and virtual
-  `read_skill_reference`. `read_skill_reference("index")` returns only the
+  `read_skill_reference`. `ui.backends.options` is a desktop setup helper that
+  returns safe backend names and metadata without exact URLs or tokens.
+  `read_skill_reference("index")` returns only the
   compact in-app skill routing document; deeper references stay allowlisted.
+  Desktop connection setup uses explicit mutating daemon kinds
+  `ui.wallets.create`, `ui.connections.btcpay.create`, and
+  `ui.metadata.bip329.import`; do not model the Connections dialog as a
+  command-template picker. Connection setup should select from configured
+  backends via `ui.backends.options`; if there is no matching backend, route
+  the user to Settings/backends instead of asking for an arbitrary backend name.
+  BTCPay setup asks for store ID only; Kassiber stores the default BTC on-chain
+  payment method internally for repeat sync.
   `ui.transactions.list` supports bounded filters for `limit`, `direction`,
   `asset`, `wallet`, `since`, `sort`, and `order`. `ui.backends.list` is
   scoped to the active profile and exposes URL presence metadata, not exact
@@ -121,7 +131,7 @@ Kassiber is currently in **dev mode**: renaming commands, breaking flags, and re
 - `workspaces {list,create}`
 - `profiles {list,create,get,set}`
 - `accounts {list,create}`
-- `wallets {kinds,list,create,get,update,delete,reveal-descriptor,sync,sync-btcpay,derive,import-json,import-csv,import-btcpay,import-phoenix}`
+- `wallets {kinds,list,create,get,update,delete,reveal-descriptor,sync,sync-btcpay,derive,import-json,import-csv,import-btcpay,import-phoenix,import-river}`
 - `backends {kinds,list,get,create,update,delete,reveal-token,set-default,clear-default}`
 - `transactions {list}`
 - `attachments {add,list,remove,verify,gc}`
@@ -250,6 +260,7 @@ uv run python -m kassiber --machine status
 uv run python -m kassiber backends list
 uv run python -m kassiber wallets kinds
 uv run python -m kassiber wallets sync-btcpay --help
+uv run python -m kassiber wallets import-river --help
 uv run python -m kassiber profiles create --help
 uv run python -m kassiber metadata records --help
 uv run python -m kassiber attachments list --help
@@ -285,7 +296,7 @@ uv run python -m kassiber ai chat --help
 
 - BTC-denominated amounts are stored as INTEGER msat in SQLite. Machine envelopes expose both `amount` (BTC float) and `amount_msat` (integer), and the same for `fee` / `quantity`. Fiat columns (`fiat_value`, `fiat_rate`, etc.) are still REAL.
 - Rates cache (`rates pairs/sync/latest/range/set`) stores BTC-USD / BTC-EUR samples from CoinGecko or manual upsert. `journals process` can auto-fill missing transaction prices from the cache when a matching sample exists at or before the transaction timestamp, but reports still use stored transaction and journal pricing rather than querying the cache live.
-- Phoenix Lightning wallet CSV import is implemented (`wallets import-phoenix`). River CSV importer is not implemented yet.
+- Phoenix Lightning wallet CSV import is implemented (`wallets import-phoenix`). River Bitcoin Activity / Account Activity CSV import is implemented (`wallets import-river` and `--source-format river_csv`).
 - No `custom` wallet kind CSV mapping DSL yet.
 - No account adjustments yet.
 - No per-profile Tor proxy configuration yet.

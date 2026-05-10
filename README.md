@@ -42,7 +42,7 @@ kind of report when an error occurs.
 - supports local sets of books, separate books for private/business tax scopes,
   wallet buckets, and wallets
 - syncs from `esplora` and `electrum`, plus `bitcoinrpc` for address-based Bitcoin wallets and confirmed BTCPay Greenfield wallet history
-- imports generic CSV/JSON, BTCPay exports, Phoenix exports, and BIP329 labels
+- imports generic CSV/JSON, BTCPay exports, Phoenix exports, River exports, and BIP329 labels
 - pulls confirmed BTCPay on-chain wallet history directly from a BTCPay server via the Greenfield API
 - stores notes, tags, exclusions, transfer pairs, and attachments
 - processes journals explicitly before reports are trusted
@@ -115,10 +115,10 @@ If you use multiple BTCPay stores, only model them as multiple Kassiber wallets
 when they are actually different underlying wallets. If two stores point at the
 same wallet, creating both in Kassiber would duplicate holdings.
 
-BTCPay-backed wallets now persist their `backend` / `store_id` /
-`payment_method_id` config on the wallet itself, so later `wallets sync`,
-`wallets sync --all`, and future GUI flows can reuse the same source without
-retyping `--store-id`.
+BTCPay-backed wallets persist their `backend` / `store_id` config on the wallet
+itself, so later `wallets sync`, `wallets sync --all`, and GUI flows can reuse
+the same source without retyping `--store-id`. The desktop setup asks for the
+store only and uses BTCPay's default BTC on-chain payment method internally.
 
 ## AI assistance
 

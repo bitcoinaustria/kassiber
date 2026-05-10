@@ -29,6 +29,7 @@ import { Diagnostics } from "./routes/Diagnostics";
 import { Books } from "./routes/Books";
 import { Connections } from "./routes/Connections";
 import { ConnectionDetail } from "./routes/ConnectionDetail";
+import { Imports } from "./routes/Imports";
 import { Settings } from "./routes/Settings";
 import { Assistant } from "./routes/Assistant";
 import { AppShell } from "./components/kb/AppShell";
@@ -158,9 +159,7 @@ const connectionDetailRoute = createRoute({
 const importsRoute = createRoute({
   getParentRoute: () => appLayoutRoute,
   path: "/imports",
-  beforeLoad: () => {
-    throw redirect({ to: "/connections" });
-  },
+  component: Imports,
 });
 
 const settingsRoute = createRoute({

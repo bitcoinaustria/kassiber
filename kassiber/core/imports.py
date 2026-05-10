@@ -2,6 +2,7 @@ from __future__ import annotations
 
 """Import orchestration helpers above the parser-only `kassiber.importers` boundary."""
 
+import contextvars
 import json
 import os
 import sqlite3
@@ -13,7 +14,12 @@ from ..envelope import json_ready
 from ..errors import AppError
 from ..fingerprints import make_transaction_fingerprint
 from . import pricing
-from ..importers import is_btcpay_format, is_phoenix_format, load_import_records
+from ..importers import (
+    is_btcpay_format,
+    is_phoenix_format,
+    is_river_format,
+    load_import_records,
+)
 from ..msat import btc_to_msat, dec
 from ..time_utils import UNKNOWN_OCCURRED_AT, now_iso, parse_timestamp
 from ..util import str_or_none
@@ -27,6 +33,16 @@ ImportRow = Mapping[str, Any]
 TagRow = Mapping[str, Any]
 EnsureTagRow = Callable[[sqlite3.Connection, str, str, str, str], tuple[TagRow, bool]]
 InvalidateJournals = Callable[[sqlite3.Connection, str], None]
+
+
+ProgressCallback = Callable[[Mapping[str, Any]], None]
+
+# Contextvar threaded by the daemon when it wants long-running imports to
+# emit row-count progress over the JSONL stream. The CLI leaves this empty
+# so no behavior change for `kassiber wallets sync` from a terminal.
+sync_progress_emitter: contextvars.ContextVar[ProgressCallback | None] = (
+    contextvars.ContextVar("kassiber.sync_progress_emitter", default=None)
+)
 
 
 @dataclass(frozen=True)
@@ -160,6 +176,60 @@ def _transaction_merge_updates(existing: Mapping[str, Any], normalized: Mapping[
     return updates
 
 
+def _normalized_fiat_currency(value: Any) -> str:
+    return str(value or "").strip().upper()
+
+
+def _import_price_currency(record: ImportRow) -> str:
+    return _normalized_fiat_currency(record.get("fiat_currency"))
+
+
+def _validate_import_price_currency(
+    profile: Mapping[str, Any],
+    normalized: Mapping[str, Any],
+) -> None:
+    import_currency = _normalized_fiat_currency(normalized.get("fiat_currency"))
+    if not import_currency:
+        return
+    has_price = normalized["fiat_rate"] is not None or normalized["fiat_value"] is not None
+    if not has_price:
+        return
+    profile_currency = _normalized_fiat_currency(profile["fiat_currency"])
+    if import_currency == profile_currency:
+        return
+    raise AppError(
+        f"Imported price currency {import_currency} does not match profile fiat currency {profile_currency}",
+        code="validation",
+        hint=(
+            "Import the file into a profile with the same fiat currency, or remove "
+            "the imported fiat price values and price the transactions separately."
+        ),
+        retryable=False,
+    )
+
+
+def _emit_import_progress(
+    progress: ProgressCallback,
+    *,
+    wallet_label: str,
+    processed: int,
+    total: int,
+    imported: int | None = None,
+    skipped: int | None = None,
+) -> None:
+    payload: dict[str, Any] = {
+        "phase": "importing",
+        "wallet": wallet_label,
+        "processed": processed,
+        "total": total,
+    }
+    if imported is not None:
+        payload["imported"] = imported
+    if skipped is not None:
+        payload["skipped"] = skipped
+    progress(payload)
+
+
 def normalize_import_record(record: ImportRow, source_label: str = "") -> dict[str, Any]:
     raw_amount = dec(record.get("amount"))
     direction = normalize_import_direction(record.get("direction"), raw_amount)
@@ -214,6 +284,7 @@ def normalize_import_record(record: ImportRow, source_label: str = "") -> dict[s
         "asset": normalize_asset_code(record.get("asset") or "BTC"),
         "amount": amount,
         "fee": fee,
+        "fiat_currency": _import_price_currency(record),
         **payload,
         "kind": record.get("kind"),
         "description": record.get("description"),
@@ -234,8 +305,18 @@ def insert_wallet_records(
 ) -> dict[str, Any]:
     imported = 0
     skipped = 0
-    for record in records:
+    total = len(records)
+    progress = sync_progress_emitter.get()
+    if progress is not None:
+        _emit_import_progress(
+            progress,
+            wallet_label=wallet["label"],
+            processed=0,
+            total=total,
+        )
+    for index, record in enumerate(records, start=1):
         normalized = normalize_import_record(record, source_label=source_label)
+        _validate_import_price_currency(profile, normalized)
         fingerprint = make_transaction_fingerprint(
             wallet["id"],
             normalized["external_id"],
@@ -255,6 +336,15 @@ def insert_wallet_records(
                     (*updates.values(), existing["id"]),
                 )
             skipped += 1
+            if progress is not None and (index % 200 == 0 or index == total):
+                _emit_import_progress(
+                    progress,
+                    wallet_label=wallet["label"],
+                    processed=index,
+                    total=total,
+                    imported=imported,
+                    skipped=skipped,
+                )
             continue
         tx_id = str(uuid.uuid4())
         conn.execute(
@@ -282,7 +372,7 @@ def insert_wallet_records(
                 normalized["asset"],
                 btc_to_msat(normalized["amount"]),
                 btc_to_msat(normalized["fee"]),
-                profile["fiat_currency"],
+                normalized["fiat_currency"] or profile["fiat_currency"],
                 normalized["fiat_rate"],
                 normalized["fiat_value"],
                 normalized["fiat_price_source"],
@@ -305,6 +395,15 @@ def insert_wallet_records(
             ),
         )
         imported += 1
+        if progress is not None and (index % 200 == 0 or index == total):
+            _emit_import_progress(
+                progress,
+                wallet_label=wallet["label"],
+                processed=index,
+                total=total,
+                imported=imported,
+                skipped=skipped,
+            )
     hooks.invalidate_journals(conn, profile["id"])
     if commit:
         conn.commit()
@@ -326,6 +425,7 @@ def import_records_into_wallet(
     *,
     apply_btcpay: bool = False,
     apply_phoenix: bool = False,
+    apply_river: bool = False,
     commit: bool = True,
 ) -> dict[str, Any]:
     outcome = insert_wallet_records(
@@ -341,9 +441,74 @@ def import_records_into_wallet(
         outcome.update(apply_btcpay_metadata(conn, profile, wallet, records, hooks, commit=False))
     if apply_phoenix:
         outcome.update(apply_phoenix_metadata(conn, profile, wallet, records, hooks, commit=False))
+    if apply_river:
+        outcome.update(apply_river_metadata(conn, profile, wallet, records, hooks, commit=False))
     if commit:
         conn.commit()
     return outcome
+
+
+def apply_river_metadata(
+    conn: sqlite3.Connection,
+    profile: Mapping[str, Any],
+    wallet: Mapping[str, Any],
+    records: Sequence[ImportRow],
+    hooks: ImportCoordinatorHooks,
+    *,
+    commit: bool = True,
+) -> dict[str, int]:
+    notes_set = 0
+    tags_added = 0
+    tags_created = 0
+    for record in records:
+        txid = record.get("txid")
+        if not txid:
+            continue
+        tx = conn.execute(
+            """
+            SELECT id, note
+            FROM transactions
+            WHERE profile_id = ? AND wallet_id = ? AND external_id = ?
+            ORDER BY created_at DESC
+            LIMIT 1
+            """,
+            (profile["id"], wallet["id"], txid),
+        ).fetchone()
+        if not tx:
+            continue
+        description = str_or_none(record.get("_river_description"))
+        if description and not tx["note"]:
+            conn.execute(
+                "UPDATE transactions SET note = ? WHERE id = ?",
+                (description, tx["id"]),
+            )
+            notes_set += 1
+        tag_value = str_or_none(record.get("_river_tag"))
+        if tag_value:
+            code = f"river:{tag_value}".lower().replace(" ", "_")
+            tag, created = hooks.ensure_tag_row(
+                conn,
+                profile["workspace_id"],
+                profile["id"],
+                code,
+                tag_value,
+            )
+            if created:
+                tags_created += 1
+            before = conn.total_changes
+            conn.execute(
+                "INSERT OR IGNORE INTO transaction_tags(transaction_id, tag_id) VALUES(?, ?)",
+                (tx["id"], tag["id"]),
+            )
+            if conn.total_changes > before:
+                tags_added += 1
+    if commit:
+        conn.commit()
+    return {
+        "river_notes_set": notes_set,
+        "river_tags_added": tags_added,
+        "river_tags_created": tags_created,
+    }
 
 
 def apply_phoenix_metadata(
@@ -486,6 +651,7 @@ def import_file_into_wallet(
         hooks,
         apply_btcpay=is_btcpay_format(input_format),
         apply_phoenix=is_phoenix_format(input_format),
+        apply_river=is_river_format(input_format),
         commit=commit,
     )
     outcome["input_format"] = input_format
@@ -497,6 +663,7 @@ __all__ = [
     "ImportCoordinatorHooks",
     "apply_btcpay_metadata",
     "apply_phoenix_metadata",
+    "apply_river_metadata",
     "import_file_into_wallet",
     "import_records_into_wallet",
     "insert_wallet_records",

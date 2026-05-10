@@ -339,6 +339,9 @@ export const mockDaemon: DaemonTransport = {
       const args = (req.args ?? {}) as {
         wallet?: unknown;
         label?: unknown;
+        store_id?: unknown;
+        wallet_material?: unknown;
+        source_file?: unknown;
       };
       const walletRef = typeof args.wallet === "string" ? args.wallet : "";
       const label = typeof args.label === "string" ? args.label.trim() : "";
@@ -346,24 +349,244 @@ export const mockDaemon: DaemonTransport = {
       const connection = overview.connections.find(
         (item) => item.id === walletRef || item.label === walletRef,
       );
-      if (!connection || !label) {
+      const hasConfigChange =
+        (typeof args.store_id === "string" && args.store_id.trim().length > 0) ||
+        (typeof args.wallet_material === "string" &&
+          args.wallet_material.trim().length > 0) ||
+        (typeof args.source_file === "string" &&
+          args.source_file.trim().length > 0);
+      if (!connection || (!label && !hasConfigChange)) {
         return {
           kind: "error",
           schema_version: 1,
           request_id: req.request_id,
           error: {
             code: "validation",
-            message: "wallet update requires an existing wallet and label",
+            message:
+              "wallet update requires an existing wallet plus a label or config change",
             retryable: false,
           },
         };
       }
-      connection.label = label;
+      if (label) connection.label = label;
       return {
         kind: "ui.wallets.update",
         schema_version: 1,
         request_id: req.request_id,
         data: { wallet: connection } as T,
+      };
+    }
+
+    if (req.kind === "ui.wallets.create") {
+      const args = (req.args ?? {}) as {
+        label?: unknown;
+        kind?: unknown;
+        source_format?: unknown;
+      };
+      const label = typeof args.label === "string" ? args.label.trim() : "";
+      const kind = typeof args.kind === "string" ? args.kind.trim() : "custom";
+      const sourceFormat =
+        typeof args.source_format === "string" ? args.source_format.trim() : "";
+      if (!label) {
+        return {
+          kind: "error",
+          schema_version: 1,
+          request_id: req.request_id,
+          error: {
+            code: "validation",
+            message: "wallet create requires a label",
+            retryable: false,
+          },
+        };
+      }
+      const overview = mockOverviewSnapshot();
+      const connection = {
+        id: `mock-wallet-${Date.now()}`,
+        label,
+        kind,
+        ...(sourceFormat
+          ? {
+              syncMode: "file_import",
+              syncSource: sourceFormat,
+              sourceFormat,
+            }
+          : {}),
+      };
+      overview.connections = [...overview.connections, connection];
+      return {
+        kind: "ui.wallets.create",
+        schema_version: 1,
+        request_id: req.request_id,
+        data: { wallet: connection } as T,
+      };
+    }
+
+    if (req.kind === "ui.connections.btcpay.create") {
+      const args = (req.args ?? {}) as {
+        label?: unknown;
+        backend?: unknown;
+        store_id?: unknown;
+      };
+      const label = typeof args.label === "string" ? args.label.trim() : "";
+      const backendName =
+        typeof args.backend === "string" ? args.backend.trim() : "";
+      const storeId = typeof args.store_id === "string" ? args.store_id.trim() : "";
+      if (!label || !backendName || !storeId) {
+        return {
+          kind: "error",
+          schema_version: 1,
+          request_id: req.request_id,
+          error: {
+            code: "validation",
+            message: "BTCPay setup requires a label, backend, and store ID",
+            retryable: false,
+          },
+        };
+      }
+      const overview = mockOverviewSnapshot();
+      const connection = {
+        id: `mock-btcpay-${Date.now()}`,
+        label,
+        kind: "custom",
+        syncMode: "btcpay",
+        syncSource: "btcpay",
+      };
+      overview.connections = [...overview.connections, connection];
+      return {
+        kind: "ui.connections.btcpay.create",
+        schema_version: 1,
+        request_id: req.request_id,
+        data: {
+          backend: { name: backendName },
+          wallet: connection,
+        } as T,
+      };
+    }
+
+    if (req.kind === "ui.metadata.bip329.import") {
+      return {
+        kind: "ui.metadata.bip329.import",
+        schema_version: 1,
+        request_id: req.request_id,
+        data: {
+          records: 1,
+          imported: 1,
+          updated: 0,
+          transaction_tags_added: 1,
+        } as T,
+      };
+    }
+
+    if (req.kind === "ui.connections.sources") {
+      return {
+        kind: "ui.connections.sources",
+        schema_version: 1,
+        request_id: req.request_id,
+        data: {
+          wallet_kinds: [
+            { kind: "descriptor", summary: "Watch-only descriptor wallet." },
+            { kind: "custom", summary: "Custom config wallet." },
+            { kind: "phoenix", summary: "Phoenix CSV importer." },
+            { kind: "river", summary: "River CSV importer." },
+          ],
+          source_formats: [
+            "btcpay_csv",
+            "btcpay_json",
+            "csv",
+            "json",
+            "phoenix_csv",
+            "river_csv",
+          ],
+        } as T,
+      };
+    }
+
+    if (req.kind === "ui.wallets.preview_descriptor") {
+      const args = (req.args ?? {}) as {
+        wallet_material?: unknown;
+        descriptor?: unknown;
+        count?: unknown;
+      };
+      const material =
+        typeof args.wallet_material === "string"
+          ? args.wallet_material.trim()
+          : typeof args.descriptor === "string"
+            ? args.descriptor.trim()
+            : "";
+      if (!material) {
+        return {
+          kind: "error",
+          schema_version: 1,
+          request_id: req.request_id,
+          error: {
+            code: "validation",
+            message: "preview requires wallet_material or descriptor",
+            retryable: false,
+          },
+        };
+      }
+      const requested = typeof args.count === "number" ? args.count : 5;
+      const count = Math.max(1, Math.min(20, requested));
+      const sampleAddresses: Array<{
+        branch: "receive" | "change";
+        index: number;
+        address: string;
+        derivation_path: string;
+      }> = Array.from({ length: count }, (_, index) => ({
+        branch: "receive",
+        index,
+        address: `bc1qmock${index.toString().padStart(38, "0")}`,
+        derivation_path: `m/0/${index}`,
+      }));
+      sampleAddresses.push({
+        branch: "change",
+        index: 0,
+        address: `bc1qmockchange${"0".repeat(31)}`,
+        derivation_path: "m/1/0",
+      });
+      return {
+        kind: "ui.wallets.preview_descriptor",
+        schema_version: 1,
+        request_id: req.request_id,
+        data: {
+          chain: "bitcoin",
+          network: "main",
+          addresses: sampleAddresses,
+          has_change_branch: true,
+        } as T,
+      };
+    }
+
+    if (req.kind === "ui.connections.btcpay.test") {
+      const args = (req.args ?? {}) as {
+        backend?: unknown;
+        store_id?: unknown;
+      };
+      const backend = typeof args.backend === "string" ? args.backend.trim() : "";
+      const storeId =
+        typeof args.store_id === "string" ? args.store_id.trim() : "";
+      if (!backend || !storeId) {
+        return {
+          kind: "error",
+          schema_version: 1,
+          request_id: req.request_id,
+          error: {
+            code: "validation",
+            message: "BTCPay test requires backend and store_id",
+            retryable: false,
+          },
+        };
+      }
+      return {
+        kind: "ui.connections.btcpay.test",
+        schema_version: 1,
+        request_id: req.request_id,
+        data: {
+          backend,
+          store_id: storeId,
+          payment_method_id: "BTC-CHAIN",
+          ok: true,
+        } as T,
       };
     }
 
@@ -437,12 +660,45 @@ export const mockDaemon: DaemonTransport = {
     if (req.kind === "ai.chat") {
       return mockAiChatStream<T, R>(req, options);
     }
+    if (req.kind === "ui.wallets.sync") {
+      return mockWalletsSyncStream<T, R>(req, options);
+    }
     // Non-streaming kinds resolve straight through to invoke.
     return mockDaemon.invoke<T>(req);
   },
 };
 
 export const mockStream = mockDaemon.stream;
+
+async function mockWalletsSyncStream<T, R>(
+  req: DaemonRequest,
+  options?: DaemonStreamOptions<R>,
+): Promise<DaemonEnvelope<T>> {
+  const requestId =
+    req.request_id ?? `mock-sync-${Math.random().toString(36).slice(2)}`;
+  const args = (req.args ?? {}) as { wallet?: unknown };
+  const walletLabel = typeof args.wallet === "string" ? args.wallet : "wallet";
+  const total = 1200;
+  const steps = [200, 600, 1000, total];
+  for (const processed of steps) {
+    if (options?.signal?.aborted) break;
+    await new Promise((resolve) => setTimeout(resolve, 60));
+    options?.onRecord?.({
+      kind: "ui.wallets.sync.progress",
+      schema_version: 1,
+      request_id: requestId,
+      data: {
+        phase: "importing",
+        wallet: walletLabel,
+        processed,
+        total,
+        imported: processed,
+        skipped: 0,
+      } as R,
+    });
+  }
+  return mockDaemon.invoke<T>(req);
+}
 
 async function mockAiChatStream<T, R>(
   req: DaemonRequest,

@@ -38,6 +38,9 @@ export interface Connection {
   /** balance in BTC (float) */
   balance: number;
   status: ConnectionStatus;
+  syncMode?: string;
+  syncSource?: string;
+  sourceFormat?: string;
   addresses?: number;
   gap?: number;
   channels?: number;

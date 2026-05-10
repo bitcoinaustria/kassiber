@@ -29,6 +29,7 @@ from kassiber.core.ui_snapshot import (
 )
 from kassiber.db import open_db, set_setting
 from kassiber.errors import AppError
+from kassiber.importers import normalize_river_record
 from kassiber.msat import btc_to_msat
 
 
@@ -542,6 +543,62 @@ class ReviewRegressionTest(unittest.TestCase):
         self.assertEqual(transactions["txs"][1]["explorerId"], "a" * 64)
         self.assertEqual(transactions["txs"][1]["amountSat"], 100_000_000)
         self.assertEqual(transactions["txs"][1]["eur"], 50_000)
+
+    def test_river_import_rejects_price_currency_mismatch(self):
+        self._bootstrap_austrian_e1kv_wallet(label="RiverEUR")
+        river_csv = self.case_dir / "river-usd.csv"
+        river_csv.write_text(
+            "\n".join(
+                [
+                    "Date,Reference Code,Transaction Type,Sent Amount,Sent Currency,Received Amount,Received Currency,Fee Amount,Fee Currency,Total Amount,Total Currency,Method,Source,Destination,Cost Basis Amount,Cost Basis Currency,Bitcoin Price Amount,Bitcoin Price Currency,Transaction ID,Recurring,Tag",
+                    "2026-01-02T12:00:00Z,RIV-USD-1,Buy,1000.00,USD,0.01000000,BTC,5.00,USD,-1005.00,USD,ACH,Linked bank,Bitcoin balance,,,100000.00,USD,,False,Buy",
+                    "",
+                ]
+            ),
+            encoding="utf-8",
+        )
+
+        payload, result = self._run_json(
+            "wallets",
+            "import-river",
+            "--workspace",
+            "Main",
+            "--profile",
+            "Default",
+            "--wallet",
+            "RiverEUR",
+            "--file",
+            str(river_csv),
+        )
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertEqual(payload["kind"], "error")
+        self.assertEqual(payload["error"]["code"], "validation")
+        self.assertIn("USD", payload["error"]["message"])
+        self.assertIn("EUR", payload["error"]["message"])
+
+    def test_river_parser_accepts_xbt_amount_suffix(self):
+        record = normalize_river_record(
+            {
+                "Date": "2026-01-02T12:00:00Z",
+                "Reference Code": "RIV-XBT-1",
+                "Transaction Type": "Interest",
+                "Sent Amount": "",
+                "Sent Currency": "",
+                "Received Amount": "0.01000000 XBT",
+                "Received Currency": "XBT",
+                "Fee Amount": "0 XBT",
+                "Fee Currency": "XBT",
+                "Bitcoin Price Amount": "100000.00 USD",
+                "Bitcoin Price Currency": "USD",
+                "Tag": "Interest",
+            }
+        )
+
+        self.assertIsNotNone(record)
+        self.assertEqual(record["amount"], Decimal("0.01000000"))
+        self.assertEqual(record["fee"], Decimal("0"))
+        self.assertEqual(record["pricing_pair"], "BTC-USD")
 
     def test_capital_gains_snapshot_uses_latest_reportable_year_and_forms(self):
         conn = open_db(self.data_root)

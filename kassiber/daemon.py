@@ -12,7 +12,7 @@ import traceback
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Callable, TextIO
+from typing import Any, Callable, Mapping, TextIO
 
 from . import __version__
 from .ai import (
@@ -44,12 +44,21 @@ from .ai.tools import (
     redact_tool_arguments,
     summarize_tool_call,
 )
-from .cli.handlers import _report_hooks, process_journals, resolve_scope, resolve_transaction, sync_wallet
+from .cli.handlers import (
+    _metadata_hooks,
+    _report_hooks,
+    process_journals,
+    resolve_scope,
+    resolve_transaction,
+    sync_wallet,
+)
 from .core import reports as core_reports
 from .core import source_funds as core_source_funds
 from .core import source_funds_coverage as core_source_funds_coverage
 from .core import source_funds_recipients as core_source_funds_recipients
 from .core import accounts as core_accounts
+from .core import imports as core_imports
+from .core import metadata as core_metadata
 from .core import wallets as core_wallets
 from .core.repo import current_context_snapshot
 from .core.runtime import build_status_payload
@@ -89,6 +98,12 @@ from .secrets.credentials import migrate_dotenv_credentials
 from .secrets.migration import create_empty_encrypted_database, migrate_plaintext_to_encrypted
 from .secrets.passphrase import change_database_passphrase
 from .secrets.sqlcipher import looks_like_plaintext_sqlite, open_encrypted, sqlcipher_available
+from .sync_btcpay import fetch_btcpay_records, probe_btcpay_wallet
+from .wallet_descriptors import (
+    derive_descriptor_targets,
+    load_descriptor_plan,
+)
+from .wallet_setup import normalize_wallet_material
 
 
 MAX_REQUEST_LINE_CHARS = 1_000_000
@@ -109,6 +124,7 @@ SUPPORTED_KINDS = (
     "ui.transactions.search",
     "ui.wallets.list",
     "ui.backends.list",
+    "ui.backends.options",
     "ui.reports.capital_gains",
     "ui.reports.summary",
     "ui.reports.balance_sheet",
@@ -158,6 +174,12 @@ SUPPORTED_KINDS = (
     "ui.secrets.init",
     "ui.secrets.change_passphrase",
     "ui.next_actions",
+    "ui.wallets.create",
+    "ui.wallets.preview_descriptor",
+    "ui.connections.sources",
+    "ui.connections.btcpay.create",
+    "ui.connections.btcpay.test",
+    "ui.metadata.bip329.import",
     "ui.wallets.update",
     "ui.wallets.delete",
     "ui.wallets.sync",
@@ -3744,18 +3766,456 @@ def _wallet_ref_from_args(args: dict[str, Any], kind: str) -> str:
     return wallet_ref.strip()
 
 
+_UI_WALLET_SOURCE_FORMATS = {
+    "json",
+    "csv",
+    "btcpay_json",
+    "btcpay_csv",
+    "phoenix_csv",
+    "river_csv",
+}
+
+
+def _optional_str_arg(args: dict[str, Any], key: str) -> str | None:
+    value = args.get(key)
+    if value is None:
+        return None
+    if not isinstance(value, str):
+        raise AppError(
+            f"{key} must be a string",
+            code="validation",
+            details={"type": type(value).__name__},
+            retryable=False,
+        )
+    stripped = value.strip()
+    return stripped or None
+
+
+def _required_str_arg(args: dict[str, Any], key: str, label: str) -> str:
+    value = _optional_str_arg(args, key)
+    if value is None:
+        raise AppError(
+            f"{label} is required.",
+            code="validation",
+            hint=f"Enter {label.lower()}.",
+            retryable=False,
+        )
+    return value
+
+
+def _source_file_arg(args: dict[str, Any]) -> str | None:
+    value = _optional_str_arg(args, "source_file")
+    if value is None:
+        return None
+    path = Path(value).expanduser()
+    if not path.exists():
+        raise AppError(
+            f"Source file not found: {value}",
+            code="not_found",
+            hint="Choose an existing local export file.",
+            retryable=False,
+        )
+    return str(path.resolve())
+
+
+def _backend_options_payload(ctx: "DaemonContext") -> dict[str, Any]:
+    rows = []
+    default_backend = str(ctx.runtime_config.get("default_backend") or "")
+    allowed_fields = {
+        "name",
+        "kind",
+        "chain",
+        "network",
+        "batch_size",
+        "timeout",
+        "insecure",
+        "has_auth_header",
+        "has_token",
+        "has_cookiefile",
+        "has_username",
+        "has_password",
+    }
+    for backend in core_accounts.list_backends(ctx.runtime_config):
+        row = dict(backend)
+        url = row.pop("url", "")
+        safe = {key: value for key, value in row.items() if key in allowed_fields}
+        safe["has_url"] = bool(url)
+        safe["is_default"] = row.pop("default", "") == "yes"
+        rows.append(safe)
+    return {
+        "backends": rows,
+        "summary": {
+            "count": len(rows),
+            "default_backend": default_backend or None,
+        },
+        "suggestions": [
+            {
+                "kind": "esplora",
+                "name": "mempool",
+                "label": "Built-in mempool.space Bitcoin backend",
+                "chain": "bitcoin",
+                "network": "mainnet",
+            }
+        ],
+    }
+
+
+def _create_wallet_payload(
+    conn: sqlite3.Connection,
+    args: dict[str, Any],
+) -> dict[str, Any]:
+    label = _required_str_arg(args, "label", "Connection label")
+    kind = _required_str_arg(args, "kind", "Connection type")
+    config: dict[str, Any] = {}
+    for key in ("backend", "chain", "network", "policy_asset", "store_id", "payment_method_id"):
+        value = _optional_str_arg(args, key)
+        if value is not None:
+            config[key] = value
+    descriptor = _optional_str_arg(args, "descriptor")
+    if descriptor is not None:
+        config["descriptor"] = descriptor
+    change_descriptor = _optional_str_arg(args, "change_descriptor")
+    if change_descriptor is not None:
+        config["change_descriptor"] = change_descriptor
+    wallet_material = _optional_str_arg(args, "wallet_material")
+    if wallet_material is not None:
+        material_config = normalize_wallet_material(wallet_material)
+        config.setdefault("descriptor", material_config["descriptor"])
+        if "change_descriptor" in material_config:
+            config.setdefault("change_descriptor", material_config["change_descriptor"])
+    source_file = _source_file_arg(args)
+    if source_file is not None:
+        config["source_file"] = source_file
+    source_format = _optional_str_arg(args, "source_format")
+    if source_format is not None:
+        if source_format not in _UI_WALLET_SOURCE_FORMATS:
+            raise AppError(
+                f"Unsupported source format '{source_format}'",
+                code="validation",
+                hint="Choose a supported file format.",
+                retryable=False,
+            )
+        config["source_format"] = source_format
+    gap_limit = args.get("gap_limit")
+    if gap_limit not in (None, ""):
+        if not isinstance(gap_limit, int):
+            raise AppError(
+                "gap_limit must be an integer",
+                code="validation",
+                details={"type": type(gap_limit).__name__},
+                retryable=False,
+            )
+        config["gap_limit"] = gap_limit
+    addresses = args.get("addresses")
+    if addresses not in (None, ""):
+        config["addresses"] = core_wallets.normalize_addresses(addresses)
+    account_ref = _optional_str_arg(args, "account")
+    wallet = core_wallets.create_wallet(
+        conn,
+        None,
+        None,
+        label,
+        kind,
+        account_ref=account_ref,
+        config=config,
+    )
+    return {"wallet": wallet}
+
+
+def _create_btcpay_connection_payload(
+    ctx: "DaemonContext",
+    args: dict[str, Any],
+) -> dict[str, Any]:
+    conn = _require_conn(ctx)
+    wallet_label = _required_str_arg(args, "label", "Connection label")
+    _, profile = resolve_scope(conn, None, None)
+    existing_wallet = conn.execute(
+        "SELECT 1 FROM wallets WHERE profile_id = ? AND label = ?",
+        (profile["id"], wallet_label),
+    ).fetchone()
+    if existing_wallet:
+        raise AppError(
+            f"Wallet '{wallet_label}' already exists in profile '{profile['label']}'",
+            code="conflict",
+            hint="Choose a different connection label.",
+            retryable=False,
+        )
+    backend_ref = _required_str_arg(args, "backend", "BTCPay backend")
+    normalized_backend = backend_ref.lower()
+    raw_backend = ctx.runtime_config["backends"].get(normalized_backend)
+    if not isinstance(raw_backend, dict):
+        raise AppError(
+            f"Backend '{backend_ref}' is not configured",
+            code="not_found",
+            hint="Choose an existing BTCPay backend or add one in Settings.",
+            retryable=False,
+        )
+    if str(raw_backend.get("kind") or "").strip().lower() != "btcpay":
+        raise AppError(
+            f"Backend '{backend_ref}' is not a BTCPay backend",
+            code="validation",
+            hint="Choose a backend whose kind is btcpay.",
+            retryable=False,
+        )
+    backend = core_accounts.get_backend_details(conn, ctx.runtime_config, normalized_backend)
+    wallet = core_wallets.create_wallet(
+        conn,
+        None,
+        None,
+        wallet_label,
+        "custom",
+        config={
+            "backend": backend["name"],
+            "store_id": _required_str_arg(args, "store_id", "BTCPay store ID"),
+            "payment_method_id": _optional_str_arg(args, "payment_method_id")
+            or core_wallets.BTCPAY_DEFAULT_PAYMENT_METHOD_ID,
+            "sync_source": core_wallets.BTCPAY_SYNC_SOURCE,
+        },
+    )
+    return {"backend": backend, "wallet": wallet}
+
+
+def _import_bip329_payload(
+    conn: sqlite3.Connection,
+    args: dict[str, Any],
+) -> dict[str, Any]:
+    file_path = _required_str_arg(args, "file", "BIP329 label file")
+    path = Path(file_path).expanduser()
+    if not path.exists():
+        raise AppError(
+            f"BIP329 label file not found: {file_path}",
+            code="not_found",
+            hint="Choose an existing local JSONL label export.",
+            retryable=False,
+        )
+    return core_metadata.import_bip329_labels(
+        conn,
+        None,
+        None,
+        str(path.resolve()),
+        _metadata_hooks(),
+        wallet_ref=_optional_str_arg(args, "wallet"),
+    )
+
+
+def _connections_sources_payload() -> dict[str, Any]:
+    """Authoritative catalog of wallet kinds + import source formats.
+
+    The desktop catalog adds presentation metadata (icons, copy,
+    ordering) on top, but uses this list to verify it isn't claiming a
+    "ready" connection backed by a wallet kind or import format the
+    daemon does not actually know about.
+    """
+    return {
+        "wallet_kinds": core_wallets.list_wallet_kinds(),
+        "source_formats": sorted(_UI_WALLET_SOURCE_FORMATS),
+    }
+
+
+def _preview_descriptor_payload(args: dict[str, Any]) -> dict[str, Any]:
+    descriptor_text = _optional_str_arg(args, "descriptor")
+    change_descriptor_text = _optional_str_arg(args, "change_descriptor")
+    wallet_material = _optional_str_arg(args, "wallet_material")
+    if wallet_material is not None:
+        material = normalize_wallet_material(wallet_material)
+        descriptor_text = descriptor_text or material["descriptor"]
+        change_descriptor_text = change_descriptor_text or material.get("change_descriptor")
+    if not descriptor_text:
+        raise AppError(
+            "Descriptor or wallet material is required",
+            code="validation",
+            hint="Paste a wallet export, descriptor, or supported extended public key.",
+            retryable=False,
+        )
+    chain = _optional_str_arg(args, "chain") or "bitcoin"
+    network = _optional_str_arg(args, "network")
+    raw_count = args.get("count")
+    count = 5
+    if isinstance(raw_count, int) and raw_count > 0:
+        count = min(raw_count, 20)
+    config: dict[str, Any] = {
+        "descriptor": descriptor_text,
+        "chain": chain,
+    }
+    if change_descriptor_text:
+        config["change_descriptor"] = change_descriptor_text
+    if network:
+        config["network"] = network
+    try:
+        plan = load_descriptor_plan(config)
+    except (ValueError, AppError) as exc:
+        raise AppError(
+            f"Could not parse descriptor: {exc}",
+            code="validation",
+            retryable=False,
+        ) from exc
+    if plan is None:
+        raise AppError(
+            "Descriptor preview requires a parseable descriptor",
+            code="validation",
+            retryable=False,
+        )
+    receive_targets = derive_descriptor_targets(plan, branch_index=0, start=0, end=count)
+    change_target = derive_descriptor_targets(plan, branch_index=1, start=0, end=1)
+    addresses = [
+        {
+            "branch": "receive",
+            "index": target.address_index,
+            "address": target.address,
+            "derivation_path": target.derivation_path,
+        }
+        for target in receive_targets
+    ]
+    if change_target:
+        addresses.append(
+            {
+                "branch": "change",
+                "index": change_target[0].address_index,
+                "address": change_target[0].address,
+                "derivation_path": change_target[0].derivation_path,
+            }
+        )
+    return {
+        "chain": plan.chain,
+        "network": plan.network,
+        "addresses": addresses,
+        "has_change_branch": any(
+            branch.branch_label == "change" for branch in plan.branches
+        ),
+    }
+
+
+def _test_btcpay_connection_payload(
+    ctx: "DaemonContext",
+    args: dict[str, Any],
+) -> dict[str, Any]:
+    backend_ref = _required_str_arg(args, "backend", "BTCPay backend")
+    store_id = _required_str_arg(args, "store_id", "BTCPay store ID")
+    payment_method_id = (
+        _optional_str_arg(args, "payment_method_id")
+        or core_wallets.BTCPAY_DEFAULT_PAYMENT_METHOD_ID
+    )
+    conn = _require_conn(ctx)
+    normalized_backend = backend_ref.lower()
+    try:
+        backend = core_accounts.reveal_backend_secrets(
+            conn,
+            ctx.runtime_config,
+            normalized_backend,
+        )
+    except AppError as exc:
+        if exc.code != "not_found":
+            raise
+        raise AppError(
+            f"Backend '{backend_ref}' is not configured",
+            code="not_found",
+            hint="Choose an existing BTCPay backend or add one in Settings.",
+            retryable=False,
+        ) from exc
+    if str(backend.get("kind") or "").strip().lower() != "btcpay":
+        raise AppError(
+            f"Backend '{backend_ref}' is not a BTCPay backend",
+            code="validation",
+            retryable=False,
+        )
+    safe_backend = core_accounts.get_backend_details(
+        conn,
+        ctx.runtime_config,
+        normalized_backend,
+    )
+    probe_btcpay_wallet(
+        backend,
+        store_id,
+        payment_method_id=payment_method_id,
+    )
+    return {
+        "backend": safe_backend["name"],
+        "store_id": store_id,
+        "payment_method_id": payment_method_id,
+        "ok": True,
+    }
+
+
+_UI_WALLET_UPDATE_CONFIG_FIELDS = (
+    "backend",
+    "chain",
+    "network",
+    "policy_asset",
+    "descriptor",
+    "change_descriptor",
+    "store_id",
+    "payment_method_id",
+    "source_format",
+)
+
+
 def _update_wallet_payload(
     ctx: "DaemonContext",
     args: dict[str, Any],
     request_id: object,
 ) -> tuple[dict[str, Any], bool]:
     wallet_ref = _wallet_ref_from_args(args, "ui.wallets.update")
-    label = args.get("label")
-    if not isinstance(label, str) or not label.strip():
+    config_updates: dict[str, Any] = {}
+    for key in _UI_WALLET_UPDATE_CONFIG_FIELDS:
+        value = _optional_str_arg(args, key)
+        if value is not None:
+            config_updates[key] = value
+    if "source_format" in config_updates and config_updates["source_format"] not in _UI_WALLET_SOURCE_FORMATS:
         raise AppError(
-            "ui.wallets.update requires label",
+            f"Unsupported source format '{config_updates['source_format']}'",
             code="validation",
-            hint="Enter a new connection label.",
+            hint="Choose a supported file format.",
+            retryable=False,
+        )
+    source_file = _source_file_arg(args)
+    if source_file is not None:
+        config_updates["source_file"] = source_file
+    wallet_material = _optional_str_arg(args, "wallet_material")
+    if wallet_material is not None:
+        material_config = normalize_wallet_material(wallet_material)
+        config_updates["descriptor"] = material_config["descriptor"]
+        if "change_descriptor" in material_config:
+            config_updates["change_descriptor"] = material_config["change_descriptor"]
+        elif "change_descriptor" not in config_updates:
+            config_updates["change_descriptor"] = None
+    gap_limit = args.get("gap_limit")
+    if gap_limit not in (None, ""):
+        if not isinstance(gap_limit, int):
+            raise AppError(
+                "gap_limit must be an integer",
+                code="validation",
+                details={"type": type(gap_limit).__name__},
+                retryable=False,
+            )
+        config_updates["gap_limit"] = gap_limit
+    addresses = args.get("addresses")
+    if addresses not in (None, ""):
+        config_updates["addresses"] = core_wallets.normalize_addresses(addresses)
+    clear_raw = args.get("clear")
+    clear_fields: list[str] = []
+    if clear_raw is not None:
+        if not isinstance(clear_raw, list) or not all(isinstance(item, str) for item in clear_raw):
+            raise AppError(
+                "clear must be a list of config field names",
+                code="validation",
+                retryable=False,
+            )
+        clear_fields = [item for item in (entry.strip() for entry in clear_raw) if item]
+    label_raw = args.get("label")
+    label_value: str | None = None
+    if label_raw is not None:
+        if not isinstance(label_raw, str) or not label_raw.strip():
+            raise AppError(
+                "label must be a non-empty string",
+                code="validation",
+                retryable=False,
+            )
+        label_value = label_raw.strip()
+    if label_value is None and not config_updates and not clear_fields:
+        raise AppError(
+            "ui.wallets.update requires label, config, or clear",
+            code="validation",
+            hint="Pass at least one field to change.",
             retryable=False,
         )
     wallet = core_wallets.get_wallet_details(ctx.conn, None, None, wallet_ref)
@@ -3770,12 +4230,19 @@ def _update_wallet_payload(
     )
     if auth_result is not None:
         return auth_result
+    updates: dict[str, Any] = {}
+    if label_value is not None:
+        updates["label"] = label_value
+    if config_updates:
+        updates["config"] = config_updates
+    if clear_fields:
+        updates["clear"] = clear_fields
     updated = core_wallets.update_wallet(
         ctx.conn,
         None,
         None,
         wallet_ref,
-        {"label": label.strip()},
+        updates,
     )
     return (
         _with_request_id(
@@ -4264,6 +4731,18 @@ def handle_request(
             False,
         )
 
+    if kind == "ui.backends.options":
+        return (
+            _with_request_id(
+                build_envelope(
+                    "ui.backends.options",
+                    _backend_options_payload(ctx),
+                ),
+                request_id,
+            ),
+            False,
+        )
+
     direct_maintenance_metadata: dict[str, Any] = {}
     if kind in _DIRECT_AUTO_JOURNAL_REFRESH_KINDS:
         direct_maintenance_metadata = _auto_maintain_for_read(
@@ -4674,6 +5153,92 @@ def handle_request(
             False,
         )
 
+    if kind == "ui.wallets.create":
+        return (
+            _with_request_id(
+                build_envelope(
+                    "ui.wallets.create",
+                    _create_wallet_payload(
+                        ctx.conn,
+                        _coerce_args_dict(request_id, request.get("args")),
+                    ),
+                ),
+                request_id,
+            ),
+            False,
+        )
+
+    if kind == "ui.wallets.preview_descriptor":
+        return (
+            _with_request_id(
+                build_envelope(
+                    "ui.wallets.preview_descriptor",
+                    _preview_descriptor_payload(
+                        _coerce_args_dict(request_id, request.get("args")),
+                    ),
+                ),
+                request_id,
+            ),
+            False,
+        )
+
+    if kind == "ui.connections.sources":
+        return (
+            _with_request_id(
+                build_envelope(
+                    "ui.connections.sources",
+                    _connections_sources_payload(),
+                ),
+                request_id,
+            ),
+            False,
+        )
+
+    if kind == "ui.connections.btcpay.create":
+        return (
+            _with_request_id(
+                build_envelope(
+                    "ui.connections.btcpay.create",
+                    _create_btcpay_connection_payload(
+                        ctx,
+                        _coerce_args_dict(request_id, request.get("args")),
+                    ),
+                ),
+                request_id,
+            ),
+            False,
+        )
+
+    if kind == "ui.connections.btcpay.test":
+        return (
+            _with_request_id(
+                build_envelope(
+                    "ui.connections.btcpay.test",
+                    _test_btcpay_connection_payload(
+                        ctx,
+                        _coerce_args_dict(request_id, request.get("args")),
+                    ),
+                ),
+                request_id,
+            ),
+            False,
+        )
+
+    if kind == "ui.metadata.bip329.import":
+        return (
+            _with_request_id(
+                build_envelope(
+                    "ui.metadata.bip329.import",
+                    _import_bip329_payload(
+                        ctx.conn,
+                        _coerce_args_dict(request_id, request.get("args")),
+                    ),
+                ),
+                request_id,
+            ),
+            False,
+        )
+
     if kind == "ui.wallets.update":
         return _update_wallet_payload(
             ctx,
@@ -4701,17 +5266,28 @@ def handle_request(
                 ),
                 False,
             )
+
+        def _emit_sync_progress(payload: Mapping[str, Any]) -> None:
+            out.write(
+                _with_request_id(
+                    build_envelope("ui.wallets.sync.progress", dict(payload)),
+                    request_id,
+                )
+            )
+
+        token = core_imports.sync_progress_emitter.set(_emit_sync_progress)
+        try:
+            sync_payload = _wallets_sync_payload(
+                ctx.conn,
+                ctx.runtime_config,
+                args or {},
+                strict=False,
+            )
+        finally:
+            core_imports.sync_progress_emitter.reset(token)
         return (
             _with_request_id(
-                build_envelope(
-                    "ui.wallets.sync",
-                    _wallets_sync_payload(
-                        ctx.conn,
-                        ctx.runtime_config,
-                        args or {},
-                        strict=False,
-                    ),
-                ),
+                build_envelope("ui.wallets.sync", sync_payload),
                 request_id,
             ),
             False,

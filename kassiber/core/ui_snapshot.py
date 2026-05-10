@@ -497,6 +497,7 @@ def _connections(
             w.id,
             w.label,
             w.kind,
+            w.config_json,
             w.created_at,
             COUNT(t.id) AS tx_count,
             MAX(t.occurred_at) AS last_tx_at
@@ -511,6 +512,10 @@ def _connections(
     output = []
     for row in rows:
         tx_count = int(row["tx_count"] or 0)
+        config = _json_config(row["config_json"])
+        backend_summary = _wallet_backend_summary(row["kind"], config, None)
+        source_format = _string_or_empty(config.get("source_format"))
+        sync_source = _string_or_empty(config.get("sync_source") or source_format)
         output.append(
             {
                 "id": row["id"],
@@ -519,6 +524,9 @@ def _connections(
                 "last": _relative_last(row["last_tx_at"] or row["created_at"]),
                 "balance": balances.get(row["id"], 0.0),
                 "status": "synced" if tx_count else "idle",
+                "syncMode": backend_summary["sync_mode"],
+                "syncSource": sync_source,
+                "sourceFormat": source_format,
             }
         )
     return output

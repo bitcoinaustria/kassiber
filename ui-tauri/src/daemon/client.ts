@@ -218,3 +218,50 @@ export function useDaemonMutation<T = unknown>(
       }),
   });
 }
+
+export interface DaemonStreamMutationOptions<R> {
+  dataMode?: DataMode;
+  onProgress?: (record: R) => void;
+}
+
+/**
+ * Mutation hook for daemon kinds that emit interleaved progress envelopes
+ * before the terminal envelope. Wraps `transport.stream` so callers can
+ * surface per-record progress (e.g. "Imported 1,200 / 5,000 rows") without
+ * dropping into the lower-level transport.
+ */
+export function useDaemonStreamMutation<T = unknown, R = unknown>(
+  kind: string,
+  options?: DaemonStreamMutationOptions<R>,
+) {
+  const selectedDataMode = useUiStore((state) => state.dataMode);
+  const dataMode = options?.dataMode ?? selectedDataMode;
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationKey: daemonMutationKey(dataMode, kind),
+    mutationFn: async (args?: Record<string, unknown>) => {
+      const daemonSession = useUiStore.getState().daemonSession;
+      const envelope = await getTransport(dataMode).stream<T, R>(
+        { kind, args },
+        {
+          onRecord: (record) => {
+            if (record.data !== undefined) {
+              options?.onProgress?.(record.data as R);
+            }
+          },
+        },
+      );
+      if (envelope.kind === "auth_required") {
+        handleAuthRequired(envelope, daemonSession);
+      }
+      if (envelope.kind === "error" || envelope.error) {
+        throw new DaemonRequestError(kind, envelope);
+      }
+      return envelope;
+    },
+    onSuccess: () =>
+      queryClient.invalidateQueries({
+        queryKey: ["daemon", dataMode],
+      }),
+  });
+}

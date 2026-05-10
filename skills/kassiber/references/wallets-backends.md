@@ -71,12 +71,17 @@ Assume a mainnet connection unless the user explicitly says testnet, signet,
 regtest, or another non-mainnet environment. For Liquid, that means the normal
 mainnet pair `--chain liquid --network liquidv1`.
 
-For secret-bearing setup, prefer giving the user a paste-ready command template
-to run in a separate local terminal instead of asking them to paste descriptors,
-tokens, or other credentials into chat. Wherever the template would otherwise
-embed `--token <value>` or `--descriptor <value>` directly, use the matching
-`--*-stdin` (or `--*-fd FD`) form so the secret never lands in shell history;
-see [secrets-and-backup.md](secrets-and-backup.md) for the field list.
+For desktop setup, prefer the Connections setup modal so the user enters wallet
+exports and local file paths into the local app instead of copying shell
+commands. Backend-backed connections should select an already configured
+backend; if none exists, route to Settings/backends. For CLI-only handoff, use
+placeholders or `--*-stdin` / `--*-fd FD` forms for secrets; do not ask users
+to paste descriptors, tokens, or credentials into chat.
+
+The Connections modal should ask for one wallet export / descriptor field, not
+separate receive and change descriptors. The daemon normalizes common formats
+such as Bitcoin Core descriptor JSON, two-line descriptor text, key/value
+descriptor exports, and ypub/zpub/upub/vpub single-sig keys.
 
 ## Descriptor wallets
 
@@ -124,7 +129,7 @@ main descriptor and `/1/*` to `--change-descriptor` or
 `--change-descriptor-file`. Do not create two wallets just because both
 branches are present.
 
-Paste-ready local templates:
+CLI-only templates:
 
 Bitcoin descriptor wallet:
 
@@ -190,16 +195,17 @@ kassiber wallets sync --wallet btcpay-shop
 kassiber wallets sync-btcpay --wallet btcpay-shop --backend btcpay-prod --store-id <store-id>
 ```
 
-`wallets sync-btcpay` keeps the old explicit shape, but it now stores the same
-BTCPay backend/store config on the wallet so later `wallets sync` and
-`wallets sync --all` can reuse it.
+`wallets sync-btcpay` keeps the old explicit CLI shape, but it now stores the
+same BTCPay backend/store config on the wallet so later `wallets sync` and
+`wallets sync --all` can reuse it. Desktop setup should ask for store ID only
+and let Kassiber use the default BTC on-chain payment method internally.
 
 Do not ask users to paste raw BTCPay API tokens into chat. Prefer
 `--token-stdin` (with a local `printf %s "$VAR" | kassiber ...` pipe) or
 `--token-fd <FD>`. The argv form `--token <value>` still works for legacy
 scripts but warns and leaks to shell history.
 
-Paste-ready local template:
+CLI-only template:
 
 ```bash
 printf %s "$BTCPAY_TOKEN" | kassiber backends create <btcpay-backend-name> \
@@ -223,6 +229,23 @@ Phoenix:
 ```bash
 kassiber wallets import-phoenix --wallet phoenix --file /path/to/export.csv
 ```
+
+River:
+
+```bash
+kassiber wallets import-river --wallet river --file /path/to/river-account-activity.csv
+kassiber wallets create \
+  --label river \
+  --kind river \
+  --source-file /path/to/river-account-activity.csv \
+  --source-format river_csv
+kassiber wallets sync --wallet river
+```
+
+Prefer River Account Activity CSV when available because it includes both BTC
+and cash legs. Kassiber skips fiat-only cash rows and preserves buy/sell cash
+legs as exact `exchange_execution` pricing from provider `River`; BTC-only rows
+with an exported Bitcoin price use that value as a River `fmv_provider` sample.
 
 Generic files:
 

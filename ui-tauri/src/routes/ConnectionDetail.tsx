@@ -40,6 +40,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import {
   Table,
   TableBody,
@@ -48,9 +49,16 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { useDaemon, useDaemonMutation } from "@/daemon/client";
+import {
+  useDaemon,
+  useDaemonMutation,
+  useDaemonStreamMutation,
+} from "@/daemon/client";
 import { screenShellClassName } from "@/lib/screen-layout";
 import { cn } from "@/lib/utils";
+import { isFilePickerAvailable, pickFile } from "@/lib/filePicker";
+import { editConfigKindForConnection } from "@/lib/connectionEditKind";
+import { detectWalletMaterial } from "@/lib/walletMaterialFormat";
 import { useUiStore } from "@/store/ui";
 import { useSyncProgressNotice } from "@/hooks/useSyncProgressNotice";
 import type {
@@ -201,17 +209,40 @@ function ConnectionDetailView({
   const navigate = useNavigate();
   const addNotification = useUiStore((state) => state.addNotification);
   const identity = useUiStore((state) => state.identity);
-  const syncWallet = useDaemonMutation<{ results: SyncResult[] }>("ui.wallets.sync");
+  const [syncProgress, setSyncProgress] = useState<{
+    wallet: string;
+    processed: number;
+    total: number;
+  } | null>(null);
+  const syncWallet = useDaemonStreamMutation<
+    { results: SyncResult[] },
+    { wallet: string; processed: number; total: number }
+  >("ui.wallets.sync", {
+    onProgress: (record) => {
+      setSyncProgress({
+        wallet: record.wallet,
+        processed: record.processed ?? 0,
+        total: record.total ?? 0,
+      });
+    },
+  });
   const updateWallet =
     useDaemonMutation<UpdateWalletResult>("ui.wallets.update");
   const deleteWallet =
     useDaemonMutation<DeleteWalletResult>("ui.wallets.delete");
+  const backendOptionsQuery = useDaemon<{
+    backends: { name: string; kind: string; is_default?: boolean }[];
+  }>("ui.backends.options");
   const { startSyncNotice, clearSyncNotice } = useSyncProgressNotice();
   const [syncMessage, setSyncMessage] = useState<string | null>(null);
   const [editOpen, setEditOpen] = useState(false);
   const [editLabel, setEditLabel] = useState(connection.label);
   const [editPassphrase, setEditPassphrase] = useState("");
   const [editPlaintextAck, setEditPlaintextAck] = useState("");
+  const [editWalletMaterial, setEditWalletMaterial] = useState("");
+  const [editStoreId, setEditStoreId] = useState("");
+  const [editBackend, setEditBackend] = useState("");
+  const [editSourceFile, setEditSourceFile] = useState("");
   const [editError, setEditError] = useState<string | null>(null);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deletePassphrase, setDeletePassphrase] = useState("");
@@ -235,6 +266,7 @@ function ConnectionDetailView({
   const onSync = () => {
     if (syncWallet.isPending) return;
     setSyncMessage(null);
+    setSyncProgress(null);
     addNotification({
       title: "Wallet sync started",
       body: `${connection.label} is syncing.`,
@@ -272,7 +304,10 @@ function ConnectionDetailView({
             tone: "error",
           });
         },
-        onSettled: clearSyncNotice,
+        onSettled: () => {
+          clearSyncNotice();
+          setSyncProgress(null);
+        },
       },
     );
   };
@@ -281,9 +316,20 @@ function ConnectionDetailView({
     setEditLabel(connection.label);
     setEditPassphrase("");
     setEditPlaintextAck("");
+    setEditWalletMaterial("");
+    setEditStoreId("");
+    setEditBackend("");
+    setEditSourceFile("");
     setEditError(null);
     setEditOpen(true);
   };
+
+  const allBackendOptions = backendOptionsQuery.data?.data?.backends ?? [];
+  const btcpayBackendOptions = allBackendOptions.filter(
+    (backend) => backend.kind === "btcpay",
+  );
+
+  const editConfigKind = editConfigKindForConnection(connection);
 
   const openDeleteDialog = () => {
     setDeletePassphrase("");
@@ -318,18 +364,47 @@ function ConnectionDetailView({
       setEditError(`Type ${PLAINTEXT_CHANGE_ACK} to confirm the change.`);
       return;
     }
+    const labelChanged = nextLabel !== connection.label;
+    const walletMaterial = editWalletMaterial.trim();
+    const storeId = editStoreId.trim();
+    const backend = editBackend.trim();
+    const sourceFile = editSourceFile.trim();
+    const configChanges: Record<string, unknown> = {};
+    if (editConfigKind === "descriptor" && walletMaterial) {
+      const detection = detectWalletMaterial(walletMaterial);
+      if (detection.kind === "bare-xpub" || detection.kind === "unknown") {
+        setEditError(detection.hint ?? detection.label);
+        return;
+      }
+      configChanges.wallet_material = walletMaterial;
+    }
+    if (editConfigKind === "btcpay") {
+      if (storeId) configChanges.store_id = storeId;
+      if (backend) configChanges.backend = backend;
+    }
+    if (editConfigKind === "file-wallet" && sourceFile) {
+      configChanges.source_file = sourceFile;
+    }
+    if (!labelChanged && Object.keys(configChanges).length === 0) {
+      setEditError("Change the label or update at least one field.");
+      return;
+    }
 
     try {
       await updateWallet.mutateAsync({
         wallet: connection.id,
-        label: nextLabel,
+        ...(labelChanged ? { label: nextLabel } : {}),
+        ...configChanges,
         auth_response: encryptedWorkspace
           ? { passphrase_secret: editPassphrase }
           : { plaintext_change_ack: PLAINTEXT_CHANGE_ACK },
       });
+      const summary = labelChanged
+        ? `${connection.label} was renamed to ${nextLabel}.`
+        : `${connection.label} was updated.`;
       addNotification({
         title: "Connection changed",
-        body: `${connection.label} was renamed to ${nextLabel}.`,
+        body: summary,
         tone: "success",
       });
       setEditOpen(false);
@@ -417,6 +492,35 @@ function ConnectionDetailView({
             {syncWallet.isPending ? "Syncing" : "Sync"}
           </Button>
         </CardContent>
+        {syncProgress && syncWallet.isPending ? (
+          <div className="px-6 pt-4">
+            <div className="space-y-1 rounded-md border bg-background px-3 py-2 text-sm">
+              <div className="flex items-center justify-between">
+                <span className="text-muted-foreground">
+                  Importing {syncProgress.wallet}…
+                </span>
+                <span className="font-medium tabular-nums">
+                  {syncProgress.processed.toLocaleString()} /{" "}
+                  {syncProgress.total.toLocaleString()} rows
+                </span>
+              </div>
+              <div className="h-1.5 overflow-hidden rounded-full bg-muted">
+                <div
+                  className="h-full bg-primary transition-all"
+                  style={{
+                    width:
+                      syncProgress.total > 0
+                        ? `${Math.min(
+                            100,
+                            (syncProgress.processed / syncProgress.total) * 100,
+                          )}%`
+                        : "0%",
+                  }}
+                />
+              </div>
+            </div>
+          </div>
+        ) : null}
         {syncMessage && (
           <div className="px-6 pt-4">
             <div
@@ -621,7 +725,7 @@ function ConnectionDetailView({
       <Dialog open={editOpen} onOpenChange={setEditOpen}>
         <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle>Edit connection label</DialogTitle>
+            <DialogTitle>Edit connection</DialogTitle>
             <DialogDescription>
               {encryptedWorkspace
                 ? "Confirm this change with the local database passphrase."
@@ -637,6 +741,99 @@ function ConnectionDetailView({
                 onChange={(event) => setEditLabel(event.target.value)}
               />
             </div>
+            {editConfigKind === "descriptor" ? (
+              <div className="space-y-2">
+                <Label htmlFor="connection-edit-material">
+                  Replace wallet export
+                </Label>
+                <Textarea
+                  id="connection-edit-material"
+                  className="min-h-24 font-mono text-xs"
+                  value={editWalletMaterial}
+                  onChange={(event) =>
+                    setEditWalletMaterial(event.target.value)
+                  }
+                  placeholder="Paste a fresh descriptor or extended public key to overwrite"
+                />
+                {editWalletMaterial.trim()
+                  ? (() => {
+                      const detection = detectWalletMaterial(editWalletMaterial);
+                      const tone =
+                        detection.kind === "bare-xpub" ||
+                        detection.kind === "unknown"
+                          ? "text-amber-700 dark:text-amber-300"
+                          : "text-emerald-700 dark:text-emerald-300";
+                      return (
+                        <p className={cn("text-xs", tone)}>
+                          Detected: {detection.label}
+                          {detection.hint ? ` — ${detection.hint}` : ""}
+                        </p>
+                      );
+                    })()
+                  : (
+                      <p className="text-xs text-muted-foreground">
+                        Leave empty to keep the current descriptors.
+                      </p>
+                    )}
+              </div>
+            ) : null}
+            {editConfigKind === "btcpay" ? (
+              <>
+                <div className="space-y-2">
+                  <Label htmlFor="connection-edit-backend">BTCPay backend</Label>
+                  <select
+                    id="connection-edit-backend"
+                    className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
+                    value={editBackend}
+                    onChange={(event) => setEditBackend(event.target.value)}
+                  >
+                    <option value="">Keep current backend</option>
+                    {btcpayBackendOptions.map((backend) => (
+                      <option key={backend.name} value={backend.name}>
+                        {backend.name}
+                        {backend.is_default ? " (default)" : ""}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="connection-edit-store">BTCPay store ID</Label>
+                  <Input
+                    id="connection-edit-store"
+                    value={editStoreId}
+                    onChange={(event) => setEditStoreId(event.target.value)}
+                    placeholder="Leave empty to keep the current store ID"
+                  />
+                </div>
+              </>
+            ) : null}
+            {editConfigKind === "file-wallet" ? (
+              <div className="space-y-2">
+                <Label htmlFor="connection-edit-source">Source file</Label>
+                <div className="flex gap-2">
+                  <Input
+                    id="connection-edit-source"
+                    value={editSourceFile}
+                    onChange={(event) => setEditSourceFile(event.target.value)}
+                    placeholder="Leave empty to keep the current file"
+                  />
+                  {isFilePickerAvailable ? (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={async () => {
+                        const picked = await pickFile({
+                          title: `Select ${connection.label} export file`,
+                        });
+                        if (picked) setEditSourceFile(picked);
+                      }}
+                    >
+                      Browse…
+                    </Button>
+                  ) : null}
+                </div>
+              </div>
+            ) : null}
             {encryptedWorkspace ? (
               <div className="space-y-2">
                 <Label htmlFor="connection-edit-passphrase">Passphrase</Label>

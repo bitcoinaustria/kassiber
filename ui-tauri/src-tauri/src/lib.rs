@@ -118,6 +118,7 @@ const ALLOWED_DAEMON_KINDS: &[&str] = &[
     "ui.transactions.list",
     "ui.wallets.list",
     "ui.backends.list",
+    "ui.backends.options",
     "ui.profiles.snapshot",
     "ui.profiles.switch",
     "ui.reports.capital_gains",
@@ -135,6 +136,14 @@ const ALLOWED_DAEMON_KINDS: &[&str] = &[
     "ui.secrets.init",
     "ui.secrets.change_passphrase",
     "ui.next_actions",
+    "ui.wallets.create",
+    "ui.wallets.preview_descriptor",
+    "ui.connections.sources",
+    "ui.connections.btcpay.create",
+    "ui.connections.btcpay.test",
+    "ui.metadata.bip329.import",
+    "ui.wallets.update",
+    "ui.wallets.delete",
     "ui.wallets.sync",
     "daemon.lock",
     "daemon.unlock",
@@ -177,7 +186,7 @@ const ALLOWED_DAEMON_KINDS: &[&str] = &[
 /// forwards intermediate records to the webview as Tauri events
 /// `daemon://stream` and switches to a per-record inactivity
 /// timeout. Other kinds keep the existing total-budget behavior.
-const STREAMING_DAEMON_KINDS: &[&str] = &["ai.chat"];
+const STREAMING_DAEMON_KINDS: &[&str] = &["ai.chat", "ui.wallets.sync"];
 
 // Daemon kinds that exercise the AI runtime (model calls, chat sessions, tool
 // consent prompts). Gated server-side by the global AI features toggle so the
@@ -986,6 +995,7 @@ pub fn run() {
     }
 
     builder
+        .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_deep_link::init())
         .setup(move |app| {
             let resource_dir = app.path().resource_dir().ok();

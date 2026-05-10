@@ -117,6 +117,12 @@ export interface SourceFundsDraft {
   currentStep?: "setup" | "review" | "export";
 }
 
+/** Captures a "I was setting up X, came here to add a backend, take me back" hop. */
+export interface DeferredConnectionSetup {
+  sourceId: string;
+  reason: string;
+}
+
 interface UiState {
   lang: Lang;
   currency: Currency;
@@ -132,6 +138,7 @@ interface UiState {
   notifications: AppNotification[];
   logEntries: AppLogEntry[];
   sourceFundsDrafts: Record<string, SourceFundsDraft>;
+  deferredConnectionSetup: DeferredConnectionSetup | null;
   setLang: (lang: Lang) => void;
   setCurrency: (currency: Currency) => void;
   setDataMode: (dataMode: DataMode) => void;
@@ -152,6 +159,8 @@ interface UiState {
   clearLogEntries: () => void;
   setSourceFundsDraft: (profileKey: string, draft: SourceFundsDraft) => void;
   clearSourceFundsDraft: (profileKey: string) => void;
+  setDeferredConnectionSetup: (intent: DeferredConnectionSetup | null) => void;
+  clearDeferredConnectionSetup: () => void;
 }
 
 const DEFAULT_APP_LOCK_POLICY: AppLockPolicy = {
@@ -270,6 +279,11 @@ export const useUiStore = create<UiState>()(
           delete next[profileKey];
           return { sourceFundsDrafts: next };
         }),
+      deferredConnectionSetup: null,
+      setDeferredConnectionSetup: (intent) =>
+        set({ deferredConnectionSetup: intent }),
+      clearDeferredConnectionSetup: () =>
+        set({ deferredConnectionSetup: null }),
     }),
     {
       name: "kb.ui",

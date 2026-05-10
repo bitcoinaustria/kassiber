@@ -283,6 +283,21 @@ def _seed_workspace_with_transaction(
     _run_cli(data_root, "rates", "set", "BTC-EUR", "2026-01-01T00:00:00Z", "50000")
 
 
+def _sample_descriptor_pair():
+    from embit import bip32
+
+    seed = bytes.fromhex("000102030405060708090a0b0c0d0e0f" * 4)
+    root = bip32.HDKey.from_seed(seed)
+    account = root.derive("m/84h/0h/0h")
+    xpub = account.to_public().to_base58()
+    fingerprint = root.my_fingerprint.hex()
+    origin = f"[{fingerprint}/84h/0h/0h]"
+    return (
+        f"wpkh({origin}{xpub}/0/*)",
+        f"wpkh({origin}{xpub}/1/*)",
+    )
+
+
 def _seed_sensitive_ai_surface(data_root):
     _run_cli(data_root, "init")
     _run_cli(data_root, "workspaces", "create", "Secure")
@@ -457,6 +472,7 @@ class DaemonSmokeTest(unittest.TestCase):
             self.assertIn("ui.transactions.search", ready["data"]["supported_kinds"])
             self.assertIn("ui.wallets.list", ready["data"]["supported_kinds"])
             self.assertIn("ui.backends.list", ready["data"]["supported_kinds"])
+            self.assertIn("ui.backends.options", ready["data"]["supported_kinds"])
             self.assertIn("ui.reports.capital_gains", ready["data"]["supported_kinds"])
             self.assertIn("ui.reports.summary", ready["data"]["supported_kinds"])
             self.assertIn("ui.reports.balance_sheet", ready["data"]["supported_kinds"])
@@ -513,6 +529,27 @@ class DaemonSmokeTest(unittest.TestCase):
             self.assertIn("ui.secrets.init", ready["data"]["supported_kinds"])
             self.assertIn("ui.secrets.change_passphrase", ready["data"]["supported_kinds"])
             self.assertIn("ui.next_actions", ready["data"]["supported_kinds"])
+            self.assertIn("ui.wallets.create", ready["data"]["supported_kinds"])
+            self.assertIn(
+                "ui.wallets.preview_descriptor",
+                ready["data"]["supported_kinds"],
+            )
+            self.assertIn(
+                "ui.connections.sources",
+                ready["data"]["supported_kinds"],
+            )
+            self.assertIn(
+                "ui.connections.btcpay.create",
+                ready["data"]["supported_kinds"],
+            )
+            self.assertIn(
+                "ui.connections.btcpay.test",
+                ready["data"]["supported_kinds"],
+            )
+            self.assertIn(
+                "ui.metadata.bip329.import",
+                ready["data"]["supported_kinds"],
+            )
             self.assertIn("ui.wallets.update", ready["data"]["supported_kinds"])
             self.assertIn("ui.wallets.delete", ready["data"]["supported_kinds"])
             self.assertIn("ui.wallets.sync", ready["data"]["supported_kinds"])
@@ -812,6 +849,369 @@ class DaemonSmokeTest(unittest.TestCase):
                 overview = _read_payload_timeout(proc)
                 self.assertEqual(overview["kind"], "ui.overview.snapshot")
                 self.assertEqual(overview["data"]["connections"], [])
+
+                _write_payload(
+                    proc,
+                    {"request_id": "shutdown-1", "kind": "daemon.shutdown"},
+                )
+                self.assertEqual(_read_payload_timeout(proc)["kind"], "daemon.shutdown")
+                code, stderr = _close_daemon(proc)
+                self.assertEqual(code, 0, stderr)
+                self.assertEqual(stderr, "")
+            finally:
+                if proc.poll() is None:
+                    proc.kill()
+
+    def test_ui_btcpay_connection_test_uses_raw_token_and_single_probe(self):
+        received = []
+
+        class Handler(BaseHTTPRequestHandler):
+            def do_GET(self):
+                received.append(
+                    {
+                        "path": self.path,
+                        "auth": self.headers.get("Authorization"),
+                    }
+                )
+                body = json.dumps(
+                    [
+                        {
+                            "transactionHash": "probe-tx",
+                            "amount": "0.001",
+                            "timestamp": 1704067200,
+                            "status": "Confirmed",
+                            "confirmations": 1,
+                            "labels": [],
+                        }
+                    ]
+                ).encode("utf-8")
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+
+            def log_message(self, *_args):
+                return
+
+        server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+        port = server.server_address[1]
+        server_thread = threading.Thread(target=server.serve_forever, daemon=True)
+        server_thread.start()
+        try:
+            with tempfile.TemporaryDirectory(prefix="kassiber-daemon-btcpay-test-") as tmp:
+                data_root = Path(tmp) / "data"
+                _seed_workspace_with_transaction(data_root, tmp)
+                _run_cli(
+                    data_root,
+                    "backends",
+                    "create",
+                    "btcpay-probe",
+                    "--kind",
+                    "btcpay",
+                    "--url",
+                    f"http://127.0.0.1:{port}",
+                    "--token",
+                    "probe-secret",
+                )
+                proc = _start_daemon(data_root)
+                try:
+                    self.assertEqual(_read_payload_timeout(proc)["kind"], "daemon.ready")
+                    _write_payload(
+                        proc,
+                        {
+                            "request_id": "btcpay-test",
+                            "kind": "ui.connections.btcpay.test",
+                            "args": {
+                                "backend": "btcpay-probe",
+                                "store_id": "STORE1",
+                            },
+                        },
+                    )
+                    envelope = _read_payload_timeout(proc)
+                    self.assertEqual(envelope["kind"], "ui.connections.btcpay.test")
+                    self.assertTrue(envelope["data"]["ok"])
+                    self.assertEqual(len(received), 1)
+                    self.assertEqual(received[0]["auth"], "token probe-secret")
+                    self.assertIn("skip=0", received[0]["path"])
+                    self.assertIn("limit=1", received[0]["path"])
+                finally:
+                    if proc.poll() is None:
+                        proc.terminate()
+                        try:
+                            proc.wait(timeout=5)
+                        except subprocess.TimeoutExpired:
+                            proc.kill()
+                            proc.wait(timeout=5)
+                    for stream in (proc.stdin, proc.stdout, proc.stderr):
+                        if stream is not None:
+                            stream.close()
+        finally:
+            server.shutdown()
+            server.server_close()
+            server_thread.join(timeout=5)
+
+    def test_ui_connection_setup_creates_file_btcpay_and_bip329_connections(self):
+        with tempfile.TemporaryDirectory(prefix="kassiber-daemon-setup-") as tmp:
+            data_root = Path(tmp) / "data"
+            _seed_workspace_with_transaction(data_root, tmp)
+            _run_cli(
+                data_root,
+                "backends",
+                "create",
+                "btcpay-ui",
+                "--kind",
+                "btcpay",
+                "--url",
+                "https://btcpay.example",
+                "--token",
+                "secret-token",
+            )
+            river_csv = Path(tmp) / "river-account-activity.csv"
+            river_csv.write_text(
+                "\n".join(
+                    [
+                        "Date,Reference Code,Transaction Type,Sent Amount,Sent Currency,Received Amount,Received Currency,Fee Amount,Fee Currency,Total Amount,Total Currency,Method,Source,Destination,Cost Basis Amount,Cost Basis Currency,Bitcoin Price Amount,Bitcoin Price Currency,Transaction ID,Recurring,Tag",
+                        "2026-01-02T12:00:00Z,RIV-BUY-UI,Buy,1000.00,EUR,0.01000000,BTC,5.00,EUR,-1005.00,EUR,ACH,Linked bank,Bitcoin balance,,,100000.00,EUR,,False,Buy",
+                        "",
+                    ]
+                ),
+                encoding="utf-8",
+            )
+            labels_path = Path(tmp) / "labels.jsonl"
+            labels_path.write_text(
+                json.dumps({"type": "tx", "ref": "RIV-BUY-UI", "label": "river-buy"})
+                + "\n",
+                encoding="utf-8",
+            )
+            receive_descriptor, change_descriptor = _sample_descriptor_pair()
+            descriptor_export = json.dumps(
+                {
+                    "descriptors": [
+                        {
+                            "desc": receive_descriptor,
+                            "active": True,
+                            "internal": False,
+                        },
+                        {
+                            "desc": change_descriptor,
+                            "active": True,
+                            "internal": True,
+                        },
+                    ]
+                }
+            )
+            proc = _start_daemon(data_root)
+            try:
+                self.assertEqual(_read_payload_timeout(proc)["kind"], "daemon.ready")
+
+                _write_payload(
+                    proc,
+                    {"request_id": "backend-options", "kind": "ui.backends.options"},
+                )
+                options = _read_payload_timeout(proc)
+                self.assertEqual(options["kind"], "ui.backends.options")
+                names = {backend["name"] for backend in options["data"]["backends"]}
+                self.assertIn("mempool", names)
+                self.assertNotIn("url", options["data"]["backends"][0])
+
+                _write_payload(
+                    proc,
+                    {
+                        "request_id": "create-descriptor",
+                        "kind": "ui.wallets.create",
+                        "args": {
+                            "label": "Descriptor UI",
+                            "kind": "descriptor",
+                            "backend": "mempool",
+                            "wallet_material": descriptor_export,
+                        },
+                    },
+                )
+                descriptor_wallet = _read_payload_timeout(proc)
+                self.assertEqual(descriptor_wallet["kind"], "ui.wallets.create")
+                self.assertTrue(descriptor_wallet["data"]["wallet"]["descriptor"])
+                self.assertTrue(descriptor_wallet["data"]["wallet"]["change_descriptor"])
+
+                _write_payload(
+                    proc,
+                    {
+                        "request_id": "replace-descriptor-receive-only",
+                        "kind": "ui.wallets.update",
+                        "args": {
+                            "wallet": "Descriptor UI",
+                            "wallet_material": receive_descriptor,
+                            "auth_response": {
+                                "plaintext_change_ack": "CHANGE LOCAL DATA",
+                            },
+                        },
+                    },
+                )
+                descriptor_updated = _read_payload_timeout(proc)
+                self.assertEqual(descriptor_updated["kind"], "ui.wallets.update")
+                self.assertTrue(descriptor_updated["data"]["wallet"]["descriptor"])
+                self.assertFalse(
+                    descriptor_updated["data"]["wallet"]["change_descriptor"]
+                )
+
+                _write_payload(
+                    proc,
+                    {
+                        "request_id": "create-river",
+                        "kind": "ui.wallets.create",
+                        "args": {
+                            "label": "River UI",
+                            "kind": "river",
+                            "source_file": str(river_csv),
+                            "source_format": "river_csv",
+                        },
+                    },
+                )
+                created = _read_payload_timeout(proc)
+                self.assertEqual(created["kind"], "ui.wallets.create")
+                self.assertEqual(created["data"]["wallet"]["label"], "River UI")
+                self.assertEqual(
+                    created["data"]["wallet"]["config"]["source_format"],
+                    "river_csv",
+                )
+
+                _write_payload(
+                    proc,
+                    {
+                        "request_id": "sync-river",
+                        "kind": "ui.wallets.sync",
+                        "args": {"wallet": "River UI"},
+                    },
+                )
+                # The daemon now interleaves ui.wallets.sync.progress
+                # envelopes ahead of the terminal sync envelope.
+                synced = None
+                for _ in range(5):
+                    envelope = _read_payload_timeout(proc)
+                    if envelope["kind"] == "ui.wallets.sync":
+                        synced = envelope
+                        break
+                self.assertIsNotNone(synced, "no terminal ui.wallets.sync envelope")
+                self.assertEqual(synced["data"]["results"][0]["imported"], 1)
+
+                _write_payload(
+                    proc,
+                    {
+                        "request_id": "import-labels",
+                        "kind": "ui.metadata.bip329.import",
+                        "args": {"wallet": "River UI", "file": str(labels_path)},
+                    },
+                )
+                labels = _read_payload_timeout(proc)
+                self.assertEqual(labels["kind"], "ui.metadata.bip329.import")
+                self.assertEqual(labels["data"]["records"], 1)
+                self.assertEqual(labels["data"]["transaction_tags_added"], 1)
+
+                _write_payload(
+                    proc,
+                    {
+                        "request_id": "create-btcpay",
+                        "kind": "ui.connections.btcpay.create",
+                        "args": {
+                            "label": "BTCPay UI",
+                            "backend": "btcpay-ui",
+                            "store_id": "store123",
+                        },
+                    },
+                )
+                btcpay = _read_payload_timeout(proc)
+                self.assertEqual(btcpay["kind"], "ui.connections.btcpay.create")
+                self.assertEqual(btcpay["data"]["backend"]["name"], "btcpay-ui")
+                self.assertEqual(btcpay["data"]["wallet"]["label"], "BTCPay UI")
+                self.assertEqual(
+                    btcpay["data"]["wallet"]["config"]["payment_method_id"],
+                    "BTC-CHAIN",
+                )
+
+                _write_payload(
+                    proc,
+                    {
+                        "request_id": "update-btcpay-config",
+                        "kind": "ui.wallets.update",
+                        "args": {
+                            "wallet": "BTCPay UI",
+                            "store_id": "store-edited",
+                            "auth_response": {
+                                "plaintext_change_ack": "CHANGE LOCAL DATA",
+                            },
+                        },
+                    },
+                )
+                edited = _read_payload_timeout(proc)
+                self.assertEqual(edited["kind"], "ui.wallets.update")
+                self.assertEqual(
+                    edited["data"]["wallet"]["config"]["store_id"], "store-edited"
+                )
+                self.assertEqual(edited["data"]["wallet"]["label"], "BTCPay UI")
+
+                _write_payload(
+                    proc,
+                    {
+                        "request_id": "overview-connections",
+                        "kind": "ui.overview.snapshot",
+                    },
+                )
+                overview = _read_payload_timeout(proc)
+                self.assertEqual(overview["kind"], "ui.overview.snapshot")
+                connections = {
+                    connection["label"]: connection
+                    for connection in overview["data"]["connections"]
+                }
+                self.assertEqual(connections["River UI"]["syncMode"], "file_import")
+                self.assertEqual(connections["River UI"]["sourceFormat"], "river_csv")
+                self.assertEqual(connections["BTCPay UI"]["syncSource"], "btcpay")
+
+                # Sync the River wallet again and confirm the daemon emits
+                # progress envelopes before the terminal sync envelope. With
+                # 1 row the importer emits two events: the initial 0/1 and
+                # the final 1/1.
+                _write_payload(
+                    proc,
+                    {
+                        "request_id": "sync-river-progress",
+                        "kind": "ui.wallets.sync",
+                        "args": {"wallet": "River UI"},
+                    },
+                )
+                envelopes = []
+                for _ in range(5):
+                    envelope = _read_payload_timeout(proc)
+                    envelopes.append(envelope)
+                    if envelope["kind"] == "ui.wallets.sync":
+                        break
+                kinds = [envelope["kind"] for envelope in envelopes]
+                self.assertIn("ui.wallets.sync.progress", kinds)
+                self.assertEqual(kinds[-1], "ui.wallets.sync")
+                progress_events = [
+                    envelope for envelope in envelopes
+                    if envelope["kind"] == "ui.wallets.sync.progress"
+                ]
+                self.assertEqual(progress_events[0]["data"]["wallet"], "River UI")
+                self.assertEqual(progress_events[0]["data"]["total"], 1)
+                final_progress = progress_events[-1]["data"]
+                self.assertEqual(final_progress["processed"], 1)
+
+                _write_payload(
+                    proc,
+                    {
+                        "request_id": "update-no-changes",
+                        "kind": "ui.wallets.update",
+                        "args": {
+                            "wallet": "BTCPay UI",
+                            "auth_response": {
+                                "plaintext_change_ack": "CHANGE LOCAL DATA",
+                            },
+                        },
+                    },
+                )
+                no_changes = _read_payload_timeout(proc)
+                self.assertEqual(no_changes["kind"], "error")
+                self.assertEqual(no_changes["error"]["code"], "validation")
 
                 _write_payload(
                     proc,
