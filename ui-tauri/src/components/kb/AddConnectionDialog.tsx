@@ -521,7 +521,10 @@ export function AddConnectionDialog({
           id={id}
           className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
           value={form.backend}
-          onChange={(event) => updateForm("backend", event.target.value)}
+          onChange={(event) => {
+            updateForm("backend", event.target.value);
+            setBtcpayTestStatus(null);
+          }}
           required
         >
           <option value="" disabled>
