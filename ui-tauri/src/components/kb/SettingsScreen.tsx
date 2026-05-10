@@ -289,6 +289,22 @@ export function SettingsScreen({ onLock }: SettingsScreenProps) {
     setSelectedIntegrationId(routeSelectedIntegrationId);
   }, [routeSelectedIntegrationId]);
 
+  // Native menu may re-fire for the same section while the URL hash is
+  // unchanged (user already on /settings#privacy, clicks Privacy again after
+  // closing the panel). The hash effect won't see a diff, so listen for an
+  // explicit `kassiber:settings-section` event and force re-selection.
+  React.useEffect(() => {
+    const handler = (event: Event) => {
+      const detail = (event as CustomEvent<{ section?: string | null }>).detail;
+      const next = selectedIntegrationForHash(detail?.section ?? "");
+      setSelectedIntegrationId(next);
+    };
+    window.addEventListener("kassiber:settings-section", handler);
+    return () => {
+      window.removeEventListener("kassiber:settings-section", handler);
+    };
+  }, []);
+
   const editingBackend = React.useMemo(
     () => backends.find((backend) => backend.id === editingBackendId) ?? null,
     [backends, editingBackendId],

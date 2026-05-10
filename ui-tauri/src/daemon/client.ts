@@ -182,6 +182,10 @@ export function useDaemon<T = unknown>(
   });
 }
 
+export function daemonMutationKey(dataMode: DataMode, kind: string) {
+  return ["daemon-mutation", dataMode, kind] as const;
+}
+
 export function useDaemonMutation<T = unknown>(
   kind: string,
   options?: { dataMode?: DataMode },
@@ -190,6 +194,11 @@ export function useDaemonMutation<T = unknown>(
   const dataMode = options?.dataMode ?? selectedDataMode;
   const queryClient = useQueryClient();
   return useMutation({
+    // Sharing the mutation key across all `useDaemonMutation(kind, ...)`
+    // instances lets callers ask the QueryClient for in-flight counts
+    // (`isMutating`) and gate duplicate jobs across the menu, route screens,
+    // and shared hooks.
+    mutationKey: daemonMutationKey(dataMode, kind),
     mutationFn: async (args?: Record<string, unknown>) => {
       const daemonSession = useUiStore.getState().daemonSession;
       const envelope = await getTransport(dataMode).invoke<T>({ kind, args });

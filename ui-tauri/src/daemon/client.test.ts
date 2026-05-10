@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  daemonMutationKey,
   parseDaemonAuthRequiredEventDetail,
   shouldHandleDaemonAuthRequiredEvent,
 } from "./client";
@@ -46,5 +47,25 @@ describe("daemon auth-required event detail", () => {
         7,
       ),
     ).toBe(false);
+  });
+});
+
+describe("daemon mutation key", () => {
+  // Sharing a stable key across `useDaemonMutation` instances lets the
+  // QueryClient report cross-instance in-flight counts via `isMutating`,
+  // which is how the native menu and route screens coalesce the same
+  // workflow (sync, journal-process) instead of issuing duplicate jobs.
+  it("partitions by data mode and kind", () => {
+    expect(daemonMutationKey("real", "ui.wallets.sync")).toEqual([
+      "daemon-mutation",
+      "real",
+      "ui.wallets.sync",
+    ]);
+    expect(daemonMutationKey("mock", "ui.wallets.sync")).not.toEqual(
+      daemonMutationKey("real", "ui.wallets.sync"),
+    );
+    expect(daemonMutationKey("real", "ui.journals.process")).not.toEqual(
+      daemonMutationKey("real", "ui.wallets.sync"),
+    );
   });
 });

@@ -80,17 +80,13 @@ import { useUiStore } from "@/store/ui";
 import type { ThemePreference } from "@/store/ui";
 import {
   DAEMON_AUTH_REQUIRED_EVENT,
+  daemonMutationKey,
   formatDaemonEnvelopeError,
   shouldHandleDaemonAuthRequiredEvent,
   useDaemon,
   useDaemonMutation,
 } from "@/daemon/client";
-import {
-  canOpenExportedFiles,
-  clearImportProject,
-  getTransport,
-  openExportedFile,
-} from "@/daemon/transport";
+import { clearImportProject, getTransport } from "@/daemon/transport";
 import { cn } from "@/lib/utils";
 import {
   clearSessionUnlockPassphrase,
@@ -130,13 +126,7 @@ type SettingsMenuSection =
 
 type NativeMenuPayload =
   | { action: "lock-app" | "toggle-sensitive" }
-  | {
-      action:
-        | "sync-all-wallets"
-        | "process-journals"
-        | "export-report-pdf"
-        | "export-capital-gains-csv";
-    }
+  | { action: "sync-all-wallets" | "process-journals" }
   | { action: "open-settings"; section?: SettingsMenuSection | null }
   | { action: "navigate"; route?: AppRoutePath | null };
 
@@ -184,18 +174,10 @@ type JournalProcessResult = {
   processed_transactions?: number;
 };
 
-type ReportExportResult = {
-  file?: string;
-  filename?: string;
-  format?: string;
-  pages?: number;
-  rows?: number;
-};
-
 const APP_VERSION = "0.22.0";
 const APP_COMMIT = __APP_COMMIT__;
 const APP_COMMIT_SHORT = APP_COMMIT ? APP_COMMIT.slice(0, 7) : "unknown";
-const NATIVE_MENU_EVENT = "kassiber://menu";
+const NATIVE_MENU_EVENT = "kassiber:intent";
 const APP_ROUTE_PATHS: readonly AppRoutePath[] = [
   "/overview",
   "/transactions",
@@ -582,10 +564,6 @@ function isAppRoutePath(value: unknown): value is AppRoutePath {
   );
 }
 
-function canOpenExportPath(path?: string) {
-  return Boolean(path && (path.startsWith("/") || /^[A-Za-z]:[\\/]/.test(path)));
-}
-
 export function AppShell() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
@@ -600,11 +578,7 @@ export function AppShell() {
   const { syncAll, isSyncing } = useWalletSyncAction();
   const processJournals =
     useDaemonMutation<JournalProcessResult>("ui.journals.process");
-  const exportReportPdf =
-    useDaemonMutation<ReportExportResult>("ui.reports.export_pdf");
-  const exportCapitalGainsCsv = useDaemonMutation<ReportExportResult>(
-    "ui.reports.export_capital_gains_csv",
-  );
+  const dataMode = useUiStore((s) => s.dataMode);
   const encryptedWorkspace =
     Boolean(identity?.encrypted) || identity?.databaseMode === "sqlcipher";
   const [daemonAuthRequired, setDaemonAuthRequired] = React.useState(false);
@@ -735,37 +709,16 @@ export function AppShell() {
     return false;
   }, [identity, navigate]);
 
-  const openFinishedMenuExport = React.useCallback(
-    (payload: ReportExportResult | undefined, fallbackName: string) => {
-      const file = payload?.file ?? "";
-      if (!canOpenExportPath(file) || !canOpenExportedFiles()) {
-        return;
-      }
-      void openExportedFile(file)
-        .then(() => {
-          addNotification({
-            title: `${payload?.filename ?? fallbackName} opened`,
-            body: "Opened with the system default app.",
-            tone: "success",
-          });
-        })
-        .catch((error) => {
-          addNotification({
-            title: "Could not open export",
-            body:
-              error instanceof Error
-                ? error.message
-                : "The export was saved but could not be opened.",
-            tone: "error",
-          });
-        });
-    },
-    [addNotification],
+  const isDaemonKindMutating = React.useCallback(
+    (kind: string) =>
+      queryClient.isMutating({ mutationKey: daemonMutationKey(dataMode, kind) }) >
+      0,
+    [dataMode, queryClient],
   );
 
   const runMenuJournalProcessing = React.useCallback(() => {
     if (!ensureWorkspaceForMenuAction()) return;
-    if (processJournals.isPending) {
+    if (isDaemonKindMutating("ui.journals.process")) {
       addNotification({
         title: "Journal processing already running",
         body: "Kassiber is already refreshing the journal state.",
@@ -813,113 +766,14 @@ export function AppShell() {
   }, [
     addNotification,
     ensureWorkspaceForMenuAction,
+    isDaemonKindMutating,
     processJournals,
     queryClient,
   ]);
 
-  const runMenuPdfExport = React.useCallback(() => {
-    if (!ensureWorkspaceForMenuAction()) return;
-    if (exportReportPdf.isPending) {
-      addNotification({
-        title: "Report export already running",
-        body: "Kassiber is already writing the PDF report.",
-        tone: "info",
-      });
-      return;
-    }
-    addNotification({
-      title: "Report PDF export started",
-      body: "Kassiber is writing a report PDF to the managed exports folder.",
-      tone: "warning",
-    });
-    exportReportPdf.mutate(
-      {},
-      {
-        onSuccess: (envelope) => {
-          const payload = envelope.data;
-          const filename = payload?.filename ?? "report.pdf";
-          const detail =
-            payload?.pages !== undefined
-              ? `${payload.pages} page${payload.pages === 1 ? "" : "s"}`
-              : "Export written";
-          addNotification({
-            title: "Report PDF export finished",
-            body: `${filename}: ${detail}`,
-            tone: "success",
-          });
-          openFinishedMenuExport(payload, filename);
-        },
-        onError: (error) => {
-          addNotification({
-            title: "Report PDF export failed",
-            body:
-              error instanceof Error ? error.message : "Could not export PDF.",
-            tone: "error",
-          });
-        },
-      },
-    );
-  }, [
-    addNotification,
-    ensureWorkspaceForMenuAction,
-    exportReportPdf,
-    openFinishedMenuExport,
-  ]);
-
-  const runMenuCapitalGainsCsvExport = React.useCallback(() => {
-    if (!ensureWorkspaceForMenuAction()) return;
-    if (exportCapitalGainsCsv.isPending) {
-      addNotification({
-        title: "Capital gains export already running",
-        body: "Kassiber is already writing the CSV export.",
-        tone: "info",
-      });
-      return;
-    }
-    addNotification({
-      title: "Capital gains CSV export started",
-      body: "Kassiber is writing a CSV to the managed exports folder.",
-      tone: "warning",
-    });
-    exportCapitalGainsCsv.mutate(
-      {},
-      {
-        onSuccess: (envelope) => {
-          const payload = envelope.data;
-          const filename = payload?.filename ?? "capital-gains.csv";
-          const detail =
-            payload?.rows !== undefined
-              ? `${payload.rows} row${payload.rows === 1 ? "" : "s"}`
-              : "Export written";
-          addNotification({
-            title: "Capital gains CSV export finished",
-            body: `${filename}: ${detail}`,
-            tone: "success",
-          });
-          openFinishedMenuExport(payload, filename);
-        },
-        onError: (error) => {
-          addNotification({
-            title: "Capital gains CSV export failed",
-            body:
-              error instanceof Error
-                ? error.message
-                : "Could not export capital gains CSV.",
-            tone: "error",
-          });
-        },
-      },
-    );
-  }, [
-    addNotification,
-    ensureWorkspaceForMenuAction,
-    exportCapitalGainsCsv,
-    openFinishedMenuExport,
-  ]);
-
   const runMenuWalletSync = React.useCallback(() => {
     if (!ensureWorkspaceForMenuAction()) return;
-    if (isSyncing) {
+    if (isSyncing || isDaemonKindMutating("ui.wallets.sync")) {
       addNotification({
         title: "Wallet sync already running",
         body: "Kassiber is already syncing wallet sources.",
@@ -928,7 +782,13 @@ export function AppShell() {
       return;
     }
     syncAll();
-  }, [addNotification, ensureWorkspaceForMenuAction, isSyncing, syncAll]);
+  }, [
+    addNotification,
+    ensureWorkspaceForMenuAction,
+    isDaemonKindMutating,
+    isSyncing,
+    syncAll,
+  ]);
 
   React.useEffect(() => {
     if (identity) return;
@@ -1059,19 +919,16 @@ export function AppShell() {
             runMenuJournalProcessing();
             return;
           }
-          if (payload.action === "export-report-pdf") {
-            runMenuPdfExport();
-            return;
-          }
-          if (payload.action === "export-capital-gains-csv") {
-            runMenuCapitalGainsCsvExport();
-            return;
-          }
           if (payload.action === "open-settings") {
             void navigate({
               to: "/settings",
               hash: payload.section ?? undefined,
             });
+            window.dispatchEvent(
+              new CustomEvent("kassiber:settings-section", {
+                detail: { section: payload.section ?? null },
+              }),
+            );
             return;
           }
           if (
@@ -1109,14 +966,28 @@ export function AppShell() {
   }, [
     lockApp,
     navigate,
-    runMenuCapitalGainsCsvExport,
     runMenuJournalProcessing,
-    runMenuPdfExport,
     runMenuWalletSync,
     aiFeaturesEnabled,
     addNotification,
     setHideSensitive,
   ]);
+
+  React.useEffect(() => {
+    if (!("__TAURI_INTERNALS__" in window)) return;
+    let disposed = false;
+    void import("@tauri-apps/api/core")
+      .then(({ invoke }) => {
+        if (disposed) return;
+        return invoke("set_menu_state", { aiFeaturesEnabled });
+      })
+      .catch((error) => {
+        console.warn("Could not sync Kassiber native menu state", error);
+      });
+    return () => {
+      disposed = true;
+    };
+  }, [aiFeaturesEnabled]);
 
   React.useEffect(() => {
     if (aiFeaturesEnabled || !isAssistantRoute) return;

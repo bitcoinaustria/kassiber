@@ -18,7 +18,10 @@ const DEFAULT_STATE_DIR: &str = ".kassiber";
 const DEFAULT_DATA_DIR: &str = "data";
 const DB_FILENAMES: &[&str] = &["kassiber.sqlite3", "satbooks.sqlite3"];
 const IMPORT_PICKER_TIMEOUT: Duration = Duration::from_secs(300);
-const MENU_EVENT: &str = "kassiber://menu";
+// Event name kept on the existing `kassiber:` colon-prefixed convention so the
+// channel can be reused for OS-level deep links (e.g. `kassiber://transaction/...`)
+// without colliding with their URL form.
+const MENU_EVENT: &str = "kassiber:intent";
 const MENU_OPEN_SETTINGS: &str = "kassiber:settings";
 const MENU_SETTINGS_GENERAL: &str = "kassiber:settings:general";
 const MENU_SETTINGS_PRIVACY: &str = "kassiber:settings:privacy";
@@ -39,13 +42,9 @@ const MENU_HELP_DOCS: &str = "kassiber:help:docs";
 const MENU_HELP_ISSUES: &str = "kassiber:help:issues";
 const MENU_WORKFLOW_SYNC_ALL: &str = "kassiber:workflow:sync-all";
 const MENU_WORKFLOW_PROCESS_JOURNALS: &str = "kassiber:workflow:process-journals";
-const MENU_WORKFLOW_EXPORT_REPORT_PDF: &str = "kassiber:workflow:export-report-pdf";
-const MENU_WORKFLOW_EXPORT_CAPITAL_GAINS_CSV: &str = "kassiber:workflow:export-capital-gains-csv";
+const MENU_WORKFLOW_OPEN_REPORTS: &str = "kassiber:workflow:open-reports";
 const MENU_WORKFLOW_CONNECTIONS_IMPORTS: &str = "kassiber:workflow:connections-imports";
 const MENU_WORKFLOW_DATA_BACKUP: &str = "kassiber:workflow:data-backup";
-const MENU_WORKFLOW_REPORTS: &str = "kassiber:workflow:reports";
-const MENU_WORKFLOW_SOURCE_FUNDS: &str = "kassiber:workflow:source-funds";
-const MENU_WORKFLOW_DIAGNOSTICS: &str = "kassiber:workflow:diagnostics";
 const MENU_NAV_OVERVIEW: &str = "kassiber:navigate:overview";
 const MENU_NAV_TRANSACTIONS: &str = "kassiber:navigate:transactions";
 const MENU_NAV_CONNECTIONS: &str = "kassiber:navigate:connections";
@@ -176,6 +175,10 @@ struct MenuActionPayload {
     route: Option<&'static str>,
     #[serde(skip_serializing_if = "Option::is_none")]
     section: Option<&'static str>,
+}
+
+struct AppMenuHandles {
+    assistant: MenuItem<tauri::Wry>,
 }
 
 #[tauri::command]
@@ -847,8 +850,9 @@ pub fn run() {
                 let code = supervisor::run_cli(resource_dir.as_deref(), args.clone());
                 std::process::exit(code);
             }
-            let menu = build_app_menu(app.handle())?;
+            let (menu, menu_handles) = build_app_menu(app.handle())?;
             app.set_menu(menu)?;
+            app.manage(menu_handles);
             app.manage(Arc::new(DaemonSupervisor::new(resource_dir)));
             Ok(())
         })
@@ -859,13 +863,16 @@ pub fn run() {
             open_external_url,
             select_import_project_directory,
             activate_import_project,
-            clear_import_project
+            clear_import_project,
+            set_menu_state
         ])
         .run(tauri::generate_context!())
         .expect("error while running Kassiber desktop shell");
 }
 
-fn build_app_menu(app: &tauri::AppHandle<tauri::Wry>) -> tauri::Result<Menu<tauri::Wry>> {
+fn build_app_menu(
+    app: &tauri::AppHandle<tauri::Wry>,
+) -> tauri::Result<(Menu<tauri::Wry>, AppMenuHandles)> {
     let settings_item = menu_item(app, MENU_OPEN_SETTINGS, "Settings...", Some("CmdOrCtrl+,"))?;
     let general_settings = menu_item(app, MENU_SETTINGS_GENERAL, "General", None)?;
     let privacy_settings = menu_item(app, MENU_SETTINGS_PRIVACY, "Privacy", None)?;
@@ -903,17 +910,11 @@ fn build_app_menu(app: &tauri::AppHandle<tauri::Wry>) -> tauri::Result<Menu<taur
         "Process Journals",
         Some("CmdOrCtrl+Shift+J"),
     )?;
-    let export_report_pdf_item = menu_item(
+    let open_reports_item = menu_item(
         app,
-        MENU_WORKFLOW_EXPORT_REPORT_PDF,
-        "Export Report PDF",
+        MENU_WORKFLOW_OPEN_REPORTS,
+        "Reports & Export...",
         Some("CmdOrCtrl+Shift+E"),
-    )?;
-    let export_capital_gains_csv_item = menu_item(
-        app,
-        MENU_WORKFLOW_EXPORT_CAPITAL_GAINS_CSV,
-        "Export Capital Gains CSV",
-        None,
     )?;
     let workflow_connections_item = menu_item(
         app,
@@ -927,10 +928,6 @@ fn build_app_menu(app: &tauri::AppHandle<tauri::Wry>) -> tauri::Result<Menu<taur
         "Local Data & Backup...",
         None,
     )?;
-    let workflow_reports_item = menu_item(app, MENU_WORKFLOW_REPORTS, "Reports", None)?;
-    let workflow_source_funds_item =
-        menu_item(app, MENU_WORKFLOW_SOURCE_FUNDS, "Source of Funds", None)?;
-    let workflow_diagnostics_item = menu_item(app, MENU_WORKFLOW_DIAGNOSTICS, "Diagnostics", None)?;
 
     let overview_item = menu_item(app, MENU_NAV_OVERVIEW, "Overview", Some("CmdOrCtrl+1"))?;
     let transactions_item = menu_item(
@@ -1023,15 +1020,9 @@ fn build_app_menu(app: &tauri::AppHandle<tauri::Wry>) -> tauri::Result<Menu<taur
         .item(&sync_all_item)
         .item(&process_journals_item)
         .separator()
-        .item(&export_report_pdf_item)
-        .item(&export_capital_gains_csv_item)
-        .separator()
+        .item(&open_reports_item)
         .item(&workflow_connections_item)
         .item(&workflow_data_item)
-        .separator()
-        .item(&workflow_reports_item)
-        .item(&workflow_source_funds_item)
-        .item(&workflow_diagnostics_item)
         .build()?;
 
     let settings_menu = SubmenuBuilder::new(app, "Settings")
@@ -1075,7 +1066,7 @@ fn build_app_menu(app: &tauri::AppHandle<tauri::Wry>) -> tauri::Result<Menu<taur
     {
         menu_builder = menu_builder.item(&app_menu);
     }
-    menu_builder
+    let menu = menu_builder
         .item(&file_menu)
         .item(&edit_menu)
         .item(&view_menu)
@@ -1083,7 +1074,24 @@ fn build_app_menu(app: &tauri::AppHandle<tauri::Wry>) -> tauri::Result<Menu<taur
         .item(&settings_menu)
         .item(&window_menu)
         .item(&help_menu)
-        .build()
+        .build()?;
+
+    let handles = AppMenuHandles {
+        assistant: assistant_item,
+    };
+
+    Ok((menu, handles))
+}
+
+#[tauri::command]
+fn set_menu_state(
+    handles: tauri::State<'_, AppMenuHandles>,
+    ai_features_enabled: bool,
+) -> Result<(), String> {
+    handles
+        .assistant
+        .set_enabled(ai_features_enabled)
+        .map_err(|error| error.to_string())
 }
 
 fn menu_item(
@@ -1154,13 +1162,9 @@ fn menu_action_for_id(id: &str) -> Option<MenuActionPayload> {
         MENU_TOGGLE_SENSITIVE => Some(menu_action("toggle-sensitive")),
         MENU_WORKFLOW_SYNC_ALL => Some(menu_action("sync-all-wallets")),
         MENU_WORKFLOW_PROCESS_JOURNALS => Some(menu_action("process-journals")),
-        MENU_WORKFLOW_EXPORT_REPORT_PDF => Some(menu_action("export-report-pdf")),
-        MENU_WORKFLOW_EXPORT_CAPITAL_GAINS_CSV => Some(menu_action("export-capital-gains-csv")),
+        MENU_WORKFLOW_OPEN_REPORTS => Some(navigate_action("/reports")),
         MENU_WORKFLOW_CONNECTIONS_IMPORTS => Some(navigate_action("/connections")),
         MENU_WORKFLOW_DATA_BACKUP => Some(open_settings_action(Some("data"))),
-        MENU_WORKFLOW_REPORTS => Some(navigate_action("/reports")),
-        MENU_WORKFLOW_SOURCE_FUNDS => Some(navigate_action("/source-of-funds")),
-        MENU_WORKFLOW_DIAGNOSTICS => Some(navigate_action("/diagnostics")),
         MENU_NAV_OVERVIEW => Some(navigate_action("/overview")),
         MENU_NAV_TRANSACTIONS => Some(navigate_action("/transactions")),
         MENU_NAV_CONNECTIONS => Some(navigate_action("/connections")),
@@ -1257,9 +1261,9 @@ mod tests {
         database_is_encrypted, inspect_import_project_directory, is_managed_report_export_path,
         is_supported_export_file, menu_action, menu_action_for_id, navigate_action,
         open_settings_action, validated_external_url, ALLOWED_DAEMON_KINDS, MENU_HELP_DOCS,
-        MENU_LOCK_APP, MENU_NAV_REPORTS, MENU_SETTINGS_SECURITY, MENU_TOGGLE_FULLSCREEN,
-        MENU_WORKFLOW_CONNECTIONS_IMPORTS, MENU_WORKFLOW_EXPORT_REPORT_PDF,
-        MENU_WORKFLOW_PROCESS_JOURNALS,
+        MENU_LOCK_APP, MENU_NAV_ASSISTANT, MENU_NAV_REPORTS, MENU_SETTINGS_SECURITY,
+        MENU_TOGGLE_FULLSCREEN, MENU_WORKFLOW_CONNECTIONS_IMPORTS, MENU_WORKFLOW_OPEN_REPORTS,
+        MENU_WORKFLOW_PROCESS_JOURNALS, MENU_WORKFLOW_SYNC_ALL,
     };
     use std::fs;
     use std::path::{Path, PathBuf};
@@ -1312,16 +1316,27 @@ mod tests {
             Some(navigate_action("/reports"))
         );
         assert_eq!(
+            menu_action_for_id(MENU_NAV_ASSISTANT),
+            Some(navigate_action("/assistant"))
+        );
+        assert_eq!(
             menu_action_for_id(MENU_LOCK_APP),
             Some(menu_action("lock-app"))
+        );
+        assert_eq!(
+            menu_action_for_id(MENU_WORKFLOW_SYNC_ALL),
+            Some(menu_action("sync-all-wallets"))
         );
         assert_eq!(
             menu_action_for_id(MENU_WORKFLOW_PROCESS_JOURNALS),
             Some(menu_action("process-journals"))
         );
+        // Reports & Export navigates to the Reports screen instead of running
+        // a context-free export from the menu, so the user keeps tax-year
+        // context and the Open step stays explicit.
         assert_eq!(
-            menu_action_for_id(MENU_WORKFLOW_EXPORT_REPORT_PDF),
-            Some(menu_action("export-report-pdf"))
+            menu_action_for_id(MENU_WORKFLOW_OPEN_REPORTS),
+            Some(navigate_action("/reports"))
         );
         assert_eq!(
             menu_action_for_id(MENU_WORKFLOW_CONNECTIONS_IMPORTS),
