@@ -12,7 +12,7 @@ import traceback
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Callable, TextIO
+from typing import Any, Callable, Mapping, TextIO
 
 from . import __version__
 from .ai import (
@@ -57,6 +57,7 @@ from .core import source_funds as core_source_funds
 from .core import source_funds_coverage as core_source_funds_coverage
 from .core import source_funds_recipients as core_source_funds_recipients
 from .core import accounts as core_accounts
+from .core import imports as core_imports
 from .core import metadata as core_metadata
 from .core import wallets as core_wallets
 from .core.repo import current_context_snapshot
@@ -5255,17 +5256,28 @@ def handle_request(
                 ),
                 False,
             )
+
+        def _emit_sync_progress(payload: Mapping[str, Any]) -> None:
+            out.write(
+                _with_request_id(
+                    build_envelope("ui.wallets.sync.progress", dict(payload)),
+                    request_id,
+                )
+            )
+
+        token = core_imports.sync_progress_emitter.set(_emit_sync_progress)
+        try:
+            sync_payload = _wallets_sync_payload(
+                ctx.conn,
+                ctx.runtime_config,
+                args or {},
+                strict=False,
+            )
+        finally:
+            core_imports.sync_progress_emitter.reset(token)
         return (
             _with_request_id(
-                build_envelope(
-                    "ui.wallets.sync",
-                    _wallets_sync_payload(
-                        ctx.conn,
-                        ctx.runtime_config,
-                        args or {},
-                        strict=False,
-                    ),
-                ),
+                build_envelope("ui.wallets.sync", sync_payload),
                 request_id,
             ),
             False,

@@ -49,7 +49,11 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { useDaemon, useDaemonMutation } from "@/daemon/client";
+import {
+  useDaemon,
+  useDaemonMutation,
+  useDaemonStreamMutation,
+} from "@/daemon/client";
 import { screenShellClassName } from "@/lib/screen-layout";
 import { cn } from "@/lib/utils";
 import { isFilePickerAvailable, pickFile } from "@/lib/filePicker";
@@ -204,7 +208,23 @@ function ConnectionDetailView({
   const navigate = useNavigate();
   const addNotification = useUiStore((state) => state.addNotification);
   const identity = useUiStore((state) => state.identity);
-  const syncWallet = useDaemonMutation<{ results: SyncResult[] }>("ui.wallets.sync");
+  const [syncProgress, setSyncProgress] = useState<{
+    wallet: string;
+    processed: number;
+    total: number;
+  } | null>(null);
+  const syncWallet = useDaemonStreamMutation<
+    { results: SyncResult[] },
+    { wallet: string; processed: number; total: number }
+  >("ui.wallets.sync", {
+    onProgress: (record) => {
+      setSyncProgress({
+        wallet: record.wallet,
+        processed: record.processed ?? 0,
+        total: record.total ?? 0,
+      });
+    },
+  });
   const updateWallet =
     useDaemonMutation<UpdateWalletResult>("ui.wallets.update");
   const deleteWallet =
@@ -245,6 +265,7 @@ function ConnectionDetailView({
   const onSync = () => {
     if (syncWallet.isPending) return;
     setSyncMessage(null);
+    setSyncProgress(null);
     addNotification({
       title: "Wallet sync started",
       body: `${connection.label} is syncing.`,
@@ -282,7 +303,10 @@ function ConnectionDetailView({
             tone: "error",
           });
         },
-        onSettled: clearSyncNotice,
+        onSettled: () => {
+          clearSyncNotice();
+          setSyncProgress(null);
+        },
       },
     );
   };
@@ -476,6 +500,35 @@ function ConnectionDetailView({
             {syncWallet.isPending ? "Syncing" : "Sync"}
           </Button>
         </CardContent>
+        {syncProgress && syncWallet.isPending ? (
+          <div className="px-6 pt-4">
+            <div className="space-y-1 rounded-md border bg-background px-3 py-2 text-sm">
+              <div className="flex items-center justify-between">
+                <span className="text-muted-foreground">
+                  Importing {syncProgress.wallet}…
+                </span>
+                <span className="font-medium tabular-nums">
+                  {syncProgress.processed.toLocaleString()} /{" "}
+                  {syncProgress.total.toLocaleString()} rows
+                </span>
+              </div>
+              <div className="h-1.5 overflow-hidden rounded-full bg-muted">
+                <div
+                  className="h-full bg-primary transition-all"
+                  style={{
+                    width:
+                      syncProgress.total > 0
+                        ? `${Math.min(
+                            100,
+                            (syncProgress.processed / syncProgress.total) * 100,
+                          )}%`
+                        : "0%",
+                  }}
+                />
+              </div>
+            </div>
+          </div>
+        ) : null}
         {syncMessage && (
           <div className="px-6 pt-4">
             <div

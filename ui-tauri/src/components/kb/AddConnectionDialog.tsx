@@ -15,7 +15,11 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { useDaemon, useDaemonMutation } from "@/daemon/client";
+import {
+  useDaemon,
+  useDaemonMutation,
+  useDaemonStreamMutation,
+} from "@/daemon/client";
 import { useSyncProgressNotice } from "@/hooks/useSyncProgressNotice";
 import { useUiStore, type DeferredConnectionSetup } from "@/store/ui";
 import { cn } from "@/lib/utils";
@@ -205,8 +209,34 @@ export function AddConnectionDialog({
     payment_method_id: string;
     ok: boolean;
   }>("ui.connections.btcpay.test");
-  const syncWallet =
-    useDaemonMutation<{ results: SyncResult[] }>("ui.wallets.sync");
+  const [syncProgress, setSyncProgress] = React.useState<{
+    wallet: string;
+    processed: number;
+    total: number;
+    imported: number;
+    skipped: number;
+  } | null>(null);
+  const syncWallet = useDaemonStreamMutation<
+    { results: SyncResult[] },
+    {
+      phase: string;
+      wallet: string;
+      processed: number;
+      total: number;
+      imported?: number;
+      skipped?: number;
+    }
+  >("ui.wallets.sync", {
+    onProgress: (record) => {
+      setSyncProgress({
+        wallet: record.wallet,
+        processed: record.processed ?? 0,
+        total: record.total ?? 0,
+        imported: record.imported ?? 0,
+        skipped: record.skipped ?? 0,
+      });
+    },
+  });
   const { startSyncNotice, clearSyncNotice } = useSyncProgressNotice();
   const [activeCategory, setActiveCategory] =
     React.useState<ConnectionCategory>("wallets");
@@ -308,6 +338,7 @@ export function AddConnectionDialog({
     setPreviewAddresses(null);
     setPreviewError(null);
     setBtcpayTestStatus(null);
+    setSyncProgress(null);
   }, [selected]);
 
   React.useEffect(() => {
@@ -1080,6 +1111,33 @@ export function AddConnectionDialog({
           onSubmit={onSetupSubmit}
         >
           {renderSetupFields()}
+          {syncProgress ? (
+            <div className="space-y-1 rounded-md border bg-background p-3 text-xs">
+              <div className="flex items-center justify-between">
+                <span className="text-muted-foreground">
+                  Importing {syncProgress.wallet}…
+                </span>
+                <span className="font-medium tabular-nums">
+                  {syncProgress.processed.toLocaleString()} /{" "}
+                  {syncProgress.total.toLocaleString()} rows
+                </span>
+              </div>
+              <div className="h-1.5 overflow-hidden rounded-full bg-muted">
+                <div
+                  className="h-full bg-primary transition-all"
+                  style={{
+                    width:
+                      syncProgress.total > 0
+                        ? `${Math.min(
+                            100,
+                            (syncProgress.processed / syncProgress.total) * 100,
+                          )}%`
+                        : "0%",
+                  }}
+                />
+              </div>
+            </div>
+          ) : null}
           {setupError ? (
             <div className="rounded-md border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">
               {setupError}

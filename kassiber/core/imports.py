@@ -2,6 +2,7 @@ from __future__ import annotations
 
 """Import orchestration helpers above the parser-only `kassiber.importers` boundary."""
 
+import contextvars
 import json
 import os
 import sqlite3
@@ -32,6 +33,16 @@ ImportRow = Mapping[str, Any]
 TagRow = Mapping[str, Any]
 EnsureTagRow = Callable[[sqlite3.Connection, str, str, str, str], tuple[TagRow, bool]]
 InvalidateJournals = Callable[[sqlite3.Connection, str], None]
+
+
+ProgressCallback = Callable[[Mapping[str, Any]], None]
+
+# Contextvar threaded by the daemon when it wants long-running imports to
+# emit row-count progress over the JSONL stream. The CLI leaves this empty
+# so no behavior change for `kassiber wallets sync` from a terminal.
+sync_progress_emitter: contextvars.ContextVar[ProgressCallback | None] = (
+    contextvars.ContextVar("kassiber.sync_progress_emitter", default=None)
+)
 
 
 @dataclass(frozen=True)
@@ -239,7 +250,18 @@ def insert_wallet_records(
 ) -> dict[str, Any]:
     imported = 0
     skipped = 0
-    for record in records:
+    total = len(records)
+    progress = sync_progress_emitter.get()
+    if progress is not None:
+        progress(
+            {
+                "phase": "importing",
+                "wallet": wallet["label"],
+                "processed": 0,
+                "total": total,
+            }
+        )
+    for index, record in enumerate(records, start=1):
         normalized = normalize_import_record(record, source_label=source_label)
         fingerprint = make_transaction_fingerprint(
             wallet["id"],
@@ -260,6 +282,17 @@ def insert_wallet_records(
                     (*updates.values(), existing["id"]),
                 )
             skipped += 1
+            if progress is not None and (index % 200 == 0 or index == total):
+                progress(
+                    {
+                        "phase": "importing",
+                        "wallet": wallet["label"],
+                        "processed": index,
+                        "total": total,
+                        "imported": imported,
+                        "skipped": skipped,
+                    }
+                )
             continue
         tx_id = str(uuid.uuid4())
         conn.execute(
@@ -310,6 +343,17 @@ def insert_wallet_records(
             ),
         )
         imported += 1
+        if progress is not None and (index % 200 == 0 or index == total):
+            progress(
+                {
+                    "phase": "importing",
+                    "wallet": wallet["label"],
+                    "processed": index,
+                    "total": total,
+                    "imported": imported,
+                    "skipped": skipped,
+                }
+            )
     hooks.invalidate_journals(conn, profile["id"])
     if commit:
         conn.commit()

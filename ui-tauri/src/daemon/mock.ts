@@ -648,12 +648,45 @@ export const mockDaemon: DaemonTransport = {
     if (req.kind === "ai.chat") {
       return mockAiChatStream<T, R>(req, options);
     }
+    if (req.kind === "ui.wallets.sync") {
+      return mockWalletsSyncStream<T, R>(req, options);
+    }
     // Non-streaming kinds resolve straight through to invoke.
     return mockDaemon.invoke<T>(req);
   },
 };
 
 export const mockStream = mockDaemon.stream;
+
+async function mockWalletsSyncStream<T, R>(
+  req: DaemonRequest,
+  options?: DaemonStreamOptions<R>,
+): Promise<DaemonEnvelope<T>> {
+  const requestId =
+    req.request_id ?? `mock-sync-${Math.random().toString(36).slice(2)}`;
+  const args = (req.args ?? {}) as { wallet?: unknown };
+  const walletLabel = typeof args.wallet === "string" ? args.wallet : "wallet";
+  const total = 1200;
+  const steps = [200, 600, 1000, total];
+  for (const processed of steps) {
+    if (options?.signal?.aborted) break;
+    await new Promise((resolve) => setTimeout(resolve, 60));
+    options?.onRecord?.({
+      kind: "ui.wallets.sync.progress",
+      schema_version: 1,
+      request_id: requestId,
+      data: {
+        phase: "importing",
+        wallet: walletLabel,
+        processed,
+        total,
+        imported: processed,
+        skipped: 0,
+      } as R,
+    });
+  }
+  return mockDaemon.invoke<T>(req);
+}
 
 async function mockAiChatStream<T, R>(
   req: DaemonRequest,

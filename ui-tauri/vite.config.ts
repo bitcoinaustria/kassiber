@@ -62,7 +62,15 @@ const ALLOWED_BRIDGE_KINDS = new Set([
   "ai.chat.cancel",
   "ai.tool_call.consent",
 ]);
-const STREAMING_BRIDGE_KINDS = new Set(["ai.chat"]);
+/**
+ * Kinds the bridge accepts on the stream endpoint. AI chat is here because
+ * it MUST stream (the daemon spawns a worker thread); wallet sync is here
+ * because it CAN stream progress envelopes when the caller wants them. The
+ * invoke endpoint also accepts wallet sync — it just drops the interleaved
+ * progress envelopes — so existing useDaemonMutation callers keep working.
+ */
+const STREAM_CAPABLE_BRIDGE_KINDS = new Set(["ai.chat", "ui.wallets.sync"]);
+const STREAM_ONLY_BRIDGE_KINDS = new Set(["ai.chat"]);
 
 function makeBridgeRequestId(prefix = "bridge") {
   return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
@@ -301,12 +309,12 @@ async function handleBridgeInvoke(
   if (!request) return;
 
   const kind = typeof request.kind === "string" ? request.kind : "";
-  if (STREAMING_BRIDGE_KINDS.has(kind)) {
+  if (STREAM_ONLY_BRIDGE_KINDS.has(kind)) {
     writeJsonError(
       res,
       400,
       "bridge_stream_required",
-      "use the bridge stream endpoint for ai.chat",
+      `daemon kind ${JSON.stringify(kind)} requires the bridge stream endpoint`,
     );
     return;
   }
@@ -333,7 +341,7 @@ async function handleBridgeStream(
   if (!request) return;
 
   const kind = typeof request.kind === "string" ? request.kind : "";
-  if (!STREAMING_BRIDGE_KINDS.has(kind)) {
+  if (!STREAM_CAPABLE_BRIDGE_KINDS.has(kind)) {
     writeJsonError(
       res,
       400,

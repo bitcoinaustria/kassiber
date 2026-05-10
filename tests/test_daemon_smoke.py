@@ -973,8 +973,15 @@ class DaemonSmokeTest(unittest.TestCase):
                         "args": {"wallet": "River UI"},
                     },
                 )
-                synced = _read_payload_timeout(proc)
-                self.assertEqual(synced["kind"], "ui.wallets.sync")
+                # The daemon now interleaves ui.wallets.sync.progress
+                # envelopes ahead of the terminal sync envelope.
+                synced = None
+                for _ in range(5):
+                    envelope = _read_payload_timeout(proc)
+                    if envelope["kind"] == "ui.wallets.sync":
+                        synced = envelope
+                        break
+                self.assertIsNotNone(synced, "no terminal ui.wallets.sync envelope")
                 self.assertEqual(synced["data"]["results"][0]["imported"], 1)
 
                 _write_payload(
@@ -1029,6 +1036,36 @@ class DaemonSmokeTest(unittest.TestCase):
                 self.assertEqual(edited["kind"], "ui.wallets.update")
                 self.assertEqual(edited["data"]["wallet"]["config"]["store_id"], "store-edited")
                 self.assertEqual(edited["data"]["wallet"]["label"], "BTCPay UI")
+
+                # Sync the River wallet again and confirm the daemon emits
+                # progress envelopes before the terminal sync envelope. With
+                # 1 row the importer emits two events: the initial 0/1 and
+                # the final 1/1.
+                _write_payload(
+                    proc,
+                    {
+                        "request_id": "sync-river-progress",
+                        "kind": "ui.wallets.sync",
+                        "args": {"wallet": "River UI"},
+                    },
+                )
+                envelopes = []
+                for _ in range(5):
+                    envelope = _read_payload_timeout(proc)
+                    envelopes.append(envelope)
+                    if envelope["kind"] == "ui.wallets.sync":
+                        break
+                kinds = [envelope["kind"] for envelope in envelopes]
+                self.assertIn("ui.wallets.sync.progress", kinds)
+                self.assertEqual(kinds[-1], "ui.wallets.sync")
+                progress_events = [
+                    envelope for envelope in envelopes
+                    if envelope["kind"] == "ui.wallets.sync.progress"
+                ]
+                self.assertEqual(progress_events[0]["data"]["wallet"], "River UI")
+                self.assertEqual(progress_events[0]["data"]["total"], 1)
+                final_progress = progress_events[-1]["data"]
+                self.assertEqual(final_progress["processed"], 1)
 
                 _write_payload(
                     proc,
