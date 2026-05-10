@@ -7,9 +7,11 @@
  */
 
 import * as React from "react";
+import { ArrowDown } from "lucide-react";
 
 import { ChatMessage } from "./ChatMessage";
 import { Conversation, ConversationContent } from "@/components/ai-elements";
+import { Button } from "@/components/ui/button";
 import type { AiChatMessage } from "@/daemon/stream";
 
 interface ChatThreadProps {
@@ -26,22 +28,42 @@ export function ChatThread({
   scrollable = true,
 }: ChatThreadProps) {
   const containerRef = React.useRef<HTMLDivElement>(null);
+  const messageCountRef = React.useRef(messages.length);
   const stickyRef = React.useRef(true);
+  const [isAtBottom, setIsAtBottom] = React.useState(true);
+
+  const scrollToBottom = React.useCallback(
+    (behavior: ScrollBehavior = "auto") => {
+      const node = containerRef.current;
+      if (!node || !scrollable) return;
+      stickyRef.current = true;
+      setIsAtBottom(true);
+      node.scrollTo({ top: node.scrollHeight, behavior });
+    },
+    [scrollable],
+  );
 
   const handleScroll = React.useCallback(() => {
     const node = containerRef.current;
     if (!node) return;
     const distance = node.scrollHeight - node.scrollTop - node.clientHeight;
-    stickyRef.current = distance <= STICKY_THRESHOLD_PX;
+    const atBottom = distance <= STICKY_THRESHOLD_PX;
+    stickyRef.current = atBottom;
+    setIsAtBottom(atBottom);
   }, []);
 
-  React.useEffect(() => {
+  React.useLayoutEffect(() => {
     const node = containerRef.current;
     if (!node) return;
     if (!scrollable) return;
+    if (messageCountRef.current !== messages.length) {
+      stickyRef.current = true;
+      messageCountRef.current = messages.length;
+    }
     if (!stickyRef.current) return;
-    node.scrollTo({ top: node.scrollHeight, behavior: "auto" });
-  }, [messages, scrollable]);
+    const frame = window.requestAnimationFrame(() => scrollToBottom());
+    return () => window.cancelAnimationFrame(frame);
+  }, [messages, scrollToBottom, scrollable]);
 
   if (messages.length === 0) return null;
 
@@ -56,6 +78,19 @@ export function ChatThread({
           <ChatMessage key={message.id} message={message} />
         ))}
       </ConversationContent>
+      {scrollable && !isAtBottom ? (
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon-lg"
+          className="absolute bottom-3 left-1/2 z-10 -translate-x-1/2 rounded-full border border-border/70 bg-background/90 text-foreground shadow-[0_12px_30px_rgba(15,23,42,0.18)] backdrop-blur hover:bg-muted dark:bg-zinc-950/80"
+          onClick={() => scrollToBottom("smooth")}
+          aria-label="Scroll to latest message"
+          title="Scroll to latest message"
+        >
+          <ArrowDown className="h-5 w-5" aria-hidden="true" />
+        </Button>
+      ) : null}
     </Conversation>
   );
 }

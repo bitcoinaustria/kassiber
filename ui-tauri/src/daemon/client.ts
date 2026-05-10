@@ -110,8 +110,10 @@ export function shouldHandleDaemonAuthRequiredEvent(
 ): boolean {
   const parsed = parseDaemonAuthRequiredEventDetail(detail);
   if (!parsed) return false;
+  if (parsed.daemonSession === undefined) {
+    return currentDaemonSession === 0;
+  }
   return (
-    parsed.daemonSession === undefined ||
     parsed.daemonSession === currentDaemonSession
   );
 }

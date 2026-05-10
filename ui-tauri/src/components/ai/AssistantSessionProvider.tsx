@@ -11,6 +11,7 @@ import {
   type AiToolConsentDecision,
   useAiChatStream,
 } from "@/daemon/stream";
+import { useUiStore } from "@/store/ui";
 
 interface AssistantSessionProviderProps {
   children: React.ReactNode;
@@ -21,8 +22,16 @@ export function AssistantSessionProvider({
   children,
   returnPath,
 }: AssistantSessionProviderProps) {
-  const [selection, setSelection] =
-    React.useState<AssistantModelSelection | null>(null);
+  const selection = useUiStore((state) => state.assistantModelSelection);
+  const setStoredSelection = useUiStore(
+    (state) => state.setAssistantModelSelection,
+  );
+  const setSelection = React.useCallback(
+    (next: AssistantModelSelection | null) => {
+      setStoredSelection(next);
+    },
+    [setStoredSelection],
+  );
   const [thinkingEffort, setThinkingEffort] = React.useState<
     AssistantSessionContextValue["thinkingEffort"]
   >("auto");
@@ -101,6 +110,7 @@ export function AssistantSessionProvider({
       pendingConsent,
       reset,
       returnPath,
+      setSelection,
       selection,
       sendPrompt,
       thinkingEffort,

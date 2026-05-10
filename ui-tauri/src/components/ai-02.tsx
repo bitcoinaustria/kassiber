@@ -6,7 +6,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import {
   Context,
@@ -26,10 +25,10 @@ import {
   RefreshCw,
   ShieldCheck,
   Square,
-  Wrench,
+  Plus,
   type LucideIcon,
 } from "lucide-react";
-import { useRef, useState } from "react";
+import { useLayoutEffect, useRef, useState } from "react";
 import type { AiProviderKind } from "@/lib/aiCapabilities";
 
 interface PromptOption {
@@ -78,10 +77,12 @@ const DEFAULT_PROMPTS: PromptOption[] = [
   },
 ];
 
+const TEXTAREA_MAX_HEIGHT_PX = 176;
+
 export default function Ai02({
   className,
   compact = false,
-  placeholder = "Ask Kassiber",
+  placeholder = "Ask anything",
   prompts = DEFAULT_PROMPTS,
   selection,
   onSelectionChange,
@@ -119,12 +120,23 @@ export default function Ai02({
         ? ShieldCheck
         : Cpu;
 
+  useLayoutEffect(() => {
+    const input = inputRef.current;
+    if (!input) return;
+    input.style.height = "auto";
+    input.style.height = `${Math.min(input.scrollHeight, TEXTAREA_MAX_HEIGHT_PX)}px`;
+    input.style.overflowY =
+      input.scrollHeight > TEXTAREA_MAX_HEIGHT_PX ? "auto" : "hidden";
+  }, [inputValue]);
+
   const handleSubmit = () => {
     if (!canSend) return;
     onSubmit(trimmedInput);
     setInputValue("");
     if (inputRef.current) {
       inputRef.current.value = "";
+      inputRef.current.style.height = "auto";
+      inputRef.current.style.overflowY = "hidden";
     }
   };
 
@@ -152,32 +164,53 @@ export default function Ai02({
             ? "shadow-[0_10px_35px_rgba(15,23,42,0.14)]"
             : "shadow-none",
           compact
-            ? "min-h-[62px] group-hover/assistant:min-h-[120px] group-focus-within/assistant:min-h-[120px]"
-            : "min-h-[120px]",
+            ? "min-h-[58px] group-hover/assistant:min-h-[72px] group-focus-within/assistant:min-h-[72px]"
+            : "min-h-[72px]",
         )}
       >
-        <div className="relative max-h-[258px] flex-1 overflow-y-auto">
+        <div className="relative min-h-0 flex-1">
           <Textarea
             ref={inputRef}
+            rows={1}
             value={inputValue}
             onChange={(event) => setInputValue(event.target.value)}
             onKeyDown={handleKeyDown}
             placeholder={placeholder}
             className={cn(
-              "w-full resize-none whitespace-pre-wrap break-words border-0 bg-transparent! text-[16px] text-foreground shadow-none outline-none transition-all duration-200 ease-in-out focus-visible:ring-0 focus-visible:ring-offset-0",
+              "max-h-44 min-h-0 w-full resize-none whitespace-pre-wrap break-words border-0 bg-transparent! text-[17px] leading-6 text-foreground shadow-none outline-none transition-[padding,color] duration-200 ease-in-out placeholder:text-muted-foreground/80 focus-visible:ring-0 focus-visible:ring-offset-0",
               compact
-                ? "min-h-0 px-3 pt-2 pb-0 group-hover/assistant:min-h-[48.4px] group-hover/assistant:p-3 group-focus-within/assistant:min-h-[48.4px] group-focus-within/assistant:p-3"
-                : "min-h-[48.4px] p-3",
+                ? "px-4 pt-4 pb-0 group-hover/assistant:pt-4 group-hover/assistant:pb-1 group-focus-within/assistant:pt-4 group-focus-within/assistant:pb-1"
+                : "px-4 pt-4 pb-1",
             )}
           />
         </div>
 
         <div
           className={cn(
-            "flex items-center gap-2 p-2 transition-all duration-200 ease-out",
-            compact ? "min-h-[32px] pt-0 pb-1" : "min-h-[40px] pb-1",
+            "flex items-center gap-2 px-2 pt-0 pb-2 transition-all duration-200 ease-out",
+            compact ? "min-h-[34px]" : "min-h-[42px]",
           )}
         >
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon-sm"
+            className={cn(
+              "shrink-0 rounded-full text-muted-foreground hover:bg-muted hover:text-foreground",
+              toolsEnabled && "bg-muted text-foreground",
+            )}
+            onClick={() => onToolsEnabledChange?.(!toolsEnabled)}
+            aria-label={
+              toolsEnabled ? "Disable assistant tools" : "Enable assistant tools"
+            }
+            aria-pressed={toolsEnabled}
+            title={
+              toolsEnabled ? "Disable assistant tools" : "Enable assistant tools"
+            }
+            disabled={isStreaming || !onToolsEnabledChange}
+          >
+            <Plus className="h-5 w-5" aria-hidden="true" />
+          </Button>
           <Context className="min-w-0 flex-1">
             <ContextItem
               icon={<ModelIcon className="h-4 w-4 text-muted-foreground" />}
@@ -220,24 +253,9 @@ export default function Ai02({
               </ContextItem>
             ) : null}
 
-            <ContextItem
-              icon={<Wrench className="h-3.5 w-3.5" aria-hidden="true" />}
-              label="Tool context"
-              className="shrink-0"
-            >
-              <label className="flex items-center gap-1.5">
-                <span>Tools</span>
-                <Switch
-                  checked={toolsEnabled}
-                  onCheckedChange={onToolsEnabledChange}
-                  aria-label="Enable assistant tools"
-                  disabled={isStreaming || !onToolsEnabledChange}
-                />
-              </label>
-            </ContextItem>
           </Context>
 
-          <div className="ml-auto flex items-center gap-3">
+          <div className="ml-auto flex items-center gap-2">
             {isStreaming && onAbort ? (
               <Button
                 variant="ghost"
@@ -253,14 +271,14 @@ export default function Ai02({
                 variant="ghost"
                 size="icon-sm"
                 className={cn(
-                  "rounded-full transition-colors duration-100 ease-out cursor-pointer bg-primary",
-                  canSend && "bg-primary hover:bg-primary/90!",
+                  "rounded-full bg-foreground text-background transition-colors duration-100 ease-out cursor-pointer hover:bg-foreground/90 disabled:bg-muted disabled:text-muted-foreground",
+                  canSend && "bg-foreground hover:bg-foreground/90!",
                 )}
                 disabled={!canSend}
                 onClick={handleSubmit}
                 aria-label="Send message"
               >
-                <ArrowUp className="h-4 w-4 text-primary-foreground" />
+                <ArrowUp className="h-4 w-4" />
               </Button>
             )}
           </div>

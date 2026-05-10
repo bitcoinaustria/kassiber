@@ -16,6 +16,7 @@ import {
   ChevronRight,
   ChevronsUpDown,
   ClipboardList,
+  Database,
   Eye,
   EyeOff,
   Gauge,
@@ -87,7 +88,12 @@ import {
   useDaemon,
   useDaemonMutation,
 } from "@/daemon/client";
-import { clearImportProject, getTransport } from "@/daemon/transport";
+import {
+  activateImportProject,
+  clearImportProject,
+  getTransport,
+  isImportProjectActive,
+} from "@/daemon/transport";
 import { cn } from "@/lib/utils";
 import {
   clearSessionUnlockPassphrase,
@@ -541,6 +547,13 @@ export function AppShell() {
   const dataMode = useUiStore((s) => s.dataMode);
   const encryptedWorkspace =
     Boolean(identity?.encrypted) || identity?.databaseMode === "sqlcipher";
+  const importedProjectRoot = identity?.importedProject?.dataRoot ?? null;
+  const [importRootReady, setImportRootReady] = React.useState(
+    () => !importedProjectRoot,
+  );
+  const [importRootError, setImportRootError] = React.useState<string | null>(
+    null,
+  );
   const [daemonAuthRequired, setDaemonAuthRequired] = React.useState(false);
   const requiresDaemonUnlock = encryptedWorkspace || daemonAuthRequired;
   const routerBusy = useRouterState({
@@ -555,6 +568,11 @@ export function AppShell() {
     React.useState<AssistantReturnPath>("/overview");
   const mainRef = React.useRef<HTMLElement>(null);
   const launchLockApplied = React.useRef(false);
+  const importedProjectActive = importedProjectRoot
+    ? isImportProjectActive(importedProjectRoot)
+    : true;
+  const importRootBlocked = !importRootReady || !importedProjectActive;
+  const daemonEnabled = !locked && !importRootBlocked;
   const shellBusy = routerBusy || daemonFetchCount > 0;
   const isAssistantRoute = pathname === "/assistant";
   const routeMeta =
@@ -606,6 +624,14 @@ export function AppShell() {
       passphrase: string,
     ): Promise<{ ok: boolean; error?: string | null }> => {
       if (requiresDaemonUnlock) {
+        if (importRootBlocked) {
+          return {
+            ok: false,
+            error:
+              importRootError ??
+              "Kassiber is still opening the selected local books folder.",
+          };
+        }
         bumpDaemonSession();
         const envelope = await getTransport("real").invoke({
           kind: "daemon.unlock",
@@ -641,7 +667,14 @@ export function AppShell() {
       }
       return { ok: unlocked, error: null };
     },
-    [bumpDaemonSession, identity?.importedProject, queryClient, requiresDaemonUnlock],
+    [
+      bumpDaemonSession,
+      identity?.importedProject,
+      importRootBlocked,
+      importRootError,
+      queryClient,
+      requiresDaemonUnlock,
+    ],
   );
 
   const resetLocalUiSession = React.useCallback(() => {
@@ -755,6 +788,52 @@ export function AppShell() {
     launchLockApplied.current = false;
     void navigate({ to: "/", replace: true });
   }, [identity, navigate]);
+
+  React.useEffect(() => {
+    if (!importedProjectRoot) {
+      setImportRootReady(true);
+      setImportRootError(null);
+      return;
+    }
+
+    if (isImportProjectActive(importedProjectRoot)) {
+      setImportRootReady(true);
+      setImportRootError(null);
+      return;
+    }
+
+    let disposed = false;
+    setImportRootReady(false);
+    setImportRootError(null);
+    clearDaemonQueryCache();
+    clearSessionUnlockPassphrase();
+    setLocked(Boolean(encryptedWorkspace));
+    void activateImportProject(importedProjectRoot)
+      .then(() => {
+        if (disposed) return;
+        setImportRootReady(true);
+        setImportRootError(null);
+        setDaemonAuthRequired(false);
+      })
+      .catch((error: unknown) => {
+        if (disposed) return;
+        setImportRootReady(false);
+        setImportRootError(
+          error instanceof Error
+            ? error.message
+            : "Could not open the selected local books folder.",
+        );
+        setLocked(true);
+      });
+
+    return () => {
+      disposed = true;
+    };
+  }, [
+    clearDaemonQueryCache,
+    encryptedWorkspace,
+    importedProjectRoot,
+  ]);
 
   React.useEffect(() => {
     const onAuthRequired = (event: Event) => {
@@ -986,18 +1065,30 @@ export function AppShell() {
           <AppDashboardHeader
             meta={routeMeta}
             onLock={lockApp}
-            daemonEnabled={!locked}
+            daemonEnabled={daemonEnabled}
           />
           <div className="flex min-h-0 flex-1">
             <AppSidebar
               pathname={pathname}
               onLock={lockApp}
-              daemonEnabled={!locked}
+              daemonEnabled={daemonEnabled}
               aiFeaturesEnabled={aiFeaturesEnabled}
             />
             <div className="min-h-0 w-full overflow-hidden lg:pt-1.5 lg:pr-1.5 lg:pb-1.5">
               <div className="relative flex h-full w-full flex-col items-center justify-start overflow-hidden bg-background lg:rounded-tl-xl lg:rounded-tr-xl">
-                {locked ? (
+                {importRootBlocked ? (
+                  <main
+                    id="app-main"
+                    ref={mainRef}
+                    tabIndex={-1}
+                    className="relative min-h-0 w-full flex-1 overflow-auto bg-background"
+                  >
+                    <ImportRootRestoreScreen
+                      error={importRootError}
+                      onReset={resetLocalUiSession}
+                    />
+                  </main>
+                ) : locked ? (
                   <main
                     id="app-main"
                     ref={mainRef}
@@ -2025,6 +2116,44 @@ function LockScreen({
           Back to setup
         </Button>
       </form>
+    </div>
+  );
+}
+
+function ImportRootRestoreScreen({
+  error,
+  onReset,
+}: {
+  error: string | null;
+  onReset: () => void;
+}) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/95 px-4 backdrop-blur-sm">
+      <div className="w-full max-w-sm rounded-lg border bg-card p-5 shadow-xl">
+        <div className="flex items-center gap-3">
+          <div className="flex size-10 items-center justify-center rounded-md bg-primary text-primary-foreground">
+            <Database className="size-5" aria-hidden="true" />
+          </div>
+          <div>
+            <h2 className="text-base font-semibold">Opening local books</h2>
+            <p className="m-0 text-xs text-muted-foreground">
+              Restoring the selected Kassiber data root.
+            </p>
+          </div>
+        </div>
+        {error ? (
+          <>
+            <p className="mt-4 text-xs text-destructive">{error}</p>
+            <Button className="mt-5 w-full" type="button" onClick={onReset}>
+              Back to setup
+            </Button>
+          </>
+        ) : (
+          <div className="mt-5 h-1.5 overflow-hidden rounded-full bg-muted">
+            <div className="h-full w-1/2 animate-pulse rounded-full bg-primary" />
+          </div>
+        )}
+      </div>
     </div>
   );
 }

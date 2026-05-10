@@ -44,6 +44,11 @@ export interface ImportedProjectIdentity {
   database: string;
 }
 
+export interface AiModelSelection {
+  provider: string;
+  model: string;
+}
+
 /**
  * Captured onboarding intent for the local books. Only `name`/`workspace`
  * are read by the running UI today (see AppHeader); the remaining fields are
@@ -122,6 +127,7 @@ interface UiState {
   appLockPolicy: AppLockPolicy;
   identity: Identity | null;
   aiFeaturesEnabled: boolean;
+  assistantModelSelection: AiModelSelection | null;
   daemonSession: number;
   notifications: AppNotification[];
   logEntries: AppLogEntry[];
@@ -135,6 +141,7 @@ interface UiState {
   setAppLockPolicy: (policy: Partial<AppLockPolicy>) => void;
   setIdentity: (identity: Identity | null) => void;
   setAiFeaturesEnabled: (enabled: boolean) => void;
+  setAssistantModelSelection: (selection: AiModelSelection | null) => void;
   bumpDaemonSession: () => void;
   addNotification: (
     notification: Omit<AppNotification, "id" | "createdAt">,
@@ -183,6 +190,7 @@ export const useUiStore = create<UiState>()(
       appLockPolicy: DEFAULT_APP_LOCK_POLICY,
       identity: null,
       aiFeaturesEnabled: true,
+      assistantModelSelection: null,
       daemonSession: 0,
       notifications: [],
       logEntries: [],
@@ -211,6 +219,8 @@ export const useUiStore = create<UiState>()(
           };
         }),
       setAiFeaturesEnabled: (enabled) => set({ aiFeaturesEnabled: enabled }),
+      setAssistantModelSelection: (assistantModelSelection) =>
+        set({ assistantModelSelection }),
       bumpDaemonSession: () =>
         set((state) => ({ daemonSession: state.daemonSession + 1 })),
       addNotification: (notification) =>
@@ -272,6 +282,7 @@ export const useUiStore = create<UiState>()(
         appLockPolicy: state.appLockPolicy,
         identity: state.identity,
         aiFeaturesEnabled: state.aiFeaturesEnabled,
+        assistantModelSelection: state.assistantModelSelection,
         daemonSession: state.daemonSession,
         notifications: state.notifications,
         sourceFundsDrafts: state.sourceFundsDrafts,
@@ -297,6 +308,9 @@ export const useUiStore = create<UiState>()(
           },
           identity,
           aiFeaturesEnabled,
+          assistantModelSelection:
+            restored.assistantModelSelection ??
+            current.assistantModelSelection,
           sourceFundsDrafts:
             restored.sourceFundsDrafts ?? current.sourceFundsDrafts,
           logEntries: current.logEntries,

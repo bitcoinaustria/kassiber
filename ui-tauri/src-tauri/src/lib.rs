@@ -464,6 +464,7 @@ fn resolve_import_data_root(path: &Path) -> Result<Option<(PathBuf, PathBuf, boo
     };
 
     match (direct, nested) {
+        (Some(_), Some(selection)) if is_managed_state_root(path) => Ok(Some(selection)),
         (Some(_), Some(_)) => Err(
             "Selected folder contains Kassiber databases both directly and under data/. Choose the exact data folder to import."
                 .to_string(),
@@ -471,6 +472,11 @@ fn resolve_import_data_root(path: &Path) -> Result<Option<(PathBuf, PathBuf, boo
         (Some(selection), None) | (None, Some(selection)) => Ok(Some(selection)),
         (None, None) => Ok(None),
     }
+}
+
+fn is_managed_state_root(path: &Path) -> bool {
+    path.file_name().and_then(|name| name.to_str()) == Some(DEFAULT_STATE_DIR)
+        || path.join("config").join("settings.json").is_file()
 }
 
 fn command_output_with_timeout(mut command: Command, label: &str) -> Result<Output, String> {
@@ -1798,6 +1804,28 @@ mod tests {
         let error = inspect_import_project_directory(&root)
             .expect_err("ambiguous import roots should be rejected");
         assert!(error.contains("both directly and under data/"));
+    }
+
+    #[test]
+    fn import_project_prefers_data_dir_for_managed_state_root() {
+        let parent = unique_temp_dir("managed-parent");
+        let root = parent.join(".kassiber");
+        let data = root.join("data");
+        fs::create_dir_all(&data).expect("create data dir");
+        fs::write(root.join("kassiber.sqlite3"), fake_kassiber_sqlite_bytes())
+            .expect("write legacy root sqlite");
+        fs::write(data.join("kassiber.sqlite3"), fake_kassiber_sqlite_bytes())
+            .expect("write nested sqlite");
+        let root = root.canonicalize().expect("canonical root");
+        let data = data.canonicalize().expect("canonical data");
+
+        let selection = inspect_import_project_directory(&root).expect("inspect project");
+        assert_eq!(selection.state_root, root.to_string_lossy().to_string());
+        assert_eq!(selection.data_root, data.to_string_lossy().to_string());
+        assert_eq!(
+            selection.database,
+            data.join("kassiber.sqlite3").to_string_lossy().to_string()
+        );
     }
 
     #[test]
