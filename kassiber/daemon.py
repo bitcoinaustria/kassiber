@@ -97,6 +97,11 @@ from .secrets.credentials import migrate_dotenv_credentials
 from .secrets.migration import create_empty_encrypted_database, migrate_plaintext_to_encrypted
 from .secrets.passphrase import change_database_passphrase
 from .secrets.sqlcipher import looks_like_plaintext_sqlite, open_encrypted, sqlcipher_available
+from .sync_btcpay import fetch_btcpay_records
+from .wallet_descriptors import (
+    derive_descriptor_targets,
+    load_descriptor_plan,
+)
 from .wallet_setup import normalize_wallet_material
 
 
@@ -169,7 +174,9 @@ SUPPORTED_KINDS = (
     "ui.secrets.change_passphrase",
     "ui.next_actions",
     "ui.wallets.create",
+    "ui.wallets.preview_descriptor",
     "ui.connections.btcpay.create",
+    "ui.connections.btcpay.test",
     "ui.metadata.bip329.import",
     "ui.wallets.update",
     "ui.wallets.delete",
@@ -3989,6 +3996,122 @@ def _import_bip329_payload(
     )
 
 
+def _preview_descriptor_payload(args: dict[str, Any]) -> dict[str, Any]:
+    descriptor_text = _optional_str_arg(args, "descriptor")
+    change_descriptor_text = _optional_str_arg(args, "change_descriptor")
+    wallet_material = _optional_str_arg(args, "wallet_material")
+    if wallet_material is not None:
+        material = normalize_wallet_material(wallet_material)
+        descriptor_text = descriptor_text or material["descriptor"]
+        change_descriptor_text = change_descriptor_text or material.get("change_descriptor")
+    if not descriptor_text:
+        raise AppError(
+            "Descriptor or wallet material is required",
+            code="validation",
+            hint="Paste a wallet export, descriptor, or supported extended public key.",
+            retryable=False,
+        )
+    chain = _optional_str_arg(args, "chain") or "bitcoin"
+    network = _optional_str_arg(args, "network")
+    raw_count = args.get("count")
+    count = 5
+    if isinstance(raw_count, int) and raw_count > 0:
+        count = min(raw_count, 20)
+    config: dict[str, Any] = {
+        "descriptor": descriptor_text,
+        "chain": chain,
+    }
+    if change_descriptor_text:
+        config["change_descriptor"] = change_descriptor_text
+    if network:
+        config["network"] = network
+    try:
+        plan = load_descriptor_plan(config)
+    except (ValueError, AppError) as exc:
+        raise AppError(
+            f"Could not parse descriptor: {exc}",
+            code="validation",
+            retryable=False,
+        ) from exc
+    if plan is None:
+        raise AppError(
+            "Descriptor preview requires a parseable descriptor",
+            code="validation",
+            retryable=False,
+        )
+    receive_targets = derive_descriptor_targets(plan, branch_index=0, start=0, end=count)
+    change_target = derive_descriptor_targets(plan, branch_index=1, start=0, end=1)
+    addresses = [
+        {
+            "branch": "receive",
+            "index": target.address_index,
+            "address": target.address,
+            "derivation_path": target.derivation_path,
+        }
+        for target in receive_targets
+    ]
+    if change_target:
+        addresses.append(
+            {
+                "branch": "change",
+                "index": change_target[0].address_index,
+                "address": change_target[0].address,
+                "derivation_path": change_target[0].derivation_path,
+            }
+        )
+    return {
+        "chain": plan.chain,
+        "network": plan.network,
+        "addresses": addresses,
+        "has_change_branch": any(
+            branch.branch_label == "change" for branch in plan.branches
+        ),
+    }
+
+
+def _test_btcpay_connection_payload(
+    ctx: "DaemonContext",
+    args: dict[str, Any],
+) -> dict[str, Any]:
+    backend_ref = _required_str_arg(args, "backend", "BTCPay backend")
+    store_id = _required_str_arg(args, "store_id", "BTCPay store ID")
+    payment_method_id = (
+        _optional_str_arg(args, "payment_method_id")
+        or core_wallets.BTCPAY_DEFAULT_PAYMENT_METHOD_ID
+    )
+    conn = _require_conn(ctx)
+    normalized_backend = backend_ref.lower()
+    raw_backend = ctx.runtime_config["backends"].get(normalized_backend)
+    if not isinstance(raw_backend, dict):
+        raise AppError(
+            f"Backend '{backend_ref}' is not configured",
+            code="not_found",
+            hint="Choose an existing BTCPay backend or add one in Settings.",
+            retryable=False,
+        )
+    if str(raw_backend.get("kind") or "").strip().lower() != "btcpay":
+        raise AppError(
+            f"Backend '{backend_ref}' is not a BTCPay backend",
+            code="validation",
+            retryable=False,
+        )
+    backend = core_accounts.get_backend_details(conn, ctx.runtime_config, normalized_backend)
+    # page_size=1 keeps the round-trip cheap while still surfacing 401/403/404
+    # via the existing AppError mapping in fetch_btcpay_records.
+    fetch_btcpay_records(
+        backend,
+        store_id,
+        payment_method_id=payment_method_id,
+        page_size=1,
+    )
+    return {
+        "backend": backend["name"],
+        "store_id": store_id,
+        "payment_method_id": payment_method_id,
+        "ok": True,
+    }
+
+
 _UI_WALLET_UPDATE_CONFIG_FIELDS = (
     "backend",
     "chain",
@@ -5019,12 +5142,41 @@ def handle_request(
             False,
         )
 
+    if kind == "ui.wallets.preview_descriptor":
+        return (
+            _with_request_id(
+                build_envelope(
+                    "ui.wallets.preview_descriptor",
+                    _preview_descriptor_payload(
+                        _coerce_args_dict(request_id, request.get("args")),
+                    ),
+                ),
+                request_id,
+            ),
+            False,
+        )
+
     if kind == "ui.connections.btcpay.create":
         return (
             _with_request_id(
                 build_envelope(
                     "ui.connections.btcpay.create",
                     _create_btcpay_connection_payload(
+                        ctx,
+                        _coerce_args_dict(request_id, request.get("args")),
+                    ),
+                ),
+                request_id,
+            ),
+            False,
+        )
+
+    if kind == "ui.connections.btcpay.test":
+        return (
+            _with_request_id(
+                build_envelope(
+                    "ui.connections.btcpay.test",
+                    _test_btcpay_connection_payload(
                         ctx,
                         _coerce_args_dict(request_id, request.get("args")),
                     ),

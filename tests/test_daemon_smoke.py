@@ -531,7 +531,15 @@ class DaemonSmokeTest(unittest.TestCase):
             self.assertIn("ui.next_actions", ready["data"]["supported_kinds"])
             self.assertIn("ui.wallets.create", ready["data"]["supported_kinds"])
             self.assertIn(
+                "ui.wallets.preview_descriptor",
+                ready["data"]["supported_kinds"],
+            )
+            self.assertIn(
                 "ui.connections.btcpay.create",
+                ready["data"]["supported_kinds"],
+            )
+            self.assertIn(
+                "ui.connections.btcpay.test",
                 ready["data"]["supported_kinds"],
             )
             self.assertIn(

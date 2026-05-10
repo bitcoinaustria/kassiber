@@ -131,6 +131,14 @@ etc.) and returns the redacted wallet row. Desktop callers can pass
 common descriptor export shapes and stores receive/change descriptors when the
 material contains both.
 
+`ui.wallets.preview_descriptor` is a read-only helper for the connection
+setup form. It accepts `wallet_material` (or explicit `descriptor` /
+`change_descriptor`), optional `chain`/`network`/`count` (1–20, default 5),
+and returns the first N derived receive addresses plus the first change
+address when present. The daemon does not persist anything; callers use the
+preview to confirm a descriptor produces the expected wallet before
+committing.
+
 `ui.connections.btcpay.create` creates a wallet configured for confirmed
 Greenfield wallet-history sync from an existing BTCPay backend. It accepts
 `backend` (must reference an already-configured BTCPay backend), `label`, and
@@ -138,6 +146,13 @@ Greenfield wallet-history sync from an existing BTCPay backend. It accepts
 internally for repeat syncs. The returned backend and wallet are redacted. If
 no BTCPay backend exists, callers should route the user to Settings rather
 than minting one through this endpoint.
+
+`ui.connections.btcpay.test` makes a single Greenfield request against
+`backend` + `store_id` (and optional `payment_method_id`, defaulting to
+`BTC-CHAIN`) to confirm the credentials and store reference resolve. It
+returns `{backend, store_id, payment_method_id, ok: true}` on success, and
+otherwise propagates the same structured error codes (`auth_error`,
+`not_found`, `network_error`) the sync path uses. Nothing is persisted.
 
 `ui.metadata.bip329.import` accepts `file` and optional `wallet`, then imports
 BIP329 JSONL labels into the active profile and bridges transaction labels to

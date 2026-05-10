@@ -25,6 +25,7 @@ import {
   type ConnectionSource,
 } from "@/lib/connectionCatalog";
 import { isFilePickerAvailable, pickFile } from "@/lib/filePicker";
+import { detectWalletMaterial } from "@/lib/walletMaterialFormat";
 
 interface AddConnectionDialogProps {
   open: boolean;
@@ -175,6 +176,23 @@ export function AddConnectionDialog({
     records: number;
     transaction_tags_added: number;
   }>("ui.metadata.bip329.import");
+  const previewDescriptor = useDaemonMutation<{
+    chain: string;
+    network: string;
+    addresses: {
+      branch: "receive" | "change";
+      index: number;
+      address: string;
+      derivation_path?: string | null;
+    }[];
+    has_change_branch: boolean;
+  }>("ui.wallets.preview_descriptor");
+  const testBtcpay = useDaemonMutation<{
+    backend: string;
+    store_id: string;
+    payment_method_id: string;
+    ok: boolean;
+  }>("ui.connections.btcpay.test");
   const syncWallet =
     useDaemonMutation<{ results: SyncResult[] }>("ui.wallets.sync");
   const [activeCategory, setActiveCategory] =
@@ -185,6 +203,13 @@ export function AddConnectionDialog({
     formDefaultsFor(CONNECTION_SOURCES[0]),
   );
   const [setupError, setSetupError] = React.useState<string | null>(null);
+  const [previewAddresses, setPreviewAddresses] = React.useState<
+    { branch: "receive" | "change"; index: number; address: string }[] | null
+  >(null);
+  const [previewError, setPreviewError] = React.useState<string | null>(null);
+  const [btcpayTestStatus, setBtcpayTestStatus] = React.useState<
+    { ok: true; storeId: string } | { ok: false; message: string } | null
+  >(null);
 
   const visibleSources = React.useMemo(
     () =>
@@ -236,6 +261,9 @@ export function AddConnectionDialog({
   React.useEffect(() => {
     setForm(formDefaultsFor(selected));
     setSetupError(null);
+    setPreviewAddresses(null);
+    setPreviewError(null);
+    setBtcpayTestStatus(null);
   }, [selected]);
 
   React.useEffect(() => {
@@ -434,6 +462,49 @@ export function AddConnectionDialog({
     </label>
   );
 
+  const renderWalletMaterialFeedback = () => {
+    const detection = detectWalletMaterial(form.walletMaterial);
+    if (detection.kind === "empty") return null;
+    const tone =
+      detection.kind === "bare-xpub" || detection.kind === "unknown"
+        ? "text-amber-700 dark:text-amber-300"
+        : "text-emerald-700 dark:text-emerald-300";
+    return (
+      <p className={cn("text-xs", tone)}>
+        Detected: {detection.label}
+        {detection.hint ? ` — ${detection.hint}` : ""}
+      </p>
+    );
+  };
+
+  const renderDescriptorPreview = () => {
+    if (previewError) {
+      return (
+        <div className="rounded-md border border-destructive/30 bg-destructive/10 p-2 text-xs text-destructive">
+          {previewError}
+        </div>
+      );
+    }
+    if (!previewAddresses || previewAddresses.length === 0) return null;
+    return (
+      <div className="rounded-md border bg-background p-3 text-xs">
+        <p className="mb-2 font-medium text-muted-foreground">
+          First derived addresses
+        </p>
+        <ul className="space-y-1 font-mono">
+          {previewAddresses.map((entry) => (
+            <li key={`${entry.branch}-${entry.index}`} className="flex gap-2">
+              <span className="text-muted-foreground">
+                {entry.branch === "change" ? "change/0" : `recv/${entry.index}`}
+              </span>
+              <span className="truncate">{entry.address}</span>
+            </li>
+          ))}
+        </ul>
+      </div>
+    );
+  };
+
   const renderSetupFields = () => {
     if (setupKind === "descriptor") {
       return (
@@ -449,9 +520,14 @@ export function AddConnectionDialog({
               id="connection-wallet-material"
               className="min-h-32 font-mono text-xs"
               value={form.walletMaterial}
-              onChange={(event) => updateForm("walletMaterial", event.target.value)}
+              onChange={(event) => {
+                updateForm("walletMaterial", event.target.value);
+                setPreviewAddresses(null);
+                setPreviewError(null);
+              }}
               required
             />
+            {renderWalletMaterialFeedback()}
           </SetupField>
           <SetupField id="connection-gap-limit" label="Gap limit">
             <Input
@@ -462,6 +538,43 @@ export function AddConnectionDialog({
               onChange={(event) => updateForm("gapLimit", event.target.value)}
             />
           </SetupField>
+          <div className="flex items-center gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={
+                previewDescriptor.isPending || !form.walletMaterial.trim()
+              }
+              onClick={async () => {
+                setPreviewError(null);
+                try {
+                  const envelope = await previewDescriptor.mutateAsync({
+                    wallet_material: form.walletMaterial.trim(),
+                    chain: selected.chain,
+                    network: selected.network,
+                    count: 5,
+                  });
+                  setPreviewAddresses(envelope.data?.addresses ?? []);
+                } catch (error) {
+                  setPreviewAddresses(null);
+                  setPreviewError(
+                    error instanceof Error
+                      ? error.message
+                      : "Could not derive addresses.",
+                  );
+                }
+              }}
+            >
+              {previewDescriptor.isPending
+                ? "Deriving…"
+                : "Preview addresses"}
+            </Button>
+            <span className="text-xs text-muted-foreground">
+              Derives the first 5 receive addresses without saving.
+            </span>
+          </div>
+          {renderDescriptorPreview()}
         </>
       );
     }
@@ -528,10 +641,58 @@ export function AddConnectionDialog({
             <Input
               id="connection-btcpay-store"
               value={form.btcpayStoreId}
-              onChange={(event) => updateForm("btcpayStoreId", event.target.value)}
+              onChange={(event) => {
+                updateForm("btcpayStoreId", event.target.value);
+                setBtcpayTestStatus(null);
+              }}
               required
             />
           </SetupField>
+          <div className="flex items-center gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={
+                testBtcpay.isPending ||
+                !form.backend.trim() ||
+                !form.btcpayStoreId.trim()
+              }
+              onClick={async () => {
+                setBtcpayTestStatus(null);
+                try {
+                  await testBtcpay.mutateAsync({
+                    backend: form.backend.trim(),
+                    store_id: form.btcpayStoreId.trim(),
+                  });
+                  setBtcpayTestStatus({
+                    ok: true,
+                    storeId: form.btcpayStoreId.trim(),
+                  });
+                } catch (error) {
+                  setBtcpayTestStatus({
+                    ok: false,
+                    message:
+                      error instanceof Error
+                        ? error.message
+                        : "BTCPay test failed.",
+                  });
+                }
+              }}
+            >
+              {testBtcpay.isPending ? "Testing…" : "Test connection"}
+            </Button>
+            {btcpayTestStatus?.ok ? (
+              <span className="text-xs text-emerald-700 dark:text-emerald-300">
+                Store {btcpayTestStatus.storeId} responded.
+              </span>
+            ) : null}
+            {btcpayTestStatus && !btcpayTestStatus.ok ? (
+              <span className="text-xs text-destructive">
+                {btcpayTestStatus.message}
+              </span>
+            ) : null}
+          </div>
           {renderSyncAfterCreate("Sync after setup")}
         </>
       );

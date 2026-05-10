@@ -1,0 +1,85 @@
+/**
+ * Lightweight client-side detection for what a user pasted into the
+ * "wallet export" textarea. Inline feedback so they can spot a wrong
+ * paste before submitting the form.
+ *
+ * Does not validate cryptographic correctness; the daemon does that on
+ * the actual create/preview call.
+ */
+
+export type WalletMaterialKind =
+  | "descriptor-json"
+  | "descriptor"
+  | "slip132"
+  | "bare-xpub"
+  | "empty"
+  | "unknown";
+
+export interface WalletMaterialDetection {
+  kind: WalletMaterialKind;
+  label: string;
+  hint?: string;
+}
+
+const DESCRIPTOR_PREFIXES = [
+  "pkh(",
+  "wpkh(",
+  "sh(",
+  "wsh(",
+  "tr(",
+  "combo(",
+  "addr(",
+  "raw(",
+  "ct(",
+  "elwpkh(",
+  "elwsh(",
+  "elsh(",
+  "eltr(",
+];
+
+const SLIP132_PREFIXES: Record<string, string> = {
+  ypub: "P2SH-wrapped SegWit (BIP49)",
+  zpub: "Native SegWit (BIP84)",
+  upub: "Testnet P2SH-wrapped SegWit",
+  vpub: "Testnet Native SegWit",
+};
+
+export function detectWalletMaterial(value: string): WalletMaterialDetection {
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return { kind: "empty", label: "Empty" };
+  }
+  if (trimmed.startsWith("{") || trimmed.startsWith("[")) {
+    return {
+      kind: "descriptor-json",
+      label: "Descriptor JSON export",
+    };
+  }
+  const lower = trimmed.toLowerCase();
+  if (DESCRIPTOR_PREFIXES.some((prefix) => lower.startsWith(prefix))) {
+    return {
+      kind: "descriptor",
+      label: "Output descriptor",
+    };
+  }
+  const head = trimmed.slice(0, 4);
+  const slip132Label = SLIP132_PREFIXES[head];
+  if (slip132Label) {
+    return {
+      kind: "slip132",
+      label: `${head} · ${slip132Label}`,
+    };
+  }
+  if (head === "xpub" || head === "tpub") {
+    return {
+      kind: "bare-xpub",
+      label: `Bare ${head}`,
+      hint: "Bare xpub/tpub is ambiguous; paste a descriptor or a ypub/zpub/upub/vpub instead.",
+    };
+  }
+  return {
+    kind: "unknown",
+    label: "Unrecognized format",
+    hint: "Paste a descriptor, Bitcoin Core descriptor JSON, or a ypub/zpub/upub/vpub key.",
+  };
+}

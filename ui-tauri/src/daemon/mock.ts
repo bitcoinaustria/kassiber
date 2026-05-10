@@ -465,6 +465,95 @@ export const mockDaemon: DaemonTransport = {
       };
     }
 
+    if (req.kind === "ui.wallets.preview_descriptor") {
+      const args = (req.args ?? {}) as {
+        wallet_material?: unknown;
+        descriptor?: unknown;
+        count?: unknown;
+      };
+      const material =
+        typeof args.wallet_material === "string"
+          ? args.wallet_material.trim()
+          : typeof args.descriptor === "string"
+            ? args.descriptor.trim()
+            : "";
+      if (!material) {
+        return {
+          kind: "error",
+          schema_version: 1,
+          request_id: req.request_id,
+          error: {
+            code: "validation",
+            message: "preview requires wallet_material or descriptor",
+            retryable: false,
+          },
+        };
+      }
+      const requested = typeof args.count === "number" ? args.count : 5;
+      const count = Math.max(1, Math.min(20, requested));
+      const sampleAddresses: Array<{
+        branch: "receive" | "change";
+        index: number;
+        address: string;
+        derivation_path: string;
+      }> = Array.from({ length: count }, (_, index) => ({
+        branch: "receive",
+        index,
+        address: `bc1qmock${index.toString().padStart(38, "0")}`,
+        derivation_path: `m/0/${index}`,
+      }));
+      sampleAddresses.push({
+        branch: "change",
+        index: 0,
+        address: `bc1qmockchange${"0".repeat(31)}`,
+        derivation_path: "m/1/0",
+      });
+      return {
+        kind: "ui.wallets.preview_descriptor",
+        schema_version: 1,
+        request_id: req.request_id,
+        data: {
+          chain: "bitcoin",
+          network: "main",
+          addresses: sampleAddresses,
+          has_change_branch: true,
+        } as T,
+      };
+    }
+
+    if (req.kind === "ui.connections.btcpay.test") {
+      const args = (req.args ?? {}) as {
+        backend?: unknown;
+        store_id?: unknown;
+      };
+      const backend = typeof args.backend === "string" ? args.backend.trim() : "";
+      const storeId =
+        typeof args.store_id === "string" ? args.store_id.trim() : "";
+      if (!backend || !storeId) {
+        return {
+          kind: "error",
+          schema_version: 1,
+          request_id: req.request_id,
+          error: {
+            code: "validation",
+            message: "BTCPay test requires backend and store_id",
+            retryable: false,
+          },
+        };
+      }
+      return {
+        kind: "ui.connections.btcpay.test",
+        schema_version: 1,
+        request_id: req.request_id,
+        data: {
+          backend,
+          store_id: storeId,
+          payment_method_id: "BTC-CHAIN",
+          ok: true,
+        } as T,
+      };
+    }
+
     if (req.kind === "ui.wallets.delete") {
       const args = (req.args ?? {}) as {
         wallet?: unknown;
