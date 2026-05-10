@@ -32,11 +32,17 @@ import { ConnectionDetail } from "./routes/ConnectionDetail";
 import { Settings } from "./routes/Settings";
 import { Assistant } from "./routes/Assistant";
 import { AppShell } from "./components/kb/AppShell";
+import { RootIntentListener } from "./components/kb/RootIntentListener";
 import { activateImportProject, canImportProjects } from "./daemon/transport";
 import { useUiStore } from "./store/ui";
 
 const rootRoute = createRootRoute({
-  component: () => <Outlet />,
+  component: () => (
+    <>
+      <RootIntentListener />
+      <Outlet />
+    </>
+  ),
 });
 
 const indexRoute = createRoute({

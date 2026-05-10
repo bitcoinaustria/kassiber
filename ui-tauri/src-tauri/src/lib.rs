@@ -1010,6 +1010,32 @@ pub fn run() {
                     let _ = window.set_focus();
                 }
             });
+
+            // Cold-start case: if Kassiber was launched *from* a deep link
+            // (`open kassiber://settings/privacy` while not running),
+            // `on_open_url` is never called for that URL — Tauri delivers
+            // launch URLs through `get_current` instead. Defer the emit
+            // until the webview has had a chance to mount the intent
+            // listener; otherwise the event fires into the void.
+            if let Ok(Some(initial_urls)) = app.deep_link().get_current() {
+                let app_handle = app.handle().clone();
+                tauri::async_runtime::spawn(async move {
+                    tauri::async_runtime::spawn_blocking(|| {
+                        std::thread::sleep(Duration::from_millis(800));
+                    })
+                    .await
+                    .ok();
+                    for url in initial_urls {
+                        if let Some(payload) = menu_action_for_deep_link(&url) {
+                            emit_menu_action(&app_handle, payload);
+                        } else {
+                            eprintln!(
+                                "kassiber: ignoring unrecognized launch deep link: {url}"
+                            );
+                        }
+                    }
+                });
+            }
             Ok(())
         })
         .on_menu_event(handle_app_menu_event)

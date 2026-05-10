@@ -35,6 +35,7 @@ import {
   User,
   Users,
   Wallet,
+  WalletCards,
 } from "lucide-react";
 import * as React from "react";
 
@@ -101,6 +102,7 @@ import kLedgerMarkUrl from "@/assets/k-ledger-mark-transparent.svg";
 import { ScreenAssistantMockup } from "./ScreenAssistantMockup";
 import { PreAlphaBanner } from "./PreAlphaBanner";
 import { useWalletSyncAction } from "@/hooks/useWalletSyncAction";
+import { BookSwitcherPopover } from "./BookSwitcherPopover";
 
 import {
   dispatchMenuIntent,
@@ -170,6 +172,7 @@ const NAV_GROUPS: NavGroup[] = [
         icon: Wallet,
         href: "/connections",
         children: [
+          { label: "Connections", icon: WalletCards, href: "/connections" },
           { label: "Source of Funds", icon: BadgeCheck, href: "/source-of-funds" },
         ],
       },
@@ -859,26 +862,35 @@ export function AppShell() {
       .then(({ listen }) =>
         listen<NativeMenuPayload>(NATIVE_MENU_EVENT, (event) => {
           const store = useUiStore.getState();
-          dispatchMenuIntent(event.payload, {
-            hasWorkspace: store.identity !== null,
-            aiFeaturesEnabled: store.aiFeaturesEnabled,
-            hideSensitive: store.hideSensitive,
-            navigate: ({ to, hash }) => {
-              void navigate({ to, hash: hash ?? undefined });
+          // AppShell only handles workspace-scoped actions (lock, sync,
+          // process-journals). Global actions (navigate, open-settings,
+          // toggle-sensitive) flow through RootIntentListener at the
+          // route-tree root so they work pre-workspace too. The "workspace"
+          // scope filter prevents this listener from double-handling.
+          dispatchMenuIntent(
+            event.payload,
+            {
+              hasWorkspace: store.identity !== null,
+              aiFeaturesEnabled: store.aiFeaturesEnabled,
+              hideSensitive: store.hideSensitive,
+              navigate: ({ to, hash }) => {
+                void navigate({ to, hash: hash ?? undefined });
+              },
+              lockApp,
+              setHideSensitive,
+              runWalletSync: runMenuWalletSync,
+              runJournalProcessing: runMenuJournalProcessing,
+              addNotification,
+              emitSettingsSection: (section) => {
+                window.dispatchEvent(
+                  new CustomEvent("kassiber:settings-section", {
+                    detail: { section },
+                  }),
+                );
+              },
             },
-            lockApp,
-            setHideSensitive,
-            runWalletSync: runMenuWalletSync,
-            runJournalProcessing: runMenuJournalProcessing,
-            addNotification,
-            emitSettingsSection: (section) => {
-              window.dispatchEvent(
-                new CustomEvent("kassiber:settings-section", {
-                  detail: { section },
-                }),
-              );
-            },
-          });
+            "workspace",
+          );
         }),
       )
       .then((nextUnlisten) => {
@@ -1404,6 +1416,7 @@ function AppDashboardHeader({
     useDaemonMutation<JournalProcessResult>("ui.journals.process");
   const [searchQuery, setSearchQuery] = React.useState("");
   const [searchOpen, setSearchOpen] = React.useState(false);
+  const [bookSwitcherOpen, setBookSwitcherOpen] = React.useState(false);
   const [activeSearchIndex, setActiveSearchIndex] = React.useState(0);
   const searchInputRef = React.useRef<HTMLInputElement>(null);
   const searchRootRef = React.useRef<HTMLDivElement>(null);
@@ -1622,13 +1635,24 @@ function AppDashboardHeader({
         </div>
         <div className="min-w-0 pl-1">
           <div className="flex min-w-0 items-center gap-1.5">
-            <span className="truncate text-sm font-semibold text-sidebar-foreground">
-              {bookLabel}
-            </span>
-            <ChevronsUpDown
-              className="hidden size-3.5 shrink-0 text-sidebar-foreground/55 sm:block"
-              aria-hidden="true"
-            />
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="group flex min-w-0 items-center gap-1 rounded-md px-1.5 py-1 text-left transition-colors hover:bg-sidebar-accent/60 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+              aria-label={`Switch books. Current books: ${bookLabel}`}
+              aria-haspopup="dialog"
+              aria-expanded={bookSwitcherOpen}
+              onClick={() => setBookSwitcherOpen(true)}
+            >
+              <span className="truncate text-sm font-semibold text-sidebar-foreground">
+                {bookLabel}
+              </span>
+              <ChevronsUpDown
+                className="hidden size-3.5 shrink-0 text-sidebar-foreground/55 transition-colors group-hover:text-sidebar-foreground/80 sm:block"
+                aria-hidden="true"
+              />
+            </Button>
             <span className="hidden text-sidebar-foreground/35 lg:inline">
               /
             </span>
@@ -1638,6 +1662,10 @@ function AppDashboardHeader({
           </div>
         </div>
       </div>
+      <BookSwitcherPopover
+        open={bookSwitcherOpen}
+        onClose={() => setBookSwitcherOpen(false)}
+      />
 
       <div
         ref={searchRootRef}

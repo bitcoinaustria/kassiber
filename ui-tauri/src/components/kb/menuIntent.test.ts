@@ -143,6 +143,62 @@ describe("dispatchMenuIntent — open-settings re-fires the section event", () =
   });
 });
 
+describe("dispatchMenuIntent — scope filter", () => {
+  // The two listeners (RootIntentListener + AppShell's) split the surface
+  // strictly so neither double-handles a sensitive toggle. Pin the split.
+  it("global scope drops workspace actions", () => {
+    const deps = makeDeps();
+    dispatchMenuIntent({ action: "lock-app" }, deps, "global");
+    dispatchMenuIntent({ action: "sync-all-wallets" }, deps, "global");
+    dispatchMenuIntent({ action: "process-journals" }, deps, "global");
+    expect(deps.lockApp).not.toHaveBeenCalled();
+    expect(deps.runWalletSync).not.toHaveBeenCalled();
+    expect(deps.runJournalProcessing).not.toHaveBeenCalled();
+  });
+
+  it("global scope handles route navigation, settings, and toggle", () => {
+    const deps = makeDeps();
+    dispatchMenuIntent(
+      { action: "navigate", route: "/transactions" },
+      deps,
+      "global",
+    );
+    dispatchMenuIntent(
+      { action: "open-settings", section: "privacy" },
+      deps,
+      "global",
+    );
+    dispatchMenuIntent({ action: "toggle-sensitive" }, deps, "global");
+    expect(deps.navigate).toHaveBeenCalledTimes(2); // navigate + open-settings
+    expect(deps.emitSettingsSection).toHaveBeenCalledWith("privacy");
+    expect(deps.setHideSensitive).toHaveBeenCalledTimes(1);
+  });
+
+  it("workspace scope drops global actions", () => {
+    const deps = makeDeps();
+    dispatchMenuIntent(
+      { action: "navigate", route: "/transactions" },
+      deps,
+      "workspace",
+    );
+    dispatchMenuIntent({ action: "open-settings" }, deps, "workspace");
+    dispatchMenuIntent({ action: "toggle-sensitive" }, deps, "workspace");
+    expect(deps.navigate).not.toHaveBeenCalled();
+    expect(deps.emitSettingsSection).not.toHaveBeenCalled();
+    expect(deps.setHideSensitive).not.toHaveBeenCalled();
+  });
+
+  it("workspace scope handles lock, sync, journals", () => {
+    const deps = makeDeps();
+    dispatchMenuIntent({ action: "lock-app" }, deps, "workspace");
+    dispatchMenuIntent({ action: "sync-all-wallets" }, deps, "workspace");
+    dispatchMenuIntent({ action: "process-journals" }, deps, "workspace");
+    expect(deps.lockApp).toHaveBeenCalledTimes(1);
+    expect(deps.runWalletSync).toHaveBeenCalledTimes(1);
+    expect(deps.runJournalProcessing).toHaveBeenCalledTimes(1);
+  });
+});
+
 describe("dispatchMenuIntent — direct actions", () => {
   it("toggle-sensitive flips hideSensitive", () => {
     const offDeps = makeDeps({ hideSensitive: false });

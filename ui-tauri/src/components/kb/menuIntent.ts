@@ -85,10 +85,38 @@ export interface MenuIntentDeps {
   emitSettingsSection: (section: string | null) => void;
 }
 
+// `global` actions are workspace-independent (route navigation, settings
+// panels, sensitive toggle) and must be reachable even on the Welcome screen
+// before AppShell mounts. `workspace` actions require AppShell-scoped
+// runners (lockApp + workflow mutations) and only fire there. Two listeners
+// (one at the root layout, one inside AppShell) split the surface so neither
+// double-handles an event.
+export type MenuIntentScope = "global" | "workspace" | "all";
+
+const GLOBAL_ACTIONS = new Set([
+  "navigate",
+  "open-settings",
+  "toggle-sensitive",
+] as const);
+
+function actionScope(action: NativeMenuPayload["action"]): "global" | "workspace" {
+  return GLOBAL_ACTIONS.has(action as (typeof GLOBAL_ACTIONS extends Set<infer T> ? T : never))
+    ? "global"
+    : "workspace";
+}
+
 export function dispatchMenuIntent(
   payload: NativeMenuPayload,
   deps: MenuIntentDeps,
+  scope: MenuIntentScope = "all",
 ): void {
+  // Scope filter: callers pass `"global"` from the root layout (always
+  // mounted) and `"workspace"` from inside AppShell (mounted only when
+  // identity exists). `"all"` is for tests and any single-listener setups.
+  // Strictly disjoint dispatch avoids double-handling toggle-sensitive etc.
+  if (scope !== "all" && actionScope(payload.action) !== scope) {
+    return;
+  }
   // Workspace gating note: `lock-app` and `navigate` are gated here against
   // `deps.hasWorkspace`. The workflow actions (`sync-all-wallets`,
   // `process-journals`) are gated *inside* their runners — see
