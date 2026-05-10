@@ -334,8 +334,9 @@ export function AddConnectionDialog({
     setForm((current) => ({ ...current, [key]: value }));
     setFieldErrors((current) => {
       if (!(key in current)) return current;
-      const { [key]: _removed, ...rest } = current;
-      return rest;
+      const next = { ...current };
+      delete next[key];
+      return next;
     });
   };
 
