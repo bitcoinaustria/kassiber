@@ -31,6 +31,12 @@ _PHOENIX_CSV = """date,id,type,amount_msat,amount_fiat,fee_credit_msat,mining_fe
 2024-05-04T09:00:00Z,44444444-aaaa-bbbb-cccc-000000000004,channel_close,-500000000,-200 USD,0,1500,0.60 USD,0,0 USD,,fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210,bc1qexamplefakechannelclose0000000000000000,Channel close to self
 """
 
+_RIVER_CSV = """Date,Reference Code,Transaction Type,Sent Amount,Sent Currency,Received Amount,Received Currency,Fee Amount,Fee Currency,Total Amount,Total Currency,Method,Source,Destination,Cost Basis Amount,Cost Basis Currency,Bitcoin Price Amount,Bitcoin Price Currency,Transaction ID,Recurring,Tag
+2026-01-01T12:00:00Z,RIV-BUY-1,Buy,1000.00,USD,0.01000000,BTC,5.00,USD,-1005.00,USD,ACH,Linked bank,Bitcoin balance,,,100000.00,USD,,False,Buy
+2026-01-02T12:00:00Z,RIV-WD-1,Automatic Withdrawal,0.00200000,BTC,,,0.00001000,BTC,-0.00201000,BTC,on-chain,Bitcoin balance,bc1qriverwithdrawal,,,60000.00,USD,aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa,False,Withdrawal
+2026-01-03T12:00:00Z,RIV-INT-1,Interest,,BTC,0.00010000,BTC,0,BTC,0.00010000,BTC,internal,River interest,Bitcoin balance,,,62000.00,USD,,False,Interest
+"""
+
 _CACHE_PRICING_CSV = """date,txid,direction,asset,amount,fee,description
 2024-05-10T09:00:00Z,cache-price-1,inbound,BTC,0.01000000,0,Cached price sample
 """
@@ -1940,6 +1946,63 @@ class AccountBucketBehaviorTest(unittest.TestCase):
         self.assertAlmostEqual(float(rows["events"]["quantity"]), 0.02, places=8)
         self.assertAlmostEqual(float(rows["treasury"]["quantity"]), 0.1, places=8)
         self.assertEqual(rows["events"]["asset"], "BTC")
+
+    def test_z_river_csv_connection_import(self):
+        river_csv = Path(self._tmp.name) / "river-account-activity.csv"
+        river_csv.write_text(_RIVER_CSV, encoding="utf-8")
+
+        payload = self._cli(
+            "wallets", "create",
+            "--workspace", "Buckets",
+            "--profile", "Default",
+            "--label", "River",
+            "--kind", "river",
+            "--source-file", str(river_csv),
+            "--source-format", "river_csv",
+        )
+        self.assertEqual(payload["kind"], "wallets.create")
+        self.assertEqual(payload["data"]["source_format"], "river_csv")
+
+        payload = self._cli(
+            "wallets", "sync",
+            "--workspace", "Buckets",
+            "--profile", "Default",
+            "--wallet", "River",
+        )
+        self.assertEqual(payload["kind"], "wallets.sync")
+        self.assertEqual(payload["data"][0]["status"], "synced")
+        self.assertEqual(payload["data"][0]["imported"], 3)
+        self.assertEqual(payload["data"][0]["river_notes_set"], 3)
+        self.assertEqual(payload["data"][0]["river_tags_added"], 3)
+
+        payload = self._cli(
+            "transactions", "list",
+            "--workspace", "Buckets",
+            "--profile", "Default",
+            "--wallet", "River",
+            "--order", "asc",
+        )
+        self.assertEqual(payload["kind"], "transactions.list")
+        records = payload["data"]
+        self.assertEqual(len(records), 3)
+        buy = records[0]
+        self.assertEqual(buy["kind"], "buy")
+        self.assertEqual(buy["direction"], "inbound")
+        self.assertEqual(buy["pricing_source_kind"], "exchange_execution")
+        self.assertEqual(buy["pricing_provider"], "River")
+        self.assertEqual(buy["pricing_method"], "river_csv")
+        self.assertEqual(buy["fiat_value_exact"], "1005.00")
+        self.assertIn({"code": "river:buy", "label": "Buy"}, buy["tags"])
+
+        withdrawal = records[1]
+        self.assertEqual(withdrawal["kind"], "withdrawal")
+        self.assertEqual(withdrawal["direction"], "outbound")
+        self.assertEqual(withdrawal["fee_msat"], 1000000)
+
+        interest = records[2]
+        self.assertEqual(interest["kind"], "interest")
+        self.assertEqual(interest["pricing_source_kind"], "fmv_provider")
+        self.assertEqual(interest["pricing_quality"], "provider_sample")
 
 
 if __name__ == "__main__":

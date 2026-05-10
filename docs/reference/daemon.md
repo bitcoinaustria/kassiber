@@ -39,6 +39,7 @@ The first line is always a lifecycle envelope:
       "ui.transactions.list",
       "ui.wallets.list",
       "ui.backends.list",
+      "ui.backends.options",
       "ui.reports.capital_gains",
       "ui.reports.export_pdf",
       "ui.reports.export_capital_gains_csv",
@@ -58,6 +59,9 @@ The first line is always a lifecycle envelope:
       "ui.secrets.init",
       "ui.secrets.change_passphrase",
       "ui.next_actions",
+      "ui.wallets.create",
+      "ui.connections.btcpay.create",
+      "ui.metadata.bip329.import",
       "ui.wallets.update",
       "ui.wallets.delete",
       "ui.wallets.sync",
@@ -113,6 +117,31 @@ books inside that set.
 `{"confirm":"DELETE","confirm_workspace":"..."}` for the current books set. Like
 wallet deletes, encrypted databases require `args.auth_response.passphrase_secret`
 and plaintext databases require `DELETE LOCAL DATA`.
+
+`ui.backends.options` returns safe backend setup choices for desktop forms. It
+lists configured backend names, kinds, chain/network metadata, presence flags,
+and default state, but does not expose exact endpoint URLs or tokens.
+
+`ui.wallets.create` is the desktop connection setup path for local/imported
+wallet sources. It accepts `label`, `kind`, and the same wallet config fields
+the CLI stores (`backend`, `chain`, `network`, `descriptor`,
+`change_descriptor`, `source_file`, `source_format`, `store_id`,
+etc.) and returns the redacted wallet row. Desktop callers can pass
+`wallet_material` instead of separate descriptor fields; the daemon recognizes
+common descriptor export shapes and stores receive/change descriptors when the
+material contains both.
+
+`ui.connections.btcpay.create` creates a wallet configured for confirmed
+Greenfield wallet-history sync from an existing BTCPay backend. It accepts
+`backend`, `label`, and `store_id`; the daemon stores the default BTC on-chain
+payment method internally for repeat syncs. The returned backend and wallet are
+redacted. A legacy backend-creation shape with `backend_name`, `url`, and
+`token` is still accepted for controlled setup flows, but desktop UX should
+normally select an existing backend and link to Settings when none exists.
+
+`ui.metadata.bip329.import` accepts `file` and optional `wallet`, then imports
+BIP329 JSONL labels into the active profile and bridges transaction labels to
+matching local transactions.
 
 `ui.wallets.update` accepts `{"wallet":"...","label":"..."}` for the active
 books/profile and currently supports label changes. `ui.wallets.delete` accepts

@@ -53,7 +53,7 @@ If a fast-path command returns a structured error, inspect the envelope and take
 21. For Liquid descriptor wallets, require an explicit backend and private blinding keys. If either is missing, stop and fix that before sync.
 22. If the user already provided a secret-bearing descriptor or token, do not ask them to paste it again and do not quote it back in summaries. Use a local file or direct CLI input once, then rely on allowlisted safe views after creation.
 23. For wallet-connection setup, ask for the wallet or backend type if it is unclear, but otherwise assume a mainnet connection. Only ask about network when the user explicitly says testnet, signet, regtest, or another non-mainnet environment.
-24. For secret-bearing wallet or backend setup, prefer giving the user a paste-ready local command template with placeholders to fill in on their machine instead of collecting descriptors, API tokens, or cookie values in chat.
+24. For desktop wallet or backend setup, prefer the Connections / Settings setup modals so users enter descriptors, file paths, and backend fields locally in the app. For CLI-only handoff, use placeholders or `--*-stdin` / `--*-fd FD`; do not collect descriptors, API tokens, or cookie values in chat.
 25. If a BTCPay or CSV export belongs to the same real wallet as an existing Kassiber wallet, import it into that wallet instead of creating a duplicate wallet record.
 26. On errors, inspect the machine envelope first. Kassiber success responses are `{kind, schema_version, data}` and errors use `kind: "error"` with structured fields.
 27. Treat normal `backends ...` and `wallets ...` success output as safe-to-record only for secret-bearing config values. Do not ask users to paste raw backend credentials, raw private descriptor material, or suppressed config blobs into chat just because `backends get` or `wallets get` returns an allowlisted safe view.
@@ -77,7 +77,7 @@ If a fast-path command returns a structured error, inspect the envelope and take
 - `--machine` implies JSON mode. Use it alone or with `--format json`; do not combine it with any other explicit `--format` value.
 - `wallets sync` uses either `--wallet <label-or-id>` or `--all`, never both; `transactions` needs the `list` subcommand and ranks raw rows with `--sort amount --order asc|desc`; `journals quarantined` has no `--limit`; `rates range --start/--end` expect RFC3339 UTC strings and supports `--order asc|desc`.
 - `backends get/list` and `wallets get/create/update` intentionally return allowlisted safe views. Look for presence and state flags instead of expecting raw credentials, raw descriptors, or arbitrary config keys back.
-- For new wallet connections, default to mainnet unless the user says otherwise, and hand back a paste-ready local command template rather than asking them to type secrets into chat.
+- For new desktop wallet connections, default to mainnet unless the user says otherwise and use the setup modal flow. For CLI-only handoff, keep secrets out of chat with placeholders or fd/stdin forms.
 - Quarantined transactions are omitted from accurate downstream reporting until resolved or excluded.
 - Paginated list commands keep rows under command-specific keys such as `.data.records` and `.data.events`. Do not assume every list response uses the same field name.
 - Follow `next_cursor` only when the user asks for all/full/export/audit output. For top-N, largest/smallest, or summary questions, stop after the correctly sorted first page.

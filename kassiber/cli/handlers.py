@@ -605,7 +605,7 @@ WALLET_KIND_CATALOG = {
         "requires": [],
     },
     "river": {
-        "summary": "River Financial CSV importer.",
+        "summary": "River Bitcoin Activity or Account Activity CSV importer.",
         "config_fields": ["source_file", "source_format"],
         "requires": [],
     },

@@ -19,6 +19,10 @@ Four format families live here:
     split across `mining_fee_sat` + `service_fee_msat`, and
     `amount_fiat` is "value CCY" formatted. We normalize all of it to
     the common record shape (BTC Decimals + derived `fiat_rate`).
+  - River (`river_csv`) — Bitcoin Activity or Account Activity CSV
+    exports. BTC-side rows are normalized to Kassiber transactions and
+    exact fiat execution amounts are preserved as exchange pricing
+    provenance where the export provides the paired cash leg.
   - BIP329 JSONL — one-record-per-line label export. `record_type`
     distinguishes tx/addr/pubkey/input/output/xpub labels.
 
@@ -78,6 +82,8 @@ def load_import_records(file_path, input_format):
         return load_btcpay_export_records(file_path, "csv")
     if input_format == "phoenix_csv":
         return load_phoenix_csv_records(file_path)
+    if input_format == "river_csv":
+        return load_river_csv_records(file_path)
     raise AppError(f"Unsupported input format '{input_format}'")
 
 
@@ -315,6 +321,209 @@ def load_phoenix_csv_records(file_path):
 
 def is_phoenix_format(input_format):
     return input_format == "phoenix_csv"
+
+
+# -- River -------------------------------------------------------------------
+
+
+_RIVER_REQUIRED_COLUMNS = (
+    "Date",
+    "Sent Amount",
+    "Sent Currency",
+    "Received Amount",
+    "Received Currency",
+)
+
+
+def _casefold_record(record):
+    output = {}
+    for key, value in record.items():
+        if key is None:
+            continue
+        output[str(key).strip().casefold()] = value
+    return output
+
+
+def _get_cell(record, *names):
+    folded = _casefold_record(record)
+    for name in names:
+        value = folded.get(name.casefold())
+        if value not in (None, ""):
+            return value
+    return None
+
+
+def _clean_decimal_text(value):
+    if value in (None, ""):
+        return None
+    text = str(value).strip()
+    if not text:
+        return None
+    negative = False
+    if text.startswith("(") and text.endswith(")"):
+        negative = True
+        text = text[1:-1].strip()
+    for symbol in ("$", "€", "£", "CHF", "USD", "EUR", "GBP", "BTC"):
+        text = text.replace(symbol, "")
+    text = text.replace(",", "").replace(" ", "").strip()
+    if not text:
+        return None
+    if negative and not text.startswith("-"):
+        text = "-" + text
+    return text
+
+
+def _river_decimal(value):
+    text = _clean_decimal_text(value)
+    return dec(text) if text is not None else None
+
+
+def _river_currency(value):
+    currency = str_or_none(value)
+    return normalize_asset_code(currency) if currency else None
+
+
+def _river_fiat_amount(value, currency):
+    if not currency or currency in {"BTC", "XBT"}:
+        return None
+    amount = _river_decimal(value)
+    return abs(amount) if amount is not None else None
+
+
+def _river_btc_amount(value, currency):
+    if currency not in {"BTC", "XBT"}:
+        return None
+    amount = _river_decimal(value)
+    return abs(amount) if amount is not None else None
+
+
+def _river_kind(value):
+    tag = str(value or "").strip().lower()
+    aliases = {
+        "automatic withdrawal": "withdrawal",
+        "cash deposit": "cash_deposit",
+        "cash withdrawal": "cash_withdrawal",
+        "mining payout": "mining",
+        "referral reward": "income",
+        "bitcoin interest on cash": "interest",
+    }
+    return aliases.get(tag, tag.replace(" ", "_") if tag else "river_activity")
+
+
+def normalize_river_record(record):
+    """Turn one River CSV row into the common import-record shape.
+
+    River currently documents two exports. Bitcoin Activity has the BTC/cash
+    legs and a `Tag`; Account Activity adds reference code, transaction type,
+    method/source/destination, price, and on-chain transaction id. Fiat-only
+    rows are skipped by returning `None`; Kassiber is the BTC-side subledger.
+    """
+    sanitized = {str(key).strip(): value for key, value in record.items() if key is not None}
+    sent_currency = _river_currency(_get_cell(sanitized, "Sent Currency"))
+    received_currency = _river_currency(_get_cell(sanitized, "Received Currency"))
+    fee_currency = _river_currency(_get_cell(sanitized, "Fee Currency"))
+    price_currency = _river_currency(_get_cell(sanitized, "Bitcoin Price Currency"))
+    sent_btc = _river_btc_amount(_get_cell(sanitized, "Sent Amount"), sent_currency)
+    received_btc = _river_btc_amount(_get_cell(sanitized, "Received Amount"), received_currency)
+    sent_fiat = _river_fiat_amount(_get_cell(sanitized, "Sent Amount"), sent_currency)
+    received_fiat = _river_fiat_amount(_get_cell(sanitized, "Received Amount"), received_currency)
+    fee_btc = _river_btc_amount(_get_cell(sanitized, "Fee Amount"), fee_currency) or Decimal("0")
+    fee_fiat = _river_fiat_amount(_get_cell(sanitized, "Fee Amount"), fee_currency) or Decimal("0")
+    price = _river_decimal(_get_cell(sanitized, "Bitcoin Price Amount"))
+    reference = str_or_none(_get_cell(sanitized, "Transaction ID", "Reference Code"))
+    tag = str_or_none(_get_cell(sanitized, "Tag", "Transaction Type"))
+    transaction_type = str_or_none(_get_cell(sanitized, "Transaction Type")) or tag
+
+    if received_btc is not None:
+        direction = "inbound"
+        amount = received_btc
+        if sent_fiat is not None:
+            fiat_value = sent_fiat + fee_fiat
+            cash_leg_pricing = True
+            kind = "buy"
+        else:
+            fiat_value = amount * price if price is not None else None
+            cash_leg_pricing = False
+            kind = _river_kind(transaction_type)
+    elif sent_btc is not None:
+        direction = "outbound"
+        amount = sent_btc
+        if received_fiat is not None:
+            fiat_value = max(Decimal("0"), received_fiat - fee_fiat)
+            cash_leg_pricing = True
+            kind = "sell"
+        else:
+            fiat_value = amount * price if price is not None else None
+            cash_leg_pricing = False
+            kind = _river_kind(transaction_type)
+    else:
+        return None
+
+    fiat_rate = fiat_value / amount if fiat_value is not None and amount > 0 else price
+    fiat_currency = (
+        sent_currency
+        if sent_fiat is not None
+        else received_currency
+        if received_fiat is not None
+        else price_currency
+    )
+    source = str_or_none(_get_cell(sanitized, "Source"))
+    destination = str_or_none(_get_cell(sanitized, "Destination"))
+    method = str_or_none(_get_cell(sanitized, "Method"))
+    description_parts = [part for part in (transaction_type, method, source, destination) if part]
+    description = " - ".join(description_parts) or "Imported from River"
+    return {
+        "txid": reference,
+        "occurred_at": _get_cell(sanitized, "Date"),
+        "direction": direction,
+        "asset": "BTC",
+        "amount": amount,
+        "fee": fee_btc,
+        "fiat_rate": fiat_rate,
+        "fiat_value": fiat_value,
+        "pricing_source_kind": "exchange_execution"
+        if cash_leg_pricing
+        else "fmv_provider"
+        if fiat_value is not None
+        else None,
+        "pricing_provider": "River",
+        "pricing_pair": f"BTC-{fiat_currency}" if fiat_currency else None,
+        "pricing_method": "river_csv",
+        "pricing_external_ref": reference,
+        "pricing_quality": "exact"
+        if cash_leg_pricing
+        else "provider_sample"
+        if fiat_value is not None
+        else None,
+        "kind": kind,
+        "description": description,
+        "counterparty": destination if direction == "outbound" else source,
+        "_river_tag": tag,
+        "_river_description": description,
+        "raw_json": json.dumps(json_ready(sanitized), sort_keys=True),
+    }
+
+
+def load_river_csv_records(file_path):
+    """Load River Bitcoin Activity or Account Activity CSV rows."""
+    with open(file_path, "r", encoding="utf-8", newline="") as handle:
+        rows = list(csv.DictReader(handle))
+    if not rows:
+        return []
+    header = {str(column).strip().casefold() for column in rows[0].keys()}
+    missing = [column for column in _RIVER_REQUIRED_COLUMNS if column.casefold() not in header]
+    if missing:
+        raise AppError("River CSV is missing required columns: " + ", ".join(missing))
+    normalized = []
+    for row in rows:
+        record = normalize_river_record(row)
+        if record is not None:
+            normalized.append(record)
+    return normalized
+
+
+def is_river_format(input_format):
+    return input_format == "river_csv"
 
 
 # -- BIP329 ------------------------------------------------------------------

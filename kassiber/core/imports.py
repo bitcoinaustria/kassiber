@@ -13,7 +13,12 @@ from ..envelope import json_ready
 from ..errors import AppError
 from ..fingerprints import make_transaction_fingerprint
 from . import pricing
-from ..importers import is_btcpay_format, is_phoenix_format, load_import_records
+from ..importers import (
+    is_btcpay_format,
+    is_phoenix_format,
+    is_river_format,
+    load_import_records,
+)
 from ..msat import btc_to_msat, dec
 from ..time_utils import UNKNOWN_OCCURRED_AT, now_iso, parse_timestamp
 from ..util import str_or_none
@@ -326,6 +331,7 @@ def import_records_into_wallet(
     *,
     apply_btcpay: bool = False,
     apply_phoenix: bool = False,
+    apply_river: bool = False,
     commit: bool = True,
 ) -> dict[str, Any]:
     outcome = insert_wallet_records(
@@ -341,9 +347,74 @@ def import_records_into_wallet(
         outcome.update(apply_btcpay_metadata(conn, profile, wallet, records, hooks, commit=False))
     if apply_phoenix:
         outcome.update(apply_phoenix_metadata(conn, profile, wallet, records, hooks, commit=False))
+    if apply_river:
+        outcome.update(apply_river_metadata(conn, profile, wallet, records, hooks, commit=False))
     if commit:
         conn.commit()
     return outcome
+
+
+def apply_river_metadata(
+    conn: sqlite3.Connection,
+    profile: Mapping[str, Any],
+    wallet: Mapping[str, Any],
+    records: Sequence[ImportRow],
+    hooks: ImportCoordinatorHooks,
+    *,
+    commit: bool = True,
+) -> dict[str, int]:
+    notes_set = 0
+    tags_added = 0
+    tags_created = 0
+    for record in records:
+        txid = record.get("txid")
+        if not txid:
+            continue
+        tx = conn.execute(
+            """
+            SELECT id, note
+            FROM transactions
+            WHERE profile_id = ? AND wallet_id = ? AND external_id = ?
+            ORDER BY created_at DESC
+            LIMIT 1
+            """,
+            (profile["id"], wallet["id"], txid),
+        ).fetchone()
+        if not tx:
+            continue
+        description = str_or_none(record.get("_river_description"))
+        if description and not tx["note"]:
+            conn.execute(
+                "UPDATE transactions SET note = ? WHERE id = ?",
+                (description, tx["id"]),
+            )
+            notes_set += 1
+        tag_value = str_or_none(record.get("_river_tag"))
+        if tag_value:
+            code = f"river:{tag_value}".lower().replace(" ", "_")
+            tag, created = hooks.ensure_tag_row(
+                conn,
+                profile["workspace_id"],
+                profile["id"],
+                code,
+                tag_value,
+            )
+            if created:
+                tags_created += 1
+            before = conn.total_changes
+            conn.execute(
+                "INSERT OR IGNORE INTO transaction_tags(transaction_id, tag_id) VALUES(?, ?)",
+                (tx["id"], tag["id"]),
+            )
+            if conn.total_changes > before:
+                tags_added += 1
+    if commit:
+        conn.commit()
+    return {
+        "river_notes_set": notes_set,
+        "river_tags_added": tags_added,
+        "river_tags_created": tags_created,
+    }
 
 
 def apply_phoenix_metadata(
@@ -486,6 +557,7 @@ def import_file_into_wallet(
         hooks,
         apply_btcpay=is_btcpay_format(input_format),
         apply_phoenix=is_phoenix_format(input_format),
+        apply_river=is_river_format(input_format),
         commit=commit,
     )
     outcome["input_format"] = input_format
@@ -497,6 +569,7 @@ __all__ = [
     "ImportCoordinatorHooks",
     "apply_btcpay_metadata",
     "apply_phoenix_metadata",
+    "apply_river_metadata",
     "import_file_into_wallet",
     "import_records_into_wallet",
     "insert_wallet_records",

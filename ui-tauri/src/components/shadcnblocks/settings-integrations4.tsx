@@ -24,6 +24,7 @@ export interface IntegrationItem {
   category: string;
   categoryLabel?: string;
   className?: string;
+  imageFrameClassName?: string;
   actionLabel?: string;
 }
 
@@ -45,11 +46,29 @@ const IntegrationCard = ({
         isSelected && "border-primary bg-primary/5",
       )}
     >
-      <img
-        src={integration.image}
-        alt={integration.title}
-        className={cn("size-10 shrink-0 rounded-md", integration.className)}
-      />
+      {integration.imageFrameClassName ? (
+        <span
+          className={cn(
+            "flex size-10 shrink-0 items-center justify-center rounded-md border bg-background p-1.5",
+            integration.imageFrameClassName,
+          )}
+        >
+          <img
+            src={integration.image}
+            alt={integration.title}
+            className={cn(
+              "max-h-full max-w-full object-contain",
+              integration.className,
+            )}
+          />
+        </span>
+      ) : (
+        <img
+          src={integration.image}
+          alt={integration.title}
+          className={cn("size-10 shrink-0 rounded-md", integration.className)}
+        />
+      )}
       <div className="min-w-0 flex-1 space-y-1">
         <div className="flex min-w-0 flex-wrap items-center gap-2">
           <p className="min-w-0 truncate font-medium">{integration.title}</p>

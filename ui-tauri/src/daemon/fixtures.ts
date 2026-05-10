@@ -42,6 +42,39 @@ export const fixtures: Record<string, unknown> = {
       updated: 0,
     })),
   },
+  "ui.backends.options": {
+    backends: [
+      {
+        name: "mempool",
+        kind: "esplora",
+        chain: "bitcoin",
+        network: "mainnet",
+        has_url: true,
+        is_default: true,
+      },
+      {
+        name: "btcpay-demo",
+        kind: "btcpay",
+        chain: "bitcoin",
+        network: "mainnet",
+        has_url: true,
+        has_token: true,
+        is_default: false,
+      },
+    ],
+    summary: {
+      count: 2,
+      default_backend: "mempool",
+    },
+    suggestions: [
+      {
+        name: "mempool",
+        label: "Built-in mempool.space Bitcoin backend",
+        chain: "bitcoin",
+        network: "mainnet",
+      },
+    ],
+  },
   "ui.profiles.snapshot": MOCK_PROFILES,
   "ui.reports.capital_gains": MOCK_CAPITAL_GAINS,
   "ui.reports.summary": {

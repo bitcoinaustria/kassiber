@@ -547,8 +547,9 @@ progress; users can cancel; secrets enter through a redacted channel.
 ### 4.1 Mutating actions in priority order
 
 1. Sync (`wallets sync`, `wallets sync-btcpay`)
-2. Imports (`wallets import-csv`, `wallets import-btcpay`,
-   `wallets import-phoenix`, `metadata bip329 import`)
+2. Connection setup and imports (`ui.wallets.create`,
+   `ui.connections.btcpay.create`, `ui.metadata.bip329.import`, plus sync for
+   file-backed CSV/JSON, Phoenix, River, and BTCPay sources)
 3. Journals process (with quarantine review UX)
 4. Metadata edits (`metadata records note`, `tags add/remove`,
    `excluded set/clear`)

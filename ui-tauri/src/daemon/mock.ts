@@ -367,6 +367,99 @@ export const mockDaemon: DaemonTransport = {
       };
     }
 
+    if (req.kind === "ui.wallets.create") {
+      const args = (req.args ?? {}) as {
+        label?: unknown;
+        kind?: unknown;
+      };
+      const label = typeof args.label === "string" ? args.label.trim() : "";
+      const kind = typeof args.kind === "string" ? args.kind.trim() : "custom";
+      if (!label) {
+        return {
+          kind: "error",
+          schema_version: 1,
+          request_id: req.request_id,
+          error: {
+            code: "validation",
+            message: "wallet create requires a label",
+            retryable: false,
+          },
+        };
+      }
+      const overview = mockOverviewSnapshot();
+      const connection = {
+        id: `mock-wallet-${Date.now()}`,
+        label,
+        kind,
+      };
+      overview.connections = [...overview.connections, connection];
+      return {
+        kind: "ui.wallets.create",
+        schema_version: 1,
+        request_id: req.request_id,
+        data: { wallet: connection } as T,
+      };
+    }
+
+    if (req.kind === "ui.connections.btcpay.create") {
+      const args = (req.args ?? {}) as {
+        label?: unknown;
+        backend?: unknown;
+        backend_name?: unknown;
+        store_id?: unknown;
+      };
+      const label = typeof args.label === "string" ? args.label.trim() : "";
+      const backendName =
+        typeof args.backend === "string"
+          ? args.backend.trim()
+          : typeof args.backend_name === "string"
+            ? args.backend_name.trim()
+            : "";
+      const storeId = typeof args.store_id === "string" ? args.store_id.trim() : "";
+      if (!label || !backendName || !storeId) {
+        return {
+          kind: "error",
+          schema_version: 1,
+          request_id: req.request_id,
+          error: {
+            code: "validation",
+            message: "BTCPay setup requires a label, backend, and store ID",
+            retryable: false,
+          },
+        };
+      }
+      const overview = mockOverviewSnapshot();
+      const connection = {
+        id: `mock-btcpay-${Date.now()}`,
+        label,
+        kind: "custom",
+      };
+      overview.connections = [...overview.connections, connection];
+      return {
+        kind: "ui.connections.btcpay.create",
+        schema_version: 1,
+        request_id: req.request_id,
+        data: {
+          backend: { name: backendName },
+          wallet: connection,
+        } as T,
+      };
+    }
+
+    if (req.kind === "ui.metadata.bip329.import") {
+      return {
+        kind: "ui.metadata.bip329.import",
+        schema_version: 1,
+        request_id: req.request_id,
+        data: {
+          records: 1,
+          imported: 1,
+          updated: 0,
+          transaction_tags_added: 1,
+        } as T,
+      };
+    }
+
     if (req.kind === "ui.wallets.delete") {
       const args = (req.args ?? {}) as {
         wallet?: unknown;
