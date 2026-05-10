@@ -3989,18 +3989,84 @@ def _import_bip329_payload(
     )
 
 
+_UI_WALLET_UPDATE_CONFIG_FIELDS = (
+    "backend",
+    "chain",
+    "network",
+    "policy_asset",
+    "descriptor",
+    "change_descriptor",
+    "store_id",
+    "payment_method_id",
+    "source_format",
+)
+
+
 def _update_wallet_payload(
     ctx: "DaemonContext",
     args: dict[str, Any],
     request_id: object,
 ) -> tuple[dict[str, Any], bool]:
     wallet_ref = _wallet_ref_from_args(args, "ui.wallets.update")
-    label = args.get("label")
-    if not isinstance(label, str) or not label.strip():
+    config_updates: dict[str, Any] = {}
+    for key in _UI_WALLET_UPDATE_CONFIG_FIELDS:
+        value = _optional_str_arg(args, key)
+        if value is not None:
+            config_updates[key] = value
+    if "source_format" in config_updates and config_updates["source_format"] not in _UI_WALLET_SOURCE_FORMATS:
         raise AppError(
-            "ui.wallets.update requires label",
+            f"Unsupported source format '{config_updates['source_format']}'",
             code="validation",
-            hint="Enter a new connection label.",
+            hint="Choose a supported file format.",
+            retryable=False,
+        )
+    source_file = _source_file_arg(args)
+    if source_file is not None:
+        config_updates["source_file"] = source_file
+    wallet_material = _optional_str_arg(args, "wallet_material")
+    if wallet_material is not None:
+        material_config = normalize_wallet_material(wallet_material)
+        config_updates["descriptor"] = material_config["descriptor"]
+        if "change_descriptor" in material_config:
+            config_updates["change_descriptor"] = material_config["change_descriptor"]
+    gap_limit = args.get("gap_limit")
+    if gap_limit not in (None, ""):
+        if not isinstance(gap_limit, int):
+            raise AppError(
+                "gap_limit must be an integer",
+                code="validation",
+                details={"type": type(gap_limit).__name__},
+                retryable=False,
+            )
+        config_updates["gap_limit"] = gap_limit
+    addresses = args.get("addresses")
+    if addresses not in (None, ""):
+        config_updates["addresses"] = core_wallets.normalize_addresses(addresses)
+    clear_raw = args.get("clear")
+    clear_fields: list[str] = []
+    if clear_raw is not None:
+        if not isinstance(clear_raw, list) or not all(isinstance(item, str) for item in clear_raw):
+            raise AppError(
+                "clear must be a list of config field names",
+                code="validation",
+                retryable=False,
+            )
+        clear_fields = [item for item in (entry.strip() for entry in clear_raw) if item]
+    label_raw = args.get("label")
+    label_value: str | None = None
+    if label_raw is not None:
+        if not isinstance(label_raw, str) or not label_raw.strip():
+            raise AppError(
+                "label must be a non-empty string",
+                code="validation",
+                retryable=False,
+            )
+        label_value = label_raw.strip()
+    if label_value is None and not config_updates and not clear_fields:
+        raise AppError(
+            "ui.wallets.update requires label, config, or clear",
+            code="validation",
+            hint="Pass at least one field to change.",
             retryable=False,
         )
     wallet = core_wallets.get_wallet_details(ctx.conn, None, None, wallet_ref)
@@ -4015,12 +4081,19 @@ def _update_wallet_payload(
     )
     if auth_result is not None:
         return auth_result
+    updates: dict[str, Any] = {}
+    if label_value is not None:
+        updates["label"] = label_value
+    if config_updates:
+        updates["config"] = config_updates
+    if clear_fields:
+        updates["clear"] = clear_fields
     updated = core_wallets.update_wallet(
         ctx.conn,
         None,
         None,
         wallet_ref,
-        {"label": label.strip()},
+        updates,
     )
     return (
         _with_request_id(

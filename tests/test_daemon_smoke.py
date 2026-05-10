@@ -1001,6 +1001,42 @@ class DaemonSmokeTest(unittest.TestCase):
 
                 _write_payload(
                     proc,
+                    {
+                        "request_id": "update-btcpay-config",
+                        "kind": "ui.wallets.update",
+                        "args": {
+                            "wallet": "BTCPay UI",
+                            "store_id": "store-edited",
+                            "auth_response": {
+                                "plaintext_change_ack": "CHANGE LOCAL DATA",
+                            },
+                        },
+                    },
+                )
+                edited = _read_payload_timeout(proc)
+                self.assertEqual(edited["kind"], "ui.wallets.update")
+                self.assertEqual(edited["data"]["wallet"]["config"]["store_id"], "store-edited")
+                self.assertEqual(edited["data"]["wallet"]["label"], "BTCPay UI")
+
+                _write_payload(
+                    proc,
+                    {
+                        "request_id": "update-no-changes",
+                        "kind": "ui.wallets.update",
+                        "args": {
+                            "wallet": "BTCPay UI",
+                            "auth_response": {
+                                "plaintext_change_ack": "CHANGE LOCAL DATA",
+                            },
+                        },
+                    },
+                )
+                no_changes = _read_payload_timeout(proc)
+                self.assertEqual(no_changes["kind"], "error")
+                self.assertEqual(no_changes["error"]["code"], "validation")
+
+                _write_payload(
+                    proc,
                     {"request_id": "shutdown-1", "kind": "daemon.shutdown"},
                 )
                 self.assertEqual(_read_payload_timeout(proc)["kind"], "daemon.shutdown")

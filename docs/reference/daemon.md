@@ -143,8 +143,14 @@ than minting one through this endpoint.
 BIP329 JSONL labels into the active profile and bridges transaction labels to
 matching local transactions.
 
-`ui.wallets.update` accepts `{"wallet":"...","label":"..."}` for the active
-books/profile and currently supports label changes. `ui.wallets.delete` accepts
+`ui.wallets.update` accepts `{"wallet":"..."}` for the active books/profile and
+edits at least one of `label`, the same wallet config fields the create
+endpoint takes (`backend`, `chain`, `network`, `descriptor`,
+`change_descriptor`, `wallet_material`, `source_file`, `source_format`,
+`store_id`, `payment_method_id`, `gap_limit`, `addresses`, `policy_asset`),
+or `clear` — a list of config field names to remove. `wallet_material`
+overwrites the receive/change descriptors when present so users can paste a
+fresh export to fix a typo. `ui.wallets.delete` accepts
 `{"wallet":"...","confirm":"DELETE","confirm_wallet":"...","cascade":true|false}`.
 Both kinds are sensitive local-state changes: encrypted databases require
 `args.auth_response.passphrase_secret`, verified with the same throwaway

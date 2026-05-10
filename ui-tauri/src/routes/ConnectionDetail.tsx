@@ -40,6 +40,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import {
   Table,
   TableBody,
@@ -51,6 +52,7 @@ import {
 import { useDaemon, useDaemonMutation } from "@/daemon/client";
 import { screenShellClassName } from "@/lib/screen-layout";
 import { cn } from "@/lib/utils";
+import { isFilePickerAvailable, pickFile } from "@/lib/filePicker";
 import { useUiStore } from "@/store/ui";
 import { useSyncProgressNotice } from "@/hooks/useSyncProgressNotice";
 import type {
@@ -212,6 +214,9 @@ function ConnectionDetailView({
   const [editLabel, setEditLabel] = useState(connection.label);
   const [editPassphrase, setEditPassphrase] = useState("");
   const [editPlaintextAck, setEditPlaintextAck] = useState("");
+  const [editWalletMaterial, setEditWalletMaterial] = useState("");
+  const [editStoreId, setEditStoreId] = useState("");
+  const [editSourceFile, setEditSourceFile] = useState("");
   const [editError, setEditError] = useState<string | null>(null);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deletePassphrase, setDeletePassphrase] = useState("");
@@ -281,9 +286,23 @@ function ConnectionDetailView({
     setEditLabel(connection.label);
     setEditPassphrase("");
     setEditPlaintextAck("");
+    setEditWalletMaterial("");
+    setEditStoreId("");
+    setEditSourceFile("");
     setEditError(null);
     setEditOpen(true);
   };
+
+  const editConfigKind: "descriptor" | "btcpay" | "file-wallet" | null =
+    connection.kind === "descriptor" || connection.kind === "xpub"
+      ? "descriptor"
+      : connection.kind === "custom" || connection.kind === "btcpay"
+        ? "btcpay"
+        : connection.kind === "river" ||
+            connection.kind === "phoenix" ||
+            connection.kind === "csv"
+          ? "file-wallet"
+          : null;
 
   const openDeleteDialog = () => {
     setDeletePassphrase("");
@@ -318,18 +337,40 @@ function ConnectionDetailView({
       setEditError(`Type ${PLAINTEXT_CHANGE_ACK} to confirm the change.`);
       return;
     }
+    const labelChanged = nextLabel !== connection.label;
+    const walletMaterial = editWalletMaterial.trim();
+    const storeId = editStoreId.trim();
+    const sourceFile = editSourceFile.trim();
+    const configChanges: Record<string, unknown> = {};
+    if (editConfigKind === "descriptor" && walletMaterial) {
+      configChanges.wallet_material = walletMaterial;
+    }
+    if (editConfigKind === "btcpay" && storeId) {
+      configChanges.store_id = storeId;
+    }
+    if (editConfigKind === "file-wallet" && sourceFile) {
+      configChanges.source_file = sourceFile;
+    }
+    if (!labelChanged && Object.keys(configChanges).length === 0) {
+      setEditError("Change the label or update at least one field.");
+      return;
+    }
 
     try {
       await updateWallet.mutateAsync({
         wallet: connection.id,
-        label: nextLabel,
+        ...(labelChanged ? { label: nextLabel } : {}),
+        ...configChanges,
         auth_response: encryptedWorkspace
           ? { passphrase_secret: editPassphrase }
           : { plaintext_change_ack: PLAINTEXT_CHANGE_ACK },
       });
+      const summary = labelChanged
+        ? `${connection.label} was renamed to ${nextLabel}.`
+        : `${connection.label} was updated.`;
       addNotification({
         title: "Connection changed",
-        body: `${connection.label} was renamed to ${nextLabel}.`,
+        body: summary,
         tone: "success",
       });
       setEditOpen(false);
@@ -621,7 +662,7 @@ function ConnectionDetailView({
       <Dialog open={editOpen} onOpenChange={setEditOpen}>
         <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle>Edit connection label</DialogTitle>
+            <DialogTitle>Edit connection</DialogTitle>
             <DialogDescription>
               {encryptedWorkspace
                 ? "Confirm this change with the local database passphrase."
@@ -637,6 +678,63 @@ function ConnectionDetailView({
                 onChange={(event) => setEditLabel(event.target.value)}
               />
             </div>
+            {editConfigKind === "descriptor" ? (
+              <div className="space-y-2">
+                <Label htmlFor="connection-edit-material">
+                  Replace wallet export
+                </Label>
+                <Textarea
+                  id="connection-edit-material"
+                  className="min-h-24 font-mono text-xs"
+                  value={editWalletMaterial}
+                  onChange={(event) =>
+                    setEditWalletMaterial(event.target.value)
+                  }
+                  placeholder="Paste a fresh descriptor or extended public key to overwrite"
+                />
+                <p className="text-xs text-muted-foreground">
+                  Leave empty to keep the current descriptors.
+                </p>
+              </div>
+            ) : null}
+            {editConfigKind === "btcpay" ? (
+              <div className="space-y-2">
+                <Label htmlFor="connection-edit-store">BTCPay store ID</Label>
+                <Input
+                  id="connection-edit-store"
+                  value={editStoreId}
+                  onChange={(event) => setEditStoreId(event.target.value)}
+                  placeholder="Leave empty to keep the current store ID"
+                />
+              </div>
+            ) : null}
+            {editConfigKind === "file-wallet" ? (
+              <div className="space-y-2">
+                <Label htmlFor="connection-edit-source">Source file</Label>
+                <div className="flex gap-2">
+                  <Input
+                    id="connection-edit-source"
+                    value={editSourceFile}
+                    onChange={(event) => setEditSourceFile(event.target.value)}
+                    placeholder="Leave empty to keep the current file"
+                  />
+                  {isFilePickerAvailable ? (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={async () => {
+                        const picked = await pickFile({
+                          title: `Select ${connection.label} export file`,
+                        });
+                        if (picked) setEditSourceFile(picked);
+                      }}
+                    >
+                      Browse…
+                    </Button>
+                  ) : null}
+                </div>
+              </div>
+            ) : null}
             {encryptedWorkspace ? (
               <div className="space-y-2">
                 <Label htmlFor="connection-edit-passphrase">Passphrase</Label>

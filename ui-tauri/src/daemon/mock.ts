@@ -339,6 +339,9 @@ export const mockDaemon: DaemonTransport = {
       const args = (req.args ?? {}) as {
         wallet?: unknown;
         label?: unknown;
+        store_id?: unknown;
+        wallet_material?: unknown;
+        source_file?: unknown;
       };
       const walletRef = typeof args.wallet === "string" ? args.wallet : "";
       const label = typeof args.label === "string" ? args.label.trim() : "";
@@ -346,19 +349,26 @@ export const mockDaemon: DaemonTransport = {
       const connection = overview.connections.find(
         (item) => item.id === walletRef || item.label === walletRef,
       );
-      if (!connection || !label) {
+      const hasConfigChange =
+        (typeof args.store_id === "string" && args.store_id.trim().length > 0) ||
+        (typeof args.wallet_material === "string" &&
+          args.wallet_material.trim().length > 0) ||
+        (typeof args.source_file === "string" &&
+          args.source_file.trim().length > 0);
+      if (!connection || (!label && !hasConfigChange)) {
         return {
           kind: "error",
           schema_version: 1,
           request_id: req.request_id,
           error: {
             code: "validation",
-            message: "wallet update requires an existing wallet and label",
+            message:
+              "wallet update requires an existing wallet plus a label or config change",
             retryable: false,
           },
         };
       }
-      connection.label = label;
+      if (label) connection.label = label;
       return {
         kind: "ui.wallets.update",
         schema_version: 1,
