@@ -405,16 +405,11 @@ export const mockDaemon: DaemonTransport = {
       const args = (req.args ?? {}) as {
         label?: unknown;
         backend?: unknown;
-        backend_name?: unknown;
         store_id?: unknown;
       };
       const label = typeof args.label === "string" ? args.label.trim() : "";
       const backendName =
-        typeof args.backend === "string"
-          ? args.backend.trim()
-          : typeof args.backend_name === "string"
-            ? args.backend_name.trim()
-            : "";
+        typeof args.backend === "string" ? args.backend.trim() : "";
       const storeId = typeof args.store_id === "string" ? args.store_id.trim() : "";
       if (!label || !backendName || !storeId) {
         return {

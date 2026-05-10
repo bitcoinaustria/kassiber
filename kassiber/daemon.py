@@ -3931,35 +3931,24 @@ def _create_btcpay_connection_payload(
             hint="Choose a different connection label.",
             retryable=False,
         )
-    existing_backend = _optional_str_arg(args, "backend")
-    if existing_backend is not None:
-        normalized_backend = existing_backend.lower()
-        raw_backend = ctx.runtime_config["backends"].get(normalized_backend)
-        if not isinstance(raw_backend, dict):
-            raise AppError(
-                f"Backend '{existing_backend}' is not configured",
-                code="not_found",
-                hint="Choose an existing BTCPay backend or add one in Settings.",
-                retryable=False,
-            )
-        if str(raw_backend.get("kind") or "").strip().lower() != "btcpay":
-            raise AppError(
-                f"Backend '{existing_backend}' is not a BTCPay backend",
-                code="validation",
-                hint="Choose a backend whose kind is btcpay.",
-                retryable=False,
-            )
-        backend = core_accounts.get_backend_details(conn, ctx.runtime_config, normalized_backend)
-    else:
-        backend_name = _required_str_arg(args, "backend_name", "Backend name").lower()
-        backend = core_accounts.create_backend(
-            conn,
-            backend_name,
-            "btcpay",
-            _required_str_arg(args, "url", "BTCPay server URL"),
-            token=_required_str_arg(args, "token", "BTCPay API token"),
+    backend_ref = _required_str_arg(args, "backend", "BTCPay backend")
+    normalized_backend = backend_ref.lower()
+    raw_backend = ctx.runtime_config["backends"].get(normalized_backend)
+    if not isinstance(raw_backend, dict):
+        raise AppError(
+            f"Backend '{backend_ref}' is not configured",
+            code="not_found",
+            hint="Choose an existing BTCPay backend or add one in Settings.",
+            retryable=False,
         )
-        merge_db_backends(conn, ctx.runtime_config)
+    if str(raw_backend.get("kind") or "").strip().lower() != "btcpay":
+        raise AppError(
+            f"Backend '{backend_ref}' is not a BTCPay backend",
+            code="validation",
+            hint="Choose a backend whose kind is btcpay.",
+            retryable=False,
+        )
+    backend = core_accounts.get_backend_details(conn, ctx.runtime_config, normalized_backend)
     wallet = core_wallets.create_wallet(
         conn,
         None,

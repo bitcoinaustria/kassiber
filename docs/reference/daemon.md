@@ -133,11 +133,11 @@ material contains both.
 
 `ui.connections.btcpay.create` creates a wallet configured for confirmed
 Greenfield wallet-history sync from an existing BTCPay backend. It accepts
-`backend`, `label`, and `store_id`; the daemon stores the default BTC on-chain
-payment method internally for repeat syncs. The returned backend and wallet are
-redacted. A legacy backend-creation shape with `backend_name`, `url`, and
-`token` is still accepted for controlled setup flows, but desktop UX should
-normally select an existing backend and link to Settings when none exists.
+`backend` (must reference an already-configured BTCPay backend), `label`, and
+`store_id`; the daemon stores the default BTC on-chain payment method
+internally for repeat syncs. The returned backend and wallet are redacted. If
+no BTCPay backend exists, callers should route the user to Settings rather
+than minting one through this endpoint.
 
 `ui.metadata.bip329.import` accepts `file` and optional `wallet`, then imports
 BIP329 JSONL labels into the active profile and bridges transaction labels to
