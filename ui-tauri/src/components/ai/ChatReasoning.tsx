@@ -14,11 +14,24 @@ import {
   ReasoningTrigger,
 } from "@/components/ai-elements";
 
+import { ChatMarkdown } from "./ChatMarkdown";
+
 interface ChatReasoningProps {
   thinking: string;
   isStreaming: boolean;
   hasAnswer: boolean;
 }
+
+const reasoningMarkdownClassName = [
+  "text-xs leading-6 text-muted-foreground",
+  "[&_blockquote]:my-2 [&_blockquote]:pl-3",
+  "[&_h1]:!mb-2 [&_h1]:!mt-3 [&_h1]:!text-sm",
+  "[&_h2]:!mb-2 [&_h2]:!mt-3 [&_h2]:!text-sm",
+  "[&_h3]:!mb-2 [&_h3]:!mt-3 [&_h3]:!text-xs",
+  "[&_h4]:!my-2",
+  "[&_ol]:my-2 [&_ul]:my-2",
+  "[&_p]:my-2 [&_pre]:my-2 [&_table]:text-xs",
+].join(" ");
 
 export function ChatReasoning({
   thinking,
@@ -65,9 +78,12 @@ export function ChatReasoning({
           : "Thoughts"}
       </ReasoningTrigger>
       <ReasoningContent>
-        <pre className="mt-2 max-w-full whitespace-pre-wrap break-words border-l border-border/70 py-1 pl-4 font-mono text-[11px] leading-relaxed text-muted-foreground">
-          {thinking}
-        </pre>
+        <div className="mt-2 max-w-full border-l border-border/70 py-1 pl-4">
+          <ChatMarkdown
+            content={thinking}
+            className={reasoningMarkdownClassName}
+          />
+        </div>
       </ReasoningContent>
     </Reasoning>
   );

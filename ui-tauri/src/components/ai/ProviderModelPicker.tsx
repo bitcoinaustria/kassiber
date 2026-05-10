@@ -87,7 +87,14 @@ export function ProviderModelPicker({
   const providersQuery = useDaemon<AiProvidersListData>(
     "ai.providers.list",
     undefined,
-    { enabled },
+    {
+      enabled,
+      // The provider list is small, stable across the whole session, and
+      // load-bearing for the picker UX — keep it in cache for the lifetime
+      // of the app so the picker never blanks on remount or re-focus.
+      staleTime: 30 * 60 * 1000,
+      gcTime: Infinity,
+    },
   );
   const providers = React.useMemo<AiProviderRow[]>(
     () =>
@@ -126,7 +133,8 @@ export function ProviderModelPicker({
       queryFn: () => fetchProviderModels(dataMode, provider.name),
       enabled,
       refetchOnMount: isCliProvider(provider) ? "always" : false,
-      staleTime: 5 * 60 * 1000,
+      staleTime: isCliProvider(provider) ? 5 * 60 * 1000 : 30 * 60 * 1000,
+      gcTime: 60 * 60 * 1000,
     })),
   });
   const modelsByProvider = React.useMemo(() => {

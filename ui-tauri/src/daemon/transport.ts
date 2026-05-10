@@ -433,6 +433,10 @@ export async function activateImportProject(
   }
 }
 
+export function isImportProjectActive(dataRoot: string): boolean {
+  return activeImportProjectSelection?.dataRoot === dataRoot;
+}
+
 export async function clearImportProject(): Promise<void> {
   if (DAEMON_MODE !== "tauri") {
     return;
