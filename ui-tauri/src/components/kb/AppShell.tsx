@@ -976,10 +976,14 @@ export function AppShell() {
   React.useEffect(() => {
     if (!("__TAURI_INTERNALS__" in window)) return;
     let disposed = false;
+    const hasWorkspace = Boolean(identity);
     void import("@tauri-apps/api/core")
       .then(({ invoke }) => {
         if (disposed) return;
-        return invoke("set_menu_state", { aiFeaturesEnabled });
+        return invoke("set_menu_state", {
+          aiFeaturesEnabled,
+          hasWorkspace,
+        });
       })
       .catch((error) => {
         console.warn("Could not sync Kassiber native menu state", error);
@@ -987,7 +991,7 @@ export function AppShell() {
     return () => {
       disposed = true;
     };
-  }, [aiFeaturesEnabled]);
+  }, [aiFeaturesEnabled, identity]);
 
   React.useEffect(() => {
     if (aiFeaturesEnabled || !isAssistantRoute) return;

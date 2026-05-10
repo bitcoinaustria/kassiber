@@ -12,6 +12,7 @@ use std::time::Duration;
 use supervisor::{DaemonSupervisor, SupervisorError};
 use tauri::menu::{AboutMetadata, Menu, MenuBuilder, MenuItem, MenuItemBuilder, SubmenuBuilder};
 use tauri::{Emitter, Manager, State, Url};
+use tauri_plugin_deep_link::DeepLinkExt;
 
 const SCHEMA_VERSION: u8 = 1;
 const DEFAULT_STATE_DIR: &str = ".kassiber";
@@ -58,6 +59,30 @@ const MENU_NAV_ASSISTANT: &str = "kassiber:navigate:assistant";
 const MENU_NAV_DIAGNOSTICS: &str = "kassiber:navigate:diagnostics";
 const DOCS_URL: &str = "https://github.com/bitcoinaustria/kassiber#readme";
 const ISSUES_URL: &str = "https://github.com/bitcoinaustria/kassiber/issues";
+
+const DEEP_LINK_SCHEME: &str = "kassiber";
+
+// Hosts that resolve to a route navigation. The host (after the scheme) maps
+// 1:1 to a top-level route slug — `kassiber://transactions` → `/transactions`.
+// Restricting to a fixed allowlist means an attacker cannot deep-link the user
+// into an unintended route by encoding it in a URL.
+const DEEP_LINK_ROUTE_HOSTS: &[(&str, &str)] = &[
+    ("overview", "/overview"),
+    ("transactions", "/transactions"),
+    ("connections", "/connections"),
+    ("books", "/books"),
+    ("reports", "/reports"),
+    ("source-of-funds", "/source-of-funds"),
+    ("journals", "/journals"),
+    ("tax-events", "/tax-events"),
+    ("quarantine", "/quarantine"),
+    ("assistant", "/assistant"),
+    ("diagnostics", "/diagnostics"),
+];
+
+const DEEP_LINK_SETTINGS_SECTIONS: &[&str] = &[
+    "privacy", "display", "security", "backends", "ai", "data",
+];
 
 const ALLOWED_DAEMON_KINDS: &[&str] = &[
     "status",
@@ -179,6 +204,11 @@ struct MenuActionPayload {
 
 struct AppMenuHandles {
     assistant: MenuItem<tauri::Wry>,
+    // Menu items that only make sense once the user has unlocked a workspace
+    // (`identity` is set). React notifies us via `set_menu_state` so the
+    // corresponding native menu items grey out instead of bouncing the user
+    // back to the Welcome screen mid-action.
+    workspace_gated: Vec<MenuItem<tauri::Wry>>,
 }
 
 #[tauri::command]
@@ -843,7 +873,28 @@ fn default_browser_command(url: &str) -> Command {
 
 pub fn run() {
     let cli_args = desktop_cli_args();
-    tauri::Builder::default()
+    let mut builder = tauri::Builder::default();
+
+    // Single-instance must come before the deep-link plugin so a second
+    // launch (`open kassiber://settings/privacy` while the app is already
+    // running) is forwarded to the existing window instead of forking a new
+    // process. With a separate process we'd race the SQLite/SQLCipher
+    // database — the daemon assumes one writer at a time.
+    #[cfg(any(target_os = "macos", target_os = "windows", target_os = "linux"))]
+    {
+        builder = builder.plugin(tauri_plugin_single_instance::init(
+            |app, _args, _cwd| {
+                if let Some(window) = app.get_webview_window("main") {
+                    let _ = window.show();
+                    let _ = window.unminimize();
+                    let _ = window.set_focus();
+                }
+            },
+        ));
+    }
+
+    builder
+        .plugin(tauri_plugin_deep_link::init())
         .setup(move |app| {
             let resource_dir = app.path().resource_dir().ok();
             if let Some(args) = cli_args.as_ref() {
@@ -854,6 +905,30 @@ pub fn run() {
             app.set_menu(menu)?;
             app.manage(menu_handles);
             app.manage(Arc::new(DaemonSupervisor::new(resource_dir)));
+
+            // Linux/Windows need an explicit runtime register; macOS uses
+            // CFBundleURLTypes from the bundle config. `register` is a no-op
+            // on macOS and harmless when the scheme is already registered.
+            #[cfg(any(target_os = "linux", all(debug_assertions, windows)))]
+            {
+                let _ = app.deep_link().register(DEEP_LINK_SCHEME);
+            }
+
+            let app_handle = app.handle().clone();
+            app.deep_link().on_open_url(move |event| {
+                for url in event.urls() {
+                    if let Some(payload) = menu_action_for_deep_link(&url) {
+                        emit_menu_action(&app_handle, payload);
+                    } else {
+                        eprintln!("kassiber: ignoring unrecognized deep link: {url}");
+                    }
+                }
+                if let Some(window) = app_handle.get_webview_window("main") {
+                    let _ = window.show();
+                    let _ = window.unminimize();
+                    let _ = window.set_focus();
+                }
+            });
             Ok(())
         })
         .on_menu_event(handle_app_menu_event)
@@ -868,6 +943,50 @@ pub fn run() {
         ])
         .run(tauri::generate_context!())
         .expect("error while running Kassiber desktop shell");
+}
+
+fn menu_action_for_deep_link(url: &Url) -> Option<MenuActionPayload> {
+    if !url.scheme().eq_ignore_ascii_case(DEEP_LINK_SCHEME) {
+        return None;
+    }
+
+    let host = url.host_str()?.to_ascii_lowercase();
+    let segments: Vec<&str> = url
+        .path_segments()
+        .map(|iter| iter.filter(|segment| !segment.is_empty()).collect())
+        .unwrap_or_default();
+
+    match host.as_str() {
+        "lock" if segments.is_empty() => Some(menu_action("lock-app")),
+        "settings" => {
+            let section = segments
+                .first()
+                .copied()
+                .and_then(deep_link_settings_section);
+            Some(open_settings_action(section))
+        }
+        "workflow" => match segments.first().copied() {
+            Some("sync-all") | Some("sync") => Some(menu_action("sync-all-wallets")),
+            Some("process-journals") => Some(menu_action("process-journals")),
+            _ => None,
+        },
+        host if segments.is_empty() => deep_link_route(host).map(navigate_action),
+        _ => None,
+    }
+}
+
+fn deep_link_route(host: &str) -> Option<&'static str> {
+    DEEP_LINK_ROUTE_HOSTS
+        .iter()
+        .find(|(slug, _)| *slug == host)
+        .map(|(_, route)| *route)
+}
+
+fn deep_link_settings_section(section: &str) -> Option<&'static str> {
+    DEEP_LINK_SETTINGS_SECTIONS
+        .iter()
+        .copied()
+        .find(|known| *known == section)
 }
 
 fn build_app_menu(
@@ -1076,8 +1195,18 @@ fn build_app_menu(
         .item(&help_menu)
         .build()?;
 
+    let workspace_gated = vec![
+        lock_item.clone(),
+        sync_all_item.clone(),
+        process_journals_item.clone(),
+        open_reports_item.clone(),
+        workflow_connections_item.clone(),
+        workflow_data_item.clone(),
+    ];
+
     let handles = AppMenuHandles {
         assistant: assistant_item,
+        workspace_gated,
     };
 
     Ok((menu, handles))
@@ -1087,11 +1216,18 @@ fn build_app_menu(
 fn set_menu_state(
     handles: tauri::State<'_, AppMenuHandles>,
     ai_features_enabled: bool,
+    has_workspace: bool,
 ) -> Result<(), String> {
+    let assistant_enabled = ai_features_enabled && has_workspace;
     handles
         .assistant
-        .set_enabled(ai_features_enabled)
-        .map_err(|error| error.to_string())
+        .set_enabled(assistant_enabled)
+        .map_err(|error| error.to_string())?;
+    for item in &handles.workspace_gated {
+        item.set_enabled(has_workspace)
+            .map_err(|error| error.to_string())?;
+    }
+    Ok(())
 }
 
 fn menu_item(
@@ -1259,12 +1395,13 @@ fn desktop_cli_args() -> Option<Vec<String>> {
 mod tests {
     use super::{
         database_is_encrypted, inspect_import_project_directory, is_managed_report_export_path,
-        is_supported_export_file, menu_action, menu_action_for_id, navigate_action,
-        open_settings_action, validated_external_url, ALLOWED_DAEMON_KINDS, MENU_HELP_DOCS,
-        MENU_LOCK_APP, MENU_NAV_ASSISTANT, MENU_NAV_REPORTS, MENU_SETTINGS_SECURITY,
+        is_supported_export_file, menu_action, menu_action_for_deep_link, menu_action_for_id,
+        navigate_action, open_settings_action, validated_external_url, ALLOWED_DAEMON_KINDS,
+        MENU_HELP_DOCS, MENU_LOCK_APP, MENU_NAV_ASSISTANT, MENU_NAV_REPORTS, MENU_SETTINGS_SECURITY,
         MENU_TOGGLE_FULLSCREEN, MENU_WORKFLOW_CONNECTIONS_IMPORTS, MENU_WORKFLOW_OPEN_REPORTS,
         MENU_WORKFLOW_PROCESS_JOURNALS, MENU_WORKFLOW_SYNC_ALL,
     };
+    use tauri::Url;
     use std::fs;
     use std::path::{Path, PathBuf};
     use std::time::{SystemTime, UNIX_EPOCH};
@@ -1344,6 +1481,60 @@ mod tests {
         );
         assert_eq!(menu_action_for_id(MENU_TOGGLE_FULLSCREEN), None);
         assert_eq!(menu_action_for_id(MENU_HELP_DOCS), None);
+    }
+
+    #[test]
+    fn deep_links_route_to_known_actions() {
+        let parse = |s: &str| menu_action_for_deep_link(&Url::parse(s).unwrap());
+
+        assert_eq!(
+            parse("kassiber://transactions"),
+            Some(navigate_action("/transactions"))
+        );
+        assert_eq!(
+            parse("kassiber://source-of-funds"),
+            Some(navigate_action("/source-of-funds"))
+        );
+        assert_eq!(
+            parse("kassiber://settings"),
+            Some(open_settings_action(None))
+        );
+        assert_eq!(
+            parse("kassiber://settings/privacy"),
+            Some(open_settings_action(Some("privacy")))
+        );
+        // Unknown sections degrade to "open settings" without a section
+        // rather than failing — the user still arrives at the right surface
+        // and the menu fallback already handles the missing-hash case.
+        assert_eq!(
+            parse("kassiber://settings/wallet-of-satoshi"),
+            Some(open_settings_action(None))
+        );
+        assert_eq!(
+            parse("kassiber://workflow/sync-all"),
+            Some(menu_action("sync-all-wallets"))
+        );
+        assert_eq!(
+            parse("kassiber://workflow/process-journals"),
+            Some(menu_action("process-journals"))
+        );
+        assert_eq!(parse("kassiber://lock"), Some(menu_action("lock-app")));
+    }
+
+    #[test]
+    fn deep_links_reject_unknown_routes() {
+        let parse = |s: &str| menu_action_for_deep_link(&Url::parse(s).unwrap());
+
+        // Unknown top-level slug is rejected outright — never silently
+        // navigate the user somewhere they didn't ask for.
+        assert_eq!(parse("kassiber://wallet-of-satoshi"), None);
+        // Unknown workflow command does NOT fall back to settings or nav.
+        assert_eq!(parse("kassiber://workflow/drain-everything"), None);
+        // `lock` only works as the bare host, not with extra segments — guards
+        // against future route collisions like `lock/...`.
+        assert_eq!(parse("kassiber://lock/maybe"), None);
+        // Wrong scheme is always rejected, even if the path otherwise looks fine.
+        assert_eq!(parse("https://transactions/abc"), None);
     }
 
     #[test]
