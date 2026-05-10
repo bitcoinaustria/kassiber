@@ -16,7 +16,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { useDaemon, useDaemonMutation } from "@/daemon/client";
-import { useUiStore } from "@/store/ui";
+import { useUiStore, type DeferredConnectionSetup } from "@/store/ui";
 import { cn } from "@/lib/utils";
 import {
   CONNECTION_CATEGORIES,
@@ -173,6 +173,9 @@ export function AddConnectionDialog({
 }: AddConnectionDialogProps) {
   const navigate = useNavigate();
   const addNotification = useUiStore((state) => state.addNotification);
+  const setDeferredConnectionSetup = useUiStore(
+    (state) => state.setDeferredConnectionSetup,
+  );
   const backendOptions = useDaemon<BackendOptionsData>("ui.backends.options");
   const createWallet =
     useDaemonMutation<{ wallet: { label: string } }>("ui.wallets.create");
@@ -320,6 +323,11 @@ export function AddConnectionDialog({
   };
 
   const openBackendSettings = () => {
+    const intent: DeferredConnectionSetup = {
+      sourceId: selected.id,
+      reason: `Adding ${selected.title}`,
+    };
+    setDeferredConnectionSetup(intent);
     onOpenChange(false);
     void navigate({ to: "/settings", hash: "backends" });
   };

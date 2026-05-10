@@ -4,7 +4,7 @@
  * Uses the shared shadcn dashboard language while keeping row navigation.
  */
 
-import { type KeyboardEvent, type ReactNode, useState } from "react";
+import { type KeyboardEvent, type ReactNode, useEffect, useState } from "react";
 import { Plus, RefreshCw, Wallet } from "lucide-react";
 import { useNavigate } from "@tanstack/react-router";
 
@@ -104,7 +104,21 @@ export function Connections() {
   const navigate = useNavigate();
   const [syncMessage, setSyncMessage] = useState<string | null>(null);
   const [addConnectionOpen, setAddConnectionOpen] = useState(false);
+  const [resumeSourceId, setResumeSourceId] = useState<string | null>(null);
+  const deferredConnectionSetup = useUiStore(
+    (s) => s.deferredConnectionSetup,
+  );
+  const clearDeferredConnectionSetup = useUiStore(
+    (s) => s.clearDeferredConnectionSetup,
+  );
   const { startSyncNotice, clearSyncNotice } = useSyncProgressNotice();
+
+  useEffect(() => {
+    if (!deferredConnectionSetup) return;
+    setResumeSourceId(deferredConnectionSetup.sourceId);
+    setAddConnectionOpen(true);
+    clearDeferredConnectionSetup();
+  }, [deferredConnectionSetup, clearDeferredConnectionSetup]);
   const onSyncAll = () => {
     if (syncWallets.isPending) return;
     setSyncMessage(null);
@@ -226,7 +240,11 @@ export function Connections() {
       </div>
       <AddConnectionDialog
         open={addConnectionOpen}
-        onOpenChange={setAddConnectionOpen}
+        onOpenChange={(next) => {
+          setAddConnectionOpen(next);
+          if (!next) setResumeSourceId(null);
+        }}
+        initialSourceId={resumeSourceId}
       />
       {syncMessage && (
         <div

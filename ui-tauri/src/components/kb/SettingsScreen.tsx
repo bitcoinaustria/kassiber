@@ -231,6 +231,12 @@ export function SettingsScreen({ onLock }: SettingsScreenProps) {
   const setAiFeaturesEnabled = useUiStore((s) => s.setAiFeaturesEnabled);
   const identity = useUiStore((s) => s.identity);
   const setIdentity = useUiStore((s) => s.setIdentity);
+  const deferredConnectionSetup = useUiStore(
+    (s) => s.deferredConnectionSetup,
+  );
+  const clearDeferredConnectionSetup = useUiStore(
+    (s) => s.clearDeferredConnectionSetup,
+  );
   const navigate = useNavigate();
   const settingsHash = useRouterState({ select: (s) => s.location.hash });
   const routeSelectedIntegrationId = React.useMemo(
@@ -602,6 +608,37 @@ export function SettingsScreen({ onLock }: SettingsScreenProps) {
               tools.
             </p>
           </div>
+
+          {deferredConnectionSetup ? (
+            <div className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-primary/30 bg-primary/5 p-3 text-sm">
+              <span>
+                You came here from connection setup
+                {deferredConnectionSetup.reason
+                  ? ` (${deferredConnectionSetup.reason})`
+                  : ""}
+                . Configure the backend below, then resume.
+              </span>
+              <div className="flex gap-2">
+                <Button
+                  type="button"
+                  size="sm"
+                  onClick={() => {
+                    void navigate({ to: "/connections" });
+                  }}
+                >
+                  Resume connection setup
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="ghost"
+                  onClick={clearDeferredConnectionSetup}
+                >
+                  Dismiss
+                </Button>
+              </div>
+            </div>
+          ) : null}
 
           <div className="flex min-w-0 flex-col gap-4">
             <SettingsIntegrations4
