@@ -23,6 +23,8 @@ import {
   Bar,
   BarChart,
   CartesianGrid,
+  Cell,
+  ReferenceLine,
   Tooltip,
   XAxis,
   YAxis,
@@ -94,7 +96,6 @@ import {
   explorerForTransaction,
   formatCounterDisplayMoney,
   formatDisplayMoney,
-  formatInlineBtc,
   formatShortTxid,
   formatSignedDisplayMoney,
   mockNewTransactionWalletSourceOptions,
@@ -118,13 +119,46 @@ import {
 } from "@/components/transactions";
 
 type PeriodKey = "ytd" | "30days" | "3months" | "1year" | "5years";
+type FlowChartMetric = "amount" | "count";
+type FlowChartMode = "external" | "all";
+type FlowChartSegment = "incoming" | "outgoing" | "transfers" | "swaps";
 
 type FlowChartPoint = {
+  bucketKey: string;
   date: string;
   incoming: number;
   outgoing: number;
   transfers: number;
   swaps: number;
+  stats: Record<FlowChartSegment, FlowChartSegmentStats>;
+};
+
+type FlowChartSegmentStats = {
+  count: number;
+  btc: number;
+  eur: number;
+  missingPrice: number;
+  review: number;
+  failed: number;
+  largest?: {
+    label: string;
+    btc: number;
+    eur: number;
+  };
+};
+
+type FlowChartSelection = {
+  id: string;
+  period: PeriodKey;
+  bucketKey: string | null;
+  bucketLabel: string;
+  segment: FlowChartSegment;
+  mode: FlowChartMode;
+};
+
+type FlowChartClickData = {
+  payload?: FlowChartPoint;
+  activePayload?: Array<{ payload?: FlowChartPoint }>;
 };
 
 type FlowBucket = {
@@ -141,7 +175,7 @@ type SwapCandidate = {
 
 const flowColors: Record<TransactionFlow, string> = {
   incoming: "oklch(0.56 0.16 150)",
-  outgoing: "oklch(0.58 0.2 27)",
+  outgoing: "var(--color-accent)",
   transfer: "oklch(0.56 0.04 260)",
   swap: "oklch(0.62 0.16 246)",
   "layer-transition": "oklch(0.65 0.11 185)",
@@ -789,6 +823,39 @@ const periodLabels: Record<PeriodKey, string> = {
   "5years": "5 Years",
 };
 
+const flowChartMetricLabels: Record<FlowChartMetric, string> = {
+  amount: "Amount",
+  count: "Count",
+};
+
+const flowChartModeLabels: Record<FlowChartMode, string> = {
+  external: "External",
+  all: "All",
+};
+
+const flowChartSegmentLabels: Record<FlowChartSegment, string> = {
+  incoming: "Incoming",
+  outgoing: "Outgoing",
+  transfers: "Transfers",
+  swaps: "Swaps",
+};
+
+const emptyFlowChartSegmentStats = (): FlowChartSegmentStats => ({
+  count: 0,
+  btc: 0,
+  eur: 0,
+  missingPrice: 0,
+  review: 0,
+  failed: 0,
+});
+
+const emptyFlowChartStats = (): Record<FlowChartSegment, FlowChartSegmentStats> => ({
+  incoming: emptyFlowChartSegmentStats(),
+  outgoing: emptyFlowChartSegmentStats(),
+  transfers: emptyFlowChartSegmentStats(),
+  swaps: emptyFlowChartSegmentStats(),
+});
+
 const periodKeys: PeriodKey[] = [
   "30days",
   "3months",
@@ -1002,11 +1069,13 @@ function buildEmptyFlowBuckets(
   while (cursor <= end) {
     const bucket = bucketTransactionDate(cursor, period);
     grouped.set(bucket.key, {
+      bucketKey: bucket.key,
       date: bucket.label,
       incoming: 0,
       outgoing: 0,
       transfers: 0,
       swaps: 0,
+      stats: emptyFlowChartStats(),
     });
     cursor = addBucketStep(cursor, period);
   }
@@ -1103,6 +1172,7 @@ function buildFlowChartRows(
   period: PeriodKey,
   currency: Currency,
   candidateIds = new Set<string>(),
+  metric: FlowChartMetric = "amount",
 ): FlowChartPoint[] {
   const grouped = buildEmptyFlowBuckets(period, records);
 
@@ -1114,20 +1184,27 @@ function buildFlowChartRows(
     const row =
       grouped.get(bucket.key) ??
       {
+        bucketKey: bucket.key,
         date: bucket.label,
         incoming: 0,
         outgoing: 0,
         transfers: 0,
         swaps: 0,
+        stats: emptyFlowChartStats(),
       };
-    const value = currency === "btc" ? transactionBtc(txn) : txn.amount;
+    const value =
+      metric === "count" ? 1 : currency === "btc" ? transactionBtc(txn) : txn.amount;
     const flow = candidateIds.has(txn.id) ? "swap" : transactionFlow(txn);
+    const segment = flowChartSegmentForFlow(flow);
     if (flow === "incoming") row.incoming += value;
-    if (flow === "outgoing") row.outgoing += value;
+    if (flow === "outgoing") row.outgoing -= value;
     if (flow === "transfer" || flow === "layer-transition") {
       row.transfers += value;
     }
     if (flow === "swap") row.swaps += value;
+    if (segment) {
+      addFlowChartSegmentStats(row.stats[segment], txn);
+    }
     grouped.set(bucket.key, row);
   }
 
@@ -1194,6 +1271,7 @@ const PeriodTabs = ({
 interface ChartTooltipPayload {
   dataKey?: string | number;
   value?: number | string;
+  payload?: FlowChartPoint;
 }
 
 interface ChartTooltipProps {
@@ -1202,6 +1280,7 @@ interface ChartTooltipProps {
   label?: string | number;
   hideSensitive: boolean;
   currency: Currency;
+  metric: FlowChartMetric;
 }
 
 const TransactionWorkbench = ({
@@ -1209,13 +1288,20 @@ const TransactionWorkbench = ({
   records,
   hideSensitive,
   currency,
+  onFlowSelectionChange,
+  chartSelection,
 }: {
   period: PeriodKey;
   records: Transaction[];
   hideSensitive: boolean;
   currency: Currency;
+  onFlowSelectionChange: (selection: FlowChartSelection) => void;
+  chartSelection: FlowChartSelection | null;
 }) => {
   const [swapDialogOpen, setSwapDialogOpen] = React.useState(false);
+  const [chartMetric, setChartMetric] =
+    React.useState<FlowChartMetric>("amount");
+  const [chartMode, setChartMode] = React.useState<FlowChartMode>("external");
   const swapCandidates = buildSwapCandidates(records);
   const swapCandidateIds = new Set(
     swapCandidates.flatMap((candidate) => [
@@ -1248,9 +1334,67 @@ const TransactionWorkbench = ({
   const failedCount = records.filter((txn) => txn.status === "failed").length;
   const withoutExplorer = records.filter((txn) => !txn.explorerId).length;
   const missingPriceCount = records.filter((txn) => !txn.rate).length;
-  const chartRows = buildFlowChartRows(records, period, currency, swapCandidateIds);
+  const chartRecords =
+    chartMode === "external"
+      ? externalRecords.filter(
+          (txn) =>
+            !swapCandidateIds.has(txn.id) &&
+            ["incoming", "outgoing"].includes(transactionFlow(txn)),
+        )
+      : records;
+  const chartRows = buildFlowChartRows(
+    chartRecords,
+    period,
+    currency,
+    swapCandidateIds,
+    chartMetric,
+  );
   const activeChartRows = chartRows.filter((row) => flowPointTotal(row) > 0);
   const visibleChartRows = activeChartRows.length ? activeChartRows : chartRows;
+  const yDomain = flowAxisDomain(visibleChartRows, chartMetric);
+  const flowChartCellProps = React.useCallback(
+    (row: FlowChartPoint, segment: FlowChartSegment) => {
+      const selected =
+        chartSelection?.segment === segment &&
+        (chartSelection.bucketKey === null ||
+          chartSelection.bucketKey === row.bucketKey);
+      const dimmed = Boolean(chartSelection && !selected);
+      return {
+        fillOpacity: dimmed ? 0.32 : 1,
+        stroke: selected ? "var(--foreground)" : "transparent",
+        strokeWidth: selected ? 1.5 : 0,
+      };
+    },
+    [chartSelection],
+  );
+  const handleFlowChartClick = React.useCallback(
+    (data: FlowChartClickData, segment: FlowChartSegment) => {
+      const point = data.payload ?? data.activePayload?.[0]?.payload;
+      if (!point || flowPointSegmentValue(point, segment) === 0) return;
+      onFlowSelectionChange({
+        id: `${period}:${point.bucketKey}:${segment}:${chartMode}`,
+        period,
+        bucketKey: point.bucketKey,
+        bucketLabel: point.date,
+        segment,
+        mode: chartMode,
+      });
+    },
+    [chartMode, onFlowSelectionChange, period],
+  );
+  const handleFlowLegendClick = React.useCallback(
+    (segment: FlowChartSegment) => {
+      onFlowSelectionChange({
+        id: `${period}:all:${segment}:${chartMode}`,
+        period,
+        bucketKey: null,
+        bucketLabel: periodLabels[period],
+        segment,
+        mode: chartMode,
+      });
+    },
+    [chartMode, onFlowSelectionChange, period],
+  );
   const networkRows = buildBreakdown(records, (txn) => txn.paymentMethod);
   const walletRows = buildBreakdown(records, (txn) => txn.wallet ?? "Unassigned");
   const maxNetworkValue = Math.max(...networkRows.map((row) => row.eur), 1);
@@ -1372,40 +1516,107 @@ const TransactionWorkbench = ({
           );
         })}
 
-        <div className="col-span-2 border-b p-3 sm:p-4 md:col-span-3 xl:col-span-4 xl:border-b-0">
-          <div className="mb-3 flex items-center justify-between gap-3">
+        <div className="col-span-2 flex min-h-[360px] flex-col border-b p-3 sm:p-4 md:col-span-3 xl:col-span-4 xl:min-h-0 xl:border-b-0">
+          <div className="mb-3 flex shrink-0 items-start justify-between gap-3">
             <div>
               <h2 className="text-sm font-semibold">
                 Flow by active {flowBucketLabel(period)}
               </h2>
               <p className="text-xs text-muted-foreground">
-                {records.length} tx across {activeChartRows.length} active{" "}
+                {chartRecords.length} tx across {activeChartRows.length} active{" "}
                 {activeChartRows.length === 1
                   ? flowBucketLabel(period)
                   : `${flowBucketLabel(period)}s`}
               </p>
             </div>
-            <div className="flex flex-wrap justify-end gap-x-3 gap-y-1 text-[10px] text-muted-foreground sm:text-xs">
-              {[
-                ["incoming", "Incoming"],
-                ["outgoing", "Outgoing"],
-                ["transfer", "Transfers"],
-                ["swap", "Swaps"],
-              ].map(([flow, label]) => (
-                <span key={flow} className="inline-flex items-center gap-1.5">
-                  <span
-                    className="size-2.5 rounded-sm"
-                    style={{ backgroundColor: flowColors[flow as TransactionFlow] }}
-                    aria-hidden="true"
-                  />
-                  {label}
-                </span>
-              ))}
+            <div className="flex flex-col items-end gap-2">
+              <div className="flex flex-wrap justify-end gap-x-2 gap-y-1 text-[10px] text-muted-foreground sm:text-xs">
+                {[
+                  ["incoming", "Incoming"],
+                  ["outgoing", "Outgoing"],
+                  ...(chartMode === "all"
+                    ? [
+                        ["transfer", "Transfers"],
+                        ["swap", "Swaps"],
+                      ]
+                    : []),
+                ].map(([flow, label]) => (
+                  <button
+                    key={flow}
+                    type="button"
+                    className={cn(
+                      "inline-flex items-center gap-1.5 rounded-md px-1.5 py-0.5 transition-colors hover:bg-muted hover:text-foreground",
+                      chartSelection?.bucketKey === null &&
+                        chartSelection.segment === flowChartSegmentForFlow(
+                          flow as TransactionFlow,
+                        ) &&
+                        "bg-muted text-foreground",
+                    )}
+                    onClick={() => {
+                      const segment = flowChartSegmentForFlow(
+                        flow as TransactionFlow,
+                      );
+                      if (segment) handleFlowLegendClick(segment);
+                    }}
+                  >
+                    <span
+                      className="size-2.5 rounded-sm"
+                      style={{
+                        backgroundColor: flowColors[flow as TransactionFlow],
+                      }}
+                      aria-hidden="true"
+                    />
+                    {label}
+                  </button>
+                ))}
+              </div>
+              <div className="flex flex-wrap justify-end gap-1">
+                {(["amount", "count"] satisfies FlowChartMetric[]).map(
+                  (metric) => (
+                    <button
+                      key={metric}
+                      type="button"
+                      aria-pressed={chartMetric === metric}
+                      onClick={() => setChartMetric(metric)}
+                      className={cn(
+                        "h-7 rounded-md border px-2 text-[10px] font-medium transition-colors sm:text-xs",
+                        chartMetric === metric
+                          ? "border-primary bg-primary text-primary-foreground"
+                          : "border-border bg-background text-muted-foreground hover:text-foreground",
+                      )}
+                    >
+                      {flowChartMetricLabels[metric]}
+                    </button>
+                  ),
+                )}
+                {(["external", "all"] satisfies FlowChartMode[]).map((mode) => (
+                  <button
+                    key={mode}
+                    type="button"
+                    aria-pressed={chartMode === mode}
+                    onClick={() => setChartMode(mode)}
+                    className={cn(
+                      "h-7 rounded-md border px-2 text-[10px] font-medium transition-colors sm:text-xs",
+                      chartMode === mode
+                        ? "border-primary bg-primary text-primary-foreground"
+                        : "border-border bg-background text-muted-foreground hover:text-foreground",
+                    )}
+                  >
+                    {flowChartModeLabels[mode]}
+                  </button>
+                ))}
+              </div>
             </div>
           </div>
-          <div className="h-[185px] min-w-0">
-            <ChartContainer config={flowChartConfig} className="h-full w-full">
-              <BarChart data={visibleChartRows}>
+          <div className="min-h-[280px] min-w-0 flex-1">
+            <ChartContainer
+              config={flowChartConfig}
+              className="h-full w-full overflow-visible [&_.recharts-tooltip-wrapper]:!z-30 [&_.recharts-wrapper]:!overflow-visible"
+            >
+              <BarChart
+                data={visibleChartRows}
+                margin={{ top: 18, right: 42, bottom: 0, left: 0 }}
+              >
                 <CartesianGrid strokeDasharray="0" vertical={false} />
                 <XAxis
                   dataKey="date"
@@ -1419,42 +1630,105 @@ const TransactionWorkbench = ({
                   tickLine={false}
                   tick={{ fontSize: 10 }}
                   width={56}
+                  domain={yDomain}
                   tickFormatter={(value) =>
                     hideSensitive
                       ? ""
-                      : currency === "btc"
-                        ? formatInlineBtc(Number(value), 4)
-                        : compactCurrencyFormatter.format(value)
+                      : chartMetric === "count"
+                        ? String(Math.round(Number(value)))
+                        : currency === "btc"
+                          ? formatBtc(Number(value), {
+                              precision: 4,
+                              sign: Number(value) !== 0,
+                            }).replace(/\s/g, "")
+                          : compactCurrencyFormatter.format(Number(value))
                   }
                 />
                 <Tooltip
+                  allowEscapeViewBox={{ x: true, y: true }}
                   cursor={{ fillOpacity: 0.05 }}
                   content={
                     <FlowTooltip
                       hideSensitive={hideSensitive}
                       currency={currency}
+                      metric={chartMetric}
                     />
                   }
+                  offset={32}
+                  wrapperStyle={{
+                    pointerEvents: "none",
+                    zIndex: 30,
+                  }}
                 />
                 <Bar
                   dataKey="incoming"
                   fill={flowColors.incoming}
                   radius={[2, 2, 0, 0]}
-                />
+                  cursor="pointer"
+                  onClick={(data: FlowChartClickData) =>
+                    handleFlowChartClick(data, "incoming")
+                  }
+                >
+                  {visibleChartRows.map((row) => (
+                    <Cell
+                      key={`incoming-${row.bucketKey}`}
+                      {...flowChartCellProps(row, "incoming")}
+                    />
+                  ))}
+                </Bar>
                 <Bar
                   dataKey="outgoing"
                   fill={flowColors.outgoing}
-                  radius={[2, 2, 0, 0]}
-                />
+                  radius={[0, 0, 2, 2]}
+                  cursor="pointer"
+                  onClick={(data: FlowChartClickData) =>
+                    handleFlowChartClick(data, "outgoing")
+                  }
+                >
+                  {visibleChartRows.map((row) => (
+                    <Cell
+                      key={`outgoing-${row.bucketKey}`}
+                      {...flowChartCellProps(row, "outgoing")}
+                    />
+                  ))}
+                </Bar>
                 <Bar
                   dataKey="transfers"
                   fill={flowColors.transfer}
                   radius={[2, 2, 0, 0]}
-                />
+                  cursor="pointer"
+                  onClick={(data: FlowChartClickData) =>
+                    handleFlowChartClick(data, "transfers")
+                  }
+                >
+                  {visibleChartRows.map((row) => (
+                    <Cell
+                      key={`transfers-${row.bucketKey}`}
+                      {...flowChartCellProps(row, "transfers")}
+                    />
+                  ))}
+                </Bar>
                 <Bar
                   dataKey="swaps"
                   fill={flowColors.swap}
                   radius={[2, 2, 0, 0]}
+                  cursor="pointer"
+                  onClick={(data: FlowChartClickData) =>
+                    handleFlowChartClick(data, "swaps")
+                  }
+                >
+                  {visibleChartRows.map((row) => (
+                    <Cell
+                      key={`swaps-${row.bucketKey}`}
+                      {...flowChartCellProps(row, "swaps")}
+                    />
+                  ))}
+                </Bar>
+                <ReferenceLine
+                  y={0}
+                  stroke="var(--foreground)"
+                  strokeOpacity={0.55}
+                  strokeWidth={2}
                 />
               </BarChart>
             </ChartContainer>
@@ -1627,42 +1901,127 @@ function FlowTooltip({
   label,
   hideSensitive,
   currency,
+  metric,
 }: ChartTooltipProps) {
   if (!active || !payload?.length) return null;
-  const rows = payload.filter((row) => Number(row.value ?? 0) > 0);
+  const rows = payload
+    .filter((row) => Number(row.value ?? 0) !== 0)
+    .sort((a, b) => Number(b.value ?? 0) - Number(a.value ?? 0));
   return (
-    <div className="rounded-lg border bg-popover p-3 text-xs shadow-lg">
+    <div className="min-w-[240px] rounded-lg border bg-popover p-3 text-xs shadow-lg">
       <p className="mb-2 font-medium">{label}</p>
-      <div className="space-y-1.5">
-        {rows.map((row) => (
-          <div key={String(row.dataKey)} className="flex items-center gap-2">
-            <span
-              className="size-2 rounded-sm"
-              style={{
-                backgroundColor:
-                  flowColors[
-                    (row.dataKey === "transfers"
-                      ? "transfer"
-                      : row.dataKey === "swaps"
-                        ? "swap"
-                        : row.dataKey) as TransactionFlow
-                  ] ?? "currentColor",
-              }}
-              aria-hidden="true"
-            />
-            <span className="capitalize text-muted-foreground">
-              {String(row.dataKey)}
-            </span>
-            <span className={cn("ml-auto font-medium", blurClass(hideSensitive))}>
-              {currency === "btc"
-                ? formatBtc(Number(row.value))
-                : currencyFormatter.format(Number(row.value))}
-            </span>
-          </div>
-        ))}
+      <div className="space-y-2">
+        {rows.map((row) => {
+          const segment = flowChartSegmentFromDataKey(row.dataKey);
+          const stats = segment ? row.payload?.stats[segment] : undefined;
+          return (
+            <div key={String(row.dataKey)} className="space-y-1.5">
+              <div className="flex items-center gap-2">
+                <span
+                  className="size-2 rounded-sm"
+                  style={{
+                    backgroundColor: flowColorForSegment(segment),
+                  }}
+                  aria-hidden="true"
+                />
+                <span className="text-muted-foreground">
+                  {segment
+                    ? flowChartSegmentLabels[segment]
+                    : String(row.dataKey)}
+                </span>
+                <span
+                  className={cn(
+                    "ml-auto font-medium",
+                    blurClass(hideSensitive),
+                  )}
+                >
+                  {formatFlowTooltipValue(Number(row.value), currency, metric)}
+                </span>
+              </div>
+              {stats && (
+                <div className="space-y-1 pl-4 text-[10px] text-muted-foreground sm:text-xs">
+                  <div className="flex justify-between gap-3">
+                    <span>{stats.count} tx</span>
+                    <span className={blurClass(hideSensitive)}>
+                      {currency === "btc"
+                        ? formatBtc(stats.btc, { precision: 8 })
+                        : currencyFormatter.format(stats.eur)}
+                    </span>
+                  </div>
+                  {stats.largest && (
+                    <div className="flex justify-between gap-3">
+                      <span className="truncate">
+                        Largest: {stats.largest.label}
+                      </span>
+                      <span
+                        className={cn(
+                          "shrink-0 font-medium",
+                          blurClass(hideSensitive),
+                        )}
+                      >
+                        {currency === "btc"
+                          ? formatBtc(stats.largest.btc, { precision: 8 })
+                          : currencyFormatter.format(stats.largest.eur)}
+                      </span>
+                    </div>
+                  )}
+                  {(stats.missingPrice > 0 ||
+                    stats.review > 0 ||
+                    stats.failed > 0) && (
+                    <div className="flex flex-wrap gap-1 pt-0.5">
+                      {stats.missingPrice > 0 && (
+                        <span className="rounded bg-amber-500/10 px-1.5 py-0.5 text-amber-600">
+                          {stats.missingPrice} missing price
+                        </span>
+                      )}
+                      {stats.review > 0 && (
+                        <span className="rounded bg-blue-500/10 px-1.5 py-0.5 text-blue-600">
+                          {stats.review} review
+                        </span>
+                      )}
+                      {stats.failed > 0 && (
+                        <span className="rounded bg-[var(--color-accent)]/10 px-1.5 py-0.5 text-[var(--color-accent)]">
+                          {stats.failed} failed
+                        </span>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          );
+        })}
       </div>
     </div>
   );
+}
+
+function flowChartSegmentFromDataKey(
+  dataKey: string | number | undefined,
+): FlowChartSegment | null {
+  if (dataKey === "incoming" || dataKey === "outgoing") return dataKey;
+  if (dataKey === "transfers" || dataKey === "swaps") return dataKey;
+  return null;
+}
+
+function flowColorForSegment(segment: FlowChartSegment | null) {
+  if (segment === "incoming") return flowColors.incoming;
+  if (segment === "outgoing") return flowColors.outgoing;
+  if (segment === "transfers") return flowColors.transfer;
+  if (segment === "swaps") return flowColors.swap;
+  return "currentColor";
+}
+
+function formatFlowTooltipValue(
+  value: number,
+  currency: Currency,
+  metric: FlowChartMetric,
+) {
+  if (metric === "count") {
+    const prefix = value >= 0 ? "+ " : "− ";
+    return `${prefix}${Math.abs(value)} tx`;
+  }
+  return formatSignedDisplayMoney(value, value, currency);
 }
 
 function flowPointEntries(row: FlowChartPoint) {
@@ -1674,8 +2033,60 @@ function flowPointEntries(row: FlowChartPoint) {
   ] as const;
 }
 
+function flowPointSegmentValue(row: FlowChartPoint, segment: FlowChartSegment) {
+  return segment === "incoming"
+    ? row.incoming
+    : segment === "outgoing"
+      ? row.outgoing
+      : segment === "transfers"
+        ? row.transfers
+        : row.swaps;
+}
+
+function flowChartSegmentForFlow(flow: TransactionFlow): FlowChartSegment | null {
+  if (flow === "incoming" || flow === "outgoing") return flow;
+  if (flow === "transfer" || flow === "layer-transition") return "transfers";
+  if (flow === "swap") return "swaps";
+  return null;
+}
+
+function addFlowChartSegmentStats(
+  stats: FlowChartSegmentStats,
+  txn: Transaction,
+) {
+  const btc = transactionBtc(txn);
+  const eur = txn.amount;
+  stats.count += 1;
+  stats.btc += btc;
+  stats.eur += eur;
+  if (!txn.rate) stats.missingPrice += 1;
+  if (txn.status === "review" || txn.status === "pending") stats.review += 1;
+  if (txn.status === "failed") stats.failed += 1;
+  if (!stats.largest || btc > stats.largest.btc) {
+    stats.largest = {
+      label: txn.counterparty || txn.wallet || txn.txnId,
+      btc,
+      eur,
+    };
+  }
+}
+
 function flowPointTotal(row: FlowChartPoint) {
-  return flowPointEntries(row).reduce((sum, [, value]) => sum + value, 0);
+  return flowPointEntries(row).reduce((sum, [, value]) => sum + Math.abs(value), 0);
+}
+
+function flowAxisDomain(
+  rows: FlowChartPoint[],
+  metric: FlowChartMetric,
+): [number, number] {
+  const maxAbs = Math.max(
+    metric === "count" ? 1 : 0,
+    ...rows.flatMap((row) =>
+      flowPointEntries(row).map(([, value]) => Math.abs(value)),
+    ),
+  );
+  if (maxAbs === 0) return [-1, 1];
+  return [-maxAbs * 1.12, maxAbs * 1.12];
 }
 
 function BreakdownPanel({
@@ -1811,18 +2222,48 @@ function matchesTransactionDeepLink(txn: Transaction, transactionId: string) {
     .some((value) => value?.toLowerCase() === target);
 }
 
+function flowChartSelectionLabel(selection: FlowChartSelection) {
+  return `${selection.bucketLabel} · ${flowChartSegmentLabels[selection.segment]} · ${
+    flowChartModeLabels[selection.mode]
+  }`;
+}
+
+function matchesFlowChartSelection(
+  txn: Transaction,
+  selection: FlowChartSelection,
+  displayFlow: (txn: Transaction) => TransactionFlow,
+) {
+  const parsedDate = parseTransactionDate(txn.date);
+  if (selection.bucketKey !== null) {
+    if (!parsedDate) return false;
+    const bucket = bucketTransactionDate(parsedDate, selection.period);
+    if (bucket.key !== selection.bucketKey) return false;
+  }
+
+  const flow = displayFlow(txn);
+  if (selection.segment === "transfers") {
+    return flow === "transfer" || flow === "layer-transition";
+  }
+  if (selection.segment === "swaps") return flow === "swap";
+  return flow === selection.segment;
+}
+
 const TransactionsTable = ({
   records,
   hideSensitive,
   currency,
   explorerSettings,
   swapCandidateIds = new Set<string>(),
+  chartSelection,
+  onChartSelectionChange,
 }: {
   records: Transaction[];
   hideSensitive: boolean;
   currency: Currency;
   explorerSettings: ExplorerSettings;
   swapCandidateIds?: Set<string>;
+  chartSelection: FlowChartSelection | null;
+  onChartSelectionChange: (selection: FlowChartSelection | null) => void;
 }) => {
   const [searchQuery, setSearchQuery] = React.useState("");
   const [statusFilter, setStatusFilter] = React.useState<string>("all");
@@ -1839,6 +2280,7 @@ const TransactionsTable = ({
     React.useState<Transaction | null>(null);
   const [detailInitialTab, setDetailInitialTab] = React.useState("details");
   const pendingDetailLinkRef = React.useRef(readTransactionDetailParams());
+  const tableRef = React.useRef<HTMLDivElement>(null);
   const [drafts, setDrafts] = React.useState<Record<string, TransactionEditDraft>>(
     {},
   );
@@ -1865,12 +2307,14 @@ const TransactionsTable = ({
   );
 
   const hasActiveFilters =
+    chartSelection !== null ||
     statusFilter !== "all" ||
     dateFilter !== "all" ||
     flowFilter !== "all" ||
     paymentMethodFilter !== "all";
 
   const clearFilters = () => {
+    onChartSelectionChange(null);
     setStatusFilter("all");
     setDateFilter("all");
     setFlowFilter("all");
@@ -1969,6 +2413,10 @@ const TransactionsTable = ({
         paymentMethodFilter === "all" ||
         txn.paymentMethod === paymentMethodFilter;
 
+      const matchesChartSelection =
+        !chartSelection ||
+        matchesFlowChartSelection(txn, chartSelection, displayFlow);
+
       let matchesDate = true;
       const pd = txn.date.toLowerCase();
       switch (dateFilter) {
@@ -1994,6 +2442,7 @@ const TransactionsTable = ({
 
       return (
         matchesSearch &&
+        matchesChartSelection &&
         matchesStatus &&
         matchesFlow &&
         matchesPaymentMethod &&
@@ -2004,12 +2453,23 @@ const TransactionsTable = ({
     records,
     getDraft,
     searchQuery,
+    chartSelection,
     statusFilter,
     dateFilter,
     flowFilter,
     paymentMethodFilter,
     displayFlow,
   ]);
+
+  React.useEffect(() => {
+    if (!chartSelection || typeof window === "undefined") return;
+    window.requestAnimationFrame(() => {
+      tableRef.current?.scrollIntoView({
+        behavior: "smooth",
+        block: "start",
+      });
+    });
+  }, [chartSelection]);
 
   const totalPages = Math.ceil(filteredTransactions.length / pageSize);
 
@@ -2023,6 +2483,7 @@ const TransactionsTable = ({
     setCurrentPage(1);
   }, [
     searchQuery,
+    chartSelection,
     statusFilter,
     dateFilter,
     flowFilter,
@@ -2098,7 +2559,7 @@ const TransactionsTable = ({
 
   return (
     <>
-      <div className="rounded-xl border bg-card">
+      <div ref={tableRef} className="rounded-xl border bg-card">
       <div className="flex flex-col gap-3 p-3 sm:flex-row sm:items-center sm:gap-4 sm:px-6 sm:py-3.5">
         <div className="flex flex-1 items-center gap-2">
           <span className="text-sm font-medium sm:text-base">Transactions</span>
@@ -2268,6 +2729,17 @@ const TransactionsTable = ({
           <span className="text-[10px] text-muted-foreground sm:text-xs">
             Filters:
           </span>
+          {chartSelection && (
+            <button
+              type="button"
+              className={filterChipClassName}
+              onClick={() => onChartSelectionChange(null)}
+              aria-label={`Clear chart filter ${flowChartSelectionLabel(chartSelection)}`}
+            >
+              Chart: {flowChartSelectionLabel(chartSelection)}
+              <X className="size-2.5 sm:size-3" aria-hidden="true" />
+            </button>
+          )}
           {statusFilter !== "all" && (
             <button
               type="button"
@@ -2771,6 +3243,8 @@ const Dashboard2 = ({
 }) => {
   const [period, setPeriod] = React.useState<PeriodKey>(initialPeriodFromUrl);
   const [newTxnOpen, setNewTxnOpen] = React.useState(false);
+  const [flowChartSelection, setFlowChartSelection] =
+    React.useState<FlowChartSelection | null>(null);
   const [newTransactionDraft, setNewTransactionDraft] =
     React.useState<NewTransactionDraft>(createNewTransactionDraft);
   const hideSensitive = useUiStore((s) => s.hideSensitive);
@@ -2798,6 +3272,10 @@ const Dashboard2 = ({
       ),
     [periodRecords],
   );
+  const handlePeriodChange = React.useCallback((nextPeriod: PeriodKey) => {
+    setPeriod(nextPeriod);
+    setFlowChartSelection(null);
+  }, []);
 
   React.useEffect(() => {
     if (typeof window === "undefined") return;
@@ -2815,7 +3293,7 @@ const Dashboard2 = ({
       className={cn(screenShellClassName, className)}
     >
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <PeriodTabs activePeriod={period} onPeriodChange={setPeriod} />
+        <PeriodTabs activePeriod={period} onPeriodChange={handlePeriodChange} />
         <div className="flex flex-wrap items-center gap-2 sm:gap-3">
           <Button
             variant="outline"
@@ -2851,6 +3329,8 @@ const Dashboard2 = ({
         records={periodRecords}
         hideSensitive={hideSensitive}
         currency={currency}
+        onFlowSelectionChange={setFlowChartSelection}
+        chartSelection={flowChartSelection}
       />
 
       <TransactionsTable
@@ -2859,6 +3339,8 @@ const Dashboard2 = ({
         currency={currency}
         explorerSettings={explorerSettings}
         swapCandidateIds={periodSwapCandidateIds}
+        chartSelection={flowChartSelection}
+        onChartSelectionChange={setFlowChartSelection}
       />
     </div>
   );
