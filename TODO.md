@@ -153,9 +153,9 @@ top of the monolith.
   transfer preparation feeding the RP2-backed Austrian path
 - [x] Re-enable Austrian profiles now that the RP2-backed path is wired,
   tested, and documented
-- [x] Replace Option C (quarantine-on-cross-asset-Neu-swap) with Option A
-  (topological two-pass compute) so `carried_basis_fiat` is populated
-  automatically; see [docs/austrian-handoff.md](docs/austrian-handoff.md)
+- [x] Replace Option C (quarantine-on-cross-asset-Neu-swap) with native
+  rp2 multi-asset carry so Austrian swap basis stays in the tax engine;
+  see [docs/austrian-handoff.md](docs/austrian-handoff.md)
 - [x] Add E 1kv CSV/PDF/XLSX export path on top of Kassiber's persisted
   Austrian disposal buckets / Kennzahl mapping, including structured
   Steuerbericht-style sections, a section-by-section CSV bundle, and

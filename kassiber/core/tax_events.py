@@ -49,11 +49,6 @@ class NormalizedTaxEvent:
     # normalization layer must synthesize a stable non-empty id when
     # tagging swap legs.
     at_swap_link: Optional[str] = None
-    # Carried basis in fiat for the incoming leg of a swap. When set, it
-    # overrides `fiat_value` as the basis seeded into rp2's InTransaction,
-    # so the destination asset's pool inherits the outgoing asset's basis
-    # (§ 27b Abs 3 Z 2 EStG). None means "use fiat_value" (spot-at-receipt).
-    carried_basis_fiat: Optional[Decimal] = None
 
 
 @dataclass(frozen=True)
@@ -158,7 +153,6 @@ def normalize_tax_asset_inputs(
     intra_pairs: Sequence[Mapping[str, Any]],
     at_regime_by_row_id: Optional[Mapping[str, AtRegime]] = None,
     at_swap_link_by_row_id: Optional[Mapping[str, str]] = None,
-    at_carried_basis_by_row_id: Optional[Mapping[str, Decimal]] = None,
 ) -> NormalizedTaxAssetInputs:
     tax_country = ""
     if hasattr(profile, "keys") and "tax_country" in profile.keys():
@@ -166,7 +160,6 @@ def normalize_tax_asset_inputs(
     is_at = tax_country == "at"
     regime_map = at_regime_by_row_id or {}
     swap_link_map = at_swap_link_by_row_id or {}
-    carried_basis_map = at_carried_basis_by_row_id or {}
     outbound_regimes = infer_outbound_regimes(rows) if is_at else {}
     events: list[NormalizedTaxEvent] = []
     transfers: list[NormalizedTaxTransfer] = []
@@ -368,7 +361,6 @@ def normalize_tax_asset_inputs(
         at_regime = None
         at_pool = None
         at_swap_link = None
-        carried_basis_fiat = None
         if is_at:
             at_pool = resolve_pool_id(wallet["id"])
             if direction == "inbound":
@@ -381,9 +373,6 @@ def normalize_tax_asset_inputs(
             linked = swap_link_map.get(row["id"])
             if linked:
                 at_swap_link = linked
-            carried = carried_basis_map.get(row["id"])
-            if carried is not None and direction == "inbound":
-                carried_basis_fiat = carried
         events.append(
             NormalizedTaxEvent(
                 transaction_id=row["id"],
@@ -401,7 +390,6 @@ def normalize_tax_asset_inputs(
                 at_regime=at_regime,
                 at_pool=at_pool,
                 at_swap_link=at_swap_link,
-                carried_basis_fiat=carried_basis_fiat,
             )
         )
         ordered_items.append(("event", row["id"]))

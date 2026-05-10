@@ -2,7 +2,7 @@
 
 Kassiber owns the normalization layer: raw transaction rows become
 `NormalizedTaxEvent` values with typed Austrian fields (`at_regime`,
-`at_pool`, `at_swap_link`, `carried_basis_fiat`). The rp2 adapter
+`at_pool`, `at_swap_link`). The rp2 adapter
 serializes those fields into rp2's `notes` wire format; the rp2 AT
 plugin (`rp2.plugin.country.at`) interprets them.
 
@@ -30,9 +30,10 @@ AT_NEU_CUTOFF = datetime(2021, 3, 1, 0, 0, 0, tzinfo=ZoneInfo("Europe/Vienna"))
 REGIME_ALT: Literal["alt"] = "alt"
 REGIME_NEU: Literal["neu"] = "neu"
 
-# Quarantine reason emitted when a Neu cross-asset swap cannot be fed into
-# rp2 safely. The engine adds a `reason_code` in the detail so callers can
-# distinguish missing pricing from source-pool-state failures.
+# Quarantine reason emitted when a reviewed Neu cross-asset swap cannot be
+# marked and fed into rp2's native carry path safely. The engine adds a
+# `reason_code` in the detail so callers can distinguish missing pricing,
+# inventory, and other readiness failures.
 AT_SWAP_QUARANTINE_REASON = "at_swap_basis_carry_unresolved"
 
 # Kassiber owns the presentation-layer mapping from RP2's semantic Austrian

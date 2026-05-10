@@ -3497,6 +3497,164 @@ class ReviewRegressionTest(unittest.TestCase):
             manual_pair_records=manual_pairs,
         )
 
+    def _direct_austrian_same_timestamp_swap_chain_inputs(self):
+        profile = {
+            "id": "profile-at-chain",
+            "workspace_id": "workspace-main",
+            "label": "FixtureAustrianSwapChain",
+            "fiat_currency": "EUR",
+            "tax_country": "at",
+            "tax_long_term_days": 9223372036854775807,
+            "gains_algorithm": "MOVING_AVERAGE_AT",
+        }
+        wallet_refs_by_id = {
+            "wallet-btc": {
+                "id": "wallet-btc",
+                "label": "Vienna",
+                "wallet_account_id": "account-treasury",
+                "account_code": "treasury",
+                "account_label": "Treasury",
+            },
+            "wallet-lbtc": {
+                "id": "wallet-lbtc",
+                "label": "Liquid",
+                "wallet_account_id": "account-treasury",
+                "account_code": "treasury",
+                "account_label": "Treasury",
+            },
+            "wallet-xyz": {
+                "id": "wallet-xyz",
+                "label": "Sidechain",
+                "wallet_account_id": "account-treasury",
+                "account_code": "treasury",
+                "account_label": "Treasury",
+            },
+        }
+        swap_time = "2025-03-01T09:00:00Z"
+        rows = [
+            {
+                "id": "btc-neu-buy",
+                "wallet_id": "wallet-btc",
+                "wallet_label": "Vienna",
+                "wallet_account_id": "account-treasury",
+                "account_code": "treasury",
+                "account_label": "Treasury",
+                "occurred_at": "2024-06-01T10:00:00Z",
+                "direction": "inbound",
+                "asset": "BTC",
+                "amount": 100_000_000_000,
+                "fee": 0,
+                "fiat_rate": 30000,
+                "fiat_value": 30000,
+                "kind": "deposit",
+                "description": "Vienna Neu buy",
+                "note": None,
+                "external_id": "btc-neu-buy",
+                "created_at": "2024-06-01T10:00:00Z",
+            },
+            {
+                "id": "btc-to-lbtc-out",
+                "wallet_id": "wallet-btc",
+                "wallet_label": "Vienna",
+                "wallet_account_id": "account-treasury",
+                "account_code": "treasury",
+                "account_label": "Treasury",
+                "occurred_at": swap_time,
+                "direction": "outbound",
+                "asset": "BTC",
+                "amount": 50_000_000_000,
+                "fee": 0,
+                "fiat_rate": 50000,
+                "fiat_value": 25000,
+                "kind": "withdrawal",
+                "description": "Peg-out BTC->LBTC",
+                "note": None,
+                "external_id": "btc-to-lbtc-out",
+                "created_at": swap_time,
+            },
+            {
+                "id": "a-lbtc-to-xyz-out",
+                "wallet_id": "wallet-lbtc",
+                "wallet_label": "Liquid",
+                "wallet_account_id": "account-treasury",
+                "account_code": "treasury",
+                "account_label": "Treasury",
+                "occurred_at": swap_time,
+                "direction": "outbound",
+                "asset": "LBTC",
+                "amount": 50_000_000_000,
+                "fee": 0,
+                "fiat_rate": 52000,
+                "fiat_value": 26000,
+                "kind": "withdrawal",
+                "description": "Peg-out LBTC->XYZ",
+                "note": None,
+                "external_id": "lbtc-to-xyz-out",
+                "created_at": swap_time,
+            },
+            {
+                "id": "z-lbtc-from-btc-in",
+                "wallet_id": "wallet-lbtc",
+                "wallet_label": "Liquid",
+                "wallet_account_id": "account-treasury",
+                "account_code": "treasury",
+                "account_label": "Treasury",
+                "occurred_at": swap_time,
+                "direction": "inbound",
+                "asset": "LBTC",
+                "amount": 50_000_000_000,
+                "fee": 0,
+                "fiat_rate": 50000,
+                "fiat_value": 25000,
+                "kind": "deposit",
+                "description": "Peg-in BTC->LBTC",
+                "note": None,
+                "external_id": "lbtc-from-btc-in",
+                "created_at": swap_time,
+            },
+            {
+                "id": "xyz-from-lbtc-in",
+                "wallet_id": "wallet-xyz",
+                "wallet_label": "Sidechain",
+                "wallet_account_id": "account-treasury",
+                "account_code": "treasury",
+                "account_label": "Treasury",
+                "occurred_at": swap_time,
+                "direction": "inbound",
+                "asset": "XYZ",
+                "amount": 50_000_000_000,
+                "fee": 0,
+                "fiat_rate": 52000,
+                "fiat_value": 26000,
+                "kind": "deposit",
+                "description": "Peg-in LBTC->XYZ",
+                "note": None,
+                "external_id": "xyz-from-lbtc-in",
+                "created_at": swap_time,
+            },
+        ]
+        manual_pairs = [
+            {
+                "id": "pair-btc-lbtc",
+                "out_transaction_id": "btc-to-lbtc-out",
+                "in_transaction_id": "z-lbtc-from-btc-in",
+                "policy": "carrying-value",
+                "kind": "swap",
+            },
+            {
+                "id": "pair-lbtc-xyz",
+                "out_transaction_id": "a-lbtc-to-xyz-out",
+                "in_transaction_id": "xyz-from-lbtc-in",
+                "policy": "carrying-value",
+                "kind": "swap",
+            },
+        ]
+        return profile, TaxEngineLedgerInputs(
+            rows=rows,
+            wallet_refs_by_id=wallet_refs_by_id,
+            manual_pair_records=manual_pairs,
+        )
+
     def _direct_missing_quarantine_engine_inputs(self):
         profile = {
             "id": "profile-missing-price",
@@ -5510,6 +5668,49 @@ class ReviewRegressionTest(unittest.TestCase):
         actual = self._direct_engine_snapshot(profile, inputs)
         expected = self._load_fixture("austrian_rp2_cross_asset_swap_snapshot.json")
         self.assertEqual(actual, expected)
+
+    def test_austrian_same_timestamp_swap_chain_reaches_rp2(self):
+        profile, inputs = self._direct_austrian_same_timestamp_swap_chain_inputs()
+        actual = self._direct_engine_snapshot(profile, inputs)
+
+        self.assertEqual(actual["quarantines"], [])
+        self.assertEqual(
+            sorted(pair["pair_id"] for pair in actual["cross_asset_pairs"]),
+            ["pair-btc-lbtc", "pair-lbtc-xyz"],
+        )
+        acquisitions_by_id = {
+            entry["transaction_id"]: entry
+            for entry in actual["entries"]
+            if entry["entry_type"] == "acquisition"
+        }
+        self.assertEqual(acquisitions_by_id["z-lbtc-from-btc-in"]["fiat_value"], 15000.0)
+        self.assertEqual(acquisitions_by_id["xyz-from-lbtc-in"]["fiat_value"], 15000.0)
+        disposal_categories = {
+            entry["transaction_id"]: entry["at_category"]
+            for entry in actual["entries"]
+            if entry["entry_type"] == "disposal"
+        }
+        self.assertEqual(disposal_categories["btc-to-lbtc-out"], "neu_swap")
+        self.assertEqual(disposal_categories["a-lbtc-to-xyz-out"], "neu_swap")
+
+    def test_austrian_cross_asset_swap_uses_rp2_multi_asset_hook(self):
+        profile, inputs = self._direct_austrian_cross_asset_swap_inputs()
+        from rp2.plugin.country.at import AT
+
+        calls: list[set[str]] = []
+        original = AT.compute_tax_for_assets
+
+        def spy(self, configuration, accounting_engine, asset_to_input_data):
+            calls.append(set(asset_to_input_data))
+            return original(self, configuration, accounting_engine, asset_to_input_data)
+
+        AT.compute_tax_for_assets = spy  # type: ignore[assignment]
+        try:
+            self._direct_engine_snapshot(profile, inputs)
+        finally:
+            AT.compute_tax_for_assets = original  # type: ignore[assignment]
+
+        self.assertEqual(calls, [{"BTC", "LBTC"}])
 
     def test_build_tax_engine_accepts_austrian_profile_and_routes_to_rp2_at(self):
         profile = {

@@ -278,5 +278,5 @@ Current limits to mention:
 
 Do not say BTC ↔ LBTC swaps are already handled just because the books are
 Austrian. The operator still needs an explicit `kassiber transfers pair` for
-cross-asset peg-ins / peg-outs before the carry-basis path can show up in
-journal state.
+cross-asset peg-ins / peg-outs before rp2's native carry path can show up
+in journal state.

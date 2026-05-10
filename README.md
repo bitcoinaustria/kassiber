@@ -65,7 +65,7 @@ Today:
 
 - the `generic` tax policy runs through RP2
 - the `at` tax policy runs through RP2's Austrian plugin plus Kassiber-side category/Kennzahl mapping
-- Austrian cross-asset swaps paired with `--policy carrying-value` now carry basis through Kassiber's two-pass handoff into RP2; generic cross-asset pairs still stay on the normal SELL + BUY path
+- Austrian cross-asset swaps paired with `--policy carrying-value` are reviewed and marked by Kassiber, then carried through RP2's native multi-asset Austrian hook; generic cross-asset pairs still stay on the normal SELL + BUY path
 
 The intended split is simple: Kassiber prepares and explains; RP2 computes.
 
