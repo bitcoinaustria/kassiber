@@ -1,4 +1,5 @@
 import * as React from "react";
+import { useQueryClient } from "@tanstack/react-query";
 
 import { useDaemonMutation } from "@/daemon/client";
 import { useUiStore } from "@/store/ui";
@@ -10,6 +11,7 @@ interface SyncResult {
 }
 
 export function useWalletSyncAction() {
+  const queryClient = useQueryClient();
   const addNotification = useUiStore((state) => state.addNotification);
   const syncWallets =
     useDaemonMutation<{ results: SyncResult[] }>("ui.wallets.sync");
@@ -60,10 +62,19 @@ export function useWalletSyncAction() {
             tone: "error",
           });
         },
-        onSettled: clearSyncNotice,
+        onSettled: () => {
+          clearSyncNotice();
+          void queryClient.invalidateQueries({ queryKey: ["daemon"] });
+        },
       },
     );
-  }, [addNotification, clearSyncNotice, startSyncNotice, syncWallets]);
+  }, [
+    addNotification,
+    clearSyncNotice,
+    queryClient,
+    startSyncNotice,
+    syncWallets,
+  ]);
 
   return {
     syncAll,

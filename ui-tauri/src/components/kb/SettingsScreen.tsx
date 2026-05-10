@@ -19,7 +19,7 @@ import {
   Trash2,
   Upload,
 } from "lucide-react";
-import { useNavigate } from "@tanstack/react-router";
+import { useNavigate, useRouterState } from "@tanstack/react-router";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -117,6 +117,23 @@ const AI_KIND_BADGE: Record<AiProviderRow["kind"], string> = {
     "border-amber-500/25 bg-amber-500/10 text-amber-700 dark:text-amber-300",
   tee: "border-sky-500/25 bg-sky-500/10 text-sky-700 dark:text-sky-300",
 };
+
+const SETTINGS_SECTION_INTEGRATION: Record<string, string> = {
+  privacy: "privacy-sensitive",
+  display: "display-currency",
+  security: "security-lock-now",
+  backends: "sync-add-backend",
+  sync: "sync-add-backend",
+  rates: "b4",
+  ai: "ai-providers",
+  assistant: "ai-providers",
+  data: "data-root",
+};
+
+function selectedIntegrationForHash(hash: string): string | null {
+  const normalized = hash.replace(/^#/, "").trim().toLowerCase();
+  return SETTINGS_SECTION_INTEGRATION[normalized] ?? null;
+}
 
 function isCliAiProvider(row: AiProviderRow): boolean {
   return (
@@ -225,9 +242,16 @@ export function SettingsScreen({ onLock }: SettingsScreenProps) {
   const setAppLockPolicy = useUiStore((s) => s.setAppLockPolicy);
   const explorerSettings = useUiStore((s) => s.explorerSettings);
   const setExplorerSettings = useUiStore((s) => s.setExplorerSettings);
+  const aiFeaturesEnabled = useUiStore((s) => s.aiFeaturesEnabled);
+  const setAiFeaturesEnabled = useUiStore((s) => s.setAiFeaturesEnabled);
   const identity = useUiStore((s) => s.identity);
   const setIdentity = useUiStore((s) => s.setIdentity);
   const navigate = useNavigate();
+  const settingsHash = useRouterState({ select: (s) => s.location.hash });
+  const routeSelectedIntegrationId = React.useMemo(
+    () => selectedIntegrationForHash(settingsHash),
+    [settingsHash],
+  );
   const statusQuery = useDaemon<StatusData>("status", undefined, {
     enabled: true,
   });
@@ -259,7 +283,11 @@ export function SettingsScreen({ onLock }: SettingsScreenProps) {
   );
   const [selectedIntegrationId, setSelectedIntegrationId] = React.useState<
     string | null
-  >(null);
+  >(() => routeSelectedIntegrationId);
+
+  React.useEffect(() => {
+    setSelectedIntegrationId(routeSelectedIntegrationId);
+  }, [routeSelectedIntegrationId]);
 
   const editingBackend = React.useMemo(
     () => backends.find((backend) => backend.id === editingBackendId) ?? null,
@@ -431,9 +459,10 @@ export function SettingsScreen({ onLock }: SettingsScreenProps) {
         id: "ai-providers",
         image: INTEGRATION_ICONS.AI,
         title: "AI providers",
-        description:
-          "Ollama and OpenAI-compatible assistant endpoints for local review.",
-        isConnected: true,
+        description: aiFeaturesEnabled
+          ? "Ollama and OpenAI-compatible assistant endpoints for local review."
+          : "Assistant UI is disabled; providers stay configured.",
+        isConnected: aiFeaturesEnabled,
         category: "assistant",
         categoryLabel: "Assistant",
         actionLabel: "Manage",
@@ -462,6 +491,7 @@ export function SettingsScreen({ onLock }: SettingsScreenProps) {
     [
       appLockPolicy.autoLockWhenIdle,
       appLockPolicy.idleMinutes,
+      aiFeaturesEnabled,
       backends,
       clearClipboard,
       currency,
@@ -626,7 +656,12 @@ export function SettingsScreen({ onLock }: SettingsScreenProps) {
                   );
                 }
                 if (integration.id === "ai-providers") {
-                  return <AiProvidersPanel />;
+                  return (
+                    <AiProvidersPanel
+                      aiFeaturesEnabled={aiFeaturesEnabled}
+                      setAiFeaturesEnabled={setAiFeaturesEnabled}
+                    />
+                  );
                 }
                 if (integration.category === "data") {
                   return <DataSettingsPanel status={status ?? null} />;
@@ -1269,7 +1304,13 @@ function DataSettingsPanel({ status }: { status: StatusData | null }) {
   );
 }
 
-function AiProvidersPanel() {
+function AiProvidersPanel({
+  aiFeaturesEnabled,
+  setAiFeaturesEnabled,
+}: {
+  aiFeaturesEnabled: boolean;
+  setAiFeaturesEnabled: (enabled: boolean) => void;
+}) {
   const providersQuery = useDaemon<AiProvidersListData>("ai.providers.list");
   const data = React.useMemo<AiProvidersListData>(
     () =>
@@ -1301,6 +1342,23 @@ function AiProvidersPanel() {
 
   return (
     <div className="space-y-4">
+      <div className="flex flex-col gap-3 rounded-md border bg-background p-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="min-w-0 space-y-1">
+          <Label htmlFor="settings-ai-features">AI features</Label>
+          <p className="text-sm text-muted-foreground">
+            Show the Assistant screen and floating chat. Turning this off keeps
+            provider settings saved.
+          </p>
+        </div>
+        <Switch
+          id="settings-ai-features"
+          checked={aiFeaturesEnabled}
+          onCheckedChange={setAiFeaturesEnabled}
+          aria-label="Enable AI features"
+          className="shrink-0"
+        />
+      </div>
+
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div className="min-w-0 space-y-1">
           <h3 className="text-sm font-semibold">Provider configuration</h3>

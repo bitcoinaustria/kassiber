@@ -10,13 +10,55 @@ use std::process::{Command, Output, Stdio};
 use std::sync::Arc;
 use std::time::Duration;
 use supervisor::{DaemonSupervisor, SupervisorError};
-use tauri::{Manager, State, Url};
+use tauri::menu::{AboutMetadata, Menu, MenuBuilder, MenuItem, MenuItemBuilder, SubmenuBuilder};
+use tauri::{Emitter, Manager, State, Url};
 
 const SCHEMA_VERSION: u8 = 1;
 const DEFAULT_STATE_DIR: &str = ".kassiber";
 const DEFAULT_DATA_DIR: &str = "data";
 const DB_FILENAMES: &[&str] = &["kassiber.sqlite3", "satbooks.sqlite3"];
 const IMPORT_PICKER_TIMEOUT: Duration = Duration::from_secs(300);
+const MENU_EVENT: &str = "kassiber://menu";
+const MENU_OPEN_SETTINGS: &str = "kassiber:settings";
+const MENU_SETTINGS_GENERAL: &str = "kassiber:settings:general";
+const MENU_SETTINGS_PRIVACY: &str = "kassiber:settings:privacy";
+const MENU_SETTINGS_DISPLAY: &str = "kassiber:settings:display";
+const MENU_SETTINGS_SECURITY: &str = "kassiber:settings:security";
+const MENU_SETTINGS_BACKENDS: &str = "kassiber:settings:backends";
+const MENU_SETTINGS_AI: &str = "kassiber:settings:ai";
+const MENU_SETTINGS_DATA: &str = "kassiber:settings:data";
+const MENU_LOCK_APP: &str = "kassiber:lock";
+const MENU_TOGGLE_SENSITIVE: &str = "kassiber:toggle-sensitive";
+const MENU_TOGGLE_FULLSCREEN: &str = "kassiber:window:toggle-fullscreen";
+const MENU_WINDOW_CLOSE: &str = "kassiber:window:close";
+const MENU_WINDOW_MINIMIZE: &str = "kassiber:window:minimize";
+const MENU_WINDOW_ZOOM: &str = "kassiber:window:zoom";
+const MENU_WINDOW_FOCUS: &str = "kassiber:window:focus";
+const MENU_QUIT: &str = "kassiber:quit";
+const MENU_HELP_DOCS: &str = "kassiber:help:docs";
+const MENU_HELP_ISSUES: &str = "kassiber:help:issues";
+const MENU_WORKFLOW_SYNC_ALL: &str = "kassiber:workflow:sync-all";
+const MENU_WORKFLOW_PROCESS_JOURNALS: &str = "kassiber:workflow:process-journals";
+const MENU_WORKFLOW_EXPORT_REPORT_PDF: &str = "kassiber:workflow:export-report-pdf";
+const MENU_WORKFLOW_EXPORT_CAPITAL_GAINS_CSV: &str = "kassiber:workflow:export-capital-gains-csv";
+const MENU_WORKFLOW_CONNECTIONS_IMPORTS: &str = "kassiber:workflow:connections-imports";
+const MENU_WORKFLOW_DATA_BACKUP: &str = "kassiber:workflow:data-backup";
+const MENU_WORKFLOW_REPORTS: &str = "kassiber:workflow:reports";
+const MENU_WORKFLOW_SOURCE_FUNDS: &str = "kassiber:workflow:source-funds";
+const MENU_WORKFLOW_DIAGNOSTICS: &str = "kassiber:workflow:diagnostics";
+const MENU_NAV_OVERVIEW: &str = "kassiber:navigate:overview";
+const MENU_NAV_TRANSACTIONS: &str = "kassiber:navigate:transactions";
+const MENU_NAV_CONNECTIONS: &str = "kassiber:navigate:connections";
+const MENU_NAV_BOOKS: &str = "kassiber:navigate:books";
+const MENU_NAV_REPORTS: &str = "kassiber:navigate:reports";
+const MENU_NAV_SOURCE_FUNDS: &str = "kassiber:navigate:source-funds";
+const MENU_NAV_JOURNALS: &str = "kassiber:navigate:journals";
+const MENU_NAV_TAX_EVENTS: &str = "kassiber:navigate:tax-events";
+const MENU_NAV_QUARANTINE: &str = "kassiber:navigate:quarantine";
+const MENU_NAV_ASSISTANT: &str = "kassiber:navigate:assistant";
+const MENU_NAV_DIAGNOSTICS: &str = "kassiber:navigate:diagnostics";
+const DOCS_URL: &str = "https://github.com/bitcoinaustria/kassiber#readme";
+const ISSUES_URL: &str = "https://github.com/bitcoinaustria/kassiber/issues";
 
 const ALLOWED_DAEMON_KINDS: &[&str] = &[
     "status",
@@ -124,6 +166,16 @@ pub struct ImportProjectSelection {
     data_root: String,
     database: String,
     encrypted: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct MenuActionPayload {
+    action: &'static str,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    route: Option<&'static str>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    section: Option<&'static str>,
 }
 
 #[tauri::command]
@@ -795,9 +847,12 @@ pub fn run() {
                 let code = supervisor::run_cli(resource_dir.as_deref(), args.clone());
                 std::process::exit(code);
             }
+            let menu = build_app_menu(app.handle())?;
+            app.set_menu(menu)?;
             app.manage(Arc::new(DaemonSupervisor::new(resource_dir)));
             Ok(())
         })
+        .on_menu_event(handle_app_menu_event)
         .invoke_handler(tauri::generate_handler![
             daemon_invoke,
             open_exported_file,
@@ -808,6 +863,372 @@ pub fn run() {
         ])
         .run(tauri::generate_context!())
         .expect("error while running Kassiber desktop shell");
+}
+
+fn build_app_menu(app: &tauri::AppHandle<tauri::Wry>) -> tauri::Result<Menu<tauri::Wry>> {
+    let settings_item = menu_item(app, MENU_OPEN_SETTINGS, "Settings...", Some("CmdOrCtrl+,"))?;
+    let general_settings = menu_item(app, MENU_SETTINGS_GENERAL, "General", None)?;
+    let privacy_settings = menu_item(app, MENU_SETTINGS_PRIVACY, "Privacy", None)?;
+    let display_settings = menu_item(app, MENU_SETTINGS_DISPLAY, "Display", None)?;
+    let security_settings = menu_item(app, MENU_SETTINGS_SECURITY, "Security", None)?;
+    let backends_settings = menu_item(app, MENU_SETTINGS_BACKENDS, "Sync Backends", None)?;
+    let ai_settings = menu_item(app, MENU_SETTINGS_AI, "AI Providers", None)?;
+    let data_settings = menu_item(app, MENU_SETTINGS_DATA, "Local Data", None)?;
+    let lock_item = menu_item(app, MENU_LOCK_APP, "Lock Kassiber", Some("CmdOrCtrl+L"))?;
+    let close_item = menu_item(app, MENU_WINDOW_CLOSE, "Close Window", Some("CmdOrCtrl+W"))?;
+    #[cfg(not(target_os = "macos"))]
+    let quit_item = menu_item(app, MENU_QUIT, "Quit Kassiber", Some("CmdOrCtrl+Q"))?;
+    let toggle_sensitive = menu_item(app, MENU_TOGGLE_SENSITIVE, "Toggle Sensitive Values", None)?;
+    let toggle_fullscreen = menu_item(
+        app,
+        MENU_TOGGLE_FULLSCREEN,
+        "Toggle Full Screen",
+        Some("F11"),
+    )?;
+    let minimize_item = menu_item(app, MENU_WINDOW_MINIMIZE, "Minimize", Some("CmdOrCtrl+M"))?;
+    let zoom_item = menu_item(app, MENU_WINDOW_ZOOM, "Zoom", None)?;
+    let focus_item = menu_item(app, MENU_WINDOW_FOCUS, "Bring Main Window to Front", None)?;
+    let docs_item = menu_item(app, MENU_HELP_DOCS, "Kassiber Documentation", None)?;
+    let issues_item = menu_item(app, MENU_HELP_ISSUES, "Report an Issue", None)?;
+    let diagnostics_item = menu_item(app, MENU_NAV_DIAGNOSTICS, "Diagnostics", None)?;
+    let sync_all_item = menu_item(
+        app,
+        MENU_WORKFLOW_SYNC_ALL,
+        "Sync All Wallets",
+        Some("CmdOrCtrl+Shift+S"),
+    )?;
+    let process_journals_item = menu_item(
+        app,
+        MENU_WORKFLOW_PROCESS_JOURNALS,
+        "Process Journals",
+        Some("CmdOrCtrl+Shift+J"),
+    )?;
+    let export_report_pdf_item = menu_item(
+        app,
+        MENU_WORKFLOW_EXPORT_REPORT_PDF,
+        "Export Report PDF",
+        Some("CmdOrCtrl+Shift+E"),
+    )?;
+    let export_capital_gains_csv_item = menu_item(
+        app,
+        MENU_WORKFLOW_EXPORT_CAPITAL_GAINS_CSV,
+        "Export Capital Gains CSV",
+        None,
+    )?;
+    let workflow_connections_item = menu_item(
+        app,
+        MENU_WORKFLOW_CONNECTIONS_IMPORTS,
+        "Connections & Imports...",
+        None,
+    )?;
+    let workflow_data_item = menu_item(
+        app,
+        MENU_WORKFLOW_DATA_BACKUP,
+        "Local Data & Backup...",
+        None,
+    )?;
+    let workflow_reports_item = menu_item(app, MENU_WORKFLOW_REPORTS, "Reports", None)?;
+    let workflow_source_funds_item =
+        menu_item(app, MENU_WORKFLOW_SOURCE_FUNDS, "Source of Funds", None)?;
+    let workflow_diagnostics_item = menu_item(app, MENU_WORKFLOW_DIAGNOSTICS, "Diagnostics", None)?;
+
+    let overview_item = menu_item(app, MENU_NAV_OVERVIEW, "Overview", Some("CmdOrCtrl+1"))?;
+    let transactions_item = menu_item(
+        app,
+        MENU_NAV_TRANSACTIONS,
+        "Transactions",
+        Some("CmdOrCtrl+2"),
+    )?;
+    let connections_item = menu_item(
+        app,
+        MENU_NAV_CONNECTIONS,
+        "Connections",
+        Some("CmdOrCtrl+3"),
+    )?;
+    let books_item = menu_item(app, MENU_NAV_BOOKS, "Books", Some("CmdOrCtrl+4"))?;
+    let reports_item = menu_item(app, MENU_NAV_REPORTS, "Reports", Some("CmdOrCtrl+5"))?;
+    let source_funds_item = menu_item(
+        app,
+        MENU_NAV_SOURCE_FUNDS,
+        "Source of Funds",
+        Some("CmdOrCtrl+6"),
+    )?;
+    let journals_item = menu_item(app, MENU_NAV_JOURNALS, "Journals", Some("CmdOrCtrl+7"))?;
+    let tax_events_item = menu_item(app, MENU_NAV_TAX_EVENTS, "Tax Events", None)?;
+    let quarantine_item = menu_item(app, MENU_NAV_QUARANTINE, "Quarantine", Some("CmdOrCtrl+8"))?;
+    let assistant_item = menu_item(app, MENU_NAV_ASSISTANT, "Assistant", Some("CmdOrCtrl+9"))?;
+
+    #[cfg(target_os = "macos")]
+    let app_menu = SubmenuBuilder::new(app, "Kassiber")
+        .about(Some(about_metadata(app)))
+        .separator()
+        .item(&settings_item)
+        .separator()
+        .services()
+        .separator()
+        .hide()
+        .hide_others()
+        .show_all()
+        .separator()
+        .quit()
+        .build()?;
+
+    #[cfg(target_os = "macos")]
+    let file_menu = SubmenuBuilder::new(app, "File")
+        .item(&lock_item)
+        .separator()
+        .item(&close_item)
+        .build()?;
+
+    #[cfg(not(target_os = "macos"))]
+    let file_menu = SubmenuBuilder::new(app, "File")
+        .item(&settings_item)
+        .separator()
+        .item(&lock_item)
+        .separator()
+        .item(&close_item)
+        .separator()
+        .item(&quit_item)
+        .build()?;
+
+    let edit_menu = SubmenuBuilder::new(app, "Edit")
+        .undo()
+        .redo()
+        .separator()
+        .cut()
+        .copy()
+        .paste()
+        .select_all()
+        .build()?;
+
+    let view_menu = SubmenuBuilder::new(app, "View")
+        .item(&overview_item)
+        .item(&transactions_item)
+        .item(&connections_item)
+        .item(&books_item)
+        .item(&reports_item)
+        .item(&source_funds_item)
+        .separator()
+        .item(&journals_item)
+        .item(&tax_events_item)
+        .item(&quarantine_item)
+        .item(&assistant_item)
+        .separator()
+        .item(&toggle_sensitive)
+        .separator()
+        .item(&toggle_fullscreen)
+        .build()?;
+
+    let workflow_menu = SubmenuBuilder::new(app, "Workflows")
+        .item(&sync_all_item)
+        .item(&process_journals_item)
+        .separator()
+        .item(&export_report_pdf_item)
+        .item(&export_capital_gains_csv_item)
+        .separator()
+        .item(&workflow_connections_item)
+        .item(&workflow_data_item)
+        .separator()
+        .item(&workflow_reports_item)
+        .item(&workflow_source_funds_item)
+        .item(&workflow_diagnostics_item)
+        .build()?;
+
+    let settings_menu = SubmenuBuilder::new(app, "Settings")
+        .item(&general_settings)
+        .separator()
+        .item(&privacy_settings)
+        .item(&display_settings)
+        .item(&security_settings)
+        .item(&backends_settings)
+        .item(&ai_settings)
+        .item(&data_settings)
+        .build()?;
+
+    let window_menu = SubmenuBuilder::new(app, "Window")
+        .item(&minimize_item)
+        .item(&zoom_item)
+        .separator()
+        .item(&focus_item)
+        .build()?;
+
+    #[cfg(target_os = "macos")]
+    let help_menu = SubmenuBuilder::new(app, "Help")
+        .item(&docs_item)
+        .item(&diagnostics_item)
+        .separator()
+        .item(&issues_item)
+        .build()?;
+
+    #[cfg(not(target_os = "macos"))]
+    let help_menu = SubmenuBuilder::new(app, "Help")
+        .item(&docs_item)
+        .item(&diagnostics_item)
+        .separator()
+        .item(&issues_item)
+        .separator()
+        .about(Some(about_metadata(app)))
+        .build()?;
+
+    let mut menu_builder = MenuBuilder::new(app);
+    #[cfg(target_os = "macos")]
+    {
+        menu_builder = menu_builder.item(&app_menu);
+    }
+    menu_builder
+        .item(&file_menu)
+        .item(&edit_menu)
+        .item(&view_menu)
+        .item(&workflow_menu)
+        .item(&settings_menu)
+        .item(&window_menu)
+        .item(&help_menu)
+        .build()
+}
+
+fn menu_item(
+    app: &tauri::AppHandle<tauri::Wry>,
+    id: &'static str,
+    text: &'static str,
+    accelerator: Option<&'static str>,
+) -> tauri::Result<MenuItem<tauri::Wry>> {
+    let mut builder = MenuItemBuilder::with_id(id, text);
+    if let Some(accelerator) = accelerator {
+        builder = builder.accelerator(accelerator);
+    }
+    builder.build(app)
+}
+
+fn about_metadata(app: &tauri::AppHandle<tauri::Wry>) -> AboutMetadata<'static> {
+    let pkg_info = app.package_info();
+    let config = app.config();
+    AboutMetadata {
+        name: Some("Kassiber".to_string()),
+        version: Some(pkg_info.version.to_string()),
+        authors: Some(vec!["Bitcoin Austria".to_string()]),
+        comments: Some("Local-first Bitcoin accounting.".to_string()),
+        copyright: config.bundle.copyright.clone(),
+        license: Some("AGPL-3.0-only".to_string()),
+        website: Some("https://github.com/bitcoinaustria/kassiber".to_string()),
+        website_label: Some("Kassiber on GitHub".to_string()),
+        ..Default::default()
+    }
+}
+
+fn handle_app_menu_event(app: &tauri::AppHandle<tauri::Wry>, event: tauri::menu::MenuEvent) {
+    let id = event.id().as_ref();
+    if let Some(payload) = menu_action_for_id(id) {
+        emit_menu_action(app, payload);
+        return;
+    }
+
+    match id {
+        MENU_TOGGLE_FULLSCREEN => toggle_main_window_fullscreen(app),
+        MENU_WINDOW_CLOSE => with_main_window(app, |window| window.close()),
+        MENU_WINDOW_MINIMIZE => with_main_window(app, |window| window.minimize()),
+        MENU_WINDOW_ZOOM => with_main_window(app, |window| {
+            if window.is_maximized().unwrap_or(false) {
+                window.unmaximize()
+            } else {
+                window.maximize()
+            }
+        }),
+        MENU_WINDOW_FOCUS => with_main_window(app, |window| window.set_focus()),
+        MENU_QUIT => app.exit(0),
+        MENU_HELP_DOCS => open_menu_url(DOCS_URL),
+        MENU_HELP_ISSUES => open_menu_url(ISSUES_URL),
+        _ => {}
+    }
+}
+
+fn menu_action_for_id(id: &str) -> Option<MenuActionPayload> {
+    match id {
+        MENU_OPEN_SETTINGS | MENU_SETTINGS_GENERAL => Some(open_settings_action(None)),
+        MENU_SETTINGS_PRIVACY => Some(open_settings_action(Some("privacy"))),
+        MENU_SETTINGS_DISPLAY => Some(open_settings_action(Some("display"))),
+        MENU_SETTINGS_SECURITY => Some(open_settings_action(Some("security"))),
+        MENU_SETTINGS_BACKENDS => Some(open_settings_action(Some("backends"))),
+        MENU_SETTINGS_AI => Some(open_settings_action(Some("ai"))),
+        MENU_SETTINGS_DATA => Some(open_settings_action(Some("data"))),
+        MENU_LOCK_APP => Some(menu_action("lock-app")),
+        MENU_TOGGLE_SENSITIVE => Some(menu_action("toggle-sensitive")),
+        MENU_WORKFLOW_SYNC_ALL => Some(menu_action("sync-all-wallets")),
+        MENU_WORKFLOW_PROCESS_JOURNALS => Some(menu_action("process-journals")),
+        MENU_WORKFLOW_EXPORT_REPORT_PDF => Some(menu_action("export-report-pdf")),
+        MENU_WORKFLOW_EXPORT_CAPITAL_GAINS_CSV => Some(menu_action("export-capital-gains-csv")),
+        MENU_WORKFLOW_CONNECTIONS_IMPORTS => Some(navigate_action("/connections")),
+        MENU_WORKFLOW_DATA_BACKUP => Some(open_settings_action(Some("data"))),
+        MENU_WORKFLOW_REPORTS => Some(navigate_action("/reports")),
+        MENU_WORKFLOW_SOURCE_FUNDS => Some(navigate_action("/source-of-funds")),
+        MENU_WORKFLOW_DIAGNOSTICS => Some(navigate_action("/diagnostics")),
+        MENU_NAV_OVERVIEW => Some(navigate_action("/overview")),
+        MENU_NAV_TRANSACTIONS => Some(navigate_action("/transactions")),
+        MENU_NAV_CONNECTIONS => Some(navigate_action("/connections")),
+        MENU_NAV_BOOKS => Some(navigate_action("/books")),
+        MENU_NAV_REPORTS => Some(navigate_action("/reports")),
+        MENU_NAV_SOURCE_FUNDS => Some(navigate_action("/source-of-funds")),
+        MENU_NAV_JOURNALS => Some(navigate_action("/journals")),
+        MENU_NAV_TAX_EVENTS => Some(navigate_action("/tax-events")),
+        MENU_NAV_QUARANTINE => Some(navigate_action("/quarantine")),
+        MENU_NAV_ASSISTANT => Some(navigate_action("/assistant")),
+        MENU_NAV_DIAGNOSTICS => Some(navigate_action("/diagnostics")),
+        _ => None,
+    }
+}
+
+fn menu_action(action: &'static str) -> MenuActionPayload {
+    MenuActionPayload {
+        action,
+        route: None,
+        section: None,
+    }
+}
+
+fn open_settings_action(section: Option<&'static str>) -> MenuActionPayload {
+    MenuActionPayload {
+        action: "open-settings",
+        route: None,
+        section,
+    }
+}
+
+fn navigate_action(route: &'static str) -> MenuActionPayload {
+    MenuActionPayload {
+        action: "navigate",
+        route: Some(route),
+        section: None,
+    }
+}
+
+fn emit_menu_action(app: &tauri::AppHandle<tauri::Wry>, payload: MenuActionPayload) {
+    if let Err(error) = app.emit(MENU_EVENT, payload) {
+        eprintln!("kassiber: failed to emit menu action: {error}");
+    }
+}
+
+fn toggle_main_window_fullscreen(app: &tauri::AppHandle<tauri::Wry>) {
+    with_main_window(app, |window| {
+        let fullscreen = window.is_fullscreen().unwrap_or(false);
+        window.set_fullscreen(!fullscreen)
+    });
+}
+
+fn with_main_window<F>(app: &tauri::AppHandle<tauri::Wry>, action: F)
+where
+    F: FnOnce(tauri::WebviewWindow<tauri::Wry>) -> tauri::Result<()>,
+{
+    let Some(window) = app.get_webview_window("main") else {
+        return;
+    };
+    if let Err(error) = action(window) {
+        eprintln!("kassiber: menu window action failed: {error}");
+    }
+}
+
+fn open_menu_url(url: &str) {
+    if let Err(error) = open_url_with_default_browser(url) {
+        eprintln!("kassiber: failed to open menu URL: {error}");
+    }
 }
 
 fn desktop_cli_args() -> Option<Vec<String>> {
@@ -834,7 +1255,11 @@ fn desktop_cli_args() -> Option<Vec<String>> {
 mod tests {
     use super::{
         database_is_encrypted, inspect_import_project_directory, is_managed_report_export_path,
-        is_supported_export_file, validated_external_url, ALLOWED_DAEMON_KINDS,
+        is_supported_export_file, menu_action, menu_action_for_id, navigate_action,
+        open_settings_action, validated_external_url, ALLOWED_DAEMON_KINDS, MENU_HELP_DOCS,
+        MENU_LOCK_APP, MENU_NAV_REPORTS, MENU_SETTINGS_SECURITY, MENU_TOGGLE_FULLSCREEN,
+        MENU_WORKFLOW_CONNECTIONS_IMPORTS, MENU_WORKFLOW_EXPORT_REPORT_PDF,
+        MENU_WORKFLOW_PROCESS_JOURNALS,
     };
     use std::fs;
     use std::path::{Path, PathBuf};
@@ -874,6 +1299,36 @@ mod tests {
                 "daemon kind missing from Tauri allowlist: {kind}"
             );
         }
+    }
+
+    #[test]
+    fn native_menu_ids_map_to_webview_actions() {
+        assert_eq!(
+            menu_action_for_id(MENU_SETTINGS_SECURITY),
+            Some(open_settings_action(Some("security")))
+        );
+        assert_eq!(
+            menu_action_for_id(MENU_NAV_REPORTS),
+            Some(navigate_action("/reports"))
+        );
+        assert_eq!(
+            menu_action_for_id(MENU_LOCK_APP),
+            Some(menu_action("lock-app"))
+        );
+        assert_eq!(
+            menu_action_for_id(MENU_WORKFLOW_PROCESS_JOURNALS),
+            Some(menu_action("process-journals"))
+        );
+        assert_eq!(
+            menu_action_for_id(MENU_WORKFLOW_EXPORT_REPORT_PDF),
+            Some(menu_action("export-report-pdf"))
+        );
+        assert_eq!(
+            menu_action_for_id(MENU_WORKFLOW_CONNECTIONS_IMPORTS),
+            Some(navigate_action("/connections"))
+        );
+        assert_eq!(menu_action_for_id(MENU_TOGGLE_FULLSCREEN), None);
+        assert_eq!(menu_action_for_id(MENU_HELP_DOCS), None);
     }
 
     #[test]

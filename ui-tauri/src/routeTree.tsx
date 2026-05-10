@@ -166,6 +166,11 @@ const settingsRoute = createRoute({
 const assistantRoute = createRoute({
   getParentRoute: () => appLayoutRoute,
   path: "/assistant",
+  beforeLoad: () => {
+    if (!useUiStore.getState().aiFeaturesEnabled) {
+      throw redirect({ to: "/overview" });
+    }
+  },
   component: Assistant,
 });
 
@@ -173,6 +178,9 @@ const assistantTypoRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/assitant",
   beforeLoad: () => {
+    if (!useUiStore.getState().aiFeaturesEnabled) {
+      throw redirect({ to: "/overview" });
+    }
     throw redirect({ to: "/assistant" });
   },
 });

@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 
 import { ScrollableTabsList } from "@/components/shadcnblocks/scrollable-tabslist";
 import { Badge } from "@/components/ui/badge";
@@ -218,6 +218,10 @@ const SettingsIntegrations4 = ({
           (integration) =>
             integration.id === selectedId || integration.title === selectedId,
         ) ?? null;
+  useEffect(() => {
+    if (!selectedIntegration?.category) return;
+    setActiveCategoryId(selectedIntegration.category);
+  }, [selectedIntegration?.category]);
   const visibleSelectedIntegration =
     selectedIntegration?.category === activeCategory ? selectedIntegration : null;
   const detail =
