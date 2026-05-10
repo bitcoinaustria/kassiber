@@ -32,11 +32,17 @@ import { ConnectionDetail } from "./routes/ConnectionDetail";
 import { Settings } from "./routes/Settings";
 import { Assistant } from "./routes/Assistant";
 import { AppShell } from "./components/kb/AppShell";
+import { RootIntentListener } from "./components/kb/RootIntentListener";
 import { activateImportProject, canImportProjects } from "./daemon/transport";
 import { useUiStore } from "./store/ui";
 
 const rootRoute = createRootRoute({
-  component: () => <Outlet />,
+  component: () => (
+    <>
+      <RootIntentListener />
+      <Outlet />
+    </>
+  ),
 });
 
 const indexRoute = createRoute({
@@ -166,6 +172,11 @@ const settingsRoute = createRoute({
 const assistantRoute = createRoute({
   getParentRoute: () => appLayoutRoute,
   path: "/assistant",
+  beforeLoad: () => {
+    if (!useUiStore.getState().aiFeaturesEnabled) {
+      throw redirect({ to: "/overview" });
+    }
+  },
   component: Assistant,
 });
 
@@ -173,6 +184,9 @@ const assistantTypoRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/assitant",
   beforeLoad: () => {
+    if (!useUiStore.getState().aiFeaturesEnabled) {
+      throw redirect({ to: "/overview" });
+    }
     throw redirect({ to: "/assistant" });
   },
 });

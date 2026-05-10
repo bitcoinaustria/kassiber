@@ -59,8 +59,9 @@ export interface ImportedProjectIdentity {
  * store; the user must re-enter it when a locked daemon session needs to open
  * the database.
  *
- * `aiSetupMode` records welcome-flow intent only. In particular,
- * `aiSetupMode: "disabled"` does not yet hide or disable the assistant dock.
+ * `aiSetupMode` records welcome-flow intent for a newly-created books set.
+ * The running UI uses `aiFeaturesEnabled` as the global feature switch after
+ * onboarding, so users can enable or disable the assistant later.
  */
 export interface Identity {
   name: string;
@@ -120,6 +121,7 @@ interface UiState {
   explorerSettings: ExplorerSettings;
   appLockPolicy: AppLockPolicy;
   identity: Identity | null;
+  aiFeaturesEnabled: boolean;
   daemonSession: number;
   notifications: AppNotification[];
   logEntries: AppLogEntry[];
@@ -132,6 +134,7 @@ interface UiState {
   setExplorerSettings: (settings: Partial<ExplorerSettings>) => void;
   setAppLockPolicy: (policy: Partial<AppLockPolicy>) => void;
   setIdentity: (identity: Identity | null) => void;
+  setAiFeaturesEnabled: (enabled: boolean) => void;
   bumpDaemonSession: () => void;
   addNotification: (
     notification: Omit<AppNotification, "id" | "createdAt">,
@@ -179,6 +182,7 @@ export const useUiStore = create<UiState>()(
       explorerSettings: DEFAULT_EXPLORER_SETTINGS,
       appLockPolicy: DEFAULT_APP_LOCK_POLICY,
       identity: null,
+      aiFeaturesEnabled: true,
       daemonSession: 0,
       notifications: [],
       logEntries: [],
@@ -196,7 +200,17 @@ export const useUiStore = create<UiState>()(
         set((state) => ({
           appLockPolicy: { ...state.appLockPolicy, ...policy },
         })),
-      setIdentity: (identity) => set({ identity: normalizeIdentity(identity) }),
+      setIdentity: (identity) =>
+        set((state) => {
+          const normalized = normalizeIdentity(identity);
+          return {
+            identity: normalized,
+            aiFeaturesEnabled: normalized?.aiSetupMode
+              ? normalized.aiSetupMode !== "disabled"
+              : state.aiFeaturesEnabled,
+          };
+        }),
+      setAiFeaturesEnabled: (enabled) => set({ aiFeaturesEnabled: enabled }),
       bumpDaemonSession: () =>
         set((state) => ({ daemonSession: state.daemonSession + 1 })),
       addNotification: (notification) =>
@@ -257,12 +271,19 @@ export const useUiStore = create<UiState>()(
         explorerSettings: state.explorerSettings,
         appLockPolicy: state.appLockPolicy,
         identity: state.identity,
+        aiFeaturesEnabled: state.aiFeaturesEnabled,
         daemonSession: state.daemonSession,
         notifications: state.notifications,
         sourceFundsDrafts: state.sourceFundsDrafts,
       }),
       merge: (persisted, current) => {
         const restored = persisted as Partial<UiState>;
+        const identity = normalizeIdentity(restored.identity ?? current.identity);
+        const aiFeaturesEnabled =
+          restored.aiFeaturesEnabled ??
+          (identity?.aiSetupMode === "disabled"
+            ? false
+            : current.aiFeaturesEnabled);
         return {
           ...current,
           ...restored,
@@ -274,7 +295,8 @@ export const useUiStore = create<UiState>()(
             ...DEFAULT_APP_LOCK_POLICY,
             ...(restored.appLockPolicy ?? current.appLockPolicy),
           },
-          identity: normalizeIdentity(restored.identity ?? current.identity),
+          identity,
+          aiFeaturesEnabled,
           sourceFundsDrafts:
             restored.sourceFundsDrafts ?? current.sourceFundsDrafts,
           logEntries: current.logEntries,

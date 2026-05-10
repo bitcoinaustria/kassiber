@@ -81,6 +81,7 @@ import { useUiStore } from "@/store/ui";
 import type { ThemePreference } from "@/store/ui";
 import {
   DAEMON_AUTH_REQUIRED_EVENT,
+  daemonMutationKey,
   formatDaemonEnvelopeError,
   shouldHandleDaemonAuthRequiredEvent,
   useDaemon,
@@ -100,21 +101,14 @@ import type { AssistantReturnPath } from "@/components/ai/assistantSession";
 import kLedgerMarkUrl from "@/assets/k-ledger-mark-transparent.svg";
 import { ScreenAssistantMockup } from "./ScreenAssistantMockup";
 import { PreAlphaBanner } from "./PreAlphaBanner";
+import { useWalletSyncAction } from "@/hooks/useWalletSyncAction";
 import { BookSwitcherPopover } from "./BookSwitcherPopover";
 
-type AppRoutePath =
-  | "/overview"
-  | "/transactions"
-  | "/reports"
-  | "/source-of-funds"
-  | "/connections"
-  | "/books"
-  | "/journals"
-  | "/tax-events"
-  | "/quarantine"
-  | "/diagnostics"
-  | "/settings"
-  | "/assistant";
+import {
+  dispatchMenuIntent,
+  type AppRoutePath,
+  type NativeMenuPayload,
+} from "./menuIntent";
 
 type NavItem = {
   label: string;
@@ -163,6 +157,7 @@ type JournalProcessResult = {
 const APP_VERSION = "0.22.0";
 const APP_COMMIT = __APP_COMMIT__;
 const APP_COMMIT_SHORT = APP_COMMIT ? APP_COMMIT.slice(0, 7) : "unknown";
+const NATIVE_MENU_EVENT = "kassiber:intent";
 const topNavIconButtonClassName =
   "size-8 text-sidebar-foreground/75 hover:bg-sidebar-accent hover:text-sidebar-foreground";
 
@@ -415,6 +410,7 @@ function searchMatches(result: SearchResult, query: string) {
 function buildSearchResults(
   snapshot: OverviewSnapshot | undefined,
   query: string,
+  aiFeaturesEnabled: boolean,
 ): SearchResult[] {
   if (!query.trim()) return [];
 
@@ -472,7 +468,12 @@ function buildSearchResults(
       : []),
   ];
 
-  return [...STATIC_SEARCH_RESULTS, ...dynamicResults]
+  return [
+    ...STATIC_SEARCH_RESULTS.filter(
+      (result) => aiFeaturesEnabled || result.to !== "/assistant",
+    ),
+    ...dynamicResults,
+  ]
     .filter((result) => searchMatches(result, query))
     .slice(0, 8);
 }
@@ -531,7 +532,13 @@ export function AppShell() {
   const appLockPolicy = useUiStore((s) => s.appLockPolicy);
   const setIdentity = useUiStore((s) => s.setIdentity);
   const setHideSensitive = useUiStore((s) => s.setHideSensitive);
+  const addNotification = useUiStore((s) => s.addNotification);
+  const aiFeaturesEnabled = useUiStore((s) => s.aiFeaturesEnabled);
   const bumpDaemonSession = useUiStore((s) => s.bumpDaemonSession);
+  const { syncAll, isSyncing } = useWalletSyncAction();
+  const processJournals =
+    useDaemonMutation<JournalProcessResult>("ui.journals.process");
+  const dataMode = useUiStore((s) => s.dataMode);
   const encryptedWorkspace =
     Boolean(identity?.encrypted) || identity?.databaseMode === "sqlcipher";
   const [daemonAuthRequired, setDaemonAuthRequired] = React.useState(false);
@@ -656,6 +663,93 @@ export function AppShell() {
     setIdentity,
   ]);
 
+  const ensureWorkspaceForMenuAction = React.useCallback(() => {
+    if (identity) return true;
+    void navigate({ to: "/", replace: true });
+    return false;
+  }, [identity, navigate]);
+
+  const isDaemonKindMutating = React.useCallback(
+    (kind: string) =>
+      queryClient.isMutating({ mutationKey: daemonMutationKey(dataMode, kind) }) >
+      0,
+    [dataMode, queryClient],
+  );
+
+  const runMenuJournalProcessing = React.useCallback(() => {
+    if (!ensureWorkspaceForMenuAction()) return;
+    if (isDaemonKindMutating("ui.journals.process")) {
+      addNotification({
+        title: "Journal processing already running",
+        body: "Kassiber is already refreshing the journal state.",
+        tone: "info",
+      });
+      return;
+    }
+    addNotification({
+      title: "Journal processing started",
+      body: "Kassiber is rebuilding report-ready journal state.",
+      tone: "warning",
+    });
+    processJournals.mutate(undefined, {
+      onSuccess: (envelope) => {
+        const payload = envelope.data;
+        const parts = [
+          payload?.processed_transactions !== undefined
+            ? `${payload.processed_transactions} transactions`
+            : null,
+          payload?.entries_created !== undefined
+            ? `${payload.entries_created} entries`
+            : null,
+          payload?.quarantined ? `${payload.quarantined} quarantined` : null,
+        ].filter(Boolean);
+        addNotification({
+          title: "Journals processed",
+          body: parts.join(", ") || "Journal state refreshed.",
+          tone: payload?.quarantined ? "warning" : "success",
+        });
+      },
+      onError: (error) => {
+        addNotification({
+          title: "Journal processing failed",
+          body:
+            error instanceof Error
+              ? error.message
+              : "Could not process journals.",
+          tone: "error",
+        });
+      },
+      onSettled: () => {
+        void queryClient.invalidateQueries({ queryKey: ["daemon"] });
+      },
+    });
+  }, [
+    addNotification,
+    ensureWorkspaceForMenuAction,
+    isDaemonKindMutating,
+    processJournals,
+    queryClient,
+  ]);
+
+  const runMenuWalletSync = React.useCallback(() => {
+    if (!ensureWorkspaceForMenuAction()) return;
+    if (isSyncing || isDaemonKindMutating("ui.wallets.sync")) {
+      addNotification({
+        title: "Wallet sync already running",
+        body: "Kassiber is already syncing wallet sources.",
+        tone: "info",
+      });
+      return;
+    }
+    syncAll();
+  }, [
+    addNotification,
+    ensureWorkspaceForMenuAction,
+    isDaemonKindMutating,
+    isSyncing,
+    syncAll,
+  ]);
+
   React.useEffect(() => {
     if (identity) return;
     launchLockApplied.current = false;
@@ -758,6 +852,98 @@ export function AppShell() {
     return () => window.removeEventListener("kassiber:lock-app", lockApp);
   }, [lockApp]);
 
+  React.useEffect(() => {
+    if (!("__TAURI_INTERNALS__" in window)) return;
+
+    let disposed = false;
+    let unlisten: (() => void) | null = null;
+
+    void import("@tauri-apps/api/event")
+      .then(({ listen }) =>
+        listen<NativeMenuPayload>(NATIVE_MENU_EVENT, (event) => {
+          const store = useUiStore.getState();
+          // AppShell only handles workspace-scoped actions (lock, sync,
+          // process-journals). Global actions (navigate, open-settings,
+          // toggle-sensitive) flow through RootIntentListener at the
+          // route-tree root so they work pre-workspace too. The "workspace"
+          // scope filter prevents this listener from double-handling.
+          dispatchMenuIntent(
+            event.payload,
+            {
+              hasWorkspace: store.identity !== null,
+              aiFeaturesEnabled: store.aiFeaturesEnabled,
+              hideSensitive: store.hideSensitive,
+              navigate: ({ to, hash }) => {
+                void navigate({ to, hash: hash ?? undefined });
+              },
+              lockApp,
+              setHideSensitive,
+              runWalletSync: runMenuWalletSync,
+              runJournalProcessing: runMenuJournalProcessing,
+              addNotification,
+              emitSettingsSection: (section) => {
+                window.dispatchEvent(
+                  new CustomEvent("kassiber:settings-section", {
+                    detail: { section },
+                  }),
+                );
+              },
+            },
+            "workspace",
+          );
+        }),
+      )
+      .then((nextUnlisten) => {
+        if (disposed) {
+          nextUnlisten();
+          return;
+        }
+        unlisten = nextUnlisten;
+      })
+      .catch((error) => {
+        console.warn("Could not attach Kassiber native menu listener", error);
+      });
+
+    return () => {
+      disposed = true;
+      unlisten?.();
+    };
+  }, [
+    lockApp,
+    navigate,
+    runMenuJournalProcessing,
+    runMenuWalletSync,
+    aiFeaturesEnabled,
+    addNotification,
+    setHideSensitive,
+  ]);
+
+  React.useEffect(() => {
+    if (!("__TAURI_INTERNALS__" in window)) return;
+    let disposed = false;
+    const hasWorkspace = Boolean(identity);
+    void import("@tauri-apps/api/core")
+      .then(({ invoke }) => {
+        if (disposed) return;
+        return invoke("set_menu_state", {
+          aiFeaturesEnabled,
+          hasWorkspace,
+          locked,
+        });
+      })
+      .catch((error) => {
+        console.warn("Could not sync Kassiber native menu state", error);
+      });
+    return () => {
+      disposed = true;
+    };
+  }, [aiFeaturesEnabled, identity, locked]);
+
+  React.useEffect(() => {
+    if (aiFeaturesEnabled || !isAssistantRoute) return;
+    void navigate({ to: "/overview", replace: true });
+  }, [aiFeaturesEnabled, isAssistantRoute, navigate]);
+
   React.useLayoutEffect(() => {
     if (locked) return;
     const main = mainRef.current;
@@ -784,23 +970,6 @@ export function AppShell() {
     };
   }, [locked, pathname]);
 
-  React.useEffect(() => {
-    const openSettings = (event: Event) => {
-      const detail = (event as CustomEvent<{ section?: "backends" | "ai" }>)
-        .detail;
-      void navigate({
-        to: "/settings",
-        hash: detail?.section ?? undefined,
-      });
-    };
-
-    window.addEventListener("kassiber:open-settings", openSettings);
-
-    return () => {
-      window.removeEventListener("kassiber:open-settings", openSettings);
-    };
-  }, [navigate]);
-
   if (!identity) return null;
 
   return (
@@ -824,6 +993,7 @@ export function AppShell() {
               pathname={pathname}
               onLock={lockApp}
               daemonEnabled={!locked}
+              aiFeaturesEnabled={aiFeaturesEnabled}
             />
             <div className="min-h-0 w-full overflow-hidden lg:pt-1.5 lg:pr-1.5 lg:pb-1.5">
               <div className="relative flex h-full w-full flex-col items-center justify-start overflow-hidden bg-background lg:rounded-tl-xl lg:rounded-tr-xl">
@@ -845,29 +1015,41 @@ export function AppShell() {
                     />
                   </main>
                 ) : (
-                  <AssistantSessionProvider returnPath={assistantReturnPath}>
+                  aiFeaturesEnabled ? (
+                    <AssistantSessionProvider returnPath={assistantReturnPath}>
+                      <main
+                        id="app-main"
+                        ref={mainRef}
+                        tabIndex={-1}
+                        className={`relative min-h-0 w-full flex-1 overflow-auto bg-background ${
+                          isAssistantRoute
+                            ? "pb-0"
+                            : assistantCollapsed
+                              ? "pb-[150px]"
+                              : "pb-[240px]"
+                        }`}
+                      >
+                        <RouteTransitionIndicator active={shellBusy} />
+                        <Outlet />
+                      </main>
+                      {isAssistantRoute ? null : (
+                        <ScreenAssistantMockup
+                          collapsed={assistantCollapsed}
+                          className="absolute inset-x-0 bottom-0 z-20"
+                        />
+                      )}
+                    </AssistantSessionProvider>
+                  ) : (
                     <main
                       id="app-main"
                       ref={mainRef}
                       tabIndex={-1}
-                      className={`relative min-h-0 w-full flex-1 overflow-auto bg-background ${
-                        isAssistantRoute
-                          ? "pb-0"
-                          : assistantCollapsed
-                            ? "pb-[150px]"
-                            : "pb-[240px]"
-                      }`}
+                      className="relative min-h-0 w-full flex-1 overflow-auto bg-background"
                     >
                       <RouteTransitionIndicator active={shellBusy} />
                       <Outlet />
                     </main>
-                    {isAssistantRoute ? null : (
-                      <ScreenAssistantMockup
-                        collapsed={assistantCollapsed}
-                        className="absolute inset-x-0 bottom-0 z-20"
-                      />
-                    )}
-                  </AssistantSessionProvider>
+                  )
                 )}
               </div>
             </div>
@@ -896,11 +1078,24 @@ function AppSidebar({
   pathname,
   onLock,
   daemonEnabled,
+  aiFeaturesEnabled,
 }: {
   pathname: string;
   onLock: () => void;
   daemonEnabled: boolean;
+  aiFeaturesEnabled: boolean;
 }) {
+  const navGroups = React.useMemo(
+    () =>
+      NAV_GROUPS.map((group) => ({
+        ...group,
+        items: group.items.filter(
+          (item) => aiFeaturesEnabled || item.href !== "/assistant",
+        ),
+      })).filter((group) => group.items.length > 0),
+    [aiFeaturesEnabled],
+  );
+
   return (
     <Sidebar
       variant="sidebar"
@@ -908,7 +1103,7 @@ function AppSidebar({
       className="top-[4.5rem] h-[calc(100svh-4.5rem)] !border-r-0 group-data-[side=left]:!border-r-0"
     >
       <SidebarContent>
-        {NAV_GROUPS.map((group) => (
+        {navGroups.map((group) => (
           <SidebarGroup key={group.title}>
             <SidebarGroupLabel>{group.title}</SidebarGroupLabel>
             <SidebarGroupContent>
@@ -1216,6 +1411,7 @@ function AppDashboardHeader({
   const appNotifications = useUiStore((s) => s.notifications);
   const addNotification = useUiStore((s) => s.addNotification);
   const clearNotifications = useUiStore((s) => s.clearNotifications);
+  const aiFeaturesEnabled = useUiStore((s) => s.aiFeaturesEnabled);
   const processJournals =
     useDaemonMutation<JournalProcessResult>("ui.journals.process");
   const [searchQuery, setSearchQuery] = React.useState("");
@@ -1231,8 +1427,8 @@ function AppDashboardHeader({
   );
   const snapshot = data?.data;
   const searchResults = React.useMemo(
-    () => buildSearchResults(snapshot, searchQuery),
-    [snapshot, searchQuery],
+    () => buildSearchResults(snapshot, searchQuery, aiFeaturesEnabled),
+    [snapshot, searchQuery, aiFeaturesEnabled],
   );
   const searchListId = React.useId();
   const searchActiveId = searchResults[activeSearchIndex]?.id

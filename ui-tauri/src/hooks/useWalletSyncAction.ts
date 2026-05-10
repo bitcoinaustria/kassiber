@@ -1,6 +1,7 @@
 import * as React from "react";
+import { useQueryClient } from "@tanstack/react-query";
 
-import { useDaemonMutation } from "@/daemon/client";
+import { daemonMutationKey, useDaemonMutation } from "@/daemon/client";
 import { useUiStore } from "@/store/ui";
 import { useSyncProgressNotice } from "./useSyncProgressNotice";
 
@@ -10,13 +11,22 @@ interface SyncResult {
 }
 
 export function useWalletSyncAction() {
+  const queryClient = useQueryClient();
+  const dataMode = useUiStore((state) => state.dataMode);
   const addNotification = useUiStore((state) => state.addNotification);
   const syncWallets =
     useDaemonMutation<{ results: SyncResult[] }>("ui.wallets.sync");
   const { startSyncNotice, clearSyncNotice } = useSyncProgressNotice();
 
   const syncAll = React.useCallback(() => {
-    if (syncWallets.isPending) return;
+    // Honor in-flight syncs from any other `useDaemonMutation("ui.wallets.sync")`
+    // instance — this hook is mounted in dashboard2/dashboard5/AppShell, so a
+    // sync started from one surface should block a duplicate from another.
+    const otherSyncInFlight =
+      queryClient.isMutating({
+        mutationKey: daemonMutationKey(dataMode, "ui.wallets.sync"),
+      }) > 0;
+    if (syncWallets.isPending || otherSyncInFlight) return;
     addNotification({
       title: "Wallet sync started",
       body: "Kassiber is syncing all configured wallet sources.",
@@ -60,10 +70,20 @@ export function useWalletSyncAction() {
             tone: "error",
           });
         },
-        onSettled: clearSyncNotice,
+        onSettled: () => {
+          clearSyncNotice();
+          void queryClient.invalidateQueries({ queryKey: ["daemon"] });
+        },
       },
     );
-  }, [addNotification, clearSyncNotice, startSyncNotice, syncWallets]);
+  }, [
+    addNotification,
+    clearSyncNotice,
+    dataMode,
+    queryClient,
+    startSyncNotice,
+    syncWallets,
+  ]);
 
   return {
     syncAll,

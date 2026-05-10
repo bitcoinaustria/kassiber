@@ -94,7 +94,7 @@ const AiPanel = ({ form }: { form: OnboardingForm }) => {
             </p>
             <p className="text-xs text-ink-2">
               {disabled
-                ? "Assistant controls remain available after onboarding."
+                ? "Assistant UI stays hidden after onboarding."
                 : "No API keys or secrets are collected in onboarding."}
             </p>
           </div>
@@ -243,8 +243,8 @@ export const AiStep = ({
               <div className="flex items-start gap-3 rounded-lg border border-accent bg-[rgba(227,0,15,0.04)] p-4 text-xs leading-5 text-ink-2">
                 <Sparkles className="mt-0.5 size-4 shrink-0 text-accent" />
                 <p className="m-0">
-                  This records your setup preference only. The assistant
-                  controls remain available after onboarding.
+                  This hides the Assistant screen and floating chat after
+                  onboarding. You can enable AI features later in Settings.
                 </p>
               </div>
             )}
