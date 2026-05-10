@@ -154,12 +154,30 @@ describe("dispatchMenuIntent — direct actions", () => {
     expect(onDeps.setHideSensitive).toHaveBeenCalledWith(false);
   });
 
-  it("sync-all-wallets and process-journals route to runners", () => {
+  it("sync-all-wallets routes to the wallet sync runner", () => {
     const deps = makeDeps();
     dispatchMenuIntent({ action: "sync-all-wallets" }, deps);
     expect(deps.runWalletSync).toHaveBeenCalledTimes(1);
+    expect(deps.runJournalProcessing).not.toHaveBeenCalled();
+  });
 
+  it("process-journals routes to the journal processor runner", () => {
+    const deps = makeDeps();
     dispatchMenuIntent({ action: "process-journals" }, deps);
+    expect(deps.runJournalProcessing).toHaveBeenCalledTimes(1);
+    expect(deps.runWalletSync).not.toHaveBeenCalled();
+  });
+
+  it("delegates workflow workspace gating to the runners", () => {
+    // Sanity check on the comment in dispatchMenuIntent: workflow actions
+    // are dispatched even without a workspace; the runners are responsible
+    // for redirecting to / via ensureWorkspaceForMenuAction. If the
+    // dispatcher ever starts gating workflows itself, this test should be
+    // updated alongside that change.
+    const deps = makeDeps({ hasWorkspace: false });
+    dispatchMenuIntent({ action: "sync-all-wallets" }, deps);
+    dispatchMenuIntent({ action: "process-journals" }, deps);
+    expect(deps.runWalletSync).toHaveBeenCalledTimes(1);
     expect(deps.runJournalProcessing).toHaveBeenCalledTimes(1);
   });
 

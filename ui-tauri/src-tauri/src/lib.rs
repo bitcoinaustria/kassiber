@@ -259,13 +259,15 @@ struct AppRuntimeState {
 
 impl AppRuntimeState {
     fn new() -> Self {
-        // Default to enabled — `set_menu_state` is invoked from React on
-        // mount and reflects the persisted store value, so any "user has AI
-        // off" state is applied within the first render. The unlikely
-        // worst-case is a single AI runtime call between Tauri startup and
-        // the first React render, which still passes ALLOWED_DAEMON_KINDS.
+        // Fail-safe default: assume AI is off until React explicitly tells
+        // us otherwise via `set_menu_state`. A few `ai_features_disabled`
+        // envelopes during the first ~50ms after startup are recoverable;
+        // a silently-broken kill switch (bad invoke binding, JS error
+        // before the effect runs) defaulting to "AI on" is not. The user's
+        // explicit "AI on" intent must always cross the React→Rust
+        // boundary before AI runtime kinds run.
         Self {
-            ai_features_enabled: AtomicBool::new(true),
+            ai_features_enabled: AtomicBool::new(false),
         }
     }
 }

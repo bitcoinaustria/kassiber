@@ -23,12 +23,19 @@ export type AppRoutePath =
   | "/settings"
   | "/assistant";
 
+// Mirrors the Rust `DEEP_LINK_SETTINGS_SECTIONS` allowlist. Aliases
+// (`sync` → backends, `assistant` → ai) round-trip from deep links and the
+// native menu — drop them from this union and Rust would emit strings the
+// type system says are impossible.
 export type SettingsMenuSection =
   | "privacy"
   | "display"
   | "security"
   | "backends"
+  | "sync"
+  | "rates"
   | "ai"
+  | "assistant"
   | "data";
 
 export type NativeMenuPayload =
@@ -82,6 +89,13 @@ export function dispatchMenuIntent(
   payload: NativeMenuPayload,
   deps: MenuIntentDeps,
 ): void {
+  // Workspace gating note: `lock-app` and `navigate` are gated here against
+  // `deps.hasWorkspace`. The workflow actions (`sync-all-wallets`,
+  // `process-journals`) are gated *inside* their runners — see
+  // `runMenuWalletSync` / `runMenuJournalProcessing` in AppShell, which
+  // call `ensureWorkspaceForMenuAction()` before mutating. If the gating
+  // rule ever changes (e.g. allow some workflow during onboarding), update
+  // both sites.
   switch (payload.action) {
     case "lock-app":
       // The native menu greys out Lock when there's no workspace, but the
