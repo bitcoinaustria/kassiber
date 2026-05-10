@@ -2,7 +2,6 @@ import * as React from "react";
 
 import {
   AssistantSessionContext,
-  type AssistantModelSelection,
   type AssistantReturnPath,
   type AssistantSessionContextValue,
 } from "@/components/ai/assistantSession";
@@ -23,14 +22,8 @@ export function AssistantSessionProvider({
   returnPath,
 }: AssistantSessionProviderProps) {
   const selection = useUiStore((state) => state.assistantModelSelection);
-  const setStoredSelection = useUiStore(
+  const setSelection = useUiStore(
     (state) => state.setAssistantModelSelection,
-  );
-  const setSelection = React.useCallback(
-    (next: AssistantModelSelection | null) => {
-      setStoredSelection(next);
-    },
-    [setStoredSelection],
   );
   const [thinkingEffort, setThinkingEffort] = React.useState<
     AssistantSessionContextValue["thinkingEffort"]

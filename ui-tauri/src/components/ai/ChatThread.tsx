@@ -1,9 +1,11 @@
 /**
  * Auto-scrolling assistant conversation container.
  *
- * Tracks whether the user has scrolled up away from the latest message —
- * if they have, we don't yank them back to the bottom on every delta;
- * once they scroll back to within ~32px of the bottom we resume sticking.
+ * Streaming token deltas within the trailing message respect the user's
+ * scroll position — if they've scrolled up by more than ~32px we don't
+ * yank them back. A *new* message (count change) always snaps to the
+ * bottom: the next turn is what the user expects to see, and the
+ * scroll-to-latest button covers the rare case where they didn't.
  */
 
 import * as React from "react";

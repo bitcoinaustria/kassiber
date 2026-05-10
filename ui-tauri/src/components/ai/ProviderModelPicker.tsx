@@ -89,8 +89,11 @@ export function ProviderModelPicker({
     undefined,
     {
       enabled,
+      // The provider list is small, stable across the whole session, and
+      // load-bearing for the picker UX — keep it in cache for the lifetime
+      // of the app so the picker never blanks on remount or re-focus.
       staleTime: 30 * 60 * 1000,
-      gcTime: 60 * 60 * 1000,
+      gcTime: Infinity,
     },
   );
   const providers = React.useMemo<AiProviderRow[]>(

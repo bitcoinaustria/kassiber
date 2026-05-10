@@ -25,7 +25,7 @@ import {
   RefreshCw,
   ShieldCheck,
   Square,
-  Plus,
+  Wrench,
   type LucideIcon,
 } from "lucide-react";
 import { useLayoutEffect, useRef, useState } from "react";
@@ -133,11 +133,6 @@ export default function Ai02({
     if (!canSend) return;
     onSubmit(trimmedInput);
     setInputValue("");
-    if (inputRef.current) {
-      inputRef.current.value = "";
-      inputRef.current.style.height = "auto";
-      inputRef.current.style.overflowY = "hidden";
-    }
   };
 
   const handleKeyDown = (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -209,7 +204,7 @@ export default function Ai02({
             }
             disabled={isStreaming || !onToolsEnabledChange}
           >
-            <Plus className="h-5 w-5" aria-hidden="true" />
+            <Wrench className="h-4 w-4" aria-hidden="true" />
           </Button>
           <Context className="min-w-0 flex-1">
             <ContextItem

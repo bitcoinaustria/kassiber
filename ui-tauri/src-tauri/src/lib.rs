@@ -474,6 +474,12 @@ fn resolve_import_data_root(path: &Path) -> Result<Option<(PathBuf, PathBuf, boo
     }
 }
 
+// A managed Kassiber state root looks like `<...>/.kassiber/{config,data}/...`,
+// so it always has a sibling `data/kassiber.sqlite3` *and* may carry a legacy
+// `kassiber.sqlite3` at the top level from earlier daemon versions. The strict
+// "ambiguous selection" error is meant for ad-hoc folders the user assembled
+// by hand — when we recognize the managed layout we transparently prefer the
+// nested `data/` database instead of asking them to drill in by one level.
 fn is_managed_state_root(path: &Path) -> bool {
     path.file_name().and_then(|name| name.to_str()) == Some(DEFAULT_STATE_DIR)
         || path.join("config").join("settings.json").is_file()
