@@ -33,15 +33,14 @@ and `at_swap_link` markers on non-`SELL` disposals.
 `kassiber/core/tax_events.py` defines the fields; `kassiber/core/austrian.py`
 defines classification and the `AT_NEU_CUTOFF` constant; `kassiber/core/engines/rp2.py`
 serializes into rp2's notes wire format in `_compose_event_notes` /
-`_compose_transfer_notes` and honors `carried_basis_fiat` for incoming
-swap legs.
+`_compose_transfer_notes`. Carried-basis computation lives in rp2's
+country-level `compute_tax_for_assets` hook.
 
 | Field | Type | Populated by |
 | --- | --- | --- |
 | `at_regime` | `"alt" | "neu" | None` | Inbound rows: direct from the 2021-03-01 Europe/Vienna acquisition cutoff. Outbound rows: same cutoff by default, but post-cutoff disposals fall back to `alt` when only Alt inventory remains in scope. Future: explicit row annotations. |
 | `at_pool` | `str | None` | v1: wallet_id. Future: configurable per profile. |
-| `at_swap_link` | `str | None` | Engine classifier tags both legs of a Neu cross-asset pair with the pair id. |
-| `carried_basis_fiat` | `Decimal | None` | Incoming leg of a Neu swap. Current path: Option A topological two-pass compute; unset only when the swap is not carrying-value or was quarantined. |
+| `at_swap_link` | `str | None` | Engine classifier tags both surviving legs of a reviewed Neu cross-asset carrying-value pair with the pair id. |
 
 ## Receipt and disposal bucketing contract
 
@@ -113,37 +112,40 @@ without guessing in the report layer.
 
 For a matched crypto-to-crypto swap, rp2 zeroes the gain on the
 outgoing Neu leg and depletes the pool at its running average. The
-**incoming** leg's basis is Kassiber's responsibility: it must be seeded
-into rp2's `InTransaction` as `fiat_in_with_fee = outgoing_amount * pool_avg_at_swap_time`
-so the destination asset's pool inherits the carried basis.
+**incoming** leg's carried basis is rp2's responsibility: Kassiber emits
+the reviewed `at_swap_link=<id>` markers, then rp2 interleaves the
+affected assets through `compute_tax_for_assets` so the destination pool
+inherits `outgoing_amount * source_pool_avg_at_swap_time`.
 
-### Current scope (Option A — topological two-pass)
+### Current scope (native rp2 multi-asset carry)
 
 For every cross-asset pair under an AT profile:
 
 - **`policy=taxable`:** the pair remains a normal SELL + BUY. Kassiber
   records the audit link in `cross_asset_pairs`, but does not emit
-  `at_swap_link` or `carried_basis_fiat`.
+  `at_swap_link`.
 - **`policy=carrying-value` + outgoing leg is Alt (acquired on/before
   2021-02-28 Vienna):** the pair still realizes. rp2's AT plugin ignores
   `at_swap_link` for Alt, so Kassiber deliberately does not emit it
   either — the lot-pairing audit trail reflects a real disposal and
   acquisition, not a tagged-but-ignored swap.
 - **`policy=carrying-value` + outgoing leg is Neu:** Kassiber annotates
-  both legs with `at_swap_link=<pair_id>` and computes the incoming
-  leg's `carried_basis_fiat` via a chronological pre-pass before the
-  per-asset rp2 loop runs.
+  both surviving legs with `at_swap_link=<pair_id>`, validates the
+  cross-asset marker shape, then calls rp2's native multi-asset compute
+  hook. rp2 owns the ordering and carried-basis math.
 
-The two-pass implementation works as follows:
+The implementation works as follows:
 
-1. Walk all AT events plus same-asset transfer moves across all assets in
-   timestamp order, maintaining a running pool state keyed by
-   `(asset, pool_id)`.
-2. For each matched Neu cross-asset carrying-value pair, look up
-   `avg = pool_avg_by(out_asset, out_pool)` at the swap timestamp.
-3. Set `carried_basis_fiat = outgoing_amount * avg` on the incoming
-   `NormalizedTaxEvent`, then let both legs flow through the existing
-   per-asset `normalize_tax_asset_inputs` + rp2 compute loop.
+1. Kassiber normalizes and prepares all assets once without swap markers,
+   so rows with missing pricing, missing inventory, or other readiness
+   blockers are quarantined before they can create orphan markers.
+2. For each reviewed Neu carrying-value pair whose two legs survived
+   preparation, Kassiber emits the same non-empty `at_swap_link` on both
+   legs.
+3. Kassiber runs rp2's country-level `compute_tax_for_assets` hook. For
+   Austrian profiles, rp2's native runner orders the affected assets,
+   derives the source pool average from the moving-average engine, and
+   applies the effective fiat basis override to the incoming lot.
 
 This is direction-agnostic: both BTC->LBTC peg-ins and LBTC->BTC
 peg-outs use the same handoff.
@@ -157,9 +159,12 @@ failure mode:
 
 - `missing_spot_price`: one or both legs lack the price data rp2 still
   needs on the raw event.
-- `missing_pool_average`: Kassiber cannot derive a valid source-pool
-  average at the swap timestamp (for example, insufficient Neu inventory
-  in that pool).
+- `pricing_review_required`: imported pricing exists but needs operator
+  review before it can feed tax processing.
+- `unsupported_tax_direction`: one of the paired rows is not a normal
+  inbound/outbound tax event.
+- `swap_leg_unavailable`: a reviewed pair points at rows that normalized
+  away before a more specific readiness reason was available.
 
 Those quarantines are no longer the default Austrian swap path; they are
 only the safety net when the swap cannot be annotated correctly.

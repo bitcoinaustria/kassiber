@@ -25,6 +25,7 @@ RP2 / `bitcoinaustria/rp2` owns:
 
 - country tax semantics
 - accounting methods and lot/moving-average math
+- cross-asset Neu swap carried-basis computation
 - gains/losses and disposal classification
 - Austrian plugin APIs such as `rp2.plugin.country.at.AT` and
   `classify_disposal()`
@@ -60,10 +61,10 @@ Typed Austrian fields on normalized events:
 - `at_regime`
 - `at_pool`
 - `at_swap_link`
-- `carried_basis_fiat`
 
 The RP2 adapter serializes those markers into RP2 notes per
-`docs/austrian-handoff.md`.
+`docs/austrian-handoff.md`; rp2's `compute_tax_for_assets` hook owns the
+carried-basis math for reviewed Neu cross-asset swaps.
 
 ## Current Engine Boundary
 
