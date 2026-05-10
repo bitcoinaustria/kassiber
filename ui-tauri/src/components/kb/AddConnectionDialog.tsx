@@ -16,6 +16,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { useDaemon, useDaemonMutation } from "@/daemon/client";
+import { useSyncProgressNotice } from "@/hooks/useSyncProgressNotice";
 import { useUiStore, type DeferredConnectionSetup } from "@/store/ui";
 import { cn } from "@/lib/utils";
 import {
@@ -206,6 +207,7 @@ export function AddConnectionDialog({
   }>("ui.connections.btcpay.test");
   const syncWallet =
     useDaemonMutation<{ results: SyncResult[] }>("ui.wallets.sync");
+  const { startSyncNotice, clearSyncNotice } = useSyncProgressNotice();
   const [activeCategory, setActiveCategory] =
     React.useState<ConnectionCategory>("wallets");
   const [selectedId, setSelectedId] = React.useState("xpub");
@@ -267,9 +269,13 @@ export function AddConnectionDialog({
   const submitLabel =
     setupKind === "backend-settings"
       ? "Open backend settings"
-      : isSubmitting
-        ? "Saving..."
-        : "Create connection";
+      : syncWallet.isPending
+        ? "Syncing…"
+        : importBip329.isPending
+          ? "Importing labels…"
+          : isSubmitting
+            ? "Saving…"
+            : "Create connection";
   const canContinue = selected.status === "ready" && setupKind !== "planned";
 
   React.useEffect(() => {
@@ -409,7 +415,14 @@ export function AddConnectionDialog({
           gap_limit: Number.isFinite(gapLimit) ? gapLimit : undefined,
         });
         if (form.syncAfterCreate) {
-          await syncWallet.mutateAsync({ wallet: label });
+          startSyncNotice(
+            `${label} is still importing. Large CSV exports can take a moment; Kassiber will update when the daemon finishes.`,
+          );
+          try {
+            await syncWallet.mutateAsync({ wallet: label });
+          } finally {
+            clearSyncNotice();
+          }
         }
         addNotification({
           title: "Connection added",
@@ -426,7 +439,14 @@ export function AddConnectionDialog({
           source_format: sourceFormat,
         });
         if (form.syncAfterCreate) {
-          await syncWallet.mutateAsync({ wallet: label });
+          startSyncNotice(
+            `${label} is still importing. Large CSV exports can take a moment; Kassiber will update when the daemon finishes.`,
+          );
+          try {
+            await syncWallet.mutateAsync({ wallet: label });
+          } finally {
+            clearSyncNotice();
+          }
         }
         addNotification({
           title: "Connection added",
@@ -440,7 +460,14 @@ export function AddConnectionDialog({
           store_id: form.btcpayStoreId.trim(),
         });
         if (form.syncAfterCreate) {
-          await syncWallet.mutateAsync({ wallet: label });
+          startSyncNotice(
+            `${label} is still importing. Large CSV exports can take a moment; Kassiber will update when the daemon finishes.`,
+          );
+          try {
+            await syncWallet.mutateAsync({ wallet: label });
+          } finally {
+            clearSyncNotice();
+          }
         }
         addNotification({
           title: "Connection added",
