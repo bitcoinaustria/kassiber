@@ -113,15 +113,23 @@ function SetupField({
   id,
   label,
   children,
+  error,
+  helper,
 }: {
   id: string;
   label: string;
   children: React.ReactNode;
+  error?: string;
+  helper?: React.ReactNode;
 }) {
   return (
     <div className="space-y-2">
       <Label htmlFor={id}>{label}</Label>
       {children}
+      {helper && !error ? (
+        <p className="text-xs text-muted-foreground">{helper}</p>
+      ) : null}
+      {error ? <p className="text-xs text-destructive">{error}</p> : null}
     </div>
   );
 }
@@ -203,6 +211,9 @@ export function AddConnectionDialog({
     formDefaultsFor(CONNECTION_SOURCES[0]),
   );
   const [setupError, setSetupError] = React.useState<string | null>(null);
+  const [fieldErrors, setFieldErrors] = React.useState<
+    Partial<Record<keyof SetupFormState, string>>
+  >({});
   const [previewAddresses, setPreviewAddresses] = React.useState<
     { branch: "receive" | "change"; index: number; address: string }[] | null
   >(null);
@@ -261,6 +272,7 @@ export function AddConnectionDialog({
   React.useEffect(() => {
     setForm(formDefaultsFor(selected));
     setSetupError(null);
+    setFieldErrors({});
     setPreviewAddresses(null);
     setPreviewError(null);
     setBtcpayTestStatus(null);
@@ -298,11 +310,63 @@ export function AddConnectionDialog({
   const updateForm = <Key extends keyof SetupFormState>(
     key: Key,
     value: SetupFormState[Key],
-  ) => setForm((current) => ({ ...current, [key]: value }));
+  ) => {
+    setForm((current) => ({ ...current, [key]: value }));
+    setFieldErrors((current) => {
+      if (!(key in current)) return current;
+      const { [key]: _removed, ...rest } = current;
+      return rest;
+    });
+  };
 
   const openBackendSettings = () => {
     onOpenChange(false);
     void navigate({ to: "/settings", hash: "backends" });
+  };
+
+  const validateSetupForm = (): Partial<Record<keyof SetupFormState, string>> => {
+    const errors: Partial<Record<keyof SetupFormState, string>> = {};
+    if (
+      setupKind === "descriptor" ||
+      setupKind === "file-wallet" ||
+      setupKind === "btcpay"
+    ) {
+      if (!form.label.trim()) {
+        errors.label = "Connection label is required.";
+      }
+    }
+    if (setupKind === "descriptor") {
+      if (!form.walletMaterial.trim()) {
+        errors.walletMaterial = "Paste a wallet export, descriptor, or extended public key.";
+      } else {
+        const detection = detectWalletMaterial(form.walletMaterial);
+        if (detection.kind === "bare-xpub" || detection.kind === "unknown") {
+          errors.walletMaterial = detection.hint ?? detection.label;
+        }
+      }
+      const gapLimit = Number.parseInt(form.gapLimit, 10);
+      if (!Number.isFinite(gapLimit) || gapLimit <= 0) {
+        errors.gapLimit = "Gap limit must be a positive integer.";
+      }
+      if (descriptorBackendOptions.length > 0 && !form.backend.trim()) {
+        errors.backend = "Choose a backend.";
+      }
+    }
+    if (setupKind === "file-wallet" && !form.sourceFile.trim()) {
+      errors.sourceFile = "Pick the export file.";
+    }
+    if (setupKind === "btcpay") {
+      if (btcpayBackends.length > 0 && !form.backend.trim()) {
+        errors.backend = "Choose a BTCPay backend.";
+      }
+      if (!form.btcpayStoreId.trim()) {
+        errors.btcpayStoreId = "Enter the BTCPay store ID.";
+      }
+    }
+    if (setupKind === "bip329" && !form.bip329File.trim()) {
+      errors.bip329File = "Pick the BIP329 label file.";
+    }
+    return errors;
   };
 
   const onSetupSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
@@ -316,6 +380,9 @@ export function AddConnectionDialog({
       return;
     }
     setSetupError(null);
+    const errors = validateSetupForm();
+    setFieldErrors(errors);
+    if (Object.keys(errors).length > 0) return;
     const label = form.label.trim();
     try {
       if (setupKind === "backend-settings") {
@@ -401,7 +468,7 @@ export function AddConnectionDialog({
     label: string,
     options: BackendOption[],
   ) => (
-    <SetupField id={id} label={label}>
+    <SetupField id={id} label={label} error={fieldErrors.backend}>
       {options.length ? (
         <select
           id={id}
@@ -440,7 +507,11 @@ export function AddConnectionDialog({
   );
 
   const renderConnectionLabelField = () => (
-    <SetupField id="connection-label" label="Connection label">
+    <SetupField
+      id="connection-label"
+      label="Connection label"
+      error={fieldErrors.label}
+    >
       <Input
         id="connection-label"
         value={form.label}
@@ -515,7 +586,11 @@ export function AddConnectionDialog({
             "Backend",
             descriptorBackendOptions,
           )}
-          <SetupField id="connection-wallet-material" label="Wallet export">
+          <SetupField
+            id="connection-wallet-material"
+            label="Wallet export"
+            error={fieldErrors.walletMaterial}
+          >
             <Textarea
               id="connection-wallet-material"
               className="min-h-32 font-mono text-xs"
@@ -529,7 +604,11 @@ export function AddConnectionDialog({
             />
             {renderWalletMaterialFeedback()}
           </SetupField>
-          <SetupField id="connection-gap-limit" label="Gap limit">
+          <SetupField
+            id="connection-gap-limit"
+            label="Gap limit"
+            error={fieldErrors.gapLimit}
+          >
             <Input
               id="connection-gap-limit"
               type="number"
@@ -598,7 +677,11 @@ export function AddConnectionDialog({
               </select>
             </SetupField>
           ) : null}
-          <SetupField id="connection-source-file" label="Export file path">
+          <SetupField
+            id="connection-source-file"
+            label="Export file path"
+            error={fieldErrors.sourceFile}
+          >
             <div className="flex gap-2">
               <Input
                 id="connection-source-file"
@@ -637,7 +720,11 @@ export function AddConnectionDialog({
             "BTCPay backend",
             btcpayBackends,
           )}
-          <SetupField id="connection-btcpay-store" label="Store ID">
+          <SetupField
+            id="connection-btcpay-store"
+            label="Store ID"
+            error={fieldErrors.btcpayStoreId}
+          >
             <Input
               id="connection-btcpay-store"
               value={form.btcpayStoreId}
@@ -701,7 +788,11 @@ export function AddConnectionDialog({
     if (setupKind === "bip329") {
       return (
         <>
-          <SetupField id="connection-bip329-file" label="Label file path">
+          <SetupField
+            id="connection-bip329-file"
+            label="Label file path"
+            error={fieldErrors.bip329File}
+          >
             <div className="flex gap-2">
               <Input
                 id="connection-bip329-file"
@@ -728,7 +819,11 @@ export function AddConnectionDialog({
               ) : null}
             </div>
           </SetupField>
-          <SetupField id="connection-bip329-wallet" label="Target wallet label">
+          <SetupField
+            id="connection-bip329-wallet"
+            label="Target wallet label"
+            helper="Optional. When set, label records target this wallet's transactions; otherwise they import without a wallet scope."
+          >
             <Input
               id="connection-bip329-wallet"
               value={form.bip329Wallet}
