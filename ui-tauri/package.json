@@ -25,6 +25,7 @@
     "@tanstack/react-router": "^1.114.3",
     "@tanstack/react-table": "^8.21.3",
     "@tauri-apps/api": "^2.8.0",
+    "@tauri-apps/plugin-dialog": "^2.7.0",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "lucide-react": "^0.469.0",

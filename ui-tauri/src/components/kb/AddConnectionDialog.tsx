@@ -24,6 +24,7 @@ import {
   type ConnectionCategory,
   type ConnectionSource,
 } from "@/lib/connectionCatalog";
+import { isFilePickerAvailable, pickFile } from "@/lib/filePicker";
 
 interface AddConnectionDialogProps {
   open: boolean;
@@ -72,6 +73,19 @@ interface BackendOptionsData {
 }
 
 type DialogStep = "source" | "setup";
+
+function sourceFileFilters(source: ConnectionSource) {
+  if (source.sourceFormat === "phoenix_csv") {
+    return [{ name: "Phoenix CSV", extensions: ["csv"] }];
+  }
+  if (source.sourceFormat === "river_csv") {
+    return [{ name: "River CSV", extensions: ["csv"] }];
+  }
+  if (source.id === "csv") {
+    return [{ name: "CSV or JSON", extensions: ["csv", "json"] }];
+  }
+  return undefined;
+}
 
 const formDefaultsFor = (source: ConnectionSource): SetupFormState => {
   const defaultLabel =
@@ -472,12 +486,29 @@ export function AddConnectionDialog({
             </SetupField>
           ) : null}
           <SetupField id="connection-source-file" label="Export file path">
-            <Input
-              id="connection-source-file"
-              value={form.sourceFile}
-              onChange={(event) => updateForm("sourceFile", event.target.value)}
-              required
-            />
+            <div className="flex gap-2">
+              <Input
+                id="connection-source-file"
+                value={form.sourceFile}
+                onChange={(event) => updateForm("sourceFile", event.target.value)}
+                required
+              />
+              {isFilePickerAvailable ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={async () => {
+                    const picked = await pickFile({
+                      title: `Select ${selected.title} export file`,
+                      filters: sourceFileFilters(selected),
+                    });
+                    if (picked) updateForm("sourceFile", picked);
+                  }}
+                >
+                  Browse…
+                </Button>
+              ) : null}
+            </div>
           </SetupField>
           {renderSyncAfterCreate("Import after setup")}
         </>
@@ -510,12 +541,31 @@ export function AddConnectionDialog({
       return (
         <>
           <SetupField id="connection-bip329-file" label="Label file path">
-            <Input
-              id="connection-bip329-file"
-              value={form.bip329File}
-              onChange={(event) => updateForm("bip329File", event.target.value)}
-              required
-            />
+            <div className="flex gap-2">
+              <Input
+                id="connection-bip329-file"
+                value={form.bip329File}
+                onChange={(event) => updateForm("bip329File", event.target.value)}
+                required
+              />
+              {isFilePickerAvailable ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={async () => {
+                    const picked = await pickFile({
+                      title: "Select BIP329 label file",
+                      filters: [
+                        { name: "BIP329 JSONL", extensions: ["jsonl", "json"] },
+                      ],
+                    });
+                    if (picked) updateForm("bip329File", picked);
+                  }}
+                >
+                  Browse…
+                </Button>
+              ) : null}
+            </div>
           </SetupField>
           <SetupField id="connection-bip329-wallet" label="Target wallet label">
             <Input
