@@ -947,6 +947,27 @@ class DaemonSmokeTest(unittest.TestCase):
                 _write_payload(
                     proc,
                     {
+                        "request_id": "replace-descriptor-receive-only",
+                        "kind": "ui.wallets.update",
+                        "args": {
+                            "wallet": "Descriptor UI",
+                            "wallet_material": receive_descriptor,
+                            "auth_response": {
+                                "plaintext_change_ack": "CHANGE LOCAL DATA",
+                            },
+                        },
+                    },
+                )
+                descriptor_updated = _read_payload_timeout(proc)
+                self.assertEqual(descriptor_updated["kind"], "ui.wallets.update")
+                self.assertTrue(descriptor_updated["data"]["wallet"]["descriptor"])
+                self.assertFalse(
+                    descriptor_updated["data"]["wallet"]["change_descriptor"]
+                )
+
+                _write_payload(
+                    proc,
+                    {
                         "request_id": "create-river",
                         "kind": "ui.wallets.create",
                         "args": {
@@ -1034,8 +1055,27 @@ class DaemonSmokeTest(unittest.TestCase):
                 )
                 edited = _read_payload_timeout(proc)
                 self.assertEqual(edited["kind"], "ui.wallets.update")
-                self.assertEqual(edited["data"]["wallet"]["config"]["store_id"], "store-edited")
+                self.assertEqual(
+                    edited["data"]["wallet"]["config"]["store_id"], "store-edited"
+                )
                 self.assertEqual(edited["data"]["wallet"]["label"], "BTCPay UI")
+
+                _write_payload(
+                    proc,
+                    {
+                        "request_id": "overview-connections",
+                        "kind": "ui.overview.snapshot",
+                    },
+                )
+                overview = _read_payload_timeout(proc)
+                self.assertEqual(overview["kind"], "ui.overview.snapshot")
+                connections = {
+                    connection["label"]: connection
+                    for connection in overview["data"]["connections"]
+                }
+                self.assertEqual(connections["River UI"]["syncMode"], "file_import")
+                self.assertEqual(connections["River UI"]["sourceFormat"], "river_csv")
+                self.assertEqual(connections["BTCPay UI"]["syncSource"], "btcpay")
 
                 # Sync the River wallet again and confirm the daemon emits
                 # progress envelopes before the terminal sync envelope. With

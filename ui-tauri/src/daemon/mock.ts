@@ -381,9 +381,12 @@ export const mockDaemon: DaemonTransport = {
       const args = (req.args ?? {}) as {
         label?: unknown;
         kind?: unknown;
+        source_format?: unknown;
       };
       const label = typeof args.label === "string" ? args.label.trim() : "";
       const kind = typeof args.kind === "string" ? args.kind.trim() : "custom";
+      const sourceFormat =
+        typeof args.source_format === "string" ? args.source_format.trim() : "";
       if (!label) {
         return {
           kind: "error",
@@ -401,6 +404,13 @@ export const mockDaemon: DaemonTransport = {
         id: `mock-wallet-${Date.now()}`,
         label,
         kind,
+        ...(sourceFormat
+          ? {
+              syncMode: "file_import",
+              syncSource: sourceFormat,
+              sourceFormat,
+            }
+          : {}),
       };
       overview.connections = [...overview.connections, connection];
       return {
@@ -438,6 +448,8 @@ export const mockDaemon: DaemonTransport = {
         id: `mock-btcpay-${Date.now()}`,
         label,
         kind: "custom",
+        syncMode: "btcpay",
+        syncSource: "btcpay",
       };
       overview.connections = [...overview.connections, connection];
       return {

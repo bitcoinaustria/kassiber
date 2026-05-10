@@ -30,6 +30,27 @@ _CATALOG_PATH = (
     / "lib"
     / "connectionCatalog.tsx"
 )
+_TAURI_LIB_PATH = (
+    Path(__file__).resolve().parent.parent
+    / "ui-tauri"
+    / "src-tauri"
+    / "src"
+    / "lib.rs"
+)
+_VITE_CONFIG_PATH = (
+    Path(__file__).resolve().parent.parent / "ui-tauri" / "vite.config.ts"
+)
+_CONNECTION_SETUP_KINDS = (
+    "ui.backends.options",
+    "ui.wallets.create",
+    "ui.wallets.preview_descriptor",
+    "ui.connections.sources",
+    "ui.connections.btcpay.create",
+    "ui.connections.btcpay.test",
+    "ui.metadata.bip329.import",
+    "ui.wallets.update",
+    "ui.wallets.delete",
+)
 
 
 def _split_entries(text: str) -> list[str]:
@@ -72,6 +93,8 @@ class ConnectionCatalogDriftTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.catalog_text = _CATALOG_PATH.read_text(encoding="utf-8")
+        cls.tauri_lib_text = _TAURI_LIB_PATH.read_text(encoding="utf-8")
+        cls.vite_config_text = _VITE_CONFIG_PATH.read_text(encoding="utf-8")
 
     def test_catalog_file_exists(self):
         self.assertTrue(
@@ -100,6 +123,44 @@ class ConnectionCatalogDriftTests(unittest.TestCase):
             match.group("kind"),
             WALLET_KINDS,
             "BTCPay setup hard-codes a wallet kind that WALLET_KINDS no longer contains",
+        )
+
+    def test_connection_setup_kinds_are_allowed_by_desktop_boundaries(self):
+        rust_allowed = re.search(
+            r"ALLOWED_DAEMON_KINDS[^=]*=\s*&\[(?P<body>.*?)\];",
+            self.tauri_lib_text,
+            re.DOTALL,
+        )
+        vite_allowed = re.search(
+            r"ALLOWED_BRIDGE_KINDS\s*=\s*new Set\(\[(?P<body>.*?)\]\);",
+            self.vite_config_text,
+            re.DOTALL,
+        )
+        self.assertIsNotNone(rust_allowed, "could not find Tauri daemon allowlist")
+        self.assertIsNotNone(vite_allowed, "could not find Vite bridge allowlist")
+        for kind in _CONNECTION_SETUP_KINDS:
+            self.assertIn(
+                f'"{kind}"',
+                rust_allowed.group("body"),
+                f"{kind} is missing from Tauri daemon allowlist",
+            )
+            self.assertIn(
+                f'"{kind}"',
+                vite_allowed.group("body"),
+                f"{kind} is missing from Vite bridge allowlist",
+            )
+
+    def test_wallet_sync_is_streaming_in_tauri_supervisor(self):
+        streaming = re.search(
+            r"STREAMING_DAEMON_KINDS[^=]*=\s*&\[(?P<body>.*?)\];",
+            self.tauri_lib_text,
+            re.DOTALL,
+        )
+        self.assertIsNotNone(streaming, "could not find Tauri streaming kind list")
+        self.assertIn(
+            '"ui.wallets.sync"',
+            streaming.group("body"),
+            "ui.wallets.sync emits progress records and must be marked streaming",
         )
 
     def test_ready_entries_reference_known_wallet_kinds(self):

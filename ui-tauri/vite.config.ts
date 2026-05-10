@@ -27,6 +27,7 @@ const ALLOWED_BRIDGE_KINDS = new Set([
   "ui.transactions.list",
   "ui.wallets.list",
   "ui.backends.list",
+  "ui.backends.options",
   "ui.profiles.snapshot",
   "ui.reports.capital_gains",
   "ui.reports.export_pdf",
@@ -43,6 +44,14 @@ const ALLOWED_BRIDGE_KINDS = new Set([
   "ui.secrets.init",
   "ui.secrets.change_passphrase",
   "ui.next_actions",
+  "ui.wallets.create",
+  "ui.wallets.preview_descriptor",
+  "ui.connections.sources",
+  "ui.connections.btcpay.create",
+  "ui.connections.btcpay.test",
+  "ui.metadata.bip329.import",
+  "ui.wallets.update",
+  "ui.wallets.delete",
   "ui.wallets.sync",
   "daemon.lock",
   "daemon.unlock",
@@ -362,7 +371,7 @@ async function handleBridgeStream(
   request.request_id = streamRequestId;
   let completed = false;
   res.once("close", () => {
-    if (completed) return;
+    if (completed || kind !== "ai.chat") return;
     void supervisor.cancelAiChat(streamRequestId).catch(() => undefined);
   });
 

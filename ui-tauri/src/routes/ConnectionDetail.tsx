@@ -57,6 +57,7 @@ import {
 import { screenShellClassName } from "@/lib/screen-layout";
 import { cn } from "@/lib/utils";
 import { isFilePickerAvailable, pickFile } from "@/lib/filePicker";
+import { editConfigKindForConnection } from "@/lib/connectionEditKind";
 import { detectWalletMaterial } from "@/lib/walletMaterialFormat";
 import { useUiStore } from "@/store/ui";
 import { useSyncProgressNotice } from "@/hooks/useSyncProgressNotice";
@@ -328,16 +329,7 @@ function ConnectionDetailView({
     (backend) => backend.kind === "btcpay",
   );
 
-  const editConfigKind: "descriptor" | "btcpay" | "file-wallet" | null =
-    connection.kind === "descriptor" || connection.kind === "xpub"
-      ? "descriptor"
-      : connection.kind === "custom" || connection.kind === "btcpay"
-        ? "btcpay"
-        : connection.kind === "river" ||
-            connection.kind === "phoenix" ||
-            connection.kind === "csv"
-          ? "file-wallet"
-          : null;
+  const editConfigKind = editConfigKindForConnection(connection);
 
   const openDeleteDialog = () => {
     setDeletePassphrase("");

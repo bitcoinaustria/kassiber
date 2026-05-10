@@ -4168,6 +4168,8 @@ def _update_wallet_payload(
         config_updates["descriptor"] = material_config["descriptor"]
         if "change_descriptor" in material_config:
             config_updates["change_descriptor"] = material_config["change_descriptor"]
+        elif "change_descriptor" not in config_updates:
+            config_updates["change_descriptor"] = None
     gap_limit = args.get("gap_limit")
     if gap_limit not in (None, ""):
         if not isinstance(gap_limit, int):
