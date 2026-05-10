@@ -175,6 +175,7 @@ SUPPORTED_KINDS = (
     "ui.next_actions",
     "ui.wallets.create",
     "ui.wallets.preview_descriptor",
+    "ui.connections.sources",
     "ui.connections.btcpay.create",
     "ui.connections.btcpay.test",
     "ui.metadata.bip329.import",
@@ -3996,6 +3997,20 @@ def _import_bip329_payload(
     )
 
 
+def _connections_sources_payload() -> dict[str, Any]:
+    """Authoritative catalog of wallet kinds + import source formats.
+
+    The desktop catalog adds presentation metadata (icons, copy,
+    ordering) on top, but uses this list to verify it isn't claiming a
+    "ready" connection backed by a wallet kind or import format the
+    daemon does not actually know about.
+    """
+    return {
+        "wallet_kinds": core_wallets.list_wallet_kinds(),
+        "source_formats": sorted(_UI_WALLET_SOURCE_FORMATS),
+    }
+
+
 def _preview_descriptor_payload(args: dict[str, Any]) -> dict[str, Any]:
     descriptor_text = _optional_str_arg(args, "descriptor")
     change_descriptor_text = _optional_str_arg(args, "change_descriptor")
@@ -5150,6 +5165,18 @@ def handle_request(
                     _preview_descriptor_payload(
                         _coerce_args_dict(request_id, request.get("args")),
                     ),
+                ),
+                request_id,
+            ),
+            False,
+        )
+
+    if kind == "ui.connections.sources":
+        return (
+            _with_request_id(
+                build_envelope(
+                    "ui.connections.sources",
+                    _connections_sources_payload(),
                 ),
                 request_id,
             ),

@@ -465,6 +465,30 @@ export const mockDaemon: DaemonTransport = {
       };
     }
 
+    if (req.kind === "ui.connections.sources") {
+      return {
+        kind: "ui.connections.sources",
+        schema_version: 1,
+        request_id: req.request_id,
+        data: {
+          wallet_kinds: [
+            { kind: "descriptor", summary: "Watch-only descriptor wallet." },
+            { kind: "custom", summary: "Custom config wallet." },
+            { kind: "phoenix", summary: "Phoenix CSV importer." },
+            { kind: "river", summary: "River CSV importer." },
+          ],
+          source_formats: [
+            "btcpay_csv",
+            "btcpay_json",
+            "csv",
+            "json",
+            "phoenix_csv",
+            "river_csv",
+          ],
+        } as T,
+      };
+    }
+
     if (req.kind === "ui.wallets.preview_descriptor") {
       const args = (req.args ?? {}) as {
         wallet_material?: unknown;

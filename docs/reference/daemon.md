@@ -139,6 +139,13 @@ address when present. The daemon does not persist anything; callers use the
 preview to confirm a descriptor produces the expected wallet before
 committing.
 
+`ui.connections.sources` returns the daemon's authoritative catalog of
+supported wallet kinds (with summary/config-fields metadata) and the
+recognized import `source_formats`. The desktop catalog stays the source of
+truth for icons, copy, and ordering, but uses this list to verify it isn't
+advertising a "ready" connection backed by a wallet kind or import format
+the daemon does not implement.
+
 `ui.connections.btcpay.create` creates a wallet configured for confirmed
 Greenfield wallet-history sync from an existing BTCPay backend. It accepts
 `backend` (must reference an already-configured BTCPay backend), `label`, and
