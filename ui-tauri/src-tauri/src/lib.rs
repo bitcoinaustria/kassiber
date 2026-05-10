@@ -7,6 +7,7 @@ use std::io::ErrorKind;
 use std::io::Read;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output, Stdio};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
 use supervisor::{DaemonSupervisor, SupervisorError};
@@ -94,8 +95,21 @@ const DEEP_LINK_ROUTE_HOSTS: &[(&str, &str)] = &[
     ("diagnostics", "/diagnostics"),
 ];
 
+// Mirrors the React `SETTINGS_SECTION_INTEGRATION` map in
+// `ui-tauri/src/components/kb/settingsSections.ts`. Aliases (`sync` →
+// backends, `assistant` → ai) are accepted at the deep-link boundary so the
+// Rust allowlist matches the panel-resolution logic on the React side; the
+// React helper does the final hash → integration-id lookup.
 const DEEP_LINK_SETTINGS_SECTIONS: &[&str] = &[
-    "privacy", "display", "security", "backends", "ai", "data",
+    "privacy",
+    "display",
+    "security",
+    "backends",
+    "sync",
+    "rates",
+    "ai",
+    "assistant",
+    "data",
 ];
 
 const ALLOWED_DAEMON_KINDS: &[&str] = &[
@@ -165,6 +179,20 @@ const ALLOWED_DAEMON_KINDS: &[&str] = &[
 /// timeout. Other kinds keep the existing total-budget behavior.
 const STREAMING_DAEMON_KINDS: &[&str] = &["ai.chat"];
 
+// Daemon kinds that exercise the AI runtime (model calls, chat sessions, tool
+// consent prompts). Gated server-side by the global AI features toggle so the
+// switch is a real privacy promise instead of just hiding the UI — every
+// future caller can't accidentally bypass the guard. `ai.providers.*` is
+// deliberately excluded: providers stay configurable while AI is off so the
+// user can wire keys before turning the feature on.
+const AI_RUNTIME_KINDS: &[&str] = &[
+    "ai.list_models",
+    "ai.test_connection",
+    "ai.chat",
+    "ai.chat.cancel",
+    "ai.tool_call.consent",
+];
+
 #[derive(Debug, Deserialize)]
 pub struct DaemonRequest {
     kind: String,
@@ -225,10 +253,28 @@ struct AppMenuHandles {
     workspace_gated: Vec<MenuItem<tauri::Wry>>,
 }
 
+struct AppRuntimeState {
+    ai_features_enabled: AtomicBool,
+}
+
+impl AppRuntimeState {
+    fn new() -> Self {
+        // Default to enabled — `set_menu_state` is invoked from React on
+        // mount and reflects the persisted store value, so any "user has AI
+        // off" state is applied within the first render. The unlikely
+        // worst-case is a single AI runtime call between Tauri startup and
+        // the first React render, which still passes ALLOWED_DAEMON_KINDS.
+        Self {
+            ai_features_enabled: AtomicBool::new(true),
+        }
+    }
+}
+
 #[tauri::command]
 async fn daemon_invoke(
     app: tauri::AppHandle,
     state: State<'_, Arc<DaemonSupervisor>>,
+    runtime: State<'_, AppRuntimeState>,
     request: DaemonRequest,
 ) -> Result<DaemonEnvelope, DaemonEnvelope> {
     if !ALLOWED_DAEMON_KINDS.contains(&request.kind.as_str()) {
@@ -241,6 +287,24 @@ async fn daemon_invoke(
             Some(
                 "Add the kind to the generated daemon allowlist before exposing it to the webview.",
             ),
+            Some(json!({ "kind": request.kind })),
+            request.request_id,
+            false,
+        ));
+    }
+
+    // Server-side enforcement of the global AI features toggle. Even if a
+    // future caller forgets the React-side guard, AI runtime kinds will get
+    // refused while the toggle is off — including streaming `ai.chat` and
+    // its cancel/consent helpers. Provider configuration (`ai.providers.*`)
+    // stays available so users can wire keys before turning AI on.
+    if AI_RUNTIME_KINDS.contains(&request.kind.as_str())
+        && !runtime.ai_features_enabled.load(Ordering::Relaxed)
+    {
+        return Ok(error_envelope(
+            "ai_features_disabled",
+            "AI features are disabled in Settings.",
+            Some("Enable AI features in Settings before invoking AI runtime kinds."),
             Some(json!({ "kind": request.kind })),
             request.request_id,
             false,
@@ -918,6 +982,7 @@ pub fn run() {
             let (menu, menu_handles) = build_app_menu(app.handle())?;
             app.set_menu(menu)?;
             app.manage(menu_handles);
+            app.manage(AppRuntimeState::new());
             app.manage(Arc::new(DaemonSupervisor::new(resource_dir)));
 
             // Linux/Windows need an explicit runtime register; macOS uses
@@ -1223,6 +1288,20 @@ fn build_app_menu(
         open_reports_item.clone(),
         workflow_connections_item.clone(),
         workflow_data_item.clone(),
+        // View-menu navigation items: clicking these from the Welcome screen
+        // would redirect right back via the identity-guard effect, so grey
+        // them out instead. Diagnostics + Settings items remain enabled
+        // because Diagnostics is meant to be reachable while triaging a
+        // broken workspace and Settings has its own no-identity render.
+        overview_item.clone(),
+        transactions_item.clone(),
+        connections_item.clone(),
+        books_item.clone(),
+        reports_item.clone(),
+        source_funds_item.clone(),
+        journals_item.clone(),
+        tax_events_item.clone(),
+        quarantine_item.clone(),
     ];
 
     let handles = AppMenuHandles {
@@ -1236,6 +1315,7 @@ fn build_app_menu(
 #[tauri::command]
 fn set_menu_state(
     handles: tauri::State<'_, AppMenuHandles>,
+    runtime: tauri::State<'_, AppRuntimeState>,
     ai_features_enabled: bool,
     has_workspace: bool,
     locked: bool,
@@ -1254,6 +1334,9 @@ fn set_menu_state(
         item.set_enabled(workflows_enabled)
             .map_err(|error| error.to_string())?;
     }
+    runtime
+        .ai_features_enabled
+        .store(ai_features_enabled, Ordering::Relaxed);
     Ok(())
 }
 

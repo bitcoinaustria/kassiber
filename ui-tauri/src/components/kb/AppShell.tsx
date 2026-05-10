@@ -102,33 +102,11 @@ import { ScreenAssistantMockup } from "./ScreenAssistantMockup";
 import { PreAlphaBanner } from "./PreAlphaBanner";
 import { useWalletSyncAction } from "@/hooks/useWalletSyncAction";
 
-type AppRoutePath =
-  | "/overview"
-  | "/transactions"
-  | "/reports"
-  | "/source-of-funds"
-  | "/connections"
-  | "/books"
-  | "/journals"
-  | "/tax-events"
-  | "/quarantine"
-  | "/diagnostics"
-  | "/settings"
-  | "/assistant";
-
-type SettingsMenuSection =
-  | "privacy"
-  | "display"
-  | "security"
-  | "backends"
-  | "ai"
-  | "data";
-
-type NativeMenuPayload =
-  | { action: "lock-app" | "toggle-sensitive" }
-  | { action: "sync-all-wallets" | "process-journals" }
-  | { action: "open-settings"; section?: SettingsMenuSection | null }
-  | { action: "navigate"; route?: AppRoutePath | null };
+import {
+  dispatchMenuIntent,
+  type AppRoutePath,
+  type NativeMenuPayload,
+} from "./menuIntent";
 
 type NavItem = {
   label: string;
@@ -178,20 +156,6 @@ const APP_VERSION = "0.22.0";
 const APP_COMMIT = __APP_COMMIT__;
 const APP_COMMIT_SHORT = APP_COMMIT ? APP_COMMIT.slice(0, 7) : "unknown";
 const NATIVE_MENU_EVENT = "kassiber:intent";
-const APP_ROUTE_PATHS: readonly AppRoutePath[] = [
-  "/overview",
-  "/transactions",
-  "/reports",
-  "/source-of-funds",
-  "/connections",
-  "/books",
-  "/journals",
-  "/tax-events",
-  "/quarantine",
-  "/diagnostics",
-  "/settings",
-  "/assistant",
-];
 const topNavIconButtonClassName =
   "size-8 text-sidebar-foreground/75 hover:bg-sidebar-accent hover:text-sidebar-foreground";
 
@@ -557,13 +521,6 @@ function assistantReturnPathFor(pathname: string): AssistantReturnPath {
   return "/overview";
 }
 
-function isAppRoutePath(value: unknown): value is AppRoutePath {
-  return (
-    typeof value === "string" &&
-    APP_ROUTE_PATHS.includes(value as AppRoutePath)
-  );
-}
-
 export function AppShell() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
@@ -901,51 +858,27 @@ export function AppShell() {
     void import("@tauri-apps/api/event")
       .then(({ listen }) =>
         listen<NativeMenuPayload>(NATIVE_MENU_EVENT, (event) => {
-          const payload = event.payload;
-          if (payload.action === "lock-app") {
-            lockApp();
-            return;
-          }
-          if (payload.action === "toggle-sensitive") {
-            const next = !useUiStore.getState().hideSensitive;
-            setHideSensitive(next);
-            return;
-          }
-          if (payload.action === "sync-all-wallets") {
-            runMenuWalletSync();
-            return;
-          }
-          if (payload.action === "process-journals") {
-            runMenuJournalProcessing();
-            return;
-          }
-          if (payload.action === "open-settings") {
-            void navigate({
-              to: "/settings",
-              hash: payload.section ?? undefined,
-            });
-            window.dispatchEvent(
-              new CustomEvent("kassiber:settings-section", {
-                detail: { section: payload.section ?? null },
-              }),
-            );
-            return;
-          }
-          if (
-            payload.action === "navigate" &&
-            isAppRoutePath(payload.route)
-          ) {
-            if (payload.route === "/assistant" && !aiFeaturesEnabled) {
-              addNotification({
-                title: "AI features are disabled",
-                body: "Enable AI features in Settings to use the assistant.",
-                tone: "info",
-              });
-              void navigate({ to: "/settings", hash: "ai" });
-              return;
-            }
-            void navigate({ to: payload.route });
-          }
+          const store = useUiStore.getState();
+          dispatchMenuIntent(event.payload, {
+            hasWorkspace: store.identity !== null,
+            aiFeaturesEnabled: store.aiFeaturesEnabled,
+            hideSensitive: store.hideSensitive,
+            navigate: ({ to, hash }) => {
+              void navigate({ to, hash: hash ?? undefined });
+            },
+            lockApp,
+            setHideSensitive,
+            runWalletSync: runMenuWalletSync,
+            runJournalProcessing: runMenuJournalProcessing,
+            addNotification,
+            emitSettingsSection: (section) => {
+              window.dispatchEvent(
+                new CustomEvent("kassiber:settings-section", {
+                  detail: { section },
+                }),
+              );
+            },
+          });
         }),
       )
       .then((nextUnlisten) => {
