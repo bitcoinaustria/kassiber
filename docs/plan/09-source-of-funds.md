@@ -227,9 +227,11 @@ supporting evidence."
 return the full machine envelope, including blockers and an `explain_gates`
 summary.
 
-`reports export-source-funds-pdf` renders saved case snapshots only. It should
-refuse live target-argument exports because the reviewed preview and the PDF
-must share the same immutable disclosure payload. It should also refuse when:
+`reports export-source-funds-pdf` renders saved case snapshots only, using the
+same ReportLab PDF renderer family as the styled tax reports so disclosed
+labels, notes, and evidence names preserve Unicode text. It should refuse live
+target-argument exports because the reviewed preview and the PDF must share the
+same immutable disclosure payload. It should also refuse when:
 
 - a path edge is still `suggested`
 - a reviewed path forms a cycle or self-link

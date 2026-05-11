@@ -393,7 +393,8 @@ python3 -m kassiber reports export-source-funds-pdf \
   --file source-of-funds.pdf
 ```
 
-Source-of-funds PDFs only render reviewed evidence. Kassiber does not claim
+Source-of-funds PDFs render saved case snapshots with the Unicode-safe
+ReportLab renderer and only include reviewed evidence. Kassiber does not claim
 chain heuristics prove ownership, does not expose descriptors/xpubs/wallet
 files/seeds/backend tokens, and treats opening balances as attested
 prior-history stops rather than real root sources. Export gates also reject

@@ -1,4 +1,6 @@
 import json
+import re
+import shutil
 import sqlite3
 import subprocess
 import sys
@@ -430,7 +432,7 @@ class SourceFundsCliTest(unittest.TestCase):
             "--file",
             str(self.evidence_file),
             "--label",
-            "Exchange fiat purchase statement",
+            "BTC ↔ EUR exchange statement",
         )["data"]
         source = self.cli(
             "source-funds",
@@ -706,7 +708,7 @@ class SourceFundsCliTest(unittest.TestCase):
         self.assertEqual(reviewed["purpose"]["type"], "planned_exchange_sale")
         self.assertEqual(reviewed["purpose"]["planned_destination"], "Example Exchange")
         self.assertIn("target-deposit-1", reviewed["disclosure_preview"]["txids"])
-        self.assertIn("Exchange fiat purchase statement", [item["label"] for item in reviewed["disclosure_preview"]["attachments"]])
+        self.assertIn("BTC ↔ EUR exchange statement", [item["label"] for item in reviewed["disclosure_preview"]["attachments"]])
         self.assertIn("missing_history", {item["code"] for item in reviewed["gaps"]})
 
         cases = self.cli("source-funds", "cases", "list", "--workspace", "Sof", "--profile", "Default")["data"]
@@ -725,9 +727,21 @@ class SourceFundsCliTest(unittest.TestCase):
             str(pdf_path),
         )["data"]
         self.assertEqual(exported["scope"], "source_funds")
+        self.assertEqual(exported["renderer"], "reportlab")
+        self.assertGreater(exported["pages"], 0)
         self.assertTrue(pdf_path.exists())
         self.assertGreater(pdf_path.stat().st_size, 1000)
-        self.assertTrue(pdf_path.read_bytes().startswith(b"%PDF-1.4"))
+        self.assertTrue(pdf_path.read_bytes().startswith(b"%PDF"))
+        if shutil.which("pdftotext"):
+            extracted = subprocess.run(
+                ["pdftotext", "-layout", str(pdf_path), "-"],
+                check=True,
+                text=True,
+                capture_output=True,
+            ).stdout
+            self.assertIn("Kassiber Source of Funds Report", extracted)
+            self.assertIn("Reviewed local evidence", extracted)
+            self.assertRegex(extracted, r"BTC\s+↔\s+EUR")
 
     def test_reveal_modes_redact_txids_and_attachment_paths(self):
         self._seed_exportable_disclosure_path()

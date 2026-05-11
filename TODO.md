@@ -470,14 +470,15 @@ and [docs/plan/04-desktop-ui.md](docs/plan/04-desktop-ui.md).
   FinanzOnline-style Kennzahl summary, and FAQ. The focused regression extracts the generated PDF with
   `pdftotext` when available and checks for `€ (EUR)` plus the new section
   names.
-- [ ] Generic and source-of-funds text PDF rendering is still Latin-1 only:
+- [ ] Generic text PDF rendering is still Latin-1 only:
   `_ascii_text` in `kassiber/pdf_report.py` silently replaces every
   codepoint outside Latin-1 with `?` in exported PDFs — notably `€`,
   `₿`, arrows like `↔`, and any non-European script. German umlauts
   and `ß` are inside Latin-1 and survive. The current behavior remains pinned
   by `test_pdf_report_substitutes_non_latin1_glyphs` in
-  `tests/test_review_regressions.py`. Follow-up: either migrate the remaining
-  generic/source-funds exports to the ReportLab renderer or fail loudly with a
+  `tests/test_review_regressions.py`. Source-of-funds PDF export now uses the
+  ReportLab renderer against saved case snapshots. Follow-up: either migrate the
+  remaining generic export to the ReportLab renderer or fail loudly with a
   structured `code: "pdf_unrepresentable"` error envelope listing the
   offending codepoints. Document the choice in
   [pdf_report.py](kassiber/pdf_report.py) and update the test pin.

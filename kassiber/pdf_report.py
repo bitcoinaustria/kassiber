@@ -6,11 +6,12 @@ no native renderer. The output is a fixed-pitch text layout suitable for
 review/audit handoffs; it deliberately trades typographic polish for
 zero runtime dependencies.
 
-Known limitation: text is encoded as Latin-1 with `replace` (see
-`_ascii_text`). Characters outside Latin-1 — `€`, `₿`, `↔`, non-European
-scripts — are silently substituted with `?` in the rendered PDF. This
-affects Austrian E 1kv exports and any user content with non-Latin-1
-glyphs. A Unicode-safe renderer is tracked as a follow-up in TODO.md.
+Known limitation: generic text PDFs are encoded as Latin-1 with `replace`
+(see `_ascii_text`). Characters outside Latin-1 — `€`, `₿`, `↔`,
+non-European scripts — are silently substituted with `?` in the rendered
+PDF. Austrian E 1kv and source-of-funds exports use ReportLab renderers
+instead. Migrating the remaining generic export or failing loudly with
+`pdf_unrepresentable` is tracked as a follow-up in TODO.md.
 """
 
 from pathlib import Path
