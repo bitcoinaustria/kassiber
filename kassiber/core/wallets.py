@@ -156,16 +156,16 @@ def wallet_btcpay_sync_config(config):
     normalized_source = sync_source.strip().lower()
     if normalized_source != BTCPAY_SYNC_SOURCE:
         raise AppError(
-            f"Unsupported wallet sync source '{normalized_source}'",
+            f"Unsupported source refresh type '{normalized_source}'",
             code="validation",
-            hint=f"Supported sync sources: {BTCPAY_SYNC_SOURCE}",
+            hint=f"Supported refresh sources: {BTCPAY_SYNC_SOURCE}",
         )
     backend = str_or_none(config.get("backend"))
     if backend is None:
         raise AppError(
             "BTCPay-backed wallets require a named --backend",
             code="validation",
-            hint="Set --backend to a btcpay backend before syncing the wallet.",
+            hint="Set --backend to a btcpay backend before refreshing this source.",
         )
     if store_id is None:
         raise AppError(

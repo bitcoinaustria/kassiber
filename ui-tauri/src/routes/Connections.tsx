@@ -28,6 +28,7 @@ import { useDaemon, useDaemonMutation } from "@/daemon/client";
 import { useUiStore } from "@/store/ui";
 import { useSyncProgressNotice } from "@/hooks/useSyncProgressNotice";
 import { useCurrency, type Currency } from "@/lib/currency";
+import { summarizeSyncResults, type SyncResult } from "@/lib/syncResults";
 import { screenShellClassName } from "@/lib/screen-layout";
 import { cn } from "@/lib/utils";
 import { AddConnectionDialog } from "@/components/kb/AddConnectionDialog";
@@ -88,13 +89,6 @@ const statusDotStyles: Record<ConnectionStatus, string> = {
   error: "bg-red-500",
 };
 
-interface SyncResult {
-  wallet: string;
-  status: "synced" | "skipped" | "error" | string;
-  message?: string;
-  reason?: string;
-}
-
 export function Connections() {
   const { data, isLoading } = useDaemon<OverviewSnapshot>("ui.overview.snapshot");
   const syncWallets = useDaemonMutation<{ results: SyncResult[] }>("ui.wallets.sync");
@@ -123,8 +117,8 @@ export function Connections() {
     if (syncWallets.isPending) return;
     setSyncMessage(null);
     addNotification({
-      title: "Wallet sync started",
-      body: "Kassiber is syncing all configured wallet sources.",
+      title: "Connection refresh started",
+      body: "Kassiber is scanning configured watch-only sources.",
       tone: "warning",
     });
     startSyncNotice();
@@ -133,37 +127,21 @@ export function Connections() {
       {
         onSuccess: (envelope) => {
           const results = envelope.data?.results ?? [];
-          const synced = results.filter((result) => result.status === "synced").length;
-          const skipped = results.filter((result) => result.status === "skipped").length;
           const errors = results.filter((result) => result.status === "error").length;
-          setSyncMessage(
-            [
-              synced ? `${synced} synced` : null,
-              skipped ? `${skipped} skipped` : null,
-              errors ? `${errors} failed` : null,
-            ]
-              .filter(Boolean)
-              .join(", ") || "Sync finished",
-          );
+          const summary = summarizeSyncResults(results);
+          setSyncMessage(summary);
           addNotification({
-            title: errors ? "Wallet sync finished with errors" : "Wallet sync finished",
-            body:
-              [
-                synced ? `${synced} synced` : null,
-                skipped ? `${skipped} skipped` : null,
-                errors ? `${errors} failed` : null,
-              ]
-                .filter(Boolean)
-                .join(", ") || "No wallet changes returned.",
+            title: errors ? "Connection refresh finished with errors" : "Connection refresh finished",
+            body: summary,
             tone: errors ? "error" : "success",
           });
         },
         onError: (error) => {
           const message =
-            error instanceof Error ? error.message : "Wallet sync failed";
+            error instanceof Error ? error.message : "Connection refresh failed";
           setSyncMessage(message);
           addNotification({
-            title: "Wallet sync failed",
+            title: "Connection refresh failed",
             body: message,
             tone: "error",
           });
@@ -205,10 +183,10 @@ export function Connections() {
             {snapshot.connections.length} connections ·{" "}
             {errorN > 0 ? `${errorN} need attention · ` : ""}
             {syncWallets.isPending
-              ? `${syncingN} syncing now`
+              ? `${syncingN} refreshing now`
               : snapshotSyncingN > 0
-                ? `${snapshotSyncingN} updating`
-                : "all synced"}
+                ? `${snapshotSyncingN} refreshing`
+                : "watch-only sources current"}
           </p>
           <h2 className="text-2xl font-semibold tracking-tight">
             Connections
@@ -226,7 +204,7 @@ export function Connections() {
               className={cn("size-4", syncWallets.isPending && "animate-spin")}
               aria-hidden="true"
             />
-            {syncWallets.isPending ? "Syncing" : "Sync all"}
+            {syncWallets.isPending ? "Refreshing" : "Refresh all"}
           </Button>
           <Button
             size="sm"
@@ -281,7 +259,7 @@ export function Connections() {
           }
         />
         <ConnectionMetric
-          label="Synced"
+          label="Current"
           value={syncedN.toLocaleString("en-US")}
           sub={`${snapshot.connections.length} configured sources`}
         />
@@ -290,7 +268,7 @@ export function Connections() {
           value={errorN.toLocaleString("en-US")}
           sub={
             syncingN > 0
-              ? `${syncingN.toLocaleString("en-US")} syncing now`
+              ? `${syncingN.toLocaleString("en-US")} refreshing now`
               : "No failed sources"
           }
         />

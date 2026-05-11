@@ -421,14 +421,16 @@ def validate_backend_for_wallet(backend, chain, network, has_descriptor=False):
         expected_chain = normalize_chain_value(backend_chain)
         if expected_chain != chain:
             raise AppError(
-                f"Backend '{backend['name']}' is configured for {expected_chain}, but wallet sync requires {chain}"
+                f"Backend '{backend['name']}' is configured for {expected_chain}, "
+                f"but source refresh requires {chain}"
             )
     backend_network = backend_value(backend, "network")
     if backend_network:
         expected_network = normalize_network_value(chain, backend_network)
         if expected_network != network:
             raise AppError(
-                f"Backend '{backend['name']}' is configured for {expected_network}, but wallet sync requires {network}"
+                f"Backend '{backend['name']}' is configured for {expected_network}, "
+                f"but source refresh requires {network}"
             )
     if chain == "liquid" and kind not in {"esplora", "electrum"}:
         raise AppError("Liquid live sync currently requires an Esplora-compatible or Electrum backend")

@@ -1241,7 +1241,7 @@ const WelcomeSection = ({
           variant="outline"
           size="sm"
           className="h-8 gap-2 sm:h-9"
-          aria-label="Sync wallets"
+          aria-label="Refresh watch-only connections"
           onClick={onSync}
           disabled={isSyncing}
         >
@@ -1250,7 +1250,7 @@ const WelcomeSection = ({
             aria-hidden="true"
           />
           <span className="hidden sm:inline">
-            {isSyncing ? "Syncing" : "Sync"}
+            {isSyncing ? "Refreshing" : "Refresh"}
           </span>
         </Button>
         <Button
@@ -2878,13 +2878,13 @@ function buildOverviewReadiness(snapshot: OverviewSnapshot): OverviewReadiness {
   const sourceDetail = totalConnections
     ? `${syncedConnections}/${totalConnections} source${
         totalConnections === 1 ? "" : "s"
-      } synced`
+      } current`
     : "No sources connected";
 
   if (!snapshot.txs.length && !totalConnections) {
     return {
       title: "Connect a source",
-      detail: "Sync a wallet or import rows to populate this book.",
+      detail: "Add a watch-only source or import rows to populate this book.",
       icon: Plus,
       tone: "neutral",
     };
@@ -2982,13 +2982,13 @@ function buildOverviewHealthItems(snapshot: OverviewSnapshot): OverviewHealthIte
       value: erroredConnections
         ? `${erroredConnections} issue${erroredConnections === 1 ? "" : "s"}`
         : syncingConnections
-          ? `${syncingConnections} syncing`
+          ? `${syncingConnections} refreshing`
           : totalConnections
-            ? `${syncedConnections}/${totalConnections} synced`
+            ? `${syncedConnections}/${totalConnections} current`
             : "None yet",
       detail: totalConnections
         ? `${totalConnections} configured source${totalConnections === 1 ? "" : "s"}`
-        : "Add a wallet, exchange, or import source.",
+        : "Add a watch-only source, exchange, or import source.",
       href: "/connections",
       icon: WalletCards,
       tone: erroredConnections

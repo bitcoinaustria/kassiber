@@ -149,7 +149,7 @@ export const CONNECTION_SOURCES: ConnectionSource[] = [
   {
     id: "bitcoin-core",
     title: "Bitcoin Core",
-    description: "Bitcoin Core RPC backend for address-based wallet sync.",
+    description: "Bitcoin Core RPC backend for address-based source refresh.",
     category: "nodes",
     image: bitcoinIcon,
     imageClassName: "size-7",
@@ -165,7 +165,7 @@ export const CONNECTION_SOURCES: ConnectionSource[] = [
   {
     id: "electrum",
     title: "Electrum server",
-    description: "Electrum/Fulcrum backend for descriptor and address sync.",
+    description: "Electrum/Fulcrum backend for descriptor and address refresh.",
     category: "nodes",
     image: sourceIcon("EL", "#2563eb", "#ffffff"),
     status: "ready",
@@ -174,13 +174,13 @@ export const CONNECTION_SOURCES: ConnectionSource[] = [
     setupKind: "backend-settings",
     details: [
       "Configured in Settings with ssl://host:50002 or tcp://host:50001",
-      "Works for Bitcoin and Liquid descriptor sync when the backend matches the chain",
+      "Works for Bitcoin and Liquid descriptor refresh when the backend matches the chain",
     ],
   },
   {
     id: "esplora",
     title: "Esplora / mempool",
-    description: "Esplora-compatible HTTP backend for Bitcoin wallet sync.",
+    description: "Esplora-compatible HTTP backend for Bitcoin source refresh.",
     category: "nodes",
     image: sourceIcon("API", "#f7931a", "#111827"),
     status: "ready",

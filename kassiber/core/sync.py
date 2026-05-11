@@ -87,8 +87,8 @@ def sync_wallet_from_backend(
     adapter = hooks.backend_adapters.get(kind)
     if adapter is None:
         raise AppError(
-            f"Wallet sync is not implemented for backend kind '{kind}'",
-            hint="Use an esplora, electrum, or bitcoinrpc backend for live sync.",
+            f"Source refresh is not implemented for backend kind '{kind}'",
+            hint="Use an esplora, electrum, or bitcoinrpc backend for live refresh.",
         )
     normalized_records, adapter_meta = adapter(backend, wallet, sync_state)
     outcome = hooks.insert_records(
@@ -134,7 +134,7 @@ def sync_wallets(
         has_descriptor = bool(str_or_none(config.get("descriptor")))
         if btcpay_config:
             if hooks.sync_btcpay_wallet is None:
-                raise AppError("BTCPay wallet sync is not configured for this runtime")
+                raise AppError("BTCPay source refresh is not configured for this runtime")
             outcome = hooks.sync_btcpay_wallet(conn, runtime_config, profile, wallet)
             results.append({"wallet": wallet["label"], "status": "synced", **outcome})
             continue

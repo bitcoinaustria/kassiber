@@ -157,7 +157,7 @@ describe("AI stream reducer helpers", () => {
         data: {
           call_id: "call_1",
           name: "ui.wallets.sync",
-          summary: "Sync all wallets",
+          summary: "Refresh all watch-only sources",
           arguments_preview: { descriptor: "<redacted>" },
         },
       },
@@ -195,7 +195,7 @@ describe("AI stream reducer helpers", () => {
           targetRequestId: "chat-1",
           callId: "call_1",
           name: "ui.wallets.sync",
-          summary: "Sync all wallets",
+          summary: "Refresh all watch-only sources",
           argumentsPreview: {},
         },
         "allow_session",

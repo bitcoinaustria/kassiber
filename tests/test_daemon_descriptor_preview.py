@@ -16,19 +16,25 @@ from kassiber.daemon import _preview_descriptor_payload
 from kassiber.errors import AppError
 
 
-def _zpub_from_seed() -> tuple[str, str]:
+# User-approved public mainnet zpub fixture with real mainnet history. Preview
+# tests use it only as watch-only material and do not contact the network.
+PUBLIC_MAINNET_ZPUB_FIXTURE = (
+    "zpub6rFR7y4Q2AijBEqTUquhVz398htDFrtymD9xYYfG1m4wAcvPhXNfE3EfH1r1AD"
+    "qtfSdVCToUG868RvUUkgDKf31mGDtKsAYz2oz2AGutZYs"
+)
+
+
+def _xpub_from_seed() -> str:
     seed = bytes.fromhex("000102030405060708090a0b0c0d0e0f")
     account = bip32.HDKey.from_seed(seed).derive("m/84h/0h/0h").to_public()
-    xpub = account.to_base58()
-    zpub = account.to_base58(version=bytes.fromhex("04b24746"))
-    return xpub, zpub
+    return account.to_base58()
 
 
 class PreviewDescriptorTests(unittest.TestCase):
     def test_zpub_material_returns_receive_and_change_addresses(self):
-        _, zpub = _zpub_from_seed()
-
-        result = _preview_descriptor_payload({"wallet_material": zpub, "count": 3})
+        result = _preview_descriptor_payload(
+            {"wallet_material": PUBLIC_MAINNET_ZPUB_FIXTURE, "count": 3}
+        )
 
         self.assertEqual(result["chain"], "bitcoin")
         self.assertEqual(result["network"], "main")
@@ -41,7 +47,7 @@ class PreviewDescriptorTests(unittest.TestCase):
             self.assertTrue(entry["address"].startswith("bc1"))
 
     def test_explicit_descriptor_with_change_branch_is_honored(self):
-        xpub, _ = _zpub_from_seed()
+        xpub = _xpub_from_seed()
 
         result = _preview_descriptor_payload(
             {
@@ -55,9 +61,9 @@ class PreviewDescriptorTests(unittest.TestCase):
         self.assertTrue(result["has_change_branch"])
 
     def test_count_is_clamped_to_twenty(self):
-        _, zpub = _zpub_from_seed()
-
-        result = _preview_descriptor_payload({"wallet_material": zpub, "count": 999})
+        result = _preview_descriptor_payload(
+            {"wallet_material": PUBLIC_MAINNET_ZPUB_FIXTURE, "count": 999}
+        )
 
         receive = [addr for addr in result["addresses"] if addr["branch"] == "receive"]
         self.assertEqual(len(receive), 20)

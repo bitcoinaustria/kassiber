@@ -522,7 +522,7 @@ TOOL_CATALOG: tuple[ToolEntry, ...] = (
         name="ui.maintenance.settings",
         description=(
             "Read AI maintenance settings for the active profile, including whether "
-            "wallet sync is allowed before report reads."
+            "watch-only source refresh is allowed before report reads."
         ),
         parameters=_EMPTY_OBJECT_SCHEMA,
         kind_class="read_only",
@@ -578,8 +578,8 @@ TOOL_CATALOG: tuple[ToolEntry, ...] = (
     ToolEntry(
         name="ui.wallets.sync",
         description=(
-            "Sync configured wallets after the user explicitly allows this "
-            "mutating action."
+            "Refresh configured watch-only sources after the user explicitly "
+            "allows this mutating action."
         ),
         parameters={
             "type": "object",
@@ -592,7 +592,7 @@ TOOL_CATALOG: tuple[ToolEntry, ...] = (
         kind_class="mutating",
         wire_name="ui_wallets_sync",
         daemon_kind="ui.wallets.sync",
-        summary_template="Sync wallets",
+        summary_template="Refresh watch-only sources",
     ),
     ToolEntry(
         name="ui.journals.process",
@@ -610,7 +610,7 @@ TOOL_CATALOG: tuple[ToolEntry, ...] = (
         name="ui.maintenance.configure",
         description=(
             "Change AI maintenance settings after explicit consent. Currently "
-            "controls whether wallet sync may run automatically before report reads."
+            "controls whether watch-only refresh may run automatically before report reads."
         ),
         parameters={
             "type": "object",
@@ -620,7 +620,7 @@ TOOL_CATALOG: tuple[ToolEntry, ...] = (
                 "auto_sync_before_report_reads": {
                     "type": "boolean",
                     "description": (
-                        "When true, report/read tools may sync configured wallets "
+                        "When true, report/read tools may refresh configured sources "
                         "before refreshing journals."
                     ),
                 },
@@ -634,7 +634,7 @@ TOOL_CATALOG: tuple[ToolEntry, ...] = (
     ToolEntry(
         name="ui.maintenance.run",
         description=(
-            "Run local maintenance after explicit consent: optional wallet sync "
+            "Run local maintenance after explicit consent: optional watch-only refresh "
             "and journal processing, then return report blockers."
         ),
         parameters={
@@ -698,23 +698,23 @@ def summarize_tool_call(tool: ToolEntry, arguments: dict[str, Any]) -> str:
     if tool.name == "ui.wallets.sync":
         wallet = arguments.get("wallet")
         if isinstance(wallet, str) and wallet.strip():
-            return f"Sync wallet {wallet.strip()}"
-        return "Sync all wallets"
+            return f"Refresh source {wallet.strip()}"
+        return "Refresh all watch-only sources"
     if tool.name == "ui.journals.process":
         return "Process journals"
     if tool.name == "ui.maintenance.configure":
         enabled = arguments.get("auto_sync_before_report_reads")
         return (
-            "Enable automatic wallet sync before report reads"
+            "Enable automatic watch-only refresh before report reads"
             if enabled is True
-            else "Disable automatic wallet sync before report reads"
+            else "Disable automatic watch-only refresh before report reads"
         )
     if tool.name == "ui.maintenance.run":
         sync_mode = arguments.get("sync", "if_enabled")
         if sync_mode == "always":
-            return "Sync wallets and process journals"
+            return "Refresh sources and process journals"
         if sync_mode == "never":
-            return "Process journals without wallet sync"
+            return "Process journals without source refresh"
         return "Run maintenance using current settings"
     return tool.summary_template or tool.name
 
@@ -749,9 +749,9 @@ whether a previous answer is still current. Do not invent calculations when
 Kassiber can read program-derived output.
 
 Stale local journals are maintenance, not a question for the user; read/report
-tools may refresh them before answering. Wallet sync contacts external services,
-so use ui.maintenance.settings to inspect the active-profile setting and
-ui.maintenance.run or ui.wallets.sync only after explicit consent.
+tools may refresh them before answering. Watch-only source refresh contacts
+external services, so use ui.maintenance.settings to inspect the active-profile
+setting and ui.maintenance.run or ui.wallets.sync only after explicit consent.
 
 Read command-templates for exact CLI command shapes and common fast paths.
 Read onboarding for first-run setup, data roots, and context selection.

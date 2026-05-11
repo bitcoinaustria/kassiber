@@ -30,6 +30,13 @@ from kassiber.secrets.sqlcipher import sqlcipher_available
 
 ROOT = Path(__file__).resolve().parent.parent
 
+# User-approved public mainnet zpub fixture with real mainnet history. Tests use
+# it only as watch-only material and serve deterministic data from loopback.
+PUBLIC_MAINNET_ZPUB_FIXTURE = (
+    "zpub6rFR7y4Q2AijBEqTUquhVz398htDFrtymD9xYYfG1m4wAcvPhXNfE3EfH1r1AD"
+    "qtfSdVCToUG868RvUUkgDKf31mGDtKsAYz2oz2AGutZYs"
+)
+
 
 def _start_daemon(data_root):
     return subprocess.Popen(
@@ -204,6 +211,42 @@ class _ToolChatHandler(BaseHTTPRequestHandler):
             self.wfile.write(b"data: [DONE]\n\n")
             self.wfile.flush()
             return
+        raw = json.dumps(payload).encode("utf-8")
+        self.send_response(200)
+        self.send_header("content-type", "application/json")
+        self.send_header("content-length", str(len(raw)))
+        self.end_headers()
+        self.wfile.write(raw)
+
+    def log_message(self, *args):
+        return
+
+
+class _EsploraSyncHandler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        target_scripthash = self.server.target_scripthash  # type: ignore[attr-defined]
+        transaction = self.server.transaction  # type: ignore[attr-defined]
+        if self.path == f"/scripthash/{target_scripthash}":
+            self._send_json(
+                {"chain_stats": {"tx_count": 1}, "mempool_stats": {"tx_count": 0}}
+            )
+            return
+        if self.path.startswith("/scripthash/") and self.path.endswith("/txs/chain"):
+            scripthash = self.path.split("/")[2]
+            self._send_json([transaction] if scripthash == target_scripthash else [])
+            return
+        if self.path.startswith("/scripthash/") and self.path.endswith("/txs/mempool"):
+            self._send_json([])
+            return
+        if self.path.startswith("/scripthash/"):
+            self._send_json(
+                {"chain_stats": {"tx_count": 0}, "mempool_stats": {"tx_count": 0}}
+            )
+            return
+        self.send_response(404)
+        self.end_headers()
+
+    def _send_json(self, payload):
         raw = json.dumps(payload).encode("utf-8")
         self.send_response(200)
         self.send_header("content-type", "application/json")
@@ -578,6 +621,125 @@ class DaemonSmokeTest(unittest.TestCase):
             code, stderr = _close_daemon(proc)
             self.assertEqual(code, 0, stderr)
             self.assertEqual(stderr, "")
+
+    def test_ui_wallets_sync_zpub_against_local_esplora_backend(self):
+        from kassiber.core.sync_backends import scriptpubkey_scripthash
+        from kassiber.wallet_descriptors import derive_descriptor_target, load_descriptor_plan
+        from kassiber.wallet_setup import normalize_wallet_material
+
+        with tempfile.TemporaryDirectory(prefix="kassiber-daemon-sync-") as tmp:
+            data_root = Path(tmp) / "data"
+            material_config = normalize_wallet_material(PUBLIC_MAINNET_ZPUB_FIXTURE)
+            plan = load_descriptor_plan(
+                {
+                    "descriptor": material_config["descriptor"],
+                    "change_descriptor": material_config["change_descriptor"],
+                    "chain": "bitcoin",
+                    "network": "main",
+                    "gap_limit": 1,
+                }
+            )
+            target = derive_descriptor_target(plan, 0, 0)
+            target_scripthash = scriptpubkey_scripthash(target.script_pubkey)
+            transaction = {
+                "txid": "66" * 32,
+                "fee": 0,
+                "vin": [],
+                "vout": [{"scriptpubkey": target.script_pubkey, "value": 123_456}],
+                "status": {"confirmed": True, "block_time": 1_700_000_000},
+            }
+            server = ThreadingHTTPServer(("127.0.0.1", 0), _EsploraSyncHandler)
+            server.target_scripthash = target_scripthash  # type: ignore[attr-defined]
+            server.transaction = transaction  # type: ignore[attr-defined]
+            server_thread = threading.Thread(target=server.serve_forever, daemon=True)
+            server_thread.start()
+
+            proc = None
+            try:
+                backend_url = f"http://127.0.0.1:{server.server_port}"
+                _run_cli(data_root, "init")
+                _run_cli(data_root, "workspaces", "create", "Demo")
+                _run_cli(data_root, "profiles", "create", "Main", "--fiat-currency", "EUR")
+                _run_cli(
+                    data_root,
+                    "backends",
+                    "create",
+                    "local-esplora",
+                    "--kind",
+                    "esplora",
+                    "--url",
+                    backend_url,
+                    "--chain",
+                    "bitcoin",
+                    "--network",
+                    "main",
+                )
+
+                proc = _start_daemon(data_root)
+                self.assertEqual(_read_payload_timeout(proc)["kind"], "daemon.ready")
+
+                _write_payload(
+                    proc,
+                    {
+                        "request_id": "create-descriptor",
+                        "kind": "ui.wallets.create",
+                        "args": {
+                            "label": "Descriptor Live",
+                            "kind": "descriptor",
+                            "backend": "local-esplora",
+                            "wallet_material": PUBLIC_MAINNET_ZPUB_FIXTURE,
+                            "gap_limit": 1,
+                        },
+                    },
+                )
+                created = _read_payload_timeout(proc)
+                self.assertEqual(created["kind"], "ui.wallets.create")
+                self.assertTrue(created["data"]["wallet"]["descriptor"])
+
+                _write_payload(
+                    proc,
+                    {
+                        "request_id": "sync-descriptor",
+                        "kind": "ui.wallets.sync",
+                        "args": {"wallet": "Descriptor Live"},
+                    },
+                )
+                synced = None
+                for _ in range(5):
+                    envelope = _read_payload_timeout(proc)
+                    if envelope["kind"] == "ui.wallets.sync":
+                        synced = envelope
+                        break
+                self.assertIsNotNone(synced, "no terminal ui.wallets.sync envelope")
+                self.assertEqual(synced["kind"], "ui.wallets.sync")
+                result = synced["data"]["results"][0]
+                self.assertEqual(result["wallet"], "Descriptor Live")
+                self.assertEqual(result["status"], "synced")
+                self.assertEqual(result["imported"], 1)
+                self.assertEqual(result["sync_mode"], "descriptor")
+                self.assertEqual(result["target_count"], 2)
+                self.assertTrue(result["has_backend_url"])
+                self.assertNotIn("backend_url", result)
+
+                _write_payload(
+                    proc,
+                    {"request_id": "shutdown-1", "kind": "daemon.shutdown"},
+                )
+                self.assertEqual(_read_payload_timeout(proc)["kind"], "daemon.shutdown")
+                code, stderr = _close_daemon(proc)
+                self.assertEqual(code, 0, stderr)
+                self.assertEqual(stderr, "")
+            finally:
+                server.shutdown()
+                server.server_close()
+                server_thread.join(timeout=5)
+                if proc is not None and proc.poll() is None:
+                    proc.kill()
+                    proc.wait(timeout=5)
+                if proc is not None:
+                    for stream in (proc.stdin, proc.stdout, proc.stderr):
+                        if stream is not None and not stream.closed:
+                            stream.close()
 
     def test_ui_source_funds_editor_roundtrip(self):
         with tempfile.TemporaryDirectory(prefix="kassiber-daemon-") as tmp:
@@ -2031,7 +2193,7 @@ class DaemonSmokeTest(unittest.TestCase):
                         "wallet": "Cold",
                         "status": "error",
                         "backend_url": "http://private-node.local/secret-path",
-                        "message": "offline",
+                        "message": "Failed to reach backend http://private-node.local/secret-path: offline",
                     }
                 ]
             }
@@ -2047,6 +2209,7 @@ class DaemonSmokeTest(unittest.TestCase):
             self.assertEqual(cached_payload["reason"], "auto_sync_rate_limited")
             self.assertNotIn("private-node.local", encoded)
             self.assertNotIn("secret-path", encoded)
+            self.assertIn("<backend-url>", encoded)
             self.assertTrue(payload["results"][0]["has_backend_url"])
             self.assertFalse(state["auto_sync"]["ok"])  # type: ignore[index]
 

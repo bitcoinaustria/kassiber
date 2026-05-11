@@ -2150,9 +2150,11 @@ def build_workspace_health_snapshot(conn: sqlite3.Connection) -> dict[str, Any]:
     ).fetchone()["count"]
     hints: list[str] = []
     if int(wallet_count or 0) == 0:
-        hints.append("Create a wallet before syncing or importing transactions.")
+        hints.append(
+            "Add a watch-only source before refreshing or importing transactions."
+        )
     elif int(transaction_count or 0) == 0:
-        hints.append("Sync wallets or import wallet files before journal processing.")
+        hints.append("Refresh sources or import files before journal processing.")
     if freshness["needs_processing"]:
         hints.append("Run journal processing before trusting reports.")
     if freshness["quarantine_count"]:
@@ -2216,8 +2218,10 @@ def build_report_blockers_snapshot(conn: sqlite3.Connection) -> dict[str, Any]:
                 {
                     "id": "no_wallets",
                     "severity": "blocking",
-                    "title": "No wallets",
-                    "detail": "Create a wallet before syncing, importing, or reporting.",
+                    "title": "No sources",
+                    "detail": (
+                        "Add a watch-only source before refreshing, importing, or reporting."
+                    ),
                     "daemon_kind": "ui.wallets.list",
                 }
             )
@@ -2227,7 +2231,7 @@ def build_report_blockers_snapshot(conn: sqlite3.Connection) -> dict[str, Any]:
                     "id": "no_transactions",
                     "severity": "blocking",
                     "title": "No transactions",
-                    "detail": "Sync wallets or import transactions before reports can be useful.",
+                    "detail": "Refresh sources or import transactions before reports can be useful.",
                     "daemon_kind": "ui.wallets.sync",
                 }
             )
@@ -2411,7 +2415,7 @@ def build_next_actions_snapshot(conn: sqlite3.Connection) -> dict[str, Any]:
             {
                 "id": "create_workspace_profile",
                 "title": "Create a workspace and profile",
-                "reason": "Kassiber needs an active accounting scope before wallets or reports.",
+                "reason": "Kassiber needs an active accounting scope before sources or reports.",
                 "mutating": True,
                 "requires_consent": True,
             }
@@ -2424,8 +2428,8 @@ def build_next_actions_snapshot(conn: sqlite3.Connection) -> dict[str, Any]:
         suggestions.append(
             {
                 "id": "create_wallet",
-                "title": "Create a wallet",
-                "reason": "No wallets exist in the active profile.",
+                "title": "Add a watch-only source",
+                "reason": "No sources exist in the active profile.",
                 "mutating": True,
                 "requires_consent": True,
             }
@@ -2434,8 +2438,8 @@ def build_next_actions_snapshot(conn: sqlite3.Connection) -> dict[str, Any]:
         suggestions.append(
             {
                 "id": "sync_or_import",
-                "title": "Sync wallets or import transactions",
-                "reason": "Wallets exist but the active profile has no transactions yet.",
+                "title": "Refresh sources or import transactions",
+                "reason": "Sources exist but the active profile has no transactions yet.",
                 "mutating": True,
                 "requires_consent": True,
                 "daemon_kind": "ui.wallets.sync",
