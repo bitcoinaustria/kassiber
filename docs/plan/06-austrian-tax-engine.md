@@ -148,8 +148,11 @@ CSV contains one row per relevant Austrian journal entry:
 tax_year,date,tx_id,transaction_id,wallet,asset,kind,entry_type,at_category,at_category_label,at_regime,qty_msat,quantity,price_eur_cents,cost_basis_eur_cents,proceeds_eur_cents,gain_loss_eur_cents,income_eur_cents,form_amount_eur_cents,holding_period_days,kennzahl,stored_kennzahl,form_section,note
 ```
 
-PDF uses Kassiber's existing line-oriented PDF writer. XLSX uses XlsxWriter as
-a small write-only dependency and lays out the workbook as an overview, numbered
+PDF uses a ReportLab renderer for a styled Austrian Steuerbericht handoff:
+cover and report metadata, taxable and non-taxable summary/detail sections,
+holdings, Besonderheiten, explanations, a landscape transaction appendix, a
+FinanzOnline-style Kennzahl summary, and FAQ. XLSX uses XlsxWriter as a small
+write-only dependency and lays out the workbook as an overview, numbered
 tax-section sheets, and an explanatory notes sheet. The CSV bundle uses the
 same overview, numbered section files, and explanatory notes layout so sections
 with different headers do not collapse into a single lossy table. The exports

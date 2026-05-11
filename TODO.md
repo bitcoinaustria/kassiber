@@ -463,33 +463,24 @@ and [docs/plan/04-desktop-ui.md](docs/plan/04-desktop-ui.md).
 
 ## Open bugs and debt
 
-- [ ] PDF report rendering is Latin-1 only after the PySide6 removal:
+- [x] Austrian E 1kv PDF export no longer uses the Latin-1 text writer:
+  `reports export-austrian-e1kv-pdf` / `reports export-austrian` now render a
+  ReportLab-backed Steuerbericht with cover, summary/detail sections,
+  holdings, Besonderheiten, explanations, transaction appendix,
+  FinanzOnline-style Kennzahl summary, and FAQ. The focused regression extracts the generated PDF with
+  `pdftotext` when available and checks for `€ (EUR)` plus the new section
+  names.
+- [ ] Generic and source-of-funds text PDF rendering is still Latin-1 only:
   `_ascii_text` in `kassiber/pdf_report.py` silently replaces every
   codepoint outside Latin-1 with `?` in exported PDFs — notably `€`,
   `₿`, arrows like `↔`, and any non-European script. German umlauts
-  and `ß` are inside Latin-1 and survive, but the Euro sign in
-  Austrian E 1kv exports does not. The current behavior is pinned by
-  `test_pdf_report_substitutes_non_latin1_glyphs` in
-  `tests/test_review_regressions.py`. Follow-up: pick a Unicode-safe
-  renderer (`reportlab` / `fpdf2` / `weasyprint`), embed at least one
-  Unicode-capable font, and flip that pin to assert preservation
-  instead of substitution. Acceptance criterion for the follow-up PR:
-  `test_austrian_e1kv_report_exports_summary_csv_pdf_and_xlsx` asserts
-  the rendered PDF bytes contain `b"\xe2\x82\xac"` (the UTF-8 bytes
-  for `€`) and at least one representative non-ASCII user-text token,
-  and `test_pdf_report_substitutes_non_latin1_glyphs` flips from
-  substitution to preservation. Until then, treat exported PDFs that
-  contain Euro signs or non-Latin-1 user content as not audit-grade.
-- [ ] Decide the permanent substitute-vs-fail policy for PDF rendering
-  as part of the Unicode-renderer follow-up. Pre-release ships the
-  silent-substitute behavior because we have no users yet and want
-  exported PDFs to keep working through the rewrite. The follow-up
-  must pick one of: (a) preserve all input glyphs (default once the
-  Unicode renderer lands), (b) fail loudly with a structured
-  `code: "pdf_unrepresentable"` error envelope listing the offending
-  codepoints, (c) ship both with a `--strict-unicode` flag. Document
-  the choice in [pdf_report.py](kassiber/pdf_report.py) and link the
-  decision rationale from this entry.
+  and `ß` are inside Latin-1 and survive. The current behavior remains pinned
+  by `test_pdf_report_substitutes_non_latin1_glyphs` in
+  `tests/test_review_regressions.py`. Follow-up: either migrate the remaining
+  generic/source-funds exports to the ReportLab renderer or fail loudly with a
+  structured `code: "pdf_unrepresentable"` error envelope listing the
+  offending codepoints. Document the choice in
+  [pdf_report.py](kassiber/pdf_report.py) and update the test pin.
 - [ ] Fix `rates set` pair validation so malformed syntax like `BTCUSD`
   is rejected cleanly
 - [ ] Add real provider-backed FX adapters beyond CoinGecko only after the UI

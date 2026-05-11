@@ -1205,6 +1205,60 @@ def _austrian_e1kv_quarantines(conn, profile, tax_year):
     ]
 
 
+def _austrian_e1kv_transaction_rows(conn, profile, tax_year):
+    where = ["t.profile_id = ?", "t.excluded = 0"]
+    params: list[Any] = [profile["id"]]
+    if tax_year is not None:
+        where.append("substr(t.occurred_at, 1, 4) = ?")
+        params.append(str(tax_year))
+    rows = conn.execute(
+        f"""
+        SELECT
+            t.id AS transaction_id,
+            t.external_id,
+            t.occurred_at,
+            w.label AS wallet,
+            t.direction,
+            t.kind,
+            t.asset,
+            t.amount,
+            t.fee,
+            t.fiat_value,
+            COALESCE(t.description, '') AS description,
+            COALESCE(t.note, '') AS note,
+            GROUP_CONCAT(tags.code, ', ') AS tags
+        FROM transactions t
+        JOIN wallets w ON w.id = t.wallet_id
+        LEFT JOIN transaction_tags tt ON tt.transaction_id = t.id
+        LEFT JOIN tags ON tags.id = tt.tag_id
+        WHERE {' AND '.join(where)}
+        GROUP BY t.id
+        ORDER BY t.occurred_at ASC, t.created_at ASC, t.id ASC
+        """,
+        params,
+    ).fetchall()
+    return [
+        {
+            "transaction_id": row["transaction_id"],
+            "external_id": row["external_id"] or "",
+            "occurred_at": row["occurred_at"],
+            "wallet": row["wallet"],
+            "direction": row["direction"],
+            "kind": row["kind"] or "",
+            "asset": row["asset"],
+            "amount": float(msat_to_btc(row["amount"] or 0)),
+            "amount_msat": int(row["amount"] or 0),
+            "fee": float(msat_to_btc(row["fee"] or 0)),
+            "fee_msat": int(row["fee"] or 0),
+            "fiat_value": float(dec(row["fiat_value"] or 0)),
+            "description": row["description"] or "",
+            "note": row["note"] or "",
+            "tags": row["tags"] or "",
+        }
+        for row in rows
+    ]
+
+
 def _austrian_e1kv_summary_rows(rows):
     totals = defaultdict(lambda: {"amount": 0, "count": 0})
     for row in rows:
@@ -1653,17 +1707,37 @@ def build_austrian_e1kv_report_lines(conn, workspace_ref, profile_ref, hooks: Re
 
 
 def export_austrian_e1kv_pdf_report(conn, workspace_ref, profile_ref, file_path, hooks: ReportHooks, tax_year=None):
-    title, lines, report = _build_austrian_e1kv_report_lines(
-        conn,
-        workspace_ref,
-        profile_ref,
-        hooks,
-        tax_year=tax_year,
+    report = report_austrian_e1kv(conn, workspace_ref, profile_ref, hooks, tax_year=tax_year)
+    _, profile = _resolve_report_scope(conn, workspace_ref, profile_ref, hooks)
+    transaction_rows = _austrian_e1kv_transaction_rows(conn, profile, report["tax_year"])
+    from ..austrian_pdf_report import write_austrian_e1kv_pdf
+
+    written = dict(
+        write_austrian_e1kv_pdf(
+            file_path,
+            report=report,
+            profile=dict(profile),
+            portfolio_rows=report_portfolio_summary(conn, workspace_ref, profile_ref, hooks),
+            transaction_rows=transaction_rows,
+            section_specs=_austrian_e1kv_section_table_specs(report),
+            generated_at=hooks.now_iso(),
+        )
     )
-    written = dict(hooks.write_text_pdf(file_path, title, lines))
     written["tax_year"] = report["tax_year"]
     written["form"] = report["form"]
     written["assumptions"] = report["assumptions"]
+    written["sections"] = [
+        "steuerpflichtige_gesamtuebersicht",
+        "steuerpflichtige_detailuebersicht",
+        "steuerfreie_gesamtuebersicht",
+        "bestandsuebersicht",
+        "besonderheiten",
+        "erlaeuterungen",
+        "transaktionsuebersicht",
+        "steuerformulare",
+        "faq",
+    ]
+    written["transactions"] = len(transaction_rows)
     return written
 
 

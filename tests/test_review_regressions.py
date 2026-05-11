@@ -1,5 +1,6 @@
 import json
 import os
+import shutil
 import sqlite3
 import subprocess
 import sys
@@ -6414,6 +6415,14 @@ class ReviewRegressionTest(unittest.TestCase):
         )
         self._assert_ok(payload, result, "wallets.import-json")
         payload, result = self._run_json(
+            "metadata", "records", "note", "set",
+            "--workspace", "Main",
+            "--profile", "Default",
+            "--transaction", "at-e1kv-staking",
+            "--note", "Unicode renderer check: BTC ↔ EUR",
+        )
+        self._assert_ok(payload, result, "metadata.records.note.set")
+        payload, result = self._run_json(
             "journals", "process",
             "--workspace", "Main",
             "--profile", "Default",
@@ -6534,12 +6543,31 @@ class ReviewRegressionTest(unittest.TestCase):
         )
         self._assert_ok(payload, result, "reports.export-austrian-e1kv-pdf")
         self.assertEqual(payload["data"]["form"], "E 1kv")
+        self.assertEqual(payload["data"]["renderer"], "reportlab")
+        self.assertEqual(payload["data"]["transactions"], 3)
+        self.assertIn("besonderheiten", payload["data"]["sections"])
+        self.assertIn("steuerformulare", payload["data"]["sections"])
+        self.assertIn("faq", payload["data"]["sections"])
         self.assertGreater(payload["data"]["pages"], 0)
         pdf_bytes = pdf_file.read_bytes()
         self.assertTrue(pdf_bytes.startswith(b"%PDF"))
         self.assertGreater(len(pdf_bytes), 0)
-        self.assertIn("Kassiber Austrian E 1kv", payload["data"]["title"])
-        self.assertIn(b"Kassiber Austrian E 1kv", pdf_bytes)
+        self.assertIn("Kassiber Steuerbericht 2024", payload["data"]["title"])
+        if shutil.which("pdftotext"):
+            extracted = subprocess.run(
+                ["pdftotext", "-layout", str(pdf_file), "-"],
+                check=True,
+                text=True,
+                capture_output=True,
+            ).stdout
+            self.assertIn("Kassiber Steuerbericht", extracted)
+            self.assertIn("Transaktionsübersicht", extracted)
+            self.assertIn("Steuerformulare", extracted)
+            self.assertIn("FinanzOnline", extracted)
+            self.assertIn("Besonderheiten", extracted)
+            self.assertIn("FAQ", extracted)
+            self.assertIn("€ (EUR)", extracted)
+            self.assertIn("BTC ↔ EUR", extracted)
 
         plain_result = self._run_cli(
             "--format", "plain",
@@ -6566,6 +6594,7 @@ class ReviewRegressionTest(unittest.TestCase):
         )
         self._assert_ok(payload, result, "reports.export-austrian")
         self.assertEqual(payload["data"]["form"], "E 1kv")
+        self.assertEqual(payload["data"]["renderer"], "reportlab")
         self.assertGreater(alias_pdf_file.stat().st_size, 0)
 
         xlsx_file = self.case_dir / "austrian-e1kv.xlsx"
@@ -6671,10 +6700,8 @@ class ReviewRegressionTest(unittest.TestCase):
         self.assertIn("at-e1kv-staking", notes_text)
 
     def test_pdf_report_substitutes_non_latin1_glyphs(self):
-        # Pin the documented Latin-1 PDF rendering regression (see
-        # kassiber/pdf_report.py module docstring and TODO.md "Open bugs
-        # and debt"). Flip these to assert preservation when the
-        # Unicode-safe renderer follow-up lands.
+        # Pin the remaining generic/source-funds text-PDF limitation.
+        # Austrian E 1kv PDFs use the ReportLab renderer instead.
         from kassiber.pdf_report import _ascii_text
 
         self.assertEqual(_ascii_text("€"), "?")
