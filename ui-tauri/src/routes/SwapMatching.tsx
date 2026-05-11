@@ -25,7 +25,11 @@ import {
   AlertTriangle,
   ArrowRight,
   Loader2,
+  Plus,
+  Settings as SettingsIcon,
   Sparkles,
+  Star,
+  Trash2,
   Undo2,
   X,
 } from "lucide-react";
@@ -34,6 +38,11 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
+import {
   Dialog,
   DialogContent,
   DialogDescription,
@@ -41,6 +50,8 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import {
   Select,
   SelectContent,
@@ -48,6 +59,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
 import { useDaemon, useDaemonMutation } from "@/daemon/client";
 import { screenPanelClassName, screenShellClassName } from "@/lib/screen-layout";
 import { cn } from "@/lib/utils";
@@ -144,6 +156,37 @@ interface BulkPairResult {
   };
 }
 
+interface SavedView {
+  id: string;
+  surface: string;
+  name: string;
+  filter: {
+    confidence?: string;
+    method?: string;
+    asset_pair?: string;
+    [key: string]: unknown;
+  };
+}
+
+interface SavedViewsEnvelope {
+  views: SavedView[];
+}
+
+interface SwapRule {
+  id: string;
+  name: string | null;
+  predicate: Record<string, unknown>;
+  kind: PairKind;
+  policy: PairPolicy;
+  enabled: boolean;
+}
+
+interface RulesEnvelope {
+  rules: SwapRule[];
+}
+
+const SAVED_VIEW_SURFACE = "swap_candidates";
+
 const UNDO_WINDOW_MS = 20_000;
 
 export function SwapMatching() {
@@ -201,6 +244,68 @@ export function SwapMatching() {
   const dismissMutation = useDaemonMutation<unknown>("ui.transfers.dismiss");
   const bulkPairMutation = useDaemonMutation<BulkPairResult>("ui.transfers.bulk_pair");
   const unpairMutation = useDaemonMutation<unknown>("ui.transfers.unpair");
+
+  const savedViewsQuery = useDaemon<SavedViewsEnvelope>("ui.saved_views.list", {
+    surface: SAVED_VIEW_SURFACE,
+  });
+  const savedViewCreate = useDaemonMutation<SavedView>("ui.saved_views.create");
+  const savedViewDelete = useDaemonMutation<unknown>("ui.saved_views.delete");
+  const rulesQuery = useDaemon<RulesEnvelope>("ui.transfers.rules.list");
+  const ruleCreate = useDaemonMutation<SwapRule>("ui.transfers.rules.create");
+  const ruleDelete = useDaemonMutation<unknown>("ui.transfers.rules.delete");
+  const ruleSetEnabled = useDaemonMutation<SwapRule>("ui.transfers.rules.set_enabled");
+
+  const [saveViewOpen, setSaveViewOpen] = useState(false);
+  const [saveViewName, setSaveViewName] = useState("");
+  const [createRuleOpen, setCreateRuleOpen] = useState(false);
+  const [rulesExpanded, setRulesExpanded] = useState(false);
+
+  const savedViews = savedViewsQuery.data?.data?.views ?? [];
+  const rules = rulesQuery.data?.data?.rules ?? [];
+
+  const filterIsDirty = confidence !== "all" || method !== "all" || assetPair.trim() !== "";
+
+  const applySavedView = (view: SavedView) => {
+    setConfidence(typeof view.filter.confidence === "string" ? view.filter.confidence : "all");
+    setMethod(typeof view.filter.method === "string" ? view.filter.method : "all");
+    setAssetPair(typeof view.filter.asset_pair === "string" ? view.filter.asset_pair : "");
+  };
+
+  const commitSaveView = async () => {
+    const name = saveViewName.trim();
+    if (!name) return;
+    const filterPayload: Record<string, unknown> = {};
+    if (confidence !== "all") filterPayload.confidence = confidence;
+    if (method !== "all") filterPayload.method = method;
+    if (assetPair.trim()) filterPayload.asset_pair = assetPair.trim().toUpperCase();
+    try {
+      await savedViewCreate.mutateAsync({
+        surface: SAVED_VIEW_SURFACE,
+        name,
+        filter: filterPayload,
+      });
+      setSaveViewName("");
+      setSaveViewOpen(false);
+      void savedViewsQuery.refetch();
+    } catch {
+      // Conflict surfaces as a mutation error; leave dialog open so user can rename.
+    }
+  };
+
+  const deleteSavedView = async (view: SavedView) => {
+    await savedViewDelete.mutateAsync({ view_id: view.id });
+    void savedViewsQuery.refetch();
+  };
+
+  const toggleRule = async (rule: SwapRule) => {
+    await ruleSetEnabled.mutateAsync({ rule_id: rule.id, enabled: !rule.enabled });
+    void rulesQuery.refetch();
+  };
+
+  const deleteRule = async (rule: SwapRule) => {
+    await ruleDelete.mutateAsync({ rule_id: rule.id });
+    void rulesQuery.refetch();
+  };
 
   const candidates = data?.data?.candidates ?? [];
   const counts = data?.data?.counts ?? { total: 0, exact: 0, strong: 0, conflicts: 0 };
@@ -383,6 +488,44 @@ export function SwapMatching() {
         <CountPill label="Conflicts" value={counts.conflicts} tone="alert" />
       </div>
 
+      <div className="flex flex-wrap items-center gap-1 px-4 pb-1 text-xs">
+        <Star className="size-3.5 text-muted-foreground" aria-hidden="true" />
+        <span className="text-muted-foreground">Views:</span>
+        {savedViews.length === 0 ? (
+          <span className="text-muted-foreground/70">none saved yet</span>
+        ) : (
+          savedViews.map((view) => (
+            <span
+              key={view.id}
+              className="inline-flex items-center gap-1 rounded-full border border-input bg-background px-2 py-0.5"
+            >
+              <button
+                className="font-medium text-foreground/90 hover:text-foreground"
+                onClick={() => applySavedView(view)}
+              >
+                {view.name}
+              </button>
+              <button
+                aria-label={`Delete view ${view.name}`}
+                onClick={() => void deleteSavedView(view)}
+              >
+                <X className="size-3" />
+              </button>
+            </span>
+          ))
+        )}
+        <Button
+          size="sm"
+          variant="ghost"
+          className="h-6 px-1.5 text-xs"
+          disabled={!filterIsDirty}
+          onClick={() => setSaveViewOpen(true)}
+        >
+          <Plus className="size-3" />
+          <span>Save filter</span>
+        </Button>
+      </div>
+
       <div className="flex flex-wrap items-center gap-2 px-4 pb-2 pt-1 text-sm">
         <span className="text-muted-foreground">Filter:</span>
         <Select value={confidence} onValueChange={setConfidence}>
@@ -429,6 +572,75 @@ export function SwapMatching() {
             Clear filters
           </Button>
         )}
+      </div>
+
+      <div className="px-4 pb-2">
+        <Collapsible open={rulesExpanded} onOpenChange={setRulesExpanded}>
+          <div className="flex items-center justify-between">
+            <CollapsibleTrigger asChild>
+              <Button variant="ghost" size="sm" className="-ml-2 h-7 text-xs">
+                <SettingsIcon className="size-3.5" />
+                <span className="ml-1">
+                  Auto-pair rules ({rules.filter((r) => r.enabled).length}/{rules.length})
+                </span>
+              </Button>
+            </CollapsibleTrigger>
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-7 text-xs"
+              onClick={() => setCreateRuleOpen(true)}
+            >
+              <Plus className="size-3" />
+              <span>New rule</span>
+            </Button>
+          </div>
+          <CollapsibleContent>
+            <div className="mt-2 space-y-1 rounded-md border bg-background/50 p-2 text-xs">
+              {rules.length === 0 ? (
+                <p className="text-muted-foreground">
+                  No auto-pair rules yet. Rules apply when a candidate matches
+                  the predicate (wallet kind / asset / fee cap / min confidence)
+                  and isn't part of a conflict cluster.
+                </p>
+              ) : (
+                rules.map((rule) => (
+                  <div
+                    key={rule.id}
+                    className="flex flex-wrap items-center gap-2 rounded border border-border/60 bg-background px-2 py-1"
+                  >
+                    <span className="font-medium">{rule.name ?? "(unnamed)"}</span>
+                    <code className="rounded bg-muted px-1 text-[10px]">
+                      {Object.entries(rule.predicate)
+                        .filter(([, v]) => v !== null && v !== "")
+                        .map(([k, v]) => `${k}=${JSON.stringify(v)}`)
+                        .join(" · ") || "any candidate"}
+                    </code>
+                    <Badge variant="outline" className="text-[10px]">
+                      {rule.kind} · {rule.policy}
+                    </Badge>
+                    <div className="ml-auto flex items-center gap-2">
+                      <Switch
+                        checked={rule.enabled}
+                        onCheckedChange={() => void toggleRule(rule)}
+                        aria-label="Toggle rule"
+                      />
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="h-6 px-1"
+                        onClick={() => void deleteRule(rule)}
+                        aria-label="Delete rule"
+                      >
+                        <Trash2 className="size-3" />
+                      </Button>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          </CollapsibleContent>
+        </Collapsible>
       </div>
 
       <div className={cn(screenPanelClassName, "flex flex-col gap-3 p-4")}>
@@ -707,6 +919,29 @@ export function SwapMatching() {
         </DialogContent>
       </Dialog>
 
+      <SaveViewDialog
+        open={saveViewOpen}
+        name={saveViewName}
+        onNameChange={setSaveViewName}
+        onCancel={() => {
+          setSaveViewOpen(false);
+          setSaveViewName("");
+        }}
+        onSave={commitSaveView}
+        isSaving={savedViewCreate.isPending}
+      />
+
+      <CreateRuleDialog
+        open={createRuleOpen}
+        onClose={() => setCreateRuleOpen(false)}
+        onCreate={async (payload) => {
+          await ruleCreate.mutateAsync({ ...payload });
+          void rulesQuery.refetch();
+          setCreateRuleOpen(false);
+        }}
+        isCreating={ruleCreate.isPending}
+      />
+
       {undoState ? (
         <div className="pointer-events-none fixed inset-x-0 bottom-4 z-50 flex justify-center">
           <div className="pointer-events-auto flex items-center gap-3 rounded-full bg-zinc-900 px-4 py-2 text-sm text-zinc-50 shadow-lg dark:bg-zinc-100 dark:text-zinc-900">
@@ -748,6 +983,288 @@ function previewSummaryText(candidates: SwapCandidate[]): string {
   const totalFeeMsat = candidates.reduce((acc, c) => acc + c.swap_fee_msat, 0);
   const totalCarry = candidates.reduce((acc, c) => acc + c.out_amount, 0);
   return `${candidates.length} pair${candidates.length === 1 ? "" : "s"} · carrying value ${formatBtc(totalCarry)} · total swap fees ${formatSats(totalFeeMsat)}.`;
+}
+
+interface SaveViewDialogProps {
+  open: boolean;
+  name: string;
+  onNameChange: (value: string) => void;
+  onCancel: () => void;
+  onSave: () => void | Promise<void>;
+  isSaving: boolean;
+}
+
+function SaveViewDialog({
+  open,
+  name,
+  onNameChange,
+  onCancel,
+  onSave,
+  isSaving,
+}: SaveViewDialogProps) {
+  return (
+    <Dialog open={open} onOpenChange={(value) => (!value ? onCancel() : undefined)}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Save current filter as a view</DialogTitle>
+          <DialogDescription>
+            The active confidence, method, and asset-pair filters are saved
+            verbatim. Pick a short name; the chip appears at the top of the
+            queue for one-click recall.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="space-y-2">
+          <Label htmlFor="view-name">View name</Label>
+          <Input
+            id="view-name"
+            autoFocus
+            placeholder="e.g. Boltz pegouts"
+            value={name}
+            onChange={(event) => onNameChange(event.target.value)}
+          />
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={onCancel}>
+            Cancel
+          </Button>
+          <Button onClick={() => void onSave()} disabled={isSaving || !name.trim()}>
+            {isSaving ? <Loader2 className="size-4 animate-spin" /> : null}
+            <span className="ml-1">Save</span>
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+interface CreateRulePayload {
+  name: string | null;
+  predicate: Record<string, unknown>;
+  kind: PairKind;
+  policy: PairPolicy;
+  enabled: boolean;
+}
+
+interface CreateRuleDialogProps {
+  open: boolean;
+  onClose: () => void;
+  onCreate: (payload: CreateRulePayload) => Promise<void>;
+  isCreating: boolean;
+}
+
+function CreateRuleDialog({ open, onClose, onCreate, isCreating }: CreateRuleDialogProps) {
+  const [name, setName] = useState("");
+  const [outAsset, setOutAsset] = useState("any");
+  const [inAsset, setInAsset] = useState("any");
+  const [outKind, setOutKind] = useState("any");
+  const [inKind, setInKind] = useState("any");
+  const [maxFeePct, setMaxFeePct] = useState("");
+  const [minConfidence, setMinConfidence] = useState<"strong" | "exact">("strong");
+  const [kind, setKind] = useState<PairKind>("submarine-swap");
+  const [policy, setPolicy] = useState<PairPolicy>("carrying-value");
+
+  const reset = () => {
+    setName("");
+    setOutAsset("any");
+    setInAsset("any");
+    setOutKind("any");
+    setInKind("any");
+    setMaxFeePct("");
+    setMinConfidence("strong");
+    setKind("submarine-swap");
+    setPolicy("carrying-value");
+  };
+
+  const submit = async () => {
+    const predicate: Record<string, unknown> = {};
+    if (outAsset !== "any") predicate.out_asset = outAsset;
+    if (inAsset !== "any") predicate.in_asset = inAsset;
+    if (outKind !== "any") predicate.out_wallet_kind = outKind;
+    if (inKind !== "any") predicate.in_wallet_kind = inKind;
+    if (maxFeePct.trim()) {
+      const parsed = Number.parseFloat(maxFeePct.trim());
+      if (Number.isFinite(parsed)) predicate.max_fee_pct = parsed;
+    }
+    predicate.min_confidence = minConfidence;
+    await onCreate({
+      name: name.trim() || null,
+      predicate,
+      kind,
+      policy,
+      enabled: true,
+    });
+    reset();
+  };
+
+  return (
+    <Dialog
+      open={open}
+      onOpenChange={(value) => {
+        if (!value) {
+          reset();
+          onClose();
+        }
+      }}
+    >
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Create auto-pair rule</DialogTitle>
+          <DialogDescription>
+            Candidates matching every non-default field will auto-pair
+            with the chosen kind / policy. Conflict clusters never auto-pair.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="grid grid-cols-2 gap-3">
+          <div className="col-span-2 space-y-1">
+            <Label htmlFor="rule-name">Name (optional)</Label>
+            <Input
+              id="rule-name"
+              placeholder="e.g. Phoenix → Liquid"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+            />
+          </div>
+          <RulePredicateAssetField
+            label="Out asset"
+            value={outAsset}
+            onChange={setOutAsset}
+          />
+          <RulePredicateAssetField
+            label="In asset"
+            value={inAsset}
+            onChange={setInAsset}
+          />
+          <RulePredicateKindField
+            label="Out wallet kind"
+            value={outKind}
+            onChange={setOutKind}
+          />
+          <RulePredicateKindField
+            label="In wallet kind"
+            value={inKind}
+            onChange={setInKind}
+          />
+          <div className="space-y-1">
+            <Label htmlFor="max-fee">Max fee % of principal</Label>
+            <Input
+              id="max-fee"
+              placeholder="e.g. 0.01"
+              value={maxFeePct}
+              onChange={(e) => setMaxFeePct(e.target.value)}
+            />
+          </div>
+          <div className="space-y-1">
+            <Label>Min confidence</Label>
+            <Select
+              value={minConfidence}
+              onValueChange={(v) => setMinConfidence(v as "strong" | "exact")}
+            >
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="strong">Strong (or exact)</SelectItem>
+                <SelectItem value="exact">Exact only</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-1">
+            <Label>Kind</Label>
+            <Select value={kind} onValueChange={(v) => setKind(v as PairKind)}>
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {PAIR_KIND_OPTIONS.map((option) => (
+                  <SelectItem key={option} value={option}>
+                    {option}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-1">
+            <Label>Policy</Label>
+            <Select value={policy} onValueChange={(v) => setPolicy(v as PairPolicy)}>
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {PAIR_POLICY_OPTIONS.map((option) => (
+                  <SelectItem key={option} value={option}>
+                    {option}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+        <DialogFooter>
+          <Button
+            variant="outline"
+            onClick={() => {
+              reset();
+              onClose();
+            }}
+          >
+            Cancel
+          </Button>
+          <Button onClick={() => void submit()} disabled={isCreating}>
+            {isCreating ? <Loader2 className="size-4 animate-spin" /> : null}
+            <span className="ml-1">Create rule</span>
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+interface RuleFieldProps {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+}
+
+function RulePredicateAssetField({ label, value, onChange }: RuleFieldProps) {
+  return (
+    <div className="space-y-1">
+      <Label>{label}</Label>
+      <Select value={value} onValueChange={onChange}>
+        <SelectTrigger>
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value="any">Any</SelectItem>
+          <SelectItem value="BTC">BTC</SelectItem>
+          <SelectItem value="LBTC">LBTC</SelectItem>
+        </SelectContent>
+      </Select>
+    </div>
+  );
+}
+
+function RulePredicateKindField({ label, value, onChange }: RuleFieldProps) {
+  return (
+    <div className="space-y-1">
+      <Label>{label}</Label>
+      <Select value={value} onValueChange={onChange}>
+        <SelectTrigger>
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value="any">Any</SelectItem>
+          <SelectItem value="phoenix">phoenix</SelectItem>
+          <SelectItem value="coreln">coreln</SelectItem>
+          <SelectItem value="lnd">lnd</SelectItem>
+          <SelectItem value="nwc">nwc</SelectItem>
+          <SelectItem value="descriptor">descriptor</SelectItem>
+          <SelectItem value="xpub">xpub</SelectItem>
+          <SelectItem value="address">address</SelectItem>
+          <SelectItem value="custom">custom</SelectItem>
+        </SelectContent>
+      </Select>
+    </div>
+  );
 }
 
 interface LegCardProps {
