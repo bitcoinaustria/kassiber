@@ -166,7 +166,7 @@ jobs:
             --profile Descriptor \
             --label DescriptorSmoke \
             --kind descriptor \
-            --descriptor 'addr(bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kygt080)' \
+            --descriptor 'wpkh([91790c21/84h/0h/0h]xpub6CpT4xRJntYQuFwkiZfSiK7jEtPM3e9nUfJKQ8ATWkgYJui4WS5HmzjD6C7avtwAFtmEyAusdFFxg2rZMs73SoSVkPQfEaQtrLGox92JNWn/0/*)' \
             --gap-limit 1 >/dev/null
           ./dist/kassiber \
             --data-root "$descriptor_root" \
