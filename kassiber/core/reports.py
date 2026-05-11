@@ -948,7 +948,8 @@ def report_tax_summary(conn, workspace_ref, profile_ref, hooks: ReportHooks):
             row["capital_gains_type"],
         ),
     )
-    if not detail_rows:
+    swap_fee_rows = _swap_fee_summary_rows(conn, profile["id"])
+    if not detail_rows and not swap_fee_rows:
         return []
 
     grouped_by_year = defaultdict(
@@ -1012,7 +1013,71 @@ def report_tax_summary(conn, workspace_ref, profile_ref, hooks: ReportHooks):
             gain_loss=grand["gain_loss"],
         )
     )
+    rows.extend(swap_fee_rows)
     return rows
+
+
+def _swap_fee_summary_rows(conn, profile_id):
+    """Aggregate ``transaction_pairs.swap_fee_msat`` per tax year and per
+    grand total, returning rows shaped to slot into the tax-summary list.
+
+    Surfaces the "what actually left your custody" line that's invisible
+    to the per-asset capital-gains breakdown above. For carrying-value
+    swaps the principal does not leave the user's custody at all — only
+    the fee delta does — so the user sees a separate "Swap fees"
+    section with the annual totals.
+    """
+    rows = conn.execute(
+        """
+        SELECT p.kind,
+               p.policy,
+               p.swap_fee_msat,
+               substr(t_out.occurred_at, 1, 4) AS year
+        FROM transaction_pairs p
+        JOIN transactions t_out ON t_out.id = p.out_transaction_id
+        WHERE p.profile_id = ?
+          AND p.deleted_at IS NULL
+          AND p.swap_fee_msat IS NOT NULL
+        """,
+        (profile_id,),
+    ).fetchall()
+    if not rows:
+        return []
+
+    per_year = defaultdict(lambda: {"count": 0, "total_msat": 0})
+    grand = {"count": 0, "total_msat": 0}
+    for row in rows:
+        year_str = row["year"] or ""
+        if not year_str.isdigit():
+            continue
+        year = int(year_str)
+        fee = int(row["swap_fee_msat"] or 0)
+        per_year[year]["count"] += 1
+        per_year[year]["total_msat"] += fee
+        grand["count"] += 1
+        grand["total_msat"] += fee
+
+    output = []
+    for year in sorted(per_year):
+        bucket = per_year[year]
+        output.append(
+            {
+                "row_type": "swap_fees_year",
+                "year": year,
+                "count": bucket["count"],
+                "total_swap_fee_msat": bucket["total_msat"],
+                "total_swap_fee": float(msat_to_btc(bucket["total_msat"])),
+            }
+        )
+    output.append(
+        {
+            "row_type": "swap_fees_total",
+            "count": grand["count"],
+            "total_swap_fee_msat": grand["total_msat"],
+            "total_swap_fee": float(msat_to_btc(grand["total_msat"])),
+        }
+    )
+    return output
 
 
 def _require_austrian_e1kv_profile(profile):
