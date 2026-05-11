@@ -47,13 +47,27 @@ from .ai.tools import (
 from .cli.handlers import (
     _metadata_hooks,
     _report_hooks,
+    bulk_pair_transfers,
+    create_saved_view_cli,
+    create_transaction_pair,
+    create_transfer_rule,
+    delete_saved_view_cli,
+    delete_transaction_pair,
+    delete_transfer_rule,
+    dismiss_transfer_candidate,
+    list_saved_views_cli,
+    list_transaction_pairs,
+    list_transfer_rules,
     process_journals,
     resolve_scope,
     resolve_transaction,
+    set_transfer_rule_enabled,
+    suggest_transfer_candidates,
     sync_wallet,
 )
 from .core import reports as core_reports
 from .core import source_funds as core_source_funds
+from .core import transfer_matching as core_transfer_matching
 from .core import source_funds_coverage as core_source_funds_coverage
 from .core import source_funds_recipients as core_source_funds_recipients
 from .core import accounts as core_accounts
@@ -164,6 +178,19 @@ SUPPORTED_KINDS = (
     "ui.journals.quarantine",
     "ui.journals.transfers.list",
     "ui.journals.process",
+    "ui.transfers.suggest",
+    "ui.transfers.list",
+    "ui.transfers.pair",
+    "ui.transfers.unpair",
+    "ui.transfers.bulk_pair",
+    "ui.transfers.dismiss",
+    "ui.transfers.rules.list",
+    "ui.transfers.rules.create",
+    "ui.transfers.rules.delete",
+    "ui.transfers.rules.set_enabled",
+    "ui.saved_views.list",
+    "ui.saved_views.create",
+    "ui.saved_views.delete",
     "ui.profiles.snapshot",
     "ui.profiles.create",
     "ui.profiles.switch",
@@ -702,6 +729,151 @@ def _write_records_csv(
         "bytes": file_path.stat().st_size,
         "rows": len(rows),
     }
+
+
+def _ui_swap_matching_payload(
+    ctx: DaemonContext,
+    kind: str,
+    args: dict[str, Any],
+) -> dict[str, Any]:
+    """Dispatch ``ui.transfers.*`` and ``ui.saved_views.*`` daemon kinds.
+
+    The UI calls these kinds explicitly from dialogs, so consent is the
+    dialog itself — there's no per-kind consent gate at this layer.
+    AI-callable subset is gated upstream via the ``TOOL_CATALOG`` in
+    ``kassiber.ai.tools`` (commit 10).
+    """
+    conn = _require_conn(ctx)
+    workspace = args.get("workspace")
+    profile = args.get("profile")
+
+    if kind == "ui.transfers.suggest":
+        return suggest_transfer_candidates(
+            conn,
+            workspace,
+            profile,
+            time_window_seconds=int(
+                args.get("time_window_seconds")
+                or core_transfer_matching.DEFAULT_TIME_WINDOW_SECONDS
+            ),
+            fee_pct_max=float(
+                args.get("fee_pct_max") or core_transfer_matching.DEFAULT_FEE_PCT_MAX
+            ),
+            fee_sats_min=int(
+                args.get("fee_sats_min") or core_transfer_matching.DEFAULT_FEE_SATS_MIN
+            ),
+            confidence=args.get("confidence"),
+            asset_pair=args.get("asset_pair"),
+            method=args.get("method"),
+        )
+    if kind == "ui.transfers.list":
+        return {"pairs": list_transaction_pairs(conn, workspace, profile)}
+    if kind == "ui.transfers.pair":
+        return create_transaction_pair(
+            conn,
+            workspace,
+            profile,
+            args.get("tx_out") or args.get("out_id"),
+            args.get("tx_in") or args.get("in_id"),
+            kind=str(args.get("kind") or "manual"),
+            policy=str(args.get("policy") or "carrying-value"),
+            notes=args.get("notes") or args.get("note"),
+            pair_source=str(args.get("pair_source") or "manual"),
+            confidence_at_pair=args.get("confidence_at_pair"),
+        )
+    if kind == "ui.transfers.unpair":
+        pair_id = args.get("pair_id")
+        if not pair_id:
+            raise AppError("ui.transfers.unpair requires pair_id", code="validation")
+        return delete_transaction_pair(conn, workspace, profile, str(pair_id))
+    if kind == "ui.transfers.bulk_pair":
+        return bulk_pair_transfers(
+            conn,
+            workspace,
+            profile,
+            confidence=str(args.get("confidence") or "exact"),
+            time_window_seconds=int(
+                args.get("time_window_seconds")
+                or core_transfer_matching.DEFAULT_TIME_WINDOW_SECONDS
+            ),
+            fee_pct_max=float(
+                args.get("fee_pct_max") or core_transfer_matching.DEFAULT_FEE_PCT_MAX
+            ),
+            fee_sats_min=int(
+                args.get("fee_sats_min") or core_transfer_matching.DEFAULT_FEE_SATS_MIN
+            ),
+        )
+    if kind == "ui.transfers.dismiss":
+        return dismiss_transfer_candidate(
+            conn,
+            workspace,
+            profile,
+            args.get("tx_out") or args.get("out_id"),
+            args.get("tx_in") or args.get("in_id"),
+            reason=args.get("reason"),
+            expires_in_days=int(args.get("expires_in_days") or 90),
+        )
+
+    if kind == "ui.transfers.rules.list":
+        return {"rules": list_transfer_rules(conn, workspace, profile)}
+    if kind == "ui.transfers.rules.create":
+        predicate = args.get("predicate") or {}
+        if not isinstance(predicate, dict):
+            raise AppError(
+                "ui.transfers.rules.create predicate must be an object", code="validation"
+            )
+        return create_transfer_rule(
+            conn,
+            workspace,
+            profile,
+            name=args.get("name"),
+            predicate=predicate,
+            kind=str(args.get("kind") or "manual"),
+            policy=str(args.get("policy") or "carrying-value"),
+            enabled=bool(args.get("enabled", True)),
+        )
+    if kind == "ui.transfers.rules.delete":
+        rule_id = args.get("rule_id")
+        if not rule_id:
+            raise AppError("ui.transfers.rules.delete requires rule_id", code="validation")
+        return delete_transfer_rule(conn, workspace, profile, str(rule_id))
+    if kind == "ui.transfers.rules.set_enabled":
+        rule_id = args.get("rule_id")
+        if not rule_id:
+            raise AppError(
+                "ui.transfers.rules.set_enabled requires rule_id", code="validation"
+            )
+        return set_transfer_rule_enabled(
+            conn, workspace, profile, str(rule_id), bool(args.get("enabled", True))
+        )
+
+    if kind == "ui.saved_views.list":
+        return {
+            "views": list_saved_views_cli(
+                conn, workspace, profile, surface=args.get("surface")
+            )
+        }
+    if kind == "ui.saved_views.create":
+        filter_payload = args.get("filter") or {}
+        if not isinstance(filter_payload, dict):
+            raise AppError(
+                "ui.saved_views.create filter must be an object", code="validation"
+            )
+        return create_saved_view_cli(
+            conn,
+            workspace,
+            profile,
+            surface=str(args.get("surface") or ""),
+            name=str(args.get("name") or ""),
+            filter_payload=filter_payload,
+        )
+    if kind == "ui.saved_views.delete":
+        view_id = args.get("view_id")
+        if not view_id:
+            raise AppError("ui.saved_views.delete requires view_id", code="validation")
+        return delete_saved_view_cli(conn, workspace, profile, str(view_id))
+
+    raise AppError(f"Unsupported swap-matching daemon kind '{kind}'", code="validation")
 
 
 def _source_funds_hooks() -> core_source_funds.SourceFundsHooks:
@@ -5330,6 +5502,20 @@ def handle_request(
                 build_envelope(
                     "ui.journals.transfers.list",
                     build_journals_transfers_list_snapshot(ctx.conn, request.get("args")),
+                ),
+                request_id,
+            ),
+            False,
+        )
+
+    if kind.startswith("ui.transfers.") or kind.startswith("ui.saved_views."):
+        return (
+            _with_request_id(
+                build_envelope(
+                    kind,
+                    _ui_swap_matching_payload(
+                        ctx, kind, _coerce_args_dict(request_id, request.get("args"))
+                    ),
                 ),
                 request_id,
             ),
