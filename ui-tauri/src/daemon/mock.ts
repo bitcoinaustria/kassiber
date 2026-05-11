@@ -87,6 +87,7 @@ export const mockDaemon: DaemonTransport = {
             sync_mode: connection.syncMode ?? "descriptor",
             sync_source: connection.syncSource ?? "",
             transaction_count: 1,
+            btcpay_provenance: [],
           })),
           summary: {
             count: overview.connections.length,

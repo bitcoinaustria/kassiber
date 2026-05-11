@@ -1008,6 +1008,62 @@ def sync_btcpay_into_wallet(
     )
 
 
+def attach_btcpay_provenance_to_wallet(
+    conn,
+    runtime_config,
+    workspace_ref,
+    profile_ref,
+    wallet_ref,
+    backend_name,
+    store_id,
+    payment_method_id,
+):
+    """Record a BTCPay provenance route on an already-configured wallet.
+
+    Mirrors the desktop "Map existing wallets" mode. Descriptor/file sync
+    remains the balance source; BTCPay just enriches matching transactions
+    with comments and labels during `wallets sync`.
+    """
+
+    store_id = core_wallets.normalize_btcpay_store_id(store_id)
+    payment_method_id = core_wallets.normalize_btcpay_payment_method_id(
+        payment_method_id
+    )
+    require_wallet_history_payment_method(payment_method_id)
+    _, profile = resolve_scope(conn, workspace_ref, profile_ref)
+    wallet = resolve_wallet(conn, profile["id"], wallet_ref)
+    backend = resolve_backend(runtime_config, backend_name)
+    kind = core_sync.normalize_backend_kind(backend["kind"])
+    if kind != "btcpay":
+        raise AppError(
+            f"Backend '{backend['name']}' has kind '{backend['kind']}', expected 'btcpay'",
+            code="validation",
+            hint="Use a BTCPay backend for BTCPay provenance enrichment.",
+        )
+    existing_config = json.loads(wallet["config_json"] or "{}")
+    existing_routes = list(
+        core_wallets.wallet_btcpay_provenance_config(existing_config)
+    )
+    next_route = {
+        "backend": backend["name"].lower(),
+        "store_id": store_id,
+        "payment_method_id": payment_method_id,
+    }
+    if next_route not in existing_routes:
+        existing_routes.append(next_route)
+    return core_wallets.update_wallet(
+        conn,
+        workspace_ref,
+        profile_ref,
+        wallet_ref,
+        {
+            "config": {
+                core_wallets.BTCPAY_PROVENANCE_CONFIG_KEY: existing_routes,
+            },
+        },
+    )
+
+
 def resolve_descriptor_branch_index(plan, branch):
     if branch in (None, "", "all"):
         return None

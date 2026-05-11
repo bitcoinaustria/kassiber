@@ -169,7 +169,9 @@ Use this to pull confirmed on-chain wallet transactions directly from a BTCPay s
 - use one Kassiber wallet per real underlying wallet / BTCPay-backed balance source; if multiple BTCPay stores point at the same underlying wallet balance, keep them on one Kassiber wallet or holdings will be duplicated
 - when a Liquid or multisig settlement wallet is already configured elsewhere,
   store BTCPay as provenance on that wallet instead of adding a second wallet
-  source for the same balance
+  source for the same balance — use `wallets attach-btcpay --wallet <label>
+  --backend <btcpay-backend> --store-id <store-id>` from the CLI, or the
+  desktop Add Connection "Map existing wallets" mode
 - Kassiber requests confirmed rows only, then normalizes them through the existing BTCPay import pipeline so comments become notes and labels become tags
 - the Greenfield wallet-transaction endpoint currently requires the `btcpay.store.canmodifystoresettings` permission on the API key
 

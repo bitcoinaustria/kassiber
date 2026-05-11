@@ -229,6 +229,20 @@ function ConnectionDetailView({
   const backendOptionsQuery = useDaemon<{
     backends: { name: string; kind: string; is_default?: boolean }[];
   }>("ui.backends.options");
+  const walletsListQuery = useDaemon<{
+    wallets: Array<{
+      label: string;
+      btcpay_provenance?: Array<{
+        backend: string;
+        store_id: string;
+        payment_method_id: string;
+      }>;
+    }>;
+  }>("ui.wallets.list");
+  const walletProvenanceRoutes =
+    walletsListQuery.data?.data?.wallets?.find(
+      (wallet) => wallet.label === connection.label,
+    )?.btcpay_provenance ?? [];
   const { startSyncNotice, clearSyncNotice } = useSyncProgressNotice();
   const [syncMessage, setSyncMessage] = useState<string | null>(null);
   const [editOpen, setEditOpen] = useState(false);
@@ -240,6 +254,7 @@ function ConnectionDetailView({
   const [editPaymentMethodId, setEditPaymentMethodId] = useState("");
   const [editBackend, setEditBackend] = useState("");
   const [editSourceFile, setEditSourceFile] = useState("");
+  const [editClearProvenance, setEditClearProvenance] = useState(false);
   const [editError, setEditError] = useState<string | null>(null);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deletePassphrase, setDeletePassphrase] = useState("");
@@ -315,6 +330,7 @@ function ConnectionDetailView({
     setEditPaymentMethodId("");
     setEditBackend("");
     setEditSourceFile("");
+    setEditClearProvenance(false);
     setEditError(null);
     setEditOpen(true);
   };
@@ -382,7 +398,15 @@ function ConnectionDetailView({
     if (editConfigKind === "file-wallet" && sourceFile) {
       configChanges.source_file = sourceFile;
     }
-    if (!labelChanged && Object.keys(configChanges).length === 0) {
+    const clearFields: string[] = [];
+    if (editClearProvenance && walletProvenanceRoutes.length > 0) {
+      clearFields.push("btcpay_provenance");
+    }
+    if (
+      !labelChanged &&
+      Object.keys(configChanges).length === 0 &&
+      clearFields.length === 0
+    ) {
       setEditError("Change the label or update at least one field.");
       return;
     }
@@ -392,6 +416,7 @@ function ConnectionDetailView({
         wallet: connection.id,
         ...(labelChanged ? { label: nextLabel } : {}),
         ...configChanges,
+        ...(clearFields.length > 0 ? { clear: clearFields } : {}),
         auth_response: encryptedWorkspace
           ? { passphrase_secret: editPassphrase }
           : { plaintext_change_ack: PLAINTEXT_CHANGE_ACK },
@@ -565,6 +590,46 @@ function ConnectionDetailView({
           icon={<Database className="size-4" aria-hidden="true" />}
         />
       </div>
+
+      {walletProvenanceRoutes.length > 0 ? (
+        <Card>
+          <CardHeader className="border-b">
+            <CardTitle>BTCPay provenance</CardTitle>
+            <CardDescription>
+              BTCPay comments and labels enrich matching transactions during sync.
+              Descriptor or file sync remains the balance source.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="p-0">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Instance</TableHead>
+                  <TableHead>Store</TableHead>
+                  <TableHead>Payment method</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {walletProvenanceRoutes.map((route, index) => (
+                  <TableRow
+                    key={`${route.backend}-${route.store_id}-${route.payment_method_id}-${index}`}
+                  >
+                    <TableCell>{route.backend}</TableCell>
+                    <TableCell>{route.store_id}</TableCell>
+                    <TableCell>{route.payment_method_id}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </CardContent>
+          <div className="border-t px-6 py-3 text-xs text-muted-foreground">
+            Add more routes from <strong>Add connection</strong> &rarr;{" "}
+            <em>BTCPay Server</em> &rarr; <em>Map existing wallets</em>, or via{" "}
+            <code>kassiber wallets attach-btcpay</code>. Use Edit to clear all
+            routes from this wallet.
+          </div>
+        </Card>
+      ) : null}
 
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1.35fr)_minmax(360px,0.85fr)]">
         <Card>
@@ -842,6 +907,28 @@ function ConnectionDetailView({
                     </Button>
                   ) : null}
                 </div>
+              </div>
+            ) : null}
+            {walletProvenanceRoutes.length > 0 ? (
+              <div className="space-y-2 rounded-md border border-border/70 p-3">
+                <label className="flex items-start gap-3 text-sm">
+                  <input
+                    type="checkbox"
+                    className="mt-0.5"
+                    checked={editClearProvenance}
+                    onChange={(event) =>
+                      setEditClearProvenance(event.target.checked)
+                    }
+                  />
+                  <span className="grid gap-0.5">
+                    <span>Clear BTCPay provenance routes</span>
+                    <span className="text-xs text-muted-foreground">
+                      Removes all {walletProvenanceRoutes.length} stored
+                      route(s). Descriptor/file sync remains the balance
+                      source. Re-add routes from Add connection.
+                    </span>
+                  </span>
+                </label>
               </div>
             ) : null}
             {encryptedWorkspace ? (

@@ -113,6 +113,18 @@ transactions.
 
 That API-backed path reuses the same BTCPay normalization and metadata rules as the file import, but only imports confirmed rows from the remote wallet history and records their confirmation timestamp for later rate lookup. It does not yet import BTCPay invoice/payment fiat facts; those need the future invoice/payment provenance ingest before Kassiber can treat BTCPay as the authoritative merchant price source. `wallets sync-btcpay --wallet ... --backend ... --store-id ...` still works too. It stores the same BTCPay config on the wallet and runs the sync immediately, so later `wallets sync` or `wallets sync --all` calls can reuse that wallet config.
 
+To wire BTCPay as enrichment-only metadata on a wallet whose balance is already tracked through descriptor or file sync, use `wallets attach-btcpay`:
+
+```bash
+python3 -m kassiber wallets attach-btcpay \
+  --wallet settlement-wallet \
+  --backend btcpay-prod \
+  --store-id <store-id> \
+  --payment-method-id BTC-CHAIN
+```
+
+The next `wallets sync` keeps the descriptor/file source as the authoritative balance, then walks the stored BTCPay route and applies comments/labels to matching transactions. Repeated `attach-btcpay` invocations dedupe identical routes and append new (store, payment method) pairs.
+
 Current BTCPay modeling:
 
 - use one Kassiber wallet per real underlying wallet / store-backed balance source

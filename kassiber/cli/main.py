@@ -68,6 +68,7 @@ from .handlers import (
     resolve_quarantine_exclude,
     resolve_quarantine_price_override,
     show_quarantine,
+    attach_btcpay_provenance_to_wallet,
     sync_btcpay_into_wallet,
     sync_wallet,
 )
@@ -596,6 +597,20 @@ def build_parser() -> argparse.ArgumentParser:
         type=int,
         default=BTCPAY_DEFAULT_PAGE_SIZE,
         dest="page_size",
+    )
+    wallets_attach_btcpay = wallets_sub.add_parser(
+        "attach-btcpay",
+        help="Record a BTCPay provenance route on an existing settlement wallet",
+    )
+    wallets_attach_btcpay.add_argument("--workspace")
+    wallets_attach_btcpay.add_argument("--profile")
+    wallets_attach_btcpay.add_argument("--wallet", required=True)
+    wallets_attach_btcpay.add_argument("--backend", required=True)
+    wallets_attach_btcpay.add_argument("--store-id", required=True, dest="store_id")
+    wallets_attach_btcpay.add_argument(
+        "--payment-method-id",
+        default=BTCPAY_DEFAULT_PAYMENT_METHOD_ID,
+        dest="payment_method_id",
     )
     wallets_sync = wallets_sub.add_parser("sync")
     wallets_sync.add_argument("--workspace")
@@ -1482,6 +1497,20 @@ def dispatch(conn: sqlite3.Connection | None, args: argparse.Namespace) -> Any:
                     args.store_id,
                     args.payment_method_id,
                     args.page_size,
+                ),
+            )
+        if args.wallets_command == "attach-btcpay":
+            return emit(
+                args,
+                attach_btcpay_provenance_to_wallet(
+                    conn,
+                    args.runtime_config,
+                    args.workspace,
+                    args.profile,
+                    args.wallet,
+                    args.backend,
+                    args.store_id,
+                    args.payment_method_id,
                 ),
             )
         if args.wallets_command == "sync":
