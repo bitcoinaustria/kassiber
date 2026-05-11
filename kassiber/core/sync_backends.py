@@ -138,7 +138,10 @@ def _socks5_address(host):
     try:
         address = ipaddress.ip_address(host)
     except ValueError:
-        encoded = host.encode("idna")
+        try:
+            encoded = host.encode("idna")
+        except UnicodeError as exc:
+            raise AppError(f"SOCKS5 proxy target host is invalid: {exc}") from exc
         if len(encoded) > 255:
             raise AppError("SOCKS5 proxy target host is too long")
         return b"\x03" + bytes([len(encoded)]) + encoded

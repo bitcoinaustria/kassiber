@@ -2139,7 +2139,7 @@ function BackendModal({
               {isElectrum ? (
                 <div className="grid gap-3 sm:grid-cols-[1fr_120px]">
                   <div className="space-y-2">
-                    <Label htmlFor="backend-electrum-host">URL</Label>
+                    <Label htmlFor="backend-electrum-host">Host</Label>
                     <Input
                       id="backend-electrum-host"
                       value={electrumHost}
@@ -2263,7 +2263,7 @@ function BackendModal({
                 {useProxy && (
                   <>
                     <div className="space-y-2">
-                      <Label htmlFor="backend-proxy-host">Proxy URL</Label>
+                      <Label htmlFor="backend-proxy-host">Proxy host</Label>
                       <Input
                         id="backend-proxy-host"
                         value={proxyHost}

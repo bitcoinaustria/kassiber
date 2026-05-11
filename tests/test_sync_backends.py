@@ -3,6 +3,9 @@ from unittest.mock import patch
 
 from kassiber.core.sync import WalletSyncHooks, WalletSyncState, sync_wallet_from_backend
 from kassiber.core.sync_backends import (
+    _connect_via_socks5,
+    _read_exact,
+    _socks5_address,
     bitcoinrpc_sync_adapter,
     electrum_sync_adapter,
     esplora_sync_adapter,
@@ -229,6 +232,127 @@ class SyncBackendsTest(unittest.TestCase):
         )
         self.assertEqual(record["occurred_at"], timestamp_to_iso(1_700_000_000))
         self.assertIsNone(record["confirmed_at"])
+
+
+class _FakeSocket:
+    """In-memory socket double for SOCKS5 protocol tests."""
+
+    def __init__(self, responses):
+        self.sent = bytearray()
+        self._inbox = bytearray(b"".join(responses))
+        self.closed = False
+
+    def sendall(self, data):
+        self.sent.extend(data)
+
+    def recv(self, length):
+        chunk = bytes(self._inbox[:length])
+        del self._inbox[:length]
+        return chunk
+
+    def close(self):
+        self.closed = True
+
+
+class Socks5HelpersTest(unittest.TestCase):
+    def test_socks5_address_ipv4(self):
+        self.assertEqual(_socks5_address("192.0.2.1"), b"\x01\xc0\x00\x02\x01")
+
+    def test_socks5_address_ipv6(self):
+        self.assertEqual(_socks5_address("::1"), b"\x04" + (b"\x00" * 15) + b"\x01")
+
+    def test_socks5_address_domain(self):
+        self.assertEqual(
+            _socks5_address("node.example"),
+            b"\x03" + bytes([len("node.example")]) + b"node.example",
+        )
+
+    def test_socks5_address_rejects_oversized_host(self):
+        # Five 60-byte labels separated by dots is 304 bytes after IDNA encoding,
+        # which clears the per-label 63-byte limit but trips the >255 total guard.
+        oversized = ".".join(["a" * 60] * 5)
+        with self.assertRaises(AppError):
+            _socks5_address(oversized)
+
+    def test_socks5_address_rejects_invalid_label(self):
+        # A single 256-byte label is rejected by the IDNA codec before the
+        # length check; the helper should still surface that as an AppError.
+        with self.assertRaises(AppError):
+            _socks5_address("a" * 256 + ".example")
+
+    def test_read_exact_assembles_across_chunks(self):
+        sock = _FakeSocket([b"ab", b"cd", b"ef"])
+        self.assertEqual(_read_exact(sock, 6), b"abcdef")
+
+    def test_read_exact_raises_on_early_close(self):
+        sock = _FakeSocket([b"ab", b""])
+        with self.assertRaises(AppError):
+            _read_exact(sock, 6)
+
+    def test_connect_via_socks5_happy_path(self):
+        fake = _FakeSocket(
+            [
+                b"\x05\x00",  # auth accepted (no-auth)
+                # response: ver, status=success, rsv, atyp=ipv4, bound ip + port
+                b"\x05\x00\x00\x01\x00\x00\x00\x00\x00\x00",
+            ],
+        )
+        with patch(
+            "kassiber.core.sync_backends.socket.create_connection",
+            return_value=fake,
+        ):
+            sock = _connect_via_socks5(
+                "socks5://127.0.0.1:9050",
+                "node.example",
+                50002,
+                timeout=5,
+            )
+        self.assertIs(sock, fake)
+        self.assertFalse(fake.closed)
+        sent = bytes(fake.sent)
+        self.assertEqual(sent[:3], b"\x05\x01\x00")  # greeting
+        expected_request = (
+            b"\x05\x01\x00\x03"
+            + bytes([len("node.example")])
+            + b"node.example"
+            + (50002).to_bytes(2, "big")
+        )
+        self.assertIn(expected_request, sent)
+
+    def test_connect_via_socks5_rejects_authenticated_proxy(self):
+        fake = _FakeSocket([b"\x05\x02"])  # proxy requires user/pass
+        with patch(
+            "kassiber.core.sync_backends.socket.create_connection",
+            return_value=fake,
+        ):
+            with self.assertRaises(AppError):
+                _connect_via_socks5(
+                    "socks5://127.0.0.1:9050",
+                    "node.example",
+                    50002,
+                    timeout=5,
+                )
+        self.assertTrue(fake.closed)
+
+    def test_connect_via_socks5_surfaces_connect_failure(self):
+        fake = _FakeSocket(
+            [
+                b"\x05\x00",
+                b"\x05\x05\x00\x01\x00\x00\x00\x00\x00\x00",  # status=5 (connection refused)
+            ],
+        )
+        with patch(
+            "kassiber.core.sync_backends.socket.create_connection",
+            return_value=fake,
+        ):
+            with self.assertRaises(AppError):
+                _connect_via_socks5(
+                    "socks5://127.0.0.1:9050",
+                    "node.example",
+                    50002,
+                    timeout=5,
+                )
+        self.assertTrue(fake.closed)
 
 
 if __name__ == "__main__":

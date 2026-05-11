@@ -18,6 +18,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { useDaemonMutation } from "@/daemon/client";
 import { cn } from "@/lib/utils";
 
 import {
@@ -144,8 +145,14 @@ export const ConnectionsStep = ({
   goBack,
   canContinue = true,
 }: StepComponentProps) => {
-  const [testState, setTestState] = useState<"idle" | "ok" | "fail">("idle");
+  const [testState, setTestState] = useState<
+    "idle" | "testing" | "ok" | "fail"
+  >("idle");
   const [testLog, setTestLog] = useState("");
+  const testElectrum = useDaemonMutation<{
+    ok: boolean;
+    logs: string[];
+  }>("ui.backends.electrum.test");
   const skipSelected = form.backendSetupMode === "skip";
   const customSelected = form.backendSetupMode === "custom";
   const electrumSelected = customSelected && form.backendKind === "electrum";
@@ -182,27 +189,39 @@ export const ConnectionsStep = ({
     resetTest();
   };
   const runElectrumTest = () => {
-    if (endpointHint) {
+    if (endpointHint || !electrumUrl) {
       setTestState("fail");
-      setTestLog(`Validation failed\n${endpointHint}`);
+      setTestLog(`Validation failed\n${endpointHint ?? "Endpoint is required."}`);
       return;
     }
-    const lines = [
-      `Opening ${form.backendUseSsl ? "TLS" : "TCP"} connection to ${form.backendHost.trim()}:${form.backendPort.trim()}`,
-      form.backendUseSsl
-        ? form.backendTrustSsl
-          ? "Certificate verification: self-signed certificate trusted by user for this backend."
-          : form.backendCertificate.trim()
-            ? `Certificate pin: ${form.backendCertificate.trim()}`
-            : "Certificate verification: system trust store."
-        : "Certificate verification: not used for plain TCP.",
-      form.backendUseProxy && form.backendProxyHost.trim()
-        ? `Proxy: ${form.backendProxyHost.trim()}:${form.backendProxyPort.trim() || "default"}`
-        : "Proxy: disabled.",
-      "Ready to save. Kassiber will use these settings for the next refresh.",
-    ];
-    setTestState("ok");
-    setTestLog(lines.join("\n"));
+    setTestState("testing");
+    setTestLog("");
+    const proxyHost = form.backendProxyHost.trim();
+    const proxyPort = form.backendProxyPort.trim();
+    void testElectrum
+      .mutateAsync({
+        url: electrumUrl,
+        trust_self_signed: form.backendUseSsl && form.backendTrustSsl,
+        certificate:
+          form.backendUseSsl && form.backendCertificate.trim()
+            ? form.backendCertificate.trim()
+            : undefined,
+        proxy:
+          form.backendUseProxy && proxyHost && proxyPort
+            ? `${proxyHost}:${proxyPort}`
+            : undefined,
+      })
+      .then((envelope) => {
+        const data = envelope.data;
+        setTestState(data?.ok ? "ok" : "fail");
+        setTestLog((data?.logs ?? []).join("\n"));
+      })
+      .catch((error) => {
+        setTestState("fail");
+        setTestLog(
+          error instanceof Error ? error.message : "Electrum test failed.",
+        );
+      });
   };
   return (
     <OnboardingStepFrame>
@@ -280,7 +299,7 @@ export const ConnectionsStep = ({
                   <>
                     <div className="grid gap-3 sm:grid-cols-[1fr_130px]">
                       <TextField
-                        label="URL"
+                        label="Host"
                         name="backendHost"
                         value={form.backendHost}
                         placeholder="index.bitcoin-austria.at"
@@ -349,7 +368,7 @@ export const ConnectionsStep = ({
                     {form.backendUseProxy && (
                       <div className="grid gap-3 sm:grid-cols-[1fr_130px]">
                         <TextField
-                          label="Proxy URL"
+                          label="Proxy host"
                           name="backendProxyHost"
                           value={form.backendProxyHost}
                           placeholder="127.0.0.1"
@@ -376,7 +395,7 @@ export const ConnectionsStep = ({
                           type="button"
                           variant="outline"
                           onClick={runElectrumTest}
-                          disabled={Boolean(endpointHint)}
+                          disabled={Boolean(endpointHint) || testState === "testing"}
                         >
                           {testState === "ok" ? (
                             <CheckCircle2 className="size-4" />
@@ -385,7 +404,7 @@ export const ConnectionsStep = ({
                           ) : (
                             <CircleHelp className="size-4" />
                           )}
-                          Test connection
+                          {testState === "testing" ? "Testing" : "Test connection"}
                         </Button>
                         <span className="text-xs text-ink-2">
                           Logs are shown below before you continue.

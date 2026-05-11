@@ -101,7 +101,14 @@ BACKEND_DB_FIELDS = {
 BACKEND_RUNTIME_METADATA_FIELDS = {"config", "is_default", "source"}
 BACKEND_RESERVED_FIELDS = BACKEND_DB_FIELDS | BACKEND_RUNTIME_METADATA_FIELDS
 BACKEND_BOOLEAN_CONFIG_FIELDS = {"insecure"}
-BACKEND_CONFIG_FIELDS = {"cookiefile", "insecure", "password", "username", "walletprefix"}
+BACKEND_CONFIG_FIELDS = {
+    "certificate",
+    "cookiefile",
+    "insecure",
+    "password",
+    "username",
+    "walletprefix",
+}
 BACKEND_CONFIG_KEY_ALIASES = {
     "cookie_file": "cookiefile",
     "rpcpassword": "password",
@@ -116,6 +123,7 @@ BACKEND_CLEAR_FIELD_ALIASES = {
     "tor-proxy": "tor_proxy",
     "notes": "notes",
     "insecure": "insecure",
+    "certificate": "certificate",
     "cookiefile": "cookiefile",
     "username": "username",
     "password": "password",
