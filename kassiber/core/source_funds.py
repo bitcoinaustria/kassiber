@@ -2283,12 +2283,22 @@ def export_pdf(
             details={"blockers": report["explain_gates"]["blockers"]},
             retryable=False,
         )
-    result = dict(hooks.write_text_pdf(str(file_path), "Kassiber Source of Funds Report", build_report_lines(report, hooks)))
+    snapshot_hash = _snapshot_hash(report)
+    from ..source_funds_pdf_report import write_source_funds_pdf
+
+    result = dict(
+        write_source_funds_pdf(
+            str(file_path),
+            report=report,
+            generated_at=_now(),
+            snapshot_hash=snapshot_hash,
+        )
+    )
     result.update(
         {
             "scope": "source_funds",
             "format": "pdf",
-            "snapshot_hash": _snapshot_hash(report),
+            "snapshot_hash": snapshot_hash,
             "reveal_mode": report["reveal_mode"],
             "purpose": report.get("purpose", {}).get("type", "existing_transaction"),
             "target_transaction_id": report["target"]["transaction_id"],

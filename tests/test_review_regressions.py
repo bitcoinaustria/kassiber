@@ -6702,8 +6702,8 @@ class ReviewRegressionTest(unittest.TestCase):
         self.assertNotIn("NFT", notes_text)
 
     def test_pdf_report_substitutes_non_latin1_glyphs(self):
-        # Pin the remaining generic/source-funds text-PDF limitation.
-        # Austrian E 1kv PDFs use the ReportLab renderer instead.
+        # Pin the remaining generic text-PDF limitation.
+        # Austrian E 1kv and source-funds PDFs use ReportLab renderers instead.
         from kassiber.pdf_report import _ascii_text
 
         self.assertEqual(_ascii_text("€"), "?")
