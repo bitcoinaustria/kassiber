@@ -326,7 +326,7 @@ export function AddConnectionDialog({
     setupKind === "backend-settings"
       ? "Open backend settings"
       : syncWallet.isPending
-        ? "Syncing…"
+        ? "Refreshing…"
         : importBip329.isPending
           ? "Importing labels…"
           : isSubmitting
@@ -475,7 +475,7 @@ export function AddConnectionDialog({
         });
         if (form.syncAfterCreate) {
           startSyncNotice(
-            `${label} is still importing. Large CSV exports can take a moment; Kassiber will update when the daemon finishes.`,
+            `${label} is still scanning in watch-only mode. Large descriptors or slow backends can take a bit; Kassiber will update when the daemon finishes.`,
           );
           try {
             await syncWallet.mutateAsync({ wallet: label });
@@ -499,7 +499,7 @@ export function AddConnectionDialog({
         });
         if (form.syncAfterCreate) {
           startSyncNotice(
-            `${label} is still importing. Large CSV exports can take a moment; Kassiber will update when the daemon finishes.`,
+            `${label} is still refreshing from BTCPay. Slow backends can take a bit; Kassiber will update when the daemon finishes.`,
           );
           try {
             await syncWallet.mutateAsync({ wallet: label });
@@ -530,7 +530,7 @@ export function AddConnectionDialog({
         }
         addNotification({
           title: "Connection added",
-          body: `${label} is configured${form.syncAfterCreate ? " and syncing" : ""}.`,
+          body: `${label} is configured${form.syncAfterCreate ? " and refreshed" : ""}.`,
           tone: "success",
         });
       } else if (setupKind === "bip329") {
@@ -888,7 +888,7 @@ export function AddConnectionDialog({
               </span>
             ) : null}
           </div>
-          {renderSyncAfterCreate("Sync after setup")}
+          {renderSyncAfterCreate("Refresh after setup")}
         </>
       );
     }

@@ -3299,7 +3299,7 @@ const Dashboard2 = ({
             variant="outline"
             size="sm"
             className="h-8 gap-2 sm:h-9"
-            aria-label="Sync wallets"
+            aria-label="Refresh watch-only connections"
             onClick={syncAll}
             disabled={isSyncing}
           >
@@ -3308,7 +3308,7 @@ const Dashboard2 = ({
               aria-hidden="true"
             />
             <span className="hidden sm:inline">
-              {isSyncing ? "Syncing" : "Sync"}
+              {isSyncing ? "Refreshing" : "Refresh"}
             </span>
           </Button>
           <NewTransactionDialog

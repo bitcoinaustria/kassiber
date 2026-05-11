@@ -1474,7 +1474,25 @@ def _redact_sync_payload_for_ui(value: Any) -> Any:
         return redacted
     if isinstance(value, list):
         return [_redact_sync_payload_for_ui(item) for item in value]
+    if isinstance(value, str):
+        return _redact_sync_text_for_ui(value)
     return value
+
+
+_SYNC_URL_RE = re.compile(
+    r"\b[a-zA-Z][a-zA-Z0-9+.-]*://"
+    r"(?:\[[^\]\s]+\][^\s,;)\"'\]]*|[^\s,;)\"'\]]+)"
+)
+_SYNC_URL_TRAILING_PUNCTUATION = ":.!?"
+
+
+def _redact_sync_text_for_ui(value: str) -> str:
+    def replace(match: re.Match[str]) -> str:
+        url = match.group(0)
+        suffix = url[len(url.rstrip(_SYNC_URL_TRAILING_PUNCTUATION)) :]
+        return f"<backend-url>{suffix}"
+
+    return _SYNC_URL_RE.sub(replace, value)
 
 
 def _sync_error_rows(payload: dict[str, Any] | None) -> list[dict[str, Any]]:
@@ -1501,14 +1519,14 @@ def _sync_failure_blocker(payload: dict[str, Any] | None) -> dict[str, Any] | No
         return None
     errors = _sync_error_rows(payload)
     detail = (
-        f"Automatic wallet sync failed for {len(errors)} wallet(s); reports may be stale."
+        f"Automatic watch-only refresh failed for {len(errors)} source(s); reports may be stale."
         if errors
-        else "Automatic wallet sync failed; reports may be stale."
+        else "Automatic watch-only refresh failed; reports may be stale."
     )
     return {
         "id": "sync_failed",
         "severity": "blocking",
-        "title": "Wallet sync failed",
+        "title": "Connection refresh failed",
         "detail": detail,
         "daemon_kind": "ui.wallets.sync",
     }

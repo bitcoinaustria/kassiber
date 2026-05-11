@@ -2,13 +2,9 @@ import * as React from "react";
 import { useQueryClient } from "@tanstack/react-query";
 
 import { daemonMutationKey, useDaemonMutation } from "@/daemon/client";
+import { summarizeSyncResults, type SyncResult } from "@/lib/syncResults";
 import { useUiStore } from "@/store/ui";
 import { useSyncProgressNotice } from "./useSyncProgressNotice";
-
-interface SyncResult {
-  wallet: string;
-  status: "synced" | "skipped" | "error" | string;
-}
 
 export function useWalletSyncAction() {
   const queryClient = useQueryClient();
@@ -28,8 +24,8 @@ export function useWalletSyncAction() {
       }) > 0;
     if (syncWallets.isPending || otherSyncInFlight) return;
     addNotification({
-      title: "Wallet sync started",
-      body: "Kassiber is syncing all configured wallet sources.",
+      title: "Connection refresh started",
+      body: "Kassiber is scanning configured watch-only sources.",
       tone: "warning",
     });
     startSyncNotice();
@@ -38,35 +34,22 @@ export function useWalletSyncAction() {
       {
         onSuccess: (envelope) => {
           const results = envelope.data?.results ?? [];
-          const synced = results.filter(
-            (result) => result.status === "synced",
-          ).length;
-          const skipped = results.filter(
-            (result) => result.status === "skipped",
-          ).length;
           const errors = results.filter(
             (result) => result.status === "error",
           ).length;
-          const body =
-            [
-              synced ? `${synced} synced` : null,
-              skipped ? `${skipped} skipped` : null,
-              errors ? `${errors} failed` : null,
-            ]
-              .filter(Boolean)
-              .join(", ") || "No wallet changes returned.";
+          const body = summarizeSyncResults(results);
           addNotification({
             title: errors
-              ? "Wallet sync finished with errors"
-              : "Wallet sync finished",
+              ? "Connection refresh finished with errors"
+              : "Connection refresh finished",
             body,
             tone: errors ? "error" : "success",
           });
         },
         onError: (error) => {
           addNotification({
-            title: "Wallet sync failed",
-            body: error instanceof Error ? error.message : "Wallet sync failed",
+            title: "Connection refresh failed",
+            body: error instanceof Error ? error.message : "Connection refresh failed",
             tone: "error",
           });
         },

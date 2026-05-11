@@ -7,6 +7,8 @@ from decimal import Decimal
 from hashlib import sha256
 from importlib import import_module
 
+from .errors import AppError
+
 
 DEFAULT_DESCRIPTOR_GAP_LIMIT = 20
 HARDENED_INDEX = 0x80000000
@@ -96,8 +98,16 @@ def get_embit_modules():
             "PrivateKey": import_module("embit.ec").PrivateKey,
         }
     except ModuleNotFoundError as exc:
-        raise ValueError(
-            "Descriptor-backed wallet sync requires the 'embit' package. Reinstall Kassiber in a Python >= 3.10 environment."
+        raise AppError(
+            "Descriptor-backed refresh requires the 'embit' package, "
+            "but it is not available in this runtime.",
+            code="dependency_missing",
+            hint=(
+                "Use a Kassiber desktop build that bundles embit, "
+                "or reinstall the CLI with project dependencies."
+            ),
+            details={"missing_package": "embit"},
+            retryable=False,
         ) from exc
     return _EMBIT_MODULES
 

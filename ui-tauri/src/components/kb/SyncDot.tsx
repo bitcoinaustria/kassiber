@@ -10,8 +10,8 @@ const CONFIG: Record<
   ConnectionStatus,
   { color: string; pulse: boolean; title: string }
 > = {
-  synced: { color: "bg-[#3fa66a]", pulse: false, title: "In sync" },
-  syncing: { color: "bg-[#c9a43a]", pulse: true, title: "Syncing" },
+  synced: { color: "bg-[#3fa66a]", pulse: false, title: "Current" },
+  syncing: { color: "bg-[#c9a43a]", pulse: true, title: "Refreshing" },
   idle: { color: "bg-ink-3", pulse: false, title: "Idle" },
   error: { color: "bg-accent", pulse: false, title: "Needs attention" },
 };

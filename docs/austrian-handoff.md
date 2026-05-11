@@ -56,7 +56,7 @@ unambiguous earn-like kinds:
 - `income`, `routing_income` -> `INCOME`
 - `wages` -> `WAGES`
 
-Generic wallet-sync / CSV receives such as `deposit`, `buy`, or Phoenix
+Generic source-refresh / CSV receives such as `deposit`, `buy`, or Phoenix
 transport types still go through rp2 as `BUY`. Kassiber does not invent
 income semantics for unlabeled inbound rows: explicit `kind` values are
 the only promotion signal in v1.

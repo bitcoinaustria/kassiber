@@ -246,13 +246,16 @@ class ToolCatalogPromptTest(unittest.TestCase):
                 "nested": {"api_token": "<redacted>"},
             },
         )
-        self.assertEqual(summarize_tool_call(tool, {"wallet": "cold"}), "Sync wallet cold")
+        self.assertEqual(
+            summarize_tool_call(tool, {"wallet": "cold"}),
+            "Refresh source cold",
+        )
         journal_tool = get_tool("ui.journals.process")
         self.assertEqual(summarize_tool_call(journal_tool, {}), "Process journals")
         maintenance_tool = get_tool("ui.maintenance.run")
         self.assertEqual(
             summarize_tool_call(maintenance_tool, {"sync": "never"}),
-            "Process journals without wallet sync",
+            "Process journals without source refresh",
         )
         configure_tool = get_tool("ui.maintenance.configure")
         self.assertEqual(
@@ -260,7 +263,7 @@ class ToolCatalogPromptTest(unittest.TestCase):
                 configure_tool,
                 {"auto_sync_before_report_reads": True},
             ),
-            "Enable automatic wallet sync before report reads",
+            "Enable automatic watch-only refresh before report reads",
         )
 
     def test_read_skill_reference_allowlist(self):

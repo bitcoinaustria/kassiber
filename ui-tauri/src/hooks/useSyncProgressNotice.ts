@@ -15,11 +15,11 @@ export function useSyncProgressNotice() {
   }, []);
 
   const startSyncNotice = React.useCallback(
-    (body = "Live wallet sync is still running. Large descriptors or slow backends can take a bit; Kassiber will update when the daemon returns.") => {
+    (body = "Watch-only refresh is still running. Large descriptors or slow backends can take a bit; Kassiber will update when the daemon returns.") => {
       clearSyncNotice();
       timerRef.current = window.setTimeout(() => {
         addNotification({
-          title: "Wallet sync still running",
+          title: "Connection refresh still running",
           body,
           tone: "info",
         });
