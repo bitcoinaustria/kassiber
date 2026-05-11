@@ -388,8 +388,12 @@ jobs:
           --onefile
           --name kassiber-cli
           --paths .
+          --collect-submodules embit
+          --collect-data embit
           --collect-submodules rp2
           --collect-data rp2
+          --collect-submodules prezzemolo
+          --hidden-import prezzemolo.avl_tree
           --hidden-import rp2.plugin.country.at
           scripts/kassiber_pyinstaller_entry.py
 
@@ -406,6 +410,36 @@ jobs:
             > "$RUNNER_TEMP/cli-sidecar-smoke.jsonl"
           grep '"kind":"daemon.ready"' "$RUNNER_TEMP/cli-sidecar-smoke.jsonl"
           grep '"kind":"daemon.shutdown"' "$RUNNER_TEMP/cli-sidecar-smoke.jsonl"
+
+          descriptor_root="$RUNNER_TEMP/kassiber-cli-sidecar-descriptor-smoke"
+          "$sidecar" --data-root "$descriptor_root" --machine init >/dev/null
+          "$sidecar" --data-root "$descriptor_root" --machine workspaces create Smoke >/dev/null
+          "$sidecar" \
+            --data-root "$descriptor_root" \
+            --machine \
+            profiles create \
+            --workspace Smoke \
+            --fiat-currency USD \
+            --tax-country generic \
+            Descriptor >/dev/null
+          "$sidecar" \
+            --data-root "$descriptor_root" \
+            --machine \
+            wallets create \
+            --workspace Smoke \
+            --profile Descriptor \
+            --label DescriptorSmoke \
+            --kind descriptor \
+            --descriptor 'wpkh([91790c21/84h/0h/0h]xpub6CpT4xRJntYQuFwkiZfSiK7jEtPM3e9nUfJKQ8ATWkgYJui4WS5HmzjD6C7avtwAFtmEyAusdFFxg2rZMs73SoSVkPQfEaQtrLGox92JNWn/0/*)' \
+            --gap-limit 1 >/dev/null
+          "$sidecar" \
+            --data-root "$descriptor_root" \
+            --machine \
+            wallets derive \
+            --workspace Smoke \
+            --profile Descriptor \
+            --wallet DescriptorSmoke \
+            --count 1 >/dev/null
 
       - name: Stage sidecar for desktop bundle
         shell: bash
