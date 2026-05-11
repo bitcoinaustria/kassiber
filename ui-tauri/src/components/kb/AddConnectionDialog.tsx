@@ -247,7 +247,6 @@ export function AddConnectionDialog({
     React.useState<ConnectionCategory>("wallets");
   const [selectedId, setSelectedId] = React.useState("xpub");
   const [sourceQuery, setSourceQuery] = React.useState("");
-  const [hidePlanned, setHidePlanned] = React.useState(false);
   const [step, setStep] = React.useState<DialogStep>("source");
   const [form, setForm] = React.useState(() =>
     formDefaultsFor(CONNECTION_SOURCES[0]),
@@ -282,14 +281,13 @@ export function AddConnectionDialog({
     const query = sourceQuery.trim().toLowerCase();
     const isSearching = query.length > 0;
     return CONNECTION_SOURCES.filter((source) => {
-      if (hidePlanned && source.status !== "ready") return false;
       if (isSearching) {
         const haystack = `${source.title} ${source.description} ${source.id}`.toLowerCase();
         return haystack.includes(query);
       }
       return source.category === activeCategory;
     });
-  }, [activeCategory, hidePlanned, sourceQuery]);
+  }, [activeCategory, sourceQuery]);
   const selected =
     CONNECTION_SOURCES.find((source) => source.id === selectedId) ??
     CONNECTION_SOURCES[0];
@@ -356,7 +354,6 @@ export function AddConnectionDialog({
     setStep(initialSourceId && source.status === "ready" ? "setup" : "source");
     setSetupError(null);
     setSourceQuery("");
-    setHidePlanned(false);
   }, [initialSourceId, open]);
 
   React.useEffect(() => {
@@ -1035,7 +1032,7 @@ export function AddConnectionDialog({
         })}
       </div>
 
-      <div className="grid min-h-0 grid-cols-1 lg:grid-cols-[minmax(0,1fr)_320px]">
+      <div className="grid min-h-0 grid-cols-1 lg:grid-cols-[minmax(0,1fr)_340px]">
         <div className="flex min-h-0 flex-col overflow-hidden border-b lg:border-r lg:border-b-0">
           <div className="flex flex-wrap items-center gap-2 border-b bg-muted/20 px-4 py-3">
             <Input
@@ -1045,13 +1042,6 @@ export function AddConnectionDialog({
               placeholder="Search sources (e.g. river, descriptor, btcpay)…"
               className="h-9 max-w-sm"
             />
-            <label className="ml-auto flex items-center gap-2 text-xs text-muted-foreground">
-              <Checkbox
-                checked={hidePlanned}
-                onCheckedChange={(checked) => setHidePlanned(checked === true)}
-              />
-              Hide planned
-            </label>
           </div>
           <div className="min-h-0 flex-1 space-y-3 overflow-y-auto p-4">
           {visibleSources.length === 0 ? (
@@ -1155,7 +1145,7 @@ export function AddConnectionDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="grid h-[calc(100dvh-2rem)] max-h-[calc(100dvh-2rem)] grid-rows-[auto_minmax(0,1fr)_auto] sm:h-[700px] sm:max-w-[900px] lg:max-w-[960px]">
+      <DialogContent className="grid h-[calc(100dvh-2rem)] max-h-[calc(100dvh-2rem)] grid-rows-[auto_minmax(0,1fr)_auto] sm:h-[740px] sm:max-w-[960px] lg:max-w-[1040px]">
         <DialogHeader>
           <DialogTitle>
             {isSetupStep ? `Set up ${selected.title}` : "Add connection"}
