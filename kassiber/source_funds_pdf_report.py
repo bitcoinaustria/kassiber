@@ -1,107 +1,20 @@
 from __future__ import annotations
 
-from decimal import Decimal, InvalidOperation
-from importlib import resources
+from decimal import Decimal
 from pathlib import Path
 from typing import Any, Iterable, Mapping, Sequence
 
-from .errors import AppError
-
-
-BRAND_INK = "#222222"
-BRAND_MUTED = "#666666"
-BRAND_LINE = "#d9d9d9"
-BRAND_SOFT = "#f7f7f7"
-
-
-def _require_reportlab() -> dict[str, Any]:
-    try:
-        from reportlab import rl_config
-        from reportlab.lib import colors
-        from reportlab.lib.pagesizes import A4
-        from reportlab.lib.styles import ParagraphStyle
-        from reportlab.lib.units import mm
-        from reportlab.pdfbase import pdfmetrics
-        from reportlab.pdfbase.ttfonts import TTFont
-        from reportlab.platypus import (
-            BaseDocTemplate,
-            Frame,
-            PageBreak,
-            PageTemplate,
-            Paragraph,
-            Spacer,
-            Table,
-            TableStyle,
-        )
-    except ImportError as exc:
-        raise AppError(
-            "Source-of-funds PDF export requires the ReportLab PDF renderer",
-            code="dependency_missing",
-            hint="Install Kassiber project dependencies again so reportlab is available.",
-        ) from exc
-
-    return {
-        "rl_config": rl_config,
-        "colors": colors,
-        "A4": A4,
-        "ParagraphStyle": ParagraphStyle,
-        "mm": mm,
-        "pdfmetrics": pdfmetrics,
-        "TTFont": TTFont,
-        "BaseDocTemplate": BaseDocTemplate,
-        "Frame": Frame,
-        "PageBreak": PageBreak,
-        "PageTemplate": PageTemplate,
-        "Paragraph": Paragraph,
-        "Spacer": Spacer,
-        "Table": Table,
-        "TableStyle": TableStyle,
-    }
-
-
-def _register_fonts(rl: dict[str, Any]) -> dict[str, str]:
-    pdfmetrics = rl["pdfmetrics"]
-    TTFont = rl["TTFont"]
-    try:
-        font_dir = resources.files("reportlab").joinpath("fonts")
-        regular = font_dir.joinpath("Vera.ttf")
-        bold = font_dir.joinpath("VeraBd.ttf")
-        mono = font_dir.joinpath("VeraMono.ttf")
-        if regular.is_file() and bold.is_file() and mono.is_file():
-            for name, path in (
-                ("KassiberSans", regular),
-                ("KassiberSans-Bold", bold),
-                ("KassiberMono", mono),
-            ):
-                if name not in pdfmetrics.getRegisteredFontNames():
-                    pdfmetrics.registerFont(TTFont(name, str(path)))
-            return {
-                "regular": "KassiberSans",
-                "bold": "KassiberSans-Bold",
-                "mono": "KassiberMono",
-            }
-    except (FileNotFoundError, ModuleNotFoundError, OSError):
-        pass
-    return {"regular": "Helvetica", "bold": "Helvetica-Bold", "mono": "Courier"}
-
-
-def _escape(value: Any) -> str:
-    text = "" if value is None else str(value)
-    return (
-        text.replace("&", "&amp;")
-        .replace("<", "&lt;")
-        .replace(">", "&gt;")
-        .replace("\n", "<br/>")
-    )
-
-
-def _decimal(value: Any) -> Decimal:
-    if value is None or value == "":
-        return Decimal("0")
-    try:
-        return Decimal(str(value))
-    except (InvalidOperation, ValueError):
-        return Decimal("0")
+from ._pdf_common import (
+    BRAND_INK,
+    BRAND_LINE,
+    BRAND_MUTED,
+    BRAND_SOFT,
+    decimal_value as _decimal,
+    draw_page_header,
+    escape_paragraph_text as _escape,
+    register_fonts,
+    require_reportlab,
+)
 
 
 def _btc(value: Any) -> str:
@@ -513,16 +426,16 @@ class _SourceFundsPdfBuilder:
 
 
 def _on_page(canvas: Any, doc: Any, *, title: str, fonts: dict[str, str], rl: dict[str, Any]) -> None:
-    canvas.saveState()
-    width, height = doc.pagesize
-    canvas.setFont(fonts["regular"], 7)
-    canvas.setFillColor(rl["colors"].HexColor(BRAND_MUTED))
-    canvas.drawString(doc.leftMargin, height - 9 * rl["mm"], title)
-    canvas.setStrokeColor(rl["colors"].HexColor(BRAND_LINE))
-    canvas.setLineWidth(0.3)
-    canvas.line(doc.leftMargin, height - 11 * rl["mm"], width - doc.rightMargin, height - 11 * rl["mm"])
-    canvas.drawRightString(width - doc.rightMargin, 8 * rl["mm"], f"Page {doc.page}")
-    canvas.restoreState()
+    draw_page_header(
+        canvas,
+        doc,
+        title=title,
+        fonts=fonts,
+        rl=rl,
+        brand_label="",
+        page_label="Page",
+        line_width=0.3,
+    )
 
 
 def write_source_funds_pdf(
@@ -532,9 +445,9 @@ def write_source_funds_pdf(
     generated_at: str,
     snapshot_hash: str,
 ) -> dict[str, Any]:
-    rl = _require_reportlab()
+    rl = require_reportlab("Source-of-funds PDF export")
     rl["rl_config"].warnOnMissingFontGlyphs = 0
-    fonts = _register_fonts(rl)
+    fonts = register_fonts(rl)
     path = Path(file_path).expanduser()
     path.parent.mkdir(parents=True, exist_ok=True)
 
