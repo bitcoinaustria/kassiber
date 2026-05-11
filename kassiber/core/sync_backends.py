@@ -162,8 +162,16 @@ def _connect_via_socks5(proxy_url, host, port, timeout):
     try:
         sock.sendall(b"\x05\x01\x00")
         greeting = _read_exact(sock, 2)
-        if greeting != b"\x05\x00":
-            raise AppError("SOCKS5 proxy does not allow unauthenticated connections")
+        if greeting[0] != 0x05:
+            raise AppError(
+                f"SOCKS5 proxy returned an unexpected greeting (got {greeting!r})"
+            )
+        if greeting[1] != 0x00:
+            raise AppError(
+                "SOCKS5 proxy refused the no-auth method "
+                f"(returned 0x{greeting[1]:02x}); Kassiber only supports "
+                "unauthenticated SOCKS5 proxies such as Tor."
+            )
         request = (
             b"\x05\x01\x00"
             + _socks5_address(host)

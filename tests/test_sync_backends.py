@@ -325,7 +325,24 @@ class Socks5HelpersTest(unittest.TestCase):
             "kassiber.core.sync_backends.socket.create_connection",
             return_value=fake,
         ):
-            with self.assertRaises(AppError):
+            with self.assertRaisesRegex(AppError, "0x02"):
+                _connect_via_socks5(
+                    "socks5://127.0.0.1:9050",
+                    "node.example",
+                    50002,
+                    timeout=5,
+                )
+        self.assertTrue(fake.closed)
+
+    def test_connect_via_socks5_rejects_non_socks5_greeting(self):
+        # A SOCKS4 / HTTP proxy will not start its reply with 0x05; the helper
+        # should call that out instead of reporting an auth-method mismatch.
+        fake = _FakeSocket([b"\x04\x5a"])
+        with patch(
+            "kassiber.core.sync_backends.socket.create_connection",
+            return_value=fake,
+        ):
+            with self.assertRaisesRegex(AppError, "unexpected greeting"):
                 _connect_via_socks5(
                     "socks5://127.0.0.1:9050",
                     "node.example",
