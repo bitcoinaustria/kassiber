@@ -12,6 +12,9 @@ import type {
 
 export const DEFAULT_BACKEND_NAME = "mempool";
 export const DEFAULT_BACKEND_URL = "https://mempool.bitcoin-austria.at/api";
+export const DEFAULT_ELECTRUM_HOST = "index.bitcoin-austria.at";
+export const DEFAULT_ELECTRUM_SSL_PORT = "50002";
+export const DEFAULT_ELECTRUM_TCP_PORT = "50001";
 export const DEFAULT_AI_PROVIDER_NAME = "ollama";
 export const DEFAULT_AI_BASE_URL = "http://localhost:11434/v1";
 export const MIN_DATABASE_PASSPHRASE_CHARS = 12;
@@ -33,6 +36,14 @@ export const DEFAULT_FORM: OnboardingForm = {
   backendKind: "esplora",
   backendName: DEFAULT_BACKEND_NAME,
   backendUrl: DEFAULT_BACKEND_URL,
+  backendHost: DEFAULT_ELECTRUM_HOST,
+  backendPort: DEFAULT_ELECTRUM_SSL_PORT,
+  backendUseSsl: true,
+  backendTrustSsl: false,
+  backendCertificate: "",
+  backendUseProxy: false,
+  backendProxyHost: "",
+  backendProxyPort: "",
   skipBackendsAcknowledged: false,
   aiSetupMode: "local",
   aiProviderKind: "local",
@@ -107,6 +118,21 @@ const hasSocketEndpoint = (raw: string): boolean => {
   }
 };
 
+export const electrumEndpointUrl = ({
+  host,
+  port,
+  useSsl,
+}: {
+  host: string;
+  port: string;
+  useSsl: boolean;
+}): string => {
+  const trimmedHost = host.trim();
+  const trimmedPort = port.trim();
+  if (!trimmedHost || !trimmedPort) return "";
+  return `${useSsl ? "ssl" : "tcp"}://${trimmedHost}:${trimmedPort}`;
+};
+
 export const backendEndpointDescription = (kind: BackendKind): string => {
   if (kind === "electrum") {
     return "Use ssl://host:50002, tcp://host:50001, or host:port.";
@@ -114,10 +140,7 @@ export const backendEndpointDescription = (kind: BackendKind): string => {
   if (kind === "bitcoinrpc") {
     return "Use the RPC URL only; add cookies or passwords after onboarding.";
   }
-  if (kind === "custom") {
-    return "Use the endpoint format expected by your custom adapter.";
-  }
-  return "Use an http(s) endpoint. Do not include API tokens or auth headers.";
+  return "Use an Esplora-compatible http:// or https:// endpoint.";
 };
 
 export const backendEndpointHint = (
@@ -134,7 +157,6 @@ export const backendEndpointHint = (
       ? null
       : "Use ssl://host:50002, tcp://host:50001, or host:port.";
   }
-  if (kind === "custom") return null;
   return hasHttpUrl(trimmed) ? null : "Use an http:// or https:// URL.";
 };
 
@@ -153,18 +175,14 @@ export const BACKEND_KINDS: BackendKind[] = [
   "esplora",
   "electrum",
   "bitcoinrpc",
-  "btcpay",
   "liquid-esplora",
-  "custom",
 ];
 
 export const BACKEND_KIND_LABELS: Record<BackendKind, string> = {
   esplora: "Esplora",
   electrum: "Electrum",
   bitcoinrpc: "Bitcoin Core RPC",
-  btcpay: "BTCPay",
   "liquid-esplora": "Liquid Esplora",
-  custom: "Custom",
 };
 
 export const PUBLIC_BACKEND_DEFAULTS: readonly BackendPreviewRow[] = [

@@ -119,6 +119,7 @@ const ALLOWED_DAEMON_KINDS: &[&str] = &[
     "ui.wallets.list",
     "ui.backends.list",
     "ui.backends.options",
+    "ui.backends.electrum.test",
     "ui.profiles.snapshot",
     "ui.profiles.switch",
     "ui.reports.capital_gains",

@@ -17,6 +17,7 @@ import lightningIcon from "@/assets/integrations/lightning.svg";
 import lightningLabsIcon from "@/assets/integrations/lightning-labs.png";
 import lianaIcon from "@/assets/integrations/liana.svg";
 import liquidIcon from "@/assets/integrations/liquid.svg";
+import mempoolIcon from "@/assets/integrations/mempool-space.svg";
 import nunchukIcon from "@/assets/integrations/nunchuk.svg";
 import relaiIcon from "@/assets/integrations/relai.svg";
 import sparrowIcon from "@/assets/integrations/sparrow.png";
@@ -182,7 +183,9 @@ export const CONNECTION_SOURCES: ConnectionSource[] = [
     title: "Esplora / mempool",
     description: "Esplora-compatible HTTP backend for Bitcoin source refresh.",
     category: "nodes",
-    image: sourceIcon("API", "#f7931a", "#111827"),
+    image: mempoolIcon,
+    imageClassName: "size-7",
+    imageFrameClassName: lightLogoFrame,
     status: "ready",
     pathLabel: "Index backend",
     formatLabel: "esplora",

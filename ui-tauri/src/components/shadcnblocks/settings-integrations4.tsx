@@ -1,6 +1,13 @@
 "use client";
 
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import {
+  useEffect,
+  useMemo,
+  useState,
+  type ComponentType,
+  type ReactNode,
+  type SVGProps,
+} from "react";
 
 import { ScrollableTabsList } from "@/components/shadcnblocks/scrollable-tabslist";
 import { Badge } from "@/components/ui/badge";
@@ -16,7 +23,8 @@ import { cn } from "@/lib/utils";
 
 export interface IntegrationItem {
   id?: string;
-  image: string;
+  image?: string;
+  icon?: ComponentType<SVGProps<SVGSVGElement>>;
   title: string;
   description: string;
   isConnected?: boolean;
@@ -39,6 +47,7 @@ const IntegrationCard = ({
   isSelected = false,
   onToggle,
 }: IntegrationCardProps) => {
+  const Icon = integration.icon;
   return (
     <div
       className={cn(
@@ -46,7 +55,7 @@ const IntegrationCard = ({
         isSelected && "border-primary bg-primary/5",
       )}
     >
-      {integration.imageFrameClassName ? (
+      {integration.image ? (
         <span
           className={cn(
             "flex size-10 shrink-0 items-center justify-center rounded-md border bg-background p-1.5",
@@ -62,13 +71,17 @@ const IntegrationCard = ({
             )}
           />
         </span>
-      ) : (
-        <img
-          src={integration.image}
-          alt={integration.title}
-          className={cn("size-10 shrink-0 rounded-md", integration.className)}
-        />
-      )}
+      ) : Icon ? (
+        <span
+          className={cn(
+            "flex size-10 shrink-0 items-center justify-center rounded-md border bg-background text-muted-foreground",
+            integration.imageFrameClassName,
+          )}
+          aria-hidden="true"
+        >
+          <Icon className={cn("size-5", integration.className)} />
+        </span>
+      ) : null}
       <div className="min-w-0 flex-1 space-y-1">
         <div className="flex min-w-0 flex-wrap items-center gap-2">
           <p className="min-w-0 truncate font-medium">{integration.title}</p>

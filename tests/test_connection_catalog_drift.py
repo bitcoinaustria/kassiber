@@ -42,6 +42,7 @@ _VITE_CONFIG_PATH = (
 )
 _CONNECTION_SETUP_KINDS = (
     "ui.backends.options",
+    "ui.backends.electrum.test",
     "ui.wallets.create",
     "ui.wallets.preview_descriptor",
     "ui.connections.sources",

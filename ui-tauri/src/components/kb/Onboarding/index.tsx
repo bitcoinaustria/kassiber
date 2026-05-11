@@ -31,6 +31,7 @@ import {
   aiBaseUrlHint,
   backendEndpointHint,
   databasePassphraseHint,
+  electrumEndpointUrl,
   gainsAlgorithmsFor,
   parseTaxLongTermDays,
 } from "./constants";
@@ -67,9 +68,17 @@ const DEFAULT_STEPS: OnboardingStep[] = [
         return form.skipBackendsAcknowledged;
       }
       if (form.backendSetupMode === "custom") {
+        const backendUrl =
+          form.backendKind === "electrum"
+            ? electrumEndpointUrl({
+                host: form.backendHost,
+                port: form.backendPort,
+                useSsl: form.backendUseSsl,
+              })
+            : form.backendUrl;
         return Boolean(
           form.backendName.trim() &&
-            backendEndpointHint(form.backendKind, form.backendUrl) === null,
+            backendEndpointHint(form.backendKind, backendUrl) === null,
         );
       }
       return true;
@@ -197,6 +206,14 @@ export const Onboarding = ({ className, steps: customSteps }: OnboardingProps) =
       }
     }
 
+    const customBackendUrl =
+      form.backendSetupMode === "custom" && form.backendKind === "electrum"
+        ? electrumEndpointUrl({
+            host: form.backendHost,
+            port: form.backendPort,
+            useSsl: form.backendUseSsl,
+          })
+        : form.backendUrl.trim();
     const identity: Identity = {
       name: form.profile.trim() || "Private",
       workspace: form.workspace.trim() || "My Books",
@@ -221,7 +238,31 @@ export const Onboarding = ({ className, steps: customSteps }: OnboardingProps) =
           : undefined,
       backendUrl:
         form.backendSetupMode === "custom"
-          ? form.backendUrl.trim()
+          ? customBackendUrl
+          : undefined,
+      backendTrustSsl:
+        form.backendSetupMode === "custom" &&
+        form.backendKind === "electrum" &&
+        form.backendUseSsl
+          ? form.backendTrustSsl
+          : undefined,
+      backendCertificate:
+        form.backendSetupMode === "custom" &&
+        form.backendKind === "electrum" &&
+        form.backendUseSsl &&
+        form.backendCertificate.trim()
+          ? form.backendCertificate.trim()
+          : undefined,
+      backendProxy:
+        form.backendSetupMode === "custom" &&
+        form.backendKind === "electrum" &&
+        form.backendUseProxy &&
+        form.backendProxyHost.trim() &&
+        form.backendProxyPort.trim()
+          ? {
+              host: form.backendProxyHost.trim(),
+              port: form.backendProxyPort.trim(),
+            }
           : undefined,
       aiSetupMode: form.aiSetupMode,
       aiProviderKind:

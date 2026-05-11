@@ -7,6 +7,7 @@
 import * as React from "react";
 import {
   Database,
+  CheckCircle2,
   Download,
   FileInput,
   KeyRound,
@@ -18,6 +19,7 @@ import {
   ShieldCheck,
   Trash2,
   Upload,
+  XCircle,
 } from "lucide-react";
 import { useNavigate, useRouterState } from "@tanstack/react-router";
 
@@ -54,6 +56,9 @@ import {
   SettingsIntegrations4,
   type IntegrationItem,
 } from "@/components/shadcnblocks/settings-integrations4";
+import bitcoinIcon from "@/assets/integrations/bitcoin.svg";
+import liquidIcon from "@/assets/integrations/liquid.svg";
+import mempoolIcon from "@/assets/integrations/mempool-space.svg";
 import {
   AiProviderForm,
   type ExistingAiProvider,
@@ -62,7 +67,6 @@ import { useDaemon, useDaemonMutation } from "@/daemon/client";
 import { clearImportProject } from "@/daemon/transport";
 import { setSessionUnlockPassphrase } from "@/store/sessionLock";
 import { useUiStore, type AppLockPolicy } from "@/store/ui";
-import type { ExplorerSettings } from "@/lib/explorer";
 import type { AiModelsListData, AiModelRow } from "@/lib/aiCapabilities";
 import { screenPanelClassName } from "@/lib/screen-layout";
 import { cn } from "@/lib/utils";
@@ -84,6 +88,12 @@ interface Backend {
   health: string;
   on: boolean;
   auth: string;
+  trustSsl?: boolean;
+  certificate?: string;
+  proxy?: {
+    host: string;
+    port: string;
+  } | null;
 }
 
 interface StatusData {
@@ -173,15 +183,6 @@ const DEFAULT_BACKENDS: Backend[] = [
   },
   {
     id: "b2",
-    name: "local electrs",
-    url: "tcp://127.0.0.1:50001",
-    net: "BTC",
-    health: "-",
-    on: false,
-    auth: "none",
-  },
-  {
-    id: "b3",
     name: "Blockstream Liquid",
     url: "https://blockstream.info/liquid/api",
     net: "LIQUID",
@@ -190,7 +191,7 @@ const DEFAULT_BACKENDS: Backend[] = [
     auth: "none",
   },
   {
-    id: "b4",
+    id: "b3",
     name: "CoinGecko",
     url: "https://api.coingecko.com/api/v3",
     net: "FX",
@@ -200,19 +201,42 @@ const DEFAULT_BACKENDS: Backend[] = [
   },
 ];
 
-const integrationIcon = (label: string, background: string, foreground: string) =>
-  `data:image/svg+xml,${encodeURIComponent(
-    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 40"><rect width="40" height="40" rx="10" fill="${background}"/><text x="20" y="24" text-anchor="middle" font-family="Inter, Arial, sans-serif" font-size="11" font-weight="700" fill="${foreground}">${label}</text></svg>`,
-  )}`;
+function isSyncBackend(backend: Backend): boolean {
+  return backend.net === "BTC" || backend.net === "LIQUID";
+}
 
-const INTEGRATION_ICONS: Record<Net | "AI" | "FILE", string> = {
-  BTC: integrationIcon("BTC", "#f59e0b", "#111827"),
-  LIQUID: integrationIcon("LQD", "#38bdf8", "#082f49"),
-  LN: integrationIcon("LN", "#7c3aed", "#ffffff"),
-  FX: integrationIcon("EUR", "#10b981", "#052e1a"),
-  AI: integrationIcon("AI", "#111827", "#ffffff"),
-  FILE: integrationIcon("CSV", "#64748b", "#ffffff"),
+const backendIntegrationImage: Partial<Record<Net, string>> = {
+  BTC: bitcoinIcon,
+  LIQUID: liquidIcon,
 };
+
+const brandLogoFrame =
+  "border-neutral-200 bg-white text-neutral-950 dark:border-neutral-700 dark:bg-white dark:text-neutral-950";
+
+function backendIntegrationArt(backend: Backend): Pick<
+  IntegrationItem,
+  "className" | "image" | "imageFrameClassName"
+> {
+  if (backend.name.toLowerCase().includes("mempool")) {
+    return {
+      image: mempoolIcon,
+      className: "size-7",
+      imageFrameClassName: brandLogoFrame,
+    };
+  }
+  if (backend.net === "LIQUID") {
+    return {
+      image: liquidIcon,
+      className: "size-7 scale-150",
+      imageFrameClassName: brandLogoFrame,
+    };
+  }
+  return {
+    image: backendIntegrationImage[backend.net],
+    className: "size-7",
+    imageFrameClassName: brandLogoFrame,
+  };
+}
 
 interface SettingsScreenProps {
   onLock?: () => void;
@@ -225,8 +249,6 @@ export function SettingsScreen({ onLock }: SettingsScreenProps) {
   const setCurrency = useUiStore((s) => s.setCurrency);
   const appLockPolicy = useUiStore((s) => s.appLockPolicy);
   const setAppLockPolicy = useUiStore((s) => s.setAppLockPolicy);
-  const explorerSettings = useUiStore((s) => s.explorerSettings);
-  const setExplorerSettings = useUiStore((s) => s.setExplorerSettings);
   const aiFeaturesEnabled = useUiStore((s) => s.aiFeaturesEnabled);
   const setAiFeaturesEnabled = useUiStore((s) => s.setAiFeaturesEnabled);
   const identity = useUiStore((s) => s.identity);
@@ -382,7 +404,7 @@ export function SettingsScreen({ onLock }: SettingsScreenProps) {
     () => [
       {
         id: "privacy-sensitive",
-        image: INTEGRATION_ICONS.FILE,
+        icon: ShieldCheck,
         title: "Sensitive values",
         description: hideSensitive
           ? "Balances, addresses, and amounts are blurred."
@@ -394,7 +416,7 @@ export function SettingsScreen({ onLock }: SettingsScreenProps) {
       },
       {
         id: "privacy-clipboard",
-        image: INTEGRATION_ICONS.FILE,
+        icon: FileInput,
         title: "Clipboard clearing",
         description: clearClipboard
           ? "Copied addresses and keys are cleared after 30 seconds."
@@ -406,7 +428,7 @@ export function SettingsScreen({ onLock }: SettingsScreenProps) {
       },
       {
         id: "display-currency",
-        image: INTEGRATION_ICONS.FX,
+        icon: Database,
         title: "Display currency",
         description:
           currency === "btc"
@@ -419,7 +441,7 @@ export function SettingsScreen({ onLock }: SettingsScreenProps) {
       },
       {
         id: "security-lock-now",
-        image: INTEGRATION_ICONS.AI,
+        icon: Lock,
         title: "Lock database",
         description: appLockPolicy.autoLockWhenIdle
           ? `Auto-locks after ${appLockPolicy.idleMinutes} minutes of inactivity.`
@@ -431,7 +453,7 @@ export function SettingsScreen({ onLock }: SettingsScreenProps) {
       },
       {
         id: "security-passphrase",
-        image: INTEGRATION_ICONS.AI,
+        icon: KeyRound,
         title: "Database passphrase",
         description: encryptedWorkspace
           ? "Change the SQLCipher database passphrase."
@@ -441,30 +463,41 @@ export function SettingsScreen({ onLock }: SettingsScreenProps) {
         categoryLabel: "Security",
         actionLabel: "Manage",
       },
-      ...backends.map((backend) => ({
+      ...backends.filter(isSyncBackend).map((backend) => ({
         id: backend.id,
-        image: INTEGRATION_ICONS[backend.net],
+        ...backendIntegrationArt(backend),
         title: backend.name,
         description: `${backend.net} backend - ${backend.url}`,
         isConnected: backend.on,
-        category: backend.net === "FX" ? "rates" : "sync",
-        categoryLabel:
-          backend.net === "FX" ? "Rate providers" : "Sync backends",
+        category: "sync",
+        categoryLabel: "Wallet sync",
         actionLabel: backend.on ? "Configure" : "Connect",
       })),
       {
         id: "sync-add-backend",
-        image: INTEGRATION_ICONS.BTC,
+        image: bitcoinIcon,
+        className: "size-7",
+        imageFrameClassName: brandLogoFrame,
         title: "Add sync backend",
-        description: "Add a Bitcoin, Liquid, or rates endpoint.",
+        description: "Add a Bitcoin or Liquid wallet refresh endpoint.",
         isConnected: false,
         category: "sync",
-        categoryLabel: "Sync backends",
+        categoryLabel: "Wallet sync",
         actionLabel: "Add",
       },
       {
+        id: "rate-providers",
+        icon: Database,
+        title: "Rate providers",
+        description: "Reference-rate sources are managed separately from wallet sync.",
+        isConnected: backends.some((backend) => backend.net === "FX" && backend.on),
+        category: "rates",
+        categoryLabel: "Rate providers",
+        actionLabel: "Review",
+      },
+      {
         id: "ai-providers",
-        image: INTEGRATION_ICONS.AI,
+        icon: Server,
         title: "AI providers",
         description: aiFeaturesEnabled
           ? "Ollama and OpenAI-compatible assistant endpoints for local review."
@@ -476,7 +509,7 @@ export function SettingsScreen({ onLock }: SettingsScreenProps) {
       },
       {
         id: "label-file-imports",
-        image: INTEGRATION_ICONS.FILE,
+        icon: FileInput,
         title: "Label and file imports",
         description: "BIP-329 labels, CSV imports, backups, and restore tools.",
         isConnected: true,
@@ -486,7 +519,7 @@ export function SettingsScreen({ onLock }: SettingsScreenProps) {
       },
       {
         id: "data-root",
-        image: INTEGRATION_ICONS.FILE,
+        icon: Database,
         title: "Local database",
         description: status?.database ?? "Local database path is loading.",
         isConnected: Boolean(status?.database),
@@ -511,7 +544,7 @@ export function SettingsScreen({ onLock }: SettingsScreenProps) {
   const onIntegrationAction = (integration: IntegrationItem) => {
     setSelectedIntegrationId(integration.id ?? integration.title);
     const backend = backends.find((item) => item.id === integration.id);
-    if (backend) {
+    if (backend && isSyncBackend(backend)) {
       openEditBackend(backend);
       return;
     }
@@ -685,8 +718,6 @@ export function SettingsScreen({ onLock }: SettingsScreenProps) {
                   return (
                     <BackendSettingsPanel
                       backends={backends}
-                      explorerSettings={explorerSettings}
-                      setExplorerSettings={setExplorerSettings}
                       onAdd={openAddBackend}
                       onEdit={openEditBackend}
                       onDelete={onDeleteBackend}
@@ -1161,70 +1192,110 @@ function SecuritySettingsPanel({
 
 function BackendSettingsPanel({
   backends,
-  explorerSettings,
-  setExplorerSettings,
   onAdd,
   onEdit,
   onDelete,
 }: {
   backends: Backend[];
-  explorerSettings: ExplorerSettings;
-  setExplorerSettings: (settings: Partial<ExplorerSettings>) => void;
   onAdd: () => void;
   onEdit: (backend: Backend) => void;
   onDelete: (backend: Backend) => void;
 }) {
+  const syncBackends = backends.filter(isSyncBackend);
+  const rateBackends = backends.filter((backend) => backend.net === "FX");
   return (
     <section className="space-y-4">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div className="min-w-0 space-y-1">
           <h3 className="flex items-center gap-2 text-sm font-semibold">
             <Server className="size-4" aria-hidden="true" />
-            Sync and rate backends
+            Backend connections
           </h3>
           <p className="text-sm text-muted-foreground">
-            Local node, indexer, Liquid, Lightning, and rate endpoints available
-            to these books.
+            Wallet refresh endpoints are configured separately from price-rate
+            sources.
           </p>
         </div>
         <Button type="button" size="sm" className="shrink-0" onClick={onAdd}>
           <Plus className="size-4" aria-hidden="true" />
-          Add backend
+          Add sync backend
         </Button>
       </div>
-      <div className="overflow-x-auto rounded-md border bg-background">
-        <Table>
-          <TableHeader>
-            <TableRow className="bg-muted/50 hover:bg-muted/50">
-              <TableHead>Backend</TableHead>
-              <TableHead>Network</TableHead>
-              <TableHead>Health</TableHead>
-              <TableHead>Auth</TableHead>
-              <TableHead className="text-right">Status</TableHead>
-              <TableHead className="text-right">Actions</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {backends.map((backend) => (
-              <TableRow key={backend.id}>
-                <TableCell className="min-w-[240px]">
-                  <div className="font-medium">{backend.name}</div>
-                  <div className="max-w-[360px] truncate text-xs text-muted-foreground">
-                    {backend.url}
-                  </div>
-                </TableCell>
-                <TableCell>
-                  <NetworkBadge net={backend.net} />
-                </TableCell>
-                <TableCell className="text-muted-foreground">
-                  {backend.health}
-                </TableCell>
-                <TableCell className="text-muted-foreground">
-                  {backend.auth}
-                </TableCell>
-                <TableCell className="text-right">
-                  <StatusBadge active={backend.on} />
-                </TableCell>
+
+      <div className="space-y-2">
+        <div>
+          <p className="text-sm font-medium">Wallet sync</p>
+          <p className="text-xs text-muted-foreground">
+            Bitcoin and Liquid endpoints used for watch-only wallet refresh.
+          </p>
+        </div>
+        <BackendTable
+          backends={syncBackends}
+          actions
+          onEdit={onEdit}
+          onDelete={onDelete}
+        />
+      </div>
+
+      <div className="space-y-2">
+        <div>
+          <p className="text-sm font-medium">Rate providers</p>
+          <p className="text-xs text-muted-foreground">
+            Fiat reference rates stay outside the wallet-sync setup flow.
+          </p>
+        </div>
+        <BackendTable backends={rateBackends} />
+      </div>
+    </section>
+  );
+}
+
+function BackendTable({
+  backends,
+  actions = false,
+  onEdit,
+  onDelete,
+}: {
+  backends: Backend[];
+  actions?: boolean;
+  onEdit?: (backend: Backend) => void;
+  onDelete?: (backend: Backend) => void;
+}) {
+  return (
+    <div className="overflow-x-auto rounded-md border bg-background">
+      <Table>
+        <TableHeader>
+          <TableRow className="bg-muted/50 hover:bg-muted/50">
+            <TableHead>Backend</TableHead>
+            <TableHead>Network</TableHead>
+            <TableHead>Health</TableHead>
+            <TableHead>Auth</TableHead>
+            <TableHead className="text-right">Status</TableHead>
+            {actions ? <TableHead className="text-right">Actions</TableHead> : null}
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {backends.map((backend) => (
+            <TableRow key={backend.id}>
+              <TableCell className="min-w-[240px]">
+                <div className="font-medium">{backend.name}</div>
+                <div className="max-w-[360px] truncate text-xs text-muted-foreground">
+                  {backend.url}
+                </div>
+              </TableCell>
+              <TableCell>
+                <NetworkBadge net={backend.net} />
+              </TableCell>
+              <TableCell className="text-muted-foreground">
+                {backend.health}
+              </TableCell>
+              <TableCell className="text-muted-foreground">
+                {backend.auth}
+              </TableCell>
+              <TableCell className="text-right">
+                <StatusBadge active={backend.on} />
+              </TableCell>
+              {actions ? (
                 <TableCell className="text-right">
                   <div className="flex justify-end gap-1">
                     <Button
@@ -1232,7 +1303,7 @@ function BackendSettingsPanel({
                       size="icon-sm"
                       variant="ghost"
                       aria-label={`Edit ${backend.name}`}
-                      onClick={() => onEdit(backend)}
+                      onClick={() => onEdit?.(backend)}
                     >
                       <Pencil className="size-3.5" aria-hidden="true" />
                     </Button>
@@ -1241,44 +1312,18 @@ function BackendSettingsPanel({
                       size="icon-sm"
                       variant="ghost"
                       aria-label={`Delete ${backend.name}`}
-                      onClick={() => onDelete(backend)}
+                      onClick={() => onDelete?.(backend)}
                     >
                       <Trash2 className="size-3.5" aria-hidden="true" />
                     </Button>
                   </div>
                 </TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
-      </div>
-      <div className="grid gap-3 rounded-md border bg-background p-4 sm:grid-cols-2">
-        <div className="space-y-2">
-          <Label htmlFor="settings-bitcoin-explorer">Bitcoin explorer</Label>
-          <Input
-            id="settings-bitcoin-explorer"
-            value={explorerSettings.bitcoinBaseUrl}
-            onChange={(event) =>
-              setExplorerSettings({ bitcoinBaseUrl: event.target.value })
-            }
-            placeholder="https://mempool.example"
-            inputMode="url"
-          />
-        </div>
-        <div className="space-y-2">
-          <Label htmlFor="settings-liquid-explorer">Liquid explorer</Label>
-          <Input
-            id="settings-liquid-explorer"
-            value={explorerSettings.liquidBaseUrl}
-            onChange={(event) =>
-              setExplorerSettings({ liquidBaseUrl: event.target.value })
-            }
-            placeholder="https://liquid.example"
-            inputMode="url"
-          />
-        </div>
-      </div>
-    </section>
+              ) : null}
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
+    </div>
   );
 }
 
@@ -1569,6 +1614,85 @@ function NetworkBadge({ net }: { net: Net }) {
   );
 }
 
+function NetworkMark({ net }: { net: Net }) {
+  const image = net === "LIQUID" ? liquidIcon : net === "BTC" ? bitcoinIcon : null;
+  if (image) {
+    return (
+      <span
+        className={cn(
+          "flex size-9 shrink-0 items-center justify-center rounded-md border p-1.5",
+          brandLogoFrame,
+        )}
+        aria-hidden="true"
+      >
+        <img
+          src={image}
+          alt=""
+          className={cn(
+            "size-6 object-contain",
+            net === "LIQUID" && "scale-150",
+          )}
+        />
+      </span>
+    );
+  }
+  return <NetworkBadge net={net} />;
+}
+
+function PresetMark({
+  preset,
+  net,
+}: {
+  preset: SyncBackendPreset;
+  net: Net;
+}) {
+  const image =
+    preset.id === "mempool"
+      ? mempoolIcon
+      : net === "LIQUID"
+        ? liquidIcon
+        : preset.protocol === "esplora"
+          ? bitcoinIcon
+          : null;
+  if (image) {
+    return (
+      <span
+        className={cn(
+          "flex size-8 shrink-0 items-center justify-center rounded-md border p-1.5",
+          brandLogoFrame,
+        )}
+        aria-hidden="true"
+      >
+        <img
+          src={image}
+          alt=""
+          className={cn(
+            "size-5 object-contain",
+            net === "LIQUID" && "scale-150",
+          )}
+        />
+      </span>
+    );
+  }
+  return (
+    <span
+      className="flex size-8 shrink-0 items-center justify-center rounded-md border bg-background text-muted-foreground"
+      aria-hidden="true"
+    >
+      <Server className="size-4" />
+    </span>
+  );
+}
+
+function selectorButtonClass(active: boolean) {
+  return cn(
+    "border text-foreground shadow-xs transition-colors",
+    active
+      ? "border-foreground/50 bg-muted text-foreground ring-1 ring-foreground/10 hover:bg-muted/90 dark:border-white/45 dark:bg-white/[0.10] dark:text-white dark:ring-white/10 dark:hover:bg-white/[0.14]"
+      : "border-border bg-background hover:border-foreground/35 hover:bg-muted dark:border-white/20 dark:bg-white/[0.04] dark:text-white dark:hover:border-white/40 dark:hover:bg-white/[0.08]",
+  );
+}
+
 function StatusBadge({ active }: { active: boolean }) {
   return (
     <span
@@ -1584,85 +1708,51 @@ function StatusBadge({ active }: { active: boolean }) {
   );
 }
 
-interface BackendPreset {
+interface SyncBackendPreset {
   id: string;
   name: string;
   url: string;
-  scheme: string;
+  protocol: "esplora" | "electrum" | "bitcoinrpc" | "liquid-esplora";
+  label: string;
   disabled?: boolean;
   status?: string;
 }
 
-interface BackendType {
-  id: string;
+interface SyncBackendNetwork {
+  id: "bitcoin" | "liquid";
   label: string;
   net: Net;
   desc: string;
-  presets: BackendPreset[];
+  presets: SyncBackendPreset[];
 }
 
-const BACKEND_TYPES: BackendType[] = [
+const SYNC_BACKEND_NETWORKS: SyncBackendNetwork[] = [
   {
-    id: "btc",
-    label: "Bitcoin node",
+    id: "bitcoin",
+    label: "Bitcoin",
     net: "BTC",
-    desc: "Read blocks, addresses and UTXOs from a Bitcoin backend.",
+    desc: "Backends used by Bitcoin watch-only wallets.",
     presets: [
       {
         id: "mempool",
         name: DEFAULT_BACKEND_NAME,
         url: DEFAULT_BACKEND_URL,
-        scheme: "REST",
-      },
-      {
-        id: "esplora",
-        name: "Blockstream Esplora",
-        url: "https://blockstream.info/api",
-        scheme: "REST",
+        protocol: "esplora",
+        label: "Esplora",
       },
       {
         id: "electrum",
-        name: "Electrum server",
-        url: "tcp://127.0.0.1:50001",
-        scheme: "Electrum",
+        name: "Bitcoin Austria Fulcrum",
+        url: "ssl://index.bitcoin-austria.at:50002",
+        protocol: "electrum",
+        label: "Electrum / Fulcrum",
       },
       {
         id: "core",
         name: "Bitcoin Core RPC",
         url: "http://127.0.0.1:8332",
-        scheme: "RPC",
-      },
-    ],
-  },
-  {
-    id: "lightning",
-    label: "Lightning",
-    net: "LN",
-    desc: "Read channel state, invoices and forwards from an LN node.",
-    presets: [
-      {
-        id: "lnd",
-        name: "LND",
-        url: "https://127.0.0.1:8080",
-        scheme: "REST",
-      },
-      {
-        id: "cln",
-        name: "Core Lightning",
-        url: "http://127.0.0.1:3010",
-        scheme: "CLNREST",
-      },
-      {
-        id: "lnbits",
-        name: "LNbits",
-        url: "https://your.lnbits.host",
-        scheme: "REST",
-      },
-      {
-        id: "nwc",
-        name: "Nostr Wallet Connect",
-        url: "nostr+walletconnect://",
-        scheme: "NWC",
+        protocol: "bitcoinrpc",
+        label: "Bitcoin Core RPC",
       },
     ],
   },
@@ -1670,58 +1760,23 @@ const BACKEND_TYPES: BackendType[] = [
     id: "liquid",
     label: "Liquid",
     net: "LIQUID",
-    desc: "Read Liquid balances and sidechain activity.",
+    desc: "Backends used by Liquid watch-only wallets.",
     presets: [
       {
         id: "blockstream",
         name: "Blockstream Liquid",
         url: "https://blockstream.info/liquid/api",
-        scheme: "REST",
+        protocol: "liquid-esplora",
+        label: "Liquid Esplora",
       },
       {
-        id: "liquidcore",
-        name: "Elements RPC",
-        url: "http://127.0.0.1:7041",
-        scheme: "RPC",
+        id: "liquid-electrum",
+        name: "Bull Bitcoin Liquid Electrum",
+        url: "ssl://les.bullbitcoin.com:995",
+        protocol: "electrum",
+        label: "Electrum / Fulcrum",
       },
     ],
-  },
-  {
-    id: "fx",
-    label: "Price / FX",
-    net: "FX",
-    desc: "BTC/EUR and other fiat reference rates.",
-    presets: [
-      {
-        id: "coingecko",
-        name: "CoinGecko",
-        url: "https://api.coingecko.com/api/v3",
-        scheme: "REST",
-      },
-      {
-        id: "kraken",
-        name: "Kraken",
-        url: "https://api.kraken.com/0/public",
-        scheme: "REST",
-        disabled: true,
-        status: "planned",
-      },
-      {
-        id: "bitstamp",
-        name: "Bitstamp",
-        url: "https://www.bitstamp.net/api/v2",
-        scheme: "REST",
-        disabled: true,
-        status: "planned",
-      },
-    ],
-  },
-  {
-    id: "other",
-    label: "Other",
-    net: "FX",
-    desc: "A generic HTTP or WebSocket endpoint.",
-    presets: [],
   },
 ];
 
@@ -1733,6 +1788,34 @@ const AUTH_MODES: Array<{ id: string; label: string }> = [
 ];
 
 type TestState = "idle" | "testing" | "ok" | "fail";
+
+interface ElectrumEndpointParts {
+  host: string;
+  port: string;
+  useSsl: boolean;
+}
+
+function parseElectrumEndpoint(raw: string): ElectrumEndpointParts {
+  const candidate = raw.includes("://") ? raw : `ssl://${raw}`;
+  try {
+    const parsed = new URL(candidate);
+    const useSsl = parsed.protocol !== "tcp:";
+    return {
+      host: parsed.hostname,
+      port: parsed.port || (useSsl ? "50002" : "50001"),
+      useSsl,
+    };
+  } catch {
+    return { host: "", port: "50002", useSsl: true };
+  }
+}
+
+function buildElectrumUrl({ host, port, useSsl }: ElectrumEndpointParts): string {
+  const trimmedHost = host.trim();
+  const trimmedPort = port.trim();
+  if (!trimmedHost || !trimmedPort) return "";
+  return `${useSsl ? "ssl" : "tcp"}://${trimmedHost}:${trimmedPort}`;
+}
 
 interface BackendModalProps {
   open: boolean;
@@ -1747,49 +1830,95 @@ function BackendModal({
   onClose,
   onSave,
 }: BackendModalProps) {
-  const [typeId, setTypeId] = React.useState("btc");
+  const testElectrum = useDaemonMutation<{
+    ok: boolean;
+    logs: string[];
+  }>("ui.backends.electrum.test");
+  const [typeId, setTypeId] = React.useState<SyncBackendNetwork["id"]>("bitcoin");
   const [presetId, setPresetId] = React.useState("mempool");
   const [name, setName] = React.useState("");
   const [url, setUrl] = React.useState(DEFAULT_BACKEND_URL);
   const [auth, setAuth] = React.useState("none");
   const [authVal, setAuthVal] = React.useState("");
   const [authVal2, setAuthVal2] = React.useState("");
+  const [electrumHost, setElectrumHost] = React.useState("");
+  const [electrumPort, setElectrumPort] = React.useState("50002");
+  const [electrumUseSsl, setElectrumUseSsl] = React.useState(true);
+  const [trustSsl, setTrustSsl] = React.useState(false);
+  const [certificate, setCertificate] = React.useState("");
+  const [useProxy, setUseProxy] = React.useState(false);
+  const [proxyHost, setProxyHost] = React.useState("");
+  const [proxyPort, setProxyPort] = React.useState("");
   const [testState, setTestState] = React.useState<TestState>("idle");
+  const [testLog, setTestLog] = React.useState("");
 
   const type =
-    BACKEND_TYPES.find((candidate) => candidate.id === typeId) ??
-    BACKEND_TYPES[0];
+    SYNC_BACKEND_NETWORKS.find((candidate) => candidate.id === typeId) ??
+    SYNC_BACKEND_NETWORKS[0];
   const preset =
     presetId === "custom"
       ? null
       : type.presets.find((candidate) => candidate.id === presetId) ?? null;
   const isEditing = Boolean(initial);
+  const isElectrum = preset?.protocol === "electrum";
+  const showAuth = preset?.protocol === "bitcoinrpc";
+  const effectiveUrl = isElectrum
+    ? buildElectrumUrl({
+        host: electrumHost,
+        port: electrumPort,
+        useSsl: electrumUseSsl,
+      })
+    : url.trim();
 
   React.useEffect(() => {
     if (!open) return;
     if (initial) {
+      const parsedElectrum = parseElectrumEndpoint(initial.url);
       const initialType =
-        BACKEND_TYPES.find((candidate) => candidate.net === initial.net) ??
-        BACKEND_TYPES[0];
+        SYNC_BACKEND_NETWORKS.find((candidate) => candidate.net === initial.net) ??
+        SYNC_BACKEND_NETWORKS[0];
+      const initialPreset =
+        initialType.presets.find((candidate) => candidate.url === initial.url) ??
+        (initial.url.match(/^(ssl|tcp):\/\//i)
+          ? initialType.presets.find((candidate) => candidate.protocol === "electrum")
+          : null);
       setTypeId(initialType.id);
-      setPresetId("custom");
+      setPresetId(initialPreset?.id ?? "custom");
       setName(initial.name);
       setUrl(initial.url);
       setAuth(initial.auth);
       setAuthVal("");
       setAuthVal2("");
+      setElectrumHost(parsedElectrum.host);
+      setElectrumPort(parsedElectrum.port);
+      setElectrumUseSsl(parsedElectrum.useSsl);
+      setTrustSsl(Boolean(initial.trustSsl));
+      setCertificate(initial.certificate ?? "");
+      setUseProxy(Boolean(initial.proxy));
+      setProxyHost(initial.proxy?.host ?? "");
+      setProxyPort(initial.proxy?.port ?? "");
       setTestState(initial.on ? "ok" : "idle");
+      setTestLog("");
       return;
     }
 
-    setTypeId("btc");
+    setTypeId("bitcoin");
     setPresetId("mempool");
     setName(DEFAULT_BACKEND_NAME);
     setUrl(DEFAULT_BACKEND_URL);
     setAuth("none");
     setAuthVal("");
     setAuthVal2("");
+    setElectrumHost("index.bitcoin-austria.at");
+    setElectrumPort("50002");
+    setElectrumUseSsl(true);
+    setTrustSsl(false);
+    setCertificate("");
+    setUseProxy(false);
+    setProxyHost("");
+    setProxyPort("");
     setTestState("idle");
+    setTestLog("");
   }, [initial, open]);
 
   React.useEffect(() => {
@@ -1798,20 +1927,28 @@ function BackendModal({
     if (preset) {
       setUrl(preset.url);
       setName(preset.name);
+      if (preset.protocol === "electrum") {
+        const parsed = parseElectrumEndpoint(preset.url);
+        setElectrumHost(parsed.host);
+        setElectrumPort(parsed.port);
+        setElectrumUseSsl(parsed.useSsl);
+      }
     } else if (presetId === "custom") {
       setUrl("");
       setName("");
     }
     setTestState("idle");
+    setTestLog("");
   }, [initial, open, preset, presetId]);
 
-  const onPickType = (id: string) => {
+  const onPickType = (id: SyncBackendNetwork["id"]) => {
     setTypeId(id);
+    setTestLog("");
     if (initial) {
       setPresetId("custom");
       return;
     }
-    const nextType = BACKEND_TYPES.find((candidate) => candidate.id === id);
+    const nextType = SYNC_BACKEND_NETWORKS.find((candidate) => candidate.id === id);
     setPresetId(
       nextType?.presets.find((candidate) => !candidate.disabled)?.id ??
         "custom",
@@ -1819,20 +1956,45 @@ function BackendModal({
   };
 
   const testConnection = () => {
-    if (!url.trim()) return;
+    if (!effectiveUrl) return;
     setTestState("testing");
+    if (isElectrum) {
+      void testElectrum
+        .mutateAsync({
+          url: effectiveUrl,
+          trust_self_signed: trustSsl,
+          certificate: certificate.trim() || undefined,
+          proxy:
+            useProxy && proxyHost.trim() && proxyPort.trim()
+              ? `${proxyHost.trim()}:${proxyPort.trim()}`
+              : undefined,
+        })
+        .then((envelope) => {
+          const data = envelope.data;
+          setTestState(data?.ok ? "ok" : "fail");
+          setTestLog((data?.logs ?? []).join("\n"));
+        })
+        .catch((error) => {
+          setTestState("fail");
+          setTestLog(
+            error instanceof Error ? error.message : "Electrum test failed.",
+          );
+        });
+      return;
+    }
     setTimeout(() => {
       const ok = /^(https?|tcp|wss?|nostr\+walletconnect):\/\/[\w.\-:/]+/i.test(
-        url.trim(),
+        effectiveUrl,
       );
       setTestState(ok ? "ok" : "fail");
+      setTestLog(ok ? `Reached ${effectiveUrl}` : `Could not reach ${effectiveUrl}`);
     }, 900);
   };
 
-  const canAdd = name.trim().length > 0 && url.trim().length > 0;
+  const canAdd = name.trim().length > 0 && effectiveUrl.length > 0;
   const save = () => {
     if (!canAdd) return;
-    const normalizedUrl = url.trim();
+    const normalizedUrl = effectiveUrl;
     const urlChanged = Boolean(initial && normalizedUrl !== initial.url);
     onSave({
       id: initial?.id ?? "b" + Date.now(),
@@ -1857,7 +2019,16 @@ function BackendModal({
             : urlChanged
               ? false
               : (initial?.on ?? false),
-      auth,
+      auth: showAuth ? auth : "none",
+      trustSsl: isElectrum && electrumUseSsl ? trustSsl : undefined,
+      certificate:
+        isElectrum && electrumUseSsl && certificate.trim()
+          ? certificate.trim()
+          : undefined,
+      proxy:
+        isElectrum && useProxy && proxyHost.trim() && proxyPort.trim()
+          ? { host: proxyHost.trim(), port: proxyPort.trim() }
+          : null,
     });
   };
 
@@ -1870,11 +2041,13 @@ function BackendModal({
     >
       <DialogContent className="max-h-[88vh] w-full max-w-[760px] overflow-hidden p-0 sm:max-w-[760px]">
         <DialogHeader className="border-b px-6 py-5">
-          <DialogTitle>{isEditing ? "Edit backend" : "Add backend"}</DialogTitle>
+          <DialogTitle>
+            {isEditing ? "Edit sync backend" : "Add sync backend"}
+          </DialogTitle>
           <DialogDescription>
             {isEditing
-              ? "Update this endpoint's label, network, URL, and auth mode."
-              : "Connect a Bitcoin, Lightning, Liquid, or price backend."}
+              ? "Update this wallet-refresh endpoint."
+              : "Connect a Bitcoin or Liquid wallet-refresh backend."}
           </DialogDescription>
         </DialogHeader>
 
@@ -1882,23 +2055,31 @@ function BackendModal({
           <div className="space-y-5 p-6">
             <section className="space-y-3">
               <div>
-                <Label>Backend type</Label>
+                <Label>Network</Label>
                 <p className="text-sm text-muted-foreground">{type.desc}</p>
               </div>
-              <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-5">
-                {BACKEND_TYPES.map((backendType) => {
+              <div className="grid gap-2 sm:grid-cols-2">
+                {SYNC_BACKEND_NETWORKS.map((backendType) => {
                   const active = backendType.id === typeId;
                   return (
                     <Button
                       key={backendType.id}
                       type="button"
-                      variant={active ? "default" : "outline"}
-                      className="h-auto min-h-20 flex-col items-start justify-start gap-2 whitespace-normal p-3 text-left"
+                      variant="outline"
+                      className={cn(
+                        "h-auto min-h-[72px] items-center justify-start gap-3 whitespace-normal p-3 text-left",
+                        selectorButtonClass(active),
+                      )}
                       onClick={() => onPickType(backendType.id)}
                     >
-                      <NetworkBadge net={backendType.net} />
-                      <span className="text-sm leading-tight font-medium">
-                        {backendType.label}
+                      <NetworkMark net={backendType.net} />
+                      <span className="min-w-0 space-y-0.5">
+                        <span className="block text-sm leading-tight font-medium">
+                          {backendType.label}
+                        </span>
+                        <span className="block text-xs leading-tight text-muted-foreground">
+                          {backendType.net === "BTC" ? "Bitcoin" : "Liquid"}
+                        </span>
                       </span>
                     </Button>
                   );
@@ -1908,33 +2089,39 @@ function BackendModal({
 
             {!isEditing && type.presets.length > 0 && (
               <section className="space-y-3">
-                <Label>Preset</Label>
-                <div className="flex flex-wrap gap-2">
-                  {type.presets.map((backendPreset) => (
-                    <Button
-                      key={backendPreset.id}
-                      type="button"
-                      variant={
-                        presetId === backendPreset.id ? "default" : "outline"
-                      }
-                      size="sm"
-                      disabled={backendPreset.disabled}
-                      onClick={() => setPresetId(backendPreset.id)}
-                    >
-                      {backendPreset.name}
-                      <span className="text-xs opacity-70">
-                        {backendPreset.status ?? backendPreset.scheme}
-                      </span>
-                    </Button>
-                  ))}
-                  <Button
-                    type="button"
-                    variant={presetId === "custom" ? "default" : "outline"}
-                    size="sm"
-                    onClick={() => setPresetId("custom")}
-                  >
-                    Custom
-                  </Button>
+                <div>
+                  <Label>Protocol</Label>
+                  <p className="text-xs text-muted-foreground">
+                    Pick the transport first, then edit the endpoint fields.
+                  </p>
+                </div>
+                <div className="grid gap-2 sm:grid-cols-2">
+                  {type.presets.map((backendPreset) => {
+                    const active = presetId === backendPreset.id;
+                    return (
+                      <Button
+                        key={backendPreset.id}
+                        type="button"
+                        variant="outline"
+                        className={cn(
+                          "h-auto min-h-12 justify-start gap-2 whitespace-normal px-3 py-2 text-left",
+                          selectorButtonClass(active),
+                        )}
+                        disabled={backendPreset.disabled}
+                        onClick={() => setPresetId(backendPreset.id)}
+                      >
+                        <PresetMark preset={backendPreset} net={type.net} />
+                        <span className="min-w-0 space-y-0.5">
+                          <span className="block truncate text-sm leading-tight font-medium">
+                            {backendPreset.name}
+                          </span>
+                          <span className="block truncate text-xs leading-tight text-muted-foreground">
+                            {backendPreset.status ?? backendPreset.label}
+                          </span>
+                        </span>
+                      </Button>
+                    );
+                  })}
                 </div>
               </section>
             )}
@@ -1949,72 +2136,217 @@ function BackendModal({
                   placeholder="My home node"
                 />
               </div>
-              <div className="space-y-2">
-                <Label htmlFor="backend-url">Endpoint URL</Label>
-                <Input
-                  id="backend-url"
-                  value={url}
-                  onChange={(event) => {
-                    setUrl(event.target.value);
-                    setTestState("idle");
-                  }}
-                  placeholder="https://..."
-                />
-              </div>
-            </section>
-
-            <section className="space-y-3">
-              <Label>Authentication</Label>
-              <div className="flex flex-wrap gap-2">
-                {AUTH_MODES.map((mode) => (
-                  <Button
-                    key={mode.id}
-                    type="button"
-                    variant={auth === mode.id ? "default" : "outline"}
-                    size="sm"
-                    onClick={() => setAuth(mode.id)}
-                  >
-                    {mode.label}
-                  </Button>
-                ))}
-              </div>
-              {auth === "apikey" && (
-                <SecretField
-                  id="backend-api-key"
-                  label="API key"
-                  value={authVal}
-                  onChange={setAuthVal}
-                  placeholder="sk_live_..."
-                />
-              )}
-              {auth === "bearer" && (
-                <SecretField
-                  id="backend-bearer"
-                  label="Bearer token"
-                  value={authVal}
-                  onChange={setAuthVal}
-                  placeholder="eyJ..."
-                />
-              )}
-              {auth === "basic" && (
-                <div className="grid gap-3 sm:grid-cols-2">
+              {isElectrum ? (
+                <div className="grid gap-3 sm:grid-cols-[1fr_120px]">
                   <div className="space-y-2">
-                    <Label htmlFor="backend-username">Username</Label>
+                    <Label htmlFor="backend-electrum-host">URL</Label>
                     <Input
-                      id="backend-username"
-                      value={authVal}
-                      onChange={(event) => setAuthVal(event.target.value)}
+                      id="backend-electrum-host"
+                      value={electrumHost}
+                      onChange={(event) => {
+                        setElectrumHost(event.target.value);
+                        setTestState("idle");
+                        setTestLog("");
+                      }}
+                      placeholder="index.bitcoin-austria.at"
                     />
                   </div>
-                  <SecretField
-                    id="backend-password"
-                    label="Password"
-                    value={authVal2}
-                    onChange={setAuthVal2}
+                  <div className="space-y-2">
+                    <Label htmlFor="backend-electrum-port">Port</Label>
+                    <Input
+                      id="backend-electrum-port"
+                      value={electrumPort}
+                      onChange={(event) => {
+                        setElectrumPort(event.target.value);
+                        setTestState("idle");
+                        setTestLog("");
+                      }}
+                      placeholder={electrumUseSsl ? "50002" : "50001"}
+                    />
+                  </div>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  <Label htmlFor="backend-url">Endpoint URL</Label>
+                  <Input
+                    id="backend-url"
+                    value={url}
+                    onChange={(event) => {
+                      setUrl(event.target.value);
+                      setTestState("idle");
+                      setTestLog("");
+                    }}
+                    placeholder="https://..."
                   />
                 </div>
               )}
             </section>
+
+            {isElectrum && (
+              <section className="grid gap-3 sm:grid-cols-2">
+                <label className="flex items-center justify-between gap-3 rounded-md border p-3 text-sm">
+                  <span>
+                    <span className="block font-medium">Use SSL</span>
+                    <span className="text-muted-foreground">
+                      Common Electrum SSL port is 50002.
+                    </span>
+                  </span>
+                  <Switch
+                    checked={electrumUseSsl}
+                    onCheckedChange={(checked) => {
+                      setElectrumUseSsl(checked);
+                      if (!checked) {
+                        setTrustSsl(false);
+                        setCertificate("");
+                      }
+                      setElectrumPort((current) =>
+                        current === "50002" || current === "50001"
+                          ? checked
+                            ? "50002"
+                            : "50001"
+                          : current,
+                      );
+                      setTestState("idle");
+                      setTestLog("");
+                    }}
+                  />
+                </label>
+                <label className="flex items-center justify-between gap-3 rounded-md border p-3 text-sm">
+                  <span>
+                    <span className="block font-medium">
+                      Trust self-signed certificate
+                    </span>
+                    <span className="text-muted-foreground">
+                      For self-signed or private CA Electrum servers.
+                    </span>
+                  </span>
+                  <Switch
+                    checked={trustSsl}
+                    disabled={!electrumUseSsl}
+                    onCheckedChange={(checked) => {
+                      setTrustSsl(checked);
+                      setTestState("idle");
+                      setTestLog("");
+                    }}
+                  />
+                </label>
+                <div className="space-y-2 sm:col-span-2">
+                  <Label htmlFor="backend-certificate">Certificate</Label>
+                  <Input
+                    id="backend-certificate"
+                    value={certificate}
+                    onChange={(event) => {
+                      setCertificate(event.target.value);
+                      setTestState("idle");
+                      setTestLog("");
+                    }}
+                    placeholder="Optional server certificate (.crt)"
+                    disabled={!electrumUseSsl}
+                  />
+                </div>
+                <label className="flex items-center justify-between gap-3 rounded-md border p-3 text-sm sm:col-span-2">
+                  <span>
+                    <span className="block font-medium">Use proxy</span>
+                    <span className="text-muted-foreground">
+                      Optional Tor or SOCKS proxy for this endpoint.
+                    </span>
+                  </span>
+                  <Switch
+                    checked={useProxy}
+                    onCheckedChange={(checked) => {
+                      setUseProxy(checked);
+                      setTestState("idle");
+                      setTestLog("");
+                    }}
+                  />
+                </label>
+                {useProxy && (
+                  <>
+                    <div className="space-y-2">
+                      <Label htmlFor="backend-proxy-host">Proxy URL</Label>
+                      <Input
+                        id="backend-proxy-host"
+                        value={proxyHost}
+                        onChange={(event) => {
+                          setProxyHost(event.target.value);
+                          setTestState("idle");
+                          setTestLog("");
+                        }}
+                        placeholder="127.0.0.1"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="backend-proxy-port">Proxy port</Label>
+                      <Input
+                        id="backend-proxy-port"
+                        value={proxyPort}
+                        onChange={(event) => {
+                          setProxyPort(event.target.value);
+                          setTestState("idle");
+                          setTestLog("");
+                        }}
+                        placeholder="9050"
+                      />
+                    </div>
+                  </>
+                )}
+              </section>
+            )}
+
+            {showAuth && (
+              <section className="space-y-3">
+                <Label>RPC authentication</Label>
+                <div className="flex flex-wrap gap-2">
+                  {AUTH_MODES.map((mode) => (
+                    <Button
+                      key={mode.id}
+                      type="button"
+                      variant={auth === mode.id ? "default" : "outline"}
+                      size="sm"
+                      onClick={() => setAuth(mode.id)}
+                    >
+                      {mode.label}
+                    </Button>
+                  ))}
+                </div>
+                {auth === "apikey" && (
+                  <SecretField
+                    id="backend-api-key"
+                    label="API key"
+                    value={authVal}
+                    onChange={setAuthVal}
+                    placeholder="sk_live_..."
+                  />
+                )}
+                {auth === "bearer" && (
+                  <SecretField
+                    id="backend-bearer"
+                    label="Bearer token"
+                    value={authVal}
+                    onChange={setAuthVal}
+                    placeholder="eyJ..."
+                  />
+                )}
+                {auth === "basic" && (
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <div className="space-y-2">
+                      <Label htmlFor="backend-username">Username</Label>
+                      <Input
+                        id="backend-username"
+                        value={authVal}
+                        onChange={(event) => setAuthVal(event.target.value)}
+                      />
+                    </div>
+                    <SecretField
+                      id="backend-password"
+                      label="Password"
+                      value={authVal2}
+                      onChange={setAuthVal2}
+                    />
+                  </div>
+                )}
+              </section>
+            )}
 
             <div className="rounded-md border bg-muted/30 p-3 text-sm">
               <div className="flex flex-wrap items-center gap-2">
@@ -2023,7 +2355,7 @@ function BackendModal({
                   variant="outline"
                   size="sm"
                   onClick={testConnection}
-                  disabled={!url.trim() || testState === "testing"}
+                  disabled={!effectiveUrl || testState === "testing"}
                 >
                   <RefreshCw
                     className={cn(
@@ -2035,16 +2367,24 @@ function BackendModal({
                   {testState === "testing" ? "Testing" : "Test connection"}
                 </Button>
                 {testState === "ok" && (
-                  <span className="text-emerald-600 dark:text-emerald-400">
-                    Connected - 142 ms
+                  <span className="inline-flex items-center gap-1 text-emerald-600 dark:text-emerald-400">
+                    <CheckCircle2 className="size-4" />
+                    Connected
                   </span>
                 )}
                 {testState === "fail" && (
-                  <span className="text-destructive">
+                  <span className="inline-flex items-center gap-1 text-destructive">
+                    <XCircle className="size-4" />
                     Could not reach endpoint
                   </span>
                 )}
               </div>
+              <textarea
+                readOnly
+                aria-label="Backend test connection log"
+                value={testLog}
+                className="mt-3 min-h-32 w-full resize-none rounded-md border bg-background p-3 font-mono text-xs leading-5"
+              />
             </div>
           </div>
         </ScrollArea>
@@ -2054,7 +2394,7 @@ function BackendModal({
             Cancel
           </Button>
           <Button type="button" disabled={!canAdd} onClick={save}>
-            {isEditing ? "Save backend" : "Add backend"}
+            {isEditing ? "Save backend" : "Add sync backend"}
           </Button>
         </DialogFooter>
       </DialogContent>

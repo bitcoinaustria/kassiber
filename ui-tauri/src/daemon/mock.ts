@@ -590,6 +590,54 @@ export const mockDaemon: DaemonTransport = {
       };
     }
 
+    if (req.kind === "ui.backends.electrum.test") {
+      const args = (req.args ?? {}) as {
+        url?: unknown;
+        trust_self_signed?: unknown;
+        certificate?: unknown;
+        proxy?: unknown;
+      };
+      const url = typeof args.url === "string" ? args.url.trim() : "";
+      const trustSelfSigned = args.trust_self_signed === true;
+      const certificate =
+        typeof args.certificate === "string" ? args.certificate.trim() : "";
+      const proxy = typeof args.proxy === "string" ? args.proxy.trim() : "";
+      if (!url) {
+        return {
+          kind: "error",
+          schema_version: 1,
+          request_id: req.request_id,
+          error: {
+            code: "validation",
+            message: "Electrum test requires url",
+            retryable: false,
+          },
+        };
+      }
+      return {
+        kind: "ui.backends.electrum.test",
+        schema_version: 1,
+        request_id: req.request_id,
+        data: {
+          ok: true,
+          url,
+          trust_self_signed: trustSelfSigned,
+          logs: [
+            `Opening Electrum connection to ${url}`,
+            trustSelfSigned
+              ? "Certificate verification: self-signed certificate trusted for this test."
+              : certificate
+                ? `Certificate verification: pinned certificate ${certificate}.`
+                : "Certificate verification: system trust store.",
+            proxy ? `Proxy: ${proxy}.` : "Proxy: disabled.",
+            "Connected.",
+            "Server version: Fulcrum 2.0 on protocol version 1.4.2",
+            "Server banner: Connected to a Fulcrum 2.0 server",
+          ],
+        } as T,
+      };
+    }
+
     if (req.kind === "ui.wallets.delete") {
       const args = (req.args ?? {}) as {
         wallet?: unknown;

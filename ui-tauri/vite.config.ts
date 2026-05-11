@@ -28,6 +28,7 @@ const ALLOWED_BRIDGE_KINDS = new Set([
   "ui.wallets.list",
   "ui.backends.list",
   "ui.backends.options",
+  "ui.backends.electrum.test",
   "ui.profiles.snapshot",
   "ui.reports.capital_gains",
   "ui.reports.export_pdf",

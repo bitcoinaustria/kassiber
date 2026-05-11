@@ -4,6 +4,7 @@ import {
   aiBaseUrlHint,
   backendEndpointHint,
   databasePassphraseHint,
+  electrumEndpointUrl,
   gainsAlgorithmsFor,
   parseTaxLongTermDays,
   taxLongTermDaysHint,
@@ -34,9 +35,26 @@ describe("onboarding tax long-term day parsing", () => {
 describe("onboarding endpoint validation", () => {
   it("accepts backend endpoint formats by kind", () => {
     expect(backendEndpointHint("esplora", "https://node.example/api")).toBeNull();
-    expect(backendEndpointHint("btcpay", "http://127.0.0.1:23000")).toBeNull();
+    expect(backendEndpointHint("liquid-esplora", "https://liquid.example/api")).toBeNull();
     expect(backendEndpointHint("electrum", "ssl://node.example:50002")).toBeNull();
     expect(backendEndpointHint("electrum", "node.example:50002")).toBeNull();
+  });
+
+  it("builds electrum endpoints from Sparrow-style host and port fields", () => {
+    expect(
+      electrumEndpointUrl({
+        host: "index.bitcoin-austria.at",
+        port: "50002",
+        useSsl: true,
+      }),
+    ).toBe("ssl://index.bitcoin-austria.at:50002");
+    expect(
+      electrumEndpointUrl({
+        host: "127.0.0.1",
+        port: "50001",
+        useSsl: false,
+      }),
+    ).toBe("tcp://127.0.0.1:50001");
   });
 
   it("rejects backend endpoint formats that will not work", () => {
