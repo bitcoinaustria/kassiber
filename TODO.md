@@ -384,7 +384,16 @@ and [docs/plan/04-desktop-ui.md](docs/plan/04-desktop-ui.md).
 - [ ] Full double-entry account model only if a future ledger design needs it:
   explicit counterpart postings, account-type rollups, adjustments, and
   migrations; current `accounts` are wallet/reporting buckets
-- [ ] Per-profile Tor proxy configuration
+- [ ] Per-profile Tor proxy configuration. The Electrum client now
+  speaks SOCKS5 against `backend.tor_proxy`, and onboarding/settings
+  expose a proxy field for the `ui.backends.electrum.test` flow, but
+  the proxy value still has to be wired through `kassiber backends
+  create/update` and through the desktop save path so it actually
+  reaches the column at rest.
+- [ ] SOCKS5 username/password auth (RFC 1928 method 0x02) for
+  Electrum proxies. Today `_connect_via_socks5` only offers no-auth
+  and emits a precise error when a proxy refuses it, which covers Tor
+  but not corporate SOCKS5 endpoints that require credentials.
 - [ ] Extend BTCPay Greenfield sync beyond confirmed wallet history with stable invoice/payment ids and raw payload snapshots
 - [ ] Import BTCPay invoice/payment fiat facts as authoritative pricing
   observations and reconcile them to wallet transactions before merchant
@@ -483,6 +492,12 @@ and [docs/plan/04-desktop-ui.md](docs/plan/04-desktop-ui.md).
   [pdf_report.py](kassiber/pdf_report.py) and update the test pin.
 - [ ] Fix `rates set` pair validation so malformed syntax like `BTCUSD`
   is rejected cleanly
+- [ ] `ElectrumClient.call` should surface non-JSON responses as a
+  typed `AppError` instead of letting `json.JSONDecodeError` propagate
+  raw. Users who point the test endpoint at an HTTPS site or a
+  non-Electrum server currently see a `Expecting value: line 1 column
+  1 (char 0)` blob; wrap the `json.loads(line)` call with a helpful
+  "Backend did not respond with Electrum-format JSON" message.
 - [ ] Add real provider-backed FX adapters beyond CoinGecko only after the UI
   and daemon can expose provider limits, granularity, and review state honestly
 - [ ] Keep the machine envelope boundary centralized and explicit
