@@ -70,7 +70,8 @@ from `rp2.plugin.country.at`. Kassiber consumes that API when it turns
 - Kassiber persists the resulting `at_category` string on journal rows.
 - Kassiber maps that semantic category onto current BMF / FinanzOnline
   Kennzahlen via its own table so tax-form wiring can evolve without
-  re-implementing Austrian tax semantics.
+  re-implementing Austrian tax semantics. RP2's category names and inline
+  category comments are semantic hints, not the export-code source of truth.
 
 Current Kassiber mapping:
 

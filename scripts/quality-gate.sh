@@ -34,8 +34,11 @@ py() {
   fi
 }
 
-run py -m py_compile kassiber/*.py kassiber/secrets/*.py kassiber/backup/*.py
+run py -m compileall -q kassiber tests
 
+run py -m unittest tests.test_dependency_drift -v
+run py -m unittest tests.test_connection_catalog_drift -v
+run py -m unittest tests.test_report_contract_drift -v
 run py -m unittest tests.test_cli_smoke -v
 run py -m unittest tests.test_source_funds_cli -v
 run py -m unittest tests.test_daemon_smoke -v

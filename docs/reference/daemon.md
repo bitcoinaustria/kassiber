@@ -25,7 +25,9 @@ and prefer that bundled executable before the development Python fallback when
 starting the daemon. `KASSIBER_PYTHON` remains the highest-priority override
 for daemon startup and installed-app CLI forwarding during debugging.
 
-The first line is always a lifecycle envelope:
+The first line is always a lifecycle envelope. The `supported_kinds` array
+below is representative; use the live `daemon.ready` payload from the running
+daemon for the exact current allowlist:
 
 ```json
 {

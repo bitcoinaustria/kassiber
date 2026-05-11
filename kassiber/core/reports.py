@@ -15,6 +15,7 @@ from ..msat import btc_to_msat, dec, msat_to_btc
 from ..tax_policy import require_tax_processing_supported
 
 INTERVAL_CHOICES = ("hour", "day", "week", "month")
+DEFAULT_BALANCE_HISTORY_INTERVAL = "month"
 EUR_CENT = Decimal("0.01")
 
 AUSTRIAN_E1KV_REVIEW_GATE = (
@@ -346,7 +347,7 @@ def report_balance_history(
     workspace_ref,
     profile_ref,
     hooks: ReportHooks,
-    interval="day",
+    interval=DEFAULT_BALANCE_HISTORY_INTERVAL,
     start=None,
     end=None,
     wallet_ref=None,
@@ -2805,6 +2806,7 @@ def export_pdf_report(conn, workspace_ref, profile_ref, file_path, hooks: Report
 
 
 __all__ = [
+    "DEFAULT_BALANCE_HISTORY_INTERVAL",
     "INTERVAL_CHOICES",
     "ReportHooks",
     "build_austrian_e1kv_report_lines",

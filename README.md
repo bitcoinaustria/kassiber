@@ -254,7 +254,12 @@ Before pushing code or docs changes, run:
 
 A Tauri 2 + React 19 + TypeScript desktop frontend lives at [ui-tauri/](ui-tauri/). It is under active translation per [docs/plan/04-desktop-ui.md](docs/plan/04-desktop-ui.md); the CLI remains the primary control surface today.
 
-The frontend currently runs against a mock daemon (`VITE_DAEMON=mock`, the default) — every screen renders against hand-rolled fixtures keyed by daemon `kind`. A minimal Tauri shell now lives in `ui-tauri/src-tauri/` and forwards whitelisted `daemon_invoke` calls to `python -m kassiber daemon`; the first real round-trip is `status`. Until typed UI snapshot kinds land, data screens still use browser mock mode for the dashboard workflow.
+Browser dev mode defaults to mock fixtures with `pnpm dev` / `pnpm dev:browser`.
+Use `pnpm dev:bridge` to exercise the real Python daemon through the loopback
+Vite bridge, or `pnpm tauri:dev` to exercise the packaged Tauri command
+boundary. Overview, Books, Connections, Transactions, Journals, Reports,
+assistant chat, exports, and diagnostics now have daemon-backed paths; remaining
+fixture mode exists for isolated UI layout work and disconnected development.
 
 Requirements:
 

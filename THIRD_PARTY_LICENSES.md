@@ -12,7 +12,7 @@ interactive local data grids.
 
 | Package | Version policy | Role | License |
 | --- | --- | --- | --- |
-| `rp2` | `git+https://github.com/bitcoinaustria/rp2.git@23c944962c775667794b19d66e785058d7aaf599` | Tax engine used by journal processing and tax-aware reports | Apache-2.0 |
+| `rp2` | `git+https://github.com/bitcoinaustria/rp2.git@12ae085ee1eafab1b54596a65ba2f7760d9cb0be` | Tax engine used by journal processing and tax-aware reports | Apache-2.0 |
 | `embit` | `>=0.8.0` | Bitcoin/Liquid descriptor parsing, script derivation, Liquid confidential output handling | MIT |
 | `XlsxWriter` | `>=3.2,<4` | Styled `.xlsx` workbook export for practitioner-facing reports | BSD-2-Clause |
 | `reportlab` | `>=4.4,<5` | Styled PDF rendering for Austrian and source-of-funds report exports | BSD |

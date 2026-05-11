@@ -40,10 +40,13 @@ _TAURI_LIB_PATH = (
 _VITE_CONFIG_PATH = (
     Path(__file__).resolve().parent.parent / "ui-tauri" / "vite.config.ts"
 )
-_CONNECTION_SETUP_KINDS = (
+_DESKTOP_MUTATION_KINDS = (
     "ui.backends.options",
     "ui.wallets.create",
     "ui.wallets.preview_descriptor",
+    "ui.profiles.create",
+    "ui.profiles.switch",
+    "ui.workspace.create",
     "ui.connections.sources",
     "ui.connections.btcpay.create",
     "ui.connections.btcpay.test",
@@ -125,7 +128,7 @@ class ConnectionCatalogDriftTests(unittest.TestCase):
             "BTCPay setup hard-codes a wallet kind that WALLET_KINDS no longer contains",
         )
 
-    def test_connection_setup_kinds_are_allowed_by_desktop_boundaries(self):
+    def test_desktop_mutation_kinds_are_allowed_by_desktop_boundaries(self):
         rust_allowed = re.search(
             r"ALLOWED_DAEMON_KINDS[^=]*=\s*&\[(?P<body>.*?)\];",
             self.tauri_lib_text,
@@ -138,7 +141,7 @@ class ConnectionCatalogDriftTests(unittest.TestCase):
         )
         self.assertIsNotNone(rust_allowed, "could not find Tauri daemon allowlist")
         self.assertIsNotNone(vite_allowed, "could not find Vite bridge allowlist")
-        for kind in _CONNECTION_SETUP_KINDS:
+        for kind in _DESKTOP_MUTATION_KINDS:
             self.assertIn(
                 f'"{kind}"',
                 rust_allowed.group("body"),
