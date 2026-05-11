@@ -61,6 +61,7 @@ import {
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { useDaemon, useDaemonMutation } from "@/daemon/client";
+import { useKeymap, type Keybinding } from "@/lib/keymap";
 import { screenPanelClassName, screenShellClassName } from "@/lib/screen-layout";
 import { cn } from "@/lib/utils";
 
@@ -259,6 +260,9 @@ export function SwapMatching() {
   const [saveViewName, setSaveViewName] = useState("");
   const [createRuleOpen, setCreateRuleOpen] = useState(false);
   const [rulesExpanded, setRulesExpanded] = useState(false);
+  const [cursorIndex, setCursorIndex] = useState(0);
+  const [helpOpen, setHelpOpen] = useState(false);
+  const filterInputRef = useRef<HTMLInputElement | null>(null);
 
   const savedViews = savedViewsQuery.data?.data?.views ?? [];
   const rules = rulesQuery.data?.data?.rules ?? [];
@@ -459,6 +463,127 @@ export function SwapMatching() {
     void refetch();
   };
 
+  useEffect(() => {
+    if (cursorIndex >= candidates.length) {
+      setCursorIndex(Math.max(0, candidates.length - 1));
+    }
+  }, [candidates.length, cursorIndex]);
+
+  const cursorCandidate = candidates[cursorIndex];
+  const cursorKey = cursorCandidate ? candidateKey(cursorCandidate) : null;
+
+  const bindings = useMemo<Keybinding[]>(() => {
+    return [
+      {
+        keys: ["?", "Shift+?"],
+        description: "Show keyboard shortcuts",
+        category: "Help",
+        handler: () => setHelpOpen(true),
+      },
+      {
+        keys: "Escape",
+        description: "Clear selection / close overlays",
+        category: "Selection",
+        handler: () => {
+          if (helpOpen) setHelpOpen(false);
+          else if (previewState) setPreviewState(null);
+          else if (selected.size > 0) setSelected(new Set());
+        },
+      },
+      {
+        keys: ["j", "ArrowDown"],
+        description: "Move cursor down",
+        category: "Navigation",
+        handler: () => {
+          if (candidates.length === 0) return;
+          setCursorIndex((idx) => Math.min(candidates.length - 1, idx + 1));
+        },
+      },
+      {
+        keys: ["k", "ArrowUp"],
+        description: "Move cursor up",
+        category: "Navigation",
+        handler: () => {
+          if (candidates.length === 0) return;
+          setCursorIndex((idx) => Math.max(0, idx - 1));
+        },
+      },
+      {
+        keys: " ",
+        description: "Toggle selection on current candidate",
+        category: "Selection",
+        handler: () => {
+          if (!cursorCandidate) return;
+          if ((clusterSizes[cursorCandidate.conflict_set_id] ?? 0) > 1) return;
+          toggleSelected(candidateKey(cursorCandidate));
+        },
+      },
+      {
+        keys: "a",
+        description: "Select all non-conflicted",
+        category: "Selection",
+        handler: () => handleSelectAll(),
+      },
+      {
+        keys: "p",
+        description: "Pair current candidate",
+        category: "Actions",
+        handler: () => {
+          if (cursorCandidate) void handlePair(cursorCandidate);
+        },
+      },
+      {
+        keys: "d",
+        description: "Dismiss current candidate",
+        category: "Actions",
+        handler: () => {
+          if (cursorCandidate) void handleDismiss(cursorCandidate);
+        },
+      },
+      {
+        keys: "e",
+        description: "Open 'Apply all exact' preview",
+        category: "Actions",
+        handler: () => {
+          if (exactSolo.length > 0) openExactPreview();
+        },
+      },
+      {
+        keys: "u",
+        description: "Undo last bulk action",
+        category: "Actions",
+        handler: () => {
+          if (undoState) void performUndo();
+        },
+      },
+      {
+        keys: "f",
+        description: "Focus asset-pair filter",
+        category: "Navigation",
+        handler: () => {
+          filterInputRef.current?.focus();
+        },
+      },
+      {
+        keys: "r",
+        description: "Refresh candidates",
+        category: "Navigation",
+        handler: () => void refetch(),
+      },
+    ];
+  }, [
+    candidates,
+    clusterSizes,
+    cursorCandidate,
+    exactSolo,
+    helpOpen,
+    previewState,
+    selected,
+    undoState,
+  ]);
+
+  useKeymap(bindings);
+
   return (
     <div className={screenShellClassName}>
       <header className="flex flex-col gap-2 px-4 py-3 sm:flex-row sm:items-end sm:justify-between">
@@ -553,12 +678,22 @@ export function SwapMatching() {
           </SelectContent>
         </Select>
         <input
+          ref={filterInputRef}
           aria-label="Asset pair filter"
           className="h-8 w-32 rounded border border-input bg-transparent px-2 text-sm"
           placeholder="OUT-IN"
           value={assetPair}
           onChange={(e) => setAssetPair(e.target.value)}
         />
+        <Button
+          variant="ghost"
+          size="sm"
+          className="ml-1 h-7 px-2 text-xs"
+          onClick={() => setHelpOpen(true)}
+          aria-label="Show keyboard shortcuts"
+        >
+          ?
+        </Button>
         {(confidence !== "all" || method !== "all" || assetPair) && (
           <Button
             variant="ghost"
@@ -740,6 +875,7 @@ export function SwapMatching() {
                 className={cn(
                   "rounded-lg border bg-card text-card-foreground shadow-sm",
                   conflicted ? "border-amber-400/60" : "border-border",
+                  cursorKey === key ? "ring-2 ring-primary/60" : null,
                 )}
               >
                 <header className="flex flex-wrap items-center gap-2 border-b border-border/60 px-4 py-2">
@@ -918,6 +1054,12 @@ export function SwapMatching() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <KeymapHelpDialog
+        open={helpOpen}
+        onClose={() => setHelpOpen(false)}
+        bindings={bindings}
+      />
 
       <SaveViewDialog
         open={saveViewOpen}
@@ -1241,6 +1383,73 @@ function RulePredicateAssetField({ label, value, onChange }: RuleFieldProps) {
       </Select>
     </div>
   );
+}
+
+interface KeymapHelpDialogProps {
+  open: boolean;
+  onClose: () => void;
+  bindings: Keybinding[];
+}
+
+function KeymapHelpDialog({ open, onClose, bindings }: KeymapHelpDialogProps) {
+  const grouped = useMemo(() => {
+    const groups: Record<string, Keybinding[]> = {};
+    for (const binding of bindings) {
+      const key = binding.category ?? "Other";
+      (groups[key] ??= []).push(binding);
+    }
+    return groups;
+  }, [bindings]);
+
+  return (
+    <Dialog open={open} onOpenChange={(value) => (!value ? onClose() : undefined)}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Keyboard shortcuts</DialogTitle>
+          <DialogDescription>
+            Shortcuts work whenever the focus isn't in a text field.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="grid gap-3 text-sm">
+          {Object.entries(grouped).map(([category, items]) => (
+            <section key={category}>
+              <h3 className="mb-1 text-xs font-semibold uppercase text-muted-foreground">
+                {category}
+              </h3>
+              <ul className="space-y-1">
+                {items.map((binding) => (
+                  <li
+                    key={`${category}-${binding.description}`}
+                    className="flex items-center justify-between gap-3 rounded border border-border/40 bg-background/50 px-2 py-1"
+                  >
+                    <span>{binding.description}</span>
+                    <kbd className="rounded bg-muted px-1.5 text-xs">
+                      {formatKeybindingKeys(binding.keys)}
+                    </kbd>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          ))}
+        </div>
+        <DialogFooter>
+          <Button onClick={onClose}>Close</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function formatKeybindingKeys(keys: string | string[]): string {
+  const list = Array.isArray(keys) ? keys : [keys];
+  return list
+    .map((key) => {
+      if (key === " ") return "Space";
+      if (key === "ArrowUp") return "↑";
+      if (key === "ArrowDown") return "↓";
+      return key.length === 1 ? key.toUpperCase() : key;
+    })
+    .join(" / ");
 }
 
 function RulePredicateKindField({ label, value, onChange }: RuleFieldProps) {
