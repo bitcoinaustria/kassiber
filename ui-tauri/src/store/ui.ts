@@ -99,6 +99,12 @@ export interface Identity {
     | "custom";
   backendName?: string;
   backendUrl?: string;
+  backendTrustSsl?: boolean;
+  backendCertificate?: string;
+  backendProxy?: {
+    host: string;
+    port: string;
+  } | null;
   aiSetupMode?: "local" | "remote" | "disabled";
   aiProviderKind?: "local" | "remote" | "tee";
   aiProviderName?: string;

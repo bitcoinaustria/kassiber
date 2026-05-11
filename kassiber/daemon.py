@@ -81,6 +81,7 @@ from .core.ui_snapshot import (
     build_wallets_list_snapshot,
     build_workspace_health_snapshot,
 )
+from .core.sync_backends import ElectrumClient
 from .backends import load_runtime_config, merge_db_backends
 from .db import (
     ensure_data_root,
@@ -125,6 +126,7 @@ SUPPORTED_KINDS = (
     "ui.wallets.list",
     "ui.backends.list",
     "ui.backends.options",
+    "ui.backends.electrum.test",
     "ui.reports.capital_gains",
     "ui.reports.summary",
     "ui.reports.balance_sheet",
@@ -4018,6 +4020,64 @@ def _connections_sources_payload() -> dict[str, Any]:
     }
 
 
+def _test_electrum_backend_payload(args: dict[str, Any]) -> dict[str, Any]:
+    url = _required_str_arg(args, "url", "Electrum endpoint URL")
+    trust_self_signed = args.get("trust_self_signed") is True
+    certificate = _optional_str_arg(args, "certificate")
+    proxy = _optional_str_arg(args, "proxy")
+    timeout = args.get("timeout")
+    if not isinstance(timeout, int) or timeout <= 0:
+        timeout = 10
+    backend = {
+        "name": "candidate",
+        "kind": "electrum",
+        "url": url,
+        "insecure": trust_self_signed,
+        "timeout": timeout,
+    }
+    if certificate is not None:
+        backend["certificate"] = certificate
+    if proxy is not None:
+        backend["tor_proxy"] = proxy
+    logs = [f"Opening Electrum connection to {url}"]
+    if trust_self_signed:
+        logs.append("Certificate verification: self-signed certificate trusted for this test.")
+    elif certificate:
+        logs.append(f"Certificate verification: pinned certificate {certificate}.")
+    else:
+        logs.append("Certificate verification: system trust store.")
+    if proxy:
+        logs.append(f"Proxy: {proxy}.")
+    else:
+        logs.append("Proxy: disabled.")
+    try:
+        with ElectrumClient(backend) as client:
+            logs.append("Connected.")
+            version = client.call("server.version", ["Kassiber", "1.4"])
+            logs.append(f"Server version: {version}")
+            try:
+                banner = client.call("server.banner")
+            except Exception as exc:  # pragma: no cover - depends on server support
+                logs.append(f"Server banner unavailable: {exc}")
+            else:
+                if banner:
+                    logs.append(f"Server banner: {banner}")
+    except Exception as exc:
+        logs.append(f"Connection failed: {exc}")
+        return {
+            "ok": False,
+            "url": url,
+            "trust_self_signed": trust_self_signed,
+            "logs": logs,
+        }
+    return {
+        "ok": True,
+        "url": url,
+        "trust_self_signed": trust_self_signed,
+        "logs": logs,
+    }
+
+
 def _preview_descriptor_payload(args: dict[str, Any]) -> dict[str, Any]:
     descriptor_text = _optional_str_arg(args, "descriptor")
     change_descriptor_text = _optional_str_arg(args, "change_descriptor")
@@ -4743,6 +4803,20 @@ def handle_request(
                 build_envelope(
                     "ui.backends.options",
                     _backend_options_payload(ctx),
+                ),
+                request_id,
+            ),
+            False,
+        )
+
+    if kind == "ui.backends.electrum.test":
+        return (
+            _with_request_id(
+                build_envelope(
+                    "ui.backends.electrum.test",
+                    _test_electrum_backend_payload(
+                        _coerce_args_dict(request_id, request.get("args")),
+                    ),
                 ),
                 request_id,
             ),

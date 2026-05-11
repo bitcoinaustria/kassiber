@@ -19,9 +19,7 @@ export type BackendKind =
   | "esplora"
   | "electrum"
   | "bitcoinrpc"
-  | "btcpay"
-  | "liquid-esplora"
-  | "custom";
+  | "liquid-esplora";
 
 export interface OnboardingForm {
   workspace: string;
@@ -40,6 +38,14 @@ export interface OnboardingForm {
   backendKind: BackendKind;
   backendName: string;
   backendUrl: string;
+  backendHost: string;
+  backendPort: string;
+  backendUseSsl: boolean;
+  backendTrustSsl: boolean;
+  backendCertificate: string;
+  backendUseProxy: boolean;
+  backendProxyHost: string;
+  backendProxyPort: string;
   skipBackendsAcknowledged: boolean;
   aiSetupMode: AiSetupMode;
   aiProviderKind: AiProviderKind;

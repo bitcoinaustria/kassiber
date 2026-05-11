@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import base64
 import hashlib
+import ipaddress
 import json
 import socket
 import ssl
@@ -119,6 +120,92 @@ def parse_socket_backend_url(url, default_scheme="ssl", default_ports=None):
     if not host or not port:
         raise AppError(f"Invalid backend socket URL: {url}")
     return scheme, host, port
+
+
+def _read_exact(sock, length):
+    chunks = []
+    remaining = length
+    while remaining > 0:
+        chunk = sock.recv(remaining)
+        if not chunk:
+            raise AppError("Proxy closed the connection during SOCKS5 negotiation")
+        chunks.append(chunk)
+        remaining -= len(chunk)
+    return b"".join(chunks)
+
+
+def _socks5_address(host):
+    try:
+        address = ipaddress.ip_address(host)
+    except ValueError:
+        try:
+            encoded = host.encode("idna")
+        except UnicodeError as exc:
+            raise AppError(f"SOCKS5 proxy target host is invalid: {exc}") from exc
+        if len(encoded) > 255:
+            raise AppError("SOCKS5 proxy target host is too long")
+        return b"\x03" + bytes([len(encoded)]) + encoded
+    if address.version == 4:
+        return b"\x01" + address.packed
+    return b"\x04" + address.packed
+
+
+def _connect_via_socks5(proxy_url, host, port, timeout):
+    scheme, proxy_host, proxy_port = parse_socket_backend_url(
+        proxy_url,
+        default_scheme="socks5",
+        default_ports={"socks5": 9050, "socks5h": 9050},
+    )
+    if scheme not in {"socks5", "socks5h"}:
+        raise AppError(f"Unsupported Electrum proxy transport '{scheme}'")
+    sock = socket.create_connection((proxy_host, proxy_port), timeout=timeout)
+    try:
+        sock.sendall(b"\x05\x01\x00")
+        greeting = _read_exact(sock, 2)
+        if greeting[0] != 0x05:
+            raise AppError(
+                f"SOCKS5 proxy returned an unexpected greeting (got {greeting!r})"
+            )
+        if greeting[1] != 0x00:
+            raise AppError(
+                "SOCKS5 proxy refused the no-auth method "
+                f"(returned 0x{greeting[1]:02x}); Kassiber only supports "
+                "unauthenticated SOCKS5 proxies such as Tor."
+            )
+        request = (
+            b"\x05\x01\x00"
+            + _socks5_address(host)
+            + int(port).to_bytes(2, byteorder="big")
+        )
+        sock.sendall(request)
+        response = _read_exact(sock, 4)
+        if response[0] != 5:
+            raise AppError("SOCKS5 proxy returned an invalid response")
+        if response[1] != 0:
+            raise AppError(f"SOCKS5 proxy connect failed with code {response[1]}")
+        atyp = response[3]
+        if atyp == 1:
+            _read_exact(sock, 4)
+        elif atyp == 3:
+            length = _read_exact(sock, 1)[0]
+            _read_exact(sock, length)
+        elif atyp == 4:
+            _read_exact(sock, 16)
+        else:
+            raise AppError("SOCKS5 proxy returned an unsupported address type")
+        _read_exact(sock, 2)
+        return sock
+    except Exception:
+        sock.close()
+        raise
+
+
+def _connect_backend_socket(backend, host, port):
+    timeout = backend_timeout(backend)
+    proxy = backend_value(backend, "tor_proxy", "proxy")
+    if proxy:
+        return _connect_via_socks5(proxy, host, port, timeout)
+    return socket.create_connection((host, port), timeout=timeout)
 
 
 def sha256d(payload):
@@ -266,9 +353,10 @@ class ElectrumClient:
             default_scheme="ssl",
             default_ports={"ssl": 50002, "tcp": 50001},
         )
-        raw_socket = socket.create_connection((host, port), timeout=backend_timeout(self.backend))
+        raw_socket = _connect_backend_socket(self.backend, host, port)
         if scheme in {"ssl", "tls"}:
-            context = ssl.create_default_context()
+            certificate = backend_value(self.backend, "certificate")
+            context = ssl.create_default_context(cafile=certificate)
             if parse_bool(backend_value(self.backend, "insecure"), default=False):
                 context.check_hostname = False
                 context.verify_mode = ssl.CERT_NONE
