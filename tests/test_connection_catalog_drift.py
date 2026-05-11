@@ -18,6 +18,7 @@ from pathlib import Path
 
 from kassiber.core.wallets import WALLET_KINDS
 from kassiber.daemon import (
+    SUPPORTED_KINDS,
     _UI_WALLET_SOURCE_FORMATS,
     _create_btcpay_connection_payload,
 )
@@ -152,6 +153,29 @@ class ConnectionCatalogDriftTests(unittest.TestCase):
         for kind in _DESKTOP_MUTATION_KINDS:
             self.assertIn(kind, rust_kinds, f"{kind} is missing from Tauri daemon allowlist")
             self.assertIn(kind, vite_kinds, f"{kind} is missing from Vite bridge allowlist")
+
+    def test_desktop_allowlists_are_subset_of_daemon_supported_kinds(self):
+        """The Tauri command boundary and the dev Vite bridge may only
+        forward kinds the Python daemon actually handles. Drift here
+        would surface as runtime ``unknown kind`` errors against whatever
+        shell forwarded a kind the daemon dropped. The reverse direction
+        (daemon-only kinds) is intentional — AI read tools, daemon
+        lifecycle commands, and reveal kinds stay off the desktop surface.
+        """
+
+        daemon_kinds = set(SUPPORTED_KINDS)
+        rust_kinds = self._rust_allowlist()
+        vite_kinds = self._vite_allowlist()
+        self.assertTrue(
+            rust_kinds.issubset(daemon_kinds),
+            "Tauri allowlist contains kinds the daemon does not support: "
+            f"{sorted(rust_kinds - daemon_kinds)}",
+        )
+        self.assertTrue(
+            vite_kinds.issubset(daemon_kinds),
+            "Vite-bridge allowlist contains kinds the daemon does not support: "
+            f"{sorted(vite_kinds - daemon_kinds)}",
+        )
 
     def test_tauri_and_vite_bridge_allowlists_match(self):
         """`pnpm dev:bridge` is the browser-loopback equivalent of the Tauri

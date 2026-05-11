@@ -69,6 +69,26 @@ def _rp2_pin_from_license_notes() -> str:
 
 
 class DependencyDriftTests(unittest.TestCase):
+    def test_rp2_country_at_exposes_validate_input_data(self):
+        """``GenericRP2TaxEngine.build_ledger_state`` calls
+        ``configuration.country.validate_input_data`` to run cross-asset
+        swap-link validation (see ``_validate_prepared_rp2_inputs`` in
+        ``kassiber/core/engines/rp2.py``). The dependency pin keeps the
+        rp2 commit hash in sync across files, but only this contract test
+        guarantees the pinned fork still exposes the method — a future
+        commit that dropped it would pass drift and then fail every AT
+        tax computation at runtime with the ``unsupported`` AppError.
+        """
+
+        from rp2.plugin.country.at import AT
+
+        self.assertTrue(
+            callable(getattr(AT, "validate_input_data", None)),
+            "Pinned rp2.plugin.country.at.AT no longer exposes validate_input_data; "
+            "bump the rp2 pin in pyproject.toml / uv.lock / THIRD_PARTY_LICENSES.md "
+            "to a fork commit that restores the hook.",
+        )
+
     def test_rp2_pin_is_consistent_across_dependency_metadata(self):
         pyproject_pin = _rp2_pin_from_pyproject()
         self.assertEqual(_rp2_pin_from_uv_lock(), pyproject_pin)

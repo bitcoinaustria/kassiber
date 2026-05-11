@@ -491,21 +491,6 @@ and [docs/plan/04-desktop-ui.md](docs/plan/04-desktop-ui.md).
 - [ ] Add a narrow docs-drift check for shared command / verification /
   safe-to-record surfaces so `README.md`, `AGENTS.md`, `SECURITY.md`, and
   `skills/kassiber/` do not quietly diverge
-- [ ] Pin desktop-kind allowlists against the daemon's authoritative
-  `daemon.ready.supported_kinds`. `tests/test_connection_catalog_drift.py`
-  currently asserts Rust `ALLOWED_DAEMON_KINDS` and Vite
-  `ALLOWED_BRIDGE_KINDS` are set-equal, but neither is checked against the
-  daemon itself. `tests/test_daemon_smoke.py` already boots the daemon; add
-  a sibling test that reads the live `daemon.ready` envelope and asserts
-  the allowlists match its `supported_kinds`.
-- [ ] Pin the RP2 country plugin API contract. `tests/test_dependency_drift.py`
-  matches commit hashes across `pyproject.toml` / `uv.lock` /
-  `THIRD_PARTY_LICENSES.md`, but a future bitcoinaustria/rp2 commit that
-  drops `AbstractCountry.validate_input_data` would still pass and break
-  every AT tax computation at runtime (see
-  `_validate_prepared_rp2_inputs` in `kassiber/core/engines/rp2.py`). Add
-  a one-line test that imports `rp2.plugin.country.at.AT` and asserts the
-  method exists.
 - [ ] Run Vitest from `scripts/quality-gate.sh`. The new
   `ui-tauri/src/lib/bridgeContainment.test.ts` only runs when
   `pnpm --dir ui-tauri exec vitest` is invoked manually, so the bridge
