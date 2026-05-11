@@ -1842,8 +1842,15 @@ def _msat_to_sat_value(value: Any) -> float:
     return int(value or 0) / 1000.0
 
 
-def _reports_balance_sheet_payload(conn: sqlite3.Connection) -> dict[str, Any]:
-    rows = core_reports.report_balance_sheet(conn, None, None, _report_hooks())
+def _totals_by_asset(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Aggregate per-asset totals from balance-sheet / portfolio-summary rows.
+
+    Both report builders emit rows shaped as
+    ``{asset, quantity, quantity_msat, cost_basis, market_value, unrealized_pnl}``.
+    If either report grows additional totals columns, extend this helper rather
+    than re-introducing per-call accumulation.
+    """
+
     totals_by_asset: dict[str, dict[str, Any]] = {}
     for row in rows:
         asset = str(row.get("asset") or "")
@@ -1865,11 +1872,15 @@ def _reports_balance_sheet_payload(conn: sqlite3.Connection) -> dict[str, Any]:
         bucket["unrealized_pnl"] += float(row.get("unrealized_pnl") or 0)
     for bucket in totals_by_asset.values():
         bucket["quantity_sat"] = _msat_to_sat_value(bucket["quantity_msat"])
+    return [totals_by_asset[key] for key in sorted(totals_by_asset)]
+
+
+def _reports_balance_sheet_payload(conn: sqlite3.Connection) -> dict[str, Any]:
+    rows = core_reports.report_balance_sheet(conn, None, None, _report_hooks())
+    totals_by_asset = _totals_by_asset(rows)
     return {
         "rows": rows,
-        "totals_by_asset": [
-            totals_by_asset[key] for key in sorted(totals_by_asset)
-        ],
+        "totals_by_asset": totals_by_asset,
         "summary": {
             "row_count": len(rows),
             "asset_count": len(totals_by_asset),
@@ -1879,32 +1890,10 @@ def _reports_balance_sheet_payload(conn: sqlite3.Connection) -> dict[str, Any]:
 
 def _reports_portfolio_summary_payload(conn: sqlite3.Connection) -> dict[str, Any]:
     rows = core_reports.report_portfolio_summary(conn, None, None, _report_hooks())
-    totals_by_asset: dict[str, dict[str, Any]] = {}
-    for row in rows:
-        asset = str(row.get("asset") or "")
-        bucket = totals_by_asset.setdefault(
-            asset,
-            {
-                "asset": asset,
-                "quantity": 0.0,
-                "quantity_msat": 0,
-                "cost_basis": 0.0,
-                "market_value": 0.0,
-                "unrealized_pnl": 0.0,
-            },
-        )
-        bucket["quantity"] += float(row.get("quantity") or 0)
-        bucket["quantity_msat"] += int(row.get("quantity_msat") or 0)
-        bucket["cost_basis"] += float(row.get("cost_basis") or 0)
-        bucket["market_value"] += float(row.get("market_value") or 0)
-        bucket["unrealized_pnl"] += float(row.get("unrealized_pnl") or 0)
-    for bucket in totals_by_asset.values():
-        bucket["quantity_sat"] = _msat_to_sat_value(bucket["quantity_msat"])
+    totals_by_asset = _totals_by_asset(rows)
     return {
         "rows": rows,
-        "totals_by_asset": [
-            totals_by_asset[key] for key in sorted(totals_by_asset)
-        ],
+        "totals_by_asset": totals_by_asset,
         "summary": {
             "row_count": len(rows),
             "asset_count": len(totals_by_asset),
@@ -1979,7 +1968,7 @@ def _reports_balance_history_payload(
             details={"unknown": unknown},
             retryable=False,
         )
-    interval = args.get("interval", "month")
+    interval = args.get("interval", core_reports.DEFAULT_BALANCE_HISTORY_INTERVAL)
     if interval not in core_reports.INTERVAL_CHOICES:
         raise AppError(
             "ui.reports.balance_history interval is unsupported",

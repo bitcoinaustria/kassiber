@@ -1018,7 +1018,11 @@ def build_parser() -> argparse.ArgumentParser:
     balance_history = reports_sub.add_parser("balance-history")
     balance_history.add_argument("--workspace")
     balance_history.add_argument("--profile")
-    balance_history.add_argument("--interval", choices=list(core_reports.INTERVAL_CHOICES), default="day")
+    balance_history.add_argument(
+        "--interval",
+        choices=list(core_reports.INTERVAL_CHOICES),
+        default=core_reports.DEFAULT_BALANCE_HISTORY_INTERVAL,
+    )
     balance_history.add_argument("--start")
     balance_history.add_argument("--end")
     balance_history.add_argument("--wallet")

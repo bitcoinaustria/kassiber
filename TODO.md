@@ -491,6 +491,28 @@ and [docs/plan/04-desktop-ui.md](docs/plan/04-desktop-ui.md).
 - [ ] Add a narrow docs-drift check for shared command / verification /
   safe-to-record surfaces so `README.md`, `AGENTS.md`, `SECURITY.md`, and
   `skills/kassiber/` do not quietly diverge
+- [ ] Run Vitest from `scripts/quality-gate.sh`. The new
+  `ui-tauri/src/lib/bridgeContainment.test.ts` only runs when
+  `pnpm --dir ui-tauri exec vitest` is invoked manually, so the bridge
+  containment regression is silent in CI. Add a `pnpm --dir ui-tauri exec
+  vitest run` step to the gate (and make sure CI sets up pnpm/node).
+- [ ] Harden the dev Vite bridge: either default to read-only and require
+  an explicit flag to allow mutating kinds, or require a per-launch token
+  header. Today the bridge accepts every kind in
+  `ALLOWED_BRIDGE_KINDS` from any same-origin loopback POST (see
+  `ui-tauri/vite.config.ts` `readBridgeRequest`). Defense-in-depth only —
+  dev-only loopback, not a production concern.
+- [ ] Replace the hand-curated `supported_kinds` example in
+  `docs/reference/daemon.md` with a snippet generated from the daemon's
+  actual dispatch table, or drop the example and direct readers to the
+  live `daemon.ready` payload. The PR added a "representative" disclaimer
+  as an interim.
+- [ ] Clean up legacy schema-version fixtures called out as a follow-up in
+  PR #101. Original author should point at the specific fixtures meant.
+- [ ] Derive `kassiber.__version__` from package metadata
+  (`importlib.metadata.version("kassiber")`) so it stops being a fifth
+  place the version drifts. Drift test already catches divergence; this
+  removes the cause.
 
 ## Verification checklist
 

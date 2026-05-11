@@ -29,6 +29,8 @@ const ALLOWED_BRIDGE_KINDS = new Set([
   "ui.backends.list",
   "ui.backends.options",
   "ui.profiles.snapshot",
+  "ui.profiles.create",
+  "ui.profiles.switch",
   "ui.reports.capital_gains",
   "ui.reports.export_pdf",
   "ui.reports.export_capital_gains_csv",
@@ -40,6 +42,7 @@ const ALLOWED_BRIDGE_KINDS = new Set([
   "ui.journals.process",
   "ui.rates.summary",
   "ui.workspace.health",
+  "ui.workspace.create",
   "ui.workspace.delete",
   "ui.secrets.init",
   "ui.secrets.change_passphrase",
@@ -70,6 +73,25 @@ const ALLOWED_BRIDGE_KINDS = new Set([
   "ai.chat",
   "ai.chat.cancel",
   "ai.tool_call.consent",
+  "ui.source_funds.preview",
+  "ui.source_funds.cases.save",
+  "ui.source_funds.cases.list",
+  "ui.source_funds.sources.list",
+  "ui.source_funds.sources.create",
+  "ui.source_funds.sources.attach",
+  "ui.source_funds.links.list",
+  "ui.source_funds.links.create",
+  "ui.source_funds.links.review",
+  "ui.source_funds.links.bulk_review",
+  "ui.source_funds.links.attach",
+  "ui.source_funds.suggest",
+  "ui.source_funds.evidence.list",
+  "ui.source_funds.export_pdf",
+  "ui.source_funds.coverage",
+  "ui.source_funds.recipients.list",
+  "ui.source_funds.recipients.create",
+  "ui.source_funds.recipients.update",
+  "ui.source_funds.recipients.delete",
 ]);
 /**
  * Kinds the bridge accepts on the stream endpoint. AI chat is here because
@@ -85,8 +107,12 @@ function makeBridgeRequestId(prefix = "bridge") {
   return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
 }
 
-function isLoopbackHost(hostHeader: string | string[] | undefined) {
-  const rawHost = Array.isArray(hostHeader) ? hostHeader[0] : hostHeader;
+function firstHeaderValue(header: string | string[] | undefined) {
+  return Array.isArray(header) ? header[0] : header;
+}
+
+export function isLoopbackHost(hostHeader: string | string[] | undefined) {
+  const rawHost = firstHeaderValue(hostHeader);
   if (!rawHost) return false;
 
   const host = rawHost.startsWith("[")
@@ -98,6 +124,27 @@ function isLoopbackHost(hostHeader: string | string[] | undefined) {
     host === "::1" ||
     host === "0:0:0:0:0:0:0:1" ||
     /^127(?:\.\d{1,3}){3}$/.test(host)
+  );
+}
+
+export function isAllowedBridgeOrigin(
+  originHeader: string | string[] | undefined,
+  hostHeader: string | string[] | undefined,
+) {
+  const rawOrigin = firstHeaderValue(originHeader);
+  const rawHost = firstHeaderValue(hostHeader);
+  if (!rawOrigin || !rawHost) return false;
+
+  let origin: URL;
+  try {
+    origin = new URL(rawOrigin);
+  } catch {
+    return false;
+  }
+
+  return (
+    isLoopbackHost(origin.host) &&
+    origin.host.toLowerCase() === rawHost.toLowerCase()
   );
 }
 
@@ -421,6 +468,16 @@ async function readBridgeRequest(req: IncomingMessage, res: ServerResponse) {
       405,
       "method_not_allowed",
       "daemon bridge only accepts POST",
+    );
+    return null;
+  }
+
+  if (!isAllowedBridgeOrigin(req.headers.origin, req.headers.host)) {
+    writeJsonError(
+      res,
+      403,
+      "bridge_forbidden_origin",
+      "daemon bridge only accepts same-origin browser requests",
     );
     return null;
   }

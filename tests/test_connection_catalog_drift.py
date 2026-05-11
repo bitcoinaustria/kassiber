@@ -18,6 +18,7 @@ from pathlib import Path
 
 from kassiber.core.wallets import WALLET_KINDS
 from kassiber.daemon import (
+    SUPPORTED_KINDS,
     _UI_WALLET_SOURCE_FORMATS,
     _create_btcpay_connection_payload,
 )
@@ -40,10 +41,13 @@ _TAURI_LIB_PATH = (
 _VITE_CONFIG_PATH = (
     Path(__file__).resolve().parent.parent / "ui-tauri" / "vite.config.ts"
 )
-_CONNECTION_SETUP_KINDS = (
+_DESKTOP_MUTATION_KINDS = (
     "ui.backends.options",
     "ui.wallets.create",
     "ui.wallets.preview_descriptor",
+    "ui.profiles.create",
+    "ui.profiles.switch",
+    "ui.workspace.create",
     "ui.connections.sources",
     "ui.connections.btcpay.create",
     "ui.connections.btcpay.test",
@@ -125,30 +129,73 @@ class ConnectionCatalogDriftTests(unittest.TestCase):
             "BTCPay setup hard-codes a wallet kind that WALLET_KINDS no longer contains",
         )
 
-    def test_connection_setup_kinds_are_allowed_by_desktop_boundaries(self):
-        rust_allowed = re.search(
+    def _rust_allowlist(self) -> set[str]:
+        match = re.search(
             r"ALLOWED_DAEMON_KINDS[^=]*=\s*&\[(?P<body>.*?)\];",
             self.tauri_lib_text,
             re.DOTALL,
         )
-        vite_allowed = re.search(
+        self.assertIsNotNone(match, "could not find Tauri daemon allowlist")
+        return set(re.findall(r'"([^"]+)"', match.group("body")))
+
+    def _vite_allowlist(self) -> set[str]:
+        match = re.search(
             r"ALLOWED_BRIDGE_KINDS\s*=\s*new Set\(\[(?P<body>.*?)\]\);",
             self.vite_config_text,
             re.DOTALL,
         )
-        self.assertIsNotNone(rust_allowed, "could not find Tauri daemon allowlist")
-        self.assertIsNotNone(vite_allowed, "could not find Vite bridge allowlist")
-        for kind in _CONNECTION_SETUP_KINDS:
-            self.assertIn(
-                f'"{kind}"',
-                rust_allowed.group("body"),
-                f"{kind} is missing from Tauri daemon allowlist",
-            )
-            self.assertIn(
-                f'"{kind}"',
-                vite_allowed.group("body"),
-                f"{kind} is missing from Vite bridge allowlist",
-            )
+        self.assertIsNotNone(match, "could not find Vite bridge allowlist")
+        return set(re.findall(r'"([^"]+)"', match.group("body")))
+
+    def test_desktop_mutation_kinds_are_allowed_by_desktop_boundaries(self):
+        rust_kinds = self._rust_allowlist()
+        vite_kinds = self._vite_allowlist()
+        for kind in _DESKTOP_MUTATION_KINDS:
+            self.assertIn(kind, rust_kinds, f"{kind} is missing from Tauri daemon allowlist")
+            self.assertIn(kind, vite_kinds, f"{kind} is missing from Vite bridge allowlist")
+
+    def test_desktop_allowlists_are_subset_of_daemon_supported_kinds(self):
+        """The Tauri command boundary and the dev Vite bridge may only
+        forward kinds the Python daemon actually handles. Drift here
+        would surface as runtime ``unknown kind`` errors against whatever
+        shell forwarded a kind the daemon dropped. The reverse direction
+        (daemon-only kinds) is intentional — AI read tools, daemon
+        lifecycle commands, and reveal kinds stay off the desktop surface.
+        """
+
+        daemon_kinds = set(SUPPORTED_KINDS)
+        rust_kinds = self._rust_allowlist()
+        vite_kinds = self._vite_allowlist()
+        self.assertTrue(
+            rust_kinds.issubset(daemon_kinds),
+            "Tauri allowlist contains kinds the daemon does not support: "
+            f"{sorted(rust_kinds - daemon_kinds)}",
+        )
+        self.assertTrue(
+            vite_kinds.issubset(daemon_kinds),
+            "Vite-bridge allowlist contains kinds the daemon does not support: "
+            f"{sorted(vite_kinds - daemon_kinds)}",
+        )
+
+    def test_tauri_and_vite_bridge_allowlists_match(self):
+        """`pnpm dev:bridge` is the browser-loopback equivalent of the Tauri
+        command boundary, so any daemon kind allowed by one should be allowed
+        by the other. Drift here leaves browser dev mode unable to exercise
+        whole feature areas (e.g. source-funds) against the real daemon while
+        the packaged desktop shell works. If a future kind is intentionally
+        Tauri-only, allowlist it explicitly here rather than weakening this
+        assertion.
+        """
+
+        rust_kinds = self._rust_allowlist()
+        vite_kinds = self._vite_allowlist()
+        self.assertEqual(
+            rust_kinds,
+            vite_kinds,
+            "Tauri and Vite-bridge daemon kind allowlists have drifted. "
+            "Update both lists together (see ui-tauri/src-tauri/src/lib.rs "
+            "and ui-tauri/vite.config.ts).",
+        )
 
     def test_wallet_sync_is_streaming_in_tauri_supervisor(self):
         streaming = re.search(

@@ -653,17 +653,6 @@ def _rp2_asset_states_from_prepared(
     }
 
 
-def _rp2_asset_state(profile, normalized_inputs: NormalizedTaxAssetInputs, configuration) -> _RP2AssetState:
-    """Legacy single-call orchestrator: prepare then compute. Preserved for callers that
-    don't need to run cross-asset validation between the two phases (all current direct
-    callers). ``GenericRP2TaxEngine.build_ledger_state`` drives prepare/validate/compute
-    explicitly and does not go through here.
-    """
-
-    prepared = _prepare_rp2_asset_input(profile, normalized_inputs, configuration)
-    return _rp2_asset_state_from_prepared(prepared, profile, configuration)
-
-
 def _effective_fiat_in_with_fee(computed_data: Any, transaction: Any) -> Any:
     accessor = getattr(computed_data, "get_in_transaction_fiat_in_with_fee", None)
     if callable(accessor):
@@ -935,6 +924,26 @@ def _prepare_assets(
     return prepared_by_asset
 
 
+def _validate_prepared_rp2_inputs(configuration: Any, input_data_list: list[Any]) -> None:
+    """Run the country-level pre-accounting validation hook over all assets."""
+
+    validator = getattr(configuration.country, "validate_input_data", None)
+    if validator is None:
+        raise AppError(
+            "Installed rp2 is missing `AbstractCountry.validate_input_data`. "
+            "Cross-asset swap-link validation requires bitcoinaustria/rp2 PR #4 or later.",
+            code="unsupported",
+            hint="Run `uv sync --refresh-package rp2` (or reinstall rp2 from the pin in pyproject.toml).",
+        )
+    try:
+        validator(input_data_list)
+    except Exception as exc:
+        raise AppError(
+            f"RP2 cross-asset input validation failed: {exc}",
+            code="rp2_input_validation",
+        ) from exc
+
+
 def _prepared_quarantine_reasons(
     prepared_by_asset: list[tuple[NormalizedTaxAssetInputs, _RP2PreparedInput]]
 ) -> dict[str, str]:
@@ -1103,22 +1112,12 @@ class GenericRP2TaxEngine:
             # `validate_input_data` was added in bitcoinaustria/rp2 PR #4. If an older rp2
             # is installed (editable checkout, stale `uv sync`), fall through with a clear
             # upgrade hint rather than a confusing generic failure.
-            validator = getattr(configuration.country, "validate_input_data", None)
-            if validator is None:
-                raise AppError(
-                    "Installed rp2 is missing `AbstractCountry.validate_input_data`. "
-                    "Cross-asset swap-link validation requires bitcoinaustria/rp2 PR #4 or later.",
-                    code="unsupported",
-                    hint="Run `uv sync --refresh-package rp2` (or reinstall rp2 from the pin in pyproject.toml).",
-                )
-            input_data_list = [prepared.input_data for _, prepared in prepared_by_asset if prepared.input_data is not None]
-            try:
-                validator(input_data_list)
-            except Exception as exc:
-                raise AppError(
-                    f"RP2 cross-asset input validation failed: {exc}",
-                    code="rp2_input_validation",
-                ) from exc
+            input_data_list = [
+                prepared.input_data
+                for _, prepared in prepared_by_asset
+                if prepared.input_data is not None
+            ]
+            _validate_prepared_rp2_inputs(configuration, input_data_list)
 
             # Phase 3: compute tax + assemble per-asset results. Austrian
             # carrying-value swaps use rp2's country-level multi-asset hook so
