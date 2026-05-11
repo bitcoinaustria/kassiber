@@ -4292,6 +4292,263 @@ class ReviewRegressionTest(unittest.TestCase):
             server.server_close()
             server_thread.join(timeout=5)
 
+    def test_wallets_attach_btcpay_stores_provenance_route_and_dedupes(self):
+        # `wallets attach-btcpay` is the CLI mirror of the desktop existing-
+        # wallets mapping flow. It must validate the backend, allowlist the
+        # payment method, and dedupe routes so repeated invocations are
+        # idempotent without accidentally clearing earlier routes.
+        self._bootstrap_wallet(label="Merchant", kind="custom")
+        payload, result = self._run_json(
+            "backends", "create",
+            "shop-btcpay",
+            "--kind", "btcpay",
+            "--url", "http://127.0.0.1:9",
+            "--token", "shopkey",
+        )
+        self._assert_ok(payload, result, "backends.create")
+
+        # Wrong backend kind -> validation error, no config change.
+        payload, result = self._run_json(
+            "backends", "create",
+            "esplora1",
+            "--kind", "esplora",
+            "--url", "https://example.invalid",
+        )
+        self._assert_ok(payload, result, "backends.create")
+        payload, result = self._run_json(
+            "wallets", "attach-btcpay",
+            "--workspace", "Main",
+            "--profile", "Default",
+            "--wallet", "Merchant",
+            "--backend", "esplora1",
+            "--store-id", "STORE1",
+        )
+        self.assertNotEqual(result.returncode, 0)
+        self.assertEqual(payload["kind"], "error")
+        self.assertEqual(payload["error"]["code"], "validation")
+
+        # Happy path: route is stored with the canonical payment method id.
+        payload, result = self._run_json(
+            "wallets", "attach-btcpay",
+            "--workspace", "Main",
+            "--profile", "Default",
+            "--wallet", "Merchant",
+            "--backend", "shop-btcpay",
+            "--store-id", "STORE1",
+            "--payment-method-id", "btc-chain",
+        )
+        self._assert_ok(payload, result, "wallets.attach-btcpay")
+        self.assertEqual(
+            payload["data"]["config"]["btcpay_provenance"],
+            [
+                {
+                    "backend": "shop-btcpay",
+                    "store_id": "STORE1",
+                    "payment_method_id": "BTC-CHAIN",
+                }
+            ],
+        )
+
+        # Same backend + store + method -> dedupes, route count stays at 1.
+        payload, result = self._run_json(
+            "wallets", "attach-btcpay",
+            "--workspace", "Main",
+            "--profile", "Default",
+            "--wallet", "Merchant",
+            "--backend", "shop-btcpay",
+            "--store-id", "STORE1",
+        )
+        self._assert_ok(payload, result, "wallets.attach-btcpay")
+        self.assertEqual(
+            len(payload["data"]["config"]["btcpay_provenance"]),
+            1,
+        )
+
+        # Different store on the same instance -> appended as a new route.
+        payload, result = self._run_json(
+            "wallets", "attach-btcpay",
+            "--workspace", "Main",
+            "--profile", "Default",
+            "--wallet", "Merchant",
+            "--backend", "shop-btcpay",
+            "--store-id", "STORE2",
+        )
+        self._assert_ok(payload, result, "wallets.attach-btcpay")
+        self.assertEqual(
+            payload["data"]["config"]["btcpay_provenance"],
+            [
+                {
+                    "backend": "shop-btcpay",
+                    "store_id": "STORE1",
+                    "payment_method_id": "BTC-CHAIN",
+                },
+                {
+                    "backend": "shop-btcpay",
+                    "store_id": "STORE2",
+                    "payment_method_id": "BTC-CHAIN",
+                },
+            ],
+        )
+
+        # BTC-LN remains blocked at the attach gate, just like sync-btcpay.
+        payload, result = self._run_json(
+            "wallets", "attach-btcpay",
+            "--workspace", "Main",
+            "--profile", "Default",
+            "--wallet", "Merchant",
+            "--backend", "shop-btcpay",
+            "--store-id", "STORE1",
+            "--payment-method-id", "BTC-LN",
+        )
+        self.assertNotEqual(result.returncode, 0)
+        self.assertEqual(payload["kind"], "error")
+        self.assertEqual(payload["error"]["code"], "validation")
+        self.assertIn("wallet-history sync", payload["error"]["message"])
+
+    def test_btcpay_provenance_enriches_existing_wallet_during_wallets_sync(self):
+        # The existing-wallets BTCPay mapping mode persists btcpay_provenance
+        # routes on a settlement wallet, and `wallets sync` is supposed to
+        # walk those routes and apply notes/tags to matching transactions.
+        # Without this end-to-end test the routes are inert storage — the
+        # rest of the feature could regress silently.
+        received_paths: list[str] = []
+
+        class Handler(BaseHTTPRequestHandler):
+            def do_GET(self):
+                received_paths.append(self.path)
+                if self.headers.get("Authorization") != "token testkey":
+                    self.send_error(401, "unauthorized")
+                    return
+                parsed = urlparse(self.path)
+                if parsed.path != (
+                    "/api/v1/stores/STORE1/payment-methods/BTC-CHAIN/wallet/transactions"
+                ):
+                    self.send_error(404, "not found")
+                    return
+                body = json.dumps(
+                    [
+                        {
+                            "transactionHash": "tx-settlement-1",
+                            "comment": "paid order 42",
+                            "amount": "0.001",
+                            "timestamp": 1704067200,
+                            "status": "Confirmed",
+                            "confirmations": 6,
+                            "labels": ["merchant"],
+                        }
+                    ]
+                ).encode("utf-8")
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+
+            def log_message(self, *_args):
+                return
+
+        server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+        port = server.server_address[1]
+        server_thread = threading.Thread(target=server.serve_forever, daemon=True)
+        server_thread.start()
+        try:
+            # The settlement wallet's CSV source seeds the row with an empty
+            # Comment so the BTCPay enrichment has space to land a note.
+            self._bootstrap_wallet(label="Settlement", kind="custom")
+            settlement_csv = self.case_dir / "settlement.csv"
+            settlement_csv.write_text(
+                "TransactionId,Timestamp,Currency,Amount,Comment,Labels\n"
+                "tx-settlement-1,2024-01-01T00:00:00Z,BTC,0.001 BTC,,\n",
+                encoding="utf-8",
+            )
+            payload, result = self._run_json(
+                "wallets", "update",
+                "--workspace", "Main",
+                "--profile", "Default",
+                "--wallet", "Settlement",
+                "--config", json.dumps(
+                    {
+                        "source_file": str(settlement_csv),
+                        "source_format": "btcpay_csv",
+                    }
+                ),
+            )
+            self._assert_ok(payload, result, "wallets.update")
+
+            payload, result = self._run_json(
+                "backends", "create",
+                "btcpay1",
+                "--kind", "btcpay",
+                "--url", f"http://127.0.0.1:{port}",
+                "--token", "testkey",
+            )
+            self._assert_ok(payload, result, "backends.create")
+
+            payload, result = self._run_json(
+                "wallets", "update",
+                "--workspace", "Main",
+                "--profile", "Default",
+                "--wallet", "Settlement",
+                "--config", json.dumps(
+                    {
+                        "btcpay_provenance": [
+                            {
+                                "backend": "btcpay1",
+                                "store_id": "STORE1",
+                                "payment_method_id": "BTC-CHAIN",
+                            }
+                        ]
+                    }
+                ),
+            )
+            self._assert_ok(payload, result, "wallets.update")
+
+            payload, result = self._run_json(
+                "wallets", "sync",
+                "--workspace", "Main",
+                "--profile", "Default",
+                "--wallet", "Settlement",
+            )
+            self._assert_ok(payload, result, "wallets.sync")
+            self.assertEqual(len(payload["data"]), 1)
+            synced = payload["data"][0]
+            self.assertEqual(synced["wallet"], "Settlement")
+            self.assertEqual(synced["status"], "synced")
+            provenance = synced["btcpay_provenance"]
+            self.assertEqual(provenance["routes"], 1)
+            self.assertEqual(provenance["fetched"], 1)
+            self.assertEqual(provenance["btcpay_notes_set"], 1)
+            self.assertEqual(provenance["btcpay_tags_added"], 1)
+            self.assertEqual(provenance["btcpay_tags_created"], 1)
+            self.assertEqual(
+                provenance["route_results"][0]["payment_method_id"],
+                "BTC-CHAIN",
+            )
+
+            self.assertTrue(
+                any(
+                    "/api/v1/stores/STORE1/payment-methods/BTC-CHAIN" in path
+                    for path in received_paths
+                )
+            )
+
+            payload, result = self._run_json(
+                "transactions", "list",
+                "--workspace", "Main",
+                "--profile", "Default",
+                "--wallet", "Settlement",
+            )
+            self._assert_ok(payload, result, "transactions.list")
+            self.assertEqual(len(payload["data"]), 1)
+            tx = payload["data"][0]
+            self.assertEqual(tx["note"], "paid order 42")
+            tag_codes = {tag["code"] for tag in tx.get("tags", [])}
+            self.assertIn("merchant", tag_codes)
+        finally:
+            server.shutdown()
+            server.server_close()
+            server_thread.join(timeout=5)
+
     def test_btcpay_sync_requires_explicit_marker_not_generic_config_keys(self):
         self._bootstrap_profile()
         generic_config = json.dumps(
@@ -4398,6 +4655,98 @@ class ReviewRegressionTest(unittest.TestCase):
             "--workspace", "Main",
             "--profile", "Default",
             "--wallet", "BTCPayBlank",
+        )
+        self._assert_ok(payload, result, "wallets.get")
+        self.assertEqual(payload["data"]["config"], {})
+
+    def test_btcpay_sync_rejects_lightning_payment_method_id_before_persisting(self):
+        self._bootstrap_wallet(label="BTCPayLightning", kind="custom")
+        payload, result = self._run_json(
+            "backends", "create",
+            "btcpay1",
+            "--kind", "btcpay",
+            "--url", "http://127.0.0.1:9",
+            "--token", "testkey",
+        )
+        self._assert_ok(payload, result, "backends.create")
+
+        payload, result = self._run_json(
+            "wallets", "sync-btcpay",
+            "--workspace", "Main",
+            "--profile", "Default",
+            "--wallet", "BTCPayLightning",
+            "--backend", "btcpay1",
+            "--store-id", "STORE1",
+            "--payment-method-id", "BTC-LN",
+        )
+        self.assertNotEqual(result.returncode, 0)
+        self.assertEqual(payload["kind"], "error")
+        self.assertEqual(payload["error"]["code"], "validation")
+        self.assertIn("wallet-history sync", payload["error"]["message"])
+
+        payload, result = self._run_json(
+            "wallets", "get",
+            "--workspace", "Main",
+            "--profile", "Default",
+            "--wallet", "BTCPayLightning",
+        )
+        self._assert_ok(payload, result, "wallets.get")
+        self.assertEqual(payload["data"]["config"], {})
+
+    def test_normalize_btcpay_payment_method_id_canonicalises_case(self):
+        # BTCPay's canonical form is upper case ("BTC-CHAIN", "BTC-LN"). All
+        # wallet config writes and URL constructions go through this helper,
+        # so canonicalising here keeps storage consistent regardless of how
+        # the value reached us (CLI arg, JSON config, daemon discovery).
+        from kassiber.core import wallets as core_wallets
+
+        self.assertEqual(
+            core_wallets.normalize_btcpay_payment_method_id("btc-chain"),
+            "BTC-CHAIN",
+        )
+        self.assertEqual(
+            core_wallets.normalize_btcpay_payment_method_id("  Btc-Chain  "),
+            "BTC-CHAIN",
+        )
+        # Already-canonical values are returned unchanged.
+        self.assertEqual(
+            core_wallets.normalize_btcpay_payment_method_id("LBTC-CHAIN"),
+            "LBTC-CHAIN",
+        )
+
+    def test_btcpay_sync_rejects_altcoin_chain_payment_method_id(self):
+        # The wallet-history allowlist is intentionally narrow (BTC-CHAIN and
+        # LBTC-CHAIN). Any other -CHAIN suffix must be rejected at the same
+        # gate as BTC-LN so we never persist a sync config we cannot honour.
+        self._bootstrap_wallet(label="BTCPayAltcoin", kind="custom")
+        payload, result = self._run_json(
+            "backends", "create",
+            "btcpay1",
+            "--kind", "btcpay",
+            "--url", "http://127.0.0.1:9",
+            "--token", "testkey",
+        )
+        self._assert_ok(payload, result, "backends.create")
+
+        payload, result = self._run_json(
+            "wallets", "sync-btcpay",
+            "--workspace", "Main",
+            "--profile", "Default",
+            "--wallet", "BTCPayAltcoin",
+            "--backend", "btcpay1",
+            "--store-id", "STORE1",
+            "--payment-method-id", "DOGE-CHAIN",
+        )
+        self.assertNotEqual(result.returncode, 0)
+        self.assertEqual(payload["kind"], "error")
+        self.assertEqual(payload["error"]["code"], "validation")
+        self.assertIn("wallet-history sync", payload["error"]["message"])
+
+        payload, result = self._run_json(
+            "wallets", "get",
+            "--workspace", "Main",
+            "--profile", "Default",
+            "--wallet", "BTCPayAltcoin",
         )
         self._assert_ok(payload, result, "wallets.get")
         self.assertEqual(payload["data"]["config"], {})

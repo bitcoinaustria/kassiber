@@ -99,7 +99,11 @@ from .secrets.credentials import migrate_dotenv_credentials
 from .secrets.migration import create_empty_encrypted_database, migrate_plaintext_to_encrypted
 from .secrets.passphrase import change_database_passphrase
 from .secrets.sqlcipher import looks_like_plaintext_sqlite, open_encrypted, sqlcipher_available
-from .sync_btcpay import probe_btcpay_wallet
+from .sync_btcpay import (
+    discover_btcpay_wallet_sources,
+    probe_btcpay_wallet,
+    require_wallet_history_payment_method,
+)
 from .wallet_descriptors import (
     derive_descriptor_targets,
     load_descriptor_plan,
@@ -180,6 +184,7 @@ SUPPORTED_KINDS = (
     "ui.wallets.preview_descriptor",
     "ui.connections.sources",
     "ui.connections.btcpay.create",
+    "ui.connections.btcpay.discover",
     "ui.connections.btcpay.test",
     "ui.metadata.bip329.import",
     "ui.wallets.update",
@@ -3930,57 +3935,388 @@ def _create_wallet_payload(
     return {"wallet": wallet}
 
 
+def _slug_btcpay_backend_label(label: str) -> str:
+    name = re.sub(r"[^a-z0-9_.-]+", "-", label.strip().lower()).strip("-")
+    if not name:
+        raise AppError(
+            "BTCPay instance label is required.",
+            code="validation",
+            hint="Enter a short local name for this BTCPay instance.",
+            retryable=False,
+        )
+    return name
+
+
+def _existing_btcpay_backend(
+    ctx: "DaemonContext",
+    backend_ref: str,
+    *,
+    reveal: bool,
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    conn = _require_conn(ctx)
+    normalized_backend = backend_ref.lower()
+    raw_backend = ctx.runtime_config["backends"].get(normalized_backend)
+    if not isinstance(raw_backend, dict):
+        raise AppError(
+            f"BTCPay instance '{backend_ref}' is not configured",
+            code="not_found",
+            hint="Choose a saved BTCPay instance or add a new one here.",
+            retryable=False,
+        )
+    if str(raw_backend.get("kind") or "").strip().lower() != "btcpay":
+        raise AppError(
+            f"Backend '{backend_ref}' is not a BTCPay instance",
+            code="validation",
+            hint="Choose a backend whose kind is btcpay.",
+            retryable=False,
+        )
+    safe_backend = core_accounts.get_backend_details(
+        conn,
+        ctx.runtime_config,
+        normalized_backend,
+    )
+    if reveal:
+        backend = core_accounts.reveal_backend_secrets(
+            conn,
+            ctx.runtime_config,
+            normalized_backend,
+        )
+    else:
+        backend = raw_backend
+    return backend, safe_backend
+
+
+def _inline_btcpay_backend_args(args: dict[str, Any]) -> tuple[str, str, str]:
+    backend_label = (
+        _optional_str_arg(args, "backend_label")
+        or _optional_str_arg(args, "instance_label")
+        or "btcpay"
+    )
+    backend_name = _slug_btcpay_backend_label(backend_label)
+    server_url = (
+        _optional_str_arg(args, "server_url")
+        or _optional_str_arg(args, "url")
+        or _required_str_arg(args, "server_url", "BTCPay server URL")
+    )
+    api_key = (
+        _optional_str_arg(args, "api_key")
+        or _optional_str_arg(args, "token")
+        or _required_str_arg(args, "api_key", "BTCPay API key")
+    )
+    return backend_name, server_url, api_key
+
+
+def _resolve_btcpay_backend_for_setup(
+    ctx: "DaemonContext",
+    args: dict[str, Any],
+    *,
+    create_if_inline: bool,
+    reveal: bool,
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    backend_ref = _optional_str_arg(args, "backend")
+    has_inline_credentials = bool(
+        _optional_str_arg(args, "server_url")
+        or _optional_str_arg(args, "url")
+        or _optional_str_arg(args, "api_key")
+        or _optional_str_arg(args, "token")
+    )
+    if backend_ref:
+        if has_inline_credentials:
+            raise AppError(
+                "BTCPay setup received both a saved instance and inline credentials",
+                code="validation",
+                hint="Choose a saved BTCPay instance or enter a new instance, not both.",
+                retryable=False,
+            )
+        return _existing_btcpay_backend(ctx, backend_ref, reveal=reveal)
+
+    conn = _require_conn(ctx)
+    backend_name, server_url, api_key = _inline_btcpay_backend_args(args)
+    if not create_if_inline:
+        backend = {
+            "name": backend_name,
+            "kind": "btcpay",
+            "url": server_url,
+            "token": api_key,
+        }
+        safe_backend = {
+            "name": backend_name,
+            "kind": "btcpay",
+            "has_url": True,
+            "has_token": True,
+        }
+        return backend, safe_backend
+
+    if backend_name in ctx.runtime_config["backends"]:
+        raise AppError(
+            f"A BTCPay instance named '{backend_name}' already exists",
+            code="conflict",
+            hint=(
+                "Pick that saved instance, or enter a different instance name."
+            ),
+            details={"existing_backend": backend_name},
+            retryable=False,
+        )
+
+    created_backend = core_accounts.create_backend(
+        conn,
+        backend_name,
+        "btcpay",
+        server_url,
+        chain="bitcoin",
+        network="main",
+        token=api_key,
+    )
+    merge_db_backends(conn, ctx.runtime_config)
+    if reveal:
+        backend = core_accounts.reveal_backend_secrets(
+            conn,
+            ctx.runtime_config,
+            created_backend["name"],
+        )
+    else:
+        backend = ctx.runtime_config["backends"][created_backend["name"]]
+    safe_backend = core_accounts.get_backend_details(
+        conn,
+        ctx.runtime_config,
+        created_backend["name"],
+    )
+    return backend, safe_backend
+
+
+def _btcpay_payment_method_ids(args: dict[str, Any]) -> list[str]:
+    raw_ids = args.get("payment_method_ids")
+    if raw_ids is None:
+        single = _optional_str_arg(args, "payment_method_id")
+        return [
+            require_wallet_history_payment_method(
+                core_wallets.normalize_btcpay_payment_method_id(
+                    single or core_wallets.BTCPAY_DEFAULT_PAYMENT_METHOD_ID
+                )
+            )
+        ]
+    if not isinstance(raw_ids, list):
+        raise AppError(
+            "BTCPay payment_method_ids must be an array",
+            code="validation",
+            details={"type": type(raw_ids).__name__},
+            retryable=False,
+        )
+    payment_method_ids = []
+    seen = set()
+    for raw_id in raw_ids:
+        if not isinstance(raw_id, str) or not raw_id.strip():
+            raise AppError(
+                "BTCPay payment_method_ids entries must be non-empty strings",
+                code="validation",
+                details={"type": type(raw_id).__name__},
+                retryable=False,
+            )
+        payment_method_id = require_wallet_history_payment_method(
+            core_wallets.normalize_btcpay_payment_method_id(raw_id)
+        )
+        if payment_method_id not in seen:
+            payment_method_ids.append(payment_method_id)
+            seen.add(payment_method_id)
+    if not payment_method_ids:
+        raise AppError(
+            "Select at least one BTCPay payment method",
+            code="validation",
+            retryable=False,
+        )
+    return payment_method_ids
+
+
+def _btcpay_wallet_labels(base_label: str, payment_method_ids: list[str]) -> list[str]:
+    if len(payment_method_ids) == 1:
+        return [base_label]
+    return [
+        f"{base_label} - {payment_method_id}"
+        for payment_method_id in payment_method_ids
+    ]
+
+
+def _btcpay_existing_wallet_routes(
+    args: dict[str, Any],
+) -> list[dict[str, str]]:
+    raw_routes = args.get("routes")
+    if raw_routes is None:
+        target_wallet = _optional_str_arg(args, "target_wallet")
+        if target_wallet is None:
+            raise AppError(
+                "Existing-wallet BTCPay setup requires routes",
+                code="validation",
+                hint="Choose which Kassiber wallet each BTCPay payment method settles into.",
+                retryable=False,
+            )
+        return [
+            {"wallet": target_wallet, "payment_method_id": payment_method_id}
+            for payment_method_id in _btcpay_payment_method_ids(args)
+        ]
+    if not isinstance(raw_routes, list) or not raw_routes:
+        raise AppError(
+            "Existing-wallet BTCPay routes must be a non-empty array",
+            code="validation",
+            retryable=False,
+        )
+    routes = []
+    seen = set()
+    for raw_route in raw_routes:
+        if not isinstance(raw_route, dict):
+            raise AppError(
+                "Existing-wallet BTCPay routes must be objects",
+                code="validation",
+                retryable=False,
+            )
+        wallet_ref = _optional_str_arg(raw_route, "wallet") or _optional_str_arg(
+            raw_route,
+            "target_wallet",
+        )
+        payment_method_id = (
+            _optional_str_arg(raw_route, "payment_method_id")
+            or core_wallets.BTCPAY_DEFAULT_PAYMENT_METHOD_ID
+        )
+        if wallet_ref is None:
+            raise AppError(
+                "Existing-wallet BTCPay routes require a wallet",
+                code="validation",
+                retryable=False,
+            )
+        payment_method_id = core_wallets.normalize_btcpay_payment_method_id(
+            payment_method_id
+        )
+        require_wallet_history_payment_method(payment_method_id)
+        key = (wallet_ref, payment_method_id)
+        if key not in seen:
+            routes.append(
+                {
+                    "wallet": wallet_ref,
+                    "payment_method_id": payment_method_id,
+                }
+            )
+            seen.add(key)
+    return routes
+
+
+def _attach_btcpay_provenance_payload(
+    ctx: "DaemonContext",
+    args: dict[str, Any],
+    safe_backend: dict[str, Any],
+) -> dict[str, Any]:
+    conn = _require_conn(ctx)
+    store_id = core_wallets.normalize_btcpay_store_id(
+        _required_str_arg(args, "store_id", "BTCPay store ID")
+    )
+    routes = _btcpay_existing_wallet_routes(args)
+    updated_wallets = []
+    for route in routes:
+        wallet = core_wallets.get_wallet_details(conn, None, None, route["wallet"])
+        existing_routes = list(
+            wallet.get("config", {}).get(core_wallets.BTCPAY_PROVENANCE_CONFIG_KEY)
+            or []
+        )
+        next_route = {
+            "backend": safe_backend["name"],
+            "store_id": store_id,
+            "payment_method_id": route["payment_method_id"],
+        }
+        if next_route not in existing_routes:
+            existing_routes.append(next_route)
+        updated_wallets.append(
+            core_wallets.update_wallet(
+                conn,
+                None,
+                None,
+                wallet["id"],
+                {
+                    "config": {
+                        core_wallets.BTCPAY_PROVENANCE_CONFIG_KEY: existing_routes,
+                    },
+                },
+            )
+        )
+    return {
+        "mode": "existing_wallets",
+        "backend": safe_backend,
+        "wallet": updated_wallets[0],
+        "wallets": updated_wallets,
+        "routes": routes,
+    }
+
+
 def _create_btcpay_connection_payload(
     ctx: "DaemonContext",
     args: dict[str, Any],
 ) -> dict[str, Any]:
     conn = _require_conn(ctx)
     wallet_label = _required_str_arg(args, "label", "Connection label")
-    _, profile = resolve_scope(conn, None, None)
-    existing_wallet = conn.execute(
-        "SELECT 1 FROM wallets WHERE profile_id = ? AND label = ?",
-        (profile["id"], wallet_label),
-    ).fetchone()
-    if existing_wallet:
+    mode = (_optional_str_arg(args, "mode") or "wallet_sources").strip().lower()
+    if mode not in {"wallet_sources", "existing_wallets", "map_existing", "provenance"}:
         raise AppError(
-            f"Wallet '{wallet_label}' already exists in profile '{profile['label']}'",
+            f"Unsupported BTCPay setup mode '{mode}'",
+            code="validation",
+            retryable=False,
+        )
+    if mode in {"existing_wallets", "map_existing", "provenance"}:
+        core_wallets.normalize_btcpay_store_id(
+            _required_str_arg(args, "store_id", "BTCPay store ID")
+        )
+        for route in _btcpay_existing_wallet_routes(args):
+            core_wallets.get_wallet_details(conn, None, None, route["wallet"])
+        _backend, safe_backend = _resolve_btcpay_backend_for_setup(
+            ctx,
+            args,
+            create_if_inline=True,
+            reveal=False,
+        )
+        return _attach_btcpay_provenance_payload(ctx, args, safe_backend)
+
+    _, profile = resolve_scope(conn, None, None)
+    payment_method_ids = _btcpay_payment_method_ids(args)
+    wallet_labels = _btcpay_wallet_labels(wallet_label, payment_method_ids)
+    existing_rows = conn.execute(
+        f"""
+        SELECT label FROM wallets
+        WHERE profile_id = ? AND label IN ({",".join("?" for _ in wallet_labels)})
+        """,
+        (profile["id"], *wallet_labels),
+    ).fetchall()
+    if existing_rows:
+        existing_labels = sorted(str(row["label"]) for row in existing_rows)
+        raise AppError(
+            f"Wallet '{existing_labels[0]}' already exists in profile '{profile['label']}'",
             code="conflict",
             hint="Choose a different connection label.",
+            details={"existing_labels": existing_labels},
             retryable=False,
         )
-    backend_ref = _required_str_arg(args, "backend", "BTCPay backend")
-    normalized_backend = backend_ref.lower()
-    raw_backend = ctx.runtime_config["backends"].get(normalized_backend)
-    if not isinstance(raw_backend, dict):
-        raise AppError(
-            f"Backend '{backend_ref}' is not configured",
-            code="not_found",
-            hint="Choose an existing BTCPay backend or add one in Settings.",
-            retryable=False,
-        )
-    if str(raw_backend.get("kind") or "").strip().lower() != "btcpay":
-        raise AppError(
-            f"Backend '{backend_ref}' is not a BTCPay backend",
-            code="validation",
-            hint="Choose a backend whose kind is btcpay.",
-            retryable=False,
-        )
-    backend = core_accounts.get_backend_details(conn, ctx.runtime_config, normalized_backend)
-    wallet = core_wallets.create_wallet(
-        conn,
-        None,
-        None,
-        wallet_label,
-        "custom",
-        config={
-            "backend": backend["name"],
-            "store_id": _required_str_arg(args, "store_id", "BTCPay store ID"),
-            "payment_method_id": _optional_str_arg(args, "payment_method_id")
-            or core_wallets.BTCPAY_DEFAULT_PAYMENT_METHOD_ID,
-            "sync_source": core_wallets.BTCPAY_SYNC_SOURCE,
-        },
+    store_id = core_wallets.normalize_btcpay_store_id(
+        _required_str_arg(args, "store_id", "BTCPay store ID")
     )
-    return {"backend": backend, "wallet": wallet}
+    _backend, safe_backend = _resolve_btcpay_backend_for_setup(
+        ctx,
+        args,
+        create_if_inline=True,
+        reveal=False,
+    )
+    wallets = []
+    for label, payment_method_id in zip(wallet_labels, payment_method_ids, strict=True):
+        wallets.append(
+            core_wallets.create_wallet(
+                conn,
+                None,
+                None,
+                label,
+                "custom",
+                config={
+                    "backend": safe_backend["name"],
+                    "store_id": store_id,
+                    "payment_method_id": payment_method_id,
+                    "sync_source": core_wallets.BTCPAY_SYNC_SOURCE,
+                },
+            )
+        )
+    return {"backend": safe_backend, "wallet": wallets[0], "wallets": wallets}
 
 
 def _import_bip329_payload(
@@ -4155,39 +4491,16 @@ def _test_btcpay_connection_payload(
     ctx: "DaemonContext",
     args: dict[str, Any],
 ) -> dict[str, Any]:
-    backend_ref = _required_str_arg(args, "backend", "BTCPay backend")
     store_id = _required_str_arg(args, "store_id", "BTCPay store ID")
     payment_method_id = (
         _optional_str_arg(args, "payment_method_id")
         or core_wallets.BTCPAY_DEFAULT_PAYMENT_METHOD_ID
     )
-    conn = _require_conn(ctx)
-    normalized_backend = backend_ref.lower()
-    try:
-        backend = core_accounts.reveal_backend_secrets(
-            conn,
-            ctx.runtime_config,
-            normalized_backend,
-        )
-    except AppError as exc:
-        if exc.code != "not_found":
-            raise
-        raise AppError(
-            f"Backend '{backend_ref}' is not configured",
-            code="not_found",
-            hint="Choose an existing BTCPay backend or add one in Settings.",
-            retryable=False,
-        ) from exc
-    if str(backend.get("kind") or "").strip().lower() != "btcpay":
-        raise AppError(
-            f"Backend '{backend_ref}' is not a BTCPay backend",
-            code="validation",
-            retryable=False,
-        )
-    safe_backend = core_accounts.get_backend_details(
-        conn,
-        ctx.runtime_config,
-        normalized_backend,
+    backend, safe_backend = _resolve_btcpay_backend_for_setup(
+        ctx,
+        args,
+        create_if_inline=False,
+        reveal=True,
     )
     probe_btcpay_wallet(
         backend,
@@ -4199,6 +4512,24 @@ def _test_btcpay_connection_payload(
         "store_id": store_id,
         "payment_method_id": payment_method_id,
         "ok": True,
+    }
+
+
+def _discover_btcpay_connection_payload(
+    ctx: "DaemonContext",
+    args: dict[str, Any],
+) -> dict[str, Any]:
+    backend, safe_backend = _resolve_btcpay_backend_for_setup(
+        ctx,
+        args,
+        create_if_inline=False,
+        reveal=True,
+    )
+    discovered = discover_btcpay_wallet_sources(backend)
+    return {
+        "backend": safe_backend["name"],
+        "stores": discovered["stores"],
+        "payment_methods": discovered["payment_methods"],
     }
 
 
@@ -5280,6 +5611,21 @@ def handle_request(
                 build_envelope(
                     "ui.connections.btcpay.create",
                     _create_btcpay_connection_payload(
+                        ctx,
+                        _coerce_args_dict(request_id, request.get("args")),
+                    ),
+                ),
+                request_id,
+            ),
+            False,
+        )
+
+    if kind == "ui.connections.btcpay.discover":
+        return (
+            _with_request_id(
+                build_envelope(
+                    "ui.connections.btcpay.discover",
+                    _discover_btcpay_connection_payload(
                         ctx,
                         _coerce_args_dict(request_id, request.get("args")),
                     ),

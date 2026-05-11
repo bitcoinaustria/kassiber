@@ -39,6 +39,7 @@ WALLET_KINDS = [
 REDACTED_CONFIG_VALUE = "[redacted]"
 BTCPAY_SYNC_SOURCE = "btcpay"
 BTCPAY_DEFAULT_PAYMENT_METHOD_ID = "BTC-CHAIN"
+BTCPAY_PROVENANCE_CONFIG_KEY = "btcpay_provenance"
 WALLET_SAFE_CONFIG_FIELDS = (
     "addresses",
     "backend",
@@ -49,6 +50,7 @@ WALLET_SAFE_CONFIG_FIELDS = (
     "sync_source",
     "store_id",
     "payment_method_id",
+    BTCPAY_PROVENANCE_CONFIG_KEY,
     "source_file",
     "source_format",
     "altbestand",
@@ -180,6 +182,47 @@ def wallet_btcpay_sync_config(config):
     }
 
 
+def wallet_btcpay_provenance_config(config):
+    if not isinstance(config, dict):
+        return []
+    raw_routes = config.get(BTCPAY_PROVENANCE_CONFIG_KEY)
+    if raw_routes is None:
+        return []
+    if not isinstance(raw_routes, list):
+        raise AppError(
+            "BTCPay provenance config must be a list",
+            code="validation",
+        )
+    routes = []
+    seen = set()
+    for raw_route in raw_routes:
+        if not isinstance(raw_route, dict):
+            raise AppError(
+                "BTCPay provenance routes must be objects",
+                code="validation",
+            )
+        backend = str_or_none(raw_route.get("backend"))
+        store_id = str_or_none(raw_route.get("store_id"))
+        payment_method_id = str_or_none(raw_route.get("payment_method_id"))
+        if backend is None or store_id is None:
+            raise AppError(
+                "BTCPay provenance routes require backend and store_id",
+                code="validation",
+            )
+        route = {
+            "backend": backend.lower(),
+            "store_id": store_id,
+            "payment_method_id": normalize_btcpay_payment_method_id(
+                payment_method_id or BTCPAY_DEFAULT_PAYMENT_METHOD_ID
+            ),
+        }
+        key = (route["backend"], route["store_id"], route["payment_method_id"])
+        if key not in seen:
+            routes.append(route)
+            seen.add(key)
+    return routes
+
+
 def normalize_btcpay_store_id(value):
     store_id = str_or_none(value)
     if store_id is None:
@@ -191,7 +234,11 @@ def normalize_btcpay_payment_method_id(value):
     payment_method_id = str_or_none(value)
     if payment_method_id is None:
         raise AppError("BTCPay payment method id cannot be empty", code="validation")
-    return payment_method_id
+    # BTCPay treats payment method ids as "{CRYPTO}-{TYPE}" — e.g. BTC-CHAIN,
+    # LBTC-CHAIN, BTC-LN. Canonicalize to upper case here so wallet config,
+    # sync URLs, and the allowlist gate all agree regardless of how the
+    # caller typed it.
+    return payment_method_id.upper()
 
 
 def parse_wallet_config(args):
@@ -254,6 +301,9 @@ def parse_wallet_config(args):
     btcpay_config = wallet_btcpay_sync_config(config)
     if btcpay_config:
         config.update(btcpay_config)
+    btcpay_routes = wallet_btcpay_provenance_config(config)
+    if btcpay_routes or BTCPAY_PROVENANCE_CONFIG_KEY in config:
+        config[BTCPAY_PROVENANCE_CONFIG_KEY] = btcpay_routes
     return config
 
 
@@ -609,6 +659,7 @@ def delete_wallet(conn, workspace_ref, profile_ref, wallet_ref, cascade=False):
 
 __all__ = [
     "BTCPAY_DEFAULT_PAYMENT_METHOD_ID",
+    "BTCPAY_PROVENANCE_CONFIG_KEY",
     "BTCPAY_SYNC_SOURCE",
     "WALLET_KINDS",
     "WALLET_KIND_CATALOG",
@@ -625,6 +676,7 @@ __all__ = [
     "parse_wallet_config",
     "read_text_argument",
     "update_wallet",
+    "wallet_btcpay_provenance_config",
     "wallet_btcpay_sync_config",
     "wallet_live_chain_config",
     "wallet_policy_asset_id",

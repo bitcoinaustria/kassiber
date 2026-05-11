@@ -52,6 +52,7 @@ const ALLOWED_BRIDGE_KINDS = new Set([
   "ui.wallets.preview_descriptor",
   "ui.connections.sources",
   "ui.connections.btcpay.create",
+  "ui.connections.btcpay.discover",
   "ui.connections.btcpay.test",
   "ui.metadata.bip329.import",
   "ui.wallets.update",

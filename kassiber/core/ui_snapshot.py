@@ -13,6 +13,7 @@ from ..tax_policy import build_tax_policy
 from ..time_utils import _iso_z, _parse_iso_datetime
 from . import reports as report_builders
 from .repo import current_context_snapshot
+from .wallets import wallet_btcpay_provenance_config
 
 
 MAX_UI_LIST_LIMIT = 500
@@ -1577,6 +1578,11 @@ def build_wallets_list_snapshot(
             else None
         )
         tx_count = int(row["tx_count"] or 0)
+        # Provenance routes are non-secret routing metadata (backend name,
+        # store id, payment method id). Exposing them lets the desktop
+        # connection detail screen show and remove routes without needing
+        # a separate single-wallet daemon endpoint.
+        provenance_routes = wallet_btcpay_provenance_config(config)
         wallets.append(
             {
                 "id": row["id"],
@@ -1599,6 +1605,7 @@ def build_wallets_list_snapshot(
                 "last_transaction_at": row["last_tx_at"],
                 "sync_status": "has_transactions" if tx_count else "empty",
                 "journals_stale": freshness["needs_processing"] and tx_count > 0,
+                "btcpay_provenance": provenance_routes,
                 "created_at": row["created_at"],
             }
         )

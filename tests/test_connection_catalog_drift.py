@@ -51,6 +51,7 @@ _DESKTOP_MUTATION_KINDS = (
     "ui.workspace.create",
     "ui.connections.sources",
     "ui.connections.btcpay.create",
+    "ui.connections.btcpay.discover",
     "ui.connections.btcpay.test",
     "ui.metadata.bip329.import",
     "ui.wallets.update",
@@ -116,7 +117,7 @@ class ConnectionCatalogDriftTests(unittest.TestCase):
         """
         source = inspect.getsource(_create_btcpay_connection_payload)
         match = re.search(
-            r"core_wallets\.create_wallet\([^)]*?wallet_label,\s*\"(?P<kind>[^\"]+)\"",
+            r"core_wallets\.create_wallet\([^)]*?(?:wallet_label|label),\s*\"(?P<kind>[^\"]+)\"",
             source,
             re.DOTALL,
         )
