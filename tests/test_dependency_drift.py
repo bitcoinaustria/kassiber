@@ -13,6 +13,29 @@ _RP2_PIN_RE = re.compile(r"bitcoinaustria/rp2\.git@(?P<rev>[0-9a-f]{40})")
 _VERSION_RE = re.compile(r'(?m)^version\s*=\s*"([^"]+)"')
 
 
+def _toml_table_body(text: str, table: str) -> str:
+    """Return the body of a top-level TOML table, scoped so per-dependency
+    `version = "..."` entries elsewhere in the file cannot be mistaken for the
+    package version."""
+
+    pattern = re.compile(
+        rf"(?ms)^\[{re.escape(table)}\]\s*\n(?P<body>.*?)(?=^\[|\Z)"
+    )
+    match = pattern.search(text)
+    if match is None:
+        raise AssertionError(f"TOML table [{table}] not found")
+    return match.group("body")
+
+
+def _version_in_table(path: Path, table: str) -> str:
+    text = path.read_text(encoding="utf-8")
+    body = _toml_table_body(text, table)
+    match = _VERSION_RE.search(body)
+    if match is None:
+        raise AssertionError(f"[{table}] table in {path.name} does not declare a version")
+    return match.group(1)
+
+
 def _rp2_pin_from_pyproject() -> str:
     text = (_ROOT / "pyproject.toml").read_text(encoding="utf-8")
     match = _RP2_PIN_RE.search(text)
@@ -22,11 +45,7 @@ def _rp2_pin_from_pyproject() -> str:
 
 
 def _project_version_from_pyproject() -> str:
-    text = (_ROOT / "pyproject.toml").read_text(encoding="utf-8")
-    match = _VERSION_RE.search(text)
-    if match:
-        return match.group(1)
-    raise AssertionError("pyproject.toml does not declare a project version")
+    return _version_in_table(_ROOT / "pyproject.toml", "project")
 
 
 def _rp2_pin_from_uv_lock() -> str:
@@ -65,21 +84,14 @@ class DependencyDriftTests(unittest.TestCase):
                 encoding="utf-8"
             )
         )
-        cargo_text = (
-            _ROOT / "ui-tauri" / "src-tauri" / "Cargo.toml"
-        ).read_text(
-            encoding="utf-8"
-        )
-        cargo_match = _VERSION_RE.search(cargo_text)
-        self.assertIsNotNone(
-            cargo_match,
-            "Cargo.toml does not declare a package version",
+        cargo_version = _version_in_table(
+            _ROOT / "ui-tauri" / "src-tauri" / "Cargo.toml", "package"
         )
 
         self.assertEqual(__version__, pyproject_version)
         self.assertEqual(package_json["version"], pyproject_version)
         self.assertEqual(tauri_config["version"], pyproject_version)
-        self.assertEqual(cargo_match.group(1), pyproject_version)
+        self.assertEqual(cargo_version, pyproject_version)
 
 
 if __name__ == "__main__":  # pragma: no cover

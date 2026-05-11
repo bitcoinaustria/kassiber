@@ -1843,6 +1843,14 @@ def _msat_to_sat_value(value: Any) -> float:
 
 
 def _totals_by_asset(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Aggregate per-asset totals from balance-sheet / portfolio-summary rows.
+
+    Both report builders emit rows shaped as
+    ``{asset, quantity, quantity_msat, cost_basis, market_value, unrealized_pnl}``.
+    If either report grows additional totals columns, extend this helper rather
+    than re-introducing per-call accumulation.
+    """
+
     totals_by_asset: dict[str, dict[str, Any]] = {}
     for row in rows:
         asset = str(row.get("asset") or "")
