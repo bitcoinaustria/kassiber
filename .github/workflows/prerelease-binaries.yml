@@ -80,8 +80,12 @@ jobs:
           --onefile
           --name kassiber
           --paths .
+          --collect-submodules embit
+          --collect-data embit
           --collect-submodules rp2
           --collect-data rp2
+          --collect-submodules prezzemolo
+          --hidden-import prezzemolo.avl_tree
           --hidden-import rp2.plugin.country.at
           scripts/kassiber_pyinstaller_entry.py
 
@@ -103,6 +107,75 @@ jobs:
             --tax-country at \
             --gains-algorithm MOVING_AVERAGE_AT \
             Austrian >/dev/null
+          ./dist/kassiber \
+            --data-root "$at_root" \
+            --machine \
+            wallets create \
+            --workspace Smoke \
+            --profile Austrian \
+            --label AustrianSmoke \
+            --kind address \
+            --address bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kygt080 >/dev/null
+          at_csv="$RUNNER_TEMP/kassiber-at-smoke.csv"
+          cat > "$at_csv" <<'CSV'
+          date,txid,direction,asset,amount,fee,fiat_rate,description
+          2026-01-01T10:00:00Z,packaged-at-buy,inbound,BTC,0.10000000,0,80000,Packaged smoke acquisition
+          2026-02-01T10:00:00Z,packaged-at-sell,outbound,BTC,0.05000000,0.0001,82000,Packaged smoke disposal
+          CSV
+          ./dist/kassiber \
+            --data-root "$at_root" \
+            --machine \
+            wallets import-csv \
+            --workspace Smoke \
+            --profile Austrian \
+            --wallet AustrianSmoke \
+            --file "$at_csv" >/dev/null
+          ./dist/kassiber \
+            --data-root "$at_root" \
+            --machine \
+            journals process \
+            --workspace Smoke \
+            --profile Austrian >/dev/null
+          xlsx_file="$RUNNER_TEMP/kassiber-at-smoke.xlsx"
+          ./dist/kassiber \
+            --data-root "$at_root" \
+            --machine \
+            reports export-austrian-e1kv-xlsx \
+            --workspace Smoke \
+            --profile Austrian \
+            --year 2026 \
+            --file "$xlsx_file" >/dev/null
+          test -s "$xlsx_file"
+
+          descriptor_root="$RUNNER_TEMP/kassiber-descriptor-smoke"
+          ./dist/kassiber --data-root "$descriptor_root" --machine init >/dev/null
+          ./dist/kassiber --data-root "$descriptor_root" --machine workspaces create Smoke >/dev/null
+          ./dist/kassiber \
+            --data-root "$descriptor_root" \
+            --machine \
+            profiles create \
+            --workspace Smoke \
+            --fiat-currency USD \
+            --tax-country generic \
+            Descriptor >/dev/null
+          ./dist/kassiber \
+            --data-root "$descriptor_root" \
+            --machine \
+            wallets create \
+            --workspace Smoke \
+            --profile Descriptor \
+            --label DescriptorSmoke \
+            --kind descriptor \
+            --descriptor 'addr(bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kygt080)' \
+            --gap-limit 1 >/dev/null
+          ./dist/kassiber \
+            --data-root "$descriptor_root" \
+            --machine \
+            wallets derive \
+            --workspace Smoke \
+            --profile Descriptor \
+            --wallet DescriptorSmoke \
+            --count 1 >/dev/null
 
       - name: Package binary
         shell: bash
