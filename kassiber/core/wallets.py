@@ -347,6 +347,10 @@ def _wallet_descriptor_state(config):
             network = descriptor_plan.network
         except ValueError:
             descriptor_state = "invalid"
+        except AppError as exc:
+            if exc.code != "dependency_missing":
+                raise
+            descriptor_state = "invalid"
     return descriptor_state, chain, network
 
 

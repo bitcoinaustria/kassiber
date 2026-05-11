@@ -19,6 +19,10 @@ describe("syncResults", () => {
     );
   });
 
+  it("uses source wording when no daemon results are returned", () => {
+    expect(summarizeSyncResults([])).toBe("No source changes returned.");
+  });
+
   it("keeps the wallet-specific error message on detail sync", () => {
     expect(
       describeWalletSyncResult(

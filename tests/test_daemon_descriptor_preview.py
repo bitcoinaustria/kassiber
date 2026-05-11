@@ -15,13 +15,7 @@ from embit import bip32
 from kassiber.daemon import _preview_descriptor_payload
 from kassiber.errors import AppError
 
-
-# User-approved public mainnet zpub fixture with real mainnet history. Preview
-# tests use it only as watch-only material and do not contact the network.
-PUBLIC_MAINNET_ZPUB_FIXTURE = (
-    "zpub6rFR7y4Q2AijBEqTUquhVz398htDFrtymD9xYYfG1m4wAcvPhXNfE3EfH1r1AD"
-    "qtfSdVCToUG868RvUUkgDKf31mGDtKsAYz2oz2AGutZYs"
-)
+from .descriptor_fixtures import PUBLIC_MAINNET_ZPUB_FIXTURE
 
 
 def _xpub_from_seed() -> str:

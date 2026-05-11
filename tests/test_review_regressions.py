@@ -1801,6 +1801,47 @@ class ReviewRegressionTest(unittest.TestCase):
         self.assertEqual(stored_config["descriptor"], descriptor)
         self.assertEqual(stored_config["change_descriptor"], change_descriptor)
 
+    def test_wallet_descriptor_state_degrades_when_embit_missing(self):
+        from kassiber.core import wallets as core_wallets
+
+        self._bootstrap_profile()
+        descriptor, change_descriptor = _sample_descriptor_pair()
+        payload, result = self._run_json(
+            "wallets",
+            "create",
+            "--workspace",
+            "Main",
+            "--profile",
+            "Default",
+            "--label",
+            "Vault",
+            "--kind",
+            "descriptor",
+            "--descriptor",
+            descriptor,
+            "--change-descriptor",
+            change_descriptor,
+        )
+        self._assert_ok(payload, result, "wallets.create")
+        conn = open_db(self.data_root)
+        self.addCleanup(conn.close)
+
+        missing_embit = AppError(
+            "Descriptor-backed refresh requires the 'embit' package",
+            code="dependency_missing",
+            details={"missing_package": "embit"},
+        )
+        with patch(
+            "kassiber.core.wallets.load_descriptor_plan",
+            side_effect=missing_embit,
+        ):
+            rows = core_wallets.list_wallets(conn, "Main", "Default")
+            details = core_wallets.get_wallet_details(conn, "Main", "Default", "Vault")
+
+        self.assertEqual(rows[0]["descriptor"], "invalid")
+        self.assertEqual(details["descriptor_state"], "invalid")
+        self.assertTrue(details["descriptor"])
+
     def test_custom_env_file_backend_bootstrap_persists_into_db(self):
         env_file = self.case_dir / "custom-backends.env"
         env_file.write_text(

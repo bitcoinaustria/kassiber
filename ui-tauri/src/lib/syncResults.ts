@@ -44,7 +44,7 @@ export function summarizeSyncResults(results: SyncResult[]): string {
       errors ? `${errors} failed` : null,
     ]
       .filter(Boolean)
-      .join(", ") || "No wallet changes returned.";
+      .join(", ") || "No source changes returned.";
   const firstError = results.find((result) => result.status === "error");
   const detail = syncResultDetail(firstError);
   return firstError && detail ? `${summary}: ${firstError.wallet}: ${detail}` : summary;

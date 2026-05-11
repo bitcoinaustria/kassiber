@@ -27,15 +27,10 @@ from kassiber.daemon import (
 )
 from kassiber.secrets.sqlcipher import sqlcipher_available
 
+from .descriptor_fixtures import PUBLIC_MAINNET_ZPUB_FIXTURE
+
 
 ROOT = Path(__file__).resolve().parent.parent
-
-# User-approved public mainnet zpub fixture with real mainnet history. Tests use
-# it only as watch-only material and serve deterministic data from loopback.
-PUBLIC_MAINNET_ZPUB_FIXTURE = (
-    "zpub6rFR7y4Q2AijBEqTUquhVz398htDFrtymD9xYYfG1m4wAcvPhXNfE3EfH1r1AD"
-    "qtfSdVCToUG868RvUUkgDKf31mGDtKsAYz2oz2AGutZYs"
-)
 
 
 def _start_daemon(data_root):
@@ -74,6 +69,22 @@ def _write_payload(proc, payload):
     line = payload if isinstance(payload, str) else json.dumps(payload)
     proc.stdin.write(line + "\n")
     proc.stdin.flush()
+
+
+def _read_until_kind(proc, kind, timeout=5.0):
+    deadline = time.monotonic() + timeout
+    seen = []
+    while True:
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            break
+        envelope = _read_payload_timeout(proc, timeout=remaining)
+        seen.append(envelope.get("kind"))
+        if envelope.get("kind") == kind:
+            return envelope
+    raise AssertionError(
+        f"daemon did not emit {kind!r} within {timeout:.1f}s; saw {seen!r}"
+    )
 
 
 def _run_cli(data_root, *args):
@@ -704,13 +715,7 @@ class DaemonSmokeTest(unittest.TestCase):
                         "args": {"wallet": "Descriptor Live"},
                     },
                 )
-                synced = None
-                for _ in range(5):
-                    envelope = _read_payload_timeout(proc)
-                    if envelope["kind"] == "ui.wallets.sync":
-                        synced = envelope
-                        break
-                self.assertIsNotNone(synced, "no terminal ui.wallets.sync envelope")
+                synced = _read_until_kind(proc, "ui.wallets.sync")
                 self.assertEqual(synced["kind"], "ui.wallets.sync")
                 result = synced["data"]["results"][0]
                 self.assertEqual(result["wallet"], "Descriptor Live")
@@ -2210,6 +2215,7 @@ class DaemonSmokeTest(unittest.TestCase):
             self.assertNotIn("private-node.local", encoded)
             self.assertNotIn("secret-path", encoded)
             self.assertIn("<backend-url>", encoded)
+            self.assertIn("Failed to reach backend <backend-url>: offline", encoded)
             self.assertTrue(payload["results"][0]["has_backend_url"])
             self.assertFalse(state["auto_sync"]["ok"])  # type: ignore[index]
 

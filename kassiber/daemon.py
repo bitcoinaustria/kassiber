@@ -1479,11 +1479,17 @@ def _redact_sync_payload_for_ui(value: Any) -> Any:
     return value
 
 
-_SYNC_URL_RE = re.compile(r"\b[a-zA-Z][a-zA-Z0-9+.-]*://[^\s,;)]+")
+_SYNC_URL_RE = re.compile(r"\b[a-zA-Z][a-zA-Z0-9+.-]*://[^\s,;)\"'\]]+")
+_SYNC_URL_TRAILING_PUNCTUATION = ":.!?"
 
 
 def _redact_sync_text_for_ui(value: str) -> str:
-    return _SYNC_URL_RE.sub("<backend-url>", value)
+    def replace(match: re.Match[str]) -> str:
+        url = match.group(0)
+        suffix = url[len(url.rstrip(_SYNC_URL_TRAILING_PUNCTUATION)) :]
+        return f"<backend-url>{suffix}"
+
+    return _SYNC_URL_RE.sub(replace, value)
 
 
 def _sync_error_rows(payload: dict[str, Any] | None) -> list[dict[str, Any]]:
