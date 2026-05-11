@@ -147,10 +147,13 @@ python3 -m kassiber reports export-austrian-e1kv-csv --year 2024 --dir e1kv-2024
 Kassiber currently maps crypto rows to the ausländisch / self-custody
 Kennzahlen 172, 174, and 176. Domestic-provider and withheld-KESt rows such as
 171, 173, or 175 need structured provider metadata before Kassiber can populate
-them. The structured JSON/PDF report includes Steuerbericht-style sections
-1.1-4.5 so unsupported areas such as margin/derivatives, NFTs, gifts, lost
-coins, commercial mining, and minting are visible as zero-value placeholders
-instead of disappearing from the handoff.
+them. The structured JSON report includes Steuerbericht-style sections 1.1-4.5
+so unsupported areas such as margin/derivatives, NFTs, gifts, lost coins,
+commercial mining, and minting are visible as zero-value placeholders instead
+of disappearing from the handoff. The PDF export renders those same real
+Kassiber rows as a styled Austrian report with summary/detail pages, holdings,
+Besonderheiten, explanations, a landscape transaction appendix, a
+FinanzOnline-style Kennzahl summary, and FAQ.
 The XLSX export mirrors that structure as an accountant-facing workbook with
 an `Übersicht` sheet, separate numbered tabs such as `1.1.`, `2.1.`, and
 `3.3.`, plus an `Erläuterungen zum Steuerreport` notes sheet.
