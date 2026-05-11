@@ -53,7 +53,7 @@ kind of report when an error occurs.
 
 Kassiber is the local-first accounting product layer. It owns:
 
-- wallet sync and import adapters
+- watch-only source refresh and import adapters
 - local storage and provenance capture
 - metadata, attachments, and transfer pairing
 - review and quarantine workflows
@@ -442,9 +442,9 @@ Contributor docs:
 Notable gaps today:
 
 - Austrian E 1kv CSV/PDF/XLSX export is review-gated and currently targets the ausländisch / self-custody Kennzahlen; the styled PDF output includes Steuerbericht-style summary/detail pages, holdings, Besonderheiten, explanations, a transaction appendix, a FinanzOnline-style Kennzahl summary, and FAQ, while the XLSX and CSV bundle use an `Übersicht`, numbered section tabs/files, and `Erläuterungen zum Steuerreport`; domestic-provider withheld KESt metadata is not modeled yet
-- full BTCPay invoice/payment provenance ingest is not implemented yet; BTCPay sync currently covers confirmed on-chain wallet history plus comments/labels
+- full BTCPay invoice/payment provenance ingest is not implemented yet; BTCPay source refresh currently covers confirmed on-chain wallet history plus comments/labels
 - Kraken, Bitstamp, and other exchange / FX providers are not wired as live rate backends yet; exact exchange execution prices should come from source CSV/API imports with pricing provenance
-- descriptor/xpub live sync through `bitcoinrpc` is not implemented yet
+- descriptor/xpub source refresh through `bitcoinrpc` is not implemented yet
 - some Lightning node adapters are declared but do not sync yet
 - `custom` wallet import mapping is not implemented yet
 - reports still use stored journal pricing rather than querying the rates cache live

@@ -154,14 +154,14 @@ function summarizeToolResult(result: unknown): string | null {
     case "ui.maintenance.settings": {
       const settings = asRecord(data.settings);
       return settings?.auto_sync_before_report_reads
-        ? "Automatic wallet sync before report reads is enabled."
-        : "Automatic wallet sync before report reads is disabled.";
+        ? "Automatic watch-only refresh before report reads is enabled."
+        : "Automatic watch-only refresh before report reads is disabled.";
     }
     case "ui.maintenance.configure": {
       const settings = asRecord(data.settings);
       return settings?.auto_sync_before_report_reads
-        ? "Enabled automatic wallet sync before report reads."
-        : "Disabled automatic wallet sync before report reads.";
+        ? "Enabled automatic watch-only refresh before report reads."
+        : "Disabled automatic watch-only refresh before report reads.";
     }
     case "ui.maintenance.run": {
       const blockers = Array.isArray(data.blockers) ? data.blockers : [];

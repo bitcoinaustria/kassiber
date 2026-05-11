@@ -156,16 +156,16 @@ def wallet_btcpay_sync_config(config):
     normalized_source = sync_source.strip().lower()
     if normalized_source != BTCPAY_SYNC_SOURCE:
         raise AppError(
-            f"Unsupported wallet sync source '{normalized_source}'",
+            f"Unsupported source refresh type '{normalized_source}'",
             code="validation",
-            hint=f"Supported sync sources: {BTCPAY_SYNC_SOURCE}",
+            hint=f"Supported refresh sources: {BTCPAY_SYNC_SOURCE}",
         )
     backend = str_or_none(config.get("backend"))
     if backend is None:
         raise AppError(
             "BTCPay-backed wallets require a named --backend",
             code="validation",
-            hint="Set --backend to a btcpay backend before syncing the wallet.",
+            hint="Set --backend to a btcpay backend before refreshing this source.",
         )
     if store_id is None:
         raise AppError(
@@ -307,7 +307,7 @@ def _validated_wallet_config(normalized_kind, config):
         )
     if chain == "liquid" and descriptor_plan is None and not config.get("source_file"):
         raise AppError(
-            "Liquid live sync currently requires a descriptor with private blinding keys",
+            "Liquid live refresh currently requires a descriptor with private blinding keys",
             code="validation",
         )
     if descriptor_plan and descriptor_plan.chain == "liquid":
@@ -346,6 +346,10 @@ def _wallet_descriptor_state(config):
             chain = descriptor_plan.chain
             network = descriptor_plan.network
         except ValueError:
+            descriptor_state = "invalid"
+        except AppError as exc:
+            if exc.code != "dependency_missing":
+                raise
             descriptor_state = "invalid"
     return descriptor_state, chain, network
 

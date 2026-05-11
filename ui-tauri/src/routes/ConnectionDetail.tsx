@@ -58,6 +58,7 @@ import { screenShellClassName } from "@/lib/screen-layout";
 import { cn } from "@/lib/utils";
 import { isFilePickerAvailable, pickFile } from "@/lib/filePicker";
 import { editConfigKindForConnection } from "@/lib/connectionEditKind";
+import { describeWalletSyncResult, type SyncResult } from "@/lib/syncResults";
 import { detectWalletMaterial } from "@/lib/walletMaterialFormat";
 import { useUiStore } from "@/store/ui";
 import { useSyncProgressNotice } from "@/hooks/useSyncProgressNotice";
@@ -129,11 +130,6 @@ const statusStyles: Record<ConnectionStatus, string> = {
   idle: "border-border bg-muted text-muted-foreground",
   error: "border-red-500/25 bg-red-500/10 text-red-700 dark:text-red-300",
 };
-
-interface SyncResult {
-  wallet: string;
-  status: "synced" | "skipped" | "error" | string;
-}
 
 interface UpdateWalletResult {
   wallet: {
@@ -268,12 +264,12 @@ function ConnectionDetailView({
     setSyncMessage(null);
     setSyncProgress(null);
     addNotification({
-      title: "Wallet sync started",
-      body: `${connection.label} is syncing.`,
+      title: "Connection refresh started",
+      body: `${connection.label} is scanning in watch-only mode.`,
       tone: "warning",
     });
     startSyncNotice(
-      `${connection.label} is still syncing. Large descriptors or slow backends can take a bit; Kassiber will update when the daemon returns.`,
+      `${connection.label} is still scanning. Large descriptors or slow backends can take a bit; Kassiber will update when the daemon returns.`,
     );
     syncWallet.mutate(
       { wallet: connection.label },
@@ -283,23 +279,20 @@ function ConnectionDetailView({
             (item) => item.wallet === connection.label,
           );
           const status = result?.status ?? "synced";
-          const message =
-            status === "error"
-              ? `${connection.label} sync returned an error.`
-              : `${connection.label} sync ${status}.`;
+          const message = describeWalletSyncResult(result, connection.label);
           setSyncMessage(message);
           addNotification({
-            title: status === "error" ? "Wallet sync failed" : "Wallet sync finished",
+            title: status === "error" ? "Connection refresh failed" : "Connection refresh finished",
             body: message,
             tone: status === "error" ? "error" : "success",
           });
         },
         onError: (error) => {
           const message =
-            error instanceof Error ? error.message : "Wallet sync failed.";
+            error instanceof Error ? error.message : "Connection refresh failed.";
           setSyncMessage(message);
           addNotification({
-            title: "Wallet sync failed",
+            title: "Connection refresh failed",
             body: message,
             tone: "error",
           });
@@ -489,7 +482,7 @@ function ConnectionDetailView({
               className={cn("size-4", syncWallet.isPending && "animate-spin")}
               aria-hidden="true"
             />
-            {syncWallet.isPending ? "Syncing" : "Sync"}
+            {syncWallet.isPending ? "Refreshing" : "Refresh"}
           </Button>
         </CardContent>
         {syncProgress && syncWallet.isPending ? (

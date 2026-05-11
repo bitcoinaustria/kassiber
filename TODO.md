@@ -264,7 +264,7 @@ and [docs/plan/04-desktop-ui.md](docs/plan/04-desktop-ui.md).
   `skills/kassiber/` guidance, add tool cards, and start with a bounded
   read-only-by-default tool loop.
 - [x] AI mutating tool consent (PR 4): require explicit per-call/session
-  approval before executing mutating tools such as wallet sync.
+  approval before executing mutating tools such as source refresh.
 - [x] In-app AI skill-aware read upgrade (PR 72): expand the compact Kassiber
   prompt, add `read_skill_reference("index")`, expose granular read-only daemon
   tools for wallets, backends, quarantine, transfers, rates, workspace health,

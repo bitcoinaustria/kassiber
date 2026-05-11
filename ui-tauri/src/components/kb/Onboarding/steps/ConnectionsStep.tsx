@@ -79,7 +79,7 @@ const ConnectionsPanel = ({ form }: { form: OnboardingForm }) => {
             <p className="font-semibold text-ink">{modeLabel}</p>
             <p className="text-xs text-ink-2">
               {form.backendSetupMode === "skip"
-                ? "No live sync until settings are configured."
+                ? "No source refresh until settings are configured."
                 : "Endpoint choices only; credentials stay out of onboarding."}
             </p>
           </div>
@@ -171,7 +171,7 @@ export const ConnectionsStep = ({
               <ChoiceCard
                 active={skipSelected}
                 title="Skip connections for now"
-                description="Continue with manual imports only. Wallet sync can be configured from Settings later."
+                description="Continue with manual imports only. Watch-only refresh can be configured from Settings later."
                 tone="warning"
                 onClick={() => update("backendSetupMode", "skip")}
               />
@@ -191,7 +191,7 @@ export const ConnectionsStep = ({
                   name="backendName"
                   value={form.backendName}
                   placeholder="home-node"
-                  description="A short label shown in Settings and wallet sync screens."
+                  description="A short label shown in Settings and connection refresh screens."
                   onChange={(value) => update("backendName", value)}
                 />
                 <TextField
@@ -220,11 +220,11 @@ export const ConnectionsStep = ({
                   <AlertTriangle className="mt-0.5 size-5 shrink-0 text-accent" />
                   <div>
                     <p className="m-0 font-semibold text-ink">
-                      Wallet sync will not be ready.
+                      Watch-only refresh will not be ready.
                     </p>
                     <p className="m-0 mt-1 text-xs leading-5 text-ink-2">
                       You can still import files, but address discovery,
-                      BTCPay live history, and node-backed sync remain disabled
+                      BTCPay live history, and node-backed refresh remain disabled
                       until a backend is configured.
                     </p>
                   </div>

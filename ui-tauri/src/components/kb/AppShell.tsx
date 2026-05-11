@@ -785,8 +785,8 @@ export function AppShell() {
     if (!ensureWorkspaceForMenuAction()) return;
     if (isSyncing || isDaemonKindMutating("ui.wallets.sync")) {
       addNotification({
-        title: "Wallet sync already running",
-        body: "Kassiber is already syncing wallet sources.",
+        title: "Connection refresh already running",
+        body: "Kassiber is already scanning watch-only sources.",
         tone: "info",
       });
       return;

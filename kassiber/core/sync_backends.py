@@ -421,19 +421,21 @@ def validate_backend_for_wallet(backend, chain, network, has_descriptor=False):
         expected_chain = normalize_chain_value(backend_chain)
         if expected_chain != chain:
             raise AppError(
-                f"Backend '{backend['name']}' is configured for {expected_chain}, but wallet sync requires {chain}"
+                f"Backend '{backend['name']}' is configured for {expected_chain}, "
+                f"but source refresh requires {chain}"
             )
     backend_network = backend_value(backend, "network")
     if backend_network:
         expected_network = normalize_network_value(chain, backend_network)
         if expected_network != network:
             raise AppError(
-                f"Backend '{backend['name']}' is configured for {expected_network}, but wallet sync requires {network}"
+                f"Backend '{backend['name']}' is configured for {expected_network}, "
+                f"but source refresh requires {network}"
             )
     if chain == "liquid" and kind not in {"esplora", "electrum"}:
-        raise AppError("Liquid live sync currently requires an Esplora-compatible or Electrum backend")
+        raise AppError("Liquid live refresh currently requires an Esplora-compatible or Electrum backend")
     if has_descriptor and kind == "bitcoinrpc":
-        raise AppError("Descriptor-backed live sync is not implemented for bitcoinrpc yet; use Esplora or Electrum")
+        raise AppError("Descriptor-backed refresh is not implemented for bitcoinrpc yet; use Esplora or Electrum")
     if chain != "bitcoin" and kind == "bitcoinrpc":
         raise AppError(f"Backend kind '{kind}' does not support {chain} wallets")
     return kind
@@ -564,7 +566,7 @@ def resolve_wallet_sync_targets(backend, wallet):
         chain = normalize_chain_value(config.get("chain"))
         network = normalize_network_value(chain, config.get("network"))
         if chain == "liquid":
-            raise AppError("Liquid live sync currently requires descriptor-backed wallets so outputs can be unblinded locally")
+            raise AppError("Liquid live refresh currently requires descriptor-backed wallets so outputs can be unblinded locally")
         validate_backend_for_wallet(backend, chain, network, has_descriptor=False)
         targets = [sync_target_from_address(address, chain, network, index) for index, address in enumerate(addresses)]
     tracked_scripts = {target["script_pubkey"]: target for target in targets}

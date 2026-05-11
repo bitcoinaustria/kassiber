@@ -802,6 +802,7 @@ def sync_wallet(conn, runtime_config, workspace_ref, profile_ref, wallet_ref=Non
                         "code": exc.code,
                         "message": str(exc),
                         "hint": exc.hint or "",
+                        "details": exc.details,
                         "retryable": bool(exc.retryable),
                     }
                 )

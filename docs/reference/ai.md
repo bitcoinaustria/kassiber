@@ -31,7 +31,7 @@ correctly for:
 - metadata cleanup
 - troubleshooting
 
-The core accounting workflow does not depend on AI. Wallet sync, imports,
+The core accounting workflow does not depend on AI. Watch-only source refresh, imports,
 journal processing, and reports should work without any model at all.
 
 ## Current direction
@@ -223,11 +223,11 @@ Kassiber refreshes stale local journals first and includes the
 `ui.journals.process` result in the tool result metadata. This refresh is local
 and deterministic, and the same refresh path applies when the desktop GUI reads
 journal-derived daemon kinds such as `ui.reports.*` or `ui.report.blockers`
-directly. Wallet/backend sync remains explicit unless the active profile has
-enabled automatic sync-before-report maintenance, because sync can contact
-external services and import new transactions. Automatic sync results are
+directly. Watch-only source refresh remains explicit unless the active profile has
+enabled automatic refresh-before-report maintenance, because refresh can contact
+external services and import new transactions. Automatic refresh results are
 redacted before they enter AI/UI tool metadata; exact backend URLs are not sent
-to the provider. If any wallet sync row fails, the maintenance/report-blocker
+to the provider. If any source refresh row fails, the maintenance/report-blocker
 path returns a blocking `sync_failed` item instead of saying reports are ready.
 
 Quoted or search-like questions can trigger `ui.transactions.search` before the

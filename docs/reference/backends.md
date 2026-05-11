@@ -140,7 +140,7 @@ BTCPay-specific fields:
 
 - `TOKEN`
 
-Note: `bitcoinrpc` support is currently partial. Kassiber can use it for Bitcoin address-based wallets, but descriptor- and xpub-backed live sync still require Esplora or Electrum.
+Note: `bitcoinrpc` support is currently partial. Kassiber can use it for Bitcoin address-based wallets, but descriptor- and xpub-backed source refresh still require Esplora or Electrum.
 
 The backend CLI now accepts the common backend-specific knobs directly:
 
@@ -170,14 +170,14 @@ Use this to pull confirmed on-chain wallet transactions directly from a BTCPay s
 Use this when a BTCPay store is the authoritative transaction source for a real wallet balance.
 
 - best fit for merchant stores where BTCPay comments/labels are part of the local bookkeeping story
-- current sync is confirmed-only and reuses the BTCPay import pipeline so comments become notes and labels become tags
+- current refresh is confirmed-only and reuses the BTCPay import pipeline so comments become notes and labels become tags
 - this is not full invoice/payment provenance yet; stable invoice ids and raw payload snapshots are still later work
 
 ### Esplora
 
 Use this for mempool-compatible HTTP APIs.
 
-- good for address and descriptor sync
+- good for address and descriptor refresh
 - leaks queried scripts to the remote server
 - easiest option when you are not running your own node
 
@@ -193,14 +193,14 @@ Use this for Electrum/Fulcrum-style servers.
 
 Use this when you run your own node.
 
-- today this path is for Bitcoin address-based sync; descriptor/xpub live sync is not implemented on `bitcoinrpc` yet
+- today this path is for Bitcoin address-based refresh; descriptor/xpub refresh is not implemented on `bitcoinrpc` yet
 - Kassiber creates or reuses a dedicated watch-only Core wallet per Kassiber wallet
-- this keeps wallet sync isolated instead of mixing unrelated watch-only imports together
+- this keeps refresh state isolated instead of mixing unrelated watch-only imports together
 - plain `http://` is only safe on localhost or over a trusted tunnel
 
 ## Descriptor and Liquid notes
 
-Descriptor wallets derive receive and change scripts locally and then sync through an Esplora- or Electrum-backed backend.
+Descriptor wallets derive receive and change scripts locally and then refresh through an Esplora- or Electrum-backed backend.
 
 Example Bitcoin descriptor wallet:
 
