@@ -20,11 +20,27 @@
  * commit 13, and keyboard shortcuts in commit 14.
  */
 
-import { useMemo, useState } from "react";
-import { AlertTriangle, ArrowRight, Loader2 } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import {
+  AlertTriangle,
+  ArrowRight,
+  Loader2,
+  Sparkles,
+  Undo2,
+  X,
+} from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import {
   Select,
   SelectContent,
@@ -119,6 +135,17 @@ function feePercent(candidate: SwapCandidate) {
   return (Math.abs(candidate.swap_fee_msat) / candidate.out_amount_msat) * 100;
 }
 
+interface BulkPairResult {
+  applied: Array<{ id: string; swap_fee_msat?: number | null }>;
+  summary: {
+    count: number;
+    skipped_conflicts: number;
+    total_swap_fee_msat: number;
+  };
+}
+
+const UNDO_WINDOW_MS = 20_000;
+
 export function SwapMatching() {
   const [confidence, setConfidence] = useState<string>("all");
   const [method, setMethod] = useState<string>("all");
@@ -126,6 +153,38 @@ export function SwapMatching() {
   const [overrides, setOverrides] = useState<
     Record<string, { kind?: PairKind; policy?: PairPolicy }>
   >({});
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [bulkKind, setBulkKind] = useState<PairKind>("submarine-swap");
+  const [bulkPolicy, setBulkPolicy] = useState<PairPolicy>("carrying-value");
+  const [previewState, setPreviewState] = useState<
+    | { mode: "exact"; candidates: SwapCandidate[] }
+    | { mode: "selected"; candidates: SwapCandidate[] }
+    | null
+  >(null);
+  const [undoState, setUndoState] = useState<{
+    pairIds: string[];
+    summary: BulkPairResult["summary"];
+    deadline: number;
+  } | null>(null);
+  const undoTimerRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    if (!undoState) return;
+    const remaining = undoState.deadline - Date.now();
+    if (remaining <= 0) {
+      setUndoState(null);
+      return;
+    }
+    undoTimerRef.current = window.setTimeout(() => {
+      setUndoState(null);
+    }, remaining);
+    return () => {
+      if (undoTimerRef.current !== null) {
+        window.clearTimeout(undoTimerRef.current);
+        undoTimerRef.current = null;
+      }
+    };
+  }, [undoState]);
 
   const args = useMemo(() => {
     const next: Record<string, unknown> = {};
@@ -140,6 +199,8 @@ export function SwapMatching() {
 
   const pairMutation = useDaemonMutation<unknown>("ui.transfers.pair");
   const dismissMutation = useDaemonMutation<unknown>("ui.transfers.dismiss");
+  const bulkPairMutation = useDaemonMutation<BulkPairResult>("ui.transfers.bulk_pair");
+  const unpairMutation = useDaemonMutation<unknown>("ui.transfers.unpair");
 
   const candidates = data?.data?.candidates ?? [];
   const counts = data?.data?.counts ?? { total: 0, exact: 0, strong: 0, conflicts: 0 };
@@ -153,6 +214,51 @@ export function SwapMatching() {
   }, [candidates]);
 
   const candidateKey = (c: SwapCandidate) => `${c.out_id}->${c.in_id}`;
+
+  const candidatesByKey = useMemo(() => {
+    const map: Record<string, SwapCandidate> = {};
+    for (const candidate of candidates) {
+      map[candidateKey(candidate)] = candidate;
+    }
+    return map;
+  }, [candidates]);
+
+  const exactSolo = useMemo(
+    () =>
+      candidates.filter(
+        (c) =>
+          c.confidence === "exact" &&
+          (clusterSizes[c.conflict_set_id] ?? 0) <= 1,
+      ),
+    [candidates, clusterSizes],
+  );
+
+  const selectedCandidates = useMemo(
+    () =>
+      Array.from(selected)
+        .map((key) => candidatesByKey[key])
+        .filter((c): c is SwapCandidate => Boolean(c)),
+    [selected, candidatesByKey],
+  );
+
+  const toggleSelected = (key: string) =>
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+
+  const handleSelectAll = () => {
+    const eligible = candidates.filter(
+      (c) => (clusterSizes[c.conflict_set_id] ?? 0) <= 1,
+    );
+    if (selected.size === eligible.length && eligible.length > 0) {
+      setSelected(new Set());
+      return;
+    }
+    setSelected(new Set(eligible.map(candidateKey)));
+  };
 
   const handlePair = async (candidate: SwapCandidate) => {
     const key = candidateKey(candidate);
@@ -174,6 +280,77 @@ export function SwapMatching() {
       tx_in: candidate.in_id,
       reason: "user dismissed from review queue",
     });
+    void refetch();
+  };
+
+  const openExactPreview = () => {
+    setPreviewState({ mode: "exact", candidates: exactSolo });
+  };
+
+  const openSelectedPreview = () => {
+    setPreviewState({ mode: "selected", candidates: selectedCandidates });
+  };
+
+  const commitBulk = async () => {
+    if (!previewState) return;
+    if (previewState.mode === "exact") {
+      const envelope = await bulkPairMutation.mutateAsync({ confidence: "exact" });
+      const result = envelope.data;
+      if (result) {
+        setUndoState({
+          pairIds: result.applied.map((p) => p.id),
+          summary: result.summary,
+          deadline: Date.now() + UNDO_WINDOW_MS,
+        });
+      }
+    } else {
+      const applied: string[] = [];
+      let totalFee = 0;
+      for (const candidate of previewState.candidates) {
+        const key = candidateKey(candidate);
+        const override = overrides[key] ?? {};
+        const envelope = await pairMutation.mutateAsync({
+          tx_out: candidate.out_id,
+          tx_in: candidate.in_id,
+          kind: override.kind ?? bulkKind,
+          policy: override.policy ?? bulkPolicy,
+          pair_source: "bulk_selected",
+          confidence_at_pair: candidate.confidence,
+        });
+        const created = envelope.data as { id?: string; swap_fee_msat?: number } | undefined;
+        if (created?.id) applied.push(created.id);
+        if (typeof created?.swap_fee_msat === "number") totalFee += created.swap_fee_msat;
+      }
+      setUndoState({
+        pairIds: applied,
+        summary: {
+          count: applied.length,
+          skipped_conflicts: 0,
+          total_swap_fee_msat: totalFee,
+        },
+        deadline: Date.now() + UNDO_WINDOW_MS,
+      });
+    }
+    setPreviewState(null);
+    setSelected(new Set());
+    void refetch();
+  };
+
+  const cancelUndo = () => {
+    setUndoState(null);
+  };
+
+  const performUndo = async () => {
+    if (!undoState) return;
+    const pairIds = undoState.pairIds;
+    setUndoState(null);
+    for (const pairId of pairIds) {
+      try {
+        await unpairMutation.mutateAsync({ pair_id: pairId });
+      } catch {
+        // Swallow per-row failures; the next refetch surfaces the actual state.
+      }
+    }
     void refetch();
   };
 
@@ -255,6 +432,78 @@ export function SwapMatching() {
       </div>
 
       <div className={cn(screenPanelClassName, "flex flex-col gap-3 p-4")}>
+        {!isLoading && !isError && candidates.length > 0 ? (
+          <div className="flex flex-wrap items-center gap-2 rounded-md border bg-background/50 px-3 py-2 text-sm">
+            <label className="flex items-center gap-2">
+              <Checkbox
+                checked={selected.size > 0}
+                onCheckedChange={handleSelectAll}
+              />
+              <span className="text-xs text-muted-foreground">
+                {selected.size > 0
+                  ? `${selected.size} selected`
+                  : "Select all non-conflicted"}
+              </span>
+            </label>
+            {selected.size > 0 ? (
+              <>
+                <label className="flex items-center gap-1 text-xs text-muted-foreground">
+                  Kind
+                  <Select value={bulkKind} onValueChange={(v) => setBulkKind(v as PairKind)}>
+                    <SelectTrigger className="ml-1 h-8 w-44">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {PAIR_KIND_OPTIONS.map((option) => (
+                        <SelectItem key={option} value={option}>
+                          {option}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </label>
+                <label className="flex items-center gap-1 text-xs text-muted-foreground">
+                  Policy
+                  <Select
+                    value={bulkPolicy}
+                    onValueChange={(v) => setBulkPolicy(v as PairPolicy)}
+                  >
+                    <SelectTrigger className="ml-1 h-8 w-44">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {PAIR_POLICY_OPTIONS.map((option) => (
+                        <SelectItem key={option} value={option}>
+                          {option}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </label>
+                <Button
+                  size="sm"
+                  onClick={openSelectedPreview}
+                  disabled={pairMutation.isPending}
+                >
+                  Pair {selected.size} selected
+                </Button>
+              </>
+            ) : null}
+            <div className="ml-auto flex items-center gap-2">
+              {exactSolo.length > 0 ? (
+                <Button
+                  size="sm"
+                  variant="default"
+                  onClick={openExactPreview}
+                  disabled={bulkPairMutation.isPending}
+                >
+                  <Sparkles className="size-4" />
+                  <span>Apply all {exactSolo.length} exact</span>
+                </Button>
+              ) : null}
+            </div>
+          </div>
+        ) : null}
         {isLoading ? (
           <div className="flex items-center gap-2 text-sm text-muted-foreground">
             <Loader2 className="size-4 animate-spin" /> Loading candidates…
@@ -282,6 +531,12 @@ export function SwapMatching() {
                 )}
               >
                 <header className="flex flex-wrap items-center gap-2 border-b border-border/60 px-4 py-2">
+                  <Checkbox
+                    aria-label="Select candidate"
+                    disabled={conflicted}
+                    checked={selected.has(key)}
+                    onCheckedChange={() => toggleSelected(key)}
+                  />
                   <ConfidenceBadge candidate={candidate} />
                   <span className="text-xs text-muted-foreground">
                     {candidate.method === "payment_hash"
@@ -399,8 +654,100 @@ export function SwapMatching() {
           })
         )}
       </div>
+
+      <Dialog
+        open={previewState !== null}
+        onOpenChange={(open) => {
+          if (!open) setPreviewState(null);
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>
+              {previewState?.mode === "exact"
+                ? "Apply all exact matches"
+                : "Pair selected candidates"}
+            </DialogTitle>
+            <DialogDescription>
+              {previewState
+                ? previewSummaryText(previewState.candidates)
+                : null}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="max-h-64 overflow-auto rounded border border-border/60 p-2 text-sm">
+            {previewState?.candidates.map((candidate) => (
+              <div
+                key={`${candidate.out_id}->${candidate.in_id}`}
+                className="flex items-center justify-between gap-2 border-b border-border/40 py-1 last:border-b-0"
+              >
+                <span className="truncate text-xs">
+                  {candidate.out_asset} {formatBtc(candidate.out_amount)} →{" "}
+                  {candidate.in_asset} {formatBtc(candidate.in_amount)}
+                </span>
+                <span className="text-xs text-muted-foreground">
+                  fee {formatSats(candidate.swap_fee_msat)}
+                </span>
+              </div>
+            ))}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setPreviewState(null)}>
+              Cancel
+            </Button>
+            <Button
+              onClick={() => void commitBulk()}
+              disabled={bulkPairMutation.isPending || pairMutation.isPending}
+            >
+              {bulkPairMutation.isPending || pairMutation.isPending ? (
+                <Loader2 className="size-4 animate-spin" />
+              ) : null}
+              <span className="ml-1">Confirm</span>
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {undoState ? (
+        <div className="pointer-events-none fixed inset-x-0 bottom-4 z-50 flex justify-center">
+          <div className="pointer-events-auto flex items-center gap-3 rounded-full bg-zinc-900 px-4 py-2 text-sm text-zinc-50 shadow-lg dark:bg-zinc-100 dark:text-zinc-900">
+            <span>
+              Paired <strong>{undoState.summary.count}</strong> candidate
+              {undoState.summary.count === 1 ? "" : "s"}
+              {undoState.summary.total_swap_fee_msat
+                ? ` · swap fees ${formatSats(undoState.summary.total_swap_fee_msat)}`
+                : ""}
+            </span>
+            <Button
+              size="sm"
+              variant="ghost"
+              className="h-7 px-2 text-inherit hover:bg-zinc-700 dark:hover:bg-zinc-300"
+              onClick={() => void performUndo()}
+              disabled={unpairMutation.isPending}
+            >
+              <Undo2 className="size-3.5" />
+              <span className="ml-1">Undo</span>
+            </Button>
+            <Button
+              size="sm"
+              variant="ghost"
+              className="h-7 px-1 text-inherit hover:bg-zinc-700 dark:hover:bg-zinc-300"
+              onClick={cancelUndo}
+              aria-label="Dismiss undo toast"
+            >
+              <X className="size-3.5" />
+            </Button>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
+}
+
+function previewSummaryText(candidates: SwapCandidate[]): string {
+  if (candidates.length === 0) return "No candidates to pair.";
+  const totalFeeMsat = candidates.reduce((acc, c) => acc + c.swap_fee_msat, 0);
+  const totalCarry = candidates.reduce((acc, c) => acc + c.out_amount, 0);
+  return `${candidates.length} pair${candidates.length === 1 ? "" : "s"} · carrying value ${formatBtc(totalCarry)} · total swap fees ${formatSats(totalFeeMsat)}.`;
 }
 
 interface LegCardProps {
