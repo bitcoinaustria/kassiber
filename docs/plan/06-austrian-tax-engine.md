@@ -186,6 +186,6 @@ needs leak tax math back across the seam.
 - FinanzOnline auto-submission
 - Regelbesteuerungsoption computation
 - Betriebsvermögen/business-income tax engine behavior
-- NFT, DeFi, and asset-backed-token support
+- DeFi and asset-backed-token support
 - altcoin product scope beyond defensive tax-engine boundaries
 - multi-year crypto loss carryforward

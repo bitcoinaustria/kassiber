@@ -70,7 +70,6 @@ AUSTRIAN_E1KV_CATEGORY_LABELS = {
 AUSTRIAN_TAX_SECTION_ORDER = (
     "1.1",
     "1.2",
-    "1.3",
     "2.1",
     "2.2",
     "3.1",
@@ -92,12 +91,6 @@ AUSTRIAN_TAX_SECTION_METADATA = {
     "1.2": {
         "label": "Steuerpflichtige Einkuenfte aus Margin, Derivaten und Futures",
         "law": "27 Z 4 EStG",
-        "supported": False,
-        "kennzahlen": (),
-    },
-    "1.3": {
-        "label": "Steuerpflichtige Einkuenfte aus NFT-Spekulationsgeschaeften",
-        "law": "31 EStG",
         "supported": False,
         "kennzahlen": (),
     },
@@ -165,7 +158,7 @@ AUSTRIAN_TAX_SECTION_METADATA = {
 AUSTRIAN_TAX_SECTION_GROUPS = (
     (
         "1. Steuerpflichtige Einkuenfte aus dem Handel mit Kryptowaehrungen",
-        ("1.1", "1.2", "1.3"),
+        ("1.1", "1.2"),
     ),
     ("2. Steuerpflichtige laufende Einkuenfte", ("2.1", "2.2")),
     ("3. Nicht steuerbare Einkuenfte", ("3.1", "3.2", "3.3")),
@@ -1432,8 +1425,6 @@ def _austrian_e1kv_overview_entries(report):
     section("1.2. Steuerpflichtige Einkünfte aus Margin, Derivaten und Futures")
     amount("Gewinne aus Margin, Derivaten und Futures", 0, total=True)
     amount("Verluste aus Margin, Derivaten und Futures", 0, total=True)
-    section("1.3. Steuerpflichtige Einkünfte aus NFT-Spekulationsgeschäften")
-    amount("Summe Einkünfte aus NFT-Spekulationsgeschäften", 0, total=True)
 
     heading("2. Steuerpflichtige laufende Einkünfte")
     section("2.1. Einkünfte aus der Überlassung von Kryptowährungen")
@@ -1745,7 +1736,6 @@ AUSTRIAN_E1KV_XLSX_SHEETS = (
     "Übersicht",
     "1.1.",
     "1.2.",
-    "1.3.",
     "2.1.",
     "2.2.",
     "3.1.",
@@ -1762,10 +1752,9 @@ AUSTRIAN_E1KV_XLSX_SHEETS = (
 AUSTRIAN_E1KV_XLSX_TITLES = {
     "1.1": "1.1. Steuerpflichtige Einkünfte aus dem An- und Verkauf von Kryptowährungen gem. § 27b Abs 3 EStG",
     "1.2": "1.2. Steuerpflichtige Einkünfte aus Margin, Derivaten und Futures",
-    "1.3": "1.3. Steuerpflichtige Einkünfte aus NFT-Spekulationsgeschäften",
     "2.1": "2.1. Steuerpflichtige laufende Einkünfte aus der Überlassung von Kryptowährungen",
     "2.2": "2.2. Steuerpflichtige laufende Einkünfte aus Leistungen zur Transaktionsverarbeitung",
-    "3.1": "3.1. Nicht steuerbare Einkünfte aus Spekulationsgeschäften mit Kryptowährungen und NFTs",
+    "3.1": "3.1. Nicht steuerbare Einkünfte aus Spekulationsgeschäften mit Kryptowährungen",
     "3.2": "3.2. Nicht steuerbare Einkünfte gem. § 27b Abs 2 Z 2 Satz 2 EStG",
     "3.3": "3.3. Nicht steuerbare Steuergebühren und Rückerstattungen",
     "4.1": "4.1. Eingegangene Spenden/Trinkgeld",
@@ -2024,17 +2013,6 @@ def _austrian_e1kv_section_table_specs(report):
             "value_column": 5,
             "column_widths": (18, 22, 16, 14, 12, 18),
         },
-        {
-            "sheet_name": "1.3.",
-            "filename": _austrian_e1kv_csv_filename(3, "1.3"),
-            "title": AUSTRIAN_E1KV_XLSX_TITLES["1.3"],
-            "headers": AUSTRIAN_E1KV_XLSX_HOLDING_HEADERS,
-            "rows": [],
-            "row_format_names": holding_formats,
-            "total_rows": [("Summe Einkünfte aus NFT-Spekulationsgeschäften", 0.0)],
-            "value_column": 10,
-            "column_widths": (18, 12, 14, 15, 15, 18, 16, 24, 18, 18, 20),
-        },
         *[
             {
                 "sheet_name": f"{section_id}.",
@@ -2052,11 +2030,11 @@ def _austrian_e1kv_section_table_specs(report):
                 "value_column": 6,
                 "column_widths": (18, 24, 18, 14, 12, 36, 24),
             }
-            for index, section_id in ((4, "2.1"), (5, "2.2"))
+            for index, section_id in ((3, "2.1"), (4, "2.2"))
         ],
         {
             "sheet_name": "3.1.",
-            "filename": _austrian_e1kv_csv_filename(6, "3.1"),
+            "filename": _austrian_e1kv_csv_filename(5, "3.1"),
             "title": AUSTRIAN_E1KV_XLSX_TITLES["3.1"],
             "headers": AUSTRIAN_E1KV_XLSX_HOLDING_HEADERS,
             "rows": [
@@ -2072,7 +2050,7 @@ def _austrian_e1kv_section_table_specs(report):
         },
         {
             "sheet_name": "3.2.",
-            "filename": _austrian_e1kv_csv_filename(7, "3.2"),
+            "filename": _austrian_e1kv_csv_filename(6, "3.2"),
             "title": AUSTRIAN_E1KV_XLSX_TITLES["3.2"],
             "headers": AUSTRIAN_E1KV_XLSX_INCOME_HEADERS,
             "rows": [],
@@ -2083,7 +2061,7 @@ def _austrian_e1kv_section_table_specs(report):
         },
         {
             "sheet_name": "3.3.",
-            "filename": _austrian_e1kv_csv_filename(8, "3.3"),
+            "filename": _austrian_e1kv_csv_filename(7, "3.3"),
             "title": AUSTRIAN_E1KV_XLSX_TITLES["3.3"],
             "headers": AUSTRIAN_E1KV_XLSX_FEE_HEADERS,
             "rows": [],
@@ -2097,7 +2075,7 @@ def _austrian_e1kv_section_table_specs(report):
         },
         {
             "sheet_name": "4.1.",
-            "filename": _austrian_e1kv_csv_filename(9, "4.1"),
+            "filename": _austrian_e1kv_csv_filename(8, "4.1"),
             "title": AUSTRIAN_E1KV_XLSX_TITLES["4.1"],
             "headers": AUSTRIAN_E1KV_XLSX_INCOME_HEADERS,
             "rows": [],
@@ -2108,7 +2086,7 @@ def _austrian_e1kv_section_table_specs(report):
         },
         {
             "sheet_name": "4.2.",
-            "filename": _austrian_e1kv_csv_filename(10, "4.2"),
+            "filename": _austrian_e1kv_csv_filename(9, "4.2"),
             "title": AUSTRIAN_E1KV_XLSX_TITLES["4.2"],
             "headers": AUSTRIAN_E1KV_XLSX_OUTGOING_HEADERS,
             "rows": [],
@@ -2119,7 +2097,7 @@ def _austrian_e1kv_section_table_specs(report):
         },
         {
             "sheet_name": "4.3.",
-            "filename": _austrian_e1kv_csv_filename(11, "4.3"),
+            "filename": _austrian_e1kv_csv_filename(10, "4.3"),
             "title": AUSTRIAN_E1KV_XLSX_TITLES["4.3"],
             "headers": AUSTRIAN_E1KV_XLSX_OUTGOING_HEADERS,
             "rows": [],
@@ -2140,7 +2118,7 @@ def _austrian_e1kv_section_table_specs(report):
                 "value_column": 6,
                 "column_widths": (18, 24, 18, 14, 12, 36, 24),
             }
-            for index, section_id, total_label in ((12, "4.4", "Summe Mining"), (13, "4.5", "Summe Minting"))
+            for index, section_id, total_label in ((11, "4.4", "Summe Mining"), (12, "4.5", "Summe Minting"))
         ],
     ]
 
@@ -2284,7 +2262,7 @@ def _austrian_e1kv_xlsx_write_explanations(report, workbook, formats):
         [
             ("Nicht modellierte Blätter", "explanation_heading"),
             (
-                "Margin/Derivate/Futures, NFT-Spekulationsgeschäfte, Steuergebühren, "
+                "Margin/Derivate/Futures, Steuergebühren, "
                 "Spenden/Schenkungen, verlorene Coins, kommerzielles Mining und Minting "
                 "werden heute als leere Nullabschnitte dargestellt, weil Kassiber dafür "
                 "noch keine strukturierten Steuerereignisse speichert.",
@@ -2426,7 +2404,7 @@ def _austrian_e1kv_explanation_csv_rows(report):
         [
             ["Nicht modellierte Dateien"],
             [
-                "Margin/Derivate/Futures, NFT-Spekulationsgeschäfte, Steuergebühren, "
+                "Margin/Derivate/Futures, Steuergebühren, "
                 "Spenden/Schenkungen, verlorene Coins, kommerzielles Mining und Minting "
                 "werden heute als leere Nullabschnitte dargestellt, weil Kassiber dafür "
                 "noch keine strukturierten Steuerereignisse speichert."
