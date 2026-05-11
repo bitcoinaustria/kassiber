@@ -1716,7 +1716,7 @@ def export_austrian_e1kv_pdf_report(conn, workspace_ref, profile_ref, file_path,
         write_austrian_e1kv_pdf(
             file_path,
             report=report,
-            summary=report_summary(conn, workspace_ref, profile_ref, hooks),
+            profile=dict(profile),
             portfolio_rows=report_portfolio_summary(conn, workspace_ref, profile_ref, hooks),
             transaction_rows=transaction_rows,
             section_specs=_austrian_e1kv_section_table_specs(report),

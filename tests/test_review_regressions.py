@@ -6374,6 +6374,14 @@ class ReviewRegressionTest(unittest.TestCase):
         )
         self._assert_ok(payload, result, "wallets.import-json")
         payload, result = self._run_json(
+            "metadata", "records", "note", "set",
+            "--workspace", "Main",
+            "--profile", "Default",
+            "--transaction", "at-e1kv-staking",
+            "--note", "Unicode renderer check: BTC ↔ EUR",
+        )
+        self._assert_ok(payload, result, "metadata.records.note.set")
+        payload, result = self._run_json(
             "journals", "process",
             "--workspace", "Main",
             "--profile", "Default",
@@ -6518,6 +6526,7 @@ class ReviewRegressionTest(unittest.TestCase):
             self.assertIn("Besonderheiten", extracted)
             self.assertIn("FAQ", extracted)
             self.assertIn("€ (EUR)", extracted)
+            self.assertIn("BTC ↔ EUR", extracted)
 
         plain_result = self._run_cli(
             "--format", "plain",

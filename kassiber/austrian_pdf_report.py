@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import re
 from collections import defaultdict
 from decimal import Decimal, InvalidOperation
 from importlib import resources
@@ -92,11 +91,6 @@ def _register_fonts(rl: dict[str, Any]) -> dict[str, str]:
     return {"regular": "Helvetica", "bold": "Helvetica-Bold", "mono": "Courier"}
 
 
-def _page_count(path: Path) -> int:
-    payload = path.read_bytes()
-    return max(1, len(re.findall(rb"/Type\s*/Page(?!s)\b", payload)))
-
-
 def _format_date(value: str | None) -> str:
     if not value:
         return ""
@@ -163,7 +157,7 @@ class _AustrianReportBuilder:
         self,
         *,
         report: dict[str, Any],
-        summary: dict[str, Any],
+        profile: dict[str, Any],
         portfolio_rows: Sequence[dict[str, Any]],
         transaction_rows: Sequence[dict[str, Any]],
         section_specs: Sequence[dict[str, Any]],
@@ -172,7 +166,7 @@ class _AustrianReportBuilder:
         fonts: dict[str, str],
     ) -> None:
         self.report = report
-        self.summary = summary
+        self.profile = profile
         self.portfolio_rows = list(portfolio_rows)
         self.transaction_rows = list(transaction_rows)
         self.section_specs = list(section_specs)
@@ -383,7 +377,7 @@ class _AustrianReportBuilder:
             ("Profil", self.report.get("profile", "")),
             ("Währung", "€ (EUR)"),
             ("Steuerjahr", tax_year),
-            ("Berechnungsart", self.summary.get("gains_algorithm", "")),
+            ("Berechnungsart", self.profile.get("gains_algorithm", "")),
             ("Report erstellt am", _format_datetime(self.generated_at)),
             ("Transaktionen", metrics["transactions"]),
             ("Genutzte Wallets", metrics["wallets"]),
@@ -451,10 +445,10 @@ class _AustrianReportBuilder:
 
     def taxable_summary(self) -> list[Any]:
         rows = [
-            ["1.1.", "Einkünfte aus der Überlassung von Kapital", "E 1kv KZ 862", "0,00"],
-            ["1.2.", "Einkünfte aus nicht verbrieften Derivaten", "E 1kv KZ 857", "0,00"],
-            ["1.3.", "Einkünfte aus verbrieften Derivaten", "E 1kv KZ 995", "0,00"],
-            ["1.4.", "Verluste aus verbrieften Derivaten", "E 1kv KZ 896", "0,00"],
+            ["1.1.", "Einkünfte aus der Überlassung von Kapital", "E 1kv KZ 862", self._money_total(862)],
+            ["1.2.", "Einkünfte aus nicht verbrieften Derivaten", "E 1kv KZ 857", self._money_total(857)],
+            ["1.3.", "Einkünfte aus verbrieften Derivaten", "E 1kv KZ 995", self._money_total(995)],
+            ["1.4.", "Verluste aus verbrieften Derivaten", "E 1kv KZ 896", self._money_total(896)],
             [
                 "1.5.",
                 "Laufende Einkünfte - § 27b Abs. 2 EStG",
@@ -476,7 +470,7 @@ class _AustrianReportBuilder:
             ["2.1.", "Inländische realisierte Wertsteigerungen mit Steuerabzug", "E 1kv KZ 173", "*"],
             ["2.2.", "Inländische realisierte Wertverluste mit Steuerabzug", "E 1kv KZ 175", "*"],
             ["3.", "Einkünfte aus Spekulationsgeschäften - § 31 EStG", "E 1 KZ 801", self._money_total(801)],
-            ["4.", "Einkünfte aus Leistungen - § 29 Z. 3 EStG", "E 1 KZ 803", "0,00"],
+            ["4.", "Einkünfte aus Leistungen - § 29 Z. 3 EStG", "E 1 KZ 803", self._money_total(803)],
         ]
         return [
             self.p("Gesamtübersicht", "h1"),
@@ -794,10 +788,11 @@ class _AustrianReportBuilder:
     def finanzonline_summary(self) -> list[Any]:
         form_rows = [
             ["801", "Einkünfte aus Spekulationsgeschäften (§ 31)", self._money_total(801)],
-            ["803", "Einkünfte aus Leistungen im Sinne des § 29 Z. 3 EStG", "0,00"],
-            ["857", "Sonstige tarifsteuerpflichtige Einkünfte aus Kapitalvermögen", "0,00"],
-            ["995", "Einkünfte aus verbrieften Derivaten", "0,00"],
-            ["896", "Verluste aus verbrieften Derivaten", "0,00"],
+            ["803", "Einkünfte aus Leistungen im Sinne des § 29 Z. 3 EStG", self._money_total(803)],
+            ["857", "Sonstige tarifsteuerpflichtige Einkünfte aus Kapitalvermögen", self._money_total(857)],
+            ["862", "Einkünfte aus der Überlassung von Kapital", self._money_total(862)],
+            ["995", "Einkünfte aus verbrieften Derivaten", self._money_total(995)],
+            ["896", "Verluste aus verbrieften Derivaten", self._money_total(896)],
             ["172", "Ausländische laufende Einkünfte", self._money_total(172)],
             ["174", "Ausländische Überschüsse aus realisierten Wertsteigerungen", self._money_total(174)],
             ["176", "Ausländische Verluste", self._money_total(176)],
@@ -870,7 +865,7 @@ def write_austrian_e1kv_pdf(
     file_path: str | Path,
     *,
     report: dict[str, Any],
-    summary: dict[str, Any],
+    profile: dict[str, Any],
     portfolio_rows: Sequence[dict[str, Any]],
     transaction_rows: Sequence[dict[str, Any]],
     section_specs: Sequence[dict[str, Any]],
@@ -923,7 +918,7 @@ def write_austrian_e1kv_pdf(
     )
     builder = _AustrianReportBuilder(
         report=report,
-        summary=summary,
+        profile=profile,
         portfolio_rows=portfolio_rows,
         transaction_rows=transaction_rows,
         section_specs=section_specs,
@@ -934,7 +929,7 @@ def write_austrian_e1kv_pdf(
     doc.build(builder.build())
     return {
         "file": str(path.resolve()),
-        "pages": _page_count(path),
+        "pages": max(1, int(getattr(doc, "page", 0) or 0)),
         "bytes": path.stat().st_size,
         "title": title,
         "renderer": "reportlab",
