@@ -1,94 +1,23 @@
 from __future__ import annotations
 
 from collections import defaultdict
-from decimal import Decimal, InvalidOperation
-from importlib import resources
+from decimal import Decimal
 from pathlib import Path
 from typing import Any, Iterable, Sequence
 
-from .errors import AppError
-
-
-BRAND_INK = "#222222"
-BRAND_MUTED = "#666666"
-BRAND_LINE = "#d9d9d9"
-BRAND_SOFT = "#f7f7f7"
-BRAND_ACCENT = "#e3000f"
-BRAND_ACCENT_SOFT = "#fff1f2"
-
-
-def _require_reportlab():
-    try:
-        from reportlab import rl_config
-        from reportlab.lib import colors
-        from reportlab.lib.pagesizes import A4, landscape
-        from reportlab.lib.styles import ParagraphStyle
-        from reportlab.lib.units import mm
-        from reportlab.pdfbase import pdfmetrics
-        from reportlab.pdfbase.ttfonts import TTFont
-        from reportlab.platypus import (
-            BaseDocTemplate,
-            Frame,
-            NextPageTemplate,
-            PageBreak,
-            PageTemplate,
-            Paragraph,
-            Spacer,
-            Table,
-            TableStyle,
-        )
-    except ImportError as exc:
-        raise AppError(
-            "Austrian PDF export requires the ReportLab PDF renderer",
-            code="dependency_missing",
-            hint="Install Kassiber project dependencies again so reportlab is available.",
-        ) from exc
-
-    return {
-        "rl_config": rl_config,
-        "colors": colors,
-        "A4": A4,
-        "landscape": landscape,
-        "ParagraphStyle": ParagraphStyle,
-        "mm": mm,
-        "pdfmetrics": pdfmetrics,
-        "TTFont": TTFont,
-        "BaseDocTemplate": BaseDocTemplate,
-        "Frame": Frame,
-        "NextPageTemplate": NextPageTemplate,
-        "PageBreak": PageBreak,
-        "PageTemplate": PageTemplate,
-        "Paragraph": Paragraph,
-        "Spacer": Spacer,
-        "Table": Table,
-        "TableStyle": TableStyle,
-    }
-
-
-def _register_fonts(rl: dict[str, Any]) -> dict[str, str]:
-    pdfmetrics = rl["pdfmetrics"]
-    TTFont = rl["TTFont"]
-    try:
-        font_dir = resources.files("reportlab").joinpath("fonts")
-        regular = font_dir.joinpath("Vera.ttf")
-        bold = font_dir.joinpath("VeraBd.ttf")
-        mono = font_dir.joinpath("VeraMono.ttf")
-        if regular.is_file() and bold.is_file() and mono.is_file():
-            for name, path in (
-                ("KassiberSans", regular),
-                ("KassiberSans-Bold", bold),
-                ("KassiberMono", mono),
-            ):
-                if name not in pdfmetrics.getRegisteredFontNames():
-                    pdfmetrics.registerFont(TTFont(name, str(path)))
-            return {
-                "regular": "KassiberSans",
-                "bold": "KassiberSans-Bold",
-                "mono": "KassiberMono",
-            }
-    except (FileNotFoundError, ModuleNotFoundError, OSError):
-        pass
-    return {"regular": "Helvetica", "bold": "Helvetica-Bold", "mono": "Courier"}
+from ._pdf_common import (
+    BRAND_ACCENT,
+    BRAND_ACCENT_SOFT,
+    BRAND_INK,
+    BRAND_LINE,
+    BRAND_MUTED,
+    BRAND_SOFT,
+    decimal_value as _decimal,
+    draw_page_header,
+    escape_paragraph_text as _escape,
+    register_fonts,
+    require_reportlab,
+)
 
 
 def _format_date(value: str | None) -> str:
@@ -111,15 +40,6 @@ def _format_datetime(value: str | None) -> str:
     return text
 
 
-def _decimal(value: Any) -> Decimal:
-    if value is None or value == "":
-        return Decimal("0")
-    try:
-        return Decimal(str(value))
-    except (InvalidOperation, ValueError):
-        return Decimal("0")
-
-
 def _money_from_cents(value: Any, *, signed: bool = False) -> str:
     amount = Decimal(int(value or 0)) / Decimal("100")
     return _money(amount, signed=signed)
@@ -140,16 +60,6 @@ def _quantity(value: Any) -> str:
     amount = _decimal(value).quantize(Decimal("0.00000001"))
     text = f"{amount:,.8f}".replace(",", "X").replace(".", ",").replace("X", ".")
     return text.rstrip("0").rstrip(",") if "," in text else text
-
-
-def _escape(value: Any) -> str:
-    text = "" if value is None else str(value)
-    return (
-        text.replace("&", "&amp;")
-        .replace("<", "&lt;")
-        .replace(">", "&gt;")
-        .replace("\n", "<br/>")
-    )
 
 
 class _AustrianReportBuilder:
@@ -843,22 +753,17 @@ class _AustrianReportBuilder:
 
 
 def _on_page(canvas: Any, doc: Any, *, title: str, fonts: dict[str, str], rl: dict[str, Any]) -> None:
-    colors = rl["colors"]
-    width, height = doc.pagesize
-    canvas.saveState()
-    canvas.setFillColor(colors.HexColor(BRAND_INK))
-    canvas.setFont(fonts["bold"], 8)
-    canvas.drawString(doc.leftMargin, height - 9 * rl["mm"], "Kassiber")
-    canvas.setFont(fonts["regular"], 7)
-    canvas.setFillColor(colors.HexColor(BRAND_MUTED))
-    canvas.drawRightString(width - doc.rightMargin, height - 9 * rl["mm"], title)
-    canvas.setStrokeColor(colors.HexColor(BRAND_LINE))
-    canvas.setLineWidth(0.4)
-    canvas.line(doc.leftMargin, height - 11 * rl["mm"], width - doc.rightMargin, height - 11 * rl["mm"])
-    canvas.setFont(fonts["regular"], 7)
-    canvas.drawString(doc.leftMargin, 8 * rl["mm"], "Local-first Steuerbericht. Keine Steuerberatung.")
-    canvas.drawRightString(width - doc.rightMargin, 8 * rl["mm"], f"Seite {doc.page}")
-    canvas.restoreState()
+    draw_page_header(
+        canvas,
+        doc,
+        title=title,
+        fonts=fonts,
+        rl=rl,
+        brand_label="Kassiber",
+        footer_left="Local-first Steuerbericht. Keine Steuerberatung.",
+        page_label="Seite",
+        line_width=0.4,
+    )
 
 
 def write_austrian_e1kv_pdf(
@@ -871,9 +776,9 @@ def write_austrian_e1kv_pdf(
     section_specs: Sequence[dict[str, Any]],
     generated_at: str,
 ) -> dict[str, Any]:
-    rl = _require_reportlab()
+    rl = require_reportlab("Austrian PDF export")
     rl["rl_config"].warnOnMissingFontGlyphs = 0
-    fonts = _register_fonts(rl)
+    fonts = register_fonts(rl)
     path = Path(file_path).expanduser()
     path.parent.mkdir(parents=True, exist_ok=True)
 

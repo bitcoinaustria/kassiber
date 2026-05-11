@@ -59,15 +59,10 @@ def _stub_format_table(headers, rows, widths, *, align_right=None):
     return [" ".join(headers)] + [" ".join(str(c) for c in row) for row in rows]
 
 
-def _stub_write_text_pdf(path, title, lines):
-    return {"file": path, "title": title, "line_count": len(lines)}
-
-
 def _build_hooks(workspace_id: str, profile_id: str) -> SourceFundsHooks:
     return SourceFundsHooks(
         resolve_scope=_stub_resolve_scope(workspace_id, profile_id),
         resolve_transaction=_stub_resolve_transaction,
-        write_text_pdf=_stub_write_text_pdf,
         format_table=_stub_format_table,
     )
 

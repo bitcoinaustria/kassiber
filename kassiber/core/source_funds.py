@@ -11,6 +11,7 @@ from typing import Any, Callable, Mapping, Sequence
 from ..envelope import json_ready
 from ..errors import AppError
 from ..msat import btc_to_msat, dec, msat_to_btc
+from ..source_funds_pdf_report import write_source_funds_pdf
 from ..time_utils import UNKNOWN_OCCURRED_AT, now_iso, parse_timestamp
 from ..wallet_descriptors import normalize_asset_code
 from .source_funds_hints import enrich_findings_with_next_steps
@@ -84,7 +85,6 @@ _MAX_BUILD_REPORT_EDGES = 5_000
 
 ScopeResolver = Callable[[sqlite3.Connection, str | None, str | None], tuple[Mapping[str, Any], Mapping[str, Any]]]
 TransactionResolver = Callable[..., Mapping[str, Any]]
-WriteTextPdf = Callable[[str, str, Sequence[str]], Mapping[str, Any]]
 FormatTable = Callable[..., list[str]]
 
 
@@ -92,7 +92,6 @@ FormatTable = Callable[..., list[str]]
 class SourceFundsHooks:
     resolve_scope: ScopeResolver
     resolve_transaction: TransactionResolver
-    write_text_pdf: WriteTextPdf
     format_table: FormatTable
 
 
@@ -2284,7 +2283,6 @@ def export_pdf(
             retryable=False,
         )
     snapshot_hash = _snapshot_hash(report)
-    from ..source_funds_pdf_report import write_source_funds_pdf
 
     result = dict(
         write_source_funds_pdf(

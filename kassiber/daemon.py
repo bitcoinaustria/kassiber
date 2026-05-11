@@ -702,7 +702,6 @@ def _source_funds_hooks() -> core_source_funds.SourceFundsHooks:
     return core_source_funds.SourceFundsHooks(
         resolve_scope=resolve_scope,
         resolve_transaction=resolve_transaction,
-        write_text_pdf=report_hooks.write_text_pdf,
         format_table=report_hooks.format_table,
     )
 

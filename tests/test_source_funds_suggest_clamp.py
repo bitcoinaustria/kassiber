@@ -36,16 +36,12 @@ def _build_hooks(workspace_id: str, profile_id: str) -> SourceFundsHooks:
             raise AppError(f"transaction '{ref}' not found", code="not_found")
         return dict(row)
 
-    def write_text_pdf(path, title, lines):
-        return {"file": path, "title": title, "line_count": len(lines)}
-
     def format_table(_headers, rows):
         return [str(row) for row in rows]
 
     return SourceFundsHooks(
         resolve_scope=resolve_scope,
         resolve_transaction=resolve_transaction,
-        write_text_pdf=write_text_pdf,
         format_table=format_table,
     )
 
