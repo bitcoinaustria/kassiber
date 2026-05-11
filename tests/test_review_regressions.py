@@ -6568,6 +6568,7 @@ class ReviewRegressionTest(unittest.TestCase):
             self.assertIn("FAQ", extracted)
             self.assertIn("€ (EUR)", extracted)
             self.assertIn("BTC ↔ EUR", extracted)
+            self.assertNotIn("NFT", extracted)
 
         plain_result = self._run_cli(
             "--format", "plain",
@@ -6613,7 +6614,6 @@ class ReviewRegressionTest(unittest.TestCase):
                 "Übersicht",
                 "1.1.",
                 "1.2.",
-                "1.3.",
                 "2.1.",
                 "2.2.",
                 "3.1.",
@@ -6636,12 +6636,14 @@ class ReviewRegressionTest(unittest.TestCase):
             shared_strings = workbook.read("xl/sharedStrings.xml").decode("utf-8")
         self.assertIn('name="Übersicht"', workbook_xml)
         self.assertIn('name="1.1."', workbook_xml)
+        self.assertNotIn('name="1.3."', workbook_xml)
         self.assertIn('name="3.3."', workbook_xml)
         self.assertIn('name="Erläuterungen zum Steuerreport"', workbook_xml)
         self.assertIn("at-e1kv-staking", shared_strings)
         self.assertIn("Summe laufende Einkünfte", shared_strings)
         self.assertIn("Kennzahl-Abweichungen", shared_strings)
         self.assertIn("Transaktion | Kategorie | gespeichert | Export", shared_strings)
+        self.assertNotIn("NFT", shared_strings)
         self.assertIn(
             "AT-E1KV-KENNZAHL-REPROCESS",
             {assumption["code"] for assumption in report["assumptions"]},
@@ -6659,22 +6661,21 @@ class ReviewRegressionTest(unittest.TestCase):
         self.assertEqual(payload["data"]["form"], "E 1kv")
         self.assertIn("Übersicht", payload["data"]["sheets"])
         self.assertIn("3.3.", payload["data"]["sheets"])
-        self.assertEqual(len(payload["data"]["files"]), 15)
+        self.assertEqual(len(payload["data"]["files"]), 14)
         expected_bundle_filenames = [
             "00_uebersicht.csv",
             "01_1.1.csv",
             "02_1.2.csv",
-            "03_1.3.csv",
-            "04_2.1.csv",
-            "05_2.2.csv",
-            "06_3.1.csv",
-            "07_3.2.csv",
-            "08_3.3.csv",
-            "09_4.1.csv",
-            "10_4.2.csv",
-            "11_4.3.csv",
-            "12_4.4.csv",
-            "13_4.5.csv",
+            "03_2.1.csv",
+            "04_2.2.csv",
+            "05_3.1.csv",
+            "06_3.2.csv",
+            "07_3.3.csv",
+            "08_4.1.csv",
+            "09_4.2.csv",
+            "10_4.3.csv",
+            "11_4.4.csv",
+            "12_4.5.csv",
             "99_erlaeuterungen_zum_steuerreport.csv",
         ]
         self.assertEqual(
@@ -6682,8 +6683,8 @@ class ReviewRegressionTest(unittest.TestCase):
             expected_bundle_filenames,
         )
         overview_csv = csv_bundle_dir / "00_uebersicht.csv"
-        section_21_csv = csv_bundle_dir / "04_2.1.csv"
-        section_33_csv = csv_bundle_dir / "08_3.3.csv"
+        section_21_csv = csv_bundle_dir / "03_2.1.csv"
+        section_33_csv = csv_bundle_dir / "07_3.3.csv"
         notes_csv = csv_bundle_dir / "99_erlaeuterungen_zum_steuerreport.csv"
         self.assertTrue(overview_csv.exists())
         self.assertTrue(section_21_csv.exists())
@@ -6698,6 +6699,7 @@ class ReviewRegressionTest(unittest.TestCase):
         self.assertIn("AT-E1KV-KENNZAHL-REPROCESS", notes_text)
         self.assertIn("Kennzahl-Abweichungen", notes_text)
         self.assertIn("at-e1kv-staking", notes_text)
+        self.assertNotIn("NFT", notes_text)
 
     def test_pdf_report_substitutes_non_latin1_glyphs(self):
         # Pin the remaining generic/source-funds text-PDF limitation.
@@ -6759,18 +6761,18 @@ class ReviewRegressionTest(unittest.TestCase):
             "--dir", str(csv_bundle_dir),
         )
         self._assert_ok(payload, result, "reports.export-austrian-e1kv-csv")
-        self.assertEqual(len(payload["data"]["files"]), 15)
+        self.assertEqual(len(payload["data"]["files"]), 14)
         self.assertIn(
             "No rows in scope.",
             (csv_bundle_dir / "02_1.2.csv").read_text(encoding="utf-8"),
         )
         self.assertIn(
             "Summe der Rückerstattungen",
-            (csv_bundle_dir / "08_3.3.csv").read_text(encoding="utf-8"),
+            (csv_bundle_dir / "07_3.3.csv").read_text(encoding="utf-8"),
         )
         self.assertIn(
             "Summe Minting",
-            (csv_bundle_dir / "13_4.5.csv").read_text(encoding="utf-8"),
+            (csv_bundle_dir / "12_4.5.csv").read_text(encoding="utf-8"),
         )
 
     def test_austrian_e1kv_quarantined_rows_stay_out_but_counts_visible(self):

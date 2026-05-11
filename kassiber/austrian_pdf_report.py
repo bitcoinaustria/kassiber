@@ -492,7 +492,7 @@ class _AustrianReportBuilder:
 
     def taxable_details(self) -> list[Any]:
         story = [self.p("Detailübersicht", "h1"), self.p("Steuerpflichtig", "cover_subtitle")]
-        for spec in self.section_specs[:5]:
+        for spec in self.section_specs[:4]:
             story.extend(self.section_spec(spec))
         story.append(self.rl["PageBreak"]())
         return story
@@ -519,7 +519,7 @@ class _AustrianReportBuilder:
             self.spacer(8),
             self.p("Detailübersicht", "h1"),
         ]
-        for spec in self.section_specs[5:]:
+        for spec in self.section_specs[4:]:
             story.extend(self.section_spec(spec))
         story.append(self.rl["PageBreak"]())
         return story
@@ -667,7 +667,7 @@ class _AustrianReportBuilder:
         rows.append(
             [
                 "Nicht modellierte Abschnitte",
-                "Margin/Derivate, NFTs, Spenden, verlorene Coins, kommerzielles Mining und Minting bleiben Null-Platzhalter.",
+                "Margin/Derivate, Spenden, verlorene Coins, kommerzielles Mining und Minting bleiben Null-Platzhalter.",
                 "Nur mit strukturierter Klassifikation befüllen; nicht aus Freitext erraten.",
             ]
         )
