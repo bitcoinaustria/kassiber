@@ -26,6 +26,12 @@ DEFAULT_PAGE_SIZE = 100
 DEFAULT_STATUS_FILTER = "Confirmed"
 MAX_PAGES = 10_000
 
+# Kassiber currently understands wallet-history sync for Bitcoin and Liquid
+# on-chain only. Adding a new entry here is the single step required to
+# extend support — both the desktop discovery UI and the daemon validation
+# paths read from this allowlist.
+WALLET_HISTORY_PAYMENT_METHOD_IDS = frozenset({"BTC-CHAIN", "LBTC-CHAIN"})
+
 
 def fetch_btcpay_records(
     backend,
@@ -304,10 +310,8 @@ def _normalize_payment_method(store_id, raw_method):
 
 
 def _is_wallet_history_payment_method(payment_method_id):
-    normalized = payment_method_id.upper()
-    if normalized.endswith("-LN") or "LIGHTNING" in normalized or "LNURL" in normalized:
-        return False
-    return normalized.endswith("-CHAIN") or "ONCHAIN" in normalized or "-" not in normalized
+    normalized = str(payment_method_id or "").strip().upper()
+    return normalized in WALLET_HISTORY_PAYMENT_METHOD_IDS
 
 
 def require_wallet_history_payment_method(payment_method_id):
@@ -377,6 +381,7 @@ def _unix_to_iso(ts):
 __all__ = [
     "DEFAULT_PAGE_SIZE",
     "DEFAULT_PAYMENT_METHOD_ID",
+    "WALLET_HISTORY_PAYMENT_METHOD_IDS",
     "discover_btcpay_wallet_sources",
     "fetch_btcpay_records",
     "probe_btcpay_wallet",

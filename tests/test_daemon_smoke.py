@@ -1549,8 +1549,9 @@ class DaemonSmokeTest(unittest.TestCase):
                     mapped_btcpay["data"]["wallet"]["label"],
                     "River UI",
                 )
+                mapped_config = mapped_btcpay["data"]["wallet"]["config"]
                 self.assertEqual(
-                    mapped_btcpay["data"]["wallet"]["config"]["btcpay_provenance"],
+                    mapped_config["btcpay_provenance"],
                     [
                         {
                             "backend": "btcpay-ui",
@@ -1558,6 +1559,36 @@ class DaemonSmokeTest(unittest.TestCase):
                             "payment_method_id": "BTC-CHAIN",
                         }
                     ],
+                )
+                # Attaching BTCPay provenance must merge — not replace — the
+                # target wallet's config. Otherwise descriptor/file sync would
+                # lose its source pointer the moment a user adds enrichment.
+                self.assertEqual(mapped_config["source_format"], "river_csv")
+                self.assertIn("source_file", mapped_config)
+
+                # A second mapping call against the same instance + label
+                # should land a friendly conflict error rather than silently
+                # creating a second BTCPay backend row.
+                _write_payload(
+                    proc,
+                    {
+                        "request_id": "inline-btcpay-collision",
+                        "kind": "ui.connections.btcpay.create",
+                        "args": {
+                            "label": "BTCPay Inline UI 2",
+                            "backend_label": "Shop BTCPay",
+                            "server_url": "https://shop-btcpay.example",
+                            "api_key": "inline-secret",
+                            "store_id": "store456",
+                            "payment_method_id": "BTC-CHAIN",
+                        },
+                    },
+                )
+                collision = _read_payload_timeout(proc)
+                self.assertEqual(collision["kind"], "error")
+                self.assertEqual(collision["error"]["code"], "conflict")
+                self.assertIn(
+                    "shop-btcpay", collision["error"]["message"].lower()
                 )
 
                 _write_payload(

@@ -4057,6 +4057,17 @@ def _resolve_btcpay_backend_for_setup(
         }
         return backend, safe_backend
 
+    if backend_name in ctx.runtime_config["backends"]:
+        raise AppError(
+            f"A BTCPay instance named '{backend_name}' already exists",
+            code="conflict",
+            hint=(
+                "Pick that saved instance, or enter a different instance name."
+            ),
+            details={"existing_backend": backend_name},
+            retryable=False,
+        )
+
     created_backend = core_accounts.create_backend(
         conn,
         backend_name,

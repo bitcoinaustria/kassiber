@@ -400,13 +400,14 @@ export function AddConnectionDialog({
   );
   const walletForPaymentMethod = React.useCallback(
     (paymentMethodId: string) => {
+      // Only auto-select when the chain matches; otherwise leave it blank so
+      // the form-validation gate forces the user to pick deliberately rather
+      // than silently routing an LBTC method into a BTC wallet (or vice versa).
       const normalized = paymentMethodId.toUpperCase();
       const desiredChain = normalized.startsWith("LBTC") ? "liquid" : "bitcoin";
       return (
         existingWalletOptions.find((wallet) => wallet.chain === desiredChain)
-          ?.label ??
-        existingWalletOptions[0]?.label ??
-        ""
+          ?.label ?? ""
       );
     },
     [existingWalletOptions],
@@ -1485,7 +1486,11 @@ export function AddConnectionDialog({
                     >
                       {existingWalletOptions.length === 0 ? (
                         <option value="">No settlement wallets yet</option>
-                      ) : null}
+                      ) : (
+                        <option value="" disabled>
+                          Select settlement wallet
+                        </option>
+                      )}
                       {existingWalletOptions.map((wallet) => (
                         <option key={wallet.label} value={wallet.label}>
                           {wallet.label}
