@@ -94,6 +94,7 @@ import {
   getTransport,
   isImportProjectActive,
 } from "@/daemon/transport";
+import { lockScreenConfig, shouldUseDaemonUnlock } from "@/lib/appLock";
 import { cn } from "@/lib/utils";
 import {
   clearSessionUnlockPassphrase,
@@ -166,6 +167,8 @@ const APP_COMMIT_SHORT = APP_COMMIT ? APP_COMMIT.slice(0, 7) : "unknown";
 const NATIVE_MENU_EVENT = "kassiber:intent";
 const topNavIconButtonClassName =
   "size-8 text-sidebar-foreground/75 hover:bg-sidebar-accent hover:text-sidebar-foreground";
+const appMainClassName =
+  "relative min-h-0 w-full flex-1 overflow-auto bg-background text-zinc-950 dark:text-zinc-50";
 
 const NAV_GROUPS: NavGroup[] = [
   {
@@ -555,7 +558,15 @@ export function AppShell() {
     null,
   );
   const [daemonAuthRequired, setDaemonAuthRequired] = React.useState(false);
-  const requiresDaemonUnlock = encryptedWorkspace || daemonAuthRequired;
+  const requiresDaemonUnlock = shouldUseDaemonUnlock({
+    dataMode,
+    hasIdentity: Boolean(identity),
+    daemonAuthRequired,
+  });
+  const lockedScreen = lockScreenConfig({
+    daemonAuthRequired,
+    encryptedWorkspace,
+  });
   const routerBusy = useRouterState({
     select: (s) => s.isLoading || s.isTransitioning || s.status === "pending",
   });
@@ -646,10 +657,15 @@ export function AppShell() {
         if (unlocked) {
           await setSessionUnlockPassphrase(passphrase);
           setDaemonAuthRequired(false);
-          await queryClient.invalidateQueries({
+          setLocked(false);
+          void queryClient.invalidateQueries({
             queryKey: ["daemon"],
           });
-          setLocked(false);
+        } else if (envelope.kind === "auth_required") {
+          setDaemonAuthRequired(true);
+          clearSessionUnlockPassphrase();
+          clearDaemonQueryCache();
+          setLocked(true);
         }
         return {
           ok: unlocked,
@@ -669,6 +685,7 @@ export function AppShell() {
     },
     [
       bumpDaemonSession,
+      clearDaemonQueryCache,
       identity?.importedProject,
       importRootBlocked,
       importRootError,
@@ -1081,7 +1098,7 @@ export function AppShell() {
                     id="app-main"
                     ref={mainRef}
                     tabIndex={-1}
-                    className="relative min-h-0 w-full flex-1 overflow-auto bg-background"
+                    className={appMainClassName}
                   >
                     <ImportRootRestoreScreen
                       error={importRootError}
@@ -1093,14 +1110,11 @@ export function AppShell() {
                     id="app-main"
                     ref={mainRef}
                     tabIndex={-1}
-                    className="relative min-h-0 w-full flex-1 overflow-auto bg-background"
+                    className={appMainClassName}
                   >
                     <LockScreen
-                      reason={
-                        daemonAuthRequired
-                          ? "The daemon needs the database passphrase before it can return live books data."
-                          : undefined
-                      }
+                      reason={lockedScreen.reason}
+                      passphraseRequired={lockedScreen.passphraseRequired}
                       onUnlock={unlockApp}
                       onReset={resetLocalUiSession}
                     />
@@ -1112,13 +1126,14 @@ export function AppShell() {
                         id="app-main"
                         ref={mainRef}
                         tabIndex={-1}
-                        className={`relative min-h-0 w-full flex-1 overflow-auto bg-background ${
+                        className={cn(
+                          appMainClassName,
                           isAssistantRoute
                             ? "pb-0"
                             : assistantCollapsed
                               ? "pb-[150px]"
-                              : "pb-[240px]"
-                        }`}
+                              : "pb-[240px]",
+                        )}
                       >
                         <RouteTransitionIndicator active={shellBusy} />
                         <Outlet />
@@ -1135,7 +1150,7 @@ export function AppShell() {
                       id="app-main"
                       ref={mainRef}
                       tabIndex={-1}
-                      className="relative min-h-0 w-full flex-1 overflow-auto bg-background"
+                      className={appMainClassName}
                     >
                       <RouteTransitionIndicator active={shellBusy} />
                       <Outlet />
@@ -2029,10 +2044,12 @@ function ThemeMenu() {
 
 function LockScreen({
   reason,
+  passphraseRequired = true,
   onUnlock,
   onReset,
 }: {
   reason?: string;
+  passphraseRequired?: boolean;
   onUnlock: (
     passphrase: string,
   ) => Promise<{ ok: boolean; error?: string | null }>;
@@ -2044,8 +2061,8 @@ function LockScreen({
   const inputRef = React.useRef<HTMLInputElement | null>(null);
 
   React.useEffect(() => {
-    inputRef.current?.focus();
-  }, []);
+    if (passphraseRequired) inputRef.current?.focus();
+  }, [passphraseRequired]);
 
   const submit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -2057,7 +2074,7 @@ function LockScreen({
       if (!result.ok) {
         setError(result.error ?? "Passphrase did not unlock this session.");
         setPassphrase("");
-        inputRef.current?.focus();
+        if (passphraseRequired) inputRef.current?.focus();
       }
     } finally {
       setSubmitting(false);
@@ -2067,7 +2084,7 @@ function LockScreen({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/95 px-4 backdrop-blur-sm">
       <form
-        className="w-full max-w-sm rounded-lg border bg-card p-5 shadow-xl"
+        className="w-full max-w-md rounded-lg border bg-card p-5 shadow-xl"
         onSubmit={(event) => {
           void submit(event);
         }}
@@ -2078,33 +2095,47 @@ function LockScreen({
           </div>
           <div>
             <h2 className="text-base font-semibold">
-              Database passphrase required
+              {passphraseRequired
+                ? "Database passphrase required"
+                : "Books locked"}
             </h2>
             <p className="m-0 text-xs text-muted-foreground">
               {reason ?? "Enter the database passphrase to unlock."}
             </p>
           </div>
         </div>
-        <div className="mt-5 space-y-2">
-          <label
-            htmlFor="lock-passphrase"
-            className="text-sm font-medium text-foreground"
-          >
-            Passphrase
-          </label>
-          <Input
-            id="lock-passphrase"
-            ref={inputRef}
-            type="password"
-            autoComplete="current-password"
-            value={passphrase}
-            onChange={(event) => setPassphrase(event.target.value)}
-            disabled={submitting}
-          />
-          {error && <p className="m-0 text-xs text-destructive">{error}</p>}
-        </div>
+        {passphraseRequired ? (
+          <div className="mt-5 space-y-2">
+            <label
+              htmlFor="lock-passphrase"
+              className="text-sm font-medium text-foreground"
+            >
+              Passphrase
+            </label>
+            <Input
+              id="lock-passphrase"
+              ref={inputRef}
+              type="password"
+              autoComplete="current-password"
+              value={passphrase}
+              onChange={(event) => setPassphrase(event.target.value)}
+              disabled={submitting}
+            />
+            {error && <p className="m-0 text-xs text-destructive">{error}</p>}
+          </div>
+        ) : (
+          error && (
+            <p className="mt-5 rounded-md border border-destructive/25 bg-destructive/10 px-3 py-2 text-xs text-destructive">
+              {error}
+            </p>
+          )
+        )}
         <Button className="mt-5 w-full" type="submit" disabled={submitting}>
-          {submitting ? "Unlocking..." : "Unlock"}
+          {submitting
+            ? "Unlocking..."
+            : passphraseRequired
+              ? "Unlock"
+              : "Open books"}
         </Button>
         <Button
           className="mt-2 w-full"

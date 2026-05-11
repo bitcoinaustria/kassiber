@@ -66,13 +66,13 @@ import { useWalletSyncAction } from "@/hooks/useWalletSyncAction";
 import { formatBtc, useCurrency, type Currency } from "@/lib/currency";
 import { screenShellClassName } from "@/lib/screen-layout";
 import { cn } from "@/lib/utils";
+import { useUiStore } from "@/store/ui";
 import {
   MOCK_OVERVIEW,
   type OverviewSnapshot,
   type PortfolioPoint,
   type Tx as OverviewTx,
 } from "@/mocks/seed";
-import { useUiStore } from "@/store/ui";
 
 type StatItem = {
   title: string;
@@ -304,21 +304,46 @@ const palette = {
   },
 };
 
-const costBasisChartColor = `color-mix(in oklch, var(--muted-foreground) 72%, ${mixBase})`;
+const portfolioChartColors = {
+  light: {
+    value: "#2f2f33",
+    costBasis: "#76767d",
+    focus: "#2f2f33",
+    risk: "#e3000f",
+    riskSoft: "rgba(227, 0, 15, 0.16)",
+  },
+  dark: {
+    value: "#e8e8ec",
+    costBasis: "#8f8f98",
+    focus: "#e8e8ec",
+    risk: "#ff3341",
+    riskSoft: "rgba(255, 51, 65, 0.18)",
+  },
+} as const;
+
+function useResolvedColorMode() {
+  const theme = useUiStore((state) => state.theme);
+  const [systemDark, setSystemDark] = React.useState(false);
+
+  React.useEffect(() => {
+    if (typeof window === "undefined") return undefined;
+    const media = window.matchMedia("(prefers-color-scheme: dark)");
+    const update = () => setSystemDark(media.matches);
+    update();
+    media.addEventListener("change", update);
+    return () => media.removeEventListener("change", update);
+  }, []);
+
+  return theme === "dark" || (theme === "system" && systemDark)
+    ? "dark"
+    : "light";
+}
 
 const holdingsChartConfig = {
   onchain: { label: "On-chain BTC", color: palette.primary },
   lightning: { label: "Lightning", theme: palette.secondary },
   liquid: { label: "Liquid", theme: palette.tertiary },
   other: { label: "Other", theme: palette.quaternary },
-} satisfies ChartConfig;
-
-const revenueFlowChartConfig = {
-  thisYear: { label: "Value", color: palette.primary },
-  prevYear: {
-    label: "Cost Basis",
-    color: costBasisChartColor,
-  },
 } satisfies ChartConfig;
 
 const statsData: StatItem[] = [
@@ -2129,6 +2154,19 @@ const RevenueFlowChart = ({
   const { active: activeSeries, handleHover } = useHoverHighlight<
     "thisYear" | "prevYear"
   >();
+  const colorMode = useResolvedColorMode();
+  const chartColors = portfolioChartColors[colorMode];
+  const chartConfig = React.useMemo(
+    () =>
+      ({
+        thisYear: { label: "Value", color: chartColors.value },
+        prevYear: {
+          label: "Cost Basis",
+          color: chartColors.costBasis,
+        },
+      }) satisfies ChartConfig,
+    [chartColors.costBasis, chartColors.value],
+  );
   const chartCurrency = chartCurrencyForMetric(metric, currency);
   const showCostBasis = metric === "value" && chartCurrency === "eur";
   const chartAttentionItems = buildOverviewHealthItems(snapshot)
@@ -2144,14 +2182,14 @@ const RevenueFlowChart = ({
             ? "BTC balance"
             : "Value"
           : portfolioMetricLabels[metric],
-      color: palette.primary,
+      color: chartColors.value,
     },
     ...(showCostBasis
       ? [
           {
             key: "prevYear" as const,
             label: "Cost Basis",
-            color: costBasisChartColor,
+            color: chartColors.costBasis,
           },
         ]
       : []),
@@ -2209,11 +2247,11 @@ const RevenueFlowChart = ({
         : portfolioMetricLabels[metric];
     const valueTone =
       metric === "unrealized" && visibleLatest < 0
-        ? palette.risk.main
-      : "var(--color-thisYear)";
+        ? chartColors.risk
+        : chartColors.value;
     const valueFill =
       metric === "unrealized" && visibleLatest < 0
-        ? palette.risk.soft
+        ? chartColors.riskSoft
         : undefined;
     const statPeriodLabel = periodShortLabels[period];
     const selectedPoint = expanded
@@ -2489,7 +2527,7 @@ const RevenueFlowChart = ({
         }
       >
         <ChartContainer
-          config={revenueFlowChartConfig}
+          config={chartConfig}
           className="h-full w-full overflow-visible [&_.recharts-tooltip-wrapper]:!z-30 [&_.recharts-wrapper]:!overflow-visible"
         >
           <AreaChart
@@ -2538,12 +2576,12 @@ const RevenueFlowChart = ({
                 >
                   <stop
                     offset="0%"
-                    stopColor="var(--color-prevYear)"
+                    stopColor={chartColors.costBasis}
                     stopOpacity={0.2}
                   />
                   <stop
                     offset="100%"
-                    stopColor="var(--color-prevYear)"
+                    stopColor={chartColors.costBasis}
                     stopOpacity={0.02}
                   />
                 </linearGradient>
@@ -2583,7 +2621,7 @@ const RevenueFlowChart = ({
             {metric === "unrealized" && (
               <ReferenceLine
                 y={0}
-                stroke={palette.risk.main}
+                stroke={chartColors.risk}
                 strokeOpacity={0.45}
                 strokeWidth={1}
               />
@@ -2591,7 +2629,7 @@ const RevenueFlowChart = ({
             {expanded && selectedPoint && (
               <ReferenceLine
                 x={selectedPoint.date}
-                stroke="var(--foreground)"
+                stroke={chartColors.focus}
                 strokeDasharray="2 3"
                 strokeOpacity={0.5}
                 strokeWidth={1.5}
@@ -2644,7 +2682,7 @@ const RevenueFlowChart = ({
               <Area
                 type={chartType}
                 dataKey="prevYear"
-                stroke="var(--color-prevYear)"
+                stroke={chartColors.costBasis}
                 strokeWidth={activeSeries === "prevYear" ? 3 : 2}
                 fill={`url(#${expanded ? "prevYearGradientExpanded" : "prevYearGradient"})`}
                 fillOpacity={
@@ -2667,7 +2705,7 @@ const RevenueFlowChart = ({
                 dataKey="date"
                 height={22}
                 travellerWidth={8}
-                stroke="var(--color-thisYear)"
+                stroke={chartColors.value}
                 tickFormatter={(value) =>
                   visibleData.find((point) => point.date === value)?.month ??
                   String(value)
@@ -3444,7 +3482,7 @@ const Dashboard5 = ({
         hideSensitive={hideSensitive}
         currency={currency}
       />
-      <div className="grid grid-cols-1 items-start gap-3 sm:gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(340px,380px)] 2xl:grid-cols-[minmax(0,1fr)_400px]">
+      <div className="grid grid-cols-1 items-start gap-3 sm:gap-4 2xl:grid-cols-[minmax(0,1fr)_400px]">
         <div className="grid min-w-0 gap-3 sm:gap-4">
           <RevenueFlowChart
             snapshot={snapshot}

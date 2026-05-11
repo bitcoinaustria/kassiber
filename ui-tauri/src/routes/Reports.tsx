@@ -337,7 +337,7 @@ function ReportsView({ report, hideSensitive }: ReportsViewProps) {
         formatNumber={fmt}
       />
 
-      <div className="grid grid-cols-1 items-start gap-3 sm:gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(340px,380px)] 2xl:grid-cols-[minmax(0,1fr)_400px]">
+      <div className="grid grid-cols-1 items-start gap-3 sm:gap-4 2xl:grid-cols-[minmax(0,1fr)_400px]">
         <div className="grid min-w-0 gap-3 sm:gap-4">
           {kennzahlRows.length ? (
             <KennzahlOverviewPanel
@@ -508,7 +508,7 @@ function ReportMetricStrip({
   ];
 
   return (
-    <div className="rounded-xl border bg-card">
+    <div className="min-w-0 overflow-hidden rounded-xl border bg-card">
       <div className="grid grid-cols-1 divide-x-0 divide-y divide-border sm:grid-cols-2 sm:divide-y-0 lg:grid-cols-4 lg:divide-x">
         {metrics.map((metric) => (
           <div key={metric.label} className="space-y-2.5 p-3 sm:p-4">
@@ -558,7 +558,7 @@ function KennzahlOverviewPanel({
   );
 
   return (
-    <div className="rounded-xl border bg-card">
+    <div className="min-w-0 overflow-hidden rounded-xl border bg-card">
       <div className="flex flex-col gap-3 px-4 py-4 sm:flex-row sm:items-start sm:justify-between sm:px-5">
         <div className="flex min-w-0 items-center gap-2">
           <Button
@@ -678,7 +678,7 @@ function ReportFilesPanel({
   onOpenExport: (path: string) => void;
 }) {
   return (
-    <div className="rounded-xl border bg-card">
+    <div className="min-w-0 overflow-hidden rounded-xl border bg-card">
       <div className="flex items-center justify-between gap-3 px-4 pt-4 sm:px-5">
         <div className="flex items-center gap-2">
           <Button
@@ -873,7 +873,7 @@ function ReportPolicyPanel({
   const [expanded, setExpanded] = useState(false);
 
   return (
-    <div className="rounded-xl border bg-card">
+    <div className="min-w-0 overflow-hidden rounded-xl border bg-card">
       <div className="flex items-center justify-between gap-3 px-4 py-4 sm:px-5">
         <div className="flex min-w-0 items-center gap-2">
           <Button
@@ -1011,7 +1011,7 @@ function LotAuditPanel({
   const [expanded, setExpanded] = useState(false);
 
   return (
-    <div className="rounded-xl border bg-card">
+    <div className="min-w-0 overflow-hidden rounded-xl border bg-card">
       <div
         className={cn(
           "flex flex-col gap-3 px-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-5",
