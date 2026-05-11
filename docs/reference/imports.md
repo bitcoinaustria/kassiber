@@ -102,6 +102,14 @@ python3 -m kassiber wallets sync-btcpay \
 `--token-stdin` keeps the Greenfield API key out of shell history and the
 process listing. Use `--token-fd <FD>` instead when stdin is already in use.
 The argv form `--token <value>` still works for legacy scripts but warns.
+In the desktop app, Add Connection can create that BTCPay instance from URL +
+API key, discover store/payment-method ids, and then finish setup in one of two
+ways. `BTCPay-only` creates Kassiber wallet sources for the selected
+sync-supported payment methods, so running a BTCPay store by itself is enough
+for confirmed wallet-history sync. `Existing wallets` maps those BTCPay payment
+methods onto already configured settlement wallets; descriptor/file sync remains
+the balance source and BTCPay is used as provenance/metadata for matching
+transactions.
 
 That API-backed path reuses the same BTCPay normalization and metadata rules as the file import, but only imports confirmed rows from the remote wallet history and records their confirmation timestamp for later rate lookup. It does not yet import BTCPay invoice/payment fiat facts; those need the future invoice/payment provenance ingest before Kassiber can treat BTCPay as the authoritative merchant price source. `wallets sync-btcpay --wallet ... --backend ... --store-id ...` still works too. It stores the same BTCPay config on the wallet and runs the sync immediately, so later `wallets sync` or `wallets sync --all` calls can reuse that wallet config.
 
@@ -110,6 +118,7 @@ Current BTCPay modeling:
 - use one Kassiber wallet per real underlying wallet / store-backed balance source
 - multiple BTCPay stores are fine when they point at different underlying wallets
 - if multiple stores point at the same underlying wallet balance, keep them on one Kassiber wallet or holdings will be duplicated
+- if the real settlement wallets are already configured, map BTCPay payment methods onto those wallets instead of creating duplicate BTCPay-backed wallets
 - the API-backed path is still confirmed-only and is not full invoice/payment provenance yet
 
 You can also create a wallet whose source file is a BTCPay export:

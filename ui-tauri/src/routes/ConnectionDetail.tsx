@@ -237,6 +237,7 @@ function ConnectionDetailView({
   const [editPlaintextAck, setEditPlaintextAck] = useState("");
   const [editWalletMaterial, setEditWalletMaterial] = useState("");
   const [editStoreId, setEditStoreId] = useState("");
+  const [editPaymentMethodId, setEditPaymentMethodId] = useState("");
   const [editBackend, setEditBackend] = useState("");
   const [editSourceFile, setEditSourceFile] = useState("");
   const [editError, setEditError] = useState<string | null>(null);
@@ -311,6 +312,7 @@ function ConnectionDetailView({
     setEditPlaintextAck("");
     setEditWalletMaterial("");
     setEditStoreId("");
+    setEditPaymentMethodId("");
     setEditBackend("");
     setEditSourceFile("");
     setEditError(null);
@@ -360,6 +362,7 @@ function ConnectionDetailView({
     const labelChanged = nextLabel !== connection.label;
     const walletMaterial = editWalletMaterial.trim();
     const storeId = editStoreId.trim();
+    const paymentMethodId = editPaymentMethodId.trim();
     const backend = editBackend.trim();
     const sourceFile = editSourceFile.trim();
     const configChanges: Record<string, unknown> = {};
@@ -373,6 +376,7 @@ function ConnectionDetailView({
     }
     if (editConfigKind === "btcpay") {
       if (storeId) configChanges.store_id = storeId;
+      if (paymentMethodId) configChanges.payment_method_id = paymentMethodId;
       if (backend) configChanges.backend = backend;
     }
     if (editConfigKind === "file-wallet" && sourceFile) {
@@ -773,14 +777,14 @@ function ConnectionDetailView({
             {editConfigKind === "btcpay" ? (
               <>
                 <div className="space-y-2">
-                  <Label htmlFor="connection-edit-backend">BTCPay backend</Label>
+                  <Label htmlFor="connection-edit-backend">BTCPay instance</Label>
                   <select
                     id="connection-edit-backend"
                     className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
                     value={editBackend}
                     onChange={(event) => setEditBackend(event.target.value)}
                   >
-                    <option value="">Keep current backend</option>
+                    <option value="">Keep current instance</option>
                     {btcpayBackendOptions.map((backend) => (
                       <option key={backend.name} value={backend.name}>
                         {backend.name}
@@ -796,6 +800,19 @@ function ConnectionDetailView({
                     value={editStoreId}
                     onChange={(event) => setEditStoreId(event.target.value)}
                     placeholder="Leave empty to keep the current store ID"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="connection-edit-payment-method">
+                    BTCPay wallet
+                  </Label>
+                  <Input
+                    id="connection-edit-payment-method"
+                    value={editPaymentMethodId}
+                    onChange={(event) =>
+                      setEditPaymentMethodId(event.target.value)
+                    }
+                    placeholder="Leave empty to keep BTC-CHAIN"
                   />
                 </div>
               </>

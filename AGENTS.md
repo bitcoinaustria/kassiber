@@ -89,13 +89,21 @@ Kassiber is currently in **dev mode**: renaming commands, breaking flags, and re
   `read_skill_reference("index")` returns only the
   compact in-app skill routing document; deeper references stay allowlisted.
   Desktop connection setup uses explicit mutating daemon kinds
-  `ui.wallets.create`, `ui.connections.btcpay.create`, and
+  `ui.wallets.create`, `ui.connections.btcpay.create`,
+  `ui.connections.btcpay.discover`, and
   `ui.metadata.bip329.import`; do not model the Connections dialog as a
   command-template picker. Connection setup should select from configured
-  backends via `ui.backends.options`; if there is no matching backend, route
-  the user to Settings/backends instead of asking for an arbitrary backend name.
-  BTCPay setup asks for store ID only; Kassiber stores the default BTC on-chain
-  payment method internally for repeat sync.
+  chain/indexer backends via `ui.backends.options`; BTCPay setup can create a
+  BTCPay instance inline from URL + API key, discover stores/payment methods,
+  or reuse a saved BTCPay instance for repeat store-wallet mappings. For
+  discovered stores, support both BTCPay-only wallet-source setup and
+  existing-settlement-wallet mapping. BTCPay-only creates one Kassiber wallet
+  per selected sync-supported BTCPay payment method. Existing-wallet mapping
+  records BTCPay provenance routes on already configured settlement wallets,
+  so descriptor/file sync remains the balance source while BTCPay comments and
+  labels enrich matching transactions. When no explicit payment method is
+  supplied, Kassiber stores the default BTC on-chain payment method internally
+  for repeat sync.
   `ui.transactions.list` supports bounded filters for `limit`, `direction`,
   `asset`, `wallet`, `since`, `sort`, and `order`. `ui.backends.list` is
   scoped to the active profile and exposes URL presence metadata, not exact

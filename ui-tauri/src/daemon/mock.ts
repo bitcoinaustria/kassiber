@@ -32,6 +32,9 @@ let mockProfilesSnapshot = cloneMockProfiles();
 type MockConnection = {
   id: string;
   label: string;
+  kind?: string;
+  syncMode?: string;
+  syncSource?: string;
 };
 
 const mockOverviewSnapshot = () =>
@@ -62,6 +65,33 @@ export const mockDaemon: DaemonTransport = {
         schema_version: 1,
         request_id: req.request_id,
         data: { recorded: true } as T,
+      };
+    }
+
+    if (req.kind === "ui.wallets.list") {
+      const overview = mockOverviewSnapshot();
+      return {
+        kind: "ui.wallets.list",
+        schema_version: 1,
+        request_id: req.request_id,
+        data: {
+          wallets: overview.connections.map((connection) => ({
+            id: connection.id,
+            label: connection.label,
+            kind: connection.kind,
+            chain:
+              connection.label.toLowerCase().includes("liquid") ||
+              connection.label.toLowerCase().includes("l-btc")
+                ? "liquid"
+                : "bitcoin",
+            sync_mode: connection.syncMode ?? "descriptor",
+            sync_source: connection.syncSource ?? "",
+            transaction_count: 1,
+          })),
+          summary: {
+            count: overview.connections.length,
+          },
+        } as T,
       };
     }
 
@@ -425,40 +455,162 @@ export const mockDaemon: DaemonTransport = {
       const args = (req.args ?? {}) as {
         label?: unknown;
         backend?: unknown;
+        backend_label?: unknown;
+        server_url?: unknown;
+        api_key?: unknown;
         store_id?: unknown;
+        payment_method_id?: unknown;
+        payment_method_ids?: unknown;
+        mode?: unknown;
+        routes?: unknown;
       };
       const label = typeof args.label === "string" ? args.label.trim() : "";
       const backendName =
-        typeof args.backend === "string" ? args.backend.trim() : "";
+        typeof args.backend === "string"
+          ? args.backend.trim()
+          : typeof args.backend_label === "string"
+            ? args.backend_label.trim().toLowerCase().replace(/[^a-z0-9_.-]+/g, "-")
+            : "";
+      const hasInlineCredentials =
+        typeof args.server_url === "string" &&
+        args.server_url.trim() &&
+        typeof args.api_key === "string" &&
+        args.api_key.trim();
       const storeId = typeof args.store_id === "string" ? args.store_id.trim() : "";
-      if (!label || !backendName || !storeId) {
+      if (!label || !backendName || !storeId || (!args.backend && !hasInlineCredentials)) {
         return {
           kind: "error",
           schema_version: 1,
           request_id: req.request_id,
           error: {
             code: "validation",
-            message: "BTCPay setup requires a label, backend, and store ID",
+            message: "BTCPay setup requires a label, instance, and store ID",
             retryable: false,
           },
         };
       }
       const overview = mockOverviewSnapshot();
-      const connection = {
-        id: `mock-btcpay-${Date.now()}`,
-        label,
+      if (args.mode === "existing_wallets") {
+        const routes = Array.isArray(args.routes) ? args.routes : [];
+        const mapped = routes
+          .map((route) =>
+            typeof route === "object" && route !== null && "wallet" in route
+              ? overview.connections.find(
+                  (connection) =>
+                    connection.label ===
+                    String((route as { wallet?: unknown }).wallet ?? ""),
+                )
+              : undefined,
+          )
+          .filter((connection): connection is MockConnection =>
+            Boolean(connection),
+          );
+        return {
+          kind: "ui.connections.btcpay.create",
+          schema_version: 1,
+          request_id: req.request_id,
+          data: {
+            mode: "existing_wallets",
+            backend: { name: backendName },
+            wallet: mapped[0],
+            wallets: mapped,
+          } as T,
+        };
+      }
+      const rawPaymentMethodIds = Array.isArray(args.payment_method_ids)
+        ? args.payment_method_ids
+        : [args.payment_method_id];
+      const paymentMethodIds = rawPaymentMethodIds
+        .filter((id): id is string => typeof id === "string" && Boolean(id.trim()))
+        .map((id) => id.trim());
+      if (paymentMethodIds.length === 0) paymentMethodIds.push("BTC-CHAIN");
+      const connections = paymentMethodIds.map((paymentMethodId, index) => ({
+        id: `mock-btcpay-${Date.now()}-${index}`,
+        label:
+          paymentMethodIds.length === 1
+            ? label
+            : `${label} - ${paymentMethodId}`,
         kind: "custom",
         syncMode: "btcpay",
         syncSource: "btcpay",
-      };
-      overview.connections = [...overview.connections, connection];
+      }));
+      overview.connections = [...overview.connections, ...connections];
       return {
         kind: "ui.connections.btcpay.create",
         schema_version: 1,
         request_id: req.request_id,
         data: {
           backend: { name: backendName },
-          wallet: connection,
+          wallet: connections[0],
+          wallets: connections,
+        } as T,
+      };
+    }
+
+    if (req.kind === "ui.connections.btcpay.discover") {
+      const args = (req.args ?? {}) as {
+        backend?: unknown;
+        backend_label?: unknown;
+        server_url?: unknown;
+        api_key?: unknown;
+      };
+      const backend =
+        typeof args.backend === "string" && args.backend.trim()
+          ? args.backend.trim()
+          : typeof args.backend_label === "string" && args.backend_label.trim()
+            ? args.backend_label.trim()
+            : "btcpay";
+      const hasSource =
+        typeof args.backend === "string" ||
+        (typeof args.server_url === "string" &&
+          args.server_url.trim() &&
+          typeof args.api_key === "string" &&
+          args.api_key.trim());
+      if (!hasSource) {
+        return {
+          kind: "error",
+          schema_version: 1,
+          request_id: req.request_id,
+          error: {
+            code: "validation",
+            message: "BTCPay discovery requires a saved instance or URL and API key",
+            retryable: false,
+          },
+        };
+      }
+      return {
+        kind: "ui.connections.btcpay.discover",
+        schema_version: 1,
+        request_id: req.request_id,
+        data: {
+          backend,
+          stores: [
+            { id: "store-main", name: "Main store", default_currency: "EUR" },
+            { id: "store-events", name: "Events", default_currency: "EUR" },
+          ],
+          payment_methods: [
+            {
+              store_id: "store-main",
+              payment_method_id: "BTC-CHAIN",
+              label: "BTC on-chain",
+              enabled: true,
+              sync_supported: true,
+            },
+            {
+              store_id: "store-main",
+              payment_method_id: "LBTC-CHAIN",
+              label: "Liquid on-chain",
+              enabled: true,
+              sync_supported: true,
+            },
+            {
+              store_id: "store-events",
+              payment_method_id: "BTC-CHAIN",
+              label: "BTC on-chain",
+              enabled: true,
+              sync_supported: true,
+            },
+          ],
         } as T,
       };
     }
@@ -560,19 +712,33 @@ export const mockDaemon: DaemonTransport = {
     if (req.kind === "ui.connections.btcpay.test") {
       const args = (req.args ?? {}) as {
         backend?: unknown;
+        backend_label?: unknown;
+        server_url?: unknown;
+        api_key?: unknown;
         store_id?: unknown;
+        payment_method_id?: unknown;
       };
-      const backend = typeof args.backend === "string" ? args.backend.trim() : "";
+      const backend =
+        typeof args.backend === "string" && args.backend.trim()
+          ? args.backend.trim()
+          : typeof args.backend_label === "string" && args.backend_label.trim()
+            ? args.backend_label.trim()
+            : "";
       const storeId =
         typeof args.store_id === "string" ? args.store_id.trim() : "";
-      if (!backend || !storeId) {
+      const hasInlineCredentials =
+        typeof args.server_url === "string" &&
+        args.server_url.trim() &&
+        typeof args.api_key === "string" &&
+        args.api_key.trim();
+      if ((!backend && !hasInlineCredentials) || !storeId) {
         return {
           kind: "error",
           schema_version: 1,
           request_id: req.request_id,
           error: {
             code: "validation",
-            message: "BTCPay test requires backend and store_id",
+            message: "BTCPay test requires instance details and store_id",
             retryable: false,
           },
         };
@@ -584,7 +750,11 @@ export const mockDaemon: DaemonTransport = {
         data: {
           backend,
           store_id: storeId,
-          payment_method_id: "BTC-CHAIN",
+          payment_method_id:
+            typeof args.payment_method_id === "string" &&
+            args.payment_method_id.trim()
+              ? args.payment_method_id.trim()
+              : "BTC-CHAIN",
           ok: true,
         } as T,
       };

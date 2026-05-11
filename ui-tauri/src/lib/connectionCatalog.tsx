@@ -377,7 +377,7 @@ export const CONNECTION_SOURCES: ConnectionSource[] = [
   {
     id: "btcpay",
     title: "BTCPay Server",
-    description: "Store wallet history through a read-only API key.",
+    description: "Store wallet history through a scoped API key.",
     category: "merchant",
     image: btcpayIcon,
     imageClassName: "h-9 w-auto",
@@ -387,8 +387,8 @@ export const CONNECTION_SOURCES: ConnectionSource[] = [
     docsHref: "https://docs.btcpayserver.org/Development/GreenFieldExample/",
     setupKind: "btcpay",
     details: [
-      "Select an existing BTCPay backend",
-      "Uses the store's BTC on-chain wallet history",
+      "Save or reuse a BTCPay instance",
+      "Map payment methods to Kassiber wallets",
     ],
   },
   {

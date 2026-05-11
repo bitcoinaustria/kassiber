@@ -597,6 +597,10 @@ class DaemonSmokeTest(unittest.TestCase):
                 ready["data"]["supported_kinds"],
             )
             self.assertIn(
+                "ui.connections.btcpay.discover",
+                ready["data"]["supported_kinds"],
+            )
+            self.assertIn(
                 "ui.connections.btcpay.test",
                 ready["data"]["supported_kinds"],
             )
@@ -1118,6 +1122,106 @@ class DaemonSmokeTest(unittest.TestCase):
             server.server_close()
             server_thread.join(timeout=5)
 
+    def test_ui_btcpay_connection_discover_accepts_inline_instance_credentials(self):
+        received = []
+
+        class Handler(BaseHTTPRequestHandler):
+            def do_GET(self):
+                received.append(
+                    {
+                        "path": self.path,
+                        "auth": self.headers.get("Authorization"),
+                    }
+                )
+                if self.path == "/api/v1/stores":
+                    body = json.dumps(
+                        [
+                            {
+                                "id": "store-main",
+                                "name": "Main shop",
+                                "defaultCurrency": "EUR",
+                            }
+                        ]
+                    ).encode("utf-8")
+                elif self.path.startswith("/api/v1/stores/store-main/payment-methods"):
+                    body = json.dumps(
+                        [
+                            {
+                                "paymentMethodId": "BTC-CHAIN",
+                                "name": "BTC on-chain",
+                                "enabled": True,
+                            },
+                            {
+                                "paymentMethodId": "BTC-LN",
+                                "name": "BTC Lightning",
+                                "enabled": True,
+                            },
+                        ]
+                    ).encode("utf-8")
+                else:
+                    self.send_response(404)
+                    self.end_headers()
+                    return
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+
+            def log_message(self, *_args):
+                return
+
+        server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+        port = server.server_address[1]
+        server_thread = threading.Thread(target=server.serve_forever, daemon=True)
+        server_thread.start()
+        try:
+            with tempfile.TemporaryDirectory(prefix="kassiber-daemon-btcpay-discover-") as tmp:
+                data_root = Path(tmp) / "data"
+                _seed_workspace_with_transaction(data_root, tmp)
+                proc = _start_daemon(data_root)
+                try:
+                    self.assertEqual(_read_payload_timeout(proc)["kind"], "daemon.ready")
+                    _write_payload(
+                        proc,
+                        {
+                            "request_id": "btcpay-discover",
+                            "kind": "ui.connections.btcpay.discover",
+                            "args": {
+                                "backend_label": "btcpay-inline",
+                                "server_url": f"http://127.0.0.1:{port}",
+                                "api_key": "inline-secret",
+                            },
+                        },
+                    )
+                    envelope = _read_payload_timeout(proc)
+                    self.assertEqual(
+                        envelope["kind"], "ui.connections.btcpay.discover"
+                    )
+                    self.assertEqual(envelope["data"]["backend"], "btcpay-inline")
+                    self.assertEqual(envelope["data"]["stores"][0]["id"], "store-main")
+                    methods = envelope["data"]["payment_methods"]
+                    self.assertEqual(methods[0]["payment_method_id"], "BTC-CHAIN")
+                    self.assertTrue(methods[0]["sync_supported"])
+                    self.assertFalse(methods[1]["sync_supported"])
+                    self.assertEqual(received[0]["auth"], "token inline-secret")
+                    self.assertIn("onlyEnabled=true", received[1]["path"])
+                finally:
+                    if proc.poll() is None:
+                        proc.terminate()
+                        try:
+                            proc.wait(timeout=5)
+                        except subprocess.TimeoutExpired:
+                            proc.kill()
+                            proc.wait(timeout=5)
+                    for stream in (proc.stdin, proc.stdout, proc.stderr):
+                        if stream is not None:
+                            stream.close()
+        finally:
+            server.shutdown()
+            server.server_close()
+            server_thread.join(timeout=5)
+
     def test_ui_connection_setup_creates_file_btcpay_and_bip329_connections(self):
         with tempfile.TemporaryDirectory(prefix="kassiber-daemon-setup-") as tmp:
             data_root = Path(tmp) / "data"
@@ -1298,6 +1402,60 @@ class DaemonSmokeTest(unittest.TestCase):
                 _write_payload(
                     proc,
                     {
+                        "request_id": "create-btcpay-inline",
+                        "kind": "ui.connections.btcpay.create",
+                        "args": {
+                            "label": "BTCPay Inline UI",
+                            "backend_label": "Shop BTCPay",
+                            "server_url": "https://shop-btcpay.example",
+                            "api_key": "inline-secret",
+                            "store_id": "store456",
+                            "payment_method_id": "BTC-CHAIN",
+                        },
+                    },
+                )
+                inline_btcpay = _read_payload_timeout(proc)
+                self.assertEqual(
+                    inline_btcpay["kind"], "ui.connections.btcpay.create"
+                )
+                self.assertEqual(
+                    inline_btcpay["data"]["backend"]["name"], "shop-btcpay"
+                )
+                self.assertEqual(
+                    inline_btcpay["data"]["wallet"]["label"], "BTCPay Inline UI"
+                )
+                self.assertEqual(
+                    inline_btcpay["data"]["wallets"][0]["label"],
+                    "BTCPay Inline UI",
+                )
+
+                _write_payload(
+                    proc,
+                    {
+                        "request_id": "create-btcpay-bulk",
+                        "kind": "ui.connections.btcpay.create",
+                        "args": {
+                            "label": "BTCPay Store UI",
+                            "backend": "btcpay-ui",
+                            "store_id": "store789",
+                            "payment_method_ids": ["BTC-CHAIN", "LBTC-CHAIN"],
+                        },
+                    },
+                )
+                bulk_btcpay = _read_payload_timeout(proc)
+                self.assertEqual(bulk_btcpay["kind"], "ui.connections.btcpay.create")
+                self.assertEqual(
+                    [wallet["label"] for wallet in bulk_btcpay["data"]["wallets"]],
+                    ["BTCPay Store UI - BTC-CHAIN", "BTCPay Store UI - LBTC-CHAIN"],
+                )
+                self.assertEqual(
+                    bulk_btcpay["data"]["wallets"][1]["config"]["payment_method_id"],
+                    "LBTC-CHAIN",
+                )
+
+                _write_payload(
+                    proc,
+                    {
                         "request_id": "update-btcpay-config",
                         "kind": "ui.wallets.update",
                         "args": {
@@ -1362,6 +1520,45 @@ class DaemonSmokeTest(unittest.TestCase):
                 self.assertEqual(progress_events[0]["data"]["total"], 1)
                 final_progress = progress_events[-1]["data"]
                 self.assertEqual(final_progress["processed"], 1)
+
+                _write_payload(
+                    proc,
+                    {
+                        "request_id": "map-btcpay-existing-wallet",
+                        "kind": "ui.connections.btcpay.create",
+                        "args": {
+                            "mode": "existing_wallets",
+                            "label": "BTCPay merchant metadata",
+                            "backend": "btcpay-ui",
+                            "store_id": "store789",
+                            "routes": [
+                                {
+                                    "wallet": "River UI",
+                                    "payment_method_id": "BTC-CHAIN",
+                                }
+                            ],
+                        },
+                    },
+                )
+                mapped_btcpay = _read_payload_timeout(proc)
+                self.assertEqual(
+                    mapped_btcpay["kind"], "ui.connections.btcpay.create"
+                )
+                self.assertEqual(mapped_btcpay["data"]["mode"], "existing_wallets")
+                self.assertEqual(
+                    mapped_btcpay["data"]["wallet"]["label"],
+                    "River UI",
+                )
+                self.assertEqual(
+                    mapped_btcpay["data"]["wallet"]["config"]["btcpay_provenance"],
+                    [
+                        {
+                            "backend": "btcpay-ui",
+                            "store_id": "store789",
+                            "payment_method_id": "BTC-CHAIN",
+                        }
+                    ],
+                )
 
                 _write_payload(
                     proc,

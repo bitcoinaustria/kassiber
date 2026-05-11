@@ -179,6 +179,7 @@ top of the monolith.
 
 - [ ] Add [docs/plan/08-external-document-reconciliation.md](docs/plan/08-external-document-reconciliation.md) follow-through in code and schema rather than letting merchant/invoice scope drift ad hoc
 - [x] Persist BTCPay confirmed wallet-sync config on wallets so `wallets sync` / `wallets sync --all` can reuse store-backed sources without retyping `--store-id`
+- [x] Let desktop BTCPay setup either create BTCPay-only wallet sources or map store payment methods onto existing settlement wallets for provenance
 - [ ] Keep BTCPay file import conservative (`deposit` / `withdrawal`) until a confirmed document match or explicit review step reclassifies the transaction
 
 ### 0.5g - Source-of-funds reports

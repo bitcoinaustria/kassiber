@@ -4402,6 +4402,40 @@ class ReviewRegressionTest(unittest.TestCase):
         self._assert_ok(payload, result, "wallets.get")
         self.assertEqual(payload["data"]["config"], {})
 
+    def test_btcpay_sync_rejects_lightning_payment_method_id_before_persisting(self):
+        self._bootstrap_wallet(label="BTCPayLightning", kind="custom")
+        payload, result = self._run_json(
+            "backends", "create",
+            "btcpay1",
+            "--kind", "btcpay",
+            "--url", "http://127.0.0.1:9",
+            "--token", "testkey",
+        )
+        self._assert_ok(payload, result, "backends.create")
+
+        payload, result = self._run_json(
+            "wallets", "sync-btcpay",
+            "--workspace", "Main",
+            "--profile", "Default",
+            "--wallet", "BTCPayLightning",
+            "--backend", "btcpay1",
+            "--store-id", "STORE1",
+            "--payment-method-id", "BTC-LN",
+        )
+        self.assertNotEqual(result.returncode, 0)
+        self.assertEqual(payload["kind"], "error")
+        self.assertEqual(payload["error"]["code"], "validation")
+        self.assertIn("wallet-history sync", payload["error"]["message"])
+
+        payload, result = self._run_json(
+            "wallets", "get",
+            "--workspace", "Main",
+            "--profile", "Default",
+            "--wallet", "BTCPayLightning",
+        )
+        self._assert_ok(payload, result, "wallets.get")
+        self.assertEqual(payload["data"]["config"], {})
+
     def test_btcpay_sync_surfaces_auth_failure_envelope(self):
         class Handler(BaseHTTPRequestHandler):
             def do_GET(self):

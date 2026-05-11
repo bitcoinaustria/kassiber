@@ -61,6 +61,8 @@ The first line is always a lifecycle envelope:
       "ui.next_actions",
       "ui.wallets.create",
       "ui.connections.btcpay.create",
+      "ui.connections.btcpay.discover",
+      "ui.connections.btcpay.test",
       "ui.metadata.bip329.import",
       "ui.wallets.update",
       "ui.wallets.delete",
@@ -146,20 +148,40 @@ truth for icons, copy, and ordering, but uses this list to verify it isn't
 advertising a "ready" connection backed by a wallet kind or import format
 the daemon does not implement.
 
-`ui.connections.btcpay.create` creates a wallet configured for confirmed
-Greenfield wallet-history sync from an existing BTCPay backend. It accepts
-`backend` (must reference an already-configured BTCPay backend), `label`, and
-`store_id`; the daemon stores the default BTC on-chain payment method
-internally for repeat syncs. The returned backend and wallet are redacted. If
-no BTCPay backend exists, callers should route the user to Settings rather
-than minting one through this endpoint.
+`ui.connections.btcpay.create` configures a BTCPay store in one of two modes.
+The default `wallet_sources` mode creates wallets configured for confirmed
+Greenfield wallet-history sync from a BTCPay instance, so a BTCPay-only setup is
+enough when BTCPay is the source of the wallet history. The `existing_wallets`
+mode maps selected BTCPay payment methods onto already configured settlement
+wallets and stores BTCPay provenance routes there; those wallets keep their
+normal descriptor/file sync source while BTCPay comments and labels enrich
+matching transactions. Both modes accept either a saved `backend` or inline
+instance credentials (`backend_label`, `server_url`, `api_key`) plus `label`,
+`store_id`, and either optional `payment_method_id` (default `BTC-CHAIN`) or
+`payment_method_ids` for bulk setup. In `wallet_sources`, bulk setup creates one
+Kassiber wallet per selected payment method and suffixes labels with the
+payment method id. In `existing_wallets`, callers pass `routes` containing
+`wallet` and `payment_method_id`. Inline credentials create a local `btcpay`
+backend row first, then store only the redacted backend reference on the
+wallet. Use one Kassiber wallet per real underlying BTCPay-backed wallet
+balance; stores that share the same BTCPay wallet should not be duplicated as
+separate Kassiber wallets.
+
+`ui.connections.btcpay.discover` accepts the same saved-backend or inline
+instance credential shape as `create`, performs read-only Greenfield discovery,
+and returns safe store ids/names plus enabled payment method ids. It does not
+persist anything and does not request payment-method config bodies, because
+those may contain wallet material. Desktop setup should default to selecting all
+sync-supported payment methods for the chosen store and leave unsupported
+methods for future source-specific adapters.
 
 `ui.connections.btcpay.test` makes a single Greenfield request against
-`backend` + `store_id` (and optional `payment_method_id`, defaulting to
-`BTC-CHAIN`) to confirm the credentials and store reference resolve. It
-returns `{backend, store_id, payment_method_id, ok: true}` on success, and
-otherwise propagates the same structured error codes (`auth_error`,
-`not_found`, `network_error`) the sync path uses. Nothing is persisted.
+the saved-backend or inline instance credentials plus `store_id` (and optional
+`payment_method_id`, defaulting to `BTC-CHAIN`) to confirm the credentials and
+store reference resolve. It returns
+`{backend, store_id, payment_method_id, ok: true}` on success, and otherwise
+propagates the same structured error codes (`auth_error`, `not_found`,
+`network_error`) the sync path uses. Nothing is persisted.
 
 `ui.metadata.bip329.import` accepts `file` and optional `wallet`, then imports
 BIP329 JSONL labels into the active profile and bridges transaction labels to

@@ -1,6 +1,8 @@
 # Backends Reference
 
-Kassiber syncs wallets through named backends. A backend is a pointer to an external indexer, node, or BTCPay server that Kassiber uses to discover transactions and balances.
+Kassiber syncs wallets through named backends. A backend is a local pointer to
+an external indexer, node, or BTCPay instance that Kassiber uses to discover
+transactions and balances.
 
 Backends are stored canonically in SQLite.
 
@@ -158,8 +160,16 @@ Use this to pull confirmed on-chain wallet transactions directly from a BTCPay s
   legacy scripts but emits a deprecation warning and leaks to shell history
 - store the BTCPay wallet config on the wallet with `wallets create/update --backend <btcpay-backend> --store-id <store-id>`
 - `wallets sync-btcpay --wallet <label> --backend <btcpay-backend> --store-id <store-id>` keeps the legacy one-off CLI shape and now stores that config on the wallet too
+- the desktop Add Connection dialog can create the BTCPay instance inline from
+  URL + API key, discover stores/payment methods, and then either create one
+  BTCPay-backed wallet source per selected sync-supported payment method or map
+  those payment methods onto existing settlement wallets without sending the
+  user through backend settings first
 - once the config is stored, `wallets sync --wallet <label>` and `wallets sync --all` reuse it automatically
 - use one Kassiber wallet per real underlying wallet / BTCPay-backed balance source; if multiple BTCPay stores point at the same underlying wallet balance, keep them on one Kassiber wallet or holdings will be duplicated
+- when a Liquid or multisig settlement wallet is already configured elsewhere,
+  store BTCPay as provenance on that wallet instead of adding a second wallet
+  source for the same balance
 - Kassiber requests confirmed rows only, then normalizes them through the existing BTCPay import pipeline so comments become notes and labels become tags
 - the Greenfield wallet-transaction endpoint currently requires the `btcpay.store.canmodifystoresettings` permission on the API key
 
@@ -167,10 +177,11 @@ Use this to pull confirmed on-chain wallet transactions directly from a BTCPay s
 
 ### BTCPay
 
-Use this when a BTCPay store is the authoritative transaction source for a real wallet balance.
+Use this when a BTCPay store is the authoritative transaction source for a real wallet balance, or when BTCPay should enrich existing settlement wallets with store-side payment metadata.
 
 - best fit for merchant stores where BTCPay comments/labels are part of the local bookkeeping story
 - current refresh is confirmed-only and reuses the BTCPay import pipeline so comments become notes and labels become tags
+- BTCPay-only mode is enough when BTCPay has all relevant store wallet history; existing-wallet mode is better when on-chain or Liquid wallets are already tracked separately
 - this is not full invoice/payment provenance yet; stable invoice ids and raw payload snapshots are still later work
 
 ### Esplora

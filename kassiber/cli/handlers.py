@@ -110,6 +110,7 @@ from ..sync_btcpay import (
     DEFAULT_PAGE_SIZE as BTCPAY_DEFAULT_PAGE_SIZE,
     DEFAULT_PAYMENT_METHOD_ID as BTCPAY_DEFAULT_PAYMENT_METHOD_ID,
     fetch_btcpay_records,
+    require_wallet_history_payment_method,
 )
 
 
@@ -758,6 +759,13 @@ def _wallet_sync_hooks(commit=True):
             wallet,
             commit=commit,
         ),
+        enrich_btcpay_wallet=lambda conn, runtime_config, profile, wallet: enrich_wallet_from_btcpay_provenance(
+            conn,
+            runtime_config,
+            profile,
+            wallet,
+            commit=commit,
+        ),
     )
 
 
@@ -884,6 +892,71 @@ def sync_configured_btcpay_wallet(conn, runtime_config, profile, wallet, *, comm
     )
 
 
+def enrich_wallet_from_btcpay_provenance(
+    conn,
+    runtime_config,
+    profile,
+    wallet,
+    *,
+    page_size=BTCPAY_DEFAULT_PAGE_SIZE,
+    commit=True,
+):
+    config = json.loads(wallet["config_json"] or "{}")
+    routes = core_wallets.wallet_btcpay_provenance_config(config)
+    totals = {
+        "routes": 0,
+        "fetched": 0,
+        "btcpay_notes_set": 0,
+        "btcpay_tags_added": 0,
+        "btcpay_tags_created": 0,
+    }
+    route_results = []
+    for route in routes:
+        backend = resolve_backend(runtime_config, route["backend"])
+        kind = core_sync.normalize_backend_kind(backend["kind"])
+        if kind != "btcpay":
+            raise AppError(
+                f"Backend '{backend['name']}' has kind '{backend['kind']}', expected 'btcpay'",
+                code="validation",
+                hint="Use a BTCPay backend for BTCPay provenance enrichment.",
+            )
+        records = fetch_btcpay_records(
+            backend,
+            store_id=route["store_id"],
+            payment_method_id=route["payment_method_id"],
+            page_size=page_size,
+        )
+        metadata = core_imports.apply_btcpay_metadata(
+            conn,
+            profile,
+            wallet,
+            records,
+            _import_coordinator_hooks(),
+            commit=False,
+        )
+        route_result = {
+            "backend": backend["name"],
+            "backend_kind": kind,
+            "backend_url": redact_backend_url(backend["url"]),
+            "store_id": route["store_id"],
+            "payment_method_id": route["payment_method_id"],
+            "fetched": len(records),
+            **metadata,
+        }
+        route_results.append(route_result)
+        totals["routes"] += 1
+        totals["fetched"] += len(records)
+        totals["btcpay_notes_set"] += metadata["btcpay_notes_set"]
+        totals["btcpay_tags_added"] += metadata["btcpay_tags_added"]
+        totals["btcpay_tags_created"] += metadata["btcpay_tags_created"]
+    if commit:
+        conn.commit()
+    return {
+        **totals,
+        "route_results": route_results,
+    }
+
+
 def sync_btcpay_into_wallet(
     conn,
     runtime_config,
@@ -899,6 +972,7 @@ def sync_btcpay_into_wallet(
     payment_method_id = core_wallets.normalize_btcpay_payment_method_id(
         payment_method_id
     )
+    require_wallet_history_payment_method(payment_method_id)
     _, profile = resolve_scope(conn, workspace_ref, profile_ref)
     wallet = resolve_wallet(conn, profile["id"], wallet_ref)
     backend = resolve_backend(runtime_config, backend_name)

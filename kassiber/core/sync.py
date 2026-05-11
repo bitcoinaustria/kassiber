@@ -9,7 +9,7 @@ from typing import Any, Callable, Mapping, MutableMapping, Sequence
 
 from ..errors import AppError
 from ..util import str_or_none
-from .wallets import wallet_btcpay_sync_config
+from .wallets import wallet_btcpay_provenance_config, wallet_btcpay_sync_config
 
 WalletRow = Mapping[str, Any]
 ProfileRow = Mapping[str, Any]
@@ -29,6 +29,10 @@ BackendAdapter = Callable[
     tuple[Sequence[BackendRecord], Mapping[str, Any]],
 ]
 SyncBTCPayWallet = Callable[
+    [sqlite3.Connection, RuntimeConfig, ProfileRow, WalletRow],
+    SyncOutcome,
+]
+EnrichBTCPayWallet = Callable[
     [sqlite3.Connection, RuntimeConfig, ProfileRow, WalletRow],
     SyncOutcome,
 ]
@@ -54,6 +58,27 @@ class WalletSyncHooks:
     normalize_addresses: NormalizeAddresses
     backend_adapters: Mapping[str, BackendAdapter]
     sync_btcpay_wallet: SyncBTCPayWallet | None = None
+    enrich_btcpay_wallet: EnrichBTCPayWallet | None = None
+
+
+def _merge_btcpay_enrichment(
+    conn: sqlite3.Connection,
+    runtime_config: RuntimeConfig,
+    profile: ProfileRow,
+    wallet: WalletRow,
+    hooks: WalletSyncHooks,
+    outcome: SyncOutcome,
+) -> SyncOutcome:
+    config = json.loads(wallet["config_json"] or "{}")
+    routes = wallet_btcpay_provenance_config(config)
+    if not routes:
+        return outcome
+    if hooks.enrich_btcpay_wallet is None:
+        raise AppError("BTCPay provenance refresh is not configured for this runtime")
+    enriched = hooks.enrich_btcpay_wallet(conn, runtime_config, profile, wallet)
+    merged = dict(outcome)
+    merged["btcpay_provenance"] = enriched
+    return merged
 
 
 def normalize_backend_kind(kind: Any) -> str:
@@ -140,6 +165,14 @@ def sync_wallets(
             continue
         if source_file and source_format:
             outcome = hooks.import_file(conn, profile, wallet, source_file, source_format)
+            outcome = _merge_btcpay_enrichment(
+                conn,
+                runtime_config,
+                profile,
+                wallet,
+                hooks,
+                outcome,
+            )
             results.append({"wallet": wallet["label"], "status": "synced", **outcome})
             continue
         if addresses or has_descriptor:
@@ -147,6 +180,14 @@ def sync_wallets(
             if outcome.get("status") == "skipped":
                 results.append(outcome)
             else:
+                outcome = _merge_btcpay_enrichment(
+                    conn,
+                    runtime_config,
+                    profile,
+                    wallet,
+                    hooks,
+                    outcome,
+                )
                 results.append({"wallet": wallet["label"], "status": "synced", **outcome})
             continue
         results.append(
