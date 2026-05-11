@@ -250,6 +250,7 @@ export const Onboarding = ({ className, steps: customSteps }: OnboardingProps) =
         form.backendSetupMode === "custom" &&
         form.backendKind === "electrum" &&
         form.backendUseSsl &&
+        !form.backendTrustSsl &&
         form.backendCertificate.trim()
           ? form.backendCertificate.trim()
           : undefined,

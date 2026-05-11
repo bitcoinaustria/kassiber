@@ -203,7 +203,9 @@ export const ConnectionsStep = ({
         url: electrumUrl,
         trust_self_signed: form.backendUseSsl && form.backendTrustSsl,
         certificate:
-          form.backendUseSsl && form.backendCertificate.trim()
+          form.backendUseSsl &&
+          !form.backendTrustSsl &&
+          form.backendCertificate.trim()
             ? form.backendCertificate.trim()
             : undefined,
         proxy:
@@ -349,7 +351,12 @@ export const ConnectionsStep = ({
                       name="backendCertificate"
                       value={form.backendCertificate}
                       placeholder="Optional server certificate (.crt)"
-                      description="Leave empty to use the system certificate store."
+                      description={
+                        form.backendTrustSsl
+                          ? "Ignored while 'Trust self-signed certificate' is on."
+                          : "Leave empty to use the system certificate store."
+                      }
+                      disabled={form.backendTrustSsl}
                       onChange={(value) => {
                         update("backendCertificate", value);
                         resetTest();

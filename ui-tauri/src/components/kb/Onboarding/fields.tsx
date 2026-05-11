@@ -21,6 +21,7 @@ export const TextField = ({
   autoComplete,
   hint,
   description,
+  disabled,
   onChange,
 }: {
   label: string;
@@ -31,6 +32,7 @@ export const TextField = ({
   autoComplete?: string;
   hint?: string | null;
   description?: string | null;
+  disabled?: boolean;
   onChange: (value: string) => void;
 }) => {
   return (
@@ -43,6 +45,7 @@ export const TextField = ({
         autoComplete={autoComplete}
         value={value}
         placeholder={placeholder}
+        disabled={disabled}
         onChange={(event) => onChange(event.target.value)}
         aria-invalid={hint ? true : undefined}
         aria-describedby={hint ? `${name}-hint` : undefined}

@@ -1962,8 +1962,11 @@ function BackendModal({
       void testElectrum
         .mutateAsync({
           url: effectiveUrl,
-          trust_self_signed: trustSsl,
-          certificate: certificate.trim() || undefined,
+          trust_self_signed: electrumUseSsl && trustSsl,
+          certificate:
+            electrumUseSsl && !trustSsl && certificate.trim()
+              ? certificate.trim()
+              : undefined,
           proxy:
             useProxy && proxyHost.trim() && proxyPort.trim()
               ? `${proxyHost.trim()}:${proxyPort.trim()}`
@@ -2022,7 +2025,7 @@ function BackendModal({
       auth: showAuth ? auth : "none",
       trustSsl: isElectrum && electrumUseSsl ? trustSsl : undefined,
       certificate:
-        isElectrum && electrumUseSsl && certificate.trim()
+        isElectrum && electrumUseSsl && !trustSsl && certificate.trim()
           ? certificate.trim()
           : undefined,
       proxy:
@@ -2241,8 +2244,14 @@ function BackendModal({
                       setTestLog("");
                     }}
                     placeholder="Optional server certificate (.crt)"
-                    disabled={!electrumUseSsl}
+                    disabled={!electrumUseSsl || trustSsl}
                   />
+                  {electrumUseSsl && trustSsl ? (
+                    <p className="text-xs text-muted-foreground">
+                      Ignored while &ldquo;Trust self-signed certificate&rdquo;
+                      is on.
+                    </p>
+                  ) : null}
                 </div>
                 <label className="flex items-center justify-between gap-3 rounded-md border p-3 text-sm sm:col-span-2">
                   <span>
