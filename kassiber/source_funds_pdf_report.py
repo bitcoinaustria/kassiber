@@ -48,6 +48,13 @@ def _fiat(value: Any, currency: Any) -> str:
     return f"{_money(value)}{suffix}"
 
 
+def _chunk_identifier(value: Any, *, size: int = 16) -> str:
+    text = str(value or "").strip()
+    if not text or len(text) <= size:
+        return text
+    return " ".join(text[index : index + size] for index in range(0, len(text), size))
+
+
 class _SourceFundsPdfBuilder:
     def __init__(
         self,
@@ -123,6 +130,15 @@ class _SourceFundsPdfBuilder:
                 fontSize=7.1,
                 leading=8.8,
                 textColor=BRAND_INK,
+                splitLongWords=1,
+            ),
+            "mono_small": ParagraphStyle(
+                "KassiberSourceFundsMonoSmall",
+                fontName=self.fonts["mono"],
+                fontSize=6.7,
+                leading=8.2,
+                textColor=BRAND_INK,
+                splitLongWords=1,
             ),
             "table_header": ParagraphStyle(
                 "KassiberSourceFundsTableHeader",
@@ -221,7 +237,7 @@ class _SourceFundsPdfBuilder:
             (target_label, target.get("label", "")),
             ("Amount", f"{_btc(target.get('required_amount'))} {target.get('asset', '')}"),
             ("Exportable", str(bool(self.report.get("explain_gates", {}).get("exportable")))),
-            ("Snapshot hash", self.snapshot_hash),
+            ("Snapshot hash", self.p(_chunk_identifier(self.snapshot_hash), "mono")),
         ]
         if recipient:
             rows.insert(4, ("Recipient", f"{recipient.get('label', '')} ({recipient.get('kind', '')})"))
@@ -371,20 +387,30 @@ class _SourceFundsPdfBuilder:
         preview = self.report.get("disclosure_preview", {})
         story: list[Any] = [self.p("Disclosure Preview", "h1")]
         txids = preview.get("txids") or []
-        story.append(self.kv_table([("Txids", ", ".join(txids) if txids else "(none in this reveal mode)")]))
+        if txids:
+            rows = [["Txid"]]
+            rows.extend(
+                [[self.p(_chunk_identifier(txid, size=18), "mono_small")] for txid in txids]
+            )
+            story.append(self.table(rows, widths=(170,), compact=True))
+        else:
+            story.append(self.kv_table([("Txids", "(none in this reveal mode)")]))
         attachments = list(preview.get("attachments") or [])
         if attachments:
             rows = [["Label", "Type", "Media/SHA256", "Location"]]
             for item in attachments:
                 media = item.get("media_type") or ""
                 if item.get("sha256"):
-                    media = f"{media} {item['sha256']}".strip()
+                    media = f"{media}\n{_chunk_identifier(item['sha256'])}".strip()
                 rows.append(
                     [
                         item.get("label", ""),
                         item.get("attachment_type", ""),
-                        media,
-                        item.get("source_url") or item.get("stored_relpath") or "",
+                        self.p(media, "mono_small") if item.get("sha256") else media,
+                        self.p(
+                            item.get("source_url") or item.get("stored_relpath") or "",
+                            "mono_small",
+                        ),
                     ]
                 )
             story.extend(
