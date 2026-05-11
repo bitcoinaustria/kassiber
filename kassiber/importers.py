@@ -228,6 +228,25 @@ def parse_phoenix_fiat_amount(amount_text):
     return value, currency
 
 
+def _normalize_payment_hash(value):
+    """Normalize a Lightning payment-hash string to 64-char lowercase hex.
+
+    Returns ``None`` when the value is empty, non-hex, or not exactly 32
+    bytes. The matcher only trusts values that round-trip cleanly.
+    """
+    text = str_or_none(value)
+    if not text:
+        return None
+    text = text.strip().lower()
+    if len(text) != 64:
+        return None
+    try:
+        bytes.fromhex(text)
+    except ValueError:
+        return None
+    return text
+
+
 def normalize_phoenix_record(record):
     """Turn a Phoenix CSV row into the common import-record shape.
 
@@ -237,9 +256,14 @@ def normalize_phoenix_record(record):
     (direction is captured separately) and derive `fiat_rate` from
     `fiat_value / amount_btc` since Phoenix does not export the rate.
 
-    Private keys `_phoenix_type`, `_phoenix_description`, and
-    `_phoenix_onchain_txid` feed `apply_phoenix_metadata` in
-    `kassiber.core.imports`.
+    Lightning rows expose a ``payment_hash`` column that we promote to
+    the canonical ``payment_hash`` field consumed by
+    ``kassiber.core.imports.normalize_import_record`` so the matcher can
+    pair the LN leg of a submarine swap with its on-chain counterpart
+    deterministically.
+
+    Private keys `_phoenix_type` and `_phoenix_description` feed
+    `apply_phoenix_metadata` in `kassiber.core.imports`.
     """
     sanitized = {str(key): value for key, value in record.items() if key is not None}
     for column in _PHOENIX_REQUIRED_COLUMNS:
@@ -280,7 +304,7 @@ def normalize_phoenix_record(record):
         fiat_rate = fiat_value / amount_btc
     description = str_or_none(sanitized.get("description"))
     counterparty = str_or_none(sanitized.get("destination"))
-    txid = str_or_none(sanitized.get("tx_id")) or str_or_none(sanitized.get("payment_hash"))
+    payment_hash = _normalize_payment_hash(sanitized.get("payment_hash"))
     return {
         "txid": sanitized.get("id"),
         "occurred_at": sanitized.get("date"),
@@ -293,9 +317,10 @@ def normalize_phoenix_record(record):
         "kind": phoenix_type,
         "description": description,
         "counterparty": counterparty,
+        "payment_hash": payment_hash,
+        "payment_hash_source": "importer" if payment_hash else None,
         "_phoenix_type": phoenix_type,
         "_phoenix_description": description,
-        "_phoenix_onchain_txid": txid,
         "raw_json": json.dumps(json_ready(sanitized), sort_keys=True),
     }
 
@@ -472,6 +497,7 @@ def normalize_river_record(record):
     method = str_or_none(_get_cell(sanitized, "Method"))
     description_parts = [part for part in (transaction_type, method, source, destination) if part]
     description = " - ".join(description_parts) or "Imported from River"
+    payment_hash = _normalize_payment_hash(_get_cell(sanitized, "Payment Hash", "payment_hash"))
     return {
         "txid": reference,
         "occurred_at": _get_cell(sanitized, "Date"),
@@ -499,6 +525,8 @@ def normalize_river_record(record):
         "kind": kind,
         "description": description,
         "counterparty": destination if direction == "outbound" else source,
+        "payment_hash": payment_hash,
+        "payment_hash_source": "importer" if payment_hash else None,
         "_river_tag": tag,
         "_river_description": description,
         "raw_json": json.dumps(json_ready(sanitized), sort_keys=True),

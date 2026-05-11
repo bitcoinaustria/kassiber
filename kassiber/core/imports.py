@@ -75,7 +75,8 @@ def _find_existing_transaction(
                pricing_source_kind, pricing_provider, pricing_pair, pricing_timestamp,
                pricing_fetched_at, pricing_granularity, pricing_method,
                pricing_external_ref, pricing_quality,
-               kind, description, counterparty, raw_json
+               kind, description, counterparty, raw_json,
+               payment_hash, payment_hash_source
         FROM transactions
         WHERE fingerprint = ?
         """,
@@ -90,7 +91,8 @@ def _find_existing_transaction(
                pricing_source_kind, pricing_provider, pricing_pair, pricing_timestamp,
                pricing_fetched_at, pricing_granularity, pricing_method,
                pricing_external_ref, pricing_quality,
-               kind, description, counterparty, raw_json
+               kind, description, counterparty, raw_json,
+               payment_hash, payment_hash_source
         FROM transactions
         WHERE wallet_id = ?
           AND external_id = ?
@@ -171,6 +173,9 @@ def _transaction_merge_updates(existing: Mapping[str, Any], normalized: Mapping[
         updates["description"] = normalized["description"]
     if not existing["counterparty"] and normalized["counterparty"]:
         updates["counterparty"] = normalized["counterparty"]
+    if not existing["payment_hash"] and normalized["payment_hash"]:
+        updates["payment_hash"] = normalized["payment_hash"]
+        updates["payment_hash_source"] = normalized["payment_hash_source"]
     if updates and normalized["raw_json"] and normalized["raw_json"] != existing["raw_json"]:
         updates["raw_json"] = normalized["raw_json"]
     return updates
@@ -276,6 +281,19 @@ def normalize_import_record(record: ImportRow, source_label: str = "") -> dict[s
         method=str_or_none(record.get("pricing_method") or record.get("method")),
         external_ref=str_or_none(record.get("pricing_external_ref") or record.get("external_ref")),
     )
+    payment_hash = str_or_none(record.get("payment_hash"))
+    if payment_hash is not None:
+        payment_hash = payment_hash.strip().lower()
+        if len(payment_hash) != 64:
+            payment_hash = None
+        else:
+            try:
+                bytes.fromhex(payment_hash)
+            except ValueError:
+                payment_hash = None
+    payment_hash_source = (
+        str_or_none(record.get("payment_hash_source")) if payment_hash else None
+    )
     return {
         "external_id": str(record.get("txid") or record.get("id") or ""),
         "occurred_at": occurred_at,
@@ -289,6 +307,8 @@ def normalize_import_record(record: ImportRow, source_label: str = "") -> dict[s
         "kind": record.get("kind"),
         "description": record.get("description"),
         "counterparty": record.get("counterparty"),
+        "payment_hash": payment_hash,
+        "payment_hash_source": payment_hash_source,
         "raw_json": raw_json,
     }
 
@@ -356,8 +376,8 @@ def insert_wallet_records(
                 fiat_value_exact, pricing_source_kind, pricing_provider, pricing_pair,
                 pricing_timestamp, pricing_fetched_at, pricing_granularity,
                 pricing_method, pricing_external_ref, pricing_quality, kind, description,
-                counterparty, raw_json, created_at
-            ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                counterparty, raw_json, payment_hash, payment_hash_source, created_at
+            ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 tx_id,
@@ -391,6 +411,8 @@ def insert_wallet_records(
                 normalized["description"],
                 normalized["counterparty"],
                 normalized["raw_json"],
+                normalized["payment_hash"],
+                normalized["payment_hash_source"],
                 now_iso(),
             ),
         )

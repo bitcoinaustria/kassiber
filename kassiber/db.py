@@ -783,6 +783,61 @@ def _ensure_swap_matching_schema(conn):
         "ON transaction_pairs(profile_id) WHERE deleted_at IS NULL"
     )
     conn.commit()
+    _backfill_payment_hash_from_raw_json(conn)
+
+
+def _backfill_payment_hash_from_raw_json(conn):
+    """Populate ``transactions.payment_hash`` for rows imported before this
+    column existed.
+
+    Phoenix CSV exports carry a top-level ``payment_hash`` field which the
+    importer stashes verbatim into ``raw_json``. Surfacing it as a queryable
+    column lets the matcher use exact payment-hash equality to pair the
+    Lightning leg of a submarine swap with the on-chain leg deterministically.
+
+    Strictly conservative — only updates rows where ``payment_hash`` is NULL
+    and ``raw_json`` parses as JSON with a top-level ``payment_hash`` that is
+    exactly 64 lowercase hex characters. Tags such rows with
+    ``payment_hash_source = 'importer_backfill'`` so future audits can tell
+    them apart from in-flight importer writes.
+    """
+    rows = conn.execute(
+        """
+        SELECT id, raw_json
+        FROM transactions
+        WHERE payment_hash IS NULL
+          AND raw_json LIKE '%payment_hash%'
+        """
+    ).fetchall()
+    if not rows:
+        return
+    updates = []
+    for row in rows:
+        try:
+            payload = json.loads(row["raw_json"] or "{}")
+        except (TypeError, ValueError, json.JSONDecodeError):
+            continue
+        if not isinstance(payload, dict):
+            continue
+        candidate = payload.get("payment_hash")
+        if not isinstance(candidate, str):
+            continue
+        text = candidate.strip().lower()
+        if len(text) != 64:
+            continue
+        try:
+            bytes.fromhex(text)
+        except ValueError:
+            continue
+        updates.append((text, row["id"]))
+    if not updates:
+        return
+    conn.executemany(
+        "UPDATE transactions SET payment_hash = ?, payment_hash_source = 'importer_backfill' "
+        "WHERE id = ? AND payment_hash IS NULL",
+        updates,
+    )
+    conn.commit()
 
 
 def _migrate_legacy_transaction_pairs_uniques(conn):
