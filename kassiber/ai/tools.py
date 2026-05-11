@@ -755,7 +755,7 @@ setting and ui.maintenance.run or ui.wallets.sync only after explicit consent.
 
 Read command-templates for exact CLI command shapes and common fast paths.
 Read onboarding for first-run setup, data roots, and context selection.
-Read wallets-backends for wallet kinds, backend selection, live sync, and
+Read wallets-backends for wallet kinds, backend selection, source refresh, and
 imports. Read journal-processing for processing order, stale journals,
 quarantines, and transfer/swap pairing. Read metadata for notes, tags,
 exclusions, BIP329 labels, and attachments. Read reports for summary,

@@ -79,7 +79,7 @@ const ConnectionsPanel = ({ form }: { form: OnboardingForm }) => {
             <p className="font-semibold text-ink">{modeLabel}</p>
             <p className="text-xs text-ink-2">
               {form.backendSetupMode === "skip"
-                ? "No live sync until settings are configured."
+                ? "No source refresh until settings are configured."
                 : "Endpoint choices only; credentials stay out of onboarding."}
             </p>
           </div>

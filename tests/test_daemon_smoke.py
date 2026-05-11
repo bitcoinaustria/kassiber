@@ -2199,6 +2199,11 @@ class DaemonSmokeTest(unittest.TestCase):
                         "status": "error",
                         "backend_url": "http://private-node.local/secret-path",
                         "message": "Failed to reach backend http://private-node.local/secret-path: offline",
+                    },
+                    {
+                        "wallet": "Node",
+                        "status": "error",
+                        "message": "Failed to reach backend http://[::1]/path/secret. retry later",
                     }
                 ]
             }
@@ -2214,8 +2219,11 @@ class DaemonSmokeTest(unittest.TestCase):
             self.assertEqual(cached_payload["reason"], "auto_sync_rate_limited")
             self.assertNotIn("private-node.local", encoded)
             self.assertNotIn("secret-path", encoded)
+            self.assertNotIn("[::1]", encoded)
+            self.assertNotIn("/path/secret", encoded)
             self.assertIn("<backend-url>", encoded)
             self.assertIn("Failed to reach backend <backend-url>: offline", encoded)
+            self.assertIn("Failed to reach backend <backend-url>. retry later", encoded)
             self.assertTrue(payload["results"][0]["has_backend_url"])
             self.assertFalse(state["auto_sync"]["ok"])  # type: ignore[index]
 

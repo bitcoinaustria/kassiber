@@ -307,7 +307,7 @@ def _validated_wallet_config(normalized_kind, config):
         )
     if chain == "liquid" and descriptor_plan is None and not config.get("source_file"):
         raise AppError(
-            "Liquid live sync currently requires a descriptor with private blinding keys",
+            "Liquid live refresh currently requires a descriptor with private blinding keys",
             code="validation",
         )
     if descriptor_plan and descriptor_plan.chain == "liquid":

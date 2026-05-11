@@ -1479,7 +1479,10 @@ def _redact_sync_payload_for_ui(value: Any) -> Any:
     return value
 
 
-_SYNC_URL_RE = re.compile(r"\b[a-zA-Z][a-zA-Z0-9+.-]*://[^\s,;)\"'\]]+")
+_SYNC_URL_RE = re.compile(
+    r"\b[a-zA-Z][a-zA-Z0-9+.-]*://"
+    r"(?:\[[^\]\s]+\][^\s,;)\"'\]]*|[^\s,;)\"'\]]+)"
+)
 _SYNC_URL_TRAILING_PUNCTUATION = ":.!?"
 
 
