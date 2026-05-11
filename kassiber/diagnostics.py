@@ -567,7 +567,9 @@ def _attachment_summary(conn: sqlite3.Connection) -> dict[str, Any]:
 
 
 def _manual_pair_summary(conn: sqlite3.Connection) -> dict[str, Any]:
-    rows = conn.execute("SELECT kind, policy FROM transaction_pairs").fetchall()
+    rows = conn.execute(
+        "SELECT kind, policy FROM transaction_pairs WHERE deleted_at IS NULL"
+    ).fetchall()
     by_kind = Counter()
     by_policy = Counter()
     for row in rows:

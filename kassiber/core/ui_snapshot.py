@@ -1840,7 +1840,7 @@ def build_journals_transfers_list_snapshot(
         FROM transaction_pairs p
         JOIN transactions tout ON tout.id = p.out_transaction_id
         JOIN transactions tin ON tin.id = p.in_transaction_id
-        WHERE p.profile_id = ?
+        WHERE p.profile_id = ? AND p.deleted_at IS NULL
         """,
         (profile["id"],),
     ).fetchone()
@@ -1876,7 +1876,7 @@ def build_journals_transfers_list_snapshot(
         JOIN transactions tin ON tin.id = p.in_transaction_id
         JOIN wallets wout ON wout.id = tout.wallet_id
         JOIN wallets win ON win.id = tin.wallet_id
-        WHERE p.profile_id = ?
+        WHERE p.profile_id = ? AND p.deleted_at IS NULL
         ORDER BY p.created_at DESC
         LIMIT ?
         """,

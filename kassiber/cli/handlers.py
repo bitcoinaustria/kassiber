@@ -37,8 +37,11 @@ from ..core import metadata as core_metadata
 from ..core import pricing
 from ..core import rates as core_rates
 from ..core import reports as core_reports
+from ..core import saved_views as core_saved_views
+from ..core import swap_rules as core_swap_rules
 from ..core import sync as core_sync
 from ..core import sync_backends as core_sync_backends
+from ..core import transfer_matching as core_transfer_matching
 from ..core import wallets as core_wallets
 from ..core.engines import TaxEngineLedgerInputs, build_tax_engine
 from ..core.repo import current_context_snapshot, resolve_account
@@ -307,7 +310,16 @@ TRANSFER_PAIR_KINDS = ("manual", "peg-in", "peg-out", "submarine-swap")
 TRANSFER_PAIR_POLICIES = ("carrying-value", "taxable")
 
 
+_PAIR_SOURCE_VALUES = ("manual", "bulk_exact", "bulk_selected", "rule_auto")
+
+
 def _pair_to_dict(row):
+    keys = set(row.keys()) if hasattr(row, "keys") else set()
+    swap_fee_msat = row["swap_fee_msat"] if "swap_fee_msat" in keys else None
+    swap_fee_kind = row["swap_fee_kind"] if "swap_fee_kind" in keys else None
+    confidence_at_pair = row["confidence_at_pair"] if "confidence_at_pair" in keys else None
+    pair_source = row["pair_source"] if "pair_source" in keys else None
+    deleted_at = row["deleted_at"] if "deleted_at" in keys else None
     return {
         "id": row["id"],
         "workspace_id": row["workspace_id"],
@@ -317,6 +329,11 @@ def _pair_to_dict(row):
         "kind": row["kind"],
         "policy": row["policy"],
         "notes": row["notes"],
+        "swap_fee_msat": int(swap_fee_msat) if swap_fee_msat is not None else None,
+        "swap_fee_kind": swap_fee_kind,
+        "confidence_at_pair": confidence_at_pair,
+        "pair_source": pair_source,
+        "deleted_at": deleted_at,
         "created_at": row["created_at"],
     }
 
@@ -330,6 +347,10 @@ def create_transaction_pair(
     kind="manual",
     policy="carrying-value",
     notes=None,
+    *,
+    pair_source="manual",
+    confidence_at_pair=None,
+    commit=True,
 ):
     workspace, profile = resolve_scope(conn, workspace_ref, profile_ref)
     if kind not in TRANSFER_PAIR_KINDS:
@@ -340,6 +361,11 @@ def create_transaction_pair(
     if policy not in TRANSFER_PAIR_POLICIES:
         raise AppError(
             f"Unsupported pair policy '{policy}'. Supported: {', '.join(TRANSFER_PAIR_POLICIES)}",
+            code="validation",
+        )
+    if pair_source not in _PAIR_SOURCE_VALUES:
+        raise AppError(
+            f"Unsupported pair_source '{pair_source}'. Supported: {', '.join(_PAIR_SOURCE_VALUES)}",
             code="validation",
         )
     out_row = resolve_transaction(conn, profile["id"], out_ref, direction="outbound")
@@ -373,7 +399,8 @@ def create_transaction_pair(
     existing = conn.execute(
         """
         SELECT id FROM transaction_pairs
-        WHERE profile_id = ? AND (out_transaction_id IN (?, ?) OR in_transaction_id IN (?, ?))
+        WHERE profile_id = ? AND deleted_at IS NULL
+          AND (out_transaction_id IN (?, ?) OR in_transaction_id IN (?, ?))
         LIMIT 1
         """,
         (profile["id"], out_row["id"], in_row["id"], out_row["id"], in_row["id"]),
@@ -384,13 +411,18 @@ def create_transaction_pair(
             f"Run `kassiber transfers unpair --pair-id {existing['id']}` first.",
             code="conflict",
         )
+    swap_fee_msat, swap_fee_kind = core_transfer_matching.compute_swap_fee(
+        int(out_row["amount"] or 0),
+        int(in_row["amount"] or 0),
+    )
     pair_id = str(uuid.uuid4())
     conn.execute(
         """
         INSERT INTO transaction_pairs(
             id, workspace_id, profile_id, out_transaction_id, in_transaction_id,
-            kind, policy, notes, created_at
-        ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?)
+            kind, policy, notes, swap_fee_msat, swap_fee_kind, confidence_at_pair,
+            pair_source, deleted_at, created_at
+        ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?)
         """,
         (
             pair_id,
@@ -401,20 +433,26 @@ def create_transaction_pair(
             kind,
             policy,
             notes,
+            swap_fee_msat,
+            swap_fee_kind,
+            confidence_at_pair,
+            pair_source,
             now_iso(),
         ),
     )
     invalidate_journals(conn, profile["id"])
-    conn.commit()
+    if commit:
+        conn.commit()
     return _pair_to_dict(
         conn.execute("SELECT * FROM transaction_pairs WHERE id = ?", (pair_id,)).fetchone()
     )
 
 
-def list_transaction_pairs(conn, workspace_ref, profile_ref):
+def list_transaction_pairs(conn, workspace_ref, profile_ref, *, include_deleted=False):
     _, profile = resolve_scope(conn, workspace_ref, profile_ref)
+    extra_where = "" if include_deleted else "AND p.deleted_at IS NULL"
     rows = conn.execute(
-        """
+        f"""
         SELECT
             p.*,
             tout.external_id AS out_external_id,
@@ -430,7 +468,7 @@ def list_transaction_pairs(conn, workspace_ref, profile_ref):
         JOIN transactions tin ON tin.id = p.in_transaction_id
         JOIN wallets wout ON wout.id = tout.wallet_id
         JOIN wallets win ON win.id = tin.wallet_id
-        WHERE p.profile_id = ?
+        WHERE p.profile_id = ? {extra_where}
         ORDER BY p.created_at DESC
         """,
         (profile["id"],),
@@ -458,7 +496,432 @@ def list_transaction_pairs(conn, workspace_ref, profile_ref):
     return output
 
 
+def _candidate_to_dict(candidate):
+    return {
+        "out_id": candidate.out_id,
+        "in_id": candidate.in_id,
+        "out_asset": candidate.out_asset,
+        "in_asset": candidate.in_asset,
+        "out_amount_msat": candidate.out_amount_msat,
+        "out_amount": float(msat_to_btc(candidate.out_amount_msat)),
+        "in_amount_msat": candidate.in_amount_msat,
+        "in_amount": float(msat_to_btc(candidate.in_amount_msat)),
+        "out_wallet_id": candidate.out_wallet_id,
+        "in_wallet_id": candidate.in_wallet_id,
+        "out_wallet_label": candidate.out_wallet_label,
+        "in_wallet_label": candidate.in_wallet_label,
+        "out_wallet_kind": candidate.out_wallet_kind,
+        "in_wallet_kind": candidate.in_wallet_kind,
+        "out_occurred_at": candidate.out_occurred_at,
+        "in_occurred_at": candidate.in_occurred_at,
+        "confidence": candidate.confidence,
+        "method": candidate.method,
+        "swap_fee_msat": candidate.swap_fee_msat,
+        "swap_fee": float(msat_to_btc(candidate.swap_fee_msat)) if candidate.swap_fee_msat else 0.0,
+        "swap_fee_kind": candidate.swap_fee_kind,
+        "default_kind": candidate.default_kind,
+        "default_policy": candidate.default_policy,
+        "conflict_set_id": candidate.conflict_set_id,
+    }
+
+
+def _load_matcher_rows(conn, profile_id):
+    """Fetch transaction rows enriched with wallet metadata for the matcher."""
+    return conn.execute(
+        """
+        SELECT
+            t.id, t.profile_id, t.wallet_id, t.payment_hash,
+            t.occurred_at, t.direction, t.asset, t.amount, t.excluded,
+            w.label AS wallet_label, w.kind AS wallet_kind
+        FROM transactions t
+        JOIN wallets w ON w.id = t.wallet_id
+        WHERE t.profile_id = ?
+        """,
+        (profile_id,),
+    ).fetchall()
+
+
+def suggest_transfer_candidates(
+    conn,
+    workspace_ref,
+    profile_ref,
+    *,
+    time_window_seconds=core_transfer_matching.DEFAULT_TIME_WINDOW_SECONDS,
+    fee_pct_max=core_transfer_matching.DEFAULT_FEE_PCT_MAX,
+    fee_sats_min=core_transfer_matching.DEFAULT_FEE_SATS_MIN,
+    confidence=None,
+    asset_pair=None,
+    method=None,
+):
+    """Run the matcher and return the candidate envelope.
+
+    Honours optional filters used by the review queue: ``confidence``
+    pins to exact / strong; ``asset_pair`` matches the
+    ``OUT-IN`` shape (e.g. ``"LBTC-BTC"``); ``method`` pins to
+    ``payment_hash`` or ``heuristic``.
+    """
+    _, profile = resolve_scope(conn, workspace_ref, profile_ref)
+    rows = _load_matcher_rows(conn, profile["id"])
+    pair_records = conn.execute(
+        "SELECT out_transaction_id, in_transaction_id, deleted_at FROM transaction_pairs WHERE profile_id = ?",
+        (profile["id"],),
+    ).fetchall()
+    dismissals = conn.execute(
+        "SELECT out_transaction_id, in_transaction_id, expires_at FROM transaction_pair_dismissals WHERE profile_id = ?",
+        (profile["id"],),
+    ).fetchall()
+    candidates = core_transfer_matching.suggest_swap_candidates(
+        rows,
+        pair_records=pair_records,
+        dismissals=dismissals,
+        time_window_seconds=int(time_window_seconds),
+        fee_pct_max=float(fee_pct_max),
+        fee_sats_min=int(fee_sats_min),
+        tax_country=str(profile["tax_country"] or ""),
+    )
+    if confidence:
+        candidates = [c for c in candidates if c.confidence == confidence]
+    if method:
+        candidates = [c for c in candidates if c.method == method]
+    if asset_pair:
+        try:
+            out_asset, in_asset = asset_pair.split("-", 1)
+        except ValueError as exc:
+            raise AppError(
+                f"Invalid asset_pair '{asset_pair}', expected OUT-IN like 'LBTC-BTC'",
+                code="validation",
+            ) from exc
+        candidates = [
+            c for c in candidates if c.out_asset == out_asset and c.in_asset == in_asset
+        ]
+    counts = {
+        "total": len(candidates),
+        "exact": sum(1 for c in candidates if c.confidence == "exact"),
+        "strong": sum(1 for c in candidates if c.confidence == "strong"),
+        "conflicts": _count_conflict_clusters(candidates),
+    }
+    return {
+        "candidates": [_candidate_to_dict(c) for c in candidates],
+        "counts": counts,
+    }
+
+
+def _count_conflict_clusters(candidates):
+    cluster_sizes = {}
+    for candidate in candidates:
+        cluster_sizes[candidate.conflict_set_id] = cluster_sizes.get(candidate.conflict_set_id, 0) + 1
+    return sum(1 for size in cluster_sizes.values() if size > 1)
+
+
+def bulk_pair_transfers(
+    conn,
+    workspace_ref,
+    profile_ref,
+    *,
+    confidence="exact",
+    time_window_seconds=core_transfer_matching.DEFAULT_TIME_WINDOW_SECONDS,
+    fee_pct_max=core_transfer_matching.DEFAULT_FEE_PCT_MAX,
+    fee_sats_min=core_transfer_matching.DEFAULT_FEE_SATS_MIN,
+):
+    """Run the matcher and auto-pair every solo (non-conflicted) candidate
+    whose confidence meets the threshold.
+
+    Defaults to ``confidence="exact"`` so only payment-hash matches
+    auto-apply without further user review. Conflict clusters are
+    always skipped — disambiguation stays manual.
+    """
+    workspace, profile = resolve_scope(conn, workspace_ref, profile_ref)
+    rows = _load_matcher_rows(conn, profile["id"])
+    pair_records = conn.execute(
+        "SELECT out_transaction_id, in_transaction_id, deleted_at FROM transaction_pairs WHERE profile_id = ?",
+        (profile["id"],),
+    ).fetchall()
+    dismissals = conn.execute(
+        "SELECT out_transaction_id, in_transaction_id, expires_at FROM transaction_pair_dismissals WHERE profile_id = ?",
+        (profile["id"],),
+    ).fetchall()
+    candidates = core_transfer_matching.suggest_swap_candidates(
+        rows,
+        pair_records=pair_records,
+        dismissals=dismissals,
+        time_window_seconds=int(time_window_seconds),
+        fee_pct_max=float(fee_pct_max),
+        fee_sats_min=int(fee_sats_min),
+        tax_country=str(profile["tax_country"] or ""),
+    )
+    if confidence not in ("exact", "strong"):
+        raise AppError(
+            f"Unsupported confidence '{confidence}'. Use 'exact' or 'strong'.",
+            code="validation",
+        )
+    cluster_sizes = {}
+    for candidate in candidates:
+        cluster_sizes[candidate.conflict_set_id] = cluster_sizes.get(candidate.conflict_set_id, 0) + 1
+    applied = []
+    pair_source = "bulk_exact" if confidence == "exact" else "bulk_selected"
+    for candidate in candidates:
+        if cluster_sizes.get(candidate.conflict_set_id, 0) > 1:
+            continue
+        if confidence == "exact" and candidate.confidence != "exact":
+            continue
+        pair = create_transaction_pair(
+            conn,
+            workspace["id"],
+            profile["id"],
+            candidate.out_id,
+            candidate.in_id,
+            kind=candidate.default_kind,
+            policy=candidate.default_policy,
+            pair_source=pair_source,
+            confidence_at_pair=candidate.confidence,
+            commit=False,
+        )
+        applied.append(pair)
+    if applied:
+        conn.commit()
+    total_fee_msat = sum(int(pair.get("swap_fee_msat") or 0) for pair in applied)
+    return {
+        "applied": applied,
+        "summary": {
+            "count": len(applied),
+            "skipped_conflicts": sum(1 for c in candidates if cluster_sizes.get(c.conflict_set_id, 0) > 1),
+            "total_swap_fee_msat": total_fee_msat,
+        },
+    }
+
+
+_DEFAULT_DISMISSAL_DAYS = 90
+
+
+def dismiss_transfer_candidate(
+    conn,
+    workspace_ref,
+    profile_ref,
+    out_ref,
+    in_ref,
+    *,
+    reason=None,
+    expires_in_days=_DEFAULT_DISMISSAL_DAYS,
+):
+    """Record a "not a swap" dismissal so the matcher stops suggesting this
+    exact pair.
+
+    Defaults to a 90-day expiry — long enough that the user doesn't keep
+    seeing the same rejected suggestion, short enough that updated
+    evidence (e.g. a payment_hash later landing on one of the legs)
+    eventually re-surfaces it.
+    """
+    workspace, profile = resolve_scope(conn, workspace_ref, profile_ref)
+    out_row = resolve_transaction(conn, profile["id"], out_ref)
+    in_row = resolve_transaction(conn, profile["id"], in_ref)
+    expires_at = None
+    if expires_in_days and int(expires_in_days) > 0:
+        from datetime import datetime, timedelta, timezone
+
+        expires_at = (
+            datetime.now(timezone.utc) + timedelta(days=int(expires_in_days))
+        ).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+    dismissal_id = str(uuid.uuid4())
+    try:
+        conn.execute(
+            """
+            INSERT INTO transaction_pair_dismissals(
+                id, workspace_id, profile_id, out_transaction_id, in_transaction_id,
+                reason, created_at, expires_at
+            ) VALUES(?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                dismissal_id,
+                workspace["id"],
+                profile["id"],
+                out_row["id"],
+                in_row["id"],
+                reason,
+                now_iso(),
+                expires_at,
+            ),
+        )
+    except sqlite3.IntegrityError:
+        # Update the existing dismissal to refresh the expiry instead.
+        conn.execute(
+            """
+            UPDATE transaction_pair_dismissals
+            SET reason = COALESCE(?, reason), expires_at = ?
+            WHERE profile_id = ? AND out_transaction_id = ? AND in_transaction_id = ?
+            """,
+            (reason, expires_at, profile["id"], out_row["id"], in_row["id"]),
+        )
+    conn.commit()
+    row = conn.execute(
+        "SELECT * FROM transaction_pair_dismissals "
+        "WHERE profile_id = ? AND out_transaction_id = ? AND in_transaction_id = ?",
+        (profile["id"], out_row["id"], in_row["id"]),
+    ).fetchone()
+    return _dismissal_to_dict(row)
+
+
+def _dismissal_to_dict(row):
+    return {
+        "id": row["id"],
+        "workspace_id": row["workspace_id"],
+        "profile_id": row["profile_id"],
+        "out_transaction_id": row["out_transaction_id"],
+        "in_transaction_id": row["in_transaction_id"],
+        "reason": row["reason"],
+        "created_at": row["created_at"],
+        "expires_at": row["expires_at"],
+    }
+
+
+# -- rules CRUD --------------------------------------------------------------
+
+
+def list_transfer_rules(conn, workspace_ref, profile_ref):
+    _, profile = resolve_scope(conn, workspace_ref, profile_ref)
+    rows = conn.execute(
+        "SELECT * FROM swap_matching_rules WHERE profile_id = ? ORDER BY created_at DESC, id ASC",
+        (profile["id"],),
+    ).fetchall()
+    return [_rule_row_to_dict(row) for row in rows]
+
+
+def create_transfer_rule(
+    conn,
+    workspace_ref,
+    profile_ref,
+    *,
+    name=None,
+    predicate=None,
+    kind="manual",
+    policy="carrying-value",
+    enabled=True,
+):
+    workspace, profile = resolve_scope(conn, workspace_ref, profile_ref)
+    if kind not in TRANSFER_PAIR_KINDS:
+        raise AppError(
+            f"Unsupported pair kind '{kind}'. Supported: {', '.join(TRANSFER_PAIR_KINDS)}",
+            code="validation",
+        )
+    if policy not in TRANSFER_PAIR_POLICIES:
+        raise AppError(
+            f"Unsupported pair policy '{policy}'. Supported: {', '.join(TRANSFER_PAIR_POLICIES)}",
+            code="validation",
+        )
+    predicate = predicate or {}
+    if not isinstance(predicate, dict):
+        raise AppError("predicate must be a JSON object", code="validation")
+    rule_id = str(uuid.uuid4())
+    timestamp = now_iso()
+    conn.execute(
+        """
+        INSERT INTO swap_matching_rules(
+            id, workspace_id, profile_id, name, predicate_json, kind, policy,
+            enabled, created_at, updated_at
+        ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        (
+            rule_id,
+            workspace["id"],
+            profile["id"],
+            name,
+            json.dumps(predicate, sort_keys=True),
+            kind,
+            policy,
+            1 if enabled else 0,
+            timestamp,
+            timestamp,
+        ),
+    )
+    conn.commit()
+    row = conn.execute("SELECT * FROM swap_matching_rules WHERE id = ?", (rule_id,)).fetchone()
+    return _rule_row_to_dict(row)
+
+
+def delete_transfer_rule(conn, workspace_ref, profile_ref, rule_id):
+    _, profile = resolve_scope(conn, workspace_ref, profile_ref)
+    row = conn.execute(
+        "SELECT * FROM swap_matching_rules WHERE id = ? AND profile_id = ?",
+        (rule_id, profile["id"]),
+    ).fetchone()
+    if not row:
+        raise AppError(f"Rule '{rule_id}' not found", code="not_found")
+    conn.execute("DELETE FROM swap_matching_rules WHERE id = ?", (rule_id,))
+    conn.commit()
+    return {"deleted": rule_id}
+
+
+def set_transfer_rule_enabled(conn, workspace_ref, profile_ref, rule_id, enabled):
+    _, profile = resolve_scope(conn, workspace_ref, profile_ref)
+    row = conn.execute(
+        "SELECT * FROM swap_matching_rules WHERE id = ? AND profile_id = ?",
+        (rule_id, profile["id"]),
+    ).fetchone()
+    if not row:
+        raise AppError(f"Rule '{rule_id}' not found", code="not_found")
+    conn.execute(
+        "UPDATE swap_matching_rules SET enabled = ?, updated_at = ? WHERE id = ?",
+        (1 if enabled else 0, now_iso(), rule_id),
+    )
+    conn.commit()
+    updated = conn.execute("SELECT * FROM swap_matching_rules WHERE id = ?", (rule_id,)).fetchone()
+    return _rule_row_to_dict(updated)
+
+
+def _rule_row_to_dict(row):
+    predicate = {}
+    try:
+        predicate = json.loads(row["predicate_json"] or "{}")
+    except (TypeError, ValueError, json.JSONDecodeError):
+        predicate = {}
+    return {
+        "id": row["id"],
+        "workspace_id": row["workspace_id"],
+        "profile_id": row["profile_id"],
+        "name": row["name"],
+        "predicate": predicate,
+        "kind": row["kind"],
+        "policy": row["policy"],
+        "enabled": bool(row["enabled"]),
+        "created_at": row["created_at"],
+        "updated_at": row["updated_at"],
+    }
+
+
+# -- saved views CRUD --------------------------------------------------------
+
+
+def list_saved_views_cli(conn, workspace_ref, profile_ref, *, surface=None):
+    _, profile = resolve_scope(conn, workspace_ref, profile_ref)
+    return core_saved_views.list_views(conn, profile["id"], surface=surface)
+
+
+def create_saved_view_cli(
+    conn, workspace_ref, profile_ref, *, surface, name, filter_payload=None
+):
+    workspace, profile = resolve_scope(conn, workspace_ref, profile_ref)
+    return core_saved_views.create_view(
+        conn,
+        workspace["id"],
+        profile["id"],
+        surface=surface,
+        name=name,
+        filter_payload=filter_payload,
+    )
+
+
+def delete_saved_view_cli(conn, workspace_ref, profile_ref, view_id):
+    _, profile = resolve_scope(conn, workspace_ref, profile_ref)
+    return core_saved_views.delete_view(conn, profile["id"], view_id)
+
+
 def delete_transaction_pair(conn, workspace_ref, profile_ref, pair_id):
+    """Soft-delete a transaction pair.
+
+    Sets ``deleted_at`` so the row stays around for audit and the
+    partial-unique indexes from commit 1 stop covering it — meaning the
+    user can immediately re-pair the same legs without first hard-deleting
+    the historic record. Already soft-deleted pairs are a no-op.
+    """
     _, profile = resolve_scope(conn, workspace_ref, profile_ref)
     row = conn.execute(
         "SELECT * FROM transaction_pairs WHERE id = ? AND profile_id = ?",
@@ -466,9 +929,13 @@ def delete_transaction_pair(conn, workspace_ref, profile_ref, pair_id):
     ).fetchone()
     if not row:
         raise AppError(f"Pair '{pair_id}' not found", code="not_found")
-    conn.execute("DELETE FROM transaction_pairs WHERE id = ?", (pair_id,))
-    invalidate_journals(conn, profile["id"])
-    conn.commit()
+    if row["deleted_at"] is None:
+        conn.execute(
+            "UPDATE transaction_pairs SET deleted_at = ? WHERE id = ?",
+            (now_iso(), pair_id),
+        )
+        invalidate_journals(conn, profile["id"])
+        conn.commit()
     return {"deleted": pair_id}
 
 
@@ -1543,7 +2010,7 @@ def build_ledger_state(conn, profile):
         (profile["id"],),
     ).fetchall()
     manual_pair_records = conn.execute(
-        "SELECT * FROM transaction_pairs WHERE profile_id = ?",
+        "SELECT * FROM transaction_pairs WHERE profile_id = ? AND deleted_at IS NULL",
         (profile["id"],),
     ).fetchall()
     tax_engine = build_tax_engine(profile)

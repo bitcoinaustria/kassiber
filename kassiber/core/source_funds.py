@@ -939,6 +939,7 @@ def _transaction_pair_still_deterministic(
             SELECT 1
             FROM transaction_pairs
             WHERE profile_id = ? AND out_transaction_id = ? AND in_transaction_id = ?
+              AND deleted_at IS NULL
             LIMIT 1
             """,
             (profile_id, from_tx["id"], to_tx["id"]),
@@ -1310,7 +1311,8 @@ def suggest_links(
         remember(link)
 
     pair_rows = conn.execute(
-        "SELECT * FROM transaction_pairs WHERE profile_id = ? ORDER BY created_at ASC, id ASC",
+        "SELECT * FROM transaction_pairs WHERE profile_id = ? AND deleted_at IS NULL "
+        "ORDER BY created_at ASC, id ASC",
         (profile["id"],),
     ).fetchall()
     for pair in pair_rows:

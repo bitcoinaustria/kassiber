@@ -47,8 +47,18 @@ from .handlers import (
     cmd_context_show,
     cmd_init,
     cmd_status,
+    bulk_pair_transfers,
+    create_saved_view_cli,
     create_transaction_pair,
+    create_transfer_rule,
+    delete_saved_view_cli,
     delete_transaction_pair,
+    delete_transfer_rule,
+    dismiss_transfer_candidate,
+    list_saved_views_cli,
+    list_transfer_rules,
+    set_transfer_rule_enabled,
+    suggest_transfer_candidates,
     derive_wallet_targets,
     emit,
     get_journal_event,
@@ -874,6 +884,120 @@ def build_parser() -> argparse.ArgumentParser:
     transfers_unpair.add_argument("--workspace")
     transfers_unpair.add_argument("--profile")
     transfers_unpair.add_argument("--pair-id", required=True, dest="pair_id")
+
+    transfers_suggest = transfers_sub.add_parser("suggest")
+    transfers_suggest.add_argument("--workspace")
+    transfers_suggest.add_argument("--profile")
+    transfers_suggest.add_argument("--confidence", choices=("exact", "strong"))
+    transfers_suggest.add_argument("--method", choices=("payment_hash", "heuristic"))
+    transfers_suggest.add_argument(
+        "--asset-pair",
+        dest="asset_pair",
+        help="Match OUT-IN asset shape, e.g. LBTC-BTC for a peg-out",
+    )
+    transfers_suggest.add_argument(
+        "--time-window-seconds",
+        dest="time_window_seconds",
+        type=int,
+        default=24 * 60 * 60,
+    )
+    transfers_suggest.add_argument(
+        "--fee-pct-max", dest="fee_pct_max", type=float, default=0.01
+    )
+    transfers_suggest.add_argument(
+        "--fee-sats-min", dest="fee_sats_min", type=int, default=2500
+    )
+
+    transfers_bulk_pair = transfers_sub.add_parser("bulk-pair")
+    transfers_bulk_pair.add_argument("--workspace")
+    transfers_bulk_pair.add_argument("--profile")
+    transfers_bulk_pair.add_argument(
+        "--confidence", choices=("exact", "strong"), default="exact"
+    )
+    transfers_bulk_pair.add_argument(
+        "--time-window-seconds",
+        dest="time_window_seconds",
+        type=int,
+        default=24 * 60 * 60,
+    )
+    transfers_bulk_pair.add_argument(
+        "--fee-pct-max", dest="fee_pct_max", type=float, default=0.01
+    )
+    transfers_bulk_pair.add_argument(
+        "--fee-sats-min", dest="fee_sats_min", type=int, default=2500
+    )
+
+    transfers_dismiss = transfers_sub.add_parser("dismiss")
+    transfers_dismiss.add_argument("--workspace")
+    transfers_dismiss.add_argument("--profile")
+    transfers_dismiss.add_argument("--tx-out", dest="tx_out", required=True)
+    transfers_dismiss.add_argument("--tx-in", dest="tx_in", required=True)
+    transfers_dismiss.add_argument("--reason")
+    transfers_dismiss.add_argument(
+        "--expires-in-days",
+        dest="expires_in_days",
+        type=int,
+        default=90,
+        help="0 = never expire",
+    )
+
+    transfers_rules = transfers_sub.add_parser("rules")
+    transfers_rules_sub = transfers_rules.add_subparsers(
+        dest="transfers_rules_command", required=True
+    )
+    tr_rules_list = transfers_rules_sub.add_parser("list")
+    tr_rules_list.add_argument("--workspace")
+    tr_rules_list.add_argument("--profile")
+    tr_rules_create = transfers_rules_sub.add_parser("create")
+    tr_rules_create.add_argument("--workspace")
+    tr_rules_create.add_argument("--profile")
+    tr_rules_create.add_argument("--name")
+    tr_rules_create.add_argument(
+        "--predicate",
+        default="{}",
+        help="Inline JSON predicate (matches out_wallet_id, in_wallet_id, "
+        "out_asset, in_asset, out_wallet_kind, in_wallet_kind, max_fee_pct, "
+        "min_confidence)",
+    )
+    tr_rules_create.add_argument("--kind", choices=list(TRANSFER_PAIR_KINDS), default="manual")
+    tr_rules_create.add_argument(
+        "--policy", choices=list(TRANSFER_PAIR_POLICIES), default="carrying-value"
+    )
+    tr_rules_create.add_argument("--disabled", action="store_true")
+    tr_rules_delete = transfers_rules_sub.add_parser("delete")
+    tr_rules_delete.add_argument("--workspace")
+    tr_rules_delete.add_argument("--profile")
+    tr_rules_delete.add_argument("--rule-id", required=True, dest="rule_id")
+    tr_rules_enable = transfers_rules_sub.add_parser("enable")
+    tr_rules_enable.add_argument("--workspace")
+    tr_rules_enable.add_argument("--profile")
+    tr_rules_enable.add_argument("--rule-id", required=True, dest="rule_id")
+    tr_rules_disable = transfers_rules_sub.add_parser("disable")
+    tr_rules_disable.add_argument("--workspace")
+    tr_rules_disable.add_argument("--profile")
+    tr_rules_disable.add_argument("--rule-id", required=True, dest="rule_id")
+
+    views = sub.add_parser("views")
+    views_sub = views.add_subparsers(dest="views_command", required=True)
+    views_list = views_sub.add_parser("list")
+    views_list.add_argument("--workspace")
+    views_list.add_argument("--profile")
+    views_list.add_argument("--surface")
+    views_create = views_sub.add_parser("create")
+    views_create.add_argument("--workspace")
+    views_create.add_argument("--profile")
+    views_create.add_argument("--surface", required=True)
+    views_create.add_argument("--name", required=True)
+    views_create.add_argument(
+        "--filter",
+        default="{}",
+        dest="filter_json",
+        help="Inline JSON filter payload (round-tripped opaque to this layer)",
+    )
+    views_delete = views_sub.add_parser("delete")
+    views_delete.add_argument("--workspace")
+    views_delete.add_argument("--profile")
+    views_delete.add_argument("--view-id", required=True, dest="view_id")
 
     source_funds = sub.add_parser("source-funds")
     source_funds_sub = source_funds.add_subparsers(dest="source_funds_command", required=True)
@@ -1859,6 +1983,119 @@ def dispatch(conn: sqlite3.Connection | None, args: argparse.Namespace) -> Any:
             return emit(
                 args,
                 delete_transaction_pair(conn, args.workspace, args.profile, args.pair_id),
+            )
+        if args.transfers_command == "suggest":
+            return emit(
+                args,
+                suggest_transfer_candidates(
+                    conn,
+                    args.workspace,
+                    args.profile,
+                    time_window_seconds=args.time_window_seconds,
+                    fee_pct_max=args.fee_pct_max,
+                    fee_sats_min=args.fee_sats_min,
+                    confidence=getattr(args, "confidence", None),
+                    asset_pair=getattr(args, "asset_pair", None),
+                    method=getattr(args, "method", None),
+                ),
+            )
+        if args.transfers_command == "bulk-pair":
+            return emit(
+                args,
+                bulk_pair_transfers(
+                    conn,
+                    args.workspace,
+                    args.profile,
+                    confidence=args.confidence,
+                    time_window_seconds=args.time_window_seconds,
+                    fee_pct_max=args.fee_pct_max,
+                    fee_sats_min=args.fee_sats_min,
+                ),
+            )
+        if args.transfers_command == "dismiss":
+            return emit(
+                args,
+                dismiss_transfer_candidate(
+                    conn,
+                    args.workspace,
+                    args.profile,
+                    args.tx_out,
+                    args.tx_in,
+                    reason=getattr(args, "reason", None),
+                    expires_in_days=args.expires_in_days,
+                ),
+            )
+        if args.transfers_command == "rules":
+            if args.transfers_rules_command == "list":
+                return emit(args, list_transfer_rules(conn, args.workspace, args.profile))
+            if args.transfers_rules_command == "create":
+                try:
+                    predicate = json.loads(args.predicate or "{}")
+                except json.JSONDecodeError as exc:
+                    raise AppError(
+                        f"Invalid --predicate JSON: {exc}", code="validation"
+                    ) from exc
+                return emit(
+                    args,
+                    create_transfer_rule(
+                        conn,
+                        args.workspace,
+                        args.profile,
+                        name=args.name,
+                        predicate=predicate,
+                        kind=args.kind,
+                        policy=args.policy,
+                        enabled=not args.disabled,
+                    ),
+                )
+            if args.transfers_rules_command == "delete":
+                return emit(
+                    args,
+                    delete_transfer_rule(conn, args.workspace, args.profile, args.rule_id),
+                )
+            if args.transfers_rules_command == "enable":
+                return emit(
+                    args,
+                    set_transfer_rule_enabled(
+                        conn, args.workspace, args.profile, args.rule_id, True
+                    ),
+                )
+            if args.transfers_rules_command == "disable":
+                return emit(
+                    args,
+                    set_transfer_rule_enabled(
+                        conn, args.workspace, args.profile, args.rule_id, False
+                    ),
+                )
+    if args.command == "views":
+        if args.views_command == "list":
+            return emit(
+                args,
+                list_saved_views_cli(
+                    conn, args.workspace, args.profile, surface=getattr(args, "surface", None)
+                ),
+            )
+        if args.views_command == "create":
+            try:
+                filter_payload = json.loads(args.filter_json or "{}")
+            except json.JSONDecodeError as exc:
+                raise AppError(
+                    f"Invalid --filter JSON: {exc}", code="validation"
+                ) from exc
+            return emit(
+                args,
+                create_saved_view_cli(
+                    conn,
+                    args.workspace,
+                    args.profile,
+                    surface=args.surface,
+                    name=args.name,
+                    filter_payload=filter_payload,
+                ),
+            )
+        if args.views_command == "delete":
+            return emit(
+                args, delete_saved_view_cli(conn, args.workspace, args.profile, args.view_id)
             )
     if args.command == "source-funds":
         source_funds_hooks = _source_funds_hooks()
