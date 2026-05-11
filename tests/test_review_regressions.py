@@ -4436,6 +4436,27 @@ class ReviewRegressionTest(unittest.TestCase):
         self._assert_ok(payload, result, "wallets.get")
         self.assertEqual(payload["data"]["config"], {})
 
+    def test_normalize_btcpay_payment_method_id_canonicalises_case(self):
+        # BTCPay's canonical form is upper case ("BTC-CHAIN", "BTC-LN"). All
+        # wallet config writes and URL constructions go through this helper,
+        # so canonicalising here keeps storage consistent regardless of how
+        # the value reached us (CLI arg, JSON config, daemon discovery).
+        from kassiber.core import wallets as core_wallets
+
+        self.assertEqual(
+            core_wallets.normalize_btcpay_payment_method_id("btc-chain"),
+            "BTC-CHAIN",
+        )
+        self.assertEqual(
+            core_wallets.normalize_btcpay_payment_method_id("  Btc-Chain  "),
+            "BTC-CHAIN",
+        )
+        # Already-canonical values are returned unchanged.
+        self.assertEqual(
+            core_wallets.normalize_btcpay_payment_method_id("LBTC-CHAIN"),
+            "LBTC-CHAIN",
+        )
+
     def test_btcpay_sync_rejects_altcoin_chain_payment_method_id(self):
         # The wallet-history allowlist is intentionally narrow (BTC-CHAIN and
         # LBTC-CHAIN). Any other -CHAIN suffix must be rejected at the same

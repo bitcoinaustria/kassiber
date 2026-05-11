@@ -234,7 +234,11 @@ def normalize_btcpay_payment_method_id(value):
     payment_method_id = str_or_none(value)
     if payment_method_id is None:
         raise AppError("BTCPay payment method id cannot be empty", code="validation")
-    return payment_method_id
+    # BTCPay treats payment method ids as "{CRYPTO}-{TYPE}" — e.g. BTC-CHAIN,
+    # LBTC-CHAIN, BTC-LN. Canonicalize to upper case here so wallet config,
+    # sync URLs, and the allowlist gate all agree regardless of how the
+    # caller typed it.
+    return payment_method_id.upper()
 
 
 def parse_wallet_config(args):
