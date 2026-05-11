@@ -94,6 +94,7 @@ import {
   getTransport,
   isImportProjectActive,
 } from "@/daemon/transport";
+import { lockScreenConfig, shouldUseDaemonUnlock } from "@/lib/appLock";
 import { cn } from "@/lib/utils";
 import {
   clearSessionUnlockPassphrase,
@@ -549,7 +550,6 @@ export function AppShell() {
   const dataMode = useUiStore((s) => s.dataMode);
   const encryptedWorkspace =
     Boolean(identity?.encrypted) || identity?.databaseMode === "sqlcipher";
-  const daemonBackedWorkspace = dataMode === "real" && Boolean(identity);
   const importedProjectRoot = identity?.importedProject?.dataRoot ?? null;
   const [importRootReady, setImportRootReady] = React.useState(
     () => !importedProjectRoot,
@@ -558,7 +558,15 @@ export function AppShell() {
     null,
   );
   const [daemonAuthRequired, setDaemonAuthRequired] = React.useState(false);
-  const requiresDaemonUnlock = daemonBackedWorkspace || daemonAuthRequired;
+  const requiresDaemonUnlock = shouldUseDaemonUnlock({
+    dataMode,
+    hasIdentity: Boolean(identity),
+    daemonAuthRequired,
+  });
+  const lockedScreen = lockScreenConfig({
+    daemonAuthRequired,
+    encryptedWorkspace,
+  });
   const routerBusy = useRouterState({
     select: (s) => s.isLoading || s.isTransitioning || s.status === "pending",
   });
@@ -1105,16 +1113,8 @@ export function AppShell() {
                     className={appMainClassName}
                   >
                     <LockScreen
-                      reason={
-                        daemonAuthRequired
-                          ? "The daemon needs the database passphrase before it can return live books data."
-                          : encryptedWorkspace
-                            ? undefined
-                            : "Open the local daemon session to continue."
-                      }
-                      passphraseRequired={
-                        encryptedWorkspace || daemonAuthRequired
-                      }
+                      reason={lockedScreen.reason}
+                      passphraseRequired={lockedScreen.passphraseRequired}
                       onUnlock={unlockApp}
                       onReset={resetLocalUiSession}
                     />
