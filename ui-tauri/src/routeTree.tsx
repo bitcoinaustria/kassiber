@@ -23,6 +23,7 @@ import { Transactions } from "./routes/Transactions";
 import { Reports } from "./routes/Reports";
 import { SourceFunds } from "./routes/SourceFunds";
 import { Journals } from "./routes/Journals";
+import { SwapMatching } from "./routes/SwapMatching";
 import { TaxEvents } from "./routes/TaxEvents";
 import { Quarantine } from "./routes/Quarantine";
 import { Diagnostics } from "./routes/Diagnostics";
@@ -116,6 +117,12 @@ const taxEventsRoute = createRoute({
   getParentRoute: () => appLayoutRoute,
   path: "/tax-events",
   component: TaxEvents,
+});
+
+const swapMatchingRoute = createRoute({
+  getParentRoute: () => appLayoutRoute,
+  path: "/swaps",
+  component: SwapMatching,
 });
 
 const quarantineRoute = createRoute({
@@ -217,6 +224,7 @@ const routeTree = rootRoute.addChildren([
     reportsRoute,
     sourceFundsRoute,
     journalsRoute,
+    swapMatchingRoute,
     taxEventsRoute,
     quarantineRoute,
     diagnosticsRoute,

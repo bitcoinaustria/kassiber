@@ -7,6 +7,7 @@ import {
 } from "@tanstack/react-router";
 import {
   ArrowLeft,
+  ArrowLeftRight,
   ArrowRight,
   BadgeCheck,
   BarChart3,
@@ -193,6 +194,7 @@ const NAV_GROUPS: NavGroup[] = [
     title: "Review",
     items: [
       { label: "Quarantine", icon: ShieldAlert, href: "/quarantine" },
+      { label: "Swaps", icon: ArrowLeftRight, href: "/swaps" },
       { label: "Journals", icon: BookOpen, href: "/journals" },
       { label: "Tax Events", icon: CircleDollarSign, href: "/tax-events" },
     ],
@@ -288,6 +290,15 @@ const ROUTE_META: Array<[string, RouteMeta]> = [
       icon: ShieldAlert,
       searchLabel: "Search quarantine",
       searchPlaceholder: "Search issue, account, source...",
+    },
+  ],
+  [
+    "/swaps",
+    {
+      title: "Swap candidates",
+      icon: ArrowLeftRight,
+      searchLabel: "Search swap candidates",
+      searchPlaceholder: "Search wallet, asset pair, txid...",
     },
   ],
   [

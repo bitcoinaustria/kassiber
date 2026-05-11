@@ -17,6 +17,7 @@ export type AppRoutePath =
   | "/connections"
   | "/books"
   | "/journals"
+  | "/swaps"
   | "/tax-events"
   | "/quarantine"
   | "/diagnostics"
@@ -52,6 +53,7 @@ export const APP_ROUTE_PATHS: readonly AppRoutePath[] = [
   "/connections",
   "/books",
   "/journals",
+  "/swaps",
   "/tax-events",
   "/quarantine",
   "/diagnostics",
