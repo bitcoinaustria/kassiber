@@ -51,7 +51,6 @@ from embit import hashes as _embit_hashes
 _OP_0 = 0x00
 _OP_PUSHBYTES_1 = 0x01
 _OP_PUSHBYTES_75 = 0x4B
-_OP_PUSHDATA1 = 0x4C
 _OP_1 = 0x51
 _OP_16 = 0x60
 _OP_DROP = 0x75

@@ -1303,6 +1303,7 @@ const TransactionWorkbench = ({
     React.useState<FlowChartMetric>("amount");
   const [chartMode, setChartMode] = React.useState<FlowChartMode>("external");
   const swapCandidates = buildSwapCandidates(records);
+  const markedSwapRecords = records.filter((txn) => transactionFlow(txn) === "swap");
   const swapCandidateIds = new Set(
     swapCandidates.flatMap((candidate) => [
       candidate.in.id,
@@ -1438,7 +1439,7 @@ const TransactionWorkbench = ({
       icon: RefreshCw,
       tone: swapCandidateTotals.count > 0 ? "text-amber-600" : "text-muted-foreground",
       onClick:
-        swapCandidateTotals.count > 0
+        swaps.count > 0
           ? () => setSwapDialogOpen(true)
           : undefined,
     },
@@ -1779,6 +1780,16 @@ const TransactionWorkbench = ({
             </DialogDescription>
           </DialogHeader>
           <div className="max-h-[60vh] space-y-3 overflow-y-auto pr-1">
+            {swapCandidates.length === 0 && markedSwapRecords.length > 0 ? (
+              <div className="rounded-lg border bg-muted/25 p-3 text-sm">
+                <p className="font-medium">No unpaired candidates in this period.</p>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  {markedSwapRecords.length} swap{" "}
+                  {markedSwapRecords.length === 1 ? "leg is" : "legs are"} already
+                  marked in the transaction list.
+                </p>
+              </div>
+            ) : null}
             {swapCandidates.map((candidate, index) => (
               <div
                 key={`${candidate.out.id}-${candidate.in.id}`}
@@ -1816,6 +1827,21 @@ const TransactionWorkbench = ({
                 </div>
               </div>
             ))}
+            {markedSwapRecords.length > 0 ? (
+              <div className="space-y-2">
+                <p className="text-xs font-medium text-muted-foreground">
+                  Marked swap legs
+                </p>
+                {markedSwapRecords.slice(0, 6).map((transaction) => (
+                  <SwapMarkedRow
+                    key={transaction.id}
+                    transaction={transaction}
+                    currency={currency}
+                    hideSensitive={hideSensitive}
+                  />
+                ))}
+              </div>
+            ) : null}
           </div>
           <DialogFooter>
             <DialogClose asChild>
@@ -1891,6 +1917,38 @@ function SwapCandidateLeg({
           </span>
         </div>
       </div>
+    </div>
+  );
+}
+
+function SwapMarkedRow({
+  transaction,
+  hideSensitive,
+  currency,
+}: {
+  transaction: Transaction;
+  hideSensitive: boolean;
+  currency: Currency;
+}) {
+  return (
+    <div className="flex min-w-0 items-center justify-between gap-3 rounded-md border bg-background p-3 text-xs">
+      <div className="min-w-0">
+        <p className={cn("truncate font-medium", blurClass(hideSensitive))}>
+          {transaction.note || transaction.tag || transaction.counterparty}
+        </p>
+        <p className="truncate text-muted-foreground">
+          {transaction.wallet} · {transaction.date} · {transaction.txnId}
+        </p>
+      </div>
+      <CurrencyToggleText
+        className={cn("shrink-0 font-semibold", blurClass(hideSensitive))}
+      >
+        {formatDisplayMoney(
+          transaction.amount,
+          transactionBtc(transaction),
+          currency,
+        )}
+      </CurrencyToggleText>
     </div>
   );
 }

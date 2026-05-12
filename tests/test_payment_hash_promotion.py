@@ -14,7 +14,6 @@ Covers four landings:
 """
 
 import json
-import sqlite3
 import tempfile
 import unittest
 import uuid

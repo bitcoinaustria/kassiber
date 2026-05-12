@@ -22,7 +22,6 @@ import sqlite3
 import tempfile
 import unittest
 import uuid
-from pathlib import Path
 
 from kassiber.db import ensure_schema_compat, open_db
 
