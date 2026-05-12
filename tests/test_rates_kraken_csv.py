@@ -62,6 +62,87 @@ class KrakenCsvRatesTest(unittest.TestCase):
         self.addCleanup(conn.close)
         return conn
 
+    def _seed_transaction_needing_rate(
+        self,
+        conn,
+        *,
+        profile_fiat="EUR",
+        tx_fiat=None,
+        occurred_at="2024-05-01T12:34:56Z",
+        confirmed_at=None,
+        asset="BTC",
+        external_id="needs-rate",
+    ):
+        created_at = "2024-05-01T00:00:00Z"
+        conn.execute(
+            "INSERT INTO workspaces(id, label, created_at) VALUES (?, ?, ?)",
+            ("workspace-1", "Main", created_at),
+        )
+        conn.execute(
+            """
+            INSERT INTO profiles(
+                id, workspace_id, label, fiat_currency, tax_country,
+                tax_long_term_days, gains_algorithm, created_at
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                "profile-1",
+                "workspace-1",
+                "Default",
+                profile_fiat,
+                "generic",
+                365,
+                "FIFO",
+                created_at,
+            ),
+        )
+        conn.execute(
+            """
+            INSERT INTO wallets(
+                id, workspace_id, profile_id, label, kind, config_json, created_at
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                "wallet-1",
+                "workspace-1",
+                "profile-1",
+                "Cold",
+                "manual",
+                "{}",
+                created_at,
+            ),
+        )
+        conn.execute(
+            """
+            INSERT INTO transactions(
+                id, workspace_id, profile_id, wallet_id, external_id, fingerprint,
+                occurred_at, confirmed_at, direction, asset, amount, fee,
+                fiat_currency, raw_json, created_at
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                "tx-1",
+                "workspace-1",
+                "profile-1",
+                "wallet-1",
+                external_id,
+                f"fingerprint-{external_id}",
+                occurred_at,
+                confirmed_at,
+                "in",
+                asset,
+                100_000_000,
+                0,
+                tx_fiat,
+                "{}",
+                created_at,
+            ),
+        )
+        conn.commit()
+
     def test_ingests_kraken_csv_and_stores_ohlcvt(self):
         payload = self._run_json(
             "rates",
@@ -294,6 +375,119 @@ class KrakenCsvRatesTest(unittest.TestCase):
         self.assertTrue(
             all((end - start).total_seconds() <= 300 * 60 for start, end in windows)
         )
+
+    def test_coinbase_sync_fetches_only_missing_transaction_window(self):
+        conn = open_db(str(self.data_root))
+        self.addCleanup(conn.close)
+        self._seed_transaction_needing_rate(conn)
+        windows = []
+
+        def fake_coinbase_rows(pair, start, end, granularity=60):
+            windows.append((pair, start, end, granularity))
+            return [
+                [
+                    1714566780,
+                    "59990.00",
+                    "60020.00",
+                    "60000.00",
+                    "60010.00",
+                    "0.50",
+                ],
+            ]
+
+        with patch.object(
+            core_rates,
+            "_coinbase_exchange_candles",
+            side_effect=fake_coinbase_rows,
+        ):
+            summary = core_rates.sync_rates(conn, days=1)
+
+        eur_summary = next(row for row in summary if row["pair"] == "BTC-EUR")
+        usd_summary = next(row for row in summary if row["pair"] == "BTC-USD")
+        self.assertEqual(eur_summary["mode"], "transaction_need")
+        self.assertEqual(eur_summary["needed_minutes"], 1)
+        self.assertEqual(eur_summary["missing_minutes"], 1)
+        self.assertEqual(eur_summary["windows"], 1)
+        self.assertEqual(eur_summary["checked_minutes"], 300)
+        self.assertEqual(usd_summary["mode"], "transaction_need")
+        self.assertEqual(usd_summary["needed_minutes"], 0)
+        self.assertEqual(usd_summary["windows"], 0)
+        self.assertEqual(len(windows), 1)
+        pair, start, end, granularity = windows[0]
+        self.assertEqual(pair, "BTC-EUR")
+        self.assertEqual(granularity, 60)
+        self.assertEqual(start.isoformat(), "2024-05-01T12:33:00+00:00")
+        self.assertEqual(end.isoformat(), "2024-05-01T17:33:00+00:00")
+
+        rate_row = conn.execute(
+            """
+            SELECT timestamp, rate_exact
+            FROM rates_cache
+            WHERE pair = 'BTC-EUR' AND source = 'coinbase-exchange'
+            """
+        ).fetchone()
+        self.assertEqual(rate_row["timestamp"], "2024-05-01T12:34:00Z")
+        self.assertEqual(rate_row["rate_exact"], "60010.00")
+
+    def test_coinbase_sync_does_not_refetch_checked_sparse_minute(self):
+        conn = open_db(str(self.data_root))
+        self.addCleanup(conn.close)
+        self._seed_transaction_needing_rate(conn)
+        calls = []
+
+        def fake_coinbase_rows(pair, start, end, granularity=60):
+            calls.append((pair, start, end, granularity))
+            return []
+
+        with patch.object(
+            core_rates,
+            "_coinbase_exchange_candles",
+            side_effect=fake_coinbase_rows,
+        ):
+            first = core_rates.sync_rates(conn, pair="BTC-EUR", days=1)
+            second = core_rates.sync_rates(conn, pair="BTC-EUR", days=1)
+
+        self.assertEqual(len(calls), 1)
+        self.assertEqual(first[0]["missing_minutes"], 1)
+        self.assertEqual(first[0]["checked_minutes"], 300)
+        self.assertEqual(second[0]["needed_minutes"], 1)
+        self.assertEqual(second[0]["already_checked_minutes"], 1)
+        self.assertEqual(second[0]["missing_minutes"], 0)
+        self.assertEqual(second[0]["windows"], 0)
+
+        checked_count = conn.execute(
+            """
+            SELECT COUNT(*)
+            FROM rates_checked_minutes
+            WHERE pair = 'BTC-EUR' AND source = 'coinbase-exchange'
+            """
+        ).fetchone()[0]
+        self.assertEqual(checked_count, 300)
+
+    def test_coinbase_sync_skips_transaction_minute_already_cached(self):
+        conn = open_db(str(self.data_root))
+        self.addCleanup(conn.close)
+        self._seed_transaction_needing_rate(conn)
+        core_rates.upsert_rate(
+            conn,
+            "BTC-EUR",
+            "2024-05-01T12:34:00Z",
+            "60000.00",
+            core_rates.RATE_SOURCE_KRAKEN_CSV,
+            fetched_at="2024-05-01T00:00:00Z",
+            granularity="minute",
+            method="ohlcvt_csv",
+        )
+        conn.commit()
+
+        with patch.object(core_rates, "_coinbase_exchange_candles") as fetch:
+            summary = core_rates.sync_rates(conn, pair="BTC-EUR", days=1)
+
+        fetch.assert_not_called()
+        self.assertEqual(summary[0]["needed_minutes"], 1)
+        self.assertEqual(summary[0]["cached_minutes"], 1)
+        self.assertEqual(summary[0]["missing_minutes"], 0)
+        self.assertEqual(summary[0]["windows"], 0)
 
 
 if __name__ == "__main__":

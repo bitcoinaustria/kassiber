@@ -35,6 +35,7 @@ _RATE_ASSET_ALIASES = {"LBTC": "BTC"}
 _KRAKEN_STABLECOIN_QUOTES = {"DAI", "USDC", "USDT"}
 _KRAKEN_SUPPORTED_QUOTES = {"EUR", "USD"}
 _KRAKEN_BATCH_SIZE = 10_000
+_COINBASE_MAX_CANDLES = 300
 
 
 _RATE_UPSERT_SQL = """
@@ -567,6 +568,194 @@ def _parse_coinbase_exchange_rows(rows, granularity=60):
     return sorted(output, key=lambda candle: candle["timestamp"])
 
 
+def _floor_to_minute(value):
+    dt = _parse_iso_datetime(value, "timestamp")
+    return _iso_z(dt.replace(second=0, microsecond=0))
+
+
+def _chunked(items, size=900):
+    chunk = []
+    for item in items:
+        chunk.append(item)
+        if len(chunk) >= size:
+            yield chunk
+            chunk = []
+    if chunk:
+        yield chunk
+
+
+def _collect_coinbase_needed_minutes(conn, pairs):
+    pair_set = set(pairs)
+    needed = {pair: set() for pair in pair_set}
+    now_minute = datetime.now(timezone.utc).replace(second=0, microsecond=0)
+    rows = conn.execute(
+        """
+        SELECT t.occurred_at, t.confirmed_at, t.asset, t.fiat_currency,
+               p.fiat_currency AS profile_fiat_currency
+        FROM transactions t
+        JOIN profiles p ON p.id = t.profile_id
+        WHERE t.excluded = 0
+          AND (
+            (
+              t.fiat_rate IS NULL AND t.fiat_value IS NULL
+              AND t.fiat_rate_exact IS NULL AND t.fiat_value_exact IS NULL
+            )
+            OR (
+              t.fiat_price_source = ?
+              AND t.pricing_source_kind IS NULL
+              AND t.pricing_quality IS NULL
+            )
+          )
+        ORDER BY COALESCE(t.confirmed_at, t.occurred_at) ASC, t.created_at ASC, t.id ASC
+        """,
+        (pricing.LEGACY_SOURCE_RATES_CACHE,),
+    ).fetchall()
+    for row in rows:
+        pair = transaction_rate_pair(
+            row["asset"],
+            row["fiat_currency"] or row["profile_fiat_currency"],
+        )
+        if pair not in pair_set:
+            continue
+        pricing_at = row["confirmed_at"] or row["occurred_at"]
+        try:
+            minute = _floor_to_minute(pricing_at)
+        except AppError:
+            logger.warning(
+                "Skipping transaction with invalid pricing timestamp: %s",
+                pricing_at,
+            )
+            continue
+        if _parse_iso_datetime(minute, "rate_timestamp") > now_minute:
+            continue
+        needed[pair].add(minute)
+    return needed
+
+
+def _existing_rate_minutes(conn, pair, timestamps):
+    existing = set()
+    ordered = sorted(timestamps)
+    for chunk in _chunked(ordered):
+        placeholders = ", ".join("?" for _ in chunk)
+        rows = conn.execute(
+            f"""
+            SELECT timestamp
+            FROM rates_cache
+            WHERE pair = ?
+              AND timestamp IN ({placeholders})
+              AND (
+                granularity = 'minute'
+                OR source IN ('manual', ?, ?)
+              )
+            """,
+            [pair, *chunk, RATE_SOURCE_COINBASE_EXCHANGE, RATE_SOURCE_KRAKEN_CSV],
+        ).fetchall()
+        existing.update(row["timestamp"] for row in rows)
+    return existing
+
+
+def _checked_rate_minutes(conn, pair, timestamps, source=RATE_SOURCE_COINBASE_EXCHANGE):
+    checked = set()
+    ordered = sorted(timestamps)
+    for chunk in _chunked(ordered):
+        placeholders = ", ".join("?" for _ in chunk)
+        rows = conn.execute(
+            f"""
+            SELECT timestamp
+            FROM rates_checked_minutes
+            WHERE pair = ?
+              AND source = ?
+              AND timestamp IN ({placeholders})
+            """,
+            [pair, source, *chunk],
+        ).fetchall()
+        checked.update(row["timestamp"] for row in rows)
+    return checked
+
+
+def _filter_missing_coinbase_minutes(conn, pair, timestamps):
+    needed = set(timestamps)
+    if not needed:
+        return {
+            "missing": set(),
+            "cached": set(),
+            "checked": set(),
+        }
+    cached = _existing_rate_minutes(conn, pair, needed)
+    checked = _checked_rate_minutes(conn, pair, needed - cached)
+    return {
+        "missing": needed - cached - checked,
+        "cached": cached,
+        "checked": checked,
+    }
+
+
+def _coinbase_windows_for_close_minutes(minutes, granularity=60, now=None):
+    granularity_seconds = int(granularity)
+    delta = timedelta(seconds=granularity_seconds)
+    step = delta * _COINBASE_MAX_CANDLES
+    now_dt = (now or datetime.now(timezone.utc)).replace(second=0, microsecond=0)
+    close_times = sorted(
+        dt
+        for dt in (
+            _parse_iso_datetime(minute, "rate_timestamp").replace(second=0, microsecond=0)
+            for minute in minutes
+        )
+        if dt <= now_dt
+    )
+    windows = []
+    index = 0
+    while index < len(close_times):
+        close_start = close_times[index]
+        close_end = min(close_start + step - delta, now_dt)
+        windows.append((close_start - delta, close_end))
+        index += 1
+        while index < len(close_times) and close_times[index] <= close_end:
+            index += 1
+    return windows
+
+
+def _coinbase_checked_minutes_for_window(start, end, granularity=60):
+    delta = timedelta(seconds=int(granularity))
+    cursor = start + delta
+    minutes = []
+    while cursor <= end:
+        minutes.append(_iso_z(cursor))
+        cursor += delta
+    return minutes
+
+
+def _mark_rate_minutes_checked(
+    conn,
+    pair,
+    timestamps,
+    checked_at,
+    source=RATE_SOURCE_COINBASE_EXCHANGE,
+    granularity="minute",
+    method="product_candles",
+):
+    rows = [
+        (pair, timestamp, source, checked_at, granularity, method)
+        for timestamp in sorted(set(timestamps))
+    ]
+    if not rows:
+        return 0
+    conn.executemany(
+        """
+        INSERT INTO rates_checked_minutes(
+            pair, timestamp, source, checked_at, granularity, method
+        )
+        VALUES (?, ?, ?, ?, ?, ?)
+        ON CONFLICT(pair, timestamp, source) DO UPDATE SET
+            checked_at = excluded.checked_at,
+            granularity = excluded.granularity,
+            method = excluded.method
+        """,
+        rows,
+    )
+    return len(rows)
+
+
 def fetch_rates_coinbase_exchange(pair, days=30, granularity=60):
     if int(days) <= 0:
         raise AppError("--days must be positive", code="validation")
@@ -578,7 +767,7 @@ def fetch_rates_coinbase_exchange(pair, days=30, granularity=60):
         )
     end = datetime.now(timezone.utc).replace(second=0, microsecond=0)
     start = end - timedelta(days=int(days))
-    step = timedelta(seconds=granularity_int * 300)
+    step = timedelta(seconds=granularity_int * _COINBASE_MAX_CANDLES)
     output = []
     cursor = start
     while cursor < end:
@@ -617,33 +806,87 @@ def _sync_rates_coinbase_exchange(
         pairs = list(SUPPORTED_RATE_PAIRS)
     fetched_at = _iso_z(datetime.now(timezone.utc))
     summary = []
+    needed_by_pair = _collect_coinbase_needed_minutes(conn, pairs)
+    has_any_needed_minutes = any(needed_by_pair.get(pair) for pair in pairs)
     for normalized_pair in pairs:
-        samples = fetch_rates_coinbase_exchange(
+        needed_minutes = needed_by_pair.get(normalized_pair, set())
+        filter_result = _filter_missing_coinbase_minutes(
+            conn,
             normalized_pair,
-            days=days,
-            granularity=60,
+            needed_minutes,
         )
+        missing_minutes = filter_result["missing"]
+        windows = _coinbase_windows_for_close_minutes(missing_minutes, granularity=60)
         inserted = 0
-        for candle in samples:
-            upsert_rate(
-                conn,
+        checked_minutes = 0
+        mode = "transaction_need"
+        if needed_minutes:
+            for start, end in windows:
+                rows = _coinbase_exchange_candles(
+                    normalized_pair,
+                    start,
+                    end,
+                    granularity=60,
+                )
+                samples = _parse_coinbase_exchange_rows(rows, granularity=60)
+                for candle in samples:
+                    upsert_rate(
+                        conn,
+                        normalized_pair,
+                        candle["timestamp"],
+                        candle["close"],
+                        source,
+                        fetched_at=fetched_at,
+                        granularity="minute",
+                        method="product_candles",
+                        open_rate=candle["open"],
+                        high_rate=candle["high"],
+                        low_rate=candle["low"],
+                        close_rate=candle["close"],
+                        volume=candle["volume"],
+                        trades=candle["trades"],
+                    )
+                    inserted += 1
+                checked_minutes += _mark_rate_minutes_checked(
+                    conn,
+                    normalized_pair,
+                    _coinbase_checked_minutes_for_window(start, end, granularity=60),
+                    fetched_at,
+                    source=source,
+                    granularity="minute",
+                    method="product_candles",
+                )
+                if samples:
+                    _invalidate_profile_journals_for_pair(conn, normalized_pair)
+                conn.commit()
+        elif not has_any_needed_minutes:
+            mode = "continuous_days"
+            samples = fetch_rates_coinbase_exchange(
                 normalized_pair,
-                candle["timestamp"],
-                candle["close"],
-                source,
-                fetched_at=fetched_at,
-                granularity="minute",
-                method="product_candles",
-                open_rate=candle["open"],
-                high_rate=candle["high"],
-                low_rate=candle["low"],
-                close_rate=candle["close"],
-                volume=candle["volume"],
-                trades=candle["trades"],
+                days=days,
+                granularity=60,
             )
-            inserted += 1
-        _invalidate_profile_journals_for_pair(conn, normalized_pair)
-        conn.commit()
+            for candle in samples:
+                upsert_rate(
+                    conn,
+                    normalized_pair,
+                    candle["timestamp"],
+                    candle["close"],
+                    source,
+                    fetched_at=fetched_at,
+                    granularity="minute",
+                    method="product_candles",
+                    open_rate=candle["open"],
+                    high_rate=candle["high"],
+                    low_rate=candle["low"],
+                    close_rate=candle["close"],
+                    volume=candle["volume"],
+                    trades=candle["trades"],
+                )
+                inserted += 1
+            if samples:
+                _invalidate_profile_journals_for_pair(conn, normalized_pair)
+            conn.commit()
         summary.append(
             {
                 "pair": normalized_pair,
@@ -652,6 +895,13 @@ def _sync_rates_coinbase_exchange(
                 "days": int(days),
                 "granularity": "minute",
                 "method": "product_candles",
+                "mode": mode,
+                "needed_minutes": len(needed_minutes),
+                "cached_minutes": len(filter_result["cached"]),
+                "already_checked_minutes": len(filter_result["checked"]),
+                "missing_minutes": len(missing_minutes),
+                "windows": len(windows),
+                "checked_minutes": checked_minutes,
                 "fetched_at": fetched_at,
             }
         )

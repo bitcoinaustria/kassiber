@@ -84,7 +84,7 @@ If a fast-path command returns a structured error, inspect the envelope and take
 - Cross-asset `--policy carrying-value` pairing is Austrian-only right now. Outside Austrian books, BTC ↔ LBTC manual pairs still stay on the normal SELL + BUY path, so do not describe them as carrying-value.
 - `kassiber status` may resolve to a legacy XDG path on machines with older state trees. Use status output, not assumptions, to find the live database.
 - If `journals transfers list` reports `cross_asset_pairs: 0`, no cross-asset swap pair is active yet. Do not describe Austrian carry-value as already applied until that changes.
-- Large `rates sync --days ...` requests may still yield limited history because the upstream source can cap the returned window. Verify actual coverage with `rates range` instead of hand-mathing sample counts.
+- Coinbase `rates sync` normally uses missing transaction minutes and cached checked-minute state before falling back to a continuous `--days` warm-cache request. Verify actual coverage with `rates range` instead of hand-mathing sample counts.
 - If a skill reference lookup fails, the most common mistake is resolving `references/...` from repo root instead of `<skill-dir>/references/...`.
 - Kassiber already has `reports export-pdf`; do not invent bespoke render scripts unless the user specifically wants a custom format beyond the built-in export.
 - Accounts are not a double-entry chart of accounts today. `account_type` and `asset` are descriptive bucket metadata; fees and external counterparties do not auto-post to separate accounts.

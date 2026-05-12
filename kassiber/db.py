@@ -315,6 +315,19 @@ CREATE TABLE IF NOT EXISTS rates_cache (
 CREATE INDEX IF NOT EXISTS idx_rates_cache_pair_ts
     ON rates_cache(pair, timestamp DESC);
 
+CREATE TABLE IF NOT EXISTS rates_checked_minutes (
+    pair TEXT NOT NULL,
+    timestamp TEXT NOT NULL,
+    source TEXT NOT NULL,
+    checked_at TEXT NOT NULL,
+    granularity TEXT,
+    method TEXT,
+    PRIMARY KEY (pair, timestamp, source)
+);
+
+CREATE INDEX IF NOT EXISTS idx_rates_checked_minutes_pair_ts
+    ON rates_checked_minutes(pair, timestamp DESC);
+
 CREATE TABLE IF NOT EXISTS attachments (
     id TEXT PRIMARY KEY,
     workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,

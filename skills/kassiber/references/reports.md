@@ -44,9 +44,15 @@ timestamps.
 Kassiber's rate cache currently supports `BTC-USD` and `BTC-EUR`. Rate sources
 are `coinbase-exchange` (default), `coingecko`, `kraken-csv`, and manual
 `rates set` entries. Coinbase Exchange sync stores sparse 1-minute candles from
-chunked 300-minute public API windows. Liquid Bitcoin uses Kassiber's BTC alias
-path for fiat pricing, so missing spot prices on LBTC rows usually mean the
-relevant BTC sample was unavailable at or before that timestamp.
+chunked 300-minute public API windows. When transactions needing pricing exist,
+the default sync builds a de-duplicated set of needed transaction minutes,
+skips minutes already covered by minute-level cache rows, records checked
+Coinbase minutes even when the response is sparse, and fetches only coalesced
+300-minute windows around the remaining gaps. With no missing transaction
+minutes, `--days` remains a continuous warm-cache fallback. Liquid Bitcoin uses
+Kassiber's BTC alias path for fiat pricing, so missing spot prices on LBTC rows
+usually mean the relevant BTC sample was unavailable at or before that
+timestamp.
 
 For historical minute-level backfills, download Kraken's OHLCVT archive from
 [Kraken's support article](https://support.kraken.com/articles/360047124832)
