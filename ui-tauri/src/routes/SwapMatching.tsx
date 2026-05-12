@@ -170,14 +170,20 @@ function formatSats(msat: number) {
 
 function formatTimestamp(value: string) {
   if (!value) return "—";
-  try {
-    return new Intl.DateTimeFormat("en-US", {
-      dateStyle: "short",
-      timeStyle: "short",
-    }).format(new Date(value));
-  } catch {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
     return value;
   }
+  return new Intl.DateTimeFormat(undefined, {
+    dateStyle: "short",
+    timeStyle: "short",
+  }).format(date);
+}
+
+function compactRecordId(value: string) {
+  if (!value) return "—";
+  if (value.length <= 22) return value;
+  return `${value.slice(0, 12)}…${value.slice(-6)}`;
 }
 
 function feePercent(candidate: SwapCandidate) {
@@ -946,116 +952,118 @@ export function SwapMatching() {
               </div>
             </div>
           ) : (
-            <Table className="min-w-[980px] border-t">
-              <TableHeader>
-                <TableRow className="bg-muted/50 hover:bg-muted/50">
-                  <TableHead className="w-[42px]"></TableHead>
-                  <TableHead className="w-[118px] text-xs font-medium text-muted-foreground">
-                    Confidence
-                  </TableHead>
-                  <TableHead className="w-[132px] text-xs font-medium text-muted-foreground">
-                    Method
-                  </TableHead>
-                  <TableHead className="min-w-[250px] text-xs font-medium text-muted-foreground">
-                    Outgoing
-                  </TableHead>
-                  <TableHead className="w-[44px] text-center"></TableHead>
-                  <TableHead className="min-w-[250px] text-xs font-medium text-muted-foreground">
-                    Incoming
-                  </TableHead>
-                  <TableHead className="min-w-[120px] text-right text-xs font-medium text-muted-foreground">
-                    Swap fee
-                  </TableHead>
-                  <TableHead className="w-[44px]"></TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {candidates.map((candidate) => {
-                  const key = candidateKey(candidate);
-                  const conflicted = (clusterSizes[candidate.conflict_set_id] ?? 0) > 1;
-                  return (
-                    <TableRow
-                      key={key}
-                      className={cn(
-                        "cursor-pointer align-top hover:bg-muted/35",
-                        conflicted ? "bg-amber-50/35 dark:bg-amber-950/20" : null,
-                        cursorKey === key ? "bg-muted/60" : null,
-                      )}
-                      onClick={() => setDetailCandidate(candidate)}
-                    >
-                      <TableCell>
-                        <Checkbox
-                          aria-label="Select candidate"
-                          disabled={conflicted}
-                          checked={selected.has(key)}
-                          onClick={(event) => event.stopPropagation()}
-                          onCheckedChange={() => toggleSelected(key)}
-                        />
-                      </TableCell>
-                      <TableCell className="whitespace-normal">
-                        <ConfidenceBadge candidate={candidate} />
-                        {conflicted ? (
-                          <p className="mt-1 inline-flex items-center gap-1 text-xs text-amber-700 dark:text-amber-300">
-                            <AlertTriangle className="size-3" />
-                            {clusterSizes[candidate.conflict_set_id]} share a leg
-                          </p>
-                        ) : null}
-                      </TableCell>
-                      <TableCell className="whitespace-normal">
-                        <div className="text-xs text-muted-foreground">
-                          {candidate.method === "payment_hash"
-                            ? "payment hash"
-                            : "time + amount"}
-                        </div>
-                        {candidate.rule_match ? (
-                          <Badge variant="outline" className="mt-1 text-[10px]">
-                            Rule
-                          </Badge>
-                        ) : null}
-                      </TableCell>
-                      <TableCell className="whitespace-normal">
-                        <SwapLegInline
-                          direction="out"
-                          asset={candidate.out_asset}
-                          amount={candidate.out_amount}
-                          wallet={candidate.out_wallet_label}
-                          walletKind={candidate.out_wallet_kind}
-                          timestamp={candidate.out_occurred_at}
-                          txId={candidate.out_id}
-                        />
-                      </TableCell>
-                      <TableCell className="text-center text-muted-foreground">
-                        <ArrowRight className="mx-auto mt-1 size-4" aria-hidden="true" />
-                      </TableCell>
-                      <TableCell className="whitespace-normal">
-                        <SwapLegInline
-                          direction="in"
-                          asset={candidate.in_asset}
-                          amount={candidate.in_amount}
-                          wallet={candidate.in_wallet_label}
-                          walletKind={candidate.in_wallet_kind}
-                          timestamp={candidate.in_occurred_at}
-                          txId={candidate.in_id}
-                        />
-                      </TableCell>
-                      <TableCell className="whitespace-normal text-right">
-                        <SwapFeeText candidate={candidate} />
-                      </TableCell>
-                      <TableCell>
-                        <SwapRowMenu
-                          candidate={candidate}
-                          onOpen={() => setDetailCandidate(candidate)}
-                          onPair={() => void handlePair(candidate)}
-                          onDismiss={() => void handleDismiss(candidate)}
-                          pairDisabled={pairMutation.isPending}
-                          dismissDisabled={dismissMutation.isPending || pairMutation.isPending}
-                        />
-                      </TableCell>
-                    </TableRow>
-                  );
-                })}
-              </TableBody>
-            </Table>
+            <div className="overflow-x-auto border-t">
+              <Table className="w-[1320px] min-w-[1320px] table-fixed">
+                <TableHeader>
+                  <TableRow className="bg-muted/50 hover:bg-muted/50">
+                    <TableHead className="w-[42px]"></TableHead>
+                    <TableHead className="w-[118px] text-xs font-medium text-muted-foreground">
+                      Confidence
+                    </TableHead>
+                    <TableHead className="w-[132px] text-xs font-medium text-muted-foreground">
+                      Method
+                    </TableHead>
+                    <TableHead className="w-[380px] text-xs font-medium text-muted-foreground">
+                      Outgoing
+                    </TableHead>
+                    <TableHead className="w-[44px] text-center"></TableHead>
+                    <TableHead className="w-[380px] text-xs font-medium text-muted-foreground">
+                      Incoming
+                    </TableHead>
+                    <TableHead className="w-[160px] text-right text-xs font-medium text-muted-foreground">
+                      Swap fee
+                    </TableHead>
+                    <TableHead className="w-[44px]"></TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {candidates.map((candidate) => {
+                    const key = candidateKey(candidate);
+                    const conflicted = (clusterSizes[candidate.conflict_set_id] ?? 0) > 1;
+                    return (
+                      <TableRow
+                        key={key}
+                        className={cn(
+                          "cursor-pointer align-top hover:bg-muted/35",
+                          conflicted ? "bg-amber-50/35 dark:bg-amber-950/20" : null,
+                          cursorKey === key ? "bg-muted/60" : null,
+                        )}
+                        onClick={() => setDetailCandidate(candidate)}
+                      >
+                        <TableCell>
+                          <Checkbox
+                            aria-label="Select candidate"
+                            disabled={conflicted}
+                            checked={selected.has(key)}
+                            onClick={(event) => event.stopPropagation()}
+                            onCheckedChange={() => toggleSelected(key)}
+                          />
+                        </TableCell>
+                        <TableCell className="whitespace-normal">
+                          <ConfidenceBadge candidate={candidate} />
+                          {conflicted ? (
+                            <p className="mt-1 inline-flex items-center gap-1 text-xs text-amber-700 dark:text-amber-300">
+                              <AlertTriangle className="size-3" />
+                              {clusterSizes[candidate.conflict_set_id]} share a leg
+                            </p>
+                          ) : null}
+                        </TableCell>
+                        <TableCell className="whitespace-normal">
+                          <div className="text-xs text-muted-foreground">
+                            {candidate.method === "payment_hash"
+                              ? "payment hash"
+                              : "time + amount"}
+                          </div>
+                          {candidate.rule_match ? (
+                            <Badge variant="outline" className="mt-1 text-[10px]">
+                              Rule
+                            </Badge>
+                          ) : null}
+                        </TableCell>
+                        <TableCell className="whitespace-nowrap">
+                          <SwapLegInline
+                            direction="out"
+                            asset={candidate.out_asset}
+                            amount={candidate.out_amount}
+                            wallet={candidate.out_wallet_label}
+                            walletKind={candidate.out_wallet_kind}
+                            timestamp={candidate.out_occurred_at}
+                            txId={candidate.out_id}
+                          />
+                        </TableCell>
+                        <TableCell className="text-center text-muted-foreground">
+                          <ArrowRight className="mx-auto mt-1 size-4" aria-hidden="true" />
+                        </TableCell>
+                        <TableCell className="whitespace-nowrap">
+                          <SwapLegInline
+                            direction="in"
+                            asset={candidate.in_asset}
+                            amount={candidate.in_amount}
+                            wallet={candidate.in_wallet_label}
+                            walletKind={candidate.in_wallet_kind}
+                            timestamp={candidate.in_occurred_at}
+                            txId={candidate.in_id}
+                          />
+                        </TableCell>
+                        <TableCell className="whitespace-nowrap text-right">
+                          <SwapFeeText candidate={candidate} />
+                        </TableCell>
+                        <TableCell>
+                          <SwapRowMenu
+                            candidate={candidate}
+                            onOpen={() => setDetailCandidate(candidate)}
+                            onPair={() => void handlePair(candidate)}
+                            onDismiss={() => void handleDismiss(candidate)}
+                            pairDisabled={pairMutation.isPending}
+                            dismissDisabled={dismissMutation.isPending || pairMutation.isPending}
+                          />
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
+              </Table>
+            </div>
           )}
 
           {selected.size > 0 ? (
@@ -1345,13 +1353,13 @@ function SwapLegInline({
     <div className="grid min-w-0 grid-cols-[1.5rem_minmax(0,1fr)_auto] items-start gap-2">
       <RailIcon rail={rail} size="compact" />
       <div className="min-w-0 text-xs text-muted-foreground">
-        <div className="flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-1">
+        <div className="flex min-w-0 items-center gap-1.5 whitespace-nowrap">
           <span className="truncate">{walletName}</span>
           <span aria-hidden="true">·</span>
-          <span>{formatTimestamp(timestamp)}</span>
+          <span className="shrink-0">{formatTimestamp(timestamp)}</span>
         </div>
         <div className="mt-1 truncate font-mono text-[11px] text-muted-foreground/80">
-          tx {txId.slice(0, 8)}…{txId.slice(-4)}
+          id {compactRecordId(txId)}
         </div>
       </div>
       <div className="min-w-[8.5rem] text-right">
@@ -2010,7 +2018,7 @@ function SwapLegDetails({
         />
         <DetailRow label="Occurred" value={formatTimestamp(timestamp)} />
         <DetailRow
-          label="Transaction"
+          label="Record ID"
           value={<span className="font-mono text-xs">{txId}</span>}
         />
       </dl>
