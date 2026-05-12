@@ -125,9 +125,12 @@ const ALLOWED_DAEMON_KINDS: &[&str] = &[
     "ui.profiles.switch",
     "ui.reports.capital_gains",
     "ui.reports.export_pdf",
+    "ui.reports.export_csv",
+    "ui.reports.export_xlsx",
     "ui.reports.export_capital_gains_csv",
     "ui.reports.export_austrian_e1kv_pdf",
     "ui.reports.export_austrian_e1kv_xlsx",
+    "ui.reports.export_austrian_e1kv_csv",
     "ui.journals.snapshot",
     "ui.journals.quarantine",
     "ui.journals.transfers.list",
@@ -377,12 +380,9 @@ fn open_exported_file(path: String) -> Result<(), String> {
     let metadata = canonical
         .metadata()
         .map_err(|error| format!("Report export file could not be inspected: {error}"))?;
-    if !metadata.is_file() {
-        return Err("Only report export files can be opened.".to_string());
-    }
-    if !is_supported_export_file(&canonical) || !is_managed_report_export_path(&canonical) {
+    if !is_supported_report_export_target(&canonical, &metadata) {
         return Err(
-            "Only PDF, XLSX, and CSV files in Kassiber's managed report exports folder can be opened."
+            "Only managed PDF, XLSX, CSV files, and Austrian CSV bundle folders can be opened."
                 .to_string(),
         );
     }
@@ -892,6 +892,13 @@ fn is_supported_export_file(path: &Path) -> bool {
         .unwrap_or(false)
 }
 
+fn is_supported_austrian_csv_bundle_dir(path: &Path) -> bool {
+    let Some(name) = path.file_name().and_then(|name| name.to_str()) else {
+        return false;
+    };
+    name.starts_with("kassiber-austrian-e1kv-") && name.contains("-csv-")
+}
+
 fn is_managed_report_export_path(path: &Path) -> bool {
     let Some(parent) = path.parent() else {
         return false;
@@ -901,6 +908,16 @@ fn is_managed_report_export_path(path: &Path) -> bool {
     };
     parent.file_name().and_then(|name| name.to_str()) == Some("reports")
         && grandparent.file_name().and_then(|name| name.to_str()) == Some("exports")
+}
+
+fn is_supported_report_export_target(path: &Path, metadata: &std::fs::Metadata) -> bool {
+    if !is_managed_report_export_path(path) {
+        return false;
+    }
+    if metadata.is_file() {
+        return is_supported_export_file(path);
+    }
+    metadata.is_dir() && is_supported_austrian_csv_bundle_dir(path)
 }
 
 fn open_with_default_app(path: &Path) -> Result<(), String> {
@@ -987,15 +1004,13 @@ pub fn run() {
     // database — the daemon assumes one writer at a time.
     #[cfg(any(target_os = "macos", target_os = "windows", target_os = "linux"))]
     {
-        builder = builder.plugin(tauri_plugin_single_instance::init(
-            |app, _args, _cwd| {
-                if let Some(window) = app.get_webview_window("main") {
-                    let _ = window.show();
-                    let _ = window.unminimize();
-                    let _ = window.set_focus();
-                }
-            },
-        ));
+        builder = builder.plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
+            if let Some(window) = app.get_webview_window("main") {
+                let _ = window.show();
+                let _ = window.unminimize();
+                let _ = window.set_focus();
+            }
+        }));
     }
 
     builder
@@ -1055,9 +1070,7 @@ pub fn run() {
                         if let Some(payload) = menu_action_for_deep_link(&url) {
                             emit_menu_action(&app_handle, payload);
                         } else {
-                            eprintln!(
-                                "kassiber: ignoring unrecognized launch deep link: {url}"
-                            );
+                            eprintln!("kassiber: ignoring unrecognized launch deep link: {url}");
                         }
                     }
                 });
@@ -1559,16 +1572,17 @@ fn desktop_cli_args() -> Option<Vec<String>> {
 mod tests {
     use super::{
         database_is_encrypted, inspect_import_project_directory, is_managed_report_export_path,
-        is_supported_export_file, menu_action, menu_action_for_deep_link, menu_action_for_id,
-        navigate_action, open_settings_action, validated_external_url, ALLOWED_DAEMON_KINDS,
-        MENU_HELP_DOCS, MENU_LOCK_APP, MENU_NAV_ASSISTANT, MENU_NAV_REPORTS, MENU_SETTINGS_SECURITY,
-        MENU_TOGGLE_FULLSCREEN, MENU_WORKFLOW_CONNECTIONS_IMPORTS, MENU_WORKFLOW_OPEN_REPORTS,
-        MENU_WORKFLOW_PROCESS_JOURNALS, MENU_WORKFLOW_SYNC_ALL,
+        is_supported_austrian_csv_bundle_dir, is_supported_export_file,
+        is_supported_report_export_target, menu_action, menu_action_for_deep_link,
+        menu_action_for_id, navigate_action, open_settings_action, validated_external_url,
+        ALLOWED_DAEMON_KINDS, MENU_HELP_DOCS, MENU_LOCK_APP, MENU_NAV_ASSISTANT, MENU_NAV_REPORTS,
+        MENU_SETTINGS_SECURITY, MENU_TOGGLE_FULLSCREEN, MENU_WORKFLOW_CONNECTIONS_IMPORTS,
+        MENU_WORKFLOW_OPEN_REPORTS, MENU_WORKFLOW_PROCESS_JOURNALS, MENU_WORKFLOW_SYNC_ALL,
     };
-    use tauri::Url;
     use std::fs;
     use std::path::{Path, PathBuf};
     use std::time::{SystemTime, UNIX_EPOCH};
+    use tauri::Url;
 
     #[test]
     fn source_funds_daemon_kinds_are_in_allowlist() {
@@ -1747,6 +1761,39 @@ mod tests {
         assert!(is_supported_export_file(Path::new("report.csv")));
         assert!(!is_supported_export_file(Path::new("report.txt")));
         assert!(!is_supported_export_file(Path::new("report")));
+    }
+
+    #[test]
+    fn austrian_csv_bundle_dirs_are_narrowly_recognized() {
+        assert!(is_supported_austrian_csv_bundle_dir(Path::new(
+            "kassiber-austrian-e1kv-2026-csv-20260512-101010"
+        )));
+        assert!(!is_supported_austrian_csv_bundle_dir(Path::new(
+            "kassiber-report-20260512-101010"
+        )));
+
+        let root = unique_temp_dir("report-export-target");
+        let reports = root.join("exports").join("reports");
+        fs::create_dir_all(&reports).expect("create reports dir");
+        let csv_file = reports.join("report.csv");
+        fs::write(&csv_file, b"header\n").expect("write csv file");
+        let bundle_dir = reports.join("kassiber-austrian-e1kv-2026-csv-20260512-101010");
+        fs::create_dir_all(&bundle_dir).expect("create bundle dir");
+        let nested_dir = reports.join("kassiber-report-20260512-101010");
+        fs::create_dir_all(&nested_dir).expect("create unrelated dir");
+
+        assert!(is_supported_report_export_target(
+            &csv_file,
+            &csv_file.metadata().expect("csv metadata")
+        ));
+        assert!(is_supported_report_export_target(
+            &bundle_dir,
+            &bundle_dir.metadata().expect("bundle metadata")
+        ));
+        assert!(!is_supported_report_export_target(
+            &nested_dir,
+            &nested_dir.metadata().expect("nested metadata")
+        ));
     }
 
     #[test]

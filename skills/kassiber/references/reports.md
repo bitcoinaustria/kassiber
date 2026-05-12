@@ -12,7 +12,7 @@ Preferred defaults:
 - `--machine reports summary` for exact rollups that should be quoted back without hand math
 - `--machine reports tax-summary` for exact yearly gain/loss buckets and totals from RP2
 - `--machine reports austrian-e1kv --year <YYYY>` for the Austrian E 1kv handoff envelope
-- `reports export-pdf` only when the user explicitly asks for a PDF
+- `reports export-pdf`, `reports export-csv`, or `reports export-xlsx` when the user explicitly asks for a complete report file
 
 `--machine`, `--format`, and `--output` are global flags and belong before the subcommand tree. Examples:
 
@@ -189,13 +189,19 @@ kassiber --format csv --output balance-history.csv reports balance-history --int
 kassiber --format plain reports balance-history --wallet satoshi-liquid --asset BTC --start 2025-01-01T00:00:00Z --end 2025-12-31T23:59:59Z
 ```
 
-## PDF export
+## Complete report exports
 
-Kassiber includes a built-in PDF export command:
+Kassiber includes built-in full-report export commands. The CSV export is a
+sectioned spreadsheet-friendly file; the XLSX export uses separate sheets for
+overview, wallets, flows, reviewed transfers/swaps, balances, capital gains,
+history, data quality, and transactions.
 
 ```bash
 kassiber reports export-pdf --file report.pdf
+kassiber reports export-csv --file report.csv
+kassiber reports export-xlsx --file report.xlsx
 kassiber reports export-pdf --wallet satoshi-liquid --file satoshi-liquid-report.pdf
 ```
 
-Use this instead of inventing extra report renderers unless the user asks for a custom output beyond Kassiber's built-in PDF.
+Use these instead of inventing extra report renderers unless the user asks for
+a custom output beyond Kassiber's built-in exports.

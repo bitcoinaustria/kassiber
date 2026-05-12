@@ -1051,6 +1051,20 @@ def build_parser() -> argparse.ArgumentParser:
     export_pdf.add_argument("--file", required=True)
     export_pdf.add_argument("--history-limit", type=int, default=0)
 
+    export_csv = reports_sub.add_parser("export-csv")
+    export_csv.add_argument("--workspace")
+    export_csv.add_argument("--profile")
+    export_csv.add_argument("--wallet")
+    export_csv.add_argument("--file", required=True)
+    export_csv.add_argument("--history-limit", type=int, default=0)
+
+    export_xlsx = reports_sub.add_parser("export-xlsx")
+    export_xlsx.add_argument("--workspace")
+    export_xlsx.add_argument("--profile")
+    export_xlsx.add_argument("--wallet")
+    export_xlsx.add_argument("--file", required=True)
+    export_xlsx.add_argument("--history-limit", type=int, default=0)
+
     source_funds_report = reports_sub.add_parser("source-funds")
     source_funds_report.add_argument("--workspace")
     source_funds_report.add_argument("--profile")
@@ -2129,6 +2143,32 @@ def dispatch(conn: sqlite3.Connection | None, args: argparse.Namespace) -> Any:
             return emit(
                 args,
                 core_reports.export_pdf_report(
+                    conn,
+                    args.workspace,
+                    args.profile,
+                    args.file,
+                    report_hooks,
+                    wallet_ref=args.wallet,
+                    history_limit=args.history_limit,
+                ),
+            )
+        if args.reports_command == "export-csv":
+            return emit(
+                args,
+                core_reports.export_csv_report(
+                    conn,
+                    args.workspace,
+                    args.profile,
+                    args.file,
+                    report_hooks,
+                    wallet_ref=args.wallet,
+                    history_limit=args.history_limit,
+                ),
+            )
+        if args.reports_command == "export-xlsx":
+            return emit(
+                args,
+                core_reports.export_xlsx_report(
                     conn,
                     args.workspace,
                     args.profile,

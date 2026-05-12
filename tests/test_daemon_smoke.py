@@ -534,6 +534,8 @@ class DaemonSmokeTest(unittest.TestCase):
             self.assertIn("ui.reports.tax_summary", ready["data"]["supported_kinds"])
             self.assertIn("ui.reports.balance_history", ready["data"]["supported_kinds"])
             self.assertIn("ui.reports.export_pdf", ready["data"]["supported_kinds"])
+            self.assertIn("ui.reports.export_csv", ready["data"]["supported_kinds"])
+            self.assertIn("ui.reports.export_xlsx", ready["data"]["supported_kinds"])
             self.assertIn(
                 "ui.reports.export_capital_gains_csv",
                 ready["data"]["supported_kinds"],
@@ -544,6 +546,10 @@ class DaemonSmokeTest(unittest.TestCase):
             )
             self.assertIn(
                 "ui.reports.export_austrian_e1kv_xlsx",
+                ready["data"]["supported_kinds"],
+            )
+            self.assertIn(
+                "ui.reports.export_austrian_e1kv_csv",
                 ready["data"]["supported_kinds"],
             )
             self.assertIn("ui.source_funds.preview", ready["data"]["supported_kinds"])
@@ -2905,6 +2911,33 @@ class DaemonSmokeTest(unittest.TestCase):
 
             _write_payload(
                 proc,
+                {"request_id": "export-report-csv", "kind": "ui.reports.export_csv"},
+            )
+            report_csv = _read_payload_timeout(proc)
+            self.assertEqual(report_csv["kind"], "ui.reports.export_csv")
+            csv_file = Path(report_csv["data"]["file"])
+            self.assertTrue(csv_file.is_file())
+            self.assertEqual(
+                csv_file.parent.resolve(),
+                (Path(tmp) / "exports" / "reports").resolve(),
+            )
+            self.assertIn("Overview", report_csv["data"]["sections"])
+            self.assertIn("Wallet Inventory", csv_file.read_text(encoding="utf-8"))
+
+            _write_payload(
+                proc,
+                {"request_id": "export-report-xlsx", "kind": "ui.reports.export_xlsx"},
+            )
+            report_xlsx = _read_payload_timeout(proc)
+            self.assertEqual(report_xlsx["kind"], "ui.reports.export_xlsx")
+            report_xlsx_file = Path(report_xlsx["data"]["file"])
+            self.assertTrue(report_xlsx_file.is_file())
+            self.assertEqual(report_xlsx_file.read_bytes()[:2], b"PK")
+            self.assertIn("Overview", report_xlsx["data"]["sheets"])
+            self.assertIn("Transactions", report_xlsx["data"]["sheets"])
+
+            _write_payload(
+                proc,
                 {
                     "request_id": "export-pdf-year",
                     "kind": "ui.reports.export_pdf",
@@ -2945,6 +2978,30 @@ class DaemonSmokeTest(unittest.TestCase):
             self.assertTrue(xlsx_file.is_file())
             self.assertEqual(xlsx_file.read_bytes()[:2], b"PK")
             self.assertEqual(xlsx["data"]["tax_year"], 2026)
+
+            _write_payload(
+                proc,
+                {
+                    "request_id": "export-austrian-csv",
+                    "kind": "ui.reports.export_austrian_e1kv_csv",
+                    "args": {"year": 2026},
+                },
+            )
+            austrian_csv = _read_payload_timeout(proc)
+            self.assertEqual(austrian_csv["kind"], "ui.reports.export_austrian_e1kv_csv")
+            self.assertEqual(austrian_csv["data"]["tax_year"], 2026)
+            self.assertEqual(austrian_csv["data"]["format"], "csv")
+            csv_dir = Path(austrian_csv["data"]["dir"])
+            self.assertTrue(csv_dir.is_dir())
+            self.assertEqual(
+                csv_dir.parent.resolve(),
+                (Path(tmp) / "exports" / "reports").resolve(),
+            )
+            files = austrian_csv["data"]["files"]
+            self.assertGreaterEqual(len(files), 2)
+            overview_csv = Path(files[0]["file"])
+            self.assertTrue(overview_csv.is_file())
+            self.assertIn("Übersicht", overview_csv.read_text(encoding="utf-8"))
 
             _write_payload(proc, {"request_id": "shutdown-1", "kind": "daemon.shutdown"})
             self.assertEqual(_read_payload_timeout(proc)["kind"], "daemon.shutdown")

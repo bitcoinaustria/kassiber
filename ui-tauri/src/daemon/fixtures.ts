@@ -197,6 +197,24 @@ export const fixtures: Record<string, unknown> = {
     bytes: 24576,
     title: "Kassiber Report - Mock",
   },
+  "ui.reports.export_csv": {
+    file: "~/.kassiber/exports/reports/kassiber-report-mock.csv",
+    filename: "kassiber-report-mock.csv",
+    format: "csv",
+    scope: "report",
+    rows: 24,
+    bytes: 12288,
+    sections: ["Overview", "Wallets", "Asset Flow", "Transactions"],
+  },
+  "ui.reports.export_xlsx": {
+    file: "~/.kassiber/exports/reports/kassiber-report-mock.xlsx",
+    filename: "kassiber-report-mock.xlsx",
+    format: "xlsx",
+    scope: "report",
+    rows: 24,
+    sheets: ["Overview", "Wallets", "Asset Flow", "Transactions"],
+    bytes: 20480,
+  },
   "ui.reports.export_capital_gains_csv": {
     file: "~/.kassiber/exports/reports/kassiber-capital-gains-mock.csv",
     filename: "kassiber-capital-gains-mock.csv",
@@ -223,6 +241,23 @@ export const fixtures: Record<string, unknown> = {
     rows: MOCK_CAPITAL_GAINS.lots.length,
     summary_rows: 3,
     bytes: 24576,
+  },
+  "ui.reports.export_austrian_e1kv_csv": {
+    dir: "~/.kassiber/exports/reports/kassiber-austrian-e1kv-2025-csv-mock",
+    filename: "kassiber-austrian-e1kv-2025-csv-mock",
+    format: "csv",
+    scope: "austrian_e1kv",
+    tax_year: 2025,
+    rows: MOCK_CAPITAL_GAINS.lots.length,
+    summary_rows: 3,
+    files: [
+      {
+        sheet: "Übersicht",
+        file: "~/.kassiber/exports/reports/kassiber-austrian-e1kv-2025-csv-mock/00_uebersicht.csv",
+        rows: 3,
+        bytes: 2048,
+      },
+    ],
   },
   "ui.source_funds.preview": {
     workspace: "My Books",

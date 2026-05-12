@@ -655,6 +655,7 @@ def _report_query_rows(conn, profile, wallet=None):
         SELECT
             t.occurred_at,
             w.label AS wallet,
+            COALESCE(t.external_id, '') AS transaction_id,
             t.direction,
             t.asset,
             t.amount,
@@ -668,6 +669,46 @@ def _report_query_rows(conn, profile, wallet=None):
         tx_params,
     ).fetchall()
 
+    pair_filters = ["p.profile_id = ?"]
+    pair_params = [profile["id"]]
+    if wallet:
+        pair_filters.append("(tout.wallet_id = ? OR tin.wallet_id = ?)")
+        pair_params.extend([wallet["id"], wallet["id"]])
+    pair_where = " AND ".join(pair_filters)
+    transfer_pairs = conn.execute(
+        f"""
+        SELECT
+            p.id,
+            p.kind,
+            p.policy,
+            COALESCE(p.notes, '') AS notes,
+            p.created_at,
+            tout.occurred_at AS out_occurred_at,
+            COALESCE(tout.external_id, '') AS out_transaction_id,
+            wout.label AS out_wallet,
+            tout.asset AS out_asset,
+            tout.amount AS out_amount,
+            tout.fee AS out_fee,
+            tin.occurred_at AS in_occurred_at,
+            COALESCE(tin.external_id, '') AS in_transaction_id,
+            win.label AS in_wallet,
+            tin.asset AS in_asset,
+            tin.amount AS in_amount,
+            tin.fee AS in_fee
+        FROM transaction_pairs p
+        JOIN transactions tout ON tout.id = p.out_transaction_id
+        JOIN transactions tin ON tin.id = p.in_transaction_id
+        JOIN wallets wout ON wout.id = tout.wallet_id
+        JOIN wallets win ON win.id = tin.wallet_id
+        WHERE {pair_where}
+        ORDER BY
+            MIN(tout.occurred_at, tin.occurred_at) ASC,
+            p.created_at ASC,
+            p.id ASC
+        """,
+        pair_params,
+    ).fetchall()
+
     return {
         "summary": summary,
         "tagged_transactions": tagged_transactions,
@@ -677,6 +718,7 @@ def _report_query_rows(conn, profile, wallet=None):
         "flow_by_wallet": flow_by_wallet,
         "quarantine_rows": quarantine_rows,
         "transactions": transactions,
+        "transfer_pairs": transfer_pairs,
     }
 
 
@@ -775,6 +817,56 @@ def _build_summary_context(conn, workspace_ref, profile_ref, hooks: ReportHooks,
         "query_rows": query_rows,
         "summary": summary,
         "rollups": rollups,
+    }
+
+
+def _build_full_report_context(conn, workspace_ref, profile_ref, hooks: ReportHooks, wallet_ref=None, history_limit=None):
+    workspace, profile = _resolve_report_scope(conn, workspace_ref, profile_ref, hooks)
+    wallet = hooks.resolve_wallet(conn, profile["id"], wallet_ref) if wallet_ref else None
+    if history_limit is not None and int(history_limit) < 0:
+        raise AppError("--history-limit must be zero or positive", code="validation")
+    hooks.require_processed_journals(conn, profile)
+
+    scope_wallets = _scope_wallets(conn, workspace["id"], profile["id"], hooks, wallet=wallet)
+    portfolio_rows = report_portfolio_summary(conn, workspace["id"], profile["id"], hooks)
+    if wallet:
+        portfolio_rows = [row for row in portfolio_rows if row["wallet"] == wallet["label"]]
+    balance_rows = _aggregate_balance_rows_from_portfolio(portfolio_rows)
+
+    capital_rows = report_capital_gains(conn, workspace["id"], profile["id"], hooks)
+    if wallet:
+        capital_rows = [row for row in capital_rows if row["wallet"] == wallet["label"]]
+    history_rows = report_balance_history(
+        conn,
+        workspace["id"],
+        profile["id"],
+        hooks,
+        interval="month",
+        wallet_ref=wallet["id"] if wallet else None,
+    )
+    if history_limit is not None and int(history_limit) > 0:
+        history_rows = history_rows[-int(history_limit) :]
+
+    query_rows = _report_query_rows(conn, profile, wallet=wallet)
+    summary = query_rows["summary"]
+    rollups = _summary_rollups(balance_rows, capital_rows)
+    title_scope = wallet["label"] if wallet else profile["label"]
+
+    return {
+        "workspace": workspace,
+        "profile": profile,
+        "wallet": wallet,
+        "scope_wallets": scope_wallets,
+        "portfolio_rows": portfolio_rows,
+        "balance_rows": balance_rows,
+        "capital_rows": capital_rows,
+        "history_rows": history_rows,
+        "query_rows": query_rows,
+        "summary": summary,
+        "rollups": rollups,
+        "generated_at": hooks.now_iso(),
+        "title": f"Kassiber Report - {title_scope}",
+        "pdf_title": f"Kassiber PDF Report - {title_scope}",
     }
 
 
@@ -2457,37 +2549,611 @@ def export_austrian_e1kv_csv_bundle(conn, workspace_ref, profile_ref, dir_path, 
     }
 
 
-def build_pdf_report_lines(conn, workspace_ref, profile_ref, hooks: ReportHooks, wallet_ref=None, history_limit=None):
-    workspace, profile = _resolve_report_scope(conn, workspace_ref, profile_ref, hooks)
-    wallet = hooks.resolve_wallet(conn, profile["id"], wallet_ref) if wallet_ref else None
-    if history_limit is not None and int(history_limit) < 0:
-        raise AppError("--history-limit must be zero or positive", code="validation")
-    hooks.require_processed_journals(conn, profile)
+def _row_get(row, key, default=""):
+    if isinstance(row, Mapping):
+        return row.get(key, default)
+    try:
+        return row[key]
+    except (IndexError, KeyError, TypeError):
+        return default
 
-    scope_wallets = _scope_wallets(conn, workspace["id"], profile["id"], hooks, wallet=wallet)
-    portfolio_rows = report_portfolio_summary(conn, workspace["id"], profile["id"], hooks)
-    if wallet:
-        portfolio_rows = [row for row in portfolio_rows if row["wallet"] == wallet["label"]]
-    balance_rows = _aggregate_balance_rows_from_portfolio(portfolio_rows)
 
-    capital_rows = report_capital_gains(conn, workspace["id"], profile["id"], hooks)
-    if wallet:
-        capital_rows = [row for row in capital_rows if row["wallet"] == wallet["label"]]
-    history_rows = report_balance_history(
-        conn,
-        workspace["id"],
-        profile["id"],
-        hooks,
-        interval="month",
-        wallet_ref=wallet["id"] if wallet else None,
+def _overview_row(group, field, value):
+    return {"group": group, "field": field, "value": "" if value is None else value}
+
+
+def _generic_report_overview_rows(context):
+    workspace = context["workspace"]
+    profile = context["profile"]
+    wallet = context["wallet"]
+    scope_wallets = context["scope_wallets"]
+    query_rows = context["query_rows"]
+    summary = context["summary"]
+    rollups = context["rollups"]
+    holdings = rollups["holdings"]
+    realized = rollups["realized"]
+
+    return [
+        _overview_row("Report metadata", "Generated at", context["generated_at"]),
+        _overview_row("Report metadata", "Workspace", workspace["label"]),
+        _overview_row("Report metadata", "Profile", profile["label"]),
+        _overview_row("Report metadata", "Wallet scope", wallet["label"] if wallet else "All wallets"),
+        _overview_row("Report metadata", "Fiat currency", profile["fiat_currency"]),
+        _overview_row("Report metadata", "Tax country", profile["tax_country"]),
+        _overview_row("Report metadata", "Tax long-term days", int(profile["tax_long_term_days"] or 0)),
+        _overview_row("Report metadata", "Gains algorithm", profile["gains_algorithm"]),
+        _overview_row("Report metadata", "Last processed at", profile["last_processed_at"] or ""),
+        _overview_row("Report metadata", "Processed tx count", int(profile["last_processed_tx_count"] or 0)),
+        _overview_row("Executive summary", "Wallets in scope", len(scope_wallets)),
+        _overview_row("Executive summary", "Assets in scope", int(summary["asset_count"] or 0)),
+        _overview_row("Executive summary", "Transactions active", int(summary["active_transactions"] or 0)),
+        _overview_row("Executive summary", "Transactions excluded", int(summary["excluded_transactions"] or 0)),
+        _overview_row("Executive summary", "Inbound transactions", int(summary["inbound_transactions"] or 0)),
+        _overview_row("Executive summary", "Outbound transactions", int(summary["outbound_transactions"] or 0)),
+        _overview_row("Executive summary", "Journal entries", int(query_rows["journal_entries"] or 0)),
+        _overview_row("Executive summary", "Quarantines", int(query_rows["quarantines"] or 0)),
+        _overview_row("Executive summary", "Priced transactions", int(summary["priced_transactions"] or 0)),
+        _overview_row("Executive summary", "Transactions with notes", int(summary["noted_transactions"] or 0)),
+        _overview_row("Executive summary", "Transactions with tags", int(query_rows["tagged_transactions"] or 0)),
+        _overview_row("Executive summary", "First transaction", summary["first_transaction_at"] or ""),
+        _overview_row("Executive summary", "Last transaction", summary["last_transaction_at"] or ""),
+        _overview_row("Financial summary", "Holdings cost basis", holdings["cost_basis"]),
+        _overview_row("Financial summary", "Holdings market value", holdings["market_value"]),
+        _overview_row("Financial summary", "Unrealized PnL", holdings["unrealized_pnl"]),
+        _overview_row("Financial summary", "Realized proceeds", realized["proceeds"]),
+        _overview_row("Financial summary", "Realized cost basis", realized["cost_basis"]),
+        _overview_row("Financial summary", "Realized gain/loss", realized["gain_loss"]),
+    ]
+
+
+def _generic_report_wallet_rows(context):
+    return [
+        {
+            "wallet": _row_get(row, "label"),
+            "kind": _row_get(row, "kind"),
+            "chain": _row_get(row, "chain"),
+            "network": _row_get(row, "network"),
+            "backend": _row_get(row, "backend"),
+            "gap_limit": _row_get(row, "gap_limit"),
+        }
+        for row in context["scope_wallets"]
+    ]
+
+
+def _generic_report_asset_flow_rows(context):
+    return _summary_flow_rows(context["query_rows"]["flow_by_asset"])
+
+
+def _generic_report_wallet_flow_rows(context):
+    return _summary_wallet_flow_rows(context["query_rows"]["flow_by_wallet"])
+
+
+def _generic_report_transfer_pair_rows(context):
+    rows = []
+    for row in context["query_rows"]["transfer_pairs"]:
+        out_amount_msat = int(row["out_amount"] or 0)
+        in_amount_msat = int(row["in_amount"] or 0)
+        out_fee_msat = int(row["out_fee"] or 0)
+        in_fee_msat = int(row["in_fee"] or 0)
+        out_asset = row["out_asset"]
+        in_asset = row["in_asset"]
+        rows.append(
+            {
+                "pair_id": row["id"],
+                "pair_type": "transfer" if out_asset == in_asset else "swap",
+                "kind": row["kind"],
+                "policy": row["policy"],
+                "out_occurred_at": row["out_occurred_at"],
+                "out_wallet": row["out_wallet"],
+                "out_transaction_id": row["out_transaction_id"],
+                "out_asset": out_asset,
+                "out_amount": float(msat_to_btc(out_amount_msat)),
+                "out_amount_msat": out_amount_msat,
+                "out_fee": float(msat_to_btc(out_fee_msat)),
+                "out_fee_msat": out_fee_msat,
+                "in_occurred_at": row["in_occurred_at"],
+                "in_wallet": row["in_wallet"],
+                "in_transaction_id": row["in_transaction_id"],
+                "in_asset": in_asset,
+                "in_amount": float(msat_to_btc(in_amount_msat)),
+                "in_amount_msat": in_amount_msat,
+                "in_fee": float(msat_to_btc(in_fee_msat)),
+                "in_fee_msat": in_fee_msat,
+                "notes": row["notes"],
+                "created_at": row["created_at"],
+            }
+        )
+    return rows
+
+
+def _generic_report_balance_rows(context):
+    rows = []
+    for row in context["balance_rows"]:
+        quantity_msat = btc_to_msat(row["quantity"])
+        rows.append(
+            {
+                "account": row["account"],
+                "asset": row["asset"],
+                "quantity": row["quantity"],
+                "quantity_sat": _msat_to_sat(quantity_msat),
+                "quantity_msat": quantity_msat,
+                "cost_basis": row["cost_basis"],
+                "market_value": row["market_value"],
+                "unrealized_pnl": row["unrealized_pnl"],
+            }
+        )
+    return rows
+
+
+def _generic_report_portfolio_rows(context):
+    return [dict(row) for row in context["portfolio_rows"]]
+
+
+def _generic_report_capital_summary_rows(context):
+    grouped = {}
+    for row in context["capital_rows"]:
+        key = (row["wallet"], row["asset"])
+        bucket = grouped.setdefault(
+            key,
+            {
+                "wallet": row["wallet"],
+                "asset": row["asset"],
+                "rows": 0,
+                "proceeds": 0.0,
+                "cost_basis": 0.0,
+                "gain_loss": 0.0,
+            },
+        )
+        bucket["rows"] += 1
+        bucket["proceeds"] += float(row["proceeds"])
+        bucket["cost_basis"] += float(row["cost_basis"])
+        bucket["gain_loss"] += float(row["gain_loss"])
+    return [grouped[key] for key in sorted(grouped)]
+
+
+def _generic_report_capital_detail_rows(context):
+    rows = []
+    for row in context["capital_rows"]:
+        rows.append(
+            {
+                "occurred_at": row["occurred_at"],
+                "wallet": row["wallet"],
+                "transaction_id": row["transaction_id"],
+                "entry_type": row["entry_type"],
+                "asset": row["asset"],
+                "quantity": row["quantity"],
+                "quantity_msat": row["quantity_msat"],
+                "proceeds": row["proceeds"],
+                "cost_basis": row["cost_basis"],
+                "gain_loss": row["gain_loss"],
+                "description": row["description"],
+                "at_category": row.get("at_category", ""),
+                "at_kennzahl": row.get("at_kennzahl", ""),
+            }
+        )
+    return rows
+
+
+def _generic_report_balance_history_rows(context):
+    return [dict(row) for row in context["history_rows"]]
+
+
+def _generic_report_data_quality_rows(context):
+    return [
+        {"reason": row["reason"], "count": int(row["count"] or 0)}
+        for row in context["query_rows"]["quarantine_rows"]
+    ]
+
+
+def _generic_report_transaction_rows(context):
+    rows = []
+    for row in context["query_rows"]["transactions"]:
+        amount_msat = int(row["amount"] or 0)
+        fee_msat = int(row["fee"] or 0)
+        rows.append(
+            {
+                "occurred_at": row["occurred_at"],
+                "wallet": row["wallet"],
+                "transaction_id": row["transaction_id"],
+                "direction": row["direction"],
+                "asset": row["asset"],
+                "amount": float(msat_to_btc(amount_msat)),
+                "amount_msat": amount_msat,
+                "fee": float(msat_to_btc(fee_msat)),
+                "fee_msat": fee_msat,
+                "description": row["description"],
+            }
+        )
+    return rows
+
+
+def _generic_report_section_specs(context):
+    return [
+        {
+            "sheet_name": "Overview",
+            "title": "Overview",
+            "headers": ("group", "field", "value"),
+            "rows": _generic_report_overview_rows(context),
+        },
+        {
+            "sheet_name": "Wallets",
+            "title": "Wallet Inventory",
+            "headers": ("wallet", "kind", "chain", "network", "backend", "gap_limit"),
+            "rows": _generic_report_wallet_rows(context),
+        },
+        {
+            "sheet_name": "Asset Flow",
+            "title": "Asset Flow Summary",
+            "headers": (
+                "asset",
+                "tx_count",
+                "inbound_count",
+                "outbound_count",
+                "inbound_amount",
+                "inbound_amount_sat",
+                "inbound_amount_msat",
+                "outbound_amount",
+                "outbound_amount_sat",
+                "outbound_amount_msat",
+                "fee_amount",
+                "fee_amount_sat",
+                "fee_amount_msat",
+            ),
+            "rows": _generic_report_asset_flow_rows(context),
+        },
+        {
+            "sheet_name": "Wallet Metrics",
+            "title": "Wallet Transaction Metrics",
+            "headers": (
+                "wallet",
+                "asset",
+                "tx_count",
+                "inbound_count",
+                "outbound_count",
+                "inbound_amount",
+                "inbound_amount_sat",
+                "inbound_amount_msat",
+                "outbound_amount",
+                "outbound_amount_sat",
+                "outbound_amount_msat",
+                "fee_amount",
+                "fee_amount_sat",
+                "fee_amount_msat",
+                "first_transaction_at",
+                "last_transaction_at",
+            ),
+            "rows": _generic_report_wallet_flow_rows(context),
+        },
+        {
+            "sheet_name": "Transfers & Swaps",
+            "title": "Reviewed Transfers and Swaps",
+            "headers": (
+                "pair_id",
+                "pair_type",
+                "kind",
+                "policy",
+                "out_occurred_at",
+                "out_wallet",
+                "out_transaction_id",
+                "out_asset",
+                "out_amount",
+                "out_amount_msat",
+                "out_fee",
+                "out_fee_msat",
+                "in_occurred_at",
+                "in_wallet",
+                "in_transaction_id",
+                "in_asset",
+                "in_amount",
+                "in_amount_msat",
+                "in_fee",
+                "in_fee_msat",
+                "notes",
+                "created_at",
+            ),
+            "rows": _generic_report_transfer_pair_rows(context),
+        },
+        {
+            "sheet_name": "Balance Sheet",
+            "title": "Balance Sheet",
+            "headers": (
+                "account",
+                "asset",
+                "quantity",
+                "quantity_sat",
+                "quantity_msat",
+                "cost_basis",
+                "market_value",
+                "unrealized_pnl",
+            ),
+            "rows": _generic_report_balance_rows(context),
+        },
+        {
+            "sheet_name": "Portfolio",
+            "title": "Portfolio Summary",
+            "headers": (
+                "wallet",
+                "account",
+                "asset",
+                "quantity",
+                "quantity_sat",
+                "quantity_msat",
+                "avg_cost",
+                "cost_basis",
+                "market_value",
+                "unrealized_pnl",
+            ),
+            "rows": _generic_report_portfolio_rows(context),
+        },
+        {
+            "sheet_name": "Capital Summary",
+            "title": "Capital Gains Summary",
+            "headers": ("wallet", "asset", "rows", "proceeds", "cost_basis", "gain_loss"),
+            "rows": _generic_report_capital_summary_rows(context),
+        },
+        {
+            "sheet_name": "Capital Detail",
+            "title": "Capital Gains Detail",
+            "headers": (
+                "occurred_at",
+                "wallet",
+                "transaction_id",
+                "entry_type",
+                "asset",
+                "quantity",
+                "quantity_msat",
+                "proceeds",
+                "cost_basis",
+                "gain_loss",
+                "description",
+                "at_category",
+                "at_kennzahl",
+            ),
+            "rows": _generic_report_capital_detail_rows(context),
+        },
+        {
+            "sheet_name": "Balance History",
+            "title": "Balance History",
+            "headers": ("period_start", "period_end", "asset", "quantity", "cumulative_cost_basis", "market_value"),
+            "rows": _generic_report_balance_history_rows(context),
+        },
+        {
+            "sheet_name": "Data Quality",
+            "title": "Data Quality",
+            "headers": ("reason", "count"),
+            "rows": _generic_report_data_quality_rows(context),
+        },
+        {
+            "sheet_name": "Transactions",
+            "title": "Transactions",
+            "headers": (
+                "occurred_at",
+                "wallet",
+                "transaction_id",
+                "direction",
+                "asset",
+                "amount",
+                "amount_msat",
+                "fee",
+                "fee_msat",
+                "description",
+            ),
+            "rows": _generic_report_transaction_rows(context),
+        },
+    ]
+
+
+def _report_column_label(header):
+    return (
+        header.replace("_", " ")
+        .title()
+        .replace(" Id", " ID")
+        .replace(" Msat", " msat")
+        .replace(" Sat", " sat")
+        .replace(" Pnl", " PnL")
     )
-    if history_limit is not None and int(history_limit) > 0:
-        history_rows = history_rows[-int(history_limit) :]
 
-    query_rows = _report_query_rows(conn, profile, wallet=wallet)
-    summary = query_rows["summary"]
 
-    rollups = _summary_rollups(balance_rows, capital_rows)
+def _generic_report_csv_rows(context, sections):
+    rows = [[context["title"]], []]
+    for spec in sections:
+        headers = list(spec["headers"])
+        rows.append([spec["title"]])
+        rows.append([_report_column_label(header) for header in headers])
+        if spec["rows"]:
+            rows.extend([[row.get(header, "") for header in headers] for row in spec["rows"]])
+        else:
+            rows.append(["No rows in scope."])
+        rows.append([])
+    return rows
+
+
+def _generic_report_xlsx_formats(workbook):
+    return {
+        "title": workbook.add_format({"bold": True, "font_size": 14, "valign": "vcenter"}),
+        "header": workbook.add_format({"bold": True, "font_size": 11, "valign": "top", "text_wrap": True}),
+        "text": workbook.add_format({"font_size": 11, "valign": "top", "text_wrap": True}),
+        "int": workbook.add_format({"font_size": 11, "valign": "top", "num_format": "0"}),
+        "quantity": workbook.add_format({"font_size": 11, "valign": "top", "num_format": "0.00000000"}),
+        "money": workbook.add_format({"font_size": 11, "valign": "top", "num_format": "#,##0.00"}),
+    }
+
+
+GENERIC_REPORT_QUANTITY_FIELDS = {
+    "amount",
+    "fee",
+    "fee_amount",
+    "in_amount",
+    "in_fee",
+    "inbound_amount",
+    "out_amount",
+    "out_fee",
+    "outbound_amount",
+    "quantity",
+}
+GENERIC_REPORT_INT_FIELDS = {
+    "amount_msat",
+    "count",
+    "fee_msat",
+    "fee_amount_msat",
+    "gap_limit",
+    "in_amount_msat",
+    "in_fee_msat",
+    "inbound_amount_msat",
+    "inbound_count",
+    "out_amount_msat",
+    "out_fee_msat",
+    "outbound_amount_msat",
+    "outbound_count",
+    "quantity_msat",
+    "rows",
+    "tx_count",
+}
+GENERIC_REPORT_MONEY_FIELDS = {
+    "avg_cost",
+    "cost_basis",
+    "cumulative_cost_basis",
+    "gain_loss",
+    "market_value",
+    "proceeds",
+    "unrealized_pnl",
+}
+
+
+def _generic_report_xlsx_format_name(header, value):
+    if value in (None, ""):
+        return "text"
+    if header in GENERIC_REPORT_INT_FIELDS:
+        return "int"
+    if header in GENERIC_REPORT_MONEY_FIELDS:
+        return "money"
+    if header in GENERIC_REPORT_QUANTITY_FIELDS or header.endswith("_sat"):
+        return "quantity"
+    return "text"
+
+
+def _generic_report_column_width(header, rows):
+    label_width = len(_report_column_label(header)) + 2
+    sample_width = label_width
+    for row in rows[:50]:
+        value = row.get(header, "")
+        sample_width = max(sample_width, min(len(str(value)), 36))
+    return max(10, min(sample_width + 2, 38))
+
+
+def _generic_report_xlsx_write_sheet(workbook, spec, formats):
+    worksheet = workbook.add_worksheet(spec["sheet_name"])
+    worksheet.set_landscape()
+    worksheet.fit_to_pages(1, 0)
+    worksheet.set_margins(left=0.35, right=0.35, top=0.5, bottom=0.5)
+    headers = list(spec["headers"])
+    rows = spec["rows"]
+    last_column = max(len(headers) - 1, 0)
+    worksheet.set_row(0, 28)
+    worksheet.merge_range(0, 0, 0, last_column, spec["title"], formats["title"])
+    worksheet.set_row(1, 24)
+    for column_index, header in enumerate(headers):
+        worksheet.set_column(column_index, column_index, _generic_report_column_width(header, rows))
+        worksheet.write_string(1, column_index, _report_column_label(header), formats["header"])
+    worksheet.freeze_panes(2, 0)
+
+    row_index = 2
+    if rows:
+        for row in rows:
+            for column_index, header in enumerate(headers):
+                value = row.get(header, "")
+                format_name = _generic_report_xlsx_format_name(header, value)
+                _xlsx_write_value(worksheet, row_index, column_index, value, formats[format_name])
+            row_index += 1
+    else:
+        worksheet.write_string(row_index, 0, "No rows in scope.", formats["text"])
+        row_index += 1
+    worksheet.autofilter(1, 0, max(row_index - 1, 1), last_column)
+    return worksheet
+
+
+def export_csv_report(conn, workspace_ref, profile_ref, file_path, hooks: ReportHooks, wallet_ref=None, history_limit=None):
+    context = _build_full_report_context(
+        conn,
+        workspace_ref,
+        profile_ref,
+        hooks,
+        wallet_ref=wallet_ref,
+        history_limit=history_limit,
+    )
+    sections = _generic_report_section_specs(context)
+    rows = _generic_report_csv_rows(context, sections)
+    path = Path(file_path).expanduser()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    _write_csv_rows(path, rows)
+    return {
+        "file": str(path.resolve()),
+        "bytes": path.stat().st_size,
+        "title": context["title"],
+        "wallet": wallet_ref or "",
+        "sections": [spec["sheet_name"] for spec in sections],
+        "rows": sum(len(spec["rows"]) for spec in sections),
+    }
+
+
+def export_xlsx_report(conn, workspace_ref, profile_ref, file_path, hooks: ReportHooks, wallet_ref=None, history_limit=None):
+    import xlsxwriter
+
+    context = _build_full_report_context(
+        conn,
+        workspace_ref,
+        profile_ref,
+        hooks,
+        wallet_ref=wallet_ref,
+        history_limit=history_limit,
+    )
+    sections = _generic_report_section_specs(context)
+    path = Path(file_path).expanduser()
+    path.parent.mkdir(parents=True, exist_ok=True)
+
+    workbook = xlsxwriter.Workbook(str(path))
+    workbook.set_properties(
+        {
+            "title": context["title"],
+            "subject": "Kassiber full report export",
+            "author": "Kassiber",
+            "comments": "Generated from the same processed report context as the generic PDF export.",
+        }
+    )
+    formats = _generic_report_xlsx_formats(workbook)
+    for spec in sections:
+        _generic_report_xlsx_write_sheet(workbook, spec, formats)
+    workbook.close()
+    return {
+        "file": str(path.resolve()),
+        "bytes": path.stat().st_size,
+        "title": context["title"],
+        "wallet": wallet_ref or "",
+        "sheets": [spec["sheet_name"] for spec in sections],
+        "rows": sum(len(spec["rows"]) for spec in sections),
+    }
+
+
+def build_pdf_report_lines(conn, workspace_ref, profile_ref, hooks: ReportHooks, wallet_ref=None, history_limit=None):
+    context = _build_full_report_context(
+        conn,
+        workspace_ref,
+        profile_ref,
+        hooks,
+        wallet_ref=wallet_ref,
+        history_limit=history_limit,
+    )
+    workspace = context["workspace"]
+    profile = context["profile"]
+    wallet = context["wallet"]
+    scope_wallets = context["scope_wallets"]
+    portfolio_rows = context["portfolio_rows"]
+    balance_rows = context["balance_rows"]
+    capital_rows = context["capital_rows"]
+    history_rows = context["history_rows"]
+    query_rows = context["query_rows"]
+    summary = context["summary"]
+    rollups = context["rollups"]
     holdings_cost_basis = rollups["holdings"]["cost_basis"]
     holdings_market_value = rollups["holdings"]["market_value"]
     holdings_unrealized = rollups["holdings"]["unrealized_pnl"]
@@ -2495,14 +3161,13 @@ def build_pdf_report_lines(conn, workspace_ref, profile_ref, hooks: ReportHooks,
     realized_cost_basis = rollups["realized"]["cost_basis"]
     realized_gain_loss = rollups["realized"]["gain_loss"]
 
-    title_scope = wallet["label"] if wallet else profile["label"]
-    title = f"Kassiber PDF Report - {title_scope}"
+    title = context["pdf_title"]
 
     lines = [title, "=" * len(title), ""]
     lines.extend(
         _report_kv_lines(
             [
-                ("Generated at", hooks.now_iso()),
+                ("Generated at", context["generated_at"]),
                 ("Workspace", workspace["label"]),
                 ("Profile", profile["label"]),
                 ("Wallet scope", wallet["label"] if wallet else "All wallets"),
@@ -2814,7 +3479,9 @@ __all__ = [
     "export_austrian_e1kv_csv_bundle",
     "export_austrian_e1kv_pdf_report",
     "export_austrian_e1kv_xlsx_report",
+    "export_csv_report",
     "export_pdf_report",
+    "export_xlsx_report",
     "report_austrian_e1kv",
     "report_balance_history",
     "report_balance_sheet",

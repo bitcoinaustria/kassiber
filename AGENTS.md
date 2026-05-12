@@ -53,7 +53,7 @@ Kassiber is currently in **dev mode**: renaming commands, breaking flags, and re
   - attachments
   - metadata (notes, tags, inclusion)
   - journals (RP2 processing + quarantine)
-  - reports (summary, tax-summary, balance-sheet, portfolio-summary, capital-gains, journal-entries, balance-history, austrian-e1kv, austrian-tax-summary, export-pdf, export-austrian, export-austrian-e1kv-pdf, export-austrian-e1kv-xlsx, export-austrian-e1kv-csv)
+  - reports (summary, tax-summary, balance-sheet, portfolio-summary, capital-gains, journal-entries, balance-history, austrian-e1kv, austrian-tax-summary, export-pdf, export-csv, export-xlsx, export-austrian, export-austrian-e1kv-pdf, export-austrian-e1kv-xlsx, export-austrian-e1kv-csv)
   - rates (local cache + CoinGecko sync + manual override)
   - diagnostics (public-safe bug-report collection)
 - Every command accepts `--format {table,plain,json,csv}`, `--output <path>`, `--machine` (= `--format json`), `--debug`, `--diagnostics-out <path|auto>`, and `--db-passphrase-fd FD` (used to unlock a SQLCipher-encrypted database non-interactively).
@@ -148,7 +148,7 @@ Kassiber is currently in **dev mode**: renaming commands, breaking flags, and re
 - `journals {process,list,transfers {list},quarantined,events {list,get},quarantine {show,clear,resolve {price-override,exclude}}}`
 - `transfers {pair,list,unpair}`
 - `source-funds {sources {list,create,attach},links {list,create,review,attach,bulk-review},suggest,cases {list}}`
-- `reports {summary,tax-summary,balance-sheet,portfolio-summary,capital-gains,journal-entries,balance-history,source-funds,austrian-e1kv,austrian-tax-summary,export-pdf,export-source-funds-pdf,export-austrian,export-austrian-e1kv-pdf,export-austrian-e1kv-xlsx,export-austrian-e1kv-csv}`
+- `reports {summary,tax-summary,balance-sheet,portfolio-summary,capital-gains,journal-entries,balance-history,source-funds,austrian-e1kv,austrian-tax-summary,export-pdf,export-csv,export-xlsx,export-source-funds-pdf,export-austrian,export-austrian-e1kv-pdf,export-austrian-e1kv-xlsx,export-austrian-e1kv-csv}`
 - `rates {pairs,sync,latest,range,set}`
 - `diagnostics {collect}`
 - `ai providers {list,get,create,update,delete,set-default,clear-default}`

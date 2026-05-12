@@ -134,12 +134,20 @@ type ReportHref = "/journals" | "/quarantine" | "/transactions" | "/reports";
 
 interface ReportExportResult {
   file?: string;
+  dir?: string;
   filename?: string;
   format?: string;
   scope?: string;
   bytes?: number;
   pages?: number;
   rows?: number;
+  sheets?: string[];
+  files?: Array<{
+    file?: string;
+    sheet?: string;
+    bytes?: number;
+    rows?: number;
+  }>;
   summary_rows?: number;
   tax_year?: number;
 }
@@ -208,13 +216,15 @@ function ReportsView({ report, hideSensitive }: ReportsViewProps) {
     null,
   );
   const addNotification = useUiStore((s) => s.addNotification);
-  const exportCsv =
-    useDaemonMutation<ReportExportResult>("ui.reports.export_capital_gains_csv");
+  const exportCsv = useDaemonMutation<ReportExportResult>("ui.reports.export_csv");
+  const exportXlsx = useDaemonMutation<ReportExportResult>("ui.reports.export_xlsx");
   const exportPdf = useDaemonMutation<ReportExportResult>("ui.reports.export_pdf");
   const exportAustrianPdf =
     useDaemonMutation<ReportExportResult>("ui.reports.export_austrian_e1kv_pdf");
   const exportAustrianXlsx =
     useDaemonMutation<ReportExportResult>("ui.reports.export_austrian_e1kv_xlsx");
+  const exportAustrianCsv =
+    useDaemonMutation<ReportExportResult>("ui.reports.export_austrian_e1kv_csv");
   const activeProfileIsAustrian = report.jurisdictionCode === "AT";
   const kennzahlRows =
     report.kennzahlRows?.length
@@ -247,32 +257,47 @@ function ReportsView({ report, hideSensitive }: ReportsViewProps) {
     setActiveExport(format);
     const mutation =
       format === "csv"
-        ? exportCsv
+        ? activeProfileIsAustrian
+          ? exportAustrianCsv
+          : exportCsv
         : format === "xlsx"
-          ? exportAustrianXlsx
+          ? activeProfileIsAustrian
+            ? exportAustrianXlsx
+            : exportXlsx
           : activeProfileIsAustrian
             ? exportAustrianPdf
             : exportPdf;
     const args =
-      format === "pdf" && !activeProfileIsAustrian ? {} : { year };
+      format === "pdf"
+        ? activeProfileIsAustrian
+          ? { year }
+          : {}
+        : (format === "xlsx" || format === "csv") && activeProfileIsAustrian
+          ? { year }
+          : {};
 
     mutation.mutate(args, {
       onSuccess: (envelope) => {
         const payload = envelope.data;
-        const file = payload?.file ?? "";
-        const filename = payload?.filename ?? file.split("/").pop() ?? "report";
+        const exportPath = payload?.file ?? payload?.dir ?? "";
+        const filename =
+          payload?.filename ?? exportPath.split(/[\\/]/).pop() ?? "report";
         const detail =
           payload?.format === "pdf" && payload.pages
             ? `${payload.pages} page${payload.pages === 1 ? "" : "s"}`
-            : payload?.format === "xlsx" && payload.rows !== undefined
-              ? `${payload.rows} row${payload.rows === 1 ? "" : "s"}`
+            : payload?.format === "xlsx" && payload.sheets?.length
+              ? `${payload.sheets.length} sheet${payload.sheets.length === 1 ? "" : "s"}`
+              : payload?.format === "csv" && payload.files?.length
+                ? `${payload.files.length} file${payload.files.length === 1 ? "" : "s"}`
+              : payload?.format === "xlsx" && payload.rows !== undefined
+                ? `${payload.rows} row${payload.rows === 1 ? "" : "s"}`
               : payload?.format === "csv" && payload.rows !== undefined
                 ? `${payload.rows} row${payload.rows === 1 ? "" : "s"}`
                 : "Export written";
         setExportStatus({
           tone: "success",
           message: `${filename} saved to the managed exports folder.`,
-          path: file,
+          path: exportPath,
         });
         addNotification({
           title: "Report export finished",
@@ -728,17 +753,21 @@ function ReportFilesPanel({
             detail={
               activeProfileIsAustrian
                 ? `${year} · Multi-sheet Austrian workbook`
-                : "Available for Austrian books"
+                : "Multi-sheet complete workbook"
             }
             loading={activeExport === "xlsx"}
-            disabled={Boolean(activeExport) || !activeProfileIsAustrian}
+            disabled={Boolean(activeExport)}
             onExport={onExport}
           />
           <ReportFileRow
             id="csv"
             icon={FileArchive}
-            title="Capital gains CSV"
-            detail={`${year} · UTF-8 rows for spreadsheet review`}
+            title="CSV report"
+            detail={
+              activeProfileIsAustrian
+                ? `${year} · Austrian E 1kv CSV bundle`
+                : "Complete report sections for spreadsheet review"
+            }
             loading={activeExport === "csv"}
             disabled={Boolean(activeExport)}
             onExport={onExport}

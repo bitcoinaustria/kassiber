@@ -18,6 +18,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+import zipfile
 from pathlib import Path
 
 
@@ -670,6 +671,52 @@ class CliSmokeTest(unittest.TestCase):
         header = payload_bytes[:8]
         self.assertTrue(header.startswith(b"%PDF-1.4"))
         self.assertRegex(payload_bytes, rb"/MediaBox \[0 0 842(?:\.0+)? 595(?:\.0+)?\]")
+
+    def test_07ab_export_csv_and_xlsx_report(self):
+        csv_path = Path(self._tmp.name) / "kassiber-report.csv"
+        xlsx_path = Path(self._tmp.name) / "kassiber-report.xlsx"
+        for path in (csv_path, xlsx_path):
+            if path.exists():
+                path.unlink()
+
+        payload = self._cli(
+            "reports", "export-csv",
+            "--workspace", "Main",
+            "--profile", "Default",
+            "--file", str(csv_path),
+        )
+        self._assert_kind(payload, "reports.export-csv")
+        self.assertEqual(Path(payload["data"]["file"]), csv_path.resolve())
+        self.assertIn("Overview", payload["data"]["sections"])
+        self.assertIn("Transfers & Swaps", payload["data"]["sections"])
+        self.assertIn("Transactions", payload["data"]["sections"])
+        csv_text = csv_path.read_text(encoding="utf-8")
+        self.assertIn("Kassiber Report - Default", csv_text)
+        self.assertIn("Wallet Inventory", csv_text)
+        self.assertIn("Reviewed Transfers and Swaps", csv_text)
+        self.assertIn("Transaction ID", csv_text)
+        self.assertIn("Onchain deposit", csv_text)
+
+        payload = self._cli(
+            "reports", "export-xlsx",
+            "--workspace", "Main",
+            "--profile", "Default",
+            "--file", str(xlsx_path),
+        )
+        self._assert_kind(payload, "reports.export-xlsx")
+        self.assertEqual(Path(payload["data"]["file"]), xlsx_path.resolve())
+        self.assertEqual(xlsx_path.read_bytes()[:2], b"PK")
+        self.assertIn("Overview", payload["data"]["sheets"])
+        self.assertIn("Transfers & Swaps", payload["data"]["sheets"])
+        self.assertIn("Transactions", payload["data"]["sheets"])
+        with zipfile.ZipFile(xlsx_path) as workbook:
+            workbook_xml = workbook.read("xl/workbook.xml").decode("utf-8")
+            shared_strings = workbook.read("xl/sharedStrings.xml").decode("utf-8")
+        self.assertIn('name="Overview"', workbook_xml)
+        self.assertIn('name="Transfers &amp; Swaps"', workbook_xml)
+        self.assertIn('name="Transactions"', workbook_xml)
+        self.assertIn("Executive summary", shared_strings)
+        self.assertIn("Wallet Inventory", shared_strings)
 
     def test_07aa_pdf_writer_reports_actual_page_count(self):
         from kassiber.pdf_report import write_text_pdf
@@ -1747,6 +1794,38 @@ class CliSmokeTest(unittest.TestCase):
         self.assertEqual(pair["policy"], "taxable")
         self.assertEqual(pair["out_wallet"], "OnchainBTC")
         self.assertEqual(pair["in_wallet"], "Liquid")
+
+        csv_path = Path(self._tmp.name) / "cross-asset-report.csv"
+        xlsx_path = Path(self._tmp.name) / "cross-asset-report.xlsx"
+        payload = self._cli(
+            "reports", "export-csv",
+            "--workspace", "Main",
+            "--profile", "CrossAsset",
+            "--file", str(csv_path),
+        )
+        self._assert_kind(payload, "reports.export-csv")
+        self.assertIn("Transfers & Swaps", payload["data"]["sections"])
+        csv_text = csv_path.read_text(encoding="utf-8")
+        self.assertIn("Reviewed Transfers and Swaps", csv_text)
+        self.assertIn(",swap,peg-in,taxable,", csv_text)
+        self.assertIn("cross-out-leg", csv_text)
+        self.assertIn("cross-in-leg", csv_text)
+
+        payload = self._cli(
+            "reports", "export-xlsx",
+            "--workspace", "Main",
+            "--profile", "CrossAsset",
+            "--file", str(xlsx_path),
+        )
+        self._assert_kind(payload, "reports.export-xlsx")
+        self.assertIn("Transfers & Swaps", payload["data"]["sheets"])
+        with zipfile.ZipFile(xlsx_path) as workbook:
+            workbook_xml = workbook.read("xl/workbook.xml").decode("utf-8")
+            shared_strings = workbook.read("xl/sharedStrings.xml").decode("utf-8")
+        self.assertIn('name="Transfers &amp; Swaps"', workbook_xml)
+        self.assertIn("Reviewed Transfers and Swaps", shared_strings)
+        self.assertIn("cross-out-leg", shared_strings)
+        self.assertIn("cross-in-leg", shared_strings)
 
     def test_16_austrian_cross_asset_carrying_value_accepts_same_wallet(self):
         workspace = "CrossAssetAT"
