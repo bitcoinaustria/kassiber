@@ -1068,17 +1068,17 @@ export function SwapMatching() {
           )}
 
           {selected.size > 0 ? (
-            <div className="flex flex-wrap items-center gap-2 border-t bg-muted/25 px-3 py-3 text-sm sm:px-6">
-              <span className="mr-1 text-xs font-medium text-foreground">
+            <div className="flex flex-wrap items-center gap-3 border-t bg-muted/25 px-3 py-3 text-sm sm:px-6">
+              <span className="shrink-0 text-xs font-medium text-foreground">
                 {selected.size} selected
               </span>
-              <label className="flex items-center gap-1 text-xs text-muted-foreground">
+              <label className="flex min-w-[16rem] items-center gap-2 text-xs text-muted-foreground">
                 Kind
                 <Select
                   value={bulkKind ?? "default"}
                   onValueChange={(v) => setBulkKind(v === "default" ? null : v as PairKind)}
                 >
-                  <SelectTrigger className="ml-1 h-8 w-40">
+                  <SelectTrigger className="h-8 w-52">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -1091,13 +1091,13 @@ export function SwapMatching() {
                   </SelectContent>
                 </Select>
               </label>
-              <label className="flex items-center gap-1 text-xs text-muted-foreground">
+              <label className="flex min-w-[16rem] items-center gap-2 text-xs text-muted-foreground">
                 Policy
                 <Select
                   value={bulkPolicy ?? "default"}
                   onValueChange={(v) => setBulkPolicy(v === "default" ? null : v as PairPolicy)}
                 >
-                  <SelectTrigger className="ml-1 h-8 w-40">
+                  <SelectTrigger className="h-8 w-52">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
