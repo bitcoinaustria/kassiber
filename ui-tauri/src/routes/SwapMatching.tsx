@@ -1011,7 +1011,7 @@ export function SwapMatching() {
                   </div>
                 ) : null}
 
-                <div className="grid gap-2 px-4 py-3 sm:grid-cols-[1fr_auto_1fr] sm:items-center">
+                <div className="grid gap-3 px-4 py-3 md:grid-cols-2">
                   <LegCard
                     title="Outgoing"
                     asset={candidate.out_asset}
@@ -1021,11 +1021,6 @@ export function SwapMatching() {
                     timestamp={candidate.out_occurred_at}
                     txId={candidate.out_id}
                   />
-                  <div className="flex justify-center">
-                    <div className="flex size-9 items-center justify-center rounded-full border border-border/70 bg-background/80 text-muted-foreground shadow-sm">
-                      <ArrowRight className="size-4" />
-                    </div>
-                  </div>
                   <LegCard
                     title="Incoming"
                     asset={candidate.in_asset}
@@ -1596,23 +1591,23 @@ interface LegCardProps {
 function LegCard({ title, asset, amount, wallet, walletKind, timestamp, txId }: LegCardProps) {
   const rail = railForLeg(asset, walletKind);
   return (
-    <div className="rounded-md border bg-background p-3">
-      <div className="flex items-center justify-between">
-        <div className="flex min-w-0 items-center gap-2">
-          <RailIcon rail={rail} />
+    <div className="grid grid-cols-[3.75rem_minmax(0,1fr)] gap-3 rounded-md border bg-background p-3">
+      <RailIcon rail={rail} size="large" />
+      <div className="min-w-0">
+        <div className="flex items-start justify-between gap-2">
           <span className="text-xs uppercase tracking-wide text-muted-foreground">
             {title}
           </span>
+          <RailBadge rail={rail} asset={asset} />
         </div>
-        <RailBadge rail={rail} asset={asset} />
-      </div>
-      <div className="mt-1 font-mono text-base">{formatBtc(amount)}</div>
-      <div className="mt-1 truncate text-xs text-muted-foreground">
-        {wallet} <span className="text-[10px] uppercase">· {walletKind}</span>
-      </div>
-      <div className="text-xs text-muted-foreground">{formatTimestamp(timestamp)}</div>
-      <div className="mt-1 font-mono text-[11px] text-muted-foreground/80">
-        tx {txId.slice(0, 8)}…{txId.slice(-4)}
+        <div className="mt-1 font-mono text-base">{formatBtc(amount)}</div>
+        <div className="mt-1 truncate text-xs text-muted-foreground">
+          {wallet} <span className="text-[10px] uppercase">· {walletKind}</span>
+        </div>
+        <div className="text-xs text-muted-foreground">{formatTimestamp(timestamp)}</div>
+        <div className="mt-1 truncate font-mono text-[11px] text-muted-foreground/80">
+          tx {txId.slice(0, 8)}…{txId.slice(-4)}
+        </div>
       </div>
     </div>
   );
@@ -1633,25 +1628,35 @@ function SwapRouteChip({ candidate }: SwapRouteChipProps) {
       aria-label={`${out.label} to ${incoming.label}`}
       title={`${out.label} to ${incoming.label}`}
     >
-      <RailIcon rail={outRail} compact />
+      <RailIcon rail={outRail} size="compact" />
       <ArrowRight className="size-3 text-muted-foreground" />
-      <RailIcon rail={inRail} compact />
+      <RailIcon rail={inRail} size="compact" />
     </div>
   );
 }
 
 interface RailIconProps {
   rail: SwapRail;
-  compact?: boolean;
+  size?: "compact" | "regular" | "large";
 }
 
-function RailIcon({ rail, compact = false }: RailIconProps) {
+function RailIcon({ rail, size = "regular" }: RailIconProps) {
   const details = RAIL_DETAILS[rail];
+  const frameSize = {
+    compact: "size-7",
+    regular: "size-7",
+    large: "size-12",
+  }[size];
+  const iconSize = {
+    compact: "size-4",
+    regular: "size-4",
+    large: "size-7",
+  }[size];
   return (
     <span
       className={cn(
         "inline-flex shrink-0 items-center justify-center rounded-full border bg-white shadow-sm ring-1 ring-black/5 dark:ring-white/15",
-        compact ? "size-6" : "size-7",
+        frameSize,
       )}
       title={details.label}
     >
@@ -1659,7 +1664,7 @@ function RailIcon({ rail, compact = false }: RailIconProps) {
         src={details.icon}
         alt=""
         aria-hidden="true"
-        className={cn(compact ? "size-3.5" : "size-4")}
+        className={cn("object-contain", iconSize, rail === "liquid" ? "scale-125" : null)}
       />
     </span>
   );
