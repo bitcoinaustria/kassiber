@@ -766,6 +766,7 @@ def _ui_swap_matching_payload(
             ),
             confidence=args.get("confidence"),
             asset_pair=args.get("asset_pair"),
+            route_pair=args.get("route_pair"),
             method=args.get("method"),
         )
     if kind == "ui.transfers.list":
@@ -805,6 +806,7 @@ def _ui_swap_matching_payload(
                 args.get("fee_sats_min") or core_transfer_matching.DEFAULT_FEE_SATS_MIN
             ),
             asset_pair=args.get("asset_pair"),
+            route_pair=args.get("route_pair"),
             method=args.get("method"),
         )
     if kind == "ui.transfers.dismiss":
@@ -867,6 +869,7 @@ def _ui_swap_matching_payload(
             ),
             confidence=args.get("confidence"),
             asset_pair=args.get("asset_pair"),
+            route_pair=args.get("route_pair"),
             method=args.get("method"),
         )
 

@@ -576,7 +576,19 @@ def _load_matcher_rows(conn, profile_id):
     ).fetchall()
 
 
-def _filter_transfer_candidates(candidates, *, confidence=None, asset_pair=None, method=None):
+def _candidate_route_asset(asset, wallet_kind):
+    asset_key = str(asset or "").upper()
+    kind_key = str(wallet_kind or "").lower()
+    if asset_key == "LBTC" or "liquid" in kind_key:
+        return "LBTC"
+    if asset_key == "BTC" and kind_key in core_transfer_matching.LIGHTNING_WALLET_KINDS:
+        return "LNBTC"
+    return asset_key
+
+
+def _filter_transfer_candidates(
+    candidates, *, confidence=None, asset_pair=None, route_pair=None, method=None
+):
     if confidence:
         candidates = [c for c in candidates if c.confidence == confidence]
     if method:
@@ -592,6 +604,20 @@ def _filter_transfer_candidates(candidates, *, confidence=None, asset_pair=None,
         candidates = [
             c for c in candidates if c.out_asset == out_asset and c.in_asset == in_asset
         ]
+    if route_pair:
+        try:
+            out_route_asset, in_route_asset = route_pair.split("-", 1)
+        except ValueError as exc:
+            raise AppError(
+                f"Invalid route_pair '{route_pair}', expected OUT-IN like 'LNBTC-BTC'",
+                code="validation",
+            ) from exc
+        candidates = [
+            c
+            for c in candidates
+            if _candidate_route_asset(c.out_asset, c.out_wallet_kind) == out_route_asset
+            and _candidate_route_asset(c.in_asset, c.in_wallet_kind) == in_route_asset
+        ]
     return candidates
 
 
@@ -605,13 +631,15 @@ def suggest_transfer_candidates(
     fee_sats_min=core_transfer_matching.DEFAULT_FEE_SATS_MIN,
     confidence=None,
     asset_pair=None,
+    route_pair=None,
     method=None,
 ):
     """Run the matcher and return the candidate envelope.
 
     Honours optional filters used by the review queue: ``confidence``
-    pins to exact / strong; ``asset_pair`` matches the
-    ``OUT-IN`` shape (e.g. ``"LBTC-BTC"``); ``method`` pins to
+    pins to exact / strong; ``asset_pair`` matches the legacy asset-only
+    ``OUT-IN`` shape (e.g. ``"LBTC-BTC"``); ``route_pair`` matches the
+    rail-aware route shape (e.g. ``"LNBTC-BTC"``); ``method`` pins to
     ``payment_hash`` or ``heuristic``.
     """
     _, profile = resolve_scope(conn, workspace_ref, profile_ref)
@@ -637,6 +665,7 @@ def suggest_transfer_candidates(
         candidates,
         confidence=confidence,
         asset_pair=asset_pair,
+        route_pair=route_pair,
         method=method,
     )
     rules = _load_transfer_rules(conn, profile["id"])
@@ -671,6 +700,7 @@ def bulk_pair_transfers(
     fee_pct_max=core_transfer_matching.DEFAULT_FEE_PCT_MAX,
     fee_sats_min=core_transfer_matching.DEFAULT_FEE_SATS_MIN,
     asset_pair=None,
+    route_pair=None,
     method=None,
 ):
     """Run the matcher and auto-pair every solo (non-conflicted) candidate
@@ -707,6 +737,7 @@ def bulk_pair_transfers(
     candidates = _filter_transfer_candidates(
         candidates,
         asset_pair=asset_pair,
+        route_pair=route_pair,
         method=method,
     )
     cluster_sizes = {}
@@ -755,6 +786,7 @@ def apply_transfer_rules(
     fee_sats_min=core_transfer_matching.DEFAULT_FEE_SATS_MIN,
     confidence=None,
     asset_pair=None,
+    route_pair=None,
     method=None,
 ):
     """Auto-pair every non-conflicted candidate matched by enabled rules."""
@@ -781,6 +813,7 @@ def apply_transfer_rules(
         candidates,
         confidence=confidence,
         asset_pair=asset_pair,
+        route_pair=route_pair,
         method=method,
     )
     rules = _load_transfer_rules(conn, profile["id"])

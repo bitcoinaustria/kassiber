@@ -106,13 +106,15 @@ const METHOD_OPTIONS = [
   { value: "payment_hash", label: "Payment hash" },
   { value: "heuristic", label: "Time + amount" },
 ] as const;
-const ASSET_PAIR_OPTIONS = [
+const ROUTE_PAIR_OPTIONS = [
   { value: "all", label: "Any route" },
-  { value: "BTC-LBTC", label: "Bitcoin → Liquid" },
-  { value: "LBTC-BTC", label: "Liquid → Bitcoin" },
-  { value: "BTC-BTC", label: "Lightning ↔ on-chain" },
+  { value: "LNBTC-LBTC", label: "Lightning → Liquid" },
+  { value: "LBTC-LNBTC", label: "Liquid → Lightning" },
+  { value: "LBTC-BTC", label: "Liquid → on-chain" },
+  { value: "LNBTC-BTC", label: "Lightning → on-chain" },
+  { value: "BTC-LBTC", label: "On-chain → Liquid" },
 ] as const;
-const ASSET_PAIR_VALUES = new Set<string>(ASSET_PAIR_OPTIONS.map((option) => option.value));
+const ROUTE_PAIR_VALUES = new Set<string>(ROUTE_PAIR_OPTIONS.map((option) => option.value));
 
 type PairKind = (typeof PAIR_KIND_OPTIONS)[number];
 type PairPolicy = (typeof PAIR_POLICY_OPTIONS)[number];
@@ -215,6 +217,7 @@ interface SavedView {
     confidence?: string;
     method?: string;
     asset_pair?: string;
+    route_pair?: string;
     [key: string]: unknown;
   };
 }
@@ -292,7 +295,7 @@ function railForLeg(asset: string, walletKind: string): SwapRail {
 export function SwapMatching() {
   const [confidence, setConfidence] = useState<string>("all");
   const [method, setMethod] = useState<string>("all");
-  const [assetPair, setAssetPair] = useState<string>("all");
+  const [routePair, setRoutePair] = useState<string>("all");
   const [overrides, setOverrides] = useState<
     Record<string, { kind?: PairKind; policy?: PairPolicy }>
   >({});
@@ -334,9 +337,9 @@ export function SwapMatching() {
     const next: Record<string, unknown> = {};
     if (confidence !== "all") next.confidence = confidence;
     if (method !== "all") next.method = method;
-    if (assetPair !== "all") next.asset_pair = assetPair;
+    if (routePair !== "all") next.route_pair = routePair;
     return next;
-  }, [confidence, method, assetPair]);
+  }, [confidence, method, routePair]);
 
   const { data, isLoading, isError, error, refetch, isFetching } =
     useDaemon<SuggestEnvelope>("ui.transfers.suggest", args);
@@ -368,16 +371,18 @@ export function SwapMatching() {
   const rules = rulesQuery.data?.data?.rules ?? [];
   const enabledRuleCount = rules.filter((rule) => rule.enabled).length;
 
-  const filterIsDirty = confidence !== "all" || method !== "all" || assetPair !== "all";
+  const filterIsDirty = confidence !== "all" || method !== "all" || routePair !== "all";
 
   const applySavedView = (view: SavedView) => {
     setConfidence(typeof view.filter.confidence === "string" ? view.filter.confidence : "all");
     setMethod(typeof view.filter.method === "string" ? view.filter.method : "all");
-    const savedAssetPair =
-      typeof view.filter.asset_pair === "string" && ASSET_PAIR_VALUES.has(view.filter.asset_pair)
-        ? view.filter.asset_pair
+    const savedRoutePair =
+      typeof view.filter.route_pair === "string" && ROUTE_PAIR_VALUES.has(view.filter.route_pair)
+        ? view.filter.route_pair
+        : typeof view.filter.asset_pair === "string" && ROUTE_PAIR_VALUES.has(view.filter.asset_pair)
+          ? view.filter.asset_pair
         : "all";
-    setAssetPair(savedAssetPair);
+    setRoutePair(savedRoutePair);
   };
 
   const commitSaveView = async () => {
@@ -386,7 +391,7 @@ export function SwapMatching() {
     const filterPayload: Record<string, unknown> = {};
     if (confidence !== "all") filterPayload.confidence = confidence;
     if (method !== "all") filterPayload.method = method;
-    if (assetPair !== "all") filterPayload.asset_pair = assetPair;
+    if (routePair !== "all") filterPayload.route_pair = routePair;
     try {
       await savedViewCreate.mutateAsync({
         surface: SAVED_VIEW_SURFACE,
@@ -828,12 +833,12 @@ export function SwapMatching() {
                   ))}
                 </SelectContent>
               </Select>
-              <Select value={assetPair} onValueChange={setAssetPair}>
+              <Select value={routePair} onValueChange={setRoutePair}>
                 <SelectTrigger className="h-8 w-44 shrink-0" aria-label="Route filter">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {ASSET_PAIR_OPTIONS.map((option) => (
+                  {ROUTE_PAIR_OPTIONS.map((option) => (
                     <SelectItem key={option.value} value={option.value}>
                       {option.label}
                     </SelectItem>
@@ -858,7 +863,7 @@ export function SwapMatching() {
                     onClick={() => {
                       setConfidence("all");
                       setMethod("all");
-                      setAssetPair("all");
+                      setRoutePair("all");
                     }}
                   >
                     Clear

@@ -142,6 +142,21 @@ class DaemonSwapMatchingTest(unittest.TestCase):
             self.assertIn("candidates", envelope["data"])
             self.assertGreaterEqual(envelope["data"]["counts"]["total"], 1)
 
+            envelope = _request_response(
+                proc,
+                {
+                    "kind": "ui.transfers.suggest",
+                    "request_id": "req-suggest-route",
+                    "args": {
+                        "workspace": "Main",
+                        "profile": "Swap",
+                        "route_pair": "LNBTC-LBTC",
+                    },
+                },
+            )
+            self.assertEqual(envelope["kind"], "ui.transfers.suggest")
+            self.assertGreaterEqual(envelope["data"]["counts"]["total"], 1)
+
         self._with_daemon(call)
 
     def test_02_ui_transfers_bulk_pair_and_list(self):
