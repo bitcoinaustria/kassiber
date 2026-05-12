@@ -47,6 +47,7 @@ from .handlers import (
     cmd_context_show,
     cmd_init,
     cmd_status,
+    apply_transfer_rules,
     bulk_pair_transfers,
     create_saved_view_cli,
     create_transaction_pair,
@@ -914,6 +915,12 @@ def build_parser() -> argparse.ArgumentParser:
     transfers_bulk_pair.add_argument(
         "--confidence", choices=("exact", "strong"), default="exact"
     )
+    transfers_bulk_pair.add_argument("--method", choices=("payment_hash", "heuristic"))
+    transfers_bulk_pair.add_argument(
+        "--asset-pair",
+        dest="asset_pair",
+        help="Restrict to OUT-IN asset shape, e.g. LBTC-BTC for a peg-out",
+    )
     transfers_bulk_pair.add_argument(
         "--time-window-seconds",
         dest="time_window_seconds",
@@ -976,6 +983,28 @@ def build_parser() -> argparse.ArgumentParser:
     tr_rules_disable.add_argument("--workspace")
     tr_rules_disable.add_argument("--profile")
     tr_rules_disable.add_argument("--rule-id", required=True, dest="rule_id")
+    tr_rules_apply = transfers_rules_sub.add_parser("apply")
+    tr_rules_apply.add_argument("--workspace")
+    tr_rules_apply.add_argument("--profile")
+    tr_rules_apply.add_argument("--confidence", choices=("exact", "strong"))
+    tr_rules_apply.add_argument("--method", choices=("payment_hash", "heuristic"))
+    tr_rules_apply.add_argument(
+        "--asset-pair",
+        dest="asset_pair",
+        help="Restrict to OUT-IN asset shape, e.g. LBTC-BTC for a peg-out",
+    )
+    tr_rules_apply.add_argument(
+        "--time-window-seconds",
+        dest="time_window_seconds",
+        type=int,
+        default=24 * 60 * 60,
+    )
+    tr_rules_apply.add_argument(
+        "--fee-pct-max", dest="fee_pct_max", type=float, default=0.01
+    )
+    tr_rules_apply.add_argument(
+        "--fee-sats-min", dest="fee_sats_min", type=int, default=2500
+    )
 
     views = sub.add_parser("views")
     views_sub = views.add_subparsers(dest="views_command", required=True)
@@ -2010,6 +2039,8 @@ def dispatch(conn: sqlite3.Connection | None, args: argparse.Namespace) -> Any:
                     time_window_seconds=args.time_window_seconds,
                     fee_pct_max=args.fee_pct_max,
                     fee_sats_min=args.fee_sats_min,
+                    asset_pair=getattr(args, "asset_pair", None),
+                    method=getattr(args, "method", None),
                 ),
             )
         if args.transfers_command == "dismiss":
@@ -2065,6 +2096,21 @@ def dispatch(conn: sqlite3.Connection | None, args: argparse.Namespace) -> Any:
                     args,
                     set_transfer_rule_enabled(
                         conn, args.workspace, args.profile, args.rule_id, False
+                    ),
+                )
+            if args.transfers_rules_command == "apply":
+                return emit(
+                    args,
+                    apply_transfer_rules(
+                        conn,
+                        args.workspace,
+                        args.profile,
+                        time_window_seconds=args.time_window_seconds,
+                        fee_pct_max=args.fee_pct_max,
+                        fee_sats_min=args.fee_sats_min,
+                        confidence=getattr(args, "confidence", None),
+                        asset_pair=getattr(args, "asset_pair", None),
+                        method=getattr(args, "method", None),
                     ),
                 )
     if args.command == "views":

@@ -96,7 +96,8 @@ kassiber transfers rules create \
 
 Rules auto-apply to solo (non-conflicted) candidates that match every
 non-empty predicate field. Conflict clusters are never auto-paired —
-the user always disambiguates. List with `transfers rules list`;
+the user always disambiguates. Apply with `transfers rules apply`;
+list with `transfers rules list`;
 toggle with `transfers rules enable|disable --rule-id <id>`; delete
 with `transfers rules delete --rule-id <id>`.
 

@@ -47,6 +47,7 @@ from .ai.tools import (
 from .cli.handlers import (
     _metadata_hooks,
     _report_hooks,
+    apply_transfer_rules,
     bulk_pair_transfers,
     create_saved_view_cli,
     create_transaction_pair,
@@ -188,6 +189,7 @@ SUPPORTED_KINDS = (
     "ui.transfers.rules.create",
     "ui.transfers.rules.delete",
     "ui.transfers.rules.set_enabled",
+    "ui.transfers.rules.apply",
     "ui.saved_views.list",
     "ui.saved_views.create",
     "ui.saved_views.delete",
@@ -802,6 +804,8 @@ def _ui_swap_matching_payload(
             fee_sats_min=int(
                 args.get("fee_sats_min") or core_transfer_matching.DEFAULT_FEE_SATS_MIN
             ),
+            asset_pair=args.get("asset_pair"),
+            method=args.get("method"),
         )
     if kind == "ui.transfers.dismiss":
         return dismiss_transfer_candidate(
@@ -845,6 +849,25 @@ def _ui_swap_matching_payload(
             )
         return set_transfer_rule_enabled(
             conn, workspace, profile, str(rule_id), bool(args.get("enabled", True))
+        )
+    if kind == "ui.transfers.rules.apply":
+        return apply_transfer_rules(
+            conn,
+            workspace,
+            profile,
+            time_window_seconds=int(
+                args.get("time_window_seconds")
+                or core_transfer_matching.DEFAULT_TIME_WINDOW_SECONDS
+            ),
+            fee_pct_max=float(
+                args.get("fee_pct_max") or core_transfer_matching.DEFAULT_FEE_PCT_MAX
+            ),
+            fee_sats_min=int(
+                args.get("fee_sats_min") or core_transfer_matching.DEFAULT_FEE_SATS_MIN
+            ),
+            confidence=args.get("confidence"),
+            asset_pair=args.get("asset_pair"),
+            method=args.get("method"),
         )
 
     if kind == "ui.saved_views.list":

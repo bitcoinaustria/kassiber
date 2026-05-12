@@ -342,6 +342,8 @@ Process journals and run reports:
 python3 -m kassiber transfers suggest
 # Auto-apply every solo exact match without further review:
 python3 -m kassiber transfers bulk-pair --confidence exact
+# Or apply saved non-conflicted auto-pair rules:
+python3 -m kassiber transfers rules apply
 # Or pair one specific pair by id:
 python3 -m kassiber transfers pair --tx-out <out-id> --tx-in <in-id> \
   --kind submarine-swap --policy carrying-value

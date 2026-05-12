@@ -932,7 +932,38 @@ def _tax_summary_total_row(
         "proceeds": float(proceeds),
         "cost_basis": float(cost_basis),
         "gain_loss": float(gain_loss),
+        "count": None,
+        "total_swap_fee_msat": None,
+        "total_swap_fee": None,
     }
+
+
+_TAX_SUMMARY_ROW_KEYS = (
+    "row_type",
+    "year",
+    "asset",
+    "transaction_type",
+    "capital_gains_type",
+    "quantity",
+    "quantity_msat",
+    "proceeds",
+    "cost_basis",
+    "gain_loss",
+    "count",
+    "total_swap_fee_msat",
+    "total_swap_fee",
+)
+
+
+def _tax_summary_detail_row(row):
+    return _normalize_tax_summary_row({"row_type": "detail", **row})
+
+
+def _normalize_tax_summary_row(row):
+    normalized = dict(row)
+    for key in _TAX_SUMMARY_ROW_KEYS:
+        normalized.setdefault(key, None)
+    return {key: normalized.get(key) for key in _TAX_SUMMARY_ROW_KEYS}
 
 
 def report_tax_summary(conn, workspace_ref, profile_ref, hooks: ReportHooks):
@@ -975,7 +1006,7 @@ def report_tax_summary(conn, workspace_ref, profile_ref, hooks: ReportHooks):
         cost_basis = dec(row["cost_basis"])
         gain_loss = dec(row["gain_loss"])
         year = int(row["year"])
-        grouped_rows[year].append({"row_type": "detail", **row})
+        grouped_rows[year].append(_tax_summary_detail_row(row))
         grouped_by_year[year]["assets"].add(row["asset"])
         grouped_by_year[year]["quantity"] += quantity
         grouped_by_year[year]["proceeds"] += proceeds
@@ -1014,7 +1045,7 @@ def report_tax_summary(conn, workspace_ref, profile_ref, hooks: ReportHooks):
         )
     )
     rows.extend(swap_fee_rows)
-    return rows
+    return [_normalize_tax_summary_row(row) for row in rows]
 
 
 def _swap_fee_summary_rows(conn, profile_id):

@@ -106,6 +106,12 @@ interface SwapCandidate {
   default_kind: PairKind;
   default_policy: PairPolicy;
   conflict_set_id: string;
+  rule_match?: {
+    rule_id: string;
+    rule_name: string | null;
+    kind: PairKind;
+    policy: PairPolicy;
+  };
 }
 
 interface SuggestEnvelope {
@@ -115,6 +121,7 @@ interface SuggestEnvelope {
     exact: number;
     strong: number;
     conflicts: number;
+    rule_matches?: number;
   };
 }
 
@@ -198,10 +205,11 @@ export function SwapMatching() {
     Record<string, { kind?: PairKind; policy?: PairPolicy }>
   >({});
   const [selected, setSelected] = useState<Set<string>>(new Set());
-  const [bulkKind, setBulkKind] = useState<PairKind>("submarine-swap");
-  const [bulkPolicy, setBulkPolicy] = useState<PairPolicy>("carrying-value");
+  const [bulkKind, setBulkKind] = useState<PairKind | null>(null);
+  const [bulkPolicy, setBulkPolicy] = useState<PairPolicy | null>(null);
   const [previewState, setPreviewState] = useState<
     | { mode: "exact"; candidates: SwapCandidate[] }
+    | { mode: "rules"; candidates: SwapCandidate[] }
     | { mode: "selected"; candidates: SwapCandidate[] }
     | null
   >(null);
@@ -255,6 +263,7 @@ export function SwapMatching() {
   const ruleCreate = useDaemonMutation<SwapRule>("ui.transfers.rules.create");
   const ruleDelete = useDaemonMutation<unknown>("ui.transfers.rules.delete");
   const ruleSetEnabled = useDaemonMutation<SwapRule>("ui.transfers.rules.set_enabled");
+  const ruleApply = useDaemonMutation<BulkPairResult>("ui.transfers.rules.apply");
 
   const [saveViewOpen, setSaveViewOpen] = useState(false);
   const [saveViewName, setSaveViewName] = useState("");
@@ -342,6 +351,16 @@ export function SwapMatching() {
     [candidates, clusterSizes],
   );
 
+  const ruleSolo = useMemo(
+    () =>
+      candidates.filter(
+        (c) =>
+          c.rule_match &&
+          (clusterSizes[c.conflict_set_id] ?? 0) <= 1,
+      ),
+    [candidates, clusterSizes],
+  );
+
   const selectedCandidates = useMemo(
     () =>
       Array.from(selected)
@@ -396,14 +415,21 @@ export function SwapMatching() {
     setPreviewState({ mode: "exact", candidates: exactSolo });
   };
 
+  const openRulesPreview = () => {
+    setPreviewState({ mode: "rules", candidates: ruleSolo });
+  };
+
   const openSelectedPreview = () => {
     setPreviewState({ mode: "selected", candidates: selectedCandidates });
   };
 
   const commitBulk = async () => {
     if (!previewState) return;
-    if (previewState.mode === "exact") {
-      const envelope = await bulkPairMutation.mutateAsync({ confidence: "exact" });
+    if (previewState.mode === "exact" || previewState.mode === "rules") {
+      const envelope =
+        previewState.mode === "exact"
+          ? await bulkPairMutation.mutateAsync({ ...args, confidence: "exact" })
+          : await ruleApply.mutateAsync(args);
       const result = envelope.data;
       if (result) {
         setUndoState({
@@ -421,8 +447,8 @@ export function SwapMatching() {
         const envelope = await pairMutation.mutateAsync({
           tx_out: candidate.out_id,
           tx_in: candidate.in_id,
-          kind: override.kind ?? bulkKind,
-          policy: override.policy ?? bulkPolicy,
+          kind: override.kind ?? bulkKind ?? candidate.default_kind,
+          policy: override.policy ?? bulkPolicy ?? candidate.default_policy,
           pair_source: "bulk_selected",
           confidence_at_pair: candidate.confidence,
         });
@@ -796,11 +822,15 @@ export function SwapMatching() {
               <>
                 <label className="flex items-center gap-1 text-xs text-muted-foreground">
                   Kind
-                  <Select value={bulkKind} onValueChange={(v) => setBulkKind(v as PairKind)}>
+                  <Select
+                    value={bulkKind ?? "default"}
+                    onValueChange={(v) => setBulkKind(v === "default" ? null : v as PairKind)}
+                  >
                     <SelectTrigger className="ml-1 h-8 w-44">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
+                      <SelectItem value="default">Candidate default</SelectItem>
                       {PAIR_KIND_OPTIONS.map((option) => (
                         <SelectItem key={option} value={option}>
                           {option}
@@ -812,13 +842,14 @@ export function SwapMatching() {
                 <label className="flex items-center gap-1 text-xs text-muted-foreground">
                   Policy
                   <Select
-                    value={bulkPolicy}
-                    onValueChange={(v) => setBulkPolicy(v as PairPolicy)}
+                    value={bulkPolicy ?? "default"}
+                    onValueChange={(v) => setBulkPolicy(v === "default" ? null : v as PairPolicy)}
                   >
                     <SelectTrigger className="ml-1 h-8 w-44">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
+                      <SelectItem value="default">Candidate default</SelectItem>
                       {PAIR_POLICY_OPTIONS.map((option) => (
                         <SelectItem key={option} value={option}>
                           {option}
@@ -837,6 +868,17 @@ export function SwapMatching() {
               </>
             ) : null}
             <div className="ml-auto flex items-center gap-2">
+              {ruleSolo.length > 0 ? (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={openRulesPreview}
+                  disabled={ruleApply.isPending}
+                >
+                  <Sparkles className="size-4" />
+                  <span>Apply {ruleSolo.length} rule match{ruleSolo.length === 1 ? "" : "es"}</span>
+                </Button>
+              ) : null}
               {exactSolo.length > 0 ? (
                 <Button
                   size="sm"
@@ -891,6 +933,11 @@ export function SwapMatching() {
                       ? "matched on payment_hash"
                       : "matched on time + amount"}
                   </span>
+                  {candidate.rule_match ? (
+                    <Badge variant="outline" className="text-[10px]">
+                      Rule: {candidate.rule_match.rule_name ?? candidate.rule_match.rule_id.slice(0, 8)}
+                    </Badge>
+                  ) : null}
                   <span className="ml-auto text-sm">
                     <span className="font-semibold">Swap fee </span>
                     {formatBtc(candidate.swap_fee)}
@@ -1014,7 +1061,9 @@ export function SwapMatching() {
             <DialogTitle>
               {previewState?.mode === "exact"
                 ? "Apply all exact matches"
-                : "Pair selected candidates"}
+                : previewState?.mode === "rules"
+                  ? "Apply matching rules"
+                  : "Pair selected candidates"}
             </DialogTitle>
             <DialogDescription>
               {previewState

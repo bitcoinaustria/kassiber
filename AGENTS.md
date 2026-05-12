@@ -150,7 +150,7 @@ Kassiber is currently in **dev mode**: renaming commands, breaking flags, and re
 - `metadata records {list,get,note {set,clear},tag {add,remove},excluded {set,clear}}`
 - `metadata bip329 {import,list,export}`
 - `journals {process,list,transfers {list},quarantined,events {list,get},quarantine {show,clear,resolve {price-override,exclude}}}`
-- `transfers {pair,list,unpair,suggest,bulk-pair,dismiss,rules {list,create,delete,enable,disable}}`
+- `transfers {pair,list,unpair,suggest,bulk-pair,dismiss,rules {list,create,apply,delete,enable,disable}}`
 - `views {list,create,delete}` — generic saved-view CRUD; ``swap_candidates`` is the first surface consumer
 - `source-funds {sources {list,create,attach},links {list,create,review,attach,bulk-review},suggest,cases {list}}`
 - `reports {summary,tax-summary,balance-sheet,portfolio-summary,capital-gains,journal-entries,balance-history,source-funds,austrian-e1kv,austrian-tax-summary,export-pdf,export-source-funds-pdf,export-austrian,export-austrian-e1kv-pdf,export-austrian-e1kv-xlsx,export-austrian-e1kv-csv}`

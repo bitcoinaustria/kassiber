@@ -1,7 +1,7 @@
 """End-to-end CLI pin for swap-matching verbs.
 
 Walks through ``transfers suggest`` / ``bulk-pair`` / ``dismiss``,
-``transfers rules {list,create,delete,enable,disable}``, and
+``transfers rules {list,create,apply,delete,enable,disable}``, and
 ``views {list,create,delete}`` against a temp data root with a
 Phoenix LN row + a synthetic Liquid inbound that lines up by time
 and amount. Pins the envelope ``kind`` + key fields so downstream
@@ -9,6 +9,7 @@ consumers (daemon, AI tools, UI) can trust the wire contract.
 """
 
 import json
+import sqlite3
 import subprocess
 import sys
 import tempfile
@@ -46,6 +47,20 @@ def _run(data_root, *args):
             f"CLI produced no stdout.\nargs: {args}\nstderr: {result.stderr}"
         )
     return json.loads(result.stdout), result.returncode
+
+
+def _run_raw(data_root, *args):
+    cmd = [
+        sys.executable,
+        "-m",
+        "kassiber",
+        "--data-root",
+        str(data_root),
+        *args,
+    ]
+    return subprocess.run(
+        cmd, cwd=ROOT, capture_output=True, text=True, check=False
+    )
 
 
 def _bootstrap_profile(data_root, phoenix_csv, liquid_csv):
@@ -89,6 +104,32 @@ def _bootstrap_profile(data_root, phoenix_csv, liquid_csv):
     )
 
 
+def _mark_journals_processed(data_root):
+    """Mark the fixture profile as current when a test targets report shaping."""
+    conn = sqlite3.connect(data_root / "kassiber.sqlite3")
+    try:
+        profile = conn.execute(
+            "SELECT id, journal_input_version FROM profiles WHERE label = 'Swap'"
+        ).fetchone()
+        tx_count = conn.execute(
+            "SELECT COUNT(*) FROM transactions WHERE profile_id = ? AND excluded = 0",
+            (profile[0],),
+        ).fetchone()[0]
+        conn.execute(
+            """
+            UPDATE profiles
+            SET last_processed_at = ?,
+                last_processed_tx_count = ?,
+                last_processed_input_version = ?
+            WHERE id = ?
+            """,
+            ("2026-03-14T17:35:00Z", tx_count, profile[1], profile[0]),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+
 class SwapMatchingCliTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
@@ -122,6 +163,15 @@ class SwapMatchingCliTest(unittest.TestCase):
         self.assertIn(candidate["confidence"], ("exact", "strong"))
         self.assertIn("swap_fee_msat", candidate)
         self.assertEqual(candidate["default_policy"], "carrying-value")
+
+        payload, code = _run(
+            data_root, "transfers", "bulk-pair",
+            "--workspace", "Main", "--profile", "Swap",
+            "--confidence", "strong",
+            "--asset-pair", "LBTC-BTC",
+        )
+        self.assertEqual(code, 0, payload)
+        self.assertEqual(payload["data"]["summary"]["count"], 0)
 
         payload, code = _run(
             data_root, "transfers", "bulk-pair",
@@ -245,6 +295,89 @@ class SwapMatchingCliTest(unittest.TestCase):
             "--rule-id", rule_id,
         )
         self.assertEqual(payload["data"]["deleted"], rule_id)
+
+    def test_rules_apply_pairs_matching_candidates(self):
+        data_root = self._fresh_root("rules-apply")
+        _bootstrap_profile(data_root, self.phoenix_csv, self.liquid_csv)
+
+        payload, code = _run(
+            data_root, "transfers", "rules", "create",
+            "--workspace", "Main", "--profile", "Swap",
+            "--name", "Phoenix swap outputs",
+            "--predicate", json.dumps({"out_wallet_kind": "phoenix"}),
+            "--kind", "submarine-swap",
+            "--policy", "carrying-value",
+        )
+        self.assertEqual(code, 0, payload)
+
+        payload, code = _run(
+            data_root, "transfers", "suggest",
+            "--workspace", "Main", "--profile", "Swap",
+        )
+        self.assertEqual(code, 0, payload)
+        candidate = payload["data"]["candidates"][0]
+        self.assertEqual(candidate["rule_match"]["rule_name"], "Phoenix swap outputs")
+        self.assertEqual(payload["data"]["counts"]["rule_matches"], 1)
+
+        payload, code = _run(
+            data_root, "transfers", "rules", "apply",
+            "--workspace", "Main", "--profile", "Swap",
+            "--asset-pair", "LBTC-BTC",
+        )
+        self.assertEqual(code, 0, payload)
+        self.assertEqual(payload["data"]["summary"]["count"], 0)
+        payload, _ = _run(
+            data_root, "transfers", "list",
+            "--workspace", "Main", "--profile", "Swap",
+        )
+        self.assertEqual(payload["data"], [])
+
+        payload, code = _run(
+            data_root, "transfers", "rules", "apply",
+            "--workspace", "Main", "--profile", "Swap",
+        )
+        self.assertEqual(code, 0, payload)
+        self.assertEqual(payload["kind"], "transfers.rules.apply")
+        self.assertEqual(payload["data"]["summary"]["count"], 1)
+
+        payload, _ = _run(
+            data_root, "transfers", "list",
+            "--workspace", "Main", "--profile", "Swap",
+        )
+        pair = payload["data"][0]
+        self.assertEqual(pair["pair_source"], "rule_auto")
+        self.assertEqual(pair["confidence_at_pair"], "strong")
+
+    def test_tax_summary_csv_surfaces_swap_fee_columns(self):
+        data_root = self._fresh_root("tax-summary-fees")
+        _bootstrap_profile(data_root, self.phoenix_csv, self.liquid_csv)
+        payload, code = _run(
+            data_root, "transfers", "suggest",
+            "--workspace", "Main", "--profile", "Swap",
+        )
+        self.assertEqual(code, 0, payload)
+        candidate = payload["data"]["candidates"][0]
+        payload, code = _run(
+            data_root, "transfers", "pair",
+            "--workspace", "Main", "--profile", "Swap",
+            "--tx-out", candidate["out_id"],
+            "--tx-in", candidate["in_id"],
+            "--kind", "submarine-swap",
+            "--policy", "taxable",
+        )
+        self.assertEqual(code, 0, payload)
+        _mark_journals_processed(data_root)
+
+        result = _run_raw(
+            data_root,
+            "--format", "csv",
+            "reports", "tax-summary",
+            "--workspace", "Main", "--profile", "Swap",
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        header = result.stdout.splitlines()[0]
+        self.assertIn("total_swap_fee_msat", header)
+        self.assertIn("swap_fees_total", result.stdout)
 
     def test_views_crud(self):
         data_root = self._fresh_root("views")

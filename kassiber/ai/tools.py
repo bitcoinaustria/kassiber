@@ -897,6 +897,19 @@ TOOL_CATALOG: tuple[ToolEntry, ...] = (
         summary_template="Toggle swap rule",
     ),
     ToolEntry(
+        name="ui.transfers.rules.apply",
+        description=(
+            "Apply all currently enabled swap auto-pair rules to non-conflicted "
+            "candidates after explicit consent. Writes reviewed pairs with "
+            "pair_source='rule_auto'."
+        ),
+        parameters=_EMPTY_OBJECT_SCHEMA,
+        kind_class="mutating",
+        wire_name="ui_transfers_rules_apply",
+        daemon_kind="ui.transfers.rules.apply",
+        summary_template="Apply swap rules",
+    ),
+    ToolEntry(
         name="ui.saved_views.create",
         description=(
             "Save a named filter for one review surface (e.g. 'swap_candidates') "

@@ -497,7 +497,7 @@ def list_transaction_pairs(conn, workspace_ref, profile_ref, *, include_deleted=
 
 
 def _candidate_to_dict(candidate):
-    return {
+    data = {
         "out_id": candidate.out_id,
         "in_id": candidate.in_id,
         "out_asset": candidate.out_asset,
@@ -523,6 +523,41 @@ def _candidate_to_dict(candidate):
         "default_policy": candidate.default_policy,
         "conflict_set_id": candidate.conflict_set_id,
     }
+    return data
+
+
+def _load_transfer_rules(conn, profile_id):
+    rows = conn.execute(
+        "SELECT * FROM swap_matching_rules WHERE profile_id = ? ORDER BY created_at ASC, id ASC",
+        (profile_id,),
+    ).fetchall()
+    return [core_swap_rules.load_rule(row) for row in rows]
+
+
+def _candidate_key(candidate):
+    return f"{candidate.out_id}->{candidate.in_id}"
+
+
+def _candidate_dicts_with_rule_matches(candidates, rules, rule_matches):
+    rules_by_id = {rule.id: rule for rule in rules}
+    rule_by_key = {
+        _candidate_key(match.candidate): {
+            "rule_id": match.rule_id,
+            "rule_name": match.rule_name,
+            "kind": rules_by_id[match.rule_id].kind,
+            "policy": rules_by_id[match.rule_id].policy,
+        }
+        for match in rule_matches
+        if match.rule_id in rules_by_id
+    }
+    output = []
+    for candidate in candidates:
+        data = _candidate_to_dict(candidate)
+        match = rule_by_key.get(_candidate_key(candidate))
+        if match:
+            data["rule_match"] = match
+        output.append(data)
+    return output
 
 
 def _load_matcher_rows(conn, profile_id):
@@ -539,6 +574,25 @@ def _load_matcher_rows(conn, profile_id):
         """,
         (profile_id,),
     ).fetchall()
+
+
+def _filter_transfer_candidates(candidates, *, confidence=None, asset_pair=None, method=None):
+    if confidence:
+        candidates = [c for c in candidates if c.confidence == confidence]
+    if method:
+        candidates = [c for c in candidates if c.method == method]
+    if asset_pair:
+        try:
+            out_asset, in_asset = asset_pair.split("-", 1)
+        except ValueError as exc:
+            raise AppError(
+                f"Invalid asset_pair '{asset_pair}', expected OUT-IN like 'LBTC-BTC'",
+                code="validation",
+            ) from exc
+        candidates = [
+            c for c in candidates if c.out_asset == out_asset and c.in_asset == in_asset
+        ]
+    return candidates
 
 
 def suggest_transfer_candidates(
@@ -579,29 +633,23 @@ def suggest_transfer_candidates(
         fee_sats_min=int(fee_sats_min),
         tax_country=str(profile["tax_country"] or ""),
     )
-    if confidence:
-        candidates = [c for c in candidates if c.confidence == confidence]
-    if method:
-        candidates = [c for c in candidates if c.method == method]
-    if asset_pair:
-        try:
-            out_asset, in_asset = asset_pair.split("-", 1)
-        except ValueError as exc:
-            raise AppError(
-                f"Invalid asset_pair '{asset_pair}', expected OUT-IN like 'LBTC-BTC'",
-                code="validation",
-            ) from exc
-        candidates = [
-            c for c in candidates if c.out_asset == out_asset and c.in_asset == in_asset
-        ]
+    candidates = _filter_transfer_candidates(
+        candidates,
+        confidence=confidence,
+        asset_pair=asset_pair,
+        method=method,
+    )
+    rules = _load_transfer_rules(conn, profile["id"])
+    rule_matches, _ = core_swap_rules.apply_rules(candidates, rules)
     counts = {
         "total": len(candidates),
         "exact": sum(1 for c in candidates if c.confidence == "exact"),
         "strong": sum(1 for c in candidates if c.confidence == "strong"),
         "conflicts": _count_conflict_clusters(candidates),
+        "rule_matches": len(rule_matches),
     }
     return {
-        "candidates": [_candidate_to_dict(c) for c in candidates],
+        "candidates": _candidate_dicts_with_rule_matches(candidates, rules, rule_matches),
         "counts": counts,
     }
 
@@ -622,6 +670,8 @@ def bulk_pair_transfers(
     time_window_seconds=core_transfer_matching.DEFAULT_TIME_WINDOW_SECONDS,
     fee_pct_max=core_transfer_matching.DEFAULT_FEE_PCT_MAX,
     fee_sats_min=core_transfer_matching.DEFAULT_FEE_SATS_MIN,
+    asset_pair=None,
+    method=None,
 ):
     """Run the matcher and auto-pair every solo (non-conflicted) candidate
     whose confidence meets the threshold.
@@ -654,6 +704,11 @@ def bulk_pair_transfers(
             f"Unsupported confidence '{confidence}'. Use 'exact' or 'strong'.",
             code="validation",
         )
+    candidates = _filter_transfer_candidates(
+        candidates,
+        asset_pair=asset_pair,
+        method=method,
+    )
     cluster_sizes = {}
     for candidate in candidates:
         cluster_sizes[candidate.conflict_set_id] = cluster_sizes.get(candidate.conflict_set_id, 0) + 1
@@ -686,6 +741,79 @@ def bulk_pair_transfers(
             "count": len(applied),
             "skipped_conflicts": sum(1 for c in candidates if cluster_sizes.get(c.conflict_set_id, 0) > 1),
             "total_swap_fee_msat": total_fee_msat,
+        },
+    }
+
+
+def apply_transfer_rules(
+    conn,
+    workspace_ref,
+    profile_ref,
+    *,
+    time_window_seconds=core_transfer_matching.DEFAULT_TIME_WINDOW_SECONDS,
+    fee_pct_max=core_transfer_matching.DEFAULT_FEE_PCT_MAX,
+    fee_sats_min=core_transfer_matching.DEFAULT_FEE_SATS_MIN,
+    confidence=None,
+    asset_pair=None,
+    method=None,
+):
+    """Auto-pair every non-conflicted candidate matched by enabled rules."""
+    workspace, profile = resolve_scope(conn, workspace_ref, profile_ref)
+    rows = _load_matcher_rows(conn, profile["id"])
+    pair_records = conn.execute(
+        "SELECT out_transaction_id, in_transaction_id, deleted_at FROM transaction_pairs WHERE profile_id = ?",
+        (profile["id"],),
+    ).fetchall()
+    dismissals = conn.execute(
+        "SELECT out_transaction_id, in_transaction_id, expires_at FROM transaction_pair_dismissals WHERE profile_id = ?",
+        (profile["id"],),
+    ).fetchall()
+    candidates = core_transfer_matching.suggest_swap_candidates(
+        rows,
+        pair_records=pair_records,
+        dismissals=dismissals,
+        time_window_seconds=int(time_window_seconds),
+        fee_pct_max=float(fee_pct_max),
+        fee_sats_min=int(fee_sats_min),
+        tax_country=str(profile["tax_country"] or ""),
+    )
+    candidates = _filter_transfer_candidates(
+        candidates,
+        confidence=confidence,
+        asset_pair=asset_pair,
+        method=method,
+    )
+    rules = _load_transfer_rules(conn, profile["id"])
+    rules_by_id = {rule.id: rule for rule in rules}
+    rule_matches, remaining = core_swap_rules.apply_rules(candidates, rules)
+    applied = []
+    try:
+        for match in rule_matches:
+            rule = rules_by_id[match.rule_id]
+            pair = create_transaction_pair(
+                conn,
+                workspace["id"],
+                profile["id"],
+                match.candidate.out_id,
+                match.candidate.in_id,
+                kind=rule.kind,
+                policy=rule.policy,
+                pair_source="rule_auto",
+                confidence_at_pair=match.candidate.confidence,
+                commit=False,
+            )
+            applied.append(pair)
+    except Exception:
+        conn.rollback()
+        raise
+    if applied:
+        conn.commit()
+    return {
+        "applied": applied,
+        "summary": {
+            "count": len(applied),
+            "remaining": len(remaining),
+            "total_swap_fee_msat": sum(int(pair.get("swap_fee_msat") or 0) for pair in applied),
         },
     }
 
