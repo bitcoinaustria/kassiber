@@ -696,7 +696,7 @@ export function SwapMatching() {
           </div>
         </header>
 
-        <section className="grid grid-cols-2 overflow-hidden rounded-lg border bg-card md:grid-cols-4">
+        <section className="mt-3 grid grid-cols-2 overflow-hidden rounded-lg border bg-card sm:mt-4 md:grid-cols-4">
           <SwapSummaryTile label="Candidates" value={counts.total} detail={`${candidates.length} visible`} />
           <SwapSummaryTile label="Exact" value={counts.exact} detail="payment hash" tone="good" />
           <SwapSummaryTile label="Strong" value={counts.strong} detail="time + amount" tone="warning" />
