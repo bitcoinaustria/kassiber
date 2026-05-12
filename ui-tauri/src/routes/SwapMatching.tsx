@@ -34,6 +34,9 @@ import {
   X,
 } from "lucide-react";
 
+import bitcoinIcon from "@/assets/integrations/bitcoin.svg";
+import lightningIcon from "@/assets/integrations/lightning.svg";
+import liquidIcon from "@/assets/integrations/liquid.svg";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -80,6 +83,7 @@ const METHOD_OPTIONS = [
 
 type PairKind = (typeof PAIR_KIND_OPTIONS)[number];
 type PairPolicy = (typeof PAIR_POLICY_OPTIONS)[number];
+type SwapRail = "onchain" | "lightning" | "liquid";
 
 interface SwapCandidate {
   out_id: string;
@@ -196,6 +200,55 @@ interface RulesEnvelope {
 const SAVED_VIEW_SURFACE = "swap_candidates";
 
 const UNDO_WINDOW_MS = 20_000;
+
+const RAIL_DETAILS: Record<
+  SwapRail,
+  {
+    label: string;
+    shortLabel: string;
+    icon: string;
+    className: string;
+  }
+> = {
+  onchain: {
+    label: "On-chain",
+    shortLabel: "BTC",
+    icon: bitcoinIcon,
+    className:
+      "border-orange-200 bg-orange-50 text-orange-800 dark:border-orange-400/30 dark:bg-orange-950/40 dark:text-orange-100",
+  },
+  lightning: {
+    label: "Lightning",
+    shortLabel: "LN",
+    icon: lightningIcon,
+    className:
+      "border-violet-200 bg-violet-50 text-violet-800 dark:border-violet-400/30 dark:bg-violet-950/40 dark:text-violet-100",
+  },
+  liquid: {
+    label: "Liquid",
+    shortLabel: "LBTC",
+    icon: liquidIcon,
+    className:
+      "border-cyan-200 bg-cyan-50 text-cyan-800 dark:border-cyan-400/30 dark:bg-cyan-950/40 dark:text-cyan-100",
+  },
+};
+
+function railForLeg(asset: string, walletKind: string): SwapRail {
+  const assetKey = asset.toUpperCase();
+  const kindKey = walletKind.toLowerCase();
+  if (assetKey === "LBTC" || kindKey.includes("liquid")) return "liquid";
+  if (
+    kindKey.includes("phoenix") ||
+    kindKey.includes("lightning") ||
+    kindKey.includes("coreln") ||
+    kindKey.includes("core-ln") ||
+    kindKey === "lnd" ||
+    kindKey === "nwc"
+  ) {
+    return "lightning";
+  }
+  return "onchain";
+}
 
 export function SwapMatching() {
   const [confidence, setConfidence] = useState<string>("all");
@@ -927,6 +980,7 @@ export function SwapMatching() {
                     checked={selected.has(key)}
                     onCheckedChange={() => toggleSelected(key)}
                   />
+                  <SwapRouteChip candidate={candidate} />
                   <ConfidenceBadge candidate={candidate} />
                   <span className="text-xs text-muted-foreground">
                     {candidate.method === "payment_hash"
@@ -967,7 +1021,11 @@ export function SwapMatching() {
                     timestamp={candidate.out_occurred_at}
                     txId={candidate.out_id}
                   />
-                  <ArrowRight className="size-5 self-center text-muted-foreground" />
+                  <div className="flex justify-center">
+                    <div className="flex size-9 items-center justify-center rounded-full border border-border/70 bg-background/80 text-muted-foreground shadow-sm">
+                      <ArrowRight className="size-4" />
+                    </div>
+                  </div>
                   <LegCard
                     title="Incoming"
                     asset={candidate.in_asset}
@@ -1536,15 +1594,17 @@ interface LegCardProps {
 }
 
 function LegCard({ title, asset, amount, wallet, walletKind, timestamp, txId }: LegCardProps) {
+  const rail = railForLeg(asset, walletKind);
   return (
     <div className="rounded-md border bg-background p-3">
       <div className="flex items-center justify-between">
-        <span className="text-xs uppercase tracking-wide text-muted-foreground">
-          {title}
-        </span>
-        <Badge variant="outline" className="text-[10px] uppercase">
-          {asset}
-        </Badge>
+        <div className="flex min-w-0 items-center gap-2">
+          <RailIcon rail={rail} />
+          <span className="text-xs uppercase tracking-wide text-muted-foreground">
+            {title}
+          </span>
+        </div>
+        <RailBadge rail={rail} asset={asset} />
       </div>
       <div className="mt-1 font-mono text-base">{formatBtc(amount)}</div>
       <div className="mt-1 truncate text-xs text-muted-foreground">
@@ -1555,6 +1615,75 @@ function LegCard({ title, asset, amount, wallet, walletKind, timestamp, txId }: 
         tx {txId.slice(0, 8)}…{txId.slice(-4)}
       </div>
     </div>
+  );
+}
+
+interface SwapRouteChipProps {
+  candidate: SwapCandidate;
+}
+
+function SwapRouteChip({ candidate }: SwapRouteChipProps) {
+  const outRail = railForLeg(candidate.out_asset, candidate.out_wallet_kind);
+  const inRail = railForLeg(candidate.in_asset, candidate.in_wallet_kind);
+  const out = RAIL_DETAILS[outRail];
+  const incoming = RAIL_DETAILS[inRail];
+  return (
+    <div
+      className="inline-flex items-center gap-1 rounded-full border border-border/70 bg-background/70 px-1.5 py-1 shadow-sm"
+      aria-label={`${out.label} to ${incoming.label}`}
+      title={`${out.label} to ${incoming.label}`}
+    >
+      <RailIcon rail={outRail} compact />
+      <ArrowRight className="size-3 text-muted-foreground" />
+      <RailIcon rail={inRail} compact />
+    </div>
+  );
+}
+
+interface RailIconProps {
+  rail: SwapRail;
+  compact?: boolean;
+}
+
+function RailIcon({ rail, compact = false }: RailIconProps) {
+  const details = RAIL_DETAILS[rail];
+  return (
+    <span
+      className={cn(
+        "inline-flex shrink-0 items-center justify-center rounded-full border bg-white shadow-sm ring-1 ring-black/5 dark:ring-white/15",
+        compact ? "size-6" : "size-7",
+      )}
+      title={details.label}
+    >
+      <img
+        src={details.icon}
+        alt=""
+        aria-hidden="true"
+        className={cn(compact ? "size-3.5" : "size-4")}
+      />
+    </span>
+  );
+}
+
+interface RailBadgeProps {
+  rail: SwapRail;
+  asset: string;
+}
+
+function RailBadge({ rail, asset }: RailBadgeProps) {
+  const details = RAIL_DETAILS[rail];
+  return (
+    <span
+      className={cn(
+        "inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-medium uppercase",
+        details.className,
+      )}
+      title={`${details.label} ${asset}`}
+    >
+      <span>{details.shortLabel}</span>
+      <span className="text-current/50">·</span>
+      <span>{asset}</span>
+    </span>
   );
 }
 
