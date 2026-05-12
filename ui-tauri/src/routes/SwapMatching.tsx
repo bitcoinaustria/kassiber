@@ -24,7 +24,10 @@ import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import {
   AlertTriangle,
   ArrowRight,
+  Check,
+  Eye,
   Loader2,
+  MoreHorizontal,
   Plus,
   Settings as SettingsIcon,
   Sparkles,
@@ -53,6 +56,13 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -62,7 +72,23 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetFooter,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet";
 import { Switch } from "@/components/ui/switch";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import { useDaemon, useDaemonMutation } from "@/daemon/client";
 import { useKeymap, type Keybinding } from "@/lib/keymap";
 import { screenPanelClassName, screenShellClassName } from "@/lib/screen-layout";
@@ -324,6 +350,7 @@ export function SwapMatching() {
   const [rulesExpanded, setRulesExpanded] = useState(false);
   const [cursorIndex, setCursorIndex] = useState(0);
   const [helpOpen, setHelpOpen] = useState(false);
+  const [detailCandidate, setDetailCandidate] = useState<SwapCandidate | null>(null);
   const filterInputRef = useRef<HTMLInputElement | null>(null);
 
   const savedViews = savedViewsQuery.data?.data?.views ?? [];
@@ -566,6 +593,7 @@ export function SwapMatching() {
         category: "Selection",
         handler: () => {
           if (helpOpen) setHelpOpen(false);
+          else if (detailCandidate) setDetailCandidate(null);
           else if (previewState) setPreviewState(null);
           else if (selected.size > 0) setSelected(new Set());
         },
@@ -656,6 +684,7 @@ export function SwapMatching() {
     clusterSizes,
     cursorCandidate,
     exactSolo,
+    detailCandidate,
     helpOpen,
     previewState,
     selected,
@@ -667,45 +696,95 @@ export function SwapMatching() {
   return (
     <div className={screenShellClassName}>
       <Collapsible open={rulesExpanded} onOpenChange={setRulesExpanded}>
-        <header className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-          <div className="min-w-0 space-y-1">
-            <h1 className="text-2xl font-semibold tracking-tight">Swap candidates</h1>
-            <p className="max-w-3xl text-sm text-muted-foreground">
-              Review likely Lightning, Liquid, and on-chain legs before they
-              become carrying-value pairs.
-            </p>
-          </div>
+        <div className={cn(screenPanelClassName, "overflow-hidden rounded-xl border bg-card")}>
+          <header className="flex flex-col gap-3 px-3 py-4 sm:flex-row sm:items-start sm:justify-between sm:px-6">
+            <div className="min-w-0 space-y-2">
+              <div className="flex flex-wrap items-center gap-2">
+                <h1 className="text-2xl font-semibold tracking-tight">
+                  Swap candidates
+                </h1>
+                <Badge variant="secondary" className="rounded-md">
+                  {counts.total}
+                </Badge>
+                <MetricPill
+                  label="Exact"
+                  value={counts.exact}
+                  active={confidence === "exact"}
+                  tone="good"
+                  onClick={() => setConfidence(confidence === "exact" ? "all" : "exact")}
+                />
+                <MetricPill
+                  label="Strong"
+                  value={counts.strong}
+                  active={confidence === "strong"}
+                  tone="warning"
+                  onClick={() => setConfidence(confidence === "strong" ? "all" : "strong")}
+                />
+                <MetricPill label="Conflicts" value={counts.conflicts} tone="alert" />
+              </div>
+              <p className="max-w-3xl text-sm text-muted-foreground">
+                Review likely Lightning, Liquid, and on-chain legs before they
+                become carrying-value pairs.
+              </p>
+              {savedViews.length > 0 ? (
+                <div className="flex flex-wrap items-center gap-1 text-xs">
+                  <Star className="size-3.5 text-muted-foreground" aria-hidden="true" />
+                  {savedViews.map((view) => (
+                    <span
+                      key={view.id}
+                      className="inline-flex items-center gap-1 rounded-full border border-input bg-background px-2 py-0.5"
+                    >
+                      <button
+                        className="font-medium text-foreground/90 hover:text-foreground"
+                        onClick={() => applySavedView(view)}
+                      >
+                        {view.name}
+                      </button>
+                      <button
+                        aria-label={`Delete view ${view.name}`}
+                        onClick={() => void deleteSavedView(view)}
+                      >
+                        <X className="size-3" />
+                      </button>
+                    </span>
+                  ))}
+                </div>
+              ) : null}
+            </div>
 
-          <div className="flex shrink-0 flex-wrap items-center gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              className="h-9"
-              onClick={() => void refetch()}
-              disabled={isFetching}
-            >
-              {isFetching ? <Loader2 className="size-4 animate-spin" /> : null}
-              <span className="ml-1">Refresh</span>
-            </Button>
-            <CollapsibleTrigger asChild>
-              <Button variant="outline" size="sm" className="h-9">
-                <SettingsIcon className="size-3.5" />
-                <span>Rules {enabledRuleCount}/{rules.length}</span>
+            <div className="flex shrink-0 flex-wrap items-center gap-2">
+              {exactSolo.length > 0 ? (
+                <Button
+                  size="sm"
+                  className="h-9 whitespace-nowrap"
+                  onClick={openExactPreview}
+                  disabled={bulkPairMutation.isPending}
+                >
+                  <Sparkles className="size-4" />
+                  <span>Apply exact {exactSolo.length}</span>
+                </Button>
+              ) : null}
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-9"
+                onClick={() => void refetch()}
+                disabled={isFetching}
+              >
+                {isFetching ? <Loader2 className="size-4 animate-spin" /> : null}
+                <span className="ml-1">Refresh</span>
               </Button>
-            </CollapsibleTrigger>
-          </div>
-        </header>
+              <CollapsibleTrigger asChild>
+                <Button variant="outline" size="sm" className="h-9">
+                  <SettingsIcon className="size-3.5" />
+                  <span>Rules {enabledRuleCount}/{rules.length}</span>
+                </Button>
+              </CollapsibleTrigger>
+            </div>
+          </header>
 
-        <section className="mt-3 grid grid-cols-2 overflow-hidden rounded-lg border bg-card sm:mt-4 md:grid-cols-4">
-          <SwapSummaryTile label="Candidates" value={counts.total} detail={`${candidates.length} visible`} />
-          <SwapSummaryTile label="Exact" value={counts.exact} detail="payment hash" tone="good" />
-          <SwapSummaryTile label="Strong" value={counts.strong} detail="time + amount" tone="warning" />
-          <SwapSummaryTile label="Conflicts" value={counts.conflicts} detail="manual choice" tone="alert" />
-        </section>
-
-        <div className="rounded-lg border bg-card">
-          <div className="grid gap-2 px-3 py-2 text-sm xl:grid-cols-[minmax(0,1fr)_auto] xl:items-center">
-            <div className="flex min-w-0 items-center gap-2 overflow-hidden">
+          <div className="grid gap-2 border-t px-3 py-3 text-sm xl:grid-cols-[minmax(0,1fr)_auto] xl:items-center sm:px-6">
+            <div className="flex min-w-0 flex-wrap items-center gap-2">
               <label className="flex shrink-0 items-center gap-2">
                 <Checkbox
                   checked={selected.size > 0}
@@ -789,22 +868,195 @@ export function SwapMatching() {
                   <span>Rule {ruleSolo.length}</span>
                 </Button>
               ) : null}
-              {exactSolo.length > 0 ? (
-                <Button
-                  size="sm"
-                  className="h-8 whitespace-nowrap"
-                  onClick={openExactPreview}
-                  disabled={bulkPairMutation.isPending}
-                >
-                  <Sparkles className="size-4" />
-                  <span>Exact {exactSolo.length}</span>
-                </Button>
-              ) : null}
             </div>
           </div>
 
+          <CollapsibleContent>
+            <div className="space-y-2 border-t bg-muted/10 p-3 text-xs sm:px-6">
+              <div className="flex items-center justify-between gap-2">
+                <span className="font-medium">Auto-pair rules</span>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="h-7 text-xs"
+                  onClick={() => setCreateRuleOpen(true)}
+                >
+                  <Plus className="size-3" />
+                  <span>New rule</span>
+                </Button>
+              </div>
+              {rules.length === 0 ? (
+                <p className="text-muted-foreground">
+                  No auto-pair rules yet. Rules apply when a candidate matches
+                  the predicate and isn't part of a conflict cluster.
+                </p>
+              ) : (
+                rules.map((rule) => (
+                  <div
+                    key={rule.id}
+                    className="flex flex-wrap items-center gap-2 rounded border border-border/60 bg-background px-2 py-1"
+                  >
+                    <span className="font-medium">{rule.name ?? "(unnamed)"}</span>
+                    <code className="rounded bg-muted px-1 text-[10px]">
+                      {Object.entries(rule.predicate)
+                        .filter(([, v]) => v !== null && v !== "")
+                        .map(([k, v]) => `${k}=${JSON.stringify(v)}`)
+                        .join(" · ") || "any candidate"}
+                    </code>
+                    <Badge variant="outline" className="text-[10px]">
+                      {rule.kind} · {rule.policy}
+                    </Badge>
+                    <div className="ml-auto flex items-center gap-2">
+                      <Switch
+                        checked={rule.enabled}
+                        onCheckedChange={() => void toggleRule(rule)}
+                        aria-label="Toggle rule"
+                      />
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="h-6 px-1"
+                        onClick={() => void deleteRule(rule)}
+                        aria-label="Delete rule"
+                      >
+                        <Trash2 className="size-3" />
+                      </Button>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          </CollapsibleContent>
+
+          {isLoading ? (
+            <div className="flex items-center gap-2 border-t px-6 py-8 text-sm text-muted-foreground">
+              <Loader2 className="size-4 animate-spin" /> Loading candidates…
+            </div>
+          ) : isError ? (
+            <div className="border-t px-6 py-6">
+              <div className="rounded border border-destructive/40 bg-destructive/10 p-3 text-sm">
+                Failed to load candidates: {String(error)}
+              </div>
+            </div>
+          ) : candidates.length === 0 ? (
+            <div className="border-t px-6 py-8">
+              <div className="rounded border border-dashed border-muted-foreground/40 p-6 text-center text-sm text-muted-foreground">
+                No unpaired swap candidates. Once a Lightning ↔ Liquid swap (or
+                BTC ↔ LBTC peg) shows up in your wallets, it will appear here.
+              </div>
+            </div>
+          ) : (
+            <Table className="min-w-[980px] border-t">
+              <TableHeader>
+                <TableRow className="bg-muted/50 hover:bg-muted/50">
+                  <TableHead className="w-[42px]"></TableHead>
+                  <TableHead className="w-[130px] text-xs font-medium text-muted-foreground">
+                    Match
+                  </TableHead>
+                  <TableHead className="min-w-[250px] text-xs font-medium text-muted-foreground">
+                    Outgoing
+                  </TableHead>
+                  <TableHead className="w-[44px] text-center"></TableHead>
+                  <TableHead className="min-w-[250px] text-xs font-medium text-muted-foreground">
+                    Incoming
+                  </TableHead>
+                  <TableHead className="min-w-[120px] text-right text-xs font-medium text-muted-foreground">
+                    Swap fee
+                  </TableHead>
+                  <TableHead className="w-[44px]"></TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {candidates.map((candidate) => {
+                  const key = candidateKey(candidate);
+                  const conflicted = (clusterSizes[candidate.conflict_set_id] ?? 0) > 1;
+                  return (
+                    <TableRow
+                      key={key}
+                      className={cn(
+                        "cursor-pointer align-top hover:bg-muted/35",
+                        conflicted ? "bg-amber-50/35 dark:bg-amber-950/20" : null,
+                        cursorKey === key ? "bg-muted/60" : null,
+                      )}
+                      onClick={() => setDetailCandidate(candidate)}
+                    >
+                      <TableCell>
+                        <Checkbox
+                          aria-label="Select candidate"
+                          disabled={conflicted}
+                          checked={selected.has(key)}
+                          onClick={(event) => event.stopPropagation()}
+                          onCheckedChange={() => toggleSelected(key)}
+                        />
+                      </TableCell>
+                      <TableCell className="whitespace-normal">
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          <ConfidenceBadge candidate={candidate} />
+                          {candidate.rule_match ? (
+                            <Badge variant="outline" className="text-[10px]">
+                              Rule
+                            </Badge>
+                          ) : null}
+                        </div>
+                        <p className="mt-1 text-xs text-muted-foreground">
+                          {candidate.method === "payment_hash"
+                            ? "payment hash"
+                            : "time + amount"}
+                        </p>
+                        {conflicted ? (
+                          <p className="mt-1 inline-flex items-center gap-1 text-xs text-amber-700 dark:text-amber-300">
+                            <AlertTriangle className="size-3" />
+                            {clusterSizes[candidate.conflict_set_id]} share a leg
+                          </p>
+                        ) : null}
+                      </TableCell>
+                      <TableCell className="whitespace-normal">
+                        <SwapLegInline
+                          direction="out"
+                          asset={candidate.out_asset}
+                          amount={candidate.out_amount}
+                          wallet={candidate.out_wallet_label}
+                          walletKind={candidate.out_wallet_kind}
+                          timestamp={candidate.out_occurred_at}
+                          txId={candidate.out_id}
+                        />
+                      </TableCell>
+                      <TableCell className="text-center text-muted-foreground">
+                        <ArrowRight className="mx-auto mt-1 size-4" aria-hidden="true" />
+                      </TableCell>
+                      <TableCell className="whitespace-normal">
+                        <SwapLegInline
+                          direction="in"
+                          asset={candidate.in_asset}
+                          amount={candidate.in_amount}
+                          wallet={candidate.in_wallet_label}
+                          walletKind={candidate.in_wallet_kind}
+                          timestamp={candidate.in_occurred_at}
+                          txId={candidate.in_id}
+                        />
+                      </TableCell>
+                      <TableCell className="whitespace-normal text-right">
+                        <SwapFeeText candidate={candidate} />
+                      </TableCell>
+                      <TableCell>
+                        <SwapRowMenu
+                          candidate={candidate}
+                          onOpen={() => setDetailCandidate(candidate)}
+                          onPair={() => void handlePair(candidate)}
+                          onDismiss={() => void handleDismiss(candidate)}
+                          pairDisabled={pairMutation.isPending}
+                          dismissDisabled={dismissMutation.isPending || pairMutation.isPending}
+                        />
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
+              </TableBody>
+            </Table>
+          )}
+
           {selected.size > 0 ? (
-            <div className="flex flex-wrap items-center gap-2 border-t bg-muted/25 px-3 py-2 text-sm">
+            <div className="flex flex-wrap items-center gap-2 border-t bg-muted/25 px-3 py-3 text-sm sm:px-6">
               <span className="mr-1 text-xs font-medium text-foreground">
                 {selected.size} selected
               </span>
@@ -857,256 +1109,52 @@ export function SwapMatching() {
             </div>
           ) : null}
 
-          {savedViews.length > 0 ? (
-            <div className="flex flex-wrap items-center gap-1 border-t px-3 py-2 text-xs">
-              <Star className="size-3.5 text-muted-foreground" aria-hidden="true" />
-              <span className="text-muted-foreground">Views</span>
-              {savedViews.map((view) => (
-                <span
-                  key={view.id}
-                  className="inline-flex items-center gap-1 rounded-full border border-input bg-background px-2 py-0.5"
-                >
-                  <button
-                    className="font-medium text-foreground/90 hover:text-foreground"
-                    onClick={() => applySavedView(view)}
-                  >
-                    {view.name}
-                  </button>
-                  <button
-                    aria-label={`Delete view ${view.name}`}
-                    onClick={() => void deleteSavedView(view)}
-                  >
-                    <X className="size-3" />
-                  </button>
-                </span>
-              ))}
-            </div>
-          ) : null}
-
-          <CollapsibleContent>
-            <div className="space-y-2 border-t bg-muted/10 p-2 text-xs">
-              <div className="flex items-center justify-between gap-2">
-                <span className="font-medium">Auto-pair rules</span>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  className="h-7 text-xs"
-                  onClick={() => setCreateRuleOpen(true)}
-                >
-                  <Plus className="size-3" />
-                  <span>New rule</span>
-                </Button>
-              </div>
-              {rules.length === 0 ? (
-                <p className="text-muted-foreground">
-                  No auto-pair rules yet. Rules apply when a candidate matches
-                  the predicate (wallet kind / asset / fee cap / min confidence)
-                  and isn't part of a conflict cluster.
-                </p>
-              ) : (
-                rules.map((rule) => (
-                  <div
-                    key={rule.id}
-                    className="flex flex-wrap items-center gap-2 rounded border border-border/60 bg-background px-2 py-1"
-                  >
-                    <span className="font-medium">{rule.name ?? "(unnamed)"}</span>
-                    <code className="rounded bg-muted px-1 text-[10px]">
-                      {Object.entries(rule.predicate)
-                        .filter(([, v]) => v !== null && v !== "")
-                        .map(([k, v]) => `${k}=${JSON.stringify(v)}`)
-                        .join(" · ") || "any candidate"}
-                    </code>
-                    <Badge variant="outline" className="text-[10px]">
-                      {rule.kind} · {rule.policy}
-                    </Badge>
-                    <div className="ml-auto flex items-center gap-2">
-                      <Switch
-                        checked={rule.enabled}
-                        onCheckedChange={() => void toggleRule(rule)}
-                        aria-label="Toggle rule"
-                      />
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        className="h-6 px-1"
-                        onClick={() => void deleteRule(rule)}
-                        aria-label="Delete rule"
-                      >
-                        <Trash2 className="size-3" />
-                      </Button>
-                    </div>
-                  </div>
-                ))
-              )}
-            </div>
-          </CollapsibleContent>
+          <div className="flex flex-col items-center justify-between gap-2 border-t px-3 py-3 text-xs text-muted-foreground sm:flex-row sm:px-6">
+            <span>
+              Showing {candidates.length === 0 ? 0 : 1}-{candidates.length} of {counts.total}
+            </span>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-7 px-2"
+              onClick={() => setHelpOpen(true)}
+              aria-label="Show keyboard shortcuts"
+            >
+              ?
+            </Button>
+          </div>
         </div>
       </Collapsible>
 
-      <div className={cn(screenPanelClassName, "flex flex-col gap-3 rounded-lg border p-4")}>
-        {isLoading ? (
-          <div className="flex items-center gap-2 text-sm text-muted-foreground">
-            <Loader2 className="size-4 animate-spin" /> Loading candidates…
-          </div>
-        ) : isError ? (
-          <div className="rounded border border-destructive/40 bg-destructive/10 p-3 text-sm">
-            Failed to load candidates: {String(error)}
-          </div>
-        ) : candidates.length === 0 ? (
-          <div className="rounded border border-dashed border-muted-foreground/40 p-6 text-center text-sm text-muted-foreground">
-            No unpaired swap candidates. Once a Lightning ↔ Liquid swap (or
-            BTC ↔ LBTC peg) shows up in your wallets, it will appear here.
-          </div>
-        ) : (
-          candidates.map((candidate) => {
-            const key = candidateKey(candidate);
-            const override = overrides[key] ?? {};
-            const conflicted = (clusterSizes[candidate.conflict_set_id] ?? 0) > 1;
-            return (
-              <article
-                key={key}
-                className={cn(
-                  "rounded-lg border bg-card text-card-foreground shadow-sm",
-                  conflicted ? "border-amber-400/60" : "border-border",
-                  cursorKey === key ? "ring-2 ring-primary/60" : null,
-                )}
-              >
-                <header className="flex flex-wrap items-center gap-2 border-b border-border/60 px-4 py-2">
-                  <Checkbox
-                    aria-label="Select candidate"
-                    disabled={conflicted}
-                    checked={selected.has(key)}
-                    onCheckedChange={() => toggleSelected(key)}
-                  />
-                  <ConfidenceBadge candidate={candidate} />
-                  <span className="text-xs text-muted-foreground">
-                    {candidate.method === "payment_hash"
-                      ? "payment_hash"
-                      : "time + amount"}
-                  </span>
-                  {candidate.rule_match ? (
-                    <Badge variant="outline" className="text-[10px]">
-                      Rule: {candidate.rule_match.rule_name ?? candidate.rule_match.rule_id.slice(0, 8)}
-                    </Badge>
-                  ) : null}
-                  <span className="ml-auto text-sm">
-                    <span className="font-semibold">Swap fee </span>
-                    {formatBtc(candidate.swap_fee)}
-                    <span className="ml-1 text-xs text-muted-foreground">
-                      · {formatSats(candidate.swap_fee_msat)} · {feePercent(candidate).toFixed(2)}%
-                    </span>
-                  </span>
-                </header>
-
-                {conflicted ? (
-                  <div className="flex items-start gap-2 border-b border-amber-400/40 bg-amber-50/40 px-4 py-2 text-xs text-amber-900 dark:bg-amber-950/30 dark:text-amber-100">
-                    <AlertTriangle className="mt-0.5 size-3.5" />
-                    <span>
-                      Conflict cluster — {clusterSizes[candidate.conflict_set_id]} candidates share a leg.
-                      Pick the right pair manually; bulk-pair skips this cluster.
-                    </span>
-                  </div>
-                ) : null}
-
-                <div className="relative grid gap-3 px-4 py-3 md:grid-cols-2">
-                  <LegCard
-                    title="Outgoing"
-                    asset={candidate.out_asset}
-                    amount={candidate.out_amount}
-                    wallet={candidate.out_wallet_label}
-                    walletKind={candidate.out_wallet_kind}
-                    timestamp={candidate.out_occurred_at}
-                    txId={candidate.out_id}
-                  />
-                  <div
-                    className="flex justify-center md:pointer-events-none md:absolute md:left-1/2 md:top-1/2 md:z-10 md:-translate-x-1/2 md:-translate-y-1/2"
-                    aria-hidden="true"
-                  >
-                    <div className="flex size-9 items-center justify-center rounded-full border border-border/70 bg-background/95 text-muted-foreground shadow-sm">
-                      <ArrowRight className="size-4" />
-                    </div>
-                  </div>
-                  <LegCard
-                    title="Incoming"
-                    asset={candidate.in_asset}
-                    amount={candidate.in_amount}
-                    wallet={candidate.in_wallet_label}
-                    walletKind={candidate.in_wallet_kind}
-                    timestamp={candidate.in_occurred_at}
-                    txId={candidate.in_id}
-                  />
-                </div>
-
-                <footer className="flex flex-wrap items-center gap-2 border-t border-border/60 px-4 py-2 text-sm">
-                  <label className="flex items-center gap-1 text-xs text-muted-foreground">
-                    Kind
-                    <Select
-                      value={override.kind ?? candidate.default_kind}
-                      onValueChange={(value) =>
-                        setOverrides((prev) => ({
-                          ...prev,
-                          [key]: { ...prev[key], kind: value as PairKind },
-                        }))
-                      }
-                    >
-                      <SelectTrigger className="ml-1 h-8 w-44">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {PAIR_KIND_OPTIONS.map((option) => (
-                          <SelectItem key={option} value={option}>
-                            {option}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </label>
-                  <label className="flex items-center gap-1 text-xs text-muted-foreground">
-                    Policy
-                    <Select
-                      value={override.policy ?? candidate.default_policy}
-                      onValueChange={(value) =>
-                        setOverrides((prev) => ({
-                          ...prev,
-                          [key]: { ...prev[key], policy: value as PairPolicy },
-                        }))
-                      }
-                    >
-                      <SelectTrigger className="ml-1 h-8 w-44">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {PAIR_POLICY_OPTIONS.map((option) => (
-                          <SelectItem key={option} value={option}>
-                            {option}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </label>
-                  <div className="ml-auto flex items-center gap-2">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => void handleDismiss(candidate)}
-                      disabled={dismissMutation.isPending || pairMutation.isPending}
-                    >
-                      Dismiss
-                    </Button>
-                    <Button
-                      size="sm"
-                      onClick={() => void handlePair(candidate)}
-                      disabled={pairMutation.isPending}
-                    >
-                      Pair
-                    </Button>
-                  </div>
-                </footer>
-              </article>
-            );
-          })
-        )}
-      </div>
+      <SwapCandidateDetailSheet
+        candidate={detailCandidate}
+        override={detailCandidate ? overrides[candidateKey(detailCandidate)] ?? {} : {}}
+        onOpenChange={(open) => {
+          if (!open) setDetailCandidate(null);
+        }}
+        onKindChange={(candidate, value) =>
+          setOverrides((prev) => ({
+            ...prev,
+            [candidateKey(candidate)]: { ...prev[candidateKey(candidate)], kind: value },
+          }))
+        }
+        onPolicyChange={(candidate, value) =>
+          setOverrides((prev) => ({
+            ...prev,
+            [candidateKey(candidate)]: { ...prev[candidateKey(candidate)], policy: value },
+          }))
+        }
+        onPair={(candidate) => {
+          setDetailCandidate(null);
+          void handlePair(candidate);
+        }}
+        onDismiss={(candidate) => {
+          setDetailCandidate(null);
+          void handleDismiss(candidate);
+        }}
+        pairDisabled={pairMutation.isPending}
+        dismissDisabled={dismissMutation.isPending || pairMutation.isPending}
+      />
 
       <Dialog
         open={previewState !== null}
@@ -1224,6 +1272,313 @@ export function SwapMatching() {
         </div>
       ) : null}
     </div>
+  );
+}
+
+function MetricPill({
+  label,
+  value,
+  tone = "neutral",
+  active = false,
+  onClick,
+}: {
+  label: string;
+  value: number;
+  tone?: "neutral" | "good" | "warning" | "alert";
+  active?: boolean;
+  onClick?: () => void;
+}) {
+  const toneClass = {
+    neutral: "text-muted-foreground",
+    good: "text-emerald-700 dark:text-emerald-300",
+    warning: "text-amber-700 dark:text-amber-300",
+    alert: "text-rose-700 dark:text-rose-300",
+  }[tone];
+  const className = cn(
+    "inline-flex h-7 items-center gap-1.5 rounded-full border px-2.5 text-xs",
+    active ? "border-primary bg-primary/10 text-primary" : "bg-background text-muted-foreground",
+  );
+  const content = (
+    <>
+      <span>{label}</span>
+      <span className={cn("font-semibold tabular-nums", active ? "text-primary" : toneClass)}>
+        {value.toLocaleString("en-US")}
+      </span>
+    </>
+  );
+  if (!onClick) {
+    return <span className={className}>{content}</span>;
+  }
+  return (
+    <button type="button" className={cn(className, "hover:bg-muted/60")} onClick={onClick}>
+      {content}
+    </button>
+  );
+}
+
+interface SwapLegInlineProps {
+  direction: "out" | "in";
+  asset: string;
+  amount: number;
+  wallet: string;
+  walletKind: string;
+  timestamp: string;
+  txId: string;
+}
+
+function SwapLegInline({
+  direction,
+  asset,
+  amount,
+  wallet,
+  walletKind,
+  timestamp,
+  txId,
+}: SwapLegInlineProps) {
+  const rail = railForLeg(asset, walletKind);
+  return (
+    <div className="flex min-w-0 items-start gap-2.5">
+      <RailIcon rail={rail} size="regular" />
+      <div className="min-w-0">
+        <div className="flex min-w-0 flex-wrap items-center gap-1.5">
+          <span
+            className={cn(
+              "font-mono text-sm font-semibold tabular-nums",
+              direction === "out"
+                ? "text-red-700 dark:text-red-300"
+                : "text-emerald-700 dark:text-emerald-300",
+            )}
+          >
+            {formatBtc(amount)}
+          </span>
+          <RailBadge rail={rail} asset={asset} />
+        </div>
+        <div className="mt-1 flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-1 text-xs text-muted-foreground">
+          <span className="truncate">{wallet}</span>
+          <span aria-hidden="true">·</span>
+          <span>{formatTimestamp(timestamp)}</span>
+        </div>
+        <div className="mt-1 truncate font-mono text-[11px] text-muted-foreground/80">
+          tx {txId.slice(0, 8)}…{txId.slice(-4)}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function SwapFeeText({ candidate }: { candidate: SwapCandidate }) {
+  const percent = feePercent(candidate);
+  const tone =
+    percent <= 0.5
+      ? "text-emerald-700 dark:text-emerald-300"
+      : percent <= 1
+        ? "text-amber-700 dark:text-amber-300"
+        : "text-rose-700 dark:text-rose-300";
+  return (
+    <div>
+      <div className={cn("text-sm font-semibold tabular-nums", tone)}>
+        {formatBtc(candidate.swap_fee)}
+      </div>
+      <div className="mt-1 text-xs text-muted-foreground">
+        {formatSats(candidate.swap_fee_msat)} · {percent.toFixed(2)}%
+      </div>
+    </div>
+  );
+}
+
+interface SwapRowMenuProps {
+  candidate: SwapCandidate;
+  onOpen: () => void;
+  onPair: () => void;
+  onDismiss: () => void;
+  pairDisabled: boolean;
+  dismissDisabled: boolean;
+}
+
+function SwapRowMenu({
+  candidate,
+  onOpen,
+  onPair,
+  onDismiss,
+  pairDisabled,
+  dismissDisabled,
+}: SwapRowMenuProps) {
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button
+          variant="ghost"
+          size="icon"
+          className="size-8 text-muted-foreground hover:text-foreground"
+          aria-label={`Open actions for ${candidate.out_id}`}
+          onClick={(event) => event.stopPropagation()}
+        >
+          <MoreHorizontal className="size-4" />
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end">
+        <DropdownMenuItem onSelect={onOpen}>
+          <Eye className="mr-2 size-4" aria-hidden="true" />
+          Open details
+        </DropdownMenuItem>
+        <DropdownMenuSeparator />
+        <DropdownMenuItem disabled={pairDisabled} onSelect={onPair}>
+          <Check className="mr-2 size-4" aria-hidden="true" />
+          Pair
+        </DropdownMenuItem>
+        <DropdownMenuItem
+          className="text-destructive"
+          disabled={dismissDisabled}
+          onSelect={onDismiss}
+        >
+          <X className="mr-2 size-4" aria-hidden="true" />
+          Dismiss
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+
+interface SwapCandidateDetailSheetProps {
+  candidate: SwapCandidate | null;
+  override: { kind?: PairKind; policy?: PairPolicy };
+  onOpenChange: (open: boolean) => void;
+  onKindChange: (candidate: SwapCandidate, value: PairKind) => void;
+  onPolicyChange: (candidate: SwapCandidate, value: PairPolicy) => void;
+  onPair: (candidate: SwapCandidate) => void;
+  onDismiss: (candidate: SwapCandidate) => void;
+  pairDisabled: boolean;
+  dismissDisabled: boolean;
+}
+
+function SwapCandidateDetailSheet({
+  candidate,
+  override,
+  onOpenChange,
+  onKindChange,
+  onPolicyChange,
+  onPair,
+  onDismiss,
+  pairDisabled,
+  dismissDisabled,
+}: SwapCandidateDetailSheetProps) {
+  const kind = candidate ? override.kind ?? candidate.default_kind : "manual";
+  const policy = candidate ? override.policy ?? candidate.default_policy : "carrying-value";
+  return (
+    <Sheet open={Boolean(candidate)} onOpenChange={onOpenChange}>
+      <SheetContent className="w-full overflow-y-auto p-0 sm:max-w-2xl">
+        {candidate ? (
+          <>
+            <SheetHeader className="border-b p-4 sm:p-6">
+              <SheetTitle>Swap candidate</SheetTitle>
+              <SheetDescription>
+                {candidate.method === "payment_hash"
+                  ? "Matched by payment hash."
+                  : "Matched by time and amount."}
+                {" "}
+                Delta {formatSats(candidate.swap_fee_msat)} ({feePercent(candidate).toFixed(2)}%).
+              </SheetDescription>
+            </SheetHeader>
+            <div className="space-y-4 p-4 sm:p-6">
+              <div className="relative grid gap-3 md:grid-cols-2">
+                <LegCard
+                  title="Outgoing"
+                  asset={candidate.out_asset}
+                  amount={candidate.out_amount}
+                  wallet={candidate.out_wallet_label}
+                  walletKind={candidate.out_wallet_kind}
+                  timestamp={candidate.out_occurred_at}
+                  txId={candidate.out_id}
+                />
+                <div
+                  className="flex justify-center md:pointer-events-none md:absolute md:left-1/2 md:top-1/2 md:z-10 md:-translate-x-1/2 md:-translate-y-1/2"
+                  aria-hidden="true"
+                >
+                  <div className="flex size-9 items-center justify-center rounded-full border border-border/70 bg-background/95 text-muted-foreground shadow-sm">
+                    <ArrowRight className="size-4" />
+                  </div>
+                </div>
+                <LegCard
+                  title="Incoming"
+                  asset={candidate.in_asset}
+                  amount={candidate.in_amount}
+                  wallet={candidate.in_wallet_label}
+                  walletKind={candidate.in_wallet_kind}
+                  timestamp={candidate.in_occurred_at}
+                  txId={candidate.in_id}
+                />
+              </div>
+
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div className="space-y-1">
+                  <Label>Kind</Label>
+                  <Select
+                    value={kind}
+                    onValueChange={(value) => onKindChange(candidate, value as PairKind)}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {PAIR_KIND_OPTIONS.map((option) => (
+                        <SelectItem key={option} value={option}>
+                          {option}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1">
+                  <Label>Policy</Label>
+                  <Select
+                    value={policy}
+                    onValueChange={(value) => onPolicyChange(candidate, value as PairPolicy)}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {PAIR_POLICY_OPTIONS.map((option) => (
+                        <SelectItem key={option} value={option}>
+                          {option}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
+              <div className="rounded-lg border bg-muted/20 p-3 text-sm">
+                <div className="font-medium">Review rationale</div>
+                <p className="mt-1 text-muted-foreground">
+                  Out {formatBtc(candidate.out_amount)} {candidate.out_asset}, in{" "}
+                  {formatBtc(candidate.in_amount)} {candidate.in_asset}; fee{" "}
+                  {formatSats(candidate.swap_fee_msat)}. Pairing creates a{" "}
+                  {policy} {kind} link for journal processing.
+                </p>
+                {candidate.rule_match ? (
+                  <p className="mt-2 text-xs text-muted-foreground">
+                    Rule match: {candidate.rule_match.rule_name ?? candidate.rule_match.rule_id}
+                  </p>
+                ) : null}
+              </div>
+            </div>
+            <SheetFooter className="border-t p-4 sm:flex-row sm:items-center sm:justify-between sm:px-6">
+              <Button
+                variant="outline"
+                onClick={() => onDismiss(candidate)}
+                disabled={dismissDisabled}
+              >
+                Dismiss
+              </Button>
+              <Button onClick={() => onPair(candidate)} disabled={pairDisabled}>
+                Pair
+              </Button>
+            </SheetFooter>
+          </>
+        ) : null}
+      </SheetContent>
+    </Sheet>
   );
 }
 
@@ -1682,36 +2037,6 @@ function RailBadge({ rail, asset }: RailBadgeProps) {
         </Fragment>
       ))}
     </span>
-  );
-}
-
-function SwapSummaryTile({
-  label,
-  value,
-  detail,
-  tone = "neutral",
-}: {
-  label: string;
-  value: number;
-  detail: string;
-  tone?: "neutral" | "good" | "warning" | "alert";
-}) {
-  const toneClass = {
-    neutral: "text-foreground",
-    good: "text-emerald-600",
-    warning: "text-amber-600",
-    alert: "text-rose-600",
-  }[tone];
-  return (
-    <div className="flex min-w-0 items-center justify-between gap-3 border-b p-3 text-left md:border-b-0 md:border-l">
-      <div className="min-w-0">
-        <div className="truncate text-xs font-medium text-muted-foreground">{label}</div>
-        <div className="truncate text-xs text-muted-foreground/80">{detail}</div>
-      </div>
-      <div className={cn("text-xl font-semibold tabular-nums tracking-tight", toneClass)}>
-        {value.toLocaleString("en-US")}
-      </div>
-    </div>
   );
 }
 
