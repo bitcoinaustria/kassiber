@@ -1282,7 +1282,10 @@ def build_parser() -> argparse.ArgumentParser:
         default=core_rates.RATE_SOURCE_COINGECKO,
         help=f"Rate source ({', '.join(core_rates.SUPPORTED_RATE_SOURCES)})",
     )
-    rates_sync.add_argument("--path", help="Local Kraken OHLCVT .csv or .zip path for --source kraken-csv")
+    rates_sync.add_argument(
+        "--path",
+        help="Local Kraken OHLCVT .csv, .zip, or extracted directory for --source kraken-csv",
+    )
 
     rates_latest = rates_sub.add_parser("latest")
     rates_latest.add_argument("pair")

@@ -1261,13 +1261,24 @@ function BackendSettingsPanel({
   const chooseKrakenArchive = async () => {
     setKrakenImportError(null);
     const selected = await pickFile({
-      title: "Choose Kraken OHLCVT archive",
+      title: "Choose Kraken OHLCVT CSV or ZIP",
       filters: [
         {
           name: "Kraken OHLCVT",
           extensions: ["zip", "csv"],
         },
       ],
+    });
+    if (selected) {
+      setKrakenArchivePath(selected);
+    }
+  };
+
+  const chooseKrakenDirectory = async () => {
+    setKrakenImportError(null);
+    const selected = await pickFile({
+      title: "Choose extracted Kraken OHLCVT folder",
+      directory: true,
     });
     if (selected) {
       setKrakenArchivePath(selected);
@@ -1283,14 +1294,18 @@ function BackendSettingsPanel({
       const selected = await pickFile({
         title:
           operation === "full"
-            ? "Choose Kraken full OHLCVT archive"
-            : "Choose Kraken update OHLCVT archive",
-        filters: [
-          {
-            name: "Kraken OHLCVT",
-            extensions: ["zip", "csv"],
-          },
-        ],
+            ? "Choose extracted Kraken OHLCVT folder"
+            : "Choose Kraken update OHLCVT CSV or ZIP",
+        directory: operation === "full",
+        filters:
+          operation === "full"
+            ? undefined
+            : [
+                {
+                  name: "Kraken OHLCVT",
+                  extensions: ["zip", "csv"],
+                },
+              ],
       });
       if (!selected) return;
       archivePath = selected;
@@ -1382,24 +1397,42 @@ function BackendSettingsPanel({
           <Input
             value={krakenArchivePath}
             onChange={(event) => setKrakenArchivePath(event.target.value)}
-            placeholder="~/Downloads/Kraken_OHLCVT.zip"
-            aria-label="Kraken CSV or ZIP path"
+            placeholder="~/Downloads/Kraken_OHLCVT.zip or extracted folder"
+            aria-label="Kraken CSV, ZIP, or folder path"
             disabled={isImportingKraken}
           />
-          <Button
-            type="button"
-            variant="outline"
-            onClick={() => void chooseKrakenArchive()}
-            disabled={!isFilePickerAvailable || isImportingKraken}
-            title={
-              isFilePickerAvailable
-                ? "Choose archive"
-                : "Use the path field in browser mode"
-            }
-          >
-            <Upload className="size-4" aria-hidden="true" />
-            Choose
-          </Button>
+          <div className="flex gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              className="flex-1 sm:flex-none"
+              onClick={() => void chooseKrakenArchive()}
+              disabled={!isFilePickerAvailable || isImportingKraken}
+              title={
+                isFilePickerAvailable
+                  ? "Choose CSV or ZIP"
+                  : "Use the path field in browser mode"
+              }
+            >
+              <Upload className="size-4" aria-hidden="true" />
+              File
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              className="flex-1 sm:flex-none"
+              onClick={() => void chooseKrakenDirectory()}
+              disabled={!isFilePickerAvailable || isImportingKraken}
+              title={
+                isFilePickerAvailable
+                  ? "Choose extracted folder"
+                  : "Use the path field in browser mode"
+              }
+            >
+              <FileInput className="size-4" aria-hidden="true" />
+              Folder
+            </Button>
+          </div>
         </div>
 
         <div className="mt-3 flex flex-col gap-2 sm:flex-row">

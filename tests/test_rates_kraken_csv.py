@@ -172,6 +172,41 @@ class KrakenCsvRatesTest(unittest.TestCase):
         count = conn.execute("SELECT COUNT(*) FROM rates_cache").fetchone()[0]
         self.assertEqual(count, 10)
 
+    def test_directory_pair_filter_ingests_extracted_archive(self):
+        archive_dir = self.tmp_path / "master_q4"
+        archive_dir.mkdir()
+        (archive_dir / "XBTEUR_1.csv").write_text(
+            XBTEUR_FIXTURE.read_text(encoding="utf-8"),
+            encoding="utf-8",
+        )
+        (archive_dir / "XBTUSD_1.csv").write_text(XBTUSD_CSV, encoding="utf-8")
+        (archive_dir / "BTCUSD_Daily_OHLC.csv").write_text(
+            "time,open,high,low,close,volume\n",
+            encoding="utf-8",
+        )
+
+        payload = self._run_json(
+            "rates",
+            "sync",
+            "--source",
+            "kraken-csv",
+            "--path",
+            str(archive_dir),
+            "--pair",
+            "BTC/EUR",
+        )
+
+        self.assertEqual(len(payload["data"]), 1)
+        self.assertEqual(payload["data"][0]["pair"], "BTC-EUR")
+        conn = self._connect()
+        pairs = [
+            row["pair"]
+            for row in conn.execute(
+                "SELECT DISTINCT pair FROM rates_cache ORDER BY pair"
+            ).fetchall()
+        ]
+        self.assertEqual(pairs, ["BTC-EUR"])
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -34,6 +34,7 @@ kassiber rates latest BTC-EUR
 kassiber rates range BTC-EUR --start 2025-01-01T00:00:00Z --end 2025-01-31T23:59:59Z --order asc
 kassiber rates sync --pair BTC-EUR --days 30
 kassiber rates sync --source kraken-csv --path ~/Downloads/Kraken_OHLCVT.zip --pair BTC/EUR
+kassiber rates sync --source kraken-csv --path ~/Downloads/master_q4 --pair BTC/EUR
 kassiber rates set BTC-EUR 2025-01-01T00:00:00Z 95000
 ```
 
@@ -48,13 +49,14 @@ timestamp.
 
 For historical minute-level backfills, download Kraken's OHLCVT archive from
 [Kraken's support article](https://support.kraken.com/articles/360047124832)
-and pass the local ZIP or CSV with `--source kraken-csv --path <file>`. Kassiber
-ingests only 1-minute Bitcoin pairs for v1, maps Kraken `XBT` filenames to
-`BTC-USD` / `BTC-EUR`, stores sparse rows only when Kraken reports a traded
-candle, and relies on re-ingesting the latest full or quarterly archive rather
-than fetching from Kraken automatically. The desktop Settings → Rate providers
-panel exposes the same local ingest as `Full history` and `Incremental update`
-actions; both use the idempotent `kraken-csv` upsert path.
+and pass the local ZIP, CSV, or extracted directory with
+`--source kraken-csv --path <path>`. Kassiber ingests only 1-minute Bitcoin
+pairs for v1, maps Kraken `XBT` filenames to `BTC-USD` / `BTC-EUR`, stores
+sparse rows only when Kraken reports a traded candle, and relies on
+re-ingesting the latest full or quarterly archive rather than fetching from
+Kraken automatically. The desktop Settings → Rate providers panel exposes the
+same local ingest as `Full history` and `Incremental update` actions; both use
+the idempotent `kraken-csv` upsert path.
 
 If pricing looks incomplete, sync rates and then re-run:
 

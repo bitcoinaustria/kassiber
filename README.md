@@ -461,7 +461,7 @@ Notable gaps today:
 
 - Austrian E 1kv CSV/PDF/XLSX export is review-gated and currently targets the ausländisch / self-custody Kennzahlen; the styled PDF output includes Steuerbericht-style summary/detail pages, holdings, Besonderheiten, explanations, a transaction appendix, a FinanzOnline-style Kennzahl summary, and FAQ, while the XLSX and CSV bundle use an `Übersicht`, numbered section tabs/files, and `Erläuterungen zum Steuerreport`; domestic-provider withheld KESt metadata is not modeled yet
 - full BTCPay invoice/payment provenance ingest is not implemented yet; BTCPay source refresh currently covers confirmed on-chain wallet history plus comments/labels
-- Kraken's local OHLCVT CSV archive is wired for BTC-USD / BTC-EUR historical rate backfills from the CLI and desktop Settings, but Bitstamp and other live exchange / FX providers are not wired as rate backends yet; exact exchange execution prices should come from source CSV/API imports with pricing provenance
+- Kraken's local OHLCVT CSV archive is wired for BTC-USD / BTC-EUR historical rate backfills from local CSVs, ZIPs, or extracted directories in the CLI and desktop Settings, but Bitstamp and other live exchange / FX providers are not wired as rate backends yet; exact exchange execution prices should come from source CSV/API imports with pricing provenance
 - descriptor/xpub source refresh through `bitcoinrpc` is not implemented yet
 - some Lightning node adapters are declared but do not sync yet
 - `custom` wallet import mapping is not implemented yet

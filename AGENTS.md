@@ -311,7 +311,7 @@ uv run python -m kassiber ai chat --help
 ## Known gaps
 
 - BTC-denominated amounts are stored as INTEGER msat in SQLite. Machine envelopes expose both `amount` (BTC float) and `amount_msat` (integer), and the same for `fee` / `quantity`. Fiat columns (`fiat_value`, `fiat_rate`, etc.) are still REAL.
-- Rates cache (`rates pairs/sync/latest/range/set`) stores BTC-USD / BTC-EUR samples from CoinGecko, local Kraken OHLCVT CSV archive ingest (`rates sync --source kraken-csv --path <csv-or-zip>`), or manual upsert. Kraken CSV ingest is local-file only, keeps 1-minute sparse candles, and stores the close as the lookup rate plus OHLCVT metadata. `journals process` can auto-fill missing transaction prices from the cache when a matching sample exists at or before the transaction timestamp, but reports still use stored transaction and journal pricing rather than querying the cache live.
+- Rates cache (`rates pairs/sync/latest/range/set`) stores BTC-USD / BTC-EUR samples from CoinGecko, local Kraken OHLCVT CSV archive ingest (`rates sync --source kraken-csv --path <csv-zip-or-directory>`), or manual upsert. Kraken CSV ingest is local-file only, keeps 1-minute sparse candles, and stores the close as the lookup rate plus OHLCVT metadata. `journals process` can auto-fill missing transaction prices from the cache when a matching sample exists at or before the transaction timestamp, but reports still use stored transaction and journal pricing rather than querying the cache live.
 - Phoenix Lightning wallet CSV import is implemented (`wallets import-phoenix`). River Bitcoin Activity / Account Activity CSV import is implemented (`wallets import-river` and `--source-format river_csv`).
 - No `custom` wallet kind CSV mapping DSL yet.
 - No account adjustments yet.

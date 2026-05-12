@@ -493,8 +493,15 @@ def _kraken_csv_members(path):
         raise AppError(
             f"Rate source path does not exist: {source_path}",
             code="not_found",
-            hint="Pass --path to a Kraken OHLCVT .csv file or .zip archive",
+            hint="Pass --path to a Kraken OHLCVT .csv file, .zip archive, or extracted directory",
         )
+    if source_path.is_dir():
+        for csv_path in sorted(source_path.glob("*.csv")):
+            if not csv_path.is_file():
+                continue
+            with csv_path.open("r", encoding="utf-8", newline="") as handle:
+                yield csv_path.name, handle
+        return
     if source_path.suffix.lower() == ".zip":
         with zipfile.ZipFile(source_path) as archive:
             for name in sorted(archive.namelist()):
