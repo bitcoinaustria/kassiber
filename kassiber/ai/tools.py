@@ -656,6 +656,294 @@ TOOL_CATALOG: tuple[ToolEntry, ...] = (
         daemon_kind="ui.maintenance.run",
         summary_template="Run AI maintenance",
     ),
+    ToolEntry(
+        name="ui.transfers.suggest",
+        description=(
+            "Read swap-candidate pairings the matcher infers from unpaired "
+            "transactions. Surfaces exact (payment_hash) and strong (time + "
+            "amount heuristic) candidates with computed swap_fee_msat and "
+            "conflict cluster ids. No DB writes."
+        ),
+        parameters={
+            "type": "object",
+            "additionalProperties": False,
+            "properties": {
+                "confidence": {
+                    "type": "string",
+                    "enum": ["exact", "strong"],
+                    "description": "Optional filter pinning to one confidence band.",
+                },
+                "method": {
+                    "type": "string",
+                    "enum": ["payment_hash", "heuristic"],
+                    "description": "Optional filter pinning to one match method.",
+                },
+                "asset_pair": {
+                    "type": "string",
+                    "description": "OUT-IN asset shape, e.g. 'LBTC-BTC' for a peg-out.",
+                },
+            },
+        },
+        kind_class="read_only",
+        wire_name="ui_transfers_suggest",
+        daemon_kind="ui.transfers.suggest",
+        summary_template="Read swap candidates",
+    ),
+    ToolEntry(
+        name="ui.transfers.list",
+        description=(
+            "Read active swap pairs (soft-deleted excluded) with their "
+            "computed swap_fee_msat, kind, policy, pair_source, and confidence."
+        ),
+        parameters=_EMPTY_OBJECT_SCHEMA,
+        kind_class="read_only",
+        wire_name="ui_transfers_list",
+        daemon_kind="ui.transfers.list",
+        summary_template="Read swap pairs",
+    ),
+    ToolEntry(
+        name="ui.transfers.rules.list",
+        description=(
+            "Read the active profile's swap auto-pair rules — predicates, "
+            "default kind/policy, and enabled state. No DB writes."
+        ),
+        parameters=_EMPTY_OBJECT_SCHEMA,
+        kind_class="read_only",
+        wire_name="ui_transfers_rules_list",
+        daemon_kind="ui.transfers.rules.list",
+        summary_template="Read swap rules",
+    ),
+    ToolEntry(
+        name="ui.saved_views.list",
+        description=(
+            "Read saved review-queue filters for the active profile, "
+            "optionally scoped to one surface (e.g. 'swap_candidates')."
+        ),
+        parameters={
+            "type": "object",
+            "additionalProperties": False,
+            "properties": {
+                "surface": {
+                    "type": "string",
+                    "description": "Optional surface label to filter on.",
+                },
+            },
+        },
+        kind_class="read_only",
+        wire_name="ui_saved_views_list",
+        daemon_kind="ui.saved_views.list",
+        summary_template="Read saved views",
+    ),
+    ToolEntry(
+        name="ui.transfers.pair",
+        description=(
+            "Pair one outbound + one inbound transaction after explicit "
+            "consent. Computes swap_fee_msat at pair time and invalidates "
+            "the journal so the next report read reflects the change."
+        ),
+        parameters={
+            "type": "object",
+            "additionalProperties": False,
+            "required": ["tx_out", "tx_in"],
+            "properties": {
+                "tx_out": {"type": "string", "description": "Outbound transaction id."},
+                "tx_in": {"type": "string", "description": "Inbound transaction id."},
+                "kind": {
+                    "type": "string",
+                    "enum": ["manual", "peg-in", "peg-out", "submarine-swap"],
+                },
+                "policy": {
+                    "type": "string",
+                    "enum": ["carrying-value", "taxable"],
+                },
+                "notes": {"type": "string"},
+            },
+        },
+        kind_class="mutating",
+        wire_name="ui_transfers_pair",
+        daemon_kind="ui.transfers.pair",
+        summary_template="Pair swap legs",
+    ),
+    ToolEntry(
+        name="ui.transfers.unpair",
+        description=(
+            "Soft-delete one swap pair after explicit consent. Sets "
+            "deleted_at so the audit row survives and the legs are immediately "
+            "eligible for re-pairing."
+        ),
+        parameters={
+            "type": "object",
+            "additionalProperties": False,
+            "required": ["pair_id"],
+            "properties": {
+                "pair_id": {"type": "string"},
+            },
+        },
+        kind_class="mutating",
+        wire_name="ui_transfers_unpair",
+        daemon_kind="ui.transfers.unpair",
+        summary_template="Unpair swap legs",
+    ),
+    ToolEntry(
+        name="ui.transfers.bulk_pair",
+        description=(
+            "Auto-pair every solo (non-conflicted) candidate at or above the "
+            "chosen confidence after explicit consent. Defaults to 'exact' "
+            "so only payment-hash matches auto-apply without further review."
+        ),
+        parameters={
+            "type": "object",
+            "additionalProperties": False,
+            "properties": {
+                "confidence": {
+                    "type": "string",
+                    "enum": ["exact", "strong"],
+                    "description": "Minimum confidence to auto-pair. Default 'exact'.",
+                },
+            },
+        },
+        kind_class="mutating",
+        wire_name="ui_transfers_bulk_pair",
+        daemon_kind="ui.transfers.bulk_pair",
+        summary_template="Bulk-pair swap candidates",
+    ),
+    ToolEntry(
+        name="ui.transfers.dismiss",
+        description=(
+            "Record a 'not a swap' dismissal so the matcher stops "
+            "suggesting this exact pair. Default expiry 90 days."
+        ),
+        parameters={
+            "type": "object",
+            "additionalProperties": False,
+            "required": ["tx_out", "tx_in"],
+            "properties": {
+                "tx_out": {"type": "string"},
+                "tx_in": {"type": "string"},
+                "reason": {"type": "string"},
+                "expires_in_days": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "description": "0 = never expire.",
+                },
+            },
+        },
+        kind_class="mutating",
+        wire_name="ui_transfers_dismiss",
+        daemon_kind="ui.transfers.dismiss",
+        summary_template="Dismiss swap candidate",
+    ),
+    ToolEntry(
+        name="ui.transfers.rules.create",
+        description=(
+            "Create one swap auto-pair rule after explicit consent. The "
+            "predicate is a JSON object whose non-empty fields constrain "
+            "which candidates auto-pair (out_wallet_id, in_wallet_id, "
+            "out_wallet_kind, in_wallet_kind, out_asset, in_asset, "
+            "max_fee_pct, min_confidence)."
+        ),
+        parameters={
+            "type": "object",
+            "additionalProperties": False,
+            "required": ["kind", "policy"],
+            "properties": {
+                "name": {"type": "string"},
+                "predicate": {"type": "object"},
+                "kind": {
+                    "type": "string",
+                    "enum": ["manual", "peg-in", "peg-out", "submarine-swap"],
+                },
+                "policy": {
+                    "type": "string",
+                    "enum": ["carrying-value", "taxable"],
+                },
+                "enabled": {"type": "boolean"},
+            },
+        },
+        kind_class="mutating",
+        wire_name="ui_transfers_rules_create",
+        daemon_kind="ui.transfers.rules.create",
+        summary_template="Create swap rule",
+    ),
+    ToolEntry(
+        name="ui.transfers.rules.delete",
+        description="Delete one swap auto-pair rule after explicit consent.",
+        parameters={
+            "type": "object",
+            "additionalProperties": False,
+            "required": ["rule_id"],
+            "properties": {"rule_id": {"type": "string"}},
+        },
+        kind_class="mutating",
+        wire_name="ui_transfers_rules_delete",
+        daemon_kind="ui.transfers.rules.delete",
+        summary_template="Delete swap rule",
+    ),
+    ToolEntry(
+        name="ui.transfers.rules.set_enabled",
+        description="Enable or disable one swap auto-pair rule after explicit consent.",
+        parameters={
+            "type": "object",
+            "additionalProperties": False,
+            "required": ["rule_id", "enabled"],
+            "properties": {
+                "rule_id": {"type": "string"},
+                "enabled": {"type": "boolean"},
+            },
+        },
+        kind_class="mutating",
+        wire_name="ui_transfers_rules_set_enabled",
+        daemon_kind="ui.transfers.rules.set_enabled",
+        summary_template="Toggle swap rule",
+    ),
+    ToolEntry(
+        name="ui.transfers.rules.apply",
+        description=(
+            "Apply all currently enabled swap auto-pair rules to non-conflicted "
+            "candidates after explicit consent. Writes reviewed pairs with "
+            "pair_source='rule_auto'."
+        ),
+        parameters=_EMPTY_OBJECT_SCHEMA,
+        kind_class="mutating",
+        wire_name="ui_transfers_rules_apply",
+        daemon_kind="ui.transfers.rules.apply",
+        summary_template="Apply swap rules",
+    ),
+    ToolEntry(
+        name="ui.saved_views.create",
+        description=(
+            "Save a named filter for one review surface (e.g. 'swap_candidates') "
+            "after explicit consent. The filter payload is opaque to the daemon."
+        ),
+        parameters={
+            "type": "object",
+            "additionalProperties": False,
+            "required": ["surface", "name"],
+            "properties": {
+                "surface": {"type": "string"},
+                "name": {"type": "string"},
+                "filter": {"type": "object"},
+            },
+        },
+        kind_class="mutating",
+        wire_name="ui_saved_views_create",
+        daemon_kind="ui.saved_views.create",
+        summary_template="Save filter view",
+    ),
+    ToolEntry(
+        name="ui.saved_views.delete",
+        description="Delete one saved view after explicit consent.",
+        parameters={
+            "type": "object",
+            "additionalProperties": False,
+            "required": ["view_id"],
+            "properties": {"view_id": {"type": "string"}},
+        },
+        kind_class="mutating",
+        wire_name="ui_saved_views_delete",
+        daemon_kind="ui.saved_views.delete",
+        summary_template="Delete saved view",
+    ),
 )
 
 TOOL_BY_NAME: dict[str, ToolEntry] = {}

@@ -33,6 +33,7 @@ from ..wallet_descriptors import (
     liquid_blinding_secret,
     liquid_plan_can_unblind,
 )
+from . import htlc_parser
 from .sync import WalletSyncState, normalize_backend_kind
 from .wallets import (
     load_wallet_descriptor_plan_from_config,
@@ -721,6 +722,71 @@ def sats_to_btc(value):
     return dec(value) / SATS_PER_BTC
 
 
+def _extract_payment_hash_from_witnesses(witness_lists):
+    """Opportunistically recover a Lightning payment_hash from spend witnesses.
+
+    ``witness_lists`` is an iterable where each element is the witness item
+    sequence for one transaction input (bytes-like values). The first input
+    whose witness shape matches a known Boltz HTLC claim wins; the rest
+    short-circuit. Returns the recovered ``payment_hash`` (64-char hex) or
+    ``None`` when no input reveals an HTLC claim.
+    """
+    for witness_items in witness_lists:
+        if not witness_items:
+            continue
+        extraction = htlc_parser.extract_from_claim_witness(witness_items)
+        if extraction is not None and extraction.payment_hash:
+            return extraction.payment_hash
+    return None
+
+
+def _payment_hash_fields(payment_hash):
+    """Build the payment-hash entries that should appear on a sync record.
+
+    Returns an empty dict when ``payment_hash`` is falsy so callers can
+    splat the result with ``**`` without polluting records that did not
+    surface an HTLC claim.
+    """
+    if not payment_hash:
+        return {}
+    return {
+        "payment_hash": payment_hash,
+        "payment_hash_source": "chain_script",
+    }
+
+
+def _esplora_witness_items(vin_entry):
+    """Decode an esplora vin's ``witness`` array of hex strings into bytes."""
+    witness = vin_entry.get("witness") if isinstance(vin_entry, dict) else None
+    if not witness:
+        return []
+    items = []
+    for entry in witness:
+        if isinstance(entry, str):
+            try:
+                items.append(bytes.fromhex(entry))
+            except ValueError:
+                continue
+        elif isinstance(entry, (bytes, bytearray)):
+            items.append(bytes(entry))
+    return items
+
+
+def _liquid_witness_items(vin):
+    """Pull the ``script_witness`` items from an embit Liquid input.
+
+    Returns a list of bytes-like items, or an empty list when the witness
+    container is missing or empty. Liquid inherits Bitcoin Script for HTLC
+    redeem scripts, so the same parser handles both chains.
+    """
+    witness = getattr(vin, "witness", None)
+    script_witness = getattr(witness, "script_witness", None) if witness is not None else None
+    items = getattr(script_witness, "items", None) if script_witness is not None else None
+    if not items:
+        return []
+    return [bytes(item) for item in items]
+
+
 def record_from_bitcoin_esplora_tx(tx, tracked_scripts, backend_name):
     received_sats = sum(
         dec(vout.get("value", 0))
@@ -752,6 +818,9 @@ def record_from_bitcoin_esplora_tx(tx, tracked_scripts, backend_name):
     block_time = (tx.get("status") or {}).get("block_time")
     occurred_at = timestamp_to_iso(block_time)
     confirmed_at = timestamp_to_iso(block_time, default=None)
+    payment_hash = _extract_payment_hash_from_witnesses(
+        _esplora_witness_items(vin) for vin in tx.get("vin", [])
+    )
     return {
         "txid": tx.get("txid"),
         "occurred_at": occurred_at,
@@ -766,6 +835,7 @@ def record_from_bitcoin_esplora_tx(tx, tracked_scripts, backend_name):
         "description": f"Synced from {backend_name}",
         "counterparty": None,
         "raw_json": json.dumps(tx, sort_keys=True),
+        **_payment_hash_fields(payment_hash),
     }
 
 
@@ -844,6 +914,10 @@ def record_components_from_liquid_tx(
             continue
         value_sats, asset_id = liquid_output_amount_asset_id(prev_output, descriptor_plan, target=target)
         net_sats[asset_id] -= value_sats
+    payment_hash = _extract_payment_hash_from_witnesses(
+        _liquid_witness_items(vin) for vin in tx.vin
+    )
+    payment_hash_fields = _payment_hash_fields(payment_hash)
     records = []
     all_assets = sorted(set(net_sats) | set(fee_sats))
     for asset_id in all_assets:
@@ -899,6 +973,7 @@ def record_components_from_liquid_tx(
                     ),
                     sort_keys=True,
                 ),
+                **payment_hash_fields,
             }
         )
     return records
@@ -1224,11 +1299,14 @@ def decode_raw_transaction(raw_hex):
             }
         )
     if has_witness:
-        for _ in range(input_count):
+        for index in range(input_count):
             witness_count, offset = read_varint(payload, offset)
+            items = []
             for _ in range(witness_count):
                 item_length, offset = read_varint(payload, offset)
+                items.append(payload[offset : offset + item_length].hex())
                 offset += item_length
+            vin[index]["witness"] = items
     locktime = int.from_bytes(payload[offset : offset + 4], "little")
     return {
         "version": version,
@@ -1293,6 +1371,9 @@ def record_from_electrum_tx(txid, tx, height, tracked_scripts, backend_name, tx_
         kind = "withdrawal" if amount > 0 else "fee"
     occurred_at = timestamp_to_iso(height)
     confirmed_at = None if occurred_at == UNKNOWN_OCCURRED_AT else occurred_at
+    payment_hash = _extract_payment_hash_from_witnesses(
+        _esplora_witness_items(vin) for vin in tx.get("vin", [])
+    )
     return {
         "txid": txid,
         "occurred_at": occurred_at,
@@ -1307,6 +1388,7 @@ def record_from_electrum_tx(txid, tx, height, tracked_scripts, backend_name, tx_
         "description": f"Synced from {backend_name}",
         "counterparty": None,
         "raw_json": json.dumps(json_ready(tx), sort_keys=True),
+        **_payment_hash_fields(payment_hash),
     }
 
 

@@ -337,7 +337,16 @@ Process journals and run reports:
 
 ```bash
 # If you have BTC <-> LBTC peg-ins / peg-outs or submarine swaps,
-# pair those legs first with `kassiber transfers pair`.
+# pair those legs first. The matcher surfaces unpaired candidates
+# (exact via Lightning payment_hash, strong via time + amount):
+python3 -m kassiber transfers suggest
+# Auto-apply every solo exact match without further review:
+python3 -m kassiber transfers bulk-pair --confidence exact
+# Or apply saved non-conflicted auto-pair rules:
+python3 -m kassiber transfers rules apply
+# Or pair one specific pair by id:
+python3 -m kassiber transfers pair --tx-out <out-id> --tx-in <in-id> \
+  --kind submarine-swap --policy carrying-value
 python3 -m kassiber journals process
 python3 -m kassiber reports summary
 python3 -m kassiber reports tax-summary

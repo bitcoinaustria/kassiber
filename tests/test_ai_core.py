@@ -164,6 +164,19 @@ class ToolCatalogPromptTest(unittest.TestCase):
             "ui_wallets_sync",
             "ui_maintenance_configure",
             "ui_maintenance_run",
+            "ui_transfers_suggest",
+            "ui_transfers_list",
+            "ui_transfers_rules_list",
+            "ui_saved_views_list",
+            "ui_transfers_pair",
+            "ui_transfers_unpair",
+            "ui_transfers_bulk_pair",
+            "ui_transfers_dismiss",
+            "ui_transfers_rules_create",
+            "ui_transfers_rules_delete",
+            "ui_transfers_rules_set_enabled",
+            "ui_saved_views_create",
+            "ui_saved_views_delete",
         }
         tool_names = {
             tool["function"]["name"]

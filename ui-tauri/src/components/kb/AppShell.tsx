@@ -7,6 +7,7 @@ import {
 } from "@tanstack/react-router";
 import {
   ArrowLeft,
+  ArrowLeftRight,
   ArrowRight,
   BadgeCheck,
   BarChart3,
@@ -181,7 +182,7 @@ const NAV_GROUPS: NavGroup[] = [
         icon: Wallet,
         href: "/connections",
         children: [
-          { label: "Connections", icon: WalletCards, href: "/connections" },
+          { label: "Wallets", icon: WalletCards, href: "/connections" },
           { label: "Source of Funds", icon: BadgeCheck, href: "/source-of-funds" },
         ],
       },
@@ -193,6 +194,7 @@ const NAV_GROUPS: NavGroup[] = [
     title: "Review",
     items: [
       { label: "Quarantine", icon: ShieldAlert, href: "/quarantine" },
+      { label: "Swaps", icon: ArrowLeftRight, href: "/swaps" },
       { label: "Journals", icon: BookOpen, href: "/journals" },
       { label: "Tax Events", icon: CircleDollarSign, href: "/tax-events" },
     ],
@@ -203,18 +205,18 @@ const ROUTE_META: Array<[string, RouteMeta]> = [
   [
     "/connections/",
     {
-      title: "Connection Detail",
+      title: "Wallet Detail",
       icon: Wallet,
-      searchLabel: "Search connections",
+      searchLabel: "Search wallets",
       searchPlaceholder: "Search wallets, books...",
     },
   ],
   [
     "/connections",
     {
-      title: "Connections",
+      title: "Wallets",
       icon: Wallet,
-      searchLabel: "Search connections",
+      searchLabel: "Search wallets",
       searchPlaceholder: "Search wallets, imports, backends...",
     },
   ],
@@ -291,6 +293,15 @@ const ROUTE_META: Array<[string, RouteMeta]> = [
     },
   ],
   [
+    "/swaps",
+    {
+      title: "Swap candidates",
+      icon: ArrowLeftRight,
+      searchLabel: "Search swap candidates",
+      searchPlaceholder: "Search wallet, asset pair, txid...",
+    },
+  ],
+  [
     "/transactions",
     {
       title: "Transactions",
@@ -336,7 +347,7 @@ const STATIC_SEARCH_RESULTS: SearchResult[] = [
   },
   {
     id: "route:connections",
-    title: "Connections",
+    title: "Wallets",
     detail: "Wallets, imports, backends, and sync",
     keywords: ["connections", "wallets", "xpub", "backend", "sync"],
     to: "/connections",

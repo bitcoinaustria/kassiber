@@ -136,6 +136,8 @@ CREATE TABLE IF NOT EXISTS transactions (
     note TEXT,
     excluded INTEGER NOT NULL DEFAULT 0,
     raw_json TEXT NOT NULL DEFAULT '{}',
+    payment_hash TEXT,
+    payment_hash_source TEXT,
     created_at TEXT NOT NULL
 );
 
@@ -202,10 +204,59 @@ CREATE TABLE IF NOT EXISTS transaction_pairs (
     kind TEXT NOT NULL DEFAULT 'manual',
     policy TEXT NOT NULL DEFAULT 'carrying-value',
     notes TEXT,
-    created_at TEXT NOT NULL,
-    UNIQUE (profile_id, out_transaction_id),
-    UNIQUE (profile_id, in_transaction_id)
+    swap_fee_msat INTEGER,
+    swap_fee_kind TEXT,
+    confidence_at_pair TEXT,
+    pair_source TEXT,
+    deleted_at TEXT,
+    created_at TEXT NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS transaction_pair_dismissals (
+    id TEXT PRIMARY KEY,
+    workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+    profile_id TEXT NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+    out_transaction_id TEXT NOT NULL REFERENCES transactions(id) ON DELETE CASCADE,
+    in_transaction_id TEXT NOT NULL REFERENCES transactions(id) ON DELETE CASCADE,
+    reason TEXT,
+    created_at TEXT NOT NULL,
+    expires_at TEXT,
+    UNIQUE (profile_id, out_transaction_id, in_transaction_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_transaction_pair_dismissals_profile
+    ON transaction_pair_dismissals(profile_id, expires_at);
+
+CREATE TABLE IF NOT EXISTS swap_matching_rules (
+    id TEXT PRIMARY KEY,
+    workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+    profile_id TEXT NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+    name TEXT,
+    predicate_json TEXT NOT NULL DEFAULT '{}',
+    kind TEXT NOT NULL DEFAULT 'manual',
+    policy TEXT NOT NULL DEFAULT 'carrying-value',
+    enabled INTEGER NOT NULL DEFAULT 1,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_swap_matching_rules_profile_enabled
+    ON swap_matching_rules(profile_id, enabled);
+
+CREATE TABLE IF NOT EXISTS saved_views (
+    id TEXT PRIMARY KEY,
+    workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+    profile_id TEXT NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+    surface TEXT NOT NULL,
+    name TEXT NOT NULL,
+    filter_json TEXT NOT NULL DEFAULT '{}',
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    UNIQUE (profile_id, surface, name)
+);
+
+CREATE INDEX IF NOT EXISTS idx_saved_views_profile_surface
+    ON saved_views(profile_id, surface);
 
 CREATE TABLE IF NOT EXISTS bip329_labels (
     id TEXT PRIMARY KEY,
@@ -690,6 +741,159 @@ def ensure_schema_compat(conn):
     _drop_legacy_source_funds_recipients_unique(conn)
     _migrate_msat_columns(conn)
     _backfill_liquid_asset_codes(conn)
+    _ensure_swap_matching_schema(conn)
+
+
+def _ensure_swap_matching_schema(conn):
+    """Add swap-matching columns + partial-unique indexes for transaction_pairs.
+
+    Splits into four ordered steps:
+      1. Drop the legacy table-level ``UNIQUE`` constraints on
+         ``transaction_pairs`` so soft-deleted pairs don't block re-pairing the
+         same legs. Rebuilds the table only when the legacy constraints are
+         actually present.
+      2. ``ensure_column`` the new nullable columns on existing tables.
+      3. Index ``transactions.payment_hash`` for the matcher's exact-lookup
+         path.
+      4. Re-create the active-pair partial unique indexes that replace the
+         legacy table-level constraints.
+    """
+    _migrate_legacy_transaction_pairs_uniques(conn)
+    ensure_column(conn, "transactions", "payment_hash", "TEXT")
+    ensure_column(conn, "transactions", "payment_hash_source", "TEXT")
+    ensure_column(conn, "transaction_pairs", "swap_fee_msat", "INTEGER")
+    ensure_column(conn, "transaction_pairs", "swap_fee_kind", "TEXT")
+    ensure_column(conn, "transaction_pairs", "confidence_at_pair", "TEXT")
+    ensure_column(conn, "transaction_pairs", "pair_source", "TEXT")
+    ensure_column(conn, "transaction_pairs", "deleted_at", "TEXT")
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_transactions_payment_hash "
+        "ON transactions(payment_hash) WHERE payment_hash IS NOT NULL"
+    )
+    conn.execute(
+        "CREATE UNIQUE INDEX IF NOT EXISTS idx_transaction_pairs_active_out "
+        "ON transaction_pairs(profile_id, out_transaction_id) WHERE deleted_at IS NULL"
+    )
+    conn.execute(
+        "CREATE UNIQUE INDEX IF NOT EXISTS idx_transaction_pairs_active_in "
+        "ON transaction_pairs(profile_id, in_transaction_id) WHERE deleted_at IS NULL"
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_transaction_pairs_profile_active "
+        "ON transaction_pairs(profile_id) WHERE deleted_at IS NULL"
+    )
+    conn.commit()
+    _backfill_payment_hash_from_raw_json(conn)
+
+
+def _backfill_payment_hash_from_raw_json(conn):
+    """Populate ``transactions.payment_hash`` for rows imported before this
+    column existed.
+
+    Phoenix CSV exports carry a top-level ``payment_hash`` field which the
+    importer stashes verbatim into ``raw_json``. Surfacing it as a queryable
+    column lets the matcher use exact payment-hash equality to pair the
+    Lightning leg of a submarine swap with the on-chain leg deterministically.
+
+    Strictly conservative — only updates rows where ``payment_hash`` is NULL
+    and ``raw_json`` parses as JSON with a top-level ``payment_hash`` that is
+    exactly 64 lowercase hex characters. Tags such rows with
+    ``payment_hash_source = 'importer_backfill'`` so future audits can tell
+    them apart from in-flight importer writes.
+    """
+    rows = conn.execute(
+        """
+        SELECT id, raw_json
+        FROM transactions
+        WHERE payment_hash IS NULL
+          AND raw_json LIKE '%payment_hash%'
+        """
+    ).fetchall()
+    if not rows:
+        return
+    updates = []
+    for row in rows:
+        try:
+            payload = json.loads(row["raw_json"] or "{}")
+        except (TypeError, ValueError, json.JSONDecodeError):
+            continue
+        if not isinstance(payload, dict):
+            continue
+        candidate = payload.get("payment_hash")
+        if not isinstance(candidate, str):
+            continue
+        text = candidate.strip().lower()
+        if len(text) != 64:
+            continue
+        try:
+            bytes.fromhex(text)
+        except ValueError:
+            continue
+        updates.append((text, row["id"]))
+    if not updates:
+        return
+    conn.executemany(
+        "UPDATE transactions SET payment_hash = ?, payment_hash_source = 'importer_backfill' "
+        "WHERE id = ? AND payment_hash IS NULL",
+        updates,
+    )
+    conn.commit()
+
+
+def _migrate_legacy_transaction_pairs_uniques(conn):
+    """Replace the table-level ``UNIQUE`` constraints with partial indexes.
+
+    The original ``transaction_pairs`` schema declared ``UNIQUE (profile_id,
+    out_transaction_id)`` / ``UNIQUE (profile_id, in_transaction_id)`` directly
+    on the table, which forces hard deletes when a user wants to unpair and
+    re-pair the same legs. Replacing those with partial unique indexes
+    (``WHERE deleted_at IS NULL``) lets us soft-delete pairs without losing
+    the constraint on active rows.
+    """
+    row = conn.execute(
+        "SELECT sql FROM sqlite_master WHERE type='table' AND name='transaction_pairs'"
+    ).fetchone()
+    if not row:
+        return
+    table_sql = (row["sql"] if hasattr(row, "keys") else row[0]) or ""
+    if "UNIQUE (profile_id, out_transaction_id)" not in table_sql:
+        return
+    previous_fk_state = conn.execute("PRAGMA foreign_keys").fetchone()[0]
+    conn.execute("PRAGMA foreign_keys = OFF")
+    try:
+        conn.execute("ALTER TABLE transaction_pairs RENAME TO transaction_pairs_legacy")
+        conn.execute(
+            """
+            CREATE TABLE transaction_pairs (
+                id TEXT PRIMARY KEY,
+                workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+                profile_id TEXT NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+                out_transaction_id TEXT NOT NULL REFERENCES transactions(id) ON DELETE CASCADE,
+                in_transaction_id TEXT NOT NULL REFERENCES transactions(id) ON DELETE CASCADE,
+                kind TEXT NOT NULL DEFAULT 'manual',
+                policy TEXT NOT NULL DEFAULT 'carrying-value',
+                notes TEXT,
+                created_at TEXT NOT NULL
+            )
+            """
+        )
+        conn.execute(
+            """
+            INSERT INTO transaction_pairs
+            (id, workspace_id, profile_id, out_transaction_id, in_transaction_id,
+             kind, policy, notes, created_at)
+            SELECT id, workspace_id, profile_id, out_transaction_id, in_transaction_id,
+                   kind, policy, notes, created_at
+            FROM transaction_pairs_legacy
+            """
+        )
+        conn.execute("DROP TABLE transaction_pairs_legacy")
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.execute(f"PRAGMA foreign_keys = {'ON' if previous_fk_state else 'OFF'}")
 
 
 def _backfill_source_funds_target_external_id(conn):

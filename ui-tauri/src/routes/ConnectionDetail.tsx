@@ -172,7 +172,7 @@ export function ConnectionDetail() {
         <Button asChild variant="outline" size="sm">
           <Link to="/connections">
             <ArrowLeft className="size-4" aria-hidden="true" />
-            Back to connections
+            Back to wallets
           </Link>
         </Button>
       </div>
@@ -483,7 +483,7 @@ function ConnectionDetailView({
         <CardContent className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex min-w-0 items-center gap-3">
             <Button asChild variant="outline" size="icon" className="shrink-0">
-              <Link to="/connections" aria-label="Back to connections">
+              <Link to="/connections" aria-label="Back to wallets">
                 <ArrowLeft className="size-4" aria-hidden="true" />
               </Link>
             </Button>
@@ -623,7 +623,7 @@ function ConnectionDetailView({
             </Table>
           </CardContent>
           <div className="border-t px-6 py-3 text-xs text-muted-foreground">
-            Add more routes from <strong>Add connection</strong> &rarr;{" "}
+            Add more routes from <strong>Add wallet</strong> &rarr;{" "}
             <em>BTCPay Server</em> &rarr; <em>Map existing wallets</em>, or via{" "}
             <code>kassiber wallets attach-btcpay</code>. Use Edit to clear all
             routes from this wallet.
@@ -925,7 +925,7 @@ function ConnectionDetailView({
                     <span className="text-xs text-muted-foreground">
                       Removes all {walletProvenanceRoutes.length} stored
                       route(s). Descriptor/file sync remains the balance
-                      source. Re-add routes from Add connection.
+                      source. Re-add routes from Add wallet.
                     </span>
                   </span>
                 </label>

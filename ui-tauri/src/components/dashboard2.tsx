@@ -19,6 +19,7 @@ import {
   X,
 } from "lucide-react";
 import * as React from "react";
+import { useNavigate } from "@tanstack/react-router";
 import {
   Bar,
   BarChart,
@@ -42,15 +43,6 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import {
-  Dialog,
-  DialogClose,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import {
   Select,
@@ -1151,22 +1143,6 @@ function buildSwapCandidates(records: Transaction[]): SwapCandidate[] {
   return candidates;
 }
 
-function swapCandidateDelta(candidate: SwapCandidate) {
-  const inDate = parseTransactionDate(candidate.in.date);
-  const outDate = parseTransactionDate(candidate.out.date);
-  if (!inDate || !outDate) return null;
-  return Math.abs(inDate.getTime() - outDate.getTime());
-}
-
-function formatCandidateDelta(candidate: SwapCandidate) {
-  const deltaMs = swapCandidateDelta(candidate);
-  if (deltaMs === null) return "Unknown timing";
-  const minutes = Math.round(deltaMs / 60_000);
-  if (minutes < 60) return `${minutes} min apart`;
-  const hours = Math.round((minutes / 60) * 10) / 10;
-  return `${hours} h apart`;
-}
-
 function buildFlowChartRows(
   records: Transaction[],
   period: PeriodKey,
@@ -1298,7 +1274,7 @@ const TransactionWorkbench = ({
   onFlowSelectionChange: (selection: FlowChartSelection) => void;
   chartSelection: FlowChartSelection | null;
 }) => {
-  const [swapDialogOpen, setSwapDialogOpen] = React.useState(false);
+  const navigate = useNavigate();
   const [chartMetric, setChartMetric] =
     React.useState<FlowChartMetric>("amount");
   const [chartMode, setChartMode] = React.useState<FlowChartMode>("external");
@@ -1395,6 +1371,9 @@ const TransactionWorkbench = ({
     },
     [chartMode, onFlowSelectionChange, period],
   );
+  const openSwapWorkflow = React.useCallback(() => {
+    void navigate({ to: "/swaps" });
+  }, [navigate]);
   const networkRows = buildBreakdown(records, (txn) => txn.paymentMethod);
   const walletRows = buildBreakdown(records, (txn) => txn.wallet ?? "Unassigned");
   const maxNetworkValue = Math.max(...networkRows.map((row) => row.eur), 1);
@@ -1438,8 +1417,8 @@ const TransactionWorkbench = ({
       icon: RefreshCw,
       tone: swapCandidateTotals.count > 0 ? "text-amber-600" : "text-muted-foreground",
       onClick:
-        swapCandidateTotals.count > 0
-          ? () => setSwapDialogOpen(true)
+        swaps.count > 0
+          ? openSwapWorkflow
           : undefined,
     },
     {
@@ -1759,141 +1738,16 @@ const TransactionWorkbench = ({
               <QualityRow
                 label="Swap candidates"
                 value={swapCandidateTotals.count}
-                onClick={
-                  swapCandidateTotals.count > 0
-                    ? () => setSwapDialogOpen(true)
-                    : undefined
-                }
+                onClick={openSwapWorkflow}
               />
             </div>
           </div>
         </div>
       </section>
 
-      <Dialog open={swapDialogOpen} onOpenChange={setSwapDialogOpen}>
-        <DialogContent className="sm:max-w-2xl">
-          <DialogHeader>
-            <DialogTitle>Swap candidates</DialogTitle>
-            <DialogDescription>
-              Cross-wallet, cross-network legs that match by time and amount.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="max-h-[60vh] space-y-3 overflow-y-auto pr-1">
-            {swapCandidates.map((candidate, index) => (
-              <div
-                key={`${candidate.out.id}-${candidate.in.id}`}
-                className="rounded-lg border bg-background p-3"
-              >
-                <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-                  <div>
-                    <p className="text-sm font-medium">Candidate {index + 1}</p>
-                    <p className="text-xs text-muted-foreground">
-                      {formatCandidateDelta(candidate)}
-                    </p>
-                  </div>
-                  <CurrencyToggleText
-                    className={cn(
-                      "text-right text-sm font-semibold",
-                      blurClass(hideSensitive),
-                    )}
-                  >
-                    {formatDisplayMoney(candidate.eur, candidate.btc, currency)}
-                  </CurrencyToggleText>
-                </div>
-                <div className="grid gap-2 sm:grid-cols-2">
-                  <SwapCandidateLeg
-                    title="Outgoing leg"
-                    transaction={candidate.out}
-                    currency={currency}
-                    hideSensitive={hideSensitive}
-                  />
-                  <SwapCandidateLeg
-                    title="Incoming leg"
-                    transaction={candidate.in}
-                    currency={currency}
-                    hideSensitive={hideSensitive}
-                  />
-                </div>
-              </div>
-            ))}
-          </div>
-          <DialogFooter>
-            <DialogClose asChild>
-              <Button type="button" variant="outline">
-                Close
-              </Button>
-            </DialogClose>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
     </>
   );
 };
-
-function SwapCandidateLeg({
-  title,
-  transaction,
-  hideSensitive,
-  currency,
-}: {
-  title: string;
-  transaction: Transaction;
-  hideSensitive: boolean;
-  currency: Currency;
-}) {
-  return (
-    <div className="min-w-0 rounded-md border bg-muted/25 p-3 text-xs">
-      <div className="mb-2 flex items-center justify-between gap-2">
-        <span className="font-medium">{title}</span>
-        <span className="rounded-md border bg-background px-1.5 py-0.5 text-muted-foreground">
-          {transaction.paymentMethod}
-        </span>
-      </div>
-      <div className="space-y-1.5">
-        <div className="flex justify-between gap-3">
-          <span className="text-muted-foreground">Wallet</span>
-          <span className={cn("truncate text-right", blurClass(hideSensitive))}>
-            {transaction.wallet}
-          </span>
-        </div>
-        <div className="flex justify-between gap-3">
-          <span className="text-muted-foreground">Date</span>
-          <span>{transaction.date}</span>
-        </div>
-        <div className="flex justify-between gap-3">
-          <span className="text-muted-foreground">Amount</span>
-          <CurrencyToggleText
-            className={cn("font-medium", blurClass(hideSensitive))}
-          >
-            {formatDisplayMoney(
-              transaction.amount,
-              transactionBtc(transaction),
-              currency,
-            )}
-          </CurrencyToggleText>
-        </div>
-        <div className="flex justify-between gap-3">
-          <span className="text-muted-foreground">Label</span>
-          <span className={cn("truncate text-right", blurClass(hideSensitive))}>
-            {transaction.tag || "Unlabeled"}
-          </span>
-        </div>
-        <div className="flex justify-between gap-3">
-          <span className="text-muted-foreground">Tx</span>
-          <span
-            className={cn(
-              "truncate text-right font-mono",
-              blurClass(hideSensitive),
-            )}
-          >
-            {transaction.txnId}
-          </span>
-        </div>
-      </div>
-    </div>
-  );
-}
 
 function FlowTooltip({
   active,

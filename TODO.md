@@ -407,7 +407,15 @@ and [docs/plan/04-desktop-ui.md](docs/plan/04-desktop-ui.md).
 - [ ] Accountant-facing export of matched BTC subledger rows with document references
 - [ ] Opt-in local AI extraction and tie-breaking only after deterministic matching is solid
 - [ ] Richer transfer pairing for multi-leg self-transfers
-- [ ] Better cross-asset transfer accounting beyond audit metadata
+- [x] Better cross-asset transfer accounting beyond audit metadata
+  (matcher + rules + saved views + `/swaps` review queue land swap
+  pairing end-to-end; AT carrying-value continues through rp2; generic
+  profiles still SELL + BUY pending upstream rp2 multi-asset carry).
+- [ ] Daemon kind for ``detect_repeating_patterns`` + "Create rule from
+  this pattern?" prompt in the swap review UI (pattern-detector helper
+  already exists in `kassiber/core/swap_rules.py`).
+- [ ] Promote bitcoinrpc-synced wallets to opportunistic HTLC enrichment
+  via a per-tx `getrawtransaction` fetch when payment_hash is missing.
 - [ ] Revisit per-wallet basis attribution if a jurisdiction ever needs
   physical-lot answers
 - [ ] Adopt a per-project storage layout: one SQLite DB per project,
