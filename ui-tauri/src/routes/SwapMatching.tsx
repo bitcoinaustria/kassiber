@@ -669,9 +669,6 @@ export function SwapMatching() {
       <Collapsible open={rulesExpanded} onOpenChange={setRulesExpanded}>
         <header className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
           <div className="min-w-0 space-y-1">
-            <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-              {counts.total} candidates · {counts.exact} exact · {counts.conflicts} conflicts
-            </p>
             <h1 className="text-2xl font-semibold tracking-tight">Swap candidates</h1>
             <p className="max-w-3xl text-sm text-muted-foreground">
               Review likely Lightning, Liquid, and on-chain legs before they
@@ -696,19 +693,10 @@ export function SwapMatching() {
                 <span>Rules {enabledRuleCount}/{rules.length}</span>
               </Button>
             </CollapsibleTrigger>
-            <Button
-              size="sm"
-              className="h-9"
-              variant="outline"
-              onClick={() => setCreateRuleOpen(true)}
-            >
-              <Plus className="size-3" />
-              <span>New rule</span>
-            </Button>
           </div>
         </header>
 
-        <section className="grid grid-cols-2 overflow-hidden rounded-xl border bg-card md:grid-cols-4">
+        <section className="grid grid-cols-2 overflow-hidden rounded-lg border bg-card md:grid-cols-4">
           <SwapSummaryTile label="Candidates" value={counts.total} detail={`${candidates.length} visible`} />
           <SwapSummaryTile label="Exact" value={counts.exact} detail="payment hash" tone="good" />
           <SwapSummaryTile label="Strong" value={counts.strong} detail="time + amount" tone="warning" />
@@ -787,15 +775,6 @@ export function SwapMatching() {
                   </Button>
                 </>
               ) : null}
-              <Button
-                variant="ghost"
-                size="sm"
-                className="h-8 shrink-0 px-2"
-                onClick={() => setHelpOpen(true)}
-                aria-label="Show keyboard shortcuts"
-              >
-                ?
-              </Button>
             </div>
             <div className="flex shrink-0 items-center justify-end gap-2">
               {ruleSolo.length > 0 ? (
@@ -905,7 +884,19 @@ export function SwapMatching() {
           ) : null}
 
           <CollapsibleContent>
-            <div className="space-y-1 border-t bg-muted/10 p-2 text-xs">
+            <div className="space-y-2 border-t bg-muted/10 p-2 text-xs">
+              <div className="flex items-center justify-between gap-2">
+                <span className="font-medium">Auto-pair rules</span>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="h-7 text-xs"
+                  onClick={() => setCreateRuleOpen(true)}
+                >
+                  <Plus className="size-3" />
+                  <span>New rule</span>
+                </Button>
+              </div>
               {rules.length === 0 ? (
                 <p className="text-muted-foreground">
                   No auto-pair rules yet. Rules apply when a candidate matches
@@ -1706,12 +1697,14 @@ function SwapSummaryTile({
     alert: "text-rose-600",
   }[tone];
   return (
-    <div className="min-w-0 space-y-2 border-b p-3 text-left sm:p-4 md:border-b-0 md:border-l">
-      <div className="truncate text-xs text-muted-foreground">{label}</div>
-      <div className={cn("text-2xl font-semibold tabular-nums tracking-tight", toneClass)}>
+    <div className="flex min-w-0 items-center justify-between gap-3 border-b p-3 text-left md:border-b-0 md:border-l">
+      <div className="min-w-0">
+        <div className="truncate text-xs font-medium text-muted-foreground">{label}</div>
+        <div className="truncate text-xs text-muted-foreground/80">{detail}</div>
+      </div>
+      <div className={cn("text-xl font-semibold tabular-nums tracking-tight", toneClass)}>
         {value.toLocaleString("en-US")}
       </div>
-      <div className="truncate text-xs text-muted-foreground">{detail}</div>
     </div>
   );
 }
