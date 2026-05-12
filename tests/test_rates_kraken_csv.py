@@ -7,6 +7,7 @@ import unittest
 import zipfile
 from pathlib import Path
 
+from kassiber.core.rates import get_cached_rate_at_or_before
 from kassiber.daemon import _rates_kraken_csv_import_payload
 from kassiber.db import open_db
 
@@ -75,8 +76,8 @@ class KrakenCsvRatesTest(unittest.TestCase):
         self.assertEqual(summary["pair"], "BTC-EUR")
         self.assertEqual(summary["source"], "kraken-csv")
         self.assertEqual(summary["samples"], 10)
-        self.assertEqual(summary["first_timestamp"], "2024-05-01T00:00:00Z")
-        self.assertEqual(summary["last_timestamp"], "2024-05-01T00:09:00Z")
+        self.assertEqual(summary["first_timestamp"], "2024-05-01T00:01:00Z")
+        self.assertEqual(summary["last_timestamp"], "2024-05-01T00:10:00Z")
 
         conn = self._connect()
         row = conn.execute(
@@ -87,7 +88,7 @@ class KrakenCsvRatesTest(unittest.TestCase):
             FROM rates_cache
             WHERE timestamp = ?
             """,
-            ("2024-05-01T00:03:00Z",),
+            ("2024-05-01T00:04:00Z",),
         ).fetchone()
         self.assertEqual(row["pair"], "BTC-EUR")
         self.assertEqual(row["source"], "kraken-csv")
@@ -100,6 +101,14 @@ class KrakenCsvRatesTest(unittest.TestCase):
         self.assertEqual(row["close_rate_exact"], "60018.75")
         self.assertEqual(row["volume_exact"], "0")
         self.assertEqual(row["trades"], 0)
+
+        cached = get_cached_rate_at_or_before(
+            conn,
+            "BTC-EUR",
+            "2024-05-01T00:03:30Z",
+        )
+        self.assertEqual(cached["timestamp"], "2024-05-01T00:03:00Z")
+        self.assertEqual(cached["rate_exact"], "60020.00")
 
     def test_reingest_is_idempotent(self):
         for _ in range(2):

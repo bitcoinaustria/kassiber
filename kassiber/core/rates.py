@@ -559,7 +559,11 @@ def _parse_kraken_csv_row(row, member_name, line_number):
         cell.strip() for cell in row
     ]
     try:
-        timestamp = _iso_z(datetime.fromtimestamp(int(timestamp_raw), tz=timezone.utc))
+        timestamp_seconds = int(timestamp_raw)
+        timestamp = _iso_z(datetime.fromtimestamp(timestamp_seconds, tz=timezone.utc))
+        close_timestamp = _iso_z(
+            datetime.fromtimestamp(timestamp_seconds + 60, tz=timezone.utc)
+        )
         open_value = pricing.decimal_from_exact(open_raw)
         high_value = pricing.decimal_from_exact(high_raw)
         low_value = pricing.decimal_from_exact(low_raw)
@@ -576,6 +580,7 @@ def _parse_kraken_csv_row(row, member_name, line_number):
         raise AppError(f"{member_name}:{line_number}: trades must be non-negative", code="validation")
     return {
         "timestamp": timestamp,
+        "close_timestamp": close_timestamp,
         "open": open_raw,
         "high": high_raw,
         "low": low_raw,
@@ -642,7 +647,7 @@ def _sync_rates_kraken_csv(conn, pair=None, path=None):
                 continue
             summary["samples"] += 1
             summary["rows"] += 1
-            ts = candle["timestamp"]
+            ts = candle["close_timestamp"]
             if summary["first_timestamp"] is None or ts < summary["first_timestamp"]:
                 summary["first_timestamp"] = ts
             if summary["last_timestamp"] is None or ts > summary["last_timestamp"]:
