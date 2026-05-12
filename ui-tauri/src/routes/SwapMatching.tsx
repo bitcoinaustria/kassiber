@@ -106,6 +106,13 @@ const METHOD_OPTIONS = [
   { value: "payment_hash", label: "Payment hash" },
   { value: "heuristic", label: "Time + amount" },
 ] as const;
+const ASSET_PAIR_OPTIONS = [
+  { value: "all", label: "Any route" },
+  { value: "BTC-LBTC", label: "BTC → LBTC" },
+  { value: "LBTC-BTC", label: "LBTC → BTC" },
+  { value: "BTC-BTC", label: "BTC → BTC" },
+  { value: "LBTC-LBTC", label: "LBTC → LBTC" },
+] as const;
 
 type PairKind = (typeof PAIR_KIND_OPTIONS)[number];
 type PairPolicy = (typeof PAIR_POLICY_OPTIONS)[number];
@@ -285,7 +292,7 @@ function railForLeg(asset: string, walletKind: string): SwapRail {
 export function SwapMatching() {
   const [confidence, setConfidence] = useState<string>("all");
   const [method, setMethod] = useState<string>("all");
-  const [assetPair, setAssetPair] = useState<string>("");
+  const [assetPair, setAssetPair] = useState<string>("all");
   const [overrides, setOverrides] = useState<
     Record<string, { kind?: PairKind; policy?: PairPolicy }>
   >({});
@@ -327,7 +334,7 @@ export function SwapMatching() {
     const next: Record<string, unknown> = {};
     if (confidence !== "all") next.confidence = confidence;
     if (method !== "all") next.method = method;
-    if (assetPair.trim()) next.asset_pair = assetPair.trim().toUpperCase();
+    if (assetPair !== "all") next.asset_pair = assetPair;
     return next;
   }, [confidence, method, assetPair]);
 
@@ -357,18 +364,16 @@ export function SwapMatching() {
   const [cursorIndex, setCursorIndex] = useState(0);
   const [helpOpen, setHelpOpen] = useState(false);
   const [detailCandidate, setDetailCandidate] = useState<SwapCandidate | null>(null);
-  const filterInputRef = useRef<HTMLInputElement | null>(null);
-
   const savedViews = savedViewsQuery.data?.data?.views ?? [];
   const rules = rulesQuery.data?.data?.rules ?? [];
   const enabledRuleCount = rules.filter((rule) => rule.enabled).length;
 
-  const filterIsDirty = confidence !== "all" || method !== "all" || assetPair.trim() !== "";
+  const filterIsDirty = confidence !== "all" || method !== "all" || assetPair !== "all";
 
   const applySavedView = (view: SavedView) => {
     setConfidence(typeof view.filter.confidence === "string" ? view.filter.confidence : "all");
     setMethod(typeof view.filter.method === "string" ? view.filter.method : "all");
-    setAssetPair(typeof view.filter.asset_pair === "string" ? view.filter.asset_pair : "");
+    setAssetPair(typeof view.filter.asset_pair === "string" ? view.filter.asset_pair : "all");
   };
 
   const commitSaveView = async () => {
@@ -377,7 +382,7 @@ export function SwapMatching() {
     const filterPayload: Record<string, unknown> = {};
     if (confidence !== "all") filterPayload.confidence = confidence;
     if (method !== "all") filterPayload.method = method;
-    if (assetPair.trim()) filterPayload.asset_pair = assetPair.trim().toUpperCase();
+    if (assetPair !== "all") filterPayload.asset_pair = assetPair;
     try {
       await savedViewCreate.mutateAsync({
         surface: SAVED_VIEW_SURFACE,
@@ -671,14 +676,6 @@ export function SwapMatching() {
         },
       },
       {
-        keys: "f",
-        description: "Focus asset-pair filter",
-        category: "Navigation",
-        handler: () => {
-          filterInputRef.current?.focus();
-        },
-      },
-      {
         keys: "r",
         description: "Refresh candidates",
         category: "Navigation",
@@ -827,14 +824,18 @@ export function SwapMatching() {
                   ))}
                 </SelectContent>
               </Select>
-              <input
-                ref={filterInputRef}
-                aria-label="Asset pair filter"
-                className="h-8 w-24 shrink-0 rounded border border-input bg-background px-2 text-sm"
-                placeholder="OUT-IN"
-                value={assetPair}
-                onChange={(e) => setAssetPair(e.target.value)}
-              />
+              <Select value={assetPair} onValueChange={setAssetPair}>
+                <SelectTrigger className="h-8 w-36 shrink-0" aria-label="Route filter">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {ASSET_PAIR_OPTIONS.map((option) => (
+                    <SelectItem key={option.value} value={option.value}>
+                      {option.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
               {filterIsDirty ? (
                 <>
                   <Button
@@ -853,7 +854,7 @@ export function SwapMatching() {
                     onClick={() => {
                       setConfidence("all");
                       setMethod("all");
-                      setAssetPair("");
+                      setAssetPair("all");
                     }}
                   >
                     Clear
@@ -984,7 +985,7 @@ export function SwapMatching() {
                       <TableRow
                         key={key}
                         className={cn(
-                          "cursor-pointer align-top hover:bg-muted/35",
+                          "cursor-pointer align-middle hover:bg-muted/35",
                           conflicted ? "bg-amber-50/35 dark:bg-amber-950/20" : null,
                           cursorKey === key ? "bg-muted/60" : null,
                         )}
