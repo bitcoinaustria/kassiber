@@ -108,11 +108,11 @@ const METHOD_OPTIONS = [
 ] as const;
 const ASSET_PAIR_OPTIONS = [
   { value: "all", label: "Any route" },
-  { value: "BTC-LBTC", label: "BTC → LBTC" },
-  { value: "LBTC-BTC", label: "LBTC → BTC" },
-  { value: "BTC-BTC", label: "BTC → BTC" },
-  { value: "LBTC-LBTC", label: "LBTC → LBTC" },
+  { value: "BTC-LBTC", label: "Bitcoin → Liquid" },
+  { value: "LBTC-BTC", label: "Liquid → Bitcoin" },
+  { value: "BTC-BTC", label: "Lightning ↔ on-chain" },
 ] as const;
+const ASSET_PAIR_VALUES = new Set<string>(ASSET_PAIR_OPTIONS.map((option) => option.value));
 
 type PairKind = (typeof PAIR_KIND_OPTIONS)[number];
 type PairPolicy = (typeof PAIR_POLICY_OPTIONS)[number];
@@ -373,7 +373,11 @@ export function SwapMatching() {
   const applySavedView = (view: SavedView) => {
     setConfidence(typeof view.filter.confidence === "string" ? view.filter.confidence : "all");
     setMethod(typeof view.filter.method === "string" ? view.filter.method : "all");
-    setAssetPair(typeof view.filter.asset_pair === "string" ? view.filter.asset_pair : "all");
+    const savedAssetPair =
+      typeof view.filter.asset_pair === "string" && ASSET_PAIR_VALUES.has(view.filter.asset_pair)
+        ? view.filter.asset_pair
+        : "all";
+    setAssetPair(savedAssetPair);
   };
 
   const commitSaveView = async () => {
@@ -825,7 +829,7 @@ export function SwapMatching() {
                 </SelectContent>
               </Select>
               <Select value={assetPair} onValueChange={setAssetPair}>
-                <SelectTrigger className="h-8 w-36 shrink-0" aria-label="Route filter">
+                <SelectTrigger className="h-8 w-44 shrink-0" aria-label="Route filter">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
