@@ -20,7 +20,7 @@
  * commit 13, and keyboard shortcuts in commit 14.
  */
 
-import { Fragment, useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   AlertTriangle,
   ArrowRight,
@@ -865,7 +865,7 @@ export function SwapMatching() {
                   disabled={ruleApply.isPending}
                 >
                   <Sparkles className="size-4" />
-                  <span>Rule {ruleSolo.length}</span>
+                  <span>Apply rule {ruleSolo.length}</span>
                 </Button>
               ) : null}
             </div>
@@ -950,8 +950,11 @@ export function SwapMatching() {
               <TableHeader>
                 <TableRow className="bg-muted/50 hover:bg-muted/50">
                   <TableHead className="w-[42px]"></TableHead>
-                  <TableHead className="w-[130px] text-xs font-medium text-muted-foreground">
-                    Match
+                  <TableHead className="w-[118px] text-xs font-medium text-muted-foreground">
+                    Confidence
+                  </TableHead>
+                  <TableHead className="w-[132px] text-xs font-medium text-muted-foreground">
+                    Method
                   </TableHead>
                   <TableHead className="min-w-[250px] text-xs font-medium text-muted-foreground">
                     Outgoing
@@ -990,24 +993,24 @@ export function SwapMatching() {
                         />
                       </TableCell>
                       <TableCell className="whitespace-normal">
-                        <div className="flex flex-wrap items-center gap-1.5">
-                          <ConfidenceBadge candidate={candidate} />
-                          {candidate.rule_match ? (
-                            <Badge variant="outline" className="text-[10px]">
-                              Rule
-                            </Badge>
-                          ) : null}
-                        </div>
-                        <p className="mt-1 text-xs text-muted-foreground">
-                          {candidate.method === "payment_hash"
-                            ? "payment hash"
-                            : "time + amount"}
-                        </p>
+                        <ConfidenceBadge candidate={candidate} />
                         {conflicted ? (
                           <p className="mt-1 inline-flex items-center gap-1 text-xs text-amber-700 dark:text-amber-300">
                             <AlertTriangle className="size-3" />
                             {clusterSizes[candidate.conflict_set_id]} share a leg
                           </p>
+                        ) : null}
+                      </TableCell>
+                      <TableCell className="whitespace-normal">
+                        <div className="text-xs text-muted-foreground">
+                          {candidate.method === "payment_hash"
+                            ? "payment hash"
+                            : "time + amount"}
+                        </div>
+                        {candidate.rule_match ? (
+                          <Badge variant="outline" className="mt-1 text-[10px]">
+                            Rule
+                          </Badge>
                         ) : null}
                       </TableCell>
                       <TableCell className="whitespace-normal">
@@ -1119,6 +1122,7 @@ export function SwapMatching() {
               className="h-7 px-2"
               onClick={() => setHelpOpen(true)}
               aria-label="Show keyboard shortcuts"
+              title="Show keyboard shortcuts"
             >
               ?
             </Button>
@@ -1336,30 +1340,33 @@ function SwapLegInline({
   txId,
 }: SwapLegInlineProps) {
   const rail = railForLeg(asset, walletKind);
+  const walletName = displayWalletName(wallet, walletKind);
   return (
-    <div className="flex min-w-0 items-start gap-2.5">
-      <RailIcon rail={rail} size="regular" />
-      <div className="min-w-0">
-        <div className="flex min-w-0 flex-wrap items-center gap-1.5">
-          <span
-            className={cn(
-              "font-mono text-sm font-semibold tabular-nums",
-              direction === "out"
-                ? "text-red-700 dark:text-red-300"
-                : "text-emerald-700 dark:text-emerald-300",
-            )}
-          >
-            {formatBtc(amount)}
-          </span>
-          <RailBadge rail={rail} asset={asset} />
-        </div>
-        <div className="mt-1 flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-1 text-xs text-muted-foreground">
-          <span className="truncate">{wallet}</span>
+    <div className="grid min-w-0 grid-cols-[1.5rem_minmax(0,1fr)_auto] items-start gap-2">
+      <RailIcon rail={rail} size="compact" />
+      <div className="min-w-0 text-xs text-muted-foreground">
+        <div className="flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-1">
+          <span className="truncate">{walletName}</span>
           <span aria-hidden="true">·</span>
           <span>{formatTimestamp(timestamp)}</span>
         </div>
         <div className="mt-1 truncate font-mono text-[11px] text-muted-foreground/80">
           tx {txId.slice(0, 8)}…{txId.slice(-4)}
+        </div>
+      </div>
+      <div className="min-w-[8.5rem] text-right">
+        <div
+          className={cn(
+            "font-mono text-sm font-semibold tabular-nums",
+            direction === "out"
+              ? "text-red-700 dark:text-red-300"
+              : "text-emerald-700 dark:text-emerald-300",
+          )}
+        >
+          {formatBtc(amount)}
+        </div>
+        <div className="mt-1 flex justify-end">
+          <RailBadge rail={rail} asset={asset} />
         </div>
       </div>
     </div>
@@ -1375,7 +1382,7 @@ function SwapFeeText({ candidate }: { candidate: SwapCandidate }) {
         ? "text-amber-700 dark:text-amber-300"
         : "text-rose-700 dark:text-rose-300";
   return (
-    <div>
+    <div className="text-right">
       <div className={cn("text-sm font-semibold tabular-nums", tone)}>
         {formatBtc(candidate.swap_fee)}
       </div>
@@ -1480,28 +1487,22 @@ function SwapCandidateDetailSheet({
               </SheetDescription>
             </SheetHeader>
             <div className="space-y-4 p-4 sm:p-6">
-              <div className="relative grid gap-3 md:grid-cols-2">
-                <LegCard
+              <div className="grid gap-4 md:grid-cols-2">
+                <SwapLegDetails
                   title="Outgoing"
                   asset={candidate.out_asset}
                   amount={candidate.out_amount}
+                  amountMsat={candidate.out_amount_msat}
                   wallet={candidate.out_wallet_label}
                   walletKind={candidate.out_wallet_kind}
                   timestamp={candidate.out_occurred_at}
                   txId={candidate.out_id}
                 />
-                <div
-                  className="flex justify-center md:pointer-events-none md:absolute md:left-1/2 md:top-1/2 md:z-10 md:-translate-x-1/2 md:-translate-y-1/2"
-                  aria-hidden="true"
-                >
-                  <div className="flex size-9 items-center justify-center rounded-full border border-border/70 bg-background/95 text-muted-foreground shadow-sm">
-                    <ArrowRight className="size-4" />
-                  </div>
-                </div>
-                <LegCard
+                <SwapLegDetails
                   title="Incoming"
                   asset={candidate.in_asset}
                   amount={candidate.in_amount}
+                  amountMsat={candidate.in_amount_msat}
                   wallet={candidate.in_wallet_label}
                   walletKind={candidate.in_wallet_kind}
                   timestamp={candidate.in_occurred_at}
@@ -1548,19 +1549,34 @@ function SwapCandidateDetailSheet({
                 </div>
               </div>
 
-              <div className="rounded-lg border bg-muted/20 p-3 text-sm">
-                <div className="font-medium">Review rationale</div>
-                <p className="mt-1 text-muted-foreground">
-                  Out {formatBtc(candidate.out_amount)} {candidate.out_asset}, in{" "}
-                  {formatBtc(candidate.in_amount)} {candidate.in_asset}; fee{" "}
-                  {formatSats(candidate.swap_fee_msat)}. Pairing creates a{" "}
-                  {policy} {kind} link for journal processing.
-                </p>
-                {candidate.rule_match ? (
-                  <p className="mt-2 text-xs text-muted-foreground">
-                    Rule match: {candidate.rule_match.rule_name ?? candidate.rule_match.rule_id}
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div className="rounded-lg border bg-muted/20 p-3 text-sm">
+                  <div className="font-medium">Match rationale</div>
+                  <p className="mt-1 text-muted-foreground">
+                    {candidate.method === "payment_hash"
+                      ? "Both legs share the same Lightning payment hash."
+                      : "The legs are close in time and amount after accounting for the swap fee."}
                   </p>
-                ) : null}
+                  {candidate.rule_match ? (
+                    <p className="mt-2 text-xs text-muted-foreground">
+                      Auto-pair route: {candidate.rule_match.rule_name ?? candidate.rule_match.rule_id}
+                    </p>
+                  ) : null}
+                </div>
+                <div className="rounded-lg border bg-muted/20 p-3 text-sm">
+                  <div className="font-medium">Accounting preview</div>
+                  <dl className="mt-2 space-y-1 text-xs">
+                    <DetailRow label="Pair kind" value={kind} />
+                    <DetailRow label="Policy" value={policy} />
+                    <DetailRow
+                      label="Swap fee"
+                      value={`${formatSats(candidate.swap_fee_msat)} · ${feePercent(candidate).toFixed(2)}%`}
+                    />
+                  </dl>
+                  <p className="mt-2 text-xs text-muted-foreground">
+                    Journal and tax deltas are computed on the next journal reprocess.
+                  </p>
+                </div>
               </div>
             </div>
             <SheetFooter className="border-t p-4 sm:flex-row sm:items-center sm:justify-between sm:px-6">
@@ -1938,37 +1954,80 @@ function RulePredicateKindField({ label, value, onChange }: RuleFieldProps) {
   );
 }
 
-interface LegCardProps {
+interface SwapLegDetailsProps {
   title: string;
   asset: string;
   amount: number;
+  amountMsat: number;
   wallet: string;
   walletKind: string;
   timestamp: string;
   txId: string;
 }
 
-function LegCard({ title, asset, amount, wallet, walletKind, timestamp, txId }: LegCardProps) {
+function SwapLegDetails({
+  title,
+  asset,
+  amount,
+  amountMsat,
+  wallet,
+  walletKind,
+  timestamp,
+  txId,
+}: SwapLegDetailsProps) {
   const rail = railForLeg(asset, walletKind);
+  const walletName = displayWalletName(wallet, walletKind);
+  const walletLabel = wallet?.trim() ?? "";
+  const showKind = walletLabel.length > 0 && walletLabel !== walletKind;
   return (
-    <div className="grid grid-cols-[3.75rem_minmax(0,1fr)] gap-3 rounded-md border bg-background p-3">
-      <RailIcon rail={rail} size="large" />
-      <div className="min-w-0">
-        <div className="flex items-start justify-between gap-2">
-          <span className="text-xs uppercase tracking-wide text-muted-foreground">
-            {title}
-          </span>
-          <RailBadge rail={rail} asset={asset} />
-        </div>
-        <div className="mt-1 font-mono text-base">{formatBtc(amount)}</div>
-        <div className="mt-1 truncate text-xs text-muted-foreground">
-          {wallet} <span className="text-[10px] uppercase">· {walletKind}</span>
-        </div>
-        <div className="text-xs text-muted-foreground">{formatTimestamp(timestamp)}</div>
-        <div className="mt-1 truncate font-mono text-[11px] text-muted-foreground/80">
-          tx {txId.slice(0, 8)}…{txId.slice(-4)}
-        </div>
+    <section className="rounded-lg border bg-background p-3">
+      <div className="mb-3 flex items-center justify-between gap-2">
+        <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+          {title}
+        </span>
+        <RailBadge rail={rail} asset={asset} />
       </div>
+      <dl className="space-y-2 text-sm">
+        <DetailRow
+          label="Wallet"
+          value={
+            <span className="inline-flex min-w-0 items-center gap-2">
+              <RailIcon rail={rail} size="compact" />
+              <span className="truncate">{walletName}</span>
+              {showKind ? (
+                <span className="text-xs uppercase text-muted-foreground">· {walletKind}</span>
+              ) : null}
+            </span>
+          }
+        />
+        <DetailRow
+          label="Amount"
+          value={
+            <span className="font-mono tabular-nums">
+              {formatBtc(amount)} <span className="text-xs text-muted-foreground">({formatSats(amountMsat)})</span>
+            </span>
+          }
+        />
+        <DetailRow label="Occurred" value={formatTimestamp(timestamp)} />
+        <DetailRow
+          label="Transaction"
+          value={<span className="font-mono text-xs">{txId}</span>}
+        />
+      </dl>
+    </section>
+  );
+}
+
+function displayWalletName(wallet: string | null | undefined, walletKind: string) {
+  const trimmed = wallet?.trim() ?? "";
+  return trimmed.length > 0 ? trimmed : walletKind;
+}
+
+function DetailRow({ label, value }: { label: string; value: ReactNode }) {
+  return (
+    <div className="grid grid-cols-[6rem_minmax(0,1fr)] gap-3">
+      <dt className="text-xs text-muted-foreground">{label}</dt>
+      <dd className="min-w-0 text-right text-sm text-foreground">{value}</dd>
     </div>
   );
 }
@@ -1993,7 +2052,8 @@ function RailIcon({ rail, size = "regular" }: RailIconProps) {
   return (
     <span
       className={cn(
-        "inline-flex shrink-0 items-center justify-center rounded-md bg-white shadow-sm ring-1 ring-black/10 dark:ring-white/15",
+        "inline-flex shrink-0 items-center justify-center bg-white shadow-sm ring-1 ring-black/10 dark:ring-white/15",
+        size === "large" ? "rounded-md" : "rounded-full",
         frameSize,
       )}
       title={details.label}
