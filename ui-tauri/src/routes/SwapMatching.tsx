@@ -328,6 +328,7 @@ export function SwapMatching() {
 
   const savedViews = savedViewsQuery.data?.data?.views ?? [];
   const rules = rulesQuery.data?.data?.rules ?? [];
+  const enabledRuleCount = rules.filter((rule) => rule.enabled).length;
 
   const filterIsDirty = confidence !== "all" || method !== "all" || assetPair.trim() !== "";
 
@@ -665,152 +666,150 @@ export function SwapMatching() {
 
   return (
     <div className={screenShellClassName}>
-      <header className="flex flex-col gap-2 px-4 py-3 sm:flex-row sm:items-end sm:justify-between">
-        <div>
-          <h1 className="text-xl font-semibold">Swap candidates</h1>
-          <p className="text-sm text-muted-foreground">
-            Cross-wallet, cross-network legs the matcher believes form one
-            swap. Pair to apply the carrying-value math; dismiss to suppress
-            for 90 days.
-          </p>
-        </div>
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => void refetch()}
-          disabled={isFetching}
-        >
-          {isFetching ? <Loader2 className="size-4 animate-spin" /> : null}
-          <span className="ml-1">Refresh</span>
-        </Button>
-      </header>
+      <Collapsible open={rulesExpanded} onOpenChange={setRulesExpanded}>
+        <header className="rounded-lg border border-border/70 bg-card/70 px-4 py-3 shadow-sm">
+          <div className="flex flex-col gap-3 xl:flex-row xl:items-start xl:justify-between">
+            <div className="min-w-0">
+              <h1 className="text-xl font-semibold">Swap candidates</h1>
+              <p className="mt-0.5 max-w-3xl text-sm text-muted-foreground">
+                Review likely Lightning, Liquid, and on-chain swap legs before
+                they become carrying-value pairs.
+              </p>
+              <div className="mt-3 flex flex-wrap gap-2">
+                <CountPill label="Candidates" value={counts.total} tone="neutral" />
+                <CountPill label="Exact" value={counts.exact} tone="good" />
+                <CountPill label="Strong" value={counts.strong} tone="warning" />
+                <CountPill label="Conflicts" value={counts.conflicts} tone="alert" />
+              </div>
+            </div>
 
-      <div className="flex flex-wrap gap-2 px-4">
-        <CountPill label="Candidates" value={counts.total} tone="neutral" />
-        <CountPill label="Exact" value={counts.exact} tone="good" />
-        <CountPill label="Strong" value={counts.strong} tone="warning" />
-        <CountPill label="Conflicts" value={counts.conflicts} tone="alert" />
-      </div>
-
-      <div className="flex flex-wrap items-center gap-1 px-4 pb-1 text-xs">
-        <Star className="size-3.5 text-muted-foreground" aria-hidden="true" />
-        <span className="text-muted-foreground">Views:</span>
-        {savedViews.length === 0 ? (
-          <span className="text-muted-foreground/70">none saved yet</span>
-        ) : (
-          savedViews.map((view) => (
-            <span
-              key={view.id}
-              className="inline-flex items-center gap-1 rounded-full border border-input bg-background px-2 py-0.5"
-            >
-              <button
-                className="font-medium text-foreground/90 hover:text-foreground"
-                onClick={() => applySavedView(view)}
+            <div className="flex shrink-0 flex-wrap items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => void refetch()}
+                disabled={isFetching}
               >
-                {view.name}
-              </button>
-              <button
-                aria-label={`Delete view ${view.name}`}
-                onClick={() => void deleteSavedView(view)}
-              >
-                <X className="size-3" />
-              </button>
-            </span>
-          ))
-        )}
-        <Button
-          size="sm"
-          variant="ghost"
-          className="h-6 px-1.5 text-xs"
-          disabled={!filterIsDirty}
-          onClick={() => setSaveViewOpen(true)}
-        >
-          <Plus className="size-3" />
-          <span>Save filter</span>
-        </Button>
-      </div>
-
-      <div className="flex flex-wrap items-center gap-2 px-4 pb-2 pt-1 text-sm">
-        <span className="text-muted-foreground">Filter:</span>
-        <Select value={confidence} onValueChange={setConfidence}>
-          <SelectTrigger className="h-8 w-44">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {CONFIDENCE_OPTIONS.map((option) => (
-              <SelectItem key={option.value} value={option.value}>
-                {option.label}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        <Select value={method} onValueChange={setMethod}>
-          <SelectTrigger className="h-8 w-44">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {METHOD_OPTIONS.map((option) => (
-              <SelectItem key={option.value} value={option.value}>
-                {option.label}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        <input
-          ref={filterInputRef}
-          aria-label="Asset pair filter"
-          className="h-8 w-32 rounded border border-input bg-transparent px-2 text-sm"
-          placeholder="OUT-IN"
-          value={assetPair}
-          onChange={(e) => setAssetPair(e.target.value)}
-        />
-        <Button
-          variant="ghost"
-          size="sm"
-          className="ml-1 h-7 px-2 text-xs"
-          onClick={() => setHelpOpen(true)}
-          aria-label="Show keyboard shortcuts"
-        >
-          ?
-        </Button>
-        {(confidence !== "all" || method !== "all" || assetPair) && (
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => {
-              setConfidence("all");
-              setMethod("all");
-              setAssetPair("");
-            }}
-          >
-            Clear filters
-          </Button>
-        )}
-      </div>
-
-      <div className="px-4 pb-2">
-        <Collapsible open={rulesExpanded} onOpenChange={setRulesExpanded}>
-          <div className="flex items-center justify-between">
-            <CollapsibleTrigger asChild>
-              <Button variant="ghost" size="sm" className="-ml-2 h-7 text-xs">
-                <SettingsIcon className="size-3.5" />
-                <span className="ml-1">
-                  Auto-pair rules ({rules.filter((r) => r.enabled).length}/{rules.length})
-                </span>
+                {isFetching ? <Loader2 className="size-4 animate-spin" /> : null}
+                <span className="ml-1">Refresh</span>
               </Button>
-            </CollapsibleTrigger>
+              <CollapsibleTrigger asChild>
+                <Button variant="outline" size="sm">
+                  <SettingsIcon className="size-3.5" />
+                  <span>Rules {enabledRuleCount}/{rules.length}</span>
+                </Button>
+              </CollapsibleTrigger>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => setCreateRuleOpen(true)}
+              >
+                <Plus className="size-3" />
+                <span>New rule</span>
+              </Button>
+            </div>
+          </div>
+
+          <div className="mt-3 flex flex-wrap items-center gap-2 text-sm">
+            <span className="text-xs font-medium uppercase text-muted-foreground">
+              Filter
+            </span>
+            <Select value={confidence} onValueChange={setConfidence}>
+              <SelectTrigger className="h-8 w-44">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {CONFIDENCE_OPTIONS.map((option) => (
+                  <SelectItem key={option.value} value={option.value}>
+                    {option.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Select value={method} onValueChange={setMethod}>
+              <SelectTrigger className="h-8 w-44">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {METHOD_OPTIONS.map((option) => (
+                  <SelectItem key={option.value} value={option.value}>
+                    {option.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <input
+              ref={filterInputRef}
+              aria-label="Asset pair filter"
+              className="h-8 w-32 rounded border border-input bg-background px-2 text-sm"
+              placeholder="OUT-IN"
+              value={assetPair}
+              onChange={(e) => setAssetPair(e.target.value)}
+            />
+            {filterIsDirty ? (
+              <>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="h-8 px-2"
+                  onClick={() => setSaveViewOpen(true)}
+                >
+                  <Star className="size-3.5" />
+                  <span>Save view</span>
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-8 px-2"
+                  onClick={() => {
+                    setConfidence("all");
+                    setMethod("all");
+                    setAssetPair("");
+                  }}
+                >
+                  Clear
+                </Button>
+              </>
+            ) : null}
             <Button
+              variant="ghost"
               size="sm"
-              variant="outline"
-              className="h-7 text-xs"
-              onClick={() => setCreateRuleOpen(true)}
+              className="h-8 px-2"
+              onClick={() => setHelpOpen(true)}
+              aria-label="Show keyboard shortcuts"
             >
-              <Plus className="size-3" />
-              <span>New rule</span>
+              ?
             </Button>
           </div>
+
+          {savedViews.length > 0 ? (
+            <div className="mt-2 flex flex-wrap items-center gap-1 text-xs">
+              <Star className="size-3.5 text-muted-foreground" aria-hidden="true" />
+              <span className="text-muted-foreground">Views</span>
+              {savedViews.map((view) => (
+                <span
+                  key={view.id}
+                  className="inline-flex items-center gap-1 rounded-full border border-input bg-background px-2 py-0.5"
+                >
+                  <button
+                    className="font-medium text-foreground/90 hover:text-foreground"
+                    onClick={() => applySavedView(view)}
+                  >
+                    {view.name}
+                  </button>
+                  <button
+                    aria-label={`Delete view ${view.name}`}
+                    onClick={() => void deleteSavedView(view)}
+                  >
+                    <X className="size-3" />
+                  </button>
+                </span>
+              ))}
+            </div>
+          ) : null}
+
           <CollapsibleContent>
-            <div className="mt-2 space-y-1 rounded-md border bg-background/50 p-2 text-xs">
+            <div className="mt-3 space-y-1 rounded-md border bg-background/70 p-2 text-xs">
               {rules.length === 0 ? (
                 <p className="text-muted-foreground">
                   No auto-pair rules yet. Rules apply when a candidate matches
@@ -854,23 +853,28 @@ export function SwapMatching() {
               )}
             </div>
           </CollapsibleContent>
-        </Collapsible>
-      </div>
+        </header>
+      </Collapsible>
 
       <div className={cn(screenPanelClassName, "flex flex-col gap-3 p-4")}>
         {!isLoading && !isError && candidates.length > 0 ? (
-          <div className="flex flex-wrap items-center gap-2 rounded-md border bg-background/50 px-3 py-2 text-sm">
-            <label className="flex items-center gap-2">
-              <Checkbox
-                checked={selected.size > 0}
-                onCheckedChange={handleSelectAll}
-              />
-              <span className="text-xs text-muted-foreground">
-                {selected.size > 0
-                  ? `${selected.size} selected`
-                  : "Select all non-conflicted"}
+          <div className="flex flex-wrap items-center gap-2 rounded-md border bg-muted/20 px-3 py-2 text-sm">
+            <div className="flex min-w-0 items-center gap-3">
+              <label className="flex items-center gap-2">
+                <Checkbox
+                  checked={selected.size > 0}
+                  onCheckedChange={handleSelectAll}
+                />
+                <span className="text-xs text-muted-foreground">
+                  {selected.size > 0
+                    ? `${selected.size} selected`
+                    : "Select non-conflicted"}
+                </span>
+              </label>
+              <span className="hidden text-xs text-muted-foreground sm:inline">
+                {candidates.length} visible
               </span>
-            </label>
+            </div>
             {selected.size > 0 ? (
               <>
                 <label className="flex items-center gap-1 text-xs text-muted-foreground">
@@ -983,8 +987,8 @@ export function SwapMatching() {
                   <ConfidenceBadge candidate={candidate} />
                   <span className="text-xs text-muted-foreground">
                     {candidate.method === "payment_hash"
-                      ? "matched on payment_hash"
-                      : "matched on time + amount"}
+                      ? "payment_hash"
+                      : "time + amount"}
                   </span>
                   {candidate.rule_match ? (
                     <Badge variant="outline" className="text-[10px]">
