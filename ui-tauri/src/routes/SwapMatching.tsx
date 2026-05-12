@@ -980,7 +980,6 @@ export function SwapMatching() {
                     checked={selected.has(key)}
                     onCheckedChange={() => toggleSelected(key)}
                   />
-                  <SwapRouteChip candidate={candidate} />
                   <ConfidenceBadge candidate={candidate} />
                   <span className="text-xs text-muted-foreground">
                     {candidate.method === "payment_hash"
@@ -1011,7 +1010,7 @@ export function SwapMatching() {
                   </div>
                 ) : null}
 
-                <div className="grid gap-3 px-4 py-3 md:grid-cols-2">
+                <div className="relative grid gap-3 px-4 py-3 md:grid-cols-2">
                   <LegCard
                     title="Outgoing"
                     asset={candidate.out_asset}
@@ -1021,6 +1020,14 @@ export function SwapMatching() {
                     timestamp={candidate.out_occurred_at}
                     txId={candidate.out_id}
                   />
+                  <div
+                    className="flex justify-center md:pointer-events-none md:absolute md:left-1/2 md:top-1/2 md:z-10 md:-translate-x-1/2 md:-translate-y-1/2"
+                    aria-hidden="true"
+                  >
+                    <div className="flex size-9 items-center justify-center rounded-full border border-border/70 bg-background/95 text-muted-foreground shadow-sm">
+                      <ArrowRight className="size-4" />
+                    </div>
+                  </div>
                   <LegCard
                     title="Incoming"
                     asset={candidate.in_asset}
@@ -1609,28 +1616,6 @@ function LegCard({ title, asset, amount, wallet, walletKind, timestamp, txId }: 
           tx {txId.slice(0, 8)}…{txId.slice(-4)}
         </div>
       </div>
-    </div>
-  );
-}
-
-interface SwapRouteChipProps {
-  candidate: SwapCandidate;
-}
-
-function SwapRouteChip({ candidate }: SwapRouteChipProps) {
-  const outRail = railForLeg(candidate.out_asset, candidate.out_wallet_kind);
-  const inRail = railForLeg(candidate.in_asset, candidate.in_wallet_kind);
-  const out = RAIL_DETAILS[outRail];
-  const incoming = RAIL_DETAILS[inRail];
-  return (
-    <div
-      className="inline-flex items-center gap-1 rounded-full border border-border/70 bg-background/70 px-1.5 py-1 shadow-sm"
-      aria-label={`${out.label} to ${incoming.label}`}
-      title={`${out.label} to ${incoming.label}`}
-    >
-      <RailIcon rail={outRail} size="compact" />
-      <ArrowRight className="size-3 text-muted-foreground" />
-      <RailIcon rail={inRail} size="compact" />
     </div>
   );
 }
