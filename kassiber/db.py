@@ -298,6 +298,17 @@ CREATE TABLE IF NOT EXISTS rates_cache (
     fetched_at TEXT NOT NULL,
     granularity TEXT,
     method TEXT,
+    open_rate REAL,
+    open_rate_exact TEXT,
+    high_rate REAL,
+    high_rate_exact TEXT,
+    low_rate REAL,
+    low_rate_exact TEXT,
+    close_rate REAL,
+    close_rate_exact TEXT,
+    volume REAL,
+    volume_exact TEXT,
+    trades INTEGER,
     PRIMARY KEY (pair, timestamp, source)
 );
 
@@ -731,6 +742,17 @@ def ensure_schema_compat(conn):
     ensure_column(conn, "rates_cache", "rate_exact", "TEXT")
     ensure_column(conn, "rates_cache", "granularity", "TEXT")
     ensure_column(conn, "rates_cache", "method", "TEXT")
+    ensure_column(conn, "rates_cache", "open_rate", "REAL")
+    ensure_column(conn, "rates_cache", "open_rate_exact", "TEXT")
+    ensure_column(conn, "rates_cache", "high_rate", "REAL")
+    ensure_column(conn, "rates_cache", "high_rate_exact", "TEXT")
+    ensure_column(conn, "rates_cache", "low_rate", "REAL")
+    ensure_column(conn, "rates_cache", "low_rate_exact", "TEXT")
+    ensure_column(conn, "rates_cache", "close_rate", "REAL")
+    ensure_column(conn, "rates_cache", "close_rate_exact", "TEXT")
+    ensure_column(conn, "rates_cache", "volume", "REAL")
+    ensure_column(conn, "rates_cache", "volume_exact", "TEXT")
+    ensure_column(conn, "rates_cache", "trades", "INTEGER")
     ensure_column(conn, "source_funds_cases", "recipient_id", "TEXT")
     ensure_column(conn, "source_funds_cases", "recipient_label_snapshot", "TEXT")
     ensure_column(conn, "source_funds_cases", "recipient_kind_snapshot", "TEXT")

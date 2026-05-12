@@ -243,6 +243,7 @@ kassiber rates pairs
 kassiber rates latest BTC-EUR
 kassiber rates range BTC-EUR --start 2025-01-01T00:00:00Z --end 2025-01-31T23:59:59Z
 kassiber rates sync --pair BTC-EUR --days 30
+kassiber rates sync --source kraken-csv --path ~/Downloads/Kraken_OHLCVT.zip --pair BTC/EUR
 kassiber rates set BTC-EUR 2025-01-01T00:00:00Z 95000
 ```
 

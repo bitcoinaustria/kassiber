@@ -33,16 +33,26 @@ kassiber rates pairs
 kassiber rates latest BTC-EUR
 kassiber rates range BTC-EUR --start 2025-01-01T00:00:00Z --end 2025-01-31T23:59:59Z --order asc
 kassiber rates sync --pair BTC-EUR --days 30
+kassiber rates sync --source kraken-csv --path ~/Downloads/Kraken_OHLCVT.zip --pair BTC/EUR
 kassiber rates set BTC-EUR 2025-01-01T00:00:00Z 95000
 ```
 
 `rates range --start/--end` expects RFC3339 UTC strings, not Unix epoch
 timestamps.
 
-Kassiber's rate cache currently supports `BTC-USD` and `BTC-EUR`. Liquid
-Bitcoin uses Kassiber's BTC alias path for fiat pricing, so missing spot prices
-on LBTC rows usually mean the relevant BTC sample was unavailable at or before
-that timestamp.
+Kassiber's rate cache currently supports `BTC-USD` and `BTC-EUR`. Rate sources
+are `coingecko`, `kraken-csv`, and manual `rates set` entries. Liquid Bitcoin
+uses Kassiber's BTC alias path for fiat pricing, so missing spot prices on LBTC
+rows usually mean the relevant BTC sample was unavailable at or before that
+timestamp.
+
+For historical minute-level backfills, download Kraken's OHLCVT archive from
+[Kraken's support article](https://support.kraken.com/articles/360047124832)
+and pass the local ZIP or CSV with `--source kraken-csv --path <file>`. Kassiber
+ingests only 1-minute Bitcoin pairs for v1, maps Kraken `XBT` filenames to
+`BTC-USD` / `BTC-EUR`, stores sparse rows only when Kraken reports a traded
+candle, and relies on re-ingesting the latest full or quarterly archive rather
+than fetching from Kraken automatically.
 
 If pricing looks incomplete, sync rates and then re-run:
 
