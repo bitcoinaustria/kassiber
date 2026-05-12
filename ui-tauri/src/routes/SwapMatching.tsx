@@ -20,7 +20,7 @@
  * commit 13, and keyboard shortcuts in commit 14.
  */
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import {
   AlertTriangle,
   ArrowRight,
@@ -1664,6 +1664,9 @@ interface RailBadgeProps {
 
 function RailBadge({ rail, asset }: RailBadgeProps) {
   const details = RAIL_DETAILS[rail];
+  const railLabel = details.shortLabel.toUpperCase();
+  const assetLabel = asset.toUpperCase();
+  const labelParts = railLabel === assetLabel ? [assetLabel] : [railLabel, assetLabel];
   return (
     <span
       className={cn(
@@ -1672,9 +1675,12 @@ function RailBadge({ rail, asset }: RailBadgeProps) {
       )}
       title={`${details.label} ${asset}`}
     >
-      <span>{details.shortLabel}</span>
-      <span className="text-current/50">·</span>
-      <span>{asset}</span>
+      {labelParts.map((part, index) => (
+        <Fragment key={part}>
+          {index > 0 ? <span className="text-current/50">·</span> : null}
+          <span>{part}</span>
+        </Fragment>
+      ))}
     </span>
   );
 }
