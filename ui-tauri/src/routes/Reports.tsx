@@ -140,6 +140,7 @@ interface ReportExportResult {
   bytes?: number;
   pages?: number;
   rows?: number;
+  sheets?: string[];
   summary_rows?: number;
   tax_year?: number;
 }
@@ -208,8 +209,8 @@ function ReportsView({ report, hideSensitive }: ReportsViewProps) {
     null,
   );
   const addNotification = useUiStore((s) => s.addNotification);
-  const exportCsv =
-    useDaemonMutation<ReportExportResult>("ui.reports.export_capital_gains_csv");
+  const exportCsv = useDaemonMutation<ReportExportResult>("ui.reports.export_csv");
+  const exportXlsx = useDaemonMutation<ReportExportResult>("ui.reports.export_xlsx");
   const exportPdf = useDaemonMutation<ReportExportResult>("ui.reports.export_pdf");
   const exportAustrianPdf =
     useDaemonMutation<ReportExportResult>("ui.reports.export_austrian_e1kv_pdf");
@@ -249,12 +250,20 @@ function ReportsView({ report, hideSensitive }: ReportsViewProps) {
       format === "csv"
         ? exportCsv
         : format === "xlsx"
-          ? exportAustrianXlsx
+          ? activeProfileIsAustrian
+            ? exportAustrianXlsx
+            : exportXlsx
           : activeProfileIsAustrian
             ? exportAustrianPdf
             : exportPdf;
     const args =
-      format === "pdf" && !activeProfileIsAustrian ? {} : { year };
+      format === "pdf"
+        ? activeProfileIsAustrian
+          ? { year }
+          : {}
+        : format === "xlsx" && activeProfileIsAustrian
+          ? { year }
+          : {};
 
     mutation.mutate(args, {
       onSuccess: (envelope) => {
@@ -264,8 +273,10 @@ function ReportsView({ report, hideSensitive }: ReportsViewProps) {
         const detail =
           payload?.format === "pdf" && payload.pages
             ? `${payload.pages} page${payload.pages === 1 ? "" : "s"}`
-            : payload?.format === "xlsx" && payload.rows !== undefined
-              ? `${payload.rows} row${payload.rows === 1 ? "" : "s"}`
+            : payload?.format === "xlsx" && payload.sheets?.length
+              ? `${payload.sheets.length} sheet${payload.sheets.length === 1 ? "" : "s"}`
+              : payload?.format === "xlsx" && payload.rows !== undefined
+                ? `${payload.rows} row${payload.rows === 1 ? "" : "s"}`
               : payload?.format === "csv" && payload.rows !== undefined
                 ? `${payload.rows} row${payload.rows === 1 ? "" : "s"}`
                 : "Export written";
@@ -728,17 +739,17 @@ function ReportFilesPanel({
             detail={
               activeProfileIsAustrian
                 ? `${year} · Multi-sheet Austrian workbook`
-                : "Available for Austrian books"
+                : "Multi-sheet complete workbook"
             }
             loading={activeExport === "xlsx"}
-            disabled={Boolean(activeExport) || !activeProfileIsAustrian}
+            disabled={Boolean(activeExport)}
             onExport={onExport}
           />
           <ReportFileRow
             id="csv"
             icon={FileArchive}
-            title="Capital gains CSV"
-            detail={`${year} · UTF-8 rows for spreadsheet review`}
+            title="CSV report"
+            detail="Complete report sections for spreadsheet review"
             loading={activeExport === "csv"}
             disabled={Boolean(activeExport)}
             onExport={onExport}

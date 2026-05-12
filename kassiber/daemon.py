@@ -138,6 +138,8 @@ SUPPORTED_KINDS = (
     "ui.reports.tax_summary",
     "ui.reports.balance_history",
     "ui.reports.export_pdf",
+    "ui.reports.export_csv",
+    "ui.reports.export_xlsx",
     "ui.reports.export_capital_gains_csv",
     "ui.reports.export_austrian_e1kv_pdf",
     "ui.reports.export_austrian_e1kv_xlsx",
@@ -1092,22 +1094,27 @@ def _ui_report_export_payload(
 ) -> dict[str, Any]:
     conn = _require_conn(ctx)
     hooks = _report_hooks()
-    if kind == "ui.reports.export_pdf":
+    generic_report_exports = {
+        "ui.reports.export_pdf": ("pdf", ".pdf", core_reports.export_pdf_report),
+        "ui.reports.export_csv": ("csv", ".csv", core_reports.export_csv_report),
+        "ui.reports.export_xlsx": ("xlsx", ".xlsx", core_reports.export_xlsx_report),
+    }
+    if kind in generic_report_exports:
         if "year" in args or "tax_year" in args:
             raise AppError(
-                "ui.reports.export_pdf does not support a tax year; "
-                "use an annual tax export instead",
+                f"{kind} does not support a tax year; use an annual tax export instead",
                 code="validation",
             )
-        path = _managed_report_export_path(ctx.data_root, "kassiber-report", ".pdf")
+        export_format, suffix, exporter = generic_report_exports[kind]
+        path = _managed_report_export_path(ctx.data_root, "kassiber-report", suffix)
         wallet = args.get("wallet")
         if wallet is not None and not isinstance(wallet, str):
             raise AppError(
-                "ui.reports.export_pdf wallet must be a string",
+                f"{kind} wallet must be a string",
                 code="validation",
             )
         payload = dict(
-            core_reports.export_pdf_report(
+            exporter(
                 conn,
                 None,
                 None,
@@ -1119,7 +1126,7 @@ def _ui_report_export_payload(
         )
         payload.update(
             {
-                "format": "pdf",
+                "format": export_format,
                 "scope": "report",
                 "filename": Path(payload["file"]).name,
             }
@@ -5245,6 +5252,8 @@ def handle_request(
 
     if kind in {
         "ui.reports.export_pdf",
+        "ui.reports.export_csv",
+        "ui.reports.export_xlsx",
         "ui.reports.export_capital_gains_csv",
         "ui.reports.export_austrian_e1kv_pdf",
         "ui.reports.export_austrian_e1kv_xlsx",

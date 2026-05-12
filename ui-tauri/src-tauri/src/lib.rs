@@ -125,6 +125,8 @@ const ALLOWED_DAEMON_KINDS: &[&str] = &[
     "ui.profiles.switch",
     "ui.reports.capital_gains",
     "ui.reports.export_pdf",
+    "ui.reports.export_csv",
+    "ui.reports.export_xlsx",
     "ui.reports.export_capital_gains_csv",
     "ui.reports.export_austrian_e1kv_pdf",
     "ui.reports.export_austrian_e1kv_xlsx",

@@ -534,6 +534,8 @@ class DaemonSmokeTest(unittest.TestCase):
             self.assertIn("ui.reports.tax_summary", ready["data"]["supported_kinds"])
             self.assertIn("ui.reports.balance_history", ready["data"]["supported_kinds"])
             self.assertIn("ui.reports.export_pdf", ready["data"]["supported_kinds"])
+            self.assertIn("ui.reports.export_csv", ready["data"]["supported_kinds"])
+            self.assertIn("ui.reports.export_xlsx", ready["data"]["supported_kinds"])
             self.assertIn(
                 "ui.reports.export_capital_gains_csv",
                 ready["data"]["supported_kinds"],
@@ -2902,6 +2904,33 @@ class DaemonSmokeTest(unittest.TestCase):
             )
             self.assertEqual(pdf_file.read_bytes()[:4], b"%PDF")
             self.assertGreater(pdf["data"]["pages"], 0)
+
+            _write_payload(
+                proc,
+                {"request_id": "export-report-csv", "kind": "ui.reports.export_csv"},
+            )
+            report_csv = _read_payload_timeout(proc)
+            self.assertEqual(report_csv["kind"], "ui.reports.export_csv")
+            csv_file = Path(report_csv["data"]["file"])
+            self.assertTrue(csv_file.is_file())
+            self.assertEqual(
+                csv_file.parent.resolve(),
+                (Path(tmp) / "exports" / "reports").resolve(),
+            )
+            self.assertIn("Overview", report_csv["data"]["sections"])
+            self.assertIn("Wallet Inventory", csv_file.read_text(encoding="utf-8"))
+
+            _write_payload(
+                proc,
+                {"request_id": "export-report-xlsx", "kind": "ui.reports.export_xlsx"},
+            )
+            report_xlsx = _read_payload_timeout(proc)
+            self.assertEqual(report_xlsx["kind"], "ui.reports.export_xlsx")
+            report_xlsx_file = Path(report_xlsx["data"]["file"])
+            self.assertTrue(report_xlsx_file.is_file())
+            self.assertEqual(report_xlsx_file.read_bytes()[:2], b"PK")
+            self.assertIn("Overview", report_xlsx["data"]["sheets"])
+            self.assertIn("Transactions", report_xlsx["data"]["sheets"])
 
             _write_payload(
                 proc,
