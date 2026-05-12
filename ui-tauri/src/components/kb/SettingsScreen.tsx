@@ -226,11 +226,20 @@ const DEFAULT_BACKENDS: Backend[] = [
   },
   {
     id: "b3",
+    name: "Coinbase Exchange",
+    url: "https://api.exchange.coinbase.com",
+    net: "FX",
+    health: "BTC/EUR 1m live",
+    on: true,
+    auth: "none",
+  },
+  {
+    id: "b4",
     name: "CoinGecko",
     url: "https://api.coingecko.com/api/v3",
     net: "FX",
-    health: "EUR 71,420 - 14s",
-    on: true,
+    health: "Daily fallback",
+    on: false,
     auth: "none",
   },
 ];

@@ -5342,8 +5342,18 @@ class ReviewRegressionTest(unittest.TestCase):
         conn.commit()
         with patch.object(
             core_rates,
-            "fetch_rates_coingecko",
-            return_value=[("2024-01-01T00:00:00Z", 60000.0)],
+            "fetch_rates_coinbase_exchange",
+            return_value=[
+                {
+                    "timestamp": "2024-01-01T00:00:00Z",
+                    "open": "60000.0",
+                    "high": "60000.0",
+                    "low": "60000.0",
+                    "close": "60000.0",
+                    "volume": "1.0",
+                    "trades": None,
+                }
+            ],
         ):
             summary = core_rates.sync_rates(conn, pair="BTC-EUR", days=1)
         self.assertEqual(summary[0]["pair"], "BTC-EUR")

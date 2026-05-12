@@ -65,7 +65,7 @@ export function AppFooter() {
 
       <div className="flex min-w-0 items-center gap-2 sm:gap-3.5">
         <span
-          title={`Updated ${sinceLabel} · source: CoinGecko`}
+          title={`Updated ${sinceLabel} · source: Coinbase Exchange`}
           className="inline-flex min-w-0 items-center gap-1.5"
         >
           <span className="hidden text-ink-3 sm:inline">BTC/EUR</span>
@@ -76,7 +76,7 @@ export function AppFooter() {
               maximumFractionDigits: 2,
             })}
           </span>
-          <span className="hidden text-ink-3 md:inline">· COINGECKO</span>
+          <span className="hidden text-ink-3 md:inline">· COINBASE</span>
           <button
             onClick={refresh}
             title="Refresh rate"

@@ -6,8 +6,9 @@ import json
 import logging
 from pathlib import Path
 import zipfile
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from urllib import error as urlerror
+from urllib import parse as urlparse
 from urllib import request as urlrequest
 
 from .. import __version__
@@ -19,11 +20,17 @@ from ..time_utils import _iso_z, _parse_iso_datetime
 logger = logging.getLogger(__name__)
 
 SUPPORTED_RATE_PAIRS = ("BTC-USD", "BTC-EUR")
+RATE_SOURCE_COINBASE_EXCHANGE = "coinbase-exchange"
 RATE_SOURCE_COINGECKO = "coingecko"
 RATE_SOURCE_KRAKEN_CSV = "kraken-csv"
-SUPPORTED_RATE_SOURCES = (RATE_SOURCE_COINGECKO, RATE_SOURCE_KRAKEN_CSV)
+SUPPORTED_RATE_SOURCES = (
+    RATE_SOURCE_COINBASE_EXCHANGE,
+    RATE_SOURCE_KRAKEN_CSV,
+    RATE_SOURCE_COINGECKO,
+)
 _COINGECKO_VS = {"USD": "usd", "EUR": "eur"}
 _COINGECKO_COIN = {"BTC": "bitcoin"}
+_COINBASE_EXCHANGE_PRODUCT = {"BTC-USD": "BTC-USD", "BTC-EUR": "BTC-EUR"}
 _RATE_ASSET_ALIASES = {"LBTC": "BTC"}
 _KRAKEN_STABLECOIN_QUOTES = {"DAI", "USDC", "USDT"}
 _KRAKEN_SUPPORTED_QUOTES = {"EUR", "USD"}
@@ -487,6 +494,163 @@ def _sync_rates_coingecko(conn, pair=None, days=30, source=RATE_SOURCE_COINGECKO
     return summary
 
 
+_COINBASE_GRANULARITIES = {60, 300, 900, 3600, 21600, 86400}
+
+
+def _coinbase_exchange_url(product_id, start, end, granularity):
+    granularity_int = int(granularity)
+    if granularity_int not in _COINBASE_GRANULARITIES:
+        raise AppError(
+            f"Coinbase Exchange granularity must be one of {sorted(_COINBASE_GRANULARITIES)}",
+            code="validation",
+        )
+    query = urlparse.urlencode(
+        {
+            "granularity": str(granularity_int),
+            "start": _iso_z(start),
+            "end": _iso_z(end),
+        }
+    )
+    return f"https://api.exchange.coinbase.com/products/{product_id}/candles?{query}"
+
+
+def _coinbase_exchange_candles(pair, start, end, granularity=60):
+    normalized = require_supported_pair(pair)
+    product_id = _COINBASE_EXCHANGE_PRODUCT.get(normalized)
+    if not product_id:
+        raise AppError(
+            f"Pair '{normalized}' has no Coinbase Exchange mapping",
+            code="validation",
+            hint=f"Supported pairs: {', '.join(SUPPORTED_RATE_PAIRS)}",
+        )
+    payload = http_get_json(
+        _coinbase_exchange_url(product_id, start, end, granularity),
+        timeout=30,
+    )
+    if not isinstance(payload, list):
+        raise AppError(
+            "Coinbase Exchange response did not contain candle rows",
+            code="upstream_error",
+            retryable=True,
+        )
+    return payload
+
+
+def _parse_coinbase_exchange_rows(rows, granularity=60):
+    output = []
+    granularity_seconds = int(granularity)
+    for row in rows:
+        if not isinstance(row, list) or len(row) < 6:
+            continue
+        try:
+            timestamp_seconds = int(row[0])
+            close_timestamp = _iso_z(
+                datetime.fromtimestamp(
+                    timestamp_seconds + granularity_seconds,
+                    tz=timezone.utc,
+                )
+            )
+            candle = {
+                "timestamp": close_timestamp,
+                "low": str(row[1]),
+                "high": str(row[2]),
+                "open": str(row[3]),
+                "close": str(row[4]),
+                "volume": str(row[5]),
+                "trades": None,
+            }
+            for field in ("open", "high", "low", "close", "volume"):
+                pricing.decimal_from_exact(candle[field])
+        except (TypeError, ValueError):
+            continue
+        output.append(candle)
+    return sorted(output, key=lambda candle: candle["timestamp"])
+
+
+def fetch_rates_coinbase_exchange(pair, days=30, granularity=60):
+    if int(days) <= 0:
+        raise AppError("--days must be positive", code="validation")
+    granularity_int = int(granularity)
+    if granularity_int not in _COINBASE_GRANULARITIES:
+        raise AppError(
+            f"Coinbase Exchange granularity must be one of {sorted(_COINBASE_GRANULARITIES)}",
+            code="validation",
+        )
+    end = datetime.now(timezone.utc).replace(second=0, microsecond=0)
+    start = end - timedelta(days=int(days))
+    step = timedelta(seconds=granularity_int * 300)
+    output = []
+    cursor = start
+    while cursor < end:
+        chunk_end = min(cursor + step, end)
+        rows = _coinbase_exchange_candles(
+            pair,
+            cursor,
+            chunk_end,
+            granularity=granularity_int,
+        )
+        output.extend(_parse_coinbase_exchange_rows(rows, granularity=granularity_int))
+        cursor = chunk_end
+    seen = set()
+    deduped = []
+    for candle in sorted(output, key=lambda item: item["timestamp"]):
+        if candle["timestamp"] in seen:
+            continue
+        seen.add(candle["timestamp"])
+        deduped.append(candle)
+    return deduped
+
+
+def _sync_rates_coinbase_exchange(
+    conn,
+    pair=None,
+    days=30,
+    source=RATE_SOURCE_COINBASE_EXCHANGE,
+):
+    if int(days) <= 0:
+        raise AppError("--days must be positive", code="validation")
+    if pair:
+        pairs = [require_supported_pair(pair)]
+    else:
+        pairs = list(SUPPORTED_RATE_PAIRS)
+    fetched_at = _iso_z(datetime.now(timezone.utc))
+    summary = []
+    for normalized_pair in pairs:
+        samples = fetch_rates_coinbase_exchange(normalized_pair, days=days, granularity=60)
+        inserted = 0
+        for candle in samples:
+            upsert_rate(
+                conn,
+                normalized_pair,
+                candle["timestamp"],
+                candle["close"],
+                source,
+                fetched_at=fetched_at,
+                granularity="minute",
+                method="product_candles",
+                open_rate=candle["open"],
+                high_rate=candle["high"],
+                low_rate=candle["low"],
+                close_rate=candle["close"],
+                volume=candle["volume"],
+                trades=candle["trades"],
+            )
+            inserted += 1
+        _invalidate_profile_journals_for_pair(conn, normalized_pair)
+        conn.commit()
+        summary.append(
+            {
+                "pair": normalized_pair,
+                "source": source,
+                "samples": inserted,
+                "days": int(days),
+                "granularity": "minute",
+                "method": "product_candles",
+                "fetched_at": fetched_at,
+            }
+        )
+    return summary
+
 def _kraken_csv_members(path):
     source_path = Path(path).expanduser()
     if not source_path.exists():
@@ -682,8 +846,15 @@ def _sync_rates_kraken_csv(conn, pair=None, path=None):
     return [summaries[pair] for pair in sorted(summaries)]
 
 
-def sync_rates(conn, pair=None, days=30, source=RATE_SOURCE_COINGECKO, path=None):
+def sync_rates(conn, pair=None, days=30, source=RATE_SOURCE_COINBASE_EXCHANGE, path=None):
     normalized_source = str(source or "").strip().lower()
+    if normalized_source == RATE_SOURCE_COINBASE_EXCHANGE:
+        if path:
+            raise AppError(
+                "--path is only supported for --source kraken-csv",
+                code="validation",
+            )
+        return _sync_rates_coinbase_exchange(conn, pair=pair, days=days, source=normalized_source)
     if normalized_source == RATE_SOURCE_COINGECKO:
         if path:
             raise AppError(
@@ -726,10 +897,12 @@ def set_manual_rate(conn, pair, timestamp, rate, source="manual", granularity=No
 
 
 __all__ = [
+    "RATE_SOURCE_COINBASE_EXCHANGE",
     "RATE_SOURCE_COINGECKO",
     "RATE_SOURCE_KRAKEN_CSV",
     "SUPPORTED_RATE_PAIRS",
     "SUPPORTED_RATE_SOURCES",
+    "fetch_rates_coinbase_exchange",
     "fetch_rates_coingecko",
     "get_cached_rate_at_or_before",
     "get_latest_rate",

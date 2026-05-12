@@ -1279,7 +1279,7 @@ def build_parser() -> argparse.ArgumentParser:
     rates_sync.add_argument("--days", type=int, default=30)
     rates_sync.add_argument(
         "--source",
-        default=core_rates.RATE_SOURCE_COINGECKO,
+        default=core_rates.RATE_SOURCE_COINBASE_EXCHANGE,
         help=f"Rate source ({', '.join(core_rates.SUPPORTED_RATE_SOURCES)})",
     )
     rates_sync.add_argument(

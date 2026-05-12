@@ -6,7 +6,9 @@ import tempfile
 import unittest
 import zipfile
 from pathlib import Path
+from unittest.mock import patch
 
+from kassiber.core import rates as core_rates
 from kassiber.core.rates import get_cached_rate_at_or_before
 from kassiber.daemon import _rates_kraken_csv_import_payload
 from kassiber.db import open_db
@@ -215,6 +217,58 @@ class KrakenCsvRatesTest(unittest.TestCase):
             ).fetchall()
         ]
         self.assertEqual(pairs, ["BTC-EUR"])
+
+    def test_default_sync_uses_coinbase_exchange_and_maps_lhoc_tuple(self):
+        conn = open_db(str(self.data_root))
+        self.addCleanup(conn.close)
+
+        def fake_coinbase_rows(pair, start, end, granularity=60):
+            self.assertEqual(pair, "BTC-EUR")
+            self.assertEqual(granularity, 60)
+            return [
+                [1714521660, "60001.00", "60040.00", "60010.00", "60030.00", "0.75"],
+                [1714521600, "59990.00", "60020.00", "60000.00", "60010.00", "0.50"],
+            ]
+
+        with patch.object(core_rates, "_coinbase_exchange_candles", side_effect=fake_coinbase_rows):
+            summary = core_rates.sync_rates(conn, pair="BTC-EUR", days=1)
+
+        self.assertEqual(summary[0]["source"], "coinbase-exchange")
+        self.assertEqual(summary[0]["method"], "product_candles")
+        rows = conn.execute(
+            """
+            SELECT timestamp, open_rate_exact, high_rate_exact, low_rate_exact,
+                   close_rate_exact, volume_exact, trades
+            FROM rates_cache
+            WHERE source = 'coinbase-exchange'
+            ORDER BY timestamp
+            """
+        ).fetchall()
+        self.assertEqual([row["timestamp"] for row in rows], [
+            "2024-05-01T00:01:00Z",
+            "2024-05-01T00:02:00Z",
+        ])
+        self.assertEqual(rows[0]["open_rate_exact"], "60000.00")
+        self.assertEqual(rows[0]["high_rate_exact"], "60020.00")
+        self.assertEqual(rows[0]["low_rate_exact"], "59990.00")
+        self.assertEqual(rows[0]["close_rate_exact"], "60010.00")
+        self.assertEqual(rows[0]["volume_exact"], "0.50")
+        self.assertIsNone(rows[0]["trades"])
+
+    def test_coinbase_exchange_fetch_windows_at_300_minutes(self):
+        windows = []
+
+        def fake_coinbase_rows(pair, start, end, granularity=60):
+            windows.append((start, end))
+            return []
+
+        with patch.object(core_rates, "_coinbase_exchange_candles", side_effect=fake_coinbase_rows):
+            core_rates.fetch_rates_coinbase_exchange("BTC-EUR", days=1, granularity=60)
+
+        self.assertEqual(len(windows), 5)
+        self.assertTrue(
+            all((end - start).total_seconds() <= 300 * 60 for start, end in windows)
+        )
 
 
 if __name__ == "__main__":
