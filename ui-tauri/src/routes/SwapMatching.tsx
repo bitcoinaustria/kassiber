@@ -786,7 +786,7 @@ export function SwapMatching() {
             </div>
           </header>
 
-          <div className="grid gap-2 border-t px-3 py-3 text-sm xl:grid-cols-[minmax(0,1fr)_auto] xl:items-center sm:px-6">
+          <div className="grid gap-2 border-t px-2 py-3 text-sm xl:grid-cols-[minmax(0,1fr)_auto] xl:items-center">
             <div className="flex min-w-0 flex-wrap items-center gap-2">
               <label className="flex shrink-0 items-center gap-2">
                 <Checkbox
@@ -1121,20 +1121,10 @@ export function SwapMatching() {
             </div>
           ) : null}
 
-          <div className="flex flex-col items-center justify-between gap-2 border-t px-3 py-3 text-xs text-muted-foreground sm:flex-row sm:px-6">
+          <div className="flex items-center border-t px-3 py-3 text-xs text-muted-foreground sm:px-6">
             <span>
               Showing {candidates.length === 0 ? 0 : 1}-{candidates.length} of {counts.total}
             </span>
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-7 px-2"
-              onClick={() => setHelpOpen(true)}
-              aria-label="Show keyboard shortcuts"
-              title="Show keyboard shortcuts"
-            >
-              ?
-            </Button>
           </div>
         </div>
       </Collapsible>
