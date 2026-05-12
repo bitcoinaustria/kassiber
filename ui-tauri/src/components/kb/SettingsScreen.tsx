@@ -9,6 +9,7 @@ import {
   Database,
   CheckCircle2,
   Download,
+  ExternalLink,
   FileInput,
   KeyRound,
   Lock,
@@ -78,6 +79,10 @@ import {
 } from "@/components/kb/Onboarding/constants";
 
 const PLAINTEXT_DELETE_ACK = "DELETE LOCAL DATA";
+const KRAKEN_OHLCVT_SUPPORT_URL =
+  "https://support.kraken.com/hc/articles/360047124832-Downloadable-historical-OHLCVT-Open-High-Low-Close-Volume-Trades-data";
+const KRAKEN_MARKET_DATA_BLOG_URL =
+  "https://blog.kraken.com/product/api/unlocked-3-the-market-data-feeds-systematic-traders-use";
 
 type Net = "BTC" | "LIQUID" | "LN" | "FX";
 
@@ -1387,6 +1392,26 @@ function BackendSettingsPanel({
             <p className="text-xs text-muted-foreground">
               One-minute Bitcoin candles from a local Kraken CSV or ZIP archive.
             </p>
+            <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-xs">
+              <a
+                href={KRAKEN_OHLCVT_SUPPORT_URL}
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex items-center gap-1 text-primary underline-offset-4 hover:underline"
+              >
+                Get Kraken archive
+                <ExternalLink className="size-3" aria-hidden="true" />
+              </a>
+              <a
+                href={KRAKEN_MARKET_DATA_BLOG_URL}
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex items-center gap-1 text-primary underline-offset-4 hover:underline"
+              >
+                Kraken market data blog
+                <ExternalLink className="size-3" aria-hidden="true" />
+              </a>
+            </div>
           </div>
           <span className="inline-flex w-fit items-center rounded-md border bg-muted px-2 py-1 text-xs text-muted-foreground">
             kraken-csv
