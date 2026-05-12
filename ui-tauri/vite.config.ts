@@ -39,6 +39,7 @@ const ALLOWED_BRIDGE_KINDS = new Set([
   "ui.reports.export_capital_gains_csv",
   "ui.reports.export_austrian_e1kv_pdf",
   "ui.reports.export_austrian_e1kv_xlsx",
+  "ui.reports.export_austrian_e1kv_csv",
   "ui.journals.snapshot",
   "ui.journals.quarantine",
   "ui.journals.transfers.list",

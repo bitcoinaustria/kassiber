@@ -143,6 +143,7 @@ SUPPORTED_KINDS = (
     "ui.reports.export_capital_gains_csv",
     "ui.reports.export_austrian_e1kv_pdf",
     "ui.reports.export_austrian_e1kv_xlsx",
+    "ui.reports.export_austrian_e1kv_csv",
     "ui.source_funds.preview",
     "ui.source_funds.cases.save",
     "ui.source_funds.cases.list",
@@ -1229,6 +1230,32 @@ def _ui_report_export_payload(
                 "format": "xlsx",
                 "scope": "austrian_e1kv",
                 "filename": Path(payload["file"]).name,
+            }
+        )
+        return payload
+
+    if kind == "ui.reports.export_austrian_e1kv_csv":
+        year = args.get("year")
+        directory = _managed_report_export_path(
+            ctx.data_root,
+            f"kassiber-austrian-e1kv-{year}-csv",
+            "",
+        )
+        payload = dict(
+            core_reports.export_austrian_e1kv_csv_bundle(
+                conn,
+                None,
+                None,
+                directory,
+                hooks,
+                tax_year=year,
+            )
+        )
+        payload.update(
+            {
+                "format": "csv",
+                "scope": "austrian_e1kv",
+                "filename": Path(payload["dir"]).name,
             }
         )
         return payload
@@ -5257,6 +5284,7 @@ def handle_request(
         "ui.reports.export_capital_gains_csv",
         "ui.reports.export_austrian_e1kv_pdf",
         "ui.reports.export_austrian_e1kv_xlsx",
+        "ui.reports.export_austrian_e1kv_csv",
     }:
         return (
             _with_request_id(

@@ -242,6 +242,23 @@ export const fixtures: Record<string, unknown> = {
     summary_rows: 3,
     bytes: 24576,
   },
+  "ui.reports.export_austrian_e1kv_csv": {
+    dir: "~/.kassiber/exports/reports/kassiber-austrian-e1kv-2025-csv-mock",
+    filename: "kassiber-austrian-e1kv-2025-csv-mock",
+    format: "csv",
+    scope: "austrian_e1kv",
+    tax_year: 2025,
+    rows: MOCK_CAPITAL_GAINS.lots.length,
+    summary_rows: 3,
+    files: [
+      {
+        sheet: "Übersicht",
+        file: "~/.kassiber/exports/reports/kassiber-austrian-e1kv-2025-csv-mock/00_uebersicht.csv",
+        rows: 3,
+        bytes: 2048,
+      },
+    ],
+  },
   "ui.source_funds.preview": {
     workspace: "My Books",
     profile: "local books",

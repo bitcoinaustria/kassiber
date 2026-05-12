@@ -134,6 +134,7 @@ type ReportHref = "/journals" | "/quarantine" | "/transactions" | "/reports";
 
 interface ReportExportResult {
   file?: string;
+  dir?: string;
   filename?: string;
   format?: string;
   scope?: string;
@@ -141,6 +142,12 @@ interface ReportExportResult {
   pages?: number;
   rows?: number;
   sheets?: string[];
+  files?: Array<{
+    file?: string;
+    sheet?: string;
+    bytes?: number;
+    rows?: number;
+  }>;
   summary_rows?: number;
   tax_year?: number;
 }
@@ -216,6 +223,8 @@ function ReportsView({ report, hideSensitive }: ReportsViewProps) {
     useDaemonMutation<ReportExportResult>("ui.reports.export_austrian_e1kv_pdf");
   const exportAustrianXlsx =
     useDaemonMutation<ReportExportResult>("ui.reports.export_austrian_e1kv_xlsx");
+  const exportAustrianCsv =
+    useDaemonMutation<ReportExportResult>("ui.reports.export_austrian_e1kv_csv");
   const activeProfileIsAustrian = report.jurisdictionCode === "AT";
   const kennzahlRows =
     report.kennzahlRows?.length
@@ -248,7 +257,9 @@ function ReportsView({ report, hideSensitive }: ReportsViewProps) {
     setActiveExport(format);
     const mutation =
       format === "csv"
-        ? exportCsv
+        ? activeProfileIsAustrian
+          ? exportAustrianCsv
+          : exportCsv
         : format === "xlsx"
           ? activeProfileIsAustrian
             ? exportAustrianXlsx
@@ -261,20 +272,23 @@ function ReportsView({ report, hideSensitive }: ReportsViewProps) {
         ? activeProfileIsAustrian
           ? { year }
           : {}
-        : format === "xlsx" && activeProfileIsAustrian
+        : (format === "xlsx" || format === "csv") && activeProfileIsAustrian
           ? { year }
           : {};
 
     mutation.mutate(args, {
       onSuccess: (envelope) => {
         const payload = envelope.data;
-        const file = payload?.file ?? "";
-        const filename = payload?.filename ?? file.split("/").pop() ?? "report";
+        const exportPath = payload?.file ?? payload?.dir ?? "";
+        const filename =
+          payload?.filename ?? exportPath.split(/[\\/]/).pop() ?? "report";
         const detail =
           payload?.format === "pdf" && payload.pages
             ? `${payload.pages} page${payload.pages === 1 ? "" : "s"}`
             : payload?.format === "xlsx" && payload.sheets?.length
               ? `${payload.sheets.length} sheet${payload.sheets.length === 1 ? "" : "s"}`
+              : payload?.format === "csv" && payload.files?.length
+                ? `${payload.files.length} file${payload.files.length === 1 ? "" : "s"}`
               : payload?.format === "xlsx" && payload.rows !== undefined
                 ? `${payload.rows} row${payload.rows === 1 ? "" : "s"}`
               : payload?.format === "csv" && payload.rows !== undefined
@@ -283,7 +297,7 @@ function ReportsView({ report, hideSensitive }: ReportsViewProps) {
         setExportStatus({
           tone: "success",
           message: `${filename} saved to the managed exports folder.`,
-          path: file,
+          path: exportPath,
         });
         addNotification({
           title: "Report export finished",
@@ -749,7 +763,11 @@ function ReportFilesPanel({
             id="csv"
             icon={FileArchive}
             title="CSV report"
-            detail="Complete report sections for spreadsheet review"
+            detail={
+              activeProfileIsAustrian
+                ? `${year} · Austrian E 1kv CSV bundle`
+                : "Complete report sections for spreadsheet review"
+            }
             loading={activeExport === "csv"}
             disabled={Boolean(activeExport)}
             onExport={onExport}

@@ -548,6 +548,10 @@ class DaemonSmokeTest(unittest.TestCase):
                 "ui.reports.export_austrian_e1kv_xlsx",
                 ready["data"]["supported_kinds"],
             )
+            self.assertIn(
+                "ui.reports.export_austrian_e1kv_csv",
+                ready["data"]["supported_kinds"],
+            )
             self.assertIn("ui.source_funds.preview", ready["data"]["supported_kinds"])
             self.assertIn("ui.source_funds.cases.save", ready["data"]["supported_kinds"])
             self.assertIn("ui.source_funds.cases.list", ready["data"]["supported_kinds"])
@@ -2974,6 +2978,30 @@ class DaemonSmokeTest(unittest.TestCase):
             self.assertTrue(xlsx_file.is_file())
             self.assertEqual(xlsx_file.read_bytes()[:2], b"PK")
             self.assertEqual(xlsx["data"]["tax_year"], 2026)
+
+            _write_payload(
+                proc,
+                {
+                    "request_id": "export-austrian-csv",
+                    "kind": "ui.reports.export_austrian_e1kv_csv",
+                    "args": {"year": 2026},
+                },
+            )
+            austrian_csv = _read_payload_timeout(proc)
+            self.assertEqual(austrian_csv["kind"], "ui.reports.export_austrian_e1kv_csv")
+            self.assertEqual(austrian_csv["data"]["tax_year"], 2026)
+            self.assertEqual(austrian_csv["data"]["format"], "csv")
+            csv_dir = Path(austrian_csv["data"]["dir"])
+            self.assertTrue(csv_dir.is_dir())
+            self.assertEqual(
+                csv_dir.parent.resolve(),
+                (Path(tmp) / "exports" / "reports").resolve(),
+            )
+            files = austrian_csv["data"]["files"]
+            self.assertGreaterEqual(len(files), 2)
+            overview_csv = Path(files[0]["file"])
+            self.assertTrue(overview_csv.is_file())
+            self.assertIn("Übersicht", overview_csv.read_text(encoding="utf-8"))
 
             _write_payload(proc, {"request_id": "shutdown-1", "kind": "daemon.shutdown"})
             self.assertEqual(_read_payload_timeout(proc)["kind"], "daemon.shutdown")
