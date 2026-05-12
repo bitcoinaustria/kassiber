@@ -1656,7 +1656,7 @@ function RailIcon({ rail, size = "regular" }: RailIconProps) {
         className={cn(
           "object-contain drop-shadow-sm",
           iconSize,
-          rail === "liquid" ? "scale-125" : null,
+          rail === "liquid" ? "scale-150" : null,
         )}
       />
     </span>
