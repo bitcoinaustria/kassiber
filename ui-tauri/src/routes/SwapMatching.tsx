@@ -1655,7 +1655,7 @@ function RailIcon({ rail, size = "regular" }: RailIconProps) {
   return (
     <span
       className={cn(
-        "inline-flex shrink-0 items-center justify-center",
+        "inline-flex shrink-0 items-center justify-center rounded-md bg-white shadow-sm ring-1 ring-black/10 dark:ring-white/15",
         frameSize,
       )}
       title={details.label}
@@ -1664,7 +1664,11 @@ function RailIcon({ rail, size = "regular" }: RailIconProps) {
         src={details.icon}
         alt=""
         aria-hidden="true"
-        className={cn("object-contain drop-shadow-sm", iconSize)}
+        className={cn(
+          "object-contain drop-shadow-sm",
+          iconSize,
+          rail === "liquid" ? "scale-125" : null,
+        )}
       />
     </span>
   );
