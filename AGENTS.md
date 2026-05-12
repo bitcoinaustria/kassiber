@@ -95,7 +95,9 @@ Kassiber is currently in **dev mode**: renaming commands, breaking flags, and re
   Desktop connection setup uses explicit mutating daemon kinds
   `ui.wallets.create`, `ui.connections.btcpay.create`,
   `ui.connections.btcpay.discover`, and
-  `ui.metadata.bip329.import`; do not model the Connections dialog as a
+  `ui.metadata.bip329.import`; desktop Settings rate import uses
+  `ui.rates.kraken_csv.import` for local Kraken CSV/ZIP history backfills and
+  quarterly update archives. Do not model the Connections dialog as a
   command-template picker. Connection setup should select from configured
   chain/indexer backends via `ui.backends.options`; BTCPay setup can create a
   BTCPay instance inline from URL + API key, discover stores/payment methods,

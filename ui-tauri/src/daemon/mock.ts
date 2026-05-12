@@ -853,6 +853,48 @@ export const mockDaemon: DaemonTransport = {
       };
     }
 
+    if (req.kind === "ui.rates.kraken_csv.import") {
+      const args = (req.args ?? {}) as {
+        operation?: unknown;
+        path?: unknown;
+      };
+      const operation =
+        args.operation === "incremental" ? "incremental" : "full";
+      return {
+        kind: "ui.rates.kraken_csv.import",
+        schema_version: 1,
+        request_id: req.request_id,
+        data: {
+          source: "kraken-csv",
+          operation,
+          path:
+            typeof args.path === "string" && args.path.trim()
+              ? args.path.trim()
+              : "/mock/Kraken_OHLCVT.zip",
+          pair: null,
+          summary: [
+            {
+              pair: "BTC-EUR",
+              samples: 10,
+              files: 1,
+              skipped_rows: 0,
+              skipped_files: 0,
+              first_timestamp: "2024-05-01T00:00:00Z",
+              last_timestamp: "2024-05-01T00:09:00Z",
+            },
+          ],
+          totals: {
+            pairs: 1,
+            samples: 10,
+            rows: 10,
+            files: 1,
+            skipped_rows: 0,
+            skipped_files: 0,
+          },
+        } as T,
+      };
+    }
+
     const fixture = fixtures[req.kind];
     if (fixture === undefined) {
       return {

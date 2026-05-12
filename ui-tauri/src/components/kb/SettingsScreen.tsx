@@ -65,6 +65,7 @@ import {
 } from "@/components/kb/AiProviderForm";
 import { useDaemon, useDaemonMutation } from "@/daemon/client";
 import { clearImportProject } from "@/daemon/transport";
+import { isFilePickerAvailable, pickFile } from "@/lib/filePicker";
 import { setSessionUnlockPassphrase } from "@/store/sessionLock";
 import { useUiStore, type AppLockPolicy } from "@/store/ui";
 import type { AiModelsListData, AiModelRow } from "@/lib/aiCapabilities";
@@ -102,6 +103,34 @@ interface StatusData {
   current_workspace: string | null;
   workspaces: number;
   profiles: number;
+}
+
+type KrakenRatesImportOperation = "full" | "incremental";
+
+interface KrakenRatesImportSummaryRow {
+  pair: string;
+  samples: number;
+  files: number;
+  skipped_rows: number;
+  skipped_files: number;
+  first_timestamp: string | null;
+  last_timestamp: string | null;
+}
+
+interface KrakenRatesImportData {
+  source: "kraken-csv";
+  operation: KrakenRatesImportOperation;
+  path: string;
+  pair: string | null;
+  summary: KrakenRatesImportSummaryRow[];
+  totals: {
+    pairs: number;
+    samples: number;
+    rows: number;
+    files: number;
+    skipped_rows: number;
+    skipped_files: number;
+  };
 }
 
 interface AiProviderRow {
@@ -212,6 +241,20 @@ const backendIntegrationImage: Partial<Record<Net, string>> = {
 
 const brandLogoFrame =
   "border-neutral-200 bg-white text-neutral-950 dark:border-neutral-700 dark:bg-white dark:text-neutral-950";
+const compactNumberFormatter = new Intl.NumberFormat(undefined, {
+  maximumFractionDigits: 0,
+});
+
+function formatCount(value: number): string {
+  return compactNumberFormatter.format(value);
+}
+
+function formatKrakenRange(row: KrakenRatesImportSummaryRow): string {
+  if (row.first_timestamp && row.last_timestamp) {
+    return `${row.first_timestamp} to ${row.last_timestamp}`;
+  }
+  return "No imported rows";
+}
 
 function backendIntegrationArt(backend: Backend): Pick<
   IntegrationItem,
@@ -1203,6 +1246,81 @@ function BackendSettingsPanel({
 }) {
   const syncBackends = backends.filter(isSyncBackend);
   const rateBackends = backends.filter((backend) => backend.net === "FX");
+  const importKrakenRates = useDaemonMutation<KrakenRatesImportData>(
+    "ui.rates.kraken_csv.import",
+  );
+  const [krakenArchivePath, setKrakenArchivePath] = React.useState("");
+  const [krakenImportResult, setKrakenImportResult] =
+    React.useState<KrakenRatesImportData | null>(null);
+  const [krakenImportError, setKrakenImportError] = React.useState<string | null>(
+    null,
+  );
+  const [pendingKrakenOperation, setPendingKrakenOperation] =
+    React.useState<KrakenRatesImportOperation | null>(null);
+
+  const chooseKrakenArchive = async () => {
+    setKrakenImportError(null);
+    const selected = await pickFile({
+      title: "Choose Kraken OHLCVT archive",
+      filters: [
+        {
+          name: "Kraken OHLCVT",
+          extensions: ["zip", "csv"],
+        },
+      ],
+    });
+    if (selected) {
+      setKrakenArchivePath(selected);
+    }
+  };
+
+  const startKrakenImport = async (operation: KrakenRatesImportOperation) => {
+    let archivePath = krakenArchivePath.trim();
+    setKrakenImportError(null);
+    setKrakenImportResult(null);
+
+    if (!archivePath && isFilePickerAvailable) {
+      const selected = await pickFile({
+        title:
+          operation === "full"
+            ? "Choose Kraken full OHLCVT archive"
+            : "Choose Kraken update OHLCVT archive",
+        filters: [
+          {
+            name: "Kraken OHLCVT",
+            extensions: ["zip", "csv"],
+          },
+        ],
+      });
+      if (!selected) return;
+      archivePath = selected;
+      setKrakenArchivePath(selected);
+    }
+
+    if (!archivePath) {
+      setKrakenImportError("Enter a local Kraken CSV or ZIP path.");
+      return;
+    }
+
+    setPendingKrakenOperation(operation);
+    try {
+      const envelope = await importKrakenRates.mutateAsync({
+        path: archivePath,
+        operation,
+      });
+      setKrakenImportResult(envelope.data ?? null);
+    } catch (error) {
+      setKrakenImportError(
+        error instanceof Error ? error.message : "Kraken import failed.",
+      );
+    } finally {
+      setPendingKrakenOperation(null);
+    }
+  };
+
+  const isImportingKraken = importKrakenRates.isPending;
+  const importedPairs = krakenImportResult?.summary ?? [];
+  const importedTotals = krakenImportResult?.totals;
   return (
     <section className="space-y-4">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
@@ -1245,6 +1363,118 @@ function BackendSettingsPanel({
           </p>
         </div>
         <BackendTable backends={rateBackends} />
+      </div>
+
+      <div className="rounded-md border bg-background p-3">
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+          <div className="min-w-0">
+            <p className="text-sm font-medium">Kraken offline history</p>
+            <p className="text-xs text-muted-foreground">
+              One-minute Bitcoin candles from a local Kraken CSV or ZIP archive.
+            </p>
+          </div>
+          <span className="inline-flex w-fit items-center rounded-md border bg-muted px-2 py-1 text-xs text-muted-foreground">
+            kraken-csv
+          </span>
+        </div>
+
+        <div className="mt-3 grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto]">
+          <Input
+            value={krakenArchivePath}
+            onChange={(event) => setKrakenArchivePath(event.target.value)}
+            placeholder="~/Downloads/Kraken_OHLCVT.zip"
+            aria-label="Kraken CSV or ZIP path"
+            disabled={isImportingKraken}
+          />
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => void chooseKrakenArchive()}
+            disabled={!isFilePickerAvailable || isImportingKraken}
+            title={
+              isFilePickerAvailable
+                ? "Choose archive"
+                : "Use the path field in browser mode"
+            }
+          >
+            <Upload className="size-4" aria-hidden="true" />
+            Choose
+          </Button>
+        </div>
+
+        <div className="mt-3 flex flex-col gap-2 sm:flex-row">
+          <Button
+            type="button"
+            onClick={() => void startKrakenImport("full")}
+            disabled={isImportingKraken}
+          >
+            {pendingKrakenOperation === "full" ? (
+              <RefreshCw className="size-4 animate-spin" aria-hidden="true" />
+            ) : (
+              <Database className="size-4" aria-hidden="true" />
+            )}
+            Full history
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => void startKrakenImport("incremental")}
+            disabled={isImportingKraken}
+          >
+            {pendingKrakenOperation === "incremental" ? (
+              <RefreshCw className="size-4 animate-spin" aria-hidden="true" />
+            ) : (
+              <RefreshCw className="size-4" aria-hidden="true" />
+            )}
+            Incremental update
+          </Button>
+        </div>
+
+        {krakenImportError ? (
+          <div className="mt-3 flex items-start gap-2 rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">
+            <XCircle className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
+            <span>{krakenImportError}</span>
+          </div>
+        ) : null}
+
+        {krakenImportResult ? (
+          <div className="mt-3 rounded-md border border-emerald-500/30 bg-emerald-500/5 p-3">
+            <div className="flex items-start gap-2 text-sm text-emerald-700 dark:text-emerald-300">
+              <CheckCircle2 className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
+              <span>
+                {importedTotals?.pairs
+                  ? `${formatCount(importedTotals.samples)} rows across ${formatCount(
+                      importedTotals.pairs,
+                    )} pair${importedTotals.pairs === 1 ? "" : "s"}`
+                  : "No Bitcoin minute rows imported"}
+              </span>
+            </div>
+            {importedPairs.length ? (
+              <div className="mt-2 divide-y rounded-md border bg-background text-xs">
+                {importedPairs.map((row) => (
+                  <div
+                    key={row.pair}
+                    className="grid gap-1 px-3 py-2 sm:grid-cols-[120px_minmax(0,1fr)_120px]"
+                  >
+                    <span className="font-medium">{row.pair}</span>
+                    <span className="truncate text-muted-foreground">
+                      {formatKrakenRange(row)}
+                    </span>
+                    <span className="text-muted-foreground sm:text-right">
+                      {formatCount(row.samples)} rows
+                    </span>
+                  </div>
+                ))}
+              </div>
+            ) : null}
+            {importedTotals?.skipped_rows || importedTotals?.skipped_files ? (
+              <p className="mt-2 text-xs text-muted-foreground">
+                Skipped {formatCount(importedTotals.skipped_rows)} rows and{" "}
+                {formatCount(importedTotals.skipped_files)} files.
+              </p>
+            ) : null}
+          </div>
+        ) : null}
       </div>
     </section>
   );

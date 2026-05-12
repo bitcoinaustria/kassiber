@@ -54,6 +54,7 @@ _DESKTOP_MUTATION_KINDS = (
     "ui.connections.btcpay.discover",
     "ui.connections.btcpay.test",
     "ui.metadata.bip329.import",
+    "ui.rates.kraken_csv.import",
     "ui.wallets.update",
     "ui.wallets.delete",
 )

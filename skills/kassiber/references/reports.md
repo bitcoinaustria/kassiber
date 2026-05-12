@@ -52,7 +52,9 @@ and pass the local ZIP or CSV with `--source kraken-csv --path <file>`. Kassiber
 ingests only 1-minute Bitcoin pairs for v1, maps Kraken `XBT` filenames to
 `BTC-USD` / `BTC-EUR`, stores sparse rows only when Kraken reports a traded
 candle, and relies on re-ingesting the latest full or quarterly archive rather
-than fetching from Kraken automatically.
+than fetching from Kraken automatically. The desktop Settings → Rate providers
+panel exposes the same local ingest as `Full history` and `Incremental update`
+actions; both use the idempotent `kraken-csv` upsert path.
 
 If pricing looks incomplete, sync rates and then re-run:
 

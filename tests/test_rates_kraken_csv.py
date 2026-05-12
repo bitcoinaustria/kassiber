@@ -7,6 +7,9 @@ import unittest
 import zipfile
 from pathlib import Path
 
+from kassiber.daemon import _rates_kraken_csv_import_payload
+from kassiber.db import open_db
+
 
 ROOT = Path(__file__).resolve().parent.parent
 FIXTURES = Path(__file__).resolve().parent / "fixtures"
@@ -110,6 +113,29 @@ class KrakenCsvRatesTest(unittest.TestCase):
             )
 
         conn = self._connect()
+        count = conn.execute(
+            "SELECT COUNT(*) FROM rates_cache WHERE source = 'kraken-csv'"
+        ).fetchone()[0]
+        self.assertEqual(count, 10)
+
+    def test_desktop_daemon_import_payload_supports_incremental_archives(self):
+        conn = open_db(str(self.data_root))
+        self.addCleanup(conn.close)
+
+        payload = _rates_kraken_csv_import_payload(
+            conn,
+            {"path": str(XBTEUR_FIXTURE), "operation": "incremental"},
+        )
+        self.assertEqual(payload["source"], "kraken-csv")
+        self.assertEqual(payload["operation"], "incremental")
+        self.assertEqual(payload["totals"]["pairs"], 1)
+        self.assertEqual(payload["totals"]["samples"], 10)
+        self.assertEqual(payload["summary"][0]["pair"], "BTC-EUR")
+
+        _rates_kraken_csv_import_payload(
+            conn,
+            {"path": str(XBTEUR_FIXTURE), "operation": "incremental"},
+        )
         count = conn.execute(
             "SELECT COUNT(*) FROM rates_cache WHERE source = 'kraken-csv'"
         ).fetchone()[0]
