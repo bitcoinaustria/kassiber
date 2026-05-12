@@ -226,11 +226,29 @@ class KrakenCsvRatesTest(unittest.TestCase):
             self.assertEqual(pair, "BTC-EUR")
             self.assertEqual(granularity, 60)
             return [
-                [1714521660, "60001.00", "60040.00", "60010.00", "60030.00", "0.75"],
-                [1714521600, "59990.00", "60020.00", "60000.00", "60010.00", "0.50"],
+                [
+                    1714521660,
+                    "60001.00",
+                    "60040.00",
+                    "60010.00",
+                    "60030.00",
+                    "0.75",
+                ],
+                [
+                    1714521600,
+                    "59990.00",
+                    "60020.00",
+                    "60000.00",
+                    "60010.00",
+                    "0.50",
+                ],
             ]
 
-        with patch.object(core_rates, "_coinbase_exchange_candles", side_effect=fake_coinbase_rows):
+        with patch.object(
+            core_rates,
+            "_coinbase_exchange_candles",
+            side_effect=fake_coinbase_rows,
+        ):
             summary = core_rates.sync_rates(conn, pair="BTC-EUR", days=1)
 
         self.assertEqual(summary[0]["source"], "coinbase-exchange")
@@ -244,10 +262,13 @@ class KrakenCsvRatesTest(unittest.TestCase):
             ORDER BY timestamp
             """
         ).fetchall()
-        self.assertEqual([row["timestamp"] for row in rows], [
-            "2024-05-01T00:01:00Z",
-            "2024-05-01T00:02:00Z",
-        ])
+        self.assertEqual(
+            [row["timestamp"] for row in rows],
+            [
+                "2024-05-01T00:01:00Z",
+                "2024-05-01T00:02:00Z",
+            ],
+        )
         self.assertEqual(rows[0]["open_rate_exact"], "60000.00")
         self.assertEqual(rows[0]["high_rate_exact"], "60020.00")
         self.assertEqual(rows[0]["low_rate_exact"], "59990.00")
@@ -262,7 +283,11 @@ class KrakenCsvRatesTest(unittest.TestCase):
             windows.append((start, end))
             return []
 
-        with patch.object(core_rates, "_coinbase_exchange_candles", side_effect=fake_coinbase_rows):
+        with patch.object(
+            core_rates,
+            "_coinbase_exchange_candles",
+            side_effect=fake_coinbase_rows,
+        ):
             core_rates.fetch_rates_coinbase_exchange("BTC-EUR", days=1, granularity=60)
 
         self.assertEqual(len(windows), 5)

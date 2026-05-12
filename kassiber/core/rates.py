@@ -589,7 +589,9 @@ def fetch_rates_coinbase_exchange(pair, days=30, granularity=60):
             chunk_end,
             granularity=granularity_int,
         )
-        output.extend(_parse_coinbase_exchange_rows(rows, granularity=granularity_int))
+        output.extend(
+            _parse_coinbase_exchange_rows(rows, granularity=granularity_int)
+        )
         cursor = chunk_end
     seen = set()
     deduped = []
@@ -616,7 +618,11 @@ def _sync_rates_coinbase_exchange(
     fetched_at = _iso_z(datetime.now(timezone.utc))
     summary = []
     for normalized_pair in pairs:
-        samples = fetch_rates_coinbase_exchange(normalized_pair, days=days, granularity=60)
+        samples = fetch_rates_coinbase_exchange(
+            normalized_pair,
+            days=days,
+            granularity=60,
+        )
         inserted = 0
         for candle in samples:
             upsert_rate(
@@ -650,6 +656,7 @@ def _sync_rates_coinbase_exchange(
             }
         )
     return summary
+
 
 def _kraken_csv_members(path):
     source_path = Path(path).expanduser()
