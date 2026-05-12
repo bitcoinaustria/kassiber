@@ -716,110 +716,109 @@ export function SwapMatching() {
         </section>
 
         <div className="rounded-lg border bg-card">
-          <div className="flex flex-wrap items-center gap-2 px-3 py-2 text-sm">
-            <label className="flex items-center gap-2">
-              <Checkbox
-                checked={selected.size > 0}
-                onCheckedChange={handleSelectAll}
-              />
-              <span className="text-xs text-muted-foreground">
-                Select non-conflicted
+          <div className="grid gap-2 px-3 py-2 text-sm xl:grid-cols-[minmax(0,1fr)_auto] xl:items-center">
+            <div className="flex min-w-0 items-center gap-2 overflow-hidden">
+              <label className="flex shrink-0 items-center gap-2">
+                <Checkbox
+                  checked={selected.size > 0}
+                  onCheckedChange={handleSelectAll}
+                />
+                <span className="text-xs text-muted-foreground">
+                  Select
+                </span>
+              </label>
+              <span className="shrink-0 text-xs text-muted-foreground">
+                {candidates.length} visible
               </span>
-            </label>
-            <span className="text-xs text-muted-foreground">
-              {candidates.length} visible
-            </span>
-            <span className="ml-1 text-xs font-medium uppercase text-muted-foreground">
-              Filter
-            </span>
-            <Select value={confidence} onValueChange={setConfidence}>
-              <SelectTrigger className="h-8 w-40">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {CONFIDENCE_OPTIONS.map((option) => (
-                  <SelectItem key={option.value} value={option.value}>
-                    {option.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <Select value={method} onValueChange={setMethod}>
-              <SelectTrigger className="h-8 w-40">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {METHOD_OPTIONS.map((option) => (
-                  <SelectItem key={option.value} value={option.value}>
-                    {option.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <input
-              ref={filterInputRef}
-              aria-label="Asset pair filter"
-              className="h-8 w-28 rounded border border-input bg-background px-2 text-sm"
-              placeholder="OUT-IN"
-              value={assetPair}
-              onChange={(e) => setAssetPair(e.target.value)}
-            />
-            {filterIsDirty ? (
-              <>
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  className="h-8 px-2"
-                  onClick={() => setSaveViewOpen(true)}
-                >
-                  <Star className="size-3.5" />
-                  <span>Save view</span>
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="h-8 px-2"
-                  onClick={() => {
-                    setConfidence("all");
-                    setMethod("all");
-                    setAssetPair("");
-                  }}
-                >
-                  Clear
-                </Button>
-              </>
-            ) : null}
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-8 px-2"
-              onClick={() => setHelpOpen(true)}
-              aria-label="Show keyboard shortcuts"
-            >
-              ?
-            </Button>
-            <div className="ml-auto flex flex-wrap items-center gap-2">
+              <Select value={confidence} onValueChange={setConfidence}>
+                <SelectTrigger className="h-8 w-40 shrink-0">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {CONFIDENCE_OPTIONS.map((option) => (
+                    <SelectItem key={option.value} value={option.value}>
+                      {option.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Select value={method} onValueChange={setMethod}>
+                <SelectTrigger className="h-8 w-36 shrink-0">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {METHOD_OPTIONS.map((option) => (
+                    <SelectItem key={option.value} value={option.value}>
+                      {option.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <input
+                ref={filterInputRef}
+                aria-label="Asset pair filter"
+                className="h-8 w-24 shrink-0 rounded border border-input bg-background px-2 text-sm"
+                placeholder="OUT-IN"
+                value={assetPair}
+                onChange={(e) => setAssetPair(e.target.value)}
+              />
+              {filterIsDirty ? (
+                <>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="h-8 shrink-0 px-2"
+                    onClick={() => setSaveViewOpen(true)}
+                  >
+                    <Star className="size-3.5" />
+                    <span>Save</span>
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-8 shrink-0 px-2"
+                    onClick={() => {
+                      setConfidence("all");
+                      setMethod("all");
+                      setAssetPair("");
+                    }}
+                  >
+                    Clear
+                  </Button>
+                </>
+              ) : null}
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-8 shrink-0 px-2"
+                onClick={() => setHelpOpen(true)}
+                aria-label="Show keyboard shortcuts"
+              >
+                ?
+              </Button>
+            </div>
+            <div className="flex shrink-0 items-center justify-end gap-2">
               {ruleSolo.length > 0 ? (
                 <Button
                   size="sm"
                   variant="outline"
-                  className="h-8"
+                  className="h-8 whitespace-nowrap"
                   onClick={openRulesPreview}
                   disabled={ruleApply.isPending}
                 >
                   <Sparkles className="size-4" />
-                  <span>Apply {ruleSolo.length} rule match{ruleSolo.length === 1 ? "" : "es"}</span>
+                  <span>Rule {ruleSolo.length}</span>
                 </Button>
               ) : null}
               {exactSolo.length > 0 ? (
                 <Button
                   size="sm"
-                  className="h-8"
+                  className="h-8 whitespace-nowrap"
                   onClick={openExactPreview}
                   disabled={bulkPairMutation.isPending}
                 >
                   <Sparkles className="size-4" />
-                  <span>Apply all {exactSolo.length} exact</span>
+                  <span>Exact {exactSolo.length}</span>
                 </Button>
               ) : null}
             </div>
