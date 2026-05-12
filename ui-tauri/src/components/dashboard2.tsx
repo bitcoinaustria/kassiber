@@ -1738,11 +1738,7 @@ const TransactionWorkbench = ({
               <QualityRow
                 label="Swap candidates"
                 value={swapCandidateTotals.count}
-                onClick={
-                  swapCandidateTotals.count > 0
-                    ? openSwapWorkflow
-                    : undefined
-                }
+                onClick={openSwapWorkflow}
               />
             </div>
           </div>

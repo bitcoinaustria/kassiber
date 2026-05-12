@@ -182,7 +182,7 @@ const NAV_GROUPS: NavGroup[] = [
         icon: Wallet,
         href: "/connections",
         children: [
-          { label: "Connections", icon: WalletCards, href: "/connections" },
+          { label: "Wallets", icon: WalletCards, href: "/connections" },
           { label: "Source of Funds", icon: BadgeCheck, href: "/source-of-funds" },
         ],
       },
@@ -205,18 +205,18 @@ const ROUTE_META: Array<[string, RouteMeta]> = [
   [
     "/connections/",
     {
-      title: "Connection Detail",
+      title: "Wallet Detail",
       icon: Wallet,
-      searchLabel: "Search connections",
+      searchLabel: "Search wallets",
       searchPlaceholder: "Search wallets, books...",
     },
   ],
   [
     "/connections",
     {
-      title: "Connections",
+      title: "Wallets",
       icon: Wallet,
-      searchLabel: "Search connections",
+      searchLabel: "Search wallets",
       searchPlaceholder: "Search wallets, imports, backends...",
     },
   ],
@@ -347,7 +347,7 @@ const STATIC_SEARCH_RESULTS: SearchResult[] = [
   },
   {
     id: "route:connections",
-    title: "Connections",
+    title: "Wallets",
     detail: "Wallets, imports, backends, and sync",
     keywords: ["connections", "wallets", "xpub", "backend", "sync"],
     to: "/connections",

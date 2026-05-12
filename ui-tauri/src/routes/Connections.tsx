@@ -180,7 +180,7 @@ export function Connections() {
       <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div className="min-w-0 space-y-1">
           <p className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
-            {snapshot.connections.length} connections ·{" "}
+            {snapshot.connections.length} wallets and sources ·{" "}
             {errorN > 0 ? `${errorN} need attention · ` : ""}
             {syncWallets.isPending
               ? `${syncingN} refreshing now`
@@ -189,7 +189,7 @@ export function Connections() {
                 : "watch-only sources current"}
           </p>
           <h2 className="text-2xl font-semibold tracking-tight">
-            Connections
+            Wallets
           </h2>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -212,7 +212,7 @@ export function Connections() {
             onClick={() => setAddConnectionOpen(true)}
           >
             <Plus className="size-4" aria-hidden="true" />
-            Add connection
+            Add wallet
           </Button>
         </div>
       </div>
@@ -286,7 +286,7 @@ export function Connections() {
           <Table>
             <TableHeader>
               <TableRow className="bg-muted/50 hover:bg-muted/50">
-                <TableHead className="min-w-[260px]">Connection</TableHead>
+                <TableHead className="min-w-[260px]">Wallet/source</TableHead>
                 <TableHead>Kind</TableHead>
                 <TableHead>Last sync</TableHead>
                 <TableHead className="hidden min-w-[180px] lg:table-cell">

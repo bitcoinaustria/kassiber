@@ -667,55 +667,73 @@ export function SwapMatching() {
   return (
     <div className={screenShellClassName}>
       <Collapsible open={rulesExpanded} onOpenChange={setRulesExpanded}>
-        <header className="rounded-lg border border-border/70 bg-card/70 px-4 py-3 shadow-sm">
-          <div className="flex flex-col gap-3 xl:flex-row xl:items-start xl:justify-between">
-            <div className="min-w-0">
-              <h1 className="text-xl font-semibold">Swap candidates</h1>
-              <p className="mt-0.5 max-w-3xl text-sm text-muted-foreground">
-                Review likely Lightning, Liquid, and on-chain swap legs before
-                they become carrying-value pairs.
-              </p>
-              <div className="mt-3 flex flex-wrap gap-2">
-                <CountPill label="Candidates" value={counts.total} tone="neutral" />
-                <CountPill label="Exact" value={counts.exact} tone="good" />
-                <CountPill label="Strong" value={counts.strong} tone="warning" />
-                <CountPill label="Conflicts" value={counts.conflicts} tone="alert" />
-              </div>
-            </div>
-
-            <div className="flex shrink-0 flex-wrap items-center gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => void refetch()}
-                disabled={isFetching}
-              >
-                {isFetching ? <Loader2 className="size-4 animate-spin" /> : null}
-                <span className="ml-1">Refresh</span>
-              </Button>
-              <CollapsibleTrigger asChild>
-                <Button variant="outline" size="sm">
-                  <SettingsIcon className="size-3.5" />
-                  <span>Rules {enabledRuleCount}/{rules.length}</span>
-                </Button>
-              </CollapsibleTrigger>
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() => setCreateRuleOpen(true)}
-              >
-                <Plus className="size-3" />
-                <span>New rule</span>
-              </Button>
-            </div>
+        <header className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+          <div className="min-w-0 space-y-1">
+            <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+              {counts.total} candidates · {counts.exact} exact · {counts.conflicts} conflicts
+            </p>
+            <h1 className="text-2xl font-semibold tracking-tight">Swap candidates</h1>
+            <p className="max-w-3xl text-sm text-muted-foreground">
+              Review likely Lightning, Liquid, and on-chain legs before they
+              become carrying-value pairs.
+            </p>
           </div>
 
-          <div className="mt-3 flex flex-wrap items-center gap-2 text-sm">
-            <span className="text-xs font-medium uppercase text-muted-foreground">
+          <div className="flex shrink-0 flex-wrap items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-9"
+              onClick={() => void refetch()}
+              disabled={isFetching}
+            >
+              {isFetching ? <Loader2 className="size-4 animate-spin" /> : null}
+              <span className="ml-1">Refresh</span>
+            </Button>
+            <CollapsibleTrigger asChild>
+              <Button variant="outline" size="sm" className="h-9">
+                <SettingsIcon className="size-3.5" />
+                <span>Rules {enabledRuleCount}/{rules.length}</span>
+              </Button>
+            </CollapsibleTrigger>
+            <Button
+              size="sm"
+              className="h-9"
+              variant="outline"
+              onClick={() => setCreateRuleOpen(true)}
+            >
+              <Plus className="size-3" />
+              <span>New rule</span>
+            </Button>
+          </div>
+        </header>
+
+        <section className="grid grid-cols-2 overflow-hidden rounded-xl border bg-card md:grid-cols-4">
+          <SwapSummaryTile label="Candidates" value={counts.total} detail={`${candidates.length} visible`} />
+          <SwapSummaryTile label="Exact" value={counts.exact} detail="payment hash" tone="good" />
+          <SwapSummaryTile label="Strong" value={counts.strong} detail="time + amount" tone="warning" />
+          <SwapSummaryTile label="Conflicts" value={counts.conflicts} detail="manual choice" tone="alert" />
+        </section>
+
+        <div className="rounded-lg border bg-card">
+          <div className="flex flex-wrap items-center gap-2 px-3 py-2 text-sm">
+            <label className="flex items-center gap-2">
+              <Checkbox
+                checked={selected.size > 0}
+                onCheckedChange={handleSelectAll}
+              />
+              <span className="text-xs text-muted-foreground">
+                Select non-conflicted
+              </span>
+            </label>
+            <span className="text-xs text-muted-foreground">
+              {candidates.length} visible
+            </span>
+            <span className="ml-1 text-xs font-medium uppercase text-muted-foreground">
               Filter
             </span>
             <Select value={confidence} onValueChange={setConfidence}>
-              <SelectTrigger className="h-8 w-44">
+              <SelectTrigger className="h-8 w-40">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -727,7 +745,7 @@ export function SwapMatching() {
               </SelectContent>
             </Select>
             <Select value={method} onValueChange={setMethod}>
-              <SelectTrigger className="h-8 w-44">
+              <SelectTrigger className="h-8 w-40">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -741,7 +759,7 @@ export function SwapMatching() {
             <input
               ref={filterInputRef}
               aria-label="Asset pair filter"
-              className="h-8 w-32 rounded border border-input bg-background px-2 text-sm"
+              className="h-8 w-28 rounded border border-input bg-background px-2 text-sm"
               placeholder="OUT-IN"
               value={assetPair}
               onChange={(e) => setAssetPair(e.target.value)}
@@ -780,10 +798,89 @@ export function SwapMatching() {
             >
               ?
             </Button>
+            <div className="ml-auto flex flex-wrap items-center gap-2">
+              {ruleSolo.length > 0 ? (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="h-8"
+                  onClick={openRulesPreview}
+                  disabled={ruleApply.isPending}
+                >
+                  <Sparkles className="size-4" />
+                  <span>Apply {ruleSolo.length} rule match{ruleSolo.length === 1 ? "" : "es"}</span>
+                </Button>
+              ) : null}
+              {exactSolo.length > 0 ? (
+                <Button
+                  size="sm"
+                  className="h-8"
+                  onClick={openExactPreview}
+                  disabled={bulkPairMutation.isPending}
+                >
+                  <Sparkles className="size-4" />
+                  <span>Apply all {exactSolo.length} exact</span>
+                </Button>
+              ) : null}
+            </div>
           </div>
 
+          {selected.size > 0 ? (
+            <div className="flex flex-wrap items-center gap-2 border-t bg-muted/25 px-3 py-2 text-sm">
+              <span className="mr-1 text-xs font-medium text-foreground">
+                {selected.size} selected
+              </span>
+              <label className="flex items-center gap-1 text-xs text-muted-foreground">
+                Kind
+                <Select
+                  value={bulkKind ?? "default"}
+                  onValueChange={(v) => setBulkKind(v === "default" ? null : v as PairKind)}
+                >
+                  <SelectTrigger className="ml-1 h-8 w-40">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="default">Candidate default</SelectItem>
+                    {PAIR_KIND_OPTIONS.map((option) => (
+                      <SelectItem key={option} value={option}>
+                        {option}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </label>
+              <label className="flex items-center gap-1 text-xs text-muted-foreground">
+                Policy
+                <Select
+                  value={bulkPolicy ?? "default"}
+                  onValueChange={(v) => setBulkPolicy(v === "default" ? null : v as PairPolicy)}
+                >
+                  <SelectTrigger className="ml-1 h-8 w-40">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="default">Candidate default</SelectItem>
+                    {PAIR_POLICY_OPTIONS.map((option) => (
+                      <SelectItem key={option} value={option}>
+                        {option}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </label>
+              <Button
+                size="sm"
+                className="ml-auto h-8"
+                onClick={openSelectedPreview}
+                disabled={pairMutation.isPending}
+              >
+                Pair selected
+              </Button>
+            </div>
+          ) : null}
+
           {savedViews.length > 0 ? (
-            <div className="mt-2 flex flex-wrap items-center gap-1 text-xs">
+            <div className="flex flex-wrap items-center gap-1 border-t px-3 py-2 text-xs">
               <Star className="size-3.5 text-muted-foreground" aria-hidden="true" />
               <span className="text-muted-foreground">Views</span>
               {savedViews.map((view) => (
@@ -809,7 +906,7 @@ export function SwapMatching() {
           ) : null}
 
           <CollapsibleContent>
-            <div className="mt-3 space-y-1 rounded-md border bg-background/70 p-2 text-xs">
+            <div className="space-y-1 border-t bg-muted/10 p-2 text-xs">
               {rules.length === 0 ? (
                 <p className="text-muted-foreground">
                   No auto-pair rules yet. Rules apply when a candidate matches
@@ -853,103 +950,10 @@ export function SwapMatching() {
               )}
             </div>
           </CollapsibleContent>
-        </header>
+        </div>
       </Collapsible>
 
-      <div className={cn(screenPanelClassName, "flex flex-col gap-3 p-4")}>
-        {!isLoading && !isError && candidates.length > 0 ? (
-          <div className="flex flex-wrap items-center gap-2 rounded-md border bg-muted/20 px-3 py-2 text-sm">
-            <div className="flex min-w-0 items-center gap-3">
-              <label className="flex items-center gap-2">
-                <Checkbox
-                  checked={selected.size > 0}
-                  onCheckedChange={handleSelectAll}
-                />
-                <span className="text-xs text-muted-foreground">
-                  {selected.size > 0
-                    ? `${selected.size} selected`
-                    : "Select non-conflicted"}
-                </span>
-              </label>
-              <span className="hidden text-xs text-muted-foreground sm:inline">
-                {candidates.length} visible
-              </span>
-            </div>
-            {selected.size > 0 ? (
-              <>
-                <label className="flex items-center gap-1 text-xs text-muted-foreground">
-                  Kind
-                  <Select
-                    value={bulkKind ?? "default"}
-                    onValueChange={(v) => setBulkKind(v === "default" ? null : v as PairKind)}
-                  >
-                    <SelectTrigger className="ml-1 h-8 w-44">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="default">Candidate default</SelectItem>
-                      {PAIR_KIND_OPTIONS.map((option) => (
-                        <SelectItem key={option} value={option}>
-                          {option}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </label>
-                <label className="flex items-center gap-1 text-xs text-muted-foreground">
-                  Policy
-                  <Select
-                    value={bulkPolicy ?? "default"}
-                    onValueChange={(v) => setBulkPolicy(v === "default" ? null : v as PairPolicy)}
-                  >
-                    <SelectTrigger className="ml-1 h-8 w-44">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="default">Candidate default</SelectItem>
-                      {PAIR_POLICY_OPTIONS.map((option) => (
-                        <SelectItem key={option} value={option}>
-                          {option}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </label>
-                <Button
-                  size="sm"
-                  onClick={openSelectedPreview}
-                  disabled={pairMutation.isPending}
-                >
-                  Pair {selected.size} selected
-                </Button>
-              </>
-            ) : null}
-            <div className="ml-auto flex items-center gap-2">
-              {ruleSolo.length > 0 ? (
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={openRulesPreview}
-                  disabled={ruleApply.isPending}
-                >
-                  <Sparkles className="size-4" />
-                  <span>Apply {ruleSolo.length} rule match{ruleSolo.length === 1 ? "" : "es"}</span>
-                </Button>
-              ) : null}
-              {exactSolo.length > 0 ? (
-                <Button
-                  size="sm"
-                  variant="default"
-                  onClick={openExactPreview}
-                  disabled={bulkPairMutation.isPending}
-                >
-                  <Sparkles className="size-4" />
-                  <span>Apply all {exactSolo.length} exact</span>
-                </Button>
-              ) : null}
-            </div>
-          </div>
-        ) : null}
+      <div className={cn(screenPanelClassName, "flex flex-col gap-3 rounded-lg border p-4")}>
         {isLoading ? (
           <div className="flex items-center gap-2 text-sm text-muted-foreground">
             <Loader2 className="size-4 animate-spin" /> Loading candidates…
@@ -1685,24 +1689,31 @@ function RailBadge({ rail, asset }: RailBadgeProps) {
   );
 }
 
-interface CountPillProps {
+function SwapSummaryTile({
+  label,
+  value,
+  detail,
+  tone = "neutral",
+}: {
   label: string;
   value: number;
-  tone: "neutral" | "good" | "warning" | "alert";
-}
-
-function CountPill({ label, value, tone }: CountPillProps) {
+  detail: string;
+  tone?: "neutral" | "good" | "warning" | "alert";
+}) {
   const toneClass = {
-    neutral: "bg-muted text-muted-foreground",
-    good: "bg-emerald-100 text-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-100",
-    warning: "bg-amber-100 text-amber-900 dark:bg-amber-950/40 dark:text-amber-100",
-    alert: "bg-rose-100 text-rose-900 dark:bg-rose-950/40 dark:text-rose-100",
+    neutral: "text-foreground",
+    good: "text-emerald-600",
+    warning: "text-amber-600",
+    alert: "text-rose-600",
   }[tone];
   return (
-    <span className={cn("inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs", toneClass)}>
-      <strong className="font-semibold">{value}</strong>
-      {label}
-    </span>
+    <div className="min-w-0 space-y-2 border-b p-3 text-left sm:p-4 md:border-b-0 md:border-l">
+      <div className="truncate text-xs text-muted-foreground">{label}</div>
+      <div className={cn("text-2xl font-semibold tabular-nums tracking-tight", toneClass)}>
+        {value.toLocaleString("en-US")}
+      </div>
+      <div className="truncate text-xs text-muted-foreground">{detail}</div>
+    </div>
   );
 }
 
