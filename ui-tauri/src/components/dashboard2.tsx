@@ -171,6 +171,7 @@ type SwapCandidate = {
 export type SwapCandidateReference = {
   in_id: string;
   out_id: string;
+  conflict_set_id?: string;
 };
 
 const flowColors: Record<TransactionFlow, string> = {
@@ -1106,7 +1107,7 @@ function buildSwapCandidates(
 ): SwapCandidate[] {
   if (candidateRefs) {
     const recordsById = new Map(records.map((txn) => [txn.id, txn]));
-    return candidateRefs.flatMap((candidate) => {
+    return nonConflictedCandidateRefs(candidateRefs).flatMap((candidate) => {
       const input = recordsById.get(candidate.in_id);
       const out = recordsById.get(candidate.out_id);
       if (!input || !out) return [];
@@ -1171,6 +1172,28 @@ function buildSwapCandidates(
   }
 
   return candidates;
+}
+
+function nonConflictedCandidateRefs(
+  candidateRefs: SwapCandidateReference[],
+): SwapCandidateReference[] {
+  const clusterSizes = new Map<string, number>();
+  candidateRefs.forEach((candidate, index) => {
+    const clusterId = candidate.conflict_set_id ?? `solo:${index}`;
+    clusterSizes.set(clusterId, (clusterSizes.get(clusterId) ?? 0) + 1);
+  });
+
+  const usedLegs = new Set<string>();
+  return candidateRefs.filter((candidate, index) => {
+    const clusterId = candidate.conflict_set_id ?? `solo:${index}`;
+    if ((clusterSizes.get(clusterId) ?? 0) > 1) return false;
+    if (usedLegs.has(candidate.in_id) || usedLegs.has(candidate.out_id)) {
+      return false;
+    }
+    usedLegs.add(candidate.in_id);
+    usedLegs.add(candidate.out_id);
+    return true;
+  });
 }
 
 function buildFlowChartRows(
@@ -1298,6 +1321,7 @@ const TransactionWorkbench = ({
   onQuickFilterChange,
   chartSelection,
   swapCandidateRefs,
+  swapCandidateTotal,
 }: {
   period: PeriodKey;
   records: Transaction[];
@@ -1307,6 +1331,7 @@ const TransactionWorkbench = ({
   onQuickFilterChange: (filter: TableQuickFilter | null) => void;
   chartSelection: FlowChartSelection | null;
   swapCandidateRefs?: SwapCandidateReference[];
+  swapCandidateTotal?: number | null;
 }) => {
   const navigate = useNavigate();
   const [chartMetric, setChartMetric] =
@@ -1332,8 +1357,13 @@ const TransactionWorkbench = ({
     }),
     { count: 0, eur: 0, btc: 0 },
   );
+  const knownSwapCandidateCount =
+    swapCandidateTotal === undefined
+      ? swapCandidateTotals.count
+      : swapCandidateTotal;
+  const swapCandidateCountForTotal = knownSwapCandidateCount ?? 0;
   const swaps = {
-    count: markedSwaps.count + swapCandidateTotals.count,
+    count: markedSwaps.count + swapCandidateCountForTotal,
     eur: markedSwaps.eur + swapCandidateTotals.eur,
     btc: markedSwaps.btc + swapCandidateTotals.btc,
   };
@@ -1495,11 +1525,16 @@ const TransactionWorkbench = ({
       label: "Swap candidates",
       value: swaps,
       meta:
-        swapCandidateTotals.count > 0
-          ? `${swapCandidateTotals.count} unpaired`
+        knownSwapCandidateCount === null
+          ? "unpaired unknown"
+          : knownSwapCandidateCount > 0
+          ? `${knownSwapCandidateCount} unpaired`
           : `${markedSwaps.count} marked`,
       icon: RefreshCw,
-      tone: swapCandidateTotals.count > 0 ? "text-amber-600" : "text-muted-foreground",
+      tone:
+        knownSwapCandidateCount === null || knownSwapCandidateCount > 0
+          ? "text-amber-600"
+          : "text-muted-foreground",
       onClick: handleSwapWorkflowClick,
       ariaLabel: "Open swap candidates",
     },
@@ -3249,10 +3284,12 @@ const Dashboard2 = ({
   className,
   transactions = MOCK_TRANSACTIONS,
   swapCandidates,
+  swapCandidateTotal,
 }: {
   className?: string;
   transactions?: TransactionsList;
   swapCandidates?: SwapCandidateReference[];
+  swapCandidateTotal?: number | null;
 }) => {
   const [period, setPeriod] = React.useState<PeriodKey>(initialPeriodFromUrl);
   const [newTxnOpen, setNewTxnOpen] = React.useState(false);
@@ -3349,6 +3386,7 @@ const Dashboard2 = ({
         onQuickFilterChange={setQuickFilter}
         chartSelection={flowChartSelection}
         swapCandidateRefs={swapCandidates}
+        swapCandidateTotal={swapCandidateTotal}
       />
 
       <TransactionsTable
