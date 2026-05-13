@@ -524,6 +524,7 @@ class DaemonSmokeTest(unittest.TestCase):
             self.assertIn("ui.transactions.list", ready["data"]["supported_kinds"])
             self.assertIn("ui.transactions.extremes", ready["data"]["supported_kinds"])
             self.assertIn("ui.transactions.search", ready["data"]["supported_kinds"])
+            self.assertIn("ui.transactions.metadata.update", ready["data"]["supported_kinds"])
             self.assertIn("ui.wallets.list", ready["data"]["supported_kinds"])
             self.assertIn("ui.backends.list", ready["data"]["supported_kinds"])
             self.assertIn("ui.backends.options", ready["data"]["supported_kinds"])
@@ -2851,6 +2852,105 @@ class DaemonSmokeTest(unittest.TestCase):
 
             _write_payload(proc, {"request_id": "shutdown-1", "kind": "daemon.shutdown"})
             self.assertEqual(_read_payload_timeout(proc)["kind"], "daemon.shutdown")
+            code, stderr = _close_daemon(proc)
+            self.assertEqual(code, 0, stderr)
+            self.assertEqual(stderr, "")
+
+    def test_daemon_transaction_metadata_update_persists_editor_fields(self):
+        with tempfile.TemporaryDirectory(prefix="kassiber-daemon-metadata-") as tmp:
+            data_root = Path(tmp) / "data"
+            _seed_workspace_with_transaction(data_root, tmp)
+            proc = _start_daemon(data_root)
+            self.assertEqual(_read_payload_timeout(proc)["kind"], "daemon.ready")
+
+            _write_payload(
+                proc,
+                {
+                    "request_id": "tx-meta-invalid-tags-1",
+                    "kind": "ui.transactions.metadata.update",
+                    "args": {
+                        "transaction": "seed-inbound-1",
+                        "note": "This note must not leak",
+                        "tags": ["Income", 42],
+                    },
+                },
+            )
+            invalid_tags = _read_payload_timeout(proc)
+            self.assertEqual(invalid_tags["kind"], "error")
+            self.assertEqual(invalid_tags["error"]["code"], "validation")
+
+            _write_payload(
+                proc,
+                {
+                    "request_id": "tx-meta-invalid-excluded-1",
+                    "kind": "ui.transactions.metadata.update",
+                    "args": {
+                        "transaction": "seed-inbound-1",
+                        "note": "This note must not leak either",
+                        "excluded": "yes",
+                    },
+                },
+            )
+            invalid_excluded = _read_payload_timeout(proc)
+            self.assertEqual(invalid_excluded["kind"], "error")
+            self.assertEqual(invalid_excluded["error"]["code"], "validation")
+
+            _write_payload(
+                proc,
+                {
+                    "request_id": "tx-meta-after-invalid-1",
+                    "kind": "ui.transactions.list",
+                    "args": {"limit": 5},
+                },
+            )
+            after_invalid = _read_payload_timeout(proc)
+            self.assertEqual(after_invalid["kind"], "ui.transactions.list")
+            self.assertEqual(after_invalid["data"]["txs"][0]["note"], "")
+            self.assertEqual(after_invalid["data"]["txs"][0]["tags"], [])
+            self.assertFalse(after_invalid["data"]["txs"][0]["excluded"])
+
+            _write_payload(
+                proc,
+                {
+                    "request_id": "tx-meta-save-1",
+                    "kind": "ui.transactions.metadata.update",
+                    "args": {
+                        "transaction": "seed-inbound-1",
+                        "note": "Receipt matched against invoice 42",
+                        "tags": ["Income", "accountant"],
+                        "excluded": True,
+                    },
+                },
+            )
+            saved = _read_payload_timeout(proc)
+            self.assertEqual(saved["kind"], "ui.transactions.metadata.update")
+            self.assertEqual(saved["data"]["note"], "Receipt matched against invoice 42")
+            self.assertEqual(
+                saved["data"]["tags"],
+                [
+                    {"code": "accountant", "label": "accountant"},
+                    {"code": "income", "label": "Income"},
+                ],
+            )
+            self.assertTrue(saved["data"]["excluded"])
+            self.assertTrue(saved["data"]["updated"])
+
+            _write_payload(
+                proc,
+                {
+                    "request_id": "tx-meta-list-1",
+                    "kind": "ui.transactions.list",
+                    "args": {"limit": 5},
+                },
+            )
+            listed = _read_payload_timeout(proc)
+            self.assertEqual(listed["kind"], "ui.transactions.list")
+            tx = listed["data"]["txs"][0]
+            self.assertEqual(tx["note"], "Receipt matched against invoice 42")
+            self.assertEqual(tx["tags"], ["accountant", "Income"])
+            self.assertEqual(tx["tag"], "accountant, Income")
+            self.assertTrue(tx["excluded"])
+
             code, stderr = _close_daemon(proc)
             self.assertEqual(code, 0, stderr)
             self.assertEqual(stderr, "")

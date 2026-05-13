@@ -65,6 +65,7 @@ import { type ExplorerSettings } from "@/lib/explorer";
 import { screenShellClassName } from "@/lib/screen-layout";
 import { CurrencyToggleText } from "@/components/kb/CurrencyToggleText";
 import { useWalletSyncAction } from "@/hooks/useWalletSyncAction";
+import { useDaemonMutation } from "@/daemon/client";
 import {
   MOCK_TRANSACTIONS,
   type TransactionsList,
@@ -783,6 +784,8 @@ function toDashboardTransaction(tx: Tx, index: number): Transaction {
     asset: "BTC",
     rate: tx.rate,
     note: tx.note,
+    tags: tx.tags,
+    excluded: tx.excluded,
     counterparty: tx.counter || tx.account || "Unassigned",
     counterpartyInitials: initials(tx.counter || tx.account || "TX"),
     direction,
@@ -2138,6 +2141,8 @@ const TransactionsTable = ({
   const [drafts, setDrafts] = React.useState<Record<string, TransactionEditDraft>>(
     {},
   );
+  const [saveError, setSaveError] = React.useState<string | null>(null);
+  const metadataUpdate = useDaemonMutation("ui.transactions.metadata.update");
   const explorerTarget = explorerTransaction
     ? explorerForTransaction(explorerTransaction, explorerSettings)
     : null;
@@ -2150,9 +2155,42 @@ const TransactionsTable = ({
     (txn: Transaction) => drafts[txn.id] ?? draftForTransaction(txn),
     [drafts],
   );
+  const saveTransactionDraft = React.useCallback(
+    async (transactionId: string, draft: TransactionEditDraft) => {
+      setSaveError(null);
+      const sourceTransaction = records.find((txn) => txn.id === transactionId);
+      const baseline = sourceTransaction
+        ? drafts[transactionId] ?? draftForTransaction(sourceTransaction)
+        : null;
+      const persistedTagCodes = new Set(
+        (sourceTransaction?.tags ?? []).map((tag) => tag.toLowerCase()),
+      );
+      const shouldPersistLabel =
+        draft.label &&
+        draft.label !== "Unlabeled" &&
+        (persistedTagCodes.has(draft.label.toLowerCase()) ||
+          draft.label !== baseline?.label);
+      const tags = [
+        shouldPersistLabel ? draft.label : "",
+        ...draft.tags,
+      ].filter(Boolean);
+      await metadataUpdate.mutateAsync({
+        transaction: transactionId,
+        note: draft.note.trim() ? draft.note : null,
+        tags: Array.from(new Set(tags)),
+        excluded: draft.excluded,
+      });
+      setDrafts((current) => ({
+        ...current,
+        [transactionId]: draft,
+      }));
+    },
+    [drafts, metadataUpdate, records],
+  );
 
   const openTransactionDetail = React.useCallback(
     (txn: Transaction, tab = "details") => {
+      setSaveError(null);
       setDetailInitialTab(tab);
       setDetailTransaction(txn);
       updateTransactionDetailParams(txn.id, tab);
@@ -3070,19 +3108,26 @@ const TransactionsTable = ({
         hideSensitive={hideSensitive}
         currency={currency}
         explorerSettings={explorerSettings}
+        isSaving={metadataUpdate.isPending}
+        saveError={saveError}
         onOpenChange={(open) => {
           if (!open) {
             setDetailTransaction(null);
+            setSaveError(null);
             updateTransactionDetailParams(null);
           }
         }}
         onOpenExplorer={(transaction) => setExplorerTransaction(transaction)}
-        onSave={(transactionId, draft) =>
-          setDrafts((current) => ({
-            ...current,
-            [transactionId]: draft,
-          }))
-        }
+        onSave={async (transactionId, draft) => {
+          try {
+            await saveTransactionDraft(transactionId, draft);
+          } catch (error) {
+            setSaveError(
+              error instanceof Error ? error.message : "Could not save metadata.",
+            );
+            throw error;
+          }
+        }}
       />
     </>
   );

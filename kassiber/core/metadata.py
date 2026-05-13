@@ -15,6 +15,8 @@ from ..msat import msat_to_btc
 
 DEFAULT_RECORDS_LIMIT = 100
 MAX_RECORDS_LIMIT = 1000
+MAX_TRANSACTION_NOTE_CHARS = 20_000
+MAX_TRANSACTION_TAG_CHARS = 128
 
 ScopeResolver = Callable[[sqlite3.Connection, str | None, str | None], tuple[Mapping[str, Any], Mapping[str, Any]]]
 WalletResolver = Callable[[sqlite3.Connection, str, str], Mapping[str, Any]]
@@ -83,6 +85,102 @@ def set_transaction_excluded(conn, workspace_ref, profile_ref, tx_ref, excluded,
     hooks.invalidate_journals(conn, profile["id"])
     conn.commit()
     return {"transaction_id": tx["id"], "excluded": bool(excluded)}
+
+
+def _clean_transaction_note(note):
+    if note is None:
+        return None
+    if not isinstance(note, str):
+        raise AppError("note must be a string or null", code="validation")
+    if len(note) > MAX_TRANSACTION_NOTE_CHARS:
+        raise AppError(
+            f"note cannot exceed {MAX_TRANSACTION_NOTE_CHARS} characters",
+            code="validation",
+            retryable=False,
+        )
+    return note
+
+
+def _clean_transaction_tags(tags):
+    if tags is None:
+        return None
+    if not isinstance(tags, list):
+        raise AppError("tags must be a list of strings", code="validation")
+    cleaned = []
+    seen = set()
+    for tag in tags:
+        if not isinstance(tag, str):
+            raise AppError("tags must be a list of strings", code="validation")
+        label = tag.strip()
+        if not label:
+            continue
+        if len(label) > MAX_TRANSACTION_TAG_CHARS:
+            raise AppError(
+                f"tag cannot exceed {MAX_TRANSACTION_TAG_CHARS} characters",
+                code="validation",
+                details={"tag": label},
+                retryable=False,
+            )
+        code = label.lower()
+        if code in seen:
+            continue
+        cleaned.append(label)
+        seen.add(code)
+    return cleaned
+
+
+def update_transaction_metadata(
+    conn,
+    workspace_ref,
+    profile_ref,
+    tx_ref,
+    hooks: MetadataHooks,
+    *,
+    note=None,
+    note_set=False,
+    tags=None,
+    excluded=None,
+):
+    workspace, profile = hooks.resolve_scope(conn, workspace_ref, profile_ref)
+    tx = hooks.resolve_transaction(conn, profile["id"], tx_ref)
+    clean_note = _clean_transaction_note(note) if note_set else None
+    clean_tags = _clean_transaction_tags(tags)
+    if excluded is not None and not isinstance(excluded, bool):
+        raise AppError("excluded must be a boolean", code="validation", retryable=False)
+
+    changed = False
+
+    try:
+        if note_set:
+            conn.execute("UPDATE transactions SET note = ? WHERE id = ?", (clean_note, tx["id"]))
+            changed = True
+
+        if clean_tags is not None:
+            tag_rows = [
+                ensure_tag_row(conn, workspace["id"], profile["id"], tag, tag, hooks)[0]
+                for tag in clean_tags
+            ]
+            conn.execute("DELETE FROM transaction_tags WHERE transaction_id = ?", (tx["id"],))
+            conn.executemany(
+                "INSERT OR IGNORE INTO transaction_tags(transaction_id, tag_id) VALUES(?, ?)",
+                [(tx["id"], tag["id"]) for tag in tag_rows],
+            )
+            changed = True
+
+        if excluded is not None:
+            conn.execute("UPDATE transactions SET excluded = ? WHERE id = ?", (1 if excluded else 0, tx["id"]))
+            changed = True
+
+        if changed:
+            hooks.invalidate_journals(conn, profile["id"])
+            conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
+
+    record = get_transaction_record(conn, workspace_ref, profile_ref, tx["id"], hooks)
+    record["updated"] = changed
+    return record
 
 
 def create_tag(conn, workspace_ref, profile_ref, code, label, hooks: MetadataHooks):
@@ -586,4 +684,5 @@ __all__ = [
     "remove_tag_from_transaction",
     "set_transaction_excluded",
     "set_transaction_note",
+    "update_transaction_metadata",
 ]

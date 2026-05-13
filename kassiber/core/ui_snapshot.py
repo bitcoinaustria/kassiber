@@ -580,11 +580,12 @@ def _transactions(conn: sqlite3.Connection, profile_id: str) -> list[dict[str, A
     output = []
     for row in rows:
         sign = 1 if row["direction"] == "inbound" else -1
-        tags = tags_by_transaction.get(row["id"], [])
-        if not tags and row["quarantine_reason"]:
-            tags = ["Review"]
-        elif not tags:
-            tags = [row["kind"] or row["direction"]]
+        metadata_tags = [str(tag) for tag in tags_by_transaction.get(row["id"], []) if tag]
+        display_tags = list(metadata_tags)
+        if not display_tags and row["quarantine_reason"]:
+            display_tags = ["Review"]
+        elif not display_tags:
+            display_tags = [row["kind"] or row["direction"]]
         amount_btc = float(msat_to_btc(row["amount"] or 0))
         output.append(
             {
@@ -608,7 +609,10 @@ def _transactions(conn: sqlite3.Connection, profile_id: str) -> list[dict[str, A
                 "amountSat": int(round(sign * amount_btc * 100_000_000)),
                 "eur": sign * abs(float(row["fiat_value"] or 0)),
                 "rate": float(row["fiat_rate"] or 0),
-                "tag": ", ".join(str(tag) for tag in tags if tag) or "Unlabeled",
+                "tag": ", ".join(display_tags) or "Unlabeled",
+                "tags": metadata_tags,
+                "note": row["note"] or "",
+                "excluded": bool(row["excluded"]),
                 "conf": 1 if row["confirmed_at"] else 0,
                 "internal": (row["kind"] or "").lower() == "transfer",
             }
@@ -983,6 +987,7 @@ def build_transactions_snapshot(
             COALESCE(t.description, '') AS description,
             COALESCE(t.counterparty, '') AS counterparty,
             COALESCE(t.note, '') AS note,
+            t.excluded,
             jq.reason AS quarantine_reason
         FROM transactions t
         JOIN wallets w ON w.id = t.wallet_id
@@ -1218,6 +1223,7 @@ def build_transactions_search_snapshot(
             COALESCE(t.description, '') AS description,
             COALESCE(t.counterparty, '') AS counterparty,
             COALESCE(t.note, '') AS note,
+            t.excluded,
             jq.reason AS quarantine_reason
         FROM transactions t
         JOIN wallets w ON w.id = t.wallet_id
@@ -2526,11 +2532,12 @@ def _transaction_rows_to_ui(
     output = []
     for row in rows:
         sign = 1 if row["direction"] == "inbound" else -1
-        tags = tags_by_transaction.get(row["id"], [])
-        if not tags and row["quarantine_reason"]:
-            tags = ["Review"]
-        elif not tags:
-            tags = [row["kind"] or row["direction"]]
+        metadata_tags = [str(tag) for tag in tags_by_transaction.get(row["id"], []) if tag]
+        display_tags = list(metadata_tags)
+        if not display_tags and row["quarantine_reason"]:
+            display_tags = ["Review"]
+        elif not display_tags:
+            display_tags = [row["kind"] or row["direction"]]
         amount_btc = float(msat_to_btc(row["amount"] or 0))
         output.append(
             {
@@ -2554,7 +2561,10 @@ def _transaction_rows_to_ui(
                 "amountSat": int(round(sign * amount_btc * 100_000_000)),
                 "eur": sign * abs(float(row["fiat_value"] or 0)),
                 "rate": float(row["fiat_rate"] or 0),
-                "tag": ", ".join(str(tag) for tag in tags if tag) or "Unlabeled",
+                "tag": ", ".join(display_tags) or "Unlabeled",
+                "tags": metadata_tags,
+                "note": row["note"] or "",
+                "excluded": bool(row["excluded"]),
                 "conf": 1 if row["confirmed_at"] else 0,
                 "internal": (row["kind"] or "").lower() == "transfer",
             }

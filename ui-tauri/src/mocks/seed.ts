@@ -70,7 +70,9 @@ export interface Tx {
   eur: number;
   rate: number;
   tag: string;
+  tags?: string[];
   note?: string;
+  excluded?: boolean;
   conf: number;
   internal?: boolean;
 }

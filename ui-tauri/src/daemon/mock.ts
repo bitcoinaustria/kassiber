@@ -630,6 +630,84 @@ export const mockDaemon: DaemonTransport = {
       };
     }
 
+    if (req.kind === "ui.transactions.metadata.update") {
+      const args = (req.args ?? {}) as {
+        transaction?: unknown;
+        note?: unknown;
+        tags?: unknown;
+        excluded?: unknown;
+      };
+      const transactionId = typeof args.transaction === "string" ? args.transaction : "";
+      const transactionList = fixtures["ui.transactions.list"] as {
+        txs?: Array<Record<string, unknown>>;
+      };
+      const tx = transactionList.txs?.find((row) => row.id === transactionId);
+      if (!tx) {
+        return {
+          kind: "error",
+          schema_version: 1,
+          request_id: req.request_id,
+          error: {
+            code: "not_found",
+            message: `Transaction '${transactionId}' not found`,
+            retryable: false,
+          },
+        };
+      }
+      if (
+        "excluded" in args &&
+        typeof args.excluded !== "boolean"
+      ) {
+        return {
+          kind: "error",
+          schema_version: 1,
+          request_id: req.request_id,
+          error: {
+            code: "validation",
+            message: "excluded must be a boolean",
+            retryable: false,
+          },
+        };
+      }
+      if (
+        "tags" in args &&
+        (!Array.isArray(args.tags) ||
+          args.tags.some((tag) => typeof tag !== "string"))
+      ) {
+        return {
+          kind: "error",
+          schema_version: 1,
+          request_id: req.request_id,
+          error: {
+            code: "validation",
+            message: "tags must be a list of strings",
+            retryable: false,
+          },
+        };
+      }
+      const tags = Array.isArray(args.tags)
+        ? args.tags.filter((tag): tag is string => typeof tag === "string")
+        : undefined;
+      if ("note" in args) tx.note = typeof args.note === "string" ? args.note : "";
+      if (tags) {
+        tx.tags = tags;
+        tx.tag = tags.join(", ");
+      }
+      if (typeof args.excluded === "boolean") tx.excluded = args.excluded;
+      return {
+        kind: "ui.transactions.metadata.update",
+        schema_version: 1,
+        request_id: req.request_id,
+        data: {
+          transaction_id: transactionId,
+          note: typeof args.note === "string" ? args.note : "",
+          tags: (tags ?? []).map((tag) => ({ code: tag.toLowerCase(), label: tag })),
+          excluded: args.excluded === true,
+          updated: true,
+        } as T,
+      };
+    }
+
     if (req.kind === "ui.connections.sources") {
       return {
         kind: "ui.connections.sources",

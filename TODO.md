@@ -344,6 +344,9 @@ and [docs/plan/04-desktop-ui.md](docs/plan/04-desktop-ui.md).
 - [x] Replace the Transactions table mock fixture with a read-only
   `ui.transactions.list` daemon kind and enable a loopback-only Vite dev
   bridge for browser testing against real local data
+- [x] Wire the transaction detail editor to persist notes, tags,
+  classification labels, and exclusion state through
+  `ui.transactions.metadata.update`
 - [x] Replace Connections, Journals, and capital-gains Reports mock fixtures
   with first real daemon-backed snapshots and a `ui.wallets.sync` action
 - [x] Wire Reports export cards to daemon-backed managed exports for PDF,

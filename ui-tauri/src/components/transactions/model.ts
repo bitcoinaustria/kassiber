@@ -30,6 +30,8 @@ export type Transaction = {
   asset?: string;
   rate?: number;
   note?: string;
+  tags?: string[];
+  excluded?: boolean;
   counterparty: string;
   counterpartyInitials: string;
   direction: TransactionDirection;
@@ -549,22 +551,15 @@ export const mockNewTransactionMovementCandidates = [
 
 export function draftForTransaction(txn: Transaction): TransactionEditDraft {
   const flow = transactionFlow(txn);
-  const initialTags = splitDraftTags(txn.tag || "");
+  const initialTags = txn.tags ?? splitDraftTags(txn.tag || "");
   const defaultTaxClassification = nextTaxClassificationForFlow(flow);
+  const persistedLabel = classificationOptions.find((option) =>
+    initialTags.includes(option),
+  );
   return {
-    label:
-      classificationOptions.find((option) => initialTags.includes(option)) ??
-      (flow === "incoming"
-        ? "Income"
-        : flow === "outgoing"
-          ? "Expense"
-          : flow === "swap"
-            ? "Swap"
-            : flow === "transfer"
-              ? "Transfer"
-              : "Unlabeled"),
+    label: persistedLabel ?? "Unlabeled",
     tags: uniqueTags(
-      initialTags.filter((tag) => !classificationOptions.includes(tag)),
+      initialTags.filter((tag) => tag !== persistedLabel),
     ),
     note: txn.note || "",
     atRegime: defaultTaxClassification.atRegime,
@@ -577,7 +572,7 @@ export function draftForTransaction(txn: Transaction): TransactionEditDraft {
     manualSource: "",
     reviewStatus: txn.status,
     taxable: flow !== "transfer",
-    excluded: false,
+    excluded: Boolean(txn.excluded),
   };
 }
 
