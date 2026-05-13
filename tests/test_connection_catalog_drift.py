@@ -59,6 +59,22 @@ _DESKTOP_MUTATION_KINDS = (
     "ui.wallets.update",
     "ui.wallets.delete",
 )
+_DESKTOP_SWAP_MATCHING_KINDS = (
+    "ui.transfers.suggest",
+    "ui.transfers.list",
+    "ui.transfers.pair",
+    "ui.transfers.unpair",
+    "ui.transfers.bulk_pair",
+    "ui.transfers.dismiss",
+    "ui.transfers.rules.list",
+    "ui.transfers.rules.create",
+    "ui.transfers.rules.delete",
+    "ui.transfers.rules.set_enabled",
+    "ui.transfers.rules.apply",
+    "ui.saved_views.list",
+    "ui.saved_views.create",
+    "ui.saved_views.delete",
+)
 
 
 def _split_entries(text: str) -> list[str]:
@@ -155,6 +171,13 @@ class ConnectionCatalogDriftTests(unittest.TestCase):
         rust_kinds = self._rust_allowlist()
         vite_kinds = self._vite_allowlist()
         for kind in _DESKTOP_MUTATION_KINDS:
+            self.assertIn(kind, rust_kinds, f"{kind} is missing from Tauri daemon allowlist")
+            self.assertIn(kind, vite_kinds, f"{kind} is missing from Vite bridge allowlist")
+
+    def test_swap_matching_kinds_are_allowed_by_desktop_boundaries(self):
+        rust_kinds = self._rust_allowlist()
+        vite_kinds = self._vite_allowlist()
+        for kind in _DESKTOP_SWAP_MATCHING_KINDS:
             self.assertIn(kind, rust_kinds, f"{kind} is missing from Tauri daemon allowlist")
             self.assertIn(kind, vite_kinds, f"{kind} is missing from Vite bridge allowlist")
 

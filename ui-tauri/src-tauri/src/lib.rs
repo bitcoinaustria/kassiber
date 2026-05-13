@@ -135,6 +135,20 @@ const ALLOWED_DAEMON_KINDS: &[&str] = &[
     "ui.journals.quarantine",
     "ui.journals.transfers.list",
     "ui.journals.process",
+    "ui.transfers.suggest",
+    "ui.transfers.list",
+    "ui.transfers.pair",
+    "ui.transfers.unpair",
+    "ui.transfers.bulk_pair",
+    "ui.transfers.dismiss",
+    "ui.transfers.rules.list",
+    "ui.transfers.rules.create",
+    "ui.transfers.rules.delete",
+    "ui.transfers.rules.set_enabled",
+    "ui.transfers.rules.apply",
+    "ui.saved_views.list",
+    "ui.saved_views.create",
+    "ui.saved_views.delete",
     "ui.rates.summary",
     "ui.rates.kraken_csv.import",
     "ui.rates.rebuild",
@@ -1613,6 +1627,35 @@ mod tests {
             "ui.source_funds.recipients.create",
             "ui.source_funds.recipients.update",
             "ui.source_funds.recipients.delete",
+        ];
+        for kind in required {
+            assert!(
+                ALLOWED_DAEMON_KINDS.contains(kind),
+                "daemon kind missing from Tauri allowlist: {kind}"
+            );
+        }
+    }
+
+    #[test]
+    fn swap_matching_daemon_kinds_are_in_allowlist() {
+        // SwapMatching.tsx drives candidate review through these explicit
+        // daemon kinds. The packaged desktop shell blocks any kind not listed
+        // in ALLOWED_DAEMON_KINDS, so keep this surface pinned.
+        let required: &[&str] = &[
+            "ui.transfers.suggest",
+            "ui.transfers.list",
+            "ui.transfers.pair",
+            "ui.transfers.unpair",
+            "ui.transfers.bulk_pair",
+            "ui.transfers.dismiss",
+            "ui.transfers.rules.list",
+            "ui.transfers.rules.create",
+            "ui.transfers.rules.delete",
+            "ui.transfers.rules.set_enabled",
+            "ui.transfers.rules.apply",
+            "ui.saved_views.list",
+            "ui.saved_views.create",
+            "ui.saved_views.delete",
         ];
         for kind in required {
             assert!(
