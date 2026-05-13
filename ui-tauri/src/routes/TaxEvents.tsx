@@ -72,7 +72,7 @@ interface JournalProcessResult {
   quarantined?: number;
 }
 
-const TAX_EVENT_LIMIT = 100;
+const TAX_EVENT_LIMIT = 500;
 const eur = new Intl.NumberFormat("de-AT", {
   style: "currency",
   currency: "EUR",
@@ -170,7 +170,7 @@ export function TaxEvents() {
           : `${snapshot.summary.count.toLocaleString("en-US")} events`
       }
       tableTitle="Processed tax events"
-      tableDescription={`${rows.length.toLocaleString("en-US")} shown · ${snapshot.summary.freshnessReason}`}
+      tableDescriptionDetail={snapshot.summary.freshnessReason}
       searchPlaceholder="Search wallet, event, asset, pricing, Kennzahl..."
       emptyMessage="No processed tax events yet. Process journals after importing transactions."
       actions={
@@ -244,45 +244,83 @@ function taxEventToRow(
       : event.atKennzahl !== null
         ? "Ready for Austrian report mapping"
         : "Ready for reports",
+    metricFilterIds: taxEventMetricFilterIds(event),
   };
 }
 
-function taxEventMetrics(
+export function taxEventMetrics(
   summary: JournalEventsSnapshot["summary"],
 ): ReviewMetric[] {
+  const acquisitions = countEntryTypes(summary.entryTypes, "acquisition");
   const disposals = countEntryTypes(summary.entryTypes, "disposal");
-  const incomeAndFees = countEntryTypes(
+  const income = countEntryTypes(summary.entryTypes, "income");
+  const fees = countEntryTypes(summary.entryTypes, "fee", "transfer_fee");
+  const neutral = countEntryTypes(
     summary.entryTypes,
-    "income",
-    "fee",
-    "transfer_fee",
-  );
-  const gainLoss = summary.entryTypes.reduce(
-    (total, row) => total + row.gainLossEur,
-    0,
+    "neutral_swap",
+    "transfer_in",
+    "transfer_out",
   );
   return [
     {
-      label: "Events",
-      value: summary.count,
-      tone: summary.needsJournals ? "warning" : summary.count ? "good" : "neutral",
-    },
-    {
-      label: "Reportable",
-      value: summary.reportableCount,
-      tone: summary.reportableCount ? "good" : "neutral",
+      label: "Acquisitions",
+      value: acquisitions,
+      tone: summary.needsJournals
+        ? "warning"
+        : acquisitions
+          ? "good"
+          : "neutral",
+      filterId: "acquisitions",
     },
     {
       label: "Disposals",
       value: disposals,
       tone: disposals ? "warning" : "neutral",
+      filterId: "disposals",
     },
     {
-      label: incomeAndFees ? "Income/fees" : "Net gain",
-      value: incomeAndFees || eur.format(gainLoss),
-      tone: gainLoss < 0 ? "alert" : gainLoss > 0 ? "good" : "neutral",
+      label: "Income",
+      value: income,
+      tone: income ? "good" : "neutral",
+      filterId: "income",
+    },
+    {
+      label: "Fees",
+      value: fees,
+      tone: fees ? "alert" : "neutral",
+      filterId: "fees",
+    },
+    {
+      label: "Neutral",
+      value: neutral,
+      tone: neutral ? "good" : "neutral",
+      filterId: "neutral",
+      filterLabel: "Neutral events",
     },
   ];
+}
+
+export function taxEventMetricFilterIds(event: {
+  entryType: string;
+  gainLossEur: number | null;
+}) {
+  const filters: string[] = [];
+  if (event.entryType === "acquisition") {
+    filters.push("acquisitions");
+  }
+  if (event.entryType === "disposal") {
+    filters.push("disposals");
+  }
+  if (event.entryType === "income") {
+    filters.push("income");
+  }
+  if (["fee", "transfer_fee"].includes(event.entryType)) {
+    filters.push("fees");
+  }
+  if (["neutral_swap", "transfer_in", "transfer_out"].includes(event.entryType)) {
+    filters.push("neutral");
+  }
+  return filters;
 }
 
 function eventTitle(event: JournalTaxEvent) {

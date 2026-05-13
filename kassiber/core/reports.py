@@ -1060,12 +1060,103 @@ def _normalize_tax_summary_row(row):
     return {key: normalized.get(key) for key in _TAX_SUMMARY_ROW_KEYS}
 
 
+def _neutral_swap_tax_summary_adjustments(conn, profile_id):
+    rows = conn.execute(
+        """
+        SELECT substr(occurred_at, 1, 4) AS year,
+               asset,
+               SUM(ABS(quantity)) AS quantity_msat,
+               SUM(COALESCE(proceeds, 0)) AS proceeds,
+               SUM(COALESCE(cost_basis, 0)) AS cost_basis,
+               SUM(COALESCE(gain_loss, 0)) AS gain_loss
+        FROM journal_entries
+        WHERE profile_id = ?
+          AND entry_type = 'disposal'
+          AND at_category = 'neu_swap'
+        GROUP BY substr(occurred_at, 1, 4), asset
+        """,
+        (profile_id,),
+    ).fetchall()
+    adjustments = {}
+    for row in rows:
+        year = str(row["year"] or "")
+        asset = str(row["asset"] or "")
+        if not year.isdigit() or not asset:
+            continue
+        quantity_msat = int(row["quantity_msat"] or 0)
+        adjustments[(int(year), asset, "sell")] = {
+            "quantity": msat_to_btc(quantity_msat),
+            "quantity_msat": quantity_msat,
+            "proceeds": dec(row["proceeds"]),
+            "cost_basis": dec(row["cost_basis"]),
+            "gain_loss": dec(row["gain_loss"]),
+        }
+    return adjustments
+
+
+def _tax_summary_row_is_zero(row):
+    quantity_msat = row.get("quantity_msat")
+    if quantity_msat is None:
+        quantity_msat = btc_to_msat(row.get("quantity"))
+    if int(quantity_msat or 0) != 0:
+        return False
+    return all(
+        abs(dec(row.get(key))) < Decimal("0.00000001")
+        for key in ("proceeds", "cost_basis", "gain_loss")
+    )
+
+
+def _exclude_neutral_swap_tax_summary_rows(conn, profile_id, rows):
+    adjustments = _neutral_swap_tax_summary_adjustments(conn, profile_id)
+    if not adjustments:
+        return [dict(row) for row in rows]
+
+    adjusted_rows = []
+    for row in rows:
+        adjusted = dict(row)
+        key = (
+            int(adjusted["year"]),
+            str(adjusted["asset"] or ""),
+            str(adjusted["transaction_type"] or "").lower(),
+        )
+        adjustment = adjustments.pop(key, None)
+        if adjustment is not None:
+            quantity = dec(adjusted["quantity"]) - adjustment["quantity"]
+            quantity_msat = (
+                int(adjusted["quantity_msat"] or 0)
+                - adjustment["quantity_msat"]
+            )
+            adjusted.update(
+                {
+                    "quantity": float(quantity),
+                    "quantity_msat": quantity_msat,
+                    "proceeds": float(
+                        dec(adjusted["proceeds"]) - adjustment["proceeds"]
+                    ),
+                    "cost_basis": float(
+                        dec(adjusted["cost_basis"]) - adjustment["cost_basis"]
+                    ),
+                    "gain_loss": float(
+                        dec(adjusted["gain_loss"]) - adjustment["gain_loss"]
+                    ),
+                }
+            )
+        if not _tax_summary_row_is_zero(adjusted):
+            adjusted_rows.append(adjusted)
+    return adjusted_rows
+
+
 def report_tax_summary(conn, workspace_ref, profile_ref, hooks: ReportHooks):
     _, profile = _resolve_report_scope(conn, workspace_ref, profile_ref, hooks)
     hooks.require_processed_journals(conn, profile)
     state = hooks.build_ledger_state(conn, profile)
-    detail_rows = sorted(
+    taxable_summary_rows = _exclude_neutral_swap_tax_summary_rows(
+        conn,
+        profile["id"],
         state["tax_summary"],
+    )
+    detail_rows = sorted(
+        taxable_summary_rows,
         key=lambda row: (
             int(row["year"]),
             row["asset"],
@@ -1332,7 +1423,11 @@ def _austrian_e1kv_detail_row(row):
 
 
 def _austrian_e1kv_rows(conn, profile, tax_year):
-    where = ["je.profile_id = ?", "je.at_category IS NOT NULL"]
+    where = [
+        "je.profile_id = ?",
+        "je.at_category IS NOT NULL",
+        "je.at_category != 'neu_swap'",
+    ]
     params: list[Any] = [profile["id"]]
     if tax_year is not None:
         where.append("substr(je.occurred_at, 1, 4) = ?")

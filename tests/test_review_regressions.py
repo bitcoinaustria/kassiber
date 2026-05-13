@@ -21,11 +21,17 @@ from kassiber.core import attachments as core_attachments
 from kassiber.core import pricing
 from kassiber.core import rates as core_rates
 from kassiber.core.engines import TaxEngineLedgerInputs, build_tax_engine
-from kassiber.core.reports import _generic_report_transfer_pair_rows
+from kassiber.core.reports import (
+    ReportHooks,
+    _generic_report_transfer_pair_rows,
+    report_austrian_e1kv,
+    report_tax_summary,
+)
 from kassiber.core.runtime import bootstrap_runtime, close_runtime
 from kassiber.core.tax_events import normalize_tax_asset_inputs
 from kassiber.core.ui_snapshot import (
     build_capital_gains_snapshot,
+    build_journal_events_list_snapshot,
     build_overview_snapshot,
     build_transactions_search_snapshot,
     build_transactions_snapshot,
@@ -1413,6 +1419,108 @@ class ReviewRegressionTest(unittest.TestCase):
         self.assertEqual(neutral["outSats"], 12_426_275)
         self.assertEqual(neutral["inSats"], 12_413_298)
         self.assertEqual(neutral["feeSats"], 12_977)
+        self.assertEqual(neutral["gainEur"], 0.0)
+        self.assertEqual(neutral["proceedsEur"], neutral["costEur"])
+        self.assertAlmostEqual(neutral["marketDeltaEur"], 121.16, places=2)
+
+        hooks = ReportHooks(
+            resolve_scope=lambda _conn, _workspace, _profile: (
+                conn.execute(
+                    "SELECT * FROM workspaces WHERE id = ?",
+                    ("ws-neutral-swap",),
+                ).fetchone(),
+                conn.execute(
+                    "SELECT * FROM profiles WHERE id = ?",
+                    ("pf-neutral-swap",),
+                ).fetchone(),
+            ),
+            resolve_account=lambda *_args, **_kwargs: None,
+            resolve_wallet=lambda *_args, **_kwargs: None,
+            require_processed_journals=lambda *_args, **_kwargs: None,
+            build_ledger_state=lambda *_args, **_kwargs: {
+                "tax_summary": [
+                    {
+                        "year": 2026,
+                        "asset": "BTC",
+                        "transaction_type": "sell",
+                        "capital_gains_type": "short",
+                        "quantity": 0.06812704,
+                        "quantity_msat": btc_to_msat("0.06812704"),
+                        "proceeds": 4_284.09,
+                        "cost_basis": 4_965.50,
+                        "gain_loss": -681.41,
+                    },
+                    {
+                        "year": 2026,
+                        "asset": "LBTC",
+                        "transaction_type": "sell",
+                        "capital_gains_type": "short",
+                        "quantity": 0.12426784,
+                        "quantity_msat": btc_to_msat("0.12426784"),
+                        "proceeds": 7_689.18,
+                        "cost_basis": 7_568.02,
+                        "gain_loss": 121.16,
+                    },
+                ],
+            },
+            list_journal_entries=lambda *_args, **_kwargs: [],
+            list_wallets=lambda *_args, **_kwargs: [],
+            parse_iso_datetime=lambda *_args, **_kwargs: None,
+            iso_z=lambda value: value,
+            now_iso=lambda: now,
+            format_table=lambda *_args, **_kwargs: [],
+            write_text_pdf=lambda *_args, **_kwargs: {},
+        )
+        tax_rows = report_tax_summary(
+            conn,
+            "ws-neutral-swap",
+            "pf-neutral-swap",
+            hooks,
+        )
+        detail_rows = [row for row in tax_rows if row["row_type"] == "detail"]
+        self.assertEqual([row["asset"] for row in detail_rows], ["BTC"])
+        year_total = next(row for row in tax_rows if row["row_type"] == "year_total")
+        self.assertAlmostEqual(year_total["gain_loss"], -681.41, places=2)
+        self.assertAlmostEqual(year_total["proceeds"], 4_284.09, places=2)
+        swap_fee_row = next(row for row in tax_rows if row["row_type"] == "swap_fees_year")
+        self.assertEqual(swap_fee_row["total_swap_fee_msat"], btc_to_msat("0.00012977"))
+
+        events = build_journal_events_list_snapshot(conn, {"limit": 10})
+        self.assertEqual(events["summary"]["reportableCount"], 1)
+        type_counts = {
+            row["type"]: (row["count"], row["gainLossEur"])
+            for row in events["summary"]["entryTypes"]
+        }
+        self.assertEqual(type_counts["neutral_swap"], (1, 0.0))
+        self.assertEqual(type_counts["disposal"], (1, -681.41))
+        neutral_event = next(
+            row for row in events["events"] if row["atCategory"] == "neu_swap"
+        )
+        self.assertEqual(neutral_event["entryType"], "neutral_swap")
+        self.assertEqual(neutral_event["gainLossEur"], 0.0)
+        self.assertEqual(
+            neutral_event["proceedsEur"],
+            neutral_event["costBasisEur"],
+        )
+        self.assertAlmostEqual(neutral_event["marketDeltaEur"], 121.16, places=2)
+
+        e1kv = report_austrian_e1kv(
+            conn,
+            "ws-neutral-swap",
+            "pf-neutral-swap",
+            hooks,
+            tax_year=2026,
+        )
+        self.assertEqual([row["asset"] for row in e1kv["rows"]], ["BTC"])
+        self.assertEqual(
+            [row["at_category"] for row in e1kv["sections"]["1.1"]["detail_rows"]],
+            ["neu_loss"],
+        )
+        self.assertEqual(e1kv["sections"]["1.1"]["totals"]["row_count"], 1)
+        self.assertEqual(
+            e1kv["sections"]["1.1"]["totals"]["gain_loss_eur_cents"],
+            -68_141,
+        )
 
     def _bootstrap_runtime_state(self, *, env_file=None, persist_bootstrap=False):
         args = Namespace(
