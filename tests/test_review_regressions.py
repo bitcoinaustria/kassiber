@@ -26,6 +26,7 @@ from kassiber.core.tax_events import normalize_tax_asset_inputs
 from kassiber.core.ui_snapshot import (
     build_capital_gains_snapshot,
     build_overview_snapshot,
+    build_transactions_search_snapshot,
     build_transactions_snapshot,
 )
 from kassiber.db import open_db, set_setting
@@ -544,6 +545,238 @@ class ReviewRegressionTest(unittest.TestCase):
         self.assertEqual(transactions["txs"][1]["explorerId"], "a" * 64)
         self.assertEqual(transactions["txs"][1]["amountSat"], 100_000_000)
         self.assertEqual(transactions["txs"][1]["eur"], 50_000)
+
+    def test_ui_snapshots_show_reviewed_swap_as_fee_row(self):
+        conn = open_db(self.data_root)
+        self.addCleanup(conn.close)
+        now = "2026-01-01T00:00:00Z"
+        conn.execute(
+            "INSERT INTO workspaces(id, label, created_at) VALUES(?, ?, ?)",
+            ("ws-swap-ui", "Swap UI Workspace", now),
+        )
+        conn.execute(
+            """
+            INSERT INTO profiles(
+                id, workspace_id, label, fiat_currency, tax_country,
+                tax_long_term_days, gains_algorithm, created_at
+            ) VALUES(?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                "pf-swap-ui",
+                "ws-swap-ui",
+                "Swap UI Profile",
+                "EUR",
+                "generic",
+                365,
+                "FIFO",
+                now,
+            ),
+        )
+        conn.executemany(
+            """
+            INSERT INTO wallets(
+                id, workspace_id, profile_id, label, kind, config_json, created_at
+            ) VALUES(?, ?, ?, ?, ?, ?, ?)
+            """,
+            [
+                (
+                    "wal-swap-btc",
+                    "ws-swap-ui",
+                    "pf-swap-ui",
+                    "BTC Wallet",
+                    "address",
+                    "{}",
+                    now,
+                ),
+                (
+                    "wal-swap-lbtc",
+                    "ws-swap-ui",
+                    "pf-swap-ui",
+                    "Liquid Wallet",
+                    "address",
+                    "{}",
+                    now,
+                ),
+            ],
+        )
+        conn.executemany(
+            """
+            INSERT INTO transactions(
+                id, workspace_id, profile_id, wallet_id, external_id, fingerprint,
+                occurred_at, confirmed_at, direction, asset, amount, fee,
+                fiat_currency, fiat_rate, fiat_value, fiat_price_source, kind,
+                description, counterparty, note, excluded, raw_json, created_at
+            ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            [
+                (
+                    "swap-out-leg",
+                    "ws-swap-ui",
+                    "pf-swap-ui",
+                    "wal-swap-btc",
+                    "swap-out-ext",
+                    "swap-out-fp",
+                    "2026-03-01T10:00:00Z",
+                    "2026-03-01T10:10:00Z",
+                    "outbound",
+                    "BTC",
+                    btc_to_msat("0.10000000"),
+                    0,
+                    "EUR",
+                    65_000,
+                    6_500,
+                    "import",
+                    "payment",
+                    "Swap send leg",
+                    None,
+                    None,
+                    0,
+                    "{}",
+                    "2026-03-01T10:00:00Z",
+                ),
+                (
+                    "swap-in-leg",
+                    "ws-swap-ui",
+                    "pf-swap-ui",
+                    "wal-swap-lbtc",
+                    "swap-in-ext",
+                    "swap-in-fp",
+                    "2026-03-01T10:05:00Z",
+                    "2026-03-01T10:15:00Z",
+                    "inbound",
+                    "LBTC",
+                    btc_to_msat("0.09990000"),
+                    0,
+                    "EUR",
+                    0,
+                    0,
+                    "import",
+                    "deposit",
+                    "Swap receive leg",
+                    None,
+                    None,
+                    0,
+                    "{}",
+                    "2026-03-01T10:05:00Z",
+                ),
+                (
+                    "older-income",
+                    "ws-swap-ui",
+                    "pf-swap-ui",
+                    "wal-swap-btc",
+                    "older-income-ext",
+                    "older-income-fp",
+                    "2026-02-01T10:00:00Z",
+                    "2026-02-01T10:10:00Z",
+                    "inbound",
+                    "BTC",
+                    btc_to_msat("0.01000000"),
+                    0,
+                    "EUR",
+                    60_000,
+                    600,
+                    "import",
+                    "deposit",
+                    "Older income",
+                    None,
+                    None,
+                    0,
+                    "{}",
+                    "2026-02-01T10:00:00Z",
+                ),
+            ],
+        )
+        conn.execute(
+            """
+            INSERT INTO transaction_pairs(
+                id, workspace_id, profile_id, out_transaction_id, in_transaction_id,
+                kind, policy, swap_fee_msat, swap_fee_kind, pair_source, created_at
+            ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                "pair-swap-ui",
+                "ws-swap-ui",
+                "pf-swap-ui",
+                "swap-out-leg",
+                "swap-in-leg",
+                "manual",
+                "carrying-value",
+                btc_to_msat("0.00010000"),
+                "deducted",
+                "manual",
+                now,
+            ),
+        )
+        set_setting(conn, "context_workspace", "ws-swap-ui")
+        set_setting(conn, "context_profile", "pf-swap-ui")
+        conn.commit()
+
+        overview = build_overview_snapshot(conn)
+        overview_swap_rows = [
+            row
+            for row in overview["txs"]
+            if row["id"] in {"swap-in-leg", "swap-out-leg"}
+        ]
+        self.assertEqual(len(overview_swap_rows), 1)
+        overview_swap = overview_swap_rows[0]
+        self.assertEqual(overview_swap["id"], "swap-in-leg")
+        self.assertEqual(overview_swap["type"], "Swap")
+        self.assertEqual(overview_swap["tag"], "Swap")
+        self.assertNotIn("tags", overview_swap)
+        self.assertEqual(overview_swap["account"], "BTC Wallet -> Liquid Wallet")
+        self.assertEqual(overview_swap["counter"], "Swap fee - BTC -> LBTC")
+        self.assertEqual(overview_swap["amountSat"], -10_000)
+        self.assertEqual(overview_swap["feeSat"], 10_000)
+        self.assertAlmostEqual(overview_swap["eur"], -6.5)
+
+        transactions = build_transactions_snapshot(conn, {"limit": 10})
+        swap_rows = [
+            row
+            for row in transactions["txs"]
+            if row["id"] in {"swap-in-leg", "swap-out-leg"}
+        ]
+        self.assertEqual(len(swap_rows), 1)
+        self.assertEqual(swap_rows[0]["type"], "Swap")
+        self.assertNotEqual(swap_rows[0]["type"], "Income")
+        self.assertEqual(swap_rows[0]["amountSat"], -10_000)
+        self.assertEqual(swap_rows[0]["feeSat"], 10_000)
+
+        ascending = build_transactions_snapshot(
+            conn,
+            {"limit": 10, "sort": "occurred-at", "order": "asc"},
+        )
+        ascending_swap = [
+            row
+            for row in ascending["txs"]
+            if row["id"] in {"swap-in-leg", "swap-out-leg"}
+        ]
+        self.assertEqual(len(ascending_swap), 1)
+        self.assertEqual(ascending_swap[0]["id"], "swap-out-leg")
+        self.assertAlmostEqual(ascending_swap[0]["eur"], -6.5)
+
+        limited = build_transactions_snapshot(conn, {"limit": 2})
+        self.assertEqual(
+            [row["id"] for row in limited["txs"]],
+            ["swap-in-leg", "older-income"],
+        )
+
+        outbound = build_transactions_snapshot(
+            conn,
+            {"limit": 10, "direction": "outbound"},
+        )
+        self.assertEqual(len(outbound["txs"]), 1)
+        self.assertEqual(outbound["txs"][0]["id"], "swap-out-leg")
+        self.assertEqual(outbound["txs"][0]["type"], "Swap")
+        self.assertEqual(outbound["txs"][0]["amountSat"], -10_000)
+        self.assertAlmostEqual(outbound["txs"][0]["eur"], -6.5)
+
+        outbound_search = build_transactions_search_snapshot(
+            conn,
+            {"query": "swap-out-ext", "limit": 10},
+        )
+        self.assertEqual(len(outbound_search["txs"]), 1)
+        self.assertEqual(outbound_search["txs"][0]["id"], "swap-out-leg")
+        self.assertEqual(outbound_search["txs"][0]["type"], "Swap")
 
     def test_river_import_rejects_price_currency_mismatch(self):
         self._bootstrap_austrian_e1kv_wallet(label="RiverEUR")
