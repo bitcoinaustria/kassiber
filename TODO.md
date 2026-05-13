@@ -349,6 +349,10 @@ and [docs/plan/04-desktop-ui.md](docs/plan/04-desktop-ui.md).
   `ui.transactions.metadata.update`
 - [x] Replace Connections, Journals, and capital-gains Reports mock fixtures
   with first real daemon-backed snapshots and a `ui.wallets.sync` action
+- [x] Wire the desktop Quarantine and Tax Events review screens to real daemon
+  data: Quarantine uses `ui.journals.quarantine`, Tax Events uses
+  `ui.journals.events.list`, and Journals remains the processing/readiness
+  surface linking both review paths.
 - [x] Wire Reports export cards to daemon-backed managed exports for PDF,
   capital-gains CSV, and Austrian E 1kv XLSX, with default-app opening for
   completed files

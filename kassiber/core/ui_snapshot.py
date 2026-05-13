@@ -1573,6 +1573,18 @@ def build_capital_gains_snapshot(conn: sqlite3.Connection) -> dict[str, Any]:
     }
 
 
+def _journal_recent_row_payload(row: sqlite3.Row) -> dict[str, Any]:
+    return {
+        "date": (row["occurred_at"] or "")[:16].replace("T", " "),
+        "type": row["entry_type"],
+        "wallet": row["wallet"],
+        "asset": row["asset"],
+        "quantity": float(msat_to_btc(row["quantity"] or 0)),
+        "fiatValueEur": float(row["fiat_value"] or 0),
+        "gainLossEur": float(row["gain_loss"] or 0),
+    }
+
+
 def build_journals_snapshot(conn: sqlite3.Connection) -> dict[str, Any]:
     context = current_context_snapshot(conn)
     if not context["workspace_id"] or not context["profile_id"]:
@@ -1588,6 +1600,7 @@ def build_journals_snapshot(conn: sqlite3.Connection) -> dict[str, Any]:
             },
             "entryTypes": [],
             "recent": [],
+            "recentByType": {},
         }
 
     profile = conn.execute(
@@ -1607,25 +1620,10 @@ def build_journals_snapshot(conn: sqlite3.Connection) -> dict[str, Any]:
             },
             "entryTypes": [],
             "recent": [],
+            "recentByType": {},
         }
 
-    active_transactions = conn.execute(
-        """
-        SELECT COUNT(*) AS count
-        FROM transactions
-        WHERE profile_id = ? AND excluded = 0
-        """,
-        (profile["id"],),
-    ).fetchone()["count"]
-    journal_entries = conn.execute(
-        "SELECT COUNT(*) AS count FROM journal_entries WHERE profile_id = ?",
-        (profile["id"],),
-    ).fetchone()["count"]
-    quarantines = conn.execute(
-        "SELECT COUNT(*) AS count FROM journal_quarantines WHERE profile_id = ?",
-        (profile["id"],),
-    ).fetchone()["count"]
-    needs_journals = _journal_freshness(conn, profile)["needs_processing"]
+    freshness = _journal_freshness(conn, profile)
     entry_rows = conn.execute(
         """
         SELECT entry_type, COUNT(*) AS count, SUM(COALESCE(gain_loss, 0)) AS gain_loss
@@ -1648,15 +1646,36 @@ def build_journals_snapshot(conn: sqlite3.Connection) -> dict[str, Any]:
         """,
         (profile["id"],),
     ).fetchall()
+    recent_by_type: dict[str, list[dict[str, Any]]] = {}
+    for entry_row in entry_rows:
+        typed_recent_rows = conn.execute(
+            """
+            SELECT je.occurred_at, je.entry_type, je.asset, je.quantity, je.fiat_value,
+                   COALESCE(je.gain_loss, 0) AS gain_loss, w.label AS wallet
+            FROM journal_entries je
+            JOIN wallets w ON w.id = je.wallet_id
+            WHERE je.profile_id = ? AND je.entry_type = ?
+            ORDER BY je.occurred_at DESC, je.created_at DESC, je.id DESC
+            LIMIT 12
+            """,
+            (profile["id"], entry_row["entry_type"]),
+        ).fetchall()
+        recent_by_type[entry_row["entry_type"]] = [
+            _journal_recent_row_payload(row) for row in typed_recent_rows
+        ]
     return {
         "status": {
             "workspace": context["workspace_label"] or None,
             "profile": context["profile_label"] or None,
-            "transactionCount": int(active_transactions or 0),
-            "journalEntryCount": int(journal_entries or 0),
-            "needsJournals": needs_journals,
-            "quarantines": int(quarantines or 0),
+            "transactionCount": freshness["active_transaction_count"],
+            "journalEntryCount": freshness["journal_entry_count"],
+            "needsJournals": freshness["needs_processing"],
+            "quarantines": freshness["quarantine_count"],
             "lastProcessedAt": profile["last_processed_at"],
+            "freshnessStatus": freshness["status"],
+            "freshnessReason": freshness["reason"],
+            "journalInputVersion": freshness["journal_input_version"],
+            "lastProcessedInputVersion": freshness["last_processed_input_version"],
         },
         "entryTypes": [
             {
@@ -1666,17 +1685,156 @@ def build_journals_snapshot(conn: sqlite3.Connection) -> dict[str, Any]:
             }
             for row in entry_rows
         ],
-        "recent": [
+        "recent": [_journal_recent_row_payload(row) for row in recent_rows],
+        "recentByType": recent_by_type,
+    }
+
+
+def build_journal_events_list_snapshot(
+    conn: sqlite3.Connection,
+    args: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    raw_args = _coerce_args(args)
+    unknown = sorted(set(raw_args) - {"limit"})
+    if unknown:
+        raise AppError(
+            "ui.journals.events.list received unsupported arguments",
+            code="validation",
+            details={"unknown": unknown},
+            retryable=False,
+        )
+    limit = _coerce_limit(raw_args, default=100, maximum=MAX_UI_LIST_LIMIT)
+    context, profile = _active_context_and_profile(conn)
+    empty_summary = {
+        "workspace": None,
+        "profile": None,
+        "count": 0,
+        "reportableCount": 0,
+        "needsJournals": False,
+        "lastProcessedAt": None,
+        "freshnessStatus": "no_profile",
+        "freshnessReason": "no active profile",
+        "entryTypes": [],
+        "limit": limit,
+    }
+    if profile is None:
+        return {"summary": empty_summary, "events": []}
+
+    freshness = _journal_freshness(conn, profile)
+    summary_rows = conn.execute(
+        """
+        SELECT
+            entry_type,
+            COUNT(*) AS count,
+            SUM(COALESCE(gain_loss, 0)) AS gain_loss
+        FROM journal_entries
+        WHERE profile_id = ?
+        GROUP BY entry_type
+        ORDER BY count DESC, entry_type ASC
+        """,
+        (profile["id"],),
+    ).fetchall()
+    total = sum(int(row["count"] or 0) for row in summary_rows)
+    reportable_count = conn.execute(
+        """
+        SELECT COUNT(*) AS count
+        FROM journal_entries
+        WHERE profile_id = ?
+          AND (
+            entry_type IN ('disposal', 'income', 'fee', 'transfer_fee')
+            OR at_kennzahl IS NOT NULL
+          )
+        """,
+        (profile["id"],),
+    ).fetchone()["count"]
+    rows = conn.execute(
+        """
+        SELECT
+            je.id,
+            je.transaction_id,
+            je.occurred_at,
+            je.created_at,
+            je.entry_type,
+            je.asset,
+            je.quantity,
+            je.fiat_value,
+            je.unit_cost,
+            je.cost_basis,
+            je.proceeds,
+            je.gain_loss,
+            je.pricing_source_kind,
+            je.pricing_quality,
+            COALESCE(je.description, '') AS description,
+            je.at_category,
+            je.at_kennzahl,
+            w.label AS wallet,
+            COALESCE(a.code, '') AS account,
+            COALESCE(a.label, '') AS account_label,
+            t.external_id AS transaction_external_id,
+            t.direction AS transaction_direction
+        FROM journal_entries je
+        JOIN wallets w ON w.id = je.wallet_id
+        LEFT JOIN accounts a ON a.id = je.account_id
+        LEFT JOIN transactions t ON t.id = je.transaction_id
+        WHERE je.profile_id = ?
+        ORDER BY je.occurred_at DESC, je.created_at DESC, je.id DESC
+        LIMIT ?
+        """,
+        (profile["id"], limit),
+    ).fetchall()
+    return {
+        "summary": {
+            "workspace": context["workspace_label"] or None,
+            "profile": context["profile_label"] or None,
+            "count": total,
+            "reportableCount": int(reportable_count or 0),
+            "needsJournals": freshness["needs_processing"],
+            "lastProcessedAt": profile["last_processed_at"],
+            "freshnessStatus": freshness["status"],
+            "freshnessReason": freshness["reason"],
+            "entryTypes": [
+                {
+                    "type": row["entry_type"],
+                    "count": int(row["count"] or 0),
+                    "gainLossEur": float(row["gain_loss"] or 0),
+                }
+                for row in summary_rows
+            ],
+            "limit": limit,
+        },
+        "events": [
             {
-                "date": (row["occurred_at"] or "")[:16].replace("T", " "),
-                "type": row["entry_type"],
+                "id": row["id"],
+                "transactionId": row["transaction_id"],
+                "transactionExternalId": row["transaction_external_id"] or "",
+                "transactionDirection": row["transaction_direction"] or "",
+                "occurredAt": row["occurred_at"],
+                "createdAt": row["created_at"],
+                "entryType": row["entry_type"],
                 "wallet": row["wallet"],
+                "account": row["account"],
+                "accountLabel": row["account_label"],
                 "asset": row["asset"],
                 "quantity": float(msat_to_btc(row["quantity"] or 0)),
+                "quantityMsat": int(row["quantity"] or 0),
                 "fiatValueEur": float(row["fiat_value"] or 0),
-                "gainLossEur": float(row["gain_loss"] or 0),
+                "unitCostEur": float(row["unit_cost"] or 0),
+                "costBasisEur": (
+                    float(row["cost_basis"]) if row["cost_basis"] is not None else None
+                ),
+                "proceedsEur": (
+                    float(row["proceeds"]) if row["proceeds"] is not None else None
+                ),
+                "gainLossEur": (
+                    float(row["gain_loss"]) if row["gain_loss"] is not None else None
+                ),
+                "pricingSourceKind": row["pricing_source_kind"] or "",
+                "pricingQuality": row["pricing_quality"] or "",
+                "description": row["description"],
+                "atCategory": row["at_category"],
+                "atKennzahl": row["at_kennzahl"],
             }
-            for row in recent_rows
+            for row in rows
         ],
     }
 

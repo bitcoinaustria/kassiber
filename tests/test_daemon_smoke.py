@@ -337,6 +337,35 @@ def _seed_workspace_with_transaction(
     _run_cli(data_root, "rates", "set", "BTC-EUR", "2026-01-01T00:00:00Z", "50000")
 
 
+def _seed_workspace_with_unpriced_transaction(data_root, tmp_root):
+    csv_path = Path(tmp_root) / "unpriced.csv"
+    csv_path.write_text(
+        "\n".join(
+            [
+                "date,txid,direction,asset,amount,fee,fiat_rate,description",
+                "2026-01-01T10:00:00Z,missing-price-1,inbound,BTC,0.10000000,0,,Needs a price",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    _run_cli(data_root, "init")
+    _run_cli(data_root, "workspaces", "create", "Demo")
+    _run_cli(data_root, "profiles", "create", "Main", "--fiat-currency", "EUR")
+    _run_cli(
+        data_root,
+        "wallets",
+        "create",
+        "--label",
+        "Cold",
+        "--kind",
+        "address",
+        "--address",
+        "bc1qtestaddress0000000000000000000000000000000",
+    )
+    _run_cli(data_root, "wallets", "import-csv", "--wallet", "Cold", "--file", str(csv_path))
+
+
 def _sample_descriptor_pair():
     from embit import bip32
 
@@ -568,6 +597,7 @@ class DaemonSmokeTest(unittest.TestCase):
             self.assertIn("ui.source_funds.evidence.list", ready["data"]["supported_kinds"])
             self.assertIn("ui.source_funds.export_pdf", ready["data"]["supported_kinds"])
             self.assertIn("ui.journals.snapshot", ready["data"]["supported_kinds"])
+            self.assertIn("ui.journals.events.list", ready["data"]["supported_kinds"])
             self.assertIn("ui.journals.quarantine", ready["data"]["supported_kinds"])
             self.assertIn("ui.journals.transfers.list", ready["data"]["supported_kinds"])
             self.assertIn("ui.journals.process", ready["data"]["supported_kinds"])
@@ -2562,6 +2592,35 @@ class DaemonSmokeTest(unittest.TestCase):
             self.assertEqual(processed["data"]["processed_transactions"], 1)
             self.assertEqual(processed["data"]["quarantined"], 0)
 
+            _write_payload(proc, {"request_id": "journals-1", "kind": "ui.journals.snapshot"})
+            journals = _read_payload_timeout(proc)
+            self.assertEqual(journals["kind"], "ui.journals.snapshot")
+            self.assertEqual(journals["data"]["status"]["transactionCount"], 1)
+            self.assertFalse(journals["data"]["status"]["needsJournals"])
+            self.assertGreaterEqual(journals["data"]["status"]["journalEntryCount"], 1)
+            self.assertIn("acquisition", journals["data"]["recentByType"])
+            self.assertEqual(
+                journals["data"]["recentByType"]["acquisition"][0]["type"],
+                "acquisition",
+            )
+
+            _write_payload(
+                proc,
+                {
+                    "request_id": "journal-events-1",
+                    "kind": "ui.journals.events.list",
+                    "args": {"limit": 5},
+                },
+            )
+            journal_events = _read_payload_timeout(proc)
+            self.assertEqual(journal_events["kind"], "ui.journals.events.list")
+            self.assertEqual(journal_events["data"]["summary"]["count"], 1)
+            self.assertEqual(journal_events["data"]["events"][0]["wallet"], "Cold")
+            self.assertEqual(
+                journal_events["data"]["events"][0]["quantityMsat"],
+                10_000_000_000,
+            )
+
             _write_payload(proc, {"request_id": "wallets-1", "kind": "ui.wallets.list"})
             wallets = _read_payload_timeout(proc)
             self.assertEqual(wallets["kind"], "ui.wallets.list")
@@ -2849,6 +2908,41 @@ class DaemonSmokeTest(unittest.TestCase):
             transfers = _read_payload_timeout(proc)
             self.assertEqual(transfers["kind"], "ui.journals.transfers.list")
             self.assertEqual(transfers["data"]["pairs"], [])
+
+            _write_payload(proc, {"request_id": "shutdown-1", "kind": "daemon.shutdown"})
+            self.assertEqual(_read_payload_timeout(proc)["kind"], "daemon.shutdown")
+            code, stderr = _close_daemon(proc)
+            self.assertEqual(code, 0, stderr)
+            self.assertEqual(stderr, "")
+
+    def test_daemon_quarantine_snapshot_returns_review_items(self):
+        with tempfile.TemporaryDirectory(prefix="kassiber-daemon-quarantine-") as tmp:
+            data_root = Path(tmp) / "data"
+            _seed_workspace_with_unpriced_transaction(data_root, tmp)
+            processed = _run_cli(data_root, "journals", "process")
+            self.assertEqual(processed["kind"], "journals.process")
+            self.assertEqual(processed["data"]["quarantined"], 1)
+
+            proc = _start_daemon(data_root)
+            self.assertEqual(_read_payload_timeout(proc)["kind"], "daemon.ready")
+
+            _write_payload(
+                proc,
+                {
+                    "request_id": "quarantine-review-1",
+                    "kind": "ui.journals.quarantine",
+                    "args": {"limit": 10},
+                },
+            )
+            quarantine = _read_payload_timeout(proc)
+            self.assertEqual(quarantine["kind"], "ui.journals.quarantine")
+            self.assertEqual(quarantine["data"]["summary"]["count"], 1)
+            self.assertEqual(quarantine["data"]["items"][0]["wallet"], "Cold")
+            self.assertIn("price", quarantine["data"]["items"][0]["reason"])
+            self.assertEqual(
+                quarantine["data"]["items"][0]["amount_msat"],
+                10_000_000_000,
+            )
 
             _write_payload(proc, {"request_id": "shutdown-1", "kind": "daemon.shutdown"})
             self.assertEqual(_read_payload_timeout(proc)["kind"], "daemon.shutdown")

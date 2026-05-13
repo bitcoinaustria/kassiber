@@ -82,6 +82,7 @@ from .core.ui_snapshot import (
     build_audit_changes_since_last_answer_snapshot,
     build_backends_list_snapshot,
     build_capital_gains_snapshot,
+    build_journal_events_list_snapshot,
     build_journals_snapshot,
     build_journals_quarantine_snapshot,
     build_journals_transfers_list_snapshot,
@@ -181,6 +182,7 @@ SUPPORTED_KINDS = (
     "ui.source_funds.recipients.update",
     "ui.source_funds.recipients.delete",
     "ui.journals.snapshot",
+    "ui.journals.events.list",
     "ui.journals.quarantine",
     "ui.journals.transfers.list",
     "ui.journals.process",
@@ -5714,6 +5716,18 @@ def handle_request(
                 build_envelope(
                     "ui.journals.snapshot",
                     build_journals_snapshot(ctx.conn),
+                ),
+                request_id,
+            ),
+            False,
+        )
+
+    if kind == "ui.journals.events.list":
+        return (
+            _with_request_id(
+                build_envelope(
+                    "ui.journals.events.list",
+                    build_journal_events_list_snapshot(ctx.conn, request.get("args")),
                 ),
                 request_id,
             ),
