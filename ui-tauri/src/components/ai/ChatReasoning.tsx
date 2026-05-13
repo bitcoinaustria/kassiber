@@ -1,9 +1,8 @@
 /**
  * Collapsible "thinking" pane for assistant reasoning content.
  *
- * Default open while the model is mid-stream so the user can watch the
- * reasoning unfold; auto-collapses once the answer starts to land. Users
- * can expand again to re-read the chain of thought.
+ * Defaults collapsed so thinking stays available without taking over the
+ * message while the answer streams. Users can expand it when useful.
  */
 
 import * as React from "react";
@@ -20,6 +19,7 @@ interface ChatReasoningProps {
   thinking: string;
   isStreaming: boolean;
   hasAnswer: boolean;
+  defaultOpen?: boolean;
 }
 
 const reasoningMarkdownClassName = [
@@ -37,20 +37,11 @@ export function ChatReasoning({
   thinking,
   isStreaming,
   hasAnswer,
+  defaultOpen = false,
 }: ChatReasoningProps) {
-  // Auto-collapse the moment the answer text starts streaming.
-  const autoOpen = isStreaming && !hasAnswer;
-  const [open, setOpen] = React.useState(autoOpen);
+  const [open, setOpen] = React.useState(defaultOpen);
   const [elapsedSeconds, setElapsedSeconds] = React.useState(0);
-  const lastAuto = React.useRef(autoOpen);
   const startedAt = React.useRef(Date.now());
-
-  React.useEffect(() => {
-    if (lastAuto.current !== autoOpen) {
-      setOpen(autoOpen);
-      lastAuto.current = autoOpen;
-    }
-  }, [autoOpen]);
 
   React.useEffect(() => {
     if (!isStreaming || hasAnswer) return;

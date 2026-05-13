@@ -21,11 +21,6 @@ export function ChatToolCall({ toolCall }: ChatToolCallProps) {
       : undefined;
   return (
     <Tool
-      defaultOpen={
-        toolCall.status === "awaiting_consent" ||
-        toolCall.status === "running" ||
-        toolCall.status === "error"
-      }
       className={
         toolCall.status === "error"
           ? "border-destructive/35 bg-destructive/5"

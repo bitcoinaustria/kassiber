@@ -63,7 +63,7 @@ export function ChatMessage({ message }: ChatMessageProps) {
               "mb-4 w-full min-w-0",
             )}
           >
-            <ChainOfThought defaultOpen>
+            <ChainOfThought>
               <ChainOfThoughtHeader icon={Wrench}>
                 Tool usage
               </ChainOfThoughtHeader>
