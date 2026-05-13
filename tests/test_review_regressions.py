@@ -24,6 +24,7 @@ from kassiber.core.engines import TaxEngineLedgerInputs, build_tax_engine
 from kassiber.core.reports import (
     ReportHooks,
     _generic_report_transfer_pair_rows,
+    report_austrian_e1kv,
     report_tax_summary,
 )
 from kassiber.core.runtime import bootstrap_runtime, close_runtime
@@ -1502,6 +1503,24 @@ class ReviewRegressionTest(unittest.TestCase):
             neutral_event["costBasisEur"],
         )
         self.assertAlmostEqual(neutral_event["marketDeltaEur"], 121.16, places=2)
+
+        e1kv = report_austrian_e1kv(
+            conn,
+            "ws-neutral-swap",
+            "pf-neutral-swap",
+            hooks,
+            tax_year=2026,
+        )
+        self.assertEqual([row["asset"] for row in e1kv["rows"]], ["BTC"])
+        self.assertEqual(
+            [row["at_category"] for row in e1kv["sections"]["1.1"]["detail_rows"]],
+            ["neu_loss"],
+        )
+        self.assertEqual(e1kv["sections"]["1.1"]["totals"]["row_count"], 1)
+        self.assertEqual(
+            e1kv["sections"]["1.1"]["totals"]["gain_loss_eur_cents"],
+            -68_141,
+        )
 
     def _bootstrap_runtime_state(self, *, env_file=None, persist_bootstrap=False):
         args = Namespace(

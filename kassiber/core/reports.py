@@ -1423,7 +1423,11 @@ def _austrian_e1kv_detail_row(row):
 
 
 def _austrian_e1kv_rows(conn, profile, tax_year):
-    where = ["je.profile_id = ?", "je.at_category IS NOT NULL"]
+    where = [
+        "je.profile_id = ?",
+        "je.at_category IS NOT NULL",
+        "je.at_category != 'neu_swap'",
+    ]
     params: list[Any] = [profile["id"]]
     if tax_year is not None:
         where.append("substr(je.occurred_at, 1, 4) = ?")
