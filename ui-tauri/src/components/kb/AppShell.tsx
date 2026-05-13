@@ -1772,10 +1772,10 @@ function AppDashboardHeader({
                 aria-hidden="true"
               />
             </Button>
-            <span className="hidden text-sidebar-foreground/35 lg:inline">
+            <span className="hidden text-sidebar-foreground/35 xl:inline">
               /
             </span>
-            <span className="hidden truncate text-sm text-sidebar-foreground/65 lg:inline">
+            <span className="hidden truncate text-sm text-sidebar-foreground/65 xl:inline">
               {meta.title}
             </span>
           </div>
@@ -2000,6 +2000,7 @@ function AppDashboardHeader({
             ))}
           </DropdownMenuContent>
         </DropdownMenu>
+        <CurrencyMenu />
         <ThemeMenu />
         <Button
           variant="ghost"
@@ -2077,6 +2078,30 @@ function ThemeMenu() {
         </DropdownMenuRadioGroup>
       </DropdownMenuContent>
     </DropdownMenu>
+  );
+}
+
+function CurrencyMenu() {
+  const currency = useUiStore((state) => state.currency);
+  const setCurrency = useUiStore((state) => state.setCurrency);
+  const symbol = currency === "btc" ? "₿" : "€";
+  const nextCurrency = currency === "btc" ? "eur" : "btc";
+  const nextLabel = nextCurrency === "btc" ? "bitcoin" : "euro";
+
+  return (
+    <Button
+      type="button"
+      variant="ghost"
+      size="icon"
+      className={topNavIconButtonClassName}
+      aria-label={`Show amounts in ${nextLabel}`}
+      title={`Show amounts in ${nextLabel}`}
+      onClick={() => setCurrency(nextCurrency)}
+    >
+      <span aria-hidden="true" className="text-sm font-semibold leading-none">
+        {symbol}
+      </span>
+    </Button>
   );
 }
 

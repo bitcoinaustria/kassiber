@@ -149,6 +149,8 @@ type FlowChartSelection = {
   mode: FlowChartMode;
 };
 
+type TableQuickFilter = "external_flow" | "review_queue";
+
 type FlowChartClickData = {
   payload?: FlowChartPoint;
   activePayload?: Array<{ payload?: FlowChartPoint }>;
@@ -164,6 +166,11 @@ type SwapCandidate = {
   out: Transaction;
   eur: number;
   btc: number;
+};
+
+export type SwapCandidateReference = {
+  in_id: string;
+  out_id: string;
 };
 
 const flowColors: Record<TransactionFlow, string> = {
@@ -1093,7 +1100,27 @@ function sumByFlow(records: Transaction[], flow: TransactionFlow) {
   };
 }
 
-function buildSwapCandidates(records: Transaction[]): SwapCandidate[] {
+function buildSwapCandidates(
+  records: Transaction[],
+  candidateRefs?: SwapCandidateReference[],
+): SwapCandidate[] {
+  if (candidateRefs) {
+    const recordsById = new Map(records.map((txn) => [txn.id, txn]));
+    return candidateRefs.flatMap((candidate) => {
+      const input = recordsById.get(candidate.in_id);
+      const out = recordsById.get(candidate.out_id);
+      if (!input || !out) return [];
+      return [
+        {
+          in: input,
+          out,
+          eur: Math.min(input.amount, out.amount),
+          btc: Math.min(transactionBtc(input), transactionBtc(out)),
+        },
+      ];
+    });
+  }
+
   const inbound = records
     .filter((txn) => transactionFlow(txn) === "incoming")
     .map((txn) => ({ txn, date: parseTransactionDate(txn.date) }))
@@ -1268,20 +1295,24 @@ const TransactionWorkbench = ({
   hideSensitive,
   currency,
   onFlowSelectionChange,
+  onQuickFilterChange,
   chartSelection,
+  swapCandidateRefs,
 }: {
   period: PeriodKey;
   records: Transaction[];
   hideSensitive: boolean;
   currency: Currency;
-  onFlowSelectionChange: (selection: FlowChartSelection) => void;
+  onFlowSelectionChange: (selection: FlowChartSelection | null) => void;
+  onQuickFilterChange: (filter: TableQuickFilter | null) => void;
   chartSelection: FlowChartSelection | null;
+  swapCandidateRefs?: SwapCandidateReference[];
 }) => {
   const navigate = useNavigate();
   const [chartMetric, setChartMetric] =
     React.useState<FlowChartMetric>("amount");
   const [chartMode, setChartMode] = React.useState<FlowChartMode>("external");
-  const swapCandidates = buildSwapCandidates(records);
+  const swapCandidates = buildSwapCandidates(records, swapCandidateRefs);
   const swapCandidateIds = new Set(
     swapCandidates.flatMap((candidate) => [
       candidate.in.id,
@@ -1350,6 +1381,7 @@ const TransactionWorkbench = ({
     (data: FlowChartClickData, segment: FlowChartSegment) => {
       const point = data.payload ?? data.activePayload?.[0]?.payload;
       if (!point || flowPointSegmentValue(point, segment) === 0) return;
+      onQuickFilterChange(null);
       onFlowSelectionChange({
         id: `${period}:${point.bucketKey}:${segment}:${chartMode}`,
         period,
@@ -1359,10 +1391,11 @@ const TransactionWorkbench = ({
         mode: chartMode,
       });
     },
-    [chartMode, onFlowSelectionChange, period],
+    [chartMode, onFlowSelectionChange, onQuickFilterChange, period],
   );
   const handleFlowLegendClick = React.useCallback(
     (segment: FlowChartSegment) => {
+      onQuickFilterChange(null);
       onFlowSelectionChange({
         id: `${period}:all:${segment}:${chartMode}`,
         period,
@@ -1372,11 +1405,42 @@ const TransactionWorkbench = ({
         mode: chartMode,
       });
     },
-    [chartMode, onFlowSelectionChange, period],
+    [chartMode, onFlowSelectionChange, onQuickFilterChange, period],
   );
+  const handleSummaryFlowClick = React.useCallback(
+    (segment: FlowChartSegment) => {
+      onQuickFilterChange(null);
+      onFlowSelectionChange({
+        id: `${period}:summary:${segment}:all`,
+        period,
+        bucketKey: null,
+        bucketLabel: periodLabels[period],
+        segment,
+        mode: "all",
+      });
+    },
+    [onFlowSelectionChange, onQuickFilterChange, period],
+  );
+  const handleNetFlowClick = React.useCallback(() => {
+    onFlowSelectionChange(null);
+    onQuickFilterChange("external_flow");
+  }, [onFlowSelectionChange, onQuickFilterChange]);
+  const handleReviewQueueClick = React.useCallback(() => {
+    onFlowSelectionChange(null);
+    onQuickFilterChange("review_queue");
+    void navigate({ to: "/quarantine" });
+  }, [navigate, onFlowSelectionChange, onQuickFilterChange]);
   const openSwapWorkflow = React.useCallback(() => {
     void navigate({ to: "/swaps" });
   }, [navigate]);
+  const handleSwapWorkflowClick = React.useCallback(
+    () => {
+      onFlowSelectionChange(null);
+      onQuickFilterChange(null);
+      openSwapWorkflow();
+    },
+    [onFlowSelectionChange, onQuickFilterChange, openSwapWorkflow],
+  );
   const networkRows = buildBreakdown(records, (txn) => txn.paymentMethod);
   const walletRows = buildBreakdown(records, (txn) => txn.wallet ?? "Unassigned");
   const maxNetworkValue = Math.max(...networkRows.map((row) => row.eur), 1);
@@ -1388,6 +1452,11 @@ const TransactionWorkbench = ({
       meta: `${incoming.count} tx`,
       icon: ArrowDownRight,
       tone: "text-emerald-600",
+      onClick:
+        incoming.count > 0
+          ? () => handleSummaryFlowClick("incoming")
+          : undefined,
+      ariaLabel: "Show incoming transactions",
     },
     {
       label: "Outgoing",
@@ -1395,6 +1464,11 @@ const TransactionWorkbench = ({
       meta: `${outgoing.count} tx`,
       icon: ArrowUpRight,
       tone: "text-red-600",
+      onClick:
+        outgoing.count > 0
+          ? () => handleSummaryFlowClick("outgoing")
+          : undefined,
+      ariaLabel: "Show outgoing transactions",
     },
     {
       label: "Net flow",
@@ -1402,6 +1476,11 @@ const TransactionWorkbench = ({
       meta: netEur >= 0 ? "inflow" : "outflow",
       icon: ArrowLeftRight,
       tone: netEur >= 0 ? "text-emerald-600" : "text-red-600",
+      onClick:
+        incoming.count + outgoing.count > 0
+          ? handleNetFlowClick
+          : undefined,
+      ariaLabel: "Show external flow transactions",
     },
     {
       label: "Transfers",
@@ -1409,6 +1488,8 @@ const TransactionWorkbench = ({
       meta: `${transfers.count} moves`,
       icon: Wallet,
       tone: "text-muted-foreground",
+      onClick: () => handleSummaryFlowClick("transfers"),
+      ariaLabel: "Show transfer transactions",
     },
     {
       label: "Swap candidates",
@@ -1419,10 +1500,8 @@ const TransactionWorkbench = ({
           : `${markedSwaps.count} marked`,
       icon: RefreshCw,
       tone: swapCandidateTotals.count > 0 ? "text-amber-600" : "text-muted-foreground",
-      onClick:
-        swaps.count > 0
-          ? openSwapWorkflow
-          : undefined,
+      onClick: handleSwapWorkflowClick,
+      ariaLabel: "Open swap candidates",
     },
     {
       label: "Review queue",
@@ -1434,6 +1513,8 @@ const TransactionWorkbench = ({
           ? "text-amber-600"
           : "text-emerald-600",
       countOnly: true,
+      onClick: handleReviewQueueClick,
+      ariaLabel: "Show review queue transactions",
     },
   ];
 
@@ -1448,7 +1529,7 @@ const TransactionWorkbench = ({
             index % 3 === 0 ? "md:border-l-0" : "md:border-l",
             index > 0 ? "xl:border-l" : "xl:border-l-0",
             metric.onClick &&
-              "w-full cursor-pointer transition-colors hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
+              "relative isolate w-full cursor-pointer overflow-hidden transition-colors before:absolute before:inset-0 before:z-0 before:origin-left before:scale-x-0 before:bg-muted/60 before:content-[''] before:transition-transform before:duration-200 before:ease-out hover:before:scale-x-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:before:scale-x-100 [&>*]:relative [&>*]:z-10",
           );
           const content = (
             <>
@@ -1487,7 +1568,7 @@ const TransactionWorkbench = ({
               type="button"
               className={className}
               onClick={metric.onClick}
-              aria-label="Open swap candidates"
+              aria-label={metric.ariaLabel}
             >
               {content}
             </button>
@@ -1998,14 +2079,14 @@ function QualityRow({
 }) {
   const tone = value > 0 ? "text-amber-600" : "text-emerald-600";
   const className = cn(
-    "flex w-full items-center justify-between gap-3 py-2 text-left",
+    "-mx-1 grid min-h-8 w-[calc(100%+0.5rem)] grid-cols-[minmax(0,1fr)_auto] items-center gap-3 rounded-md px-1 py-1.5 text-left",
     onClick &&
-      "cursor-pointer rounded-md px-1 transition-colors hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+      "cursor-pointer transition-colors hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
   );
   const content = (
     <>
-      <span className="text-muted-foreground">{label}</span>
-      <span className={cn("font-semibold tabular-nums", tone)}>
+      <span className="min-w-0 truncate text-muted-foreground">{label}</span>
+      <span className={cn("shrink-0 font-semibold leading-none tabular-nums", tone)}>
         {value}
       </span>
     </>
@@ -2085,6 +2166,11 @@ function flowChartSelectionLabel(selection: FlowChartSelection) {
   }`;
 }
 
+function quickFilterLabel(filter: TableQuickFilter) {
+  if (filter === "external_flow") return "External flow";
+  return "Review queue";
+}
+
 function matchesFlowChartSelection(
   txn: Transaction,
   selection: FlowChartSelection,
@@ -2112,7 +2198,9 @@ const TransactionsTable = ({
   explorerSettings,
   swapCandidateIds = new Set<string>(),
   chartSelection,
+  quickFilter,
   onChartSelectionChange,
+  onQuickFilterChange,
 }: {
   records: Transaction[];
   hideSensitive: boolean;
@@ -2120,7 +2208,9 @@ const TransactionsTable = ({
   explorerSettings: ExplorerSettings;
   swapCandidateIds?: Set<string>;
   chartSelection: FlowChartSelection | null;
+  quickFilter: TableQuickFilter | null;
   onChartSelectionChange: (selection: FlowChartSelection | null) => void;
+  onQuickFilterChange: (filter: TableQuickFilter | null) => void;
 }) => {
   const [searchQuery, setSearchQuery] = React.useState("");
   const [statusFilter, setStatusFilter] = React.useState<string>("all");
@@ -2200,6 +2290,7 @@ const TransactionsTable = ({
 
   const hasActiveFilters =
     chartSelection !== null ||
+    quickFilter !== null ||
     statusFilter !== "all" ||
     dateFilter !== "all" ||
     flowFilter !== "all" ||
@@ -2207,6 +2298,7 @@ const TransactionsTable = ({
 
   const clearFilters = () => {
     onChartSelectionChange(null);
+    onQuickFilterChange(null);
     setStatusFilter("all");
     setDateFilter("all");
     setFlowFilter("all");
@@ -2309,6 +2401,12 @@ const TransactionsTable = ({
         !chartSelection ||
         matchesFlowChartSelection(txn, chartSelection, displayFlow);
 
+      const matchesQuickFilter =
+        quickFilter === null ||
+        (quickFilter === "external_flow" &&
+          ["incoming", "outgoing"].includes(displayFlow(txn))) ||
+        (quickFilter === "review_queue" && draft.reviewStatus !== "completed");
+
       let matchesDate = true;
       const pd = txn.date.toLowerCase();
       switch (dateFilter) {
@@ -2335,6 +2433,7 @@ const TransactionsTable = ({
       return (
         matchesSearch &&
         matchesChartSelection &&
+        matchesQuickFilter &&
         matchesStatus &&
         matchesFlow &&
         matchesPaymentMethod &&
@@ -2346,6 +2445,7 @@ const TransactionsTable = ({
     getDraft,
     searchQuery,
     chartSelection,
+    quickFilter,
     statusFilter,
     dateFilter,
     flowFilter,
@@ -2354,14 +2454,14 @@ const TransactionsTable = ({
   ]);
 
   React.useEffect(() => {
-    if (!chartSelection || typeof window === "undefined") return;
+    if ((!chartSelection && !quickFilter) || typeof window === "undefined") return;
     window.requestAnimationFrame(() => {
       tableRef.current?.scrollIntoView({
         behavior: "smooth",
         block: "start",
       });
     });
-  }, [chartSelection]);
+  }, [chartSelection, quickFilter]);
 
   const totalPages = Math.ceil(filteredTransactions.length / pageSize);
 
@@ -2376,6 +2476,7 @@ const TransactionsTable = ({
   }, [
     searchQuery,
     chartSelection,
+    quickFilter,
     statusFilter,
     dateFilter,
     flowFilter,
@@ -2629,6 +2730,17 @@ const TransactionsTable = ({
               aria-label={`Clear chart filter ${flowChartSelectionLabel(chartSelection)}`}
             >
               Chart: {flowChartSelectionLabel(chartSelection)}
+              <X className="size-2.5 sm:size-3" aria-hidden="true" />
+            </button>
+          )}
+          {quickFilter && (
+            <button
+              type="button"
+              className={filterChipClassName}
+              onClick={() => onQuickFilterChange(null)}
+              aria-label={`Clear ${quickFilterLabel(quickFilter)} filter`}
+            >
+              {quickFilterLabel(quickFilter)}
               <X className="size-2.5 sm:size-3" aria-hidden="true" />
             </button>
           )}
@@ -3136,14 +3248,18 @@ const TransactionsTable = ({
 const Dashboard2 = ({
   className,
   transactions = MOCK_TRANSACTIONS,
+  swapCandidates,
 }: {
   className?: string;
   transactions?: TransactionsList;
+  swapCandidates?: SwapCandidateReference[];
 }) => {
   const [period, setPeriod] = React.useState<PeriodKey>(initialPeriodFromUrl);
   const [newTxnOpen, setNewTxnOpen] = React.useState(false);
   const [flowChartSelection, setFlowChartSelection] =
     React.useState<FlowChartSelection | null>(null);
+  const [quickFilter, setQuickFilter] =
+    React.useState<TableQuickFilter | null>(null);
   const [newTransactionDraft, setNewTransactionDraft] =
     React.useState<NewTransactionDraft>(createNewTransactionDraft);
   const hideSensitive = useUiStore((s) => s.hideSensitive);
@@ -3164,16 +3280,17 @@ const Dashboard2 = ({
   const periodSwapCandidateIds = React.useMemo(
     () =>
       new Set(
-        buildSwapCandidates(periodRecords).flatMap((candidate) => [
+        buildSwapCandidates(periodRecords, swapCandidates).flatMap((candidate) => [
           candidate.in.id,
           candidate.out.id,
         ]),
       ),
-    [periodRecords],
+    [periodRecords, swapCandidates],
   );
   const handlePeriodChange = React.useCallback((nextPeriod: PeriodKey) => {
     setPeriod(nextPeriod);
     setFlowChartSelection(null);
+    setQuickFilter(null);
   }, []);
 
   React.useEffect(() => {
@@ -3229,7 +3346,9 @@ const Dashboard2 = ({
         hideSensitive={hideSensitive}
         currency={currency}
         onFlowSelectionChange={setFlowChartSelection}
+        onQuickFilterChange={setQuickFilter}
         chartSelection={flowChartSelection}
+        swapCandidateRefs={swapCandidates}
       />
 
       <TransactionsTable
@@ -3239,7 +3358,9 @@ const Dashboard2 = ({
         explorerSettings={explorerSettings}
         swapCandidateIds={periodSwapCandidateIds}
         chartSelection={flowChartSelection}
+        quickFilter={quickFilter}
         onChartSelectionChange={setFlowChartSelection}
+        onQuickFilterChange={setQuickFilter}
       />
     </div>
   );
