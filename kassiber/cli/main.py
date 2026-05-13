@@ -1287,6 +1287,24 @@ def build_parser() -> argparse.ArgumentParser:
         help="Local Kraken OHLCVT .csv, .zip, or extracted directory for --source kraken-csv",
     )
 
+    rates_rebuild = rates_sub.add_parser("rebuild")
+    rates_rebuild.add_argument("--pair")
+    rates_rebuild.add_argument("--days", type=int, default=30)
+    rates_rebuild.add_argument(
+        "--source",
+        default=core_rates.RATE_SOURCE_COINBASE_EXCHANGE,
+        help=f"Rate source ({', '.join(core_rates.SUPPORTED_RATE_SOURCES)})",
+    )
+    rates_rebuild.add_argument(
+        "--path",
+        help="Local Kraken OHLCVT .csv, .zip, or extracted directory for --source kraken-csv",
+    )
+    rates_rebuild.add_argument(
+        "--reprice-transactions",
+        action="store_true",
+        help="Clear provider-generated transaction prices so journal processing refills them from the rebuilt cache",
+    )
+
     rates_latest = rates_sub.add_parser("latest")
     rates_latest.add_argument("pair")
 
@@ -2546,6 +2564,18 @@ def dispatch(conn: sqlite3.Connection | None, args: argparse.Namespace) -> Any:
                     days=args.days,
                     source=args.source,
                     path=args.path,
+                ),
+            )
+        if args.rates_command == "rebuild":
+            return emit(
+                args,
+                core_rates.rebuild_rates_cache(
+                    conn,
+                    pair=args.pair,
+                    days=args.days,
+                    source=args.source,
+                    path=args.path,
+                    reprice_transactions=args.reprice_transactions,
                 ),
             )
         if args.rates_command == "latest":

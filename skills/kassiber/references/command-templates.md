@@ -243,12 +243,16 @@ kassiber rates pairs
 kassiber rates latest BTC-EUR
 kassiber rates range BTC-EUR --start 2025-01-01T00:00:00Z --end 2025-01-31T23:59:59Z
 kassiber rates sync --pair BTC-EUR --days 30
+kassiber rates rebuild --source coinbase-exchange --reprice-transactions
 kassiber rates sync --source kraken-csv --path ~/Downloads/Kraken_OHLCVT.zip --pair BTC/EUR
 kassiber rates sync --source kraken-csv --path ~/Downloads/master_q4 --pair BTC/EUR
 kassiber rates set BTC-EUR 2025-01-01T00:00:00Z 95000
 ```
 
 `rates range --start/--end` expects RFC3339 UTC strings, not Unix epoch values.
+Use `rates rebuild --source coinbase-exchange --reprice-transactions` when
+provider-derived cached prices should be discarded and rebuilt from fresh
+Coinbase one-minute samples.
 
 ## Reports
 

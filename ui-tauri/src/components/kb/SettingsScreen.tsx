@@ -6,6 +6,7 @@
  */
 import * as React from "react";
 import {
+  AlertTriangle,
   Database,
   CheckCircle2,
   Download,
@@ -136,6 +137,30 @@ interface KrakenRatesImportData {
     skipped_rows: number;
     skipped_files: number;
   };
+}
+
+interface RateRebuildData {
+  source: string;
+  pair: string | null;
+  reprice_transactions: boolean;
+  deleted: {
+    rates: number;
+    checked_minutes: number;
+    transaction_prices: number;
+    profiles_invalidated: number;
+  };
+  sync: Array<{
+    pair: string;
+    samples?: number;
+    windows?: number;
+    missing_minutes?: number;
+    checked_minutes?: number;
+  }>;
+  journals?: {
+    entries_created?: number;
+    quarantined?: number;
+    auto_priced?: number;
+  } | null;
 }
 
 interface AiProviderRow {
@@ -1263,6 +1288,10 @@ function BackendSettingsPanel({
   const importKrakenRates = useDaemonMutation<KrakenRatesImportData>(
     "ui.rates.kraken_csv.import",
   );
+  const rebuildRates = useDaemonMutation<RateRebuildData>("ui.rates.rebuild");
+  const addNotification = useUiStore((state) => state.addNotification);
+  const updateNotification = useUiStore((state) => state.updateNotification);
+  const rebuildNoticeRef = React.useRef<string | null>(null);
   const [krakenArchivePath, setKrakenArchivePath] = React.useState("");
   const [krakenImportResult, setKrakenImportResult] =
     React.useState<KrakenRatesImportData | null>(null);
@@ -1271,6 +1300,12 @@ function BackendSettingsPanel({
   );
   const [pendingKrakenOperation, setPendingKrakenOperation] =
     React.useState<KrakenRatesImportOperation | null>(null);
+  const [rateRebuildOpen, setRateRebuildOpen] = React.useState(false);
+  const [rateRebuildResult, setRateRebuildResult] =
+    React.useState<RateRebuildData | null>(null);
+  const [rateRebuildError, setRateRebuildError] = React.useState<string | null>(
+    null,
+  );
 
   const chooseKrakenArchive = async () => {
     setKrakenImportError(null);
@@ -1348,6 +1383,64 @@ function BackendSettingsPanel({
   };
 
   const isImportingKraken = importKrakenRates.isPending;
+  const isRebuildingRates = rebuildRates.isPending;
+  const startRateRebuild = async () => {
+    setRateRebuildError(null);
+    setRateRebuildResult(null);
+    rebuildNoticeRef.current = addNotification({
+      title: "Pricing cache rebuild started",
+      body: "Kassiber is clearing provider-derived prices, fetching fresh Coinbase one-minute windows, and reprocessing journals.",
+      tone: "warning",
+      progress: {
+        indeterminate: true,
+        label: "Rebuilding",
+      },
+    });
+    try {
+      const envelope = await rebuildRates.mutateAsync({
+        source: "coinbase-exchange",
+        reprice_transactions: true,
+      });
+      const payload = envelope.data ?? null;
+      setRateRebuildResult(payload);
+      setRateRebuildOpen(false);
+      const notification = {
+        title: "Pricing cache rebuilt",
+        body: payload
+          ? `${formatCount(payload.deleted.transaction_prices)} cached transaction prices cleared; ${formatCount(
+              payload.sync.reduce(
+                (total, row) => total + Number(row.samples ?? 0),
+                0,
+              ),
+            )} rate rows fetched.`
+          : "Coinbase pricing cache was rebuilt.",
+        tone: "success",
+        progress: undefined,
+      } as const;
+      if (rebuildNoticeRef.current) {
+        updateNotification(rebuildNoticeRef.current, notification);
+        rebuildNoticeRef.current = null;
+      } else {
+        addNotification(notification);
+      }
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Could not rebuild pricing cache.";
+      setRateRebuildError(message);
+      const notification = {
+        title: "Pricing cache rebuild failed",
+        body: message,
+        tone: "error",
+        progress: undefined,
+      } as const;
+      if (rebuildNoticeRef.current) {
+        updateNotification(rebuildNoticeRef.current, notification);
+        rebuildNoticeRef.current = null;
+      } else {
+        addNotification(notification);
+      }
+    }
+  };
   const importedPairs = krakenImportResult?.summary ?? [];
   const importedTotals = krakenImportResult?.totals;
   return (
@@ -1392,6 +1485,51 @@ function BackendSettingsPanel({
           </p>
         </div>
         <BackendTable backends={rateBackends} />
+      </div>
+
+      <div className="rounded-md border bg-background p-3">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+          <div className="min-w-0">
+            <p className="text-sm font-medium">Rebuild pricing cache</p>
+            <p className="text-xs text-muted-foreground">
+              Clear Coinbase provider samples, checked-empty minutes, and
+              cached provider-generated transaction prices, then fetch fresh
+              one-minute rates for the active books.
+            </p>
+          </div>
+          <Button
+            type="button"
+            variant="outline"
+            className="shrink-0"
+            onClick={() => {
+              setRateRebuildError(null);
+              setRateRebuildOpen(true);
+            }}
+            disabled={isRebuildingRates || isImportingKraken}
+          >
+            {isRebuildingRates ? (
+              <RefreshCw className="size-4 animate-spin" aria-hidden="true" />
+            ) : (
+              <Database className="size-4" aria-hidden="true" />
+            )}
+            Rebuild cache
+          </Button>
+        </div>
+        <p className="mt-2 text-xs text-muted-foreground">
+          Manual overrides and imported exchange execution prices are kept. Large
+          wallets can take a while because Kassiber refetches missing windows and
+          reprocesses journals afterward.
+        </p>
+        {rateRebuildResult ? (
+          <div className="mt-3 rounded-md border border-emerald-500/30 bg-emerald-500/5 p-3 text-sm text-emerald-700 dark:text-emerald-300">
+            Rebuilt {rateRebuildResult.source}: removed{" "}
+            {formatCount(rateRebuildResult.deleted.rates)} rate rows,{" "}
+            {formatCount(rateRebuildResult.deleted.checked_minutes)} checked
+            minutes, and{" "}
+            {formatCount(rateRebuildResult.deleted.transaction_prices)} cached
+            transaction prices.
+          </div>
+        ) : null}
       </div>
 
       <div className="rounded-md border bg-background p-3">
@@ -1543,6 +1681,59 @@ function BackendSettingsPanel({
           </div>
         ) : null}
       </div>
+      <Dialog open={rateRebuildOpen} onOpenChange={setRateRebuildOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Rebuild pricing cache?</DialogTitle>
+            <DialogDescription>
+              Kassiber will delete Coinbase provider cache rows and refetch
+              one-minute rates for missing transaction windows in the active
+              books.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="rounded-md border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-amber-800 dark:text-amber-200">
+            <div className="flex items-start gap-2">
+              <AlertTriangle
+                className="mt-0.5 size-4 shrink-0"
+                aria-hidden="true"
+              />
+              <div className="space-y-1">
+                <p className="font-medium">Large wallets can take a while.</p>
+                <p>
+                  The rebuild also clears provider-generated transaction prices
+                  and reprocesses journals. Manual overrides and imported
+                  execution prices are preserved.
+                </p>
+              </div>
+            </div>
+          </div>
+          {rateRebuildError ? (
+            <p className="text-sm text-destructive">{rateRebuildError}</p>
+          ) : null}
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setRateRebuildOpen(false)}
+              disabled={isRebuildingRates}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              onClick={() => void startRateRebuild()}
+              disabled={isRebuildingRates}
+            >
+              {isRebuildingRates ? (
+                <RefreshCw className="size-4 animate-spin" aria-hidden="true" />
+              ) : (
+                <Database className="size-4" aria-hidden="true" />
+              )}
+              {isRebuildingRates ? "Rebuilding..." : "Rebuild"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </section>
   );
 }

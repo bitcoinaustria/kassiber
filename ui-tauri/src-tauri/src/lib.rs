@@ -151,6 +151,7 @@ const ALLOWED_DAEMON_KINDS: &[&str] = &[
     "ui.saved_views.delete",
     "ui.rates.summary",
     "ui.rates.kraken_csv.import",
+    "ui.rates.rebuild",
     "ui.workspace.health",
     "ui.workspace.create",
     "ui.workspace.delete",

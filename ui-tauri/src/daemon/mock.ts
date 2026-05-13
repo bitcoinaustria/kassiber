@@ -895,6 +895,40 @@ export const mockDaemon: DaemonTransport = {
       };
     }
 
+    if (req.kind === "ui.rates.rebuild") {
+      return {
+        kind: "ui.rates.rebuild",
+        schema_version: 1,
+        request_id: req.request_id,
+        data: {
+          source: "coinbase-exchange",
+          pair: null,
+          days: 30,
+          reprice_transactions: true,
+          deleted: {
+            rates: 420,
+            checked_minutes: 900,
+            transaction_prices: 8,
+            profiles_invalidated: 1,
+          },
+          sync: [
+            {
+              pair: "BTC-EUR",
+              samples: 300,
+              windows: 1,
+              missing_minutes: 3,
+              checked_minutes: 300,
+            },
+          ],
+          journals: {
+            entries_created: 12,
+            quarantined: 0,
+            auto_priced: 8,
+          },
+        } as T,
+      };
+    }
+
     const fixture = fixtures[req.kind];
     if (fixture === undefined) {
       return {

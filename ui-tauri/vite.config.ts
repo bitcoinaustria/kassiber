@@ -60,6 +60,7 @@ const ALLOWED_BRIDGE_KINDS = new Set([
   "ui.saved_views.delete",
   "ui.rates.summary",
   "ui.rates.kraken_csv.import",
+  "ui.rates.rebuild",
   "ui.workspace.health",
   "ui.workspace.create",
   "ui.workspace.delete",

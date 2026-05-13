@@ -203,6 +203,7 @@ SUPPORTED_KINDS = (
     "ui.rates.summary",
     "ui.rates.coverage",
     "ui.rates.kraken_csv.import",
+    "ui.rates.rebuild",
     "ui.report.blockers",
     "ui.audit.changes_since_last_answer",
     "ui.maintenance.settings",
@@ -1592,6 +1593,65 @@ def _rates_kraken_csv_import_payload(
                 default=0,
             ),
         },
+    }
+
+
+def _rates_rebuild_payload(
+    conn: sqlite3.Connection,
+    args: dict[str, Any],
+) -> dict[str, Any]:
+    source = str(
+        args.get("source") or core_rates.RATE_SOURCE_COINBASE_EXCHANGE
+    ).strip().lower()
+    pair_arg = args.get("pair")
+    if pair_arg is not None and not isinstance(pair_arg, str):
+        raise AppError(
+            "ui.rates.rebuild pair must be a string",
+            code="validation",
+            retryable=False,
+        )
+    pair = pair_arg.strip() if isinstance(pair_arg, str) and pair_arg.strip() else None
+    path_arg = args.get("path")
+    if path_arg is not None and not isinstance(path_arg, str):
+        raise AppError(
+            "ui.rates.rebuild path must be a string",
+            code="validation",
+            retryable=False,
+        )
+    try:
+        days = int(args.get("days") or 30)
+    except (TypeError, ValueError) as exc:
+        raise AppError(
+            "ui.rates.rebuild days must be a positive integer",
+            code="validation",
+            retryable=False,
+        ) from exc
+    if days <= 0:
+        raise AppError(
+            "ui.rates.rebuild days must be a positive integer",
+            code="validation",
+            retryable=False,
+        )
+    reprice_transactions = bool(args.get("reprice_transactions", True))
+    profile_id = None
+    if reprice_transactions:
+        _, profile = resolve_scope(conn, None, None)
+        profile_id = profile["id"]
+    rebuilt = core_rates.rebuild_rates_cache(
+        conn,
+        pair=pair,
+        days=days,
+        source=source,
+        path=path_arg.strip() if isinstance(path_arg, str) and path_arg.strip() else None,
+        reprice_transactions=reprice_transactions,
+        profile_id=profile_id,
+    )
+    journals = None
+    if reprice_transactions:
+        journals = process_journals(conn, None, None)
+    return {
+        **rebuilt,
+        "journals": journals,
     }
 
 
@@ -5723,6 +5783,21 @@ def handle_request(
                 build_envelope(
                     "ui.rates.kraken_csv.import",
                     _rates_kraken_csv_import_payload(
+                        ctx.conn,
+                        _coerce_args_dict(request_id, request.get("args")),
+                    ),
+                ),
+                request_id,
+            ),
+            False,
+        )
+
+    if kind == "ui.rates.rebuild":
+        return (
+            _with_request_id(
+                build_envelope(
+                    "ui.rates.rebuild",
+                    _rates_rebuild_payload(
                         ctx.conn,
                         _coerce_args_dict(request_id, request.get("args")),
                     ),
