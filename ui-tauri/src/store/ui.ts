@@ -204,6 +204,14 @@ function normalizeIdentity(identity: Identity | null): Identity | null {
   };
 }
 
+function stripNotificationProgress(
+  notifications: AppNotification[] | undefined,
+): AppNotification[] {
+  return (notifications ?? []).map(({ progress: _progress, ...notification }) =>
+    notification
+  );
+}
+
 export const useUiStore = create<UiState>()(
   persist(
     (set) => ({
@@ -324,7 +332,7 @@ export const useUiStore = create<UiState>()(
         aiFeaturesEnabled: state.aiFeaturesEnabled,
         assistantModelSelection: state.assistantModelSelection,
         daemonSession: state.daemonSession,
-        notifications: state.notifications,
+        notifications: stripNotificationProgress(state.notifications),
         sourceFundsDrafts: state.sourceFundsDrafts,
       }),
       merge: (persisted, current) => {
@@ -351,6 +359,9 @@ export const useUiStore = create<UiState>()(
           assistantModelSelection:
             restored.assistantModelSelection ??
             current.assistantModelSelection,
+          notifications: stripNotificationProgress(
+            restored.notifications ?? current.notifications,
+          ),
           sourceFundsDrafts:
             restored.sourceFundsDrafts ?? current.sourceFundsDrafts,
           logEntries: current.logEntries,

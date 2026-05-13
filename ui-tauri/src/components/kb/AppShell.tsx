@@ -80,7 +80,7 @@ import {
 } from "@/components/ui/sidebar";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { useUiStore } from "@/store/ui";
-import type { ThemePreference } from "@/store/ui";
+import type { AppNotification, ThemePreference } from "@/store/ui";
 import {
   DAEMON_AUTH_REQUIRED_EVENT,
   daemonMutationKey,
@@ -146,16 +146,8 @@ type SearchResult = {
   connectionId?: string;
 };
 
-type NotificationItem = {
-  id: string;
-  title: string;
-  body: string;
-  tone: "info" | "success" | "warning" | "error";
-  progress?: {
-    value?: number;
-    indeterminate?: boolean;
-    label?: string;
-  };
+type NotificationItem = Omit<AppNotification, "createdAt"> & {
+  createdAt?: string;
   to?: AppRoutePath;
   action?: "process-journals";
   actionLabel?: string;
