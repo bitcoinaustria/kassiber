@@ -1,7 +1,9 @@
 import { Link } from "@tanstack/react-router";
+import { useState } from "react";
 import {
   BookOpen,
   CheckCircle2,
+  CircleDollarSign,
   FileText,
   Loader2,
   RefreshCw,
@@ -48,9 +50,12 @@ interface JournalsSnapshot {
     needsJournals: boolean;
     quarantines: number;
     lastProcessedAt: string | null;
+    freshnessStatus?: string;
+    freshnessReason?: string;
   };
   entryTypes: JournalEntryType[];
   recent: RecentJournalEntry[];
+  recentByType?: Record<string, RecentJournalEntry[]>;
 }
 
 interface JournalProcessResult {
@@ -77,6 +82,7 @@ export function Journals() {
   const { data, isLoading, isError, error } = useDaemon<JournalsSnapshot>(
     "ui.journals.snapshot",
   );
+  const [entryTypeFilter, setEntryTypeFilter] = useState<string | null>(null);
   const hideSensitive = useUiStore((s) => s.hideSensitive);
   const dataMode = useUiStore((s) => s.dataMode);
   const addNotification = useUiStore((s) => s.addNotification);
@@ -113,6 +119,13 @@ export function Journals() {
   const maxEntryCount = Math.max(
     ...snapshot.entryTypes.map((entry) => entry.count),
     1,
+  );
+  const filteredRecent = entryTypeFilter
+    ? (snapshot.recentByType?.[entryTypeFilter] ??
+      snapshot.recent.filter((entry) => entry.type === entryTypeFilter))
+    : snapshot.recent;
+  const quickFilterTypes = ["acquisition", "disposal"].filter((type) =>
+    snapshot.entryTypes.some((entry) => entry.type === type),
   );
 
   const runJournalProcessing = () => {
@@ -181,7 +194,8 @@ export function Journals() {
                 Journal state
               </h1>
               <p className="mt-1 max-w-3xl text-sm text-muted-foreground">
-                Processed accounting rows that reports read from.
+                Processing state, journal row mix, and the latest accounting rows
+                that reports read from.
               </p>
             </div>
           </div>
@@ -194,6 +208,12 @@ export function Journals() {
                 </Link>
               </Button>
             ) : null}
+            <Button asChild variant="outline" className="h-9">
+              <Link to="/tax-events">
+                <CircleDollarSign className="size-4" aria-hidden="true" />
+                Tax Events
+              </Link>
+            </Button>
             <Button asChild variant="outline" className="h-9">
               <Link to="/reports">
                 <FileText className="size-4" aria-hidden="true" />
@@ -260,7 +280,22 @@ export function Journals() {
           <div className="space-y-3 p-4">
             {snapshot.entryTypes.length ? (
               snapshot.entryTypes.map((entry) => (
-                <div key={entry.type} className="space-y-2">
+                <button
+                  key={entry.type}
+                  type="button"
+                  aria-pressed={entryTypeFilter === entry.type}
+                  className={cn(
+                    "w-full rounded-lg border p-3 text-left transition-colors",
+                    entryTypeFilter === entry.type
+                      ? "border-primary/45 bg-primary/5"
+                      : "border-transparent hover:border-border hover:bg-muted/35",
+                  )}
+                  onClick={() =>
+                    setEntryTypeFilter((current) =>
+                      current === entry.type ? null : entry.type,
+                    )
+                  }
+                >
                   <div className="flex items-baseline justify-between gap-3">
                     <div className="min-w-0">
                       <p className="truncate text-sm font-medium">
@@ -290,7 +325,7 @@ export function Journals() {
                       }}
                     />
                   </div>
-                </div>
+                </button>
               ))
             ) : (
               <p className="text-sm text-muted-foreground">
@@ -305,17 +340,46 @@ export function Journals() {
             <div>
               <h2 className="text-base font-semibold">Recent journal rows</h2>
               <p className="mt-1 text-sm text-muted-foreground">
-                Latest rows produced by journal processing.
+                {entryTypeFilter
+                  ? `Latest ${formatEntryType(entryTypeFilter).toLowerCase()} rows produced by journal processing.`
+                  : "Latest rows produced by journal processing."}
               </p>
             </div>
-            <Badge
-              variant="outline"
-              className={cn("w-fit rounded-md", toneBadgeStyles[readiness.tone])}
-            >
-              {status.lastProcessedAt
-                ? `Processed ${formatShortDate(status.lastProcessedAt)}`
-                : "Never processed"}
-            </Badge>
+            <div className="flex flex-wrap items-center gap-2">
+              {quickFilterTypes.length ? (
+                <>
+                  <Button
+                    type="button"
+                    variant={entryTypeFilter === null ? "default" : "outline"}
+                    size="sm"
+                    className="h-8"
+                    onClick={() => setEntryTypeFilter(null)}
+                  >
+                    All
+                  </Button>
+                  {quickFilterTypes.map((type) => (
+                    <Button
+                      key={type}
+                      type="button"
+                      variant={entryTypeFilter === type ? "default" : "outline"}
+                      size="sm"
+                      className="h-8"
+                      onClick={() => setEntryTypeFilter(type)}
+                    >
+                      {formatEntryType(type)}
+                    </Button>
+                  ))}
+                </>
+              ) : null}
+              <Badge
+                variant="outline"
+                className={cn("w-fit rounded-md", toneBadgeStyles[readiness.tone])}
+              >
+                {status.lastProcessedAt
+                  ? `Processed ${formatShortDate(status.lastProcessedAt)}`
+                  : "Never processed"}
+              </Badge>
+            </div>
           </div>
           <div className="overflow-x-auto">
             <Table className="min-w-[840px]">
@@ -334,8 +398,8 @@ export function Journals() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {snapshot.recent.length ? (
-                  snapshot.recent.map((entry, index) => (
+                {filteredRecent.length ? (
+                  filteredRecent.map((entry, index) => (
                     <TableRow key={`${entry.date}-${entry.type}-${index}`}>
                       <TableCell className="font-mono text-xs text-muted-foreground">
                         {entry.date}
@@ -376,7 +440,9 @@ export function Journals() {
                       colSpan={6}
                       className="h-24 text-center text-sm text-muted-foreground"
                     >
-                      No recent rows exposed by the current journal snapshot.
+                      {entryTypeFilter
+                        ? `No recent ${formatEntryType(entryTypeFilter).toLowerCase()} rows exposed by the current journal snapshot.`
+                        : "No recent rows exposed by the current journal snapshot."}
                     </TableCell>
                   </TableRow>
                 )}
@@ -433,14 +499,14 @@ function journalReadiness(status: JournalsSnapshot["status"]): {
   if (status.needsJournals) {
     return {
       label: "Stale",
-      detail: "process before reports",
+      detail: status.freshnessReason ?? "process before reports",
       tone: "warning",
     };
   }
   if (status.journalEntryCount > 0) {
     return {
       label: "Current",
-      detail: "ready for reports",
+      detail: status.freshnessReason ?? "ready for reports",
       tone: "good",
     };
   }

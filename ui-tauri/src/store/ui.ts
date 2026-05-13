@@ -207,9 +207,11 @@ function normalizeIdentity(identity: Identity | null): Identity | null {
 function stripNotificationProgress(
   notifications: AppNotification[] | undefined,
 ): AppNotification[] {
-  return (notifications ?? []).map(({ progress: _progress, ...notification }) =>
-    notification
-  );
+  return (notifications ?? []).map((notification) => {
+    const clone = { ...notification };
+    delete clone.progress;
+    return clone;
+  });
 }
 
 export const useUiStore = create<UiState>()(

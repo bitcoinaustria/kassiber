@@ -8,7 +8,13 @@ import {
   Search,
   ShieldAlert,
 } from "lucide-react";
-import { useMemo, useState, type ComponentType, type SVGProps } from "react";
+import {
+  useMemo,
+  useState,
+  type ComponentType,
+  type ReactNode,
+  type SVGProps,
+} from "react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -39,6 +45,14 @@ export interface ReviewTableRow {
   status: "Ready" | "Needs review" | "Blocked" | "Resolved";
   priority: "Low" | "Medium" | "High";
   owner: string;
+  evidenceHint?: string;
+  nextAction?: string;
+}
+
+export interface ReviewMetric {
+  label: string;
+  value: number | string;
+  tone: ReviewTone;
 }
 
 interface ReviewDataTableProps {
@@ -48,6 +62,14 @@ interface ReviewDataTableProps {
   description: string;
   icon: ComponentType<SVGProps<SVGSVGElement>>;
   rows: ReviewTableRow[];
+  actions?: ReactNode;
+  metrics?: ReviewMetric[];
+  tableTitle?: string;
+  tableDescription?: string;
+  searchPlaceholder?: string;
+  emptyMessage?: string;
+  badgeLabel?: string;
+  showSummaryBadge?: boolean;
 }
 
 const statusClass: Record<ReviewTableRow["status"], string> = {
@@ -91,7 +113,7 @@ const statusOptions: Array<ReviewTableRow["status"] | "All"> = [
   "Ready",
 ];
 
-type ReviewTone = "good" | "warning" | "alert" | "neutral";
+export type ReviewTone = "good" | "warning" | "alert" | "neutral";
 type SortDirection = "desc" | "asc";
 
 const blurClass = (hidden: boolean) => (hidden ? "sensitive" : "");
@@ -103,6 +125,14 @@ export function ReviewDataTable({
   description,
   icon: Icon,
   rows,
+  actions,
+  metrics,
+  tableTitle,
+  tableDescription,
+  searchPlaceholder,
+  emptyMessage,
+  badgeLabel,
+  showSummaryBadge = true,
 }: ReviewDataTableProps) {
   const hideSensitive = useUiStore((s) => s.hideSensitive);
   const [globalFilter, setGlobalFilter] = useState("");
@@ -136,6 +166,9 @@ export function ReviewDataTable({
           row.impact,
           row.status,
           row.priority,
+          row.owner,
+          row.evidenceHint ?? "",
+          row.nextAction ?? "",
         ]
           .join(" ")
           .toLowerCase()
@@ -156,6 +189,18 @@ export function ReviewDataTable({
     currentPage * pageSize + pageSize,
   );
   const hasActiveFilters = statusFilter !== "All" || Boolean(globalFilter);
+  const metricsToShow =
+    metrics ??
+    [
+      { label: "Open", value: activeRows.length, tone: queueTone },
+      { label: "Needs review", value: reviewCount, tone: "warning" },
+      { label: "Blocked", value: blockedCount, tone: "alert" },
+      {
+        label: "High priority",
+        value: highCount,
+        tone: highCount ? "alert" : "neutral",
+      },
+    ];
 
   const updateStatusFilter = (status: ReviewTableRow["status"] | "All") => {
     setStatusFilter(status);
@@ -190,24 +235,29 @@ export function ReviewDataTable({
             </p>
           </div>
         </div>
-        <Badge
-          variant="outline"
-          className={cn("self-start rounded-md", toneBadgeStyles[queueTone])}
-        >
-          {activeRows.length} open
-        </Badge>
+        <div className="flex shrink-0 flex-wrap items-center gap-2">
+          {actions}
+          {showSummaryBadge ? (
+            <Badge
+              variant="outline"
+              className={cn("self-start rounded-md", toneBadgeStyles[queueTone])}
+            >
+              {badgeLabel ?? `${activeRows.length} open`}
+            </Badge>
+          ) : null}
+        </div>
       </div>
 
       <div className="rounded-xl border bg-card">
         <div className="grid grid-cols-2 divide-x-0 divide-y divide-border sm:grid-cols-4 sm:divide-x sm:divide-y-0">
-          <QueueMetric label="Open" value={activeRows.length} tone={queueTone} />
-          <QueueMetric label="Needs review" value={reviewCount} tone="warning" />
-          <QueueMetric label="Blocked" value={blockedCount} tone="alert" />
-          <QueueMetric
-            label="High priority"
-            value={highCount}
-            tone={highCount ? "alert" : "neutral"}
-          />
+          {metricsToShow.slice(0, 4).map((metric) => (
+            <QueueMetric
+              key={metric.label}
+              label={metric.label}
+              value={metric.value}
+              tone={metric.tone}
+            />
+          ))}
         </div>
       </div>
 
@@ -220,10 +270,12 @@ export function ReviewDataTable({
             />
             <div className="min-w-0">
               <h2 className="text-sm font-medium sm:text-base">
-                {kind === "tax-events" ? "Review records" : "Blocked records"}
+                {tableTitle ??
+                  (kind === "tax-events" ? "Review records" : "Blocked records")}
               </h2>
               <p className="text-[10px] text-muted-foreground sm:text-xs">
-                {filteredRows.length} shown · {resolvedCount} resolved
+                {tableDescription ??
+                  `${filteredRows.length} shown · ${resolvedCount} resolved`}
               </p>
             </div>
           </div>
@@ -236,7 +288,7 @@ export function ReviewDataTable({
               <Input
                 value={globalFilter}
                 onChange={(event) => updateGlobalFilter(event.target.value)}
-                placeholder="Search account, issue, source..."
+                placeholder={searchPlaceholder ?? "Search account, issue, source..."}
                 className="h-9 pl-9"
               />
             </div>
@@ -326,7 +378,7 @@ export function ReviewDataTable({
                     colSpan={6}
                     className="h-24 text-center text-muted-foreground"
                   >
-                    No matching records.
+                    {emptyMessage ?? "No matching records."}
                   </TableCell>
                 </TableRow>
               )}
@@ -382,16 +434,18 @@ function QueueMetric({
   tone,
 }: {
   label: string;
-  value: number;
+  value: number | string;
   tone: ReviewTone;
 }) {
+  const formattedValue =
+    typeof value === "number" ? value.toLocaleString("en-US") : value;
   return (
     <div className="space-y-2 p-3 sm:p-4">
       <p className="text-xs font-medium text-muted-foreground sm:text-sm">
         {label}
       </p>
       <p className={cn("text-2xl font-semibold tabular-nums", toneTextStyles[tone])}>
-        {value}
+        {formattedValue}
       </p>
     </div>
   );
@@ -462,9 +516,7 @@ function ReviewWorklistRow({
         <span
           className={cn(
             "text-sm font-medium tabular-nums",
-            row.impact.startsWith("-")
-              ? "text-red-600 dark:text-red-400"
-              : "text-emerald-600 dark:text-emerald-400",
+            impactToneClass(row.impact),
             blurClass(hideSensitive),
           )}
         >
@@ -520,6 +572,7 @@ function SortButton({
 }
 
 function evidenceHint(row: ReviewTableRow) {
+  if (row.evidenceHint) return row.evidenceHint;
   const normalized = `${row.event} ${row.source} ${row.basis}`.toLowerCase();
   if (normalized.includes("price")) return "Needs fiat price evidence";
   if (normalized.includes("transfer") || normalized.includes("pair")) {
@@ -536,10 +589,20 @@ function evidenceHint(row: ReviewTableRow) {
 }
 
 function nextActionLabel(row: ReviewTableRow) {
+  if (row.nextAction) return row.nextAction;
   if (row.status === "Resolved") return "No action needed";
   if (row.status === "Blocked") return "Blocks trusted reports";
   if (row.status === "Needs review") return "Review before reports";
   return "Ready for reports";
+}
+
+function impactToneClass(impact: string) {
+  const trimmed = impact.trim();
+  if (/^-/.test(trimmed)) return "text-red-600 dark:text-red-400";
+  if (/^[+]?[\d€$]/.test(trimmed)) {
+    return "text-emerald-600 dark:text-emerald-400";
+  }
+  return "text-muted-foreground";
 }
 
 const toneStyles: Record<ReviewTone, string> = {
