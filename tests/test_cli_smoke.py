@@ -73,6 +73,11 @@ _HOT_TRANSFER_VALUE_ONLY_CSV = """date,txid,direction,asset,amount,fee,fiat_valu
 2026-02-01T12:00:00Z,onchain-self-transfer-value-1,inbound,BTC,0.50000000,0,32500,Receive from cold wallet
 """
 
+_FEE_ONLY_CONSOLIDATION_CSV = """date,txid,direction,asset,amount,fee,fiat_rate,description
+2026-01-01T10:00:00Z,fee-only-funding-1,inbound,BTC,1.00000000,0,60000,Funding
+2026-02-01T12:00:00Z,fee-only-consolidation-1,outbound,BTC,0,0.001,65000,Wallet consolidation fee
+"""
+
 # Manual same-asset pair scenario: two BTC legs whose external_ids deliberately
 # don't match, so auto-detection skips them. The user knows they're paired
 # (e.g., a swap via a custom counterparty) and creates a manual pair.
@@ -196,6 +201,8 @@ class CliSmokeTest(unittest.TestCase):
         cls.cold_transfer_value_only_csv.write_text(_COLD_TRANSFER_VALUE_ONLY_CSV, encoding="utf-8")
         cls.hot_transfer_value_only_csv = Path(cls._tmp.name) / "hot-transfer-value-only.csv"
         cls.hot_transfer_value_only_csv.write_text(_HOT_TRANSFER_VALUE_ONLY_CSV, encoding="utf-8")
+        cls.fee_only_consolidation_csv = Path(cls._tmp.name) / "fee-only-consolidation.csv"
+        cls.fee_only_consolidation_csv.write_text(_FEE_ONLY_CONSOLIDATION_CSV, encoding="utf-8")
         cls.manual_from_csv = Path(cls._tmp.name) / "manual-from.csv"
         cls.manual_from_csv.write_text(_MANUAL_FROM_CSV, encoding="utf-8")
         cls.manual_to_csv = Path(cls._tmp.name) / "manual-to.csv"
@@ -1541,6 +1548,83 @@ class CliSmokeTest(unittest.TestCase):
         self.assertAlmostEqual(float(gain_row["proceeds"]), 65.0, places=4)
         self.assertAlmostEqual(float(gain_row["cost_basis"]), 60.0, places=4)
         self.assertAlmostEqual(float(gain_row["gain_loss"]), 5.0, places=4)
+
+    def test_13c_fee_only_consolidation_is_reported_as_fee(self):
+        payload = self._cli(
+            "profiles", "create",
+            "--workspace", "Main",
+            "--fiat-currency", "USD",
+            "--tax-country", "generic",
+            "FeeOnly",
+        )
+        self._assert_kind(payload, "profiles.create")
+
+        payload = self._cli(
+            "wallets", "create",
+            "--workspace", "Main",
+            "--profile", "FeeOnly",
+            "--label", "Wallet",
+            "--kind", "custom",
+        )
+        self._assert_kind(payload, "wallets.create")
+
+        payload = self._cli(
+            "wallets", "import-csv",
+            "--workspace", "Main",
+            "--profile", "FeeOnly",
+            "--wallet", "Wallet",
+            "--file", str(self.fee_only_consolidation_csv),
+        )
+        self._assert_kind(payload, "wallets.import-csv")
+        self.assertEqual(payload["data"]["imported"], 2)
+
+        payload = self._cli(
+            "journals", "process",
+            "--workspace", "Main",
+            "--profile", "FeeOnly",
+        )
+        self._assert_kind(payload, "journals.process")
+        self.assertEqual(payload["data"]["entries_created"], 2)
+        self.assertEqual(payload["data"]["transfers_detected"], 0)
+        self.assertEqual(payload["data"]["quarantined"], 0)
+
+        payload = self._cli(
+            "reports", "journal-entries",
+            "--workspace", "Main",
+            "--profile", "FeeOnly",
+        )
+        self._assert_kind(payload, "reports.journal-entries")
+        entries = payload["data"]
+        self.assertEqual(sorted(e["entry_type"] for e in entries), ["acquisition", "fee"])
+        fee_entry = next(e for e in entries if e["entry_type"] == "fee")
+        self.assertEqual(fee_entry["wallet"], "Wallet")
+        self.assertAlmostEqual(float(fee_entry["quantity"]), -0.001, places=8)
+        self.assertAlmostEqual(float(fee_entry["proceeds"]), 65.0, places=4)
+        self.assertAlmostEqual(float(fee_entry["cost_basis"]), 60.0, places=4)
+        self.assertAlmostEqual(float(fee_entry["gain_loss"]), 5.0, places=4)
+
+        payload = self._cli(
+            "reports", "summary",
+            "--workspace", "Main",
+            "--profile", "FeeOnly",
+        )
+        self._assert_kind(payload, "reports.summary")
+        flow = payload["data"]["asset_flow"][0]
+        self.assertEqual(flow["outbound_amount_msat"], 0)
+        self.assertEqual(flow["fee_amount_msat"], 100000000)
+        self.assertEqual(payload["data"]["realized"]["gain_loss"], 5.0)
+
+        payload = self._cli(
+            "reports", "tax-summary",
+            "--workspace", "Main",
+            "--profile", "FeeOnly",
+        )
+        self._assert_kind(payload, "reports.tax-summary")
+        detail_rows = [row for row in payload["data"] if row["row_type"] == "detail"]
+        self.assertEqual(len(detail_rows), 1)
+        self.assertEqual(detail_rows[0]["transaction_type"], "fee")
+        self.assertEqual(detail_rows[0]["quantity_msat"], 100000000)
+        self.assertAlmostEqual(float(detail_rows[0]["gain_loss"]), 5.0, places=4)
 
     def test_13b_pair_by_shared_external_id(self):
         payload = self._cli(

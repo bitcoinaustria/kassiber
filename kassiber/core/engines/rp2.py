@@ -195,8 +195,12 @@ def _is_rp2_earn_transaction_type(transaction_type: Any) -> bool:
     checker = getattr(transaction_type, "is_earn_type", None)
     if callable(checker):
         return bool(checker())
+    return _rp2_transaction_type_value(transaction_type) in _RP2_EARN_TRANSACTION_TYPES
+
+
+def _rp2_transaction_type_value(transaction_type: Any) -> str:
     value = getattr(transaction_type, "value", transaction_type)
-    return str(value or "").strip().lower() in _RP2_EARN_TRANSACTION_TYPES
+    return str(value or "").strip().lower()
 
 
 def _compose_transfer_notes(transfer: Any) -> str:
@@ -707,13 +711,13 @@ def _append_rp2_journal_entries(entries, computed_data, wallet_refs_by_label, pr
         is_intra = (
             taxable_event.unique_id in audit_by_out_id
             and taxable_event.asset == computed_data.asset
-            and taxable_event.transaction_type.value.lower() == "move"
+            and _rp2_transaction_type_value(taxable_event.transaction_type) == "move"
         )
         if is_earn:
             entry_type = "income"
         elif is_intra:
             entry_type = "transfer_fee"
-        elif taxable_event.transaction_type.value == "FEE":
+        elif _rp2_transaction_type_value(taxable_event.transaction_type) == "fee":
             entry_type = "fee"
         else:
             entry_type = "disposal"
