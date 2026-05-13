@@ -1277,7 +1277,15 @@ def build_parser() -> argparse.ArgumentParser:
     rates_sync = rates_sub.add_parser("sync")
     rates_sync.add_argument("--pair")
     rates_sync.add_argument("--days", type=int, default=30)
-    rates_sync.add_argument("--source", default="coingecko")
+    rates_sync.add_argument(
+        "--source",
+        default=core_rates.RATE_SOURCE_COINBASE_EXCHANGE,
+        help=f"Rate source ({', '.join(core_rates.SUPPORTED_RATE_SOURCES)})",
+    )
+    rates_sync.add_argument(
+        "--path",
+        help="Local Kraken OHLCVT .csv, .zip, or extracted directory for --source kraken-csv",
+    )
 
     rates_latest = rates_sub.add_parser("latest")
     rates_latest.add_argument("pair")
@@ -2532,7 +2540,13 @@ def dispatch(conn: sqlite3.Connection | None, args: argparse.Namespace) -> Any:
         if args.rates_command == "sync":
             return emit(
                 args,
-                core_rates.sync_rates(conn, pair=args.pair, days=args.days, source=args.source),
+                core_rates.sync_rates(
+                    conn,
+                    pair=args.pair,
+                    days=args.days,
+                    source=args.source,
+                    path=args.path,
+                ),
             )
         if args.rates_command == "latest":
             return emit(args, core_rates.get_latest_rate(conn, args.pair))

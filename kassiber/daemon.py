@@ -74,6 +74,7 @@ from .core import source_funds_recipients as core_source_funds_recipients
 from .core import accounts as core_accounts
 from .core import imports as core_imports
 from .core import metadata as core_metadata
+from .core import rates as core_rates
 from .core import wallets as core_wallets
 from .core.repo import current_context_snapshot
 from .core.runtime import build_status_payload
@@ -201,6 +202,7 @@ SUPPORTED_KINDS = (
     "ui.profiles.switch",
     "ui.rates.summary",
     "ui.rates.coverage",
+    "ui.rates.kraken_csv.import",
     "ui.report.blockers",
     "ui.audit.changes_since_last_answer",
     "ui.maintenance.settings",
@@ -1524,6 +1526,73 @@ def _coerce_args_dict(request_id: object, args: object) -> dict[str, Any]:
         details={"type": type(args).__name__},
         retryable=False,
     )
+
+
+def _rates_kraken_csv_import_payload(
+    conn: sqlite3.Connection,
+    args: dict[str, Any],
+) -> dict[str, Any]:
+    path = args.get("path")
+    if not isinstance(path, str) or not path.strip():
+        raise AppError(
+            "ui.rates.kraken_csv.import requires args.path",
+            code="validation",
+            hint="Choose a local Kraken OHLCVT .zip or .csv archive.",
+            retryable=False,
+        )
+
+    operation = (
+        str(args.get("operation") or args.get("mode") or "full").strip().lower()
+    )
+    if operation not in {"full", "incremental"}:
+        raise AppError(
+            "ui.rates.kraken_csv.import operation must be full or incremental",
+            code="validation",
+            retryable=False,
+        )
+
+    pair_arg = args.get("pair")
+    if pair_arg is not None and not isinstance(pair_arg, str):
+        raise AppError(
+            "ui.rates.kraken_csv.import pair must be a string",
+            code="validation",
+            retryable=False,
+        )
+    pair = (
+        pair_arg.strip()
+        if isinstance(pair_arg, str) and pair_arg.strip()
+        else None
+    )
+    archive_path = path.strip()
+    summary = core_rates.sync_rates(
+        conn,
+        pair=pair,
+        source=core_rates.RATE_SOURCE_KRAKEN_CSV,
+        path=archive_path,
+    )
+    skipped_files = [
+        row.get("skipped_files") for row in summary if isinstance(row, dict)
+    ]
+    return {
+        "source": core_rates.RATE_SOURCE_KRAKEN_CSV,
+        "operation": operation,
+        "path": archive_path,
+        "pair": pair,
+        "summary": summary,
+        "totals": {
+            "pairs": len(summary),
+            "samples": sum(int(row.get("samples") or 0) for row in summary),
+            "rows": sum(int(row.get("rows") or 0) for row in summary),
+            "files": sum(int(row.get("files") or 0) for row in summary),
+            "skipped_rows": sum(
+                int(row.get("skipped_rows") or 0) for row in summary
+            ),
+            "skipped_files": max(
+                [int(value) for value in skipped_files if isinstance(value, int)],
+                default=0,
+            ),
+        },
+    }
 
 
 def _ai_chat_args(args: dict) -> dict[str, Any]:
@@ -5642,6 +5711,21 @@ def handle_request(
                 build_envelope(
                     "ui.rates.coverage",
                     build_rates_coverage_snapshot(ctx.conn, request.get("args")),
+                ),
+                request_id,
+            ),
+            False,
+        )
+
+    if kind == "ui.rates.kraken_csv.import":
+        return (
+            _with_request_id(
+                build_envelope(
+                    "ui.rates.kraken_csv.import",
+                    _rates_kraken_csv_import_payload(
+                        ctx.conn,
+                        _coerce_args_dict(request_id, request.get("args")),
+                    ),
                 ),
                 request_id,
             ),

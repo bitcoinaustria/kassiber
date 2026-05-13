@@ -12,11 +12,18 @@ export type DataMode = "mock" | "real";
 export type ThemePreference = "system" | "light" | "dark";
 export type NotificationTone = "info" | "success" | "warning" | "error";
 
+export interface NotificationProgress {
+  value?: number;
+  indeterminate?: boolean;
+  label?: string;
+}
+
 export interface AppNotification {
   id: string;
   title: string;
   body: string;
   tone: NotificationTone;
+  progress?: NotificationProgress;
   createdAt: string;
 }
 
@@ -158,6 +165,10 @@ interface UiState {
   bumpDaemonSession: () => void;
   addNotification: (
     notification: Omit<AppNotification, "id" | "createdAt">,
+  ) => string;
+  updateNotification: (
+    id: string,
+    patch: Partial<Omit<AppNotification, "id" | "createdAt">>,
   ) => void;
   clearNotification: (id: string) => void;
   clearNotifications: () => void;
@@ -191,6 +202,14 @@ function normalizeIdentity(identity: Identity | null): Identity | null {
     profile: identity.profile === "mock" ? "mock books" : identity.profile,
     workspace: "My Books",
   };
+}
+
+function stripNotificationProgress(
+  notifications: AppNotification[] | undefined,
+): AppNotification[] {
+  return (notifications ?? []).map(({ progress: _progress, ...notification }) =>
+    notification
+  );
 }
 
 export const useUiStore = create<UiState>()(
@@ -238,16 +257,25 @@ export const useUiStore = create<UiState>()(
         set({ assistantModelSelection }),
       bumpDaemonSession: () =>
         set((state) => ({ daemonSession: state.daemonSession + 1 })),
-      addNotification: (notification) =>
+      addNotification: (notification) => {
+        const id = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
         set((state) => ({
           notifications: [
             {
               ...notification,
-              id: `${Date.now()}-${state.notifications.length}`,
+              id,
               createdAt: new Date().toISOString(),
             },
             ...state.notifications,
           ].slice(0, 12),
+        }));
+        return id;
+      },
+      updateNotification: (id, patch) =>
+        set((state) => ({
+          notifications: state.notifications.map((notification) =>
+            notification.id === id ? { ...notification, ...patch } : notification,
+          ),
         })),
       clearNotification: (id) =>
         set((state) => ({
@@ -304,7 +332,7 @@ export const useUiStore = create<UiState>()(
         aiFeaturesEnabled: state.aiFeaturesEnabled,
         assistantModelSelection: state.assistantModelSelection,
         daemonSession: state.daemonSession,
-        notifications: state.notifications,
+        notifications: stripNotificationProgress(state.notifications),
         sourceFundsDrafts: state.sourceFundsDrafts,
       }),
       merge: (persisted, current) => {
@@ -331,6 +359,9 @@ export const useUiStore = create<UiState>()(
           assistantModelSelection:
             restored.assistantModelSelection ??
             current.assistantModelSelection,
+          notifications: stripNotificationProgress(
+            restored.notifications ?? current.notifications,
+          ),
           sourceFundsDrafts:
             restored.sourceFundsDrafts ?? current.sourceFundsDrafts,
           logEntries: current.logEntries,

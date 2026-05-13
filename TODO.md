@@ -508,8 +508,9 @@ and [docs/plan/04-desktop-ui.md](docs/plan/04-desktop-ui.md).
   non-Electrum server currently see a `Expecting value: line 1 column
   1 (char 0)` blob; wrap the `json.loads(line)` call with a helpful
   "Backend did not respond with Electrum-format JSON" message.
-- [ ] Add real provider-backed FX adapters beyond CoinGecko only after the UI
-  and daemon can expose provider limits, granularity, and review state honestly
+- [ ] Add live provider-backed FX adapters beyond CoinGecko and local Kraken
+  CSV archive ingest only after the UI and daemon can expose provider limits,
+  granularity, and review state honestly
 - [ ] Keep the machine envelope boundary centralized and explicit
 - [ ] Keep docs and examples Bitcoin-only
 - [ ] Add a narrow docs-drift check for shared command / verification /

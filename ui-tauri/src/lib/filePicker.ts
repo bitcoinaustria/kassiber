@@ -10,6 +10,7 @@
 export interface FilePickerOptions {
   title?: string;
   filters?: { name: string; extensions: string[] }[];
+  directory?: boolean;
 }
 
 export const isFilePickerAvailable =
@@ -22,7 +23,7 @@ export async function pickFile(
   const { open } = await import("@tauri-apps/plugin-dialog");
   const selection = await open({
     multiple: false,
-    directory: false,
+    directory: options.directory ?? false,
     title: options.title,
     filters: options.filters,
   });

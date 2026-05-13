@@ -80,7 +80,7 @@ import {
 } from "@/components/ui/sidebar";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { useUiStore } from "@/store/ui";
-import type { ThemePreference } from "@/store/ui";
+import type { AppNotification, ThemePreference } from "@/store/ui";
 import {
   DAEMON_AUTH_REQUIRED_EVENT,
   daemonMutationKey,
@@ -146,11 +146,8 @@ type SearchResult = {
   connectionId?: string;
 };
 
-type NotificationItem = {
-  id: string;
-  title: string;
-  body: string;
-  tone: "info" | "success" | "warning" | "error";
+type NotificationItem = Omit<AppNotification, "createdAt"> & {
+  createdAt?: string;
   to?: AppRoutePath;
   action?: "process-journals";
   actionLabel?: string;
@@ -168,6 +165,11 @@ const APP_COMMIT_SHORT = APP_COMMIT ? APP_COMMIT.slice(0, 7) : "unknown";
 const NATIVE_MENU_EVENT = "kassiber:intent";
 const topNavIconButtonClassName =
   "size-8 text-sidebar-foreground/75 hover:bg-sidebar-accent hover:text-sidebar-foreground";
+
+function notificationProgressValue(value: number | undefined) {
+  if (typeof value !== "number" || !Number.isFinite(value)) return 0;
+  return Math.max(0, Math.min(100, value));
+}
 const appMainClassName =
   "relative min-h-0 w-full flex-1 overflow-auto bg-background text-zinc-950 dark:text-zinc-50";
 
@@ -1952,6 +1954,31 @@ function AppDashboardHeader({
                     />
                   ) : null}
                 </DropdownMenuItem>
+                {item.progress ? (
+                  <div className="px-2 pb-1">
+                    <div className="h-1.5 overflow-hidden rounded-full bg-muted">
+                      <div
+                        className={cn(
+                          "h-full rounded-full bg-primary transition-[width] duration-300",
+                          item.progress.indeterminate &&
+                            "w-1/2 motion-safe:animate-[route-progress_0.9s_ease-in-out_infinite] motion-reduce:w-full",
+                        )}
+                        style={
+                          item.progress.indeterminate
+                            ? undefined
+                            : {
+                                width: `${notificationProgressValue(item.progress.value)}%`,
+                              }
+                        }
+                      />
+                    </div>
+                    {item.progress.label ? (
+                      <div className="mt-1 text-[11px] text-muted-foreground">
+                        {item.progress.label}
+                      </div>
+                    ) : null}
+                  </div>
+                ) : null}
                 {item.action === "process-journals" ? (
                   <Button
                     type="button"

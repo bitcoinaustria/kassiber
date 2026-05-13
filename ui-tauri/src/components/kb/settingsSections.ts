@@ -9,7 +9,7 @@ const SETTINGS_SECTION_INTEGRATION: Record<string, string> = {
   security: "security-lock-now",
   backends: "sync-add-backend",
   sync: "sync-add-backend",
-  rates: "b4",
+  rates: "rate-providers",
   ai: "ai-providers",
   assistant: "ai-providers",
   data: "data-root",

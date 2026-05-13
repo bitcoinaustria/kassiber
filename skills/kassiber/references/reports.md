@@ -33,16 +33,37 @@ kassiber rates pairs
 kassiber rates latest BTC-EUR
 kassiber rates range BTC-EUR --start 2025-01-01T00:00:00Z --end 2025-01-31T23:59:59Z --order asc
 kassiber rates sync --pair BTC-EUR --days 30
+kassiber rates sync --source kraken-csv --path ~/Downloads/Kraken_OHLCVT.zip --pair BTC/EUR
+kassiber rates sync --source kraken-csv --path ~/Downloads/master_q4 --pair BTC/EUR
 kassiber rates set BTC-EUR 2025-01-01T00:00:00Z 95000
 ```
 
 `rates range --start/--end` expects RFC3339 UTC strings, not Unix epoch
 timestamps.
 
-Kassiber's rate cache currently supports `BTC-USD` and `BTC-EUR`. Liquid
-Bitcoin uses Kassiber's BTC alias path for fiat pricing, so missing spot prices
-on LBTC rows usually mean the relevant BTC sample was unavailable at or before
-that timestamp.
+Kassiber's rate cache currently supports `BTC-USD` and `BTC-EUR`. Rate sources
+are `coinbase-exchange` (default), `coingecko`, `kraken-csv`, and manual
+`rates set` entries. Coinbase Exchange sync stores sparse 1-minute candles from
+chunked 300-minute public API windows. When transactions needing pricing exist,
+the default sync builds a de-duplicated set of needed transaction minutes,
+skips minutes already covered by minute-level cache rows, records checked
+Coinbase minutes even when the response is sparse, and fetches only coalesced
+300-minute windows around the remaining gaps. With no missing transaction
+minutes, `--days` remains a continuous warm-cache fallback. Liquid Bitcoin uses
+Kassiber's BTC alias path for fiat pricing, so missing spot prices on LBTC rows
+usually mean the relevant BTC sample was unavailable at or before that
+timestamp.
+
+For historical minute-level backfills, download Kraken's OHLCVT archive from
+[Kraken's support article](https://support.kraken.com/articles/360047124832)
+and pass the local ZIP, CSV, or extracted directory with
+`--source kraken-csv --path <path>`. Kassiber ingests only 1-minute Bitcoin
+pairs for v1, maps Kraken `XBT` filenames to `BTC-USD` / `BTC-EUR`, stores
+sparse rows only when Kraken reports a traded candle, and relies on
+re-ingesting the latest full or quarterly archive rather than fetching from
+Kraken automatically. The desktop Settings → Rate providers panel exposes the
+same local ingest as `Full history` and `Incremental update` actions; both use
+the idempotent `kraken-csv` upsert path.
 
 If pricing looks incomplete, sync rates and then re-run:
 

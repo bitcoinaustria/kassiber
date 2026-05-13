@@ -13,7 +13,7 @@ describe("settings integration hash mapping", () => {
     expect(selectedIntegrationForHash("display")).toBe("display-currency");
     expect(selectedIntegrationForHash("security")).toBe("security-lock-now");
     expect(selectedIntegrationForHash("backends")).toBe("sync-add-backend");
-    expect(selectedIntegrationForHash("rates")).toBe("b4");
+    expect(selectedIntegrationForHash("rates")).toBe("rate-providers");
     expect(selectedIntegrationForHash("ai")).toBe("ai-providers");
     expect(selectedIntegrationForHash("data")).toBe("data-root");
   });
