@@ -543,7 +543,9 @@ def _transactions(conn: sqlite3.Connection, profile_id: str) -> list[dict[str, A
             t.confirmed_at,
             w.label AS wallet,
             t.direction,
+            t.asset,
             t.amount,
+            t.fee,
             COALESCE(t.fiat_value, 0) AS fiat_value,
             COALESCE(t.fiat_rate, 0) AS fiat_rate,
             COALESCE(t.kind, '') AS kind,
@@ -557,67 +559,35 @@ def _transactions(conn: sqlite3.Connection, profile_id: str) -> list[dict[str, A
         LEFT JOIN journal_quarantines jq ON jq.transaction_id = t.id
         WHERE t.profile_id = ?
         ORDER BY t.occurred_at DESC, t.created_at DESC, t.id DESC
-        LIMIT 20
+        LIMIT 40
         """,
         (profile_id,),
     ).fetchall()
-    tags_by_transaction = {row["id"]: [] for row in rows}
-    if rows:
-        placeholders = ", ".join("?" for _ in rows)
-        tag_rows = conn.execute(
-            f"""
-            SELECT tt.transaction_id, tags.label
-            FROM transaction_tags tt
-            JOIN tags ON tags.id = tt.tag_id
-            WHERE tt.transaction_id IN ({placeholders})
-            ORDER BY tt.transaction_id ASC, tags.code ASC
-            """,
-            [row["id"] for row in rows],
-        ).fetchall()
-        for tag in tag_rows:
-            tags_by_transaction[tag["transaction_id"]].append(tag["label"])
+    pair_meta_by_transaction = _transaction_pair_display_meta(conn, rows)
+    tag_ids = [row["id"] for row in rows]
+    tag_ids.extend(
+        str(pair_meta["display_transaction_id"])
+        for pair_meta in pair_meta_by_transaction.values()
+    )
+    tags_by_transaction = _transaction_tags_by_transaction(conn, tag_ids)
 
     output = []
+    rendered_pair_ids: set[str] = set()
     for row in rows:
-        sign = 1 if row["direction"] == "inbound" else -1
-        metadata_tags = [str(tag) for tag in tags_by_transaction.get(row["id"], []) if tag]
-        display_tags = list(metadata_tags)
-        if not display_tags and row["quarantine_reason"]:
-            display_tags = ["Review"]
-        elif not display_tags:
-            display_tags = [row["kind"] or row["direction"]]
-        amount_btc = float(msat_to_btc(row["amount"] or 0))
-        output.append(
-            {
-                "id": row["id"],
-                "externalId": row["external_id"],
-                "explorerId": _public_explorer_id(row["external_id"]),
-                "date": (row["occurred_at"] or "")[:16].replace("T", " "),
-                "type": _transaction_type(
-                    row["kind"],
-                    row["direction"],
-                    row["quarantine_reason"],
-                ),
-                "account": row["wallet"],
-                "counter": (
-                    row["counterparty"]
-                    or row["description"]
-                    or row["note"]
-                    or row["external_id"]
-                    or row["id"]
-                ),
-                "amountSat": int(round(sign * amount_btc * 100_000_000)),
-                "eur": sign * abs(float(row["fiat_value"] or 0)),
-                "rate": float(row["fiat_rate"] or 0),
-                "tag": ", ".join(display_tags) or "Unlabeled",
-                "tags": metadata_tags,
-                "note": row["note"] or "",
-                "excluded": bool(row["excluded"]),
-                "conf": 1 if row["confirmed_at"] else 0,
-                "internal": (row["kind"] or "").lower() == "transfer",
-            }
+        pair_meta = pair_meta_by_transaction.get(row["id"])
+        tag_transaction_id = (
+            str(pair_meta["display_transaction_id"]) if pair_meta else row["id"]
         )
-    return output
+        metadata_tags = [
+            str(tag) for tag in tags_by_transaction.get(tag_transaction_id, []) if tag
+        ]
+        if pair_meta:
+            pair_id = str(pair_meta["pair_id"])
+            if pair_id in rendered_pair_ids:
+                continue
+            rendered_pair_ids.add(pair_id)
+        output.append(_transaction_row_to_ui(row, metadata_tags, pair_meta))
+    return output[:20]
 
 
 def _transaction_type(kind: str, direction: str, quarantine_reason: str | None) -> str:
@@ -633,6 +603,212 @@ def _transaction_type(kind: str, direction: str, quarantine_reason: str | None) 
     if direction == "inbound":
         return "Income"
     return "Expense"
+
+
+def _ui_sat_amount(msat: int) -> int | float:
+    amount = int(msat or 0)
+    if amount % 1000 == 0:
+        return amount // 1000
+    return amount / 1000
+
+
+def _transaction_tags_by_transaction(
+    conn: sqlite3.Connection,
+    transaction_ids: list[str],
+) -> dict[str, list[str]]:
+    ids = list(dict.fromkeys(str(tx_id) for tx_id in transaction_ids if tx_id))
+    tags_by_transaction: dict[str, list[str]] = {tx_id: [] for tx_id in ids}
+    if not ids:
+        return tags_by_transaction
+    placeholders = ", ".join("?" for _ in ids)
+    tag_rows = conn.execute(
+        f"""
+        SELECT tt.transaction_id, tags.label
+        FROM transaction_tags tt
+        JOIN tags ON tags.id = tt.tag_id
+        WHERE tt.transaction_id IN ({placeholders})
+        ORDER BY tt.transaction_id ASC, tags.code ASC
+        """,
+        ids,
+    ).fetchall()
+    for tag in tag_rows:
+        tags_by_transaction[tag["transaction_id"]].append(tag["label"])
+    return tags_by_transaction
+
+
+def _transaction_pair_display_meta(
+    conn: sqlite3.Connection,
+    rows: list[sqlite3.Row],
+) -> dict[str, dict[str, Any]]:
+    if not rows:
+        return {}
+    ids = [row["id"] for row in rows]
+    placeholders = ", ".join("?" for _ in ids)
+    pair_rows = conn.execute(
+        f"""
+        SELECT
+            p.id,
+            p.kind,
+            p.policy,
+            p.swap_fee_msat,
+            p.out_transaction_id,
+            p.in_transaction_id,
+            tout.external_id AS out_external_id,
+            tout.occurred_at AS out_occurred_at,
+            tout.confirmed_at AS out_confirmed_at,
+            tout.asset AS out_asset,
+            tout.amount AS out_amount,
+            COALESCE(tout.fiat_rate, 0) AS out_fiat_rate,
+            COALESCE(tout.note, '') AS out_note,
+            tout.excluded AS out_excluded,
+            tin.external_id AS in_external_id,
+            tin.occurred_at AS in_occurred_at,
+            tin.confirmed_at AS in_confirmed_at,
+            tin.asset AS in_asset,
+            tin.amount AS in_amount,
+            COALESCE(tin.fiat_rate, 0) AS in_fiat_rate,
+            COALESCE(tin.note, '') AS in_note,
+            tin.excluded AS in_excluded,
+            wout.label AS out_wallet,
+            win.label AS in_wallet
+        FROM transaction_pairs p
+        JOIN transactions tout ON tout.id = p.out_transaction_id
+        JOIN transactions tin ON tin.id = p.in_transaction_id
+        JOIN wallets wout ON wout.id = tout.wallet_id
+        JOIN wallets win ON win.id = tin.wallet_id
+        WHERE p.deleted_at IS NULL
+          AND (p.out_transaction_id IN ({placeholders})
+               OR p.in_transaction_id IN ({placeholders}))
+        """,
+        [*ids, *ids],
+    ).fetchall()
+    pair_meta: dict[str, dict[str, Any]] = {}
+    for pair in pair_rows:
+        out_asset = pair["out_asset"]
+        in_asset = pair["in_asset"]
+        pair_type = "transfer" if out_asset == in_asset else "swap"
+        raw_fee_msat = pair["swap_fee_msat"]
+        if raw_fee_msat is None:
+            raw_fee_msat = int(pair["out_amount"] or 0) - int(pair["in_amount"] or 0)
+        fee_msat = int(raw_fee_msat or 0)
+        label = "Transfer" if pair_type == "transfer" else "Swap"
+        counter = f"{label} fee - {out_asset} -> {in_asset}"
+        account = f"{pair['out_wallet']} -> {pair['in_wallet']}"
+        display_rate = float(pair["out_fiat_rate"] or pair["in_fiat_rate"] or 0)
+        base = {
+            "pair_id": pair["id"],
+            "pair_type": pair_type,
+            "label": label,
+            "counter": counter,
+            "account": account,
+            "fee_msat": fee_msat,
+            "tag": label,
+            "display_transaction_id": pair["in_transaction_id"],
+            "display_external_id": pair["in_external_id"],
+            "display_occurred_at": pair["in_occurred_at"] or pair["out_occurred_at"],
+            "display_confirmed_at": pair["in_confirmed_at"] or pair["out_confirmed_at"],
+            "display_rate": display_rate,
+            "display_note": pair["in_note"] or pair["out_note"] or "",
+            "display_excluded": bool(pair["out_excluded"] or pair["in_excluded"]),
+        }
+        pair_meta[pair["out_transaction_id"]] = {**base, "role": "out"}
+        pair_meta[pair["in_transaction_id"]] = {**base, "role": "in"}
+    return pair_meta
+
+
+def _transaction_row_to_ui(
+    row: sqlite3.Row,
+    metadata_tags: list[str],
+    pair_meta: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    fee_msat = int(row["fee"] or 0)
+    rate = float(row["fiat_rate"] or 0)
+    if pair_meta:
+        rate = float(pair_meta["display_rate"] or 0)
+        display_fee_msat = abs(int(pair_meta["fee_msat"] or 0))
+        pair_tag = str(pair_meta["tag"])
+        display_tags = [pair_tag, *[tag for tag in metadata_tags if tag != pair_tag]]
+        amount_msat = -display_fee_msat
+        fiat_value = -float(msat_to_btc(display_fee_msat)) * rate if rate else 0.0
+        type_label = str(pair_meta["label"])
+        counter = str(pair_meta["counter"])
+        account = str(pair_meta["account"])
+        internal = pair_meta["pair_type"] == "transfer"
+        output_tags = metadata_tags
+        fee_sat = _ui_sat_amount(display_fee_msat)
+        row_id = str(pair_meta["display_transaction_id"])
+        external_id = pair_meta["display_external_id"]
+        occurred_at = pair_meta["display_occurred_at"]
+        confirmed_at = pair_meta["display_confirmed_at"]
+        note = str(pair_meta["display_note"] or "")
+        excluded = bool(pair_meta["display_excluded"])
+        include_empty_tags = False
+    else:
+        sign = 1 if row["direction"] == "inbound" else -1
+        amount_msat = sign * int(row["amount"] or 0)
+        fiat_value = sign * abs(float(row["fiat_value"] or 0))
+        type_label = _transaction_type(
+            row["kind"],
+            row["direction"],
+            row["quarantine_reason"],
+        )
+        if (
+            row["direction"] == "outbound"
+            and int(row["amount"] or 0) == 0
+            and fee_msat > 0
+        ):
+            amount_msat = -fee_msat
+            fiat_value = -float(msat_to_btc(fee_msat)) * rate if rate else fiat_value
+            type_label = "Fee"
+        display_tags = list(metadata_tags)
+        if not display_tags and row["quarantine_reason"]:
+            display_tags = ["Review"]
+        elif not display_tags:
+            display_tags = [
+                type_label
+                if type_label != "Expense"
+                else (row["kind"] or row["direction"])
+            ]
+        counter = (
+            row["counterparty"]
+            or row["description"]
+            or row["note"]
+            or row["external_id"]
+            or row["id"]
+        )
+        account = row["wallet"]
+        internal = (row["kind"] or "").lower() == "transfer"
+        output_tags = metadata_tags
+        fee_sat = _ui_sat_amount(fee_msat) if fee_msat else 0
+        row_id = row["id"]
+        external_id = row["external_id"]
+        occurred_at = row["occurred_at"]
+        confirmed_at = row["confirmed_at"]
+        note = row["note"] or ""
+        excluded = bool(row["excluded"])
+        include_empty_tags = True
+
+    payload = {
+        "id": row_id,
+        "externalId": external_id,
+        "explorerId": _public_explorer_id(external_id),
+        "date": (occurred_at or "")[:16].replace("T", " "),
+        "type": type_label,
+        "account": account,
+        "counter": counter,
+        "amountSat": _ui_sat_amount(amount_msat),
+        "feeSat": fee_sat,
+        "eur": fiat_value,
+        "rate": rate,
+        "tag": ", ".join(display_tags) or "Unlabeled",
+        "note": note,
+        "excluded": excluded,
+        "conf": 1 if confirmed_at else 0,
+        "internal": internal,
+    }
+    if output_tags or include_empty_tags:
+        payload["tags"] = output_tags
+    return payload
 
 
 def _balance_series(conn: sqlite3.Connection, profile_id: str) -> list[float]:
@@ -967,7 +1143,8 @@ def build_transactions_snapshot(
             f"{sort_columns[sort]} {order_sql}, "
             "t.occurred_at DESC, t.created_at DESC, t.id DESC"
         )
-    params.append(limit)
+    raw_limit = limit * 2
+    params.append(raw_limit)
 
     rows = conn.execute(
         f"""
@@ -999,7 +1176,7 @@ def build_transactions_snapshot(
         params,
     ).fetchall()
     return {
-        "txs": _transaction_rows_to_ui(conn, rows),
+        "txs": _transaction_rows_to_ui(conn, rows)[:limit],
         "year": _snapshot_year(rows),
         "filters": {
             "limit": limit,
@@ -1203,7 +1380,8 @@ def build_transactions_search_snapshot(
             f"{sort_columns[sort]} {order_sql}, "
             "t.occurred_at DESC, t.created_at DESC, t.id DESC"
         )
-    params.append(limit)
+    raw_limit = limit * 2
+    params.append(raw_limit)
 
     rows = conn.execute(
         f"""
@@ -1235,7 +1413,7 @@ def build_transactions_search_snapshot(
         params,
     ).fetchall()
     return {
-        "txs": _transaction_rows_to_ui(conn, rows),
+        "txs": _transaction_rows_to_ui(conn, rows)[:limit],
         "filters": {
             "query": query,
             "limit": limit,
@@ -2513,60 +2691,28 @@ def _transaction_rows_to_ui(
     conn: sqlite3.Connection,
     rows: list[sqlite3.Row],
 ) -> list[dict[str, Any]]:
-    tags_by_transaction = {row["id"]: [] for row in rows}
-    if rows:
-        placeholders = ", ".join("?" for _ in rows)
-        tag_rows = conn.execute(
-            f"""
-            SELECT tt.transaction_id, tags.label
-            FROM transaction_tags tt
-            JOIN tags ON tags.id = tt.tag_id
-            WHERE tt.transaction_id IN ({placeholders})
-            ORDER BY tt.transaction_id ASC, tags.code ASC
-            """,
-            [row["id"] for row in rows],
-        ).fetchall()
-        for tag in tag_rows:
-            tags_by_transaction[tag["transaction_id"]].append(tag["label"])
+    pair_meta_by_transaction = _transaction_pair_display_meta(conn, rows)
+    tag_ids = [row["id"] for row in rows]
+    tag_ids.extend(
+        str(pair_meta["display_transaction_id"])
+        for pair_meta in pair_meta_by_transaction.values()
+    )
+    tags_by_transaction = _transaction_tags_by_transaction(conn, tag_ids)
 
     output = []
+    rendered_pair_ids: set[str] = set()
     for row in rows:
-        sign = 1 if row["direction"] == "inbound" else -1
-        metadata_tags = [str(tag) for tag in tags_by_transaction.get(row["id"], []) if tag]
-        display_tags = list(metadata_tags)
-        if not display_tags and row["quarantine_reason"]:
-            display_tags = ["Review"]
-        elif not display_tags:
-            display_tags = [row["kind"] or row["direction"]]
-        amount_btc = float(msat_to_btc(row["amount"] or 0))
-        output.append(
-            {
-                "id": row["id"],
-                "externalId": row["external_id"],
-                "explorerId": _public_explorer_id(row["external_id"]),
-                "date": (row["occurred_at"] or "")[:16].replace("T", " "),
-                "type": _transaction_type(
-                    row["kind"],
-                    row["direction"],
-                    row["quarantine_reason"],
-                ),
-                "account": row["wallet"],
-                "counter": (
-                    row["counterparty"]
-                    or row["description"]
-                    or row["note"]
-                    or row["external_id"]
-                    or row["id"]
-                ),
-                "amountSat": int(round(sign * amount_btc * 100_000_000)),
-                "eur": sign * abs(float(row["fiat_value"] or 0)),
-                "rate": float(row["fiat_rate"] or 0),
-                "tag": ", ".join(display_tags) or "Unlabeled",
-                "tags": metadata_tags,
-                "note": row["note"] or "",
-                "excluded": bool(row["excluded"]),
-                "conf": 1 if row["confirmed_at"] else 0,
-                "internal": (row["kind"] or "").lower() == "transfer",
-            }
+        pair_meta = pair_meta_by_transaction.get(row["id"])
+        tag_transaction_id = (
+            str(pair_meta["display_transaction_id"]) if pair_meta else row["id"]
         )
+        metadata_tags = [
+            str(tag) for tag in tags_by_transaction.get(tag_transaction_id, []) if tag
+        ]
+        if pair_meta:
+            pair_id = str(pair_meta["pair_id"])
+            if pair_id in rendered_pair_ids:
+                continue
+            rendered_pair_ids.add(pair_id)
+        output.append(_transaction_row_to_ui(row, metadata_tags, pair_meta))
     return output
