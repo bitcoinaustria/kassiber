@@ -740,6 +740,173 @@ class DaemonSmokeTest(unittest.TestCase):
             self.assertEqual(code, 0, stderr)
             self.assertNotIn(secret_marker, stderr)
 
+    def test_ai_provider_move_to_native_store_rolls_back_on_bridge_failure(self):
+        secret_marker = "sk-native-move-rollback"
+        with tempfile.TemporaryDirectory(prefix="kassiber-daemon-ai-move-") as tmp:
+            data_root = Path(tmp) / "data"
+            proc = _start_daemon(data_root)
+            self.assertEqual(_read_payload_timeout(proc)["kind"], "daemon.ready")
+            try:
+                _write_payload(
+                    proc,
+                    {
+                        "request_id": "provider-1",
+                        "kind": "ai.providers.create",
+                        "args": {
+                            "name": "native-rollback",
+                            "base_url": "https://example.test/v1",
+                            "kind": "remote",
+                        },
+                    },
+                )
+                self.assertEqual(_read_payload_timeout(proc)["kind"], "ai.providers.create")
+                _write_payload(
+                    proc,
+                    {
+                        "request_id": "set-1",
+                        "kind": "ai.providers.set_api_key",
+                        "args": {"name": "native-rollback", "api_key": secret_marker},
+                    },
+                )
+                self.assertEqual(_read_payload_timeout(proc)["kind"], "ai.providers.set_api_key")
+                _write_payload(
+                    proc,
+                    {
+                        "request_id": "move-1",
+                        "kind": "ai.providers.move_api_key",
+                        "args": {
+                            "name": "native-rollback",
+                            "store_id": "macos_keychain",
+                            "_desktop_secret_store_bridge": True,
+                        },
+                    },
+                )
+                control = _read_payload_timeout(proc)
+                self.assertEqual(control["kind"], "supervisor.ai_secret_store.request")
+                self.assertEqual(control["data"]["op"], "set")
+                self.assertEqual(control["data"]["secret"], secret_marker)
+                _write_payload(
+                    proc,
+                    {
+                        "request_id": control["request_id"],
+                        "kind": "supervisor.ai_secret_store.response",
+                        "error": {
+                            "code": "secret_store_bridge_error",
+                            "message": "mock native store refused the write",
+                            "retryable": True,
+                        },
+                    },
+                )
+                moved = _read_payload_timeout(proc)
+                self.assertEqual(moved["kind"], "error")
+                self.assertEqual(moved["error"]["code"], "secret_store_bridge_error")
+                self.assertNotIn(secret_marker, json.dumps(moved, sort_keys=True))
+
+                conn = sqlite3.connect(data_root / "kassiber.sqlite3")
+                conn.row_factory = sqlite3.Row
+                try:
+                    row = conn.execute(
+                        "SELECT api_key FROM ai_providers WHERE name = ?",
+                        ("native-rollback",),
+                    ).fetchone()
+                    self.assertEqual(row["api_key"], secret_marker)
+                    ref = conn.execute(
+                        "SELECT store_id, state FROM ai_provider_secret_refs WHERE provider_name = ?",
+                        ("native-rollback",),
+                    ).fetchone()
+                    self.assertEqual(ref["store_id"], "sqlcipher_inline")
+                    self.assertEqual(ref["state"], "ok")
+                finally:
+                    conn.close()
+            finally:
+                _write_payload(proc, {"request_id": "shutdown-1", "kind": "daemon.shutdown"})
+                self.assertEqual(_read_payload_timeout(proc)["kind"], "daemon.shutdown")
+                code, stderr = _close_daemon(proc)
+                self.assertEqual(code, 0, stderr)
+
+    def test_ai_provider_move_to_native_store_clears_inline_secret_on_success(self):
+        secret_marker = "sk-native-move-success"
+        with tempfile.TemporaryDirectory(prefix="kassiber-daemon-ai-move-ok-") as tmp:
+            data_root = Path(tmp) / "data"
+            proc = _start_daemon(data_root)
+            self.assertEqual(_read_payload_timeout(proc)["kind"], "daemon.ready")
+            try:
+                _write_payload(
+                    proc,
+                    {
+                        "request_id": "provider-1",
+                        "kind": "ai.providers.create",
+                        "args": {
+                            "name": "native-ok",
+                            "base_url": "https://example.test/v1",
+                            "kind": "remote",
+                        },
+                    },
+                )
+                self.assertEqual(_read_payload_timeout(proc)["kind"], "ai.providers.create")
+                _write_payload(
+                    proc,
+                    {
+                        "request_id": "set-1",
+                        "kind": "ai.providers.set_api_key",
+                        "args": {"name": "native-ok", "api_key": secret_marker},
+                    },
+                )
+                self.assertEqual(_read_payload_timeout(proc)["kind"], "ai.providers.set_api_key")
+                _write_payload(
+                    proc,
+                    {
+                        "request_id": "move-1",
+                        "kind": "ai.providers.move_api_key",
+                        "args": {
+                            "name": "native-ok",
+                            "store_id": "macos_keychain",
+                            "_desktop_secret_store_bridge": True,
+                        },
+                    },
+                )
+                control = _read_payload_timeout(proc)
+                self.assertEqual(control["kind"], "supervisor.ai_secret_store.request")
+                self.assertEqual(control["data"]["secret"], secret_marker)
+                _write_payload(
+                    proc,
+                    {
+                        "request_id": control["request_id"],
+                        "kind": "supervisor.ai_secret_store.response",
+                        "data": {"provider_name": "native-ok", "state": "ok"},
+                    },
+                )
+                moved = _read_payload_timeout(proc)
+                self.assertEqual(moved["kind"], "ai.providers.move_api_key")
+                self.assertTrue(moved["data"]["has_api_key"])
+                self.assertEqual(
+                    moved["data"]["secret_ref"],
+                    {"store_id": "macos_keychain", "state": "ok"},
+                )
+                self.assertNotIn(secret_marker, json.dumps(moved, sort_keys=True))
+
+                conn = sqlite3.connect(data_root / "kassiber.sqlite3")
+                conn.row_factory = sqlite3.Row
+                try:
+                    row = conn.execute(
+                        "SELECT api_key FROM ai_providers WHERE name = ?",
+                        ("native-ok",),
+                    ).fetchone()
+                    self.assertIsNone(row["api_key"])
+                    ref = conn.execute(
+                        "SELECT store_id, state FROM ai_provider_secret_refs WHERE provider_name = ?",
+                        ("native-ok",),
+                    ).fetchone()
+                    self.assertEqual(ref["store_id"], "macos_keychain")
+                    self.assertEqual(ref["state"], "ok")
+                finally:
+                    conn.close()
+            finally:
+                _write_payload(proc, {"request_id": "shutdown-1", "kind": "daemon.shutdown"})
+                self.assertEqual(_read_payload_timeout(proc)["kind"], "daemon.shutdown")
+                code, stderr = _close_daemon(proc)
+                self.assertEqual(code, 0, stderr)
+
     def test_ui_wallets_sync_zpub_against_local_esplora_backend(self):
         from kassiber.core.sync_backends import scriptpubkey_scripthash
         from kassiber.wallet_descriptors import derive_descriptor_target, load_descriptor_plan

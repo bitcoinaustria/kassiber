@@ -1,3 +1,7 @@
+use crate::secret_store::{
+    current_ai_provider_secret_store_policy, current_secret_store_platform,
+    native_store_id_for_platform, NativeSecretStore, SecretStore, STORE_ID_SQLCIPHER_INLINE,
+};
 use serde_json::{json, Map, Value};
 use std::collections::HashMap;
 use std::env;
@@ -24,17 +28,23 @@ const STDERR_TAIL_LIMIT: usize = 16 * 1024;
 type DaemonResponse = Result<Value, SupervisorError>;
 type PendingSender = mpsc::Sender<DaemonResponse>;
 type PendingMap = Arc<Mutex<HashMap<String, PendingSender>>>;
+type SharedStdin = Arc<Mutex<ChildStdin>>;
+type SharedSecretStore = Arc<dyn SecretStore>;
+
+const SECRET_STORE_CONTROL_REQUEST_KIND: &str = "supervisor.ai_secret_store.request";
+const SECRET_STORE_CONTROL_RESPONSE_KIND: &str = "supervisor.ai_secret_store.response";
 
 pub struct DaemonSupervisor {
     process: Mutex<Option<Arc<DaemonProcess>>>,
     resource_dir: Option<PathBuf>,
     data_root: Mutex<Option<PathBuf>>,
     next_request_id: AtomicU64,
+    secret_store: SharedSecretStore,
 }
 
 struct DaemonProcess {
     child: Mutex<Child>,
-    stdin: Mutex<ChildStdin>,
+    stdin: SharedStdin,
     pending: PendingMap,
     stderr_tail: StderrTail,
     broken: Arc<AtomicBool>,
@@ -213,6 +223,7 @@ impl DaemonSupervisor {
             resource_dir,
             data_root: Mutex::new(None),
             next_request_id: AtomicU64::new(1),
+            secret_store: Arc::new(NativeSecretStore),
         }
     }
 
@@ -223,6 +234,21 @@ impl DaemonSupervisor {
             resource_dir: None,
             data_root: Mutex::new(None),
             next_request_id: AtomicU64::new(1),
+            secret_store: Arc::new(NativeSecretStore),
+        }
+    }
+
+    #[cfg(test)]
+    fn new_with_process_and_secret_store(
+        process: DaemonProcess,
+        secret_store: SharedSecretStore,
+    ) -> Self {
+        Self {
+            process: Mutex::new(Some(Arc::new(process))),
+            resource_dir: None,
+            data_root: Mutex::new(None),
+            next_request_id: AtomicU64::new(1),
+            secret_store,
         }
     }
 
@@ -249,6 +275,7 @@ impl DaemonSupervisor {
         let replacement = Arc::new(DaemonProcess::spawn(
             self.resource_dir.as_deref(),
             data_root.clone(),
+            Arc::clone(&self.secret_store),
         )?);
         if let Some(process) = slot.replace(replacement) {
             process.mark_broken();
@@ -301,6 +328,7 @@ impl DaemonSupervisor {
             "request_id": request_id,
             "kind": kind,
         });
+        let args = augment_ai_provider_secret_args(kind, args);
         if let Some(args) = args {
             request["args"] = args;
         }
@@ -464,6 +492,7 @@ impl DaemonSupervisor {
             *slot = Some(Arc::new(DaemonProcess::spawn(
                 self.resource_dir.as_deref(),
                 data_root,
+                Arc::clone(&self.secret_store),
             )?));
         }
 
@@ -477,6 +506,7 @@ impl DaemonProcess {
     fn spawn(
         resource_dir: Option<&Path>,
         data_root: Option<PathBuf>,
+        secret_store: SharedSecretStore,
     ) -> Result<Self, SupervisorError> {
         let mut args = Vec::new();
         if let Some(data_root) = data_root {
@@ -484,10 +514,18 @@ impl DaemonProcess {
             args.push(data_root.to_string_lossy().to_string());
         }
         args.push("daemon".into());
-        Self::spawn_command(kassiber_command(resource_dir, args))
+        Self::spawn_command_with_secret_store(kassiber_command(resource_dir, args), secret_store)
     }
 
+    #[cfg(test)]
     fn spawn_command(command: DaemonCommand) -> Result<Self, SupervisorError> {
+        Self::spawn_command_with_secret_store(command, Arc::new(NativeSecretStore))
+    }
+
+    fn spawn_command_with_secret_store(
+        command: DaemonCommand,
+        secret_store: SharedSecretStore,
+    ) -> Result<Self, SupervisorError> {
         let mut child = Command::new(&command.program)
             .args(&command.args)
             .current_dir(&command.cwd)
@@ -517,6 +555,7 @@ impl DaemonProcess {
                 "Python daemon stdin was not captured",
             )
         })?;
+        let stdin = Arc::new(Mutex::new(stdin));
         let stdout = child.stdout.take().ok_or_else(|| {
             SupervisorError::new(
                 "daemon_spawn_failed",
@@ -534,10 +573,17 @@ impl DaemonProcess {
         let broken = Arc::new(AtomicBool::new(false));
         let pending = Arc::new(Mutex::new(HashMap::new()));
         let (ready_tx, ready_rx) = mpsc::channel();
-        spawn_stdout_reader(stdout, Arc::clone(&pending), Arc::clone(&broken), ready_tx);
+        spawn_stdout_reader(
+            stdout,
+            Arc::clone(&pending),
+            Arc::clone(&broken),
+            ready_tx,
+            Arc::clone(&stdin),
+            secret_store,
+        );
         let process = Self {
             child: Mutex::new(child),
-            stdin: Mutex::new(stdin),
+            stdin,
             pending,
             stderr_tail,
             broken,
@@ -764,6 +810,8 @@ fn spawn_stdout_reader(
     pending: PendingMap,
     broken: Arc<AtomicBool>,
     ready_tx: PendingSender,
+    stdin: SharedStdin,
+    secret_store: SharedSecretStore,
 ) {
     std::thread::spawn(move || {
         let mut reader = BufReader::new(stdout);
@@ -804,6 +852,16 @@ fn spawn_stdout_reader(
                                 .details(response),
                             );
                             return;
+                        }
+
+                        match handle_secret_store_control_request(&response, &stdin, &secret_store)
+                        {
+                            Ok(true) => continue,
+                            Ok(false) => {}
+                            Err(error) => {
+                                fail_stdout_reader(&broken, &pending, &mut startup, error);
+                                return;
+                            }
                         }
 
                         let Some(request_id) = response
@@ -892,6 +950,214 @@ fn spawn_stdout_reader(
             }
         }
     });
+}
+
+fn augment_ai_provider_secret_args(kind: &str, args: Option<Value>) -> Option<Value> {
+    if !uses_ai_provider_secret_bridge(kind) {
+        return args;
+    }
+    let mut map = match args {
+        Some(Value::Object(map)) => map,
+        Some(other) => {
+            let mut map = Map::new();
+            map.insert("_desktop_original_args".to_string(), other);
+            map
+        }
+        None => Map::new(),
+    };
+    map.insert(
+        "_desktop_secret_store_bridge".to_string(),
+        Value::Bool(true),
+    );
+
+    if matches!(
+        kind,
+        "ai.providers.set_api_key" | "ai.providers.move_api_key"
+    ) {
+        let requested = map
+            .get("store_id")
+            .and_then(Value::as_str)
+            .filter(|value| *value != STORE_ID_SQLCIPHER_INLINE);
+        let selection = current_ai_provider_secret_store_policy(requested);
+        map.insert(
+            "_desktop_secret_store_default".to_string(),
+            Value::String(selection.store_id.clone()),
+        );
+        map.insert(
+            "_desktop_secret_store_policy".to_string(),
+            serde_json::to_value(selection).unwrap_or(Value::Null),
+        );
+    }
+
+    Some(Value::Object(map))
+}
+
+fn uses_ai_provider_secret_bridge(kind: &str) -> bool {
+    matches!(
+        kind,
+        "ai.providers.list"
+            | "ai.providers.get"
+            | "ai.providers.set_api_key"
+            | "ai.providers.move_api_key"
+            | "ai.providers.delete"
+            | "ai.list_models"
+            | "ai.test_connection"
+            | "ai.chat"
+    )
+}
+
+fn handle_secret_store_control_request(
+    response: &Value,
+    stdin: &SharedStdin,
+    secret_store: &SharedSecretStore,
+) -> Result<bool, SupervisorError> {
+    if response.get("kind").and_then(Value::as_str) != Some(SECRET_STORE_CONTROL_REQUEST_KIND) {
+        return Ok(false);
+    }
+    let response_payload = secret_store_control_response(response, secret_store);
+    let line = serde_json::to_string(&response_payload).map_err(|error| {
+        SupervisorError::new(
+            "secret_store_bridge_failed",
+            format!("Could not serialize secret-store bridge response: {error}"),
+        )
+    })?;
+    let mut stdin = stdin.lock().map_err(|_| {
+        SupervisorError::new("daemon_lock_poisoned", "daemon stdin lock is poisoned").retryable()
+    })?;
+    writeln!(stdin, "{line}").map_err(|error| {
+        SupervisorError::new(
+            "secret_store_bridge_failed",
+            format!("Could not write secret-store bridge response: {error}"),
+        )
+        .retryable()
+    })?;
+    stdin.flush().map_err(|error| {
+        SupervisorError::new(
+            "secret_store_bridge_failed",
+            format!("Could not flush secret-store bridge response: {error}"),
+        )
+        .retryable()
+    })?;
+    Ok(true)
+}
+
+fn secret_store_control_response(request: &Value, secret_store: &SharedSecretStore) -> Value {
+    let request_id = request.get("request_id").cloned().unwrap_or(Value::Null);
+    let result = handle_secret_store_operation(request, secret_store);
+    match result {
+        Ok(data) => json!({
+            "kind": SECRET_STORE_CONTROL_RESPONSE_KIND,
+            "schema_version": 1,
+            "request_id": request_id,
+            "data": data,
+        }),
+        Err(message) => json!({
+            "kind": SECRET_STORE_CONTROL_RESPONSE_KIND,
+            "schema_version": 1,
+            "request_id": request_id,
+            "error": {
+                "code": "secret_store_bridge_error",
+                "message": redact_sensitive_text(&message),
+                "retryable": true,
+            },
+        }),
+    }
+}
+
+fn handle_secret_store_operation(
+    request: &Value,
+    secret_store: &SharedSecretStore,
+) -> Result<Value, String> {
+    let data = request
+        .get("data")
+        .and_then(Value::as_object)
+        .ok_or_else(|| "secret-store bridge request missing data".to_string())?;
+    let provider_name = data
+        .get("provider_name")
+        .and_then(Value::as_str)
+        .filter(|value| !value.trim().is_empty())
+        .ok_or_else(|| "secret-store bridge request missing provider_name".to_string())?;
+    let op = data
+        .get("op")
+        .and_then(Value::as_str)
+        .ok_or_else(|| "secret-store bridge request missing op".to_string())?;
+    let store_id = data
+        .get("store_id")
+        .and_then(Value::as_str)
+        .unwrap_or(STORE_ID_SQLCIPHER_INLINE);
+    if store_id == STORE_ID_SQLCIPHER_INLINE {
+        return Err("sqlcipher_inline refs are handled by the Python daemon".to_string());
+    }
+    let platform = current_secret_store_platform();
+    let Some(native_store_id) = native_store_id_for_platform(&platform) else {
+        return Err("this platform does not support native AI provider secret storage".to_string());
+    };
+    if store_id != native_store_id {
+        return Err(format!(
+            "requested AI provider secret store {store_id:?} is not available on this platform"
+        ));
+    }
+
+    match op {
+        "availability" => Ok(json!({
+            "provider_name": provider_name,
+            "availability": secret_store.availability(),
+        })),
+        "get" => {
+            let (service, account) = secret_ref_service_account(data)?;
+            match secret_store.get(service, account)? {
+                Some(secret) => {
+                    let secret = String::from_utf8(secret)
+                        .map_err(|_| "stored provider API key is not UTF-8".to_string())?;
+                    Ok(json!({
+                        "provider_name": provider_name,
+                        "state": "ok",
+                        "secret": secret,
+                    }))
+                }
+                None => Ok(json!({
+                    "provider_name": provider_name,
+                    "state": "missing",
+                    "secret": Value::Null,
+                })),
+            }
+        }
+        "set" => {
+            let (service, account) = secret_ref_service_account(data)?;
+            let secret = data
+                .get("secret")
+                .and_then(Value::as_str)
+                .ok_or_else(|| "secret-store set request missing secret".to_string())?;
+            secret_store.set(service, account, secret.as_bytes())?;
+            Ok(json!({
+                "provider_name": provider_name,
+                "state": "ok",
+            }))
+        }
+        "delete" => {
+            let (service, account) = secret_ref_service_account(data)?;
+            secret_store.delete(service, account)?;
+            Ok(json!({
+                "provider_name": provider_name,
+                "state": "missing",
+            }))
+        }
+        other => Err(format!("unsupported secret-store bridge op {other:?}")),
+    }
+}
+
+fn secret_ref_service_account(data: &Map<String, Value>) -> Result<(&str, &str), String> {
+    let service = data
+        .get("service")
+        .and_then(Value::as_str)
+        .filter(|value| !value.trim().is_empty())
+        .ok_or_else(|| "secret-store bridge request missing service".to_string())?;
+    let account = data
+        .get("account")
+        .and_then(Value::as_str)
+        .filter(|value| !value.trim().is_empty())
+        .ok_or_else(|| "secret-store bridge request missing account".to_string())?;
+    Ok((service, account))
 }
 
 fn fail_stdout_reader(
@@ -1135,6 +1401,8 @@ mod tests {
         ));
         fs::create_dir_all(&dir).expect("create temp dir");
         let script = dir.join("stub-daemon.py");
+        let test_secret_store_id = native_store_id_for_platform(&current_secret_store_platform())
+            .unwrap_or(STORE_ID_SQLCIPHER_INLINE);
         fs::write(
             &script,
             r#"#!/usr/bin/env python3
@@ -1151,7 +1419,7 @@ def emit(payload):
         sys.stdout.write(json.dumps(payload, separators=(",", ":")) + "\n")
         sys.stdout.flush()
 
-emit({"kind":"daemon.ready","schema_version":1,"data":{"version":"test","supported_kinds":["slow","fast","locked","daemon.shutdown"]}})
+emit({"kind":"daemon.ready","schema_version":1,"data":{"version":"test","supported_kinds":["slow","fast","locked","secret-get","daemon.shutdown"]}})
 
 def slow(request_id):
     emit({"kind":"slow.delta","schema_version":1,"request_id":request_id,"data":{"delta":{"content":"a"}}})
@@ -1170,10 +1438,15 @@ for line in sys.stdin:
         emit({"kind":"fast","schema_version":1,"request_id":request_id,"data":{"ok":True,"pid":os.getpid()}})
     elif kind == "locked":
         emit({"kind":"auth_required","schema_version":1,"request_id":request_id,"data":{"scope":"unlock_database"}})
+    elif kind == "secret-get":
+        emit({"kind":"supervisor.ai_secret_store.request","schema_version":1,"request_id":"secret-control-1","data":{"op":"get","provider_name":"remote","store_id":"__TEST_STORE_ID__","service":"service-hash","account":"remote"}})
+        control = json.loads(sys.stdin.readline())
+        emit({"kind":"secret-get","schema_version":1,"request_id":request_id,"data":{"control_kind":control.get("kind"),"state":control.get("data",{}).get("state"),"secret":control.get("data",{}).get("secret")}})
     elif kind == "daemon.shutdown":
         emit({"kind":"daemon.shutdown","schema_version":1,"request_id":request_id,"data":{}})
         break
-"#,
+"#
+            .replace("__TEST_STORE_ID__", test_secret_store_id),
         )
         .expect("write stub daemon");
         let mut permissions = fs::metadata(&script).expect("metadata").permissions();
@@ -1272,6 +1545,80 @@ for line in sys.stdin:
             None,
             false,
             Some(json!("shutdown-locked-1")),
+            |_| {},
+        );
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn handles_secret_store_control_requests_without_forwarding_them() {
+        let (dir, script) = write_stub_daemon();
+        let mock_store = crate::secret_store::MockSecretStore::new(
+            crate::secret_store::SecretStoreAvailability::Available {
+                identity_strength: crate::secret_store::IdentityStrength::Production,
+            },
+        );
+        mock_store
+            .set("service-hash", "remote", b"bridge-secret")
+            .expect("seed mock store");
+        let secret_store = Arc::new(mock_store);
+        let process = DaemonProcess::spawn_command_with_secret_store(
+            DaemonCommand {
+                program: script,
+                args: Vec::new(),
+                cwd: dir.clone(),
+                source: "env_python",
+            },
+            secret_store.clone(),
+        )
+        .expect("spawn stub daemon");
+        let supervisor = DaemonSupervisor::new_with_process_and_secret_store(process, secret_store);
+
+        let response = supervisor
+            .invoke_inner(
+                "secret-get",
+                None,
+                false,
+                Some(json!("secret-get-1")),
+                |_| {},
+            )
+            .expect("secret bridge response");
+
+        assert_eq!(
+            response.get("kind").and_then(Value::as_str),
+            Some("secret-get")
+        );
+        assert_eq!(
+            response
+                .get("data")
+                .and_then(Value::as_object)
+                .and_then(|data| data.get("control_kind"))
+                .and_then(Value::as_str),
+            Some(SECRET_STORE_CONTROL_RESPONSE_KIND)
+        );
+        assert_eq!(
+            response
+                .get("data")
+                .and_then(Value::as_object)
+                .and_then(|data| data.get("state"))
+                .and_then(Value::as_str),
+            Some("ok")
+        );
+        assert_eq!(
+            response
+                .get("data")
+                .and_then(Value::as_object)
+                .and_then(|data| data.get("secret"))
+                .and_then(Value::as_str),
+            Some("bridge-secret")
+        );
+
+        let _ = supervisor.invoke_inner(
+            "daemon.shutdown",
+            None,
+            false,
+            Some(json!("shutdown-secret-bridge")),
             |_| {},
         );
         let _ = fs::remove_dir_all(dir);
@@ -1381,6 +1728,7 @@ for line in sys.stdin:
             resource_dir: Some(sidecar_dir.clone()),
             data_root: Mutex::new(None),
             next_request_id: AtomicU64::new(1),
+            secret_store: Arc::new(NativeSecretStore),
         };
 
         let error = supervisor

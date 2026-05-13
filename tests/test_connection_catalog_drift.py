@@ -59,6 +59,7 @@ _DESKTOP_MUTATION_KINDS = (
     "ui.wallets.update",
     "ui.wallets.delete",
     "ai.providers.set_api_key",
+    "ai.providers.move_api_key",
 )
 _DESKTOP_SWAP_MATCHING_KINDS = (
     "ui.transfers.suggest",

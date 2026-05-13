@@ -166,6 +166,20 @@ interface RateRebuildData {
 type AiSecretStoreId = "macos_keychain" | "windows_dpapi" | "linux_secret_service" | "sqlcipher_inline";
 type AiSecretState = "ok" | "missing" | "needs_reauth" | "unavailable";
 
+interface AiSecretStorePolicy {
+  platform?: "macos" | "windows" | "linux" | "unsupported";
+  default?: {
+    store_id: AiSecretStoreId;
+    native_store_id?: AiSecretStoreId | null;
+    native_available: boolean;
+    warning?: string | null;
+  };
+  availability?: {
+    state: "available" | "locked_needs_unlock" | "unavailable";
+    reason?: string;
+  };
+}
+
 interface AiProviderRow {
   name: string;
   base_url: string;
@@ -184,6 +198,7 @@ interface AiProviderRow {
 interface AiProvidersListData {
   providers: AiProviderRow[];
   default: string | null;
+  secret_store_policy?: AiSecretStorePolicy;
 }
 
 const AI_KIND_BADGE: Record<AiProviderRow["kind"], string> = {
@@ -1928,8 +1943,12 @@ function AiProvidersPanel({
   );
   const setDefault = useDaemonMutation("ai.providers.set_default");
   const deleteProvider = useDaemonMutation("ai.providers.delete");
+  const moveProviderKey = useDaemonMutation("ai.providers.move_api_key");
   const [editingName, setEditingName] = React.useState<string | null>(null);
   const [addOpen, setAddOpen] = React.useState(false);
+  const nativeStoreId = data.secret_store_policy?.default?.native_store_id ?? null;
+  const nativeAvailable = data.secret_store_policy?.default?.native_available === true;
+  const policyWarning = data.secret_store_policy?.default?.warning;
 
   const editingProvider = React.useMemo<ExistingAiProvider | null>(() => {
     if (!editingName) return null;
@@ -1985,6 +2004,12 @@ function AiProvidersPanel({
           Add provider
         </Button>
       </div>
+
+      {policyWarning ? (
+        <div className="rounded-md border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-amber-800 dark:text-amber-200">
+          {policyWarning}
+        </div>
+      ) : null}
 
       {providersQuery.isLoading ? (
         <div className="rounded-md border bg-background p-4 text-sm text-muted-foreground">
@@ -2080,6 +2105,44 @@ function AiProvidersPanel({
                         >
                           <Pencil className="size-3.5" aria-hidden="true" />
                         </Button>
+                        {nativeStoreId &&
+                        nativeAvailable &&
+                        row.secret_ref?.store_id === "sqlcipher_inline" &&
+                        row.has_api_key ? (
+                          <Button
+                            type="button"
+                            size="icon-sm"
+                            variant="ghost"
+                            aria-label={`Move ${row.name} key to native storage`}
+                            disabled={moveProviderKey.isPending}
+                            onClick={() =>
+                              moveProviderKey.mutate({
+                                name: row.name,
+                                store_id: nativeStoreId,
+                              })
+                            }
+                          >
+                            <ShieldCheck className="size-3.5" aria-hidden="true" />
+                          </Button>
+                        ) : null}
+                        {row.secret_ref?.store_id &&
+                        row.secret_ref.store_id !== "sqlcipher_inline" ? (
+                          <Button
+                            type="button"
+                            size="icon-sm"
+                            variant="ghost"
+                            aria-label={`Move ${row.name} key to SQLCipher storage`}
+                            disabled={moveProviderKey.isPending || !row.has_api_key}
+                            onClick={() =>
+                              moveProviderKey.mutate({
+                                name: row.name,
+                                store_id: "sqlcipher_inline",
+                              })
+                            }
+                          >
+                            <Database className="size-3.5" aria-hidden="true" />
+                          </Button>
+                        ) : null}
                         <Button
                           type="button"
                           size="icon-sm"

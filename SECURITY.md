@@ -124,13 +124,13 @@ not store unlock material in the OS keychain. The passphrase is the
 perimeter. Pick a long passphrase from a password manager and treat
 the loss of that passphrase as data loss — there is no recovery path.
 
-**Desktop credential stores are a separate future boundary, not SQLCipher
-replacement.** The current desktop code contains probe-only Rust secret-store
-traits for macOS Keychain, Windows user-scope Credential Manager/DPAPI, and
-Linux Secret Service. This PR pilots only AI provider API-key references and
-keeps production storage as `sqlcipher_inline`. Backend tokens, descriptors,
-xpubs, blinding keys, and reveal payloads stay SQLCipher-protected and are not
-migrated to OS credential stores. See
+**Desktop credential stores are a separate boundary, not SQLCipher
+replacement.** Desktop builds can store AI provider API keys in macOS
+Keychain, Windows user-scope Credential Manager/DPAPI, or Linux Secret Service
+when platform policy selects a native store. The unlocked Python daemon remains
+trusted at runtime and receives the key only to call the configured provider.
+Backend tokens, descriptors, xpubs, blinding keys, and reveal payloads stay
+SQLCipher-protected and are not migrated to OS credential stores. See
 [docs/plan/10-secret-management.md](docs/plan/10-secret-management.md).
 
 **Reveal is a UX gate, not cryptographic separation.** Once the daemon
@@ -245,13 +245,14 @@ through Settings → AI providers or `kassiber ai providers create`.
   `--acknowledge`, or confirmed in Settings → AI providers. `ai.chat`
   refuses to send prompts to an unacknowledged off-device provider with
   `ai_remote_ack_required`.
-- **AI provider API keys use the SQLCipher inline path in this PR.** CLI
+- **AI provider API keys have a narrow desktop native-store path.** CLI
   callers should use `--api-key-stdin` / `--api-key-fd FD`; the old
-  `--api-key <value>` form is a warning-on-use shim. Desktop Settings writes
-  keys through the narrow `ai.providers.set_api_key` daemon kind and receives
-  only `has_api_key` plus `secret_ref` state back. OS credential-store refs are
-  schema/probe-only for now; backend tokens and wallet descriptors are not
-  migrated.
+  `--api-key <value>` form is a warning-on-use shim and stores
+  `sqlcipher_inline`. Desktop Settings writes keys through
+  `ai.providers.set_api_key` and can move a provider key with
+  `ai.providers.move_api_key`; provider envelopes return only `has_api_key`
+  plus `secret_ref.{store_id,state}`. No generic keyring get/list API is
+  exposed to the webview or assistant.
 - **No encrypted-while-running claim.** Once the Python daemon is unlocked, it
   can read stored AI keys, backend tokens, descriptors, and blinding keys to do
   its job. This does not protect against malware, admin/root access, debugger

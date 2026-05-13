@@ -20,9 +20,11 @@ from .ai import (
     delete_db_ai_provider,
     get_db_ai_provider,
     get_ai_provider_api_key_for_use,
+    mark_ai_provider_secret_ref_state,
     redact_ai_provider_for_output,
     require_ai_provider_acknowledged,
     resolve_ai_provider,
+    set_db_ai_provider_native_secret_ref,
     set_default_ai_provider,
     clear_default_ai_provider,
     set_db_ai_provider_api_key,
@@ -37,6 +39,7 @@ from .ai.prompt import (
 from .ai.providers import (
     acknowledge_remote_use,
     get_default_ai_provider_name,
+    list_db_ai_providers,
     list_with_default as list_ai_providers_with_default,
     normalize_base_url,
 )
@@ -115,6 +118,7 @@ from .db import (
 from .envelope import build_envelope, build_error_envelope, json_ready
 from .errors import AppError
 from .redaction import redact_secret_text, redact_secret_value
+from .util import str_or_none
 from .secrets.credentials import migrate_dotenv_credentials
 from .secrets.migration import create_empty_encrypted_database, migrate_plaintext_to_encrypted
 from .secrets.passphrase import change_database_passphrase
@@ -141,6 +145,15 @@ _AUTO_SYNC_PROFILE_LAST_ATTEMPT: dict[str, float] = {}
 _AUTO_SYNC_PROFILE_LAST_RESULT: dict[str, dict[str, Any]] = {}
 _AUTO_SYNC_PROFILE_LOCK = threading.Lock()
 _REQUEST_ID_MISSING = object()
+_SECRET_STORE_CONTROL_REQUEST_KIND = "supervisor.ai_secret_store.request"
+_SECRET_STORE_CONTROL_RESPONSE_KIND = "supervisor.ai_secret_store.response"
+_SECRET_STORE_BRIDGE_TIMEOUT_SECONDS = 15.0
+_AI_PROVIDER_SECRET_STORE_IDS = {
+    "sqlcipher_inline",
+    "macos_keychain",
+    "windows_dpapi",
+    "linux_secret_service",
+}
 SUPPORTED_KINDS = (
     "status",
     "ui.overview.snapshot",
@@ -238,6 +251,7 @@ SUPPORTED_KINDS = (
     "ai.providers.create",
     "ai.providers.update",
     "ai.providers.set_api_key",
+    "ai.providers.move_api_key",
     "ai.providers.delete",
     "ai.providers.set_default",
     "ai.providers.clear_default",
@@ -551,6 +565,9 @@ class DaemonContext:
     active_ai_chats: ActiveAiChats
     main_thread_tasks: queue.Queue[_DaemonMainThreadTask]
     auth_backoff: AuthAttemptBackoff
+    input_lines: queue.Queue[str]
+    deferred_input_lines: list[str]
+    out: Any
 
 
 @dataclass(frozen=True)
@@ -649,6 +666,14 @@ def _start_stdin_reader(input_stream: TextIO) -> queue.Queue[str]:
     return lines
 
 
+def _next_input_line(ctx: DaemonContext, timeout: float | None = None) -> str:
+    if ctx.deferred_input_lines:
+        return ctx.deferred_input_lines.pop(0)
+    if timeout is None:
+        return ctx.input_lines.get()
+    return ctx.input_lines.get(timeout=timeout)
+
+
 def _with_request_id(
     envelope: dict[str, Any],
     request_id: object = _REQUEST_ID_MISSING,
@@ -685,6 +710,322 @@ def _error_envelope(
         ),
         request_id,
     )
+
+
+def _desktop_secret_store_bridge_enabled(args: Mapping[str, Any]) -> bool:
+    return bool(args.get("_desktop_secret_store_bridge"))
+
+
+def _desktop_secret_store_default(args: Mapping[str, Any]) -> str:
+    value = args.get("_desktop_secret_store_default")
+    return value if isinstance(value, str) and value else "sqlcipher_inline"
+
+
+def _validate_ai_provider_secret_store_id(store_id: str) -> str:
+    store_id = store_id.strip()
+    if store_id not in _AI_PROVIDER_SECRET_STORE_IDS:
+        raise AppError(
+            "unsupported AI provider secret store",
+            code="validation",
+            details={"store_id": store_id},
+        )
+    return store_id
+
+
+def _provider_secret_ref_for_bridge(provider: dict[str, Any]) -> dict[str, Any]:
+    ref = dict(provider.get("secret_ref") or {})
+    ref.setdefault("provider_name", provider.get("name"))
+    ref.setdefault("account", provider.get("name"))
+    if not ref.get("service"):
+        raise AppError(
+            "AI provider secret ref is missing its service identifier",
+            code="secret_ref_unavailable",
+            details={"refs": [{"provider_name": provider.get("name"), "state": "unavailable"}]},
+            retryable=True,
+        )
+    return ref
+
+
+def _secret_store_bridge_request(
+    ctx: DaemonContext,
+    *,
+    op: str,
+    provider_name: str,
+    store_id: str,
+    service: str,
+    account: str,
+    secret: str | None = None,
+) -> dict[str, Any]:
+    control_id = f"secret-store-{time.monotonic_ns()}"
+    payload: dict[str, Any] = {
+        "op": op,
+        "provider_name": provider_name,
+        "store_id": store_id,
+        "service": service,
+        "account": account,
+    }
+    if secret is not None:
+        payload["secret"] = secret
+    ctx.out.write(
+        _with_request_id(
+            build_envelope(_SECRET_STORE_CONTROL_REQUEST_KIND, payload),
+            control_id,
+        )
+    )
+    deadline = time.monotonic() + _SECRET_STORE_BRIDGE_TIMEOUT_SECONDS
+    while True:
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            raise AppError(
+                "desktop secret store did not answer",
+                code="secret_ref_unavailable",
+                hint="Try again after restarting the desktop app or re-enter the provider API key.",
+                details={"refs": [{"provider_name": provider_name, "store_id": store_id, "state": "unavailable"}]},
+                retryable=True,
+            )
+        try:
+            line = _next_input_line(ctx, timeout=remaining)
+        except queue.Empty:
+            continue
+        if line == "":
+            raise AppError(
+                "desktop secret store bridge closed",
+                code="secret_ref_unavailable",
+                details={"refs": [{"provider_name": provider_name, "store_id": store_id, "state": "unavailable"}]},
+                retryable=True,
+            )
+        raw = line.strip()
+        if not raw:
+            continue
+        try:
+            response = json.loads(raw)
+        except json.JSONDecodeError:
+            ctx.deferred_input_lines.append(line)
+            continue
+        if (
+            isinstance(response, dict)
+            and response.get("kind") == _SECRET_STORE_CONTROL_RESPONSE_KIND
+            and response.get("request_id") == control_id
+        ):
+            error = response.get("error")
+            if isinstance(error, dict):
+                raise AppError(
+                    str(error.get("message") or "desktop secret store operation failed"),
+                    code=str(error.get("code") or "secret_ref_unavailable"),
+                    details={"refs": [{"provider_name": provider_name, "store_id": store_id, "state": "unavailable"}]},
+                    retryable=bool(error.get("retryable", True)),
+                )
+            data = response.get("data")
+            if not isinstance(data, dict):
+                raise AppError(
+                    "desktop secret store response was malformed",
+                    code="secret_ref_unavailable",
+                    retryable=True,
+                )
+            return data
+        ctx.deferred_input_lines.append(line)
+
+
+def _secret_resolver_from_args(
+    ctx: DaemonContext,
+    args: Mapping[str, Any],
+) -> Any:
+    if not _desktop_secret_store_bridge_enabled(args):
+        return None
+
+    def _resolve(ref: dict[str, Any]) -> str | None:
+        data = _secret_store_bridge_request(
+            ctx,
+            op="get",
+            provider_name=str(ref.get("provider_name") or ref.get("account") or ""),
+            store_id=str(ref.get("store_id") or ""),
+            service=str(ref.get("service") or ""),
+            account=str(ref.get("account") or ref.get("provider_name") or ""),
+        )
+        state = str(data.get("state") or "")
+        if state != "ok":
+            return None
+        secret = data.get("secret")
+        return secret if isinstance(secret, str) else None
+
+    return _resolve
+
+
+def _resolve_ai_provider_api_key(
+    ctx: DaemonContext,
+    provider: dict[str, Any],
+    args: Mapping[str, Any],
+) -> str | None:
+    return get_ai_provider_api_key_for_use(
+        provider,
+        conn=ctx.conn,
+        secret_resolver=_secret_resolver_from_args(ctx, args),
+    )
+
+
+def _ai_provider_secret_service_account(provider: dict[str, Any]) -> tuple[str, str]:
+    ref = _provider_secret_ref_for_bridge(provider)
+    return str(ref["service"]), str(ref.get("account") or provider["name"])
+
+
+def _set_ai_provider_key_with_selected_store(
+    ctx: DaemonContext,
+    args: Mapping[str, Any],
+    *,
+    name: str,
+    api_key: str | None,
+) -> dict[str, Any]:
+    target_store_id = (
+        str(args.get("store_id"))
+        if isinstance(args.get("store_id"), str) and args.get("store_id")
+        else _desktop_secret_store_default(args)
+    )
+    target_store_id = _validate_ai_provider_secret_store_id(target_store_id)
+    if target_store_id == "sqlcipher_inline":
+        return set_db_ai_provider_api_key(ctx.conn, name, api_key)
+    if not _desktop_secret_store_bridge_enabled(args):
+        raise AppError(
+            "native AI provider secret storage is available only in the desktop app",
+            code="secret_store_unavailable",
+            hint="Use SQLCipher inline storage or reopen this project in the desktop app.",
+            retryable=True,
+        )
+    provider = get_db_ai_provider(ctx.conn, name)
+    service, account = _ai_provider_secret_service_account(provider)
+    if api_key is None:
+        _secret_store_bridge_request(
+            ctx,
+            op="delete",
+            provider_name=name,
+            store_id=target_store_id,
+            service=service,
+            account=account,
+        )
+        return set_db_ai_provider_api_key(ctx.conn, name, None)
+    _secret_store_bridge_request(
+        ctx,
+        op="set",
+        provider_name=name,
+        store_id=target_store_id,
+        service=service,
+        account=account,
+        secret=api_key,
+    )
+    return set_db_ai_provider_native_secret_ref(
+        ctx.conn,
+        name,
+        store_id=target_store_id,
+        service=service,
+        account=account,
+        state="ok",
+    )
+
+
+def _move_ai_provider_key(
+    ctx: DaemonContext,
+    args: Mapping[str, Any],
+    *,
+    name: str,
+    target_store_id: str,
+    api_key: str | None,
+) -> dict[str, Any]:
+    provider = get_db_ai_provider(ctx.conn, name)
+    current_ref = provider.get("secret_ref") or {}
+    current_store_id = current_ref.get("store_id") or "sqlcipher_inline"
+    target_store_id = _validate_ai_provider_secret_store_id(target_store_id)
+    key_to_move = str_or_none(api_key) or str_or_none(provider.get("api_key"))
+
+    if target_store_id != "sqlcipher_inline" and not _desktop_secret_store_bridge_enabled(args):
+        raise AppError(
+            "native AI provider secret storage is available only in the desktop app",
+            code="secret_store_unavailable",
+            retryable=True,
+        )
+
+    if key_to_move is None and current_store_id != "sqlcipher_inline":
+        key_to_move = _resolve_ai_provider_api_key(ctx, provider, args)
+
+    if key_to_move is None:
+        raise AppError(
+            "AI provider key must be re-entered before it can be moved",
+            code="secret_ref_unavailable",
+            hint="Re-enter the provider API key in Settings, then retry the storage move.",
+            details={"refs": [_provider_secret_ref_for_bridge(provider)]},
+            retryable=True,
+        )
+
+    if target_store_id == "sqlcipher_inline":
+        updated = set_db_ai_provider_api_key(ctx.conn, name, key_to_move)
+        if current_store_id != "sqlcipher_inline" and _desktop_secret_store_bridge_enabled(args):
+            service, account = _ai_provider_secret_service_account(provider)
+            _secret_store_bridge_request(
+                ctx,
+                op="delete",
+                provider_name=name,
+                store_id=current_store_id,
+                service=service,
+                account=account,
+            )
+        return updated
+
+    service, account = _ai_provider_secret_service_account(provider)
+    _secret_store_bridge_request(
+        ctx,
+        op="set",
+        provider_name=name,
+        store_id=target_store_id,
+        service=service,
+        account=account,
+        secret=key_to_move,
+    )
+    return set_db_ai_provider_native_secret_ref(
+        ctx.conn,
+        name,
+        store_id=target_store_id,
+        service=service,
+        account=account,
+        state="ok",
+    )
+
+
+def _delete_native_ai_provider_secret(
+    ctx: DaemonContext,
+    args: Mapping[str, Any],
+    provider: Mapping[str, Any],
+) -> None:
+    ref = provider.get("secret_ref") or {}
+    store_id = ref.get("store_id") or "sqlcipher_inline"
+    if store_id == "sqlcipher_inline" or not _desktop_secret_store_bridge_enabled(args):
+        return
+    service, account = _ai_provider_secret_service_account(dict(provider))
+    _secret_store_bridge_request(
+        ctx,
+        op="delete",
+        provider_name=str(provider.get("name") or account),
+        store_id=str(store_id),
+        service=service,
+        account=account,
+    )
+
+
+def _refresh_ai_provider_native_secret_states(
+    ctx: DaemonContext,
+    args: Mapping[str, Any],
+) -> None:
+    if not _desktop_secret_store_bridge_enabled(args):
+        return
+    for provider in list_db_ai_providers(ctx.conn):
+        ref = provider.get("secret_ref") or {}
+        store_id = ref.get("store_id")
+        if not store_id or store_id == "sqlcipher_inline" or ref.get("state") != "ok":
+            continue
+        try:
+            secret = _resolve_ai_provider_api_key(ctx, provider, args)
+        except AppError:
+            continue
+        if not str_or_none(secret):
+            mark_ai_provider_secret_ref_state(ctx.conn, provider["name"], "missing")
+            ctx.conn.commit()
 
 
 def _status_payload_from_parts(
@@ -1770,6 +2111,7 @@ def _ai_chat_args(args: dict) -> dict[str, Any]:
         "tool_loop_max_iterations": tool_loop_max_iterations,
         "system_prompt_kind": system_prompt_kind,
         "system_prompt": system_prompt,
+        "_desktop_secret_store_bridge": args.get("_desktop_secret_store_bridge"),
     }
 
 
@@ -6220,6 +6562,8 @@ def handle_request(
         )
 
     if kind == "ai.providers.list":
+        args = _coerce_args_dict(request_id, request.get("args"))
+        _refresh_ai_provider_native_secret_states(ctx, args)
         return (
             _with_request_id(
                 build_envelope("ai.providers.list", list_ai_providers_with_default(ctx.conn)),
@@ -6307,10 +6651,41 @@ def handle_request(
         api_key = args.get("api_key")
         if api_key is not None and not isinstance(api_key, str):
             raise AppError("ai.providers.set_api_key api_key must be a string or null", code="validation")
-        updated = set_db_ai_provider_api_key(ctx.conn, name, api_key)
+        updated = _set_ai_provider_key_with_selected_store(
+            ctx,
+            args,
+            name=name,
+            api_key=api_key,
+        )
         return (
             _with_request_id(
                 build_envelope("ai.providers.set_api_key", _ai_provider_redacted(ctx, updated)),
+                request_id,
+            ),
+            False,
+        )
+
+    if kind == "ai.providers.move_api_key":
+        args = _coerce_args_dict(request_id, request.get("args"))
+        name = args.get("name")
+        if not isinstance(name, str):
+            raise AppError("ai.providers.move_api_key requires a name string", code="validation")
+        target_store_id = args.get("store_id")
+        if not isinstance(target_store_id, str) or not target_store_id.strip():
+            raise AppError("ai.providers.move_api_key requires store_id", code="validation")
+        api_key = args.get("api_key")
+        if api_key is not None and not isinstance(api_key, str):
+            raise AppError("ai.providers.move_api_key api_key must be a string or null", code="validation")
+        updated = _move_ai_provider_key(
+            ctx,
+            args,
+            name=name,
+            target_store_id=target_store_id,
+            api_key=api_key,
+        )
+        return (
+            _with_request_id(
+                build_envelope("ai.providers.move_api_key", _ai_provider_redacted(ctx, updated)),
                 request_id,
             ),
             False,
@@ -6321,6 +6696,8 @@ def handle_request(
         name = args.get("name")
         if not isinstance(name, str):
             raise AppError("ai.providers.delete requires a name string", code="validation")
+        provider = get_db_ai_provider(ctx.conn, name)
+        _delete_native_ai_provider_secret(ctx, args, provider)
         return (
             _with_request_id(
                 build_envelope("ai.providers.delete", delete_db_ai_provider(ctx.conn, name)),
@@ -6356,6 +6733,7 @@ def handle_request(
         name = args.get("name")
         if not isinstance(name, str):
             raise AppError("ai.providers.get requires a name string", code="validation")
+        _refresh_ai_provider_native_secret_states(ctx, args)
         return (
             _with_request_id(
                 build_envelope("ai.providers.get", _ai_provider_redacted(ctx, get_db_ai_provider(ctx.conn, name))),
@@ -6385,7 +6763,7 @@ def handle_request(
         provider = resolve_ai_provider(ctx.conn, provider_name)
         client = ai_client_for_locator(
             base_url=provider["base_url"],
-            api_key=get_ai_provider_api_key_for_use(provider),
+            api_key=_resolve_ai_provider_api_key(ctx, provider, args),
         )
         return (
             _with_request_id(
@@ -6437,7 +6815,7 @@ def handle_request(
                 except AppError:
                     stored = None
                 if stored:
-                    api_key_text = get_ai_provider_api_key_for_use(stored) or ""
+                    api_key_text = _resolve_ai_provider_api_key(ctx, stored, args) or ""
         # Use a tight timeout so a dead URL surfaces a clean error before
         # the Tauri supervisor's `DAEMON_INVOKE_TIMEOUT` (15s) kills the
         # daemon process. Test connection is interactive — a 10s ceiling
@@ -6485,7 +6863,7 @@ def handle_request(
         provider_snapshot = {
             "name": provider["name"],
             "base_url": provider["base_url"],
-            "api_key": get_ai_provider_api_key_for_use(provider),
+            "api_key": _resolve_ai_provider_api_key(ctx, provider, validated),
             "kind": provider["kind"],
         }
         runtime = AiToolRuntime(
@@ -6669,6 +7047,7 @@ def run(
     input_stream = stdin or sys.stdin
     output_stream = stdout or sys.stdout
     out = _OutputChannel(output_stream)
+    input_lines = _start_stdin_reader(input_stream)
     ctx = DaemonContext(
         conn=conn,
         data_root=args.data_root,
@@ -6678,8 +7057,10 @@ def run(
         auth_backoff=AuthAttemptBackoff(
             str(resolve_config_root(args.data_root) / AUTH_BACKOFF_FILENAME)
         ),
+        input_lines=input_lines,
+        deferred_input_lines=[],
+        out=out,
     )
-    input_lines = _start_stdin_reader(input_stream)
 
     out.write(
         build_envelope(
@@ -6694,14 +7075,14 @@ def run(
     while True:
         _drain_daemon_main_thread_tasks(ctx)
         try:
-            line = input_lines.get(timeout=0.05)
+            line = _next_input_line(ctx, timeout=0.05)
         except queue.Empty:
             continue
         if line == "":
             break
         if len(line) > MAX_REQUEST_LINE_CHARS:
             while line and not line.endswith("\n"):
-                line = input_lines.get()
+                line = _next_input_line(ctx)
             out.write(
                 _error_envelope(
                     "request_too_large",
@@ -6738,6 +7119,8 @@ def run(
                     retryable=False,
                 ),
             )
+            continue
+        if request.get("kind") == _SECRET_STORE_CONTROL_RESPONSE_KIND:
             continue
 
         try:

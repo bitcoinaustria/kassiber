@@ -460,9 +460,10 @@ and [docs/plan/04-desktop-ui.md](docs/plan/04-desktop-ui.md).
   `--api-key <value>` argv form remains a warning-on-use shim for scripts.
   Claude/Codex CLI providers use local CLI auth and do not add Kassiber
   API-key storage.
-- [x] Document the desktop secret-management boundary model for the AI-key
-  pilot: SQLCipher remains the DB/accounting at-rest perimeter, OS credential
-  stores are probe-only for now, backend tokens/descriptors/blinding keys stay
+- [x] Implement and document the desktop secret-management boundary model for
+  the AI-key pilot: SQLCipher remains the DB/accounting at-rest perimeter,
+  desktop native stores can hold AI provider API keys only behind the narrow
+  daemon/supervisor bridge, backend tokens/descriptors/blinding keys stay
   SQLCipher-protected, and no runtime or OS-compromise protection claims are
   made. See `docs/plan/10-secret-management.md`.
 - [ ] Split wallet descriptor and other sensitive config out of the generic

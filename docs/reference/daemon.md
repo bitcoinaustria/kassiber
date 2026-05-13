@@ -108,9 +108,11 @@ material.
 `{"name":"provider","api_key":"..."}` or `{"name":"provider","api_key":null}`.
 It is the desktop API-key rotate/re-enter path. The terminal envelope is
 redacted and contains `has_api_key` plus `secret_ref.{store_id,state}`, never
-the raw key. In this PR the production store is still `sqlcipher_inline`;
-future OS-backed refs that cannot be read must return `secret_ref_unavailable`
-with `details.refs` and a Settings repair path.
+the raw key. `ai.providers.move_api_key` accepts
+`{"name":"provider","store_id":"sqlcipher_inline|macos_keychain|windows_dpapi|linux_secret_service"}`
+and moves an existing provider key through the desktop-only native-store bridge.
+OS-backed refs that cannot be read return `secret_ref_unavailable` with
+`details.refs` and a Settings repair path.
 `ai.providers.create`, `ai.providers.update`, and `ai.test_connection` reject
 caller-supplied `api_key`; desktop callers must set or rotate keys through
 `ai.providers.set_api_key` and then test the stored provider.
