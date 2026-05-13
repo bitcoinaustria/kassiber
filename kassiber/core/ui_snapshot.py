@@ -1580,8 +1580,10 @@ def _capital_gains_neutral_swap_rows(
                 "feeSats": _ui_sat_amount(fee_msat),
                 "feeKind": row["swap_fee_kind"],
                 "costEur": float(row["cost_basis"] or 0),
-                "proceedsEur": float(row["proceeds"] or 0),
-                "gainEur": float(row["gain_loss"] or 0),
+                "proceedsEur": float(row["cost_basis"] or 0),
+                "gainEur": 0.0,
+                "marketValueEur": float(row["proceeds"] or 0),
+                "marketDeltaEur": float(row["gain_loss"] or 0),
             }
         )
     return output
@@ -1842,12 +1844,24 @@ def build_journal_events_list_snapshot(
     summary_rows = conn.execute(
         """
         SELECT
-            entry_type,
+            CASE
+                WHEN at_category = 'neu_swap' THEN 'neutral_swap'
+                ELSE entry_type
+            END AS entry_type,
             COUNT(*) AS count,
-            SUM(COALESCE(gain_loss, 0)) AS gain_loss
+            SUM(
+                CASE
+                    WHEN at_category = 'neu_swap' THEN 0
+                    ELSE COALESCE(gain_loss, 0)
+                END
+            ) AS gain_loss
         FROM journal_entries
         WHERE profile_id = ?
-        GROUP BY entry_type
+        GROUP BY
+            CASE
+                WHEN at_category = 'neu_swap' THEN 'neutral_swap'
+                ELSE entry_type
+            END
         ORDER BY count DESC, entry_type ASC
         """,
         (profile["id"],),
@@ -1859,7 +1873,8 @@ def build_journal_events_list_snapshot(
         FROM journal_entries
         WHERE profile_id = ?
           AND (
-            entry_type IN ('disposal', 'income', 'fee', 'transfer_fee')
+            (entry_type = 'disposal' AND COALESCE(at_category, '') != 'neu_swap')
+            OR entry_type IN ('income', 'fee', 'transfer_fee')
             OR at_kennzahl IS NOT NULL
           )
         """,
@@ -1928,7 +1943,11 @@ def build_journal_events_list_snapshot(
                 "transactionDirection": row["transaction_direction"] or "",
                 "occurredAt": row["occurred_at"],
                 "createdAt": row["created_at"],
-                "entryType": row["entry_type"],
+                "entryType": (
+                    "neutral_swap"
+                    if row["at_category"] == "neu_swap"
+                    else row["entry_type"]
+                ),
                 "wallet": row["wallet"],
                 "account": row["account"],
                 "accountLabel": row["account_label"],
@@ -1941,10 +1960,31 @@ def build_journal_events_list_snapshot(
                     float(row["cost_basis"]) if row["cost_basis"] is not None else None
                 ),
                 "proceedsEur": (
-                    float(row["proceeds"]) if row["proceeds"] is not None else None
+                    float(row["cost_basis"])
+                    if row["at_category"] == "neu_swap"
+                    and row["cost_basis"] is not None
+                    else float(row["proceeds"])
+                    if row["proceeds"] is not None
+                    else None
                 ),
                 "gainLossEur": (
-                    float(row["gain_loss"]) if row["gain_loss"] is not None else None
+                    0.0
+                    if row["at_category"] == "neu_swap"
+                    else float(row["gain_loss"])
+                    if row["gain_loss"] is not None
+                    else None
+                ),
+                "marketValueEur": (
+                    float(row["proceeds"])
+                    if row["at_category"] == "neu_swap"
+                    and row["proceeds"] is not None
+                    else None
+                ),
+                "marketDeltaEur": (
+                    float(row["gain_loss"])
+                    if row["at_category"] == "neu_swap"
+                    and row["gain_loss"] is not None
+                    else None
                 ),
                 "pricingSourceKind": row["pricing_source_kind"] or "",
                 "pricingQuality": row["pricing_quality"] or "",

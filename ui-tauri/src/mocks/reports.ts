@@ -109,6 +109,8 @@ export interface NeutralSwapLot {
   costEur: number;
   proceedsEur: number;
   gainEur: number;
+  marketValueEur?: number;
+  marketDeltaEur?: number;
 }
 
 export interface KennzahlRow {

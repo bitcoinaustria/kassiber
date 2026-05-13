@@ -7,6 +7,7 @@ import {
   FileSearch,
   Search,
   ShieldAlert,
+  X,
 } from "lucide-react";
 import {
   useMemo,
@@ -47,12 +48,15 @@ export interface ReviewTableRow {
   owner: string;
   evidenceHint?: string;
   nextAction?: string;
+  metricFilterIds?: string[];
 }
 
 export interface ReviewMetric {
   label: string;
   value: number | string;
   tone: ReviewTone;
+  filterId?: string;
+  filterLabel?: string;
 }
 
 interface ReviewDataTableProps {
@@ -66,6 +70,7 @@ interface ReviewDataTableProps {
   metrics?: ReviewMetric[];
   tableTitle?: string;
   tableDescription?: string;
+  tableDescriptionDetail?: string;
   searchPlaceholder?: string;
   emptyMessage?: string;
   badgeLabel?: string;
@@ -129,6 +134,7 @@ export function ReviewDataTable({
   metrics,
   tableTitle,
   tableDescription,
+  tableDescriptionDetail,
   searchPlaceholder,
   emptyMessage,
   badgeLabel,
@@ -138,6 +144,7 @@ export function ReviewDataTable({
   const [globalFilter, setGlobalFilter] = useState("");
   const [statusFilter, setStatusFilter] =
     useState<ReviewTableRow["status"] | "All">("All");
+  const [metricFilterId, setMetricFilterId] = useState<string | null>(null);
   const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
   const [pageIndex, setPageIndex] = useState(0);
 
@@ -151,6 +158,8 @@ export function ReviewDataTable({
   const filteredRows = useMemo(() => {
     const query = globalFilter.trim().toLowerCase();
     const filtered = rows.filter((row) => {
+      const matchesMetric =
+        !metricFilterId || row.metricFilterIds?.includes(metricFilterId);
       const matchesStatus =
         statusFilter === "All" || row.status === statusFilter;
       const matchesQuery =
@@ -173,14 +182,14 @@ export function ReviewDataTable({
           .join(" ")
           .toLowerCase()
           .includes(query);
-      return matchesStatus && matchesQuery;
+      return matchesMetric && matchesStatus && matchesQuery;
     });
     return filtered.sort((a, b) =>
       sortDirection === "desc"
         ? b.date.localeCompare(a.date)
         : a.date.localeCompare(b.date),
     );
-  }, [globalFilter, rows, sortDirection, statusFilter]);
+  }, [globalFilter, metricFilterId, rows, sortDirection, statusFilter]);
   const pageSize = 8;
   const pageCount = Math.max(Math.ceil(filteredRows.length / pageSize), 1);
   const currentPage = Math.min(pageIndex, pageCount - 1);
@@ -188,7 +197,8 @@ export function ReviewDataTable({
     currentPage * pageSize,
     currentPage * pageSize + pageSize,
   );
-  const hasActiveFilters = statusFilter !== "All" || Boolean(globalFilter);
+  const hasActiveFilters =
+    metricFilterId !== null || statusFilter !== "All" || Boolean(globalFilter);
   const metricsToShow =
     metrics ??
     [
@@ -201,9 +211,22 @@ export function ReviewDataTable({
         tone: highCount ? "alert" : "neutral",
       },
     ];
+  const visibleMetricCount = Math.min(metricsToShow.length, 5);
+  const activeMetric = metricFilterId
+    ? metricsToShow.find((metric) => metric.filterId === metricFilterId)
+    : null;
+  const renderedTableDescription = tableDescriptionDetail
+    ? `${filteredRows.length.toLocaleString("en-US")} shown · ${tableDescriptionDetail}`
+    : tableDescription ??
+      `${filteredRows.length} shown · ${resolvedCount} resolved`;
 
   const updateStatusFilter = (status: ReviewTableRow["status"] | "All") => {
     setStatusFilter(status);
+    setPageIndex(0);
+  };
+
+  const updateMetricFilter = (filterId: string) => {
+    setMetricFilterId(filterId === "all" ? null : filterId);
     setPageIndex(0);
   };
 
@@ -249,13 +272,25 @@ export function ReviewDataTable({
       </div>
 
       <div className="rounded-xl border bg-card">
-        <div className="grid grid-cols-2 divide-x-0 divide-y divide-border sm:grid-cols-4 sm:divide-x sm:divide-y-0">
-          {metricsToShow.slice(0, 4).map((metric) => (
+        <div
+          className={cn(
+            "grid grid-cols-2 divide-x-0 divide-y divide-border sm:divide-x sm:divide-y-0",
+            visibleMetricCount >= 5 ? "sm:grid-cols-5" : "sm:grid-cols-4",
+          )}
+        >
+          {metricsToShow.slice(0, 5).map((metric) => (
             <QueueMetric
               key={metric.label}
               label={metric.label}
               value={metric.value}
               tone={metric.tone}
+              filterId={metric.filterId}
+              active={
+                metric.filterId === "all"
+                  ? metricFilterId === null
+                  : metric.filterId === metricFilterId
+              }
+              onFilter={updateMetricFilter}
             />
           ))}
         </div>
@@ -274,8 +309,7 @@ export function ReviewDataTable({
                   (kind === "tax-events" ? "Review records" : "Blocked records")}
               </h2>
               <p className="text-[10px] text-muted-foreground sm:text-xs">
-                {tableDescription ??
-                  `${filteredRows.length} shown · ${resolvedCount} resolved`}
+                {renderedTableDescription}
               </p>
             </div>
           </div>
@@ -326,12 +360,24 @@ export function ReviewDataTable({
               size="sm"
               className="h-7 px-2 text-xs"
               onClick={() => {
+                setMetricFilterId(null);
                 updateStatusFilter("All");
                 updateGlobalFilter("");
               }}
             >
               Clear all
             </Button>
+            {activeMetric ? (
+              <button
+                type="button"
+                className="inline-flex h-7 items-center gap-1.5 rounded-md border bg-background px-2 text-xs text-foreground transition-colors hover:bg-muted"
+                onClick={() => updateMetricFilter("all")}
+                aria-label={`Clear ${activeMetric.filterLabel ?? activeMetric.label} filter`}
+              >
+                {activeMetric.filterLabel ?? activeMetric.label}
+                <X className="size-3" aria-hidden="true" />
+              </button>
+            ) : null}
           </div>
         ) : null}
 
@@ -432,22 +478,48 @@ function QueueMetric({
   label,
   value,
   tone,
+  filterId,
+  active,
+  onFilter,
 }: {
   label: string;
   value: number | string;
   tone: ReviewTone;
+  filterId?: string;
+  active?: boolean;
+  onFilter?: (filterId: string) => void;
 }) {
   const formattedValue =
     typeof value === "number" ? value.toLocaleString("en-US") : value;
-  return (
-    <div className="space-y-2 p-3 sm:p-4">
+  const className = cn(
+    "min-w-0 space-y-2 p-3 text-left sm:p-4",
+    filterId &&
+      "relative w-full cursor-pointer transition-colors hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
+    active && "bg-primary/5 ring-1 ring-primary/30 ring-inset",
+  );
+  const content = (
+    <>
       <p className="text-xs font-medium text-muted-foreground sm:text-sm">
         {label}
       </p>
       <p className={cn("text-2xl font-semibold tabular-nums", toneTextStyles[tone])}>
         {formattedValue}
       </p>
-    </div>
+    </>
+  );
+  if (!filterId || !onFilter) {
+    return <div className={className}>{content}</div>;
+  }
+  return (
+    <button
+      type="button"
+      className={className}
+      onClick={() => onFilter(filterId)}
+      aria-pressed={active}
+      aria-label={`${filterId === "all" ? "Show all" : "Filter"} ${label}`}
+    >
+      {content}
+    </button>
   );
 }
 
