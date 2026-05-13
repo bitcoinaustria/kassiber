@@ -20,6 +20,7 @@ Covers the round-trips the plan calls out as table-stakes:
 
 from __future__ import annotations
 
+import json
 import os
 import shutil
 import sqlite3
@@ -27,7 +28,9 @@ import tarfile
 import tempfile
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
 
+from kassiber.backup.cli import cmd_backup_import
 from kassiber.backup.pack import export_backup, import_backup
 from kassiber.backup.safe_tar import (
     UnsafeTarMember,
@@ -372,6 +375,184 @@ class BackupRoundTripTests(unittest.TestCase):
                 )
             finally:
                 conn.close()
+
+    def test_restore_surfaces_os_backed_ai_secret_refs_without_values(self):
+        with tempfile.TemporaryDirectory() as root:
+            data_root = Path(root) / "data"
+            data_root.mkdir()
+            seed = open_db(str(data_root))
+            seed.execute(
+                """
+                INSERT INTO ai_providers(
+                    name, base_url, api_key, default_model, kind, notes,
+                    acknowledged_at, created_at, updated_at
+                ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    "cloud",
+                    "https://example.test/v1",
+                    None,
+                    "model-a",
+                    "remote",
+                    None,
+                    None,
+                    "2026-05-13T00:00:00Z",
+                    "2026-05-13T00:00:00Z",
+                ),
+            )
+            seed.execute(
+                """
+                INSERT INTO ai_provider_secret_refs(
+                    provider_name, store_id, service, account, state,
+                    created_at, rotated_at
+                ) VALUES(?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    "cloud",
+                    "macos_keychain",
+                    "service-hash",
+                    "cloud",
+                    "ok",
+                    "2026-05-13T00:00:00Z",
+                    "2026-05-13T00:00:00Z",
+                ),
+            )
+            seed.commit()
+            seed.close()
+            migrate_plaintext_to_encrypted(data_root / "kassiber.sqlite3", "db-pass")
+
+            backup_path = Path(root) / "snap.kassiber"
+            exported = export_backup(
+                str(data_root),
+                backup_path,
+                "db-pass",
+                backup_passphrase="outer-pass",
+            )
+            manifest_json = json.dumps(exported.manifest, sort_keys=True)
+            self.assertNotIn("api_key", manifest_json)
+            self.assertEqual(
+                exported.manifest["secret_refs"]["ai_provider_refs"],
+                [
+                    {
+                        "provider_name": "cloud",
+                        "store_id": "macos_keychain",
+                        "service": "service-hash",
+                        "account": "cloud",
+                        "state": "ok",
+                    }
+                ],
+            )
+
+            result = import_backup(
+                backup_path,
+                Path(root) / "unused",
+                backup_passphrase="outer-pass",
+                move_into_place=False,
+            )
+            try:
+                self.assertEqual(
+                    result.secret_ref_unavailable,
+                    [
+                        {
+                            "provider_name": "cloud",
+                            "store_id": "macos_keychain",
+                            "service": "service-hash",
+                            "account": "cloud",
+                            "state": "unavailable",
+                        }
+                    ],
+                )
+            finally:
+                if result.staging_path:
+                    shutil.rmtree(result.staging_path.parent)
+
+            read_fd, write_fd = os.pipe()
+            os.write(write_fd, b"outer-pass")
+            os.close(write_fd)
+            try:
+                envelope = cmd_backup_import(
+                    SimpleNamespace(
+                        archive=str(backup_path),
+                        identity_file=None,
+                        backup_passphrase_fd=read_fd,
+                        target_data_root=None,
+                        data_root=str(Path(root) / "cli-restore"),
+                        install=False,
+                    )
+                )
+            finally:
+                try:
+                    os.close(read_fd)
+                except OSError:
+                    pass
+            staging_path = envelope["data"]["staging_path"]
+            try:
+                warning = envelope["data"]["secret_ref_unavailable"]
+                self.assertEqual(warning["code"], "secret_ref_unavailable")
+                self.assertEqual(
+                    warning["details"]["refs"][0]["store_id"], "macos_keychain"
+                )
+                self.assertEqual(
+                    warning["details"]["refs"][0]["state"], "unavailable"
+                )
+            finally:
+                if staging_path:
+                    shutil.rmtree(Path(staging_path).parent)
+
+    def test_export_refuses_os_backed_ai_ref_with_inline_secret(self):
+        with tempfile.TemporaryDirectory() as root:
+            data_root = Path(root) / "data"
+            data_root.mkdir()
+            seed = open_db(str(data_root))
+            seed.execute(
+                """
+                INSERT INTO ai_providers(
+                    name, base_url, api_key, default_model, kind, notes,
+                    acknowledged_at, created_at, updated_at
+                ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    "cloud",
+                    "https://example.test/v1",
+                    "sk-inline-secret",
+                    "model-a",
+                    "remote",
+                    None,
+                    None,
+                    "2026-05-13T00:00:00Z",
+                    "2026-05-13T00:00:00Z",
+                ),
+            )
+            seed.execute(
+                """
+                INSERT INTO ai_provider_secret_refs(
+                    provider_name, store_id, service, account, state,
+                    created_at, rotated_at
+                ) VALUES(?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    "cloud",
+                    "macos_keychain",
+                    "service-hash",
+                    "cloud",
+                    "ok",
+                    "2026-05-13T00:00:00Z",
+                    "2026-05-13T00:00:00Z",
+                ),
+            )
+            seed.commit()
+            seed.close()
+            migrate_plaintext_to_encrypted(data_root / "kassiber.sqlite3", "db-pass")
+
+            with self.assertRaises(AppError) as ctx:
+                export_backup(
+                    str(data_root),
+                    Path(root) / "snap.kassiber",
+                    "db-pass",
+                    backup_passphrase="outer-pass",
+                )
+            self.assertEqual(ctx.exception.code, "secret_ref_inline_secret")
+            self.assertNotIn("sk-inline-secret", json.dumps(ctx.exception.details))
 
     def test_stage_only_import_removes_decrypted_tarball(self):
         with tempfile.TemporaryDirectory() as root:

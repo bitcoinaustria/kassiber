@@ -151,10 +151,14 @@ update envelopes.
 Current storage is `sqlcipher_inline`: the key remains in the SQLCipher
 database and provider envelopes expose only `has_api_key` plus
 `secret_ref.{store_id,state}`. The AI-only `ai_provider_secret_refs` schema is
-present so future OS-backed stores can record non-secret refs, but this PR does
-not store production secrets in macOS Keychain, Windows Credential Manager, or
-Linux Secret Service yet. Backend tokens, descriptors, xpubs, and blinding keys
-stay SQLCipher-protected. See
+present so future OS-backed stores can record non-secret refs. Backup export
+records only that ref metadata for non-inline AI keys and refuses inconsistent
+rows where a non-inline ref still has an inline `api_key`; backup import
+surfaces a non-fatal `secret_ref_unavailable` warning so Settings can prompt for
+re-entry.
+This PR does not store production secrets in macOS Keychain, Windows Credential
+Manager, or Linux Secret Service yet. Backend tokens, descriptors, xpubs, and
+blinding keys stay SQLCipher-protected. See
 [`../plan/10-secret-management.md`](../plan/10-secret-management.md).
 
 Reasoning-capable models surface chain-of-thought through one of two

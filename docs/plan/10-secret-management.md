@@ -64,7 +64,7 @@ or CLI provider is selected.
 | CLI argv for AI keys | `kassiber/cli/main.py:1359`, `kassiber/cli/main.py:1378`, `kassiber/cli/main.py:2639` | `--api-key-stdin` / `--api-key-fd` are preferred; `--api-key` remains a warning-on-use shim. | Legacy argv values can still land in shell history/process listings. |
 | AI provider daemon envelopes | `kassiber/ai/providers.py:300`, `kassiber/daemon.py:6288` | Redacted provider payloads include `has_api_key` and `secret_ref.{store_id,state}` only. | The unlocked daemon can still read inline DB values to call the provider. |
 | AI provider DB schema | `kassiber/db.py:461`, `kassiber/db.py:473`, `kassiber/db.py:793` | AI-only `ai_provider_secret_refs` records store refs/state, not secret bytes. | `sqlcipher_inline` means the value is still in `ai_providers.api_key`. |
-| Missing OS-backed refs | `kassiber/ai/providers.py:250` | Non-inline unavailable refs raise `secret_ref_unavailable` with repair details. | No production OS-backed get/set exists in this PR. |
+| Missing OS-backed refs | `kassiber/backup/pack.py:122`, `kassiber/backup/pack.py:188`, `kassiber/backup/cli.py:113`, `kassiber/ai/providers.py:245` | Backup import reports non-inline AI refs as `secret_ref_unavailable`; use-time access raises the same code with repair details. | No production OS-backed get/set exists in this PR. |
 | Reveal descriptor/token envelopes | `kassiber/daemon.py:6496`, `kassiber/daemon.py:6542`, `kassiber/daemon.py:6626` | Reveal requires an `auth_required` passphrase round-trip and then returns the raw payload. | Reveal is a UX gate, not a second cryptographic boundary. |
 | AI tool previews/results | `kassiber/daemon.py:3580`, `kassiber/daemon.py:3658`, `kassiber/daemon.py:2659`, `kassiber/daemon.py:3280` | Mutating previews, streamed tool results, tool-message content, and auto-context entries pass through `redact_tool_arguments`. | Read-only business data can still be sent to the configured model. |
 | Tauri supervisor stderr/details | `ui-tauri/src-tauri/src/supervisor.rs:78`, `ui-tauri/src-tauri/src/supervisor.rs:83`, `ui-tauri/src-tauri/src/supervisor.rs:104`, `ui-tauri/src-tauri/src/supervisor.rs:909` | Structured error details and daemon stderr tails are redacted before becoming Tauri error payloads. | Runtime process memory and live devtools remain in the runtime boundary. |
@@ -86,7 +86,9 @@ For AI provider keys, the long-term desktop shape is:
 4. Keep `sqlcipher_inline` as the explicit fallback and restore-compatible
    mode.
 5. Surface missing refs as `secret_ref_unavailable` at restore time and use
-   time, with `details.refs` and a Settings repair path.
+   time, with `details.refs` and a Settings repair path. Backup export writes
+   only non-secret AI provider ref metadata to `manifest.secret_refs`; import
+   turns those OS-backed refs into an unavailable warning.
 
 This PR implements the schema, redacted envelopes, stdin/fd entry, daemon
 rotate/re-enter kind, desktop display, and Rust probe trait. It intentionally
@@ -200,8 +202,12 @@ Desktop:
 
 1. SQLCipher-inline keys restore with the DB because the value is inside the
    encrypted database.
-2. Future OS-backed refs restore only as refs. `.kassiber` backups must not
-   include OS-store secret values.
-3. If an OS-backed ref is missing or unavailable, reads return
+2. Future OS-backed refs restore only as refs. `.kassiber` backups record
+   `manifest.secret_refs.ai_provider_refs` metadata but must not include
+   OS-store secret values. Export refuses a non-inline AI ref if the legacy
+   inline `api_key` column is still populated for that provider.
+3. `backup import` returns a non-fatal `secret_ref_unavailable` warning with
+   `details.refs` when the manifest contains OS-backed refs.
+4. If an OS-backed ref is missing or unavailable at use time, reads return
    `secret_ref_unavailable` with `details.refs`.
-4. Settings prompts for re-entry and calls `ai.providers.set_api_key`.
+5. Settings prompts for re-entry and calls `ai.providers.set_api_key`.
