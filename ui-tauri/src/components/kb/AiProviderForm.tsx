@@ -139,8 +139,9 @@ export function AiProviderForm({
       const args: Record<string, unknown> = { base_url: trimmedUrl };
       const trimmedKey = apiKey.trim();
       if (trimmedKey) {
-        args.api_key = trimmedKey;
-      } else if (editing && initial) {
+        throw new Error("Save the provider before testing a new API key.");
+      }
+      if (editing && initial) {
         // Empty API-key field means "keep current key" — let the daemon
         // fall back to the stored value so the test exercises real creds.
         args.provider = initial.name;

@@ -386,6 +386,21 @@ class HttpErrorMappingTest(unittest.TestCase):
         self.assertFalse(app_err.retryable)
         self.assertIn("body", app_err.details)
 
+    def test_provider_error_body_redacts_echoed_secrets_and_truncates(self):
+        body = (
+            b'Authorization: Bearer sk-provider-header-secret {"api_key":"sk-provider-json-secret"} '
+            b"plain sk-provider-plain-secret "
+            + (b"x" * 2000)
+        )
+        app_err = _http_error_app_error(self._err(401, body))
+        encoded = json.dumps(app_err.details, sort_keys=True)
+        self.assertNotIn("sk-provider-header-secret", encoded)
+        self.assertNotIn("sk-provider-json-secret", encoded)
+        self.assertNotIn("sk-provider-plain-secret", encoded)
+        self.assertIn("[redacted", encoded)
+        self.assertTrue(app_err.details["body_truncated"])
+        self.assertLessEqual(len(app_err.details["body"]), 512)
+
     def test_404_is_request_invalid(self):
         app_err = _http_error_app_error(self._err(404))
         self.assertEqual(app_err.code, "ai_request_invalid")

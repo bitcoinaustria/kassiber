@@ -146,7 +146,9 @@ legacy `--api-key <value>` form still works as a warning-on-use compatibility
 shim, but docs and tests avoid it because argv can land in shell history and
 process listings. Desktop Settings uses the narrow `ai.providers.set_api_key`
 daemon kind to rotate/re-enter a key without echoing it in provider create or
-update envelopes.
+update envelopes. The daemon rejects `api_key` on `ai.providers.create`,
+`ai.providers.update`, and `ai.test_connection`; connection tests use the stored
+provider key after it has been saved.
 
 Current storage is `sqlcipher_inline`: the key remains in the SQLCipher
 database and provider envelopes expose only `has_api_key` plus
@@ -349,8 +351,10 @@ journal maintenance and returns report blockers. Stale journals may also be
 refreshed automatically before read/report tools as local maintenance. Wallet
 sync before report reads is disabled by default; it runs automatically only
 after `ui_maintenance_configure` enables that active-profile setting, or when
-the user explicitly approves a maintenance/sync call. When a model requests a
-mutating tool, the daemon emits
+the user explicitly approves a maintenance/sync call. Tool-call arguments are
+redacted before previews, stream events, auto-context entries, and tool-result
+content are returned to the model/UI. When a model requests a mutating tool, the
+daemon emits
 `ai.chat.tool_consent_required` with a short summary and redacted argument
 preview, then waits for:
 
