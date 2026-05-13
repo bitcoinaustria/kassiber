@@ -63,6 +63,7 @@ import {
   formatManualFiat,
   formatManualPrice,
   formatShortTxid,
+  formatSignedDisplayMoney,
   parseManualDecimal,
   pricingSelectionValue,
   pricingSourceLabel,
@@ -218,6 +219,19 @@ function SourceRecordRow({
   );
 }
 
+function formatSheetMoney(eur: number, btc: number, currency: Currency, sign = false) {
+  if (sign) return formatSignedDisplayMoney(eur, btc, currency);
+  return formatDisplayMoney(Math.abs(eur), Math.abs(btc), currency);
+}
+
+function balanceImpactDirection(transaction: Transaction, flow: ReturnType<typeof transactionFlow>) {
+  if (flow === "incoming") return 1;
+  if (flow === "outgoing") return -1;
+  if (transaction.direction === "Receive") return 1;
+  if (transaction.direction === "Send") return -1;
+  return 0;
+}
+
 export function TransactionDetailSheet({
   transaction,
   draft,
@@ -251,6 +265,7 @@ export function TransactionDetailSheet({
     draft,
   );
   const [tagInput, setTagInput] = React.useState("");
+  const [balanceCurrency, setBalanceCurrency] = React.useState<Currency>(currency);
 
   React.useEffect(() => {
     setActiveTab(initialTab);
@@ -259,7 +274,8 @@ export function TransactionDetailSheet({
   React.useEffect(() => {
     setLocalDraft(draft);
     setTagInput("");
-  }, [draft, transaction?.id]);
+    setBalanceCurrency(currency);
+  }, [currency, draft, transaction?.id]);
 
   if (!transaction || !localDraft) return null;
 
@@ -267,6 +283,16 @@ export function TransactionDetailSheet({
   const flow = transactionFlow(transaction);
   const explorer = explorerForTransaction(transaction, explorerSettings);
   const amountBtc = transactionBtc(transaction);
+  const feeBtc = transaction.feeBtc ?? 0;
+  const feeEur = transaction.feeEur ?? 0;
+  const impactDirection = balanceImpactDirection(transaction, flow);
+  const principalImpactBtc = impactDirection * amountBtc;
+  const principalImpactEur = impactDirection * transaction.amount;
+  const feeImpactBtc = feeBtc ? -feeBtc : 0;
+  const feeImpactEur = feeBtc ? -feeEur : 0;
+  const netImpactBtc = principalImpactBtc + feeImpactBtc;
+  const netImpactEur = principalImpactEur + feeImpactEur;
+  const pair = transaction.pair;
   const signedPrefix =
     flow === "incoming" ? "+" : flow === "outgoing" ? "-" : "";
   const tags = localDraft.tags;
@@ -410,12 +436,8 @@ export function TransactionDetailSheet({
         <div className="min-h-0 flex-1 overflow-y-auto">
           <div className="grid gap-4 p-4 sm:p-6 xl:grid-cols-[minmax(0,1fr)_340px]">
             <div className="min-w-0 space-y-4">
-              <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-                <DetailField
-                  label="Timestamp"
-                  value={transaction.date}
-                  copyValue={transaction.date}
-                />
+              <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+                <DetailField label="Timestamp" value={transaction.date} />
                 <DetailField
                   label="Wallet"
                   value={transaction.wallet ?? "Unassigned"}
@@ -436,6 +458,19 @@ export function TransactionDetailSheet({
                       : transaction.rate
                       ? `${currencyFormatter.format(transaction.rate)} / BTC`
                       : "Missing"
+                  }
+                  hidden={hideSensitive}
+                />
+                <DetailField
+                  label="Fee"
+                  value={
+                    feeBtc ? (
+                      <CurrencyToggleText className={blurClass(hideSensitive)}>
+                        {formatFee(transaction, currency)}
+                      </CurrencyToggleText>
+                    ) : (
+                      "None"
+                    )
                   }
                   hidden={hideSensitive}
                 />
@@ -509,7 +544,33 @@ export function TransactionDetailSheet({
                   </div>
                 </TabsContent>
 
-                <TabsContent value="ledger" className="mt-4">
+                <TabsContent value="ledger" className="mt-4 space-y-3">
+                  <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border bg-muted/20 px-3 py-2">
+                    <div>
+                      <div className="text-sm font-medium">Balance impact</div>
+                      <div className="text-xs text-muted-foreground">
+                        Principal movement and any separate fee shown side by side.
+                      </div>
+                    </div>
+                    <div className="flex rounded-md border bg-background p-0.5">
+                      {(["btc", "eur"] satisfies Currency[]).map((value) => (
+                        <button
+                          key={value}
+                          type="button"
+                          aria-pressed={balanceCurrency === value}
+                          onClick={() => setBalanceCurrency(value)}
+                          className={cn(
+                            "h-7 min-w-10 rounded px-2 text-xs font-medium transition-colors",
+                            balanceCurrency === value
+                              ? "bg-primary text-primary-foreground"
+                              : "text-muted-foreground hover:text-foreground",
+                          )}
+                        >
+                          {value === "btc" ? "BTC" : "EUR"}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
                   <div className="overflow-hidden rounded-md border">
                     <LedgerRow
                       label="Asset"
@@ -546,11 +607,89 @@ export function TransactionDetailSheet({
                       align="right"
                     />
                     <LedgerRow
-                      label="Running balance"
-                      value="Calculated after journal processing"
+                      label="Principal impact"
+                      value={
+                        impactDirection === 0 ? (
+                          "Paired movement"
+                        ) : (
+                          <span className={blurClass(hideSensitive)}>
+                            {formatSheetMoney(
+                              principalImpactEur,
+                              principalImpactBtc,
+                              balanceCurrency,
+                              true,
+                            )}
+                          </span>
+                        )
+                      }
+                      align="right"
+                      muted
+                    />
+                    <LedgerRow
+                      label="Fee impact"
+                      value={
+                        feeBtc ? (
+                          <span className={blurClass(hideSensitive)}>
+                            {formatSheetMoney(
+                              feeImpactEur,
+                              feeImpactBtc,
+                              balanceCurrency,
+                              true,
+                            )}
+                          </span>
+                        ) : (
+                          "-"
+                        )
+                      }
                       align="right"
                     />
+                    <LedgerRow
+                      label="Net wallet impact"
+                      value={
+                        <span className={blurClass(hideSensitive)}>
+                          {impactDirection === 0 && !feeBtc
+                            ? "See paired movement"
+                            : formatSheetMoney(
+                                netImpactEur,
+                                netImpactBtc,
+                                balanceCurrency,
+                                true,
+                              )}
+                        </span>
+                      }
+                      align="right"
+                      muted
+                    />
                   </div>
+                  {pair ? (
+                    <div className="overflow-hidden rounded-md border">
+                      <LedgerRow
+                        label="Paired movement"
+                        value={`${pair.outWallet ?? "Outgoing"} -> ${pair.inWallet ?? "Incoming"}`}
+                        align="right"
+                      />
+                      <LedgerRow
+                        label="Sent"
+                        value={`${Math.abs((pair.outAmountSat ?? 0) / 100_000_000).toFixed(8)} ${pair.outAsset ?? "BTC"}`}
+                        align="right"
+                      />
+                      <LedgerRow
+                        label="Received"
+                        value={`${Math.abs((pair.inAmountSat ?? 0) / 100_000_000).toFixed(8)} ${pair.inAsset ?? "BTC"}`}
+                        align="right"
+                      />
+                      <LedgerRow
+                        label="Pair fee"
+                        value={
+                          pair.feeSat
+                            ? formatBtcAmount(Math.abs(pair.feeSat / 100_000_000))
+                            : "-"
+                        }
+                        align="right"
+                        muted
+                      />
+                    </div>
+                  ) : null}
                 </TabsContent>
 
                 <TabsContent value="pricing" className="mt-4">

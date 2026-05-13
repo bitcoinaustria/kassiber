@@ -41,6 +41,7 @@ export interface Connection {
   syncMode?: string;
   syncSource?: string;
   sourceFormat?: string;
+  transactionCount?: number;
   addresses?: number;
   gap?: number;
   channels?: number;
@@ -73,6 +74,20 @@ export interface Tx {
   tags?: string[];
   note?: string;
   excluded?: boolean;
+  pair?: {
+    id: string;
+    type: "transfer" | "swap";
+    kind?: string | null;
+    policy?: string | null;
+    outWallet?: string | null;
+    outAsset?: string | null;
+    outAmountSat?: number;
+    inWallet?: string | null;
+    inAsset?: string | null;
+    inAmountSat?: number;
+    feeSat?: number;
+    feeKind?: string | null;
+  };
   conf: number;
   internal?: boolean;
 }

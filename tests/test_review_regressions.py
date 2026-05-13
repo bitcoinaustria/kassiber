@@ -546,7 +546,7 @@ class ReviewRegressionTest(unittest.TestCase):
         self.assertEqual(transactions["txs"][1]["amountSat"], 100_000_000)
         self.assertEqual(transactions["txs"][1]["eur"], 50_000)
 
-    def test_ui_snapshots_show_reviewed_swap_as_fee_row(self):
+    def test_ui_snapshots_show_reviewed_swap_movement_with_fee(self):
         conn = open_db(self.data_root)
         self.addCleanup(conn.close)
         now = "2026-01-01T00:00:00Z"
@@ -724,10 +724,19 @@ class ReviewRegressionTest(unittest.TestCase):
         self.assertEqual(overview_swap["tag"], "Swap")
         self.assertNotIn("tags", overview_swap)
         self.assertEqual(overview_swap["account"], "BTC Wallet -> Liquid Wallet")
-        self.assertEqual(overview_swap["counter"], "Swap fee - BTC -> LBTC")
-        self.assertEqual(overview_swap["amountSat"], -10_000)
+        self.assertEqual(overview_swap["counter"], "Swap BTC -> LBTC")
+        self.assertEqual(overview_swap["amountSat"], -10_000_000)
         self.assertEqual(overview_swap["feeSat"], 10_000)
-        self.assertAlmostEqual(overview_swap["eur"], -6.5)
+        self.assertAlmostEqual(overview_swap["eur"], -6500.0)
+        self.assertEqual(overview_swap["pair"]["outAmountSat"], 10_000_000)
+        self.assertEqual(overview_swap["pair"]["inAmountSat"], 9_990_000)
+        self.assertEqual(overview_swap["pair"]["feeSat"], 10_000)
+        connection_by_label = {
+            connection["label"]: connection
+            for connection in overview["connections"]
+        }
+        self.assertEqual(connection_by_label["Liquid Wallet"]["transactionCount"], 1)
+        self.assertAlmostEqual(connection_by_label["Liquid Wallet"]["balance"], 0.0999)
 
         transactions = build_transactions_snapshot(conn, {"limit": 10})
         swap_rows = [
@@ -738,7 +747,7 @@ class ReviewRegressionTest(unittest.TestCase):
         self.assertEqual(len(swap_rows), 1)
         self.assertEqual(swap_rows[0]["type"], "Swap")
         self.assertNotEqual(swap_rows[0]["type"], "Income")
-        self.assertEqual(swap_rows[0]["amountSat"], -10_000)
+        self.assertEqual(swap_rows[0]["amountSat"], -10_000_000)
         self.assertEqual(swap_rows[0]["feeSat"], 10_000)
 
         ascending = build_transactions_snapshot(
@@ -752,7 +761,7 @@ class ReviewRegressionTest(unittest.TestCase):
         ]
         self.assertEqual(len(ascending_swap), 1)
         self.assertEqual(ascending_swap[0]["id"], "swap-out-leg")
-        self.assertAlmostEqual(ascending_swap[0]["eur"], -6.5)
+        self.assertAlmostEqual(ascending_swap[0]["eur"], -6500.0)
 
         limited = build_transactions_snapshot(conn, {"limit": 2})
         self.assertEqual(
@@ -767,8 +776,8 @@ class ReviewRegressionTest(unittest.TestCase):
         self.assertEqual(len(outbound["txs"]), 1)
         self.assertEqual(outbound["txs"][0]["id"], "swap-out-leg")
         self.assertEqual(outbound["txs"][0]["type"], "Swap")
-        self.assertEqual(outbound["txs"][0]["amountSat"], -10_000)
-        self.assertAlmostEqual(outbound["txs"][0]["eur"], -6.5)
+        self.assertEqual(outbound["txs"][0]["amountSat"], -10_000_000)
+        self.assertAlmostEqual(outbound["txs"][0]["eur"], -6500.0)
 
         outbound_search = build_transactions_search_snapshot(
             conn,
@@ -1150,6 +1159,225 @@ class ReviewRegressionTest(unittest.TestCase):
         self.assertEqual(snapshot["year"], 2024)
         self.assertEqual(snapshot["availableYears"], [2024])
         self.assertEqual(snapshot["lots"], [])
+
+    def test_capital_gains_snapshot_splits_neutral_austrian_swap_rows(self):
+        conn = open_db(self.data_root)
+        self.addCleanup(conn.close)
+        now = "2026-01-01T00:00:00Z"
+        conn.execute(
+            "INSERT INTO workspaces(id, label, created_at) VALUES(?, ?, ?)",
+            ("ws-neutral-swap", "Main", now),
+        )
+        conn.execute(
+            """
+            INSERT INTO profiles(
+                id, workspace_id, label, fiat_currency, tax_country,
+                tax_long_term_days, gains_algorithm, last_processed_at,
+                last_processed_tx_count, created_at
+            ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                "pf-neutral-swap",
+                "ws-neutral-swap",
+                "Default",
+                "EUR",
+                "at",
+                365,
+                "FIFO",
+                now,
+                2,
+                now,
+            ),
+        )
+        conn.executemany(
+            """
+            INSERT INTO wallets(
+                id, workspace_id, profile_id, label, kind, config_json, created_at
+            ) VALUES(?, ?, ?, ?, ?, ?, ?)
+            """,
+            [
+                ("wal-lbtc-neutral", "ws-neutral-swap", "pf-neutral-swap", "Liquid", "descriptor", "{}", now),
+                ("wal-btc-neutral", "ws-neutral-swap", "pf-neutral-swap", "Onchain", "descriptor", "{}", now),
+            ],
+        )
+        conn.executemany(
+            """
+            INSERT INTO transactions(
+                id, workspace_id, profile_id, wallet_id, external_id, fingerprint,
+                occurred_at, confirmed_at, direction, asset, amount, fee,
+                fiat_currency, fiat_rate, fiat_value, fiat_price_source, kind,
+                description, counterparty, note, excluded, raw_json, created_at
+            ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            [
+                (
+                    "tx-neutral-out",
+                    "ws-neutral-swap",
+                    "pf-neutral-swap",
+                    "wal-lbtc-neutral",
+                    "neutral-out",
+                    "fp-neutral-out",
+                    "2026-03-14T17:30:10Z",
+                    "2026-03-14T17:30:20Z",
+                    "outbound",
+                    "LBTC",
+                    btc_to_msat("0.12426275"),
+                    btc_to_msat("0.00000509"),
+                    "EUR",
+                    61_878.46,
+                    7_689.18,
+                    "import",
+                    "withdrawal",
+                    "Liquid peg-out",
+                    None,
+                    None,
+                    0,
+                    "{}",
+                    now,
+                ),
+                (
+                    "tx-neutral-in",
+                    "ws-neutral-swap",
+                    "pf-neutral-swap",
+                    "wal-btc-neutral",
+                    "neutral-in",
+                    "fp-neutral-in",
+                    "2026-03-14T17:32:32Z",
+                    "2026-03-14T17:32:42Z",
+                    "inbound",
+                    "BTC",
+                    btc_to_msat("0.12413298"),
+                    0,
+                    "EUR",
+                    61_878.46,
+                    7_681.16,
+                    "import",
+                    "deposit",
+                    "On-chain peg-out receive",
+                    None,
+                    None,
+                    0,
+                    "{}",
+                    now,
+                ),
+                (
+                    "tx-taxable-out",
+                    "ws-neutral-swap",
+                    "pf-neutral-swap",
+                    "wal-btc-neutral",
+                    "taxable-out",
+                    "fp-taxable-out",
+                    "2026-04-15T09:38:43Z",
+                    "2026-04-15T09:39:00Z",
+                    "outbound",
+                    "BTC",
+                    btc_to_msat("0.06811291"),
+                    btc_to_msat("0.00001413"),
+                    "EUR",
+                    62_896.96,
+                    4_284.09,
+                    "import",
+                    "withdrawal",
+                    "Taxable spend",
+                    None,
+                    None,
+                    0,
+                    "{}",
+                    now,
+                ),
+            ],
+        )
+        conn.execute(
+            """
+            INSERT INTO transaction_pairs(
+                id, workspace_id, profile_id, out_transaction_id, in_transaction_id,
+                kind, policy, swap_fee_msat, swap_fee_kind, pair_source, created_at
+            ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                "pair-neutral-swap",
+                "ws-neutral-swap",
+                "pf-neutral-swap",
+                "tx-neutral-out",
+                "tx-neutral-in",
+                "peg-out",
+                "carrying-value",
+                btc_to_msat("0.00012977"),
+                "combined",
+                "manual",
+                now,
+            ),
+        )
+        conn.executemany(
+            """
+            INSERT INTO journal_entries(
+                id, workspace_id, profile_id, transaction_id, wallet_id,
+                occurred_at, entry_type, asset, quantity, fiat_value, unit_cost,
+                cost_basis, proceeds, gain_loss, description, at_category,
+                at_kennzahl, created_at
+            ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            [
+                (
+                    "je-neutral-swap",
+                    "ws-neutral-swap",
+                    "pf-neutral-swap",
+                    "tx-neutral-out",
+                    "wal-lbtc-neutral",
+                    "2026-03-14T17:30:10Z",
+                    "disposal",
+                    "LBTC",
+                    -btc_to_msat("0.12426784"),
+                    7_689.18,
+                    0,
+                    7_568.02,
+                    7_689.18,
+                    121.16,
+                    "at_regime=neu at_swap_link=pair-neutral-swap",
+                    "neu_swap",
+                    None,
+                    now,
+                ),
+                (
+                    "je-taxable-out",
+                    "ws-neutral-swap",
+                    "pf-neutral-swap",
+                    "tx-taxable-out",
+                    "wal-btc-neutral",
+                    "2026-04-15T09:38:43Z",
+                    "disposal",
+                    "BTC",
+                    -btc_to_msat("0.06812704"),
+                    4_284.09,
+                    0,
+                    4_965.50,
+                    4_284.09,
+                    -681.41,
+                    "at_regime=neu",
+                    "neu_loss",
+                    176,
+                    now,
+                ),
+            ],
+        )
+        set_setting(conn, "context_workspace", "ws-neutral-swap")
+        set_setting(conn, "context_profile", "pf-neutral-swap")
+        conn.commit()
+
+        snapshot = build_capital_gains_snapshot(conn)
+
+        self.assertEqual(snapshot["year"], 2026)
+        self.assertEqual(snapshot["method"], "moving_average_at")
+        self.assertEqual(len(snapshot["lots"]), 1)
+        self.assertEqual(snapshot["lots"][0]["disposed"], "2026-04-15")
+        self.assertEqual(len(snapshot["neutralSwapLots"]), 1)
+        neutral = snapshot["neutralSwapLots"][0]
+        self.assertEqual(neutral["date"], "2026-03-14")
+        self.assertEqual(neutral["outAsset"], "LBTC")
+        self.assertEqual(neutral["inAsset"], "BTC")
+        self.assertEqual(neutral["outSats"], 12_426_275)
+        self.assertEqual(neutral["inSats"], 12_413_298)
+        self.assertEqual(neutral["feeSats"], 12_977)
 
     def _bootstrap_runtime_state(self, *, env_file=None, persist_bootstrap=False):
         args = Namespace(

@@ -346,6 +346,15 @@ def _tax_policy_label(profile: sqlite3.Row) -> str:
     )
 
 
+def _profile_policy_method(profile: sqlite3.Row) -> str:
+    if str(profile["tax_country"] or "").strip().lower() == "at":
+        try:
+            return str(build_tax_policy(profile).default_accounting_method or "").lower()
+        except (AppError, ValueError, ImportError):
+            return "moving_average_at"
+    return str(profile["gains_algorithm"] or "fifo").lower()
+
+
 def build_profiles_snapshot(conn: sqlite3.Connection) -> dict[str, Any]:
     context = current_context_snapshot(conn)
     profile_rows = conn.execute(
@@ -449,7 +458,7 @@ def _transaction_wallet_balances(
                 END
             ) AS quantity
         FROM transactions
-        WHERE profile_id = ? AND excluded = 0 AND asset = 'BTC'
+        WHERE profile_id = ? AND excluded = 0 AND asset IN ('BTC', 'LBTC')
         GROUP BY wallet_id
         """,
         (profile_id,),
@@ -473,7 +482,7 @@ def _wallet_balances(
         """
         SELECT wallet_id, SUM(quantity) AS quantity
         FROM journal_entries
-        WHERE profile_id = ? AND asset = 'BTC'
+        WHERE profile_id = ? AND asset IN ('BTC', 'LBTC')
         GROUP BY wallet_id
         """,
         (profile_id,),
@@ -525,6 +534,7 @@ def _connections(
                 "last": _relative_last(row["last_tx_at"] or row["created_at"]),
                 "balance": balances.get(row["id"], 0.0),
                 "status": "synced" if tx_count else "idle",
+                "transactionCount": tx_count,
                 "syncMode": backend_summary["sync_mode"],
                 "syncSource": sync_source,
                 "sourceFormat": source_format,
@@ -646,6 +656,7 @@ def _transaction_pair_display_meta(
             p.kind,
             p.policy,
             p.swap_fee_msat,
+            p.swap_fee_kind,
             p.out_transaction_id,
             p.in_transaction_id,
             tout.asset AS out_asset,
@@ -683,10 +694,19 @@ def _transaction_pair_display_meta(
         base = {
             "pair_id": pair["id"],
             "pair_type": pair_type,
+            "kind": pair["kind"],
+            "policy": pair["policy"],
             "label": label,
             "counter": counter,
             "account": account,
             "fee_msat": fee_msat,
+            "fee_kind": pair["swap_fee_kind"],
+            "out_asset": out_asset,
+            "out_amount_msat": int(pair["out_amount"] or 0),
+            "out_wallet": pair["out_wallet"],
+            "in_asset": in_asset,
+            "in_amount_msat": int(pair["in_amount"] or 0),
+            "in_wallet": pair["in_wallet"],
             "tag": label,
             "display_rate": display_rate,
         }
@@ -705,12 +725,19 @@ def _transaction_row_to_ui(
     if pair_meta:
         rate = float(pair_meta["display_rate"] or 0)
         display_fee_msat = abs(int(pair_meta["fee_msat"] or 0))
+        out_amount_msat = abs(int(pair_meta.get("out_amount_msat") or 0))
+        in_amount_msat = abs(int(pair_meta.get("in_amount_msat") or 0))
         pair_tag = str(pair_meta["tag"])
         display_tags = [pair_tag, *[tag for tag in metadata_tags if tag != pair_tag]]
-        amount_msat = -display_fee_msat
-        fiat_value = -float(msat_to_btc(display_fee_msat)) * rate if rate else 0.0
+        if pair_meta["pair_type"] == "swap":
+            amount_msat = -max(out_amount_msat, in_amount_msat)
+            fiat_value = -float(msat_to_btc(abs(amount_msat))) * rate if rate else 0.0
+            counter = f"Swap {pair_meta['out_asset']} -> {pair_meta['in_asset']}"
+        else:
+            amount_msat = -display_fee_msat
+            fiat_value = -float(msat_to_btc(display_fee_msat)) * rate if rate else 0.0
+            counter = str(pair_meta["counter"])
         type_label = str(pair_meta["label"])
-        counter = str(pair_meta["counter"])
         account = str(pair_meta["account"])
         internal = pair_meta["pair_type"] == "transfer"
         output_tags = metadata_tags
@@ -787,6 +814,21 @@ def _transaction_row_to_ui(
     }
     if output_tags or include_empty_tags:
         payload["tags"] = output_tags
+    if pair_meta:
+        payload["pair"] = {
+            "id": pair_meta["pair_id"],
+            "type": pair_meta["pair_type"],
+            "kind": pair_meta.get("kind"),
+            "policy": pair_meta.get("policy"),
+            "outWallet": pair_meta.get("out_wallet"),
+            "outAsset": pair_meta.get("out_asset"),
+            "outAmountSat": _ui_sat_amount(pair_meta.get("out_amount_msat") or 0),
+            "inWallet": pair_meta.get("in_wallet"),
+            "inAsset": pair_meta.get("in_asset"),
+            "inAmountSat": _ui_sat_amount(pair_meta.get("in_amount_msat") or 0),
+            "feeSat": fee_sat,
+            "feeKind": pair_meta.get("fee_kind"),
+        }
     return payload
 
 
@@ -1422,7 +1464,8 @@ def _capital_gains_available_years(
     primary_only: bool = False,
 ) -> list[int]:
     reportable_filter = (
-        "(entry_type = 'disposal' OR at_kennzahl IS NOT NULL)"
+        "((entry_type = 'disposal' AND COALESCE(at_category, '') != 'neu_swap') "
+        "OR at_kennzahl IS NOT NULL)"
         if primary_only
         else "(entry_type IN ('disposal', 'income', 'fee', 'transfer_fee') "
         "OR at_kennzahl IS NOT NULL)"
@@ -1473,6 +1516,75 @@ def _austrian_kennzahl_snapshot_rows(
         }
         for row in summary_rows
     ]
+
+
+def _capital_gains_neutral_swap_rows(
+    conn: sqlite3.Connection,
+    profile_id: str,
+    tax_year: int,
+) -> list[dict[str, Any]]:
+    rows = conn.execute(
+        """
+        SELECT
+            je.occurred_at,
+            je.quantity,
+            je.cost_basis,
+            je.proceeds,
+            je.gain_loss,
+            COALESCE(p.id, '') AS pair_id,
+            COALESCE(p.kind, '') AS kind,
+            COALESCE(p.policy, '') AS policy,
+            COALESCE(p.swap_fee_msat, 0) AS swap_fee_msat,
+            COALESCE(p.swap_fee_kind, '') AS swap_fee_kind,
+            wout.label AS out_wallet,
+            tout.asset AS out_asset,
+            tout.amount AS out_amount,
+            win.label AS in_wallet,
+            tin.asset AS in_asset,
+            tin.amount AS in_amount
+        FROM journal_entries je
+        LEFT JOIN transaction_pairs p
+          ON p.out_transaction_id = je.transaction_id
+         AND p.profile_id = je.profile_id
+         AND p.deleted_at IS NULL
+        LEFT JOIN transactions tout ON tout.id = p.out_transaction_id
+        LEFT JOIN transactions tin ON tin.id = p.in_transaction_id
+        LEFT JOIN wallets wout ON wout.id = tout.wallet_id
+        LEFT JOIN wallets win ON win.id = tin.wallet_id
+        WHERE je.profile_id = ?
+          AND je.entry_type = 'disposal'
+          AND je.at_category = 'neu_swap'
+          AND substr(je.occurred_at, 1, 4) = ?
+        ORDER BY je.occurred_at ASC, je.created_at ASC, je.id ASC
+        """,
+        (profile_id, str(tax_year)),
+    ).fetchall()
+    output = []
+    for row in rows:
+        quantity_msat = abs(int(row["quantity"] or 0))
+        out_amount_msat = abs(int(row["out_amount"] or 0)) or quantity_msat
+        in_amount_msat = abs(int(row["in_amount"] or 0))
+        fee_msat = int(row["swap_fee_msat"] or 0)
+        output.append(
+            {
+                "date": (row["occurred_at"] or "")[:10],
+                "pairId": row["pair_id"],
+                "kind": row["kind"],
+                "policy": row["policy"],
+                "outWallet": row["out_wallet"] or "",
+                "outAsset": row["out_asset"] or "",
+                "outSats": _ui_sat_amount(out_amount_msat),
+                "inWallet": row["in_wallet"] or "",
+                "inAsset": row["in_asset"] or "",
+                "inSats": _ui_sat_amount(in_amount_msat),
+                "feeSats": _ui_sat_amount(fee_msat),
+                "feeKind": row["swap_fee_kind"],
+                "costEur": float(row["cost_basis"] or 0),
+                "proceedsEur": float(row["proceeds"] or 0),
+                "gainEur": float(row["gain_loss"] or 0),
+            }
+        )
+    return output
 
 
 def build_capital_gains_snapshot(conn: sqlite3.Connection) -> dict[str, Any]:
@@ -1528,6 +1640,7 @@ def build_capital_gains_snapshot(conn: sqlite3.Connection) -> dict[str, Any]:
         FROM journal_entries
         WHERE profile_id = ?
           AND entry_type = 'disposal'
+          AND COALESCE(at_category, '') != 'neu_swap'
         ORDER BY occurred_at DESC, created_at DESC, id DESC
         LIMIT 200
         """,
@@ -1563,8 +1676,13 @@ def build_capital_gains_snapshot(conn: sqlite3.Connection) -> dict[str, Any]:
         "jurisdictionCode": (profile["tax_country"] or "AT").upper(),
         "year": latest_year,
         "availableYears": available_years,
-        "method": str(profile["gains_algorithm"] or "fifo").lower(),
+        "method": _profile_policy_method(profile),
         "lots": lots,
+        "neutralSwapLots": _capital_gains_neutral_swap_rows(
+            conn,
+            profile["id"],
+            latest_year,
+        ),
         "kennzahlRows": _austrian_kennzahl_snapshot_rows(conn, profile, latest_year),
         "status": {
             "needsJournals": needs_journals,

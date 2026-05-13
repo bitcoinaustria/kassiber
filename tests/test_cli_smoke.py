@@ -1891,6 +1891,8 @@ class CliSmokeTest(unittest.TestCase):
         self.assertIn("Transfers & Swaps", payload["data"]["sections"])
         csv_text = csv_path.read_text(encoding="utf-8")
         self.assertIn("Reviewed Transfers and Swaps", csv_text)
+        self.assertIn("Swap Fee msat", csv_text)
+        self.assertIn("Swap Fee Kind", csv_text)
         self.assertIn(",swap,peg-in,taxable,", csv_text)
         self.assertIn("cross-out-leg", csv_text)
         self.assertIn("cross-in-leg", csv_text)
@@ -1908,6 +1910,8 @@ class CliSmokeTest(unittest.TestCase):
             shared_strings = workbook.read("xl/sharedStrings.xml").decode("utf-8")
         self.assertIn('name="Transfers &amp; Swaps"', workbook_xml)
         self.assertIn("Reviewed Transfers and Swaps", shared_strings)
+        self.assertIn("Swap Fee msat", shared_strings)
+        self.assertIn("Swap Fee Kind", shared_strings)
         self.assertIn("cross-out-leg", shared_strings)
         self.assertIn("cross-in-leg", shared_strings)
 

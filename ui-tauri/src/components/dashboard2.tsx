@@ -13,7 +13,6 @@ import {
   MoreHorizontal,
   Pencil,
   RefreshCw,
-  Search,
   ShieldAlert,
   Wallet,
   X,
@@ -43,7 +42,6 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Input } from "@/components/ui/input";
 import {
   Select,
   SelectContent,
@@ -150,6 +148,10 @@ type FlowChartSelection = {
 };
 
 type TableQuickFilter = "external_flow" | "review_queue";
+type BreakdownSelection = {
+  dimension: "network" | "wallet";
+  key: string;
+};
 
 type FlowChartClickData = {
   payload?: FlowChartPoint;
@@ -794,6 +796,7 @@ function toDashboardTransaction(tx: Tx, index: number): Transaction {
     note: tx.note,
     tags: tx.tags,
     excluded: tx.excluded,
+    pair: tx.pair,
     counterparty: tx.counter || tx.account || "Unassigned",
     counterpartyInitials: initials(tx.counter || tx.account || "TX"),
     direction,
@@ -805,6 +808,34 @@ function toDashboardTransaction(tx: Tx, index: number): Transaction {
     date: tx.date,
     status: tag.toLowerCase().includes("review") ? "review" : status,
   };
+}
+
+function isRedundantTransactionLabel(label: string, flow: TransactionFlow) {
+  const normalized = label.trim().toLowerCase();
+  if (!normalized || normalized === "unlabeled") return true;
+  return normalized === transactionFlowLabels[flow].toLowerCase();
+}
+
+function pairRailLabel(txn: Transaction) {
+  const pair = txn.pair;
+  if (!pair) return txn.paymentMethod;
+  const outRail = railLabelForAssetOrWallet(pair.outAsset, pair.outWallet);
+  const inRail = railLabelForAssetOrWallet(pair.inAsset, pair.inWallet);
+  return outRail === inRail ? outRail : `${outRail} -> ${inRail}`;
+}
+
+function railLabelForAssetOrWallet(asset?: string | null, wallet?: string | null) {
+  const text = `${asset ?? ""} ${wallet ?? ""}`.toLowerCase();
+  if (text.includes("lightning") || text.includes("phoenix") || text.includes("ln")) {
+    return "Lightning";
+  }
+  if (text.includes("lbtc") || text.includes("liquid")) {
+    return "Liquid";
+  }
+  if (text.includes("btc") || text.includes("onchain") || text.includes("on-chain")) {
+    return "On-chain";
+  }
+  return "Other";
 }
 
 function initials(value: string) {
@@ -1319,7 +1350,9 @@ const TransactionWorkbench = ({
   currency,
   onFlowSelectionChange,
   onQuickFilterChange,
+  onBreakdownSelectionChange,
   chartSelection,
+  breakdownSelection,
   swapCandidateRefs,
   swapCandidateTotal,
 }: {
@@ -1329,7 +1362,9 @@ const TransactionWorkbench = ({
   currency: Currency;
   onFlowSelectionChange: (selection: FlowChartSelection | null) => void;
   onQuickFilterChange: (filter: TableQuickFilter | null) => void;
+  onBreakdownSelectionChange: (selection: BreakdownSelection | null) => void;
   chartSelection: FlowChartSelection | null;
+  breakdownSelection: BreakdownSelection | null;
   swapCandidateRefs?: SwapCandidateReference[];
   swapCandidateTotal?: number | null;
 }) => {
@@ -1412,6 +1447,7 @@ const TransactionWorkbench = ({
       const point = data.payload ?? data.activePayload?.[0]?.payload;
       if (!point || flowPointSegmentValue(point, segment) === 0) return;
       onQuickFilterChange(null);
+      onBreakdownSelectionChange(null);
       onFlowSelectionChange({
         id: `${period}:${point.bucketKey}:${segment}:${chartMode}`,
         period,
@@ -1421,11 +1457,18 @@ const TransactionWorkbench = ({
         mode: chartMode,
       });
     },
-    [chartMode, onFlowSelectionChange, onQuickFilterChange, period],
+    [
+      chartMode,
+      onBreakdownSelectionChange,
+      onFlowSelectionChange,
+      onQuickFilterChange,
+      period,
+    ],
   );
   const handleFlowLegendClick = React.useCallback(
     (segment: FlowChartSegment) => {
       onQuickFilterChange(null);
+      onBreakdownSelectionChange(null);
       onFlowSelectionChange({
         id: `${period}:all:${segment}:${chartMode}`,
         period,
@@ -1435,11 +1478,18 @@ const TransactionWorkbench = ({
         mode: chartMode,
       });
     },
-    [chartMode, onFlowSelectionChange, onQuickFilterChange, period],
+    [
+      chartMode,
+      onBreakdownSelectionChange,
+      onFlowSelectionChange,
+      onQuickFilterChange,
+      period,
+    ],
   );
   const handleSummaryFlowClick = React.useCallback(
     (segment: FlowChartSegment) => {
       onQuickFilterChange(null);
+      onBreakdownSelectionChange(null);
       onFlowSelectionChange({
         id: `${period}:summary:${segment}:all`,
         period,
@@ -1449,17 +1499,19 @@ const TransactionWorkbench = ({
         mode: "all",
       });
     },
-    [onFlowSelectionChange, onQuickFilterChange, period],
+    [onBreakdownSelectionChange, onFlowSelectionChange, onQuickFilterChange, period],
   );
   const handleNetFlowClick = React.useCallback(() => {
     onFlowSelectionChange(null);
+    onBreakdownSelectionChange(null);
     onQuickFilterChange("external_flow");
-  }, [onFlowSelectionChange, onQuickFilterChange]);
+  }, [onBreakdownSelectionChange, onFlowSelectionChange, onQuickFilterChange]);
   const handleReviewQueueClick = React.useCallback(() => {
     onFlowSelectionChange(null);
+    onBreakdownSelectionChange(null);
     onQuickFilterChange("review_queue");
     void navigate({ to: "/quarantine" });
-  }, [navigate, onFlowSelectionChange, onQuickFilterChange]);
+  }, [navigate, onBreakdownSelectionChange, onFlowSelectionChange, onQuickFilterChange]);
   const openSwapWorkflow = React.useCallback(() => {
     void navigate({ to: "/swaps" });
   }, [navigate]);
@@ -1467,9 +1519,29 @@ const TransactionWorkbench = ({
     () => {
       onFlowSelectionChange(null);
       onQuickFilterChange(null);
-      openSwapWorkflow();
+      onBreakdownSelectionChange(null);
+      if (knownSwapCandidateCount === null || knownSwapCandidateCount > 0) {
+        openSwapWorkflow();
+        return;
+      }
+      handleSummaryFlowClick("swaps");
     },
-    [onFlowSelectionChange, onQuickFilterChange, openSwapWorkflow],
+    [
+      handleSummaryFlowClick,
+      knownSwapCandidateCount,
+      onBreakdownSelectionChange,
+      onFlowSelectionChange,
+      onQuickFilterChange,
+      openSwapWorkflow,
+    ],
+  );
+  const handleBreakdownClick = React.useCallback(
+    (dimension: BreakdownSelection["dimension"], key: string) => {
+      onFlowSelectionChange(null);
+      onQuickFilterChange(null);
+      onBreakdownSelectionChange({ dimension, key });
+    },
+    [onBreakdownSelectionChange, onFlowSelectionChange, onQuickFilterChange],
   );
   const networkRows = buildBreakdown(records, (txn) => txn.paymentMethod);
   const walletRows = buildBreakdown(records, (txn) => txn.wallet ?? "Unassigned");
@@ -1522,21 +1594,26 @@ const TransactionWorkbench = ({
       ariaLabel: "Show transfer transactions",
     },
     {
-      label: "Swap candidates",
+      label: "Swaps",
       value: swaps,
       meta:
         knownSwapCandidateCount === null
           ? "unpaired unknown"
+          : knownSwapCandidateCount > 0 && markedSwaps.count > 0
+          ? `${knownSwapCandidateCount} unpaired · ${markedSwaps.count} paired`
           : knownSwapCandidateCount > 0
           ? `${knownSwapCandidateCount} unpaired`
-          : `${markedSwaps.count} marked`,
+          : `${markedSwaps.count} paired`,
       icon: RefreshCw,
       tone:
         knownSwapCandidateCount === null || knownSwapCandidateCount > 0
           ? "text-amber-600"
           : "text-muted-foreground",
       onClick: handleSwapWorkflowClick,
-      ariaLabel: "Open swap candidates",
+      ariaLabel:
+        knownSwapCandidateCount === null || knownSwapCandidateCount > 0
+          ? "Open swap candidates"
+          : "Show paired swap transactions",
     },
     {
       label: "Review queue",
@@ -1840,6 +1917,12 @@ const TransactionWorkbench = ({
             maxValue={maxNetworkValue}
             currency={currency}
             hideSensitive={hideSensitive}
+            selectedKey={
+              breakdownSelection?.dimension === "network"
+                ? breakdownSelection.key
+                : null
+            }
+            onSelect={(key) => handleBreakdownClick("network", key)}
           />
           <BreakdownPanel
             title="Wallet/source mix"
@@ -1847,6 +1930,12 @@ const TransactionWorkbench = ({
             maxValue={maxWalletValue}
             currency={currency}
             hideSensitive={hideSensitive}
+            selectedKey={
+              breakdownSelection?.dimension === "wallet"
+                ? breakdownSelection.key
+                : null
+            }
+            onSelect={(key) => handleBreakdownClick("wallet", key)}
           />
           <div className="border-t p-3 sm:col-span-2 lg:col-span-1 sm:p-4">
             <h3 className="mb-2 text-sm font-semibold">Data quality</h3>
@@ -1857,7 +1946,7 @@ const TransactionWorkbench = ({
               <QualityRow
                 label="Swap candidates"
                 value={swapCandidateTotals.count}
-                onClick={openSwapWorkflow}
+                onClick={swapCandidateTotals.count > 0 ? openSwapWorkflow : undefined}
               />
             </div>
           </div>
@@ -2068,19 +2157,25 @@ function BreakdownPanel({
   maxValue,
   currency,
   hideSensitive,
+  selectedKey,
+  onSelect,
 }: {
   title: string;
   rows: Array<{ key: string; count: number; eur: number; btc: number }>;
   maxValue: number;
   currency: Currency;
   hideSensitive: boolean;
+  selectedKey?: string | null;
+  onSelect?: (key: string) => void;
 }) {
   return (
     <div className="border-t p-3 first:border-t-0 sm:p-4">
       <h3 className="mb-3 text-sm font-semibold">{title}</h3>
       <div className="space-y-2.5">
-        {rows.map((row) => (
-          <div key={row.key} className="space-y-1">
+        {rows.map((row) => {
+          const selected = selectedKey === row.key;
+          const content = (
+            <>
             <div className="flex items-center justify-between gap-2 text-xs">
               <span className="truncate font-medium">{row.key}</span>
               <span className="shrink-0 text-muted-foreground">
@@ -2096,8 +2191,27 @@ function BreakdownPanel({
                 style={{ width: `${Math.max(6, (row.eur / maxValue) * 100)}%` }}
               />
             </div>
-          </div>
-        ))}
+            </>
+          );
+          return onSelect ? (
+            <button
+              key={row.key}
+              type="button"
+              className={cn(
+                "-mx-1.5 block w-[calc(100%+0.75rem)] space-y-1 rounded-md px-1.5 py-1.5 text-left transition-colors hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                selected && "bg-muted/70",
+              )}
+              onClick={() => onSelect(row.key)}
+              aria-pressed={selected}
+            >
+              {content}
+            </button>
+          ) : (
+            <div key={row.key} className="space-y-1">
+              {content}
+            </div>
+          );
+        })}
       </div>
     </div>
   );
@@ -2206,6 +2320,12 @@ function quickFilterLabel(filter: TableQuickFilter) {
   return "Review queue";
 }
 
+function breakdownSelectionLabel(selection: BreakdownSelection) {
+  return selection.dimension === "network"
+    ? `Network: ${selection.key}`
+    : `Wallet/source: ${selection.key}`;
+}
+
 function matchesFlowChartSelection(
   txn: Transaction,
   selection: FlowChartSelection,
@@ -2234,8 +2354,10 @@ const TransactionsTable = ({
   swapCandidateIds = new Set<string>(),
   chartSelection,
   quickFilter,
+  breakdownSelection,
   onChartSelectionChange,
   onQuickFilterChange,
+  onBreakdownSelectionChange,
 }: {
   records: Transaction[];
   hideSensitive: boolean;
@@ -2244,10 +2366,11 @@ const TransactionsTable = ({
   swapCandidateIds?: Set<string>;
   chartSelection: FlowChartSelection | null;
   quickFilter: TableQuickFilter | null;
+  breakdownSelection: BreakdownSelection | null;
   onChartSelectionChange: (selection: FlowChartSelection | null) => void;
   onQuickFilterChange: (filter: TableQuickFilter | null) => void;
+  onBreakdownSelectionChange: (selection: BreakdownSelection | null) => void;
 }) => {
-  const [searchQuery, setSearchQuery] = React.useState("");
   const [statusFilter, setStatusFilter] = React.useState<string>("all");
   const [dateFilter, setDateFilter] = React.useState<string>("all");
   const [flowFilter, setFlowFilter] = React.useState<string>("all");
@@ -2326,6 +2449,7 @@ const TransactionsTable = ({
   const hasActiveFilters =
     chartSelection !== null ||
     quickFilter !== null ||
+    breakdownSelection !== null ||
     statusFilter !== "all" ||
     dateFilter !== "all" ||
     flowFilter !== "all" ||
@@ -2334,6 +2458,7 @@ const TransactionsTable = ({
   const clearFilters = () => {
     onChartSelectionChange(null);
     onQuickFilterChange(null);
+    onBreakdownSelectionChange(null);
     setStatusFilter("all");
     setDateFilter("all");
     setFlowFilter("all");
@@ -2343,7 +2468,6 @@ const TransactionsTable = ({
   React.useEffect(() => {
     if (typeof window === "undefined") return;
     const params = new URLSearchParams(window.location.search);
-    setSearchQuery(params.get("q") ?? "");
 
     const nextStatus = params.get("status");
     if (
@@ -2410,18 +2534,8 @@ const TransactionsTable = ({
   }, [records, openTransactionDetail]);
 
   const filteredTransactions = React.useMemo(() => {
-    const query = searchQuery.toLowerCase();
     return records.filter((txn) => {
       const draft = getDraft(txn);
-      const matchesSearch =
-        txn.txnId.toLowerCase().includes(query) ||
-        txn.counterparty.toLowerCase().includes(query) ||
-        (txn.wallet ?? "").toLowerCase().includes(query) ||
-        (draft.label ?? "").toLowerCase().includes(query) ||
-        draft.tags.join(" ").toLowerCase().includes(query) ||
-        (draft.note ?? "").toLowerCase().includes(query) ||
-        txn.paymentMethod.toLowerCase().includes(query);
-
       const matchesStatus =
         statusFilter === "all" || draft.reviewStatus === statusFilter;
 
@@ -2441,6 +2555,13 @@ const TransactionsTable = ({
         (quickFilter === "external_flow" &&
           ["incoming", "outgoing"].includes(displayFlow(txn))) ||
         (quickFilter === "review_queue" && draft.reviewStatus !== "completed");
+
+      const matchesBreakdownSelection =
+        !breakdownSelection ||
+        (breakdownSelection.dimension === "network" &&
+          txn.paymentMethod === breakdownSelection.key) ||
+        (breakdownSelection.dimension === "wallet" &&
+          (txn.wallet ?? "Unassigned") === breakdownSelection.key);
 
       let matchesDate = true;
       const pd = txn.date.toLowerCase();
@@ -2466,9 +2587,9 @@ const TransactionsTable = ({
       }
 
       return (
-        matchesSearch &&
         matchesChartSelection &&
         matchesQuickFilter &&
+        matchesBreakdownSelection &&
         matchesStatus &&
         matchesFlow &&
         matchesPaymentMethod &&
@@ -2478,9 +2599,9 @@ const TransactionsTable = ({
   }, [
     records,
     getDraft,
-    searchQuery,
     chartSelection,
     quickFilter,
+    breakdownSelection,
     statusFilter,
     dateFilter,
     flowFilter,
@@ -2489,14 +2610,19 @@ const TransactionsTable = ({
   ]);
 
   React.useEffect(() => {
-    if ((!chartSelection && !quickFilter) || typeof window === "undefined") return;
+    if (
+      (!chartSelection && !quickFilter && !breakdownSelection) ||
+      typeof window === "undefined"
+    ) {
+      return;
+    }
     window.requestAnimationFrame(() => {
       tableRef.current?.scrollIntoView({
         behavior: "smooth",
         block: "start",
       });
     });
-  }, [chartSelection, quickFilter]);
+  }, [chartSelection, quickFilter, breakdownSelection]);
 
   const totalPages = Math.ceil(filteredTransactions.length / pageSize);
 
@@ -2509,9 +2635,9 @@ const TransactionsTable = ({
   React.useEffect(() => {
     setCurrentPage(1);
   }, [
-    searchQuery,
     chartSelection,
     quickFilter,
+    breakdownSelection,
     statusFilter,
     dateFilter,
     flowFilter,
@@ -2522,12 +2648,7 @@ const TransactionsTable = ({
   React.useEffect(() => {
     if (!isHydrated || typeof window === "undefined") return;
     const params = new URLSearchParams(window.location.search);
-
-    if (searchQuery) {
-      params.set("q", searchQuery);
-    } else {
-      params.delete("q");
-    }
+    params.delete("q");
 
     if (statusFilter !== "all") {
       params.set("status", statusFilter);
@@ -2571,7 +2692,6 @@ const TransactionsTable = ({
       : window.location.pathname;
     window.history.replaceState(null, "", nextUrl);
   }, [
-    searchQuery,
     statusFilter,
     dateFilter,
     flowFilter,
@@ -2597,26 +2717,6 @@ const TransactionsTable = ({
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
-          <div className="relative flex-1 sm:flex-none">
-            <Search
-              className="absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground sm:size-5"
-              aria-hidden="true"
-            />
-            <Input
-              type="search"
-              name="transactions-search"
-              inputMode="search"
-              autoComplete="off"
-              aria-label="Search transactions"
-              placeholder="Search txid, wallet, label, tag..."
-              value={searchQuery}
-              onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
-                setSearchQuery(e.target.value)
-              }
-              className="h-8 w-full pl-9 text-sm sm:h-9 sm:w-[160px] sm:pl-10 lg:w-[200px]"
-            />
-          </div>
-
           <Select value={dateFilter} onValueChange={setDateFilter}>
             <SelectTrigger
               className="h-8 w-[120px] text-xs sm:h-9 sm:w-[140px] sm:text-sm"
@@ -2779,6 +2879,17 @@ const TransactionsTable = ({
               <X className="size-2.5 sm:size-3" aria-hidden="true" />
             </button>
           )}
+          {breakdownSelection && (
+            <button
+              type="button"
+              className={filterChipClassName}
+              onClick={() => onBreakdownSelectionChange(null)}
+              aria-label={`Clear ${breakdownSelectionLabel(breakdownSelection)} filter`}
+            >
+              {breakdownSelectionLabel(breakdownSelection)}
+              <X className="size-2.5 sm:size-3" aria-hidden="true" />
+            </button>
+          )}
           {statusFilter !== "all" && (
             <button
               type="button"
@@ -2881,7 +2992,15 @@ const TransactionsTable = ({
                 const StatusIcon = transactionStatusIcons[draft.reviewStatus];
                 const explorer = explorerForTransaction(txn, explorerSettings);
                 const flow = displayFlow(txn);
+                const showPrimaryLabel = !isRedundantTransactionLabel(
+                  draft.label,
+                  flow,
+                );
                 const tagPreview = draft.tags;
+                const networkLabel =
+                  flow === "swap" || flow === "layer-transition"
+                    ? pairRailLabel(txn)
+                    : txn.paymentMethod;
                 const amountBtc = transactionBtc(txn);
                 const signedAmountBtc =
                   flow === "outgoing" ? -amountBtc : amountBtc;
@@ -2934,9 +3053,11 @@ const TransactionsTable = ({
                             >
                               {txn.counterparty}
                             </span>
-                            <Badge variant="secondary" className="rounded-md">
-                              {draft.label}
-                            </Badge>
+                            {showPrimaryLabel ? (
+                              <Badge variant="secondary" className="rounded-md">
+                                {draft.label}
+                              </Badge>
+                            ) : null}
                           </div>
                           <div className="mt-1 flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-1 text-[10px] text-muted-foreground sm:text-xs">
                             <span
@@ -3053,16 +3174,8 @@ const TransactionsTable = ({
                     </TableCell>
                     <TableCell className="hidden xl:table-cell">
                       <div className="flex flex-wrap gap-1">
-                        <span
-                          className={cn(
-                            "inline-flex items-center rounded-md border px-2 py-0.5 text-[10px] font-normal sm:text-xs",
-                            transactionFlowStyles[flow],
-                          )}
-                        >
-                          {transactionFlowLabels[flow]}
-                        </span>
                         <span className="inline-flex items-center rounded-md border px-2 py-0.5 text-[10px] font-normal text-muted-foreground sm:text-xs">
-                          {txn.paymentMethod}
+                          {networkLabel}
                         </span>
                       </div>
                     </TableCell>
@@ -3297,6 +3410,8 @@ const Dashboard2 = ({
     React.useState<FlowChartSelection | null>(null);
   const [quickFilter, setQuickFilter] =
     React.useState<TableQuickFilter | null>(null);
+  const [breakdownSelection, setBreakdownSelection] =
+    React.useState<BreakdownSelection | null>(null);
   const [newTransactionDraft, setNewTransactionDraft] =
     React.useState<NewTransactionDraft>(createNewTransactionDraft);
   const hideSensitive = useUiStore((s) => s.hideSensitive);
@@ -3328,6 +3443,7 @@ const Dashboard2 = ({
     setPeriod(nextPeriod);
     setFlowChartSelection(null);
     setQuickFilter(null);
+    setBreakdownSelection(null);
   }, []);
 
   React.useEffect(() => {
@@ -3384,7 +3500,9 @@ const Dashboard2 = ({
         currency={currency}
         onFlowSelectionChange={setFlowChartSelection}
         onQuickFilterChange={setQuickFilter}
+        onBreakdownSelectionChange={setBreakdownSelection}
         chartSelection={flowChartSelection}
+        breakdownSelection={breakdownSelection}
         swapCandidateRefs={swapCandidates}
         swapCandidateTotal={swapCandidateTotal}
       />
@@ -3397,8 +3515,10 @@ const Dashboard2 = ({
         swapCandidateIds={periodSwapCandidateIds}
         chartSelection={flowChartSelection}
         quickFilter={quickFilter}
+        breakdownSelection={breakdownSelection}
         onChartSelectionChange={setFlowChartSelection}
         onQuickFilterChange={setQuickFilter}
+        onBreakdownSelectionChange={setBreakdownSelection}
       />
     </div>
   );
