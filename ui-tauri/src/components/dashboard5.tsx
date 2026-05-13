@@ -83,6 +83,7 @@ type StatItem = {
   icon: React.ComponentType<React.SVGProps<SVGSVGElement>>;
   format: "currency" | "number";
   comparisonLabel: string;
+  href: OverviewHref;
 };
 
 type HoldingsItem = {
@@ -356,6 +357,7 @@ const statsData: StatItem[] = [
     icon: CircleDollarSign,
     format: "currency",
     comparisonLabel: "vs Last Month",
+    href: "/reports",
   },
   {
     title: "Transactions",
@@ -366,6 +368,7 @@ const statsData: StatItem[] = [
     icon: ClipboardList,
     format: "number",
     comparisonLabel: "vs Last Month",
+    href: "/transactions",
   },
   {
     title: "Reviewed events",
@@ -376,6 +379,7 @@ const statsData: StatItem[] = [
     icon: Users,
     format: "number",
     comparisonLabel: "vs Last Month",
+    href: "/connections",
   },
   {
     title: "Open review",
@@ -386,6 +390,7 @@ const statsData: StatItem[] = [
     icon: CreditCard,
     format: "currency",
     comparisonLabel: "vs Last Month",
+    href: "/quarantine",
   },
 ];
 
@@ -1299,64 +1304,79 @@ const StatsCards = ({
             currency === "btc" && stat.title === "Portfolio value";
 
           return (
-            <div key={stat.title} className="space-y-2.5 p-3 sm:p-4">
-              <div className="text-muted-foreground">
-                <span className="text-xs font-medium sm:text-sm">
-                  {isBitcoinPortfolio ? "Bitcoin balance" : stat.title}
-                </span>
-              </div>
-              <p className="text-xl font-semibold tracking-tight sm:text-2xl">
-                {isBitcoinPortfolio ? (
-                  <CurrencyToggleText className={blurClass(hideSensitive)}>
-                    {formatBtc(latestPortfolioBalanceBtc(snapshot), {
-                      precision: 3,
-                    })}
-                  </CurrencyToggleText>
-                ) : stat.format === "currency" ? (
-                  <CurrencyToggleText className={blurClass(hideSensitive)}>
-                    {formatCompactDisplayMoney(
-                      stat.value,
-                      snapshot.priceEur,
-                      currency,
-                    )}
-                  </CurrencyToggleText>
-                ) : (
-                  formatter.format(stat.value)
-                )}
-              </p>
-              <div className="flex flex-wrap items-center gap-2 text-[10px] sm:text-xs xl:flex-nowrap">
-                <span
+            <div
+              key={stat.title}
+              className="group relative isolate overflow-hidden p-3 transition-colors before:absolute before:inset-0 before:z-0 before:origin-left before:scale-x-0 before:bg-muted/60 before:content-[''] before:transition-transform before:duration-200 before:ease-out hover:before:scale-x-100 focus-within:before:scale-x-100 sm:p-4"
+            >
+              <Link
+                to={stat.href}
+                className="absolute inset-0 z-10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                aria-label={`Open ${isBitcoinPortfolio ? "Bitcoin balance" : stat.title}`}
+              />
+              <div className="pointer-events-none relative z-20 space-y-2.5">
+                <div className="text-muted-foreground">
+                  <span className="text-xs font-medium sm:text-sm">
+                    {isBitcoinPortfolio ? "Bitcoin balance" : stat.title}
+                  </span>
+                </div>
+                <p
                   className={cn(
-                    "font-medium",
-                    stat.isPositive
-                      ? "text-emerald-600 dark:text-emerald-400"
-                      : "text-red-600 dark:text-red-400",
+                    "text-xl font-semibold tracking-tight sm:text-2xl",
                     blurClass(hideSensitive),
                   )}
                 >
-                  {statusText}
-                  {hasComparison && (
-                    <span className="hidden sm:inline">
-                      (
-                      {stat.format === "currency"
-                        ? formatCompactDisplayMoney(
-                            Math.abs(stat.value - stat.previousValue),
-                            snapshot.priceEur,
-                            currency,
-                          )
-                        : formatter.format(
-                            Math.abs(stat.value - stat.previousValue),
-                          )}
-                      )
+                  {isBitcoinPortfolio ? (
+                    <span>
+                      {formatBtc(latestPortfolioBalanceBtc(snapshot), {
+                        precision: 3,
+                      })}
                     </span>
+                  ) : stat.format === "currency" ? (
+                    <span>
+                      {formatCompactDisplayMoney(
+                        stat.value,
+                        snapshot.priceEur,
+                        currency,
+                      )}
+                    </span>
+                  ) : (
+                    formatter.format(stat.value)
                   )}
-                </span>
-                <span className="hidden items-center gap-2 text-muted-foreground sm:inline-flex">
-                  <span className="size-1 rounded-full bg-muted-foreground" />
-                  <span className="xl:whitespace-nowrap">
-                    {stat.comparisonLabel}
+                </p>
+                <div className="flex flex-wrap items-center gap-2 text-[10px] sm:text-xs xl:flex-nowrap">
+                  <span
+                    className={cn(
+                      "font-medium",
+                      stat.isPositive
+                        ? "text-emerald-600 dark:text-emerald-400"
+                        : "text-red-600 dark:text-red-400",
+                      blurClass(hideSensitive),
+                    )}
+                  >
+                    {statusText}
+                    {hasComparison && (
+                      <span className="hidden sm:inline">
+                        (
+                        {stat.format === "currency"
+                          ? formatCompactDisplayMoney(
+                              Math.abs(stat.value - stat.previousValue),
+                              snapshot.priceEur,
+                              currency,
+                            )
+                          : formatter.format(
+                              Math.abs(stat.value - stat.previousValue),
+                            )}
+                        )
+                      </span>
+                    )}
                   </span>
-                </span>
+                  <span className="hidden items-center gap-2 text-muted-foreground sm:inline-flex">
+                    <span className="size-1 rounded-full bg-muted-foreground" />
+                    <span className="xl:whitespace-nowrap">
+                      {stat.comparisonLabel}
+                    </span>
+                  </span>
+                </div>
               </div>
             </div>
           );

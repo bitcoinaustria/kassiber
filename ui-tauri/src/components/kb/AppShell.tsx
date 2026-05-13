@@ -1772,10 +1772,10 @@ function AppDashboardHeader({
                 aria-hidden="true"
               />
             </Button>
-            <span className="hidden text-sidebar-foreground/35 lg:inline">
+            <span className="hidden text-sidebar-foreground/35 xl:inline">
               /
             </span>
-            <span className="hidden truncate text-sm text-sidebar-foreground/65 lg:inline">
+            <span className="hidden truncate text-sm text-sidebar-foreground/65 xl:inline">
               {meta.title}
             </span>
           </div>
@@ -2000,6 +2000,7 @@ function AppDashboardHeader({
             ))}
           </DropdownMenuContent>
         </DropdownMenu>
+        <CurrencyToggle />
         <ThemeMenu />
         <Button
           variant="ghost"
@@ -2077,6 +2078,32 @@ function ThemeMenu() {
         </DropdownMenuRadioGroup>
       </DropdownMenuContent>
     </DropdownMenu>
+  );
+}
+
+function CurrencyToggle() {
+  const currency = useUiStore((state) => state.currency);
+  const setCurrency = useUiStore((state) => state.setCurrency);
+  const symbol = currency === "btc" ? "₿" : "€";
+  const currentLabel = currency === "btc" ? "bitcoin" : "euro";
+  const nextCurrency = currency === "btc" ? "eur" : "btc";
+  const nextLabel = nextCurrency === "btc" ? "bitcoin" : "euro";
+
+  return (
+    <Button
+      type="button"
+      variant="ghost"
+      size="icon"
+      className={topNavIconButtonClassName}
+      aria-label={`Display currency is ${currentLabel}. Switch to ${nextLabel}.`}
+      aria-pressed={currency === "btc"}
+      title={`Display currency: ${currentLabel}. Switch to ${nextLabel}.`}
+      onClick={() => setCurrency(nextCurrency)}
+    >
+      <span aria-hidden="true" className="text-sm font-semibold leading-none">
+        {symbol}
+      </span>
+    </Button>
   );
 }
 
