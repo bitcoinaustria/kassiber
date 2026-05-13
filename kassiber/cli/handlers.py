@@ -1482,7 +1482,7 @@ def _sync_btcpay_wallet(
         raise AppError(
             f"Backend '{backend['name']}' has kind '{backend['kind']}', expected 'btcpay'",
             code="validation",
-            hint="Create a BTCPay backend with `kassiber backends create --kind btcpay --url <server> --token <api-key>`.",
+            hint="Create a BTCPay backend with `kassiber backends create --kind btcpay --url <server> --token-stdin` or `--token-fd FD`.",
         )
     records = fetch_btcpay_records(
         backend,
@@ -1609,7 +1609,7 @@ def sync_btcpay_into_wallet(
         raise AppError(
             f"Backend '{backend['name']}' has kind '{backend['kind']}', expected 'btcpay'",
             code="validation",
-            hint="Create a BTCPay backend with `kassiber backends create --kind btcpay --url <server> --token <api-key>`.",
+            hint="Create a BTCPay backend with `kassiber backends create --kind btcpay --url <server> --token-stdin` or `--token-fd FD`.",
         )
     core_wallets.update_wallet(
         conn,

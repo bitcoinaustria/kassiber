@@ -74,6 +74,23 @@ or CLI provider is selected.
 | Diagnostics | `kassiber/diagnostics.py:127`, `kassiber/diagnostics.py:129`, `kassiber/diagnostics.py:609`, `kassiber/diagnostics.py:682` | Public diagnostics redacts sensitive keys, xpub/xprv, bearer tokens, `sk-*`, assigned secret text, details, and paths. | Diagnostics is public-safe by design, not a substitute for reviewing arbitrary logs. |
 | Managed paths | `kassiber/core/runtime.py:68`, `kassiber/core/runtime.py:76`, `kassiber/core/runtime.py:77`, `kassiber/core/runtime.py:86` | Data/config/exports/attachments are explicit managed roots. | Attachments and exports are outside SQLCipher unless inside an encrypted backup. |
 
+## Remaining Secret Argv Audit
+
+These forms remain compatibility shims and warn on use. New docs, tests, and
+assistant-facing examples should prefer stdin/fd or file paths. Removing the
+shims is tracked separately in `TODO.md` because older CLI regression tests and
+scripts still exercise them.
+
+| Secret argv form | Parser location | Preferred entry | Current test/call-site evidence |
+| --- | --- | --- | --- |
+| `backends create/update --auth-header` | `kassiber/cli/main.py:348`, `kassiber/cli/main.py:382` | `--auth-header-stdin` / `--auth-header-fd` | `tests/test_review_regressions.py:2553`, `tests/test_review_regressions.py:2626` |
+| `backends create/update --token` | `kassiber/cli/main.py:352`, `kassiber/cli/main.py:386` | `--token-stdin` / `--token-fd` | `tests/test_daemon_smoke.py:1188`, `tests/test_daemon_smoke.py:1341`, `tests/test_review_regressions.py:1272`, `tests/test_review_regressions.py:2555`, `tests/test_review_regressions.py:2628`, `tests/test_review_regressions.py:4334`, `tests/test_review_regressions.py:4445`, `tests/test_review_regressions.py:4571`, `tests/test_review_regressions.py:4748`, `tests/test_review_regressions.py:4900`, `tests/test_review_regressions.py:4934`, `tests/test_review_regressions.py:4992`, `tests/test_review_regressions.py:5038` |
+| `backends create/update --username` | `kassiber/cli/main.py:363`, `kassiber/cli/main.py:397` | `--username-stdin` / `--username-fd` | `tests/test_review_regressions.py:2559`, `tests/test_review_regressions.py:2622` |
+| `backends create/update --password` | `kassiber/cli/main.py:367`, `kassiber/cli/main.py:401` | `--password-stdin` / `--password-fd` | `tests/test_review_regressions.py:2561`, `tests/test_review_regressions.py:2624` |
+| `wallets create --descriptor` | `kassiber/cli/main.py:509` | `--descriptor-stdin` / `--descriptor-fd` / `--descriptor-file` | `tests/test_cli_smoke.py:417`, `tests/test_review_regressions.py:2025`, `tests/test_review_regressions.py:2086` |
+| `wallets create --change-descriptor` | `kassiber/cli/main.py:515` | `--change-descriptor-stdin` / `--change-descriptor-fd` / `--change-descriptor-file` | `tests/test_cli_smoke.py:418`, `tests/test_review_regressions.py:2027`, `tests/test_review_regressions.py:2088` |
+| `ai providers create/update --api-key` | `kassiber/cli/main.py:1359`, `kassiber/cli/main.py:1378` | `--api-key-stdin` / `--api-key-fd` or Settings `ai.providers.set_api_key` | `tests/test_cli_smoke.py:322` covers the preferred stdin path; no current test should add a raw `--api-key <value>` call site. |
+
 ## Target Design
 
 For AI provider keys, the long-term desktop shape is:

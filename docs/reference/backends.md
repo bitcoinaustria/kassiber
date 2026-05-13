@@ -222,13 +222,15 @@ Descriptor wallets derive receive and change scripts locally and then refresh th
 Example Bitcoin descriptor wallet:
 
 ```bash
-python3 -m kassiber wallets create \
+bash -c 'python3 -m kassiber wallets create \
   --label vault \
   --kind descriptor \
   --backend mempool \
-  --descriptor 'wpkh([fingerprint/84h/0h/0h]xpub.../0/*)' \
-  --change-descriptor 'wpkh([fingerprint/84h/0h/0h]xpub.../1/*)' \
-  --gap-limit 20
+  --descriptor-fd 3 \
+  --change-descriptor-fd 4 \
+  --gap-limit 20' \
+  3< <(printf '%s\n' 'wpkh([fingerprint/84h/0h/0h]xpub.../0/*)') \
+  4< <(printf '%s\n' 'wpkh([fingerprint/84h/0h/0h]xpub.../1/*)')
 
 python3 -m kassiber wallets derive --wallet vault --count 5
 python3 -m kassiber wallets sync --wallet vault
@@ -237,15 +239,17 @@ python3 -m kassiber wallets sync --wallet vault
 Example Liquid descriptor wallet:
 
 ```bash
-python3 -m kassiber wallets create \
+bash -c 'python3 -m kassiber wallets create \
   --label event-liquid \
   --kind descriptor \
   --backend liquid \
   --chain liquid \
   --network liquidv1 \
-  --descriptor 'ct(slip77(...),elwpkh(.../0/*))' \
-  --change-descriptor 'ct(slip77(...),elwpkh(.../1/*))' \
-  --gap-limit 20
+  --descriptor-fd 3 \
+  --change-descriptor-fd 4 \
+  --gap-limit 20' \
+  3< <(printf '%s\n' 'ct(slip77(...),elwpkh(.../0/*))') \
+  4< <(printf '%s\n' 'ct(slip77(...),elwpkh(.../1/*))')
 ```
 
 For Liquid:
@@ -258,6 +262,8 @@ For Liquid:
 
 - public backends learn your queried scripts and timing
 - descriptor sync leaks more wallet structure than fixed-address sync
+- descriptors and blinding keys are Kassiber-managed secrets; prefer stdin/fd
+  entry over inline argv, and avoid temporary plaintext descriptor files
 - `tor_proxy` is stored but not wired yet; route the whole process externally if needed
 - credentials in argv (`--token <value>`, `--password <value>`,
   `--auth-header <value>`, `--username <value>`) land in shell history
