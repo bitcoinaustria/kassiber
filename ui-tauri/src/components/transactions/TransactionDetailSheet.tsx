@@ -225,6 +225,8 @@ export function TransactionDetailSheet({
   hideSensitive,
   currency,
   explorerSettings,
+  isSaving,
+  saveError,
   onOpenChange,
   onOpenExplorer,
   onSave,
@@ -235,9 +237,14 @@ export function TransactionDetailSheet({
   hideSensitive: boolean;
   currency: Currency;
   explorerSettings: ExplorerSettings;
+  isSaving?: boolean;
+  saveError?: string | null;
   onOpenChange: (open: boolean) => void;
   onOpenExplorer: (transaction: Transaction) => void;
-  onSave: (transactionId: string, draft: TransactionEditDraft) => void;
+  onSave: (
+    transactionId: string,
+    draft: TransactionEditDraft,
+  ) => void | Promise<void>;
 }) {
   const [activeTab, setActiveTab] = React.useState(initialTab);
   const [localDraft, setLocalDraft] = React.useState<TransactionEditDraft | null>(
@@ -484,7 +491,7 @@ export function TransactionDetailSheet({
                         label="Included"
                         value={localDraft.excluded ? "Excluded" : "Included"}
                       />
-                      <LedgerRow label="Last edited" value="Local draft" />
+                      <LedgerRow label="Metadata" value="Book database" />
                     </div>
                   </div>
                   <div className="rounded-md border bg-muted/25 p-3">
@@ -558,6 +565,7 @@ export function TransactionDetailSheet({
                             pricingValue === option.value &&
                               "border-primary bg-muted/60",
                           )}
+                          disabled
                           onClick={() => {
                             updateDraft("pricingSourceKind", option.sourceKind);
                             updateDraft("pricingQuality", option.quality);
@@ -602,6 +610,7 @@ export function TransactionDetailSheet({
                           <Input
                             id="tx-manual-currency"
                             value={localDraft.manualCurrency}
+                            disabled
                             onChange={(event) =>
                               updateDraft(
                                 "manualCurrency",
@@ -617,6 +626,7 @@ export function TransactionDetailSheet({
                             id="tx-manual-price"
                             inputMode="decimal"
                             value={localDraft.manualPrice}
+                            disabled
                             onFocus={() => {
                               updateDraft("pricingSourceKind", "manual_override");
                               updateDraft("pricingQuality", "exact");
@@ -631,6 +641,7 @@ export function TransactionDetailSheet({
                             id="tx-manual-value"
                             inputMode="decimal"
                             value={localDraft.manualValue}
+                            disabled
                             onFocus={() => {
                               updateDraft("pricingSourceKind", "manual_override");
                               updateDraft("pricingQuality", "exact");
@@ -646,6 +657,7 @@ export function TransactionDetailSheet({
                           id="tx-manual-source"
                           value={localDraft.manualSource}
                           className={blurClass(hideSensitive)}
+                          disabled
                           onFocus={() => {
                             updateDraft("pricingSourceKind", "manual_override");
                             updateDraft("pricingQuality", "exact");
@@ -762,6 +774,7 @@ export function TransactionDetailSheet({
                       <Label htmlFor="tx-status">Review status</Label>
                       <Select
                         value={localDraft.reviewStatus}
+                        disabled
                         onValueChange={(value) =>
                           updateDraft("reviewStatus", value as TransactionStatus)
                         }
@@ -861,6 +874,7 @@ export function TransactionDetailSheet({
                               localDraft.atRegime,
                               localDraft.atCategory,
                             )}
+                            disabled
                             onValueChange={(value) => {
                               const option =
                                 austrianTaxClassificationForValue(value);
@@ -891,6 +905,7 @@ export function TransactionDetailSheet({
                           <Switch
                             id="tx-taxable"
                             checked={localDraft.taxable}
+                            disabled
                             onCheckedChange={(checked) =>
                               updateDraft("taxable", checked)
                             }
@@ -1047,22 +1062,40 @@ export function TransactionDetailSheet({
         <SheetFooter className="border-t p-3 sm:flex-row sm:items-center sm:justify-between sm:px-6">
           <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
             <BookMarked className="size-4" aria-hidden="true" />
-            <span>Demo only: changes stay local until persistence is wired.</span>
+            <span>
+              Saves note, tags, classification label, and exclusion state to
+              this book.
+            </span>
+            {saveError ? (
+              <span className="basis-full text-destructive sm:basis-auto">
+                {saveError}
+              </span>
+            ) : null}
           </div>
           <div className="flex justify-end gap-2">
-            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+            <Button
+              type="button"
+              variant="outline"
+              disabled={isSaving}
+              onClick={() => onOpenChange(false)}
+            >
               Cancel
             </Button>
             <Button
               type="button"
               className="gap-2"
-              onClick={() => {
-                onSave(transaction.id, localDraft);
-                onOpenChange(false);
+              disabled={isSaving}
+              onClick={async () => {
+                try {
+                  await onSave(transaction.id, localDraft);
+                  onOpenChange(false);
+                } catch {
+                  // The parent renders the daemon error in the footer.
+                }
               }}
             >
               <Save className="size-4" aria-hidden="true" />
-              Save local draft
+              {isSaving ? "Saving" : "Save edits"}
             </Button>
           </div>
         </SheetFooter>

@@ -39,6 +39,7 @@ daemon for the exact current allowlist:
       "status",
       "ui.overview.snapshot",
       "ui.transactions.list",
+      "ui.transactions.metadata.update",
       "ui.wallets.list",
       "ui.backends.list",
       "ui.backends.options",
@@ -191,6 +192,12 @@ propagates the same structured error codes (`auth_error`, `not_found`,
 `ui.metadata.bip329.import` accepts `file` and optional `wallet`, then imports
 BIP329 JSONL labels into the active profile and bridges transaction labels to
 matching local transactions.
+
+`ui.transactions.metadata.update` accepts
+`{"transaction":"...","note":"...","tags":["Reviewed"],"excluded":false}` for
+the active books/profile. The daemon persists the note, replaces the
+transaction tag set (creating missing tag rows), updates the exclusion flag, and
+invalidates processed journals so reports are rebuilt before use.
 
 `ui.wallets.update` accepts `{"wallet":"..."}` for the active books/profile and
 edits at least one of `label`, the same wallet config fields the create

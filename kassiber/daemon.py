@@ -143,6 +143,7 @@ SUPPORTED_KINDS = (
     "ui.transactions.list",
     "ui.transactions.extremes",
     "ui.transactions.search",
+    "ui.transactions.metadata.update",
     "ui.wallets.list",
     "ui.backends.list",
     "ui.backends.options",
@@ -4703,6 +4704,37 @@ def _import_bip329_payload(
     )
 
 
+def _handle_transaction_metadata_update(
+    ctx: DaemonContext,
+    request: dict[str, Any],
+) -> dict[str, Any]:
+    if ctx.conn is None:
+        raise AppError("database is not open", code="unavailable", retryable=True)
+    args = _coerce_args_dict(request.get("request_id"), request.get("args"))
+    allowed = {"transaction", "note", "tags", "excluded"}
+    unknown = sorted(set(args) - allowed)
+    if unknown:
+        raise AppError(
+            "ui.transactions.metadata.update received unsupported fields",
+            code="validation",
+            details={"unknown": unknown},
+            retryable=False,
+        )
+    transaction = _required_str_arg(args, "transaction", "transaction id")
+    tags = args.get("tags") if "tags" in args else None
+    return core_metadata.update_transaction_metadata(
+        ctx.conn,
+        None,
+        None,
+        transaction,
+        _metadata_hooks(),
+        note=args.get("note"),
+        note_set="note" in args,
+        tags=tags,
+        excluded=args.get("excluded") if "excluded" in args else None,
+    )
+
+
 def _connections_sources_payload() -> dict[str, Any]:
     """Authoritative catalog of wallet kinds + import source formats.
 
@@ -5459,6 +5491,18 @@ def handle_request(
                 build_envelope(
                     "ui.transactions.search",
                     build_transactions_search_snapshot(ctx.conn, request.get("args")),
+                ),
+                request_id,
+            ),
+            False,
+        )
+
+    if kind == "ui.transactions.metadata.update":
+        return (
+            _with_request_id(
+                build_envelope(
+                    "ui.transactions.metadata.update",
+                    _handle_transaction_metadata_update(ctx, request),
                 ),
                 request_id,
             ),
