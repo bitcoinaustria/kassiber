@@ -986,6 +986,98 @@ class DaemonSmokeTest(unittest.TestCase):
                 code, stderr = _close_daemon(proc)
                 self.assertEqual(code, 0, stderr)
 
+    def test_ai_provider_list_keeps_ok_state_on_native_ref_bridge_error(self):
+        with tempfile.TemporaryDirectory(prefix="kassiber-daemon-ai-native-transient-") as tmp:
+            data_root = Path(tmp) / "data"
+            proc = _start_daemon(data_root)
+            self.assertEqual(_read_payload_timeout(proc)["kind"], "daemon.ready")
+            try:
+                _write_payload(
+                    proc,
+                    {
+                        "request_id": "provider-1",
+                        "kind": "ai.providers.create",
+                        "args": {
+                            "name": "native-transient",
+                            "base_url": "https://example.test/v1",
+                            "kind": "remote",
+                        },
+                    },
+                )
+                self.assertEqual(_read_payload_timeout(proc)["kind"], "ai.providers.create")
+                conn = sqlite3.connect(data_root / "kassiber.sqlite3")
+                try:
+                    conn.execute(
+                        """
+                        INSERT INTO ai_provider_secret_refs(
+                            provider_name, store_id, service, account, state,
+                            created_at, rotated_at
+                        ) VALUES(?, ?, ?, ?, ?, ?, ?)
+                        """,
+                        (
+                            "native-transient",
+                            "macos_keychain",
+                            "service-hash",
+                            "native-transient",
+                            "ok",
+                            "2026-05-13T00:00:00Z",
+                            "2026-05-13T00:00:00Z",
+                        ),
+                    )
+                    conn.commit()
+                finally:
+                    conn.close()
+
+                _write_payload(
+                    proc,
+                    {
+                        "request_id": "list-1",
+                        "kind": "ai.providers.list",
+                        "args": {"_desktop_secret_store_bridge": True},
+                    },
+                )
+                control = _read_payload_timeout(proc)
+                self.assertEqual(control["kind"], "supervisor.ai_secret_store.request")
+                self.assertEqual(control["data"]["op"], "exists")
+                _write_payload(
+                    proc,
+                    {
+                        "request_id": control["request_id"],
+                        "kind": "supervisor.ai_secret_store.response",
+                        "error": {
+                            "code": "secret_store_bridge_error",
+                            "message": "native store unavailable",
+                            "retryable": True,
+                        },
+                    },
+                )
+                listed = _read_payload_timeout(proc)
+                self.assertEqual(listed["kind"], "ai.providers.list")
+                provider = next(
+                    row
+                    for row in listed["data"]["providers"]
+                    if row["name"] == "native-transient"
+                )
+                self.assertEqual(
+                    provider["secret_ref"],
+                    {"store_id": "macos_keychain", "state": "ok"},
+                )
+
+                conn = sqlite3.connect(data_root / "kassiber.sqlite3")
+                try:
+                    state = conn.execute(
+                        "SELECT state FROM ai_provider_secret_refs WHERE provider_name = ?",
+                        ("native-transient",),
+                    ).fetchone()[0]
+                    self.assertEqual(state, "ok")
+                finally:
+                    conn.close()
+            finally:
+                _write_payload(proc, {"request_id": "shutdown-1", "kind": "daemon.shutdown"})
+                self.assertEqual(_read_payload_timeout(proc)["kind"], "daemon.shutdown")
+                code, stderr = _close_daemon(proc)
+                self.assertEqual(code, 0, stderr)
+
     def test_ai_provider_delete_ignores_unreachable_native_cleanup(self):
         with tempfile.TemporaryDirectory(prefix="kassiber-daemon-ai-native-delete-") as tmp:
             data_root = Path(tmp) / "data"

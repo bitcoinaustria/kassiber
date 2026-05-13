@@ -1033,14 +1033,9 @@ def _refresh_ai_provider_native_secret_states(
                 account=str(bridge_ref.get("account") or provider["name"]),
             )
         except AppError:
-            mark_ai_provider_secret_ref_state(ctx.conn, provider["name"], "unavailable")
-            ctx.conn.commit()
             continue
-        state = str(data.get("state") or "unavailable")
-        if state != "ok":
-            if state not in {"missing", "needs_reauth", "unavailable"}:
-                state = "unavailable"
-            mark_ai_provider_secret_ref_state(ctx.conn, provider["name"], state)
+        if str(data.get("state") or "") == "missing":
+            mark_ai_provider_secret_ref_state(ctx.conn, provider["name"], "missing")
             ctx.conn.commit()
 
 
