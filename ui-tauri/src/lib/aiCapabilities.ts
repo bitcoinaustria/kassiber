@@ -4,6 +4,21 @@ export type AssistantModelSelection = {
 } | null;
 
 export type AiProviderKind = "local" | "remote" | "tee";
+export type AiSecretStoreId =
+  | "macos_keychain"
+  | "windows_dpapi"
+  | "linux_secret_service"
+  | "sqlcipher_inline";
+export type AiSecretRefState =
+  | "ok"
+  | "missing"
+  | "needs_reauth"
+  | "unavailable";
+
+export interface AiProviderSecretRef {
+  store_id: AiSecretStoreId;
+  state: AiSecretRefState;
+}
 
 export interface AiProviderRow {
   name: string;
@@ -13,6 +28,7 @@ export interface AiProviderRow {
   notes?: string | null;
   acknowledged_at?: string | null;
   has_api_key: boolean;
+  secret_ref?: AiProviderSecretRef;
   is_default: boolean;
   supports_reasoning_effort?: boolean;
   capabilities?: unknown;

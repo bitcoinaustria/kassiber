@@ -80,6 +80,7 @@ daemon for the exact current allowlist:
       "ai.providers.get",
       "ai.providers.create",
       "ai.providers.update",
+      "ai.providers.set_api_key",
       "ai.providers.delete",
       "ai.providers.set_default",
       "ai.providers.clear_default",
@@ -102,6 +103,17 @@ treat this list (not the docs) as the source of truth for what the supervisor
 will pass through. Reveal kinds (see below) are included in the list but still
 require their own passphrase round-trip before the daemon returns raw secret
 material.
+
+`ai.providers.set_api_key` accepts
+`{"name":"provider","api_key":"..."}` or `{"name":"provider","api_key":null}`.
+It is the desktop API-key rotate/re-enter path. The terminal envelope is
+redacted and contains `has_api_key` plus `secret_ref.{store_id,state}`, never
+the raw key. In this PR the production store is still `sqlcipher_inline`;
+future OS-backed refs that cannot be read must return `secret_ref_unavailable`
+with `details.refs` and a Settings repair path.
+`ai.providers.create`, `ai.providers.update`, and `ai.test_connection` reject
+caller-supplied `api_key`; desktop callers must set or rotate keys through
+`ai.providers.set_api_key` and then test the stored provider.
 
 `ui.profiles.switch` accepts `{"profile_id":"..."}` and updates the active
 books set / book (`context_workspace` / `context_profile` internally) after the
@@ -268,5 +280,9 @@ can read every credential. The auth round-trip exists so a compromised UI
 process cannot silently siphon secrets without surfacing a re-prompt.
 
 The supervisor and any client must redact `passphrase_secret`, `token`,
-`descriptor`, `change_descriptor`, `blinding_key`, `auth_header`, and
-`password` fields from any persisted log line.
+`descriptor`, `change_descriptor`, `blinding_key`, `auth_header`, `password`,
+and `api_key` fields from any persisted log line.
+The daemon also redacts secret-shaped strings and sensitive detail keys at the
+error-envelope boundary before responses cross into Tauri, the Vite bridge, or
+UI state. Provider-controlled AI error bodies are treated as hostile and are
+size-limited plus redacted before they become `error.details.body`.

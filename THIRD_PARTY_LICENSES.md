@@ -9,6 +9,9 @@ It is not meant to be a hand-maintained inventory of every transitive package in
 Kassiber currently depends directly on the Kassiber-maintained [RP2 fork](https://github.com/bitcoinaustria/rp2) as its tax engine, [embit](https://github.com/diybitcoinhardware/embit) for descriptor derivation and Liquid support, [XlsxWriter](https://xlsxwriter.readthedocs.io/) for styled XLSX report exports, and [ReportLab](https://www.reportlab.com/) for styled PDF report exports.
 The in-development Tauri frontend also depends directly on TanStack Table for
 interactive local data grids.
+The desktop shell includes probe-only Rust keyring crates for the future
+AI-provider-key OS-store path; production storage still defaults to
+SQLCipher-inline in this slice.
 
 | Package | Version policy | Role | License |
 | --- | --- | --- | --- |
@@ -21,6 +24,10 @@ interactive local data grids.
 | `@tanstack/react-table` | `^8.21.3` | Interactive sorting, filtering, selection, and pagination in desktop UI data tables | MIT |
 | `react-markdown` | `^10.1.0` | Markdown renderer for assistant chat replies (paragraphs, lists, code, links) | MIT |
 | `remark-gfm` | `^4.0.0` | GitHub-flavored markdown extensions (tables, strikethrough, task lists) for assistant chat replies | MIT |
+| `keyring-core` | `1.0.0` | Rust trait layer for desktop secret-store probes | MIT OR Apache-2.0 |
+| `apple-native-keyring-store` | `1.0.0` | macOS Keychain backend crate compiled for the probe layer | MIT OR Apache-2.0 |
+| `windows-native-keyring-store` | `1.0.0` | Windows user-scope credential backend crate compiled for the probe layer | MIT OR Apache-2.0 |
+| `zbus-secret-service-keyring-store` | `1.0.0` | Linux Secret Service backend crate compiled for the probe layer | MIT OR Apache-2.0 |
 
 ## Notable downstream license note
 

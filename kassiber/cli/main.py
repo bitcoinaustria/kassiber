@@ -14,6 +14,7 @@ from ..ai import (
     create_db_ai_provider,
     delete_db_ai_provider,
     get_db_ai_provider,
+    get_ai_provider_api_key_for_use,
     redact_ai_provider_for_output,
     require_ai_provider_acknowledged,
     resolve_ai_provider,
@@ -143,7 +144,7 @@ def _ai_chat_options(args: argparse.Namespace) -> dict | None:
 def _ai_client_for(provider: dict):
     return ai_client_for_locator(
         base_url=provider["base_url"],
-        api_key=provider.get("api_key"),
+        api_key=get_ai_provider_api_key_for_use(provider),
     )
 
 
@@ -1355,7 +1356,8 @@ def build_parser() -> argparse.ArgumentParser:
             "or claude-cli://default / codex-cli://default"
         ),
     )
-    ai_providers_create.add_argument("--api-key", help="Bearer token; omit for keyless local providers")
+    ai_providers_create.add_argument("--api-key", help="Deprecated argv bearer token shim; prefer --api-key-stdin or --api-key-fd")
+    add_secret_stdin_options(ai_providers_create, "api-key", label="AI provider API key")
     ai_providers_create.add_argument("--default-model")
     ai_providers_create.add_argument(
         "--kind",
@@ -1373,7 +1375,8 @@ def build_parser() -> argparse.ArgumentParser:
     ai_providers_update = ai_providers_sub.add_parser("update")
     ai_providers_update.add_argument("name")
     ai_providers_update.add_argument("--base-url")
-    ai_providers_update.add_argument("--api-key")
+    ai_providers_update.add_argument("--api-key", help="Deprecated argv bearer token shim; prefer --api-key-stdin or --api-key-fd")
+    add_secret_stdin_options(ai_providers_update, "api-key", label="AI provider API key")
     ai_providers_update.add_argument("--default-model")
     ai_providers_update.add_argument("--kind", choices=list(_AI_PROVIDER_KINDS_LIST))
     ai_providers_update.add_argument("--notes")
@@ -2633,11 +2636,13 @@ def dispatch(conn: sqlite3.Connection | None, args: argparse.Namespace) -> Any:
             if args.ai_providers_command == "get":
                 return emit(args, _ai_provider_redacted(conn, get_db_ai_provider(conn, args.name)))
             if args.ai_providers_command == "create":
+                enforce_single_stdin_consumer(args, ("api_key",))
+                api_key = read_secret_from_args(args, "api-key", legacy_attr="api_key")
                 created = create_db_ai_provider(
                     conn,
                     args.name,
                     args.base_url,
-                    api_key=args.api_key,
+                    api_key=api_key,
                     default_model=args.default_model,
                     kind=args.kind,
                     notes=args.notes,
@@ -2645,9 +2650,11 @@ def dispatch(conn: sqlite3.Connection | None, args: argparse.Namespace) -> Any:
                 )
                 return emit(args, _ai_provider_redacted(conn, created))
             if args.ai_providers_command == "update":
+                enforce_single_stdin_consumer(args, ("api_key",))
+                api_key = read_secret_from_args(args, "api-key", legacy_attr="api_key")
                 updates = {
                     "base_url": args.base_url,
-                    "api_key": args.api_key,
+                    "api_key": api_key,
                     "default_model": args.default_model,
                     "kind": args.kind,
                     "notes": args.notes,

@@ -24,7 +24,7 @@ import json
 import shutil
 import tarfile
 import tempfile
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from io import BytesIO
 from pathlib import Path
@@ -43,6 +43,7 @@ from ..db import (
 )
 from ..errors import AppError
 from ..secrets.sqlcipher import (
+    get_row_class,
     looks_like_plaintext_sqlite,
     open_encrypted,
     require_sqlcipher,
@@ -63,6 +64,10 @@ BACKUP_CONFIG_DIR = "config"
 BACKUP_BACKENDS_ENV = f"{BACKUP_CONFIG_DIR}/backends.env"
 
 MANIFEST_SCHEMA_VERSION = 1
+SQLCIPHER_INLINE_SECRET_STORE = "sqlcipher_inline"
+SECRET_REF_REPAIR_HINT = (
+    "Open Settings -> AI providers and re-enter or repair the provider API key."
+)
 
 
 @dataclass
@@ -79,6 +84,7 @@ class BackupImportResult:
     manifest: dict
     pre_restore_backup: Optional[Path] = None
     temporary_artifacts_cleaned: bool = False
+    secret_ref_unavailable: list[dict] = field(default_factory=list)
 
 
 def _now_iso() -> str:
@@ -113,12 +119,106 @@ def _backup_sqlcipher_database(
         src.close()
 
 
+def _collect_ai_provider_secret_refs(db_path: Path, db_passphrase: str) -> list[dict]:
+    """Return non-inline AI provider secret refs for restore warnings.
+
+    The manifest intentionally records reference metadata only. Secret values
+    stay either inside the SQLCipher database (`sqlcipher_inline`) or in a
+    future OS store; OS-backed refs are never materialized into the backup.
+    """
+
+    conn = open_encrypted(db_path, db_passphrase, row_factory=get_row_class())
+    try:
+        exists = conn.execute(
+            """
+            SELECT 1
+            FROM sqlite_master
+            WHERE type = 'table' AND name = 'ai_provider_secret_refs'
+            """
+        ).fetchone()
+        if not exists:
+            return []
+        rows = conn.execute(
+            """
+            SELECT
+                r.provider_name,
+                r.store_id,
+                r.service,
+                r.account,
+                r.state,
+                p.api_key IS NOT NULL AND p.api_key != '' AS has_inline_secret
+            FROM ai_provider_secret_refs r
+            LEFT JOIN ai_providers p ON p.name = r.provider_name
+            WHERE r.store_id != ?
+            ORDER BY r.provider_name
+            """,
+            (SQLCIPHER_INLINE_SECRET_STORE,),
+        ).fetchall()
+        for row in rows:
+            if row["has_inline_secret"]:
+                raise AppError(
+                    (
+                        "refusing to export an OS-backed AI provider ref that "
+                        "still has an inline API key"
+                    ),
+                    code="secret_ref_inline_secret",
+                    hint=(
+                        "Repair the provider secret state before exporting the backup."
+                    ),
+                    details={
+                        "provider_name": row["provider_name"],
+                        "store_id": row["store_id"],
+                    },
+                    retryable=False,
+                )
+        return [
+            {
+                "provider_name": row["provider_name"],
+                "store_id": row["store_id"],
+                "service": row["service"],
+                "account": row["account"],
+                "state": row["state"],
+            }
+            for row in rows
+        ]
+    finally:
+        conn.close()
+
+
+def _restore_unavailable_secret_refs(manifest: dict) -> list[dict]:
+    secret_refs = manifest.get("secret_refs")
+    if not isinstance(secret_refs, dict):
+        return []
+    refs = secret_refs.get("ai_provider_refs")
+    if not isinstance(refs, list):
+        return []
+
+    unavailable: list[dict] = []
+    for ref in refs:
+        if not isinstance(ref, dict):
+            continue
+        store_id = str(ref.get("store_id") or "")
+        if not store_id or store_id == SQLCIPHER_INLINE_SECRET_STORE:
+            continue
+        unavailable.append(
+            {
+                "provider_name": str(ref.get("provider_name") or ""),
+                "store_id": store_id,
+                "service": str(ref.get("service") or ""),
+                "account": str(ref.get("account") or ref.get("provider_name") or ""),
+                "state": "unavailable",
+            }
+        )
+    return unavailable
+
+
 def _build_manifest(
     *,
     workspace_paths: dict,
     db_relpath: str,
     attachments_count: int,
     backends_env_present: bool,
+    ai_provider_secret_refs: Optional[list[dict]] = None,
 ) -> dict:
     return {
         "schema_version": MANIFEST_SCHEMA_VERSION,
@@ -133,6 +233,9 @@ def _build_manifest(
         "notes": {
             "inner_db_encrypted": True,
             "inner_db_passphrase_required": True,
+        },
+        "secret_refs": {
+            "ai_provider_refs": ai_provider_secret_refs or [],
         },
     }
 
@@ -211,6 +314,9 @@ def export_backup(
         staging = Path(tmpdir)
         db_copy = staging / BACKUP_DB_NAME
         _backup_sqlcipher_database(db_path, db_passphrase, db_copy)
+        ai_provider_secret_refs = _collect_ai_provider_secret_refs(
+            db_copy, db_passphrase
+        )
 
         tarball_path = staging / "bundle.tar"
         attachments_count = 0
@@ -244,6 +350,7 @@ def export_backup(
                 db_relpath=BACKUP_DB_NAME,
                 attachments_count=attachments_count,
                 backends_env_present=backends_env_present,
+                ai_provider_secret_refs=ai_provider_secret_refs,
             )
             manifest_bytes = (
                 json.dumps(manifest, indent=2, sort_keys=True).encode("utf-8") + b"\n"
@@ -355,13 +462,20 @@ def import_backup(
         # `entries.backends_env=True` in the manifest implies the bundle
         # actually carries the file. Cross-check so we fail loudly if a
         # tampered manifest claims content the archive does not contain.
-        manifest_entries = manifest.get("entries", {}) if isinstance(manifest.get("entries"), dict) else {}
-        if manifest_entries.get("backends_env") and not (staging_dir / BACKUP_BACKENDS_ENV).exists():
+        manifest_entries = (
+            manifest.get("entries", {})
+            if isinstance(manifest.get("entries"), dict)
+            else {}
+        )
+        if manifest_entries.get("backends_env") and not (
+            staging_dir / BACKUP_BACKENDS_ENV
+        ).exists():
             raise AppError(
                 "manifest declares backends_env but the file is missing from the archive",
                 code="invalid_backup",
                 retryable=False,
             )
+        secret_ref_unavailable = _restore_unavailable_secret_refs(manifest)
 
         installed_root: Optional[Path] = None
         backup_dir: Optional[Path] = None
@@ -439,6 +553,7 @@ def import_backup(
                 staging_path=None,
                 installed_data_root=installed_root,
                 manifest=manifest,
+                secret_ref_unavailable=secret_ref_unavailable,
                 pre_restore_backup=backup_dir,
                 temporary_artifacts_cleaned=True,
             )
@@ -447,6 +562,7 @@ def import_backup(
             staging_path=staging_dir,
             installed_data_root=None,
             manifest=manifest,
+            secret_ref_unavailable=secret_ref_unavailable,
         )
     except Exception:
         shutil.rmtree(staging_parent, ignore_errors=True)

@@ -33,6 +33,7 @@ import urllib.error
 import urllib.request
 
 from ..errors import AppError
+from ..redaction import provider_error_body_preview
 
 
 DEFAULT_TIMEOUT_SECONDS = 120
@@ -205,7 +206,9 @@ def _http_error_app_error(exc: urllib.error.HTTPError) -> AppError:
         body = ""
     details = {"status": status}
     if body:
-        details["body"] = body[:1024]
+        preview, truncated = provider_error_body_preview(body)
+        details["body"] = preview
+        details["body_truncated"] = truncated
     if status == 401 or status == 403:
         return AppError(
             "AI provider rejected the request as unauthorized",

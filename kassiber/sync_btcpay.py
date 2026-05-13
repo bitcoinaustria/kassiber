@@ -51,7 +51,7 @@ def fetch_btcpay_records(
         raise AppError(
             "BTCPay instance is missing 'token' (api key)",
             code="config_error",
-            hint="Store the api key with `kassiber backends update --token <key>` or KASSIBER_BACKEND_<NAME>_TOKEN.",
+            hint="Store the api key with `kassiber backends update --token-stdin` or `--token-fd FD`.",
         )
     if page_size <= 0:
         raise AppError("BTCPay page_size must be positive", code="validation")
@@ -111,7 +111,7 @@ def probe_btcpay_wallet(
         raise AppError(
             "BTCPay instance is missing 'token' (api key)",
             code="config_error",
-            hint="Store the api key with `kassiber backends update --token <key>` or KASSIBER_BACKEND_<NAME>_TOKEN.",
+            hint="Store the api key with `kassiber backends update --token-stdin` or `--token-fd FD`.",
         )
     timeout = backend_timeout(backend)
     http_opener = opener or urlrequest.build_opener()

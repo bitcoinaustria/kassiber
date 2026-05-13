@@ -453,12 +453,18 @@ and [docs/plan/04-desktop-ui.md](docs/plan/04-desktop-ui.md).
   setup site. At the same time, harden the `backends.env` plaintext-secret
   warning into a refusal once no test or example needs the dotenv path for
   secret seeding.
-- [ ] Extend the stdin/fd secret-input pattern to `ai_providers.api_key`:
-  OpenAI-compatible remote providers still accept `--api-key <value>` via argv.
-  Add `--api-key-stdin` / `--api-key-fd FD` (matching the backends pattern) and
-  a daemon-side `ai.providers.set_api_key` reveal/rotate flow so hosted agents
-  never have to put raw API keys on the command line. Claude/Codex CLI providers
-  use local CLI auth and do not add Kassiber API-key storage.
+- [x] Extend the stdin/fd secret-input pattern to `ai_providers.api_key`:
+  OpenAI-compatible remote providers now support `--api-key-stdin` /
+  `--api-key-fd FD` and desktop Settings uses the daemon-side
+  `ai.providers.set_api_key` rotate/re-enter flow. The legacy
+  `--api-key <value>` argv form remains a warning-on-use shim for scripts.
+  Claude/Codex CLI providers use local CLI auth and do not add Kassiber
+  API-key storage.
+- [x] Document the desktop secret-management boundary model for the AI-key
+  pilot: SQLCipher remains the DB/accounting at-rest perimeter, OS credential
+  stores are probe-only for now, backend tokens/descriptors/blinding keys stay
+  SQLCipher-protected, and no runtime or OS-compromise protection claims are
+  made. See `docs/plan/10-secret-management.md`.
 - [ ] Split wallet descriptor and other sensitive config out of the generic
   `wallets.config_json` blob into typed project-local tables now that
   SQLCipher protects the file at rest.
@@ -523,11 +529,10 @@ and [docs/plan/04-desktop-ui.md](docs/plan/04-desktop-ui.md).
 - [ ] Add a narrow docs-drift check for shared command / verification /
   safe-to-record surfaces so `README.md`, `AGENTS.md`, `SECURITY.md`, and
   `skills/kassiber/` do not quietly diverge
-- [ ] Run Vitest from `scripts/quality-gate.sh`. The new
-  `ui-tauri/src/lib/bridgeContainment.test.ts` only runs when
-  `pnpm --dir ui-tauri exec vitest` is invoked manually, so the bridge
-  containment regression is silent in CI. Add a `pnpm --dir ui-tauri exec
-  vitest run` step to the gate (and make sure CI sets up pnpm/node).
+- [x] Run Vitest from `scripts/quality-gate.sh`; CI installs
+  `ui-tauri/node_modules` with `pnpm --dir ui-tauri install --frozen-lockfile`
+  before running the gate, and the gate fails clearly if dependencies are
+  missing instead of silently installing them.
 - [ ] Harden the dev Vite bridge: either default to read-only and require
   an explicit flag to allow mutating kinds, or require a per-launch token
   header. Today the bridge accepts every kind in

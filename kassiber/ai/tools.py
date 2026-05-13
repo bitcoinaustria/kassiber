@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any, Literal
 
 from ..errors import AppError
+from ..redaction import is_sensitive_key, redact_secret_text
 
 
 ToolKindClass = Literal["read_only", "mutating"]
@@ -971,13 +972,17 @@ def redact_tool_arguments(value: Any) -> Any:
         for key, item in value.items():
             key_text = str(key)
             lowered = key_text.lower()
-            if any(part in lowered for part in SENSITIVE_ARGUMENT_KEY_PARTS):
+            if is_sensitive_key(key_text) or any(
+                part in lowered for part in SENSITIVE_ARGUMENT_KEY_PARTS
+            ):
                 redacted[key_text] = "<redacted>"
             else:
                 redacted[key_text] = redact_tool_arguments(item)
         return redacted
     if isinstance(value, list):
         return [redact_tool_arguments(item) for item in value]
+    if isinstance(value, str):
+        return redact_secret_text(value)
     return value
 
 

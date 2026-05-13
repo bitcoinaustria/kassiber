@@ -1,3 +1,5 @@
+#[allow(dead_code)]
+mod secret_store;
 mod supervisor;
 
 use serde::{Deserialize, Serialize};
@@ -175,6 +177,7 @@ const ALLOWED_DAEMON_KINDS: &[&str] = &[
     "ai.providers.get",
     "ai.providers.create",
     "ai.providers.update",
+    "ai.providers.set_api_key",
     "ai.providers.delete",
     "ai.providers.set_default",
     "ai.providers.clear_default",
@@ -639,7 +642,7 @@ fn contains_ascii_case_insensitive(haystack: &[u8], needle: &[u8]) -> bool {
         window
             .iter()
             .zip(needle)
-            .all(|(left, right)| left.to_ascii_lowercase() == right.to_ascii_lowercase())
+            .all(|(left, right)| left.eq_ignore_ascii_case(right))
     })
 }
 
@@ -1565,6 +1568,17 @@ fn open_menu_url(url: &str) {
     }
 }
 
+fn exe_stem_is_kassiber() -> bool {
+    env::current_exe()
+        .ok()
+        .and_then(|path: PathBuf| {
+            path.file_stem()
+                .map(|stem| stem.to_string_lossy().to_string())
+        })
+        .map(|stem| stem.eq_ignore_ascii_case("kassiber"))
+        .unwrap_or(false)
+}
+
 fn desktop_cli_args() -> Option<Vec<String>> {
     let args: Vec<String> = env::args()
         .skip(1)
@@ -2051,15 +2065,4 @@ mod tests {
     fn fake_kassiber_sqlite_bytes() -> &'static [u8] {
         b"SQLite format 3\0CREATE TABLE IF NOT EXISTS settings (key TEXT, value TEXT); CREATE TABLE IF NOT EXISTS workspaces (id TEXT, label TEXT); CREATE TABLE IF NOT EXISTS profiles (id TEXT, workspace_id TEXT, label TEXT, fiat_currency TEXT);"
     }
-}
-
-fn exe_stem_is_kassiber() -> bool {
-    env::current_exe()
-        .ok()
-        .and_then(|path: PathBuf| {
-            path.file_stem()
-                .map(|stem| stem.to_string_lossy().to_string())
-        })
-        .map(|stem| stem.eq_ignore_ascii_case("kassiber"))
-        .unwrap_or(false)
 }

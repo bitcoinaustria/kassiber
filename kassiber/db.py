@@ -46,6 +46,8 @@ LEGACY_XDG_DATA_ROOT = os.path.expanduser(f"~/.local/share/{APP_NAME}")
 LEGACY_DATA_ROOT = os.path.expanduser(f"~/.local/share/{LEGACY_APP_NAME}")
 DEFAULT_DB_FILENAME = f"{APP_NAME}.sqlite3"
 LEGACY_DB_FILENAME = f"{LEGACY_APP_NAME}.sqlite3"
+AI_PROVIDER_SECRET_STORE_SQLCIPHER = "sqlcipher_inline"
+AI_PROVIDER_SECRET_STATE_UNAVAILABLE = "unavailable"
 
 
 SCHEMA = """
@@ -469,6 +471,16 @@ CREATE TABLE IF NOT EXISTS ai_providers (
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS ai_provider_secret_refs (
+    provider_name TEXT PRIMARY KEY REFERENCES ai_providers(name) ON DELETE CASCADE,
+    store_id TEXT NOT NULL,
+    service TEXT NOT NULL,
+    account TEXT NOT NULL,
+    state TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    rotated_at TEXT
+);
 """
 
 
@@ -773,10 +785,55 @@ def ensure_schema_compat(conn):
     ensure_column(conn, "source_funds_cases", "target_external_id", "TEXT")
     _backfill_source_funds_target_external_id(conn)
     ensure_column(conn, "source_funds_recipients", "active", "INTEGER NOT NULL DEFAULT 1")
+    _ensure_ai_provider_secret_refs_schema(conn)
+    _mark_probe_only_ai_provider_secret_refs_unavailable(conn)
     _drop_legacy_source_funds_recipients_unique(conn)
     _migrate_msat_columns(conn)
     _backfill_liquid_asset_codes(conn)
     _ensure_swap_matching_schema(conn)
+
+
+def _ensure_ai_provider_secret_refs_schema(conn):
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS ai_provider_secret_refs (
+            provider_name TEXT PRIMARY KEY REFERENCES ai_providers(name) ON DELETE CASCADE,
+            store_id TEXT NOT NULL,
+            service TEXT NOT NULL,
+            account TEXT NOT NULL,
+            state TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            rotated_at TEXT
+        )
+        """
+    )
+
+
+def _mark_probe_only_ai_provider_secret_refs_unavailable(conn):
+    """Persist repair state for non-inline refs until native stores are writable.
+
+    In this probe-only build the Python daemon cannot read Keychain,
+    Credential Manager, or Secret Service values. If a restored database carries
+    an OS-backed ref with `state='ok'`, mark it as unavailable after unlock so
+    Settings shows the repair path durably instead of relying on the transient
+    backup-import warning.
+    """
+
+    cursor = conn.execute(
+        """
+        UPDATE ai_provider_secret_refs
+        SET state = ?
+        WHERE store_id != ?
+          AND state != ?
+        """,
+        (
+            AI_PROVIDER_SECRET_STATE_UNAVAILABLE,
+            AI_PROVIDER_SECRET_STORE_SQLCIPHER,
+            AI_PROVIDER_SECRET_STATE_UNAVAILABLE,
+        ),
+    )
+    if cursor.rowcount:
+        conn.commit()
 
 
 def _ensure_swap_matching_schema(conn):

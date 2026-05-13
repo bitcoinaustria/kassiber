@@ -90,4 +90,15 @@ smoke_py -m kassiber backends reveal-token --help >/dev/null
 smoke_py -m kassiber wallets reveal-descriptor --help >/dev/null
 
 echo
+if [ ! -d "$ROOT/ui-tauri/node_modules" ]; then
+  echo "quality gate requires ui-tauri/node_modules for Vitest; run: pnpm --dir ui-tauri install --frozen-lockfile" >&2
+  exit 2
+fi
+if ! command -v pnpm >/dev/null 2>&1; then
+  echo "quality gate requires pnpm on PATH to run Vitest" >&2
+  exit 2
+fi
+run pnpm --dir ui-tauri exec vitest run
+
+echo
 echo "quality gate passed"

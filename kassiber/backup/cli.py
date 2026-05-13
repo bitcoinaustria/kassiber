@@ -12,7 +12,7 @@ from ..secrets.prompt import (
     prompt_passphrase_with_confirmation,
     read_passphrase_from_fd,
 )
-from .pack import export_backup, import_backup
+from .pack import SECRET_REF_REPAIR_HINT, export_backup, import_backup
 
 
 def _resolve_backup_passphrase(
@@ -110,6 +110,15 @@ def cmd_backup_import(args: argparse.Namespace) -> dict:
             ),
             "temporary_artifacts_cleaned": result.temporary_artifacts_cleaned,
             "manifest": result.manifest,
+            "secret_ref_unavailable": (
+                {
+                    "code": "secret_ref_unavailable",
+                    "hint": SECRET_REF_REPAIR_HINT,
+                    "details": {"refs": result.secret_ref_unavailable},
+                }
+                if result.secret_ref_unavailable
+                else None
+            ),
         },
     )
 

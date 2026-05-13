@@ -136,7 +136,7 @@ export interface DeferredConnectionSetup {
   reason: string;
 }
 
-interface UiState {
+export interface UiState {
   lang: Lang;
   currency: Currency;
   dataMode: DataMode;
@@ -212,6 +212,23 @@ function stripNotificationProgress(
     delete clone.progress;
     return clone;
   });
+}
+
+export function uiStatePartialForStorage(state: UiState) {
+  return {
+    lang: state.lang,
+    currency: state.currency,
+    dataMode: state.dataMode,
+    hideSensitive: state.hideSensitive,
+    explorerSettings: state.explorerSettings,
+    appLockPolicy: state.appLockPolicy,
+    identity: state.identity,
+    aiFeaturesEnabled: state.aiFeaturesEnabled,
+    assistantModelSelection: state.assistantModelSelection,
+    daemonSession: state.daemonSession,
+    notifications: stripNotificationProgress(state.notifications),
+    sourceFundsDrafts: state.sourceFundsDrafts,
+  };
 }
 
 export const useUiStore = create<UiState>()(
@@ -323,20 +340,7 @@ export const useUiStore = create<UiState>()(
     }),
     {
       name: "kb.ui",
-      partialize: (state) => ({
-        lang: state.lang,
-        currency: state.currency,
-        dataMode: state.dataMode,
-        hideSensitive: state.hideSensitive,
-        explorerSettings: state.explorerSettings,
-        appLockPolicy: state.appLockPolicy,
-        identity: state.identity,
-        aiFeaturesEnabled: state.aiFeaturesEnabled,
-        assistantModelSelection: state.assistantModelSelection,
-        daemonSession: state.daemonSession,
-        notifications: stripNotificationProgress(state.notifications),
-        sourceFundsDrafts: state.sourceFundsDrafts,
-      }),
+      partialize: uiStatePartialForStorage,
       merge: (persisted, current) => {
         const restored = persisted as Partial<UiState>;
         const identity = normalizeIdentity(restored.identity ?? current.identity);
