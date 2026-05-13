@@ -38,7 +38,7 @@ export const JURISDICTIONS: Record<string, Jurisdiction> = {
     rateLabel: "KESt 27,5 %",
     defaultMethod: "moving_average_at",
     methodLocked: true,
-    methodNote: "Old stock: FIFO; new stock: average cost",
+    methodNote: "ATM - Austria Tax Method (FIFO old stock & AVCO new stock)",
     internalsNonTaxable: true,
     longTermDays: 365,
     ccy: "€",
@@ -93,6 +93,24 @@ export interface DisposedLot {
   type: LotType;
 }
 
+export interface NeutralSwapLot {
+  date: string;
+  pairId?: string;
+  kind?: string;
+  policy?: string;
+  outWallet: string;
+  outAsset: string;
+  outSats: number;
+  inWallet: string;
+  inAsset: string;
+  inSats: number;
+  feeSats: number;
+  feeKind?: string;
+  costEur: number;
+  proceedsEur: number;
+  gainEur: number;
+}
+
 export interface KennzahlRow {
   code: string;
   label: string;
@@ -119,6 +137,7 @@ export interface CapitalGainsReport {
   availableYears?: number[];
   method: CostBasisMethod;
   lots: DisposedLot[];
+  neutralSwapLots?: NeutralSwapLot[];
   kennzahlRows?: KennzahlRow[];
   status?: {
     needsJournals: boolean;

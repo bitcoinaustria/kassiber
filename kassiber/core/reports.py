@@ -681,6 +681,8 @@ def _report_query_rows(conn, profile, wallet=None):
             p.id,
             p.kind,
             p.policy,
+            p.swap_fee_msat,
+            COALESCE(p.swap_fee_kind, '') AS swap_fee_kind,
             COALESCE(p.notes, '') AS notes,
             p.created_at,
             tout.occurred_at AS out_occurred_at,
@@ -2724,6 +2726,13 @@ def _generic_report_wallet_flow_rows(context):
     return _summary_wallet_flow_rows(context["query_rows"]["flow_by_wallet"])
 
 
+def _pair_swap_fee_msat(row):
+    raw_fee_msat = row["swap_fee_msat"]
+    if raw_fee_msat is not None:
+        return int(raw_fee_msat or 0)
+    return int(row["out_amount"] or 0) - int(row["in_amount"] or 0)
+
+
 def _generic_report_transfer_pair_rows(context):
     rows = []
     for row in context["query_rows"]["transfer_pairs"]:
@@ -2733,12 +2742,16 @@ def _generic_report_transfer_pair_rows(context):
         in_fee_msat = int(row["in_fee"] or 0)
         out_asset = row["out_asset"]
         in_asset = row["in_asset"]
+        swap_fee_msat = _pair_swap_fee_msat(row)
         rows.append(
             {
                 "pair_id": row["id"],
                 "pair_type": "transfer" if out_asset == in_asset else "swap",
                 "kind": row["kind"],
                 "policy": row["policy"],
+                "swap_fee": float(msat_to_btc(swap_fee_msat)),
+                "swap_fee_msat": swap_fee_msat,
+                "swap_fee_kind": row["swap_fee_kind"],
                 "out_occurred_at": row["out_occurred_at"],
                 "out_wallet": row["out_wallet"],
                 "out_transaction_id": row["out_transaction_id"],
@@ -2928,6 +2941,9 @@ def _generic_report_section_specs(context):
                 "pair_type",
                 "kind",
                 "policy",
+                "swap_fee",
+                "swap_fee_msat",
+                "swap_fee_kind",
                 "out_occurred_at",
                 "out_wallet",
                 "out_transaction_id",

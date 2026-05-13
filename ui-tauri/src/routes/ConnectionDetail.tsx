@@ -8,7 +8,10 @@
 import { useState, type FormEvent, type ReactNode } from "react";
 import { Link, useNavigate, useParams } from "@tanstack/react-router";
 import {
+  ArrowDownRight,
   ArrowLeft,
+  ArrowLeftRight,
+  ArrowUpRight,
   Check,
   Copy,
   Database,
@@ -84,16 +87,8 @@ const fmtSatSigned = (amountSat: number) =>
   )}`;
 const fmtEurSigned = (amountEur: number) =>
   `${amountEur >= 0 ? "+ " : "- "}${fmtEur(Math.abs(amountEur))}`;
-const compactAddress = (value: string) =>
-  value.length <= 16 ? value : `${value.slice(0, 8)}…${value.slice(-8)}`;
-
-const SYNTHETIC_ADDRESSES = [
-  "bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq",
-  "bc1q9d4ywgfnd8h43da5tpcxcn6ajv590cg6d3tg6a",
-  "bc1qxy2kgdygjrsqtzq2n0yrf2493p83kkfjhx0wlh",
-  "bc1pgw9z80zvz6jcdqfp3hjlam77t34ddln0wfqp6w",
-  "bc1qm34lsc65zpw79lxes69zkqmk6ee3ewf0j77s3h",
-];
+const fmtShortTxid = (value?: string) =>
+  !value ? "no id" : value.length <= 18 ? value : `${value.slice(0, 10)}…${value.slice(-6)}`;
 
 const FULL_XPUB =
   "xpub6CUGRUonZSQ4TWtTMmzXdrXDtypWKiKrhko4ogpiMZbpiaQL2j8mdfKB3kRvvKUC7vw3R7Y8eYS9zPNxKr1J9";
@@ -265,15 +260,22 @@ function ConnectionDetailView({
     Boolean(identity?.encrypted) || identity?.databaseMode === "sqlcipher";
   const isXpubLike =
     connection.kind === "xpub" || connection.kind === "descriptor";
-  const addressCount = connection.addresses ?? connection.channels ?? 0;
+  const sourceValue = connection.syncSource || connection.sourceFormat || kindLabels[connection.kind];
+  const sourceDetail =
+    connection.syncMode === "live"
+      ? "Live sync source"
+      : connection.syncMode === "file"
+        ? "File import source"
+        : "Wallet source";
+  const hasGapMetric = connection.gap != null;
   const txsForConnection = txs
-    .filter((tx) =>
-      tx.account
-        .toLowerCase()
-        .includes(connection.label.toLowerCase().split(" ")[0].toLowerCase()),
-    )
+    .filter((tx) => {
+      const account = tx.account.toLowerCase();
+      const label = connection.label.toLowerCase();
+      return account === label || account.includes(label);
+    })
     .slice(0, 6);
-  const displayTxs = txsForConnection.length > 0 ? txsForConnection : txs.slice(0, 6);
+  const txCount = connection.transactionCount ?? txsForConnection.length;
 
   const onSync = () => {
     if (syncWallet.isPending) return;
@@ -572,9 +574,9 @@ function ConnectionDetailView({
           icon={<Wallet className="size-4" aria-hidden="true" />}
         />
         <MetricCard
-          label={connection.channels != null ? "Channels" : "Addresses"}
-          value={addressCount.toLocaleString("en-US")}
-          detail={connection.channels != null ? "Lightning channels" : "Derived rows"}
+          label="Rows"
+          value={txCount.toLocaleString("en-US")}
+          detail="Imported transactions"
           icon={<KeyRound className="size-4" aria-hidden="true" />}
         />
         <MetricCard
@@ -584,9 +586,11 @@ function ConnectionDetailView({
           icon={<RefreshCw className="size-4" aria-hidden="true" />}
         />
         <MetricCard
-          label="Gap limit"
-          value={connection.gap?.toLocaleString("en-US") ?? "—"}
-          detail={connection.gap != null ? "Unused address window" : "Not applicable"}
+          label={hasGapMetric ? "Gap limit" : "Source"}
+          value={
+            hasGapMetric ? connection.gap?.toLocaleString("en-US") ?? "—" : sourceValue
+          }
+          detail={hasGapMetric ? "Unused address window" : sourceDetail}
           icon={<Database className="size-4" aria-hidden="true" />}
         />
       </div>
@@ -636,53 +640,25 @@ function ConnectionDetailView({
           <CardHeader className="border-b">
             <CardTitle>Recent transactions</CardTitle>
             <CardDescription>
-              Recent rows that match this connection label.
+              Recent rows for this wallet source.
             </CardDescription>
           </CardHeader>
           <CardContent className="p-0">
-            <Table>
-              <TableHeader>
-                <TableRow className="bg-muted/50 hover:bg-muted/50">
-                  <TableHead>Date</TableHead>
-                  <TableHead>Type</TableHead>
-                  <TableHead className="text-right">Sats</TableHead>
-                  <TableHead className="text-right">EUR</TableHead>
-                  <TableHead className="text-right">Conf</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {displayTxs.map((tx) => (
-                  <TableRow key={tx.id}>
-                    <TableCell className="font-mono text-xs text-muted-foreground">
-                      {tx.date.slice(5)}
-                    </TableCell>
-                    <TableCell>{tx.type}</TableCell>
-                    <TableCell
-                      className={cn(
-                        "text-right font-mono text-xs tabular-nums",
-                        tx.amountSat > 0
-                          ? "text-emerald-600 dark:text-emerald-400"
-                          : "text-foreground",
-                        blurClass(hideSensitive),
-                      )}
-                    >
-                      {fmtSatSigned(tx.amountSat)}
-                    </TableCell>
-                    <TableCell
-                      className={cn(
-                        "text-right font-mono text-xs tabular-nums",
-                        blurClass(hideSensitive),
-                      )}
-                    >
-                      {fmtEurSigned(tx.eur)}
-                    </TableCell>
-                    <TableCell className="text-right font-mono text-xs text-muted-foreground tabular-nums">
-                      {tx.conf}
-                    </TableCell>
-                  </TableRow>
+            {txsForConnection.length ? (
+              <div className="divide-y">
+                {txsForConnection.map((tx) => (
+                  <ConnectionTransactionRow
+                    key={tx.id}
+                    tx={tx}
+                    hideSensitive={hideSensitive}
+                  />
                 ))}
-              </TableBody>
-            </Table>
+              </div>
+            ) : (
+              <div className="px-5 py-8 text-sm text-muted-foreground">
+                No recent rows are attached to this wallet source.
+              </div>
+            )}
           </CardContent>
         </Card>
 
@@ -742,45 +718,6 @@ function ConnectionDetailView({
             </CardContent>
           </Card>
 
-          {isXpubLike && (
-            <Card>
-              <CardHeader className="border-b">
-                <CardTitle>Derived addresses</CardTitle>
-                <CardDescription>
-                  Preview rows from the receive branch.
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="p-0">
-                <Table>
-                  <TableBody>
-                    {SYNTHETIC_ADDRESSES.map((address, index) => (
-                      <TableRow key={address}>
-                        <TableCell className="p-2 align-middle">
-                          <div className="flex min-w-0 items-center gap-2">
-                            <span
-                              className={cn(
-                                "min-w-0 font-mono text-xs tabular-nums",
-                                blurClass(hideSensitive),
-                              )}
-                            >
-                              {compactAddress(address)}
-                            </span>
-                            <CopyButton
-                              value={address}
-                              ariaLabel="Copy full address"
-                            />
-                          </div>
-                        </TableCell>
-                        <TableCell className="text-right font-mono text-xs text-muted-foreground">
-                          m/84&apos;/0&apos;/0&apos;/0/{index}
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </CardContent>
-            </Card>
-          )}
         </div>
       </div>
 
@@ -1044,6 +981,94 @@ function ConnectionDetailView({
         </DialogContent>
       </Dialog>
     </div>
+  );
+}
+
+function ConnectionTransactionRow({
+  tx,
+  hideSensitive,
+}: {
+  tx: OverviewSnapshot["txs"][number];
+  hideSensitive: boolean;
+}) {
+  const flow =
+    tx.type === "Swap" || tx.type === "Transfer" || tx.type === "Rebalance"
+      ? "transfer"
+      : tx.amountSat >= 0
+        ? "incoming"
+        : "outgoing";
+  const Icon =
+    flow === "incoming"
+      ? ArrowDownRight
+      : flow === "outgoing"
+        ? ArrowUpRight
+        : ArrowLeftRight;
+  const tone =
+    flow === "incoming"
+      ? "border-emerald-600/20 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300"
+      : flow === "outgoing"
+        ? "border-red-600/20 bg-red-500/10 text-red-700 dark:text-red-300"
+        : "border-sky-600/20 bg-sky-500/10 text-sky-700 dark:text-sky-300";
+
+  return (
+    <Link
+      to="/transactions"
+      search={{ tx: tx.id }}
+      className="flex min-w-0 items-start gap-3 px-5 py-3 transition-colors hover:bg-muted/45 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+    >
+      <span
+        className={cn(
+          "mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-md border",
+          tone,
+        )}
+        aria-hidden="true"
+      >
+        <Icon className="size-4" />
+      </span>
+      <span className="min-w-0 flex-1">
+        <span className="flex min-w-0 flex-wrap items-center gap-1.5">
+          <span className="truncate text-sm font-medium">
+            {tx.counter || tx.type}
+          </span>
+          <Badge variant="outline" className="rounded-md">
+            {tx.type}
+          </Badge>
+          <Badge variant="outline" className="rounded-md">
+            {tx.conf > 0 ? "Confirmed" : "Pending"}
+          </Badge>
+        </span>
+        <span className="mt-1 flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-1 text-[10px] text-muted-foreground sm:text-xs">
+          <span>{tx.date}</span>
+          <span aria-hidden="true">·</span>
+          <span className={cn("truncate font-mono", blurClass(hideSensitive))}>
+            {fmtShortTxid(tx.externalId ?? tx.id)}
+          </span>
+        </span>
+      </span>
+      <span className="shrink-0 text-right">
+        <span
+          className={cn(
+            "block font-mono text-sm font-semibold tabular-nums",
+            tx.amountSat > 0
+              ? "text-emerald-600 dark:text-emerald-400"
+              : tx.amountSat < 0
+                ? "text-red-600 dark:text-red-400"
+                : "text-muted-foreground",
+            blurClass(hideSensitive),
+          )}
+        >
+          {fmtSatSigned(tx.amountSat)}
+        </span>
+        <span
+          className={cn(
+            "mt-0.5 block font-mono text-[10px] text-muted-foreground tabular-nums sm:text-xs",
+            blurClass(hideSensitive),
+          )}
+        >
+          {fmtEurSigned(tx.eur)}
+        </span>
+      </span>
+    </Link>
   );
 }
 

@@ -46,6 +46,7 @@ import {
   type CostBasisMethod,
   type DisposedLot,
   type KennzahlRow,
+  type NeutralSwapLot,
 } from "@/mocks/reports";
 import { useUiStore } from "@/store/ui";
 
@@ -62,8 +63,10 @@ const COST_BASIS_METHODS: Array<{
   { k: "lofo", name: "LOFO", desc: "Lowest-in, first-out" },
 ];
 
-const METHOD_LABELS: Record<CostBasisMethod, { name: string; desc: string }> =
-  {
+const METHOD_LABELS: Record<
+  CostBasisMethod,
+  { name: string; desc: string; fullName?: string }
+> = {
     fifo: { name: "FIFO", desc: "First-in, first-out" },
     lifo: { name: "LIFO", desc: "Last-in, first-out" },
     hifo: { name: "HIFO", desc: "Highest-in, first-out" },
@@ -73,8 +76,9 @@ const METHOD_LABELS: Record<CostBasisMethod, { name: string; desc: string }> =
       desc: "Average cost pool",
     },
     moving_average_at: {
-      name: "Austria tax method",
-      desc: "Old stock: FIFO; new stock: average cost",
+      name: "ATM",
+      fullName: "ATM - Austria Tax Method (FIFO old stock & AVCO new stock)",
+      desc: "FIFO old stock; AVCO new stock",
     },
   };
 
@@ -234,6 +238,7 @@ function ReportsView({ report, hideSensitive }: ReportsViewProps) {
         : [];
 
   const lots = report.lots;
+  const neutralSwapLots = report.neutralSwapLots ?? [];
   const totals = summarizeLots(lots);
   const estimatedTax = Math.max(totals.gain, 0) * jurisdiction.rate;
   const fmt = (n: number) =>
@@ -380,6 +385,14 @@ function ReportsView({ report, hideSensitive }: ReportsViewProps) {
             formatNumber={fmt}
             year={year}
           />
+          {neutralSwapLots.length ? (
+            <NeutralSwapAuditPanel
+              swaps={neutralSwapLots}
+              jurisdiction={jurisdiction}
+              hideSensitive={hideSensitive}
+              formatNumber={fmt}
+            />
+          ) : null}
         </div>
         <div className="grid min-w-0 gap-3 sm:gap-4">
           <ReportFilesPanel
@@ -412,8 +425,9 @@ function ReportPackageHeader({
   year: number;
   periodLabel: string;
   jurisdiction: (typeof JURISDICTIONS)[string];
-  methodLabel: { name: string; desc: string };
+  methodLabel: { name: string; desc: string; fullName?: string };
 }) {
+  const methodName = methodLabel.fullName ?? methodLabel.name;
   return (
     <div className="rounded-xl border bg-card px-3 py-3 sm:px-4">
       <div className="flex min-w-0 flex-wrap items-center gap-2 sm:gap-3">
@@ -430,7 +444,7 @@ function ReportPackageHeader({
           {jurisdiction.code} · {jurisdiction.name}
         </Badge>
         <Badge variant="outline" className="hidden rounded-md xl:inline-flex">
-          {methodLabel.name}
+          {methodName}
         </Badge>
       </div>
     </div>
@@ -899,6 +913,7 @@ function ReportPolicyPanel({
   setMethod: (method: CostBasisMethod) => void;
 }) {
   const methodLabel = METHOD_LABELS[method] ?? METHOD_LABELS[jurisdiction.defaultMethod];
+  const methodFullName = methodLabel.fullName ?? methodLabel.name;
   const [expanded, setExpanded] = useState(false);
 
   return (
@@ -918,7 +933,9 @@ function ReportPolicyPanel({
               Profile rules
             </h2>
             <p className="truncate text-[10px] text-muted-foreground sm:text-xs">
-              {jurisdiction.code} · {methodLabel.name}
+              {jurisdiction.code} ·{" "}
+              <span className="xl:hidden">{methodLabel.name}</span>
+              <span className="hidden xl:inline">{methodFullName}</span>
             </p>
           </div>
         </div>
@@ -968,7 +985,7 @@ function ReportPolicyPanel({
             />
             <ReportFactRow
               label="Cost-basis method"
-              value={jurisdiction.methodNote ?? methodLabel.name}
+              value={jurisdiction.methodNote ?? methodFullName}
             />
           </div>
 
@@ -1155,6 +1172,143 @@ function LotAuditPanel({
       ) : expanded ? (
         <div className="flex min-h-32 items-center justify-center px-4 py-8 text-center text-sm text-muted-foreground">
           No disposal lots were returned for {year}.
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function NeutralSwapAuditPanel({
+  swaps,
+  jurisdiction,
+  hideSensitive,
+  formatNumber,
+}: {
+  swaps: NeutralSwapLot[];
+  jurisdiction: (typeof JURISDICTIONS)[string];
+  hideSensitive: boolean;
+  formatNumber: (value: number) => string;
+}) {
+  const [expanded, setExpanded] = useState(false);
+  const totalFeeSats = swaps.reduce((sum, swap) => sum + swap.feeSats, 0);
+
+  return (
+    <div className="min-w-0 overflow-hidden rounded-xl border bg-card">
+      <div
+        className={cn(
+          "flex flex-col gap-3 px-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-5",
+          expanded && "border-b",
+        )}
+      >
+        <div className="flex min-w-0 items-center gap-2">
+          <Button
+            variant="outline"
+            size="icon"
+            className="size-8 shrink-0"
+            aria-label="Tax-neutral swap audit"
+          >
+            <RefreshCw className="size-4 text-muted-foreground" />
+          </Button>
+          <div className="min-w-0">
+            <h2 className="truncate text-sm font-medium sm:text-base">
+              Tax-neutral swap audit
+            </h2>
+            <p className="truncate text-[10px] text-muted-foreground sm:text-xs">
+              Reviewed carrying-value movement and fee delta
+            </p>
+          </div>
+        </div>
+        <div className="flex shrink-0 items-center gap-2">
+          <Badge variant="outline" className="rounded-md">
+            {swaps.length} row{swaps.length === 1 ? "" : "s"}
+          </Badge>
+          <Badge variant="secondary" className="rounded-md">
+            {totalFeeSats.toLocaleString("en-US")} sats fee
+          </Badge>
+          <Button
+            type="button"
+            variant="outline"
+            size="icon"
+            className="size-8"
+            aria-label={
+              expanded
+                ? "Collapse tax-neutral swap audit"
+                : "Expand tax-neutral swap audit"
+            }
+            aria-expanded={expanded}
+            onClick={() => setExpanded((value) => !value)}
+          >
+            <ChevronDown
+              className={cn(
+                "size-4 text-muted-foreground transition-transform",
+                expanded && "rotate-180",
+              )}
+              aria-hidden="true"
+            />
+          </Button>
+        </div>
+      </div>
+
+      {expanded ? (
+        <div className="overflow-x-auto">
+          <Table className="min-w-[880px]">
+            <TableHeader>
+              <TableRow className="bg-muted/50 hover:bg-muted/50">
+                <TableHead className="min-w-[112px]">Date</TableHead>
+                <TableHead className="min-w-[180px]">From</TableHead>
+                <TableHead className="text-right">Out sats</TableHead>
+                <TableHead className="min-w-[180px]">To</TableHead>
+                <TableHead className="text-right">In sats</TableHead>
+                <TableHead className="text-right">Fee sats</TableHead>
+                <TableHead className="text-right">
+                  Carry basis {jurisdiction.ccy}
+                </TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {swaps.map((swap, index) => (
+                <TableRow key={`${swap.date}-${swap.pairId ?? index}`}>
+                  <TableCell>{swap.date}</TableCell>
+                  <TableCell>
+                    <div className="min-w-0">
+                      <p className="truncate font-medium">{swap.outWallet}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {swap.outAsset}
+                      </p>
+                    </div>
+                  </TableCell>
+                  <TableCell
+                    className={cn("text-right tabular-nums", blurClass(hideSensitive))}
+                  >
+                    {swap.outSats.toLocaleString("en-US")}
+                  </TableCell>
+                  <TableCell>
+                    <div className="min-w-0">
+                      <p className="truncate font-medium">{swap.inWallet}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {swap.inAsset}
+                      </p>
+                    </div>
+                  </TableCell>
+                  <TableCell
+                    className={cn("text-right tabular-nums", blurClass(hideSensitive))}
+                  >
+                    {swap.inSats.toLocaleString("en-US")}
+                  </TableCell>
+                  <TableCell
+                    className={cn("text-right tabular-nums", blurClass(hideSensitive))}
+                  >
+                    {swap.feeSats.toLocaleString("en-US")}
+                  </TableCell>
+                  <TableCell
+                    className={cn("text-right tabular-nums", blurClass(hideSensitive))}
+                  >
+                    {formatNumber(swap.costEur)}
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
         </div>
       ) : null}
     </div>

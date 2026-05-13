@@ -923,38 +923,39 @@ function buildBalanceRailItems(snapshot: OverviewSnapshot) {
     byRail[rail] += connection.balance * snapshot.priceEur;
   }
   const total = Object.values(byRail).reduce((sum, value) => sum + value, 0);
+  const items = [
+    {
+      key: "onchain",
+      label: "On-chain",
+      value: byRail.onchain,
+      percent: percentOf(byRail.onchain, total),
+      color: palette.primary,
+    },
+    {
+      key: "lightning",
+      label: "Lightning",
+      value: byRail.lightning,
+      percent: percentOf(byRail.lightning, total),
+      color: palette.secondary.light,
+    },
+    {
+      key: "liquid",
+      label: "Liquid",
+      value: byRail.liquid,
+      percent: percentOf(byRail.liquid, total),
+      color: palette.tertiary.light,
+    },
+    {
+      key: "other",
+      label: "Other",
+      value: byRail.other,
+      percent: percentOf(byRail.other, total),
+      color: `color-mix(in oklch, var(--muted-foreground) 70%, ${mixBase})`,
+    },
+  ];
   return {
     total,
-    items: [
-      {
-        key: "onchain",
-        label: "On-chain",
-        value: byRail.onchain,
-        percent: percentOf(byRail.onchain, total),
-        color: palette.primary,
-      },
-      {
-        key: "lightning",
-        label: "Lightning",
-        value: byRail.lightning,
-        percent: percentOf(byRail.lightning, total),
-        color: palette.secondary.light,
-      },
-      {
-        key: "liquid",
-        label: "Liquid",
-        value: byRail.liquid,
-        percent: percentOf(byRail.liquid, total),
-        color: palette.tertiary.light,
-      },
-      {
-        key: "other",
-        label: "Other",
-        value: byRail.other,
-        percent: percentOf(byRail.other, total),
-        color: `color-mix(in oklch, var(--muted-foreground) 70%, ${mixBase})`,
-      },
-    ],
+    items: total > 0 ? items.filter((item) => item.value > 0) : items,
   };
 }
 
@@ -1620,6 +1621,7 @@ const HoldingsBySourceChart = ({
     snapshot.priceEur,
     currency,
   );
+  const singleHolding = holdingsData.length === 1 ? holdingsData[0] : null;
 
   return (
     <div className="flex flex-1 flex-col gap-3 rounded-xl border bg-card p-4">
@@ -1678,8 +1680,52 @@ const HoldingsBySourceChart = ({
         </Button>
       </div>
 
-      <div className="grid flex-1 items-center gap-3 sm:grid-cols-[minmax(136px,1.2fr)_minmax(0,0.8fr)] sm:gap-4">
-        <div className="relative mx-auto size-[128px] shrink-0 sm:size-[152px] xl:size-[160px]">
+      {singleHolding ? (
+        <div className="flex flex-1 items-center rounded-md bg-muted/25 px-3 py-3">
+          <div
+            className="flex min-w-0 flex-1 items-start gap-2"
+            onMouseEnter={() => setHoveredSlice(0)}
+            onMouseLeave={() => setHoveredSlice(null)}
+          >
+            <span
+              className="mt-1 size-2.5 shrink-0 rounded-full"
+              style={{ backgroundColor: singleHolding.color }}
+            />
+            <div className="min-w-0">
+              <p className="break-words text-sm font-medium leading-5">
+                {singleHolding.name}
+              </p>
+              <p className="text-[10px] text-muted-foreground sm:text-xs">
+                Only active source
+              </p>
+            </div>
+          </div>
+          <div className="ml-3 shrink-0 text-right">
+            <p
+              className={cn(
+                "text-sm font-semibold tabular-nums",
+                blurClass(hideSensitive),
+              )}
+            >
+              {formatCompactDisplayMoney(
+                singleHolding.value,
+                snapshot.priceEur,
+                currency,
+              )}
+            </p>
+            <p
+              className={cn(
+                "text-[10px] text-muted-foreground tabular-nums sm:text-xs",
+                blurClass(hideSensitive),
+              )}
+            >
+              {singleHolding.percent}%
+            </p>
+          </div>
+        </div>
+      ) : (
+      <div className="grid flex-1 items-center gap-3 sm:grid-cols-[minmax(112px,0.9fr)_minmax(0,1.1fr)] sm:gap-4">
+        <div className="relative mx-auto size-[124px] shrink-0 sm:size-[140px] xl:size-[148px]">
           <ChartContainer
             config={holdingsChartConfig}
             className="h-full w-full"
@@ -1726,22 +1772,22 @@ const HoldingsBySourceChart = ({
             <div
               key={item.name}
               className={cn(
-                "flex items-center justify-between gap-2 transition-opacity duration-200 motion-reduce:transition-none",
+                "flex items-start justify-between gap-2 transition-opacity duration-200 motion-reduce:transition-none",
                 activeSlice !== null && activeSlice !== index && "opacity-50",
               )}
               onMouseEnter={() => setHoveredSlice(index)}
               onMouseLeave={() => setHoveredSlice(null)}
             >
-              <div className="flex min-w-0 items-center gap-2">
+              <div className="flex min-w-0 flex-1 items-start gap-2">
                 <div
-                  className="size-2 rounded-full sm:size-2.5"
+                  className="mt-1 size-2 shrink-0 rounded-full sm:size-2.5"
                   style={{ backgroundColor: item.color }}
                 />
-                <span className="min-w-0 truncate text-[10px] text-muted-foreground sm:text-xs">
+                <span className="min-w-0 break-words text-[10px] leading-4 text-muted-foreground sm:text-xs">
                   {item.name}
                 </span>
               </div>
-              <div className="flex shrink-0 items-center gap-1.5 text-[10px] sm:text-xs">
+              <div className="flex shrink-0 flex-wrap justify-end gap-x-1.5 text-[10px] sm:text-xs">
                 <span
                   className={cn(
                     "font-medium tabular-nums",
@@ -1767,6 +1813,7 @@ const HoldingsBySourceChart = ({
           ))}
         </div>
       </div>
+      )}
     </div>
   );
 };
@@ -2722,10 +2769,12 @@ const RevenueFlowChart = ({
             )}
             {expanded && visibleData.length > 18 && (
               <Brush
+                className="text-muted-foreground"
                 dataKey="date"
+                fill="var(--card)"
                 height={22}
                 travellerWidth={8}
-                stroke={chartColors.value}
+                stroke="var(--border)"
                 tickFormatter={(value) =>
                   visibleData.find((point) => point.date === value)?.month ??
                   String(value)
@@ -2754,7 +2803,7 @@ const RevenueFlowChart = ({
       {renderChartCard()}
       <DialogContent
         showCloseButton={false}
-        className="max-w-[calc(100vw-2rem)] p-0 sm:max-w-[min(1120px,calc(100vw-2rem))]"
+        className="max-w-[calc(100vw-1rem)] p-0 sm:max-w-[min(1500px,calc(100vw-1.5rem))]"
       >
         <DialogTitle className="sr-only">
           Expanded portfolio value chart

@@ -32,6 +32,7 @@ export type Transaction = {
   note?: string;
   tags?: string[];
   excluded?: boolean;
+  pair?: Tx["pair"];
   counterparty: string;
   counterpartyInitials: string;
   direction: TransactionDirection;
@@ -571,7 +572,7 @@ export function draftForTransaction(txn: Transaction): TransactionEditDraft {
     manualValue: txn.amount ? String(txn.amount) : "",
     manualSource: "",
     reviewStatus: txn.status,
-    taxable: flow !== "transfer",
+    taxable: defaultTaxClassification.taxable,
     excluded: Boolean(txn.excluded),
   };
 }

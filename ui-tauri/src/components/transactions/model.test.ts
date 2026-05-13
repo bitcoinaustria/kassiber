@@ -36,4 +36,15 @@ describe("draftForTransaction", () => {
     expect(draft.label).toBe("Unlabeled");
     expect(draft.tags).toEqual([]);
   });
+
+  it("keeps reviewed swap movements tax-neutral by default", () => {
+    const draft = draftForTransaction({
+      ...txWithTags(["Swap"]),
+      direction: "Transfer",
+      flow: "swap",
+    });
+
+    expect(draft.atCategory).toBe("neu_swap");
+    expect(draft.taxable).toBe(false);
+  });
 });
