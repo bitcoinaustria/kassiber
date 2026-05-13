@@ -1007,6 +1007,41 @@ export const mockDaemon: DaemonTransport = {
       };
     }
 
+    if (req.kind === "ai.providers.set_api_key") {
+      const args = (req.args ?? {}) as { name?: unknown; api_key?: unknown };
+      const name = typeof args.name === "string" ? args.name.trim() : "";
+      if (!name) {
+        return {
+          kind: "error",
+          schema_version: 1,
+          request_id: req.request_id,
+          error: {
+            code: "validation",
+            message: "ai.providers.set_api_key requires a provider name",
+            retryable: false,
+          },
+        };
+      }
+      return {
+        kind: "ai.providers.set_api_key",
+        schema_version: 1,
+        request_id: req.request_id,
+        data: {
+          name,
+          has_api_key: Boolean(
+            typeof args.api_key === "string" && args.api_key.trim(),
+          ),
+          secret_ref: {
+            store_id: "sqlcipher_inline",
+            state:
+              typeof args.api_key === "string" && args.api_key.trim()
+                ? "ok"
+                : "missing",
+          },
+        } as T,
+      };
+    }
+
     const fixture = fixtures[req.kind];
     if (fixture === undefined) {
       return {

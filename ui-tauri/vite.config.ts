@@ -86,6 +86,7 @@ const ALLOWED_BRIDGE_KINDS = new Set([
   "ai.providers.get",
   "ai.providers.create",
   "ai.providers.update",
+  "ai.providers.set_api_key",
   "ai.providers.delete",
   "ai.providers.set_default",
   "ai.providers.clear_default",
@@ -127,6 +128,43 @@ const STREAM_ONLY_BRIDGE_KINDS = new Set(["ai.chat"]);
 
 function makeBridgeRequestId(prefix = "bridge") {
   return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+}
+
+export function redactBridgeText(value: string): string {
+  const words: string[] = [];
+  let redactNext = false;
+  for (const word of value.split(/\s+/).filter(Boolean)) {
+    if (redactNext) {
+      words.push("[redacted]");
+      redactNext = false;
+      continue;
+    }
+    const lowered = word.toLowerCase();
+    if (lowered.startsWith("sk-")) {
+      words.push("[redacted]");
+      continue;
+    }
+    if (
+      /\b(?:xpub|ypub|zpub|tpub|upub|vpub|xprv|yprv|zprv|tprv|uprv|vprv)[A-Za-z0-9]{20,}\b/i.test(
+        word,
+      ) ||
+      /\b(?:wpkh|sh|wsh|tr|pkh|combo)\([^)\n]{16,}\)/i.test(word)
+    ) {
+      words.push("[redacted]");
+      continue;
+    }
+    if (lowered === "bearer") {
+      words.push("Bearer");
+      redactNext = true;
+      continue;
+    }
+    const redacted = word.replace(
+      /\b(api[_-]?key|auth[_-]?header|cookie|descriptor|passphrase(?:_secret)?|password|secret|token)\b([:=])([^\s,;"']+)/gi,
+      "$1$2[redacted]",
+    );
+    words.push(redacted);
+  }
+  return words.join(" ");
 }
 
 function firstHeaderValue(header: string | string[] | undefined) {
@@ -292,7 +330,7 @@ class DaemonBridgeSupervisor {
     child.stdout.setEncoding("utf8");
     child.stderr.setEncoding("utf8");
     child.stderr.on("data", (chunk: string) => {
-      this.stderrTail = (this.stderrTail + chunk).slice(-8_000);
+      this.stderrTail = redactBridgeText((this.stderrTail + chunk).slice(-8_000));
     });
     child.on("error", (error) => this.failPending(error));
     child.on("close", (code, signal) => {
@@ -404,7 +442,7 @@ async function handleBridgeInvoke(
       res,
       500,
       "bridge_daemon_failed",
-      error instanceof Error ? error.message : String(error),
+      redactBridgeText(error instanceof Error ? error.message : String(error)),
       true,
     );
   }
@@ -464,7 +502,7 @@ async function handleBridgeStream(
         request_id: request.request_id,
         error: {
           code: "bridge_daemon_failed",
-          message: error instanceof Error ? error.message : String(error),
+          message: redactBridgeText(error instanceof Error ? error.message : String(error)),
           retryable: true,
         },
       });

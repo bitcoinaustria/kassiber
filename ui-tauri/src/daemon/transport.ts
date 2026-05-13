@@ -177,16 +177,22 @@ export function makeDaemonRequestId(): string {
 
 const SENSITIVE_LOG_KEYS = [
   "api_key",
+  "auth",
   "auth_response",
   "auth_header",
+  "basic_auth",
+  "blinding",
   "cookie",
   "descriptor",
+  "header",
   "new_passphrase_secret",
   "passphrase",
   "passphrase_secret",
+  "password",
   "private",
   "secret",
   "token",
+  "xpub",
   "xprv",
 ];
 

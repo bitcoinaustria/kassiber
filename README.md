@@ -24,6 +24,11 @@ diagnostics workflows.
 It keeps your accounting state on your machine, syncs from Bitcoin-native sources, and processes journals locally before generating reports. Built from scratch, it takes early visual cues from Clams and other tools in the space without inheriting the cloud trust model.
 
 Before pointing Kassiber at real wallets, read [SECURITY.md](SECURITY.md). It covers backend visibility, external requests, the V4.1 SQLCipher-based at-rest encryption (and what it does *not* protect — sidecar files, attachments, the OS-level threat model), and incomplete Tor support.
+The desktop secret-management direction is tracked in
+[docs/plan/10-secret-management.md](docs/plan/10-secret-management.md): the
+unlocked Python daemon is the runtime trust boundary, SQLCipher remains the
+at-rest perimeter for DB-resident secrets, and native OS credential stores are
+only probe-only scaffolding for the AI-provider-key pilot today.
 
 Normal `backends ...` and `wallets ...` success output now follows a narrow
 safe-to-record contract for secret-bearing config values: backend inspection
@@ -154,6 +159,9 @@ picker tags each provider as `local`, `remote`, or `tee`, and chat requires
 explicit acknowledgement before any off-device prompt is sent. The same surface
 is reachable from the CLI via
 `kassiber ai providers …`, `kassiber ai models`, and `kassiber ai chat`.
+API keys should be entered through Settings or CLI stdin/fd
+(`--api-key-stdin` / `--api-key-fd FD`); the older `--api-key <value>` argv
+form remains only as a warning-on-use compatibility shim.
 
 AI is optional. Kassiber's core accounting flow does not depend on a model, and
 future AI-assisted features such as OCR, extraction, and reconciliation
@@ -210,6 +218,10 @@ Requirements:
 - `XlsxWriter` for workbook exports and `reportlab` for styled Austrian and
   source-of-funds PDF exports
 - `sqlcipher3` and `pyrage` for encrypted databases and `.kassiber` backups
+- desktop builds include probe-only Rust keyring crates (`keyring-core`,
+  `apple-native-keyring-store`, `windows-native-keyring-store`, and
+  `zbus-secret-service-keyring-store`) for the future AI-provider-key
+  OS-store path; production secret storage still defaults to SQLCipher inline
 
 Install in a virtual environment:
 

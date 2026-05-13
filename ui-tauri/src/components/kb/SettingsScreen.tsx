@@ -163,6 +163,9 @@ interface RateRebuildData {
   } | null;
 }
 
+type AiSecretStoreId = "macos_keychain" | "windows_dpapi" | "linux_secret_service" | "sqlcipher_inline";
+type AiSecretState = "ok" | "missing" | "needs_reauth" | "unavailable";
+
 interface AiProviderRow {
   name: string;
   base_url: string;
@@ -170,6 +173,10 @@ interface AiProviderRow {
   default_model?: string | null;
   notes?: string | null;
   has_api_key: boolean;
+  secret_ref?: {
+    store_id: AiSecretStoreId;
+    state: AiSecretState;
+  };
   is_default: boolean;
   acknowledged_at?: string | null;
 }
@@ -194,6 +201,34 @@ function isCliAiProvider(row: AiProviderRow): boolean {
     row.base_url === "claude-cli://default" ||
     row.base_url === "codex-cli://default"
   );
+}
+
+function aiSecretStoreLabel(storeId: AiSecretStoreId | undefined): string {
+  switch (storeId) {
+    case "macos_keychain":
+      return "macOS Keychain";
+    case "windows_dpapi":
+      return "Windows Credential Manager";
+    case "linux_secret_service":
+      return "Secret Service";
+    case "sqlcipher_inline":
+    default:
+      return "SQLCipher inline";
+  }
+}
+
+function aiSecretStateLabel(state: AiSecretState | undefined): string {
+  switch (state) {
+    case "ok":
+      return "ok";
+    case "needs_reauth":
+      return "needs re-entry";
+    case "unavailable":
+      return "unavailable";
+    case "missing":
+    default:
+      return "missing";
+  }
 }
 
 function formatModelSummary(models: AiModelRow[]): string {
@@ -1907,6 +1942,7 @@ function AiProvidersPanel({
       kind: row.kind,
       notes: row.notes ?? undefined,
       has_api_key: row.has_api_key,
+      secret_ref: row.secret_ref,
       acknowledged_at: row.acknowledged_at ?? null,
     };
   }, [data.providers, editingName]);
@@ -1967,6 +2003,7 @@ function AiProvidersPanel({
                 <TableHead>Posture</TableHead>
                 <TableHead>Default model</TableHead>
                 <TableHead>Auth</TableHead>
+                <TableHead>Storage</TableHead>
                 <TableHead className="text-right">Default</TableHead>
                 <TableHead className="text-right">Actions</TableHead>
               </TableRow>
@@ -1975,7 +2012,7 @@ function AiProvidersPanel({
               {data.providers.length === 0 ? (
                 <TableRow>
                   <TableCell
-                    colSpan={6}
+                    colSpan={7}
                     className="text-center text-sm text-muted-foreground"
                   >
                     No providers configured.
@@ -2005,6 +2042,10 @@ function AiProvidersPanel({
                     </TableCell>
                     <TableCell className="text-muted-foreground">
                       {row.has_api_key ? "Bearer" : "none"}
+                    </TableCell>
+                    <TableCell className="min-w-[170px] text-xs text-muted-foreground">
+                      <div>{aiSecretStoreLabel(row.secret_ref?.store_id)}</div>
+                      <div className="font-mono">{aiSecretStateLabel(row.secret_ref?.state)}</div>
                     </TableCell>
                     <TableCell className="text-right">
                       {row.is_default ? (

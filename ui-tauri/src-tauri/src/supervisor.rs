@@ -21,6 +21,10 @@ const DAEMON_INVOKE_TIMEOUT: Duration = Duration::from_secs(15);
 const DAEMON_STREAM_INACTIVITY_TIMEOUT: Duration = Duration::from_secs(90);
 const STDERR_TAIL_LIMIT: usize = 16 * 1024;
 
+type DaemonResponse = Result<Value, SupervisorError>;
+type PendingSender = mpsc::Sender<DaemonResponse>;
+type PendingMap = Arc<Mutex<HashMap<String, PendingSender>>>;
+
 pub struct DaemonSupervisor {
     process: Mutex<Option<Arc<DaemonProcess>>>,
     resource_dir: Option<PathBuf>,
@@ -31,7 +35,7 @@ pub struct DaemonSupervisor {
 struct DaemonProcess {
     child: Mutex<Child>,
     stdin: Mutex<ChildStdin>,
-    pending: Arc<Mutex<HashMap<String, mpsc::Sender<Result<Value, SupervisorError>>>>>,
+    pending: PendingMap,
     stderr_tail: StderrTail,
     broken: Arc<AtomicBool>,
 }
@@ -72,11 +76,12 @@ impl SupervisorError {
     }
 
     fn details(mut self, details: Value) -> Self {
-        self.details = Some(details);
+        self.details = Some(redact_sensitive_value(details));
         self
     }
 
     fn with_stderr_tail(mut self, stderr_tail: String) -> Self {
+        let stderr_tail = redact_sensitive_text(&stderr_tail);
         if stderr_tail.is_empty() {
             return self;
         }
@@ -94,6 +99,111 @@ impl SupervisorError {
         self.details = Some(Value::Object(map));
         self
     }
+}
+
+fn redact_sensitive_value(value: Value) -> Value {
+    match value {
+        Value::String(text) => Value::String(redact_sensitive_text(&text)),
+        Value::Array(items) => {
+            Value::Array(items.into_iter().map(redact_sensitive_value).collect())
+        }
+        Value::Object(map) => Value::Object(
+            map.into_iter()
+                .map(|(key, value)| {
+                    if is_sensitive_key(&key) {
+                        (key, Value::String("[redacted]".to_string()))
+                    } else {
+                        (key, redact_sensitive_value(value))
+                    }
+                })
+                .collect(),
+        ),
+        other => other,
+    }
+}
+
+fn is_sensitive_key(key: &str) -> bool {
+    let lowered = key.to_ascii_lowercase().replace('-', "_");
+    [
+        "api_key",
+        "auth_header",
+        "auth_response",
+        "cookie",
+        "descriptor",
+        "password",
+        "passphrase",
+        "private",
+        "secret",
+        "token",
+        "xprv",
+    ]
+    .iter()
+    .any(|part| lowered.contains(part))
+}
+
+fn redact_sensitive_text(text: &str) -> String {
+    let mut redact_next = false;
+    let mut words = Vec::new();
+    for word in text.split_whitespace() {
+        if redact_next {
+            words.push("[redacted]".to_string());
+            redact_next = false;
+            continue;
+        }
+        let redacted = redact_sensitive_word(word);
+        redact_next = word.eq_ignore_ascii_case("bearer") || redacted == "Bearer";
+        words.push(redacted);
+    }
+    words.join(" ")
+}
+
+fn redact_sensitive_word(word: &str) -> String {
+    let lowered = word.to_ascii_lowercase();
+    if lowered.starts_with("sk-") {
+        return "[redacted]".to_string();
+    }
+    if contains_extended_key_or_descriptor(&lowered) {
+        return "[redacted]".to_string();
+    }
+    if lowered.starts_with("bearer") {
+        return "Bearer".to_string();
+    }
+    for marker in [
+        "api_key",
+        "api-key",
+        "auth_header",
+        "auth-header",
+        "cookie",
+        "descriptor",
+        "password",
+        "passphrase",
+        "secret",
+        "token",
+        "xprv",
+    ] {
+        if let Some(index) = lowered.find(marker) {
+            let after = &word[index + marker.len()..];
+            if after.starts_with('=') || after.starts_with(':') {
+                return format!("{}{}[redacted]", &word[..index + marker.len()], &after[..1]);
+            }
+        }
+    }
+    word.to_string()
+}
+
+fn contains_extended_key_or_descriptor(lowered: &str) -> bool {
+    let has_extended_key = [
+        "xpub", "ypub", "zpub", "tpub", "upub", "vpub", "xprv", "yprv", "zprv", "tprv", "uprv",
+        "vprv",
+    ]
+    .iter()
+    .any(|prefix| lowered.contains(prefix) && lowered.len() >= prefix.len() + 20);
+    if has_extended_key {
+        return true;
+    }
+    ["wpkh(", "sh(", "wsh(", "tr(", "pkh(", "combo("]
+        .iter()
+        .any(|prefix| lowered.contains(prefix) && lowered.len() > prefix.len() + 16)
 }
 
 impl DaemonSupervisor {
@@ -651,9 +761,9 @@ impl StderrTail {
 
 fn spawn_stdout_reader(
     stdout: ChildStdout,
-    pending: Arc<Mutex<HashMap<String, mpsc::Sender<Result<Value, SupervisorError>>>>>,
+    pending: PendingMap,
     broken: Arc<AtomicBool>,
-    ready_tx: mpsc::Sender<Result<Value, SupervisorError>>,
+    ready_tx: PendingSender,
 ) {
     std::thread::spawn(move || {
         let mut reader = BufReader::new(stdout);
@@ -786,8 +896,8 @@ fn spawn_stdout_reader(
 
 fn fail_stdout_reader(
     broken: &Arc<AtomicBool>,
-    pending: &Arc<Mutex<HashMap<String, mpsc::Sender<Result<Value, SupervisorError>>>>>,
-    startup: &mut Option<mpsc::Sender<Result<Value, SupervisorError>>>,
+    pending: &PendingMap,
+    startup: &mut Option<PendingSender>,
     error: SupervisorError,
 ) {
     broken.store(true, Ordering::SeqCst);
@@ -797,10 +907,7 @@ fn fail_stdout_reader(
     broadcast_pending_error(pending, error);
 }
 
-fn broadcast_pending_error(
-    pending: &Arc<Mutex<HashMap<String, mpsc::Sender<Result<Value, SupervisorError>>>>>,
-    error: SupervisorError,
-) {
+fn broadcast_pending_error(pending: &PendingMap, error: SupervisorError) {
     let senders = match pending.lock() {
         Ok(mut pending) => pending
             .drain()
@@ -885,7 +992,7 @@ fn repo_root() -> PathBuf {
         .unwrap_or_else(|| PathBuf::from("."))
 }
 
-fn default_python(repo_root: &PathBuf) -> PathBuf {
+fn default_python(repo_root: &Path) -> PathBuf {
     let unix_venv = repo_root.join(".venv").join("bin").join("python");
     if unix_venv.exists() {
         return unix_venv;
@@ -983,6 +1090,27 @@ mod tests {
     use std::os::unix::fs::PermissionsExt;
 
     static TEST_TEMP_COUNTER: AtomicU64 = AtomicU64::new(1);
+
+    #[test]
+    fn redacts_stderr_tail_and_sensitive_details() {
+        let error = SupervisorError::new("internal", "failed")
+            .details(json!({
+                "api_key": "sk-detail-secret",
+                "line": "token=btcpay-secret Bearer openai-secret descriptor=wpkh(xpub661MyMwAqRbcF12345678901234567890)"
+            }))
+            .with_stderr_tail(
+                "api_key=sk-stderr-secret Bearer stderr-secret passphrase_secret=correct raw xpub661MyMwAqRbcF12345678901234567890".to_string(),
+            );
+        let encoded = serde_json::to_string(&error.details).expect("details json");
+        assert!(!encoded.contains("sk-detail-secret"));
+        assert!(!encoded.contains("btcpay-secret"));
+        assert!(!encoded.contains("openai-secret"));
+        assert!(!encoded.contains("sk-stderr-secret"));
+        assert!(!encoded.contains("stderr-secret"));
+        assert!(!encoded.contains("correct"));
+        assert!(!encoded.contains("xpub661MyMwAqRbcF12345678901234567890"));
+        assert!(encoded.contains("[redacted]"));
+    }
 
     #[cfg(unix)]
     fn response_pid(response: &Value) -> i64 {

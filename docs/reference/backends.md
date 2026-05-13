@@ -15,6 +15,10 @@ Backends are stored canonically in SQLite.
   `USERNAME`, `AUTH_HEADER`, plus the RPC aliases `RPCUSER` /
   `RPCPASSWORD`) should live once `kassiber secrets init` has put the
   database under SQLCipher
+- native OS credential stores are not used for backend secrets in the current
+  desktop secret-management slice; the AI-provider-key pilot is deliberately
+  narrow, and backend tokens/auth headers/cookies/basic-auth remain
+  SQLCipher-protected
 
 Built-in defaults and dotenv-defined backends are imported into SQLite during
 explicit bootstrap-import flows such as `kassiber init` or backend mutation

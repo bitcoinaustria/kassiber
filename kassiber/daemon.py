@@ -19,11 +19,13 @@ from .ai import (
     create_db_ai_provider,
     delete_db_ai_provider,
     get_db_ai_provider,
+    get_ai_provider_api_key_for_use,
     redact_ai_provider_for_output,
     require_ai_provider_acknowledged,
     resolve_ai_provider,
     set_default_ai_provider,
     clear_default_ai_provider,
+    set_db_ai_provider_api_key,
     update_db_ai_provider,
 )
 from .ai.client import ai_client_for_locator
@@ -234,6 +236,7 @@ SUPPORTED_KINDS = (
     "ai.providers.get",
     "ai.providers.create",
     "ai.providers.update",
+    "ai.providers.set_api_key",
     "ai.providers.delete",
     "ai.providers.set_default",
     "ai.providers.clear_default",
@@ -2654,7 +2657,7 @@ def _execute_mutating_ai_tool(call: ParsedAiToolCall, runtime: AiToolRuntime) ->
 
 
 def _tool_result_content_for_model(result: dict[str, Any]) -> str:
-    return json.dumps(json_ready(result), sort_keys=True, separators=(",", ":"))
+    return json.dumps(json_ready(redact_tool_arguments(result)), sort_keys=True, separators=(",", ":"))
 
 
 def _utc_now_iso() -> str:
@@ -3274,7 +3277,7 @@ def _trim_auto_context_value(value: Any, *, depth: int = 0) -> Any:
 
 
 def _auto_context_entry_for_model(entry: dict[str, Any]) -> dict[str, Any]:
-    trimmed = _trim_auto_context_value(entry)
+    trimmed = _trim_auto_context_value(redact_tool_arguments(entry))
     encoded = json.dumps(
         json_ready(trimmed),
         sort_keys=True,
@@ -3387,11 +3390,12 @@ def _run_auto_read_tools(
         )
         result = _execute_read_only_ai_tool(call, runtime)
         _record_ai_tool_usage(runtime, entry.name, result)
+        safe_result = redact_tool_arguments(result)
         out.write(
             _with_request_id(
                 build_envelope(
                     "ai.chat.tool_result",
-                    {"call_id": call.call_id, **result},
+                    {"call_id": call.call_id, **safe_result},
                 ),
                 request_id,
             )
@@ -3651,11 +3655,12 @@ def _run_ai_chat_tool_loop(
             else:
                 result = _execute_read_only_ai_tool(call, runtime)
             _record_ai_tool_usage(runtime, display_name, result)
+            safe_result = redact_tool_arguments(result)
             out.write(
                 _with_request_id(
                     build_envelope(
                         "ai.chat.tool_result",
-                        {"call_id": call.call_id, **result},
+                        {"call_id": call.call_id, **safe_result},
                     ),
                     request_id,
                 )
@@ -6280,6 +6285,23 @@ def handle_request(
             False,
         )
 
+    if kind == "ai.providers.set_api_key":
+        args = _coerce_args_dict(request_id, request.get("args"))
+        name = args.get("name")
+        if not isinstance(name, str):
+            raise AppError("ai.providers.set_api_key requires a name string", code="validation")
+        api_key = args.get("api_key")
+        if api_key is not None and not isinstance(api_key, str):
+            raise AppError("ai.providers.set_api_key api_key must be a string or null", code="validation")
+        updated = set_db_ai_provider_api_key(ctx.conn, name, api_key)
+        return (
+            _with_request_id(
+                build_envelope("ai.providers.set_api_key", _ai_provider_redacted(ctx, updated)),
+                request_id,
+            ),
+            False,
+        )
+
     if kind == "ai.providers.delete":
         args = _coerce_args_dict(request_id, request.get("args"))
         name = args.get("name")
@@ -6349,7 +6371,7 @@ def handle_request(
         provider = resolve_ai_provider(ctx.conn, provider_name)
         client = ai_client_for_locator(
             base_url=provider["base_url"],
-            api_key=provider.get("api_key"),
+            api_key=get_ai_provider_api_key_for_use(provider),
         )
         return (
             _with_request_id(
@@ -6394,8 +6416,8 @@ def handle_request(
                     stored = get_db_ai_provider(ctx.conn, stored_provider)
                 except AppError:
                     stored = None
-                if stored and stored.get("api_key"):
-                    api_key_text = stored["api_key"]
+                if stored:
+                    api_key_text = get_ai_provider_api_key_for_use(stored) or ""
         # Use a tight timeout so a dead URL surfaces a clean error before
         # the Tauri supervisor's `DAEMON_INVOKE_TIMEOUT` (15s) kills the
         # daemon process. Test connection is interactive — a 10s ceiling
@@ -6443,7 +6465,7 @@ def handle_request(
         provider_snapshot = {
             "name": provider["name"],
             "base_url": provider["base_url"],
-            "api_key": provider.get("api_key"),
+            "api_key": get_ai_provider_api_key_for_use(provider),
             "kind": provider["kind"],
         }
         runtime = AiToolRuntime(

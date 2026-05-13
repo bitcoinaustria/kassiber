@@ -56,6 +56,7 @@ _SENSITIVE_KEY_TOKENS = {
     "name",
     "note",
     "output",
+    "passphrase",
     "password",
     "path",
     "price",
@@ -119,7 +120,18 @@ _TIMESTAMP_RE = re.compile(
     re.IGNORECASE,
 )
 _HEX64_RE = re.compile(r"\b[0-9a-fA-F]{64}\b")
-_XPUB_RE = re.compile(r"\b(?:xpub|ypub|zpub|tpub|upub|vpub)[A-Za-z0-9]{20,}\b", re.IGNORECASE)
+_XKEY_RE = re.compile(
+    r"\b(?:xpub|ypub|zpub|tpub|upub|vpub|xprv|yprv|zprv|tprv|uprv|vprv)[A-Za-z0-9]{20,}\b",
+    re.IGNORECASE,
+)
+_BEARER_SECRET_RE = re.compile(r"\bBearer\s+[A-Za-z0-9._~+/=-]{6,}", re.IGNORECASE)
+_SK_SECRET_RE = re.compile(r"\bsk-[A-Za-z0-9._-]{6,}\b")
+_ASSIGNED_SECRET_RE = re.compile(
+    r"\b(?P<key>[A-Za-z0-9_.-]*(?:api[_-]?key|auth[_-]?header|cookie|passphrase|password|secret|token)[A-Za-z0-9_.-]*)"
+    r"(?P<sep>\s*[:=]\s*)"
+    r"(?P<value>[^\s,;]+)",
+    re.IGNORECASE,
+)
 _BECH32_RE = re.compile(r"\b(?:bc1|tb1|bcrt1|lq1|ex1)[0-9a-z]{8,90}\b", re.IGNORECASE)
 _AMOUNT_UNIT_RE = re.compile(
     r"(?<![A-Za-z0-9_])[-+]?\d+(?:\.\d+)?\s*(?:msat|sats?|btc|lbtc|usd|eur)\b",
@@ -667,10 +679,13 @@ def sanitize_text(value: Any) -> str | None:
     if value is None:
         return None
     text = str(value)
+    text = _BEARER_SECRET_RE.sub("Bearer <redacted>", text)
+    text = _SK_SECRET_RE.sub("<redacted-secret>", text)
+    text = _ASSIGNED_SECRET_RE.sub(r"\g<key>\g<sep><redacted>", text)
     text = _URL_RE.sub("<url>", text)
     text = _TIMESTAMP_RE.sub("<timestamp>", text)
     text = _HEX64_RE.sub("<hex64>", text)
-    text = _XPUB_RE.sub("<xpub>", text)
+    text = _XKEY_RE.sub("<xkey>", text)
     text = _BECH32_RE.sub("<address>", text)
     text = _PATHISH_RE.sub("<path>", text)
     text = _AMOUNT_UNIT_RE.sub("<amount>", text)

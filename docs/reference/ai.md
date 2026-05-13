@@ -134,16 +134,28 @@ Provider configuration is mirrored in the CLI:
 
 ```bash
 kassiber ai providers list
-kassiber ai providers create openai --base-url https://api.openai.com/v1 --kind remote --acknowledge --api-key $OPENAI_API_KEY --default-model gpt-4o-mini
+printf '%s\n' "$OPENAI_API_KEY" | kassiber ai providers create openai --base-url https://api.openai.com/v1 --kind remote --acknowledge --api-key-stdin --default-model gpt-4o-mini
 kassiber ai providers create claude-cli --base-url claude-cli://default --kind remote --acknowledge --default-model default
 kassiber ai providers set-default openai
 kassiber ai models
 kassiber ai chat "Summarise the last week of imports."
 ```
 
-API keys are stored in plaintext in the SQLite database for now, mirroring the
-existing `backends` pattern. An OS-keychain migration is tracked in
-[`../../TODO.md`](../../TODO.md).
+Provider API-key entry supports `--api-key-stdin` and `--api-key-fd FD`. The
+legacy `--api-key <value>` form still works as a warning-on-use compatibility
+shim, but docs and tests avoid it because argv can land in shell history and
+process listings. Desktop Settings uses the narrow `ai.providers.set_api_key`
+daemon kind to rotate/re-enter a key without echoing it in provider create or
+update envelopes.
+
+Current storage is `sqlcipher_inline`: the key remains in the SQLCipher
+database and provider envelopes expose only `has_api_key` plus
+`secret_ref.{store_id,state}`. The AI-only `ai_provider_secret_refs` schema is
+present so future OS-backed stores can record non-secret refs, but this PR does
+not store production secrets in macOS Keychain, Windows Credential Manager, or
+Linux Secret Service yet. Backend tokens, descriptors, xpubs, and blinding keys
+stay SQLCipher-protected. See
+[`../plan/10-secret-management.md`](../plan/10-secret-management.md).
 
 Reasoning-capable models surface chain-of-thought through one of two
 channels, and both are split into a collapsible reasoning pane above the

@@ -1372,10 +1372,16 @@ class ReviewRegressionTest(unittest.TestCase):
         from kassiber.diagnostics import collect_public_diagnostics, sanitize_text
 
         sample_upub = "Upub" + ("A" * 80)
+        sample_xprv = "xprv" + ("B" * 80)
         sanitized = sanitize_text(
-            f"descriptor={sample_upub} amount=12345 sat fee=2500msat timestamp=2026-04-24T09:00:00Z"
+            f"descriptor={sample_upub} backup={sample_xprv} api_key=sk-diagnostics-secret "
+            "auth_header=Bearer diagnostics-token amount=12345 sat fee=2500msat "
+            "timestamp=2026-04-24T09:00:00Z"
         )
         self.assertNotIn(sample_upub, sanitized)
+        self.assertNotIn(sample_xprv, sanitized)
+        self.assertNotIn("sk-diagnostics-secret", sanitized)
+        self.assertNotIn("diagnostics-token", sanitized)
         self.assertNotIn("12345", sanitized)
         self.assertNotIn("2500", sanitized)
         self.assertNotIn("2026", sanitized)
@@ -1392,12 +1398,36 @@ class ReviewRegressionTest(unittest.TestCase):
             tag="private-tax-review",
             backend="secret-backend",
             account="private-account",
+            api_key="sk-argv-diagnostics",
+            passphrase="very-private-passphrase",
             type="private-type",
             asset="PRIVATEASSET",
             provider="public-provider",
             trend="weekly",
         )
-        report = collect_public_diagnostics(None, args)
+        report = collect_public_diagnostics(
+            None,
+            args,
+            error=AppError(
+                "Provider failed with api_key=sk-error-diagnostics",
+                code="secret_error",
+                details={
+                    "api_key": "sk-detail-diagnostics",
+                    "nested": {"token": "nested-token"},
+                    "message": "Bearer diagnostics-detail-token",
+                },
+            ),
+        )
+        encoded_report = json.dumps(report, sort_keys=True)
+        for leaked in (
+            "sk-argv-diagnostics",
+            "very-private-passphrase",
+            "sk-error-diagnostics",
+            "sk-detail-diagnostics",
+            "nested-token",
+            "diagnostics-detail-token",
+        ):
+            self.assertNotIn(leaked, encoded_report)
         values = {
             item["name"]: item
             for item in report["invocation"]["provided_arguments"]
@@ -1405,6 +1435,8 @@ class ReviewRegressionTest(unittest.TestCase):
         self.assertEqual(values["tag"]["value_class"], "redacted")
         self.assertEqual(values["backend"]["value_class"], "redacted")
         self.assertEqual(values["account"]["value_class"], "redacted")
+        self.assertEqual(values["api_key"]["value_class"], "redacted")
+        self.assertEqual(values["passphrase"]["value_class"], "redacted")
         self.assertEqual(values["type"]["value_class"], "redacted")
         self.assertEqual(values["asset"]["value_class"], "redacted")
         self.assertEqual(values["provider"]["value"], "public-provider")

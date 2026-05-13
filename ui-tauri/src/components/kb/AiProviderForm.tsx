@@ -37,6 +37,10 @@ export interface AiProviderInput {
 
 export interface ExistingAiProvider extends AiProviderInput {
   has_api_key: boolean;
+  secret_ref?: {
+    store_id: "macos_keychain" | "windows_dpapi" | "linux_secret_service" | "sqlcipher_inline";
+    state: "ok" | "missing" | "needs_reauth" | "unavailable";
+  };
   acknowledged_at?: string | null;
 }
 
@@ -120,6 +124,7 @@ export function AiProviderForm({
 
   const createProvider = useDaemonMutation("ai.providers.create");
   const updateProvider = useDaemonMutation("ai.providers.update");
+  const setApiKeyMutation = useDaemonMutation("ai.providers.set_api_key");
 
   const handleTest = async () => {
     setTestStatus({ state: "running" });
@@ -180,13 +185,16 @@ export function AiProviderForm({
           kind,
           notes: notes.trim() || null,
         };
-        if (apiKey.trim()) {
-          args.api_key = apiKey.trim();
-        }
         if (needsRemoteAck) {
           args.acknowledged = true;
         }
         await updateProvider.mutateAsync(args);
+        if (apiKey.trim()) {
+          await setApiKeyMutation.mutateAsync({
+            name: initial.name,
+            api_key: apiKey.trim(),
+          });
+        }
         onSaved?.(initial.name);
       } else {
         const args: Record<string, unknown> = {
@@ -196,13 +204,16 @@ export function AiProviderForm({
           kind,
           notes: notes.trim() || undefined,
         };
-        if (apiKey.trim()) {
-          args.api_key = apiKey.trim();
-        }
         if (needsRemoteAck) {
           args.acknowledged = true;
         }
         await createProvider.mutateAsync(args);
+        if (apiKey.trim()) {
+          await setApiKeyMutation.mutateAsync({
+            name: name.trim(),
+            api_key: apiKey.trim(),
+          });
+        }
         onSaved?.(name.trim());
       }
       onClose();
@@ -211,7 +222,7 @@ export function AiProviderForm({
     }
   };
 
-  const isBusy = createProvider.isPending || updateProvider.isPending;
+  const isBusy = createProvider.isPending || updateProvider.isPending || setApiKeyMutation.isPending;
   const needsRemoteAck =
     kind !== "local" && (!initial || initial.kind === "local" || !initial.acknowledged_at);
   const canSubmit = !isBusy && (!needsRemoteAck || remoteAcknowledged);

@@ -1125,6 +1125,7 @@ export const fixtures: Record<string, unknown> = {
         created_at: "2026-04-27T08:00:00Z",
         updated_at: "2026-04-27T08:00:00Z",
         has_api_key: false,
+        secret_ref: { store_id: "sqlcipher_inline", state: "missing" },
         is_default: true,
       },
     ],

@@ -469,6 +469,16 @@ CREATE TABLE IF NOT EXISTS ai_providers (
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS ai_provider_secret_refs (
+    provider_name TEXT PRIMARY KEY REFERENCES ai_providers(name) ON DELETE CASCADE,
+    store_id TEXT NOT NULL,
+    service TEXT NOT NULL,
+    account TEXT NOT NULL,
+    state TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    rotated_at TEXT
+);
 """
 
 
@@ -773,10 +783,27 @@ def ensure_schema_compat(conn):
     ensure_column(conn, "source_funds_cases", "target_external_id", "TEXT")
     _backfill_source_funds_target_external_id(conn)
     ensure_column(conn, "source_funds_recipients", "active", "INTEGER NOT NULL DEFAULT 1")
+    _ensure_ai_provider_secret_refs_schema(conn)
     _drop_legacy_source_funds_recipients_unique(conn)
     _migrate_msat_columns(conn)
     _backfill_liquid_asset_codes(conn)
     _ensure_swap_matching_schema(conn)
+
+
+def _ensure_ai_provider_secret_refs_schema(conn):
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS ai_provider_secret_refs (
+            provider_name TEXT PRIMARY KEY REFERENCES ai_providers(name) ON DELETE CASCADE,
+            store_id TEXT NOT NULL,
+            service TEXT NOT NULL,
+            account TEXT NOT NULL,
+            state TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            rotated_at TEXT
+        )
+        """
+    )
 
 
 def _ensure_swap_matching_schema(conn):

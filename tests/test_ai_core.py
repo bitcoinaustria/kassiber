@@ -21,11 +21,13 @@ from kassiber.ai import (
     create_db_ai_provider,
     delete_db_ai_provider,
     get_db_ai_provider,
+    get_ai_provider_api_key_for_use,
     list_db_ai_providers,
     redact_ai_provider_for_output,
     require_ai_provider_acknowledged,
     resolve_ai_provider,
     set_default_ai_provider,
+    set_db_ai_provider_api_key,
     clear_default_ai_provider,
     update_db_ai_provider,
     seed_default_ai_provider_if_empty,
@@ -175,6 +177,7 @@ class ToolCatalogPromptTest(unittest.TestCase):
             "ui_transfers_rules_create",
             "ui_transfers_rules_delete",
             "ui_transfers_rules_set_enabled",
+            "ui_transfers_rules_apply",
             "ui_saved_views_create",
             "ui_saved_views_delete",
         }
@@ -880,6 +883,8 @@ class ProvidersCrudTest(unittest.TestCase):
                 redacted = redact_ai_provider_for_output(fetched, default_name="ollama")
                 self.assertNotIn("api_key", redacted)
                 self.assertTrue(redacted["has_api_key"])
+                self.assertEqual(redacted["secret_ref"]["store_id"], "sqlcipher_inline")
+                self.assertEqual(redacted["secret_ref"]["state"], "ok")
                 self.assertFalse(redacted["is_default"])
                 self.assertFalse(redacted["supports_reasoning_effort"])
 
@@ -913,6 +918,7 @@ class ProvidersCrudTest(unittest.TestCase):
                     {"api_key": "sk-new", "default_model": "anthropic/claude-3.5-sonnet"},
                 )
                 self.assertEqual(updated["api_key"], "sk-new")
+                self.assertEqual(updated["secret_ref"]["state"], "ok")
                 self.assertEqual(updated["default_model"], "anthropic/claude-3.5-sonnet")
 
                 cleared = update_db_ai_provider(
@@ -921,7 +927,67 @@ class ProvidersCrudTest(unittest.TestCase):
                     {"clear": ["api_key", "default_model"]},
                 )
                 self.assertIsNone(cleared["api_key"])
+                self.assertEqual(cleared["secret_ref"]["state"], "missing")
                 self.assertIsNone(cleared["default_model"])
+            finally:
+                conn.close()
+
+    def test_narrow_set_api_key_updates_secret_ref_without_echo(self):
+        with tempfile.TemporaryDirectory(prefix="kassiber-ai-secret-ref-") as tmp:
+            conn = open_db(str(Path(tmp) / "data"))
+            try:
+                create_db_ai_provider(
+                    conn,
+                    "openrouter",
+                    "https://openrouter.ai/api/v1",
+                    kind="remote",
+                )
+                updated = set_db_ai_provider_api_key(conn, "openrouter", "sk-rotated")
+                self.assertEqual(get_ai_provider_api_key_for_use(updated), "sk-rotated")
+                redacted = redact_ai_provider_for_output(updated)
+                encoded = json.dumps(redacted)
+                self.assertNotIn("sk-rotated", encoded)
+                self.assertEqual(redacted["secret_ref"], {"store_id": "sqlcipher_inline", "state": "ok"})
+
+                cleared = set_db_ai_provider_api_key(conn, "openrouter", None)
+                self.assertIsNone(get_ai_provider_api_key_for_use(cleared))
+                self.assertEqual(cleared["secret_ref"]["state"], "missing")
+            finally:
+                conn.close()
+
+    def test_os_backed_secret_ref_fails_with_repair_details(self):
+        with tempfile.TemporaryDirectory(prefix="kassiber-ai-secret-ref-missing-") as tmp:
+            conn = open_db(str(Path(tmp) / "data"))
+            try:
+                create_db_ai_provider(
+                    conn,
+                    "cloud",
+                    "https://example.test/v1",
+                    kind="remote",
+                )
+                conn.execute(
+                    """
+                    INSERT INTO ai_provider_secret_refs(
+                        provider_name, store_id, service, account, state, created_at, rotated_at
+                    ) VALUES(?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        "cloud",
+                        "macos_keychain",
+                        "service-hash",
+                        "cloud",
+                        "missing",
+                        "2026-05-13T00:00:00Z",
+                        None,
+                    ),
+                )
+                conn.commit()
+                provider = get_db_ai_provider(conn, "cloud")
+                with self.assertRaises(AppError) as ctx:
+                    get_ai_provider_api_key_for_use(provider)
+                self.assertEqual(ctx.exception.code, "secret_ref_unavailable")
+                self.assertEqual(ctx.exception.details["refs"][0]["store_id"], "macos_keychain")
+                self.assertEqual(ctx.exception.details["refs"][0]["state"], "missing")
             finally:
                 conn.close()
 
@@ -959,6 +1025,7 @@ class ProvidersCrudTest(unittest.TestCase):
                 # No raw api_key in any redacted row.
                 for row in payload["providers"]:
                     self.assertNotIn("api_key", row)
+                    self.assertIn("secret_ref", row)
             finally:
                 conn.close()
 

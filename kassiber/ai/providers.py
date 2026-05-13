@@ -21,6 +21,8 @@ the first time the table is queried; it leaves a sentinel in `settings`
 
 from __future__ import annotations
 
+import hashlib
+from pathlib import Path
 from typing import Any, Iterable
 
 from ..db import get_setting, set_setting
@@ -32,6 +34,15 @@ from ..util import str_or_none
 AI_PROVIDER_KINDS = ("local", "remote", "tee")
 DEFAULT_AI_PROVIDER_SETTING = "default_ai_provider"
 AI_PROVIDERS_SEEDED_SETTING = "ai_providers_seeded"
+DESKTOP_BUNDLE_ID = "at.bitcoinaustria.kassiber"
+AI_PROVIDER_SECRET_STORE_SQLCIPHER = "sqlcipher_inline"
+AI_PROVIDER_SECRET_STORES = (
+    "macos_keychain",
+    "windows_dpapi",
+    "linux_secret_service",
+    AI_PROVIDER_SECRET_STORE_SQLCIPHER,
+)
+AI_PROVIDER_SECRET_STATES = ("ok", "missing", "needs_reauth", "unavailable")
 
 CLI_PROVIDER_LOCATORS = ("claude-cli://default", "codex-cli://default")
 
@@ -77,6 +88,30 @@ def _normalize_kind(value: Any) -> str:
     return kind
 
 
+def _normalize_secret_store_id(value: Any) -> str:
+    store_id = str_or_none(value) or AI_PROVIDER_SECRET_STORE_SQLCIPHER
+    store_id = store_id.strip().lower()
+    if store_id not in AI_PROVIDER_SECRET_STORES:
+        raise AppError(
+            f"Unsupported AI provider secret store '{store_id}'",
+            code="validation",
+            hint=f"Choose one of: {', '.join(AI_PROVIDER_SECRET_STORES)}",
+        )
+    return store_id
+
+
+def _normalize_secret_state(value: Any) -> str:
+    state = str_or_none(value) or "missing"
+    state = state.strip().lower()
+    if state not in AI_PROVIDER_SECRET_STATES:
+        raise AppError(
+            f"Unsupported AI provider secret state '{state}'",
+            code="validation",
+            hint=f"Choose one of: {', '.join(AI_PROVIDER_SECRET_STATES)}",
+        )
+    return state
+
+
 def _validate_locator_kind(base_url: str, kind: str) -> None:
     if is_cli_provider_locator(base_url) and kind == "local":
         raise AppError(
@@ -95,6 +130,133 @@ def is_cli_provider_locator(value: Any) -> bool:
         return False
     base = base.strip().lower()
     return base in CLI_PROVIDER_LOCATORS
+
+
+def _data_root_from_connection(conn) -> str:
+    try:
+        rows = conn.execute("PRAGMA database_list").fetchall()
+    except Exception:
+        return ""
+    for row in rows:
+        try:
+            name = row["name"]
+            filename = row["file"]
+        except (KeyError, TypeError, IndexError):
+            name = row[1] if len(row) > 1 else None
+            filename = row[2] if len(row) > 2 else None
+        if name == "main" and filename:
+            return str(Path(str(filename)).expanduser().resolve().parent)
+    return ""
+
+
+def ai_provider_secret_service_id(data_root: str | None) -> str:
+    """Return the non-secret service identifier for desktop AI key refs."""
+
+    normalized_root = str(Path(data_root).expanduser().resolve()) if data_root else ""
+    material = f"{DESKTOP_BUNDLE_ID}:{normalized_root}".encode("utf-8")
+    return hashlib.sha256(material).hexdigest()
+
+
+def _default_secret_ref(conn, provider_name: str, *, has_secret: bool) -> dict[str, Any]:
+    return {
+        "store_id": AI_PROVIDER_SECRET_STORE_SQLCIPHER,
+        "service": ai_provider_secret_service_id(_data_root_from_connection(conn)),
+        "account": provider_name,
+        "state": "ok" if has_secret else "missing",
+        "created_at": None,
+        "rotated_at": None,
+    }
+
+
+def _row_secret_ref(conn, row) -> dict[str, Any]:
+    has_secret = bool(str_or_none(row["api_key"]))
+    ref = {
+        "store_id": row["secret_store_id"],
+        "service": row["secret_service"],
+        "account": row["secret_account"],
+        "state": row["secret_state"],
+        "created_at": row["secret_created_at"],
+        "rotated_at": row["secret_rotated_at"],
+    }
+    if not ref["store_id"]:
+        return _default_secret_ref(conn, row["name"], has_secret=has_secret)
+    return {
+        "store_id": _normalize_secret_store_id(ref["store_id"]),
+        "service": str(ref["service"] or ai_provider_secret_service_id(_data_root_from_connection(conn))),
+        "account": str(ref["account"] or row["name"]),
+        "state": _normalize_secret_state(ref["state"] or ("ok" if has_secret else "missing")),
+        "created_at": ref["created_at"],
+        "rotated_at": ref["rotated_at"],
+    }
+
+
+def _upsert_ai_provider_secret_ref(
+    conn,
+    provider_name: str,
+    *,
+    store_id: str = AI_PROVIDER_SECRET_STORE_SQLCIPHER,
+    state: str,
+) -> dict[str, Any]:
+    provider_name = _normalize_name(provider_name)
+    store_id = _normalize_secret_store_id(store_id)
+    state = _normalize_secret_state(state)
+    service = ai_provider_secret_service_id(_data_root_from_connection(conn))
+    ts = now_iso()
+    row = conn.execute(
+        "SELECT created_at FROM ai_provider_secret_refs WHERE provider_name = ?",
+        (provider_name,),
+    ).fetchone()
+    created_at = row["created_at"] if row else ts
+    conn.execute(
+        """
+        INSERT INTO ai_provider_secret_refs(
+            provider_name, store_id, service, account, state, created_at, rotated_at
+        ) VALUES(?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(provider_name) DO UPDATE SET
+            store_id = excluded.store_id,
+            service = excluded.service,
+            account = excluded.account,
+            state = excluded.state,
+            rotated_at = excluded.rotated_at
+        """,
+        (provider_name, store_id, service, provider_name, state, created_at, ts),
+    )
+    return {
+        "store_id": store_id,
+        "service": service,
+        "account": provider_name,
+        "state": state,
+        "created_at": created_at,
+        "rotated_at": ts,
+    }
+
+
+def _secret_ref_for_error(provider: dict) -> dict[str, Any]:
+    ref = dict(provider.get("secret_ref") or {})
+    return {
+        "provider_name": provider.get("name"),
+        "store_id": ref.get("store_id") or AI_PROVIDER_SECRET_STORE_SQLCIPHER,
+        "service": ref.get("service"),
+        "account": ref.get("account") or provider.get("name"),
+        "state": ref.get("state") or "missing",
+    }
+
+
+def get_ai_provider_api_key_for_use(provider: dict) -> str | None:
+    """Return an inline API key or raise for unresolved OS-backed refs."""
+
+    ref = provider.get("secret_ref") or {}
+    store_id = ref.get("store_id") or AI_PROVIDER_SECRET_STORE_SQLCIPHER
+    state = ref.get("state") or ("ok" if str_or_none(provider.get("api_key")) else "missing")
+    if store_id == AI_PROVIDER_SECRET_STORE_SQLCIPHER:
+        return str_or_none(provider.get("api_key"))
+    raise AppError(
+        f"AI provider '{provider.get('name')}' secret is not available in this restored project",
+        code="secret_ref_unavailable",
+        hint="Open Settings -> AI providers and re-enter or repair the provider API key.",
+        details={"refs": [_secret_ref_for_error(provider)], "state": state},
+        retryable=True,
+    )
 
 
 def normalize_base_url(value: Any) -> str:
@@ -141,14 +303,20 @@ def redact_ai_provider_for_output(provider: dict, *, default_name: str | None = 
     for field in AI_PROVIDER_SAFE_OUTPUT_FIELDS:
         if field in provider:
             payload[field] = provider[field]
-    payload["has_api_key"] = bool(str_or_none(provider.get("api_key")))
+    ref = provider.get("secret_ref") or {}
+    ref_state = ref.get("state")
+    payload["has_api_key"] = bool(str_or_none(provider.get("api_key"))) or ref_state == "ok"
+    payload["secret_ref"] = {
+        "store_id": ref.get("store_id") or AI_PROVIDER_SECRET_STORE_SQLCIPHER,
+        "state": ref_state or ("ok" if payload["has_api_key"] else "missing"),
+    }
     payload["supports_reasoning_effort"] = is_cli_provider_locator(provider.get("base_url"))
     if default_name is not None:
         payload["is_default"] = provider.get("name") == default_name
     return payload
 
 
-def _row_to_dict(row) -> dict[str, Any]:
+def _row_to_dict(conn, row) -> dict[str, Any]:
     return {
         "name": row["name"],
         "base_url": row["base_url"],
@@ -159,6 +327,7 @@ def _row_to_dict(row) -> dict[str, Any]:
         "acknowledged_at": row["acknowledged_at"],
         "created_at": row["created_at"],
         "updated_at": row["updated_at"],
+        "secret_ref": _row_secret_ref(conn, row),
     }
 
 
@@ -201,22 +370,51 @@ def seed_default_ai_provider_if_empty(conn) -> None:
 def list_db_ai_providers(conn) -> list[dict]:
     """Return all rows from the `ai_providers` table, sorted by name."""
     seed_default_ai_provider_if_empty(conn)
-    rows = conn.execute("SELECT * FROM ai_providers ORDER BY name ASC").fetchall()
-    return [_row_to_dict(row) for row in rows]
+    rows = conn.execute(
+        """
+        SELECT
+            p.*,
+            r.store_id AS secret_store_id,
+            r.service AS secret_service,
+            r.account AS secret_account,
+            r.state AS secret_state,
+            r.created_at AS secret_created_at,
+            r.rotated_at AS secret_rotated_at
+        FROM ai_providers p
+        LEFT JOIN ai_provider_secret_refs r ON r.provider_name = p.name
+        ORDER BY p.name ASC
+        """
+    ).fetchall()
+    return [_row_to_dict(conn, row) for row in rows]
 
 
 def get_db_ai_provider(conn, name: str) -> dict:
     """Fetch one provider, or raise `AppError(not_found)`."""
     seed_default_ai_provider_if_empty(conn)
     name = _normalize_name(name)
-    row = conn.execute("SELECT * FROM ai_providers WHERE name = ?", (name,)).fetchone()
+    row = conn.execute(
+        """
+        SELECT
+            p.*,
+            r.store_id AS secret_store_id,
+            r.service AS secret_service,
+            r.account AS secret_account,
+            r.state AS secret_state,
+            r.created_at AS secret_created_at,
+            r.rotated_at AS secret_rotated_at
+        FROM ai_providers p
+        LEFT JOIN ai_provider_secret_refs r ON r.provider_name = p.name
+        WHERE p.name = ?
+        """,
+        (name,),
+    ).fetchone()
     if not row:
         raise AppError(
             f"AI provider '{name}' not found",
             code="not_found",
             hint="Use `kassiber ai providers list` to see configured providers.",
         )
-    return _row_to_dict(row)
+    return _row_to_dict(conn, row)
 
 
 def get_default_ai_provider_name(conn) -> str | None:
@@ -279,6 +477,8 @@ def create_db_ai_provider(
         """,
         (name, base_url, api_key, default_model, kind, notes, acknowledged_at, ts, ts),
     )
+    if api_key:
+        _upsert_ai_provider_secret_ref(conn, name, state="ok")
     conn.commit()
     return get_db_ai_provider(conn, name)
 
@@ -366,6 +566,32 @@ def update_db_ai_provider(conn, name: str, updates: dict) -> dict:
             name,
         ),
     )
+    if "api_key" in clear_fields:
+        _upsert_ai_provider_secret_ref(conn, name, state="missing")
+    elif updates.get("api_key") is not None:
+        _upsert_ai_provider_secret_ref(conn, name, state="ok")
+    conn.commit()
+    return get_db_ai_provider(conn, name)
+
+
+def set_db_ai_provider_api_key(conn, name: str, api_key: str | None) -> dict:
+    """Set or clear an AI provider API key through the narrow secret path."""
+
+    seed_default_ai_provider_if_empty(conn)
+    name = _normalize_name(name)
+    row = conn.execute("SELECT 1 FROM ai_providers WHERE name = ?", (name,)).fetchone()
+    if not row:
+        raise AppError(
+            f"AI provider '{name}' not found",
+            code="not_found",
+        )
+    normalized_key = str_or_none(api_key)
+    state = "ok" if normalized_key else "missing"
+    conn.execute(
+        "UPDATE ai_providers SET api_key = ?, updated_at = ? WHERE name = ?",
+        (normalized_key, now_iso(), name),
+    )
+    _upsert_ai_provider_secret_ref(conn, name, state=state)
     conn.commit()
     return get_db_ai_provider(conn, name)
 

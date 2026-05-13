@@ -56,10 +56,12 @@ configurable.
 | `wallets sync` against a user-configured Electrum backend | your configured `ssl://` or `tcp://` URL | Electrum JSON-RPC over raw TCP/TLS | IP, queried scripthashes, query timing |
 | `wallets sync` against a `bitcoinrpc` backend | your configured URL | HTTP(S) POST with Basic auth | nothing leaves your machine if the node is local |
 | `rates sync` (only) | `https://api.coingecko.com/api/v3/coins/bitcoin/market_chart` | unauthenticated HTTPS GET | IP, User-Agent, which fiat pair and window |
+| `ai models`, `ai chat`, `ai.test_connection` against a configured remote/TEE provider | your configured provider URL or CLI provider | OpenAI-compatible HTTP(S) or the configured local CLI's own transport | prompt/tool context, model request metadata, IP/provider account context according to that provider |
 
 Nothing else makes network calls. `rates set`, `rates latest`,
 `rates range`, `rates pairs`, journal processing, metadata CRUD, and all
-reports are fully offline.
+reports are fully offline unless the user explicitly invokes an AI provider
+that itself contacts a remote service.
 
 ## Local storage
 
@@ -122,6 +124,15 @@ not store unlock material in the OS keychain. The passphrase is the
 perimeter. Pick a long passphrase from a password manager and treat
 the loss of that passphrase as data loss — there is no recovery path.
 
+**Desktop credential stores are a separate future boundary, not SQLCipher
+replacement.** The current desktop code contains probe-only Rust secret-store
+traits for macOS Keychain, Windows user-scope Credential Manager/DPAPI, and
+Linux Secret Service. This PR pilots only AI provider API-key references and
+keeps production storage as `sqlcipher_inline`. Backend tokens, descriptors,
+xpubs, blinding keys, and reveal payloads stay SQLCipher-protected and are not
+migrated to OS credential stores. See
+[docs/plan/10-secret-management.md](docs/plan/10-secret-management.md).
+
 **Reveal is a UX gate, not cryptographic separation.** Once the daemon
 is running with the unlocked DB, it can read every credential. The
 `auth_required` round-trip for `wallets reveal-descriptor` and
@@ -162,7 +173,8 @@ fails.
 - **Secrets on the command line still end up in shell history if you
   use the deprecated argv forms.** `--token <value>`,
   `--auth-header <value>`, `--password <value>`, `--username <value>`,
-  `--descriptor <value>`, and `--change-descriptor <value>` are kept
+  `--descriptor <value>`, `--change-descriptor <value>`, and
+  `--api-key <value>` are kept
   for backwards-compatibility with existing scripts and emit a
   deprecation warning. Prefer the safe replacements:
   `--token-stdin` / `--token-fd FD` (and the matching `*-stdin` /
@@ -233,10 +245,17 @@ through Settings → AI providers or `kassiber ai providers create`.
   `--acknowledge`, or confirmed in Settings → AI providers. `ai.chat`
   refuses to send prompts to an unacknowledged off-device provider with
   `ai_remote_ack_required`.
-- **API keys live in plaintext SQLite** (mirroring how `backends` stores
-  tokens) until the OS-keychain migration tracked in `TODO.md` covers
-  both surfaces. Filesystem read of `~/.kassiber/data/kassiber.sqlite3`
-  exposes any stored API key.
+- **AI provider API keys use the SQLCipher inline path in this PR.** CLI
+  callers should use `--api-key-stdin` / `--api-key-fd FD`; the old
+  `--api-key <value>` form is a warning-on-use shim. Desktop Settings writes
+  keys through the narrow `ai.providers.set_api_key` daemon kind and receives
+  only `has_api_key` plus `secret_ref` state back. OS credential-store refs are
+  schema/probe-only for now; backend tokens and wallet descriptors are not
+  migrated.
+- **No encrypted-while-running claim.** Once the Python daemon is unlocked, it
+  can read stored AI keys, backend tokens, descriptors, and blinding keys to do
+  its job. This does not protect against malware, admin/root access, debugger
+  memory inspection, a compromised OS, or a compromised webview process.
 - **The Tauri shell allowlists exactly the AI daemon kinds.** The webview
   cannot reach Ollama (or any other model API) directly — every call
   passes through the Python daemon. The provider URL never reaches the

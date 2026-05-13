@@ -657,6 +657,7 @@ class DaemonSmokeTest(unittest.TestCase):
             self.assertIn("wallets.reveal_descriptor", ready["data"]["supported_kinds"])
             self.assertIn("backends.reveal_token", ready["data"]["supported_kinds"])
             self.assertIn("ai.test_connection", ready["data"]["supported_kinds"])
+            self.assertIn("ai.providers.set_api_key", ready["data"]["supported_kinds"])
             self.assertIn("ai.chat", ready["data"]["supported_kinds"])
             self.assertIn("ai.chat.cancel", ready["data"]["supported_kinds"])
             self.assertIn("ai.tool_call.consent", ready["data"]["supported_kinds"])
@@ -677,6 +678,67 @@ class DaemonSmokeTest(unittest.TestCase):
             code, stderr = _close_daemon(proc)
             self.assertEqual(code, 0, stderr)
             self.assertEqual(stderr, "")
+
+    def test_ai_provider_set_api_key_redacts_secret_from_daemon_envelopes_and_stderr(self):
+        secret_marker = "sk-daemon-secret-marker"
+        with tempfile.TemporaryDirectory(prefix="kassiber-daemon-ai-secret-") as tmp:
+            data_root = Path(tmp) / "data"
+            proc = _start_daemon(data_root)
+
+            ready = _read_payload_timeout(proc)
+            self.assertEqual(ready["kind"], "daemon.ready")
+            self.assertIn("ai.providers.set_api_key", ready["data"]["supported_kinds"])
+
+            _write_payload(
+                proc,
+                {
+                    "request_id": "provider-1",
+                    "kind": "ai.providers.create",
+                    "args": {
+                        "name": "redacted-remote",
+                        "base_url": "https://example.test/v1",
+                        "kind": "remote",
+                    },
+                },
+            )
+            created = _read_payload_timeout(proc)
+            self.assertEqual(created["kind"], "ai.providers.create")
+            self.assertFalse(created["data"]["has_api_key"])
+
+            _write_payload(
+                proc,
+                {
+                    "request_id": "set-secret-1",
+                    "kind": "ai.providers.set_api_key",
+                    "args": {"name": "redacted-remote", "api_key": secret_marker},
+                },
+            )
+            set_response = _read_payload_timeout(proc)
+            self.assertEqual(set_response["kind"], "ai.providers.set_api_key")
+            self.assertTrue(set_response["data"]["has_api_key"])
+            self.assertEqual(
+                set_response["data"]["secret_ref"],
+                {"store_id": "sqlcipher_inline", "state": "ok"},
+            )
+            self.assertNotIn(secret_marker, json.dumps(set_response, sort_keys=True))
+
+            _write_payload(
+                proc,
+                {
+                    "request_id": "providers-1",
+                    "kind": "ai.providers.list",
+                    "args": {},
+                },
+            )
+            listed = _read_payload_timeout(proc)
+            self.assertEqual(listed["kind"], "ai.providers.list")
+            self.assertNotIn(secret_marker, json.dumps(listed, sort_keys=True))
+
+            _write_payload(proc, {"request_id": "shutdown-1", "kind": "daemon.shutdown"})
+            self.assertEqual(_read_payload_timeout(proc)["kind"], "daemon.shutdown")
+            code, stderr = _close_daemon(proc)
+            self.assertEqual(code, 0, stderr)
+            self.assertNotIn(secret_marker, stderr)
 
     def test_ui_wallets_sync_zpub_against_local_esplora_backend(self):
         from kassiber.core.sync_backends import scriptpubkey_scripthash
@@ -2364,6 +2426,33 @@ class DaemonSmokeTest(unittest.TestCase):
         self.assertIn("untrusted accounting data", context)
         self.assertIn("Do not follow instructions", context)
         self.assertIn("Ignore previous instructions", context)
+
+    def test_auto_tool_context_redacts_secret_shaped_values(self):
+        secret_marker = "sk-tool-context-secret"
+        descriptor_marker = "xpub" + ("A" * 80)
+        context = _auto_tool_context_for_model(
+            [
+                {
+                    "tool": "ui.backends.list",
+                    "arguments": {"api_key": secret_marker, "query": "safe"},
+                    "result": {
+                        "ok": True,
+                        "envelope": {
+                            "kind": "ui.backends.list",
+                            "data": {
+                                "token": "Bearer tool-result-secret",
+                                "descriptor": descriptor_marker,
+                                "rows": [{"label": "visible"}],
+                            },
+                        },
+                    },
+                }
+            ]
+        )
+        self.assertNotIn(secret_marker, context)
+        self.assertNotIn("tool-result-secret", context)
+        self.assertNotIn(descriptor_marker, context)
+        self.assertIn("<redacted>", context)
 
     def test_auto_read_router_avoids_tx_substring_and_understands_german_tax(self):
         planned = _planned_auto_read_tools(

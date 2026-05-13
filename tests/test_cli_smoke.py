@@ -137,7 +137,7 @@ def _sample_multisig_branch_descriptor():
     return "wsh(\n  sortedmulti(\n    2,\n    " + ",\n    ".join(keys) + "\n  )\n)\n"
 
 
-def _run(data_root, *args):
+def _run(data_root, *args, input_text=None):
     """Invoke `python -m kassiber --data-root DATA --machine ARGS...`.
 
     Returns (payload_dict, returncode). Never raises on non-zero exit; the
@@ -157,6 +157,7 @@ def _run(data_root, *args):
         cwd=ROOT,
         capture_output=True,
         text=True,
+        input=input_text,
         check=False,
     )
     stdout = result.stdout.strip()
@@ -229,8 +230,8 @@ class CliSmokeTest(unittest.TestCase):
     def tearDownClass(cls):
         cls._tmp.cleanup()
 
-    def _cli(self, *args):
-        payload, code = _run(self.data_root, *args)
+    def _cli(self, *args, input_text=None):
+        payload, code = _run(self.data_root, *args, input_text=input_text)
         if code != 0:
             self.fail(
                 f"CLI exited {code} for {args!r}; envelope: {json.dumps(payload)[:400]}"
@@ -318,16 +319,23 @@ class CliSmokeTest(unittest.TestCase):
         payload = self._cli(
             "ai", "providers", "create", "smoke-remote",
             "--base-url", "https://example.test/v1",
-            "--api-key", "sk-test-secret",
+            "--api-key-stdin",
             "--default-model", "test-model",
             "--kind", "remote",
             "--notes", "Smoke test remote",
+            input_text="sk-test-secret\n",
         )
         self._assert_kind(payload, "ai.providers.create")
+        encoded_payload = json.dumps(payload)
+        self.assertNotIn("sk-test-secret", encoded_payload)
         self.assertEqual(payload["data"]["name"], "smoke-remote")
         self.assertEqual(payload["data"]["kind"], "remote")
         self.assertTrue(payload["data"]["has_api_key"])
         self.assertNotIn("api_key", payload["data"])
+        self.assertEqual(
+            payload["data"]["secret_ref"],
+            {"store_id": "sqlcipher_inline", "state": "ok"},
+        )
         # Remote providers are not auto-acknowledged.
         self.assertIsNone(payload["data"].get("acknowledged_at"))
 
