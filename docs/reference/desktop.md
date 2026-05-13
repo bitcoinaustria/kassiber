@@ -6,17 +6,19 @@ core running as a long-lived sidecar daemon over JSONL. See
 decision and [../plan/04-desktop-ui.md](../plan/04-desktop-ui.md) for the
 implementation plan.
 
-The desktop shell is in active development. Until it ships, use the CLI as
-the primary control surface — see [../../README.md](../../README.md) for
-the quick start and [machine-output.md](machine-output.md) for the JSON
-envelope contract that the future desktop shell will consume through the
-daemon.
+The desktop shell is a pre-alpha preview. It already uses real daemon-backed
+paths for the main setup, review, report, export, assistant, and diagnostics
+workflows, but the CLI is still the most complete and scriptable control
+surface. See [../../README.md](../../README.md) for the quick start and
+[machine-output.md](machine-output.md) for the JSON envelope contract the shell
+consumes through the daemon.
 
 Current development modes:
 
-- `pnpm dev` in `ui-tauri/` runs the browser dashboard. Use
-  `pnpm dev:browser` for mock daemon fixtures, or `pnpm dev:bridge` to proxy
-  daemon requests through the loopback-only Vite bridge.
+- `pnpm dev` in `ui-tauri/` runs the browser dashboard against the
+  loopback-only Vite daemon bridge by default. `pnpm dev:bridge` is the
+  explicit form of the same mode. Use `pnpm dev:browser` for mock daemon
+  fixtures when you want disconnected UI layout work.
 - `pnpm tauri:dev` runs the Tauri shell, starts `python -m kassiber daemon`,
   and calls the Rust `daemon_invoke` boundary. The command allowlists the
   current UI data, export, and action kinds. Report exports write under the

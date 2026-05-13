@@ -13,7 +13,13 @@
 > of truth for filings, bookkeeping, audits, or financial decisions. Review all
 > output independently before using it.
 
-Kassiber is an open-source, local-first Bitcoin accounting CLI. A desktop shell built on Tauri 2 + React + TypeScript with a Python sidecar daemon is in active development (see [docs/plan/01-stack-decision.md](docs/plan/01-stack-decision.md) and [docs/plan/04-desktop-ui.md](docs/plan/04-desktop-ui.md)).
+Kassiber is an open-source, local-first Bitcoin accounting CLI with a
+pre-alpha desktop preview built on Tauri 2 + React + TypeScript and a Python
+sidecar daemon (see [docs/plan/01-stack-decision.md](docs/plan/01-stack-decision.md)
+and [docs/plan/04-desktop-ui.md](docs/plan/04-desktop-ui.md)). The CLI remains
+the most complete control surface today; the desktop preview is now backed by
+real daemon calls for the main review, setup, report, export, assistant, and
+diagnostics workflows.
 
 It keeps your accounting state on your machine, syncs from Bitcoin-native sources, and processes journals locally before generating reports. Built from scratch, it takes early visual cues from Clams and other tools in the space without inheriting the cloud trust model.
 
@@ -41,13 +47,21 @@ kind of report when an error occurs.
 - ships a single-file `tar | age` backup format (`kassiber backup export`) that is recoverable with stock `age` + `tar` + `sqlcipher` if Kassiber stops being maintained
 - supports local sets of books, separate books for private/business tax scopes,
   wallet buckets, and wallets
-- syncs from `esplora` and `electrum`, plus `bitcoinrpc` for address-based Bitcoin wallets and confirmed BTCPay Greenfield wallet history
+- syncs Bitcoin and Liquid wallets through `esplora` / `electrum`, supports
+  address-based Bitcoin refresh through `bitcoinrpc`, and pulls confirmed
+  BTCPay Greenfield wallet history
 - imports generic CSV/JSON, BTCPay exports, Phoenix exports, River exports, and BIP329 labels
 - pulls confirmed BTCPay on-chain wallet history directly from a BTCPay server via the Greenfield API
-- stores notes, tags, exclusions, transfer pairs, and attachments
+- keeps a local BTC-USD / BTC-EUR rates cache from Coinbase Exchange,
+  CoinGecko fallback, manual overrides, and optional local Kraken OHLCVT CSV
+  archives
+- stores notes, tags, exclusions, transfer pairs, swap review views,
+  source-of-funds sources/links/cases, and attachments
 - processes journals explicitly before reports are trusted
 - exposes every command through a deterministic JSON envelope
-- has a desktop shell on Tauri 2 + React + TypeScript with a Python sidecar daemon under construction (see [docs/plan/01-stack-decision.md](docs/plan/01-stack-decision.md))
+- has a daemon-backed desktop preview for onboarding, connections,
+  transactions, swap matching, journals, reports, source-of-funds review,
+  settings, diagnostics, and the optional assistant
 
 ## Architecture
 
@@ -115,10 +129,14 @@ If you use multiple BTCPay stores, only model them as multiple Kassiber wallets
 when they are actually different underlying wallets. If two stores point at the
 same wallet, creating both in Kassiber would duplicate holdings.
 
-BTCPay-backed wallets persist their `backend` / `store_id` config on the wallet
-itself, so later `wallets sync`, `wallets sync --all`, and GUI flows can reuse
-the same source without retyping `--store-id`. The desktop setup asks for the
-store only and uses BTCPay's default BTC on-chain payment method internally.
+BTCPay-backed wallets persist their `backend` / `store_id` /
+`payment_method_id` config on the wallet itself, so later `wallets sync`,
+`wallets sync --all`, and GUI flows can reuse the same source without retyping
+store details. The desktop setup can create a BTCPay instance from URL + API
+key, discover stores and payment methods, create BTCPay-only wallet sources, or
+map BTCPay payment methods onto existing settlement wallets for provenance
+enrichment. When no explicit payment method is supplied, Kassiber stores the
+default BTC on-chain payment method internally.
 
 ## AI assistance
 
@@ -140,6 +158,13 @@ is reachable from the CLI via
 AI is optional. Kassiber's core accounting flow does not depend on a model, and
 future AI-assisted features such as OCR, extraction, and reconciliation
 suggestions should stay review-gated.
+
+The desktop assistant uses explicit daemon tools rather than raw shell, raw
+filesystem, arbitrary CLI execution, descriptors, wallet files, env files, or
+generic daemon dispatch. Read-only tool calls can fetch bounded local snapshots
+for answers; mutating tools require user consent. AI features can be disabled
+globally in Settings, which hides the assistant route, sidebar entry, and
+floating chat surface while leaving provider settings available.
 
 If you use AI with Kassiber, treat prompts as sensitive accounting data. Local
 inference is the recommended default. [Ollama](https://ollama.com/) is a good
@@ -182,8 +207,9 @@ Requirements:
 - Python `>=3.10`
 - `embit>=0.8.0`
 - `rp2` from `bitcoinaustria/rp2` (pinned in `pyproject.toml`)
-- `XlsxWriter` for Austrian workbook exports and `reportlab` for styled PDF
-  report exports
+- `XlsxWriter` for workbook exports and `reportlab` for styled Austrian and
+  source-of-funds PDF exports
+- `sqlcipher3` and `pyrage` for encrypted databases and `.kassiber` backups
 
 Install in a virtual environment:
 
@@ -250,16 +276,20 @@ Before pushing code or docs changes, run:
 ./scripts/quality-gate.sh
 ```
 
-## Desktop UI (in development)
+## Desktop UI (pre-alpha preview)
 
-A Tauri 2 + React 19 + TypeScript desktop frontend lives at [ui-tauri/](ui-tauri/). It is under active translation per [docs/plan/04-desktop-ui.md](docs/plan/04-desktop-ui.md); the CLI remains the primary control surface today.
+A Tauri 2 + React 19 + TypeScript desktop frontend lives at [ui-tauri/](ui-tauri/).
+It is usable as a prerelease preview for core flows, but still pre-alpha; the
+CLI remains the most complete and scriptable surface.
 
-Browser dev mode defaults to mock fixtures with `pnpm dev` / `pnpm dev:browser`.
-Use `pnpm dev:bridge` to exercise the real Python daemon through the loopback
-Vite bridge, or `pnpm tauri:dev` to exercise the packaged Tauri command
-boundary. Overview, Books, Connections, Transactions, Journals, Reports,
-assistant chat, exports, and diagnostics now have daemon-backed paths; remaining
-fixture mode exists for isolated UI layout work and disconnected development.
+Browser dev mode now defaults to the loopback Vite daemon bridge, so `pnpm dev`
+and `pnpm dev:bridge` exercise the real Python daemon. Use `pnpm dev:browser`
+when you intentionally want mock fixtures for isolated UI layout work, or
+`pnpm tauri:dev` to exercise the packaged Tauri command boundary. Overview,
+Books, Connections, Imports, Transactions, Swap Matching, Journals, Tax Events,
+Quarantine, Reports, Source of Funds, Settings, assistant chat, exports, and
+diagnostics all have daemon-backed paths; mock mode remains for disconnected
+development and screen polish.
 
 Requirements:
 
@@ -286,13 +316,14 @@ cd ui-tauri
 pnpm tauri:dev
 ```
 
-`pnpm tauri:dev` runs the webview with the Tauri transport, starts the Python daemon, and forwards calls through the Rust supervisor. The supervisor prefers `.venv/bin/python` when present and otherwise falls back to `python3`; set `KASSIBER_PYTHON=/path/to/python` to override it, or `KASSIBER_REPO_ROOT=/path/to/checkout` to point the dev shell at another checkout. Screens that still require fixture data show daemon-unavailable states until typed UI snapshot kinds are wired.
+`pnpm tauri:dev` runs the webview with the Tauri transport, starts the Python daemon, and forwards calls through the Rust supervisor. The supervisor prefers `.venv/bin/python` when present and otherwise falls back to `python3`; set `KASSIBER_PYTHON=/path/to/python` to override it, or `KASSIBER_REPO_ROOT=/path/to/checkout` to point the dev shell at another checkout. The Tauri and bridge supervisors both allowlist daemon kinds instead of exposing generic process or CLI access.
 
 The app boots into the Welcome onboarding flow on first load, persists identity
-to localStorage, and routes through Overview / Connections / Transactions /
-Reports / Tax Events / Quarantine / Books. The shared shell hosts global
-search, the hide-sensitive eye, and the Settings modal; display currency lives
-inside Settings.
+to localStorage, and routes through Overview / Connections / Imports /
+Transactions / Swaps / Journals / Reports / Source of Funds / Tax Events /
+Quarantine / Diagnostics / Books / Settings / Assistant. The shared shell hosts
+global search, the hide-sensitive eye, native menu intents, the global AI
+feature toggle, and Settings; display currency lives inside Settings.
 
 Other useful commands:
 
@@ -301,7 +332,7 @@ pnpm typecheck   # tsc --noEmit project references
 pnpm lint        # ESLint flat config
 pnpm build       # production bundle into dist/
 pnpm tauri       # Tauri CLI
-pnpm test        # Vitest (no tests yet)
+pnpm test        # Vitest unit tests
 ```
 
 `pnpm typecheck && pnpm lint && pnpm build` is the local UI gate; pair it with `./scripts/quality-gate.sh` from the repo root before pushing changes that touch both layers.
@@ -399,6 +430,12 @@ python3 -m kassiber source-funds links create \
   --type manual_source \
   --allocation-amount 0.10000000
 
+# Optional: save recipient-specific disclosure defaults for repeat exports.
+python3 -m kassiber source-funds recipients create \
+  --label "Relationship bank" \
+  --kind bank \
+  --default-reveal-mode standard
+
 # Preview gates and disclosure, saving an immutable case before export.
 python3 -m kassiber --machine reports source-funds \
   --target-transaction <target-txid-or-id> \
@@ -447,6 +484,7 @@ Planning and architecture docs:
 - [docs/plan/04-desktop-ui.md](docs/plan/04-desktop-ui.md) (desktop implementation plan)
 - [docs/plan/06-austrian-tax-engine.md](docs/plan/06-austrian-tax-engine.md)
 - [docs/plan/08-external-document-reconciliation.md](docs/plan/08-external-document-reconciliation.md)
+- [docs/plan/09-source-of-funds.md](docs/plan/09-source-of-funds.md)
 
 Contributor docs:
 
@@ -460,14 +498,19 @@ Contributor docs:
 Notable gaps today:
 
 - Austrian E 1kv CSV/PDF/XLSX export is review-gated and currently targets the ausländisch / self-custody Kennzahlen; the styled PDF output includes Steuerbericht-style summary/detail pages, holdings, Besonderheiten, explanations, a transaction appendix, a FinanzOnline-style Kennzahl summary, and FAQ, while the XLSX and CSV bundle use an `Übersicht`, numbered section tabs/files, and `Erläuterungen zum Steuerreport`; domestic-provider withheld KESt metadata is not modeled yet
-- full BTCPay invoice/payment provenance ingest is not implemented yet; BTCPay source refresh currently covers confirmed on-chain wallet history plus comments/labels
+- full BTCPay invoice/payment provenance ingest is not implemented yet; BTCPay source refresh currently covers confirmed on-chain wallet history, comments/labels, and enrichment routes for existing settlement wallets
 - Coinbase Exchange is the default online BTC-USD / BTC-EUR rate source; it fetches coalesced 300-minute windows for missing transaction minutes and records checked sparse minutes so repeat syncs avoid dead zones. Kraken's local OHLCVT CSV archive is wired as an optional offline historical backfill from local CSVs, ZIPs, or extracted directories in the CLI and desktop Settings. Provider-derived cached prices can be rebuilt from Settings or `rates rebuild`; exact exchange execution prices should come from source CSV/API imports with pricing provenance
 - descriptor/xpub source refresh through `bitcoinrpc` is not implemented yet
 - some Lightning node adapters are declared but do not sync yet
 - `custom` wallet import mapping is not implemented yet
 - reports still use stored journal pricing rather than querying the rates cache live
+- generic text PDF export is still Latin-1-only; Austrian E 1kv and
+  source-of-funds PDFs use ReportLab renderers, but the generic PDF exporter
+  still substitutes characters outside Latin-1
 - no REST/server mode or multi-user auth
-- desktop UI (Tauri 2 + React + Python sidecar) is under construction; the CLI is the primary control surface today
+- the desktop preview is broad but not production-hardened yet: long-running
+  worker-pool/progress plumbing, remaining Settings daemon calls, production
+  signing/notarization, and OS-keychain convenience are still open
 
 See [TODO.md](TODO.md) for the active backlog.
 
