@@ -998,14 +998,17 @@ def _delete_native_ai_provider_secret(
     if store_id == "sqlcipher_inline" or not _desktop_secret_store_bridge_enabled(args):
         return
     service, account = _ai_provider_secret_service_account(dict(provider))
-    _secret_store_bridge_request(
-        ctx,
-        op="delete",
-        provider_name=str(provider.get("name") or account),
-        store_id=str(store_id),
-        service=service,
-        account=account,
-    )
+    try:
+        _secret_store_bridge_request(
+            ctx,
+            op="delete",
+            provider_name=str(provider.get("name") or account),
+            store_id=str(store_id),
+            service=service,
+            account=account,
+        )
+    except AppError:
+        return
 
 
 def _refresh_ai_provider_native_secret_states(
@@ -1020,11 +1023,24 @@ def _refresh_ai_provider_native_secret_states(
         if not store_id or store_id == "sqlcipher_inline" or ref.get("state") != "ok":
             continue
         try:
-            secret = _resolve_ai_provider_api_key(ctx, provider, args)
+            bridge_ref = _provider_secret_ref_for_bridge(provider)
+            data = _secret_store_bridge_request(
+                ctx,
+                op="exists",
+                provider_name=str(provider["name"]),
+                store_id=str(store_id),
+                service=str(bridge_ref["service"]),
+                account=str(bridge_ref.get("account") or provider["name"]),
+            )
         except AppError:
+            mark_ai_provider_secret_ref_state(ctx.conn, provider["name"], "unavailable")
+            ctx.conn.commit()
             continue
-        if not str_or_none(secret):
-            mark_ai_provider_secret_ref_state(ctx.conn, provider["name"], "missing")
+        state = str(data.get("state") or "unavailable")
+        if state != "ok":
+            if state not in {"missing", "needs_reauth", "unavailable"}:
+                state = "unavailable"
+            mark_ai_provider_secret_ref_state(ctx.conn, provider["name"], state)
             ctx.conn.commit()
 
 

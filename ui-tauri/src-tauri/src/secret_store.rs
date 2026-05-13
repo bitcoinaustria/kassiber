@@ -32,6 +32,7 @@ pub struct SecretStoreEntryRef {
 pub trait SecretStore: Send + Sync {
     fn availability(&self) -> SecretStoreAvailability;
     fn get(&self, service: &str, account: &str) -> Result<Option<Vec<u8>>, String>;
+    fn exists(&self, service: &str, account: &str) -> Result<bool, String>;
     fn set(&self, service: &str, account: &str, secret: &[u8]) -> Result<(), String>;
     fn delete(&self, service: &str, account: &str) -> Result<(), String>;
     fn list(&self, service: &str) -> Result<Vec<SecretStoreEntryRef>, String>;
@@ -46,6 +47,10 @@ impl SecretStore for ProbeSecretStore {
     }
 
     fn get(&self, _service: &str, _account: &str) -> Result<Option<Vec<u8>>, String> {
+        Err("native secret storage is unavailable in this build".to_string())
+    }
+
+    fn exists(&self, _service: &str, _account: &str) -> Result<bool, String> {
         Err("native secret storage is unavailable in this build".to_string())
     }
 
@@ -77,6 +82,13 @@ impl SecretStore for NativeSecretStore {
             Err(KeyringError::NoEntry) => Ok(None),
             Err(error) => Err(keyring_error_for_user(error)),
         }
+    }
+
+    fn exists(&self, service: &str, account: &str) -> Result<bool, String> {
+        Ok(self
+            .list(service)?
+            .iter()
+            .any(|entry| entry.account == account))
     }
 
     fn set(&self, service: &str, account: &str, secret: &[u8]) -> Result<(), String> {
@@ -141,6 +153,14 @@ impl SecretStore for MockSecretStore {
             .expect("mock entries lock")
             .get(&(service.to_string(), account.to_string()))
             .cloned())
+    }
+
+    fn exists(&self, service: &str, account: &str) -> Result<bool, String> {
+        Ok(self
+            .entries
+            .lock()
+            .expect("mock entries lock")
+            .contains_key(&(service.to_string(), account.to_string())))
     }
 
     fn set(&self, service: &str, account: &str, secret: &[u8]) -> Result<(), String> {

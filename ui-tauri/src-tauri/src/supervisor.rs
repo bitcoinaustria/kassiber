@@ -1122,6 +1122,18 @@ fn handle_secret_store_operation(
                 })),
             }
         }
+        "exists" => {
+            let (service, account) = secret_ref_service_account(data)?;
+            let state = if secret_store.exists(service, account)? {
+                "ok"
+            } else {
+                "missing"
+            };
+            Ok(json!({
+                "provider_name": provider_name,
+                "state": state,
+            }))
+        }
         "set" => {
             let (service, account) = secret_ref_service_account(data)?;
             let secret = data

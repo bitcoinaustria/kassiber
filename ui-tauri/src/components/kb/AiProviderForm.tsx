@@ -194,7 +194,6 @@ export function AiProviderForm({
           await setApiKeyMutation.mutateAsync({
             name: initial.name,
             api_key: apiKey.trim(),
-            store_id: initial.secret_ref?.store_id,
           });
         }
         onSaved?.(initial.name);

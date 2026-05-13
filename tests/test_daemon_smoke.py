@@ -907,6 +907,171 @@ class DaemonSmokeTest(unittest.TestCase):
                 code, stderr = _close_daemon(proc)
                 self.assertEqual(code, 0, stderr)
 
+    def test_ai_provider_list_checks_native_ref_existence_without_secret(self):
+        with tempfile.TemporaryDirectory(prefix="kassiber-daemon-ai-native-list-") as tmp:
+            data_root = Path(tmp) / "data"
+            proc = _start_daemon(data_root)
+            self.assertEqual(_read_payload_timeout(proc)["kind"], "daemon.ready")
+            try:
+                _write_payload(
+                    proc,
+                    {
+                        "request_id": "provider-1",
+                        "kind": "ai.providers.create",
+                        "args": {
+                            "name": "native-list",
+                            "base_url": "https://example.test/v1",
+                            "kind": "remote",
+                        },
+                    },
+                )
+                self.assertEqual(_read_payload_timeout(proc)["kind"], "ai.providers.create")
+                conn = sqlite3.connect(data_root / "kassiber.sqlite3")
+                try:
+                    conn.execute(
+                        """
+                        INSERT INTO ai_provider_secret_refs(
+                            provider_name, store_id, service, account, state,
+                            created_at, rotated_at
+                        ) VALUES(?, ?, ?, ?, ?, ?, ?)
+                        """,
+                        (
+                            "native-list",
+                            "macos_keychain",
+                            "service-hash",
+                            "native-list",
+                            "ok",
+                            "2026-05-13T00:00:00Z",
+                            "2026-05-13T00:00:00Z",
+                        ),
+                    )
+                    conn.commit()
+                finally:
+                    conn.close()
+
+                _write_payload(
+                    proc,
+                    {
+                        "request_id": "list-1",
+                        "kind": "ai.providers.list",
+                        "args": {"_desktop_secret_store_bridge": True},
+                    },
+                )
+                control = _read_payload_timeout(proc)
+                self.assertEqual(control["kind"], "supervisor.ai_secret_store.request")
+                self.assertEqual(control["data"]["op"], "exists")
+                self.assertNotIn("secret", control["data"])
+                _write_payload(
+                    proc,
+                    {
+                        "request_id": control["request_id"],
+                        "kind": "supervisor.ai_secret_store.response",
+                        "data": {"provider_name": "native-list", "state": "missing"},
+                    },
+                )
+                listed = _read_payload_timeout(proc)
+                self.assertEqual(listed["kind"], "ai.providers.list")
+                provider = next(
+                    row
+                    for row in listed["data"]["providers"]
+                    if row["name"] == "native-list"
+                )
+                self.assertEqual(
+                    provider["secret_ref"],
+                    {"store_id": "macos_keychain", "state": "missing"},
+                )
+            finally:
+                _write_payload(proc, {"request_id": "shutdown-1", "kind": "daemon.shutdown"})
+                self.assertEqual(_read_payload_timeout(proc)["kind"], "daemon.shutdown")
+                code, stderr = _close_daemon(proc)
+                self.assertEqual(code, 0, stderr)
+
+    def test_ai_provider_delete_ignores_unreachable_native_cleanup(self):
+        with tempfile.TemporaryDirectory(prefix="kassiber-daemon-ai-native-delete-") as tmp:
+            data_root = Path(tmp) / "data"
+            proc = _start_daemon(data_root)
+            self.assertEqual(_read_payload_timeout(proc)["kind"], "daemon.ready")
+            try:
+                _write_payload(
+                    proc,
+                    {
+                        "request_id": "provider-1",
+                        "kind": "ai.providers.create",
+                        "args": {
+                            "name": "native-delete",
+                            "base_url": "https://example.test/v1",
+                            "kind": "remote",
+                        },
+                    },
+                )
+                self.assertEqual(_read_payload_timeout(proc)["kind"], "ai.providers.create")
+                conn = sqlite3.connect(data_root / "kassiber.sqlite3")
+                try:
+                    conn.execute(
+                        """
+                        INSERT INTO ai_provider_secret_refs(
+                            provider_name, store_id, service, account, state,
+                            created_at, rotated_at
+                        ) VALUES(?, ?, ?, ?, ?, ?, ?)
+                        """,
+                        (
+                            "native-delete",
+                            "macos_keychain",
+                            "service-hash",
+                            "native-delete",
+                            "ok",
+                            "2026-05-13T00:00:00Z",
+                            "2026-05-13T00:00:00Z",
+                        ),
+                    )
+                    conn.commit()
+                finally:
+                    conn.close()
+
+                _write_payload(
+                    proc,
+                    {
+                        "request_id": "delete-1",
+                        "kind": "ai.providers.delete",
+                        "args": {
+                            "name": "native-delete",
+                            "_desktop_secret_store_bridge": True,
+                        },
+                    },
+                )
+                control = _read_payload_timeout(proc)
+                self.assertEqual(control["kind"], "supervisor.ai_secret_store.request")
+                self.assertEqual(control["data"]["op"], "delete")
+                _write_payload(
+                    proc,
+                    {
+                        "request_id": control["request_id"],
+                        "kind": "supervisor.ai_secret_store.response",
+                        "error": {
+                            "code": "secret_store_bridge_error",
+                            "message": "native store unavailable",
+                            "retryable": True,
+                        },
+                    },
+                )
+                deleted = _read_payload_timeout(proc)
+                self.assertEqual(deleted["kind"], "ai.providers.delete")
+
+                conn = sqlite3.connect(data_root / "kassiber.sqlite3")
+                try:
+                    row = conn.execute(
+                        "SELECT 1 FROM ai_providers WHERE name = ?",
+                        ("native-delete",),
+                    ).fetchone()
+                    self.assertIsNone(row)
+                finally:
+                    conn.close()
+            finally:
+                _write_payload(proc, {"request_id": "shutdown-1", "kind": "daemon.shutdown"})
+                self.assertEqual(_read_payload_timeout(proc)["kind"], "daemon.shutdown")
+                code, stderr = _close_daemon(proc)
+                self.assertEqual(code, 0, stderr)
+
     def test_ui_wallets_sync_zpub_against_local_esplora_backend(self):
         from kassiber.core.sync_backends import scriptpubkey_scripthash
         from kassiber.wallet_descriptors import derive_descriptor_target, load_descriptor_plan
