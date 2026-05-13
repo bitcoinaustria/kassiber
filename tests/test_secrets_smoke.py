@@ -20,6 +20,7 @@ Covers the round-trips the plan calls out as table-stakes:
 
 from __future__ import annotations
 
+from contextlib import suppress
 import json
 import os
 import shutil
@@ -30,6 +31,7 @@ import unittest
 from pathlib import Path
 from types import SimpleNamespace
 
+from kassiber.ai.providers import get_db_ai_provider, redact_ai_provider_for_output
 from kassiber.backup.cli import cmd_backup_import
 from kassiber.backup.pack import export_backup, import_backup
 from kassiber.backup.safe_tar import (
@@ -464,7 +466,27 @@ class BackupRoundTripTests(unittest.TestCase):
                 )
             finally:
                 if result.staging_path:
-                    shutil.rmtree(result.staging_path.parent)
+                    repaired = open_db(str(result.staging_path), passphrase="db-pass")
+                    try:
+                        provider = get_db_ai_provider(repaired, "cloud")
+                        redacted = redact_ai_provider_for_output(provider)
+                        self.assertFalse(redacted["has_api_key"])
+                        self.assertEqual(
+                            redacted["secret_ref"],
+                            {"store_id": "macos_keychain", "state": "unavailable"},
+                        )
+                        persisted_state = repaired.execute(
+                            """
+                            SELECT state
+                            FROM ai_provider_secret_refs
+                            WHERE provider_name = ?
+                            """,
+                            ("cloud",),
+                        ).fetchone()["state"]
+                        self.assertEqual(persisted_state, "unavailable")
+                    finally:
+                        repaired.close()
+                        shutil.rmtree(result.staging_path.parent)
 
             read_fd, write_fd = os.pipe()
             os.write(write_fd, b"outer-pass")
@@ -481,10 +503,8 @@ class BackupRoundTripTests(unittest.TestCase):
                     )
                 )
             finally:
-                try:
+                with suppress(OSError):
                     os.close(read_fd)
-                except OSError:
-                    pass
             staging_path = envelope["data"]["staging_path"]
             try:
                 warning = envelope["data"]["secret_ref_unavailable"]

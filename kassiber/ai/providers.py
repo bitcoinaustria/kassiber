@@ -233,12 +233,16 @@ def _upsert_ai_provider_secret_ref(
 
 def _secret_ref_for_error(provider: dict) -> dict[str, Any]:
     ref = dict(provider.get("secret_ref") or {})
+    store_id = ref.get("store_id") or AI_PROVIDER_SECRET_STORE_SQLCIPHER
+    state = ref.get("state") or "missing"
+    if store_id != AI_PROVIDER_SECRET_STORE_SQLCIPHER and state == "ok":
+        state = "unavailable"
     return {
         "provider_name": provider.get("name"),
-        "store_id": ref.get("store_id") or AI_PROVIDER_SECRET_STORE_SQLCIPHER,
+        "store_id": store_id,
         "service": ref.get("service"),
         "account": ref.get("account") or provider.get("name"),
-        "state": ref.get("state") or "missing",
+        "state": state,
     }
 
 
@@ -247,14 +251,19 @@ def get_ai_provider_api_key_for_use(provider: dict) -> str | None:
 
     ref = provider.get("secret_ref") or {}
     store_id = ref.get("store_id") or AI_PROVIDER_SECRET_STORE_SQLCIPHER
-    state = ref.get("state") or ("ok" if str_or_none(provider.get("api_key")) else "missing")
+    state = ref.get("state") or (
+        "ok" if str_or_none(provider.get("api_key")) else "missing"
+    )
     if store_id == AI_PROVIDER_SECRET_STORE_SQLCIPHER:
         return str_or_none(provider.get("api_key"))
+    if state == "ok":
+        state = "unavailable"
+    secret_ref = _secret_ref_for_error(provider)
     raise AppError(
         f"AI provider '{provider.get('name')}' secret is not available in this restored project",
         code="secret_ref_unavailable",
         hint="Open Settings -> AI providers and re-enter or repair the provider API key.",
-        details={"refs": [_secret_ref_for_error(provider)], "state": state},
+        details={"refs": [secret_ref], "state": state},
         retryable=True,
     )
 
@@ -304,10 +313,16 @@ def redact_ai_provider_for_output(provider: dict, *, default_name: str | None = 
         if field in provider:
             payload[field] = provider[field]
     ref = provider.get("secret_ref") or {}
+    store_id = ref.get("store_id") or AI_PROVIDER_SECRET_STORE_SQLCIPHER
     ref_state = ref.get("state")
-    payload["has_api_key"] = bool(str_or_none(provider.get("api_key"))) or ref_state == "ok"
+    inline_has_key = bool(str_or_none(provider.get("api_key")))
+    if store_id == AI_PROVIDER_SECRET_STORE_SQLCIPHER:
+        ref_state = "ok" if inline_has_key else "missing"
+    elif ref_state == "ok":
+        ref_state = "unavailable"
+    payload["has_api_key"] = inline_has_key
     payload["secret_ref"] = {
-        "store_id": ref.get("store_id") or AI_PROVIDER_SECRET_STORE_SQLCIPHER,
+        "store_id": store_id,
         "state": ref_state or ("ok" if payload["has_api_key"] else "missing"),
     }
     payload["supports_reasoning_effort"] = is_cli_provider_locator(provider.get("base_url"))

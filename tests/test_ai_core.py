@@ -968,7 +968,8 @@ class ProvidersCrudTest(unittest.TestCase):
                 conn.execute(
                     """
                     INSERT INTO ai_provider_secret_refs(
-                        provider_name, store_id, service, account, state, created_at, rotated_at
+                        provider_name, store_id, service, account, state,
+                        created_at, rotated_at
                     ) VALUES(?, ?, ?, ?, ?, ?, ?)
                     """,
                     (
@@ -988,6 +989,51 @@ class ProvidersCrudTest(unittest.TestCase):
                 self.assertEqual(ctx.exception.code, "secret_ref_unavailable")
                 self.assertEqual(ctx.exception.details["refs"][0]["store_id"], "macos_keychain")
                 self.assertEqual(ctx.exception.details["refs"][0]["state"], "missing")
+            finally:
+                conn.close()
+
+    def test_probe_only_os_backed_ok_ref_outputs_unavailable(self):
+        with tempfile.TemporaryDirectory(prefix="kassiber-ai-secret-ref-ok-") as tmp:
+            conn = open_db(str(Path(tmp) / "data"))
+            try:
+                create_db_ai_provider(
+                    conn,
+                    "cloud",
+                    "https://example.test/v1",
+                    kind="remote",
+                )
+                conn.execute(
+                    """
+                    INSERT INTO ai_provider_secret_refs(
+                        provider_name, store_id, service, account, state,
+                        created_at, rotated_at
+                    ) VALUES(?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        "cloud",
+                        "macos_keychain",
+                        "service-hash",
+                        "cloud",
+                        "ok",
+                        "2026-05-13T00:00:00Z",
+                        None,
+                    ),
+                )
+                conn.commit()
+
+                provider = get_db_ai_provider(conn, "cloud")
+                redacted = redact_ai_provider_for_output(provider)
+                self.assertFalse(redacted["has_api_key"])
+                self.assertEqual(
+                    redacted["secret_ref"],
+                    {"store_id": "macos_keychain", "state": "unavailable"},
+                )
+                with self.assertRaises(AppError) as ctx:
+                    get_ai_provider_api_key_for_use(provider)
+                self.assertEqual(ctx.exception.code, "secret_ref_unavailable")
+                self.assertEqual(
+                    ctx.exception.details["refs"][0]["state"], "unavailable"
+                )
             finally:
                 conn.close()
 

@@ -155,7 +155,9 @@ present so future OS-backed stores can record non-secret refs. Backup export
 records only that ref metadata for non-inline AI keys and refuses inconsistent
 rows where a non-inline ref still has an inline `api_key`; backup import
 surfaces a non-fatal `secret_ref_unavailable` warning so Settings can prompt for
-re-entry.
+re-entry. After the restored DB is unlocked, this probe-only build persists
+non-inline refs as `unavailable` so provider lists do not report them as usable
+keys.
 This PR does not store production secrets in macOS Keychain, Windows Credential
 Manager, or Linux Secret Service yet. Backend tokens, descriptors, xpubs, and
 blinding keys stay SQLCipher-protected. See
