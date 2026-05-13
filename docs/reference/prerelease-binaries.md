@@ -111,6 +111,21 @@ desktop leg uses GitHub's `macos-latest` runner with Tauri's
 (`aarch64-apple-darwin` and `x86_64-apple-darwin`). Keep the desktop artifact
 target name `macos-universal` so users only see one Mac GUI download.
 
+For a local Apple Silicon build without Rosetta, use the arm64-only helper:
+
+```bash
+./scripts/build-macos-arm64-app.sh
+```
+
+It builds the PyInstaller sidecar as
+`ui-tauri/src-tauri/binaries/kassiber-cli-aarch64-apple-darwin`, verifies that
+the executable is arm64, and runs Tauri with
+`--target aarch64-apple-darwin --bundles app,dmg`. The result is a full
+unsigned desktop app and DMG under
+`ui-tauri/src-tauri/target/aarch64-apple-darwin/release/bundle`.
+The helper defaults to Python 3.11 to match the GitHub Actions prerelease
+workflow; set `PYTHON_VERSION=<version>` only for intentional local debugging.
+
 Desktop artifacts are unsigned previews, but normal daemon calls use the
 bundled PyInstaller CLI sidecar and do not require a separate Python checkout.
 The GUI executable also forwards `--cli ...` to that sidecar so an installed
