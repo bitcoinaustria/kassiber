@@ -137,6 +137,7 @@ const ALLOWED_DAEMON_KINDS: &[&str] = &[
     "ui.journals.process",
     "ui.rates.summary",
     "ui.rates.kraken_csv.import",
+    "ui.rates.rebuild",
     "ui.workspace.health",
     "ui.workspace.create",
     "ui.workspace.delete",

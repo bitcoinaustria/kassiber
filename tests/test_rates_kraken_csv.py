@@ -9,9 +9,10 @@ from pathlib import Path
 from unittest.mock import patch
 
 from kassiber.core import rates as core_rates
+from kassiber.core import pricing
 from kassiber.core.rates import get_cached_rate_at_or_before
-from kassiber.daemon import _rates_kraken_csv_import_payload
-from kassiber.db import open_db
+from kassiber.daemon import _rates_kraken_csv_import_payload, _rates_rebuild_payload
+from kassiber.db import open_db, set_setting
 
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -488,6 +489,221 @@ class KrakenCsvRatesTest(unittest.TestCase):
         self.assertEqual(summary[0]["cached_minutes"], 1)
         self.assertEqual(summary[0]["missing_minutes"], 0)
         self.assertEqual(summary[0]["windows"], 0)
+
+    def test_rebuild_rates_cache_clears_provider_rows_and_reprices(self):
+        conn = open_db(str(self.data_root))
+        self.addCleanup(conn.close)
+        self._seed_transaction_needing_rate(conn)
+        core_rates.upsert_rate(
+            conn,
+            "BTC-EUR",
+            "2024-05-01T12:34:00Z",
+            "59900.00",
+            core_rates.RATE_SOURCE_COINBASE_EXCHANGE,
+            fetched_at="2024-05-01T00:00:00Z",
+            granularity="minute",
+            method="product_candles",
+        )
+        core_rates.upsert_rate(
+            conn,
+            "BTC-EUR",
+            "2024-05-01T12:33:00Z",
+            "60100.00",
+            "manual",
+            fetched_at="2024-05-01T00:00:00Z",
+            granularity="exact",
+            method="manual",
+        )
+        conn.execute(
+            """
+            INSERT INTO rates_checked_minutes(
+                pair, timestamp, source, checked_at, granularity, method
+            )
+            VALUES (?, ?, ?, ?, ?, ?)
+            """,
+            (
+                "BTC-EUR",
+                "2024-05-01T12:34:00Z",
+                core_rates.RATE_SOURCE_COINBASE_EXCHANGE,
+                "2024-05-01T00:00:00Z",
+                "minute",
+                "product_candles",
+            ),
+        )
+        conn.execute(
+            """
+            UPDATE transactions
+            SET fiat_rate = ?, fiat_value = ?, fiat_price_source = ?,
+                fiat_rate_exact = ?, fiat_value_exact = ?,
+                pricing_source_kind = ?, pricing_provider = ?, pricing_pair = ?,
+                pricing_timestamp = ?, pricing_fetched_at = ?,
+                pricing_granularity = ?, pricing_method = ?,
+                pricing_quality = ?
+            WHERE id = ?
+            """,
+            (
+                59900.0,
+                59900.0,
+                pricing.LEGACY_SOURCE_RATES_CACHE,
+                "59900.00",
+                "59900.00",
+                pricing.SOURCE_FMV_PROVIDER,
+                core_rates.RATE_SOURCE_COINBASE_EXCHANGE,
+                "BTC-EUR",
+                "2024-05-01T12:34:00Z",
+                "2024-05-01T00:00:00Z",
+                "minute",
+                "product_candles",
+                pricing.QUALITY_PROVIDER_SAMPLE,
+                "tx-1",
+            ),
+        )
+        conn.commit()
+
+        def fake_coinbase_rows(pair, start, end, granularity=60):
+            return [
+                [
+                    1714566780,
+                    "60000.00",
+                    "60040.00",
+                    "60010.00",
+                    "60030.00",
+                    "0.75",
+                ],
+            ]
+
+        with patch.object(
+            core_rates,
+            "_coinbase_exchange_candles",
+            side_effect=fake_coinbase_rows,
+        ):
+            rebuilt = core_rates.rebuild_rates_cache(
+                conn,
+                pair="BTC-EUR",
+                source=core_rates.RATE_SOURCE_COINBASE_EXCHANGE,
+                reprice_transactions=True,
+                profile_id="profile-1",
+            )
+
+        self.assertEqual(rebuilt["deleted"]["rates"], 1)
+        self.assertEqual(rebuilt["deleted"]["checked_minutes"], 1)
+        self.assertEqual(rebuilt["deleted"]["transaction_prices"], 1)
+        self.assertEqual(rebuilt["sync"][0]["samples"], 1)
+        rows = conn.execute(
+            """
+            SELECT source, rate_exact
+            FROM rates_cache
+            WHERE pair = 'BTC-EUR'
+            ORDER BY source
+            """
+        ).fetchall()
+        self.assertEqual(
+            [(row["source"], row["rate_exact"]) for row in rows],
+            [
+                ("coinbase-exchange", "60030.00"),
+                ("manual", "60100.00"),
+            ],
+        )
+        checked = conn.execute("SELECT COUNT(*) FROM rates_checked_minutes").fetchone()[0]
+        self.assertEqual(checked, 300)
+        tx = conn.execute(
+            """
+            SELECT fiat_rate, fiat_value, pricing_source_kind
+            FROM transactions
+            WHERE id = 'tx-1'
+            """
+        ).fetchone()
+        self.assertIsNone(tx["fiat_rate"])
+        self.assertIsNone(tx["fiat_value"])
+        self.assertIsNone(tx["pricing_source_kind"])
+
+    def test_desktop_daemon_rebuild_reprices_active_profile(self):
+        conn = open_db(str(self.data_root))
+        self.addCleanup(conn.close)
+        self._seed_transaction_needing_rate(conn)
+        set_setting(conn, "context_workspace", "workspace-1")
+        set_setting(conn, "context_profile", "profile-1")
+        core_rates.upsert_rate(
+            conn,
+            "BTC-EUR",
+            "2024-05-01T12:34:00Z",
+            "59900.00",
+            core_rates.RATE_SOURCE_COINBASE_EXCHANGE,
+            fetched_at="2024-05-01T00:00:00Z",
+            granularity="minute",
+            method="product_candles",
+        )
+        conn.execute(
+            """
+            UPDATE transactions
+            SET fiat_rate = ?, fiat_value = ?, fiat_price_source = ?,
+                fiat_rate_exact = ?, fiat_value_exact = ?,
+                pricing_source_kind = ?, pricing_provider = ?, pricing_pair = ?,
+                pricing_timestamp = ?, pricing_fetched_at = ?,
+                pricing_granularity = ?, pricing_method = ?,
+                pricing_quality = ?
+            WHERE id = ?
+            """,
+            (
+                59900.0,
+                59900.0,
+                pricing.LEGACY_SOURCE_RATES_CACHE,
+                "59900.00",
+                "59900.00",
+                pricing.SOURCE_FMV_PROVIDER,
+                core_rates.RATE_SOURCE_COINBASE_EXCHANGE,
+                "BTC-EUR",
+                "2024-05-01T12:34:00Z",
+                "2024-05-01T00:00:00Z",
+                "minute",
+                "product_candles",
+                pricing.QUALITY_PROVIDER_SAMPLE,
+                "tx-1",
+            ),
+        )
+        conn.commit()
+
+        def fake_coinbase_rows(pair, start, end, granularity=60):
+            return [
+                [
+                    1714566780,
+                    "60000.00",
+                    "60040.00",
+                    "60010.00",
+                    "60030.00",
+                    "0.75",
+                ],
+            ]
+
+        with patch.object(
+            core_rates,
+            "_coinbase_exchange_candles",
+            side_effect=fake_coinbase_rows,
+        ):
+            payload = _rates_rebuild_payload(
+                conn,
+                {
+                    "source": core_rates.RATE_SOURCE_COINBASE_EXCHANGE,
+                    "pair": "BTC-EUR",
+                    "reprice_transactions": True,
+                },
+            )
+
+        self.assertEqual(payload["source"], "coinbase-exchange")
+        self.assertEqual(payload["deleted"]["transaction_prices"], 1)
+        self.assertIsNotNone(payload["journals"])
+        tx = conn.execute(
+            """
+            SELECT fiat_rate_exact, fiat_value_exact, pricing_source_kind,
+                   pricing_provider
+            FROM transactions
+            WHERE id = 'tx-1'
+            """
+        ).fetchone()
+        self.assertEqual(tx["fiat_rate_exact"], "60030.00")
+        self.assertEqual(tx["fiat_value_exact"], "60.03000")
+        self.assertEqual(tx["pricing_source_kind"], pricing.SOURCE_FMV_PROVIDER)
+        self.assertEqual(tx["pricing_provider"], "coinbase-exchange")
 
 
 if __name__ == "__main__":

@@ -756,6 +756,157 @@ def _mark_rate_minutes_checked(
     return len(rows)
 
 
+def _delete_rate_rows(conn, pair=None, source=None):
+    clauses = []
+    params = []
+    if pair:
+        clauses.append("pair = ?")
+        params.append(require_supported_pair(pair))
+    if source:
+        clauses.append("source = ?")
+        params.append(str(source).strip().lower())
+    where = f"WHERE {' AND '.join(clauses)}" if clauses else ""
+    cursor = conn.execute(f"DELETE FROM rates_cache {where}", params)
+    return cursor.rowcount if cursor.rowcount is not None else 0
+
+
+def _delete_checked_rate_minutes(conn, pair=None, source=None):
+    clauses = []
+    params = []
+    if pair:
+        clauses.append("pair = ?")
+        params.append(require_supported_pair(pair))
+    if source:
+        clauses.append("source = ?")
+        params.append(str(source).strip().lower())
+    where = f"WHERE {' AND '.join(clauses)}" if clauses else ""
+    cursor = conn.execute(f"DELETE FROM rates_checked_minutes {where}", params)
+    return cursor.rowcount if cursor.rowcount is not None else 0
+
+
+def _clear_provider_transaction_prices(conn, pair=None, profile_id=None):
+    clauses = ["pricing_source_kind = ?"]
+    params = [pricing.SOURCE_FMV_PROVIDER]
+    if pair:
+        clauses.append("pricing_pair = ?")
+        params.append(require_supported_pair(pair))
+    if profile_id:
+        clauses.append("profile_id = ?")
+        params.append(profile_id)
+    where = " AND ".join(clauses)
+    affected_profiles = [
+        row["profile_id"]
+        for row in conn.execute(
+            f"SELECT DISTINCT profile_id FROM transactions WHERE {where}",
+            params,
+        ).fetchall()
+    ]
+    cursor = conn.execute(
+        f"""
+        UPDATE transactions
+        SET fiat_rate = NULL,
+            fiat_value = NULL,
+            fiat_price_source = NULL,
+            fiat_rate_exact = NULL,
+            fiat_value_exact = NULL,
+            pricing_source_kind = NULL,
+            pricing_provider = NULL,
+            pricing_pair = NULL,
+            pricing_timestamp = NULL,
+            pricing_fetched_at = NULL,
+            pricing_granularity = NULL,
+            pricing_method = NULL,
+            pricing_external_ref = NULL,
+            pricing_quality = NULL
+        WHERE {where}
+        """,
+        params,
+    )
+    for profile in affected_profiles:
+        conn.execute(
+            """
+            UPDATE profiles
+            SET last_processed_at = NULL,
+                last_processed_tx_count = 0,
+                journal_input_version = journal_input_version + 1
+            WHERE id = ?
+            """,
+            (profile,),
+        )
+    return {
+        "transactions": cursor.rowcount if cursor.rowcount is not None else 0,
+        "profiles": len(affected_profiles),
+    }
+
+
+def rebuild_rates_cache(
+    conn,
+    pair=None,
+    days=30,
+    source=RATE_SOURCE_COINBASE_EXCHANGE,
+    path=None,
+    reprice_transactions=False,
+    profile_id=None,
+):
+    normalized_source = str(source or "").strip().lower()
+    if normalized_source not in SUPPORTED_RATE_SOURCES:
+        raise AppError(
+            f"Unknown rate source '{source}'",
+            code="validation",
+            hint=f"Supported sources: {', '.join(SUPPORTED_RATE_SOURCES)}",
+        )
+    normalized_pair = require_supported_pair(pair) if pair else None
+    if normalized_source == RATE_SOURCE_KRAKEN_CSV and not path:
+        raise AppError(
+            "--path is required for --source kraken-csv",
+            code="validation",
+        )
+    if normalized_source != RATE_SOURCE_KRAKEN_CSV and path:
+        raise AppError(
+            "--path is only supported for --source kraken-csv",
+            code="validation",
+        )
+
+    transaction_prices = {"transactions": 0, "profiles": 0}
+    if reprice_transactions:
+        transaction_prices = _clear_provider_transaction_prices(
+            conn,
+            pair=normalized_pair,
+            profile_id=profile_id,
+        )
+    deleted_rates = _delete_rate_rows(
+        conn,
+        pair=normalized_pair,
+        source=normalized_source,
+    )
+    deleted_checked_minutes = _delete_checked_rate_minutes(
+        conn,
+        pair=normalized_pair,
+        source=normalized_source,
+    )
+    conn.commit()
+    sync_summary = sync_rates(
+        conn,
+        pair=normalized_pair,
+        days=days,
+        source=normalized_source,
+        path=path,
+    )
+    return {
+        "source": normalized_source,
+        "pair": normalized_pair,
+        "days": int(days),
+        "reprice_transactions": bool(reprice_transactions),
+        "deleted": {
+            "rates": deleted_rates,
+            "checked_minutes": deleted_checked_minutes,
+            "transaction_prices": transaction_prices["transactions"],
+            "profiles_invalidated": transaction_prices["profiles"],
+        },
+        "sync": sync_summary,
+    }
+
+
 def fetch_rates_coinbase_exchange(pair, days=30, granularity=60):
     if int(days) <= 0:
         raise AppError("--days must be positive", code="validation")
@@ -1166,6 +1317,7 @@ __all__ = [
     "get_rate_range",
     "list_cached_pairs",
     "rate_pair_parts",
+    "rebuild_rates_cache",
     "require_supported_pair",
     "set_manual_rate",
     "sync_rates",

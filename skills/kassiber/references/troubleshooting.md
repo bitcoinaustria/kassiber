@@ -30,6 +30,13 @@ kassiber rates set BTC-EUR 2025-01-01T00:00:00Z 95000
 
 and process again.
 
+If provider-derived rates were cached from an older or approximate source, use
+`kassiber rates rebuild --source coinbase-exchange --reprice-transactions` or
+the desktop Settings → Rate providers rebuild action. Warn users with large
+wallets that a rebuild can be slow because Kassiber refetches one-minute
+Coinbase windows and reprocesses journals. Manual overrides and imported
+exchange execution prices are not cleared.
+
 Do not infer historical coverage from the `samples` count in `rates sync`
 output. Use `kassiber rates range BTC-EUR --start <rfc3339> --end <rfc3339>`
 to verify whether the missing transaction timestamps are actually covered.

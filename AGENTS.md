@@ -156,7 +156,7 @@ Kassiber is currently in **dev mode**: renaming commands, breaking flags, and re
 - `views {list,create,delete}` — generic saved-view CRUD; ``swap_candidates`` is the first surface consumer
 - `source-funds {sources {list,create,attach},links {list,create,review,attach,bulk-review},suggest,cases {list}}`
 - `reports {summary,tax-summary,balance-sheet,portfolio-summary,capital-gains,journal-entries,balance-history,source-funds,austrian-e1kv,austrian-tax-summary,export-pdf,export-csv,export-xlsx,export-source-funds-pdf,export-austrian,export-austrian-e1kv-pdf,export-austrian-e1kv-xlsx,export-austrian-e1kv-csv}`
-- `rates {pairs,sync,latest,range,set}`
+- `rates {pairs,sync,rebuild,latest,range,set}`
 - `diagnostics {collect}`
 - `ai providers {list,get,create,update,delete,set-default,clear-default}`
 - `ai {models,chat}`

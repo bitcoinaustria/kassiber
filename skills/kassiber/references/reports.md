@@ -65,6 +65,15 @@ Kraken automatically. The desktop Settings → Rate providers panel exposes the
 same local ingest as `Full history` and `Incremental update` actions; both use
 the idempotent `kraken-csv` upsert path.
 
+When existing provider-derived prices look suspicious, use
+`kassiber rates rebuild --source coinbase-exchange --reprice-transactions` or
+Settings → Rate providers → Rebuild pricing cache. This clears Coinbase cache
+rows, checked-empty minutes, and provider-generated transaction prices before
+fetching fresh one-minute samples and reprocessing journals. Manual overrides
+and imported exchange execution prices are preserved; large wallets can take a
+while because the rebuild refetches provider windows and reruns journal
+processing.
+
 If pricing looks incomplete, sync rates and then re-run:
 
 ```bash
