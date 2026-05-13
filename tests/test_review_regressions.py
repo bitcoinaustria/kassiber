@@ -21,6 +21,7 @@ from kassiber.core import attachments as core_attachments
 from kassiber.core import pricing
 from kassiber.core import rates as core_rates
 from kassiber.core.engines import TaxEngineLedgerInputs, build_tax_engine
+from kassiber.core.reports import _generic_report_transfer_pair_rows
 from kassiber.core.runtime import bootstrap_runtime, close_runtime
 from kassiber.core.tax_events import normalize_tax_asset_inputs
 from kassiber.core.ui_snapshot import (
@@ -786,6 +787,40 @@ class ReviewRegressionTest(unittest.TestCase):
         self.assertEqual(len(outbound_search["txs"]), 1)
         self.assertEqual(outbound_search["txs"][0]["id"], "swap-out-leg")
         self.assertEqual(outbound_search["txs"][0]["type"], "Swap")
+
+    def test_report_transfer_rows_derive_missing_swap_fee(self):
+        context = {
+            "query_rows": {
+                "transfer_pairs": [
+                    {
+                        "id": "pair-old-null-fee",
+                        "kind": "submarine-swap",
+                        "policy": "carrying-value",
+                        "swap_fee_msat": None,
+                        "swap_fee_kind": "combined",
+                        "out_occurred_at": "2026-03-01T10:00:00Z",
+                        "out_wallet": "BTC Wallet",
+                        "out_transaction_id": "swap-out-leg",
+                        "out_asset": "BTC",
+                        "out_amount": btc_to_msat("0.10000000"),
+                        "out_fee": 0,
+                        "in_occurred_at": "2026-03-01T10:05:00Z",
+                        "in_wallet": "Liquid Wallet",
+                        "in_transaction_id": "swap-in-leg",
+                        "in_asset": "LBTC",
+                        "in_amount": btc_to_msat("0.09990000"),
+                        "in_fee": 0,
+                        "notes": "",
+                        "created_at": "2026-03-01T10:06:00Z",
+                    }
+                ]
+            }
+        }
+
+        rows = _generic_report_transfer_pair_rows(context)
+
+        self.assertEqual(rows[0]["swap_fee_msat"], btc_to_msat("0.00010000"))
+        self.assertAlmostEqual(rows[0]["swap_fee"], 0.0001)
 
     def test_river_import_rejects_price_currency_mismatch(self):
         self._bootstrap_austrian_e1kv_wallet(label="RiverEUR")
