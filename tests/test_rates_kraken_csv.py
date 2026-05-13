@@ -13,6 +13,7 @@ from kassiber.core import pricing
 from kassiber.core.rates import get_cached_rate_at_or_before
 from kassiber.daemon import _rates_kraken_csv_import_payload, _rates_rebuild_payload
 from kassiber.db import open_db, set_setting
+from kassiber.errors import AppError
 
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -617,12 +618,10 @@ class KrakenCsvRatesTest(unittest.TestCase):
         self.assertIsNone(tx["fiat_value"])
         self.assertIsNone(tx["pricing_source_kind"])
 
-    def test_desktop_daemon_rebuild_reprices_active_profile(self):
+    def test_rebuild_rates_cache_rolls_back_when_provider_fetch_fails(self):
         conn = open_db(str(self.data_root))
         self.addCleanup(conn.close)
         self._seed_transaction_needing_rate(conn)
-        set_setting(conn, "context_workspace", "workspace-1")
-        set_setting(conn, "context_profile", "profile-1")
         core_rates.upsert_rate(
             conn,
             "BTC-EUR",
@@ -632,6 +631,22 @@ class KrakenCsvRatesTest(unittest.TestCase):
             fetched_at="2024-05-01T00:00:00Z",
             granularity="minute",
             method="product_candles",
+        )
+        conn.execute(
+            """
+            INSERT INTO rates_checked_minutes(
+                pair, timestamp, source, checked_at, granularity, method
+            )
+            VALUES (?, ?, ?, ?, ?, ?)
+            """,
+            (
+                "BTC-EUR",
+                "2024-05-01T12:34:00Z",
+                core_rates.RATE_SOURCE_COINBASE_EXCHANGE,
+                "2024-05-01T00:00:00Z",
+                "minute",
+                "product_candles",
+            ),
         )
         conn.execute(
             """
@@ -659,6 +674,129 @@ class KrakenCsvRatesTest(unittest.TestCase):
                 "product_candles",
                 pricing.QUALITY_PROVIDER_SAMPLE,
                 "tx-1",
+            ),
+        )
+        conn.commit()
+
+        with self.assertRaises(AppError):
+            core_rates.rebuild_rates_cache(
+                conn,
+                pair="BTC-EUR",
+                days=0,
+                source=core_rates.RATE_SOURCE_COINBASE_EXCHANGE,
+                reprice_transactions=True,
+                profile_id="profile-1",
+            )
+        with patch.object(
+            core_rates,
+            "_coinbase_exchange_candles",
+            side_effect=RuntimeError("provider down"),
+        ):
+            with self.assertRaises(RuntimeError):
+                core_rates.rebuild_rates_cache(
+                    conn,
+                    pair="BTC-EUR",
+                    source=core_rates.RATE_SOURCE_COINBASE_EXCHANGE,
+                    reprice_transactions=True,
+                    profile_id="profile-1",
+                )
+
+        rate_count = conn.execute(
+            """
+            SELECT COUNT(*) FROM rates_cache
+            WHERE source = 'coinbase-exchange' AND rate_exact = '59900.00'
+            """
+        ).fetchone()[0]
+        checked_count = conn.execute(
+            "SELECT COUNT(*) FROM rates_checked_minutes"
+        ).fetchone()[0]
+        tx = conn.execute(
+            """
+            SELECT fiat_rate_exact, pricing_source_kind, pricing_provider
+            FROM transactions
+            WHERE id = 'tx-1'
+            """
+        ).fetchone()
+        self.assertEqual(rate_count, 1)
+        self.assertEqual(checked_count, 1)
+        self.assertEqual(tx["fiat_rate_exact"], "59900.00")
+        self.assertEqual(tx["pricing_source_kind"], pricing.SOURCE_FMV_PROVIDER)
+        self.assertEqual(tx["pricing_provider"], "coinbase-exchange")
+
+    def test_desktop_daemon_rebuild_reprices_active_profile(self):
+        conn = open_db(str(self.data_root))
+        self.addCleanup(conn.close)
+        self._seed_transaction_needing_rate(conn)
+        set_setting(conn, "context_workspace", "workspace-1")
+        set_setting(conn, "context_profile", "profile-1")
+        core_rates.upsert_rate(
+            conn,
+            "BTC-EUR",
+            "2024-05-01T12:34:00Z",
+            "59900.00",
+            core_rates.RATE_SOURCE_COINBASE_EXCHANGE,
+            fetched_at="2024-05-01T00:00:00Z",
+            granularity="minute",
+            method="product_candles",
+        )
+        conn.execute(
+            """
+            UPDATE transactions
+            SET fiat_rate = ?, fiat_value = ?, fiat_price_source = ?,
+                fiat_rate_exact = ?, fiat_value_exact = ?
+            WHERE id = ?
+            """,
+            (
+                59900.0,
+                59900.0,
+                pricing.LEGACY_SOURCE_RATES_CACHE,
+                "59900.00",
+                "59900.00",
+                "tx-1",
+            ),
+        )
+        conn.execute(
+            """
+            INSERT INTO transactions(
+                id, workspace_id, profile_id, wallet_id, external_id, fingerprint,
+                occurred_at, confirmed_at, direction, asset, amount, fee,
+                fiat_currency, fiat_rate, fiat_value, fiat_price_source,
+                fiat_rate_exact, fiat_value_exact, pricing_source_kind,
+                pricing_provider, pricing_pair, pricing_timestamp,
+                pricing_fetched_at, pricing_granularity, pricing_method,
+                pricing_quality, raw_json, created_at
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                "tx-2",
+                "workspace-1",
+                "profile-1",
+                "wallet-1",
+                "kraken-priced",
+                "fingerprint-kraken-priced",
+                "2024-05-01T12:40:00Z",
+                None,
+                "in",
+                "BTC",
+                200_000_000,
+                0,
+                None,
+                61000.0,
+                122000.0,
+                pricing.LEGACY_SOURCE_RATES_CACHE,
+                "61000.00",
+                "122000.00",
+                pricing.SOURCE_FMV_PROVIDER,
+                core_rates.RATE_SOURCE_KRAKEN_CSV,
+                "BTC-EUR",
+                "2024-05-01T12:40:00Z",
+                "2024-05-01T00:00:00Z",
+                "minute",
+                "ohlcvt_csv",
+                pricing.QUALITY_PROVIDER_SAMPLE,
+                "{}",
+                "2024-05-01T00:00:00Z",
             ),
         )
         conn.commit()
@@ -704,6 +842,21 @@ class KrakenCsvRatesTest(unittest.TestCase):
         self.assertEqual(tx["fiat_value_exact"], "60.03000")
         self.assertEqual(tx["pricing_source_kind"], pricing.SOURCE_FMV_PROVIDER)
         self.assertEqual(tx["pricing_provider"], "coinbase-exchange")
+        preserved = conn.execute(
+            """
+            SELECT fiat_rate_exact, fiat_value_exact, pricing_source_kind,
+                   pricing_provider
+            FROM transactions
+            WHERE id = 'tx-2'
+            """
+        ).fetchone()
+        self.assertEqual(preserved["fiat_rate_exact"], "61000.00")
+        self.assertEqual(preserved["fiat_value_exact"], "122000.00")
+        self.assertEqual(
+            preserved["pricing_source_kind"],
+            pricing.SOURCE_FMV_PROVIDER,
+        )
+        self.assertEqual(preserved["pricing_provider"], "kraken-csv")
 
 
 if __name__ == "__main__":

@@ -455,7 +455,13 @@ def fetch_rates_coingecko(pair, days=30):
     return _coingecko_market_chart(coin_id, vs, days)
 
 
-def _sync_rates_coingecko(conn, pair=None, days=30, source=RATE_SOURCE_COINGECKO):
+def _sync_rates_coingecko(
+    conn,
+    pair=None,
+    days=30,
+    source=RATE_SOURCE_COINGECKO,
+    commit=True,
+):
     if int(days) <= 0:
         raise AppError("--days must be positive", code="validation")
     if pair:
@@ -481,7 +487,8 @@ def _sync_rates_coingecko(conn, pair=None, days=30, source=RATE_SOURCE_COINGECKO
             )
             inserted += 1
         _invalidate_profile_journals_for_pair(conn, normalized_pair)
-        conn.commit()
+        if commit:
+            conn.commit()
         summary.append(
             {
                 "pair": normalized_pair,
@@ -784,25 +791,89 @@ def _delete_checked_rate_minutes(conn, pair=None, source=None):
     return cursor.rowcount if cursor.rowcount is not None else 0
 
 
-def _clear_provider_transaction_prices(conn, pair=None, profile_id=None):
-    clauses = ["pricing_source_kind = ?"]
-    params = [pricing.SOURCE_FMV_PROVIDER]
+def _provider_price_transaction_rows(
+    conn,
+    pair=None,
+    source=None,
+    profile_id=None,
+    pairs=None,
+):
+    normalized_pairs = set()
     if pair:
-        clauses.append("pricing_pair = ?")
-        params.append(require_supported_pair(pair))
+        normalized_pairs.add(require_supported_pair(pair))
+    elif pairs:
+        normalized_pairs.update(require_supported_pair(candidate) for candidate in pairs)
+    normalized_source = str(source).strip().lower() if source else None
+    clauses = [
+        """
+        (
+          pricing_source_kind = ?
+          OR (
+            fiat_price_source = ?
+            AND pricing_source_kind IS NULL
+            AND pricing_quality IS NULL
+          )
+        )
+        """,
+    ]
+    params = [pricing.SOURCE_FMV_PROVIDER, pricing.LEGACY_SOURCE_RATES_CACHE]
     if profile_id:
-        clauses.append("profile_id = ?")
+        clauses.append("t.profile_id = ?")
         params.append(profile_id)
     where = " AND ".join(clauses)
-    affected_profiles = [
-        row["profile_id"]
-        for row in conn.execute(
-            f"SELECT DISTINCT profile_id FROM transactions WHERE {where}",
-            params,
-        ).fetchall()
-    ]
-    cursor = conn.execute(
+    rows = conn.execute(
         f"""
+        SELECT t.id, t.profile_id, t.asset, t.fiat_currency,
+               t.pricing_source_kind, t.pricing_provider, t.pricing_pair,
+               t.fiat_price_source, t.pricing_quality,
+               p.fiat_currency AS profile_fiat_currency
+        FROM transactions t
+        JOIN profiles p ON p.id = t.profile_id
+        WHERE {where}
+        """,
+        params,
+    ).fetchall()
+    matched = []
+    for row in rows:
+        is_modern_provider = row["pricing_source_kind"] == pricing.SOURCE_FMV_PROVIDER
+        if (
+            normalized_source
+            and is_modern_provider
+            and row["pricing_provider"] != normalized_source
+        ):
+            continue
+        if normalized_pairs:
+            candidate_pair = row["pricing_pair"] or transaction_rate_pair(
+                row["asset"],
+                row["fiat_currency"] or row["profile_fiat_currency"],
+            )
+            if candidate_pair not in normalized_pairs:
+                continue
+        matched.append(row)
+    return matched
+
+
+def _clear_provider_transaction_prices(
+    conn,
+    pair=None,
+    source=None,
+    profile_id=None,
+    pairs=None,
+):
+    rows = _provider_price_transaction_rows(
+        conn,
+        pair=pair,
+        source=source,
+        profile_id=profile_id,
+        pairs=pairs,
+    )
+    ids = [row["id"] for row in rows]
+    if not ids:
+        return {"transactions": 0, "profiles": 0}
+    for chunk in _chunked(ids):
+        placeholders = ", ".join("?" for _ in chunk)
+        conn.execute(
+            f"""
         UPDATE transactions
         SET fiat_rate = NULL,
             fiat_value = NULL,
@@ -818,10 +889,11 @@ def _clear_provider_transaction_prices(conn, pair=None, profile_id=None):
             pricing_method = NULL,
             pricing_external_ref = NULL,
             pricing_quality = NULL
-        WHERE {where}
+        WHERE id IN ({placeholders})
         """,
-        params,
-    )
+            chunk,
+        )
+    affected_profiles = sorted({row["profile_id"] for row in rows})
     for profile in affected_profiles:
         conn.execute(
             """
@@ -834,7 +906,7 @@ def _clear_provider_transaction_prices(conn, pair=None, profile_id=None):
             (profile,),
         )
     return {
-        "transactions": cursor.rowcount if cursor.rowcount is not None else 0,
+        "transactions": len(ids),
         "profiles": len(affected_profiles),
     }
 
@@ -867,35 +939,52 @@ def rebuild_rates_cache(
             code="validation",
         )
 
-    transaction_prices = {"transactions": 0, "profiles": 0}
-    if reprice_transactions:
-        transaction_prices = _clear_provider_transaction_prices(
+    try:
+        days_int = int(days)
+    except (TypeError, ValueError) as exc:
+        raise AppError("--days must be positive", code="validation") from exc
+    if days_int <= 0:
+        raise AppError("--days must be positive", code="validation")
+    conn.execute("SAVEPOINT rates_rebuild")
+    try:
+        supported_pairs = [normalized_pair] if normalized_pair else list(SUPPORTED_RATE_PAIRS)
+        transaction_prices = {"transactions": 0, "profiles": 0}
+        if reprice_transactions:
+            transaction_prices = _clear_provider_transaction_prices(
+                conn,
+                pair=normalized_pair,
+                source=normalized_source,
+                profile_id=profile_id,
+                pairs=supported_pairs,
+            )
+        deleted_rates = _delete_rate_rows(
             conn,
             pair=normalized_pair,
-            profile_id=profile_id,
+            source=normalized_source,
         )
-    deleted_rates = _delete_rate_rows(
-        conn,
-        pair=normalized_pair,
-        source=normalized_source,
-    )
-    deleted_checked_minutes = _delete_checked_rate_minutes(
-        conn,
-        pair=normalized_pair,
-        source=normalized_source,
-    )
+        deleted_checked_minutes = _delete_checked_rate_minutes(
+            conn,
+            pair=normalized_pair,
+            source=normalized_source,
+        )
+        sync_summary = sync_rates(
+            conn,
+            pair=normalized_pair,
+            days=days_int,
+            source=normalized_source,
+            path=path,
+            commit=False,
+        )
+    except Exception:
+        conn.execute("ROLLBACK TO SAVEPOINT rates_rebuild")
+        conn.execute("RELEASE SAVEPOINT rates_rebuild")
+        raise
+    conn.execute("RELEASE SAVEPOINT rates_rebuild")
     conn.commit()
-    sync_summary = sync_rates(
-        conn,
-        pair=normalized_pair,
-        days=days,
-        source=normalized_source,
-        path=path,
-    )
     return {
         "source": normalized_source,
         "pair": normalized_pair,
-        "days": int(days),
+        "days": days_int,
         "reprice_transactions": bool(reprice_transactions),
         "deleted": {
             "rates": deleted_rates,
@@ -948,6 +1037,7 @@ def _sync_rates_coinbase_exchange(
     pair=None,
     days=30,
     source=RATE_SOURCE_COINBASE_EXCHANGE,
+    commit=True,
 ):
     if int(days) <= 0:
         raise AppError("--days must be positive", code="validation")
@@ -1009,7 +1099,8 @@ def _sync_rates_coinbase_exchange(
                 )
                 if samples:
                     _invalidate_profile_journals_for_pair(conn, normalized_pair)
-                conn.commit()
+                if commit:
+                    conn.commit()
         elif not has_any_needed_minutes:
             mode = "continuous_days"
             samples = fetch_rates_coinbase_exchange(
@@ -1037,7 +1128,8 @@ def _sync_rates_coinbase_exchange(
                 inserted += 1
             if samples:
                 _invalidate_profile_journals_for_pair(conn, normalized_pair)
-            conn.commit()
+            if commit:
+                conn.commit()
         summary.append(
             {
                 "pair": normalized_pair,
@@ -1168,7 +1260,7 @@ def _flush_kraken_batch(conn, batch):
     conn.executemany(_RATE_UPSERT_SQL, batch)
 
 
-def _sync_rates_kraken_csv(conn, pair=None, path=None):
+def _sync_rates_kraken_csv(conn, pair=None, path=None, commit=True):
     if not path:
         raise AppError(
             "--path is required for --source kraken-csv",
@@ -1250,11 +1342,19 @@ def _sync_rates_kraken_csv(conn, pair=None, path=None):
         summary["skipped_files"] = skipped_files
         if summary["samples"]:
             _invalidate_profile_journals_for_pair(conn, summary["pair"])
-    conn.commit()
+    if commit:
+        conn.commit()
     return [summaries[pair] for pair in sorted(summaries)]
 
 
-def sync_rates(conn, pair=None, days=30, source=RATE_SOURCE_COINBASE_EXCHANGE, path=None):
+def sync_rates(
+    conn,
+    pair=None,
+    days=30,
+    source=RATE_SOURCE_COINBASE_EXCHANGE,
+    path=None,
+    commit=True,
+):
     normalized_source = str(source or "").strip().lower()
     if normalized_source == RATE_SOURCE_COINBASE_EXCHANGE:
         if path:
@@ -1262,16 +1362,28 @@ def sync_rates(conn, pair=None, days=30, source=RATE_SOURCE_COINBASE_EXCHANGE, p
                 "--path is only supported for --source kraken-csv",
                 code="validation",
             )
-        return _sync_rates_coinbase_exchange(conn, pair=pair, days=days, source=normalized_source)
+        return _sync_rates_coinbase_exchange(
+            conn,
+            pair=pair,
+            days=days,
+            source=normalized_source,
+            commit=commit,
+        )
     if normalized_source == RATE_SOURCE_COINGECKO:
         if path:
             raise AppError(
                 "--path is only supported for --source kraken-csv",
                 code="validation",
             )
-        return _sync_rates_coingecko(conn, pair=pair, days=days, source=normalized_source)
+        return _sync_rates_coingecko(
+            conn,
+            pair=pair,
+            days=days,
+            source=normalized_source,
+            commit=commit,
+        )
     if normalized_source == RATE_SOURCE_KRAKEN_CSV:
-        return _sync_rates_kraken_csv(conn, pair=pair, path=path)
+        return _sync_rates_kraken_csv(conn, pair=pair, path=path, commit=commit)
     raise AppError(
         f"Unknown rate source '{source}'",
         code="validation",
