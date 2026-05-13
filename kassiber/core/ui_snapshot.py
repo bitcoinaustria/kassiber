@@ -564,22 +564,17 @@ def _transactions(conn: sqlite3.Connection, profile_id: str) -> list[dict[str, A
         (profile_id,),
     ).fetchall()
     pair_meta_by_transaction = _transaction_pair_display_meta(conn, rows)
-    tag_ids = [row["id"] for row in rows]
-    tag_ids.extend(
-        str(pair_meta["display_transaction_id"])
-        for pair_meta in pair_meta_by_transaction.values()
+    tags_by_transaction = _transaction_tags_by_transaction(
+        conn,
+        [row["id"] for row in rows],
     )
-    tags_by_transaction = _transaction_tags_by_transaction(conn, tag_ids)
 
     output = []
     rendered_pair_ids: set[str] = set()
     for row in rows:
         pair_meta = pair_meta_by_transaction.get(row["id"])
-        tag_transaction_id = (
-            str(pair_meta["display_transaction_id"]) if pair_meta else row["id"]
-        )
         metadata_tags = [
-            str(tag) for tag in tags_by_transaction.get(tag_transaction_id, []) if tag
+            str(tag) for tag in tags_by_transaction.get(row["id"], []) if tag
         ]
         if pair_meta:
             pair_id = str(pair_meta["pair_id"])
@@ -653,22 +648,12 @@ def _transaction_pair_display_meta(
             p.swap_fee_msat,
             p.out_transaction_id,
             p.in_transaction_id,
-            tout.external_id AS out_external_id,
-            tout.occurred_at AS out_occurred_at,
-            tout.confirmed_at AS out_confirmed_at,
             tout.asset AS out_asset,
             tout.amount AS out_amount,
             COALESCE(tout.fiat_rate, 0) AS out_fiat_rate,
-            COALESCE(tout.note, '') AS out_note,
-            tout.excluded AS out_excluded,
-            tin.external_id AS in_external_id,
-            tin.occurred_at AS in_occurred_at,
-            tin.confirmed_at AS in_confirmed_at,
             tin.asset AS in_asset,
             tin.amount AS in_amount,
             COALESCE(tin.fiat_rate, 0) AS in_fiat_rate,
-            COALESCE(tin.note, '') AS in_note,
-            tin.excluded AS in_excluded,
             wout.label AS out_wallet,
             win.label AS in_wallet
         FROM transaction_pairs p
@@ -703,13 +688,7 @@ def _transaction_pair_display_meta(
             "account": account,
             "fee_msat": fee_msat,
             "tag": label,
-            "display_transaction_id": pair["in_transaction_id"],
-            "display_external_id": pair["in_external_id"],
-            "display_occurred_at": pair["in_occurred_at"] or pair["out_occurred_at"],
-            "display_confirmed_at": pair["in_confirmed_at"] or pair["out_confirmed_at"],
             "display_rate": display_rate,
-            "display_note": pair["in_note"] or pair["out_note"] or "",
-            "display_excluded": bool(pair["out_excluded"] or pair["in_excluded"]),
         }
         pair_meta[pair["out_transaction_id"]] = {**base, "role": "out"}
         pair_meta[pair["in_transaction_id"]] = {**base, "role": "in"}
@@ -736,12 +715,12 @@ def _transaction_row_to_ui(
         internal = pair_meta["pair_type"] == "transfer"
         output_tags = metadata_tags
         fee_sat = _ui_sat_amount(display_fee_msat)
-        row_id = str(pair_meta["display_transaction_id"])
-        external_id = pair_meta["display_external_id"]
-        occurred_at = pair_meta["display_occurred_at"]
-        confirmed_at = pair_meta["display_confirmed_at"]
-        note = str(pair_meta["display_note"] or "")
-        excluded = bool(pair_meta["display_excluded"])
+        row_id = row["id"]
+        external_id = row["external_id"]
+        occurred_at = row["occurred_at"]
+        confirmed_at = row["confirmed_at"]
+        note = row["note"] or ""
+        excluded = bool(row["excluded"])
         include_empty_tags = False
     else:
         sign = 1 if row["direction"] == "inbound" else -1
@@ -2692,22 +2671,17 @@ def _transaction_rows_to_ui(
     rows: list[sqlite3.Row],
 ) -> list[dict[str, Any]]:
     pair_meta_by_transaction = _transaction_pair_display_meta(conn, rows)
-    tag_ids = [row["id"] for row in rows]
-    tag_ids.extend(
-        str(pair_meta["display_transaction_id"])
-        for pair_meta in pair_meta_by_transaction.values()
+    tags_by_transaction = _transaction_tags_by_transaction(
+        conn,
+        [row["id"] for row in rows],
     )
-    tags_by_transaction = _transaction_tags_by_transaction(conn, tag_ids)
 
     output = []
     rendered_pair_ids: set[str] = set()
     for row in rows:
         pair_meta = pair_meta_by_transaction.get(row["id"])
-        tag_transaction_id = (
-            str(pair_meta["display_transaction_id"]) if pair_meta else row["id"]
-        )
         metadata_tags = [
-            str(tag) for tag in tags_by_transaction.get(tag_transaction_id, []) if tag
+            str(tag) for tag in tags_by_transaction.get(row["id"], []) if tag
         ]
         if pair_meta:
             pair_id = str(pair_meta["pair_id"])

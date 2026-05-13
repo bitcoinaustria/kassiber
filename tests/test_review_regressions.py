@@ -26,6 +26,7 @@ from kassiber.core.tax_events import normalize_tax_asset_inputs
 from kassiber.core.ui_snapshot import (
     build_capital_gains_snapshot,
     build_overview_snapshot,
+    build_transactions_search_snapshot,
     build_transactions_snapshot,
 )
 from kassiber.db import open_db, set_setting
@@ -750,7 +751,7 @@ class ReviewRegressionTest(unittest.TestCase):
             if row["id"] in {"swap-in-leg", "swap-out-leg"}
         ]
         self.assertEqual(len(ascending_swap), 1)
-        self.assertEqual(ascending_swap[0]["id"], "swap-in-leg")
+        self.assertEqual(ascending_swap[0]["id"], "swap-out-leg")
         self.assertAlmostEqual(ascending_swap[0]["eur"], -6.5)
 
         limited = build_transactions_snapshot(conn, {"limit": 2})
@@ -758,6 +759,24 @@ class ReviewRegressionTest(unittest.TestCase):
             [row["id"] for row in limited["txs"]],
             ["swap-in-leg", "older-income"],
         )
+
+        outbound = build_transactions_snapshot(
+            conn,
+            {"limit": 10, "direction": "outbound"},
+        )
+        self.assertEqual(len(outbound["txs"]), 1)
+        self.assertEqual(outbound["txs"][0]["id"], "swap-out-leg")
+        self.assertEqual(outbound["txs"][0]["type"], "Swap")
+        self.assertEqual(outbound["txs"][0]["amountSat"], -10_000)
+        self.assertAlmostEqual(outbound["txs"][0]["eur"], -6.5)
+
+        outbound_search = build_transactions_search_snapshot(
+            conn,
+            {"query": "swap-out-ext", "limit": 10},
+        )
+        self.assertEqual(len(outbound_search["txs"]), 1)
+        self.assertEqual(outbound_search["txs"][0]["id"], "swap-out-leg")
+        self.assertEqual(outbound_search["txs"][0]["type"], "Swap")
 
     def test_river_import_rejects_price_currency_mismatch(self):
         self._bootstrap_austrian_e1kv_wallet(label="RiverEUR")
