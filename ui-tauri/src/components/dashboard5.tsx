@@ -11,7 +11,6 @@ import {
   CreditCard,
   Filter,
   FileText,
-  Landmark,
   Maximize2,
   MoreHorizontal,
   PieChartIcon,
@@ -57,12 +56,6 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import {
-  Tooltip as ShadTooltip,
-  TooltipContent as ShadTooltipContent,
-  TooltipProvider as ShadTooltipProvider,
-  TooltipTrigger as ShadTooltipTrigger,
-} from "@/components/ui/tooltip";
 import { useJournalProcessingAction } from "@/hooks/useJournalProcessingAction";
 import { useWalletSyncAction } from "@/hooks/useWalletSyncAction";
 import { formatBtc, useCurrency, type Currency } from "@/lib/currency";
@@ -93,6 +86,15 @@ type HoldingsItem = {
   value: number;
   percent: number;
   color: string;
+};
+
+type BalanceDriverItem = {
+  key: "incoming" | "outgoing" | "swap" | "fees";
+  label: string;
+  valueBtc: number;
+  count: number;
+  icon: React.ComponentType<React.SVGProps<SVGSVGElement>>;
+  toneClassName: string;
 };
 
 type PortfolioChartPoint = {
@@ -233,6 +235,13 @@ function formatCompactPortfolioMoney(
   return formatCompactDisplayMoney(amount, priceEur, currency);
 }
 
+function formatDriverValue(btc: number, priceEur: number, currency: Currency) {
+  if (currency === "btc") {
+    return formatBtc(btc, { precision: btc > 0 && btc < 0.001 ? 8 : 3 });
+  }
+  return formatCompactDisplayMoney(btc * priceEur, priceEur, currency);
+}
+
 function formatDetailedPortfolioMoney(
   amount: number,
   priceEur: number,
@@ -268,6 +277,10 @@ function donutCenterValueClass(value: string) {
 
 function transactionBtc(tx: Transaction, priceEur: number) {
   return tx.amountBtc ?? btcFromEur(tx.amount, priceEur);
+}
+
+function satToBtc(sats: number | undefined) {
+  return (sats ?? 0) / 100_000_000;
 }
 
 /**
@@ -994,6 +1007,84 @@ function buildHoldingsBySource(snapshot: OverviewSnapshot): HoldingsItem[] {
   }));
 }
 
+function buildBalanceDrivers(snapshot: OverviewSnapshot) {
+  const totals = {
+    incomingBtc: 0,
+    outgoingBtc: 0,
+    swapBtc: 0,
+    feesBtc: 0,
+    incomingCount: 0,
+    outgoingCount: 0,
+    swapCount: 0,
+    feeCount: 0,
+  };
+  for (const tx of snapshot.txs.filter((row) => !row.excluded)) {
+    const flow = flowForOverviewTx(tx);
+    const amountBtc = satToBtc(Math.abs(tx.amountSat));
+    const feeBtc = satToBtc(Math.abs(tx.feeSat ?? 0));
+    if (flow === "incoming") {
+      totals.incomingBtc += amountBtc;
+      totals.incomingCount += 1;
+    } else if (flow === "outgoing") {
+      totals.outgoingBtc += amountBtc;
+      totals.outgoingCount += 1;
+    } else if (flow === "swap") {
+      const pairedVolume = Math.max(
+        amountBtc,
+        satToBtc(Math.abs(tx.pair?.outAmountSat ?? 0)),
+        satToBtc(Math.abs(tx.pair?.inAmountSat ?? 0)),
+      );
+      totals.swapBtc += pairedVolume;
+      totals.swapCount += 1;
+    }
+    if (feeBtc > 0) {
+      totals.feesBtc += feeBtc;
+      totals.feeCount += 1;
+    }
+  }
+  const netBtc = totals.incomingBtc - totals.outgoingBtc - totals.feesBtc;
+  const items: BalanceDriverItem[] = [
+    {
+      key: "incoming",
+      label: "Incoming",
+      valueBtc: totals.incomingBtc,
+      count: totals.incomingCount,
+      icon: ArrowDownRight,
+      toneClassName: "text-emerald-700 dark:text-emerald-300",
+    },
+    {
+      key: "outgoing",
+      label: "Outgoing",
+      valueBtc: totals.outgoingBtc,
+      count: totals.outgoingCount,
+      icon: ArrowUpRight,
+      toneClassName: "text-red-700 dark:text-red-300",
+    },
+    {
+      key: "swap",
+      label: "Swap volume",
+      valueBtc: totals.swapBtc,
+      count: totals.swapCount,
+      icon: ArrowLeftRight,
+      toneClassName: "text-sky-700 dark:text-sky-300",
+    },
+    {
+      key: "fees",
+      label: "Fees",
+      valueBtc: totals.feesBtc,
+      count: totals.feeCount,
+      icon: CircleDollarSign,
+      toneClassName: "text-muted-foreground",
+    },
+  ];
+  return {
+    rows: items,
+    maxValueBtc: Math.max(...items.map((item) => item.valueBtc), 0),
+    netBtc,
+    transactionCount: snapshot.txs.filter((row) => !row.excluded).length,
+  };
+}
+
 const transactionStatuses: TransactionStatus[] = [
   "confirmed",
   "pending",
@@ -1411,7 +1502,7 @@ const StatsCards = ({
   );
 };
 
-const BalanceRailChart = ({
+const BalanceDriversCard = ({
   snapshot,
   hideSensitive,
   currency,
@@ -1420,8 +1511,15 @@ const BalanceRailChart = ({
   hideSensitive: boolean;
   currency: Currency;
 }) => {
-  const { active: activeSegment, handleHover } = useHoverHighlight<number>();
-  const { total, items: balanceRailItems } = buildBalanceRailItems(snapshot);
+  const { rows, maxValueBtc, netBtc, transactionCount } =
+    buildBalanceDrivers(snapshot);
+  const netEur = netBtc * snapshot.priceEur;
+  const netTone =
+    netBtc > 0
+      ? "text-emerald-700 dark:text-emerald-300"
+      : netBtc < 0
+        ? "text-red-700 dark:text-red-300"
+        : "text-muted-foreground";
 
   return (
     <div className="flex flex-col gap-3 rounded-xl border bg-card p-3 sm:p-4">
@@ -1431,190 +1529,78 @@ const BalanceRailChart = ({
             variant="outline"
             size="icon"
             className="size-7 sm:size-8"
-            aria-label="Balance by rail"
+            aria-label="Balance drivers"
           >
-            <Landmark className="size-4 text-muted-foreground sm:size-[18px]" />
+            <ArrowLeftRight className="size-4 text-muted-foreground sm:size-[18px]" />
           </Button>
           <div>
-            <span className="text-sm font-medium">
-              Balance by Rail
-            </span>
+            <span className="text-sm font-medium">Balance Drivers</span>
             <p
               className={cn(
                 "text-[10px] text-muted-foreground sm:text-xs",
                 blurClass(hideSensitive),
               )}
             >
-              {formatCompactDisplayMoney(total, snapshot.priceEur, currency)} current balance
+              {transactionCount.toLocaleString("en-US")} recent rows
             </p>
           </div>
         </div>
-        <Button
-          variant="ghost"
-          size="icon"
-          className="size-7 sm:size-8"
-          aria-label="More options"
+        <CurrencyToggleText
+          className={cn(
+            "text-right text-sm font-semibold tabular-nums",
+            netTone,
+            blurClass(hideSensitive),
+          )}
         >
-          <MoreHorizontal className="size-4 text-muted-foreground" />
-        </Button>
+          {formatSignedDisplayMoney(netEur, snapshot.priceEur, currency)}
+        </CurrencyToggleText>
       </div>
 
       <div className="space-y-2.5">
-        <div className="flex h-3 w-full overflow-hidden rounded-full sm:h-4">
-          {balanceRailItems.map((item, index) => (
-            <ShadTooltipProvider key={item.key}>
-              <ShadTooltip>
-                <ShadTooltipTrigger asChild>
-                  <button
-                    type="button"
-                    className={cn(
-                      "h-full border-0 p-0 transition-opacity duration-200 motion-reduce:transition-none",
-                      activeSegment !== null &&
-                        activeSegment !== index &&
-                        "opacity-40",
-                    )}
-                    style={{
-                      width: `${item.percent}%`,
-                      backgroundColor: item.color,
-                    }}
-                    onPointerEnter={() => handleHover(index)}
-                    onPointerLeave={() => handleHover(null)}
-                    onFocus={() => handleHover(index)}
-                    onBlur={() => handleHover(null)}
-                    aria-label={
-                      hideSensitive
-                        ? `${item.label}: hidden`
-                        : `${item.label}: ${formatDisplayMoney(
-                            item.value,
-                            snapshot.priceEur,
-                            currency,
-                          )} (${item.percent}%)`
-                    }
-                  />
-                </ShadTooltipTrigger>
-                <ShadTooltipContent
-                  side="top"
-                  sideOffset={8}
-                  className="border-zinc-950/25 bg-zinc-950 px-3 py-2 text-white shadow-xl [&_.text-muted-foreground]:text-white/75 dark:border-white/25 dark:bg-zinc-50 dark:text-zinc-950 dark:[&_.text-muted-foreground]:text-zinc-700"
+        {rows.map((item) => {
+          const Icon = item.icon;
+          const width =
+            maxValueBtc > 0 ? Math.max((item.valueBtc / maxValueBtc) * 100, 4) : 0;
+          return (
+            <div key={item.key} className="grid gap-1.5">
+              <div className="flex items-center justify-between gap-3">
+                <div className="flex min-w-0 items-center gap-2">
+                  <Icon className={cn("size-3.5 shrink-0", item.toneClassName)} />
+                  <span className="truncate text-xs text-muted-foreground">
+                    {item.label}
+                  </span>
+                  <span className="text-[10px] text-muted-foreground">
+                    {item.count}
+                  </span>
+                </div>
+                <span
+                  className={cn(
+                    "shrink-0 text-xs font-medium tabular-nums",
+                    item.toneClassName,
+                    blurClass(hideSensitive),
+                  )}
                 >
-                  <div className="grid gap-1">
-                    <div className="flex items-center gap-2">
-                      <span
-                        className="size-2 rounded-full"
-                        style={{ backgroundColor: item.color }}
-                      />
-                      <span className="font-medium">{item.label}</span>
-                      <span
-                        className={cn(
-                          "text-muted-foreground tabular-nums",
-                          blurClass(hideSensitive),
-                        )}
-                      >
-                        {item.percent}%
-                      </span>
-                    </div>
-                    <span
-                      className={cn(
-                        "text-muted-foreground tabular-nums",
-                        blurClass(hideSensitive),
-                      )}
-                    >
-                      {formatDisplayMoney(
-                        item.value,
-                        snapshot.priceEur,
-                        currency,
-                      )}
-                    </span>
-                  </div>
-                </ShadTooltipContent>
-              </ShadTooltip>
-            </ShadTooltipProvider>
-          ))}
-        </div>
-
-        <div className="flex items-center justify-between text-[10px] sm:text-xs">
-          {balanceRailItems.map((item, index) => (
-            <span
-              key={item.key}
-              className={cn(
-                "text-muted-foreground tabular-nums transition-opacity duration-200 motion-reduce:transition-none",
-                activeSegment !== null &&
-                  activeSegment !== index &&
-                  "opacity-40",
-                blurClass(hideSensitive),
-              )}
-            >
-              {item.percent}%
-            </span>
-          ))}
-        </div>
-
-        <div className="flex flex-wrap items-center gap-2.5 sm:gap-3">
-          {balanceRailItems.map((item, index) => (
-            <ShadTooltipProvider key={item.key}>
-              <ShadTooltip>
-                <ShadTooltipTrigger asChild>
-                  <button
-                    type="button"
-                    className={cn(
-                      "flex items-center gap-1.5 border-0 bg-transparent p-0 transition-opacity duration-200 motion-reduce:transition-none",
-                      activeSegment !== null &&
-                        activeSegment !== index &&
-                        "opacity-40",
-                    )}
-                    onPointerEnter={() => handleHover(index)}
-                    onPointerLeave={() => handleHover(null)}
-                    onFocus={() => handleHover(index)}
-                    onBlur={() => handleHover(null)}
-                  >
-                    <span
-                      className="size-2.5 rounded-full sm:size-3"
-                      style={{ backgroundColor: item.color }}
-                    />
-                    <span className="text-[10px] text-muted-foreground sm:text-xs">
-                      {item.label}
-                    </span>
-                  </button>
-                </ShadTooltipTrigger>
-                <ShadTooltipContent
-                  side="top"
-                  sideOffset={8}
-                  className="border-zinc-950/25 bg-zinc-950 px-3 py-2 text-white shadow-xl [&_.text-muted-foreground]:text-white/75 dark:border-white/25 dark:bg-zinc-50 dark:text-zinc-950 dark:[&_.text-muted-foreground]:text-zinc-700"
-                >
-                  <div className="grid gap-1">
-                    <div className="flex items-center gap-2">
-                      <span
-                        className="size-2 rounded-full"
-                        style={{ backgroundColor: item.color }}
-                      />
-                      <span className="font-medium">{item.label}</span>
-                      <span
-                        className={cn(
-                          "text-muted-foreground tabular-nums",
-                          blurClass(hideSensitive),
-                        )}
-                      >
-                        {item.percent}%
-                      </span>
-                    </div>
-                    <span
-                      className={cn(
-                        "text-muted-foreground tabular-nums",
-                        blurClass(hideSensitive),
-                      )}
-                    >
-                      {formatDisplayMoney(
-                        item.value,
-                        snapshot.priceEur,
-                        currency,
-                      )}
-                    </span>
-                  </div>
-                </ShadTooltipContent>
-              </ShadTooltip>
-            </ShadTooltipProvider>
-          ))}
-        </div>
+                  {formatDriverValue(item.valueBtc, snapshot.priceEur, currency)}
+                </span>
+              </div>
+              <div className="h-1.5 overflow-hidden rounded-full bg-muted">
+                <div
+                  className={cn(
+                    "h-full rounded-full",
+                    item.key === "incoming"
+                      ? "bg-emerald-500"
+                      : item.key === "outgoing"
+                        ? "bg-red-500"
+                        : item.key === "swap"
+                          ? "bg-sky-500"
+                          : "bg-muted-foreground/60",
+                  )}
+                  style={{ width: `${width}%` }}
+                />
+              </div>
+            </div>
+          );
+        })}
       </div>
     </div>
   );
@@ -1633,6 +1619,7 @@ const HoldingsBySourceChart = ({
   const { active: activeSlice, handleHover: setHoveredSlice } =
     useHoverHighlight<number>();
   const holdingsData = buildHoldingsBySource(snapshot);
+  const { items: balanceRailItems } = buildBalanceRailItems(snapshot);
   const unrealizedPercent = snapshot.fiat.eurCostBasis
     ? (snapshot.fiat.eurUnrealized / snapshot.fiat.eurCostBasis) * 100
     : 0;
@@ -1659,7 +1646,7 @@ const HoldingsBySourceChart = ({
           >
             <PieChartIcon className="size-4 text-muted-foreground sm:size-[18px]" />
           </Button>
-          <div>
+          <div className="min-w-0">
             <span className="text-sm font-medium">
               Holdings by Source
             </span>
@@ -1703,6 +1690,28 @@ const HoldingsBySourceChart = ({
           <MoreHorizontal className="size-4 text-muted-foreground" />
         </Button>
       </div>
+
+      {balanceRailItems.length > 1 ? (
+        <div className="flex flex-wrap gap-1.5">
+          {balanceRailItems.map((item) => (
+            <span
+              key={item.key}
+              className="inline-flex items-center gap-1 rounded-md border bg-background/55 px-1.5 py-0.5 text-[10px] text-muted-foreground"
+            >
+              <span
+                className="size-1.5 rounded-full"
+                style={{ backgroundColor: item.color }}
+              />
+              {item.label}
+              <span
+                className={cn("tabular-nums", blurClass(hideSensitive))}
+              >
+                {item.percent}%
+              </span>
+            </span>
+          ))}
+        </div>
+      ) : null}
 
       {singleHolding ? (
         <div className="flex flex-1 items-center rounded-md bg-muted/25 px-3 py-3">
@@ -1860,7 +1869,7 @@ const SideChartsSection = ({
         className,
       )}
     >
-      <BalanceRailChart
+      <BalanceDriversCard
         snapshot={snapshot}
         hideSensitive={hideSensitive}
         currency={currency}
