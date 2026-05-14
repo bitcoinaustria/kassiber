@@ -2939,12 +2939,12 @@ function ChartControlsSheet({
                 Chart controls
               </SheetTitle>
               <SheetDescription className="mt-1 truncate">
-                Time range, chart series, and BTC marker minimums
+                Time range, chart series, and BTC dot minimums
               </SheetDescription>
               <div className="mt-2 flex flex-wrap items-center gap-2">
                 <span className="text-[10px] text-muted-foreground">
                   {visibleMarkerCount.toLocaleString("en-US")} of{" "}
-                  {markerCount.toLocaleString("en-US")} markers visible
+                  {markerCount.toLocaleString("en-US")} activity dots visible
                 </span>
               </div>
             </div>
@@ -3054,7 +3054,7 @@ function ChartControlsSheet({
                   <p className="mt-1 text-xs text-muted-foreground">
                     Minimum size in BTC ·{" "}
                     {visibleIncomingMarkerCount.toLocaleString("en-US")} of{" "}
-                    {incomingMarkerCount.toLocaleString("en-US")} shown
+                    {incomingMarkerCount.toLocaleString("en-US")} dots shown
                   </p>
                 </div>
                 <span
@@ -3064,7 +3064,7 @@ function ChartControlsSheet({
                 </span>
               </div>
               <input
-                aria-label="Minimum incoming payment marker size in BTC"
+                aria-label="Minimum incoming payment dot size in BTC"
                 className="mt-3 h-2 w-full cursor-pointer"
                 min={0}
                 max={MAX_ACTIVITY_MARKER_MIN_BTC}
@@ -3087,7 +3087,7 @@ function ChartControlsSheet({
                   <p className="mt-1 text-xs text-muted-foreground">
                     Minimum size in BTC ·{" "}
                     {visibleOutgoingMarkerCount.toLocaleString("en-US")} of{" "}
-                    {outgoingMarkerCount.toLocaleString("en-US")} shown
+                    {outgoingMarkerCount.toLocaleString("en-US")} dots shown
                   </p>
                 </div>
                 <span
@@ -3100,7 +3100,7 @@ function ChartControlsSheet({
                 </span>
               </div>
               <input
-                aria-label="Minimum outgoing activity marker size in BTC"
+                aria-label="Minimum outgoing activity dot size in BTC"
                 className="mt-3 h-2 w-full cursor-pointer"
                 min={0}
                 max={MAX_ACTIVITY_MARKER_MIN_BTC}
