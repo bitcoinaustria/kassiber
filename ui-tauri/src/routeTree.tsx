@@ -24,7 +24,6 @@ import { Reports } from "./routes/Reports";
 import { SourceFunds } from "./routes/SourceFunds";
 import { Journals } from "./routes/Journals";
 import { SwapMatching } from "./routes/SwapMatching";
-import { TaxEvents } from "./routes/TaxEvents";
 import { Quarantine } from "./routes/Quarantine";
 import { Diagnostics } from "./routes/Diagnostics";
 import { Books } from "./routes/Books";
@@ -116,7 +115,9 @@ const journalsRoute = createRoute({
 const taxEventsRoute = createRoute({
   getParentRoute: () => appLayoutRoute,
   path: "/tax-events",
-  component: TaxEvents,
+  beforeLoad: () => {
+    throw redirect({ to: "/journals" });
+  },
 });
 
 const swapMatchingRoute = createRoute({

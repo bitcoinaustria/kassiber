@@ -17,6 +17,7 @@ import {
   PieChartIcon,
   Plus,
   RefreshCw,
+  Settings2,
   ShieldAlert,
   WalletCards,
   Users,
@@ -62,6 +63,7 @@ import {
   TooltipProvider as ShadTooltipProvider,
   TooltipTrigger as ShadTooltipTrigger,
 } from "@/components/ui/tooltip";
+import { useJournalProcessingAction } from "@/hooks/useJournalProcessingAction";
 import { useWalletSyncAction } from "@/hooks/useWalletSyncAction";
 import { formatBtc, useCurrency, type Currency } from "@/lib/currency";
 import { screenShellClassName } from "@/lib/screen-layout";
@@ -1213,30 +1215,52 @@ const readinessToneStyles: Record<OverviewHealthTone, string> = {
 
 const WelcomeSection = ({
   onAddConnection,
-  onSync,
-  isSyncing,
+  onRefresh,
+  onProcessJournals,
+  isRefreshing,
+  isProcessingJournals,
   snapshot,
 }: {
   onAddConnection: () => void;
-  onSync: () => void;
-  isSyncing: boolean;
+  onRefresh: () => void;
+  onProcessJournals: () => void;
+  isRefreshing: boolean;
+  isProcessingJournals: boolean;
   snapshot: OverviewSnapshot;
 }) => {
   const readiness = buildOverviewReadiness(snapshot);
   const ReadinessIcon = readiness.icon;
+  const needsJournals = Boolean(snapshot.status?.needsJournals);
+  const readinessClassName = cn(
+    "inline-flex h-8 shrink-0 items-center gap-2 rounded-md border px-2.5 text-sm font-medium",
+    readinessToneStyles[readiness.tone],
+  );
 
   return (
     <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
       <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-2">
-        <span
-          className={cn(
-            "inline-flex h-8 shrink-0 items-center gap-2 rounded-md border px-2.5 text-sm font-medium",
-            readinessToneStyles[readiness.tone],
-          )}
-        >
-          <ReadinessIcon className="size-4" aria-hidden="true" />
-          {readiness.title}
-        </span>
+        {needsJournals ? (
+          <button
+            type="button"
+            className={cn(
+              readinessClassName,
+              "transition-colors hover:bg-amber-500/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-60",
+            )}
+            onClick={onProcessJournals}
+            disabled={isProcessingJournals}
+          >
+            <ReadinessIcon
+              className={cn("size-4", isProcessingJournals && "animate-spin")}
+              aria-hidden="true"
+            />
+            {isProcessingJournals ? "Reprocessing journals" : readiness.title}
+          </button>
+        ) : (
+          <span className={readinessClassName}>
+            <ReadinessIcon className="size-4" aria-hidden="true" />
+            {readiness.title}
+          </span>
+        )}
         <span className="min-w-0 truncate text-xs text-muted-foreground sm:text-sm">
           {readiness.detail}
         </span>
@@ -1247,16 +1271,16 @@ const WelcomeSection = ({
           variant="outline"
           size="sm"
           className="h-8 gap-2 sm:h-9"
-          aria-label="Refresh watch-only connections"
-          onClick={onSync}
-          disabled={isSyncing}
+          aria-label="Refresh wallets and journals"
+          onClick={onRefresh}
+          disabled={isRefreshing}
         >
           <RefreshCw
-            className={cn("size-4", isSyncing && "animate-spin")}
+            className={cn("size-4", isRefreshing && "animate-spin")}
             aria-hidden="true"
           />
           <span className="hidden sm:inline">
-            {isSyncing ? "Refreshing" : "Refresh"}
+            {isRefreshing ? "Refreshing" : "Refresh"}
           </span>
         </Button>
         <Button
@@ -2236,9 +2260,6 @@ const RevenueFlowChart = ({
   );
   const chartCurrency = chartCurrencyForMetric(metric, currency);
   const showCostBasis = metric === "value" && chartCurrency === "eur";
-  const chartAttentionItems = buildOverviewHealthItems(snapshot)
-    .filter((item) => item.tone === "warning" || item.tone === "alert")
-    .slice(0, 3);
 
   const legendItems = [
     {
@@ -2400,41 +2421,33 @@ const RevenueFlowChart = ({
               <DropdownMenuTrigger asChild>
                 <Button
                   variant="outline"
-                  size="sm"
-                  className="h-8 px-2 text-xs"
-                  aria-label="Select time period"
+                  size="icon"
+                  className="size-7 sm:size-8"
+                  aria-label="Open chart settings"
                 >
-                  {periodLabels[period]}
+                  <Settings2 className="size-4" aria-hidden="true" />
                 </Button>
               </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-48">
-                <DropdownMenuLabel>Time Period</DropdownMenuLabel>
+              <DropdownMenuContent align="end" className="w-56">
+                <DropdownMenuLabel>Chart settings</DropdownMenuLabel>
                 <DropdownMenuSeparator />
+                <DropdownMenuLabel className="text-[10px] font-medium tracking-[0.14em] text-muted-foreground uppercase">
+                  Time Period
+                </DropdownMenuLabel>
                 {periodKeys.map((key) => (
                   <DropdownMenuCheckboxItem
                     key={key}
                     checked={period === key}
+                    onSelect={(event) => event.preventDefault()}
                     onCheckedChange={() => setPeriod(key)}
                   >
                     {periodLabels[key]}
                   </DropdownMenuCheckboxItem>
                 ))}
-              </DropdownMenuContent>
-            </DropdownMenu>
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="h-8 px-2 text-xs"
-                  aria-label="Select chart metric"
-                >
-                  {portfolioMetricLabels[metric]}
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-48">
-                <DropdownMenuLabel>Metric</DropdownMenuLabel>
                 <DropdownMenuSeparator />
+                <DropdownMenuLabel className="text-[10px] font-medium tracking-[0.14em] text-muted-foreground uppercase">
+                  Metric
+                </DropdownMenuLabel>
                 {(
                   [
                     "value",
@@ -2446,32 +2459,22 @@ const RevenueFlowChart = ({
                   <DropdownMenuCheckboxItem
                     key={key}
                     checked={metric === key}
+                    onSelect={(event) => event.preventDefault()}
                     onCheckedChange={() => setMetric(key)}
                   >
                     {portfolioMetricLabels[key]}
                   </DropdownMenuCheckboxItem>
                 ))}
-              </DropdownMenuContent>
-            </DropdownMenu>
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="h-8 px-2 text-xs"
-                  aria-label="Select chart shape"
-                >
-                  {portfolioShapeLabels[shape]}
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-44">
-                <DropdownMenuLabel>Shape</DropdownMenuLabel>
                 <DropdownMenuSeparator />
+                <DropdownMenuLabel className="text-[10px] font-medium tracking-[0.14em] text-muted-foreground uppercase">
+                  Shape
+                </DropdownMenuLabel>
                 {(["step", "line"] satisfies PortfolioChartShape[]).map(
                   (key) => (
                     <DropdownMenuCheckboxItem
                       key={key}
                       checked={shape === key}
+                      onSelect={(event) => event.preventDefault()}
                       onCheckedChange={() => setShape(key)}
                     >
                       {portfolioShapeLabels[key]}
@@ -2506,34 +2509,6 @@ const RevenueFlowChart = ({
             )}
           </div>
         </div>
-
-        {chartAttentionItems.length > 0 && (
-          <div className="grid gap-2 sm:grid-cols-3">
-            {chartAttentionItems.map((item) => {
-              const ItemIcon = item.icon;
-              return (
-                <Link
-                  key={item.key}
-                  to={item.href}
-                  className={cn(
-                    "flex min-w-0 items-center gap-2 rounded-md px-2.5 py-2 text-xs ring-1 ring-inset transition-colors hover:bg-muted/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-                    healthToneStyles[item.tone],
-                  )}
-                >
-                  <ItemIcon className="size-3.5 shrink-0" aria-hidden="true" />
-                  <span className="min-w-0">
-                    <span className="block truncate font-medium">
-                      {item.title}
-                    </span>
-                    <span className="block truncate opacity-80">
-                      {item.value}
-                    </span>
-                  </span>
-                </Link>
-              );
-            })}
-          </div>
-        )}
 
         {expanded && chartStats && (
           <div className="grid gap-2 rounded-lg border bg-muted/25 p-2 sm:grid-cols-3">
@@ -3074,13 +3049,7 @@ function buildOverviewHealthItems(snapshot: OverviewSnapshot): OverviewHealthIte
 function buildPrimaryOverviewAction(snapshot: OverviewSnapshot) {
   const status = snapshot.status;
   if (status?.needsJournals) {
-    return {
-      title: "Process journals",
-      detail: "Refresh tax events and report state before trusting summaries.",
-      href: "/journals",
-      icon: RefreshCw,
-      tone: "warning" as const,
-    };
+    return null;
   }
   if ((status?.quarantines ?? 0) > 0) {
     return {
@@ -3417,13 +3386,18 @@ const healthToneStyles: Record<OverviewHealthTone, string> = {
 const BooksHealthPanel = ({
   className,
   snapshot,
+  onProcessJournals,
+  isProcessingJournals,
 }: {
   className?: string;
   snapshot: OverviewSnapshot;
+  onProcessJournals: () => void;
+  isProcessingJournals: boolean;
 }) => {
   const healthItems = buildOverviewHealthItems(snapshot);
   const primaryAction = buildPrimaryOverviewAction(snapshot);
-  const PrimaryIcon = primaryAction.icon;
+  const PrimaryIcon = primaryAction?.icon;
+  const needsJournals = Boolean(snapshot.status?.needsJournals);
 
   return (
     <div className={cn("rounded-xl border bg-card", className)}>
@@ -3449,54 +3423,83 @@ const BooksHealthPanel = ({
       </div>
 
       <div className="space-y-3 px-4 pt-3 pb-4 sm:px-6">
-        <Link
-          to={primaryAction.href}
-          className={cn(
-            "group flex items-start gap-3 rounded-lg p-3 ring-1 ring-inset transition-colors hover:bg-muted/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-            healthToneStyles[primaryAction.tone],
-          )}
-        >
-          <span className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-md bg-background/70">
-            <PrimaryIcon className="size-4" aria-hidden="true" />
-          </span>
-          <span className="min-w-0">
-            <span className="block text-sm font-semibold">
-              {primaryAction.title}
+        {primaryAction && PrimaryIcon ? (
+          <Link
+            to={primaryAction.href}
+            className={cn(
+              "group flex items-start gap-3 rounded-lg p-3 ring-1 ring-inset transition-colors hover:bg-muted/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+              healthToneStyles[primaryAction.tone],
+            )}
+          >
+            <span className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-md bg-background/70">
+              <PrimaryIcon className="size-4" aria-hidden="true" />
             </span>
-            <span className="mt-0.5 block text-xs leading-5 opacity-80">
-              {primaryAction.detail}
+            <span className="min-w-0">
+              <span className="block text-sm font-semibold">
+                {primaryAction.title}
+              </span>
+              <span className="mt-0.5 block text-xs leading-5 opacity-80">
+                {primaryAction.detail}
+              </span>
             </span>
-          </span>
-        </Link>
+          </Link>
+        ) : null}
 
         <div className="divide-y rounded-lg border bg-background/50">
           {healthItems.map((item) => {
             const ItemIcon = item.icon;
-            return (
-              <Link
-                key={item.key}
-                to={item.href}
-                className="group flex items-center gap-3 px-3 py-3 transition-colors first:rounded-t-lg last:rounded-b-lg hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-              >
+            const isJournalRefresh = item.key === "journals" && needsJournals;
+            const content = (
+              <>
                 <span
                   className={cn(
                     "flex size-8 shrink-0 items-center justify-center rounded-md ring-1 ring-inset",
                     healthToneStyles[item.tone],
                   )}
                 >
-                  <ItemIcon className="size-4" aria-hidden="true" />
+                  <ItemIcon
+                    className={cn(
+                      "size-4",
+                      isJournalRefresh && isProcessingJournals && "animate-spin",
+                    )}
+                    aria-hidden="true"
+                  />
                 </span>
                 <span className="min-w-0 flex-1">
                   <span className="block truncate text-xs font-medium text-muted-foreground">
                     {item.title}
                   </span>
                   <span className="mt-0.5 block truncate text-sm font-semibold text-foreground">
-                    {item.value}
+                    {isJournalRefresh && isProcessingJournals
+                      ? "Reprocessing"
+                      : item.value}
                   </span>
                 </span>
                 <span className="hidden max-w-[140px] text-right text-[10px] leading-4 text-muted-foreground sm:block">
                   {item.detail}
                 </span>
+              </>
+            );
+            const className =
+              "group flex w-full items-center gap-3 px-3 py-3 text-left transition-colors first:rounded-t-lg last:rounded-b-lg hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring";
+
+            return isJournalRefresh ? (
+              <button
+                key={item.key}
+                type="button"
+                className={className}
+                onClick={onProcessJournals}
+                disabled={isProcessingJournals}
+              >
+                {content}
+              </button>
+            ) : (
+              <Link
+                key={item.key}
+                to={item.href}
+                className={className}
+              >
+                {content}
               </Link>
             );
           })}
@@ -3524,6 +3527,8 @@ const Dashboard5 = ({
   const hideSensitive = useUiStore((s) => s.hideSensitive);
   const currency = useCurrency();
   const { syncAll, isSyncing } = useWalletSyncAction();
+  const { runJournalProcessing, isProcessingJournals } =
+    useJournalProcessingAction({ notifyStart: true });
   const transactions = React.useMemo(
     () =>
       snapshot.txs.length
@@ -3531,6 +3536,11 @@ const Dashboard5 = ({
         : transactionRecords,
     [snapshot.txs],
   );
+  const refreshOverviewState = React.useCallback(() => {
+    if (isSyncing || isProcessingJournals) return;
+    syncAll({ onSettled: runJournalProcessing });
+  }, [isProcessingJournals, isSyncing, runJournalProcessing, syncAll]);
+  const isRefreshingOverview = isSyncing || isProcessingJournals;
 
   return (
     <div
@@ -3538,8 +3548,10 @@ const Dashboard5 = ({
     >
       <WelcomeSection
         snapshot={snapshot}
-        onSync={syncAll}
-        isSyncing={isSyncing}
+        onRefresh={refreshOverviewState}
+        onProcessJournals={runJournalProcessing}
+        isRefreshing={isRefreshingOverview}
+        isProcessingJournals={isProcessingJournals}
         onAddConnection={() => setAddConnectionOpen(true)}
       />
       <AddConnectionDialog
@@ -3572,7 +3584,11 @@ const Dashboard5 = ({
             hideSensitive={hideSensitive}
             currency={currency}
           />
-          <BooksHealthPanel snapshot={snapshot} />
+          <BooksHealthPanel
+            snapshot={snapshot}
+            onProcessJournals={runJournalProcessing}
+            isProcessingJournals={isProcessingJournals}
+          />
         </div>
       </div>
     </div>

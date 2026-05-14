@@ -1746,18 +1746,46 @@ def build_journals_snapshot(conn: sqlite3.Connection) -> dict[str, Any]:
     freshness = _journal_freshness(conn, profile)
     entry_rows = conn.execute(
         """
-        SELECT entry_type, COUNT(*) AS count, SUM(COALESCE(gain_loss, 0)) AS gain_loss
+        SELECT
+            CASE
+                WHEN at_category = 'neu_swap' THEN 'neutral_swap'
+                ELSE entry_type
+            END AS entry_type,
+            COUNT(*) AS count,
+            SUM(
+                CASE
+                    WHEN at_category = 'neu_swap' THEN 0
+                    ELSE COALESCE(gain_loss, 0)
+                END
+            ) AS gain_loss
         FROM journal_entries
         WHERE profile_id = ?
-        GROUP BY entry_type
+        GROUP BY
+            CASE
+                WHEN at_category = 'neu_swap' THEN 'neutral_swap'
+                ELSE entry_type
+            END
         ORDER BY count DESC, entry_type ASC
         """,
         (profile["id"],),
     ).fetchall()
     recent_rows = conn.execute(
         """
-        SELECT je.occurred_at, je.entry_type, je.asset, je.quantity, je.fiat_value,
-               COALESCE(je.gain_loss, 0) AS gain_loss, w.label AS wallet
+        SELECT
+               je.occurred_at,
+               CASE
+                   WHEN je.at_category = 'neu_swap' THEN 'neutral_swap'
+                   ELSE je.entry_type
+               END AS entry_type,
+               je.asset, je.quantity, je.fiat_value,
+               COALESCE(
+                   CASE
+                       WHEN je.at_category = 'neu_swap' THEN 0
+                       ELSE je.gain_loss
+                   END,
+                   0
+               ) AS gain_loss,
+               w.label AS wallet
         FROM journal_entries je
         JOIN wallets w ON w.id = je.wallet_id
         WHERE je.profile_id = ?
@@ -1770,11 +1798,30 @@ def build_journals_snapshot(conn: sqlite3.Connection) -> dict[str, Any]:
     for entry_row in entry_rows:
         typed_recent_rows = conn.execute(
             """
-            SELECT je.occurred_at, je.entry_type, je.asset, je.quantity, je.fiat_value,
-                   COALESCE(je.gain_loss, 0) AS gain_loss, w.label AS wallet
+            SELECT
+                   je.occurred_at,
+                   CASE
+                       WHEN je.at_category = 'neu_swap' THEN 'neutral_swap'
+                       ELSE je.entry_type
+                   END AS entry_type,
+                   je.asset, je.quantity, je.fiat_value,
+                   COALESCE(
+                       CASE
+                           WHEN je.at_category = 'neu_swap' THEN 0
+                           ELSE je.gain_loss
+                       END,
+                       0
+                   ) AS gain_loss,
+                   w.label AS wallet
             FROM journal_entries je
             JOIN wallets w ON w.id = je.wallet_id
-            WHERE je.profile_id = ? AND je.entry_type = ?
+            WHERE je.profile_id = ?
+              AND (
+                  CASE
+                      WHEN je.at_category = 'neu_swap' THEN 'neutral_swap'
+                      ELSE je.entry_type
+                  END
+              ) = ?
             ORDER BY je.occurred_at DESC, je.created_at DESC, je.id DESC
             LIMIT 12
             """,

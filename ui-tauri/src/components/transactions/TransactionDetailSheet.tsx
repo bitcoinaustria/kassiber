@@ -1038,7 +1038,7 @@ export function TransactionDetailSheet({
                           <div className="min-w-0">
                             <Label htmlFor="tx-taxable">Taxable</Label>
                             <p className="text-xs text-muted-foreground">
-                              Included in tax event preparation.
+                              Included in journal processing.
                             </p>
                           </div>
                           <Switch

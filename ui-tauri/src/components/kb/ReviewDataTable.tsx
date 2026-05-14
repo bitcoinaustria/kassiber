@@ -32,7 +32,7 @@ import { screenShellClassName } from "@/lib/screen-layout";
 import { cn } from "@/lib/utils";
 import { useUiStore } from "@/store/ui";
 
-export type ReviewTableKind = "tax-events" | "quarantine";
+export type ReviewTableKind = "journal-events" | "quarantine";
 
 export interface ReviewTableRow {
   id: string;
@@ -75,6 +75,7 @@ interface ReviewDataTableProps {
   emptyMessage?: string;
   badgeLabel?: string;
   showSummaryBadge?: boolean;
+  shellClassName?: string;
 }
 
 const statusClass: Record<ReviewTableRow["status"], string> = {
@@ -139,6 +140,7 @@ export function ReviewDataTable({
   emptyMessage,
   badgeLabel,
   showSummaryBadge = true,
+  shellClassName = screenShellClassName,
 }: ReviewDataTableProps) {
   const hideSensitive = useUiStore((s) => s.hideSensitive);
   const [globalFilter, setGlobalFilter] = useState("");
@@ -236,7 +238,7 @@ export function ReviewDataTable({
   };
 
   return (
-    <div className={screenShellClassName}>
+    <div className={cn(shellClassName)}>
       <div className="flex flex-col gap-3 rounded-xl border bg-card px-4 py-4 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex min-w-0 items-start gap-3">
           <span
@@ -306,7 +308,9 @@ export function ReviewDataTable({
             <div className="min-w-0">
               <h2 className="text-sm font-medium sm:text-base">
                 {tableTitle ??
-                  (kind === "tax-events" ? "Review records" : "Blocked records")}
+                  (kind === "journal-events"
+                    ? "Review records"
+                    : "Blocked records")}
               </h2>
               <p className="text-[10px] text-muted-foreground sm:text-xs">
                 {renderedTableDescription}
@@ -386,7 +390,7 @@ export function ReviewDataTable({
             <TableHeader>
               <TableRow className="bg-muted/50 hover:bg-muted/50">
                 <TableHead className="min-w-[330px]">
-                  {kind === "tax-events" ? "Event" : "Issue"}
+                  {kind === "journal-events" ? "Event" : "Issue"}
                 </TableHead>
                 <TableHead className="min-w-[180px]">Evidence</TableHead>
                 <TableHead className="min-w-[160px] text-right">

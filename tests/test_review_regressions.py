@@ -32,6 +32,7 @@ from kassiber.core.tax_events import normalize_tax_asset_inputs
 from kassiber.core.ui_snapshot import (
     build_capital_gains_snapshot,
     build_journal_events_list_snapshot,
+    build_journals_snapshot,
     build_overview_snapshot,
     build_transactions_search_snapshot,
     build_transactions_snapshot,
@@ -1503,6 +1504,22 @@ class ReviewRegressionTest(unittest.TestCase):
             neutral_event["costBasisEur"],
         )
         self.assertAlmostEqual(neutral_event["marketDeltaEur"], 121.16, places=2)
+
+        journals = build_journals_snapshot(conn)
+        state_type_counts = {
+            row["type"]: (row["count"], row["gainLossEur"])
+            for row in journals["entryTypes"]
+        }
+        self.assertEqual(state_type_counts["neutral_swap"], (1, 0.0))
+        self.assertEqual(state_type_counts["disposal"], (1, -681.41))
+        self.assertEqual(
+            journals["recentByType"]["neutral_swap"][0]["type"],
+            "neutral_swap",
+        )
+        self.assertEqual(
+            journals["recentByType"]["neutral_swap"][0]["gainLossEur"],
+            0.0,
+        )
 
         e1kv = report_austrian_e1kv(
             conn,

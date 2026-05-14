@@ -25,7 +25,6 @@ import {
   RefreshCw,
   ShieldCheck,
   Square,
-  Wrench,
   type LucideIcon,
 } from "lucide-react";
 import { useLayoutEffect, useRef, useState } from "react";
@@ -47,8 +46,6 @@ interface Ai02Props {
   onSubmit: (prompt: string) => void;
   onAbort?: () => void;
   isStreaming?: boolean;
-  toolsEnabled?: boolean;
-  onToolsEnabledChange?: (enabled: boolean) => void;
   thinkingEffort?: "auto" | "low" | "medium" | "high";
   onThinkingEffortChange?: (effort: "auto" | "low" | "medium" | "high") => void;
   showThinkingEffort?: boolean;
@@ -89,8 +86,6 @@ export default function Ai02({
   onSubmit,
   onAbort,
   isStreaming = false,
-  toolsEnabled = true,
-  onToolsEnabledChange,
   thinkingEffort = "auto",
   onThinkingEffortChange,
   showThinkingEffort = false,
@@ -109,7 +104,6 @@ export default function Ai02({
       inputRef.current.focus();
     }
   };
-
   const trimmedInput = inputValue.trim();
   const canSend = Boolean(trimmedInput) && Boolean(selection?.model) && !isStreaming;
   const showSuggestions = !trimmedInput && !isStreaming && prompts.length > 0;
@@ -145,22 +139,22 @@ export default function Ai02({
   return (
     <div
       className={cn(
-        "group/assistant mx-auto flex w-full max-w-3xl flex-col rounded-[28px] border border-zinc-300/90 bg-zinc-200/78 p-2 shadow-[0_24px_90px_rgba(15,23,42,0.30),0_3px_18px_rgba(15,23,42,0.14)] ring-1 ring-white/90 backdrop-blur-xl transition-all duration-200 ease-out dark:border-white/10 dark:bg-zinc-900/55 dark:ring-white/10",
+        "group/assistant mx-auto flex w-full max-w-3xl flex-col rounded-[28px] border border-zinc-300/90 bg-zinc-200/78 p-2 shadow-[0_24px_90px_rgba(15,23,42,0.30),0_3px_18px_rgba(15,23,42,0.14),inset_0_1px_0_rgba(255,255,255,0.65)] ring-1 ring-white/90 backdrop-blur-xl transition-all duration-200 ease-out dark:border-white/16 dark:bg-zinc-950/86 dark:shadow-[0_24px_80px_rgba(0,0,0,0.68),0_6px_24px_rgba(0,0,0,0.44),inset_0_1px_0_rgba(255,255,255,0.11)] dark:ring-white/12",
         compact
-          ? "gap-0 rounded-3xl p-1.5 hover:gap-3 hover:rounded-[28px] hover:p-2 focus-within:gap-3 focus-within:rounded-[28px] focus-within:p-2"
+          ? "gap-0 rounded-[24px] p-1.5 focus-within:gap-3 focus-within:rounded-[28px] focus-within:p-2"
           : "gap-3",
         className,
       )}
     >
       <div
         className={cn(
-          "flex cursor-text flex-col rounded-2xl border border-border/70 bg-background/90 backdrop-blur-md transition-all duration-200 ease-out dark:bg-background/60",
+          "flex cursor-text flex-col border border-border/70 bg-background/90 backdrop-blur-md transition-all duration-200 ease-out dark:bg-background/60",
           inputPanelElevated
             ? "shadow-[0_10px_35px_rgba(15,23,42,0.14)]"
             : "shadow-none",
           compact
-            ? "min-h-[58px] group-hover/assistant:min-h-[72px] group-focus-within/assistant:min-h-[72px]"
-            : "min-h-[72px]",
+            ? "min-h-[52px] rounded-[18px] group-focus-within/assistant:min-h-[72px] group-focus-within/assistant:rounded-2xl"
+            : "min-h-[72px] rounded-2xl",
         )}
       >
         <div className="relative min-h-0 flex-1">
@@ -174,38 +168,49 @@ export default function Ai02({
             className={cn(
               "max-h-44 min-h-0 w-full resize-none whitespace-pre-wrap break-words border-0 bg-transparent! text-[17px] leading-6 text-foreground shadow-none outline-none transition-[padding,color] duration-200 ease-in-out placeholder:text-muted-foreground/80 focus-visible:ring-0 focus-visible:ring-offset-0",
               compact
-                ? "px-4 pt-4 pb-0 group-hover/assistant:pt-4 group-hover/assistant:pb-1 group-focus-within/assistant:pt-4 group-focus-within/assistant:pb-1"
+                ? "pr-14 pl-4 pt-3.5 pb-0 group-focus-within/assistant:px-4 group-focus-within/assistant:pt-4 group-focus-within/assistant:pb-1"
                 : "px-4 pt-4 pb-1",
             )}
           />
+          {compact ? (
+            <div className="absolute top-1/2 right-2 -translate-y-1/2 group-focus-within/assistant:hidden">
+              {isStreaming && onAbort ? (
+                <Button
+                  variant="ghost"
+                  size="icon-sm"
+                  className="size-9 rounded-full bg-destructive transition-colors duration-100 ease-out cursor-pointer hover:bg-destructive/90!"
+                  onClick={onAbort}
+                  aria-label="Stop generating"
+                >
+                  <Square className="h-3.5 w-3.5 text-destructive-foreground" />
+                </Button>
+              ) : (
+                <Button
+                  variant="ghost"
+                  size="icon-sm"
+                  className={cn(
+                    "size-9 rounded-full bg-foreground text-background transition-colors duration-100 ease-out cursor-pointer hover:bg-foreground/90 disabled:bg-muted disabled:text-muted-foreground",
+                    canSend && "bg-foreground hover:bg-foreground/90!",
+                  )}
+                  disabled={!canSend}
+                  onClick={handleSubmit}
+                  aria-label="Send message"
+                >
+                  <ArrowUp className="h-4 w-4" />
+                </Button>
+              )}
+            </div>
+          ) : null}
         </div>
 
         <div
           className={cn(
-            "flex items-center gap-2 px-2 pt-0 pb-2 transition-all duration-200 ease-out",
-            compact ? "min-h-[34px]" : "min-h-[42px]",
+            "flex items-center gap-2 px-2 pt-0 transition-all duration-200 ease-out",
+            compact
+              ? "max-h-0 min-h-0 overflow-hidden pb-0 opacity-0 group-focus-within/assistant:max-h-11 group-focus-within/assistant:min-h-[42px] group-focus-within/assistant:pb-2 group-focus-within/assistant:opacity-100"
+              : "min-h-[42px] pb-2",
           )}
         >
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon-sm"
-            className={cn(
-              "shrink-0 rounded-full text-muted-foreground hover:bg-muted hover:text-foreground",
-              toolsEnabled && "bg-muted text-foreground",
-            )}
-            onClick={() => onToolsEnabledChange?.(!toolsEnabled)}
-            aria-label={
-              toolsEnabled ? "Disable assistant tools" : "Enable assistant tools"
-            }
-            aria-pressed={toolsEnabled}
-            title={
-              toolsEnabled ? "Disable assistant tools" : "Enable assistant tools"
-            }
-            disabled={isStreaming || !onToolsEnabledChange}
-          >
-            <Wrench className="h-4 w-4" aria-hidden="true" />
-          </Button>
           <Context className="min-w-0 flex-1">
             <ContextItem
               icon={<ModelIcon className="h-4 w-4 text-muted-foreground" />}
@@ -285,7 +290,7 @@ export default function Ai02({
           className={cn(
             "overflow-hidden transition-all duration-200 ease-out",
             compact
-              ? "max-h-0 translate-y-1 opacity-0 group-hover/assistant:max-h-16 group-hover/assistant:translate-y-0 group-hover/assistant:opacity-100 group-focus-within/assistant:max-h-16 group-focus-within/assistant:translate-y-0 group-focus-within/assistant:opacity-100"
+              ? "max-h-0 translate-y-1 opacity-0 group-focus-within/assistant:max-h-16 group-focus-within/assistant:translate-y-0 group-focus-within/assistant:opacity-100"
               : "max-h-16 translate-y-0 opacity-100",
           )}
           aria-hidden={compact}

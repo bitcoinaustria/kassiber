@@ -30,7 +30,6 @@ import {
   Search,
   Server,
   Settings,
-  CircleDollarSign,
   ShieldAlert,
   Sun,
   SunMoon,
@@ -87,7 +86,6 @@ import {
   formatDaemonEnvelopeError,
   shouldHandleDaemonAuthRequiredEvent,
   useDaemon,
-  useDaemonMutation,
 } from "@/daemon/client";
 import {
   activateImportProject,
@@ -109,6 +107,7 @@ import type { AssistantReturnPath } from "@/components/ai/assistantSession";
 import kLedgerMarkUrl from "@/assets/k-ledger-mark-transparent.svg";
 import { ScreenAssistantMockup } from "./ScreenAssistantMockup";
 import { PreAlphaBanner } from "./PreAlphaBanner";
+import { useJournalProcessingAction } from "@/hooks/useJournalProcessingAction";
 import { useWalletSyncAction } from "@/hooks/useWalletSyncAction";
 import { BookSwitcherPopover } from "./BookSwitcherPopover";
 
@@ -153,12 +152,6 @@ type NotificationItem = Omit<AppNotification, "createdAt"> & {
   actionLabel?: string;
 };
 
-type JournalProcessResult = {
-  entries_created?: number;
-  quarantined?: number;
-  processed_transactions?: number;
-};
-
 const APP_VERSION = "0.22.0";
 const APP_COMMIT = __APP_COMMIT__;
 const APP_COMMIT_SHORT = APP_COMMIT ? APP_COMMIT.slice(0, 7) : "unknown";
@@ -179,15 +172,7 @@ const NAV_GROUPS: NavGroup[] = [
     items: [
       { label: "Overview", icon: Gauge, href: "/overview" },
       { label: "Transactions", icon: ClipboardList, href: "/transactions" },
-      {
-        label: "Inputs",
-        icon: Wallet,
-        href: "/connections",
-        children: [
-          { label: "Wallets", icon: WalletCards, href: "/connections" },
-          { label: "Source of Funds", icon: BadgeCheck, href: "/source-of-funds" },
-        ],
-      },
+      { label: "Wallets", icon: WalletCards, href: "/connections" },
       { label: "Reports", icon: BarChart3, href: "/reports" },
       { label: "Assistant", icon: MessageSquareText, href: "/assistant" },
     ],
@@ -196,9 +181,9 @@ const NAV_GROUPS: NavGroup[] = [
     title: "Review",
     items: [
       { label: "Quarantine", icon: ShieldAlert, href: "/quarantine" },
+      { label: "Source Funds", icon: BadgeCheck, href: "/source-of-funds" },
       { label: "Swaps", icon: ArrowLeftRight, href: "/swaps" },
       { label: "Journals", icon: BookOpen, href: "/journals" },
-      { label: "Tax Events", icon: CircleDollarSign, href: "/tax-events" },
     ],
   },
 ];
@@ -274,15 +259,6 @@ const ROUTE_META: Array<[string, RouteMeta]> = [
       icon: BadgeCheck,
       searchLabel: "Search source of funds",
       searchPlaceholder: "Search sources, wallets...",
-    },
-  ],
-  [
-    "/tax-events",
-    {
-      title: "Tax Events",
-      icon: CircleDollarSign,
-      searchLabel: "Search tax events",
-      searchPlaceholder: "Search event, basis, account...",
     },
   ],
   [
@@ -539,7 +515,6 @@ function assistantReturnPathFor(pathname: string): AssistantReturnPath {
   if (pathname === "/source-of-funds") return "/source-of-funds";
   if (pathname === "/books" || pathname === "/profiles") return "/books";
   if (pathname === "/journals") return "/journals";
-  if (pathname === "/tax-events") return "/tax-events";
   if (pathname === "/quarantine") return "/quarantine";
   if (pathname === "/diagnostics") return "/diagnostics";
   if (pathname === "/settings") return "/settings";
@@ -558,8 +533,6 @@ export function AppShell() {
   const aiFeaturesEnabled = useUiStore((s) => s.aiFeaturesEnabled);
   const bumpDaemonSession = useUiStore((s) => s.bumpDaemonSession);
   const { syncAll, isSyncing } = useWalletSyncAction();
-  const processJournals =
-    useDaemonMutation<JournalProcessResult>("ui.journals.process");
   const dataMode = useUiStore((s) => s.dataMode);
   const encryptedWorkspace =
     Boolean(identity?.encrypted) || identity?.databaseMode === "sqlcipher";
@@ -738,61 +711,12 @@ export function AppShell() {
       0,
     [dataMode, queryClient],
   );
-
-  const runMenuJournalProcessing = React.useCallback(() => {
-    if (!ensureWorkspaceForMenuAction()) return;
-    if (isDaemonKindMutating("ui.journals.process")) {
-      addNotification({
-        title: "Journal processing already running",
-        body: "Kassiber is already refreshing the journal state.",
-        tone: "info",
-      });
-      return;
-    }
-    addNotification({
-      title: "Journal processing started",
-      body: "Kassiber is rebuilding report-ready journal state.",
-      tone: "warning",
+  const { runJournalProcessing: runMenuJournalProcessing } =
+    useJournalProcessingAction({
+      beforeRun: ensureWorkspaceForMenuAction,
+      notifyAlreadyRunning: true,
+      notifyStart: true,
     });
-    processJournals.mutate(undefined, {
-      onSuccess: (envelope) => {
-        const payload = envelope.data;
-        const parts = [
-          payload?.processed_transactions !== undefined
-            ? `${payload.processed_transactions} transactions`
-            : null,
-          payload?.entries_created !== undefined
-            ? `${payload.entries_created} entries`
-            : null,
-          payload?.quarantined ? `${payload.quarantined} quarantined` : null,
-        ].filter(Boolean);
-        addNotification({
-          title: "Journals processed",
-          body: parts.join(", ") || "Journal state refreshed.",
-          tone: payload?.quarantined ? "warning" : "success",
-        });
-      },
-      onError: (error) => {
-        addNotification({
-          title: "Journal processing failed",
-          body:
-            error instanceof Error
-              ? error.message
-              : "Could not process journals.",
-          tone: "error",
-        });
-      },
-      onSettled: () => {
-        void queryClient.invalidateQueries({ queryKey: ["daemon"] });
-      },
-    });
-  }, [
-    addNotification,
-    ensureWorkspaceForMenuAction,
-    isDaemonKindMutating,
-    processJournals,
-    queryClient,
-  ]);
 
   const runMenuWalletSync = React.useCallback(() => {
     if (!ensureWorkspaceForMenuAction()) return;
@@ -1068,7 +992,9 @@ export function AppShell() {
     }
 
     const syncAssistantState = () => {
-      setAssistantCollapsed(main.scrollTop > 32);
+      const scrollableHeight = Math.max(1, main.scrollHeight - main.clientHeight);
+      const scrolledProgress = main.scrollTop / scrollableHeight;
+      setAssistantCollapsed(main.scrollTop > 96 && scrolledProgress > 0.04);
     };
 
     syncAssistantState();
@@ -1528,11 +1454,10 @@ function AppDashboardHeader({
   const setHideSensitive = useUiStore((s) => s.setHideSensitive);
   const dataMode = useUiStore((s) => s.dataMode);
   const appNotifications = useUiStore((s) => s.notifications);
-  const addNotification = useUiStore((s) => s.addNotification);
   const clearNotifications = useUiStore((s) => s.clearNotifications);
   const aiFeaturesEnabled = useUiStore((s) => s.aiFeaturesEnabled);
-  const processJournals =
-    useDaemonMutation<JournalProcessResult>("ui.journals.process");
+  const { runJournalProcessing, isProcessingJournals } =
+    useJournalProcessingAction();
   const [searchQuery, setSearchQuery] = React.useState("");
   const [searchOpen, setSearchOpen] = React.useState(false);
   const [bookSwitcherOpen, setBookSwitcherOpen] = React.useState(false);
@@ -1593,39 +1518,6 @@ function AppDashboardHeader({
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, []);
-
-  const runJournalProcessing = React.useCallback(() => {
-    if (processJournals.isPending) return;
-    processJournals.mutate(undefined, {
-      onSuccess: (envelope) => {
-        const payload = envelope.data;
-        const parts = [
-          payload?.processed_transactions !== undefined
-            ? `${payload.processed_transactions} transactions`
-            : null,
-          payload?.entries_created !== undefined
-            ? `${payload.entries_created} entries`
-            : null,
-          payload?.quarantined ? `${payload.quarantined} quarantined` : null,
-        ].filter(Boolean);
-        addNotification({
-          title: "Journals processed",
-          body: parts.join(", ") || "Journal state refreshed.",
-          tone: payload?.quarantined ? "warning" : "success",
-        });
-      },
-      onError: (error) => {
-        addNotification({
-          title: "Journal processing failed",
-          body:
-            error instanceof Error
-              ? error.message
-              : "Could not process journals.",
-          tone: "error",
-        });
-      },
-    });
-  }, [addNotification, processJournals]);
 
   const systemNotificationItems: NotificationItem[] = [
     ...(snapshot?.status?.needsJournals
@@ -1985,13 +1877,13 @@ function AppDashboardHeader({
                     variant="outline"
                     size="sm"
                     className="mt-1 h-7 w-full justify-center text-xs"
-                    disabled={processJournals.isPending}
+                    disabled={isProcessingJournals}
                     onClick={(event) => {
                       event.preventDefault();
                       runJournalProcessing();
                     }}
                   >
-                    {processJournals.isPending
+                    {isProcessingJournals
                       ? "Processing..."
                       : item.actionLabel}
                   </Button>

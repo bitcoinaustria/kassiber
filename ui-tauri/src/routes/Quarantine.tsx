@@ -8,7 +8,8 @@ import {
 } from "@/components/kb/ReviewDataTable";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { useDaemon, useDaemonMutation } from "@/daemon/client";
+import { useDaemon } from "@/daemon/client";
+import { useJournalProcessingAction } from "@/hooks/useJournalProcessingAction";
 import { screenPanelClassName } from "@/lib/screen-layout";
 import { useUiStore } from "@/store/ui";
 
@@ -45,12 +46,6 @@ interface QuarantineSnapshot {
   items: QuarantineItem[];
 }
 
-interface JournalProcessResult {
-  entries_created?: number;
-  processed_transactions?: number;
-  quarantined?: number;
-}
-
 const QUARANTINE_LIMIT = 100;
 
 export function Quarantine() {
@@ -59,45 +54,8 @@ export function Quarantine() {
     { limit: QUARANTINE_LIMIT },
   );
   const dataMode = useUiStore((s) => s.dataMode);
-  const addNotification = useUiStore((s) => s.addNotification);
-  const processJournals =
-    useDaemonMutation<JournalProcessResult>("ui.journals.process");
-
-  const runJournalProcessing = () => {
-    if (processJournals.isPending) return;
-    processJournals.mutate(undefined, {
-      onSuccess: (envelope) => {
-        const payload = envelope.data;
-        addNotification({
-          title: "Journals processed",
-          body: [
-            payload?.processed_transactions !== undefined
-              ? `${payload.processed_transactions} transactions`
-              : null,
-            payload?.entries_created !== undefined
-              ? `${payload.entries_created} entries`
-              : null,
-            payload?.quarantined !== undefined
-              ? `${payload.quarantined} quarantined`
-              : null,
-          ]
-            .filter(Boolean)
-            .join(", "),
-          tone: payload?.quarantined ? "warning" : "success",
-        });
-      },
-      onError: (mutationError) => {
-        addNotification({
-          title: "Journal processing failed",
-          body:
-            mutationError instanceof Error
-              ? mutationError.message
-              : "Could not process journals.",
-          tone: "error",
-        });
-      },
-    });
-  };
+  const { runJournalProcessing, isProcessingJournals } =
+    useJournalProcessingAction();
 
   if (isLoading) {
     return (
@@ -165,9 +123,9 @@ export function Quarantine() {
             type="button"
             className="h-9"
             onClick={runJournalProcessing}
-            disabled={processJournals.isPending}
+            disabled={isProcessingJournals}
           >
-            {processJournals.isPending ? (
+            {isProcessingJournals ? (
               <Loader2 className="size-4 animate-spin" aria-hidden="true" />
             ) : (
               <RefreshCw className="size-4" aria-hidden="true" />

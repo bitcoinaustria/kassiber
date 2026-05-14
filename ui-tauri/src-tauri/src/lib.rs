@@ -56,7 +56,6 @@ const MENU_NAV_BOOKS: &str = "kassiber:navigate:books";
 const MENU_NAV_REPORTS: &str = "kassiber:navigate:reports";
 const MENU_NAV_SOURCE_FUNDS: &str = "kassiber:navigate:source-funds";
 const MENU_NAV_JOURNALS: &str = "kassiber:navigate:journals";
-const MENU_NAV_TAX_EVENTS: &str = "kassiber:navigate:tax-events";
 const MENU_NAV_QUARANTINE: &str = "kassiber:navigate:quarantine";
 const MENU_NAV_ASSISTANT: &str = "kassiber:navigate:assistant";
 const MENU_NAV_DIAGNOSTICS: &str = "kassiber:navigate:diagnostics";
@@ -91,7 +90,7 @@ const DEEP_LINK_ROUTE_HOSTS: &[(&str, &str)] = &[
     ("reports", "/reports"),
     ("source-of-funds", "/source-of-funds"),
     ("journals", "/journals"),
-    ("tax-events", "/tax-events"),
+    ("tax-events", "/journals"),
     ("quarantine", "/quarantine"),
     ("assistant", "/assistant"),
     ("diagnostics", "/diagnostics"),
@@ -1244,7 +1243,6 @@ fn build_app_menu(
         Some("CmdOrCtrl+6"),
     )?;
     let journals_item = menu_item(app, MENU_NAV_JOURNALS, "Journals", Some("CmdOrCtrl+7"))?;
-    let tax_events_item = menu_item(app, MENU_NAV_TAX_EVENTS, "Tax Events", None)?;
     let quarantine_item = menu_item(app, MENU_NAV_QUARANTINE, "Quarantine", Some("CmdOrCtrl+8"))?;
     let assistant_item = menu_item(app, MENU_NAV_ASSISTANT, "Assistant", Some("CmdOrCtrl+9"))?;
 
@@ -1300,7 +1298,6 @@ fn build_app_menu(
         .item(&source_funds_item)
         .separator()
         .item(&journals_item)
-        .item(&tax_events_item)
         .item(&quarantine_item)
         .item(&assistant_item)
         .separator()
@@ -1388,7 +1385,6 @@ fn build_app_menu(
         reports_item.clone(),
         source_funds_item.clone(),
         journals_item.clone(),
-        tax_events_item.clone(),
         quarantine_item.clone(),
     ];
 
@@ -1506,7 +1502,6 @@ fn menu_action_for_id(id: &str) -> Option<MenuActionPayload> {
         MENU_NAV_REPORTS => Some(navigate_action("/reports")),
         MENU_NAV_SOURCE_FUNDS => Some(navigate_action("/source-of-funds")),
         MENU_NAV_JOURNALS => Some(navigate_action("/journals")),
-        MENU_NAV_TAX_EVENTS => Some(navigate_action("/tax-events")),
         MENU_NAV_QUARANTINE => Some(navigate_action("/quarantine")),
         MENU_NAV_ASSISTANT => Some(navigate_action("/assistant")),
         MENU_NAV_DIAGNOSTICS => Some(navigate_action("/diagnostics")),

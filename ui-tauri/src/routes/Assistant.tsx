@@ -21,8 +21,6 @@ export function Assistant() {
     thinkingEffort,
     setThinkingEffort,
     sendPrompt,
-    toolsEnabled,
-    setToolsEnabled,
     sendConsent,
     abort,
   } = useAssistantSession();
@@ -63,8 +61,6 @@ export function Assistant() {
       onSubmit={sendPrompt}
       onAbort={abort}
       isStreaming={isStreaming}
-      toolsEnabled={toolsEnabled}
-      onToolsEnabledChange={setToolsEnabled}
       thinkingEffort={thinkingEffort}
       onThinkingEffortChange={
         supportsThinkingEffort ? setThinkingEffort : undefined
