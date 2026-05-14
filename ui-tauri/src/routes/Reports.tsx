@@ -237,10 +237,15 @@ function ReportsView({
   onYearChange,
 }: ReportsViewProps) {
   const year = report.year;
-  const availableYears = (report.availableYears?.length
-    ? report.availableYears
-    : [year]
-  ).filter((item, index, years) => years.indexOf(item) === index);
+  const effectiveYear = selectedYear ?? year;
+  const availableYears = Array.from(
+    new Set([
+      ...(report.availableYears?.length ? report.availableYears : [effectiveYear]),
+      effectiveYear,
+    ]),
+  )
+    .filter((item) => Number.isInteger(item))
+    .sort((a, b) => b - a);
   const jurisdiction =
     JURISDICTIONS[report.jurisdictionCode] ?? JURISDICTIONS.AT;
   const [method, setMethod] = useState<CostBasisMethod>(
@@ -284,8 +289,8 @@ function ReportsView({
       maximumFractionDigits: 2,
     });
   const methodLabel = METHOD_LABELS[method] ?? METHOD_LABELS[jurisdiction.defaultMethod];
-  const readiness = buildReportReadiness(report, lots, year);
-  const periodLabel = formatReportPeriod(year, jurisdiction.locale);
+  const readiness = buildReportReadiness(report, lots, effectiveYear);
+  const periodLabel = formatReportPeriod(effectiveYear, jurisdiction.locale);
   const canOpenCurrentExport =
     exportStatus?.tone === "success" &&
     canOpenExportPath(exportStatus.path) &&
@@ -312,10 +317,10 @@ function ReportsView({
     const args =
       format === "pdf"
         ? activeProfileIsAustrian
-          ? { year }
+          ? { year: effectiveYear }
           : {}
         : (format === "xlsx" || format === "csv") && activeProfileIsAustrian
-          ? { year }
+          ? { year: effectiveYear }
           : {};
 
     mutation.mutate(args, {
@@ -386,7 +391,7 @@ function ReportsView({
   return (
     <div className={screenShellClassName}>
       <ReportPackageHeader
-        selectedYear={selectedYear ?? year}
+        selectedYear={effectiveYear}
         availableYears={availableYears}
         onYearChange={onYearChange}
         periodLabel={periodLabel}
@@ -402,7 +407,7 @@ function ReportsView({
         lots={lots}
         totals={totals}
         estimatedTax={estimatedTax}
-        year={year}
+        year={effectiveYear}
         formatNumber={fmt}
       />
 
@@ -422,7 +427,7 @@ function ReportsView({
             jurisdiction={jurisdiction}
             hideSensitive={hideSensitive}
             formatNumber={fmt}
-            year={year}
+            year={effectiveYear}
           />
           {neutralSwapLots.length ? (
             <NeutralSwapAuditPanel
@@ -435,7 +440,7 @@ function ReportsView({
         </div>
         <div className="grid min-w-0 gap-3">
           <ReportFilesPanel
-            year={year}
+            year={effectiveYear}
             activeExport={activeExport}
             activeProfileIsAustrian={activeProfileIsAustrian}
             exportStatus={exportStatus}

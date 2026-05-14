@@ -910,7 +910,7 @@ class ReviewRegressionTest(unittest.TestCase):
                 365,
                 "moving_average_at",
                 "2026-01-01T01:00:00Z",
-                2,
+                3,
                 now,
             ),
         )
@@ -982,6 +982,31 @@ class ReviewRegressionTest(unittest.TestCase):
                     "{}",
                     "2025-02-01T12:00:00Z",
                 ),
+                (
+                    "tx-transaction-only-year",
+                    "ws-at-years",
+                    "pf-at-years",
+                    "wal-at-years",
+                    "transaction-only-year",
+                    "fp-transaction-only-year",
+                    "2023-02-01T12:00:00Z",
+                    "2023-02-01T12:05:00Z",
+                    "inbound",
+                    "BTC",
+                    btc_to_msat("0.01"),
+                    0,
+                    "EUR",
+                    1_300,
+                    13,
+                    "import",
+                    "deposit",
+                    "Transaction-only year",
+                    None,
+                    None,
+                    0,
+                    "{}",
+                    "2023-02-01T12:00:00Z",
+                ),
             ],
         )
         conn.executemany(
@@ -1042,11 +1067,11 @@ class ReviewRegressionTest(unittest.TestCase):
 
         snapshot = build_capital_gains_snapshot(conn)
         self.assertEqual(snapshot["year"], 2024)
-        self.assertEqual(snapshot["availableYears"], [2025, 2024])
+        self.assertEqual(snapshot["availableYears"], [2025, 2024, 2023])
         self.assertEqual(len(snapshot["lots"]), 1)
         selected_year_snapshot = build_capital_gains_snapshot(conn, tax_year=2025)
         self.assertEqual(selected_year_snapshot["year"], 2025)
-        self.assertEqual(selected_year_snapshot["availableYears"], [2025, 2024])
+        self.assertEqual(selected_year_snapshot["availableYears"], [2025, 2024, 2023])
         self.assertEqual(selected_year_snapshot["lots"], [])
         snapshot_rows = {row["code"]: row for row in snapshot["kennzahlRows"]}
         self.assertEqual(snapshot_rows["801"]["amountEurCents"], 4_000)

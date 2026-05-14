@@ -1502,6 +1502,40 @@ def _capital_gains_available_years(
     return years
 
 
+def _capital_gains_transaction_years(
+    conn: sqlite3.Connection,
+    profile_id: str,
+) -> list[int]:
+    rows = conn.execute(
+        """
+        SELECT DISTINCT substr(occurred_at, 1, 4) AS year
+        FROM transactions
+        WHERE profile_id = ?
+          AND excluded = 0
+          AND occurred_at IS NOT NULL
+          AND length(occurred_at) >= 4
+        ORDER BY year DESC
+        """,
+        (profile_id,),
+    ).fetchall()
+    years: list[int] = []
+    for row in rows:
+        year = row["year"] or ""
+        if str(year).isdigit():
+            years.append(int(year))
+    return years
+
+
+def _merge_report_years(*year_lists: list[int]) -> list[int]:
+    years = {
+        int(year)
+        for year_list in year_lists
+        for year in year_list
+        if 2009 <= int(year) <= 2100
+    }
+    return sorted(years, reverse=True)
+
+
 def _austrian_kennzahl_snapshot_rows(
     conn: sqlite3.Connection,
     profile: sqlite3.Row,
@@ -1673,7 +1707,10 @@ def build_capital_gains_snapshot(
         """,
         (profile["id"],),
     ).fetchall()
-    available_years = _capital_gains_available_years(conn, profile["id"])
+    available_years = _merge_report_years(
+        _capital_gains_available_years(conn, profile["id"]),
+        _capital_gains_transaction_years(conn, profile["id"]),
+    )
     primary_years = _capital_gains_available_years(
         conn,
         profile["id"],
