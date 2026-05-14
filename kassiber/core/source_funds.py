@@ -14,7 +14,7 @@ from ..errors import AppError
 from ..msat import btc_to_msat, dec, msat_to_btc
 from ..source_funds_pdf_report import write_source_funds_pdf
 from ..time_utils import UNKNOWN_OCCURRED_AT, now_iso, parse_timestamp
-from ..wallet_descriptors import normalize_asset_code
+from ..wallet_descriptors import normalize_asset_code, normalize_chain, normalize_network
 from .source_funds_hints import enrich_findings_with_next_steps
 
 
@@ -73,8 +73,11 @@ PROVIDER_EVIDENCE_KEYS = PROVIDER_UNIQUE_KEYS + PROVIDER_BROAD_KEYS
 SUGGESTION_WRITE_CAP = 500
 _PUBLIC_TXID_RE = re.compile(r"^[0-9a-fA-F]{64}$")
 _PUBLIC_EXPLORER_BASES = {
-    "bitcoin": ("mempool.space", "https://mempool.space"),
-    "liquid": ("Liquid Network", "https://liquid.network"),
+    ("bitcoin", "main"): ("mempool.space", "https://mempool.space"),
+    ("bitcoin", "test"): ("mempool.space testnet", "https://mempool.space/testnet"),
+    ("bitcoin", "signet"): ("mempool.space signet", "https://mempool.space/signet"),
+    ("liquid", "liquidv1"): ("Liquid Network", "https://liquid.network"),
+    ("liquid", "liquidtestnet"): ("Liquid Network Testnet", "https://liquid.network/testnet"),
 }
 # Hard cap for build_report's max_depth so a caller cannot run an
 # unbounded BFS through transaction history. Real audit chains are
@@ -254,18 +257,42 @@ def _public_tx_id(row: Mapping[str, Any], reveal_mode: str, *, is_target: bool =
     return row["external_id"] or row["id"]
 
 
-def _public_explorer_network(asset: Any) -> str:
-    return "liquid" if normalize_asset_code(str(asset or "")) == "LBTC" else "bitcoin"
+def _wallet_chain_network(config_json: Any, asset: Any) -> tuple[str, str]:
+    config = {}
+    if config_json:
+        try:
+            loaded = json.loads(str(config_json))
+            if isinstance(loaded, dict):
+                config = loaded
+        except (TypeError, ValueError, json.JSONDecodeError):
+            return "", ""
+    chain_hint = config.get("chain") or (
+        "liquid" if normalize_asset_code(str(asset or "")) == "LBTC" else "bitcoin"
+    )
+    try:
+        chain = normalize_chain(chain_hint)
+        network = normalize_network(chain, config.get("network"))
+    except ValueError:
+        return "", ""
+    return chain, network
 
 
-def _public_explorer_link(txid: str, asset: Any) -> dict[str, Any] | None:
+def _public_explorer_link(
+    txid: str,
+    asset: Any,
+    wallet_config_json: Any = None,
+) -> dict[str, Any] | None:
     if not _PUBLIC_TXID_RE.fullmatch(str(txid or "").strip()):
         return None
-    network = _public_explorer_network(asset)
-    label, base_url = _PUBLIC_EXPLORER_BASES[network]
+    chain, network = _wallet_chain_network(wallet_config_json, asset)
+    explorer = _PUBLIC_EXPLORER_BASES.get((chain, network))
+    if not explorer:
+        return None
+    label, base_url = explorer
     return {
         "txid": txid,
         "asset": normalize_asset_code(str(asset or "")) or "BTC",
+        "chain": chain,
         "network": network,
         "label": label,
         "url": f"{base_url}/tx/{txid}",
@@ -448,7 +475,7 @@ def _link_row_to_dict(conn: sqlite3.Connection, row: Mapping[str, Any]) -> dict[
 def _transaction_by_id(conn: sqlite3.Connection, profile_id: str, tx_id: str):
     return conn.execute(
         """
-        SELECT t.*, w.label AS wallet_label
+        SELECT t.*, w.label AS wallet_label, w.config_json AS wallet_config_json
         FROM transactions t
         JOIN wallets w ON w.id = t.wallet_id
         WHERE t.profile_id = ? AND t.id = ?
@@ -2050,7 +2077,11 @@ def build_report(
         disclosed_txid = _public_tx_id(tx, mode, is_target=is_target_tx)
         if disclosed_txid:
             disclosure_txids.add(disclosed_txid)
-            explorer_link = _public_explorer_link(disclosed_txid, tx["asset"])
+            explorer_link = _public_explorer_link(
+                disclosed_txid,
+                tx["asset"],
+                tx["wallet_config_json"],
+            )
             if explorer_link:
                 explorer_links_by_txid[disclosed_txid] = explorer_link
         if tx["fiat_value"] is None and tx["fiat_rate"] is None:

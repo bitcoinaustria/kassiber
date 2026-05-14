@@ -95,8 +95,15 @@ class SourceFundsCliTest(unittest.TestCase):
         self.assertEqual(payload["kind"], "error")
         return payload
 
-    def _create_wallet_and_import(self, label: str, csv_name: str):
-        self.cli(
+    def _create_wallet_and_import(
+        self,
+        label: str,
+        csv_name: str,
+        *,
+        chain: str | None = None,
+        network: str | None = None,
+    ):
+        create_args = [
             "wallets",
             "create",
             "--workspace",
@@ -107,7 +114,12 @@ class SourceFundsCliTest(unittest.TestCase):
             label,
             "--kind",
             "custom",
-        )
+        ]
+        if chain:
+            create_args.extend(["--chain", chain])
+        if network:
+            create_args.extend(["--network", network])
+        self.cli(*create_args)
         self.cli(
             "wallets",
             "import-csv",
@@ -1215,6 +1227,126 @@ class SourceFundsCliTest(unittest.TestCase):
         pdf_bytes = pdf_path.read_bytes()
         self.assertIn(f"https://mempool.space/tx/{exchange_withdraw_txid}".encode(), pdf_bytes)
         self.assertIn(f"https://mempool.space/tx/{cold_consolidation_txid}".encode(), pdf_bytes)
+
+    def test_explorer_links_follow_wallet_network_config(self):
+        self._init_default_workspace()
+
+        def report_for_wallet(
+            *,
+            wallet: str,
+            txid: str,
+            asset: str,
+            chain: str,
+            network: str,
+        ) -> dict:
+            csv_name = f"{wallet.lower().replace(' ', '-')}.csv"
+            self._write_csv(
+                csv_name,
+                "date,txid,direction,asset,amount,fee,fiat_rate,description\n"
+                f"2026-05-01T09:00:00Z,{txid},inbound,{asset},0.10000000,0,50000,Network target\n",
+            )
+            if chain == "liquid":
+                self._create_wallet_and_import(wallet, csv_name)
+                with self._db() as conn:
+                    conn.execute(
+                        """
+                        UPDATE wallets
+                        SET config_json = ?
+                        WHERE label = ?
+                        """,
+                        (json.dumps({"chain": chain, "network": network}), wallet),
+                    )
+            else:
+                self._create_wallet_and_import(wallet, csv_name, chain=chain, network=network)
+            source = self.cli(
+                "source-funds",
+                "sources",
+                "create",
+                "--workspace",
+                "Sof",
+                "--profile",
+                "Default",
+                "--type",
+                "fiat_purchase",
+                "--label",
+                f"{wallet} source",
+                "--asset",
+                asset,
+                "--amount",
+                "0.10000000",
+            )["data"]
+            self.cli(
+                "source-funds",
+                "links",
+                "create",
+                "--workspace",
+                "Sof",
+                "--profile",
+                "Default",
+                "--from-source",
+                source["id"],
+                "--to-transaction",
+                txid,
+                "--type",
+                "manual_source",
+                "--allocation-amount",
+                "0.10000000",
+                "--allocation-policy",
+                "explicit",
+            )
+            return self._source_funds_report_for_target(
+                target=txid,
+                amount="0.10000000",
+                reveal_mode="standard",
+            )
+
+        bitcoin_testnet_txid = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        bitcoin_signet_txid = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+        bitcoin_regtest_txid = "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+        liquid_txid = "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+
+        testnet = report_for_wallet(
+            wallet="Bitcoin Testnet",
+            txid=bitcoin_testnet_txid,
+            asset="BTC",
+            chain="bitcoin",
+            network="testnet",
+        )
+        signet = report_for_wallet(
+            wallet="Bitcoin Signet",
+            txid=bitcoin_signet_txid,
+            asset="BTC",
+            chain="bitcoin",
+            network="signet",
+        )
+        regtest = report_for_wallet(
+            wallet="Bitcoin Regtest",
+            txid=bitcoin_regtest_txid,
+            asset="BTC",
+            chain="bitcoin",
+            network="regtest",
+        )
+        liquid = report_for_wallet(
+            wallet="Liquid Main",
+            txid=liquid_txid,
+            asset="L-BTC",
+            chain="liquid",
+            network="main",
+        )
+
+        self.assertEqual(
+            testnet["disclosure_preview"]["explorer_links"][0]["url"],
+            f"https://mempool.space/testnet/tx/{bitcoin_testnet_txid}",
+        )
+        self.assertEqual(
+            signet["disclosure_preview"]["explorer_links"][0]["url"],
+            f"https://mempool.space/signet/tx/{bitcoin_signet_txid}",
+        )
+        self.assertEqual(regtest["disclosure_preview"]["explorer_links"], [])
+        self.assertEqual(
+            liquid["disclosure_preview"]["explorer_links"][0]["url"],
+            f"https://liquid.network/tx/{liquid_txid}",
+        )
 
     def test_export_case_uses_frozen_snapshot_after_live_mutation(self):
         self._seed_exportable_disclosure_path()

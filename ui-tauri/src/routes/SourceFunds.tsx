@@ -282,6 +282,7 @@ type SourceFundsPreview = {
     explorer_links?: {
       txid: string;
       asset?: string;
+      chain?: string;
       network?: string;
       label: string;
       url: string;
@@ -762,6 +763,7 @@ export function SourceFunds() {
     explanation: "",
     attachment_id: NO_ATTACHMENT,
   });
+  const [linkFormSourceId, setLinkFormSourceId] = useState("");
   const [sourceForm, setSourceForm] = useState({
     source_type: "fiat_purchase",
     label: "",
@@ -1079,8 +1081,17 @@ export function SourceFunds() {
   }, [selectedTarget]);
 
   useEffect(() => {
-    if (!selectedLink) return;
+    if (!selectedLink) {
+      if (linkFormSourceId) {
+        setLinkFormSourceId("");
+      }
+      return;
+    }
+    if (selectedLink.id === linkFormSourceId) {
+      return;
+    }
     setSelectedLinkId(selectedLink.id);
+    setLinkFormSourceId(selectedLink.id);
     setLinkForm({
       link_type: selectedLink.link_type,
       confidence: selectedLink.confidence,
@@ -1095,7 +1106,7 @@ export function SourceFunds() {
       explanation: selectedLink.explanation ?? "",
       attachment_id: NO_ATTACHMENT,
     });
-  }, [selectedLink]);
+  }, [selectedLink, linkFormSourceId]);
 
   const txName = (id?: string | null) => {
     const row = id ? txById.get(id) : undefined;

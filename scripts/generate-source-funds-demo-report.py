@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -68,208 +69,244 @@ def _tx_id(data_root: Path, wallet: str, external_id: str) -> str:
     return matches[0]["id"]
 
 
-def build_demo(output_pdf: Path, output_json: Path, data_root: Path | None = None) -> dict[str, Any]:
-    data_root = data_root or Path(tempfile.mkdtemp(prefix="kassiber-source-funds-demo-data-"))
+def build_demo(
+    output_pdf: Path,
+    output_json: Path,
+    data_root: Path | None = None,
+    *,
+    keep_workdir: bool = False,
+) -> dict[str, Any]:
+    owns_data_root = data_root is None
+    data_root = data_root or Path(
+        tempfile.mkdtemp(prefix="kassiber-source-funds-demo-data-")
+    )
     inputs = Path(tempfile.mkdtemp(prefix="kassiber-source-funds-demo-inputs-"))
-    evidence = inputs / "fictitious-exchange-statement.txt"
-    _write(
-        evidence,
-        "Fictitious exchange statement for a demo Mittelherkunftsnachweis.\n"
-        "Customer: Example Person\n"
-        "Purchase: 0.30000000 BTC funded from EUR salary savings.\n",
-    )
-    csvs = {
-        "exchange.csv": (
-            "date,txid,direction,asset,amount,fee,fiat_rate,description\n"
-            f"2025-03-01T09:00:00Z,{EXCHANGE_WITHDRAW_TXID},outbound,BTC,0.30010000,0.00010000,55000,"
-            "Fictitious exchange withdrawal to self custody\n"
-        ),
-        "cold.csv": (
-            "date,txid,direction,asset,amount,fee,fiat_rate,description\n"
-            f"2025-03-01T09:30:00Z,{EXCHANGE_WITHDRAW_TXID},inbound,BTC,0.30000000,0,55000,"
-            "Received in cold storage\n"
-            f"2025-11-06T08:45:00Z,{COLD_CONSOLIDATION_TXID},outbound,BTC,0.15005000,0.00005000,70000,"
-            "Reviewed consolidation spend from cold storage\n"
-        ),
-        "target.csv": (
-            "date,txid,direction,asset,amount,fee,fiat_rate,description\n"
-            f"2025-11-06T09:10:00Z,{COLD_CONSOLIDATION_TXID},inbound,BTC,0.15000000,0,70000,"
-            "Fictitious target broker deposit\n"
-        ),
-    }
-    for name, content in csvs.items():
-        _write(inputs / name, content)
+    try:
+        evidence = inputs / "fictitious-exchange-statement.txt"
+        _write(
+            evidence,
+            "Fictitious exchange statement for a demo Mittelherkunftsnachweis.\n"
+            "Customer: Example Person\n"
+            "Purchase: 0.30000000 BTC funded from EUR salary savings.\n",
+        )
+        csvs = {
+            "exchange.csv": (
+                "date,txid,direction,asset,amount,fee,fiat_rate,description\n"
+                f"2025-03-01T09:00:00Z,{EXCHANGE_WITHDRAW_TXID},outbound,BTC,0.30010000,0.00010000,55000,"
+                "Fictitious exchange withdrawal to self custody\n"
+            ),
+            "cold.csv": (
+                "date,txid,direction,asset,amount,fee,fiat_rate,description\n"
+                f"2025-03-01T09:30:00Z,{EXCHANGE_WITHDRAW_TXID},inbound,BTC,0.30000000,0,55000,"
+                "Received in cold storage\n"
+                f"2025-11-06T08:45:00Z,{COLD_CONSOLIDATION_TXID},outbound,BTC,0.15005000,0.00005000,70000,"
+                "Reviewed consolidation spend from cold storage\n"
+            ),
+            "target.csv": (
+                "date,txid,direction,asset,amount,fee,fiat_rate,description\n"
+                f"2025-11-06T09:10:00Z,{COLD_CONSOLIDATION_TXID},inbound,BTC,0.15000000,0,70000,"
+                "Fictitious target broker deposit\n"
+            ),
+        }
+        for name, content in csvs.items():
+            _write(inputs / name, content)
 
-    _run_cli(data_root, "init")
-    _run_cli(data_root, "workspaces", "create", "Demo")
-    _run_cli(
-        data_root,
-        "profiles",
-        "create",
-        "--workspace",
-        "Demo",
-        "--fiat-currency",
-        "EUR",
-        "--tax-country",
-        "at",
-        "Austria Demo",
-    )
-    for wallet, csv_name in (
-        ("Example Exchange", "exchange.csv"),
-        ("Cold Storage", "cold.csv"),
-        ("Target Broker", "target.csv"),
-    ):
+        _run_cli(data_root, "init")
+        _run_cli(data_root, "workspaces", "create", "Demo")
         _run_cli(
             data_root,
-            "wallets",
+            "profiles",
             "create",
             "--workspace",
             "Demo",
-            "--profile",
+            "--fiat-currency",
+            "EUR",
+            "--tax-country",
+            "at",
             "Austria Demo",
-            "--label",
-            wallet,
-            "--kind",
-            "custom",
         )
-        _run_cli(
+        for wallet, csv_name in (
+            ("Example Exchange", "exchange.csv"),
+            ("Cold Storage", "cold.csv"),
+            ("Target Broker", "target.csv"),
+        ):
+            _run_cli(
+                data_root,
+                "wallets",
+                "create",
+                "--workspace",
+                "Demo",
+                "--profile",
+                "Austria Demo",
+                "--label",
+                wallet,
+                "--kind",
+                "custom",
+            )
+            _run_cli(
+                data_root,
+                "wallets",
+                "import-csv",
+                "--workspace",
+                "Demo",
+                "--profile",
+                "Austria Demo",
+                "--wallet",
+                wallet,
+                "--file",
+                str(inputs / csv_name),
+            )
+
+        exchange_out = _tx_id(data_root, "Example Exchange", EXCHANGE_WITHDRAW_TXID)
+        cold_in = _tx_id(data_root, "Cold Storage", EXCHANGE_WITHDRAW_TXID)
+        cold_out = _tx_id(data_root, "Cold Storage", COLD_CONSOLIDATION_TXID)
+        target_in = _tx_id(data_root, "Target Broker", COLD_CONSOLIDATION_TXID)
+
+        attachment = _run_cli(
             data_root,
-            "wallets",
-            "import-csv",
+            "attachments",
+            "add",
             "--workspace",
             "Demo",
             "--profile",
             "Austria Demo",
-            "--wallet",
-            wallet,
+            "--transaction",
+            exchange_out,
             "--file",
-            str(inputs / csv_name),
+            str(evidence),
+            "--label",
+            "Fictitious EUR purchase statement",
         )
-
-    exchange_out = _tx_id(data_root, "Example Exchange", EXCHANGE_WITHDRAW_TXID)
-    cold_in = _tx_id(data_root, "Cold Storage", EXCHANGE_WITHDRAW_TXID)
-    cold_out = _tx_id(data_root, "Cold Storage", COLD_CONSOLIDATION_TXID)
-    target_in = _tx_id(data_root, "Target Broker", COLD_CONSOLIDATION_TXID)
-
-    attachment = _run_cli(
-        data_root,
-        "attachments",
-        "add",
-        "--workspace",
-        "Demo",
-        "--profile",
-        "Austria Demo",
-        "--transaction",
-        exchange_out,
-        "--file",
-        str(evidence),
-        "--label",
-        "Fictitious EUR purchase statement",
-    )
-    source = _run_cli(
-        data_root,
-        "source-funds",
-        "sources",
-        "create",
-        "--workspace",
-        "Demo",
-        "--profile",
-        "Austria Demo",
-        "--type",
-        "fiat_purchase",
-        "--label",
-        "Fictitious EUR salary-funded BTC purchase",
-        "--asset",
-        "BTC",
-        "--amount",
-        "0.30000000",
-        "--fiat-currency",
-        "EUR",
-        "--fiat-value",
-        "16500",
-        "--acquired-at",
-        "2025-02-20T10:00:00Z",
-        "--attachment",
-        attachment["id"],
-    )
-    links = (
-        ("--from-source", source["id"], exchange_out, "manual_source", "0.15005000", None),
-        ("--from-transaction", exchange_out, cold_in, "self_transfer", "0.15005000", "0.15005000"),
-        ("--from-transaction", cold_in, cold_out, "self_transfer", "0.15005000", "0.15005000"),
-        ("--from-transaction", cold_out, target_in, "self_transfer", "0.15000000", "0.15005000"),
-    )
-    for from_arg, from_ref, to_ref, link_type, allocation, from_amount in links:
-        args = [
+        source = _run_cli(
+            data_root,
             "source-funds",
-            "links",
+            "sources",
             "create",
             "--workspace",
             "Demo",
             "--profile",
             "Austria Demo",
-            from_arg,
-            from_ref,
-            "--to-transaction",
-            to_ref,
             "--type",
-            link_type,
-            "--allocation-amount",
-            allocation,
-            "--allocation-policy",
-            "explicit",
-        ]
-        if from_amount:
-            args.extend(["--from-amount", from_amount])
-        _run_cli(data_root, *args)
+            "fiat_purchase",
+            "--label",
+            "Fictitious EUR salary-funded BTC purchase",
+            "--asset",
+            "BTC",
+            "--amount",
+            "0.30000000",
+            "--fiat-currency",
+            "EUR",
+            "--fiat-value",
+            "16500",
+            "--acquired-at",
+            "2025-02-20T10:00:00Z",
+            "--attachment",
+            attachment["id"],
+        )
+        links = (
+            ("--from-source", source["id"], exchange_out, "manual_source", "0.15005000", None),
+            (
+                "--from-transaction",
+                exchange_out,
+                cold_in,
+                "self_transfer",
+                "0.15005000",
+                "0.15005000",
+            ),
+            (
+                "--from-transaction",
+                cold_in,
+                cold_out,
+                "self_transfer",
+                "0.15005000",
+                "0.15005000",
+            ),
+            (
+                "--from-transaction",
+                cold_out,
+                target_in,
+                "self_transfer",
+                "0.15000000",
+                "0.15005000",
+            ),
+        )
+        for from_arg, from_ref, to_ref, link_type, allocation, from_amount in links:
+            args = [
+                "source-funds",
+                "links",
+                "create",
+                "--workspace",
+                "Demo",
+                "--profile",
+                "Austria Demo",
+                from_arg,
+                from_ref,
+                "--to-transaction",
+                to_ref,
+                "--type",
+                link_type,
+                "--allocation-amount",
+                allocation,
+                "--allocation-policy",
+                "explicit",
+            ]
+            if from_amount:
+                args.extend(["--from-amount", from_amount])
+            _run_cli(data_root, *args)
 
-    report = _run_cli(
-        data_root,
-        "reports",
-        "source-funds",
-        "--workspace",
-        "Demo",
-        "--profile",
-        "Austria Demo",
-        "--target-transaction",
-        target_in,
-        "--target-amount",
-        "0.15000000",
-        "--purpose",
-        "planned_exchange_sale",
-        "--planned-destination",
-        "Example Broker Austria",
-        "--planned-note",
-        "Fictitious AT/EUR source-of-funds demo report.",
-        "--reveal-mode",
-        "standard",
-        "--case-label",
-        "Fictitious AT/EUR source-of-funds demo",
-        "--save-case",
-    )
-    output_json.parent.mkdir(parents=True, exist_ok=True)
-    output_json.write_text(json.dumps(report, indent=2, sort_keys=True), encoding="utf-8")
-    export = _run_cli(
-        data_root,
-        "reports",
-        "export-source-funds-pdf",
-        "--workspace",
-        "Demo",
-        "--profile",
-        "Austria Demo",
-        "--case",
-        report["case"]["id"],
-        "--file",
-        str(output_pdf),
-    )
-    return {
-        "pdf": str(output_pdf),
-        "json": str(output_json),
-        "data_root": str(data_root),
-        "inputs": str(inputs),
-        "case_id": report["case"]["id"],
-        "snapshot_hash": report["case"]["snapshot_hash"],
-        "pages": export["pages"],
-    }
+        report = _run_cli(
+            data_root,
+            "reports",
+            "source-funds",
+            "--workspace",
+            "Demo",
+            "--profile",
+            "Austria Demo",
+            "--target-transaction",
+            target_in,
+            "--target-amount",
+            "0.15000000",
+            "--purpose",
+            "planned_exchange_sale",
+            "--planned-destination",
+            "Example Broker Austria",
+            "--planned-note",
+            "Fictitious AT/EUR source-of-funds demo report.",
+            "--reveal-mode",
+            "standard",
+            "--case-label",
+            "Fictitious AT/EUR source-of-funds demo",
+            "--save-case",
+        )
+        output_json.parent.mkdir(parents=True, exist_ok=True)
+        output_json.write_text(json.dumps(report, indent=2, sort_keys=True), encoding="utf-8")
+        export = _run_cli(
+            data_root,
+            "reports",
+            "export-source-funds-pdf",
+            "--workspace",
+            "Demo",
+            "--profile",
+            "Austria Demo",
+            "--case",
+            report["case"]["id"],
+            "--file",
+            str(output_pdf),
+        )
+        return {
+            "pdf": str(output_pdf),
+            "json": str(output_json),
+            "data_root": str(data_root) if keep_workdir or not owns_data_root else "(cleaned up)",
+            "inputs": str(inputs) if keep_workdir else "(cleaned up)",
+            "case_id": report["case"]["id"],
+            "snapshot_hash": report["case"]["snapshot_hash"],
+            "pages": export["pages"],
+        }
+    finally:
+        if not keep_workdir:
+            shutil.rmtree(inputs, ignore_errors=True)
+            if owns_data_root:
+                shutil.rmtree(data_root, ignore_errors=True)
 
 
 def main() -> int:
@@ -286,9 +323,23 @@ def main() -> int:
         default=Path("/tmp/kassiber-source-funds-demo.json"),
         help="Saved report snapshot JSON output path.",
     )
-    parser.add_argument("--data-root", type=Path, help="Optional Kassiber data root to populate.")
+    parser.add_argument(
+        "--data-root",
+        type=Path,
+        help="Optional Kassiber data root to populate and retain.",
+    )
+    parser.add_argument(
+        "--keep-workdir",
+        action="store_true",
+        help="Keep generated temporary CSV/evidence inputs and the default temporary data root for inspection.",
+    )
     args = parser.parse_args()
-    result = build_demo(args.output, args.json_output, args.data_root)
+    result = build_demo(
+        args.output,
+        args.json_output,
+        args.data_root,
+        keep_workdir=args.keep_workdir,
+    )
     print(json.dumps(result, indent=2))
     return 0
 

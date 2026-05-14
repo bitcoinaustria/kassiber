@@ -504,6 +504,10 @@ uv run python scripts/generate-source-funds-demo-report.py \
   --json-output /tmp/kassiber-source-funds-demo.json
 ```
 
+The demo generator removes its temporary CSV/evidence inputs and default
+temporary data root after a successful run. Pass `--keep-workdir` or provide
+`--data-root` when you want to inspect the generated working data.
+
 ## Docs
 
 Reference docs:
