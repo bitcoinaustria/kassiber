@@ -22,6 +22,7 @@ import {
   Wallet,
 } from "lucide-react";
 
+import { ScreenSkeleton } from "@/components/kb/ScreenSkeleton";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -191,11 +192,7 @@ export function ConnectionDetail() {
   const hideSensitive = useUiStore((state) => state.hideSensitive);
 
   if (isLoading || !data?.data) {
-    return (
-      <div className="flex flex-1 items-center justify-center text-sm text-muted-foreground">
-        Loading connection...
-      </div>
-    );
+    return <ScreenSkeleton titleWidth="w-44" />;
   }
 
   const snapshot = data.data;

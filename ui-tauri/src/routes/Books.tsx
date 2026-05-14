@@ -20,6 +20,7 @@ import {
   Wallet,
 } from "lucide-react";
 
+import { ScreenSkeleton } from "@/components/kb/ScreenSkeleton";
 import { useDaemon, useDaemonMutation } from "@/daemon/client";
 import { Button } from "@/components/ui/button";
 import {
@@ -56,11 +57,7 @@ export function Books() {
   );
 
   if (isLoading || !data?.data) {
-    return (
-      <div className="flex flex-1 items-center justify-center text-sm text-muted-foreground">
-        Loading books...
-      </div>
-    );
+    return <ScreenSkeleton titleWidth="w-28" metricCount={3} />;
   }
 
   return <BooksView snapshot={data.data} />;

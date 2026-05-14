@@ -4,6 +4,7 @@ import {
   ReviewDataTable,
   type ReviewTableRow,
 } from "@/components/kb/ReviewDataTable";
+import { ScreenSkeleton } from "@/components/kb/ScreenSkeleton";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useDaemon } from "@/daemon/client";
@@ -74,11 +75,7 @@ export function JournalReportableEntries() {
     useJournalProcessingAction();
 
   if (isLoading) {
-    return (
-      <div className="flex flex-1 items-center justify-center text-sm text-muted-foreground">
-        Loading reportable entries...
-      </div>
-    );
+    return <ScreenSkeleton titleWidth="w-52" />;
   }
 
   if (isError || data?.error || !data?.data) {

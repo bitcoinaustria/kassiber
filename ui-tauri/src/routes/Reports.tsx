@@ -26,6 +26,7 @@ import {
   Sigma,
 } from "lucide-react";
 
+import { ScreenSkeleton } from "@/components/kb/ScreenSkeleton";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -237,30 +238,42 @@ export function Reports() {
     () => (selectedYear ? { year: selectedYear } : undefined),
     [selectedYear],
   );
-  const { data, isLoading } = useDaemon<CapitalGainsReport>(
-    "ui.reports.capital_gains",
-    reportArgs,
-    { staleTime: 0 },
-  );
+  const { data, isLoading, isFetching, isError, error } =
+    useDaemon<CapitalGainsReport>("ui.reports.capital_gains", reportArgs);
   const hideSensitive = useUiStore((s) => s.hideSensitive);
+  const returnedReportYear = data?.data?.year;
   const waitingForSelectedYear =
-    selectedYear !== null && data?.data?.year !== selectedYear;
+    selectedYear !== null &&
+    returnedReportYear !== undefined &&
+    returnedReportYear !== selectedYear;
 
-  if (isLoading || waitingForSelectedYear) {
-    return (
-      <div className="flex flex-1 items-center justify-center text-sm text-muted-foreground">
-        Loading reports...
-      </div>
-    );
+  if (isLoading || (waitingForSelectedYear && isFetching)) {
+    return <ScreenSkeleton titleWidth="w-48" />;
   }
 
-  if (data?.error || !data?.data) {
+  if (waitingForSelectedYear) {
     return (
       <div className={screenPanelClassName}>
         <div className="rounded-xl border bg-card p-4">
           <h2 className="text-base font-semibold">Reports unavailable</h2>
           <p className="mt-1 text-sm text-muted-foreground">
-            {data?.error?.message ?? "The daemon did not return report data."}
+            The daemon returned {returnedReportYear} while the selected tax year is{" "}
+            {selectedYear}.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  if (isError || data?.error || !data?.data) {
+    return (
+      <div className={screenPanelClassName}>
+        <div className="rounded-xl border bg-card p-4">
+          <h2 className="text-base font-semibold">Reports unavailable</h2>
+          <p className="mt-1 text-sm text-muted-foreground">
+            {error instanceof Error
+              ? error.message
+              : data?.error?.message ?? "The daemon did not return report data."}
           </p>
         </div>
       </div>

@@ -10,6 +10,7 @@ import {
 } from "lucide-react";
 
 import { JournalReportableEntries } from "@/components/kb/JournalReportableEntries";
+import { ScreenSkeleton } from "@/components/kb/ScreenSkeleton";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -80,11 +81,7 @@ export function Journals() {
     useJournalProcessingAction();
 
   if (isLoading) {
-    return (
-      <div className="flex flex-1 items-center justify-center text-sm text-muted-foreground">
-        Loading journals...
-      </div>
-    );
+    return <ScreenSkeleton titleWidth="w-32" />;
   }
 
   if (isError || data?.error || !data?.data) {

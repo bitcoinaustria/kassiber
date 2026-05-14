@@ -8,6 +8,7 @@ import { type KeyboardEvent, type ReactNode, useEffect, useState } from "react";
 import { Plus, RefreshCw, Wallet } from "lucide-react";
 import { useNavigate } from "@tanstack/react-router";
 
+import { ScreenSkeleton } from "@/components/kb/ScreenSkeleton";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -155,11 +156,7 @@ export function Connections() {
   };
 
   if (isLoading || !data?.data) {
-    return (
-      <div className="flex flex-1 items-center justify-center text-sm text-muted-foreground">
-        Loading connections...
-      </div>
-    );
+    return <ScreenSkeleton titleWidth="w-32" metricCount={3} />;
   }
 
   const snapshot = data.data;
