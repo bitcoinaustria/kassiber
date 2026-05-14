@@ -2,8 +2,11 @@ import {
   AlertTriangle,
   ArrowDownRight,
   ArrowLeftRight,
+  ArrowRight,
   ArrowUpRight,
+  ChevronDown,
   Check,
+  ExternalLink,
   FileCheck,
   FileDown,
   GitBranch,
@@ -12,6 +15,7 @@ import {
   RefreshCw,
   Search,
   ShieldAlert,
+  SlidersHorizontal,
   X,
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
@@ -25,10 +29,16 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { useDaemon, useDaemonMutation } from "@/daemon/client";
+import { openExternalUrl } from "@/daemon/transport";
 import { screenShellClassName } from "@/lib/screen-layout";
 import { sourceFundsExportArgs } from "@/lib/sourceFundsExport";
 import { useUiStore } from "@/store/ui";
@@ -158,6 +168,7 @@ type SourceFundsPreview = {
   target: {
     transaction_id: string;
     label: string;
+    wallet?: string;
     asset: string;
     required_amount: number;
     external_id?: string;
@@ -167,7 +178,94 @@ type SourceFundsPreview = {
     nodes: Record<string, unknown>[];
     edges: Record<string, unknown>[];
   };
-  source_mix: { source_type: string; amount: number; count: number }[];
+  source_mix: {
+    source_type: string;
+    amount: number;
+    amount_msat?: number;
+    count: number;
+    percent_of_target?: number;
+  }[];
+  report_context?: {
+    tax_country?: string;
+    fiat_currency?: string;
+    jurisdiction_label?: string;
+    template_key?: string;
+    report_title?: string;
+    report_subtitle?: string;
+  };
+  overview?: {
+    target_label?: string;
+    target_asset?: string;
+    target_amount?: number;
+    target_fiat_value?: number | null;
+    target_fiat_currency?: string;
+    target_date?: string;
+    target_wallet?: string;
+    time_range?: {
+      start?: string;
+      end?: string;
+    };
+    transaction_count?: number;
+    link_count?: number;
+    root_source_count?: number;
+    source_category_count?: number;
+    data_source_count?: number;
+    blocker_count?: number;
+    warning_count?: number;
+  };
+  narrative?: {
+    generated_by?: string;
+    paragraphs?: string[];
+  };
+  data_sources?: {
+    label: string;
+    kind: string;
+    transaction_count: number;
+    source_count: number;
+    assets: string[];
+    first_seen?: string;
+    last_seen?: string;
+  }[];
+  simplified_flow?: {
+    note?: string;
+    deferred_privacy_hops?: unknown[];
+    levels: {
+      level?: number;
+      role?: string;
+      distance_to_target?: number;
+      nodes: {
+        id: string;
+        node_type?: string;
+        kind?: string;
+        label?: string;
+        wallet?: string;
+        asset?: string;
+        amount?: number | null;
+        occurred_at?: string;
+        deferred_privacy_hop?: boolean;
+      }[];
+    }[];
+    edges?: Record<string, unknown>[];
+  };
+  flow_levels?: {
+    level: number;
+    role: string;
+    transaction_count: number;
+    source_count: number;
+    nodes: {
+      id: string;
+      node_type: string;
+      label: string;
+      wallet?: string;
+      source_type?: string;
+      asset?: string;
+      required_amount?: number | null;
+      amount?: number | null;
+      occurred_at?: string;
+      acquired_at?: string;
+      external_id?: string;
+    }[];
+  }[];
   case?: {
     id: string;
     status: string;
@@ -181,6 +279,13 @@ type SourceFundsPreview = {
   };
   disclosure_preview: {
     txids: string[];
+    explorer_links?: {
+      txid: string;
+      asset?: string;
+      network?: string;
+      label: string;
+      url: string;
+    }[];
     attachments: { id: string; label: string; attachment_type?: string }[];
     privacy_note: string;
     excluded: string[];
@@ -450,6 +555,11 @@ function formatBtc(value: number | null | undefined, asset = "BTC") {
   return `${value.toFixed(8)} ${asset}`;
 }
 
+function formatDateTime(value?: string | null) {
+  if (!value) return "-";
+  return value.replace("T", " ").replace("Z", "").slice(0, 16);
+}
+
 function pretty(value: string) {
   return value.replaceAll("_", " ");
 }
@@ -672,6 +782,10 @@ export function SourceFunds() {
     explanation: "",
     attachment_id: NO_ATTACHMENT,
   });
+  const [showCoverage, setShowCoverage] = useState(false);
+  const [showAdvancedTargetFilters, setShowAdvancedTargetFilters] =
+    useState(false);
+  const [showAdvancedReview, setShowAdvancedReview] = useState(false);
 
   const transactions = useDaemon<unknown>("ui.transactions.list", { limit: 500 });
   const rows = useMemo(
@@ -737,6 +851,14 @@ export function SourceFunds() {
     setTargetAssetFilter("all");
     setTargetWalletFilter("all");
   };
+  const targetFiltersActive =
+    Boolean(targetSearch) ||
+    targetDirectionFilter !== "all" ||
+    targetDateFilter !== "all" ||
+    targetStatusFilter !== "all" ||
+    targetNetworkFilter !== "all" ||
+    targetAssetFilter !== "all" ||
+    targetWalletFilter !== "all";
   const selectedTarget = target || txRef(rows[0] ?? {});
   const selectedTx = rows.find((row) => txRef(row) === selectedTarget) ?? rows[0];
   const selectedTxId = selectedTx?.id || selectedTx?.transaction_id || "";
@@ -824,9 +946,18 @@ export function SourceFunds() {
     if (!args) return;
     exportPdf.mutate(args);
   };
-  const links = linksQuery.data?.data?.links ?? [];
-  const sources = sourcesQuery.data?.data?.sources ?? [];
-  const evidence = evidenceQuery.data?.data?.attachments ?? [];
+  const links = useMemo(
+    () => linksQuery.data?.data?.links ?? [],
+    [linksQuery.data],
+  );
+  const sources = useMemo(
+    () => sourcesQuery.data?.data?.sources ?? [],
+    [sourcesQuery.data],
+  );
+  const evidence = useMemo(
+    () => evidenceQuery.data?.data?.attachments ?? [],
+    [evidenceQuery.data],
+  );
   const blockers = report?.explain_gates.blockers ?? [];
   const warnings = report?.explain_gates.warnings ?? [];
   const reachableLinkIds = useMemo(() => {
@@ -964,7 +1095,7 @@ export function SourceFunds() {
       explanation: selectedLink.explanation ?? "",
       attachment_id: NO_ATTACHMENT,
     });
-  }, [selectedLink?.id]);
+  }, [selectedLink]);
 
   const txName = (id?: string | null) => {
     const row = id ? txById.get(id) : undefined;
@@ -1108,7 +1239,18 @@ export function SourceFunds() {
     <div className={screenShellClassName}>
       <div className="grid gap-4">
         <div className="space-y-4">
-          <CoveragePanel coverage={coverageQuery.data?.data} loading={coverageQuery.isLoading} />
+          <OptionalSection
+            open={showCoverage}
+            onOpenChange={setShowCoverage}
+            icon={<GitBranch className="size-4" aria-hidden="true" />}
+            title="Historical inbound coverage"
+            summary={coverageSummary(coverageQuery.data?.data)}
+          >
+            <CoveragePanel
+              coverage={coverageQuery.data?.data}
+              loading={coverageQuery.isLoading}
+            />
+          </OptionalSection>
           <Card>
             <CardHeader className="border-b">
               <CardTitle className="flex items-center gap-2">
@@ -1197,113 +1339,146 @@ export function SourceFunds() {
                           {filteredTargetRows.length} of {rows.length} transactions
                         </div>
                       </div>
-                      <div className="flex flex-wrap gap-2">
-                        <div className="relative min-w-[220px] flex-1">
-                          <Search
-                            className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
-                            aria-hidden="true"
-                          />
-                          <Input
-                            type="search"
-                            value={targetSearch}
-                            onChange={(event) => setTargetSearch(event.target.value)}
-                            placeholder="Search txid, wallet, note..."
-                            className="h-9 pl-9"
-                          />
-                        </div>
-                        <select
-                          className="h-9 rounded-md border bg-background px-3 text-sm"
-                          value={targetDirectionFilter}
-                          onChange={(event) => setTargetDirectionFilter(event.target.value)}
-                          aria-label="Filter by direction"
-                        >
-                          <option value="all">All flows</option>
-                          <option value="incoming">Incoming</option>
-                          <option value="outgoing">Outgoing</option>
-                          <option value="transfer">Transfer</option>
-                          <option value="swap">Swap</option>
-                        </select>
-                        <select
-                          className="h-9 rounded-md border bg-background px-3 text-sm"
-                          value={targetDateFilter}
-                          onChange={(event) => setTargetDateFilter(event.target.value)}
-                          aria-label="Filter by date"
-                        >
-                          <option value="all">All dates</option>
-                          <option value="today">Today</option>
-                          <option value="yesterday">Yesterday</option>
-                          <option value="7days">Last 7 days</option>
-                          <option value="30days">Last 30 days</option>
-                          <option value="older">Older</option>
-                        </select>
-                        <select
-                          className="h-9 rounded-md border bg-background px-3 text-sm"
-                          value={targetStatusFilter}
-                          onChange={(event) => setTargetStatusFilter(event.target.value)}
-                          aria-label="Filter by status"
-                        >
-                          <option value="all">All statuses</option>
-                          <option value="confirmed">Confirmed</option>
-                          <option value="pending">Pending</option>
-                          <option value="review">Needs review</option>
-                        </select>
-                        <select
-                          className="h-9 rounded-md border bg-background px-3 text-sm"
-                          value={targetNetworkFilter}
-                          onChange={(event) => setTargetNetworkFilter(event.target.value)}
-                          aria-label="Filter by network"
-                        >
-                          <option value="all">All networks</option>
-                          {targetNetworkOptions.map((network) => (
-                            <option key={network} value={network}>
-                              {network}
-                            </option>
-                          ))}
-                        </select>
-                        <select
-                          className="h-9 rounded-md border bg-background px-3 text-sm"
-                          value={targetAssetFilter}
-                          onChange={(event) => setTargetAssetFilter(event.target.value)}
-                          aria-label="Filter by asset"
-                        >
-                          <option value="all">All assets</option>
-                          {targetAssetOptions.map((asset) => (
-                            <option key={asset} value={asset}>
-                              {asset}
-                            </option>
-                          ))}
-                        </select>
-                        <select
-                          className="h-9 max-w-[190px] rounded-md border bg-background px-3 text-sm"
-                          value={targetWalletFilter}
-                          onChange={(event) => setTargetWalletFilter(event.target.value)}
-                          aria-label="Filter by wallet"
-                        >
-                          <option value="all">All wallets</option>
-                          {targetWalletOptions.map((wallet) => (
-                            <option key={wallet} value={wallet}>
-                              {wallet}
-                            </option>
-                          ))}
-                        </select>
-                        {(targetSearch ||
-                          targetDirectionFilter !== "all" ||
-                          targetDateFilter !== "all" ||
-                          targetStatusFilter !== "all" ||
-                          targetNetworkFilter !== "all" ||
-                          targetAssetFilter !== "all" ||
-                          targetWalletFilter !== "all") && (
+                      <div className="space-y-3">
+                        <div className="flex flex-wrap gap-2">
+                          <div className="relative min-w-[220px] flex-1">
+                            <Search
+                              className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
+                              aria-hidden="true"
+                            />
+                            <Input
+                              type="search"
+                              value={targetSearch}
+                              onChange={(event) =>
+                                setTargetSearch(event.target.value)
+                              }
+                              placeholder="Search txid, wallet, note..."
+                              className="h-9 pl-9"
+                            />
+                          </div>
                           <Button
                             type="button"
                             variant="outline"
                             size="sm"
                             className="h-9"
-                            onClick={clearTargetFilters}
+                            onClick={() =>
+                              setShowAdvancedTargetFilters((open) => !open)
+                            }
+                            aria-expanded={showAdvancedTargetFilters}
                           >
-                            <X className="mr-2 size-4" aria-hidden="true" />
-                            Clear
+                            <SlidersHorizontal
+                              className="mr-2 size-4"
+                              aria-hidden="true"
+                            />
+                            Filters
                           </Button>
-                        )}
+                          {targetFiltersActive && (
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              className="h-9"
+                              onClick={clearTargetFilters}
+                            >
+                              <X className="mr-2 size-4" aria-hidden="true" />
+                              Clear
+                            </Button>
+                          )}
+                        </div>
+                        <Collapsible
+                          open={showAdvancedTargetFilters}
+                          onOpenChange={setShowAdvancedTargetFilters}
+                        >
+                          <CollapsibleContent className="grid gap-2 sm:grid-cols-2 xl:grid-cols-5">
+                            <select
+                              className="h-9 rounded-md border bg-background px-3 text-sm"
+                              value={targetDirectionFilter}
+                              onChange={(event) =>
+                                setTargetDirectionFilter(event.target.value)
+                              }
+                              aria-label="Filter by direction"
+                            >
+                              <option value="all">All flows</option>
+                              <option value="incoming">Incoming</option>
+                              <option value="outgoing">Outgoing</option>
+                              <option value="transfer">Transfer</option>
+                              <option value="swap">Swap</option>
+                            </select>
+                            <select
+                              className="h-9 rounded-md border bg-background px-3 text-sm"
+                              value={targetDateFilter}
+                              onChange={(event) =>
+                                setTargetDateFilter(event.target.value)
+                              }
+                              aria-label="Filter by date"
+                            >
+                              <option value="all">All dates</option>
+                              <option value="today">Today</option>
+                              <option value="yesterday">Yesterday</option>
+                              <option value="7days">Last 7 days</option>
+                              <option value="30days">Last 30 days</option>
+                              <option value="older">Older</option>
+                            </select>
+                            <select
+                              className="h-9 rounded-md border bg-background px-3 text-sm"
+                              value={targetStatusFilter}
+                              onChange={(event) =>
+                                setTargetStatusFilter(event.target.value)
+                              }
+                              aria-label="Filter by status"
+                            >
+                              <option value="all">All statuses</option>
+                              <option value="confirmed">Confirmed</option>
+                              <option value="pending">Pending</option>
+                              <option value="review">Needs review</option>
+                            </select>
+                            <select
+                              className="h-9 rounded-md border bg-background px-3 text-sm"
+                              value={targetNetworkFilter}
+                              onChange={(event) =>
+                                setTargetNetworkFilter(event.target.value)
+                              }
+                              aria-label="Filter by network"
+                            >
+                              <option value="all">All networks</option>
+                              {targetNetworkOptions.map((network) => (
+                                <option key={network} value={network}>
+                                  {network}
+                                </option>
+                              ))}
+                            </select>
+                            <select
+                              className="h-9 rounded-md border bg-background px-3 text-sm"
+                              value={targetAssetFilter}
+                              onChange={(event) =>
+                                setTargetAssetFilter(event.target.value)
+                              }
+                              aria-label="Filter by asset"
+                            >
+                              <option value="all">All assets</option>
+                              {targetAssetOptions.map((asset) => (
+                                <option key={asset} value={asset}>
+                                  {asset}
+                                </option>
+                              ))}
+                            </select>
+                            <select
+                              className="h-9 rounded-md border bg-background px-3 text-sm xl:col-span-2"
+                              value={targetWalletFilter}
+                              onChange={(event) =>
+                                setTargetWalletFilter(event.target.value)
+                              }
+                              aria-label="Filter by wallet"
+                            >
+                              <option value="all">All wallets</option>
+                              {targetWalletOptions.map((wallet) => (
+                                <option key={wallet} value={wallet}>
+                                  {wallet}
+                                </option>
+                              ))}
+                            </select>
+                          </CollapsibleContent>
+                        </Collapsible>
                       </div>
                     </div>
                     <TransactionTargetHeader />
@@ -1349,16 +1524,11 @@ export function SourceFunds() {
               )}
 
               {currentStep === "review" && (
-              <div className="grid gap-3 md:grid-cols-5">
-                <Metric label="Nodes" value={report?.graph.nodes.length ?? 0} />
-                <Metric label="Reviewed links" value={report?.graph.edges.length ?? 0} />
-                <Metric
-                  label="Batchable"
-                  value={bulkReviewableSuggestions.length}
+                <CaseBrief
+                  report={report}
+                  bulkReviewable={bulkReviewableSuggestions.length}
+                  manualReview={manualSuggestionCount}
                 />
-                <Metric label="Sources" value={report?.source_mix.length ?? 0} />
-                <Metric label="Blockers" value={blockers.length} />
-              </div>
               )}
 
               {currentStep === "review" && (
@@ -1388,7 +1558,7 @@ export function SourceFunds() {
                 <Button
                   type="button"
                   variant="outline"
-                  onClick={() =>
+                  onClick={() => {
                     setSourceForm((current) => ({
                       ...current,
                       source_type: "missing_history",
@@ -1398,8 +1568,9 @@ export function SourceFunds() {
                       description:
                         current.description ||
                         "Prior history is missing and has been reviewed as a disclosure gap.",
-                    }))
-                  }
+                    }));
+                    setShowAdvancedReview(true);
+                  }}
                 >
                   <AlertTriangle className="mr-2 size-4" aria-hidden="true" />
                   Mark Gap
@@ -1415,6 +1586,11 @@ export function SourceFunds() {
 
               {currentStep === "export" && (
                 <div className="space-y-3">
+                  <CaseBrief
+                    report={report}
+                    bulkReviewable={bulkReviewableSuggestions.length}
+                    manualReview={manualSuggestionCount}
+                  />
                   <RecipientPicker
                     recipients={recipientsQuery.data?.data?.recipients ?? []}
                     selectedRecipientId={selectedRecipientId}
@@ -1469,6 +1645,13 @@ export function SourceFunds() {
           </Card>
 
           {currentStep === "review" && (
+          <OptionalSection
+            open={showAdvancedReview}
+            onOpenChange={setShowAdvancedReview}
+            icon={<SlidersHorizontal className="size-4" aria-hidden="true" />}
+            title="Advanced review editor"
+            summary={`${reviewQueueLinks.length} links, ${sources.length} sources, ${evidence.length} evidence items`}
+          >
           <div className="grid gap-4 2xl:grid-cols-[minmax(0,1fr)_420px]">
             <Card>
               <CardHeader className="border-b">
@@ -1641,9 +1824,6 @@ export function SourceFunds() {
               </CardContent>
             </Card>
           </div>
-          )}
-
-          {currentStep === "review" && (
           <div className="grid gap-4 2xl:grid-cols-2">
             <Card>
               <CardHeader className="border-b">
@@ -1897,6 +2077,7 @@ export function SourceFunds() {
               </CardContent>
             </Card>
           </div>
+          </OptionalSection>
           )}
         </div>
 
@@ -1949,10 +2130,7 @@ export function SourceFunds() {
             </CardHeader>
             <CardContent className="space-y-4 p-4 text-sm">
               <DisclosureNarrative report={report} />
-              <DisclosureList
-                label="Txids"
-                values={report?.disclosure_preview.txids ?? []}
-              />
+              <DisclosureTxidList report={report} />
               <DisclosureList
                 label="Evidence"
                 values={(report?.disclosure_preview.attachments ?? []).map(
@@ -2051,6 +2229,243 @@ export function SourceFunds() {
           )}
         </div>
         )}
+      </div>
+    </div>
+  );
+}
+
+function OptionalSection({
+  open,
+  onOpenChange,
+  icon,
+  title,
+  summary,
+  children,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  icon: ReactNode;
+  title: string;
+  summary?: string;
+  children: ReactNode;
+}) {
+  return (
+    <Collapsible open={open} onOpenChange={onOpenChange}>
+      <section className="rounded-md border bg-card">
+        <CollapsibleTrigger asChild>
+          <button
+            type="button"
+            className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left"
+          >
+            <span className="flex min-w-0 items-center gap-2">
+              {icon}
+              <span className="min-w-0">
+                <span className="block text-sm font-semibold">{title}</span>
+                {summary && (
+                  <span className="block truncate text-xs text-muted-foreground">
+                    {summary}
+                  </span>
+                )}
+              </span>
+            </span>
+            <ChevronDown
+              className={[
+                "size-4 shrink-0 text-muted-foreground transition-transform",
+                open ? "rotate-180" : "",
+              ].join(" ")}
+              aria-hidden="true"
+            />
+          </button>
+        </CollapsibleTrigger>
+        <CollapsibleContent>
+          <div className="border-t p-4">{children}</div>
+        </CollapsibleContent>
+      </section>
+    </Collapsible>
+  );
+}
+
+function CaseBrief({
+  report,
+  bulkReviewable,
+  manualReview,
+}: {
+  report?: SourceFundsPreview;
+  bulkReviewable: number;
+  manualReview: number;
+}) {
+  const overview = report?.overview;
+  const targetAsset = overview?.target_asset || report?.target.asset || "BTC";
+  const paragraphs = report?.narrative?.paragraphs ?? [];
+  const sources = report?.source_mix ?? [];
+  const dataSources = report?.data_sources ?? [];
+  const context = report?.report_context;
+  const jurisdiction = context?.jurisdiction_label;
+  const fiatCurrency = context?.fiat_currency;
+  return (
+    <section className="space-y-4 rounded-md border bg-muted/20 p-4">
+      <div className="flex flex-col gap-2 lg:flex-row lg:items-start lg:justify-between">
+        <div>
+          <h2 className="text-base font-semibold">
+            {overview?.target_label || report?.target.label || "Selected target"}
+          </h2>
+          <p className="text-sm text-muted-foreground">
+            {formatDateTime(overview?.target_date)} ·{" "}
+            {overview?.target_wallet || report?.target.wallet || "No wallet"} ·{" "}
+            {formatBtc(overview?.target_amount ?? report?.target.required_amount, targetAsset)}
+            {(jurisdiction || fiatCurrency) && (
+              <>
+                {" "}
+                · {[jurisdiction, fiatCurrency].filter(Boolean).join(" / ")}
+              </>
+            )}
+          </p>
+        </div>
+        <StatusPill
+          state={report?.explain_gates.exportable ? "reviewed" : "suggested"}
+        />
+      </div>
+      <div className="grid gap-3 md:grid-cols-5">
+        <Metric label="Transactions" value={overview?.transaction_count ?? 0} />
+        <Metric label="Reviewed links" value={overview?.link_count ?? 0} />
+        <Metric label="Sources" value={overview?.source_category_count ?? 0} />
+        <Metric label="Blockers" value={overview?.blocker_count ?? 0} />
+        <Metric label="Batchable" value={bulkReviewable} />
+      </div>
+      <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_340px]">
+        <div className="space-y-2">
+          {paragraphs.length > 0 ? (
+            paragraphs.slice(0, 3).map((paragraph) => (
+              <p key={paragraph} className="text-sm text-muted-foreground">
+                {paragraph}
+              </p>
+            ))
+          ) : (
+            <p className="text-sm text-muted-foreground">
+              Local preview data is not available yet.
+            </p>
+          )}
+          {manualReview > 0 && (
+            <p className="text-xs text-amber-700 dark:text-amber-300">
+              {manualReview} manual review item{manualReview === 1 ? "" : "s"}.
+            </p>
+          )}
+        </div>
+        <div className="space-y-2">
+          <div className="rounded-md border bg-background">
+            {(sources.length > 0 ? sources : [{ source_type: "unresolved", amount: 0, count: 0 }]).map(
+              (source) => (
+                <div
+                  key={source.source_type}
+                  className="flex items-center justify-between gap-3 border-b px-3 py-2 text-sm last:border-b-0"
+                >
+                  <span className="truncate">{pretty(source.source_type)}</span>
+                  <span className="font-mono text-xs tabular-nums">
+                    {formatBtc(source.amount, targetAsset)}
+                  </span>
+                </div>
+              ),
+            )}
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {dataSources.slice(0, 4).map((source) => (
+              <span
+                key={`${source.kind}-${source.label}`}
+                className="rounded-full border bg-background px-2 py-1 text-xs text-muted-foreground"
+              >
+                {source.label} · {source.transaction_count + source.source_count}
+              </span>
+            ))}
+            {dataSources.length > 4 && (
+              <span className="rounded-full border bg-background px-2 py-1 text-xs text-muted-foreground">
+                +{dataSources.length - 4}
+              </span>
+            )}
+          </div>
+        </div>
+      </div>
+      <FlowPathPreview flow={report?.simplified_flow} />
+    </section>
+  );
+}
+
+function FlowPathPreview({
+  flow,
+}: {
+  flow?: SourceFundsPreview["simplified_flow"];
+}) {
+  const levels = flow?.levels ?? [];
+  if (levels.length === 0) {
+    return null;
+  }
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center justify-between gap-3">
+        <h3 className="text-sm font-semibold">Simplified flow path</h3>
+        {flow?.deferred_privacy_hops?.length ? (
+          <span className="rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-xs text-amber-900 dark:border-amber-900/60 dark:bg-amber-950/40 dark:text-amber-200">
+            Privacy hop deferred
+          </span>
+        ) : null}
+      </div>
+      {flow?.note && (
+        <p className="text-xs text-muted-foreground">{flow.note}</p>
+      )}
+      <div className="overflow-x-auto pb-1">
+        <div className="flex min-w-max items-stretch gap-2">
+          {levels.map((level, levelIndex) => {
+            const nodes = level.nodes.slice(0, 3);
+            const hidden = Math.max(0, level.nodes.length - nodes.length);
+            return (
+              <div
+                key={`${level.role ?? "level"}-${levelIndex}`}
+                className="flex items-center gap-2"
+              >
+                <div className="w-44 rounded-md border bg-background p-2">
+                  <div className="mb-2 text-[10px] font-semibold uppercase text-muted-foreground">
+                    {pretty(level.role || "flow")}
+                  </div>
+                  <div className="space-y-1">
+                    {nodes.map((node) => (
+                      <div
+                        key={node.id}
+                        className={[
+                          "rounded border px-2 py-1",
+                          node.deferred_privacy_hop
+                            ? "border-amber-300 bg-amber-50 text-amber-900 dark:border-amber-900/60 dark:bg-amber-950/40 dark:text-amber-100"
+                            : level.role === "target"
+                              ? "border-primary/35 bg-primary/5"
+                              : "bg-muted/25",
+                        ].join(" ")}
+                      >
+                        <div className="truncate text-xs font-medium">
+                          {node.label || node.id}
+                        </div>
+                        <div className="mt-0.5 truncate text-[11px] text-muted-foreground">
+                          {pretty(node.kind || node.node_type || "")}
+                          {node.amount != null
+                            ? ` · ${formatBtc(node.amount, node.asset || "BTC")}`
+                            : ""}
+                        </div>
+                      </div>
+                    ))}
+                    {hidden > 0 && (
+                      <div className="rounded border border-dashed px-2 py-1 text-xs text-muted-foreground">
+                        +{hidden} more
+                      </div>
+                    )}
+                  </div>
+                </div>
+                {levelIndex < levels.length - 1 && (
+                  <ArrowRight
+                    className="size-4 shrink-0 text-muted-foreground"
+                    aria-hidden="true"
+                  />
+                )}
+              </div>
+            );
+          })}
+        </div>
       </div>
     </div>
   );
@@ -2291,6 +2706,14 @@ const COVERAGE_BUCKET_TONES: Record<keyof SourceFundsCoverageBuckets, string> = 
   not_classified: "text-muted-foreground",
 };
 
+function coverageSummary(coverage?: SourceFundsCoverage) {
+  if (!coverage || coverage.totals.tx_count === 0) {
+    return "No inbound coverage snapshot";
+  }
+  const traced = coverage.totals.buckets.fully_traced.amount;
+  return `${traced.toFixed(8)} BTC fully traced across ${coverage.totals.tx_count} inbound transactions`;
+}
+
 function CoveragePanel({
   coverage,
   loading,
@@ -2304,20 +2727,7 @@ function CoveragePanel({
   const buckets = totals?.buckets;
   const denominator = totalAmount > 0 ? totalAmount : 0;
   return (
-    <Card>
-      <CardHeader className="border-b">
-        <CardTitle className="flex items-center gap-2 text-base">
-          <GitBranch className="size-4" aria-hidden="true" />
-          Historical inbound coverage
-        </CardTitle>
-        <CardDescription>
-          Across every inbound transaction in this profile, how much is
-          traced under the current export gate. Not a current-holdings
-          view: self-transfers count at each hop, already-spent inflows
-          still appear here.
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="p-4">
+    <section>
         {loading && !coverage ? (
           <EmptyState text="Computing coverage..." />
         ) : !coverage || totalTxCount === 0 ? (
@@ -2356,8 +2766,7 @@ function CoveragePanel({
             </div>
           </>
         )}
-      </CardContent>
-    </Card>
+    </section>
   );
 }
 
@@ -2556,6 +2965,87 @@ function DisclosureMetric({ label, value }: { label: string; value: number }) {
         {value.toLocaleString("en-US")}
       </div>
     </div>
+  );
+}
+
+function DisclosureTxidList({ report }: { report?: SourceFundsPreview }) {
+  const [openingTxid, setOpeningTxid] = useState<string | null>(null);
+  const [openError, setOpenError] = useState<string | null>(null);
+  const txids = report?.disclosure_preview.txids ?? [];
+  const links = useMemo(
+    () =>
+      new Map(
+        (report?.disclosure_preview.explorer_links ?? []).map((link) => [
+          link.txid,
+          link,
+        ]),
+      ),
+    [report?.disclosure_preview.explorer_links],
+  );
+  const onOpen = async (txid: string, url: string) => {
+    setOpenError(null);
+    setOpeningTxid(txid);
+    try {
+      await openExternalUrl(url);
+    } catch (error) {
+      setOpenError(
+        error instanceof Error && error.message
+          ? error.message
+          : "Could not open explorer URL.",
+      );
+    } finally {
+      setOpeningTxid(null);
+    }
+  };
+  return (
+    <section className="space-y-2">
+      <h2 className="text-sm font-semibold">Txids</h2>
+      <div className="space-y-1">
+        {txids.length === 0 ? (
+          <div className="rounded-md border px-3 py-2 text-muted-foreground">
+            None
+          </div>
+        ) : (
+          txids.map((txid) => {
+            const link = links.get(txid);
+            return (
+              <div
+                key={txid}
+                className="flex flex-col gap-2 rounded-md border px-3 py-2 text-xs sm:flex-row sm:items-center sm:justify-between"
+              >
+                <span className="break-all font-mono">{txid}</span>
+                {link ? (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="h-8 shrink-0"
+                    disabled={openingTxid === txid}
+                    onClick={() => void onOpen(txid, link.url)}
+                    title={`Open ${txid} on ${link.label}`}
+                  >
+                    <ExternalLink className="mr-2 size-3.5" aria-hidden="true" />
+                    {openingTxid === txid ? "Opening..." : link.label}
+                  </Button>
+                ) : (
+                  <span className="text-muted-foreground">
+                    No public explorer link
+                  </span>
+                )}
+              </div>
+            );
+          })
+        )}
+      </div>
+      {openError && (
+        <p
+          role="alert"
+          className="rounded-md border border-destructive/25 bg-destructive/10 px-3 py-2 text-xs text-destructive"
+        >
+          {openError}
+        </p>
+      )}
+    </section>
   );
 }
 

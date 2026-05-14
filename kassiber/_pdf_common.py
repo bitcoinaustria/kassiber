@@ -27,6 +27,7 @@ def require_reportlab(export_name: str) -> dict[str, Any]:
         from reportlab.platypus import (
             BaseDocTemplate,
             Frame,
+            Flowable,
             NextPageTemplate,
             PageBreak,
             PageTemplate,
@@ -53,6 +54,7 @@ def require_reportlab(export_name: str) -> dict[str, Any]:
         "TTFont": TTFont,
         "BaseDocTemplate": BaseDocTemplate,
         "Frame": Frame,
+        "Flowable": Flowable,
         "NextPageTemplate": NextPageTemplate,
         "PageBreak": PageBreak,
         "PageTemplate": PageTemplate,

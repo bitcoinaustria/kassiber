@@ -709,6 +709,21 @@ class SourceFundsCliTest(unittest.TestCase):
         self.assertIn("target-deposit-1", reviewed["disclosure_preview"]["txids"])
         self.assertIn("BTC ↔ EUR exchange statement", [item["label"] for item in reviewed["disclosure_preview"]["attachments"]])
         self.assertIn("missing_history", {item["code"] for item in reviewed["gaps"]})
+        self.assertGreaterEqual(reviewed["overview"]["transaction_count"], 5)
+        self.assertGreaterEqual(reviewed["overview"]["data_source_count"], 3)
+        self.assertTrue(reviewed["narrative"]["paragraphs"])
+        self.assertEqual(reviewed["narrative"]["generated_by"], "local_rule_summary")
+        self.assertTrue(any(row["label"] == "Cold" for row in reviewed["data_sources"]))
+        self.assertEqual(reviewed["flow_levels"][0]["role"], "target")
+        self.assertGreaterEqual(len(reviewed["flow_levels"]), 3)
+        self.assertTrue(reviewed["simplified_flow"]["deferred_privacy_hops"])
+        self.assertTrue(
+            any(
+                node["deferred_privacy_hop"]
+                for level in reviewed["simplified_flow"]["levels"]
+                for node in level["nodes"]
+            )
+        )
 
         cases = self.cli("source-funds", "cases", "list", "--workspace", "Sof", "--profile", "Default")["data"]
         self.assertEqual(cases[0]["id"], reviewed["case"]["id"])
@@ -740,6 +755,12 @@ class SourceFundsCliTest(unittest.TestCase):
             ).stdout
             self.assertIn("Kassiber Source of Funds Report", extracted)
             self.assertIn("Reviewed local evidence", extracted)
+            self.assertIn("Source of Funds Overview", extracted)
+            self.assertIn("Origin and Transaction Flow", extracted)
+            self.assertIn("Simplified Flow Path", extracted)
+            self.assertIn("CoinJoin/PayJoin traversal deferred", extracted)
+            self.assertIn("Data Sources", extracted)
+            self.assertIn("Transaction Details", extracted)
             self.assertRegex(extracted, r"BTC\s+↔\s+EUR")
 
     def test_reveal_modes_redact_txids_and_attachment_paths(self):
@@ -954,6 +975,17 @@ class SourceFundsCliTest(unittest.TestCase):
     def test_export_via_case_matches_preview_snapshot_hash(self):
         self._seed_exportable_disclosure_path()
         preview = self._source_funds_report(save_case=True)
+        flow = preview["simplified_flow"]
+        self.assertFalse(flow["deferred_privacy_hops"])
+        self.assertGreaterEqual(len(flow["levels"]), 4)
+        self.assertEqual(flow["levels"][-1]["role"], "target")
+        flow_labels = {
+            node["label"]
+            for level in flow["levels"]
+            for node in level["nodes"]
+        }
+        self.assertIn("Reviewed disclosure source", flow_labels)
+        self.assertGreaterEqual(len(flow["edges"]), 3)
         pdf_path = self.root / "case-export.pdf"
         exported = self.cli(
             "reports",
@@ -969,6 +1001,220 @@ class SourceFundsCliTest(unittest.TestCase):
         )["data"]
         self.assertEqual(exported["snapshot_hash"], preview["case"]["snapshot_hash"])
         self.assertTrue(pdf_path.exists())
+
+    def test_austrian_eur_basic_source_funds_pdf_context(self):
+        exchange_withdraw_txid = "4e9f0b7d8c6a5b4c3d2e1f0099887766554433221100ffeeddccbbaa99887766"
+        cold_consolidation_txid = "6f1e2d3c4b5a69788776655443322110ffeeddccbbaa00998877665544332211"
+        self.cli("init")
+        self.cli("workspaces", "create", "AtSof")
+        self.cli(
+            "profiles",
+            "create",
+            "--workspace",
+            "AtSof",
+            "--fiat-currency",
+            "EUR",
+            "--tax-country",
+            "at",
+            "Austria",
+        )
+        self._write_csv(
+            "at-exchange.csv",
+            "date,txid,direction,asset,amount,fee,fiat_rate,description\n"
+            f"2025-03-01T09:00:00Z,{exchange_withdraw_txid},outbound,BTC,0.30010000,0.00010000,55000,Fictitious exchange withdrawal\n",
+        )
+        self._write_csv(
+            "at-cold.csv",
+            "date,txid,direction,asset,amount,fee,fiat_rate,description\n"
+            f"2025-03-01T09:30:00Z,{exchange_withdraw_txid},inbound,BTC,0.30000000,0,55000,Cold storage receive\n"
+            f"2025-11-06T08:45:00Z,{cold_consolidation_txid},outbound,BTC,0.15005000,0.00005000,70000,Reviewed consolidation spend\n",
+        )
+        self._write_csv(
+            "at-target.csv",
+            "date,txid,direction,asset,amount,fee,fiat_rate,description\n"
+            f"2025-11-06T09:10:00Z,{cold_consolidation_txid},inbound,BTC,0.15000000,0,70000,Fictitious target broker deposit\n",
+        )
+        for label, csv_name in [
+            ("Example Exchange AT", "at-exchange.csv"),
+            ("Cold Storage AT", "at-cold.csv"),
+            ("Target Broker AT", "at-target.csv"),
+        ]:
+            self.cli(
+                "wallets",
+                "create",
+                "--workspace",
+                "AtSof",
+                "--profile",
+                "Austria",
+                "--label",
+                label,
+                "--kind",
+                "custom",
+            )
+            self.cli(
+                "wallets",
+                "import-csv",
+                "--workspace",
+                "AtSof",
+                "--profile",
+                "Austria",
+                "--wallet",
+                label,
+                "--file",
+                str(self.root / csv_name),
+            )
+
+        def tx_id(wallet: str, external_id: str) -> str:
+            payload = self.cli(
+                "transactions",
+                "list",
+                "--workspace",
+                "AtSof",
+                "--profile",
+                "Austria",
+                "--wallet",
+                wallet,
+                "--limit",
+                "10",
+            )
+            rows = payload["data"].get("transactions") if isinstance(payload["data"], dict) else payload["data"]
+            for row in rows:
+                if row["external_id"] == external_id:
+                    return row["id"]
+            self.fail(f"transaction {external_id} not found in wallet {wallet}")
+            raise AssertionError(f"transaction {external_id} not found in wallet {wallet}")
+
+        exchange_out = tx_id("Example Exchange AT", exchange_withdraw_txid)
+        cold_in = tx_id("Cold Storage AT", exchange_withdraw_txid)
+        cold_out = tx_id("Cold Storage AT", cold_consolidation_txid)
+        target_in = tx_id("Target Broker AT", cold_consolidation_txid)
+        attachment = self.cli(
+            "attachments",
+            "add",
+            "--workspace",
+            "AtSof",
+            "--profile",
+            "Austria",
+            "--transaction",
+            exchange_out,
+            "--file",
+            str(self.evidence_file),
+            "--label",
+            "Fictitious Austrian EUR purchase statement",
+        )["data"]
+        source = self.cli(
+            "source-funds",
+            "sources",
+            "create",
+            "--workspace",
+            "AtSof",
+            "--profile",
+            "Austria",
+            "--type",
+            "fiat_purchase",
+            "--label",
+            "Fictitious Austrian EUR purchase",
+            "--asset",
+            "BTC",
+            "--amount",
+            "0.30000000",
+            "--fiat-currency",
+            "EUR",
+            "--fiat-value",
+            "16500",
+            "--acquired-at",
+            "2025-02-20T10:00:00Z",
+            "--attachment",
+            attachment["id"],
+        )["data"]
+        for from_arg, from_ref, to_ref, allocation, from_amount in [
+            ("--from-source", source["id"], exchange_out, "0.15005000", None),
+            ("--from-transaction", exchange_out, cold_in, "0.15005000", "0.15005000"),
+            ("--from-transaction", cold_in, cold_out, "0.15005000", "0.15005000"),
+            ("--from-transaction", cold_out, target_in, "0.15000000", "0.15005000"),
+        ]:
+            args = [
+                "source-funds",
+                "links",
+                "create",
+                "--workspace",
+                "AtSof",
+                "--profile",
+                "Austria",
+                from_arg,
+                from_ref,
+                "--to-transaction",
+                to_ref,
+                "--type",
+                "manual_source" if from_arg == "--from-source" else "self_transfer",
+                "--allocation-amount",
+                allocation,
+                "--allocation-policy",
+                "explicit",
+            ]
+            if from_amount:
+                args.extend(["--from-amount", from_amount])
+            self.cli(*args)
+        report = self.cli(
+            "reports",
+            "source-funds",
+            "--workspace",
+            "AtSof",
+            "--profile",
+            "Austria",
+            "--target-transaction",
+            target_in,
+            "--target-amount",
+            "0.15000000",
+            "--purpose",
+            "planned_exchange_sale",
+            "--planned-destination",
+            "Example Broker Austria",
+            "--reveal-mode",
+            "standard",
+            "--save-case",
+        )["data"]
+        context = report["report_context"]
+        self.assertEqual(context["template_key"], "at_eur_basic")
+        self.assertEqual(context["jurisdiction_label"], "Austria")
+        self.assertEqual(context["fiat_currency"], "EUR")
+        self.assertIn("Mittelherkunftsnachweis", context["report_title"])
+        self.assertEqual(len(report["simplified_flow"]["edges"]), 4)
+        self.assertEqual(
+            {link["txid"] for link in report["disclosure_preview"]["explorer_links"]},
+            {exchange_withdraw_txid, cold_consolidation_txid},
+        )
+        self.assertTrue(
+            all(link["url"].startswith("https://mempool.space/tx/") for link in report["disclosure_preview"]["explorer_links"])
+        )
+        self.assertTrue(report["explain_gates"]["exportable"], report["explain_gates"]["blockers"])
+        pdf_path = self.root / "at-source-funds.pdf"
+        self.cli(
+            "reports",
+            "export-source-funds-pdf",
+            "--workspace",
+            "AtSof",
+            "--profile",
+            "Austria",
+            "--case",
+            report["case"]["id"],
+            "--file",
+            str(pdf_path),
+        )
+        if shutil.which("pdftotext"):
+            extracted = subprocess.run(
+                ["pdftotext", "-layout", str(pdf_path), "-"],
+                check=True,
+                text=True,
+                capture_output=True,
+            ).stdout
+            self.assertIn("Mittelherkunftsnachweis", extracted)
+            self.assertIn("Evidence Checklist", extracted)
+            self.assertIn("Austrian/EUR", extracted)
+            self.assertIn("mempool.space", extracted)
+        pdf_bytes = pdf_path.read_bytes()
+        self.assertIn(f"https://mempool.space/tx/{exchange_withdraw_txid}".encode(), pdf_bytes)
+        self.assertIn(f"https://mempool.space/tx/{cold_consolidation_txid}".encode(), pdf_bytes)
 
     def test_export_case_uses_frozen_snapshot_after_live_mutation(self):
         self._seed_exportable_disclosure_path()

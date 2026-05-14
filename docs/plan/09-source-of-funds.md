@@ -210,6 +210,23 @@ source-of-funds documents:
 8. Notes and disclaimers: generated from user-provided data, not legal advice,
    not a government-certified source-of-funds confirmation.
 
+The shipped local report envelope now carries those sections as structured
+fields instead of PDF-only prose: `overview`, `narrative`, `data_sources`,
+`simplified_flow`, `flow_levels`, `source_mix`, `graph`, `findings`,
+`disclosure_preview`, and `report_context`. The narrative and simplified chart
+model are generated deterministically from the saved review graph on the user's
+machine. They must not call an external AI service or upgrade weak heuristics
+into proof. The simplified chart follows reviewed local sources, wallet
+transfers, and consolidation-style reviewed hops. CoinJoin/PayJoin traversal is
+deferred for now and rendered as an explicit privacy boundary, not as proof
+through unrelated participant inputs.
+
+`report_context` is the expansion point for country/currency presentation. The
+first concrete profile is `template_key="at_eur_basic"` for Austrian EUR books:
+the PDF title becomes `Mittelherkunftsnachweis / Source of Funds Report`, the
+cover records Austria/EUR context, and an evidence checklist pins the minimum
+workflow. This is not a full Austrian legal template or German localization yet.
+
 The machine envelope should expose the graph nodes, edges, rollups, gaps, and
 data-quality findings directly so the PDF is only a rendering of program
 output.
@@ -328,6 +345,15 @@ The first implementation adds the conservative, testable core path:
   planned exchange/bank note fields, suggestion seeding, link accept/reject,
   explicit allocation edits, evidence attachment, source/gap creation, gate
   preview, disclosure preview, and PDF export
+- a simplified desktop default path that keeps target selection, local case
+  summary, review gates, and export visible while historical coverage, target
+  filters, and full link/source editors stay optional advanced panels
+- PDF sections for source overview, local narrative, data-source rollups, source
+  mix, a simplified boxes-and-arrows flow path, level-by-level flow rows,
+  transaction details, review gates, disclosure preview, and limitations
+- a basic Austrian/EUR report context with bilingual title, evidence checklist,
+  and a checked-in fictitious demo generator at
+  `scripts/generate-source-funds-demo-report.py`
 
 The v1 suggestion pass seeds separate source-funds links from same
 `external_id` transfers, existing `transaction_pairs`, and one-to-one

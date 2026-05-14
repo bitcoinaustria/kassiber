@@ -194,6 +194,8 @@ top of the monolith.
 - [x] Deepen desktop source-funds editing beyond the first daemon-backed preview/export screen: accept/reject links, edit allocations, attach evidence, and mark reviewed missing-history gaps in-app
 - [x] Make report purpose explicit in the desktop workflow and report payload: planned exchange sale / bank pre-disclosure versus already-completed transaction
 - [x] Add deterministic-hop bulk review for consolidation/self-transfer chains while keeping weak time/amount and chain-observation suggestions manual
+- [x] Add local report-shape rollups for overview, narrative, data sources, source mix, simplified flow charts, and level-by-level flow details, and simplify the desktop default workflow while keeping advanced review controls optional
+- [x] Add a basic Austria/EUR source-funds report context with bilingual title, evidence checklist, and fictitious local demo generator
 - [ ] Add graph visualization polish for dense source-funds cases after real-user feedback; keep the current editor workflow as the source of truth
 - [ ] Add optional configured-backend chain observations with an explicit public-backend privacy warning; keep them weak suggestions unless reviewed
 

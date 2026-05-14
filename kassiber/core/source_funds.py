@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 import sqlite3
 import uuid
 from collections import defaultdict, deque
@@ -70,6 +71,11 @@ PROVIDER_UNIQUE_KEYS = (
 PROVIDER_BROAD_KEYS = ("provider_id",)
 PROVIDER_EVIDENCE_KEYS = PROVIDER_UNIQUE_KEYS + PROVIDER_BROAD_KEYS
 SUGGESTION_WRITE_CAP = 500
+_PUBLIC_TXID_RE = re.compile(r"^[0-9a-fA-F]{64}$")
+_PUBLIC_EXPLORER_BASES = {
+    "bitcoin": ("mempool.space", "https://mempool.space"),
+    "liquid": ("Liquid Network", "https://liquid.network"),
+}
 # Hard cap for build_report's max_depth so a caller cannot run an
 # unbounded BFS through transaction history. Real audit chains are
 # well below this; the cap exists to prevent runaway sweeps when a
@@ -248,6 +254,24 @@ def _public_tx_id(row: Mapping[str, Any], reveal_mode: str, *, is_target: bool =
     return row["external_id"] or row["id"]
 
 
+def _public_explorer_network(asset: Any) -> str:
+    return "liquid" if normalize_asset_code(str(asset or "")) == "LBTC" else "bitcoin"
+
+
+def _public_explorer_link(txid: str, asset: Any) -> dict[str, Any] | None:
+    if not _PUBLIC_TXID_RE.fullmatch(str(txid or "").strip()):
+        return None
+    network = _public_explorer_network(asset)
+    label, base_url = _PUBLIC_EXPLORER_BASES[network]
+    return {
+        "txid": txid,
+        "asset": normalize_asset_code(str(asset or "")) or "BTC",
+        "network": network,
+        "label": label,
+        "url": f"{base_url}/tx/{txid}",
+    }
+
+
 def _public_explanation(text: str | None, reveal_mode: str) -> str:
     """Redact the link explanation under reveal modes that disallow free text.
 
@@ -264,6 +288,58 @@ def _public_explanation(text: str | None, reveal_mode: str) -> str:
     if reveal_mode in {"standard", "full"}:
         return text
     return ""
+
+
+def _label(value: Any) -> str:
+    return str(value or "").replace("_", " ")
+
+
+def _mapping_value(row: Mapping[str, Any], key: str, default: Any = "") -> Any:
+    if hasattr(row, "keys") and key in row.keys():
+        return row[key]
+    if hasattr(row, "get"):
+        return row.get(key, default)
+    return default
+
+
+def _report_context(profile: Mapping[str, Any]) -> dict[str, Any]:
+    tax_country = str(_mapping_value(profile, "tax_country", "generic") or "generic").lower()
+    fiat_currency = str(_mapping_value(profile, "fiat_currency", "") or "").upper()
+    is_at_eur = tax_country == "at" and fiat_currency == "EUR"
+    jurisdiction_label = "Austria" if tax_country == "at" else "Generic"
+    checklist = [
+        "Original fiat-to-bitcoin purchase or income evidence is attached to the root source.",
+        "Reviewed wallet-transfer and consolidation hops cover the disclosed target amount.",
+        "The target exchange, broker, or bank deposit is the selected report target.",
+        "The PDF is rendered from a saved immutable case snapshot.",
+    ]
+    if is_at_eur:
+        checklist.append(
+            "EUR values and Austrian profile context are present for a basic Mittelherkunftsnachweis workflow."
+        )
+    return {
+        "tax_country": tax_country,
+        "fiat_currency": fiat_currency,
+        "jurisdiction_label": jurisdiction_label,
+        "template_key": "at_eur_basic" if is_at_eur else "generic_basic",
+        "report_title": (
+            "Mittelherkunftsnachweis / Source of Funds Report"
+            if is_at_eur
+            else "Source of Funds Report"
+        ),
+        "report_subtitle": (
+            "Reviewed local evidence disclosure for an Austrian/EUR source-of-funds workflow."
+            if is_at_eur
+            else "Reviewed local evidence disclosure from a saved immutable case snapshot."
+        ),
+        "evidence_checklist": checklist,
+        "deferred": [
+            "Full country-specific legal templates",
+            "German localization",
+            "Locale-specific money/date formatting beyond the current ReportLab renderer",
+            "CoinJoin/PayJoin traversal",
+        ],
+    }
 
 
 def _tx_label(row: Mapping[str, Any], reveal_mode: str, *, is_target: bool = False) -> str:
@@ -1516,6 +1592,368 @@ def _add_finding(findings: list[dict[str, Any]], code: str, severity: str, messa
         findings.append(item)
 
 
+def _node_event_time(node: Mapping[str, Any]) -> str:
+    return str(node.get("occurred_at") or node.get("acquired_at") or "")
+
+
+def _summarize_report_data_sources(nodes: Sequence[Mapping[str, Any]]) -> list[dict[str, Any]]:
+    grouped: dict[tuple[str, str], dict[str, Any]] = {}
+    for node in nodes:
+        if node.get("node_type") == "transaction":
+            label = str(node.get("wallet") or "Unlabeled wallet")
+            kind = "wallet"
+            transaction_count = 1
+            source_count = 0
+        else:
+            label = str(node.get("label") or _label(node.get("source_type")) or "Reviewed source")
+            kind = str(node.get("source_type") or "source")
+            transaction_count = 0
+            source_count = 1
+        key = (kind, label)
+        item = grouped.setdefault(
+            key,
+            {
+                "label": label,
+                "kind": kind,
+                "transaction_count": 0,
+                "source_count": 0,
+                "assets": set(),
+                "first_seen": "",
+                "last_seen": "",
+            },
+        )
+        item["transaction_count"] += transaction_count
+        item["source_count"] += source_count
+        if node.get("asset"):
+            item["assets"].add(str(node["asset"]))
+        event_time = _node_event_time(node)
+        if event_time:
+            item["first_seen"] = min([item["first_seen"], event_time]) if item["first_seen"] else event_time
+            item["last_seen"] = max([item["last_seen"], event_time]) if item["last_seen"] else event_time
+    rows: list[dict[str, Any]] = []
+    for item in grouped.values():
+        row = dict(item)
+        row["assets"] = sorted(row["assets"])
+        rows.append(row)
+    return sorted(rows, key=lambda row: (row["kind"], row["label"]))
+
+
+def _compact_flow_node(node: Mapping[str, Any]) -> dict[str, Any]:
+    return {
+        "id": node.get("id", ""),
+        "node_type": node.get("node_type", ""),
+        "label": node.get("label", ""),
+        "wallet": node.get("wallet", ""),
+        "source_type": node.get("source_type", ""),
+        "asset": node.get("asset", ""),
+        "required_amount": node.get("required_amount"),
+        "required_amount_msat": node.get("required_amount_msat"),
+        "amount": node.get("amount"),
+        "amount_msat": node.get("amount_msat"),
+        "occurred_at": node.get("occurred_at", ""),
+        "acquired_at": node.get("acquired_at", ""),
+        "external_id": node.get("external_id", ""),
+        "fiat_currency": node.get("fiat_currency", ""),
+        "fiat_value": node.get("fiat_value"),
+        "review_state": node.get("review_state", ""),
+    }
+
+
+def _build_flow_levels(report: Mapping[str, Any]) -> list[dict[str, Any]]:
+    graph = report.get("graph") or {}
+    nodes = list(graph.get("nodes") or [])
+    edges = list(graph.get("edges") or [])
+    node_by_id = {str(node.get("id")): node for node in nodes if node.get("id")}
+    target = report.get("target") or {}
+    target_id = str(target.get("id") or "")
+    if not target_id:
+        return []
+    parents_by_child: dict[str, list[str]] = defaultdict(list)
+    for edge in edges:
+        parent = str(edge.get("from") or "")
+        child = str(edge.get("to") or "")
+        if parent and child:
+            parents_by_child[child].append(parent)
+
+    depths: dict[str, int] = {target_id: 0}
+    queue = deque([target_id])
+    while queue:
+        child = queue.popleft()
+        for parent in parents_by_child.get(child, []):
+            next_depth = depths[child] + 1
+            if parent not in depths or next_depth < depths[parent]:
+                depths[parent] = next_depth
+                queue.append(parent)
+
+    fallback_depth = max(depths.values() or [0]) + 1
+    for node_id in node_by_id:
+        depths.setdefault(node_id, fallback_depth)
+
+    levels: dict[int, list[Mapping[str, Any]]] = defaultdict(list)
+    for node_id, depth in depths.items():
+        node = node_by_id.get(node_id)
+        if node:
+            levels[depth].append(node)
+
+    rows: list[dict[str, Any]] = []
+    for depth in sorted(levels):
+        level_nodes = sorted(
+            levels[depth],
+            key=lambda node: (
+                node.get("node_type") == "source",
+                _node_event_time(node),
+                str(node.get("label") or ""),
+            ),
+        )
+        rows.append(
+            {
+                "level": depth + 1,
+                "role": "target" if depth == 0 else "upstream",
+                "nodes": [_compact_flow_node(node) for node in level_nodes],
+                "transaction_count": sum(1 for node in level_nodes if node.get("node_type") == "transaction"),
+                "source_count": sum(1 for node in level_nodes if node.get("node_type") == "source"),
+            }
+        )
+    return rows
+
+
+def _compact_simplified_flow_node(
+    node: Mapping[str, Any],
+    *,
+    deferred_privacy_hop: bool = False,
+) -> dict[str, Any]:
+    kind = node.get("source_type") or node.get("direction") or node.get("node_type") or ""
+    return {
+        "id": node.get("id", ""),
+        "node_type": node.get("node_type", ""),
+        "kind": kind,
+        "label": node.get("label", ""),
+        "wallet": node.get("wallet", ""),
+        "asset": node.get("asset", ""),
+        "amount": node.get("required_amount") if node.get("required_amount") is not None else node.get("amount"),
+        "amount_msat": (
+            node.get("required_amount_msat")
+            if node.get("required_amount_msat") is not None
+            else node.get("amount_msat")
+        ),
+        "occurred_at": node.get("occurred_at") or node.get("acquired_at") or "",
+        "deferred_privacy_hop": deferred_privacy_hop,
+    }
+
+
+def _build_simplified_flow(report: Mapping[str, Any]) -> dict[str, Any]:
+    """Build a compact chart model from reviewed graph edges.
+
+    The chart follows reviewed source, self-transfer, consolidation, trade, and
+    swap-style links. CoinJoin/PayJoin traversal is intentionally deferred:
+    those links become boundary nodes so the PDF never implies that Kassiber can
+    prove ownership through unrelated participant inputs.
+    """
+    graph = report.get("graph") or {}
+    nodes = list(graph.get("nodes") or [])
+    edges = list(graph.get("edges") or [])
+    node_by_id = {str(node.get("id")): node for node in nodes if node.get("id")}
+    target = report.get("target") or {}
+    target_id = str(target.get("id") or "")
+    if not target_id or target_id not in node_by_id:
+        return {
+            "levels": [],
+            "edges": [],
+            "deferred_privacy_hops": [],
+            "note": "",
+        }
+
+    parents_by_child: dict[str, list[Mapping[str, Any]]] = defaultdict(list)
+    for edge in edges:
+        parent = str(edge.get("from") or "")
+        child = str(edge.get("to") or "")
+        if parent and child:
+            parents_by_child[child].append(edge)
+
+    included: set[str] = {target_id}
+    deferred_nodes: set[str] = set()
+    deferred_hops: list[dict[str, Any]] = []
+    depths: dict[str, int] = {target_id: 0}
+    queue = deque([target_id])
+    traversed_edges: set[str] = set()
+
+    while queue:
+        child = queue.popleft()
+        child_depth = depths[child]
+        for edge in parents_by_child.get(child, []):
+            edge_id = str(edge.get("id") or "")
+            if edge_id in traversed_edges:
+                continue
+            traversed_edges.add(edge_id)
+            parent = str(edge.get("from") or "")
+            if parent not in node_by_id:
+                continue
+            next_depth = child_depth + 1
+            if parent not in depths or next_depth < depths[parent]:
+                depths[parent] = next_depth
+            included.add(parent)
+            if edge.get("link_type") in PRIVACY_LINK_TYPES:
+                deferred_nodes.add(parent)
+                deferred_hops.append(
+                    {
+                        "link_id": edge.get("id", ""),
+                        "link_type": edge.get("link_type", ""),
+                        "from": parent,
+                        "to": child,
+                        "message": (
+                            "CoinJoin/PayJoin traversal is deferred; this reviewed hop is "
+                            "shown as a privacy boundary, not as ownership proof through "
+                            "unrelated participant inputs."
+                        ),
+                    }
+                )
+                continue
+            if parent not in deferred_nodes:
+                queue.append(parent)
+
+    levels_by_depth: dict[int, list[str]] = defaultdict(list)
+    for node_id in included:
+        levels_by_depth[depths.get(node_id, 0)].append(node_id)
+
+    levels: list[dict[str, Any]] = []
+    max_depth = max(levels_by_depth)
+    for depth in sorted(levels_by_depth, reverse=True):
+        level_nodes = sorted(
+            levels_by_depth[depth],
+            key=lambda node_id: (
+                node_by_id[node_id].get("node_type") == "source",
+                _node_event_time(node_by_id[node_id]),
+                str(node_by_id[node_id].get("label") or ""),
+            ),
+        )
+        role = "target" if depth == 0 else "upstream"
+        if all(node_by_id[node_id].get("node_type") == "source" for node_id in level_nodes):
+            role = "source"
+        if any(node_id in deferred_nodes for node_id in level_nodes):
+            role = "privacy_boundary" if role != "target" else role
+        levels.append(
+            {
+                "level": max_depth - depth + 1,
+                "distance_to_target": depth,
+                "role": role,
+                "nodes": [
+                    _compact_simplified_flow_node(
+                        node_by_id[node_id],
+                        deferred_privacy_hop=node_id in deferred_nodes,
+                    )
+                    for node_id in level_nodes
+                ],
+            }
+        )
+
+    simplified_edges = []
+    for edge in edges:
+        parent = str(edge.get("from") or "")
+        child = str(edge.get("to") or "")
+        if parent in included and child in included:
+            simplified_edges.append(
+                {
+                    "id": edge.get("id", ""),
+                    "from": parent,
+                    "to": child,
+                    "link_type": edge.get("link_type", ""),
+                    "asset": edge.get("asset", ""),
+                    "amount": edge.get("allocation_amount"),
+                    "amount_msat": edge.get("allocation_amount_msat"),
+                    "deferred_privacy_hop": edge.get("link_type") in PRIVACY_LINK_TYPES,
+                }
+            )
+
+    note = (
+        "Simplified flow follows reviewed local links. Wallet transfers and "
+        "consolidations are shown as reviewed hops; CoinJoin/PayJoin traversal "
+        "is deferred and shown only as a privacy boundary."
+    )
+    return {
+        "levels": levels,
+        "edges": simplified_edges,
+        "deferred_privacy_hops": deferred_hops,
+        "note": note,
+    }
+
+
+def _source_mix_phrase(source_mix: Sequence[Mapping[str, Any]], asset: str) -> str:
+    if not source_mix:
+        return "no reviewed root sources"
+    parts = []
+    for row in source_mix[:4]:
+        amount = _btc_value(row.get("amount_msat"))
+        percent = row.get("percent_of_target")
+        suffix = f", {float(percent):.1f}% of target" if percent is not None else ""
+        parts.append(f"{_label(row.get('source_type'))}: {amount:.8f} {asset}{suffix}")
+    if len(source_mix) > 4:
+        parts.append(f"{len(source_mix) - 4} more source categories")
+    return "; ".join(parts)
+
+
+def _add_report_shape(envelope: dict[str, Any]) -> None:
+    graph = envelope.get("graph") or {}
+    nodes = list(graph.get("nodes") or [])
+    edges = list(graph.get("edges") or [])
+    tx_nodes = [node for node in nodes if node.get("node_type") == "transaction"]
+    source_nodes = [node for node in nodes if node.get("node_type") == "source"]
+    dates = sorted(_node_event_time(node) for node in nodes if _node_event_time(node))
+    target = envelope.get("target") or {}
+    target_asset = str(target.get("asset") or envelope.get("allocations", {}).get("asset") or "")
+    data_sources = _summarize_report_data_sources(nodes)
+    source_mix = list(envelope.get("source_mix") or [])
+    blocker_count = len((envelope.get("explain_gates") or {}).get("blockers") or [])
+    warning_count = len((envelope.get("explain_gates") or {}).get("warnings") or [])
+
+    envelope["overview"] = {
+        "target_label": target.get("label", ""),
+        "target_asset": target_asset,
+        "target_amount": target.get("required_amount"),
+        "target_amount_msat": target.get("required_amount_msat"),
+        "target_fiat_value": target.get("fiat_value"),
+        "target_fiat_currency": target.get("fiat_currency", ""),
+        "target_date": target.get("occurred_at", ""),
+        "target_wallet": target.get("wallet", ""),
+        "time_range": {
+            "start": dates[0] if dates else "",
+            "end": dates[-1] if dates else "",
+        },
+        "transaction_count": len(tx_nodes),
+        "link_count": len(edges),
+        "root_source_count": len(source_nodes),
+        "source_category_count": len(source_mix),
+        "data_source_count": len(data_sources),
+        "blocker_count": blocker_count,
+        "warning_count": warning_count,
+    }
+    envelope["data_sources"] = data_sources
+    envelope["flow_levels"] = _build_flow_levels(envelope)
+    envelope["simplified_flow"] = _build_simplified_flow(envelope)
+    envelope["narrative"] = {
+        "generated_by": "local_rule_summary",
+        "paragraphs": [
+            (
+                f"This report traces {target.get('required_amount', 0):.8f} {target_asset} for "
+                f"{target.get('label') or 'the selected target'} through {len(edges)} reviewed "
+                f"link{'' if len(edges) == 1 else 's'} across {len(tx_nodes)} transaction"
+                f"{'' if len(tx_nodes) == 1 else 's'}."
+            ),
+            (
+                f"The reviewed source mix is {_source_mix_phrase(source_mix, target_asset)}. "
+                f"The path spans {envelope['overview']['time_range']['start'] or 'unknown start'} "
+                f"to {envelope['overview']['time_range']['end'] or 'unknown end'} and uses "
+                f"{len(data_sources)} local data source{'' if len(data_sources) == 1 else 's'}."
+            ),
+            (
+                "Export is currently clear under the current review gates."
+                if blocker_count == 0
+                else f"Export is blocked by {blocker_count} unresolved review gate"
+                f"{'' if blocker_count == 1 else 's'}."
+            ),
+        ],
+    }
+
+
 def build_report(
     conn: sqlite3.Connection,
     workspace_ref: str | None,
@@ -1560,6 +1998,7 @@ def build_report(
     source_mix = defaultdict(lambda: {"amount_msat": 0, "count": 0})
     source_consumption_msat = defaultdict(int)
     disclosure_txids: set[str] = set()
+    explorer_links_by_txid: dict[str, dict[str, Any]] = {}
     disclosure_attachments: dict[str, dict[str, Any]] = {}
     visited: set[str] = set()
     queued: set[str] = {target["id"]}
@@ -1611,6 +2050,9 @@ def build_report(
         disclosed_txid = _public_tx_id(tx, mode, is_target=is_target_tx)
         if disclosed_txid:
             disclosure_txids.add(disclosed_txid)
+            explorer_link = _public_explorer_link(disclosed_txid, tx["asset"])
+            if explorer_link:
+                explorer_links_by_txid[disclosed_txid] = explorer_link
         if tx["fiat_value"] is None and tx["fiat_rate"] is None:
             _add_finding(
                 findings,
@@ -1915,6 +2357,11 @@ def build_report(
             "source_type": source_type,
             "amount": _btc_value(values["amount_msat"]),
             "amount_msat": values["amount_msat"],
+            "percent_of_target": (
+                round((values["amount_msat"] / target_amount_msat) * 100, 4)
+                if target_amount_msat
+                else 0
+            ),
             "count": values["count"],
         }
         for source_type, values in sorted(source_mix.items())
@@ -1922,6 +2369,7 @@ def build_report(
     envelope = {
         "workspace": workspace["label"],
         "profile": profile["label"],
+        "report_context": _report_context(profile),
         "purpose": {
             "type": purpose,
             "label": "Planned exchange sale" if purpose == "planned_exchange_sale" else "Already completed transaction",
@@ -1968,6 +2416,10 @@ def build_report(
         },
         "disclosure_preview": {
             "txids": sorted(disclosure_txids),
+            "explorer_links": [
+                explorer_links_by_txid[txid]
+                for txid in sorted(explorer_links_by_txid)
+            ],
             "attachments": sorted(disclosure_attachments.values(), key=lambda item: item["id"]),
             "privacy_note": (
                 "Txids disclose on-chain neighbors to the recipient. Chain observations are context, not proof of ownership."
@@ -1989,6 +2441,7 @@ def build_report(
             "kind": recipient["kind"],
             "default_reveal_mode": recipient["default_reveal_mode"],
         }
+    _add_report_shape(envelope)
     if save_case:
         case = save_case_snapshot(
             conn,
@@ -2176,6 +2629,48 @@ def build_report_lines(report: Mapping[str, Any], hooks: SourceFundsHooks) -> li
                 "",
             ]
         )
+    overview = report.get("overview", {})
+    if overview:
+        time_range = overview.get("time_range", {})
+        lines.extend(
+            [
+                "Overview",
+                "--------",
+                f"Time range:      {time_range.get('start') or ''} - {time_range.get('end') or ''}",
+                f"Transactions:    {overview.get('transaction_count', 0)}",
+                f"Reviewed links:  {overview.get('link_count', 0)}",
+                f"Data sources:    {overview.get('data_source_count', 0)}",
+                f"Source types:    {overview.get('source_category_count', 0)}",
+                "",
+            ]
+        )
+    narrative = report.get("narrative", {})
+    paragraphs = narrative.get("paragraphs") if isinstance(narrative, dict) else None
+    if paragraphs:
+        lines.extend(["Origin and Transaction Flow", "---------------------------"])
+        lines.extend(str(paragraph) for paragraph in paragraphs)
+        lines.append("")
+    data_sources = report.get("data_sources") or []
+    if data_sources:
+        lines.extend(["Data Sources", "------------"])
+        lines.extend(
+            hooks.format_table(
+                ["Name", "Kind", "Transactions", "Sources", "Assets"],
+                [
+                    [
+                        row.get("label", ""),
+                        row.get("kind", ""),
+                        row.get("transaction_count", 0),
+                        row.get("source_count", 0),
+                        ",".join(row.get("assets") or []),
+                    ]
+                    for row in data_sources
+                ],
+                [28, 20, 12, 10, 16],
+                align_right={2, 3},
+            )
+        )
+        lines.append("")
     lines.extend(
         [
             "Disclosure Preview",

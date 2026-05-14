@@ -466,22 +466,43 @@ python3 -m kassiber reports export-source-funds-pdf \
   --file source-of-funds.pdf
 ```
 
-Source-of-funds PDFs render saved case snapshots with the Unicode-safe
-ReportLab renderer and only include reviewed evidence. Kassiber does not claim
-chain heuristics prove ownership, does not expose descriptors/xpubs/wallet
+Source-of-funds reports carry local overview metrics, deterministic narrative
+text, a simplified reviewed flow path, data-source rollups, source mix,
+level-by-level flow rows, transaction details, review gates, and disclosure
+notes. PDFs render saved case snapshots with the ReportLab exporter and only
+include reviewed evidence. The simplified flow chart follows reviewed local
+source, wallet-transfer, and consolidation-style links; CoinJoin/PayJoin
+traversal is deferred and shown as a privacy boundary rather than ownership
+proof through unrelated participant inputs. Kassiber does not
+claim chain heuristics prove ownership, does not expose descriptors/xpubs/wallet
 files/seeds/backend tokens, and treats opening balances as attested
 prior-history stops rather than real root sources. Export gates also reject
 cycle paths, self-transfer asset mismatches, source/edge asset mismatches,
 concrete sources without amounts, cumulative source over-allocation, and
 reviewed paths that require more value from a transaction than it contains.
 
-The desktop Source of Funds screen provides the same workflow with a target
-purpose picker for planned exchange sales versus completed transactions,
-deterministic-hop bulk review for consolidation chains, suggested-link review
-queue, explicit allocation editor, existing evidence attachment picker,
-root-source / missing-history editor, disclosure narrative, and gated PDF export.
+The desktop Source of Funds screen keeps the default path to target selection,
+local case summary, review gates, and gated PDF export. Advanced target filters,
+historical coverage diagnostics, suggested-link review, allocation editing,
+evidence attachment, manual transaction links, and root-source / missing-history
+editing stay available as optional panels.
 For planned sales, fiat-funds evidence for the original bitcoin purchase
 remains a separate source attachment.
+
+For a basic Austrian workflow, create the profile with `--tax-country at` and
+`--fiat-currency EUR`. The source-of-funds PDF then uses the
+`Mittelherkunftsnachweis / Source of Funds Report` title, includes Austria/EUR
+report context, and renders an evidence checklist covering fiat-purchase proof,
+reviewed wallet-transfer / consolidation hops, target broker or exchange
+deposit, and immutable saved-case export. Full German localization,
+country-specific legal templates, and CoinJoin/PayJoin traversal remain
+deferred. A fictitious AT/EUR sample report can be generated locally with:
+
+```bash
+uv run python scripts/generate-source-funds-demo-report.py \
+  --output /tmp/kassiber-source-funds-demo.pdf \
+  --json-output /tmp/kassiber-source-funds-demo.json
+```
 
 ## Docs
 

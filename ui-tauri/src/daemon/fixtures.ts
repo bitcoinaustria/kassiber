@@ -11,6 +11,27 @@ import { MOCK_TRANSACTIONS } from "@/mocks/transactions";
 import { MOCK_PROFILES } from "@/mocks/profiles";
 import { MOCK_CAPITAL_GAINS } from "@/mocks/reports";
 
+const SOURCE_FUNDS_FIXTURE_TARGET_TXID =
+  "4e9f0b7d8c6a5b4c3d2e1f0099887766554433221100ffeeddccbbaa99887766";
+const SOURCE_FUNDS_FIXTURE_WITHDRAW_TXID =
+  "6f1e2d3c4b5a69788776655443322110ffeeddccbbaa00998877665544332211";
+const SOURCE_FUNDS_FIXTURE_EXPLORER_LINKS = [
+  {
+    txid: SOURCE_FUNDS_FIXTURE_TARGET_TXID,
+    asset: "BTC",
+    network: "bitcoin",
+    label: "mempool.space",
+    url: `https://mempool.space/tx/${SOURCE_FUNDS_FIXTURE_TARGET_TXID}`,
+  },
+  {
+    txid: SOURCE_FUNDS_FIXTURE_WITHDRAW_TXID,
+    asset: "BTC",
+    network: "bitcoin",
+    label: "mempool.space",
+    url: `https://mempool.space/tx/${SOURCE_FUNDS_FIXTURE_WITHDRAW_TXID}`,
+  },
+];
+
 export const fixtures: Record<string, unknown> = {
   status: {
     version: "0.0.0-ui-scaffold",
@@ -461,12 +482,139 @@ export const fixtures: Record<string, unknown> = {
       asset: "BTC",
       reviewed_edge_count: 1,
     },
-    source_mix: [{ source_type: "fiat_purchase", amount: 0.15, amount_msat: 15_000_000_000, count: 1 }],
+    source_mix: [{ source_type: "fiat_purchase", amount: 0.15, amount_msat: 15_000_000_000, percent_of_target: 100, count: 1 }],
+    report_context: {
+      tax_country: "at",
+      fiat_currency: "EUR",
+      jurisdiction_label: "Austria",
+      template_key: "at_eur_basic",
+      report_title: "Mittelherkunftsnachweis / Source of Funds Report",
+      report_subtitle: "Reviewed local evidence disclosure for an Austrian/EUR source-of-funds workflow.",
+    },
+    overview: {
+      target_label: "Vault migration",
+      target_asset: "BTC",
+      target_amount: 0.15,
+      target_fiat_value: 10713.03,
+      target_fiat_currency: "EUR",
+      target_date: "2024-11-05T10:12:00Z",
+      target_wallet: "Multisig Vault",
+      time_range: { start: "2024-10-31T09:00:00Z", end: "2024-11-05T10:12:00Z" },
+      transaction_count: 2,
+      link_count: 1,
+      root_source_count: 1,
+      source_category_count: 1,
+      data_source_count: 2,
+      blocker_count: 0,
+      warning_count: 1,
+    },
+    narrative: {
+      generated_by: "local_rule_summary",
+      paragraphs: [
+        "This report traces 0.15000000 BTC for Vault migration through 1 reviewed link across 2 transactions.",
+        "The reviewed source mix is fiat purchase: 0.15000000 BTC, 100.0% of target. The path spans 2024-10-31T09:00:00Z to 2024-11-05T10:12:00Z and uses 2 local data sources.",
+        "Export is currently clear under the current review gates.",
+      ],
+    },
+    data_sources: [
+      {
+        label: "Multisig Vault",
+        kind: "wallet",
+        transaction_count: 1,
+        source_count: 0,
+        assets: ["BTC"],
+        first_seen: "2024-11-05T10:12:00Z",
+        last_seen: "2024-11-05T10:12:00Z",
+      },
+      {
+        label: "Reviewed exchange purchase",
+        kind: "fiat_purchase",
+        transaction_count: 0,
+        source_count: 1,
+        assets: ["BTC"],
+        first_seen: "2024-10-31T09:00:00Z",
+        last_seen: "2024-10-31T09:00:00Z",
+      },
+    ],
+    flow_levels: [
+      {
+        level: 1,
+        role: "target",
+        transaction_count: 1,
+        source_count: 0,
+        nodes: [
+          { id: "tx:2", node_type: "transaction", label: "target deposit", wallet: "Multisig Vault", asset: "BTC", required_amount: 0.15, occurred_at: "2024-11-05T10:12:00Z", external_id: "mock-target-deposit" },
+        ],
+      },
+      {
+        level: 2,
+        role: "upstream",
+        transaction_count: 0,
+        source_count: 1,
+        nodes: [
+          { id: "source:1", node_type: "source", source_type: "fiat_purchase", label: "Reviewed exchange purchase", asset: "BTC", required_amount: 0.15, acquired_at: "2024-10-31T09:00:00Z" },
+        ],
+      },
+    ],
+    simplified_flow: {
+      note: "Simplified flow follows reviewed local links. Wallet transfers and consolidations are shown as reviewed hops; CoinJoin/PayJoin traversal is deferred and shown only as a privacy boundary.",
+      deferred_privacy_hops: [],
+      levels: [
+        {
+          level: 1,
+          role: "source",
+          distance_to_target: 1,
+          nodes: [
+            {
+              id: "source:1",
+              node_type: "source",
+              kind: "fiat_purchase",
+              label: "Reviewed exchange purchase",
+              asset: "BTC",
+              amount: 0.15,
+              occurred_at: "2024-10-31T09:00:00Z",
+            },
+          ],
+        },
+        {
+          level: 2,
+          role: "target",
+          distance_to_target: 0,
+          nodes: [
+            {
+              id: "tx:2",
+              node_type: "transaction",
+              kind: "inbound",
+              label: "target deposit",
+              wallet: "Multisig Vault",
+              asset: "BTC",
+              amount: 0.15,
+              occurred_at: "2024-11-05T10:12:00Z",
+            },
+          ],
+        },
+      ],
+      edges: [
+        {
+          id: "link:1",
+          from: "source:1",
+          to: "tx:2",
+          link_type: "manual_source",
+          asset: "BTC",
+          amount: 0.15,
+          deferred_privacy_hop: false,
+        },
+      ],
+    },
     gaps: [{ code: "missing_history", severity: "warning", message: "Reviewed prior-history gap included.", ref: "source:gap" }],
     findings: [{ code: "missing_history", severity: "warning", message: "Reviewed prior-history gap included.", ref: "source:gap" }],
     explain_gates: { exportable: true, blockers: [], warnings: [{ code: "missing_history", severity: "warning", message: "Reviewed prior-history gap included.", ref: "source:gap" }] },
     disclosure_preview: {
-      txids: ["mock-target-deposit", "withdraw-1"],
+      txids: [
+        SOURCE_FUNDS_FIXTURE_TARGET_TXID,
+        SOURCE_FUNDS_FIXTURE_WITHDRAW_TXID,
+      ],
+      explorer_links: SOURCE_FUNDS_FIXTURE_EXPLORER_LINKS,
       attachments: [{ id: "att:1", label: "Exchange statement", attachment_type: "file" }],
       privacy_note: "Txids disclose on-chain neighbors to the recipient. Chain observations are context, not proof of ownership.",
       excluded: ["descriptors", "xpubs", "wallet files", "seeds", "backend tokens", "unrelated wallet history"],
@@ -524,7 +672,11 @@ export const fixtures: Record<string, unknown> = {
     findings: [{ code: "missing_history", severity: "warning", message: "Reviewed prior-history gap included.", ref: "source:gap" }],
     explain_gates: { exportable: true, blockers: [], warnings: [{ code: "missing_history", severity: "warning", message: "Reviewed prior-history gap included.", ref: "source:gap" }] },
     disclosure_preview: {
-      txids: ["mock-target-deposit", "withdraw-1"],
+      txids: [
+        SOURCE_FUNDS_FIXTURE_TARGET_TXID,
+        SOURCE_FUNDS_FIXTURE_WITHDRAW_TXID,
+      ],
+      explorer_links: SOURCE_FUNDS_FIXTURE_EXPLORER_LINKS,
       attachments: [{ id: "att:1", label: "Exchange statement", attachment_type: "file" }],
       privacy_note: "Txids disclose on-chain neighbors to the recipient. Chain observations are context, not proof of ownership.",
       excluded: ["descriptors", "xpubs", "wallet files", "seeds", "backend tokens", "unrelated wallet history"],
