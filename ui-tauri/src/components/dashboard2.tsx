@@ -2257,6 +2257,8 @@ const dateFilterOptions = [
   { label: "Last 30 days", value: "30days" },
 ];
 
+type FeeFilter = "all" | "with-fees";
+
 const filterChipClassName =
   "inline-flex h-5 cursor-pointer items-center gap-1 rounded-md bg-gray-50 px-2 text-[10px] font-medium text-gray-600 ring-1 ring-inset ring-gray-500/10 sm:h-6 sm:text-xs dark:bg-gray-800/50 dark:text-gray-400 dark:ring-gray-400/20";
 
@@ -2376,6 +2378,7 @@ const TransactionsTable = ({
   const [flowFilter, setFlowFilter] = React.useState<string>("all");
   const [paymentMethodFilter, setPaymentMethodFilter] =
     React.useState<string>("all");
+  const [feeFilter, setFeeFilter] = React.useState<FeeFilter>("all");
   const [currentPage, setCurrentPage] = React.useState(1);
   const [pageSize, setPageSize] = React.useState(10);
   const [isHydrated, setIsHydrated] = React.useState(false);
@@ -2453,7 +2456,8 @@ const TransactionsTable = ({
     statusFilter !== "all" ||
     dateFilter !== "all" ||
     flowFilter !== "all" ||
-    paymentMethodFilter !== "all";
+    paymentMethodFilter !== "all" ||
+    feeFilter !== "all";
 
   const clearFilters = () => {
     onChartSelectionChange(null);
@@ -2463,6 +2467,7 @@ const TransactionsTable = ({
     setDateFilter("all");
     setFlowFilter("all");
     setPaymentMethodFilter("all");
+    setFeeFilter("all");
   };
 
   React.useEffect(() => {
@@ -2506,6 +2511,13 @@ const TransactionsTable = ({
       setPaymentMethodFilter(nextPayment);
     }
 
+    const nextFees = params.get("fees");
+    if (nextFees === "with-fees" || nextFees === "true" || nextFees === "1") {
+      setFeeFilter("with-fees");
+    } else if (nextFees === "all") {
+      setFeeFilter("all");
+    }
+
     const nextPage = Number(params.get("page"));
     if (!Number.isNaN(nextPage) && nextPage > 0) {
       setCurrentPage(nextPage);
@@ -2545,6 +2557,9 @@ const TransactionsTable = ({
       const matchesPaymentMethod =
         paymentMethodFilter === "all" ||
         txn.paymentMethod === paymentMethodFilter;
+
+      const matchesFees =
+        feeFilter === "all" || (txn.feeBtc ?? 0) > 0 || (txn.feeEur ?? 0) > 0;
 
       const matchesChartSelection =
         !chartSelection ||
@@ -2593,6 +2608,7 @@ const TransactionsTable = ({
         matchesStatus &&
         matchesFlow &&
         matchesPaymentMethod &&
+        matchesFees &&
         matchesDate
       );
     });
@@ -2606,6 +2622,7 @@ const TransactionsTable = ({
     dateFilter,
     flowFilter,
     paymentMethodFilter,
+    feeFilter,
     displayFlow,
   ]);
 
@@ -2642,6 +2659,7 @@ const TransactionsTable = ({
     dateFilter,
     flowFilter,
     paymentMethodFilter,
+    feeFilter,
     pageSize,
   ]);
 
@@ -2674,6 +2692,12 @@ const TransactionsTable = ({
       params.delete("payment");
     }
 
+    if (feeFilter === "with-fees") {
+      params.set("fees", feeFilter);
+    } else {
+      params.delete("fees");
+    }
+
     if (currentPage > 1) {
       params.set("page", String(currentPage));
     } else {
@@ -2696,6 +2720,7 @@ const TransactionsTable = ({
     dateFilter,
     flowFilter,
     paymentMethodFilter,
+    feeFilter,
     currentPage,
     pageSize,
     isHydrated,
@@ -2931,6 +2956,17 @@ const TransactionsTable = ({
               aria-label={`Clear ${paymentMethodFilter} filter`}
             >
               {paymentMethodFilter}
+              <X className="size-2.5 sm:size-3" aria-hidden="true" />
+            </button>
+          )}
+          {feeFilter === "with-fees" && (
+            <button
+              type="button"
+              className={filterChipClassName}
+              onClick={() => setFeeFilter("all")}
+              aria-label="Clear with fees filter"
+            >
+              With fees
               <X className="size-2.5 sm:size-3" aria-hidden="true" />
             </button>
           )}

@@ -1085,6 +1085,21 @@ function buildBalanceDrivers(snapshot: OverviewSnapshot) {
   };
 }
 
+function transactionsDriverSearch(driver: BalanceDriverItem["key"]) {
+  const search: Record<string, string> = {};
+  if (typeof window !== "undefined") {
+    const currentParams = new URLSearchParams(window.location.search);
+    const period = currentParams.get("period");
+    if (period) search.period = period;
+  }
+  if (driver === "fees") {
+    search.fees = "with-fees";
+  } else {
+    search.flow = driver;
+  }
+  return search;
+}
+
 const transactionStatuses: TransactionStatus[] = [
   "confirmed",
   "pending",
@@ -1562,7 +1577,13 @@ const BalanceDriversCard = ({
           const width =
             maxValueBtc > 0 ? Math.max((item.valueBtc / maxValueBtc) * 100, 4) : 0;
           return (
-            <div key={item.key} className="grid gap-1.5">
+            <Link
+              key={item.key}
+              to="/transactions"
+              search={transactionsDriverSearch(item.key)}
+              className="-mx-1 grid gap-1.5 rounded-md px-1 py-1 transition-colors hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              aria-label={`View ${item.label.toLowerCase()} transactions`}
+            >
               <div className="flex items-center justify-between gap-3">
                 <div className="flex min-w-0 items-center gap-2">
                   <Icon className={cn("size-3.5 shrink-0", item.toneClassName)} />
@@ -1598,7 +1619,7 @@ const BalanceDriversCard = ({
                   style={{ width: `${width}%` }}
                 />
               </div>
-            </div>
+            </Link>
           );
         })}
       </div>
