@@ -16,7 +16,7 @@ import {
   PieChartIcon,
   Plus,
   RefreshCw,
-  Settings2,
+  Settings,
   ShieldAlert,
   WalletCards,
   Users,
@@ -29,16 +29,21 @@ import {
   Brush,
   CartesianGrid,
   Cell,
+  ComposedChart,
+  Line,
   Pie,
   PieChart,
   ReferenceLine,
+  Scatter,
   Tooltip,
   XAxis,
   YAxis,
+  ZAxis,
 } from "recharts";
 
 import { Button } from "@/components/ui/button";
 import { AddConnectionDialog } from "@/components/kb/AddConnectionDialog";
+import { Checkbox } from "@/components/ui/checkbox";
 import { CurrencyToggleText } from "@/components/kb/CurrencyToggleText";
 import { type ChartConfig, ChartContainer } from "@/components/ui/chart";
 import {
@@ -49,11 +54,17 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet";
+import {
   DropdownMenu,
   DropdownMenuCheckboxItem,
   DropdownMenuContent,
   DropdownMenuLabel,
-  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useJournalProcessingAction } from "@/hooks/useJournalProcessingAction";
@@ -110,10 +121,83 @@ type PortfolioChartPoint = {
 };
 
 type PortfolioChartMetric = "value" | "btc" | "basis" | "unrealized";
-type PortfolioChartShape = "step" | "line";
+type ActivityFlow = "incoming" | "outgoing" | "swap" | "transfer" | "fee";
+type TreasuryChartSeriesKey = "primary" | "price" | "basis" | "events";
+type TreasurySeriesVisibility = Record<TreasuryChartSeriesKey, boolean>;
+type TreasuryLegendItem = {
+  key: TreasuryChartSeriesKey;
+  label: string;
+  color: string;
+  dashed: boolean;
+};
+
+const DEFAULT_INCOMING_MARKER_MIN_BTC = 0.0001;
+const DEFAULT_OUTGOING_MARKER_MIN_BTC = 0;
+const MAX_ACTIVITY_MARKER_MIN_BTC = 0.01;
+const ACTIVITY_MARKER_MIN_STEP_BTC = 0.00005;
+
+const defaultTreasurySeriesVisibility: TreasurySeriesVisibility = {
+  primary: true,
+  price: true,
+  basis: true,
+  events: true,
+};
+
+type TreasuryChartPoint = PortfolioChartPoint & {
+  bitcoinPriceEur: number;
+  avgCostEur: number | null;
+  reserveValueEur: number;
+  activityBtc: number;
+  activityCount: number;
+  activityValueEur: number;
+  eventPriceEur?: number;
+  eventBalanceBtc?: number;
+  eventSize: number;
+  eventFlow?: ActivityFlow;
+  eventSignedBtc?: number;
+  eventFeeBtc?: number;
+  eventFiatValueEur?: number;
+  eventType?: OverviewTx["type"];
+  eventAccount?: string;
+  eventCounter?: string;
+  eventTag?: string;
+  eventStatus?: TransactionStatus;
+  eventConfirmations?: number;
+  eventId?: string;
+  eventTransactionId?: string;
+  sortTimeMs: number;
+  isActivityEvent?: boolean;
+};
 
 type PortfolioChartMouseState = {
-  activePayload?: Array<{ payload?: PortfolioChartPoint }>;
+  activePayload?: Array<{ payload?: TreasuryChartPoint }>;
+};
+
+type ActivityScatterDotProps = {
+  cx?: number;
+  cy?: number;
+  size?: number;
+  payload?: TreasuryChartPoint;
+  activeSeries: TreasuryChartSeriesKey | null;
+};
+
+type ActivityMarkerView = {
+  activityPoints: TreasuryChartPoint[];
+  chartDisplayData: TreasuryChartPoint[];
+  visibleActivityMarkers: TreasuryChartPoint[];
+};
+
+type TreasuryActivityEvent = {
+  tx: OverviewSnapshot["txs"][number];
+  btc: number;
+  signedBtc: number;
+  feeBtc: number;
+  occurredAt: Date;
+  priceEur: number;
+  valueEur: number;
+  flow: ActivityFlow;
+  volumeBtc: number;
+  sequence: number;
 };
 
 type TransactionStatus = "confirmed" | "pending" | "review" | "failed";
@@ -206,17 +290,6 @@ function formatCompactDisplayMoney(
   return compactCurrencyFormatter.format(eur);
 }
 
-function formatAxisDisplayMoney(
-  eur: number,
-  priceEur: number,
-  currency: Currency,
-) {
-  if (currency === "btc") {
-    return formatCompactDisplayMoney(eur, priceEur, currency).replace("₿ ", "₿");
-  }
-  return formatCompactDisplayMoney(eur, priceEur, currency);
-}
-
 function formatPortfolioMoney(
   amount: number,
   priceEur: number,
@@ -224,15 +297,6 @@ function formatPortfolioMoney(
 ) {
   if (currency === "btc") return formatBtc(amount);
   return formatDisplayMoney(amount, priceEur, currency);
-}
-
-function formatCompactPortfolioMoney(
-  amount: number,
-  priceEur: number,
-  currency: Currency,
-) {
-  if (currency === "btc") return formatBtc(amount, { precision: 3 });
-  return formatCompactDisplayMoney(amount, priceEur, currency);
 }
 
 function formatDriverValue(btc: number, priceEur: number, currency: Currency) {
@@ -251,20 +315,6 @@ function formatDetailedPortfolioMoney(
     return formatBtc(amount, { precision: Math.abs(amount) < 0.01 ? 8 : 4 });
   }
   return formatDisplayMoney(amount, priceEur, currency);
-}
-
-function formatAxisPortfolioMoney(
-  amount: number,
-  priceEur: number,
-  currency: Currency,
-) {
-  if (currency === "btc") {
-    return formatCompactPortfolioMoney(amount, priceEur, currency).replace(
-      "₿ ",
-      "₿",
-    );
-  }
-  return formatAxisDisplayMoney(amount, priceEur, currency);
 }
 
 function donutCenterValueClass(value: string) {
@@ -322,15 +372,15 @@ const palette = {
 
 const portfolioChartColors = {
   light: {
-    value: "#2f2f33",
-    costBasis: "#76767d",
+    value: "#f7931a",
+    costBasis: "#2fae79",
     focus: "#2f2f33",
     risk: "#e3000f",
     riskSoft: "rgba(227, 0, 15, 0.16)",
   },
   dark: {
-    value: "#e8e8ec",
-    costBasis: "#8f8f98",
+    value: "#f6a21a",
+    costBasis: "#50c695",
     focus: "#e8e8ec",
     risk: "#ff3341",
     riskSoft: "rgba(255, 51, 65, 0.18)",
@@ -503,7 +553,7 @@ const periodLabels: Record<TimePeriod, string> = {
   ytd: "YTD",
   "1year": "1 Year",
   "5years": "5 Years",
-  all: "All",
+  all: "All Time",
 };
 
 const periodShortLabels: Record<TimePeriod, string> = {
@@ -513,18 +563,6 @@ const periodShortLabels: Record<TimePeriod, string> = {
   "1year": "1Y",
   "5years": "5Y",
   all: "All",
-};
-
-const portfolioMetricLabels: Record<PortfolioChartMetric, string> = {
-  value: "Value",
-  btc: "BTC",
-  basis: "Cost Basis",
-  unrealized: "Unrealized",
-};
-
-const portfolioShapeLabels: Record<PortfolioChartShape, string> = {
-  step: "Step",
-  line: "Line",
 };
 
 const periodKeys: TimePeriod[] = [
@@ -574,9 +612,35 @@ function normalizeTimePeriodParam(value: string | null): TimePeriod | null {
 }
 
 function initialTimePeriodFromUrl(): TimePeriod {
-  if (typeof window === "undefined") return "1year";
+  if (typeof window === "undefined") return "ytd";
   const params = new URLSearchParams(window.location.search);
-  return normalizeTimePeriodParam(params.get("period")) ?? "1year";
+  return normalizeTimePeriodParam(params.get("period")) ?? "ytd";
+}
+
+function clampActivityMarkerMinimum(value: number) {
+  if (!Number.isFinite(value)) return 0;
+  const clamped = Math.min(Math.max(value, 0), MAX_ACTIVITY_MARKER_MIN_BTC);
+  return (
+    Math.round(clamped / ACTIVITY_MARKER_MIN_STEP_BTC) *
+    ACTIVITY_MARKER_MIN_STEP_BTC
+  );
+}
+
+function initialActivityMarkerMinimumFromUrl(param: string, fallback: number) {
+  if (typeof window === "undefined") return fallback;
+  const params = new URLSearchParams(window.location.search);
+  const rawValue = params.get(param);
+  if (rawValue === null) return fallback;
+  const parsed = Number(rawValue);
+  if (!Number.isFinite(parsed)) return fallback;
+  return clampActivityMarkerMinimum(parsed);
+}
+
+function serializeActivityMarkerMinimum(value: number) {
+  return clampActivityMarkerMinimum(value)
+    .toFixed(8)
+    .replace(/0+$/, "")
+    .replace(/\.$/, "");
 }
 
 function fallbackPortfolioData(
@@ -794,6 +858,424 @@ function chartCurrencyForMetric(
   if (metric === "btc") return "btc";
   if (metric === "value") return currency;
   return "eur";
+}
+
+function parseIsoDayDate(value: string | undefined) {
+  if (!value || !/^\d{4}-\d{2}-\d{2}/.test(value)) return null;
+  const parsed = new Date(`${value.slice(0, 10)}T00:00:00Z`);
+  return Number.isNaN(parsed.valueOf()) ? null : parsed;
+}
+
+function parseOverviewTxDate(value: string | undefined) {
+  if (!value) return null;
+  const normalized = value.includes("T") ? value : `${value.replace(" ", "T")}Z`;
+  const parsed = new Date(normalized);
+  return Number.isNaN(parsed.valueOf()) ? null : parsed;
+}
+
+function treasurySortTime(value: string | undefined) {
+  if (!value) return null;
+  const key = value.split("#")[0] ?? value;
+  const parsed = key.includes("T") ? new Date(key) : parseIsoDayDate(key);
+  return parsed && !Number.isNaN(parsed.valueOf()) ? parsed.valueOf() : null;
+}
+
+function formatTreasuryTick(value: string) {
+  const parsed = parseIsoDayDate(value);
+  if (!parsed) return value;
+  return parsed.toLocaleDateString("en-US", {
+    month: "short",
+    year: "2-digit",
+    timeZone: "UTC",
+  });
+}
+
+function formatTreasuryDetailDate(value: string) {
+  const parsed = parseIsoDayDate(value);
+  if (!parsed) return value;
+  return parsed.toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    timeZone: "UTC",
+  });
+}
+
+function formatEurPrice(eur: number) {
+  if (Math.abs(eur) >= 100_000) return `${Math.round(eur).toLocaleString("en-US")} EUR`;
+  return `${eur.toLocaleString("en-US", {
+    maximumFractionDigits: 0,
+  })} EUR`;
+}
+
+function treasuryPrimaryValue(point: TreasuryChartPoint) {
+  return point.balanceBtc;
+}
+
+function formatBtcAxis(value: number) {
+  const precision = Math.abs(value) >= 10 ? 0 : Math.abs(value) >= 1 ? 2 : 3;
+  return formatBtc(value, { precision }).replace("₿ ", "₿");
+}
+
+function formatActivityMarkerMinimum(value: number) {
+  if (value <= 0) return "All activity";
+  if (value < 0.0001) return `${Math.round(value * 100_000_000).toLocaleString("en-US")} sats`;
+  return formatBtc(value, { precision: value < 0.001 ? 5 : 4 });
+}
+
+function compactEventId(value: string | undefined) {
+  if (!value) return null;
+  if (value.length <= 18) return value;
+  return `${value.slice(0, 8)}…${value.slice(-6)}`;
+}
+
+function statusForOverviewTx(tx: OverviewTx): TransactionStatus {
+  if (tx.internal) return "pending";
+  if (tx.conf > 0) return "confirmed";
+  return tx.tag.toLowerCase().includes("review") ? "review" : "pending";
+}
+
+function activityFlowForTx(tx: OverviewTx): ActivityFlow {
+  if (tx.type === "Fee") return "fee";
+  return flowForOverviewTx(tx);
+}
+
+const activityFlowLabels: Record<ActivityFlow, string> = {
+  incoming: "Received",
+  outgoing: "Spent",
+  swap: "Swap",
+  transfer: "Transfer",
+  fee: "Fee",
+};
+
+const activityFlowColors: Record<ActivityFlow, string> = {
+  incoming: "#34d399",
+  outgoing: "#f87171",
+  swap: "#38bdf8",
+  transfer: "#f59e0b",
+  fee: "#a1a1aa",
+};
+
+const activityFlowKeys: ActivityFlow[] = [
+  "incoming",
+  "outgoing",
+  "swap",
+  "transfer",
+  "fee",
+];
+
+function ActivityScatterDot({
+  cx,
+  cy,
+  size,
+  payload,
+  activeSeries,
+}: ActivityScatterDotProps) {
+  if (
+    typeof cx !== "number" ||
+    typeof cy !== "number" ||
+    !payload?.eventFlow
+  ) {
+    return null;
+  }
+
+  const normalizedSize = typeof size === "number" ? size : 80;
+  const radius = Math.max(3, Math.sqrt(normalizedSize / Math.PI));
+  const transactionId = payload.eventTransactionId ?? payload.eventId;
+  const openTransactionDetail = () => {
+    if (!transactionId) return;
+    window.location.href = transactionDetailHref(transactionId);
+  };
+  const handleClick = (event: React.MouseEvent<SVGCircleElement>) => {
+    if (!transactionId) return;
+    event.preventDefault();
+    event.stopPropagation();
+    openTransactionDetail();
+  };
+  const handleKeyDown = (event: React.KeyboardEvent<SVGCircleElement>) => {
+    if (!transactionId || (event.key !== "Enter" && event.key !== " ")) return;
+    event.preventDefault();
+    event.stopPropagation();
+    openTransactionDetail();
+  };
+
+  return (
+    <circle
+      className="recharts-scatter-symbol"
+      cx={cx}
+      cy={cy}
+      r={radius}
+      aria-label={
+        transactionId
+          ? `Open ${activityFlowLabels[payload.eventFlow]} transaction`
+          : undefined
+      }
+      fill={activityFlowColors[payload.eventFlow]}
+      fillOpacity={
+        activeSeries === null || activeSeries === "events" ? 0.92 : 0.28
+      }
+      focusable={transactionId ? true : false}
+      onClick={handleClick}
+      onKeyDown={handleKeyDown}
+      onMouseDown={(event) => event.preventDefault()}
+      role={transactionId ? "button" : undefined}
+      stroke="var(--background)"
+      strokeWidth={2.5}
+      style={{
+        cursor: transactionId ? "pointer" : "default",
+      }}
+      tabIndex={transactionId ? 0 : -1}
+    />
+  );
+}
+
+function activityTxs(snapshot: OverviewSnapshot): TreasuryActivityEvent[] {
+  const txs = snapshot.activityTxs?.length ? snapshot.activityTxs : snapshot.txs;
+  return txs
+    .flatMap((tx, sequence) => {
+      const occurredAt = parseOverviewTxDate(tx.occurredAt ?? tx.date);
+      if (tx.excluded || !occurredAt) return [];
+      const signedBtc = satToBtc(tx.amountSat);
+      const btc = Math.abs(signedBtc);
+      const feeBtc = satToBtc(Math.abs(tx.feeSat ?? 0));
+      const flow = activityFlowForTx(tx);
+      const pairedVolume = Math.max(
+        btc,
+        satToBtc(Math.abs(tx.pair?.outAmountSat ?? 0)),
+        satToBtc(Math.abs(tx.pair?.inAmountSat ?? 0)),
+      );
+      const volumeBtc =
+        flow === "fee" ? Math.max(btc, feeBtc) : flow === "swap" ? pairedVolume : btc;
+      if (volumeBtc <= 0 && feeBtc <= 0) return [];
+      const valueEur = Math.abs(tx.eur);
+      const priceEur =
+        valueEur > 0 && btc > 0 ? valueEur / btc : tx.rate || snapshot.priceEur;
+      return [
+        {
+          tx,
+          btc,
+          signedBtc,
+          feeBtc,
+          occurredAt,
+          priceEur,
+          valueEur,
+          flow,
+          volumeBtc,
+          sequence,
+        },
+      ];
+    })
+    .sort((a, b) => {
+      const timeDelta = a.occurredAt.valueOf() - b.occurredAt.valueOf();
+      return timeDelta || a.sequence - b.sequence;
+    });
+}
+
+function isActivityInTreasuryPeriod(
+  event: TreasuryActivityEvent,
+  latestDate: Date,
+  period: TimePeriod,
+) {
+  if (period === "all") return true;
+  if (period === "ytd") {
+    return event.occurredAt.getUTCFullYear() === latestDate.getUTCFullYear();
+  }
+  const start = new Date(latestDate);
+  if (period === "30days") {
+    start.setUTCDate(start.getUTCDate() - 30);
+  } else if (period === "3months") {
+    start.setUTCMonth(start.getUTCMonth() - 3);
+  } else if (period === "1year") {
+    start.setUTCFullYear(start.getUTCFullYear() - 1);
+  } else if (period === "5years") {
+    start.setUTCFullYear(start.getUTCFullYear() - 5);
+  }
+  return event.occurredAt >= start && event.occurredAt <= latestDate;
+}
+
+function activityDateKey(event: TreasuryActivityEvent) {
+  return `${event.occurredAt.toISOString()}#${event.tx.id || event.sequence}`;
+}
+
+function buildTreasuryBasePoint(
+  point: PortfolioChartPoint,
+  snapshot: OverviewSnapshot,
+): TreasuryChartPoint {
+  const bitcoinPriceEur =
+    point.balanceBtc > 0 ? point.valueEur / point.balanceBtc : snapshot.priceEur;
+  const avgCostEur =
+    point.balanceBtc > 0 && point.costBasisEur > 0
+      ? point.costBasisEur / point.balanceBtc
+      : null;
+  return {
+    ...point,
+    bitcoinPriceEur,
+    avgCostEur,
+    reserveValueEur: point.valueEur,
+    activityBtc: 0,
+    activityCount: 0,
+    activityValueEur: 0,
+    eventPriceEur: undefined,
+    eventBalanceBtc: undefined,
+    eventSize: 0,
+    sortTimeMs: treasurySortTime(point.date) ?? 0,
+    month: point.month || formatTreasuryTick(point.date),
+    detailLabel: point.detailLabel || formatTreasuryDetailDate(point.date),
+  };
+}
+
+function nearestTreasuryAnchor(
+  points: TreasuryChartPoint[],
+  event: TreasuryActivityEvent,
+) {
+  const eventTime = event.occurredAt.valueOf();
+  const previous = [...points]
+    .reverse()
+    .find((point) => point.sortTimeMs <= eventTime);
+  return previous ?? points[0] ?? null;
+}
+
+function buildTreasuryActivityPoint(
+  event: TreasuryActivityEvent,
+  anchor: TreasuryChartPoint | null,
+  snapshot: OverviewSnapshot,
+): TreasuryChartPoint {
+  const balanceBtc =
+    event.tx.balanceBtc ?? anchor?.balanceBtc ?? latestPortfolioBalanceBtc(snapshot);
+  const costBasisEur =
+    event.tx.costBasisEur ?? anchor?.costBasisEur ?? snapshot.fiat.eurCostBasis;
+  const valueEur =
+    balanceBtc > 0
+      ? balanceBtc * event.priceEur
+      : anchor?.valueEur ?? snapshot.fiat.eurBalance;
+  const avgCostEur =
+    balanceBtc > 0 && costBasisEur > 0 ? costBasisEur / balanceBtc : null;
+  const date = activityDateKey(event);
+  return {
+    date,
+    month: formatTreasuryTick(date),
+    detailLabel: formatTreasuryDetailDate(date),
+    thisYear: valueEur,
+    prevYear: costBasisEur,
+    balanceBtc,
+    valueEur,
+    costBasisEur,
+    unrealizedEur: valueEur - costBasisEur,
+    bitcoinPriceEur: event.priceEur,
+    avgCostEur,
+    reserveValueEur: valueEur,
+    activityBtc: event.volumeBtc,
+    activityCount: 1,
+    activityValueEur: event.valueEur,
+    eventPriceEur: event.priceEur,
+    eventBalanceBtc: balanceBtc,
+    eventSize: Math.max(event.volumeBtc, event.feeBtc),
+    eventFlow: event.flow,
+    eventSignedBtc: event.signedBtc,
+    eventFeeBtc: event.feeBtc,
+    eventFiatValueEur: event.valueEur,
+    eventType: event.tx.type,
+    eventAccount: event.tx.account,
+    eventCounter: event.tx.counter,
+    eventTag: event.tx.tag,
+    eventStatus: statusForOverviewTx(event.tx),
+    eventConfirmations: event.tx.conf,
+    eventId: event.tx.explorerId ?? event.tx.externalId ?? event.tx.id,
+    eventTransactionId: event.tx.id,
+    sortTimeMs: event.occurredAt.valueOf() + event.sequence / 1000,
+    isActivityEvent: true,
+  };
+}
+
+function enrichTreasuryChartData(
+  points: PortfolioChartPoint[],
+  snapshot: OverviewSnapshot,
+  period: TimePeriod,
+): TreasuryChartPoint[] {
+  const basePoints = points.map((point) => buildTreasuryBasePoint(point, snapshot));
+  const events = activityTxs(snapshot);
+  const candidateTimes = [
+    ...basePoints.map((point) => point.sortTimeMs).filter((time) => time > 0),
+    ...events.map((event) => event.occurredAt.valueOf()),
+  ];
+  const latestTime = candidateTimes.length ? Math.max(...candidateTimes) : Date.now();
+  const latestDate = new Date(latestTime);
+  const eventPoints = events
+    .filter((event) => isActivityInTreasuryPeriod(event, latestDate, period))
+    .map((event) =>
+      buildTreasuryActivityPoint(
+        event,
+        nearestTreasuryAnchor(basePoints, event),
+        snapshot,
+      ),
+    );
+
+  return [...basePoints, ...eventPoints].sort((a, b) => {
+    const timeDelta = a.sortTimeMs - b.sortTimeMs;
+    if (timeDelta !== 0) return timeDelta;
+    if (a.isActivityEvent === b.isActivityEvent) return a.date.localeCompare(b.date);
+    return a.isActivityEvent ? -1 : 1;
+  });
+}
+
+function buildTreasuryChartStats(points: TreasuryChartPoint[]) {
+  if (!points.length) return null;
+  const firstPoint = points[0];
+  const lastPoint = points[points.length - 1] ?? firstPoint;
+  const first = treasuryPrimaryValue(firstPoint);
+  const last = treasuryPrimaryValue(lastPoint);
+  const delta = last - first;
+  const highPoint = points.reduce((highest, point) =>
+    treasuryPrimaryValue(point) > treasuryPrimaryValue(highest)
+      ? point
+      : highest,
+  );
+  const lowPoint = points.reduce((lowest, point) =>
+    treasuryPrimaryValue(point) < treasuryPrimaryValue(lowest)
+      ? point
+      : lowest,
+  );
+  return {
+    first,
+    last,
+    delta,
+    pct: first !== 0 ? (delta / Math.abs(first)) * 100 : null,
+    highPoint,
+    lowPoint,
+  };
+}
+
+function activityMarkerView(
+  plottedData: TreasuryChartPoint[],
+  showEvents: boolean,
+  markerMinimumForPoint: (point: TreasuryChartPoint) => number,
+): ActivityMarkerView {
+  const activityPoints = plottedData.filter((point) => point.isActivityEvent);
+  const visibleActivityMarkers = activityPoints.filter(
+    (point) =>
+      showEvents &&
+      (point.eventSize || point.activityBtc) >= markerMinimumForPoint(point),
+  );
+  const visibleActivityMarkerIds = new Set(
+    visibleActivityMarkers.map((point) => point.date),
+  );
+  const chartDisplayData = plottedData.map((point) => {
+    if (!point.isActivityEvent || visibleActivityMarkerIds.has(point.date)) {
+      return point;
+    }
+    return {
+      ...point,
+      eventBalanceBtc: undefined,
+      eventFlow: undefined,
+      eventSize: 0,
+      isActivityEvent: false,
+    };
+  });
+  return {
+    activityPoints,
+    chartDisplayData,
+    visibleActivityMarkers,
+  };
 }
 
 function expandFallbackYearData(
@@ -1938,130 +2420,204 @@ const SideChartsSection = ({
   );
 };
 
-interface RevenueTooltipPayload {
+interface TreasuryTooltipPayload {
   dataKey?: string | number;
   value?: number | string;
-  payload?: PortfolioChartPoint;
+  payload?: TreasuryChartPoint;
 }
 
-interface RevenueTooltipProps {
+interface TreasuryTooltipProps {
   active?: boolean;
-  payload?: RevenueTooltipPayload[];
+  payload?: TreasuryTooltipPayload[];
   label?: string | number;
   hideSensitive: boolean;
-  currency: Currency;
   priceEur: number;
-  showCostBasis: boolean;
-  valueLabel: string;
-  metric: PortfolioChartMetric;
 }
 
-function CustomTooltip({
+function TreasuryTooltip({
   active,
   payload,
   label,
   hideSensitive,
-  currency,
   priceEur,
-  showCostBasis,
-  valueLabel,
-  metric,
-}: RevenueTooltipProps) {
+}: TreasuryTooltipProps) {
   if (!active || !payload?.length) return null;
 
-  const thisYear = payload.find((p) => p.dataKey === "thisYear")?.value || 0;
-  const prevYear = payload.find((p) => p.dataKey === "prevYear")?.value;
-  const point = payload.find((p) => p.payload)?.payload;
-  const hasCostBasis = showCostBasis && prevYear !== undefined;
-  const diff = point
-    ? point.unrealizedEur
-    : Number(thisYear) - Number(prevYear ?? 0);
-  const percentage =
-    (hasCostBasis && Number(prevYear)) || point?.costBasisEur
-      ? (diff / Math.abs(Number(prevYear ?? point?.costBasisEur ?? 0))) * 100
-      : 0;
-  const chartCurrency = chartCurrencyForMetric(metric, currency);
-  const primaryValue =
-    point && metric === "value" && chartCurrency === "btc"
-      ? point.balanceBtc
-      : Number(thisYear);
-  const signedUnrealized = `${diff >= 0 ? "+ " : "− "}${formatPortfolioMoney(
-    Math.abs(diff),
-    priceEur,
-    "eur",
-  )}`;
+  const point =
+    payload.find((p) => p.payload?.isActivityEvent)?.payload ??
+    payload.find((p) => p.payload)?.payload;
+  if (!point) return null;
 
-  return (
-    <div className="min-w-[180px] rounded-lg border border-border bg-popover p-2.5 text-xs shadow-lg">
-      <p className="mb-2 font-medium text-foreground">
-        {point?.detailLabel ?? label}
-      </p>
-      <div className="space-y-1.5">
-        <TooltipMetricRow
-          label={valueLabel}
-          value={formatPortfolioMoney(primaryValue, priceEur, chartCurrency)}
-          hidden={hideSensitive}
-        />
-        {hasCostBasis && (
-          <>
+  const unrealizedPct = point.costBasisEur
+    ? (point.unrealizedEur / Math.abs(point.costBasisEur)) * 100
+    : 0;
+  const eventFlow = point.eventFlow;
+  const hasEvent = point.isActivityEvent && eventFlow !== undefined;
+  const eventTone =
+    eventFlow === "incoming" || eventFlow === "swap"
+      ? "good"
+      : eventFlow === "outgoing" || eventFlow === "fee"
+        ? "bad"
+        : "neutral";
+  const eventAmount =
+    eventFlow === "swap"
+      ? `${formatBtc(point.activityBtc, { precision: 8 })} volume`
+      : eventFlow === "fee"
+        ? formatBtc(-(point.eventFeeBtc || point.activityBtc), {
+            precision: 8,
+            sign: true,
+          })
+        : formatBtc(point.eventSignedBtc ?? 0, {
+            precision: 8,
+            sign: true,
+          });
+  const eventId = compactEventId(point.eventId);
+
+  if (hasEvent) {
+    return (
+      <div className="min-w-[280px] max-w-[320px] rounded-lg border border-border bg-popover p-3 text-xs shadow-xl">
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-1.5">
+              <span
+                className="size-2.5 rounded-full"
+                style={{ backgroundColor: activityFlowColors[eventFlow] }}
+                aria-hidden="true"
+              />
+              <span className="font-semibold text-foreground">
+                {activityFlowLabels[eventFlow]}
+              </span>
+              {point.eventType && (
+                <span className="rounded border bg-muted/30 px-1.5 py-0.5 text-[10px] text-muted-foreground">
+                  {point.eventType}
+                </span>
+              )}
+            </div>
+            <p className="mt-1 text-[10px] text-muted-foreground">
+              {point.detailLabel ?? label}
+            </p>
+          </div>
+          <span
+            className={cn(
+              "shrink-0 text-right font-semibold tabular-nums",
+              eventTone === "good" && "text-emerald-500",
+              eventTone === "bad" && "text-[var(--color-accent)]",
+              blurClass(hideSensitive),
+            )}
+          >
+            {eventAmount}
+          </span>
+        </div>
+
+        <div className="mt-3 space-y-1.5">
+          {point.eventAccount && (
             <TooltipMetricRow
-              label="Cost basis"
-              value={formatPortfolioMoney(Number(prevYear), priceEur, "eur")}
-              hidden={hideSensitive}
+              label="Source"
+              value={point.eventAccount}
+              hidden={false}
             />
+          )}
+          {point.eventCounter && (
             <TooltipMetricRow
-              label="Unrealized"
-              value={`${signedUnrealized} (${percentage >= 0 ? "+" : "−"}${Math.abs(
-                percentage,
-              ).toFixed(1)}%)`}
-              tone={diff >= 0 ? "good" : "bad"}
-              hidden={hideSensitive}
+              label="Counterparty"
+              value={point.eventCounter}
+              hidden={false}
             />
-          </>
-        )}
-        {metric === "unrealized" && point && (
-          <>
-            <TooltipMetricRow
-              label="Value"
-              value={formatPortfolioMoney(point.valueEur, priceEur, "eur")}
-              hidden={hideSensitive}
-            />
-            <TooltipMetricRow
-              label="Cost basis"
-              value={formatPortfolioMoney(point.costBasisEur, priceEur, "eur")}
-              hidden={hideSensitive}
-            />
-          </>
-        )}
-        {metric === "basis" && point && (
-          <>
-            <TooltipMetricRow
-              label="Value"
-              value={formatPortfolioMoney(point.valueEur, priceEur, "eur")}
-              hidden={hideSensitive}
-            />
-            <TooltipMetricRow
-              label="Unrealized"
-              value={signedUnrealized}
-              tone={diff >= 0 ? "good" : "bad"}
-              hidden={hideSensitive}
-            />
-          </>
-        )}
-        {point && metric !== "btc" && chartCurrency !== "btc" && (
+          )}
           <TooltipMetricRow
-            label="BTC"
+            label="Fiat value"
+            value={formatPortfolioMoney(point.eventFiatValueEur ?? 0, priceEur, "eur")}
+            hidden={hideSensitive}
+          />
+          <TooltipMetricRow
+            label="BTC price"
+            value={formatEurPrice(point.bitcoinPriceEur)}
+            hidden={hideSensitive}
+          />
+          {(point.eventFeeBtc ?? 0) > 0 && (
+            <TooltipMetricRow
+              label="Fee"
+              value={formatBtc(point.eventFeeBtc ?? 0, { precision: 8 })}
+              hidden={hideSensitive}
+            />
+          )}
+          <TooltipMetricRow
+            label="Position after"
             value={formatBtc(point.balanceBtc, { precision: 8 })}
             hidden={hideSensitive}
           />
-        )}
-        {point && chartCurrency === "btc" && (
           <TooltipMetricRow
-            label="Fiat value"
-            value={formatPortfolioMoney(point.valueEur, priceEur, "eur")}
+            label="Avg basis after"
+            value={
+              point.avgCostEur === null ? "—" : formatEurPrice(point.avgCostEur)
+            }
             hidden={hideSensitive}
           />
-        )}
+          <TooltipMetricRow
+            label="Status"
+            value={
+              point.eventStatus === "confirmed"
+                ? `${point.eventConfirmations?.toLocaleString("en-US") ?? 0} confirmations`
+                : point.eventStatus
+                  ? statusLabels[point.eventStatus]
+                  : "Unknown"
+            }
+            hidden={false}
+          />
+          {(point.eventTag || eventId) && (
+            <div className="flex flex-wrap gap-1.5 pt-1">
+              {point.eventTag && (
+                <span className="rounded border bg-muted/30 px-1.5 py-0.5 text-[10px] text-muted-foreground">
+                  {point.eventTag}
+                </span>
+              )}
+              {eventId && (
+                <span className="rounded border bg-muted/30 px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground">
+                  {eventId}
+                </span>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-w-[220px] rounded-lg border border-border bg-popover p-2.5 text-xs shadow-lg">
+      <p className="mb-2 font-medium text-foreground">
+        {point.detailLabel ?? label}
+      </p>
+      <div className="space-y-1.5">
+        <TooltipMetricRow
+          label="BTC balance"
+          value={formatBtc(point.balanceBtc, { precision: 8 })}
+          hidden={hideSensitive}
+        />
+        <TooltipMetricRow
+          label="BTC price"
+          value={formatEurPrice(point.bitcoinPriceEur)}
+          hidden={hideSensitive}
+        />
+        <TooltipMetricRow
+          label="Avg basis"
+          value={
+            point.avgCostEur === null ? "—" : formatEurPrice(point.avgCostEur)
+          }
+          hidden={hideSensitive}
+        />
+        <TooltipMetricRow
+          label="Unrealized"
+          value={`${point.unrealizedEur >= 0 ? "+ " : "− "}${formatPortfolioMoney(
+            Math.abs(point.unrealizedEur),
+            priceEur,
+            "eur",
+          )} (${unrealizedPct >= 0 ? "+" : "−"}${Math.abs(unrealizedPct).toFixed(
+            1,
+          )}%)`}
+          tone={point.unrealizedEur >= 0 ? "good" : "bad"}
+          hidden={hideSensitive}
+        />
       </div>
     </div>
   );
@@ -2093,28 +2649,6 @@ function TooltipMetricRow({
       </span>
     </div>
   );
-}
-
-function buildPortfolioChartStats(points: PortfolioChartPoint[]) {
-  if (!points.length) return null;
-  const values = points.map((point) => point.thisYear);
-  const first = values[0] ?? 0;
-  const last = values[values.length - 1] ?? first;
-  const delta = last - first;
-  const highPoint = points.reduce((highest, point) =>
-    point.thisYear > highest.thisYear ? point : highest,
-  );
-  const lowPoint = points.reduce((lowest, point) =>
-    point.thisYear < lowest.thisYear ? point : lowest,
-  );
-  return {
-    first,
-    last,
-    delta,
-    pct: first !== 0 ? (delta / Math.abs(first)) * 100 : null,
-    highPoint,
-    lowPoint,
-  };
 }
 
 function ChartStat({
@@ -2290,6 +2824,287 @@ function InspectorMetric({
   );
 }
 
+type ChartControlsSheetProps = {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  period: TimePeriod;
+  onPeriodChange: (period: TimePeriod) => void;
+  primaryColor: string;
+  legendItems: TreasuryLegendItem[];
+  seriesVisible: TreasurySeriesVisibility;
+  onToggleSeries: (key: TreasuryChartSeriesKey) => void;
+  activeSeries: TreasuryChartSeriesKey | null;
+  onHoverSeries: (key: TreasuryChartSeriesKey | null) => void;
+  markerCount: number;
+  visibleMarkerCount: number;
+  incomingMarkerCount: number;
+  visibleIncomingMarkerCount: number;
+  outgoingMarkerCount: number;
+  visibleOutgoingMarkerCount: number;
+  incomingMarkerMinimumBtc: number;
+  onIncomingMarkerMinimumChange: (value: number) => void;
+  outgoingMarkerMinimumBtc: number;
+  onOutgoingMarkerMinimumChange: (value: number) => void;
+  hideSensitive: boolean;
+};
+
+function ActivityFlowKey() {
+  return (
+    <div className="rounded-md border p-3">
+      <p className="text-xs font-medium text-muted-foreground">
+        Activity flows
+      </p>
+      <div className="mt-3 grid grid-cols-2 gap-2 text-xs text-muted-foreground">
+        {activityFlowKeys.map((flow) => (
+          <div key={flow} className="flex min-w-0 items-center gap-2">
+            <span
+              className="size-2.5 shrink-0 rounded-full"
+              style={{ backgroundColor: activityFlowColors[flow] }}
+              aria-hidden="true"
+            />
+            <span className="truncate">{activityFlowLabels[flow]}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function ActivityLegendSwatch({ muted = false }: { muted?: boolean }) {
+  return (
+    <span
+      className={cn(
+        "flex w-11 shrink-0 items-center gap-0.5",
+        muted && "opacity-40",
+      )}
+      aria-hidden="true"
+    >
+      {activityFlowKeys.map((flow) => (
+        <span
+          key={flow}
+          className="size-1.5 rounded-full"
+          style={{ backgroundColor: activityFlowColors[flow] }}
+        />
+      ))}
+    </span>
+  );
+}
+
+function ChartControlsSheet({
+  open,
+  onOpenChange,
+  period,
+  onPeriodChange,
+  primaryColor,
+  legendItems,
+  seriesVisible,
+  onToggleSeries,
+  activeSeries,
+  onHoverSeries,
+  markerCount,
+  visibleMarkerCount,
+  incomingMarkerCount,
+  visibleIncomingMarkerCount,
+  outgoingMarkerCount,
+  visibleOutgoingMarkerCount,
+  incomingMarkerMinimumBtc,
+  onIncomingMarkerMinimumChange,
+  outgoingMarkerMinimumBtc,
+  onOutgoingMarkerMinimumChange,
+  hideSensitive,
+}: ChartControlsSheetProps) {
+  return (
+    <Sheet open={open} onOpenChange={onOpenChange}>
+      <SheetContent
+        className="w-[min(100vw,420px)] overflow-hidden p-0 sm:max-w-none"
+        showCloseButton={false}
+      >
+        <SheetHeader className="border-b p-0">
+          <div className="flex items-start justify-between gap-4 px-4 py-4 sm:px-6">
+            <div className="min-w-0">
+              <SheetTitle className="truncate text-xl sm:text-2xl">
+                Chart controls
+              </SheetTitle>
+              <SheetDescription className="mt-1 truncate">
+                Time range, chart series, and activity marker thresholds
+              </SheetDescription>
+              <div className="mt-2 flex flex-wrap items-center gap-2">
+                <span className="text-[10px] text-muted-foreground">
+                  {visibleMarkerCount.toLocaleString("en-US")} of{" "}
+                  {markerCount.toLocaleString("en-US")} markers visible
+                </span>
+              </div>
+            </div>
+            <Button
+              type="button"
+              size="icon"
+              variant="ghost"
+              aria-label="Close chart controls"
+              onClick={() => onOpenChange(false)}
+            >
+              <X className="size-4" aria-hidden="true" />
+            </Button>
+          </div>
+        </SheetHeader>
+
+        <div className="min-h-0 flex-1 overflow-y-auto">
+          <div className="space-y-5 p-4 sm:p-6">
+            <div className="rounded-md border p-3">
+              <p className="text-xs font-medium text-muted-foreground">
+                Time Range
+              </p>
+              <div className="mt-3 grid grid-cols-2 gap-2">
+                {periodKeys.map((key) => (
+                  <button
+                    key={key}
+                    type="button"
+                    aria-pressed={period === key}
+                    className={cn(
+                      "rounded-md border px-2.5 py-2 text-left text-sm transition-colors",
+                      period === key
+                        ? "text-foreground"
+                        : "border-transparent bg-muted/20 text-muted-foreground hover:bg-muted/45 hover:text-foreground",
+                    )}
+                    style={
+                      period === key
+                        ? {
+                            backgroundColor: `${primaryColor}24`,
+                            borderColor: primaryColor,
+                          }
+                        : undefined
+                    }
+                    onClick={() => onPeriodChange(key)}
+                  >
+                    {periodLabels[key]}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <ActivityFlowKey />
+
+            <div className="rounded-md border p-3">
+              <p className="text-xs font-medium text-muted-foreground">
+                Series
+              </p>
+              <div className="mt-3 space-y-1">
+                {legendItems.map((item) => (
+                  <label
+                    key={item.key}
+                    className={cn(
+                      "flex cursor-pointer items-center gap-2 rounded-md px-2 py-2 text-sm transition-colors hover:bg-muted/35",
+                      !seriesVisible[item.key] && "text-muted-foreground",
+                      activeSeries !== null &&
+                        activeSeries !== item.key &&
+                        "opacity-55",
+                    )}
+                    onMouseEnter={() => onHoverSeries(item.key)}
+                    onMouseLeave={() => onHoverSeries(null)}
+                  >
+                    <Checkbox
+                      checked={seriesVisible[item.key]}
+                      onCheckedChange={() => onToggleSeries(item.key)}
+                      aria-label={`Show ${item.label}`}
+                      className="data-[state=checked]:border-[var(--chart-control-accent)] data-[state=checked]:bg-[var(--chart-control-accent)] data-[state=checked]:text-background"
+                      style={
+                        {
+                          "--chart-control-accent": item.color,
+                        } as React.CSSProperties
+                      }
+                    />
+                    {item.key === "events" ? (
+                      <ActivityLegendSwatch muted={!seriesVisible.events} />
+                    ) : (
+                      <span
+                        className={cn(
+                          "h-0.5 w-6 shrink-0 rounded-full",
+                          item.dashed && "border-t border-dashed bg-transparent",
+                        )}
+                        style={{
+                          backgroundColor: item.dashed ? "transparent" : item.color,
+                          borderColor: item.color,
+                        }}
+                      />
+                    )}
+                    <span className="truncate">{item.label}</span>
+                  </label>
+                ))}
+              </div>
+            </div>
+
+            <div className="rounded-md border p-3">
+              <div className="flex items-center justify-between gap-3 text-sm">
+                <div>
+                  <p className="text-xs font-medium text-muted-foreground">
+                    Incoming markers
+                  </p>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    {visibleIncomingMarkerCount.toLocaleString("en-US")} of{" "}
+                    {incomingMarkerCount.toLocaleString("en-US")} shown
+                  </p>
+                </div>
+                <span
+                  className={cn("font-medium tabular-nums", blurClass(hideSensitive))}
+                >
+                  {formatActivityMarkerMinimum(incomingMarkerMinimumBtc)}
+                </span>
+              </div>
+              <input
+                aria-label="Minimum incoming activity marker value"
+                className="mt-3 h-2 w-full cursor-pointer"
+                min={0}
+                max={MAX_ACTIVITY_MARKER_MIN_BTC}
+                step={ACTIVITY_MARKER_MIN_STEP_BTC}
+                type="range"
+                value={incomingMarkerMinimumBtc}
+                style={{ accentColor: activityFlowColors.incoming }}
+                onChange={(event) =>
+                  onIncomingMarkerMinimumChange(Number(event.currentTarget.value))
+                }
+              />
+            </div>
+
+            <div className="rounded-md border border-red-500/20 bg-red-500/5 p-3">
+              <div className="flex items-center justify-between gap-3 text-sm">
+                <div>
+                  <p className="text-xs font-medium text-red-500 dark:text-red-400">
+                    Outgoing markers
+                  </p>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    {visibleOutgoingMarkerCount.toLocaleString("en-US")} of{" "}
+                    {outgoingMarkerCount.toLocaleString("en-US")} shown
+                  </p>
+                </div>
+                <span
+                  className={cn(
+                    "font-medium tabular-nums text-red-500 dark:text-red-400",
+                    blurClass(hideSensitive),
+                  )}
+                >
+                  {formatActivityMarkerMinimum(outgoingMarkerMinimumBtc)}
+                </span>
+              </div>
+              <input
+                aria-label="Minimum outgoing activity marker value"
+                className="mt-3 h-2 w-full cursor-pointer"
+                min={0}
+                max={MAX_ACTIVITY_MARKER_MIN_BTC}
+                step={ACTIVITY_MARKER_MIN_STEP_BTC}
+                type="range"
+                value={outgoingMarkerMinimumBtc}
+                style={{ accentColor: activityFlowColors.outgoing }}
+                onChange={(event) =>
+                  onOutgoingMarkerMinimumChange(Number(event.currentTarget.value))
+                }
+              />
+            </div>
+          </div>
+        </div>
+      </SheetContent>
+    </Sheet>
+  );
+}
+
 const RevenueFlowChart = ({
   snapshot,
   hideSensitive,
@@ -2301,260 +3116,384 @@ const RevenueFlowChart = ({
 }) => {
   const [period, setPeriod] =
     React.useState<TimePeriod>(initialTimePeriodFromUrl);
-  const [metric, setMetric] = React.useState<PortfolioChartMetric>("value");
-  const [shape, setShape] = React.useState<PortfolioChartShape>("step");
   const [expandedPointDate, setExpandedPointDate] = React.useState<string | null>(
     null,
   );
-  const { active: activeSeries, handleHover } = useHoverHighlight<
-    "thisYear" | "prevYear"
-  >();
+  const [seriesVisible, setSeriesVisible] =
+    React.useState<TreasurySeriesVisibility>(defaultTreasurySeriesVisibility);
+  const [incomingMarkerMinimumBtc, setIncomingMarkerMinimumBtc] =
+    React.useState(() =>
+      initialActivityMarkerMinimumFromUrl(
+        "incomingMin",
+        DEFAULT_INCOMING_MARKER_MIN_BTC,
+      ),
+    );
+  const [outgoingMarkerMinimumBtc, setOutgoingMarkerMinimumBtc] =
+    React.useState(() =>
+      initialActivityMarkerMinimumFromUrl(
+        "outgoingMin",
+        DEFAULT_OUTGOING_MARKER_MIN_BTC,
+      ),
+    );
+  const [chartControlsOpen, setChartControlsOpen] = React.useState(false);
+  const [expandedChartControlsOpen, setExpandedChartControlsOpen] =
+    React.useState(false);
+  const { active: activeSeries, handleHover } =
+    useHoverHighlight<TreasuryChartSeriesKey>();
   const colorMode = useResolvedColorMode();
   const chartColors = portfolioChartColors[colorMode];
+  const primaryColor = chartColors.value;
+  const secondaryColor = chartColors.costBasis;
   const chartConfig = React.useMemo(
     () =>
       ({
-        thisYear: { label: "Value", color: chartColors.value },
-        prevYear: {
-          label: "Cost Basis",
-          color: chartColors.costBasis,
+        primary: {
+          label: "BTC Balance",
+          color: primaryColor,
+        },
+        price: {
+          label: "BTC Price",
+          color: "#94a3b8",
+        },
+        basis: {
+          label: "Avg Basis",
+          color: secondaryColor,
+        },
+        events: {
+          label: "Activity",
+          color: "#f97316",
         },
       }) satisfies ChartConfig,
-    [chartColors.costBasis, chartColors.value],
+    [primaryColor, secondaryColor],
   );
-  const chartCurrency = chartCurrencyForMetric(metric, currency);
-  const showCostBasis = metric === "value" && chartCurrency === "eur";
 
-  const legendItems = [
+  const legendItems: TreasuryLegendItem[] = [
     {
-      key: "thisYear" as const,
-      label:
-        metric === "value"
-          ? chartCurrency === "btc"
-            ? "BTC balance"
-            : "Value"
-          : portfolioMetricLabels[metric],
-      color: chartColors.value,
+      key: "primary" as const,
+      label: "BTC Balance",
+      color: primaryColor,
+      dashed: false,
     },
-    ...(showCostBasis
-      ? [
-          {
-            key: "prevYear" as const,
-            label: "Cost Basis",
-            color: chartColors.costBasis,
-          },
-        ]
-      : []),
+    {
+      key: "events" as const,
+      label: "Activity",
+      color: "#f97316",
+      dashed: false,
+    },
+    {
+      key: "basis" as const,
+      label: "Avg Basis",
+      color: secondaryColor,
+      dashed: true,
+    },
+    {
+      key: "price" as const,
+      label: "BTC Price",
+      color: "#94a3b8",
+      dashed: true,
+    },
   ];
 
   React.useEffect(() => {
     if (typeof window === "undefined") return;
     const params = new URLSearchParams(window.location.search);
     params.set("period", period);
+    if (incomingMarkerMinimumBtc === DEFAULT_INCOMING_MARKER_MIN_BTC) {
+      params.delete("incomingMin");
+    } else {
+      params.set(
+        "incomingMin",
+        serializeActivityMarkerMinimum(incomingMarkerMinimumBtc),
+      );
+    }
+    if (outgoingMarkerMinimumBtc === DEFAULT_OUTGOING_MARKER_MIN_BTC) {
+      params.delete("outgoingMin");
+    } else {
+      params.set(
+        "outgoingMin",
+        serializeActivityMarkerMinimum(outgoingMarkerMinimumBtc),
+      );
+    }
     const nextQuery = params.toString();
     const nextUrl = nextQuery
       ? `${window.location.pathname}?${nextQuery}`
       : window.location.pathname;
     window.history.replaceState(null, "", nextUrl);
-  }, [period]);
+  }, [incomingMarkerMinimumBtc, outgoingMarkerMinimumBtc, period]);
 
   React.useEffect(() => {
     setExpandedPointDate(null);
-  }, [currency, metric, period]);
+  }, [currency, period]);
 
-  const chartType = shape === "step" ? "stepAfter" : "linear";
-  const chartData = getDataForPeriod(
-    period,
-    snapshot,
-    metric,
-    currency,
-    "compact",
+  const chartData = React.useMemo(
+    () =>
+      enrichTreasuryChartData(
+        getDataForPeriod(period, snapshot, "value", currency, "compact"),
+        snapshot,
+        period,
+      ),
+    [currency, period, snapshot],
   );
-  const expandedChartData = getDataForPeriod(
-    period,
-    snapshot,
-    metric,
-    currency,
-    "detailed",
+  const expandedChartData = React.useMemo(
+    () =>
+      enrichTreasuryChartData(
+        getDataForPeriod(period, snapshot, "value", currency, "detailed"),
+        snapshot,
+        period,
+      ),
+    [currency, period, snapshot],
   );
-  const chartStats = buildPortfolioChartStats(expandedChartData);
-  const latestPortfolioValue =
-    chartData.length > 0
-      ? chartData[chartData.length - 1]?.thisYear
-      : chartCurrency === "btc"
-        ? latestPortfolioBalanceBtc(snapshot)
-        : snapshot.fiat.eurBalance;
+  const toggleSeries = React.useCallback((key: TreasuryChartSeriesKey) => {
+    setSeriesVisible((current) => ({ ...current, [key]: !current[key] }));
+  }, []);
+  const activityMarkerMinimumForPoint = React.useCallback(
+    (point: TreasuryChartPoint) => {
+      if (point.eventFlow === "incoming") return incomingMarkerMinimumBtc;
+      if (point.eventFlow === "outgoing" || point.eventFlow === "fee") {
+        return outgoingMarkerMinimumBtc;
+      }
+      return Math.min(incomingMarkerMinimumBtc, outgoingMarkerMinimumBtc);
+    },
+    [incomingMarkerMinimumBtc, outgoingMarkerMinimumBtc],
+  );
+  const compactMarkerView = React.useMemo(
+    () =>
+      activityMarkerView(
+        chartData,
+        seriesVisible.events,
+        activityMarkerMinimumForPoint,
+      ),
+    [activityMarkerMinimumForPoint, chartData, seriesVisible.events],
+  );
+  const expandedMarkerView = React.useMemo(
+    () =>
+      activityMarkerView(
+        expandedChartData,
+        seriesVisible.events,
+        activityMarkerMinimumForPoint,
+      ),
+    [activityMarkerMinimumForPoint, expandedChartData, seriesVisible.events],
+  );
 
   const renderChartCard = (expanded = false) => {
-    const visibleData = expanded ? expandedChartData : chartData;
-    const visibleLatest =
-      visibleData.length > 0
-        ? visibleData[visibleData.length - 1]?.thisYear
-        : latestPortfolioValue;
-    const chartTitle =
-      metric === "value"
-        ? chartCurrency === "btc"
-          ? "BTC Balance"
-          : "Portfolio Value"
-        : portfolioMetricLabels[metric];
-    const valueTone =
-      metric === "unrealized" && visibleLatest < 0
-        ? chartColors.risk
-        : chartColors.value;
-    const valueFill =
-      metric === "unrealized" && visibleLatest < 0
-        ? chartColors.riskSoft
-        : undefined;
+    const plottedData = expanded ? expandedChartData : chartData;
+    const markerView = expanded ? expandedMarkerView : compactMarkerView;
+    const controlsOpen = expanded ? expandedChartControlsOpen : chartControlsOpen;
+    const setControlsOpen = expanded
+      ? setExpandedChartControlsOpen
+      : setChartControlsOpen;
+    const {
+      activityPoints,
+      chartDisplayData,
+      visibleActivityMarkers,
+    } = markerView;
+    const latestPoint = plottedData.at(-1);
+    const brushGradientId = expanded
+      ? "treasuryBrushGradientExpanded"
+      : "treasuryBrushGradient";
+    const visibleLatestReserve = snapshot.fiat.eurBalance;
+    const visibleCostBasis = snapshot.fiat.eurCostBasis;
+    const latestBalanceBtc = latestPortfolioBalanceBtc(snapshot);
+    const visibleAvgCost =
+      latestBalanceBtc > 0 ? visibleCostBasis / latestBalanceBtc : (latestPoint?.avgCostEur ?? 0);
+    const gainEur = visibleLatestReserve - visibleCostBasis;
+    const gainPct = visibleCostBasis
+      ? (gainEur / Math.abs(visibleCostBasis)) * 100
+      : null;
+    const incomingActivityPoints = activityPoints.filter(
+      (point) => point.eventFlow === "incoming",
+    );
+    const visibleIncomingMarkers = visibleActivityMarkers.filter(
+      (point) => point.eventFlow === "incoming",
+    );
+    const outgoingActivityPoints = activityPoints.filter(
+      (point) => point.eventFlow === "outgoing" || point.eventFlow === "fee",
+    );
+    const visibleOutgoingMarkers = visibleActivityMarkers.filter(
+      (point) => point.eventFlow === "outgoing" || point.eventFlow === "fee",
+    );
+    const activityEvents = activityPoints.length;
+    const receivedBtc = activityPoints.reduce(
+      (sum, point) =>
+        point.eventFlow === "incoming" ? sum + point.activityBtc : sum,
+      0,
+    );
+    const spentBtc = activityPoints.reduce(
+      (sum, point) =>
+        point.eventFlow === "outgoing" ? sum + point.activityBtc : sum,
+      0,
+    );
+    const swapBtc = activityPoints.reduce(
+      (sum, point) => (point.eventFlow === "swap" ? sum + point.activityBtc : sum),
+      0,
+    );
+    const feeBtc = activityPoints.reduce(
+      (sum, point) => {
+        const markerFee = point.eventFeeBtc ?? 0;
+        if (markerFee > 0) return sum + markerFee;
+        return point.eventFlow === "fee" ? sum + point.activityBtc : sum;
+      },
+      0,
+    );
+    const netBtc = receivedBtc - spentBtc - feeBtc;
+    const chartStats = buildTreasuryChartStats(plottedData);
     const statPeriodLabel = periodShortLabels[period];
     const selectedPoint = expanded
-      ? (visibleData.find((point) => point.date === expandedPointDate) ??
-        visibleData.at(-1) ??
+      ? (plottedData.find((point) => point.date === expandedPointDate) ??
+        plottedData.at(-1) ??
         null)
       : null;
     const selectedPointIndex = selectedPoint
-      ? visibleData.findIndex((point) => point.date === selectedPoint.date)
+      ? plottedData.findIndex((point) => point.date === selectedPoint.date)
       : -1;
     const previousPoint =
-      selectedPointIndex > 0 ? visibleData[selectedPointIndex - 1] : null;
+      selectedPointIndex > 0 ? plottedData[selectedPointIndex - 1] : null;
     const handleExpandedChartMove = (state: PortfolioChartMouseState) => {
       if (!expanded) return;
       const point = state.activePayload?.find((item) => item.payload)?.payload;
       if (point) setExpandedPointDate(point.date);
     };
-    const xAxisTicks = portfolioAxisTicks(visibleData, period, expanded);
-
+    const balancePoints = plottedData.filter((point) => !point.isActivityEvent);
+    const xAxisTicks = portfolioAxisTicks(
+      balancePoints.length ? balancePoints : plottedData,
+      period,
+      expanded,
+    );
+    const detailDate = latestPoint
+      ? formatTreasuryDetailDate(latestPoint.date)
+      : "Current snapshot";
     return (
-      <div className="flex min-w-0 flex-1 flex-col gap-3 rounded-xl border bg-card p-3 sm:p-4">
-        <div className="flex flex-wrap items-center gap-2 sm:gap-3">
-          <div className="flex flex-1 flex-col gap-1">
-            {metric === "value" ? (
-              <CurrencyToggleText
-                className={cn(
-                  "block w-fit text-xl leading-tight font-semibold tracking-tight",
-                  blurClass(hideSensitive),
-                )}
-              >
-                {formatCompactPortfolioMoney(
-                  visibleLatest,
-                  snapshot.priceEur,
-                  chartCurrency,
-                )}
-              </CurrencyToggleText>
-            ) : (
-              <p
-                className={cn(
-                  "text-xl leading-tight font-semibold tracking-tight",
-                  blurClass(hideSensitive),
-                )}
-              >
-                {formatCompactPortfolioMoney(
-                  visibleLatest,
-                  snapshot.priceEur,
-                  chartCurrency,
-                )}
+      <div className="relative z-10 flex min-w-0 flex-1 flex-col gap-4 overflow-visible rounded-xl border bg-card p-3 sm:p-4">
+        <ChartControlsSheet
+          open={controlsOpen}
+          onOpenChange={setControlsOpen}
+          period={period}
+          onPeriodChange={setPeriod}
+          primaryColor={primaryColor}
+          legendItems={legendItems}
+          seriesVisible={seriesVisible}
+          onToggleSeries={toggleSeries}
+          activeSeries={activeSeries}
+          onHoverSeries={handleHover}
+          markerCount={activityPoints.length}
+          visibleMarkerCount={visibleActivityMarkers.length}
+          incomingMarkerCount={incomingActivityPoints.length}
+          visibleIncomingMarkerCount={visibleIncomingMarkers.length}
+          outgoingMarkerCount={outgoingActivityPoints.length}
+          visibleOutgoingMarkerCount={visibleOutgoingMarkers.length}
+          incomingMarkerMinimumBtc={incomingMarkerMinimumBtc}
+          onIncomingMarkerMinimumChange={setIncomingMarkerMinimumBtc}
+          outgoingMarkerMinimumBtc={outgoingMarkerMinimumBtc}
+          onOutgoingMarkerMinimumChange={setOutgoingMarkerMinimumBtc}
+          hideSensitive={hideSensitive}
+        />
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div
+            className="min-w-0"
+            aria-label="BTC activity chart"
+          >
+            <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+              <p className="text-sm font-semibold text-foreground">
+                BTC activity
               </p>
-            )}
-            <p className="text-xs text-muted-foreground">
-              {`${chartTitle} (${periodLabels[period]})`}
-            </p>
-          </div>
-          <div className="hidden items-center gap-3 sm:flex sm:gap-5">
-            {legendItems.map((item) => (
-              <div
-                key={item.key}
-                className={cn(
-                  "flex items-center gap-1.5 transition-opacity duration-200 motion-reduce:transition-none",
-                  activeSeries !== null &&
-                    activeSeries !== item.key &&
-                    "opacity-40",
-                )}
-                onMouseEnter={() => handleHover(item.key)}
-                onMouseLeave={() => handleHover(null)}
-              >
-                <div
-                  className="size-2.5 rounded-full sm:size-3"
-                  style={{ backgroundColor: item.color }}
-                />
-                <span className="text-[10px] text-muted-foreground sm:text-xs">
-                  {item.label}
-                </span>
-              </div>
-            ))}
-          </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button
-                  variant="outline"
-                  size="icon"
-                  className="size-7 sm:size-8"
-                  aria-label="Open chart settings"
+              <span className="text-[10px] text-muted-foreground">
+                As of {detailDate}
+              </span>
+            </div>
+            <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
+              <span>
+                <span className={cn("font-semibold text-foreground", blurClass(hideSensitive))}>
+                  {activityEvents.toLocaleString("en-US")}
+                </span>{" "}
+                events
+              </span>
+              <span>
+                <span
+                  className={cn(
+                    "font-semibold",
+                    netBtc >= 0
+                      ? "text-emerald-600 dark:text-emerald-400"
+                      : "text-[var(--color-accent)]",
+                    blurClass(hideSensitive),
+                  )}
                 >
-                  <Settings2 className="size-4" aria-hidden="true" />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-56">
-                <DropdownMenuLabel>Chart settings</DropdownMenuLabel>
-                <DropdownMenuSeparator />
-                <DropdownMenuLabel className="text-[10px] font-medium tracking-[0.14em] text-muted-foreground uppercase">
-                  Time Period
-                </DropdownMenuLabel>
-                {periodKeys.map((key) => (
-                  <DropdownMenuCheckboxItem
-                    key={key}
-                    checked={period === key}
-                    onSelect={(event) => event.preventDefault()}
-                    onCheckedChange={() => setPeriod(key)}
-                  >
-                    {periodLabels[key]}
-                  </DropdownMenuCheckboxItem>
-                ))}
-                <DropdownMenuSeparator />
-                <DropdownMenuLabel className="text-[10px] font-medium tracking-[0.14em] text-muted-foreground uppercase">
-                  Metric
-                </DropdownMenuLabel>
-                {(
-                  [
-                    "value",
-                    "btc",
-                    "basis",
-                    "unrealized",
-                  ] satisfies PortfolioChartMetric[]
-                ).map((key) => (
-                  <DropdownMenuCheckboxItem
-                    key={key}
-                    checked={metric === key}
-                    onSelect={(event) => event.preventDefault()}
-                    onCheckedChange={() => setMetric(key)}
-                  >
-                    {portfolioMetricLabels[key]}
-                  </DropdownMenuCheckboxItem>
-                ))}
-                <DropdownMenuSeparator />
-                <DropdownMenuLabel className="text-[10px] font-medium tracking-[0.14em] text-muted-foreground uppercase">
-                  Shape
-                </DropdownMenuLabel>
-                {(["step", "line"] satisfies PortfolioChartShape[]).map(
-                  (key) => (
-                    <DropdownMenuCheckboxItem
-                      key={key}
-                      checked={shape === key}
-                      onSelect={(event) => event.preventDefault()}
-                      onCheckedChange={() => setShape(key)}
-                    >
-                      {portfolioShapeLabels[key]}
-                    </DropdownMenuCheckboxItem>
-                  ),
-                )}
-              </DropdownMenuContent>
-            </DropdownMenu>
+                  {formatBtc(netBtc, { precision: 4, sign: true })}
+                </span>{" "}
+                net
+              </span>
+              <span>
+                Received{" "}
+                <span className={cn("font-semibold text-foreground", blurClass(hideSensitive))}>
+                  {formatBtc(receivedBtc, { precision: 4 })}
+                </span>
+              </span>
+              <span>
+                Spent{" "}
+                <span className={cn("font-semibold text-foreground", blurClass(hideSensitive))}>
+                  {formatBtc(spentBtc, { precision: 4 })}
+                </span>
+              </span>
+              {swapBtc > 0 && (
+                <span>
+                  Swapped{" "}
+                  <span className={cn("font-semibold text-foreground", blurClass(hideSensitive))}>
+                    {formatBtc(swapBtc, { precision: 4 })}
+                  </span>
+                </span>
+              )}
+              {feeBtc > 0 && (
+                <span>
+                  Fees{" "}
+                  <span className={cn("font-semibold text-foreground", blurClass(hideSensitive))}>
+                    {formatBtc(feeBtc, { precision: 8 })}
+                  </span>
+                </span>
+              )}
+              <span>
+                Avg basis{" "}
+                <span className={cn("font-semibold text-foreground", blurClass(hideSensitive))}>
+                  {formatEurPrice(visibleAvgCost)}
+                </span>
+              </span>
+              {gainPct !== null && (
+                <span
+                  className={cn(
+                    "font-semibold",
+                    gainEur >= 0
+                      ? "text-emerald-600 dark:text-emerald-400"
+                      : "text-[var(--color-accent)]",
+                    blurClass(hideSensitive),
+                  )}
+                >
+                  {gainEur >= 0 ? "+ " : "- "}
+                  {Math.abs(gainPct).toFixed(2)}% unrealized
+                </span>
+              )}
+            </div>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="rounded border bg-muted/30 px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">
+              {periodShortLabels[period]}
+            </span>
+            <Button
+              type="button"
+              variant={controlsOpen ? "outline" : "ghost"}
+              size="icon"
+              className="size-8"
+              aria-label="Toggle chart controls"
+              aria-expanded={controlsOpen}
+              onClick={() => setControlsOpen((open) => !open)}
+            >
+              <Settings className="size-4" aria-hidden="true" />
+            </Button>
             {!expanded && (
               <DialogTrigger asChild>
                 <Button
                   variant="ghost"
                   size="icon"
-                  className="size-7 sm:size-8"
-                  aria-label="Expand portfolio value chart"
+                  className="size-8"
+                  aria-label="Expand BTC activity chart"
                 >
                   <Maximize2 className="size-4" aria-hidden="true" />
                 </Button>
@@ -2565,8 +3504,8 @@ const RevenueFlowChart = ({
                 <Button
                   variant="ghost"
                   size="icon"
-                  className="size-7 sm:size-8"
-                  aria-label="Close expanded portfolio value chart"
+                  className="size-8"
+                  aria-label="Close BTC activity chart"
                 >
                   <X className="size-4" aria-hidden="true" />
                 </Button>
@@ -2578,264 +3517,335 @@ const RevenueFlowChart = ({
         {expanded && chartStats && (
           <div className="grid gap-2 rounded-lg border bg-muted/25 p-2 sm:grid-cols-3">
             <ChartStat
-              label={`Change in ${chartTitle}`}
-              value={formatDetailedPortfolioMoney(
-                Math.abs(chartStats.delta),
-                snapshot.priceEur,
-                chartCurrency,
-              )}
+              label="Change in BTC balance"
+              value={formatBtc(Math.abs(chartStats.delta), { precision: 4 })}
               detail={
                 chartStats.pct === null
                   ? statPeriodLabel
-                  : `${statPeriodLabel} · ${chartStats.pct >= 0 ? "+" : "−"}${Math.abs(
+                  : `${statPeriodLabel} · ${chartStats.pct >= 0 ? "+" : "-"}${Math.abs(
                       chartStats.pct,
                     ).toFixed(1)}%`
               }
               tone={chartStats.delta >= 0 ? "good" : "bad"}
-              prefix={chartStats.delta >= 0 ? "+ " : "− "}
+              prefix={chartStats.delta >= 0 ? "+ " : "- "}
               hidden={hideSensitive}
             />
             <ChartStat
-              label={`Highest ${chartTitle} point`}
-              value={formatDetailedPortfolioMoney(
-                chartStats.highPoint.thisYear,
-                snapshot.priceEur,
-                chartCurrency,
-              )}
+              label="Highest BTC position"
+              value={formatBtc(treasuryPrimaryValue(chartStats.highPoint), {
+                precision: 4,
+              })}
               detail={`${statPeriodLabel} · ${chartStats.highPoint.detailLabel}`}
               hidden={hideSensitive}
             />
             <ChartStat
-              label={`Lowest ${chartTitle} point`}
-              value={formatDetailedPortfolioMoney(
-                chartStats.lowPoint.thisYear,
-                snapshot.priceEur,
-                chartCurrency,
-              )}
+              label="Lowest BTC position"
+              value={formatBtc(treasuryPrimaryValue(chartStats.lowPoint), {
+                precision: 4,
+              })}
               detail={`${statPeriodLabel} · ${chartStats.lowPoint.detailLabel}`}
               hidden={hideSensitive}
             />
           </div>
         )}
 
-      <div
-        className={cn(
-          "min-w-0",
-          expanded
-            ? "grid gap-3 xl:grid-cols-[minmax(0,1fr)_300px]"
-            : "w-full",
-        )}
-      >
-      <div
-        className={
-          expanded
-            ? "h-[min(64vh,620px)] w-full min-w-0"
-            : "h-[180px] w-full min-w-0 sm:h-[220px] lg:h-[240px]"
-        }
-      >
-        <ChartContainer
-          config={chartConfig}
-          className="h-full w-full overflow-visible [&_.recharts-tooltip-wrapper]:!z-30 [&_.recharts-wrapper]:!overflow-visible"
-        >
-          <AreaChart
-            data={visibleData}
-            onMouseMove={
-              expanded
-                ? (state) =>
-                    handleExpandedChartMove(state as PortfolioChartMouseState)
-                : undefined
-            }
-            margin={{
-              top: expanded ? 24 : 18,
-              right: expanded ? 56 : 44,
-              bottom: expanded ? 4 : 0,
-              left: expanded ? 8 : 0,
-            }}
-          >
-            <defs>
-              <linearGradient
-                id={expanded ? "thisYearGradientExpanded" : "thisYearGradient"}
-                x1="0"
-                y1="0"
-                x2="0"
-                y2="1"
-              >
-                <stop
-                  offset="0%"
-                  stopColor={valueFill ?? valueTone}
-                  stopOpacity={0.3}
-                />
-                <stop
-                  offset="100%"
-                  stopColor={valueFill ?? valueTone}
-                  stopOpacity={0.05}
-                />
-              </linearGradient>
-              {showCostBasis && (
-                <linearGradient
-                  id={
-                    expanded ? "prevYearGradientExpanded" : "prevYearGradient"
-                  }
-                  x1="0"
-                  y1="0"
-                  x2="0"
-                  y2="1"
-                >
-                  <stop
-                    offset="0%"
-                    stopColor={chartColors.costBasis}
-                    stopOpacity={0.2}
-                  />
-                  <stop
-                    offset="100%"
-                    stopColor={chartColors.costBasis}
-                    stopOpacity={0.02}
-                  />
-                </linearGradient>
+        <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
+          {legendItems.map((item) => (
+            <div
+              key={item.key}
+              className={cn(
+                "flex items-center gap-1.5 transition-opacity duration-200 motion-reduce:transition-none",
+                !seriesVisible[item.key] && "opacity-30",
+                activeSeries !== null &&
+                  activeSeries !== item.key &&
+                  "opacity-40",
               )}
-            </defs>
-            <CartesianGrid strokeDasharray="0" vertical={false} />
-            <XAxis
-              dataKey="date"
-              axisLine={false}
-              tickLine={false}
-              tick={{ fontSize: 10 }}
-              dy={8}
-              minTickGap={expanded ? 22 : 28}
-              ticks={xAxisTicks}
-              tickFormatter={(value) =>
-                visibleData.find((point) => point.date === value)?.month ??
-                String(value)
-              }
-            />
-            <YAxis
-              axisLine={false}
-              tickLine={false}
-              tick={{ fontSize: 10 }}
-              tickMargin={6}
-              dx={-2}
-              tickFormatter={(value) =>
-                hideSensitive
-                  ? ""
-                  : formatAxisPortfolioMoney(
-                      Number(value),
-                      snapshot.priceEur,
-                      chartCurrency,
-                    )
-              }
-              width={58}
-            />
-            {metric === "unrealized" && (
-              <ReferenceLine
-                y={0}
-                stroke={chartColors.risk}
-                strokeOpacity={0.45}
-                strokeWidth={1}
-              />
+              onMouseEnter={() => handleHover(item.key)}
+              onMouseLeave={() => handleHover(null)}
+            >
+              {item.key === "events" ? (
+                <ActivityLegendSwatch muted={!seriesVisible.events} />
+              ) : (
+                <span
+                  className={cn(
+                    "h-0.5 w-5 rounded-full",
+                    item.dashed && "border-t border-dashed bg-transparent",
+                  )}
+                  style={{
+                    backgroundColor: item.dashed ? "transparent" : item.color,
+                    borderColor: item.color,
+                  }}
+                />
+              )}
+              <span>{item.label}</span>
+            </div>
+          ))}
+        </div>
+
+        <div
+          className={cn(
+            "min-w-0",
+            expanded
+              ? "grid gap-3 xl:grid-cols-[minmax(0,1fr)_300px]"
+              : "relative",
+          )}
+        >
+          <div
+            className={cn(
+              "relative flex w-full min-w-0 flex-col",
+              expanded
+                ? "h-[min(64vh,620px)]"
+                : "h-[380px] sm:h-[456px]",
             )}
-            {expanded && selectedPoint && (
-              <ReferenceLine
-                x={selectedPoint.date}
-                stroke={chartColors.focus}
-                strokeDasharray="2 3"
-                strokeOpacity={0.5}
-                strokeWidth={1.5}
-              />
-            )}
-            {!expanded && (
-              <Tooltip
-                allowEscapeViewBox={{ x: true, y: true }}
-                content={
-                  <CustomTooltip
-                    hideSensitive={hideSensitive}
-                    currency={currency}
-                    priceEur={snapshot.priceEur}
-                    showCostBasis={showCostBasis}
-                    valueLabel={
-                      metric === "value"
-                        ? chartCurrency === "btc"
-                          ? "BTC Balance"
-                          : "Value"
-                        : portfolioMetricLabels[metric]
-                    }
-                    metric={metric}
+          >
+            <div className="grid min-h-0 flex-1 grid-cols-[18px_minmax(0,1fr)_20px]">
+              <div className="pointer-events-none flex items-center justify-center">
+                <span className="-rotate-90 whitespace-nowrap text-[10px] font-semibold text-muted-foreground">
+                  BTC Balance
+                </span>
+              </div>
+              <ChartContainer
+                config={chartConfig}
+                className="h-full min-h-0 w-full overflow-visible [&_.recharts-tooltip-wrapper]:!z-[100]"
+              >
+                <ComposedChart
+                  data={chartDisplayData}
+                  onMouseMove={
+                    expanded
+                      ? (state) =>
+                          handleExpandedChartMove(
+                            state as PortfolioChartMouseState,
+                          )
+                      : undefined
+                  }
+                  margin={{
+                    top: expanded ? 12 : 2,
+                    right: expanded ? 8 : 4,
+                    bottom: plottedData.length > 3 ? (expanded ? 14 : 8) : 0,
+                    left: expanded ? 8 : 4,
+                  }}
+                >
+                  <CartesianGrid
+                    strokeDasharray="0"
+                    vertical
+                    strokeOpacity={0.45}
                   />
-                }
-                cursor={{ strokeOpacity: 0.2 }}
-                isAnimationActive={false}
-                offset={32}
-                wrapperStyle={{
-                  pointerEvents: "none",
-                  zIndex: 30,
-                }}
-              />
+                  <XAxis
+                    dataKey="date"
+                    axisLine={false}
+                    tickLine={false}
+                    tick={{ fontSize: 10 }}
+                    dy={8}
+                    minTickGap={expanded ? 18 : 24}
+                    ticks={xAxisTicks}
+                    tickFormatter={(value) =>
+                      plottedData.find((point) => point.date === value)?.month ??
+                      formatTreasuryTick(String(value))
+                    }
+                  />
+                  <YAxis
+                    yAxisId="btc"
+                    orientation="left"
+                    axisLine={false}
+                    tickLine={false}
+                    tick={{ fontSize: 10 }}
+                    tickMargin={4}
+                    tickFormatter={(value) =>
+                      hideSensitive ? "" : formatBtcAxis(Number(value))
+                    }
+                    width={48}
+                  />
+                  <YAxis
+                    yAxisId="price"
+                    orientation="right"
+                    axisLine={false}
+                    tickLine={false}
+                    tick={{ fontSize: 10 }}
+                    tickMargin={4}
+                    tickFormatter={(value) =>
+                      hideSensitive
+                        ? ""
+                        : formatEurPrice(Number(value))
+                    }
+                    width={64}
+                  />
+                  <ZAxis
+                    dataKey="eventSize"
+                    range={[80, expanded ? 620 : 480]}
+                  />
+                  {expanded && selectedPoint && (
+                    <ReferenceLine
+                      yAxisId="btc"
+                      x={selectedPoint.date}
+                      stroke={chartColors.focus}
+                      strokeDasharray="2 3"
+                      strokeOpacity={0.5}
+                      strokeWidth={1.5}
+                    />
+                  )}
+                  <Tooltip
+                    allowEscapeViewBox={{ x: true, y: true }}
+                    content={
+                      <TreasuryTooltip
+                        hideSensitive={hideSensitive}
+                        priceEur={snapshot.priceEur}
+                      />
+                    }
+                    cursor={{ strokeOpacity: 0.2 }}
+                    isAnimationActive={false}
+                    offset={32}
+                    wrapperStyle={{
+                      pointerEvents: "none",
+                      zIndex: 30,
+                    }}
+                  />
+                  {seriesVisible.primary && (
+                    <Line
+                      yAxisId="btc"
+                      type="stepAfter"
+                      dataKey="balanceBtc"
+                      name={legendItems[0]?.label}
+                      stroke={primaryColor}
+                      strokeWidth={activeSeries === "primary" ? 3 : 2.5}
+                      strokeOpacity={
+                        activeSeries === null || activeSeries === "primary"
+                          ? 1
+                          : 0.3
+                      }
+                      dot={false}
+                      activeDot={expanded ? { r: 4 } : { r: 3 }}
+                      isAnimationActive={false}
+                    />
+                  )}
+                  {seriesVisible.price && (
+                    <Line
+                      yAxisId="price"
+                      type="linear"
+                      dataKey="bitcoinPriceEur"
+                      name={legendItems[3]?.label}
+                      stroke="#94a3b8"
+                      strokeWidth={activeSeries === "price" ? 2.4 : 1.6}
+                      strokeDasharray="3 5"
+                      strokeOpacity={
+                        activeSeries === null || activeSeries === "price" ? 0.72 : 0.2
+                      }
+                      dot={false}
+                      activeDot={expanded ? { r: 3 } : { r: 2 }}
+                      isAnimationActive={false}
+                    />
+                  )}
+                  {seriesVisible.basis && (
+                    <Line
+                      yAxisId="price"
+                      type="stepAfter"
+                      dataKey="avgCostEur"
+                      name={legendItems[2]?.label}
+                      connectNulls={false}
+                      stroke={secondaryColor}
+                      strokeWidth={activeSeries === "basis" ? 3 : 2}
+                      strokeDasharray="5 5"
+                      strokeOpacity={
+                        activeSeries === null || activeSeries === "basis"
+                          ? 1
+                          : 0.32
+                      }
+                      dot={false}
+                      activeDot={expanded ? { r: 4 } : { r: 3 }}
+                      isAnimationActive={false}
+                    />
+                  )}
+                  {seriesVisible.events && (
+                    <Scatter
+                      yAxisId="btc"
+                      dataKey="eventBalanceBtc"
+                      name="Activity"
+                      fill="transparent"
+                      shape={(props) => (
+                        <ActivityScatterDot
+                          {...props}
+                          activeSeries={activeSeries}
+                        />
+                      )}
+                      isAnimationActive={false}
+                    />
+                  )}
+                  {plottedData.length > 3 && (
+                    <Brush
+                      className="text-muted-foreground"
+                      dataKey="date"
+                      fill="rgba(12, 10, 8, 0.78)"
+                      height={expanded ? 60 : 74}
+                      padding={{ top: 8, right: 1, bottom: 8, left: 1 }}
+                      travellerWidth={10}
+                      stroke={primaryColor}
+                      tickFormatter={(value) =>
+                        plottedData.find((point) => point.date === value)?.month ??
+                        formatTreasuryTick(String(value))
+                      }
+                    >
+                      <AreaChart>
+                        <XAxis dataKey="date" hide />
+                        <YAxis hide domain={["dataMin", "dataMax"]} />
+                        <defs>
+                          <linearGradient
+                            id={brushGradientId}
+                            x1="0"
+                            y1="0"
+                            x2="0"
+                            y2="1"
+                          >
+                            <stop
+                              offset="0%"
+                              stopColor={primaryColor}
+                              stopOpacity={0.28}
+                            />
+                            <stop
+                              offset="100%"
+                              stopColor={primaryColor}
+                              stopOpacity={0.03}
+                            />
+                          </linearGradient>
+                        </defs>
+                        <Area
+                          type="monotone"
+                          dataKey="bitcoinPriceEur"
+                          stroke={primaryColor}
+                          strokeWidth={1.35}
+                          fill={`url(#${brushGradientId})`}
+                          fillOpacity={1}
+                          dot={false}
+                          isAnimationActive={false}
+                        />
+                      </AreaChart>
+                    </Brush>
+                  )}
+                </ComposedChart>
+              </ChartContainer>
+              <div className="pointer-events-none flex items-center justify-center">
+                <span className="rotate-90 whitespace-nowrap text-[10px] font-semibold text-muted-foreground">
+                  BTC Price (EUR)
+                </span>
+              </div>
+            </div>
+            {plottedData.length > 3 && (
+              <p className="pt-1 text-center text-[10px] text-muted-foreground">
+                Drag the handles or selection area to reframe the time period
+              </p>
             )}
-            <Area
-              type={chartType}
-              dataKey="thisYear"
-              stroke={valueTone}
-              strokeWidth={activeSeries === "thisYear" ? 3 : 2}
-              fill={`url(#${expanded ? "thisYearGradientExpanded" : "thisYearGradient"})`}
-              fillOpacity={
-                activeSeries === null || activeSeries === "thisYear" ? 1 : 0.3
-              }
-              strokeOpacity={
-                activeSeries === null || activeSeries === "thisYear" ? 1 : 0.3
-              }
-              dot={expanded || visibleData.length <= 36 ? { r: 2 } : false}
-              activeDot={expanded ? { r: 4 } : false}
-              isAnimationActive={false}
-            />
-            {showCostBasis && (
-              <Area
-                type={chartType}
-                dataKey="prevYear"
-                stroke={chartColors.costBasis}
-                strokeWidth={activeSeries === "prevYear" ? 3 : 2}
-                fill={`url(#${expanded ? "prevYearGradientExpanded" : "prevYearGradient"})`}
-                fillOpacity={
-                  activeSeries === null || activeSeries === "prevYear"
-                    ? 1
-                    : 0.3
-                }
-                strokeOpacity={
-                  activeSeries === null || activeSeries === "prevYear"
-                    ? 1
-                    : 0.3
-                }
-                dot={expanded || visibleData.length <= 36 ? { r: 2 } : false}
-                activeDot={expanded ? { r: 4 } : false}
-                isAnimationActive={false}
+          </div>
+          {expanded && (
+            <div className="grid content-start gap-3">
+              <PortfolioInspector
+                point={selectedPoint}
+                previousPoint={previousPoint}
+                hideSensitive={hideSensitive}
+                priceEur={snapshot.priceEur}
+                chartCurrency={currency}
               />
-            )}
-            {expanded && visibleData.length > 18 && (
-              <Brush
-                className="text-muted-foreground"
-                dataKey="date"
-                fill="var(--card)"
-                height={22}
-                travellerWidth={8}
-                stroke="var(--border)"
-                tickFormatter={(value) =>
-                  visibleData.find((point) => point.date === value)?.month ??
-                  String(value)
-                }
-              />
-            )}
-          </AreaChart>
-        </ChartContainer>
+            </div>
+          )}
+        </div>
       </div>
-      {expanded && (
-        <PortfolioInspector
-          point={selectedPoint}
-          previousPoint={previousPoint}
-          hideSensitive={hideSensitive}
-          priceEur={snapshot.priceEur}
-          chartCurrency={chartCurrency}
-        />
-      )}
-    </div>
-    </div>
     );
   };
 
@@ -2847,7 +3857,7 @@ const RevenueFlowChart = ({
         className="max-w-[calc(100vw-1rem)] p-0 sm:max-w-[min(1500px,calc(100vw-1.5rem))]"
       >
         <DialogTitle className="sr-only">
-          Expanded portfolio value chart
+          Expanded BTC activity chart
         </DialogTitle>
         {renderChartCard(true)}
       </DialogContent>
@@ -3237,14 +4247,6 @@ const RecentTransactionsTable = ({
       <div className={cn("rounded-xl border bg-card", className)}>
       <div className="flex items-center justify-between gap-3 px-3 pt-3 sm:px-4">
         <div className="flex items-center gap-2">
-          <Button
-            variant="outline"
-            size="icon"
-            className="size-7 shrink-0 sm:size-8"
-            aria-label="Recent transactions"
-          >
-            <ClipboardList className="size-4 text-muted-foreground sm:size-[18px]" />
-          </Button>
           <span className="text-sm font-medium">
             Recent Transactions
           </span>

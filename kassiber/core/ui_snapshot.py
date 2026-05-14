@@ -590,26 +590,59 @@ def _transactions(conn: sqlite3.Connection, profile_id: str) -> list[dict[str, A
         """,
         (profile_id,),
     ).fetchall()
-    pair_meta_by_transaction = _transaction_pair_display_meta(conn, rows)
-    tags_by_transaction = _transaction_tags_by_transaction(
-        conn,
-        [row["id"] for row in rows],
-    )
-
-    output = []
-    rendered_pair_ids: set[str] = set()
-    for row in rows:
-        pair_meta = pair_meta_by_transaction.get(row["id"])
-        metadata_tags = [
-            str(tag) for tag in tags_by_transaction.get(row["id"], []) if tag
-        ]
-        if pair_meta:
-            pair_id = str(pair_meta["pair_id"])
-            if pair_id in rendered_pair_ids:
-                continue
-            rendered_pair_ids.add(pair_id)
-        output.append(_transaction_row_to_ui(row, metadata_tags, pair_meta))
+    output = _transaction_rows_to_ui(conn, rows)
     return output[:20]
+
+
+def _activity_transactions(conn: sqlite3.Connection, profile_id: str) -> list[dict[str, Any]]:
+    rows = conn.execute(
+        """
+        SELECT
+            t.id,
+            t.external_id AS external_id,
+            t.occurred_at,
+            t.confirmed_at,
+            w.label AS wallet,
+            t.direction,
+            t.asset,
+            t.amount,
+            t.fee,
+            COALESCE(t.fiat_value, 0) AS fiat_value,
+            COALESCE(t.fiat_rate, 0) AS fiat_rate,
+            COALESCE(t.kind, '') AS kind,
+            COALESCE(t.description, '') AS description,
+            COALESCE(t.counterparty, '') AS counterparty,
+            COALESCE(t.note, '') AS note,
+            t.excluded,
+            jq.reason AS quarantine_reason
+        FROM transactions t
+        JOIN wallets w ON w.id = t.wallet_id
+        LEFT JOIN journal_quarantines jq ON jq.transaction_id = t.id
+        WHERE t.profile_id = ?
+        ORDER BY t.occurred_at ASC, t.created_at ASC, t.id ASC
+        """,
+        (profile_id,),
+    ).fetchall()
+    activity_rows: list[dict[str, Any]] = []
+    quantity_msat = 0
+    cost_basis_by_transaction = _portfolio_cost_basis_by_transaction(conn, profile_id)
+    running_cost_basis = 0.0
+    for row in rows:
+        amount = int(row["amount"] or 0)
+        fee = int(row["fee"] or 0)
+        quantity_msat += amount if row["direction"] == "inbound" else -amount - fee
+        running_cost_basis = cost_basis_by_transaction.get(
+            str(row["id"]),
+            running_cost_basis,
+        )
+        activity_rows.append(
+            {
+                **dict(row),
+                "running_balance_btc": float(msat_to_btc(quantity_msat)),
+                "running_cost_basis_eur": running_cost_basis,
+            }
+        )
+    return _activity_transaction_rows_to_ui(conn, activity_rows)
 
 
 def _transaction_type(kind: str, direction: str, quarantine_reason: str | None) -> str:
@@ -846,6 +879,13 @@ def _transaction_row_to_ui(
             "feeSat": fee_sat,
             "feeKind": pair_meta.get("fee_kind"),
         }
+    row_keys = set(row.keys())
+    if occurred_at:
+        payload["occurredAt"] = occurred_at
+    if "running_balance_btc" in row_keys:
+        payload["balanceBtc"] = float(row["running_balance_btc"] or 0)
+    if "running_cost_basis_eur" in row_keys:
+        payload["costBasisEur"] = float(row["running_cost_basis_eur"] or 0)
     return payload
 
 
@@ -917,6 +957,34 @@ def _portfolio_cost_basis_by_date(
             cost_basis -= float(row["cost_basis"] or 0)
         by_date[date_key] = cost_basis
     return by_date
+
+
+def _portfolio_cost_basis_by_transaction(
+    conn: sqlite3.Connection,
+    profile_id: str,
+) -> dict[str, float]:
+    rows = conn.execute(
+        """
+        SELECT transaction_id, quantity, fiat_value, cost_basis
+        FROM journal_entries
+        WHERE profile_id = ? AND asset = 'BTC'
+        ORDER BY occurred_at ASC, created_at ASC, id ASC
+        """,
+        (profile_id,),
+    ).fetchall()
+    cost_basis = 0.0
+    by_transaction: dict[str, float] = {}
+    for row in rows:
+        transaction_id = row["transaction_id"]
+        if not transaction_id:
+            continue
+        quantity = int(row["quantity"] or 0)
+        if quantity >= 0:
+            cost_basis += float(row["fiat_value"] or 0)
+        else:
+            cost_basis -= float(row["cost_basis"] or 0)
+        by_transaction[str(transaction_id)] = cost_basis
+    return by_transaction
 
 
 def _portfolio_series(
@@ -1064,6 +1132,7 @@ def build_overview_snapshot(conn: sqlite3.Connection) -> dict[str, Any]:
         "priceUsd": price_usd,
         "connections": _connections(conn, profile["id"], balances),
         "txs": _transactions(conn, profile["id"]),
+        "activityTxs": _activity_transactions(conn, profile["id"]),
         "balanceSeries": _balance_series(conn, profile["id"]),
         "portfolioSeries": _portfolio_series(
             conn,
@@ -3092,4 +3161,29 @@ def _transaction_rows_to_ui(
                 continue
             rendered_pair_ids.add(pair_id)
         output.append(_transaction_row_to_ui(row, metadata_tags, pair_meta))
+    return output
+
+
+def _activity_transaction_rows_to_ui(
+    conn: sqlite3.Connection,
+    rows: list[sqlite3.Row] | list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    pair_meta_by_transaction: dict[str, dict[str, Any]] = {}
+    # Keep the overview chart uncapped without building giant IN (...) queries.
+    for start in range(0, len(rows), 400):
+        chunk = rows[start : start + 400]
+        pair_meta_by_transaction.update(_transaction_pair_display_meta(conn, chunk))
+
+    output = []
+    rendered_pair_ids: set[str] = set()
+    for row in rows:
+        pair_meta = pair_meta_by_transaction.get(row["id"])
+        if pair_meta:
+            pair_id = str(pair_meta["pair_id"])
+            if pair_id in rendered_pair_ids:
+                continue
+            rendered_pair_ids.add(pair_id)
+        # Activity chart rows intentionally skip metadata tags to keep the
+        # uncapped overview payload and SQLite parameter count bounded.
+        output.append(_transaction_row_to_ui(row, [], pair_meta))
     return output
