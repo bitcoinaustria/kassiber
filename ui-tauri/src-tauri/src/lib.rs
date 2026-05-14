@@ -1181,9 +1181,24 @@ fn build_app_menu(
     #[cfg(not(target_os = "macos"))]
     let quit_item = menu_item(app, MENU_QUIT, "Quit Kassiber", Some("CmdOrCtrl+Q"))?;
     let toggle_sensitive = menu_item(app, MENU_TOGGLE_SENSITIVE, "Toggle Sensitive Values", None)?;
-    let ui_scale_decrease_item = menu_item(app, MENU_UI_SCALE_DECREASE, "Smaller UI", None)?;
-    let ui_scale_increase_item = menu_item(app, MENU_UI_SCALE_INCREASE, "Larger UI", None)?;
-    let ui_scale_reset_item = menu_item(app, MENU_UI_SCALE_RESET, "Default UI Scale", None)?;
+    let ui_scale_decrease_item = menu_item(
+        app,
+        MENU_UI_SCALE_DECREASE,
+        "Smaller UI",
+        Some("CmdOrCtrl+Minus"),
+    )?;
+    let ui_scale_increase_item = menu_item(
+        app,
+        MENU_UI_SCALE_INCREASE,
+        "Larger UI",
+        Some("CmdOrCtrl+Equal"),
+    )?;
+    let ui_scale_reset_item = menu_item(
+        app,
+        MENU_UI_SCALE_RESET,
+        "Default UI Scale",
+        Some("CmdOrCtrl+Digit0"),
+    )?;
     let toggle_fullscreen = menu_item(
         app,
         MENU_TOGGLE_FULLSCREEN,
