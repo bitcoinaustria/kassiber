@@ -65,6 +65,7 @@ export interface Tx {
   externalId?: string;
   explorerId?: string;
   date: string;
+  occurredAt?: string;
   type: TxType;
   account: string;
   counter: string;
@@ -92,6 +93,8 @@ export interface Tx {
   };
   conf: number;
   internal?: boolean;
+  balanceBtc?: number;
+  costBasisEur?: number;
 }
 
 export interface FiatSnapshot {

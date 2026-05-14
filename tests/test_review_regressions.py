@@ -544,6 +544,19 @@ class ReviewRegressionTest(unittest.TestCase):
         self.assertEqual(overview["txs"][0]["amountSat"], -10_000_000)
         self.assertEqual(overview["txs"][0]["tag"], "Review")
         self.assertEqual(overview["txs"][1]["explorerId"], "a" * 64)
+        self.assertEqual(
+            [row["id"] for row in overview["activityTxs"]],
+            ["tx-ui-in", "tx-ui-spend"],
+        )
+        self.assertEqual(
+            overview["activityTxs"][0]["occurredAt"],
+            "2026-01-10T10:00:00Z",
+        )
+        self.assertAlmostEqual(overview["activityTxs"][0]["balanceBtc"], 1.0)
+        self.assertAlmostEqual(overview["activityTxs"][0]["costBasisEur"], 50_000)
+        self.assertEqual(overview["activityTxs"][1]["feeSat"], 100_000)
+        self.assertAlmostEqual(overview["activityTxs"][1]["balanceBtc"], 0.899)
+        self.assertAlmostEqual(overview["activityTxs"][1]["costBasisEur"], 44_950)
 
         transactions = build_transactions_snapshot(conn, {"limit": 10})
         self.assertEqual(transactions["year"], 2026)

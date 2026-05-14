@@ -836,7 +836,7 @@ function parseIsoDayDate(value: string | undefined) {
 
 function parseOverviewTxDate(value: string | undefined) {
   if (!value) return null;
-  const normalized = value.includes("T") ? value : value.replace(" ", "T");
+  const normalized = value.includes("T") ? value : `${value.replace(" ", "T")}Z`;
   const parsed = new Date(normalized);
   return Number.isNaN(parsed.valueOf()) ? null : parsed;
 }
@@ -904,8 +904,7 @@ function statusForOverviewTx(tx: OverviewTx): TransactionStatus {
 }
 
 function activityFlowForTx(tx: OverviewTx): ActivityFlow {
-  const normalizedTag = tx.tag.toLowerCase();
-  if (tx.type === "Fee" || normalizedTag.includes("fee")) return "fee";
+  if (tx.type === "Fee") return "fee";
   return flowForOverviewTx(tx);
 }
 
@@ -984,7 +983,7 @@ function activityTxs(snapshot: OverviewSnapshot): TreasuryActivityEvent[] {
   const txs = snapshot.activityTxs?.length ? snapshot.activityTxs : snapshot.txs;
   return txs
     .flatMap((tx, sequence) => {
-      const occurredAt = parseOverviewTxDate(tx.date);
+      const occurredAt = parseOverviewTxDate(tx.occurredAt ?? tx.date);
       if (tx.excluded || !occurredAt) return [];
       const signedBtc = satToBtc(tx.amountSat);
       const btc = Math.abs(signedBtc);
@@ -1091,8 +1090,10 @@ function buildTreasuryActivityPoint(
   anchor: TreasuryChartPoint | null,
   snapshot: OverviewSnapshot,
 ): TreasuryChartPoint {
-  const balanceBtc = anchor?.balanceBtc ?? latestPortfolioBalanceBtc(snapshot);
-  const costBasisEur = anchor?.costBasisEur ?? snapshot.fiat.eurCostBasis;
+  const balanceBtc =
+    event.tx.balanceBtc ?? anchor?.balanceBtc ?? latestPortfolioBalanceBtc(snapshot);
+  const costBasisEur =
+    event.tx.costBasisEur ?? anchor?.costBasisEur ?? snapshot.fiat.eurCostBasis;
   const valueEur =
     balanceBtc > 0
       ? balanceBtc * event.priceEur
@@ -2996,6 +2997,8 @@ const RevenueFlowChart = ({
     DEFAULT_OUTGOING_MARKER_MIN_BTC,
   );
   const [chartControlsOpen, setChartControlsOpen] = React.useState(false);
+  const [expandedChartControlsOpen, setExpandedChartControlsOpen] =
+    React.useState(false);
   const { active: activeSeries, handleHover } =
     useHoverHighlight<TreasuryChartSeriesKey>();
   const colorMode = useResolvedColorMode();
@@ -3093,6 +3096,10 @@ const RevenueFlowChart = ({
 
   const renderChartCard = (expanded = false) => {
     const plottedData = expanded ? expandedChartData : chartData;
+    const controlsOpen = expanded ? expandedChartControlsOpen : chartControlsOpen;
+    const setControlsOpen = expanded
+      ? setExpandedChartControlsOpen
+      : setChartControlsOpen;
     const activityPoints = plottedData.filter((point) => point.isActivityEvent);
     const visibleActivityMarkers = activityPoints.filter(
       (point) =>
@@ -3119,9 +3126,11 @@ const RevenueFlowChart = ({
     const brushGradientId = expanded
       ? "treasuryBrushGradientExpanded"
       : "treasuryBrushGradient";
-    const visibleLatestReserve = latestPoint?.reserveValueEur ?? snapshot.fiat.eurBalance;
-    const visibleCostBasis = latestPoint?.costBasisEur ?? snapshot.fiat.eurCostBasis;
-    const visibleAvgCost = latestPoint?.avgCostEur ?? 0;
+    const visibleLatestReserve = snapshot.fiat.eurBalance;
+    const visibleCostBasis = snapshot.fiat.eurCostBasis;
+    const latestBalanceBtc = latestPortfolioBalanceBtc(snapshot);
+    const visibleAvgCost =
+      latestBalanceBtc > 0 ? visibleCostBasis / latestBalanceBtc : (latestPoint?.avgCostEur ?? 0);
     const gainEur = visibleLatestReserve - visibleCostBasis;
     const gainPct = visibleCostBasis
       ? (gainEur / Math.abs(visibleCostBasis)) * 100
@@ -3154,10 +3163,11 @@ const RevenueFlowChart = ({
       0,
     );
     const feeBtc = activityPoints.reduce(
-      (sum, point) =>
-        point.eventFlow === "fee"
-          ? sum + (point.eventFeeBtc || point.activityBtc)
-          : sum,
+      (sum, point) => {
+        const markerFee = point.eventFeeBtc ?? 0;
+        if (markerFee > 0) return sum + markerFee;
+        return point.eventFlow === "fee" ? sum + point.activityBtc : sum;
+      },
       0,
     );
     const netBtc = receivedBtc - spentBtc - feeBtc;
@@ -3190,8 +3200,8 @@ const RevenueFlowChart = ({
     return (
       <div className="relative z-10 flex min-w-0 flex-1 flex-col gap-4 overflow-visible rounded-xl border bg-card p-3 sm:p-4">
         <ChartControlsSheet
-          open={chartControlsOpen}
-          onOpenChange={setChartControlsOpen}
+          open={controlsOpen}
+          onOpenChange={setControlsOpen}
           period={period}
           onPeriodChange={setPeriod}
           primaryColor={primaryColor}
@@ -3303,12 +3313,12 @@ const RevenueFlowChart = ({
             </span>
             <Button
               type="button"
-              variant={chartControlsOpen ? "outline" : "ghost"}
+              variant={controlsOpen ? "outline" : "ghost"}
               size="icon"
               className="size-8"
               aria-label="Toggle chart controls"
-              aria-expanded={chartControlsOpen}
-              onClick={() => setChartControlsOpen((open) => !open)}
+              aria-expanded={controlsOpen}
+              onClick={() => setControlsOpen((open) => !open)}
             >
               <Settings className="size-4" aria-hidden="true" />
             </Button>
