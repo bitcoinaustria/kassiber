@@ -181,6 +181,12 @@ type ActivityScatterDotProps = {
   activeSeries: TreasuryChartSeriesKey | null;
 };
 
+type ActivityMarkerView = {
+  activityPoints: TreasuryChartPoint[];
+  chartDisplayData: TreasuryChartPoint[];
+  visibleActivityMarkers: TreasuryChartPoint[];
+};
+
 type TreasuryActivityEvent = {
   tx: OverviewSnapshot["txs"][number];
   btc: number;
@@ -611,6 +617,32 @@ function initialTimePeriodFromUrl(): TimePeriod {
   return normalizeTimePeriodParam(params.get("period")) ?? "ytd";
 }
 
+function clampActivityMarkerMinimum(value: number) {
+  if (!Number.isFinite(value)) return 0;
+  const clamped = Math.min(Math.max(value, 0), MAX_ACTIVITY_MARKER_MIN_BTC);
+  return (
+    Math.round(clamped / ACTIVITY_MARKER_MIN_STEP_BTC) *
+    ACTIVITY_MARKER_MIN_STEP_BTC
+  );
+}
+
+function initialActivityMarkerMinimumFromUrl(param: string, fallback: number) {
+  if (typeof window === "undefined") return fallback;
+  const params = new URLSearchParams(window.location.search);
+  const rawValue = params.get(param);
+  if (rawValue === null) return fallback;
+  const parsed = Number(rawValue);
+  if (!Number.isFinite(parsed)) return fallback;
+  return clampActivityMarkerMinimum(parsed);
+}
+
+function serializeActivityMarkerMinimum(value: number) {
+  return clampActivityMarkerMinimum(value)
+    .toFixed(8)
+    .replace(/0+$/, "")
+    .replace(/\.$/, "");
+}
+
 function fallbackPortfolioData(
   data: Array<{ month: string; thisYear: number; prevYear: number }>,
   snapshot: OverviewSnapshot,
@@ -924,6 +956,14 @@ const activityFlowColors: Record<ActivityFlow, string> = {
   fee: "#a1a1aa",
 };
 
+const activityFlowKeys: ActivityFlow[] = [
+  "incoming",
+  "outgoing",
+  "swap",
+  "transfer",
+  "fee",
+];
+
 function ActivityScatterDot({
   cx,
   cy,
@@ -942,11 +982,21 @@ function ActivityScatterDot({
   const normalizedSize = typeof size === "number" ? size : 80;
   const radius = Math.max(3, Math.sqrt(normalizedSize / Math.PI));
   const transactionId = payload.eventTransactionId ?? payload.eventId;
-  const openTransactionDetail = (event: React.MouseEvent<SVGCircleElement>) => {
+  const openTransactionDetail = () => {
+    if (!transactionId) return;
+    window.location.href = transactionDetailHref(transactionId);
+  };
+  const handleClick = (event: React.MouseEvent<SVGCircleElement>) => {
     if (!transactionId) return;
     event.preventDefault();
     event.stopPropagation();
-    window.location.href = transactionDetailHref(transactionId);
+    openTransactionDetail();
+  };
+  const handleKeyDown = (event: React.KeyboardEvent<SVGCircleElement>) => {
+    if (!transactionId || (event.key !== "Enter" && event.key !== " ")) return;
+    event.preventDefault();
+    event.stopPropagation();
+    openTransactionDetail();
   };
 
   return (
@@ -964,17 +1014,17 @@ function ActivityScatterDot({
       fillOpacity={
         activeSeries === null || activeSeries === "events" ? 0.92 : 0.28
       }
-      focusable={false}
-      onClick={openTransactionDetail}
+      focusable={transactionId ? true : false}
+      onClick={handleClick}
+      onKeyDown={handleKeyDown}
       onMouseDown={(event) => event.preventDefault()}
       role={transactionId ? "button" : undefined}
       stroke="var(--background)"
       strokeWidth={2.5}
       style={{
         cursor: transactionId ? "pointer" : "default",
-        outline: "none",
       }}
-      tabIndex={-1}
+      tabIndex={transactionId ? 0 : -1}
     />
   );
 }
@@ -1192,6 +1242,39 @@ function buildTreasuryChartStats(points: TreasuryChartPoint[]) {
     pct: first !== 0 ? (delta / Math.abs(first)) * 100 : null,
     highPoint,
     lowPoint,
+  };
+}
+
+function activityMarkerView(
+  plottedData: TreasuryChartPoint[],
+  showEvents: boolean,
+  markerMinimumForPoint: (point: TreasuryChartPoint) => number,
+): ActivityMarkerView {
+  const activityPoints = plottedData.filter((point) => point.isActivityEvent);
+  const visibleActivityMarkers = activityPoints.filter(
+    (point) =>
+      showEvents &&
+      (point.eventSize || point.activityBtc) >= markerMinimumForPoint(point),
+  );
+  const visibleActivityMarkerIds = new Set(
+    visibleActivityMarkers.map((point) => point.date),
+  );
+  const chartDisplayData = plottedData.map((point) => {
+    if (!point.isActivityEvent || visibleActivityMarkerIds.has(point.date)) {
+      return point;
+    }
+    return {
+      ...point,
+      eventBalanceBtc: undefined,
+      eventFlow: undefined,
+      eventSize: 0,
+      isActivityEvent: false,
+    };
+  });
+  return {
+    activityPoints,
+    chartDisplayData,
+    visibleActivityMarkers,
   };
 }
 
@@ -2765,6 +2848,48 @@ type ChartControlsSheetProps = {
   hideSensitive: boolean;
 };
 
+function ActivityFlowKey() {
+  return (
+    <div className="rounded-md border p-3">
+      <p className="text-xs font-medium text-muted-foreground">
+        Activity flows
+      </p>
+      <div className="mt-3 grid grid-cols-2 gap-2 text-xs text-muted-foreground">
+        {activityFlowKeys.map((flow) => (
+          <div key={flow} className="flex min-w-0 items-center gap-2">
+            <span
+              className="size-2.5 shrink-0 rounded-full"
+              style={{ backgroundColor: activityFlowColors[flow] }}
+              aria-hidden="true"
+            />
+            <span className="truncate">{activityFlowLabels[flow]}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function ActivityLegendSwatch({ muted = false }: { muted?: boolean }) {
+  return (
+    <span
+      className={cn(
+        "flex w-11 shrink-0 items-center gap-0.5",
+        muted && "opacity-40",
+      )}
+      aria-hidden="true"
+    >
+      {activityFlowKeys.map((flow) => (
+        <span
+          key={flow}
+          className="size-1.5 rounded-full"
+          style={{ backgroundColor: activityFlowColors[flow] }}
+        />
+      ))}
+    </span>
+  );
+}
+
 function ChartControlsSheet({
   open,
   onOpenChange,
@@ -2797,18 +2922,18 @@ function ChartControlsSheet({
         <SheetHeader className="border-b p-0">
           <div className="flex items-start justify-between gap-4 px-4 py-4 sm:px-6">
             <div className="min-w-0">
-              <div className="mb-2 flex flex-wrap items-center gap-2">
-                <span className="text-[10px] text-muted-foreground">
-                  {visibleMarkerCount.toLocaleString("en-US")} of{" "}
-                  {markerCount.toLocaleString("en-US")} markers visible
-                </span>
-              </div>
               <SheetTitle className="truncate text-xl sm:text-2xl">
                 Chart controls
               </SheetTitle>
               <SheetDescription className="mt-1 truncate">
                 Time range, chart series, and activity marker thresholds
               </SheetDescription>
+              <div className="mt-2 flex flex-wrap items-center gap-2">
+                <span className="text-[10px] text-muted-foreground">
+                  {visibleMarkerCount.toLocaleString("en-US")} of{" "}
+                  {markerCount.toLocaleString("en-US")} markers visible
+                </span>
+              </div>
             </div>
             <Button
               type="button"
@@ -2856,6 +2981,8 @@ function ChartControlsSheet({
               </div>
             </div>
 
+            <ActivityFlowKey />
+
             <div className="rounded-md border p-3">
               <p className="text-xs font-medium text-muted-foreground">
                 Series
@@ -2885,16 +3012,20 @@ function ChartControlsSheet({
                         } as React.CSSProperties
                       }
                     />
-                    <span
-                      className={cn(
-                        "h-0.5 w-6 shrink-0 rounded-full",
-                        item.dashed && "border-t border-dashed bg-transparent",
-                      )}
-                      style={{
-                        backgroundColor: item.dashed ? "transparent" : item.color,
-                        borderColor: item.color,
-                      }}
-                    />
+                    {item.key === "events" ? (
+                      <ActivityLegendSwatch muted={!seriesVisible.events} />
+                    ) : (
+                      <span
+                        className={cn(
+                          "h-0.5 w-6 shrink-0 rounded-full",
+                          item.dashed && "border-t border-dashed bg-transparent",
+                        )}
+                        style={{
+                          backgroundColor: item.dashed ? "transparent" : item.color,
+                          borderColor: item.color,
+                        }}
+                      />
+                    )}
                     <span className="truncate">{item.label}</span>
                   </label>
                 ))}
@@ -2937,7 +3068,7 @@ function ChartControlsSheet({
               <div className="flex items-center justify-between gap-3 text-sm">
                 <div>
                   <p className="text-xs font-medium text-red-500 dark:text-red-400">
-                    Outgoing flag
+                    Outgoing markers
                   </p>
                   <p className="mt-1 text-xs text-muted-foreground">
                     {visibleOutgoingMarkerCount.toLocaleString("en-US")} of{" "}
@@ -2990,12 +3121,20 @@ const RevenueFlowChart = ({
   );
   const [seriesVisible, setSeriesVisible] =
     React.useState<TreasurySeriesVisibility>(defaultTreasurySeriesVisibility);
-  const [incomingMarkerMinimumBtc, setIncomingMarkerMinimumBtc] = React.useState(
-    DEFAULT_INCOMING_MARKER_MIN_BTC,
-  );
-  const [outgoingMarkerMinimumBtc, setOutgoingMarkerMinimumBtc] = React.useState(
-    DEFAULT_OUTGOING_MARKER_MIN_BTC,
-  );
+  const [incomingMarkerMinimumBtc, setIncomingMarkerMinimumBtc] =
+    React.useState(() =>
+      initialActivityMarkerMinimumFromUrl(
+        "incomingMin",
+        DEFAULT_INCOMING_MARKER_MIN_BTC,
+      ),
+    );
+  const [outgoingMarkerMinimumBtc, setOutgoingMarkerMinimumBtc] =
+    React.useState(() =>
+      initialActivityMarkerMinimumFromUrl(
+        "outgoingMin",
+        DEFAULT_OUTGOING_MARKER_MIN_BTC,
+      ),
+    );
   const [chartControlsOpen, setChartControlsOpen] = React.useState(false);
   const [expandedChartControlsOpen, setExpandedChartControlsOpen] =
     React.useState(false);
@@ -3059,26 +3198,50 @@ const RevenueFlowChart = ({
     if (typeof window === "undefined") return;
     const params = new URLSearchParams(window.location.search);
     params.set("period", period);
+    if (incomingMarkerMinimumBtc === DEFAULT_INCOMING_MARKER_MIN_BTC) {
+      params.delete("incomingMin");
+    } else {
+      params.set(
+        "incomingMin",
+        serializeActivityMarkerMinimum(incomingMarkerMinimumBtc),
+      );
+    }
+    if (outgoingMarkerMinimumBtc === DEFAULT_OUTGOING_MARKER_MIN_BTC) {
+      params.delete("outgoingMin");
+    } else {
+      params.set(
+        "outgoingMin",
+        serializeActivityMarkerMinimum(outgoingMarkerMinimumBtc),
+      );
+    }
     const nextQuery = params.toString();
     const nextUrl = nextQuery
       ? `${window.location.pathname}?${nextQuery}`
       : window.location.pathname;
     window.history.replaceState(null, "", nextUrl);
-  }, [period]);
+  }, [incomingMarkerMinimumBtc, outgoingMarkerMinimumBtc, period]);
 
   React.useEffect(() => {
     setExpandedPointDate(null);
   }, [currency, period]);
 
-  const chartData = enrichTreasuryChartData(
-    getDataForPeriod(period, snapshot, "value", currency, "compact"),
-    snapshot,
-    period,
+  const chartData = React.useMemo(
+    () =>
+      enrichTreasuryChartData(
+        getDataForPeriod(period, snapshot, "value", currency, "compact"),
+        snapshot,
+        period,
+      ),
+    [currency, period, snapshot],
   );
-  const expandedChartData = enrichTreasuryChartData(
-    getDataForPeriod(period, snapshot, "value", currency, "detailed"),
-    snapshot,
-    period,
+  const expandedChartData = React.useMemo(
+    () =>
+      enrichTreasuryChartData(
+        getDataForPeriod(period, snapshot, "value", currency, "detailed"),
+        snapshot,
+        period,
+      ),
+    [currency, period, snapshot],
   );
   const toggleSeries = React.useCallback((key: TreasuryChartSeriesKey) => {
     setSeriesVisible((current) => ({ ...current, [key]: !current[key] }));
@@ -3093,35 +3256,37 @@ const RevenueFlowChart = ({
     },
     [incomingMarkerMinimumBtc, outgoingMarkerMinimumBtc],
   );
+  const compactMarkerView = React.useMemo(
+    () =>
+      activityMarkerView(
+        chartData,
+        seriesVisible.events,
+        activityMarkerMinimumForPoint,
+      ),
+    [activityMarkerMinimumForPoint, chartData, seriesVisible.events],
+  );
+  const expandedMarkerView = React.useMemo(
+    () =>
+      activityMarkerView(
+        expandedChartData,
+        seriesVisible.events,
+        activityMarkerMinimumForPoint,
+      ),
+    [activityMarkerMinimumForPoint, expandedChartData, seriesVisible.events],
+  );
 
   const renderChartCard = (expanded = false) => {
     const plottedData = expanded ? expandedChartData : chartData;
+    const markerView = expanded ? expandedMarkerView : compactMarkerView;
     const controlsOpen = expanded ? expandedChartControlsOpen : chartControlsOpen;
     const setControlsOpen = expanded
       ? setExpandedChartControlsOpen
       : setChartControlsOpen;
-    const activityPoints = plottedData.filter((point) => point.isActivityEvent);
-    const visibleActivityMarkers = activityPoints.filter(
-      (point) =>
-        seriesVisible.events &&
-        (point.eventSize || point.activityBtc) >=
-          activityMarkerMinimumForPoint(point),
-    );
-    const visibleActivityMarkerIds = new Set(
-      visibleActivityMarkers.map((point) => point.date),
-    );
-    const chartDisplayData = plottedData.map((point) => {
-      if (!point.isActivityEvent || visibleActivityMarkerIds.has(point.date)) {
-        return point;
-      }
-      return {
-        ...point,
-        eventBalanceBtc: undefined,
-        eventFlow: undefined,
-        eventSize: 0,
-        isActivityEvent: false,
-      };
-    });
+    const {
+      activityPoints,
+      chartDisplayData,
+      visibleActivityMarkers,
+    } = markerView;
     const latestPoint = plottedData.at(-1);
     const brushGradientId = expanded
       ? "treasuryBrushGradientExpanded"
@@ -3398,16 +3563,20 @@ const RevenueFlowChart = ({
               onMouseEnter={() => handleHover(item.key)}
               onMouseLeave={() => handleHover(null)}
             >
-              <span
-                className={cn(
-                  "h-0.5 w-5 rounded-full",
-                  item.dashed && "border-t border-dashed bg-transparent",
-                )}
-                style={{
-                  backgroundColor: item.dashed ? "transparent" : item.color,
-                  borderColor: item.color,
-                }}
-              />
+              {item.key === "events" ? (
+                <ActivityLegendSwatch muted={!seriesVisible.events} />
+              ) : (
+                <span
+                  className={cn(
+                    "h-0.5 w-5 rounded-full",
+                    item.dashed && "border-t border-dashed bg-transparent",
+                  )}
+                  style={{
+                    backgroundColor: item.dashed ? "transparent" : item.color,
+                    borderColor: item.color,
+                  }}
+                />
+              )}
               <span>{item.label}</span>
             </div>
           ))}
@@ -3426,7 +3595,7 @@ const RevenueFlowChart = ({
               "relative flex w-full min-w-0 flex-col",
               expanded
                 ? "h-[min(64vh,620px)]"
-                : "h-[432px] sm:h-[516px]",
+                : "h-[380px] sm:h-[456px]",
             )}
           >
             <div className="grid min-h-0 flex-1 grid-cols-[18px_minmax(0,1fr)_20px]">
@@ -3451,9 +3620,9 @@ const RevenueFlowChart = ({
                   }
                   margin={{
                     top: expanded ? 12 : 2,
-                    right: expanded ? 22 : 18,
+                    right: expanded ? 8 : 4,
                     bottom: plottedData.length > 3 ? (expanded ? 14 : 8) : 0,
-                    left: expanded ? 18 : 14,
+                    left: expanded ? 8 : 4,
                   }}
                 >
                   <CartesianGrid
@@ -3478,29 +3647,27 @@ const RevenueFlowChart = ({
                     yAxisId="btc"
                     orientation="left"
                     axisLine={false}
-                    mirror
                     tickLine={false}
-                    tick={{ fontSize: 10, textAnchor: "start" }}
-                    tickMargin={6}
+                    tick={{ fontSize: 10 }}
+                    tickMargin={4}
                     tickFormatter={(value) =>
                       hideSensitive ? "" : formatBtcAxis(Number(value))
                     }
-                    width={44}
+                    width={48}
                   />
                   <YAxis
                     yAxisId="price"
                     orientation="right"
                     axisLine={false}
-                    mirror
                     tickLine={false}
-                    tick={{ fontSize: 10, textAnchor: "end" }}
-                    tickMargin={6}
+                    tick={{ fontSize: 10 }}
+                    tickMargin={4}
                     tickFormatter={(value) =>
                       hideSensitive
                         ? ""
                         : formatEurPrice(Number(value))
                     }
-                    width={58}
+                    width={64}
                   />
                   <ZAxis
                     dataKey="eventSize"

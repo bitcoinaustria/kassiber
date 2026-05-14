@@ -3183,5 +3183,7 @@ def _activity_transaction_rows_to_ui(
             if pair_id in rendered_pair_ids:
                 continue
             rendered_pair_ids.add(pair_id)
+        # Activity chart rows intentionally skip metadata tags to keep the
+        # uncapped overview payload and SQLite parameter count bounded.
         output.append(_transaction_row_to_ui(row, [], pair_meta))
     return output
