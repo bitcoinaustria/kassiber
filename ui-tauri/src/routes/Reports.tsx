@@ -52,6 +52,11 @@ import {
   saveExportedFileAs,
 } from "@/daemon/transport";
 import { saveFile } from "@/lib/filePicker";
+import {
+  reportExportStatusForYear,
+  type ReportExportStatus,
+} from "@/lib/reportExportStatus";
+import { reportYearFromSearch } from "@/lib/reportYear";
 import { screenPanelClassName, screenShellClassName } from "@/lib/screen-layout";
 import { cn } from "@/lib/utils";
 import {
@@ -212,14 +217,7 @@ function basename(path: string) {
 
 function initialReportYearFromUrl() {
   if (typeof window === "undefined") return null;
-  return reportYearFromUrl(window.location.search);
-}
-
-function reportYearFromUrl(search: string) {
-  const value = new URLSearchParams(search).get("year");
-  if (!value) return null;
-  const parsed = Number(value);
-  return Number.isInteger(parsed) ? parsed : null;
+  return reportYearFromSearch(window.location.search);
 }
 
 export function Reports() {
@@ -228,14 +226,14 @@ export function Reports() {
   );
   useEffect(() => {
     const syncYearFromUrl = () => {
-      setSelectedYear(reportYearFromUrl(window.location.search));
+      setSelectedYear(reportYearFromSearch(window.location.search));
     };
     syncYearFromUrl();
     window.addEventListener("popstate", syncYearFromUrl);
     return () => window.removeEventListener("popstate", syncYearFromUrl);
   }, []);
   const reportArgs = useMemo(
-    () => (selectedYear ? { year: selectedYear } : undefined),
+    () => (selectedYear !== null ? { year: selectedYear } : undefined),
     [selectedYear],
   );
   const { data, isLoading, isFetching, isError, error, refetch } =
@@ -309,12 +307,9 @@ function ReportsView({
   const [method, setMethod] = useState<CostBasisMethod>(
     normalizeReportMethod(report.method, jurisdiction),
   );
-  const [exportStatus, setExportStatus] = useState<{
-    tone: "success" | "error";
-    message: string;
-    path?: string;
-    openPath?: string;
-  } | null>(null);
+  const [exportStatus, setExportStatus] = useState<ReportExportStatus | null>(
+    null,
+  );
   const [activeExport, setActiveExport] =
     useState<ReportExportFormatId | null>(null);
   const [openingExportPath, setOpeningExportPath] = useState<string | null>(
@@ -350,15 +345,22 @@ function ReportsView({
   const methodLabel = METHOD_LABELS[method] ?? METHOD_LABELS[jurisdiction.defaultMethod];
   const readiness = buildReportReadiness(report, lots, effectiveYear);
   const periodLabel = formatReportPeriod(effectiveYear, jurisdiction.locale);
+  const currentExportStatus = reportExportStatusForYear(
+    exportStatus,
+    effectiveYear,
+  );
   const canOpenCurrentExport =
-    exportStatus?.tone === "success" &&
-    canOpenExportPath(exportStatus.openPath) &&
+    currentExportStatus?.tone === "success" &&
+    canOpenExportPath(currentExportStatus.openPath) &&
     canOpenExportedFiles();
   const openableExportPath =
-    canOpenCurrentExport && exportStatus?.openPath ? exportStatus.openPath : null;
+    canOpenCurrentExport && currentExportStatus?.openPath
+      ? currentExportStatus.openPath
+      : null;
 
   const handleExport = (format: ReportExportFormatId) => {
     if (activeExport) return;
+    const exportYear = effectiveYear;
     setExportStatus(null);
     setActiveExport(format);
     const mutation =
@@ -376,10 +378,10 @@ function ReportsView({
     const args =
       format === "pdf"
         ? activeProfileIsAustrian
-          ? { year: effectiveYear }
+          ? { year: exportYear }
           : {}
         : (format === "xlsx" || format === "csv") && activeProfileIsAustrian
-          ? { year: effectiveYear }
+          ? { year: exportYear }
           : {};
 
     mutation.mutate(args, {
@@ -411,7 +413,7 @@ function ReportsView({
                   : "Save report export",
               defaultPath: reportExportDefaultFilename(
                 format,
-                effectiveYear,
+                exportYear,
                 activeProfileIsAustrian,
               ),
               filters: reportExportSaveFilters(format, payload),
@@ -426,6 +428,7 @@ function ReportsView({
             const message =
               error instanceof Error ? error.message : "Could not save report export";
             setExportStatus({
+              year: exportYear,
               tone: "error",
               message,
               path: exportPath,
@@ -440,6 +443,7 @@ function ReportsView({
           }
         }
         setExportStatus({
+          year: exportYear,
           tone: "success",
           message: statusMessage,
           path: savedPath,
@@ -457,7 +461,7 @@ function ReportsView({
       onError: (error) => {
         const message =
           error instanceof Error ? error.message : "Report export failed";
-        setExportStatus({ tone: "error", message });
+        setExportStatus({ year: exportYear, tone: "error", message });
         addNotification({
           title: "Report export failed",
           body: message,
@@ -545,7 +549,7 @@ function ReportsView({
             year={effectiveYear}
             activeExport={activeExport}
             activeProfileIsAustrian={activeProfileIsAustrian}
-            exportStatus={exportStatus}
+            exportStatus={currentExportStatus}
             openableExportPath={openableExportPath}
             openingExportPath={openingExportPath}
             onExport={handleExport}
@@ -880,12 +884,7 @@ function ReportFilesPanel({
   year: number;
   activeExport: ReportExportFormatId | null;
   activeProfileIsAustrian: boolean;
-  exportStatus: {
-    tone: "success" | "error";
-    message: string;
-    path?: string;
-    openPath?: string;
-  } | null;
+  exportStatus: ReportExportStatus | null;
   openableExportPath: string | null;
   openingExportPath: string | null;
   onExport: (format: ReportExportFormatId) => void;
@@ -973,12 +972,7 @@ function ExportNotice({
   openingExportPath,
   onOpenExport,
 }: {
-  exportStatus: {
-    tone: "success" | "error";
-    message: string;
-    path?: string;
-    openPath?: string;
-  };
+  exportStatus: ReportExportStatus;
   openableExportPath: string | null;
   openingExportPath: string | null;
   onOpenExport: (path: string) => void;

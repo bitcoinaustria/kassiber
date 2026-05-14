@@ -3604,7 +3604,7 @@ const Dashboard5 = ({
   );
   const refreshOverviewState = React.useCallback(() => {
     if (isSyncing || isProcessingJournals) return;
-    syncAll({ onSettled: runJournalProcessing });
+    syncAll({ onTrustedSuccess: runJournalProcessing });
   }, [isProcessingJournals, isSyncing, runJournalProcessing, syncAll]);
   const isRefreshingOverview = isSyncing || isProcessingJournals;
 

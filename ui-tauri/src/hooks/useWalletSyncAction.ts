@@ -2,7 +2,11 @@ import * as React from "react";
 import { useQueryClient } from "@tanstack/react-query";
 
 import { daemonMutationKey, useDaemonStreamMutation } from "@/daemon/client";
-import { summarizeSyncResults, type SyncResult } from "@/lib/syncResults";
+import {
+  summarizeSyncResults,
+  syncResultsAreTrustedForReports,
+  type SyncResult,
+} from "@/lib/syncResults";
 import {
   STARTING_SYNC_PROGRESS_VALUE,
   startingSyncProgress,
@@ -12,7 +16,7 @@ import {
 import { useUiStore } from "@/store/ui";
 
 type WalletSyncOptions = {
-  onSettled?: () => void;
+  onTrustedSuccess?: (results: SyncResult[]) => void;
 };
 
 export function useWalletSyncAction() {
@@ -68,6 +72,7 @@ export function useWalletSyncAction() {
               (result) => result.status === "error",
             ).length;
             const body = summarizeSyncResults(results);
+            const shouldRunFollowup = syncResultsAreTrustedForReports(results);
             if (noticeIdRef.current) {
               updateNotification(noticeIdRef.current, {
                 title: errors
@@ -79,16 +84,17 @@ export function useWalletSyncAction() {
                 progress: undefined,
               });
               noticeIdRef.current = null;
-              return;
+            } else {
+              addNotification({
+                title: errors
+                  ? "Connection refresh finished with errors"
+                  : "Connection refresh finished",
+                body,
+                tone: errors ? "error" : "success",
+                dedupeKey: "wallet-sync",
+              });
             }
-            addNotification({
-              title: errors
-                ? "Connection refresh finished with errors"
-                : "Connection refresh finished",
-              body,
-              tone: errors ? "error" : "success",
-              dedupeKey: "wallet-sync",
-            });
+            if (shouldRunFollowup) options?.onTrustedSuccess?.(results);
           },
           onError: (error) => {
             const body =
@@ -115,7 +121,6 @@ export function useWalletSyncAction() {
           },
           onSettled: () => {
             void queryClient.invalidateQueries({ queryKey: ["daemon"] });
-            options?.onSettled?.();
           },
         },
       );
