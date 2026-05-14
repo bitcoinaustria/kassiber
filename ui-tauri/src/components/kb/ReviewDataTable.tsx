@@ -239,11 +239,11 @@ export function ReviewDataTable({
 
   return (
     <div className={cn(shellClassName)}>
-      <div className="flex flex-col gap-3 rounded-xl border bg-card px-4 py-4 sm:flex-row sm:items-center sm:justify-between">
+      <div className="flex flex-col gap-2.5 rounded-xl border bg-card px-3 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-4">
         <div className="flex min-w-0 items-start gap-3">
           <span
             className={cn(
-              "flex size-9 shrink-0 items-center justify-center rounded-md ring-1 ring-inset",
+              "flex size-8 shrink-0 items-center justify-center rounded-md ring-1 ring-inset",
               toneStyles[queueTone],
             )}
             aria-hidden="true"
@@ -254,8 +254,8 @@ export function ReviewDataTable({
             <p className="text-[10px] font-medium tracking-[0.18em] text-muted-foreground uppercase">
               {eyebrow}
             </p>
-            <h1 className="mt-1 text-lg font-semibold sm:text-xl">{title}</h1>
-            <p className="mt-1 max-w-4xl text-sm text-muted-foreground">
+            <h1 className="mt-0.5 text-base font-semibold">{title}</h1>
+            <p className="mt-0.5 max-w-4xl text-xs text-muted-foreground sm:text-sm">
               {description}
             </p>
           </div>
@@ -327,7 +327,7 @@ export function ReviewDataTable({
                 value={globalFilter}
                 onChange={(event) => updateGlobalFilter(event.target.value)}
                 placeholder={searchPlaceholder ?? "Search account, issue, source..."}
-                className="h-9 pl-9"
+                className="h-8 pl-9"
               />
             </div>
             <div className="flex flex-wrap gap-2">
@@ -343,7 +343,7 @@ export function ReviewDataTable({
                     type="button"
                     size="sm"
                     variant={statusFilter === status ? "default" : "outline"}
-                    className="h-9"
+                    className="h-8"
                     onClick={() => updateStatusFilter(status)}
                   >
                     {status}
@@ -436,7 +436,7 @@ export function ReviewDataTable({
           </Table>
         </div>
 
-        <div className="flex flex-col gap-3 border-t px-4 py-3 text-sm text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex flex-col gap-3 border-t px-3 py-2.5 text-xs text-muted-foreground sm:flex-row sm:items-center sm:justify-between sm:px-4">
           <span>
             {filteredRows.length === 0
               ? "0 rows"
@@ -449,7 +449,7 @@ export function ReviewDataTable({
             <Button
               variant="outline"
               size="icon"
-              className="size-8"
+              className="size-7"
               onClick={() => setPageIndex((value) => Math.max(value - 1, 0))}
               disabled={currentPage === 0}
               aria-label="Previous page"
@@ -462,7 +462,7 @@ export function ReviewDataTable({
             <Button
               variant="outline"
               size="icon"
-              className="size-8"
+              className="size-7"
               onClick={() =>
                 setPageIndex((value) => Math.min(value + 1, pageCount - 1))
               }
@@ -503,10 +503,10 @@ function QueueMetric({
   );
   const content = (
     <>
-      <p className="text-xs font-medium text-muted-foreground sm:text-sm">
+      <p className="text-xs font-medium text-muted-foreground">
         {label}
       </p>
-      <p className={cn("text-2xl font-semibold tabular-nums", toneTextStyles[tone])}>
+      <p className={cn("text-xl font-semibold tabular-nums", toneTextStyles[tone])}>
         {formattedValue}
       </p>
     </>

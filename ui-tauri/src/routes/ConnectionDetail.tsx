@@ -548,8 +548,8 @@ function ConnectionDetailView({
 
   return (
     <div className={screenShellClassName}>
-      <Card className="py-4">
-        <CardContent className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+      <Card className="py-3">
+        <CardContent className="flex flex-col gap-3 px-4 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex min-w-0 items-center gap-3">
             <Button asChild variant="outline" size="icon" className="shrink-0">
               <Link to="/connections" aria-label="Back to wallets">
@@ -557,7 +557,7 @@ function ConnectionDetailView({
               </Link>
             </Button>
             <div className="min-w-0">
-              <h1 className="truncate text-2xl font-semibold tracking-tight">
+              <h1 className="truncate text-xl font-semibold tracking-tight">
                 {connection.label}
               </h1>
             </div>
@@ -578,7 +578,7 @@ function ConnectionDetailView({
           </Button>
         </CardContent>
         {syncProgress && syncWallet.isPending ? (
-          <div className="px-6 pt-4">
+          <div className="px-4 pt-3">
             <div className="space-y-1 rounded-md border bg-background px-3 py-2 text-sm">
               <div className="flex items-center justify-between">
                 <span className="text-muted-foreground">
@@ -607,7 +607,7 @@ function ConnectionDetailView({
           </div>
         ) : null}
         {syncMessage && (
-          <div className="px-6 pt-4">
+          <div className="px-4 pt-3">
             <div
               className={cn(
                 "rounded-md border px-3 py-2 text-sm",
@@ -658,8 +658,8 @@ function ConnectionDetailView({
 
       {walletProvenanceRoutes.length > 0 ? (
         <Card>
-          <CardHeader className="border-b">
-            <CardTitle>BTCPay provenance</CardTitle>
+          <CardHeader className="border-b px-4 pb-3">
+            <CardTitle className="text-sm sm:text-base">BTCPay provenance</CardTitle>
             <CardDescription>
               BTCPay comments and labels enrich matching transactions during sync.
               Descriptor or file sync remains the balance source.
@@ -687,7 +687,7 @@ function ConnectionDetailView({
               </TableBody>
             </Table>
           </CardContent>
-          <div className="border-t px-6 py-3 text-xs text-muted-foreground">
+          <div className="border-t px-4 py-2.5 text-xs text-muted-foreground">
             Add more routes from <strong>Add wallet</strong> &rarr;{" "}
             <em>BTCPay Server</em> &rarr; <em>Map existing wallets</em>, or via{" "}
             <code>kassiber wallets attach-btcpay</code>. Use Edit to clear all
@@ -696,10 +696,10 @@ function ConnectionDetailView({
         </Card>
       ) : null}
 
-      <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1.35fr)_minmax(360px,0.85fr)]">
+      <div className="grid grid-cols-1 gap-3 xl:grid-cols-[minmax(0,1.35fr)_minmax(360px,0.85fr)]">
         <Card>
-          <CardHeader className="border-b">
-            <CardTitle>Recent transactions</CardTitle>
+          <CardHeader className="border-b px-4 pb-3">
+            <CardTitle className="text-sm sm:text-base">Recent transactions</CardTitle>
             <CardDescription>
               Recent transactions for this wallet source.
             </CardDescription>
@@ -723,15 +723,15 @@ function ConnectionDetailView({
           </CardContent>
         </Card>
 
-        <div className="space-y-4">
+        <div className="space-y-3">
           <Card>
-            <CardHeader className="border-b">
-              <CardTitle>Connection details</CardTitle>
+            <CardHeader className="border-b px-4 pb-3">
+              <CardTitle className="text-sm sm:text-base">Connection details</CardTitle>
               <CardDescription>
                 Local metadata and source configuration.
               </CardDescription>
             </CardHeader>
-            <CardContent className="space-y-4 pt-6">
+            <CardContent className="space-y-3 px-4 pt-4">
               <DetailRow label="Label" value={connection.label} />
               <DetailRow label="Type" value={connection.kind.toUpperCase()} mono />
               <DetailRow
@@ -783,13 +783,13 @@ function ConnectionDetailView({
           </Card>
 
           <Card>
-            <CardHeader className="border-b">
-              <CardTitle>Connection actions</CardTitle>
+            <CardHeader className="border-b px-4 pb-3">
+              <CardTitle className="text-sm sm:text-base">Connection actions</CardTitle>
               <CardDescription>
                 Changing or removing a wallet source requires local confirmation.
               </CardDescription>
             </CardHeader>
-            <CardContent className="flex flex-wrap gap-2 pt-6">
+            <CardContent className="flex flex-wrap gap-2 px-4 pt-4">
               <Button type="button" variant="outline" onClick={openEditDialog}>
                 <Pencil className="size-4" aria-hidden="true" />
                 Edit label
@@ -1168,13 +1168,13 @@ interface MetricCardProps {
 
 function MetricCard({ label, value, detail, icon }: MetricCardProps) {
   return (
-    <Card className="gap-3 py-5">
-      <CardContent className="space-y-3">
+    <Card className="gap-2.5 py-4">
+      <CardContent className="space-y-2 px-4">
         <div className="flex items-center gap-2 text-muted-foreground">
           {icon}
           <span className="text-xs font-medium">{label}</span>
         </div>
-        <p className="text-2xl font-semibold tracking-tight tabular-nums">
+        <p className="text-xl font-semibold tracking-tight tabular-nums">
           {value}
         </p>
         <p className="text-xs text-muted-foreground">{detail}</p>

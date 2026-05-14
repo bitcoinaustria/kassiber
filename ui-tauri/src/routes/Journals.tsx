@@ -116,12 +116,12 @@ export function Journals() {
     : snapshot.recent;
   return (
     <div className={screenShellClassName}>
-      <div className="rounded-xl border bg-card p-4">
-        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+      <div className="rounded-xl border bg-card px-3 py-3 sm:px-4">
+        <div className="flex flex-col gap-2.5 lg:flex-row lg:items-center lg:justify-between">
           <div className="flex min-w-0 items-start gap-3">
             <span
               className={cn(
-                "flex size-9 shrink-0 items-center justify-center rounded-md ring-1 ring-inset",
+                "flex size-8 shrink-0 items-center justify-center rounded-md ring-1 ring-inset",
                 toneStyles[readiness.tone],
               )}
               aria-hidden="true"
@@ -143,10 +143,10 @@ export function Journals() {
                   </Badge>
                 ) : null}
               </div>
-              <h1 className="mt-1 text-lg font-semibold sm:text-xl">
+              <h1 className="mt-0.5 text-base font-semibold">
                 Journals
               </h1>
-              <p className="mt-1 max-w-3xl text-sm text-muted-foreground">
+              <p className="mt-0.5 max-w-3xl text-xs text-muted-foreground sm:text-sm">
                 Processing state, reportable entries, and the latest accounting
                 rows that reports read from.
               </p>
@@ -154,14 +154,14 @@ export function Journals() {
           </div>
           <div className="flex flex-wrap gap-2">
             {status.quarantines ? (
-              <Button asChild variant="outline" className="h-9">
+              <Button asChild variant="outline" className="h-8">
                 <Link to="/quarantine">
                   <ShieldAlert className="size-4" aria-hidden="true" />
                   Quarantine
                 </Link>
               </Button>
             ) : null}
-            <Button asChild variant="outline" className="h-9">
+            <Button asChild variant="outline" className="h-8">
               <Link to="/reports">
                 <FileText className="size-4" aria-hidden="true" />
                 Reports
@@ -169,7 +169,7 @@ export function Journals() {
             </Button>
             <Button
               type="button"
-              className="h-9"
+              className="h-8"
               onClick={runJournalProcessing}
               disabled={isProcessingJournals}
             >
@@ -184,13 +184,13 @@ export function Journals() {
         </div>
       </div>
 
-      <Tabs defaultValue="state" className="space-y-3 sm:space-y-4">
+      <Tabs defaultValue="state" className="space-y-3">
         <TabsList className="w-full justify-start overflow-x-auto sm:w-fit">
           <TabsTrigger value="state">State</TabsTrigger>
           <TabsTrigger value="reportable">Reportable entries</TabsTrigger>
         </TabsList>
 
-        <TabsContent value="state" className="mt-0 space-y-3 sm:space-y-4">
+        <TabsContent value="state" className="mt-0 space-y-3">
           <div className="rounded-xl border bg-card">
             <div className="grid grid-cols-2 divide-x-0 divide-y divide-border sm:grid-cols-4 sm:divide-x sm:divide-y-0">
               <JournalMetric
@@ -222,16 +222,16 @@ export function Journals() {
 
           <div className="grid min-w-0 grid-cols-1 gap-3 xl:grid-cols-[360px_minmax(0,1fr)]">
             <div className="min-w-0 rounded-xl border bg-card">
-              <div className="border-b p-4">
+              <div className="border-b p-3 sm:px-4">
                 <h2 className="flex items-center gap-2 text-base font-semibold">
                   <BookOpen className="size-4" aria-hidden="true" />
                   Entry mix
                 </h2>
-                <p className="mt-1 text-sm text-muted-foreground">
+                <p className="mt-0.5 text-xs text-muted-foreground sm:text-sm">
                   Current processed journal composition.
                 </p>
               </div>
-              <div className="space-y-3 p-4">
+              <div className="space-y-2.5 p-3 sm:p-4">
                 {snapshot.entryTypes.length ? (
                   snapshot.entryTypes.map((entry) => (
                     <button
@@ -239,7 +239,7 @@ export function Journals() {
                       type="button"
                       aria-pressed={entryTypeFilter === entry.type}
                       className={cn(
-                        "w-full rounded-lg border p-3 text-left transition-colors",
+                        "w-full rounded-lg border p-2.5 text-left transition-colors",
                         entryTypeFilter === entry.type
                           ? "border-primary/45 bg-primary/5"
                           : "border-transparent hover:border-border hover:bg-muted/35",
@@ -290,10 +290,10 @@ export function Journals() {
             </div>
 
             <div className="min-w-0 rounded-xl border bg-card">
-              <div className="border-b p-4">
+              <div className="border-b p-3 sm:px-4">
                 <div>
                   <h2 className="text-base font-semibold">Recent journal rows</h2>
-                  <p className="mt-1 text-sm text-muted-foreground">
+                  <p className="mt-0.5 text-xs text-muted-foreground sm:text-sm">
                     {entryTypeFilter
                       ? `Latest ${formatEntryType(entryTypeFilter).toLowerCase()} rows produced by journal processing.`
                       : "Latest rows produced by journal processing."}
@@ -395,12 +395,12 @@ function JournalMetric({
 }) {
   return (
     <div className="space-y-2 p-3 sm:p-4">
-      <p className="text-xs font-medium text-muted-foreground sm:text-sm">
+      <p className="text-xs font-medium text-muted-foreground">
         {label}
       </p>
       <p
         className={cn(
-          "text-xl font-semibold tabular-nums sm:text-2xl",
+          "text-xl font-semibold tabular-nums",
           toneTextStyles[tone],
         )}
       >

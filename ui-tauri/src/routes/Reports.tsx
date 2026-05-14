@@ -367,8 +367,8 @@ function ReportsView({ report, hideSensitive }: ReportsViewProps) {
         formatNumber={fmt}
       />
 
-      <div className="grid grid-cols-1 items-start gap-3 sm:gap-4 2xl:grid-cols-[minmax(0,1fr)_400px]">
-        <div className="grid min-w-0 gap-3 sm:gap-4">
+      <div className="grid grid-cols-1 items-start gap-3 2xl:grid-cols-[minmax(0,1fr)_380px]">
+        <div className="grid min-w-0 gap-3">
           {kennzahlRows.length ? (
             <KennzahlOverviewPanel
               rows={kennzahlRows}
@@ -394,7 +394,7 @@ function ReportsView({ report, hideSensitive }: ReportsViewProps) {
             />
           ) : null}
         </div>
-        <div className="grid min-w-0 gap-3 sm:gap-4">
+        <div className="grid min-w-0 gap-3">
           <ReportFilesPanel
             year={year}
             activeExport={activeExport}
@@ -431,7 +431,7 @@ function ReportPackageHeader({
   return (
     <div className="rounded-xl border bg-card px-3 py-3 sm:px-4">
       <div className="flex min-w-0 flex-wrap items-center gap-2 sm:gap-3">
-        <span className="text-base font-semibold sm:text-lg">Tax report</span>
+        <span className="text-base font-semibold">Tax report</span>
         <Badge variant="outline" className="rounded-md">
           {year}
         </Badge>
@@ -455,11 +455,11 @@ function ReportReadinessStrip({ readiness }: { readiness: ReportReadiness }) {
   const Icon = readiness.icon;
 
   return (
-    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
+    <div className="flex flex-col gap-2.5 sm:flex-row sm:items-center sm:justify-between sm:gap-3">
       <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-2">
         <span
           className={cn(
-            "inline-flex h-8 shrink-0 items-center gap-2 rounded-md border px-2.5 text-sm font-medium",
+            "inline-flex h-7 shrink-0 items-center gap-1.5 rounded-md border px-2 text-xs font-medium",
             readinessToneStyles[readiness.tone],
           )}
         >
@@ -550,11 +550,11 @@ function ReportMetricStrip({
     <div className="min-w-0 overflow-hidden rounded-xl border bg-card">
       <div className="grid grid-cols-1 divide-x-0 divide-y divide-border sm:grid-cols-2 sm:divide-y-0 lg:grid-cols-4 lg:divide-x">
         {metrics.map((metric) => (
-          <div key={metric.label} className="space-y-2.5 p-3 sm:p-4">
-            <p className="text-xs font-medium text-muted-foreground sm:text-sm">
+          <div key={metric.label} className="space-y-2 p-3 sm:p-4">
+            <p className="text-xs font-medium text-muted-foreground">
               {metric.label}
             </p>
-            <p className="min-w-0 text-xl leading-tight font-semibold tracking-tight tabular-nums sm:text-2xl">
+            <p className="min-w-0 text-xl leading-tight font-semibold tracking-tight tabular-nums">
               {metric.value}
             </p>
             <p className="text-[10px] text-muted-foreground sm:text-xs">

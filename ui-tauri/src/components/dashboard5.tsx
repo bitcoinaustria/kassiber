@@ -1232,12 +1232,12 @@ const WelcomeSection = ({
   const ReadinessIcon = readiness.icon;
   const needsJournals = Boolean(snapshot.status?.needsJournals);
   const readinessClassName = cn(
-    "inline-flex h-8 shrink-0 items-center gap-2 rounded-md border px-2.5 text-sm font-medium",
+    "inline-flex h-7 shrink-0 items-center gap-1.5 rounded-md border px-2 text-xs font-medium",
     readinessToneStyles[readiness.tone],
   );
 
   return (
-    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
+    <div className="flex flex-col gap-2.5 sm:flex-row sm:items-center sm:justify-between sm:gap-3">
       <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-2">
         {needsJournals ? (
           <button
@@ -1270,7 +1270,7 @@ const WelcomeSection = ({
         <Button
           variant="outline"
           size="sm"
-          className="h-8 gap-2 sm:h-9"
+          className="h-8 gap-2"
           aria-label="Refresh wallets and journals"
           onClick={onRefresh}
           disabled={isRefreshing}
@@ -1285,7 +1285,7 @@ const WelcomeSection = ({
         </Button>
         <Button
           size="sm"
-          className="h-8 gap-2 sm:h-9"
+          className="h-8 gap-2"
           aria-label="Add connection"
           onClick={onAddConnection}
         >
@@ -1338,15 +1338,15 @@ const StatsCards = ({
                 className="absolute inset-0 z-10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 aria-label={`Open ${isBitcoinPortfolio ? "Bitcoin balance" : stat.title}`}
               />
-              <div className="pointer-events-none relative z-20 space-y-2.5">
+              <div className="pointer-events-none relative z-20 space-y-2">
                 <div className="text-muted-foreground">
-                  <span className="text-xs font-medium sm:text-sm">
+                  <span className="text-xs font-medium">
                     {isBitcoinPortfolio ? "Bitcoin balance" : stat.title}
                   </span>
                 </div>
                 <p
                   className={cn(
-                    "text-xl font-semibold tracking-tight sm:text-2xl",
+                    "text-xl font-semibold tracking-tight",
                     blurClass(hideSensitive),
                   )}
                 >
@@ -1424,7 +1424,7 @@ const BalanceRailChart = ({
   const { total, items: balanceRailItems } = buildBalanceRailItems(snapshot);
 
   return (
-    <div className="flex flex-col gap-3 rounded-xl border bg-card p-4">
+    <div className="flex flex-col gap-3 rounded-xl border bg-card p-3 sm:p-4">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2 sm:gap-2.5">
           <Button
@@ -1436,7 +1436,7 @@ const BalanceRailChart = ({
             <Landmark className="size-4 text-muted-foreground sm:size-[18px]" />
           </Button>
           <div>
-            <span className="text-sm font-medium sm:text-base">
+            <span className="text-sm font-medium">
               Balance by Rail
             </span>
             <p
@@ -1459,7 +1459,7 @@ const BalanceRailChart = ({
         </Button>
       </div>
 
-      <div className="space-y-3">
+      <div className="space-y-2.5">
         <div className="flex h-3 w-full overflow-hidden rounded-full sm:h-4">
           {balanceRailItems.map((item, index) => (
             <ShadTooltipProvider key={item.key}>
@@ -1549,7 +1549,7 @@ const BalanceRailChart = ({
           ))}
         </div>
 
-        <div className="flex flex-wrap items-center gap-3 sm:gap-4">
+        <div className="flex flex-wrap items-center gap-2.5 sm:gap-3">
           {balanceRailItems.map((item, index) => (
             <ShadTooltipProvider key={item.key}>
               <ShadTooltip>
@@ -1648,7 +1648,7 @@ const HoldingsBySourceChart = ({
   const singleHolding = holdingsData.length === 1 ? holdingsData[0] : null;
 
   return (
-    <div className="flex flex-1 flex-col gap-3 rounded-xl border bg-card p-4">
+    <div className="flex flex-1 flex-col gap-3 rounded-xl border bg-card p-3 sm:p-4">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2 sm:gap-2.5">
           <Button
@@ -1660,7 +1660,7 @@ const HoldingsBySourceChart = ({
             <PieChartIcon className="size-4 text-muted-foreground sm:size-[18px]" />
           </Button>
           <div>
-            <span className="text-sm font-medium sm:text-base">
+            <span className="text-sm font-medium">
               Holdings by Source
             </span>
             {isBitcoinMode ? (
@@ -1748,8 +1748,8 @@ const HoldingsBySourceChart = ({
           </div>
         </div>
       ) : (
-      <div className="grid flex-1 items-center gap-3 sm:grid-cols-[minmax(112px,0.9fr)_minmax(0,1.1fr)] sm:gap-4">
-        <div className="relative mx-auto size-[124px] shrink-0 sm:size-[140px] xl:size-[148px]">
+      <div className="grid flex-1 items-center gap-3 sm:grid-cols-[minmax(104px,0.85fr)_minmax(0,1.15fr)]">
+        <div className="relative mx-auto size-[116px] shrink-0 sm:size-[128px] xl:size-[136px]">
           <ChartContainer
             config={holdingsChartConfig}
             className="h-full w-full"
@@ -2359,13 +2359,13 @@ const RevenueFlowChart = ({
     };
 
     return (
-      <div className="flex min-w-0 flex-1 flex-col gap-3 rounded-xl border bg-card p-4 sm:gap-4 sm:p-5">
+      <div className="flex min-w-0 flex-1 flex-col gap-3 rounded-xl border bg-card p-3 sm:p-4">
         <div className="flex flex-wrap items-center gap-2 sm:gap-3">
           <div className="flex flex-1 flex-col gap-1">
             {metric === "value" ? (
               <CurrencyToggleText
                 className={cn(
-                  "block w-fit text-xl leading-tight font-semibold tracking-tight sm:text-2xl",
+                  "block w-fit text-xl leading-tight font-semibold tracking-tight",
                   blurClass(hideSensitive),
                 )}
               >
@@ -2378,7 +2378,7 @@ const RevenueFlowChart = ({
             ) : (
               <p
                 className={cn(
-                  "text-xl leading-tight font-semibold tracking-tight sm:text-2xl",
+                  "text-xl leading-tight font-semibold tracking-tight",
                   blurClass(hideSensitive),
                 )}
               >
@@ -3169,7 +3169,7 @@ const RecentTransactionsTable = ({
   return (
     <>
       <div className={cn("rounded-xl border bg-card", className)}>
-      <div className="flex items-center justify-between gap-3 px-4 pt-4 sm:px-6">
+      <div className="flex items-center justify-between gap-3 px-3 pt-3 sm:px-4">
         <div className="flex items-center gap-2">
           <Button
             variant="outline"
@@ -3179,7 +3179,7 @@ const RecentTransactionsTable = ({
           >
             <ClipboardList className="size-4 text-muted-foreground sm:size-[18px]" />
           </Button>
-          <span className="text-sm font-medium sm:text-base">
+          <span className="text-sm font-medium">
             Recent Transactions
           </span>
           <span className="ml-1 inline-flex items-center rounded-md bg-gray-50 px-2 py-1 text-[10px] font-medium text-gray-600 ring-1 ring-gray-500/10 ring-inset sm:text-xs dark:bg-gray-800/50 dark:text-gray-400 dark:ring-gray-400/20">
@@ -3224,7 +3224,7 @@ const RecentTransactionsTable = ({
         </div>
       </div>
 
-      <div className="px-4 pt-3 pb-4 sm:px-6">
+      <div className="px-3 pt-2.5 pb-3 sm:px-4">
         {paginatedTransactions.length === 0 ? (
           <div className="flex h-24 items-center justify-center rounded-lg border border-dashed text-sm text-muted-foreground">
             No transactions found.
@@ -3260,7 +3260,7 @@ const RecentTransactionsTable = ({
                 <a
                   key={t.id}
                   href={transactionDetailHref(t.id)}
-                  className="group flex min-w-0 items-center gap-3 px-3 py-3 transition-colors hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:px-4"
+                  className="group flex min-w-0 items-center gap-3 px-3 py-2.5 transition-colors hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 >
                   <span
                     className={cn(
@@ -3341,7 +3341,7 @@ const RecentTransactionsTable = ({
         )}
       </div>
 
-      <div className="flex items-center justify-between border-t px-4 py-3 text-[10px] text-muted-foreground sm:px-6 sm:text-xs">
+      <div className="flex items-center justify-between border-t px-3 py-2.5 text-[10px] text-muted-foreground sm:px-4 sm:text-xs">
         <span>
           {startRow}-{endRow} of {filteredTransactions.length}
         </span>
@@ -3401,7 +3401,7 @@ const BooksHealthPanel = ({
 
   return (
     <div className={cn("rounded-xl border bg-card", className)}>
-      <div className="flex items-center justify-between gap-3 px-4 pt-4 sm:px-6">
+      <div className="flex items-center justify-between gap-3 px-3 pt-3 sm:px-4">
         <div className="flex items-center gap-2">
           <Button
             variant="outline"
@@ -3412,7 +3412,7 @@ const BooksHealthPanel = ({
             <CheckCircle2 className="size-4 text-muted-foreground sm:size-[18px]" />
           </Button>
           <div>
-            <span className="text-sm font-medium sm:text-base">
+            <span className="text-sm font-medium">
               Books Health
             </span>
             <p className="text-[10px] text-muted-foreground sm:text-xs">
@@ -3422,12 +3422,12 @@ const BooksHealthPanel = ({
         </div>
       </div>
 
-      <div className="space-y-3 px-4 pt-3 pb-4 sm:px-6">
+      <div className="space-y-2.5 px-3 pt-2.5 pb-3 sm:px-4">
         {primaryAction && PrimaryIcon ? (
           <Link
             to={primaryAction.href}
             className={cn(
-              "group flex items-start gap-3 rounded-lg p-3 ring-1 ring-inset transition-colors hover:bg-muted/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+              "group flex items-start gap-3 rounded-lg p-2.5 ring-1 ring-inset transition-colors hover:bg-muted/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
               healthToneStyles[primaryAction.tone],
             )}
           >
@@ -3481,7 +3481,7 @@ const BooksHealthPanel = ({
               </>
             );
             const className =
-              "group flex w-full items-center gap-3 px-3 py-3 text-left transition-colors first:rounded-t-lg last:rounded-b-lg hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring";
+              "group flex w-full items-center gap-3 px-3 py-2.5 text-left transition-colors first:rounded-t-lg last:rounded-b-lg hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring";
 
             return isJournalRefresh ? (
               <button
@@ -3563,8 +3563,8 @@ const Dashboard5 = ({
         hideSensitive={hideSensitive}
         currency={currency}
       />
-      <div className="grid grid-cols-1 items-start gap-3 sm:gap-4 2xl:grid-cols-[minmax(0,1fr)_400px]">
-        <div className="grid min-w-0 gap-3 sm:gap-4">
+      <div className="grid grid-cols-1 items-start gap-3 2xl:grid-cols-[minmax(0,1fr)_380px]">
+        <div className="grid min-w-0 gap-3">
           <RevenueFlowChart
             snapshot={snapshot}
             hideSensitive={hideSensitive}
@@ -3578,7 +3578,7 @@ const Dashboard5 = ({
             priceEur={snapshot.priceEur}
           />
         </div>
-        <div className="grid min-w-0 gap-3 sm:gap-4">
+        <div className="grid min-w-0 gap-3">
           <SideChartsSection
             snapshot={snapshot}
             hideSensitive={hideSensitive}

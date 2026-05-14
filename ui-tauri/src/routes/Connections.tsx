@@ -177,7 +177,7 @@ export function Connections() {
 
   return (
     <div className={screenShellClassName}>
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+      <div className="flex flex-col gap-2.5 sm:flex-row sm:items-end sm:justify-between">
         <div className="min-w-0 space-y-1">
           <p className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
             {snapshot.connections.length} wallets and sources ·{" "}
@@ -188,7 +188,7 @@ export function Connections() {
                 ? `${snapshotSyncingN} refreshing`
                 : "watch-only sources current"}
           </p>
-          <h2 className="text-2xl font-semibold tracking-tight">
+          <h2 className="text-xl font-semibold tracking-tight">
             Wallets
           </h2>
         </div>
@@ -196,7 +196,7 @@ export function Connections() {
           <Button
             variant="outline"
             size="sm"
-            className="h-9 gap-2"
+            className="h-8 gap-2"
             onClick={onSyncAll}
             disabled={syncWallets.isPending}
           >
@@ -208,7 +208,7 @@ export function Connections() {
           </Button>
           <Button
             size="sm"
-            className="h-9 gap-2"
+            className="h-8 gap-2"
             onClick={() => setAddConnectionOpen(true)}
           >
             <Plus className="size-4" aria-hidden="true" />
@@ -275,8 +275,8 @@ export function Connections() {
       </div>
 
       <Card>
-        <CardHeader className="border-b">
-          <CardTitle>Wallets and sources</CardTitle>
+        <CardHeader className="border-b px-4 pb-3">
+          <CardTitle className="text-sm sm:text-base">Wallets and sources</CardTitle>
           <CardDescription>
             Local wallet, Lightning, ecash, and import sources available to
             Kassiber.
@@ -323,13 +323,13 @@ interface ConnectionMetricProps {
 
 function ConnectionMetric({ label, value, sub }: ConnectionMetricProps) {
   return (
-    <Card className="gap-3 py-5">
-      <CardContent className="space-y-3">
+    <Card className="gap-2.5 py-4">
+      <CardContent className="space-y-2 px-4">
         <div className="flex items-center gap-2 text-muted-foreground">
           <Wallet className="size-4" aria-hidden="true" />
           <span className="text-xs font-medium">{label}</span>
         </div>
-        <p className="text-2xl font-semibold tracking-tight">{value}</p>
+        <p className="text-xl font-semibold tracking-tight">{value}</p>
         <p className="text-xs text-muted-foreground">{sub}</p>
       </CardContent>
     </Card>
