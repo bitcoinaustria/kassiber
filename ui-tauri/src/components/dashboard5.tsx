@@ -1556,7 +1556,7 @@ const BalanceDriversCard = ({
                 blurClass(hideSensitive),
               )}
             >
-              {transactionCount.toLocaleString("en-US")} recent rows
+              Latest {transactionCount.toLocaleString("en-US")} transactions
             </p>
           </div>
         </div>

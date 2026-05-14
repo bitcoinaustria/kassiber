@@ -25,6 +25,7 @@ const ALLOWED_BRIDGE_KINDS = new Set([
   "status",
   "ui.overview.snapshot",
   "ui.transactions.list",
+  "ui.transactions.metadata.update",
   "ui.wallets.list",
   "ui.backends.list",
   "ui.backends.options",
