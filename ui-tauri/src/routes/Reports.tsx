@@ -7,7 +7,7 @@
  */
 
 import { Link } from "@tanstack/react-router";
-import { Fragment, useState, type ReactNode } from "react";
+import { Fragment, useEffect, useMemo, useState, type ReactNode } from "react";
 import {
   AlertTriangle,
   CalendarDays,
@@ -211,7 +211,11 @@ function basename(path: string) {
 
 function initialReportYearFromUrl() {
   if (typeof window === "undefined") return null;
-  const value = new URLSearchParams(window.location.search).get("year");
+  return reportYearFromUrl(window.location.search);
+}
+
+function reportYearFromUrl(search: string) {
+  const value = new URLSearchParams(search).get("year");
   if (!value) return null;
   const parsed = Number(value);
   return Number.isInteger(parsed) ? parsed : null;
@@ -221,13 +225,28 @@ export function Reports() {
   const [selectedYear, setSelectedYear] = useState<number | null>(
     initialReportYearFromUrl,
   );
+  useEffect(() => {
+    const syncYearFromUrl = () => {
+      setSelectedYear(reportYearFromUrl(window.location.search));
+    };
+    syncYearFromUrl();
+    window.addEventListener("popstate", syncYearFromUrl);
+    return () => window.removeEventListener("popstate", syncYearFromUrl);
+  }, []);
+  const reportArgs = useMemo(
+    () => (selectedYear ? { year: selectedYear } : undefined),
+    [selectedYear],
+  );
   const { data, isLoading } = useDaemon<CapitalGainsReport>(
     "ui.reports.capital_gains",
-    selectedYear ? { year: selectedYear } : undefined,
+    reportArgs,
+    { staleTime: 0 },
   );
   const hideSensitive = useUiStore((s) => s.hideSensitive);
+  const waitingForSelectedYear =
+    selectedYear !== null && data?.data?.year !== selectedYear;
 
-  if (isLoading) {
+  if (isLoading || waitingForSelectedYear) {
     return (
       <div className="flex flex-1 items-center justify-center text-sm text-muted-foreground">
         Loading reports...

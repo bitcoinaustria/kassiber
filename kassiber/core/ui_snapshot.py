@@ -1700,18 +1700,6 @@ def build_capital_gains_snapshot(
         "SELECT COUNT(*) AS count FROM journal_quarantines WHERE profile_id = ?",
         (profile["id"],),
     ).fetchone()["count"]
-    rows = conn.execute(
-        """
-        SELECT occurred_at, quantity, cost_basis, proceeds, gain_loss
-        FROM journal_entries
-        WHERE profile_id = ?
-          AND entry_type = 'disposal'
-          AND COALESCE(at_category, '') != 'neu_swap'
-        ORDER BY occurred_at DESC, created_at DESC, id DESC
-        LIMIT 200
-        """,
-        (profile["id"],),
-    ).fetchall()
     available_years = _merge_report_years(
         _capital_gains_available_years(conn, profile["id"]),
         _capital_gains_transaction_years(conn, profile["id"]),
@@ -1728,9 +1716,22 @@ def build_capital_gains_snapshot(
     elif available_years:
         latest_year = available_years[0]
     else:
-        latest_year = _snapshot_year(rows)
+        latest_year = datetime.now(timezone.utc).year
     if latest_year not in available_years:
         available_years = [latest_year, *available_years]
+    rows = conn.execute(
+        """
+        SELECT occurred_at, quantity, cost_basis, proceeds, gain_loss
+        FROM journal_entries
+        WHERE profile_id = ?
+          AND entry_type = 'disposal'
+          AND COALESCE(at_category, '') != 'neu_swap'
+          AND substr(occurred_at, 1, 4) = ?
+        ORDER BY occurred_at DESC, created_at DESC, id DESC
+        LIMIT 200
+        """,
+        (profile["id"], str(latest_year)),
+    ).fetchall()
     lots = [
         {
             "acquired": "",
@@ -1741,7 +1742,6 @@ def build_capital_gains_snapshot(
             "type": "ST",
         }
         for row in reversed(rows)
-        if (row["occurred_at"] or "").startswith(str(latest_year))
     ]
     return {
         "jurisdictionCode": (profile["tax_country"] or "AT").upper(),
