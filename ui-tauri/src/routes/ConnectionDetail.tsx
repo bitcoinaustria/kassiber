@@ -735,6 +735,10 @@ function ConnectionDetailView({
               <DetailRow label="Label" value={connection.label} />
               <DetailRow label="Type" value={connection.kind.toUpperCase()} mono />
               <DetailRow
+                label="Status"
+                value={walletDetail?.sync_status ?? connection.status}
+              />
+              <DetailRow
                 label="Sync mode"
                 value={
                   syncModeLabels[

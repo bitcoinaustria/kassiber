@@ -3469,7 +3469,7 @@ const Dashboard2 = ({
             size="sm"
             className="h-8 gap-2 sm:h-9"
             aria-label="Refresh watch-only connections"
-            onClick={syncAll}
+            onClick={() => syncAll()}
             disabled={isSyncing}
           >
             <RefreshCw

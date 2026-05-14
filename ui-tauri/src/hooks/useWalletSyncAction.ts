@@ -15,12 +15,6 @@ type WalletSyncOptions = {
   onSettled?: () => void;
 };
 
-function isWalletSyncOptions(
-  value: WalletSyncOptions | React.MouseEvent | undefined,
-): value is WalletSyncOptions {
-  return Boolean(value && "onSettled" in value);
-}
-
 export function useWalletSyncAction() {
   const queryClient = useQueryClient();
   const dataMode = useUiStore((state) => state.dataMode);
@@ -48,10 +42,7 @@ export function useWalletSyncAction() {
   });
 
   const syncAll = React.useCallback(
-    (optionsOrEvent?: WalletSyncOptions | React.MouseEvent) => {
-      const options = isWalletSyncOptions(optionsOrEvent)
-        ? optionsOrEvent
-        : undefined;
+    (options?: WalletSyncOptions) => {
       // Honor in-flight syncs from any other `useDaemonMutation("ui.wallets.sync")`
       // instance — this hook is mounted in dashboard2/dashboard5/AppShell, so a
       // sync started from one surface should block a duplicate from another.

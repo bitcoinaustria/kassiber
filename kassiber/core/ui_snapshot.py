@@ -18,6 +18,18 @@ from .wallets import wallet_btcpay_provenance_config
 
 MAX_UI_LIST_LIMIT = 500
 MAX_UI_PREVIEW_LIMIT = 100
+_JOURNAL_DISPLAY_ENTRY_TYPE_SQL = """
+CASE
+    WHEN je.at_category = 'neu_swap' THEN 'neutral_swap'
+    ELSE je.entry_type
+END
+""".strip()
+_JOURNAL_DISPLAY_GAIN_LOSS_SQL = """
+CASE
+    WHEN je.at_category = 'neu_swap' THEN 0
+    ELSE COALESCE(je.gain_loss, 0)
+END
+""".strip()
 _AUDIT_PROFILE_TABLE_COLUMNS = {
     "transactions": "created_at",
     "journal_entries": "created_at",
@@ -1745,51 +1757,38 @@ def build_journals_snapshot(conn: sqlite3.Connection) -> dict[str, Any]:
 
     freshness = _journal_freshness(conn, profile)
     entry_rows = conn.execute(
-        """
+        f"""
         SELECT
-            CASE
-                WHEN at_category = 'neu_swap' THEN 'neutral_swap'
-                ELSE entry_type
-            END AS entry_type,
+            {_JOURNAL_DISPLAY_ENTRY_TYPE_SQL} AS entry_type,
             COUNT(*) AS count,
-            SUM(
-                CASE
-                    WHEN at_category = 'neu_swap' THEN 0
-                    ELSE COALESCE(gain_loss, 0)
-                END
-            ) AS gain_loss
-        FROM journal_entries
+            SUM({_JOURNAL_DISPLAY_GAIN_LOSS_SQL}) AS gain_loss
+        FROM journal_entries je
         WHERE profile_id = ?
-        GROUP BY
-            CASE
-                WHEN at_category = 'neu_swap' THEN 'neutral_swap'
-                ELSE entry_type
-            END
+        GROUP BY {_JOURNAL_DISPLAY_ENTRY_TYPE_SQL}
         ORDER BY count DESC, entry_type ASC
         """,
         (profile["id"],),
     ).fetchall()
     recent_rows = conn.execute(
-        """
-        SELECT
-               je.occurred_at,
-               CASE
-                   WHEN je.at_category = 'neu_swap' THEN 'neutral_swap'
-                   ELSE je.entry_type
-               END AS entry_type,
-               je.asset, je.quantity, je.fiat_value,
-               COALESCE(
-                   CASE
-                       WHEN je.at_category = 'neu_swap' THEN 0
-                       ELSE je.gain_loss
-                   END,
-                   0
-               ) AS gain_loss,
-               w.label AS wallet
-        FROM journal_entries je
-        JOIN wallets w ON w.id = je.wallet_id
-        WHERE je.profile_id = ?
-        ORDER BY je.occurred_at DESC, je.created_at DESC, je.id DESC
+        f"""
+        WITH normalized AS (
+            SELECT
+                je.occurred_at,
+                je.created_at,
+                je.id,
+                {_JOURNAL_DISPLAY_ENTRY_TYPE_SQL} AS entry_type,
+                je.asset,
+                je.quantity,
+                je.fiat_value,
+                {_JOURNAL_DISPLAY_GAIN_LOSS_SQL} AS gain_loss,
+                w.label AS wallet
+            FROM journal_entries je
+            JOIN wallets w ON w.id = je.wallet_id
+            WHERE je.profile_id = ?
+        )
+        SELECT occurred_at, entry_type, asset, quantity, fiat_value, gain_loss, wallet
+        FROM normalized
+        ORDER BY occurred_at DESC, created_at DESC, id DESC
         LIMIT 12
         """,
         (profile["id"],),
@@ -1797,32 +1796,26 @@ def build_journals_snapshot(conn: sqlite3.Connection) -> dict[str, Any]:
     recent_by_type: dict[str, list[dict[str, Any]]] = {}
     for entry_row in entry_rows:
         typed_recent_rows = conn.execute(
-            """
-            SELECT
-                   je.occurred_at,
-                   CASE
-                       WHEN je.at_category = 'neu_swap' THEN 'neutral_swap'
-                       ELSE je.entry_type
-                   END AS entry_type,
-                   je.asset, je.quantity, je.fiat_value,
-                   COALESCE(
-                       CASE
-                           WHEN je.at_category = 'neu_swap' THEN 0
-                           ELSE je.gain_loss
-                       END,
-                       0
-                   ) AS gain_loss,
-                   w.label AS wallet
-            FROM journal_entries je
-            JOIN wallets w ON w.id = je.wallet_id
-            WHERE je.profile_id = ?
-              AND (
-                  CASE
-                      WHEN je.at_category = 'neu_swap' THEN 'neutral_swap'
-                      ELSE je.entry_type
-                  END
-              ) = ?
-            ORDER BY je.occurred_at DESC, je.created_at DESC, je.id DESC
+            f"""
+            WITH normalized AS (
+                SELECT
+                    je.occurred_at,
+                    je.created_at,
+                    je.id,
+                    {_JOURNAL_DISPLAY_ENTRY_TYPE_SQL} AS entry_type,
+                    je.asset,
+                    je.quantity,
+                    je.fiat_value,
+                    {_JOURNAL_DISPLAY_GAIN_LOSS_SQL} AS gain_loss,
+                    w.label AS wallet
+                FROM journal_entries je
+                JOIN wallets w ON w.id = je.wallet_id
+                WHERE je.profile_id = ?
+            )
+            SELECT occurred_at, entry_type, asset, quantity, fiat_value, gain_loss, wallet
+            FROM normalized
+            WHERE entry_type = ?
+            ORDER BY occurred_at DESC, created_at DESC, id DESC
             LIMIT 12
             """,
             (profile["id"], entry_row["entry_type"]),
@@ -1889,26 +1882,14 @@ def build_journal_events_list_snapshot(
 
     freshness = _journal_freshness(conn, profile)
     summary_rows = conn.execute(
-        """
+        f"""
         SELECT
-            CASE
-                WHEN at_category = 'neu_swap' THEN 'neutral_swap'
-                ELSE entry_type
-            END AS entry_type,
+            {_JOURNAL_DISPLAY_ENTRY_TYPE_SQL} AS entry_type,
             COUNT(*) AS count,
-            SUM(
-                CASE
-                    WHEN at_category = 'neu_swap' THEN 0
-                    ELSE COALESCE(gain_loss, 0)
-                END
-            ) AS gain_loss
-        FROM journal_entries
+            SUM({_JOURNAL_DISPLAY_GAIN_LOSS_SQL}) AS gain_loss
+        FROM journal_entries je
         WHERE profile_id = ?
-        GROUP BY
-            CASE
-                WHEN at_category = 'neu_swap' THEN 'neutral_swap'
-                ELSE entry_type
-            END
+        GROUP BY {_JOURNAL_DISPLAY_ENTRY_TYPE_SQL}
         ORDER BY count DESC, entry_type ASC
         """,
         (profile["id"],),
