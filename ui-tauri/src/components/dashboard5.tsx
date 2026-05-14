@@ -135,6 +135,10 @@ const DEFAULT_INCOMING_MARKER_MIN_BTC = 0.0001;
 const DEFAULT_OUTGOING_MARKER_MIN_BTC = 0;
 const MAX_ACTIVITY_MARKER_MIN_BTC = 0.01;
 const ACTIVITY_MARKER_MIN_STEP_BTC = 0.00005;
+const INCOMING_MARKER_MIN_PARAM = "incomingMinBtc";
+const OUTGOING_MARKER_MIN_PARAM = "outgoingMinBtc";
+const LEGACY_INCOMING_MARKER_MIN_PARAM = "incomingMin";
+const LEGACY_OUTGOING_MARKER_MIN_PARAM = "outgoingMin";
 
 const defaultTreasurySeriesVisibility: TreasurySeriesVisibility = {
   primary: true,
@@ -626,13 +630,24 @@ function clampActivityMarkerMinimum(value: number) {
   );
 }
 
-function initialActivityMarkerMinimumFromUrl(param: string, fallback: number) {
+function initialActivityMarkerMinimumFromUrl(
+  param: string,
+  fallback: number,
+  legacyParam?: string,
+) {
   if (typeof window === "undefined") return fallback;
   const params = new URLSearchParams(window.location.search);
   const rawValue = params.get(param);
-  if (rawValue === null) return fallback;
-  const parsed = Number(rawValue);
+  if (rawValue !== null) {
+    const parsed = Number(rawValue);
+    if (!Number.isFinite(parsed)) return fallback;
+    return clampActivityMarkerMinimum(parsed);
+  }
+  const legacyValue = legacyParam ? params.get(legacyParam) : null;
+  if (legacyValue === null) return fallback;
+  const parsed = Number(legacyValue);
   if (!Number.isFinite(parsed)) return fallback;
+  if (parsed <= 0) return fallback;
   return clampActivityMarkerMinimum(parsed);
 }
 
@@ -918,9 +933,7 @@ function formatBtcAxis(value: number) {
 }
 
 function formatActivityMarkerMinimum(value: number) {
-  if (value <= 0) return "All activity";
-  if (value < 0.0001) return `${Math.round(value * 100_000_000).toLocaleString("en-US")} sats`;
-  return formatBtc(value, { precision: value < 0.001 ? 5 : 4 });
+  return `${serializeActivityMarkerMinimum(value)} BTC`;
 }
 
 function compactEventId(value: string | undefined) {
@@ -2926,7 +2939,7 @@ function ChartControlsSheet({
                 Chart controls
               </SheetTitle>
               <SheetDescription className="mt-1 truncate">
-                Time range, chart series, and activity marker thresholds
+                Time range, chart series, and BTC marker minimums
               </SheetDescription>
               <div className="mt-2 flex flex-wrap items-center gap-2">
                 <span className="text-[10px] text-muted-foreground">
@@ -3036,9 +3049,10 @@ function ChartControlsSheet({
               <div className="flex items-center justify-between gap-3 text-sm">
                 <div>
                   <p className="text-xs font-medium text-muted-foreground">
-                    Incoming markers
+                    Incoming payments
                   </p>
                   <p className="mt-1 text-xs text-muted-foreground">
+                    Minimum size in BTC ·{" "}
                     {visibleIncomingMarkerCount.toLocaleString("en-US")} of{" "}
                     {incomingMarkerCount.toLocaleString("en-US")} shown
                   </p>
@@ -3050,7 +3064,7 @@ function ChartControlsSheet({
                 </span>
               </div>
               <input
-                aria-label="Minimum incoming activity marker value"
+                aria-label="Minimum incoming payment marker size in BTC"
                 className="mt-3 h-2 w-full cursor-pointer"
                 min={0}
                 max={MAX_ACTIVITY_MARKER_MIN_BTC}
@@ -3068,9 +3082,10 @@ function ChartControlsSheet({
               <div className="flex items-center justify-between gap-3 text-sm">
                 <div>
                   <p className="text-xs font-medium text-red-500 dark:text-red-400">
-                    Outgoing markers
+                    Outgoing activity
                   </p>
                   <p className="mt-1 text-xs text-muted-foreground">
+                    Minimum size in BTC ·{" "}
                     {visibleOutgoingMarkerCount.toLocaleString("en-US")} of{" "}
                     {outgoingMarkerCount.toLocaleString("en-US")} shown
                   </p>
@@ -3085,7 +3100,7 @@ function ChartControlsSheet({
                 </span>
               </div>
               <input
-                aria-label="Minimum outgoing activity marker value"
+                aria-label="Minimum outgoing activity marker size in BTC"
                 className="mt-3 h-2 w-full cursor-pointer"
                 min={0}
                 max={MAX_ACTIVITY_MARKER_MIN_BTC}
@@ -3124,15 +3139,17 @@ const RevenueFlowChart = ({
   const [incomingMarkerMinimumBtc, setIncomingMarkerMinimumBtc] =
     React.useState(() =>
       initialActivityMarkerMinimumFromUrl(
-        "incomingMin",
+        INCOMING_MARKER_MIN_PARAM,
         DEFAULT_INCOMING_MARKER_MIN_BTC,
+        LEGACY_INCOMING_MARKER_MIN_PARAM,
       ),
     );
   const [outgoingMarkerMinimumBtc, setOutgoingMarkerMinimumBtc] =
     React.useState(() =>
       initialActivityMarkerMinimumFromUrl(
-        "outgoingMin",
+        OUTGOING_MARKER_MIN_PARAM,
         DEFAULT_OUTGOING_MARKER_MIN_BTC,
+        LEGACY_OUTGOING_MARKER_MIN_PARAM,
       ),
     );
   const [chartControlsOpen, setChartControlsOpen] = React.useState(false);
@@ -3198,19 +3215,21 @@ const RevenueFlowChart = ({
     if (typeof window === "undefined") return;
     const params = new URLSearchParams(window.location.search);
     params.set("period", period);
+    params.delete(LEGACY_INCOMING_MARKER_MIN_PARAM);
+    params.delete(LEGACY_OUTGOING_MARKER_MIN_PARAM);
     if (incomingMarkerMinimumBtc === DEFAULT_INCOMING_MARKER_MIN_BTC) {
-      params.delete("incomingMin");
+      params.delete(INCOMING_MARKER_MIN_PARAM);
     } else {
       params.set(
-        "incomingMin",
+        INCOMING_MARKER_MIN_PARAM,
         serializeActivityMarkerMinimum(incomingMarkerMinimumBtc),
       );
     }
     if (outgoingMarkerMinimumBtc === DEFAULT_OUTGOING_MARKER_MIN_BTC) {
-      params.delete("outgoingMin");
+      params.delete(OUTGOING_MARKER_MIN_PARAM);
     } else {
       params.set(
-        "outgoingMin",
+        OUTGOING_MARKER_MIN_PARAM,
         serializeActivityMarkerMinimum(outgoingMarkerMinimumBtc),
       );
     }
