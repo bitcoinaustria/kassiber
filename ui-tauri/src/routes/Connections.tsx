@@ -25,11 +25,10 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { useDaemon, useDaemonMutation } from "@/daemon/client";
+import { useDaemon } from "@/daemon/client";
 import { useUiStore } from "@/store/ui";
-import { useSyncProgressNotice } from "@/hooks/useSyncProgressNotice";
+import { useWalletSyncAction } from "@/hooks/useWalletSyncAction";
 import { useCurrency, type Currency } from "@/lib/currency";
-import { summarizeSyncResults, type SyncResult } from "@/lib/syncResults";
 import { screenShellClassName } from "@/lib/screen-layout";
 import { cn } from "@/lib/utils";
 import { AddConnectionDialog } from "@/components/kb/AddConnectionDialog";
@@ -92,12 +91,10 @@ const statusDotStyles: Record<ConnectionStatus, string> = {
 
 export function Connections() {
   const { data, isLoading } = useDaemon<OverviewSnapshot>("ui.overview.snapshot");
-  const syncWallets = useDaemonMutation<{ results: SyncResult[] }>("ui.wallets.sync");
+  const { syncAll, isSyncing } = useWalletSyncAction();
   const hideSensitive = useUiStore((s) => s.hideSensitive);
-  const addNotification = useUiStore((s) => s.addNotification);
   const currency = useCurrency();
   const navigate = useNavigate();
-  const [syncMessage, setSyncMessage] = useState<string | null>(null);
   const [addConnectionOpen, setAddConnectionOpen] = useState(false);
   const [resumeSourceId, setResumeSourceId] = useState<string | null>(null);
   const deferredConnectionSetup = useUiStore(
@@ -106,7 +103,6 @@ export function Connections() {
   const clearDeferredConnectionSetup = useUiStore(
     (s) => s.clearDeferredConnectionSetup,
   );
-  const { startSyncNotice, clearSyncNotice } = useSyncProgressNotice();
 
   useEffect(() => {
     if (!deferredConnectionSetup) return;
@@ -115,44 +111,7 @@ export function Connections() {
     clearDeferredConnectionSetup();
   }, [deferredConnectionSetup, clearDeferredConnectionSetup]);
   const onSyncAll = () => {
-    if (syncWallets.isPending) return;
-    setSyncMessage(null);
-    addNotification({
-      title: "Connection refresh started",
-      body: "Kassiber is scanning configured watch-only sources.",
-      tone: "warning",
-      dedupeKey: "wallet-sync",
-    });
-    startSyncNotice();
-    syncWallets.mutate(
-      { all: true },
-      {
-        onSuccess: (envelope) => {
-          const results = envelope.data?.results ?? [];
-          const errors = results.filter((result) => result.status === "error").length;
-          const summary = summarizeSyncResults(results);
-          setSyncMessage(summary);
-          addNotification({
-            title: errors ? "Connection refresh finished with errors" : "Connection refresh finished",
-            body: summary,
-            tone: errors ? "error" : "success",
-            dedupeKey: "wallet-sync",
-          });
-        },
-        onError: (error) => {
-          const message =
-            error instanceof Error ? error.message : "Connection refresh failed";
-          setSyncMessage(message);
-          addNotification({
-            title: "Connection refresh failed",
-            body: message,
-            tone: "error",
-            dedupeKey: "wallet-sync",
-          });
-        },
-        onSettled: clearSyncNotice,
-      },
-    );
+    syncAll();
   };
 
   if (isLoading || !data?.data) {
@@ -164,7 +123,7 @@ export function Connections() {
   const totalEur = totalBtc * snapshot.priceEur;
   const errorN = snapshot.connections.filter((c) => c.status === "error").length;
   const snapshotSyncingN = snapshot.connections.filter((c) => c.status === "syncing").length;
-  const syncingN = syncWallets.isPending
+  const syncingN = isSyncing
     ? snapshot.connections.length
     : snapshotSyncingN;
   const syncedN = snapshot.connections.filter((c) => c.status === "synced").length;
@@ -182,7 +141,7 @@ export function Connections() {
           <p className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
             {snapshot.connections.length} wallets and sources ·{" "}
             {errorN > 0 ? `${errorN} need attention · ` : ""}
-            {syncWallets.isPending
+            {isSyncing
               ? `${syncingN} refreshing now`
               : snapshotSyncingN > 0
                 ? `${snapshotSyncingN} refreshing`
@@ -198,13 +157,13 @@ export function Connections() {
             size="sm"
             className="h-8 gap-2"
             onClick={onSyncAll}
-            disabled={syncWallets.isPending}
+            disabled={isSyncing}
           >
             <RefreshCw
-              className={cn("size-4", syncWallets.isPending && "animate-spin")}
+              className={cn("size-4", isSyncing && "animate-spin")}
               aria-hidden="true"
             />
-            {syncWallets.isPending ? "Refreshing" : "Refresh all"}
+            {isSyncing ? "Refreshing" : "Refresh all"}
           </Button>
           <Button
             size="sm"
@@ -224,20 +183,6 @@ export function Connections() {
         }}
         initialSourceId={resumeSourceId}
       />
-      {syncMessage && (
-        <div
-          className={cn(
-            "rounded-md border px-3 py-2 text-sm",
-            syncWallets.isError
-              ? "border-red-200 bg-red-50 text-red-700 dark:border-red-900/60 dark:bg-red-950/40 dark:text-red-300"
-              : "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900/60 dark:bg-emerald-950/40 dark:text-emerald-300",
-          )}
-          role="status"
-        >
-          {syncMessage}
-        </div>
-      )}
-
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
         <ConnectionMetric
           label="Total balance"

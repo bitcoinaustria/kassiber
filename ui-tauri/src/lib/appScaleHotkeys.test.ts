@@ -26,6 +26,7 @@ describe("app scale hotkeys", () => {
         metaKey: false,
         ctrlKey: true,
         altKey: false,
+        shiftKey: true,
       }),
     ).toBe("increase");
     expect(

@@ -1601,6 +1601,8 @@ def _capital_gains_transaction_years(
 
 
 def _merge_report_years(*year_lists: list[int]) -> list[int]:
+    # Keep these bounds in sync with the desktop `reportYear` URL parser so
+    # obviously invalid years fail consistently on both sides of the bridge.
     years = {
         int(year)
         for year_list in year_lists

@@ -20,4 +20,16 @@ describe("reportExportStatusForYear", () => {
   it("hides stale export notices from a previous tax year", () => {
     expect(reportExportStatusForYear(status, 2025)).toBeNull();
   });
+
+  it("switches visible export notices with the active tax year", () => {
+    const nextStatus: ReportExportStatus = {
+      ...status,
+      year: 2025,
+      message: "kassiber-austrian-e1kv-2025.pdf saved.",
+      path: "/exports/kassiber-austrian-e1kv-2025.pdf",
+    };
+
+    expect(reportExportStatusForYear(status, 2025)).toBeNull();
+    expect(reportExportStatusForYear(nextStatus, 2025)).toBe(nextStatus);
+  });
 });

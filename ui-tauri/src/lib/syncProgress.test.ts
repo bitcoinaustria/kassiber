@@ -39,4 +39,19 @@ describe("sync progress notifications", () => {
       label: "Scanning configured sources",
     });
   });
+
+  it("clamps progress when daemon counters exceed the reported total", () => {
+    const progress = syncProgressNotification({
+      wallet: "Cold",
+      processed: 30,
+      total: 24,
+    });
+
+    expect(progress.value).toBe(100);
+    expect(progress.progress).toEqual({
+      value: 100,
+      indeterminate: false,
+      label: "Scanning transactions: 30 / 24",
+    });
+  });
 });

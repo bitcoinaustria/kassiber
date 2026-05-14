@@ -1,3 +1,5 @@
+// Keep these bounds in sync with `kassiber.core.ui_snapshot` report-year
+// normalization so invalid URL years fail before they reach the daemon.
 export const MIN_REPORT_YEAR = 2009;
 export const MAX_REPORT_YEAR = 2100;
 

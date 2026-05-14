@@ -436,6 +436,7 @@ fn save_exported_file_as(source_path: String, destination_path: String) -> Resul
                 .to_string(),
         );
     }
+    ensure_export_destination_outside_managed_root(&canonical_source, &destination)?;
 
     if metadata.is_file() {
         copy_report_export_file(&canonical_source, &destination)?;
@@ -443,6 +444,28 @@ fn save_exported_file_as(source_path: String, destination_path: String) -> Resul
         copy_report_export_directory(&canonical_source, &destination)?;
     }
     Ok(destination.to_string_lossy().into_owned())
+}
+
+fn ensure_export_destination_outside_managed_root(
+    source: &Path,
+    destination: &Path,
+) -> Result<(), String> {
+    let Some(managed_root) = managed_report_exports_root(source) else {
+        return Err("Report export source is not in the managed exports folder.".to_string());
+    };
+    let Some(destination_parent) = destination.parent() else {
+        return Err("Report export destination must include a parent folder.".to_string());
+    };
+    std::fs::create_dir_all(destination_parent)
+        .map_err(|error| format!("Could not create report export destination folder: {error}"))?;
+    let canonical_parent = std::fs::canonicalize(destination_parent)
+        .map_err(|error| format!("Could not inspect report export destination folder: {error}"))?;
+    let canonical_managed_root = std::fs::canonicalize(managed_root)
+        .map_err(|error| format!("Could not inspect managed report export folder: {error}"))?;
+    if canonical_parent.starts_with(canonical_managed_root) {
+        return Err("Choose a destination outside Kassiber's managed exports folder.".to_string());
+    }
+    Ok(())
 }
 
 fn copy_report_export_file(source: &Path, destination: &Path) -> Result<(), String> {
@@ -999,14 +1022,23 @@ fn is_supported_austrian_csv_bundle_dir(path: &Path) -> bool {
 }
 
 fn is_managed_report_export_path(path: &Path) -> bool {
+    managed_report_exports_root(path).is_some()
+}
+
+fn managed_report_exports_root(path: &Path) -> Option<&Path> {
     let Some(parent) = path.parent() else {
-        return false;
+        return None;
     };
     let Some(grandparent) = parent.parent() else {
-        return false;
+        return None;
     };
-    parent.file_name().and_then(|name| name.to_str()) == Some("reports")
+    if parent.file_name().and_then(|name| name.to_str()) == Some("reports")
         && grandparent.file_name().and_then(|name| name.to_str()) == Some("exports")
+    {
+        Some(grandparent)
+    } else {
+        None
+    }
 }
 
 fn is_supported_report_export_target(path: &Path, metadata: &std::fs::Metadata) -> bool {
@@ -1703,7 +1735,8 @@ fn desktop_cli_args() -> Option<Vec<String>> {
 #[cfg(test)]
 mod tests {
     use super::{
-        copy_report_export_directory, database_is_encrypted, inspect_import_project_directory,
+        copy_report_export_directory, database_is_encrypted,
+        ensure_export_destination_outside_managed_root, inspect_import_project_directory,
         is_managed_report_export_path, is_supported_austrian_csv_bundle_dir,
         is_supported_export_file, is_supported_report_export_target, menu_action,
         menu_action_for_deep_link, menu_action_for_id, navigate_action, open_settings_action,
@@ -1969,6 +2002,23 @@ mod tests {
             &nested_dir,
             &nested_dir.metadata().expect("nested metadata")
         ));
+    }
+
+    #[test]
+    fn export_save_destination_must_stay_outside_managed_exports() {
+        let root = unique_temp_dir("report-export-destination");
+        let reports = root.join("exports").join("reports");
+        fs::create_dir_all(&reports).expect("create reports dir");
+        let source = reports.join("report.pdf");
+        fs::write(&source, b"%PDF").expect("write source file");
+
+        let outside = root.join("downloads").join("report.pdf");
+        ensure_export_destination_outside_managed_root(&source, &outside)
+            .expect("outside managed exports is allowed");
+
+        let inside = reports.join("copy.pdf");
+        let error = ensure_export_destination_outside_managed_root(&source, &inside).unwrap_err();
+        assert!(error.contains("outside Kassiber's managed exports"));
     }
 
     #[test]

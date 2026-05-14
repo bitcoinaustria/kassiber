@@ -56,7 +56,7 @@ export function reportableEntryMetrics(
     {
       label: "Fees",
       value: fees,
-      tone: fees ? "alert" : "neutral",
+      tone: fees ? "warning" : "neutral",
       filterId: "fees",
     },
     {

@@ -1,5 +1,5 @@
 import * as React from "react";
-import { useQueryClient } from "@tanstack/react-query";
+import { useIsMutating, useQueryClient } from "@tanstack/react-query";
 
 import { daemonMutationKey, useDaemonStreamMutation } from "@/daemon/client";
 import {
@@ -22,6 +22,13 @@ type WalletSyncOptions = {
 export function useWalletSyncAction() {
   const queryClient = useQueryClient();
   const dataMode = useUiStore((state) => state.dataMode);
+  const walletSyncMutationKey = React.useMemo(
+    () => daemonMutationKey(dataMode, "ui.wallets.sync"),
+    [dataMode],
+  );
+  const walletSyncsInFlight = useIsMutating({
+    mutationKey: walletSyncMutationKey,
+  });
   const addNotification = useUiStore((state) => state.addNotification);
   const updateNotification = useUiStore((state) => state.updateNotification);
   const noticeIdRef = React.useRef<string | null>(null);
@@ -52,7 +59,7 @@ export function useWalletSyncAction() {
       // sync started from one surface should block a duplicate from another.
       const otherSyncInFlight =
         queryClient.isMutating({
-          mutationKey: daemonMutationKey(dataMode, "ui.wallets.sync"),
+          mutationKey: walletSyncMutationKey,
         }) > 0;
       if (syncWallets.isPending || otherSyncInFlight) return;
       progressValueRef.current = STARTING_SYNC_PROGRESS_VALUE;
@@ -127,15 +134,15 @@ export function useWalletSyncAction() {
     },
     [
       addNotification,
-      dataMode,
       queryClient,
       syncWallets,
       updateNotification,
+      walletSyncMutationKey,
     ],
   );
 
   return {
     syncAll,
-    isSyncing: syncWallets.isPending,
+    isSyncing: walletSyncsInFlight > 0,
   };
 }

@@ -8,6 +8,9 @@ import {
 } from "./menuIntent";
 
 const NATIVE_MENU_EVENT = "kassiber:intent";
+const unexpectedWorkspaceAction = () => {
+  console.error("RootIntentListener should not receive workspace actions");
+};
 
 /**
  * Listens for `kassiber:intent` events on the root layout — above the
@@ -42,27 +45,15 @@ export function RootIntentListener() {
               },
               // Workspace-required deps are unused at this scope — the
               // dispatcher's scope filter guarantees workspace actions are
-              // dropped before they reach these. Throw if they're ever
-              // called so a future scope-filter regression is loud.
-              lockApp: () => {
-                throw new Error(
-                  "RootIntentListener should not receive workspace actions",
-                );
-              },
+              // dropped before they reach these. Log loudly if a future
+              // scope-filter regression reaches this root listener.
+              lockApp: unexpectedWorkspaceAction,
               setHideSensitive: store.setHideSensitive,
               decreaseAppScale: store.decreaseAppScale,
               increaseAppScale: store.increaseAppScale,
               resetAppScale: store.resetAppScale,
-              runWalletSync: () => {
-                throw new Error(
-                  "RootIntentListener should not receive workspace actions",
-                );
-              },
-              runJournalProcessing: () => {
-                throw new Error(
-                  "RootIntentListener should not receive workspace actions",
-                );
-              },
+              runWalletSync: unexpectedWorkspaceAction,
+              runJournalProcessing: unexpectedWorkspaceAction,
               addNotification: store.addNotification,
               emitSettingsSection: (section) => {
                 window.dispatchEvent(

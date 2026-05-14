@@ -1086,6 +1086,10 @@ class ReviewRegressionTest(unittest.TestCase):
         self.assertEqual(selected_year_snapshot["year"], 2025)
         self.assertEqual(selected_year_snapshot["availableYears"], [2025, 2024, 2023])
         self.assertEqual(selected_year_snapshot["lots"], [])
+        with self.assertRaises(AppError) as invalid_year:
+            build_capital_gains_snapshot(conn, tax_year=0)
+        self.assertEqual(invalid_year.exception.code, "validation")
+        self.assertIn("plausible", str(invalid_year.exception))
         snapshot_rows = {row["code"]: row for row in snapshot["kennzahlRows"]}
         self.assertEqual(snapshot_rows["801"]["amountEurCents"], 4_000)
         self.assertEqual(snapshot_rows["801"]["form"], "E 1")

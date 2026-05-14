@@ -228,7 +228,6 @@ export function Reports() {
     const syncYearFromUrl = () => {
       setSelectedYear(reportYearFromSearch(window.location.search));
     };
-    syncYearFromUrl();
     window.addEventListener("popstate", syncYearFromUrl);
     return () => window.removeEventListener("popstate", syncYearFromUrl);
   }, []);
@@ -236,22 +235,31 @@ export function Reports() {
     () => (selectedYear !== null ? { year: selectedYear } : undefined),
     [selectedYear],
   );
-  const { data, isLoading, isFetching, isError, error, refetch } =
+  const { data, isLoading, isFetching, isError, error } =
     useDaemon<CapitalGainsReport>("ui.reports.capital_gains", reportArgs);
   const hideSensitive = useUiStore((s) => s.hideSensitive);
   const returnedReportYear = data?.data?.year;
-  const waitingForSelectedYear =
+  const reportYearMismatch =
     selectedYear !== null &&
     returnedReportYear !== undefined &&
     returnedReportYear !== selectedYear;
 
-  useEffect(() => {
-    if (!waitingForSelectedYear || isFetching) return;
-    void refetch();
-  }, [isFetching, refetch, waitingForSelectedYear]);
-
-  if (isLoading || waitingForSelectedYear) {
+  if (isLoading || (reportYearMismatch && isFetching)) {
     return <ScreenSkeleton titleWidth="w-48" />;
+  }
+
+  if (reportYearMismatch) {
+    return (
+      <div className={screenPanelClassName}>
+        <div className="rounded-xl border bg-card p-4">
+          <h2 className="text-base font-semibold">Reports unavailable</h2>
+          <p className="mt-1 text-sm text-muted-foreground">
+            The daemon returned {returnedReportYear} while the selected tax year is{" "}
+            {selectedYear}.
+          </p>
+        </div>
+      </div>
+    );
   }
 
   if (isError || data?.error || !data?.data) {
