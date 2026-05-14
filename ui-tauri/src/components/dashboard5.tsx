@@ -870,6 +870,40 @@ function formatPortfolioTick(value: string, period: TimePeriod) {
   });
 }
 
+function portfolioTickBucket(point: PortfolioChartPoint, period: TimePeriod) {
+  if (point.date.startsWith("fallback-") || point.date.startsWith("series-")) {
+    return point.month;
+  }
+  if (period === "30days" || period === "3months") return point.month;
+  if (period === "5years" || period === "all") {
+    const date = parseSeriesDate(point.date);
+    return `${date.getUTCFullYear()}-${Math.floor(date.getUTCMonth() / 3)}`;
+  }
+  const date = parseSeriesDate(point.date);
+  return `${date.getUTCFullYear()}-${date.getUTCMonth()}`;
+}
+
+function portfolioAxisTicks(
+  points: PortfolioChartPoint[],
+  period: TimePeriod,
+  expanded: boolean,
+) {
+  const maxTicks = expanded ? 10 : 8;
+  const ticks: string[] = [];
+  const seenBuckets = new Set<string>();
+  for (const point of points) {
+    const bucket = portfolioTickBucket(point, period);
+    if (seenBuckets.has(bucket)) continue;
+    seenBuckets.add(bucket);
+    ticks.push(point.date);
+  }
+  if (ticks.length <= maxTicks) return ticks;
+  const step = Math.ceil((ticks.length - 1) / Math.max(1, maxTicks - 1));
+  return ticks.filter(
+    (_, index) => index === 0 || index === ticks.length - 1 || index % step === 0,
+  );
+}
+
 function formatPortfolioDetailLabel(value: string) {
   const date = parseSeriesDate(value);
   return date.toLocaleDateString("en-US", {
@@ -2387,6 +2421,7 @@ const RevenueFlowChart = ({
       const point = state.activePayload?.find((item) => item.payload)?.payload;
       if (point) setExpandedPointDate(point.date);
     };
+    const xAxisTicks = portfolioAxisTicks(visibleData, period, expanded);
 
     return (
       <div className="flex min-w-0 flex-1 flex-col gap-3 rounded-xl border bg-card p-3 sm:p-4">
@@ -2667,7 +2702,7 @@ const RevenueFlowChart = ({
               tick={{ fontSize: 10 }}
               dy={8}
               minTickGap={expanded ? 22 : 28}
-              interval="preserveStartEnd"
+              ticks={xAxisTicks}
               tickFormatter={(value) =>
                 visibleData.find((point) => point.date === value)?.month ??
                 String(value)
@@ -2727,6 +2762,7 @@ const RevenueFlowChart = ({
                   />
                 }
                 cursor={{ strokeOpacity: 0.2 }}
+                isAnimationActive={false}
                 offset={32}
                 wrapperStyle={{
                   pointerEvents: "none",
@@ -2747,7 +2783,7 @@ const RevenueFlowChart = ({
                 activeSeries === null || activeSeries === "thisYear" ? 1 : 0.3
               }
               dot={expanded || visibleData.length <= 36 ? { r: 2 } : false}
-              activeDot={{ r: 4 }}
+              activeDot={expanded ? { r: 4 } : false}
               isAnimationActive={false}
             />
             {showCostBasis && (
@@ -2768,7 +2804,7 @@ const RevenueFlowChart = ({
                     : 0.3
                 }
                 dot={expanded || visibleData.length <= 36 ? { r: 2 } : false}
-                activeDot={{ r: 4 }}
+                activeDot={expanded ? { r: 4 } : false}
                 isAnimationActive={false}
               />
             )}

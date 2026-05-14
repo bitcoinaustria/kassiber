@@ -29,6 +29,13 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
   Table,
   TableBody,
   TableCell,
@@ -167,9 +174,21 @@ interface ReportReadiness {
   };
 }
 
+function initialReportYearFromUrl() {
+  if (typeof window === "undefined") return null;
+  const value = new URLSearchParams(window.location.search).get("year");
+  if (!value) return null;
+  const parsed = Number(value);
+  return Number.isInteger(parsed) ? parsed : null;
+}
+
 export function Reports() {
+  const [selectedYear, setSelectedYear] = useState<number | null>(
+    initialReportYearFromUrl,
+  );
   const { data, isLoading } = useDaemon<CapitalGainsReport>(
     "ui.reports.capital_gains",
+    selectedYear ? { year: selectedYear } : undefined,
   );
   const hideSensitive = useUiStore((s) => s.hideSensitive);
 
@@ -194,16 +213,34 @@ export function Reports() {
     );
   }
 
-  return <ReportsView report={data.data} hideSensitive={hideSensitive} />;
+  return (
+    <ReportsView
+      report={data.data}
+      hideSensitive={hideSensitive}
+      selectedYear={selectedYear}
+      onYearChange={setSelectedYear}
+    />
+  );
 }
 
 interface ReportsViewProps {
   report: CapitalGainsReport;
   hideSensitive: boolean;
+  selectedYear: number | null;
+  onYearChange: (year: number) => void;
 }
 
-function ReportsView({ report, hideSensitive }: ReportsViewProps) {
+function ReportsView({
+  report,
+  hideSensitive,
+  selectedYear,
+  onYearChange,
+}: ReportsViewProps) {
   const year = report.year;
+  const availableYears = (report.availableYears?.length
+    ? report.availableYears
+    : [year]
+  ).filter((item, index, years) => years.indexOf(item) === index);
   const jurisdiction =
     JURISDICTIONS[report.jurisdictionCode] ?? JURISDICTIONS.AT;
   const [method, setMethod] = useState<CostBasisMethod>(
@@ -349,7 +386,9 @@ function ReportsView({ report, hideSensitive }: ReportsViewProps) {
   return (
     <div className={screenShellClassName}>
       <ReportPackageHeader
-        year={year}
+        selectedYear={selectedYear ?? year}
+        availableYears={availableYears}
+        onYearChange={onYearChange}
         periodLabel={periodLabel}
         jurisdiction={jurisdiction}
         methodLabel={methodLabel}
@@ -417,24 +456,52 @@ function ReportsView({ report, hideSensitive }: ReportsViewProps) {
 }
 
 function ReportPackageHeader({
-  year,
+  selectedYear,
+  availableYears,
+  onYearChange,
   periodLabel,
   jurisdiction,
   methodLabel,
 }: {
-  year: number;
+  selectedYear: number;
+  availableYears: number[];
+  onYearChange: (year: number) => void;
   periodLabel: string;
   jurisdiction: (typeof JURISDICTIONS)[string];
   methodLabel: { name: string; desc: string; fullName?: string };
 }) {
   const methodName = methodLabel.fullName ?? methodLabel.name;
+  const handleYearChange = (value: string) => {
+    const nextYear = Number(value);
+    if (!Number.isInteger(nextYear)) return;
+    if (typeof window !== "undefined") {
+      const params = new URLSearchParams(window.location.search);
+      params.set("year", String(nextYear));
+      const query = params.toString();
+      window.history.replaceState(
+        null,
+        "",
+        query ? `${window.location.pathname}?${query}` : window.location.pathname,
+      );
+    }
+    onYearChange(nextYear);
+  };
   return (
     <div className="rounded-xl border bg-card px-3 py-3 sm:px-4">
       <div className="flex min-w-0 flex-wrap items-center gap-2 sm:gap-3">
         <span className="text-base font-semibold">Tax report</span>
-        <Badge variant="outline" className="rounded-md">
-          {year}
-        </Badge>
+        <Select value={String(selectedYear)} onValueChange={handleYearChange}>
+          <SelectTrigger className="h-7 w-[88px] rounded-md text-xs" aria-label="Tax year">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {availableYears.map((availableYear) => (
+              <SelectItem key={availableYear} value={String(availableYear)}>
+                {availableYear}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
         <span className="hidden h-6 w-px bg-border sm:block" />
         <span className="inline-flex min-w-0 items-center gap-2 text-sm text-muted-foreground">
           <CalendarDays className="size-4 shrink-0" aria-hidden="true" />

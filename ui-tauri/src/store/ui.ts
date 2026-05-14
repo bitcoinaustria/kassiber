@@ -28,6 +28,7 @@ export interface AppNotification {
   title: string;
   body: string;
   tone: NotificationTone;
+  dedupeKey?: string;
   progress?: NotificationProgress;
   createdAt: string;
 }
@@ -310,17 +311,38 @@ export const useUiStore = create<UiState>()(
         set((state) => ({ daemonSession: state.daemonSession + 1 })),
       addNotification: (notification) => {
         const id = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+        let existingId: string | null = null;
         set((state) => ({
-          notifications: [
-            {
-              ...notification,
-              id,
-              createdAt: new Date().toISOString(),
-            },
-            ...state.notifications,
-          ].slice(0, 12),
+          notifications: (() => {
+            const createdAt = new Date().toISOString();
+            if (notification.dedupeKey) {
+              const existing = state.notifications.find(
+                (item) => item.dedupeKey === notification.dedupeKey,
+              );
+              if (existing) {
+                existingId = existing.id;
+                return [
+                  {
+                    ...existing,
+                    ...notification,
+                    progress: notification.progress,
+                    createdAt,
+                  },
+                  ...state.notifications.filter((item) => item.id !== existing.id),
+                ].slice(0, 12);
+              }
+            }
+            return [
+              {
+                ...notification,
+                id,
+                createdAt,
+              },
+              ...state.notifications,
+            ].slice(0, 12);
+          })(),
         }));
-        return id;
+        return existingId ?? id;
       },
       updateNotification: (id, patch) =>
         set((state) => ({

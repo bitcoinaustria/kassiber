@@ -22,6 +22,11 @@ export function useSyncProgressNotice() {
           title: "Connection refresh still running",
           body,
           tone: "info",
+          dedupeKey: "wallet-sync",
+          progress: {
+            indeterminate: true,
+            label: "Still scanning watch-only sources",
+          },
         });
         timerRef.current = null;
       }, LONG_SYNC_NOTICE_MS);

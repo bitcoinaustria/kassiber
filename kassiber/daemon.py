@@ -5579,11 +5579,14 @@ def handle_request(
         )
 
     if kind == "ui.reports.capital_gains":
+        args = _coerce_args_dict(request_id, request.get("args"))
+        year_args = args or {}
+        year = year_args.get("year", year_args.get("tax_year"))
         return (
             _with_request_id(
                 build_envelope(
                     "ui.reports.capital_gains",
-                    build_capital_gains_snapshot(ctx.conn),
+                    build_capital_gains_snapshot(ctx.conn, tax_year=year),
                 ),
                 request_id,
             ),

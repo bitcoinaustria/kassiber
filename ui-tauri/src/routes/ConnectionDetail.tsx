@@ -338,6 +338,7 @@ function ConnectionDetailView({
       title: "Connection refresh started",
       body: `${connection.label} is scanning in watch-only mode.`,
       tone: "warning",
+      dedupeKey: "wallet-sync",
       progress: startingSyncProgress(),
     });
     startSyncNotice(
@@ -357,6 +358,7 @@ function ConnectionDetailView({
             title: status === "error" ? "Connection refresh failed" : "Connection refresh finished",
             body: message,
             tone: status === "error" ? "error" : "success",
+            dedupeKey: "wallet-sync",
             progress: undefined,
           } as const;
           if (syncNoticeIdRef.current) {
@@ -373,6 +375,7 @@ function ConnectionDetailView({
             title: "Connection refresh failed",
             body: message,
             tone: "error",
+            dedupeKey: "wallet-sync",
             progress: undefined,
           } as const;
           if (syncNoticeIdRef.current) {

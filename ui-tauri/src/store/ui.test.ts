@@ -10,6 +10,33 @@ import {
 } from "./ui";
 
 describe("UI persistence", () => {
+  it("coalesces notifications with the same dedupe key", () => {
+    useUiStore.setState({ notifications: [] });
+    const first = useUiStore.getState().addNotification({
+      title: "Connection refresh started",
+      body: "Scanning",
+      tone: "warning",
+      dedupeKey: "wallet-sync",
+      progress: { label: "Preparing wallet scan" },
+    });
+    const second = useUiStore.getState().addNotification({
+      title: "Connection refresh finished",
+      body: "2 sources current",
+      tone: "success",
+      dedupeKey: "wallet-sync",
+    });
+
+    expect(second).toBe(first);
+    expect(useUiStore.getState().notifications).toHaveLength(1);
+    expect(useUiStore.getState().notifications[0]).toMatchObject({
+      id: first,
+      title: "Connection refresh finished",
+      body: "2 sources current",
+      dedupeKey: "wallet-sync",
+    });
+    expect(useUiStore.getState().notifications[0].progress).toBeUndefined();
+  });
+
   it("does not persist daemon logs or notification progress to localStorage", () => {
     const state = {
       ...useUiStore.getState(),

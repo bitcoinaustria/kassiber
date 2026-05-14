@@ -25,7 +25,7 @@ describe("sync progress notifications", () => {
     expect(progress.progress).toEqual({
       value: 50,
       indeterminate: false,
-      label: "12 / 24",
+      label: "Scanning transactions: 12 / 24",
     });
   });
 
@@ -36,7 +36,7 @@ describe("sync progress notifications", () => {
     expect(progress.progress).toEqual({
       value: 85,
       indeterminate: false,
-      label: "Syncing",
+      label: "Scanning configured sources",
     });
   });
 });

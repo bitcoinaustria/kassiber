@@ -1601,7 +1601,20 @@ def _capital_gains_neutral_swap_rows(
     return output
 
 
-def build_capital_gains_snapshot(conn: sqlite3.Connection) -> dict[str, Any]:
+def _normalize_snapshot_tax_year(year: Any) -> int:
+    try:
+        normalized = int(year)
+    except (TypeError, ValueError) as exc:
+        raise AppError("tax year must be a four-digit year", code="validation") from exc
+    if normalized < 2009 or normalized > 2100:
+        raise AppError("tax year must be a plausible four-digit year", code="validation")
+    return normalized
+
+
+def build_capital_gains_snapshot(
+    conn: sqlite3.Connection,
+    tax_year: int | str | None = None,
+) -> dict[str, Any]:
     context = current_context_snapshot(conn)
     if not context["workspace_id"] or not context["profile_id"]:
         return {
@@ -1666,7 +1679,9 @@ def build_capital_gains_snapshot(conn: sqlite3.Connection) -> dict[str, Any]:
         profile["id"],
         primary_only=True,
     )
-    if primary_years:
+    if tax_year is not None:
+        latest_year = _normalize_snapshot_tax_year(tax_year)
+    elif primary_years:
         latest_year = primary_years[0]
     elif available_years:
         latest_year = available_years[0]

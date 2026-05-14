@@ -120,6 +120,7 @@ export function Connections() {
       title: "Connection refresh started",
       body: "Kassiber is scanning configured watch-only sources.",
       tone: "warning",
+      dedupeKey: "wallet-sync",
     });
     startSyncNotice();
     syncWallets.mutate(
@@ -134,6 +135,7 @@ export function Connections() {
             title: errors ? "Connection refresh finished with errors" : "Connection refresh finished",
             body: summary,
             tone: errors ? "error" : "success",
+            dedupeKey: "wallet-sync",
           });
         },
         onError: (error) => {
@@ -144,6 +146,7 @@ export function Connections() {
             title: "Connection refresh failed",
             body: message,
             tone: "error",
+            dedupeKey: "wallet-sync",
           });
         },
         onSettled: clearSyncNotice,

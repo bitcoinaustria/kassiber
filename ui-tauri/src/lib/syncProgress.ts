@@ -28,7 +28,7 @@ export function startingSyncProgress(): NotificationProgress {
   return {
     value: STARTING_SYNC_PROGRESS_VALUE,
     indeterminate: false,
-    label: "Starting",
+    label: "Preparing wallet scan",
   };
 }
 
@@ -63,10 +63,12 @@ export function syncProgressNotification(
       indeterminate: false,
       label:
         processed !== null && total !== null && total > 0
-          ? `${processed.toLocaleString()} / ${total.toLocaleString()}`
+          ? `Scanning transactions: ${processed.toLocaleString()} / ${total.toLocaleString()}`
           : processed !== null
-            ? `${processed.toLocaleString()} scanned`
-            : "Syncing",
+            ? `Scanning transactions: ${processed.toLocaleString()} scanned`
+            : progress.wallet
+              ? `Scanning ${progress.wallet}`
+              : "Scanning configured sources",
     },
     value,
   };

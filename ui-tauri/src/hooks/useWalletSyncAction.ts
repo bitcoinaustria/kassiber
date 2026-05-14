@@ -56,6 +56,7 @@ export function useWalletSyncAction() {
         title: "Connection refresh started",
         body: "Kassiber is scanning configured watch-only sources.",
         tone: "warning",
+        dedupeKey: "wallet-sync",
         progress: startingSyncProgress(),
       });
       syncWallets.mutate(
@@ -74,6 +75,7 @@ export function useWalletSyncAction() {
                   : "Connection refresh finished",
                 body,
                 tone: errors ? "error" : "success",
+                dedupeKey: "wallet-sync",
                 progress: undefined,
               });
               noticeIdRef.current = null;
@@ -85,6 +87,7 @@ export function useWalletSyncAction() {
                 : "Connection refresh finished",
               body,
               tone: errors ? "error" : "success",
+              dedupeKey: "wallet-sync",
             });
           },
           onError: (error) => {
@@ -97,6 +100,7 @@ export function useWalletSyncAction() {
                 title: "Connection refresh failed",
                 body,
                 tone: "error",
+                dedupeKey: "wallet-sync",
                 progress: undefined,
               });
               noticeIdRef.current = null;
@@ -106,6 +110,7 @@ export function useWalletSyncAction() {
               title: "Connection refresh failed",
               body,
               tone: "error",
+              dedupeKey: "wallet-sync",
             });
           },
           onSettled: () => {

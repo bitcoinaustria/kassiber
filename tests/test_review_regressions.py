@@ -1044,6 +1044,10 @@ class ReviewRegressionTest(unittest.TestCase):
         self.assertEqual(snapshot["year"], 2024)
         self.assertEqual(snapshot["availableYears"], [2025, 2024])
         self.assertEqual(len(snapshot["lots"]), 1)
+        selected_year_snapshot = build_capital_gains_snapshot(conn, tax_year=2025)
+        self.assertEqual(selected_year_snapshot["year"], 2025)
+        self.assertEqual(selected_year_snapshot["availableYears"], [2025, 2024])
+        self.assertEqual(selected_year_snapshot["lots"], [])
         snapshot_rows = {row["code"]: row for row in snapshot["kennzahlRows"]}
         self.assertEqual(snapshot_rows["801"]["amountEurCents"], 4_000)
         self.assertEqual(snapshot_rows["801"]["form"], "E 1")

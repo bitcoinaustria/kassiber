@@ -67,6 +67,7 @@ export function useJournalProcessingAction(
           title: "Journal processing already running",
           body: "Kassiber is already refreshing the journal state.",
           tone: "info",
+          dedupeKey: "journal-processing",
         });
       }
       return;
@@ -76,6 +77,7 @@ export function useJournalProcessingAction(
         title: "Journal processing started",
         body: "Kassiber is rebuilding report-ready journal state.",
         tone: "warning",
+        dedupeKey: "journal-processing",
       });
     }
     processJournals.mutate(undefined, {
@@ -85,6 +87,7 @@ export function useJournalProcessingAction(
           title: "Journals processed",
           body: journalProcessBody(payload, entryLabel),
           tone: payload?.quarantined ? "warning" : "success",
+          dedupeKey: "journal-processing",
         });
       },
       onError: (error) => {
@@ -95,6 +98,7 @@ export function useJournalProcessingAction(
               ? error.message
               : "Could not process journals.",
           tone: "error",
+          dedupeKey: "journal-processing",
         });
       },
       onSettled: () => {
