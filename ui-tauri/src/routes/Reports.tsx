@@ -238,7 +238,7 @@ export function Reports() {
     () => (selectedYear ? { year: selectedYear } : undefined),
     [selectedYear],
   );
-  const { data, isLoading, isFetching, isError, error } =
+  const { data, isLoading, isFetching, isError, error, refetch } =
     useDaemon<CapitalGainsReport>("ui.reports.capital_gains", reportArgs);
   const hideSensitive = useUiStore((s) => s.hideSensitive);
   const returnedReportYear = data?.data?.year;
@@ -247,22 +247,13 @@ export function Reports() {
     returnedReportYear !== undefined &&
     returnedReportYear !== selectedYear;
 
-  if (isLoading || (waitingForSelectedYear && isFetching)) {
-    return <ScreenSkeleton titleWidth="w-48" />;
-  }
+  useEffect(() => {
+    if (!waitingForSelectedYear || isFetching) return;
+    void refetch();
+  }, [isFetching, refetch, waitingForSelectedYear]);
 
-  if (waitingForSelectedYear) {
-    return (
-      <div className={screenPanelClassName}>
-        <div className="rounded-xl border bg-card p-4">
-          <h2 className="text-base font-semibold">Reports unavailable</h2>
-          <p className="mt-1 text-sm text-muted-foreground">
-            The daemon returned {returnedReportYear} while the selected tax year is{" "}
-            {selectedYear}.
-          </p>
-        </div>
-      </div>
-    );
+  if (isLoading || waitingForSelectedYear) {
+    return <ScreenSkeleton titleWidth="w-48" />;
   }
 
   if (isError || data?.error || !data?.data) {
