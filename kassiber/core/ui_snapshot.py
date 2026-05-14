@@ -560,9 +560,20 @@ def _connections(
     return output
 
 
-def _transactions(conn: sqlite3.Connection, profile_id: str) -> list[dict[str, Any]]:
+def _transactions(
+    conn: sqlite3.Connection,
+    profile_id: str,
+    *,
+    query_limit: int | None = 40,
+    output_limit: int | None = 20,
+) -> list[dict[str, Any]]:
+    params: list[Any] = [profile_id]
+    limit_sql = ""
+    if query_limit is not None:
+        limit_sql = "LIMIT ?"
+        params.append(query_limit)
     rows = conn.execute(
-        """
+        f"""
         SELECT
             t.id,
             t.external_id AS external_id,
@@ -586,30 +597,12 @@ def _transactions(conn: sqlite3.Connection, profile_id: str) -> list[dict[str, A
         LEFT JOIN journal_quarantines jq ON jq.transaction_id = t.id
         WHERE t.profile_id = ?
         ORDER BY t.occurred_at DESC, t.created_at DESC, t.id DESC
-        LIMIT 40
+        {limit_sql}
         """,
-        (profile_id,),
+        params,
     ).fetchall()
-    pair_meta_by_transaction = _transaction_pair_display_meta(conn, rows)
-    tags_by_transaction = _transaction_tags_by_transaction(
-        conn,
-        [row["id"] for row in rows],
-    )
-
-    output = []
-    rendered_pair_ids: set[str] = set()
-    for row in rows:
-        pair_meta = pair_meta_by_transaction.get(row["id"])
-        metadata_tags = [
-            str(tag) for tag in tags_by_transaction.get(row["id"], []) if tag
-        ]
-        if pair_meta:
-            pair_id = str(pair_meta["pair_id"])
-            if pair_id in rendered_pair_ids:
-                continue
-            rendered_pair_ids.add(pair_id)
-        output.append(_transaction_row_to_ui(row, metadata_tags, pair_meta))
-    return output[:20]
+    output = _transaction_rows_to_ui(conn, rows)
+    return output if output_limit is None else output[:output_limit]
 
 
 def _transaction_type(kind: str, direction: str, quarantine_reason: str | None) -> str:
@@ -1064,6 +1057,12 @@ def build_overview_snapshot(conn: sqlite3.Connection) -> dict[str, Any]:
         "priceUsd": price_usd,
         "connections": _connections(conn, profile["id"], balances),
         "txs": _transactions(conn, profile["id"]),
+        "activityTxs": _transactions(
+            conn,
+            profile["id"],
+            query_limit=None,
+            output_limit=None,
+        ),
         "balanceSeries": _balance_series(conn, profile["id"]),
         "portfolioSeries": _portfolio_series(
             conn,

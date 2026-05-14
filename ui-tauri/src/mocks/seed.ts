@@ -113,6 +113,7 @@ export interface OverviewSnapshot {
   priceEur: number;
   priceUsd: number;
   connections: Connection[];
+  activityTxs?: Tx[];
   txs: Tx[];
   /** monthly-ish BTC totals across the span */
   balanceSeries: number[];
