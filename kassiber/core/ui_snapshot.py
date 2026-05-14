@@ -535,6 +535,7 @@ def _connections(
     for row in rows:
         tx_count = int(row["tx_count"] or 0)
         config = _json_config(row["config_json"])
+        last_synced_at = _string_or_empty(config.get("last_synced_at"))
         backend_summary = _wallet_backend_summary(row["kind"], config, None)
         source_format = _string_or_empty(config.get("source_format"))
         sync_source = _string_or_empty(config.get("sync_source") or source_format)
@@ -543,7 +544,11 @@ def _connections(
                 "id": row["id"],
                 "kind": _map_wallet_kind(row["kind"]),
                 "label": row["label"],
-                "last": _relative_last(row["last_tx_at"] or row["created_at"]),
+                "last": _relative_last(
+                    last_synced_at or row["last_tx_at"] or row["created_at"]
+                ),
+                "lastSyncAt": last_synced_at or None,
+                "lastTransactionAt": row["last_tx_at"],
                 "balance": balances.get(row["id"], 0.0),
                 "status": "synced" if tx_count else "idle",
                 "transactionCount": tx_count,
@@ -2131,6 +2136,7 @@ def build_wallets_list_snapshot(
         config = _json_config(row["config_json"])
         backend_summary = _wallet_backend_summary(row["kind"], config, default_backend)
         backend_name = backend_summary["name"]
+        last_synced_at = _string_or_empty(config.get("last_synced_at"))
         backend = (
             runtime_backends.get(str(backend_name))
             if isinstance(runtime_backends, dict) and backend_name
@@ -2162,6 +2168,7 @@ def build_wallets_list_snapshot(
                 "sync_source": str(config.get("sync_source") or config.get("source_format") or ""),
                 "transaction_count": tx_count,
                 "last_transaction_at": row["last_tx_at"],
+                "last_synced_at": last_synced_at or None,
                 "sync_status": "has_transactions" if tx_count else "empty",
                 "journals_stale": freshness["needs_processing"] and tx_count > 0,
                 "btcpay_provenance": provenance_routes,

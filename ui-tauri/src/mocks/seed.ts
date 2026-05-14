@@ -35,6 +35,8 @@ export interface Connection {
   kind: ConnectionKind;
   label: string;
   last: string;
+  lastSyncAt?: string | null;
+  lastTransactionAt?: string | null;
   /** balance in BTC (float) */
   balance: number;
   status: ConnectionStatus;

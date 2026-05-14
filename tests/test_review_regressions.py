@@ -3356,6 +3356,29 @@ class ReviewRegressionTest(unittest.TestCase):
                 },
             ],
         )
+        conn = open_db(self.data_root)
+        self.addCleanup(conn.close)
+        config = json.loads(
+            conn.execute(
+                "SELECT config_json FROM wallets WHERE label = ?",
+                ("SyncMe",),
+            ).fetchone()["config_json"]
+        )
+        last_synced_at = config.get("last_synced_at")
+        self.assertIsInstance(last_synced_at, str)
+        self.assertRegex(last_synced_at, r"^\d{4}-\d{2}-\d{2}T")
+        overview = build_overview_snapshot(conn)
+        overview_connections = {
+            connection["label"]: connection for connection in overview["connections"]
+        }
+        self.assertEqual(
+            overview_connections["SyncMe"]["lastSyncAt"],
+            last_synced_at,
+        )
+        self.assertEqual(
+            overview_connections["SyncMe"]["lastTransactionAt"],
+            "2024-05-01T10:15:00Z",
+        )
 
         payload, result = self._run_json(
             "wallets", "sync",

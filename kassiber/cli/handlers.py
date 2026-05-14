@@ -1397,6 +1397,22 @@ def _wallet_sync_hooks(commit=True):
     )
 
 
+def _mark_wallet_synced(conn, wallet, synced_at=None):
+    timestamp = synced_at or now_iso()
+    config = json.loads(wallet["config_json"] or "{}")
+    config["last_synced_at"] = timestamp
+    conn.execute(
+        "UPDATE wallets SET config_json = ? WHERE id = ?",
+        (json.dumps(config, sort_keys=True), wallet["id"]),
+    )
+    return timestamp
+
+
+def _mark_wallet_synced_from_results(conn, wallet, results):
+    if any(result.get("status") == "synced" for result in results):
+        _mark_wallet_synced(conn, wallet)
+
+
 def sync_wallet_from_backend(conn, runtime_config, workspace_ref, profile_ref, wallet):
     _, profile = resolve_scope(conn, workspace_ref, profile_ref)
     return core_sync.sync_wallet_from_backend(
@@ -1419,15 +1435,15 @@ def sync_wallet(conn, runtime_config, workspace_ref, profile_ref, wallet_ref=Non
             savepoint = f"wallet_sync_{idx}"
             conn.execute(f"SAVEPOINT {savepoint}")
             try:
-                results.extend(
-                    core_sync.sync_wallets(
-                        conn,
-                        runtime_config,
-                        profile,
-                        [wallet],
-                        _wallet_sync_hooks(commit=False),
-                    )
+                wallet_results = core_sync.sync_wallets(
+                    conn,
+                    runtime_config,
+                    profile,
+                    [wallet],
+                    _wallet_sync_hooks(commit=False),
                 )
+                _mark_wallet_synced_from_results(conn, wallet, wallet_results)
+                results.extend(wallet_results)
             except AppError as exc:
                 conn.execute(f"ROLLBACK TO SAVEPOINT {savepoint}")
                 conn.execute(f"RELEASE SAVEPOINT {savepoint}")
@@ -1450,13 +1466,16 @@ def sync_wallet(conn, runtime_config, workspace_ref, profile_ref, wallet_ref=Non
         if not wallet_ref:
             raise AppError("Provide --wallet or use --all")
         wallets = [resolve_wallet(conn, profile["id"], wallet_ref)]
-        return core_sync.sync_wallets(
+        results = core_sync.sync_wallets(
             conn,
             runtime_config,
             profile,
             wallets,
             _wallet_sync_hooks(),
         )
+        _mark_wallet_synced_from_results(conn, wallets[0], results)
+        conn.commit()
+        return results
 
 
 def _sync_btcpay_wallet(
@@ -1627,13 +1646,16 @@ def sync_btcpay_into_wallet(
         },
     )
     wallet = resolve_wallet(conn, profile["id"], wallet["id"])
-    return _sync_btcpay_wallet(
+    outcome = _sync_btcpay_wallet(
         conn,
         runtime_config,
         profile,
         wallet,
         page_size=page_size,
     )
+    _mark_wallet_synced(conn, wallet)
+    conn.commit()
+    return outcome
 
 
 def attach_btcpay_provenance_to_wallet(

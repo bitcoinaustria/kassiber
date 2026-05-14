@@ -151,6 +151,7 @@ type WalletListItem = {
   sync_source?: string;
   transaction_count?: number;
   last_transaction_at?: string | null;
+  last_synced_at?: string | null;
   sync_status?: string;
   created_at?: string;
   btcpay_provenance?: Array<{
