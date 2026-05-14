@@ -1042,6 +1042,40 @@ export const mockDaemon: DaemonTransport = {
       };
     }
 
+    if (req.kind === "ai.providers.move_api_key") {
+      const args = (req.args ?? {}) as { name?: unknown; store_id?: unknown };
+      const name = typeof args.name === "string" ? args.name.trim() : "";
+      const storeId =
+        typeof args.store_id === "string" && args.store_id.trim()
+          ? args.store_id.trim()
+          : "sqlcipher_inline";
+      if (!name) {
+        return {
+          kind: "error",
+          schema_version: 1,
+          request_id: req.request_id,
+          error: {
+            code: "validation",
+            message: "ai.providers.move_api_key requires a provider name",
+            retryable: false,
+          },
+        };
+      }
+      return {
+        kind: "ai.providers.move_api_key",
+        schema_version: 1,
+        request_id: req.request_id,
+        data: {
+          name,
+          has_api_key: true,
+          secret_ref: {
+            store_id: storeId,
+            state: "ok",
+          },
+        } as T,
+      };
+    }
+
     const fixture = fixtures[req.kind];
     if (fixture === undefined) {
       return {

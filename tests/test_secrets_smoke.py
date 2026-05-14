@@ -31,7 +31,11 @@ import unittest
 from pathlib import Path
 from types import SimpleNamespace
 
-from kassiber.ai.providers import get_db_ai_provider, redact_ai_provider_for_output
+from kassiber.ai.providers import (
+    get_ai_provider_api_key_for_use,
+    get_db_ai_provider,
+    redact_ai_provider_for_output,
+)
 from kassiber.backup.cli import cmd_backup_import
 from kassiber.backup.pack import export_backup, import_backup
 from kassiber.backup.safe_tar import (
@@ -468,6 +472,10 @@ class BackupRoundTripTests(unittest.TestCase):
                 if result.staging_path:
                     repaired = open_db(str(result.staging_path), passphrase="db-pass")
                     try:
+                        provider = get_db_ai_provider(repaired, "cloud")
+                        with self.assertRaises(AppError) as ctx:
+                            get_ai_provider_api_key_for_use(provider, conn=repaired)
+                        self.assertEqual(ctx.exception.code, "secret_ref_unavailable")
                         provider = get_db_ai_provider(repaired, "cloud")
                         redacted = redact_ai_provider_for_output(provider)
                         self.assertFalse(redacted["has_api_key"])

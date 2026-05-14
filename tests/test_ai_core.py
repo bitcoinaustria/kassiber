@@ -28,6 +28,7 @@ from kassiber.ai import (
     resolve_ai_provider,
     set_default_ai_provider,
     set_db_ai_provider_api_key,
+    set_db_ai_provider_native_secret_ref,
     clear_default_ai_provider,
     update_db_ai_provider,
     seed_default_ai_provider_if_empty,
@@ -970,6 +971,38 @@ class ProvidersCrudTest(unittest.TestCase):
             finally:
                 conn.close()
 
+    def test_native_secret_ref_clears_inline_key_bytes(self):
+        with tempfile.TemporaryDirectory(prefix="kassiber-ai-native-ref-") as tmp:
+            conn = open_db(str(Path(tmp) / "data"))
+            try:
+                create_db_ai_provider(
+                    conn,
+                    "openrouter",
+                    "https://openrouter.ai/api/v1",
+                    api_key="sk-inline-before-move",
+                    kind="remote",
+                )
+                updated = set_db_ai_provider_native_secret_ref(
+                    conn,
+                    "openrouter",
+                    store_id="macos_keychain",
+                    service="service-hash",
+                    account="openrouter",
+                )
+                self.assertIsNone(updated["api_key"])
+                self.assertEqual(updated["secret_ref"]["store_id"], "macos_keychain")
+                self.assertEqual(updated["secret_ref"]["state"], "ok")
+                raw = conn.execute(
+                    "SELECT api_key FROM ai_providers WHERE name = ?",
+                    ("openrouter",),
+                ).fetchone()["api_key"]
+                self.assertIsNone(raw)
+                redacted = redact_ai_provider_for_output(updated)
+                self.assertTrue(redacted["has_api_key"])
+                self.assertNotIn("sk-inline-before-move", json.dumps(redacted))
+            finally:
+                conn.close()
+
     def test_os_backed_secret_ref_fails_with_repair_details(self):
         with tempfile.TemporaryDirectory(prefix="kassiber-ai-secret-ref-missing-") as tmp:
             conn = open_db(str(Path(tmp) / "data"))
@@ -1007,7 +1040,7 @@ class ProvidersCrudTest(unittest.TestCase):
             finally:
                 conn.close()
 
-    def test_probe_only_os_backed_ok_ref_outputs_unavailable(self):
+    def test_os_backed_ok_ref_resolves_through_secret_resolver(self):
         with tempfile.TemporaryDirectory(prefix="kassiber-ai-secret-ref-ok-") as tmp:
             conn = open_db(str(Path(tmp) / "data"))
             try:
@@ -1038,17 +1071,63 @@ class ProvidersCrudTest(unittest.TestCase):
 
                 provider = get_db_ai_provider(conn, "cloud")
                 redacted = redact_ai_provider_for_output(provider)
-                self.assertFalse(redacted["has_api_key"])
+                self.assertTrue(redacted["has_api_key"])
                 self.assertEqual(
                     redacted["secret_ref"],
-                    {"store_id": "macos_keychain", "state": "unavailable"},
+                    {"store_id": "macos_keychain", "state": "ok"},
                 )
+                self.assertEqual(
+                    get_ai_provider_api_key_for_use(
+                        provider,
+                        conn=conn,
+                        secret_resolver=lambda ref: "sk-native",
+                    ),
+                    "sk-native",
+                )
+            finally:
+                conn.close()
+
+    def test_os_backed_ok_ref_without_resolver_persists_unavailable(self):
+        with tempfile.TemporaryDirectory(prefix="kassiber-ai-secret-ref-unavailable-") as tmp:
+            conn = open_db(str(Path(tmp) / "data"))
+            try:
+                create_db_ai_provider(
+                    conn,
+                    "cloud",
+                    "https://example.test/v1",
+                    kind="remote",
+                )
+                conn.execute(
+                    """
+                    INSERT INTO ai_provider_secret_refs(
+                        provider_name, store_id, service, account, state,
+                        created_at, rotated_at
+                    ) VALUES(?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        "cloud",
+                        "macos_keychain",
+                        "service-hash",
+                        "cloud",
+                        "ok",
+                        "2026-05-13T00:00:00Z",
+                        None,
+                    ),
+                )
+                conn.commit()
+
+                provider = get_db_ai_provider(conn, "cloud")
                 with self.assertRaises(AppError) as ctx:
-                    get_ai_provider_api_key_for_use(provider)
+                    get_ai_provider_api_key_for_use(provider, conn=conn)
                 self.assertEqual(ctx.exception.code, "secret_ref_unavailable")
                 self.assertEqual(
                     ctx.exception.details["refs"][0]["state"], "unavailable"
                 )
+                persisted = conn.execute(
+                    "SELECT state FROM ai_provider_secret_refs WHERE provider_name = ?",
+                    ("cloud",),
+                ).fetchone()["state"]
+                self.assertEqual(persisted, "unavailable")
             finally:
                 conn.close()
 

@@ -145,24 +145,22 @@ Provider API-key entry supports `--api-key-stdin` and `--api-key-fd FD`. The
 legacy `--api-key <value>` form still works as a warning-on-use compatibility
 shim, but docs and tests avoid it because argv can land in shell history and
 process listings. Desktop Settings uses the narrow `ai.providers.set_api_key`
-daemon kind to rotate/re-enter a key without echoing it in provider create or
-update envelopes. The daemon rejects `api_key` on `ai.providers.create`,
-`ai.providers.update`, and `ai.test_connection`; connection tests use the stored
-provider key after it has been saved.
+daemon kind to rotate/re-enter a key and `ai.providers.move_api_key` to move a
+stored key between `sqlcipher_inline` and the selected native store. The daemon
+rejects `api_key` on `ai.providers.create`, `ai.providers.update`, and
+`ai.test_connection`; connection tests use the stored provider key after it has
+been saved.
 
-Current storage is `sqlcipher_inline`: the key remains in the SQLCipher
-database and provider envelopes expose only `has_api_key` plus
-`secret_ref.{store_id,state}`. The AI-only `ai_provider_secret_refs` schema is
-present so future OS-backed stores can record non-secret refs. Backup export
-records only that ref metadata for non-inline AI keys and refuses inconsistent
-rows where a non-inline ref still has an inline `api_key`; backup import
-surfaces a non-fatal `secret_ref_unavailable` warning so Settings can prompt for
-re-entry. After the restored DB is unlocked, this probe-only build persists
-non-inline refs as `unavailable` so provider lists do not report them as usable
-keys.
-This PR does not store production secrets in macOS Keychain, Windows Credential
-Manager, or Linux Secret Service yet. Backend tokens, descriptors, xpubs, and
-blinding keys stay SQLCipher-protected. See
+Provider envelopes expose only `has_api_key` plus
+`secret_ref.{store_id,state}`. `sqlcipher_inline` keeps the key in the
+SQLCipher database. Native desktop storage records only non-secret
+`ai_provider_secret_refs` metadata and stores the value in macOS Keychain,
+Windows user-scope Credential Manager/DPAPI, or Linux Secret Service when
+platform policy selects that store. Backup export records only ref metadata for
+non-inline AI keys and refuses inconsistent rows where a non-inline ref still
+has an inline `api_key`; backup import surfaces a non-fatal
+`secret_ref_unavailable` warning so Settings can prompt for re-entry. Backend
+tokens, descriptors, xpubs, and blinding keys stay SQLCipher-protected. See
 [`../plan/10-secret-management.md`](../plan/10-secret-management.md).
 
 Reasoning-capable models surface chain-of-thought through one of two

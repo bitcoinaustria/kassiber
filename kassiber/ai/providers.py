@@ -23,7 +23,7 @@ from __future__ import annotations
 
 import hashlib
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any, Callable, Iterable
 
 from ..db import get_setting, set_setting
 from ..errors import AppError
@@ -196,11 +196,14 @@ def _upsert_ai_provider_secret_ref(
     *,
     store_id: str = AI_PROVIDER_SECRET_STORE_SQLCIPHER,
     state: str,
+    service: str | None = None,
+    account: str | None = None,
 ) -> dict[str, Any]:
     provider_name = _normalize_name(provider_name)
     store_id = _normalize_secret_store_id(store_id)
     state = _normalize_secret_state(state)
-    service = ai_provider_secret_service_id(_data_root_from_connection(conn))
+    service = str_or_none(service) or ai_provider_secret_service_id(_data_root_from_connection(conn))
+    account = str_or_none(account) or provider_name
     ts = now_iso()
     row = conn.execute(
         "SELECT created_at FROM ai_provider_secret_refs WHERE provider_name = ?",
@@ -219,12 +222,12 @@ def _upsert_ai_provider_secret_ref(
             state = excluded.state,
             rotated_at = excluded.rotated_at
         """,
-        (provider_name, store_id, service, provider_name, state, created_at, ts),
+        (provider_name, store_id, service, account, state, created_at, ts),
     )
     return {
         "store_id": store_id,
         "service": service,
-        "account": provider_name,
+        "account": account,
         "state": state,
         "created_at": created_at,
         "rotated_at": ts,
@@ -246,8 +249,40 @@ def _secret_ref_for_error(provider: dict) -> dict[str, Any]:
     }
 
 
-def get_ai_provider_api_key_for_use(provider: dict) -> str | None:
-    """Return an inline API key or raise for unresolved OS-backed refs."""
+def mark_ai_provider_secret_ref_state(
+    conn,
+    provider_name: str,
+    state: str,
+    *,
+    store_id: str | None = None,
+    service: str | None = None,
+    account: str | None = None,
+) -> dict[str, Any]:
+    """Persist the visible state for a provider secret reference."""
+
+    provider_name = _normalize_name(provider_name)
+    provider = get_db_ai_provider(conn, provider_name)
+    ref = provider.get("secret_ref") or {}
+    return _upsert_ai_provider_secret_ref(
+        conn,
+        provider_name,
+        store_id=store_id or ref.get("store_id") or AI_PROVIDER_SECRET_STORE_SQLCIPHER,
+        state=state,
+        service=service or ref.get("service"),
+        account=account or ref.get("account"),
+    )
+
+
+SecretResolver = Callable[[dict[str, Any]], str | None]
+
+
+def get_ai_provider_api_key_for_use(
+    provider: dict,
+    *,
+    conn=None,
+    secret_resolver: SecretResolver | None = None,
+) -> str | None:
+    """Return an inline API key or resolve an OS-backed provider ref."""
 
     ref = provider.get("secret_ref") or {}
     store_id = ref.get("store_id") or AI_PROVIDER_SECRET_STORE_SQLCIPHER
@@ -256,11 +291,50 @@ def get_ai_provider_api_key_for_use(provider: dict) -> str | None:
     )
     if store_id == AI_PROVIDER_SECRET_STORE_SQLCIPHER:
         return str_or_none(provider.get("api_key"))
-    if state == "ok":
+    if state != "ok":
+        secret_ref = _secret_ref_for_error(provider)
+        raise AppError(
+            f"AI provider '{provider.get('name')}' secret is not available",
+            code="secret_ref_unavailable",
+            hint="Open Settings -> AI providers and re-enter or repair the provider API key.",
+            details={"refs": [secret_ref], "state": state},
+            retryable=True,
+        )
+    if secret_resolver is not None:
+        try:
+            secret = secret_resolver(dict(ref, provider_name=provider.get("name")))
+        except AppError as exc:
+            state = "unavailable"
+            if conn is not None:
+                if provider.get("name"):
+                    mark_ai_provider_secret_ref_state(conn, str(provider["name"]), state)
+                conn.commit()
+            secret_ref = _secret_ref_for_error(provider)
+            secret_ref["state"] = state
+            raise AppError(
+                f"AI provider '{provider.get('name')}' secret is not available in the OS credential store",
+                code="secret_ref_unavailable",
+                hint=exc.hint
+                or "Open Settings -> AI providers and re-enter or repair the provider API key.",
+                details={
+                    "refs": [secret_ref],
+                    "state": state,
+                    "cause_code": exc.code,
+                },
+                retryable=True,
+            ) from exc
+        if str_or_none(secret):
+            return str_or_none(secret)
+        state = "missing"
+    else:
         state = "unavailable"
+    if conn is not None and provider.get("name"):
+        mark_ai_provider_secret_ref_state(conn, str(provider["name"]), state)
+        conn.commit()
     secret_ref = _secret_ref_for_error(provider)
+    secret_ref["state"] = state
     raise AppError(
-        f"AI provider '{provider.get('name')}' secret is not available in this restored project",
+        f"AI provider '{provider.get('name')}' secret is not available in the OS credential store",
         code="secret_ref_unavailable",
         hint="Open Settings -> AI providers and re-enter or repair the provider API key.",
         details={"refs": [secret_ref], "state": state},
@@ -318,9 +392,9 @@ def redact_ai_provider_for_output(provider: dict, *, default_name: str | None = 
     inline_has_key = bool(str_or_none(provider.get("api_key")))
     if store_id == AI_PROVIDER_SECRET_STORE_SQLCIPHER:
         ref_state = "ok" if inline_has_key else "missing"
-    elif ref_state == "ok":
-        ref_state = "unavailable"
-    payload["has_api_key"] = inline_has_key
+    payload["has_api_key"] = inline_has_key or (
+        store_id != AI_PROVIDER_SECRET_STORE_SQLCIPHER and ref_state == "ok"
+    )
     payload["secret_ref"] = {
         "store_id": store_id,
         "state": ref_state or ("ok" if payload["has_api_key"] else "missing"),
@@ -607,6 +681,41 @@ def set_db_ai_provider_api_key(conn, name: str, api_key: str | None) -> dict:
         (normalized_key, now_iso(), name),
     )
     _upsert_ai_provider_secret_ref(conn, name, state=state)
+    conn.commit()
+    return get_db_ai_provider(conn, name)
+
+
+def set_db_ai_provider_native_secret_ref(
+    conn,
+    name: str,
+    *,
+    store_id: str,
+    service: str,
+    account: str,
+    state: str = "ok",
+) -> dict:
+    """Point a provider at an OS-backed secret and clear inline bytes."""
+
+    seed_default_ai_provider_if_empty(conn)
+    name = _normalize_name(name)
+    row = conn.execute("SELECT 1 FROM ai_providers WHERE name = ?", (name,)).fetchone()
+    if not row:
+        raise AppError(
+            f"AI provider '{name}' not found",
+            code="not_found",
+        )
+    conn.execute(
+        "UPDATE ai_providers SET api_key = NULL, updated_at = ? WHERE name = ?",
+        (now_iso(), name),
+    )
+    _upsert_ai_provider_secret_ref(
+        conn,
+        name,
+        store_id=store_id,
+        state=state,
+        service=service,
+        account=account,
+    )
     conn.commit()
     return get_db_ai_provider(conn, name)
 

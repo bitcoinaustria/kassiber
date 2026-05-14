@@ -88,6 +88,7 @@ const ALLOWED_BRIDGE_KINDS = new Set([
   "ai.providers.create",
   "ai.providers.update",
   "ai.providers.set_api_key",
+  "ai.providers.move_api_key",
   "ai.providers.delete",
   "ai.providers.set_default",
   "ai.providers.clear_default",

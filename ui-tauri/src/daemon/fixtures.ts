@@ -1130,6 +1130,20 @@ export const fixtures: Record<string, unknown> = {
       },
     ],
     default: "ollama",
+    secret_store_policy: {
+      platform: "macos",
+      availability: {
+        state: "available",
+        identity_strength: "unknown_or_unsigned",
+      },
+      default: {
+        store_id: "sqlcipher_inline",
+        native_store_id: "macos_keychain",
+        native_available: true,
+        warning:
+          "Unsigned or ad-hoc macOS builds keep AI keys in SQLCipher by default; Keychain is an explicit experimental move because prompts may appear again after rebuilds or identity changes.",
+      },
+    },
   },
   "ai.list_models": {
     provider: "ollama",

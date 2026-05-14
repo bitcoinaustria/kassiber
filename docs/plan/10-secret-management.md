@@ -16,9 +16,10 @@ Kassiber has two intended secret boundaries:
    descriptors, xpubs, blinding keys, and the current AI-provider API-key
    fallback.
 2. OS credential stores are a separate user/device-mediated boundary for
-   selected external API secrets. This PR only creates the desktop probe layer
-   and AI-only reference schema; it does not move production storage out of the
-   database yet.
+   selected external API secrets. The current implementation uses that boundary
+   for AI provider API keys only; it does not move backend credentials,
+   descriptors, xpubs, blinding keys, passphrases, or reveal payloads out of
+   SQLCipher.
 
 The unlocked Python daemon is the runtime trust boundary. Once it has an open
 database connection, it can read any DB-resident secret needed to fulfill an
@@ -47,7 +48,7 @@ raw shell, raw filesystem, arbitrary CLI, or generic daemon-dispatch access.
 | Backup passphrase / age recipient material | backup CLI prompts/options | not stored by Kassiber | local CLI process | not revealed | diagnostics redaction applies to passphrase-shaped keys/text | user-supplied for each backup/import | external `age` or `pyrage` boundary | no recovery if lost |
 | Backend tokens/auth headers/cookies/basic-auth | backend create/update, dotenv migration | SQLCipher DB `backends` table; older dotenvs may still be migrated | daemon/CLI explicit backend flows | `backends.reveal_token` after passphrase round-trip | safe backend views expose presence flags only; diagnostics aggregate credential presence | `.kassiber` SQLCipher backup includes values | SQLCipher at rest, unlocked daemon at runtime | not migrated to OS stores in this PR |
 | Descriptors, xpubs, blinding keys | wallet create/update/import | SQLCipher DB wallet config today | daemon/CLI wallet flows | `wallets.reveal_descriptor` after passphrase round-trip | safe wallet views expose state flags only; diagnostics redacts xpub/xprv patterns | `.kassiber` SQLCipher backup includes values | SQLCipher at rest, unlocked daemon at runtime | still in generic wallet config blob |
-| AI provider API keys | CLI stdin/fd/legacy argv, Settings form | SQLCipher inline in `ai_providers.api_key`; AI ref row records store/state | CLI stdin/fd; daemon `ai.providers.set_api_key`; Settings uses narrow daemon kind | no reveal kind | provider envelopes omit `api_key`; tool/log/diagnostic redaction tests cover secret-shaped values | SQLCipher-inline keys restore with DB; future OS-backed refs restore as missing | SQLCipher at rest in this PR | OS-store write path is probe-only |
+| AI provider API keys | CLI stdin/fd/legacy argv, Settings form | SQLCipher inline in `ai_providers.api_key` or OS-backed ref in `ai_provider_secret_refs` | CLI stdin/fd; daemon `ai.providers.set_api_key`; Settings uses narrow daemon kind plus desktop-only native bridge | no reveal kind | provider envelopes omit `api_key`; tool/log/diagnostic redaction tests cover secret-shaped values | SQLCipher-inline keys restore with DB; OS-backed refs restore as repair-needed refs only | SQLCipher or user/device OS store at rest; unlocked daemon at runtime | AI-provider keys only |
 | Reveal payloads | reveal daemon kinds | derived from unlocked DB at request time | daemon envelope after passphrase recheck | yes, explicit reveal only | clients must not persist; supervisor/bridge redacts error tails | not separately backed up | UX gate, not cryptographic separation | compromised unlocked daemon can read |
 | Sensitive attachments | attachment add/import | copied under managed `attachments/` outside SQLCipher | local file copy/reference only | user opens/manages files | diagnostics omits filenames/URLs | backup format includes managed state tree | filesystem permissions and backup encryption | not DB-encrypted |
 | Report/export artifacts | report export commands | managed `exports/` outside SQLCipher | local file writes | user opens/shares | diagnostics outputs are public-safe; reports are not | backup format includes exports depending on pack scope | filesystem permissions and optional backup encryption | user must treat reports as sensitive |
@@ -62,9 +63,9 @@ or CLI provider is selected.
 | Channel | Current code path | Current behavior | Remaining risk |
 | --- | --- | --- | --- |
 | CLI argv for AI keys | `kassiber/cli/main.py:1359`, `kassiber/cli/main.py:1378`, `kassiber/cli/main.py:2639` | `--api-key-stdin` / `--api-key-fd` are preferred; `--api-key` remains a warning-on-use shim. | Legacy argv values can still land in shell history/process listings. |
-| AI provider daemon ingress/envelopes | `kassiber/daemon.py:6236`, `kassiber/daemon.py:6266`, `kassiber/daemon.py:6288`, `kassiber/ai/providers.py:309` | `ai.providers.set_api_key` is the only daemon kind that accepts an API key; create/update/test kinds reject `api_key`; provider payloads include `has_api_key` and `secret_ref.{store_id,state}` only. | The unlocked daemon can still read inline DB values to call the provider. |
-| AI provider DB schema | `kassiber/db.py:463`, `kassiber/db.py:475`, `kassiber/db.py:796`, `kassiber/db.py:812` | AI-only `ai_provider_secret_refs` records store refs/state, not secret bytes; probe-only non-inline refs are marked `unavailable` after unlock. | `sqlcipher_inline` means the value is still in `ai_providers.api_key`. |
-| Missing OS-backed refs | `kassiber/backup/pack.py:122`, `kassiber/backup/pack.py:188`, `kassiber/backup/cli.py:113`, `kassiber/ai/providers.py:249` | Backup import reports non-inline AI refs as `secret_ref_unavailable`; post-unlock schema repair persists `unavailable`; use-time access raises the same code with repair details. | No production OS-backed get/set exists in this PR. |
+| AI provider daemon ingress/envelopes | `kassiber/daemon.py`, `kassiber/ai/providers.py` | `ai.providers.set_api_key` is the only public daemon kind that accepts an API key; create/update/test kinds reject `api_key`; provider payloads include `has_api_key` and `secret_ref.{store_id,state}` only. | The unlocked daemon can still resolve a key at use time to call the provider. |
+| AI provider DB schema | `kassiber/db.py`, `kassiber/ai/providers.py` | AI-only `ai_provider_secret_refs` records store refs/state, not secret bytes; OS-backed moves clear `ai_providers.api_key` in the same logical operation after native write success. | `sqlcipher_inline` means the value is still in `ai_providers.api_key`. |
+| Missing OS-backed refs | `kassiber/backup/pack.py`, `kassiber/backup/cli.py`, `kassiber/ai/providers.py` | Backup import reports non-inline AI refs as `secret_ref_unavailable`; Settings/use-time native resolution persists `missing` or `unavailable`; use-time access raises the same code with repair details. | OS stores are per-user/per-device and are not included in `.kassiber` backups. |
 | Reveal descriptor/token envelopes | `kassiber/daemon.py:6496`, `kassiber/daemon.py:6542`, `kassiber/daemon.py:6626` | Reveal requires an `auth_required` passphrase round-trip and then returns the raw payload. | Reveal is a UX gate, not a second cryptographic boundary. |
 | Daemon error envelopes / provider errors | `kassiber/daemon.py:668`, `kassiber/ai/client.py:199` | `_error_envelope` redacts secret-shaped strings and sensitive detail keys before Tauri/Vite/UI egress; AI provider HTTP bodies are treated as hostile, size-limited, and redacted before `error.details.body`. | Error messages can still contain non-secret operational metadata. |
 | AI tool previews/results | `kassiber/daemon.py:3383`, `kassiber/daemon.py:3580`, `kassiber/daemon.py:3658`, `kassiber/daemon.py:2659`, `kassiber/daemon.py:3280` | Read-only and mutating previews, streamed tool results, tool-message content, and auto-context entries pass through `redact_tool_arguments`, including oversize fallback summaries. | Read-only business data can still be sent to the configured model. |
@@ -94,7 +95,7 @@ scripts still exercise them.
 
 ## Target Design
 
-For AI provider keys, the long-term desktop shape is:
+For AI provider keys, the desktop shape is:
 
 1. Store provider metadata in SQLite.
 2. Store only a ref row in `ai_provider_secret_refs` for OS-backed keys:
@@ -106,28 +107,30 @@ For AI provider keys, the long-term desktop shape is:
 5. Surface missing refs as `secret_ref_unavailable` at restore time and use
    time, with `details.refs` and a Settings repair path. Backup export writes
    only non-secret AI provider ref metadata to `manifest.secret_refs`; import
-   turns those OS-backed refs into an unavailable warning. The first unlocked
-   DB open in this probe-only build also persists non-inline refs as
-   `unavailable`, so Settings does not rely on the transient import response.
+   turns those OS-backed refs into an unavailable warning. Settings and
+   use-time resolution persist `missing` or `unavailable` after the first
+   failed native lookup so the state is durable after unlock.
 
 This PR implements the schema, redacted envelopes, stdin/fd entry, daemon
-rotate/re-enter kind, desktop display, and Rust probe trait. It intentionally
-does not store production secrets in native stores yet.
+rotate/re-enter kind, desktop display, Rust native stores, and the narrow
+daemon/supervisor bridge. It intentionally does not migrate backend tokens,
+descriptors, xpubs, blinding keys, passphrases, or reveal payloads.
 
 ## Platform Policy
 
 | Platform | Default for unsigned/ad-hoc preview builds | OS-store policy | UI copy |
 | --- | --- | --- | --- |
 | macOS | `sqlcipher_inline` | Keychain can be opt-in experimental while app identity is unsigned, ad-hoc, or unknown. Production-signed builds may default to Keychain later. | "Keychain may ask again after rebuilds or app identity changes." |
-| Windows | `sqlcipher_inline` until production write path lands | User-scope Credential Manager / DPAPI only. No machine-scope secrets. | "Stored for this Windows user account only." |
+| Windows | user-scope Credential Manager / DPAPI when available | User-scope Credential Manager / DPAPI only. No machine-scope secrets. | "Stored for this Windows user account only." |
 | Linux | `sqlcipher_inline` when Secret Service is missing, locked, headless, or no D-Bus | Use Secret Service only when available and unlocked. No plaintext fallback. | Show a banner when falling back because no reliable desktop secret service is available. |
 
 `remember-unlock` stays disabled for this pass.
 
-## Rust Probe Layer
+## Rust Secret Store Layer
 
 `ui-tauri/src-tauri/src/secret_store.rs` defines a narrow `SecretStore` trait:
-`get`, `set`, `delete`, `list`, and `availability`.
+`get`, `set`, `delete`, `list`, and `availability`. Production desktop builds
+use platform adapters behind that trait; tests use an in-memory mock store.
 
 Availability is one of:
 
@@ -135,9 +138,10 @@ Availability is one of:
 - `LockedNeedsUnlock`
 - `Unavailable { reason }`
 
-The current `ProbeSecretStore` returns availability and refuses get/set/delete
-with "native secret storage is probe-only in this build". This gives the UI and
-docs a typed design point without making production storage claims.
+The legacy `ProbeSecretStore` remains only as a negative test helper. The
+supervisor intercepts daemon-owned `supervisor.ai_secret_store.request`
+records and never exposes generic keyring operations to the webview or
+assistant.
 
 ## Dependency Rationale
 
@@ -228,8 +232,8 @@ Desktop:
    inline `api_key` column is still populated for that provider.
 3. `backup import` returns a non-fatal `secret_ref_unavailable` warning with
    `details.refs` when the manifest contains OS-backed refs.
-4. The next unlocked DB open persists non-inline refs as `unavailable` in this
-   probe-only build, because native OS stores are not readable yet.
+4. After unlock, Settings/use-time native resolution persists non-inline refs
+   as `missing` or `unavailable` if the OS store cannot provide the key.
 5. If an OS-backed ref is missing or unavailable at use time, reads return
    `secret_ref_unavailable` with `details.refs`.
 6. Settings prompts for re-entry and calls `ai.providers.set_api_key`.

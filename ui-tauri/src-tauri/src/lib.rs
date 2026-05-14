@@ -2,6 +2,7 @@
 mod secret_store;
 mod supervisor;
 
+use secret_store::secret_store_policy_status;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::env;
@@ -179,6 +180,7 @@ const ALLOWED_DAEMON_KINDS: &[&str] = &[
     "ai.providers.create",
     "ai.providers.update",
     "ai.providers.set_api_key",
+    "ai.providers.move_api_key",
     "ai.providers.delete",
     "ai.providers.set_default",
     "ai.providers.clear_default",
@@ -361,17 +363,22 @@ async fn daemon_invoke(
     } = request;
     match tauri::async_runtime::spawn_blocking(move || {
         match supervisor.invoke(&kind, args, &app, streaming, client_request_id) {
-            Ok(response) => match serde_json::from_value(response) {
-                Ok(envelope) => envelope,
-                Err(error) => error_envelope(
-                    "daemon_protocol_error",
-                    format!("Python daemon response did not match the envelope contract: {error}"),
-                    Some("Check daemon smoke tests before wiring more UI kinds."),
-                    None,
-                    task_request_id.clone(),
-                    false,
-                ),
-            },
+            Ok(mut response) => {
+                attach_secret_store_policy_status(&mut response);
+                match serde_json::from_value(response) {
+                    Ok(envelope) => envelope,
+                    Err(error) => error_envelope(
+                        "daemon_protocol_error",
+                        format!(
+                            "Python daemon response did not match the envelope contract: {error}"
+                        ),
+                        Some("Check daemon smoke tests before wiring more UI kinds."),
+                        None,
+                        task_request_id.clone(),
+                        false,
+                    ),
+                }
+            }
             Err(error) => supervisor_error_envelope(error, task_request_id),
         }
     })
@@ -387,6 +394,19 @@ async fn daemon_invoke(
             true,
         )),
     }
+}
+
+fn attach_secret_store_policy_status(response: &mut Value) {
+    if response.get("kind").and_then(Value::as_str) != Some("ai.providers.list") {
+        return;
+    }
+    let Some(data) = response.get_mut("data").and_then(Value::as_object_mut) else {
+        return;
+    };
+    data.insert(
+        "secret_store_policy".to_string(),
+        secret_store_policy_status(),
+    );
 }
 
 #[tauri::command]

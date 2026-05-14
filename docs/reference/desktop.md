@@ -57,13 +57,14 @@ location/state. Saving provider metadata does not include the raw key in the
 create/update request; when the API-key field is filled, the form sends the
 narrow `ai.providers.set_api_key` daemon kind and receives only redacted
 metadata back. Connection tests use the stored provider key; a newly typed key
-must be saved through `ai.providers.set_api_key` before testing. Current desktop
-builds default to `sqlcipher_inline` for AI provider keys. macOS Keychain,
-Windows user-scope Credential Manager/DPAPI, and Linux Secret Service support is
-probe-only in this slice; unsigned/ad-hoc macOS builds should keep Keychain
-opt-in experimental copy because rebuilds or app identity changes can prompt
-again. Linux falls back explicitly to `sqlcipher_inline` when no desktop secret
-service, D-Bus session, or unlocked collection is available. There is no
+must be saved through `ai.providers.set_api_key` before testing. Settings can
+move an existing provider key between `sqlcipher_inline` and the native store
+with `ai.providers.move_api_key`. macOS production-signed builds may default to
+Keychain; unsigned/ad-hoc/unknown macOS builds keep Keychain opt-in
+experimental copy because rebuilds or app identity changes can prompt again.
+Windows uses user-scope Credential Manager/DPAPI when available. Linux falls
+back explicitly to `sqlcipher_inline` when no desktop secret service, D-Bus
+session, or unlocked collection is available. There is no
 plaintext fallback and no remember-unlock behavior.
 
 The GUI executable also works as a CLI forwarder when launched with

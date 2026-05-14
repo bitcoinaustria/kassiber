@@ -37,6 +37,15 @@ export interface AiProviderRow {
 export interface AiProvidersListData {
   providers: AiProviderRow[];
   default: string | null;
+  secret_store_policy?: {
+    platform?: "macos" | "windows" | "linux" | "unsupported";
+    default?: {
+      store_id: AiSecretStoreId;
+      native_store_id?: AiSecretStoreId | null;
+      native_available: boolean;
+      warning?: string | null;
+    };
+  };
 }
 
 export interface AiModelRow {

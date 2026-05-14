@@ -27,8 +27,9 @@ Before pointing Kassiber at real wallets, read [SECURITY.md](SECURITY.md). It co
 The desktop secret-management direction is tracked in
 [docs/plan/10-secret-management.md](docs/plan/10-secret-management.md): the
 unlocked Python daemon is the runtime trust boundary, SQLCipher remains the
-at-rest perimeter for DB-resident secrets, and native OS credential stores are
-only probe-only scaffolding for the AI-provider-key pilot today.
+at-rest perimeter for DB-resident secrets, and desktop builds can move AI
+provider API keys only into native OS credential stores behind a narrow
+daemon/supervisor bridge.
 
 Normal `backends ...` and `wallets ...` success output now follows a narrow
 safe-to-record contract for secret-bearing config values: backend inspection
@@ -162,6 +163,11 @@ is reachable from the CLI via
 API keys should be entered through Settings or CLI stdin/fd
 (`--api-key-stdin` / `--api-key-fd FD`); the older `--api-key <value>` argv
 form remains only as a warning-on-use compatibility shim.
+In desktop Settings, provider keys can stay `sqlcipher_inline` or move to the
+platform store selected by policy: macOS Keychain, Windows user-scope
+Credential Manager/DPAPI, or Linux Secret Service when available. Backend
+tokens, descriptors, xpubs, blinding keys, and reveal payloads are not moved by
+this AI-key pilot.
 
 AI is optional. Kassiber's core accounting flow does not depend on a model, and
 future AI-assisted features such as OCR, extraction, and reconciliation
@@ -218,10 +224,11 @@ Requirements:
 - `XlsxWriter` for workbook exports and `reportlab` for styled Austrian and
   source-of-funds PDF exports
 - `sqlcipher3` and `pyrage` for encrypted databases and `.kassiber` backups
-- desktop builds include probe-only Rust keyring crates (`keyring-core`,
+- desktop builds use Rust keyring crates (`keyring-core`,
   `apple-native-keyring-store`, `windows-native-keyring-store`, and
-  `zbus-secret-service-keyring-store`) for the future AI-provider-key
-  OS-store path; production secret storage still defaults to SQLCipher inline
+  `zbus-secret-service-keyring-store`) for AI provider API-key storage when
+  platform policy selects a native store; SQLCipher inline remains the explicit
+  fallback and the CLI path
 
 Install in a virtual environment:
 
