@@ -44,7 +44,13 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { useDaemon, useDaemonMutation } from "@/daemon/client";
-import { canOpenExportedFiles, openExportedFile } from "@/daemon/transport";
+import {
+  canOpenExportedFiles,
+  canSaveExportedFiles,
+  openExportedFile,
+  saveExportedFileAs,
+} from "@/daemon/transport";
+import { saveFile } from "@/lib/filePicker";
 import { screenPanelClassName, screenShellClassName } from "@/lib/screen-layout";
 import { cn } from "@/lib/utils";
 import {
@@ -174,6 +180,35 @@ interface ReportReadiness {
   };
 }
 
+function reportExportDefaultFilename(
+  format: ReportExportFormatId,
+  year: number,
+  austrian: boolean,
+) {
+  if (austrian) {
+    if (format === "pdf") return `kassiber-austrian-e1kv-${year}.pdf`;
+    if (format === "xlsx") return `kassiber-austrian-e1kv-${year}.xlsx`;
+    return `kassiber-austrian-e1kv-${year}-csv`;
+  }
+  if (format === "pdf") return "kassiber-report.pdf";
+  if (format === "xlsx") return "kassiber-report.xlsx";
+  return "kassiber-report.csv";
+}
+
+function reportExportSaveFilters(
+  format: ReportExportFormatId,
+  payload?: ReportExportResult,
+) {
+  if (payload?.format === "csv" && payload.files?.length) return undefined;
+  if (format === "pdf") return [{ name: "PDF report", extensions: ["pdf"] }];
+  if (format === "xlsx") return [{ name: "Excel workbook", extensions: ["xlsx"] }];
+  return [{ name: "CSV report", extensions: ["csv"] }];
+}
+
+function basename(path: string) {
+  return path.split(/[\\/]/).pop() || path;
+}
+
 function initialReportYearFromUrl() {
   if (typeof window === "undefined") return null;
   const value = new URLSearchParams(window.location.search).get("year");
@@ -255,6 +290,7 @@ function ReportsView({
     tone: "success" | "error";
     message: string;
     path?: string;
+    openPath?: string;
   } | null>(null);
   const [activeExport, setActiveExport] =
     useState<ReportExportFormatId | null>(null);
@@ -293,10 +329,10 @@ function ReportsView({
   const periodLabel = formatReportPeriod(effectiveYear, jurisdiction.locale);
   const canOpenCurrentExport =
     exportStatus?.tone === "success" &&
-    canOpenExportPath(exportStatus.path) &&
+    canOpenExportPath(exportStatus.openPath) &&
     canOpenExportedFiles();
   const openableExportPath =
-    canOpenCurrentExport && exportStatus?.path ? exportStatus.path : null;
+    canOpenCurrentExport && exportStatus?.openPath ? exportStatus.openPath : null;
 
   const handleExport = (format: ReportExportFormatId) => {
     if (activeExport) return;
@@ -324,11 +360,11 @@ function ReportsView({
           : {};
 
     mutation.mutate(args, {
-      onSuccess: (envelope) => {
+      onSuccess: async (envelope) => {
         const payload = envelope.data;
         const exportPath = payload?.file ?? payload?.dir ?? "";
         const filename =
-          payload?.filename ?? exportPath.split(/[\\/]/).pop() ?? "report";
+          payload?.filename ?? basename(exportPath) ?? "report";
         const detail =
           payload?.format === "pdf" && payload.pages
             ? `${payload.pages} page${payload.pages === 1 ? "" : "s"}`
@@ -341,14 +377,57 @@ function ReportsView({
               : payload?.format === "csv" && payload.rows !== undefined
                 ? `${payload.rows} row${payload.rows === 1 ? "" : "s"}`
                 : "Export written";
+        let savedPath = exportPath;
+        let statusMessage = `${filename} saved to the managed exports folder.`;
+        if (exportPath && canSaveExportedFiles()) {
+          try {
+            const destination = await saveFile({
+              title:
+                payload?.format === "csv" && payload.files?.length
+                  ? "Save CSV bundle"
+                  : "Save report export",
+              defaultPath: reportExportDefaultFilename(
+                format,
+                effectiveYear,
+                activeProfileIsAustrian,
+              ),
+              filters: reportExportSaveFilters(format, payload),
+            });
+            if (destination) {
+              savedPath = await saveExportedFileAs(exportPath, destination);
+              statusMessage = `${basename(savedPath)} saved.`;
+            } else {
+              statusMessage = `${filename} export kept in the managed exports folder.`;
+            }
+          } catch (error) {
+            const message =
+              error instanceof Error ? error.message : "Could not save report export";
+            setExportStatus({
+              tone: "error",
+              message,
+              path: exportPath,
+              openPath: exportPath,
+            });
+            addNotification({
+              title: "Could not save report export",
+              body: message,
+              tone: "error",
+            });
+            return;
+          }
+        }
         setExportStatus({
           tone: "success",
-          message: `${filename} saved to the managed exports folder.`,
-          path: exportPath,
+          message: statusMessage,
+          path: savedPath,
+          openPath: savedPath === exportPath ? exportPath : undefined,
         });
         addNotification({
           title: "Report export finished",
-          body: detail,
+          body:
+            savedPath === exportPath
+              ? detail
+              : `${detail} · saved to ${basename(savedPath)}`,
           tone: "success",
         });
       },
@@ -782,6 +861,7 @@ function ReportFilesPanel({
     tone: "success" | "error";
     message: string;
     path?: string;
+    openPath?: string;
   } | null;
   openableExportPath: string | null;
   openingExportPath: string | null;
@@ -803,7 +883,7 @@ function ReportFilesPanel({
           <div>
             <h2 className="text-sm font-medium sm:text-base">Report files</h2>
             <p className="text-[10px] text-muted-foreground sm:text-xs">
-              Export from the managed local report package
+              Export report files
             </p>
           </div>
         </div>
@@ -874,6 +954,7 @@ function ExportNotice({
     tone: "success" | "error";
     message: string;
     path?: string;
+    openPath?: string;
   };
   openableExportPath: string | null;
   openingExportPath: string | null;

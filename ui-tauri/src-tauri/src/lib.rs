@@ -415,6 +415,81 @@ fn open_exported_file(path: String) -> Result<(), String> {
 }
 
 #[tauri::command]
+fn save_exported_file_as(source_path: String, destination_path: String) -> Result<String, String> {
+    let source = PathBuf::from(source_path);
+    if !source.is_absolute() {
+        return Err("Report export source paths must be absolute.".to_string());
+    }
+    let destination = PathBuf::from(destination_path);
+    if !destination.is_absolute() {
+        return Err("Report export destination paths must be absolute.".to_string());
+    }
+
+    let canonical_source = std::fs::canonicalize(&source)
+        .map_err(|error| format!("Report export file could not be found: {error}"))?;
+    let metadata = canonical_source
+        .metadata()
+        .map_err(|error| format!("Report export file could not be inspected: {error}"))?;
+    if !is_supported_report_export_target(&canonical_source, &metadata) {
+        return Err(
+            "Only managed PDF, XLSX, CSV files, and Austrian CSV bundle folders can be saved."
+                .to_string(),
+        );
+    }
+
+    if metadata.is_file() {
+        copy_report_export_file(&canonical_source, &destination)?;
+    } else {
+        copy_report_export_directory(&canonical_source, &destination)?;
+    }
+    Ok(destination.to_string_lossy().into_owned())
+}
+
+fn copy_report_export_file(source: &Path, destination: &Path) -> Result<(), String> {
+    if !is_supported_export_file(destination) {
+        return Err("Report export destination must use .pdf, .xlsx, or .csv.".to_string());
+    }
+    let Some(parent) = destination.parent() else {
+        return Err("Report export destination must include a parent folder.".to_string());
+    };
+    std::fs::create_dir_all(parent)
+        .map_err(|error| format!("Could not create report export destination folder: {error}"))?;
+    std::fs::copy(source, destination)
+        .map(|_| ())
+        .map_err(|error| format!("Could not save report export: {error}"))
+}
+
+fn copy_report_export_directory(source: &Path, destination: &Path) -> Result<(), String> {
+    if destination.exists()
+        && destination
+            .read_dir()
+            .map_err(|error| format!("Could not inspect report export destination: {error}"))?
+            .next()
+            .is_some()
+    {
+        return Err("Choose a new or empty folder for the CSV bundle.".to_string());
+    }
+    std::fs::create_dir_all(destination)
+        .map_err(|error| format!("Could not create CSV bundle destination: {error}"))?;
+    for entry in std::fs::read_dir(source)
+        .map_err(|error| format!("Could not read managed CSV bundle: {error}"))?
+    {
+        let entry = entry.map_err(|error| format!("Could not read CSV bundle entry: {error}"))?;
+        let source_path = entry.path();
+        let destination_path = destination.join(entry.file_name());
+        let entry_metadata = entry
+            .metadata()
+            .map_err(|error| format!("Could not inspect CSV bundle entry: {error}"))?;
+        if entry_metadata.is_dir() {
+            copy_report_export_directory(&source_path, &destination_path)?;
+        } else {
+            copy_report_export_file(&source_path, &destination_path)?;
+        }
+    }
+    Ok(())
+}
+
+#[tauri::command]
 fn open_external_url(url: String) -> Result<(), String> {
     let validated = validated_external_url(&url)?;
     open_url_with_default_browser(&validated)
@@ -1105,6 +1180,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             daemon_invoke,
             open_exported_file,
+            save_exported_file_as,
             open_external_url,
             select_import_project_directory,
             activate_import_project,
@@ -1627,14 +1703,15 @@ fn desktop_cli_args() -> Option<Vec<String>> {
 #[cfg(test)]
 mod tests {
     use super::{
-        database_is_encrypted, inspect_import_project_directory, is_managed_report_export_path,
-        is_supported_austrian_csv_bundle_dir, is_supported_export_file,
-        is_supported_report_export_target, menu_action, menu_action_for_deep_link,
-        menu_action_for_id, navigate_action, open_settings_action, validated_external_url,
-        ALLOWED_DAEMON_KINDS, MENU_HELP_DOCS, MENU_LOCK_APP, MENU_NAV_ASSISTANT, MENU_NAV_REPORTS,
-        MENU_SETTINGS_SECURITY, MENU_TOGGLE_FULLSCREEN, MENU_UI_SCALE_DECREASE,
-        MENU_UI_SCALE_INCREASE, MENU_UI_SCALE_RESET, MENU_WORKFLOW_CONNECTIONS_IMPORTS,
-        MENU_WORKFLOW_OPEN_REPORTS, MENU_WORKFLOW_PROCESS_JOURNALS, MENU_WORKFLOW_SYNC_ALL,
+        copy_report_export_directory, database_is_encrypted, inspect_import_project_directory,
+        is_managed_report_export_path, is_supported_austrian_csv_bundle_dir,
+        is_supported_export_file, is_supported_report_export_target, menu_action,
+        menu_action_for_deep_link, menu_action_for_id, navigate_action, open_settings_action,
+        validated_external_url, ALLOWED_DAEMON_KINDS, MENU_HELP_DOCS, MENU_LOCK_APP,
+        MENU_NAV_ASSISTANT, MENU_NAV_REPORTS, MENU_SETTINGS_SECURITY, MENU_TOGGLE_FULLSCREEN,
+        MENU_UI_SCALE_DECREASE, MENU_UI_SCALE_INCREASE, MENU_UI_SCALE_RESET,
+        MENU_WORKFLOW_CONNECTIONS_IMPORTS, MENU_WORKFLOW_OPEN_REPORTS,
+        MENU_WORKFLOW_PROCESS_JOURNALS, MENU_WORKFLOW_SYNC_ALL,
     };
     use std::fs;
     use std::path::{Path, PathBuf};
@@ -1892,6 +1969,20 @@ mod tests {
             &nested_dir,
             &nested_dir.metadata().expect("nested metadata")
         ));
+    }
+
+    #[test]
+    fn csv_bundle_copy_refuses_non_empty_destination() {
+        let root = unique_temp_dir("report-export-copy");
+        let source = root.join("source");
+        let destination = root.join("destination");
+        fs::create_dir_all(&source).expect("create source dir");
+        fs::create_dir_all(&destination).expect("create destination dir");
+        fs::write(source.join("overview.csv"), b"a,b\n1,2\n").expect("write source csv");
+        fs::write(destination.join("keep.csv"), b"existing\n").expect("write destination csv");
+
+        let error = copy_report_export_directory(&source, &destination).unwrap_err();
+        assert!(error.contains("new or empty folder"));
     }
 
     #[test]
