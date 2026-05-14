@@ -1,6 +1,13 @@
 import { describe, expect, it } from "vitest";
 
-import { uiStatePartialForStorage, useUiStore } from "./ui";
+import {
+  DEFAULT_APP_SCALE,
+  MAX_APP_SCALE,
+  MIN_APP_SCALE,
+  normalizeAppScale,
+  uiStatePartialForStorage,
+  useUiStore,
+} from "./ui";
 
 describe("UI persistence", () => {
   it("does not persist daemon logs or notification progress to localStorage", () => {
@@ -33,5 +40,12 @@ describe("UI persistence", () => {
     expect(encoded).not.toContain("btcpay-localStorage-secret");
     expect(encoded).not.toContain("secret-progress");
     expect(encoded).not.toContain("logEntries");
+  });
+
+  it("normalizes persisted UI scale to the supported menu range", () => {
+    expect(normalizeAppScale(0.93)).toBe(0.95);
+    expect(normalizeAppScale(0.1)).toBe(MIN_APP_SCALE);
+    expect(normalizeAppScale(2)).toBe(MAX_APP_SCALE);
+    expect(normalizeAppScale("large")).toBe(DEFAULT_APP_SCALE);
   });
 });

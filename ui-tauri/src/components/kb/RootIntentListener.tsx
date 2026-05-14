@@ -50,6 +50,9 @@ export function RootIntentListener() {
                 );
               },
               setHideSensitive: store.setHideSensitive,
+              decreaseAppScale: store.decreaseAppScale,
+              increaseAppScale: store.increaseAppScale,
+              resetAppScale: store.resetAppScale,
               runWalletSync: () => {
                 throw new Error(
                   "RootIntentListener should not receive workspace actions",

@@ -36,6 +36,9 @@ const MENU_SETTINGS_AI: &str = "kassiber:settings:ai";
 const MENU_SETTINGS_DATA: &str = "kassiber:settings:data";
 const MENU_LOCK_APP: &str = "kassiber:lock";
 const MENU_TOGGLE_SENSITIVE: &str = "kassiber:toggle-sensitive";
+const MENU_UI_SCALE_DECREASE: &str = "kassiber:ui-scale:decrease";
+const MENU_UI_SCALE_INCREASE: &str = "kassiber:ui-scale:increase";
+const MENU_UI_SCALE_RESET: &str = "kassiber:ui-scale:reset";
 const MENU_TOGGLE_FULLSCREEN: &str = "kassiber:window:toggle-fullscreen";
 const MENU_WINDOW_CLOSE: &str = "kassiber:window:close";
 const MENU_WINDOW_MINIMIZE: &str = "kassiber:window:minimize";
@@ -1178,6 +1181,9 @@ fn build_app_menu(
     #[cfg(not(target_os = "macos"))]
     let quit_item = menu_item(app, MENU_QUIT, "Quit Kassiber", Some("CmdOrCtrl+Q"))?;
     let toggle_sensitive = menu_item(app, MENU_TOGGLE_SENSITIVE, "Toggle Sensitive Values", None)?;
+    let ui_scale_decrease_item = menu_item(app, MENU_UI_SCALE_DECREASE, "Smaller UI", None)?;
+    let ui_scale_increase_item = menu_item(app, MENU_UI_SCALE_INCREASE, "Larger UI", None)?;
+    let ui_scale_reset_item = menu_item(app, MENU_UI_SCALE_RESET, "Default UI Scale", None)?;
     let toggle_fullscreen = menu_item(
         app,
         MENU_TOGGLE_FULLSCREEN,
@@ -1302,6 +1308,10 @@ fn build_app_menu(
         .item(&assistant_item)
         .separator()
         .item(&toggle_sensitive)
+        .separator()
+        .item(&ui_scale_decrease_item)
+        .item(&ui_scale_increase_item)
+        .item(&ui_scale_reset_item)
         .separator()
         .item(&toggle_fullscreen)
         .build()?;
@@ -1490,6 +1500,9 @@ fn menu_action_for_id(id: &str) -> Option<MenuActionPayload> {
         MENU_SETTINGS_DATA => Some(open_settings_action(Some("data"))),
         MENU_LOCK_APP => Some(menu_action("lock-app")),
         MENU_TOGGLE_SENSITIVE => Some(menu_action("toggle-sensitive")),
+        MENU_UI_SCALE_DECREASE => Some(menu_action("ui-scale-decrease")),
+        MENU_UI_SCALE_INCREASE => Some(menu_action("ui-scale-increase")),
+        MENU_UI_SCALE_RESET => Some(menu_action("ui-scale-reset")),
         MENU_WORKFLOW_SYNC_ALL => Some(menu_action("sync-all-wallets")),
         MENU_WORKFLOW_PROCESS_JOURNALS => Some(menu_action("process-journals")),
         MENU_WORKFLOW_OPEN_REPORTS => Some(navigate_action("/reports")),
@@ -1603,7 +1616,8 @@ mod tests {
         is_supported_report_export_target, menu_action, menu_action_for_deep_link,
         menu_action_for_id, navigate_action, open_settings_action, validated_external_url,
         ALLOWED_DAEMON_KINDS, MENU_HELP_DOCS, MENU_LOCK_APP, MENU_NAV_ASSISTANT, MENU_NAV_REPORTS,
-        MENU_SETTINGS_SECURITY, MENU_TOGGLE_FULLSCREEN, MENU_WORKFLOW_CONNECTIONS_IMPORTS,
+        MENU_SETTINGS_SECURITY, MENU_TOGGLE_FULLSCREEN, MENU_UI_SCALE_DECREASE,
+        MENU_UI_SCALE_INCREASE, MENU_UI_SCALE_RESET, MENU_WORKFLOW_CONNECTIONS_IMPORTS,
         MENU_WORKFLOW_OPEN_REPORTS, MENU_WORKFLOW_PROCESS_JOURNALS, MENU_WORKFLOW_SYNC_ALL,
     };
     use std::fs;
@@ -1693,6 +1707,18 @@ mod tests {
         assert_eq!(
             menu_action_for_id(MENU_LOCK_APP),
             Some(menu_action("lock-app"))
+        );
+        assert_eq!(
+            menu_action_for_id(MENU_UI_SCALE_DECREASE),
+            Some(menu_action("ui-scale-decrease"))
+        );
+        assert_eq!(
+            menu_action_for_id(MENU_UI_SCALE_INCREASE),
+            Some(menu_action("ui-scale-increase"))
+        );
+        assert_eq!(
+            menu_action_for_id(MENU_UI_SCALE_RESET),
+            Some(menu_action("ui-scale-reset"))
         );
         assert_eq!(
             menu_action_for_id(MENU_WORKFLOW_SYNC_ALL),

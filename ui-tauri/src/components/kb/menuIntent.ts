@@ -40,6 +40,7 @@ export type SettingsMenuSection =
 
 export type NativeMenuPayload =
   | { action: "lock-app" | "toggle-sensitive" }
+  | { action: "ui-scale-decrease" | "ui-scale-increase" | "ui-scale-reset" }
   | { action: "sync-all-wallets" | "process-journals" }
   | { action: "open-settings"; section?: SettingsMenuSection | null }
   | { action: "navigate"; route?: AppRoutePath | null };
@@ -81,6 +82,9 @@ export interface MenuIntentDeps {
   setHideSensitive: (next: boolean) => void;
   runWalletSync: () => void;
   runJournalProcessing: () => void;
+  decreaseAppScale: () => void;
+  increaseAppScale: () => void;
+  resetAppScale: () => void;
   addNotification: (notification: MenuIntentNotification) => void;
   emitSettingsSection: (section: string | null) => void;
 }
@@ -97,6 +101,9 @@ const GLOBAL_ACTIONS = new Set([
   "navigate",
   "open-settings",
   "toggle-sensitive",
+  "ui-scale-decrease",
+  "ui-scale-increase",
+  "ui-scale-reset",
 ] as const);
 
 function actionScope(action: NativeMenuPayload["action"]): "global" | "workspace" {
@@ -135,6 +142,18 @@ export function dispatchMenuIntent(
 
     case "toggle-sensitive":
       deps.setHideSensitive(!deps.hideSensitive);
+      return;
+
+    case "ui-scale-decrease":
+      deps.decreaseAppScale();
+      return;
+
+    case "ui-scale-increase":
+      deps.increaseAppScale();
+      return;
+
+    case "ui-scale-reset":
+      deps.resetAppScale();
       return;
 
     case "sync-all-wallets":

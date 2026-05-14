@@ -25,3 +25,16 @@ export function ThemeController() {
 
   return null;
 }
+
+export function AppScaleController() {
+  const appScale = useUiStore((state) => state.appScale);
+
+  React.useLayoutEffect(() => {
+    document.documentElement.style.setProperty(
+      "--app-ui-scale",
+      String(appScale),
+    );
+  }, [appScale]);
+
+  return null;
+}
