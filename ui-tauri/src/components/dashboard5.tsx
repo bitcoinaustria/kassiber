@@ -1272,18 +1272,9 @@ function activityMarkerView(
   const visibleActivityMarkerIds = new Set(
     visibleActivityMarkers.map((point) => point.date),
   );
-  const chartDisplayData = plottedData.map((point) => {
-    if (!point.isActivityEvent || visibleActivityMarkerIds.has(point.date)) {
-      return point;
-    }
-    return {
-      ...point,
-      eventBalanceBtc: undefined,
-      eventFlow: undefined,
-      eventSize: 0,
-      isActivityEvent: false,
-    };
-  });
+  const chartDisplayData = plottedData.filter(
+    (point) => !point.isActivityEvent || visibleActivityMarkerIds.has(point.date),
+  );
   return {
     activityPoints,
     chartDisplayData,
@@ -3355,24 +3346,24 @@ const RevenueFlowChart = ({
       0,
     );
     const netBtc = receivedBtc - spentBtc - feeBtc;
-    const chartStats = buildTreasuryChartStats(plottedData);
+    const chartStats = buildTreasuryChartStats(chartDisplayData);
     const statPeriodLabel = periodShortLabels[period];
     const selectedPoint = expanded
-      ? (plottedData.find((point) => point.date === expandedPointDate) ??
-        plottedData.at(-1) ??
+      ? (chartDisplayData.find((point) => point.date === expandedPointDate) ??
+        chartDisplayData.at(-1) ??
         null)
       : null;
     const selectedPointIndex = selectedPoint
-      ? plottedData.findIndex((point) => point.date === selectedPoint.date)
+      ? chartDisplayData.findIndex((point) => point.date === selectedPoint.date)
       : -1;
     const previousPoint =
-      selectedPointIndex > 0 ? plottedData[selectedPointIndex - 1] : null;
+      selectedPointIndex > 0 ? chartDisplayData[selectedPointIndex - 1] : null;
     const handleExpandedChartMove = (state: PortfolioChartMouseState) => {
       if (!expanded) return;
       const point = state.activePayload?.find((item) => item.payload)?.payload;
       if (point) setExpandedPointDate(point.date);
     };
-    const balancePoints = plottedData.filter((point) => !point.isActivityEvent);
+    const balancePoints = chartDisplayData.filter((point) => !point.isActivityEvent);
     const xAxisTicks = portfolioAxisTicks(
       balancePoints.length ? balancePoints : plottedData,
       period,
