@@ -7,9 +7,6 @@
  * cases for the schema once it lands.
  */
 
-export type WorkspaceKind = "Personal" | "Business" | "Household";
-
-export type ProfileRole = "Owner" | "Treasurer" | "Auditor";
 export type ProfileTaxCountry = "at" | "generic";
 export type ProfileGainsAlgorithm =
   | "FIFO"
@@ -21,7 +18,6 @@ export type ProfileGainsAlgorithm =
 export interface Profile {
   id: string;
   name: string;
-  role: ProfileRole;
   taxPolicy: string;
   fiatCurrency?: string;
   taxCountry?: ProfileTaxCountry;
@@ -36,7 +32,6 @@ export interface Profile {
 export interface Workspace {
   id: string;
   name: string;
-  kind: WorkspaceKind;
   currency: string;
   jurisdiction: string;
   created: string;
@@ -58,7 +53,6 @@ export const MOCK_PROFILES: ProfilesSnapshot = {
     {
       id: "w1",
       name: "My Books",
-      kind: "Personal",
       currency: "EUR",
       jurisdiction: "Austria",
       created: "2024-03-12",
@@ -66,8 +60,7 @@ export const MOCK_PROFILES: ProfilesSnapshot = {
         {
           id: "p1",
           name: "Alice",
-          role: "Owner",
-          taxPolicy: "Private · AT moving average",
+          taxPolicy: "Austria - ATM - EUR",
           fiatCurrency: "EUR",
           taxCountry: "at",
           taxLongTermDays: 0,
@@ -80,8 +73,7 @@ export const MOCK_PROFILES: ProfilesSnapshot = {
         {
           id: "p2",
           name: "Alice · Self-employed",
-          role: "Owner",
-          taxPolicy: "Self-employed · FIFO · full income tax",
+          taxPolicy: "Generic - FIFO - EUR - 365 day long-term",
           fiatCurrency: "EUR",
           taxCountry: "generic",
           taxLongTermDays: 365,
@@ -95,7 +87,6 @@ export const MOCK_PROFILES: ProfilesSnapshot = {
     {
       id: "w2",
       name: "Hyperion GmbH",
-      kind: "Business",
       currency: "EUR",
       jurisdiction: "Germany",
       created: "2024-09-01",
@@ -103,8 +94,7 @@ export const MOCK_PROFILES: ProfilesSnapshot = {
         {
           id: "p3",
           name: "Hyperion GmbH · Operating",
-          role: "Treasurer",
-          taxPolicy: "Business · FIFO · corporate income tax",
+          taxPolicy: "Generic - FIFO - EUR - 365 day long-term",
           fiatCurrency: "EUR",
           taxCountry: "generic",
           taxLongTermDays: 365,
@@ -116,8 +106,7 @@ export const MOCK_PROFILES: ProfilesSnapshot = {
         {
           id: "p4",
           name: "Hyperion GmbH · Treasury",
-          role: "Treasurer",
-          taxPolicy: "Business · FIFO",
+          taxPolicy: "Generic - FIFO - EUR - 365 day long-term",
           fiatCurrency: "EUR",
           taxCountry: "generic",
           taxLongTermDays: 365,
@@ -131,7 +120,6 @@ export const MOCK_PROFILES: ProfilesSnapshot = {
     {
       id: "w3",
       name: "Family",
-      kind: "Household",
       currency: "CHF",
       jurisdiction: "Switzerland",
       created: "2025-02-18",
@@ -139,8 +127,7 @@ export const MOCK_PROFILES: ProfilesSnapshot = {
         {
           id: "p5",
           name: "Household",
-          role: "Owner",
-          taxPolicy: "Private · shared",
+          taxPolicy: "Generic - FIFO - CHF - 365 day long-term",
           fiatCurrency: "CHF",
           taxCountry: "generic",
           taxLongTermDays: 365,

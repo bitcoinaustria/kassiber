@@ -2328,17 +2328,38 @@ class DaemonSmokeTest(unittest.TestCase):
 
                 _write_payload(
                     proc,
+                    {
+                        "request_id": "rename-workspace-1",
+                        "kind": "ui.workspace.rename",
+                        "args": {
+                            "workspace_id": created["data"]["workspace"]["id"],
+                            "label": "Renamed Books",
+                        },
+                    },
+                )
+                renamed = _read_payload_timeout(proc)
+                self.assertEqual(renamed["kind"], "ui.workspace.rename")
+                self.assertEqual(
+                    renamed["data"]["workspace"]["name"],
+                    "Renamed Books",
+                )
+
+                _write_payload(
+                    proc,
                     {"request_id": "profiles-1", "kind": "ui.profiles.snapshot"},
                 )
                 profiles = _read_payload_timeout(proc)
                 self.assertEqual(profiles["data"]["activeProfileId"], "")
                 self.assertEqual(len(profiles["data"]["workspaces"]), 1)
-                self.assertEqual(profiles["data"]["workspaces"][0]["name"], "Side Books")
+                self.assertEqual(
+                    profiles["data"]["workspaces"][0]["name"],
+                    "Renamed Books",
+                )
                 self.assertEqual(profiles["data"]["workspaces"][0]["profiles"], [])
 
                 _write_payload(proc, {"request_id": "status-1", "kind": "status"})
                 status = _read_payload_timeout(proc)
-                self.assertEqual(status["data"]["current_workspace"], "Side Books")
+                self.assertEqual(status["data"]["current_workspace"], "Renamed Books")
                 self.assertEqual(status["data"]["current_profile"], "")
 
                 _write_payload(
@@ -2449,6 +2470,21 @@ class DaemonSmokeTest(unittest.TestCase):
                 _write_payload(
                     proc,
                     {
+                        "request_id": "rename-profile-1",
+                        "kind": "ui.profiles.rename",
+                        "args": {
+                            "profile_id": created["data"]["profile"]["id"],
+                            "label": "Side Renamed",
+                        },
+                    },
+                )
+                renamed = _read_payload_timeout(proc)
+                self.assertEqual(renamed["kind"], "ui.profiles.rename")
+                self.assertEqual(renamed["data"]["profile"]["name"], "Side Renamed")
+
+                _write_payload(
+                    proc,
+                    {
                         "request_id": "create-profile-2",
                         "kind": "ui.profiles.create",
                         "args": {
@@ -2508,24 +2544,24 @@ class DaemonSmokeTest(unittest.TestCase):
                     for workspace in after["data"]["workspaces"]
                     for profile in workspace["profiles"]
                 }
-                self.assertIn("Side", profiles)
+                self.assertIn("Side Renamed", profiles)
                 self.assertEqual(
-                    profiles["Side"]["taxPolicy"],
+                    profiles["Side Renamed"]["taxPolicy"],
                     "Generic - HIFO - CHF - 730 day long-term",
                 )
                 self.assertEqual(
                     profiles["Template Copy"]["taxPolicy"],
                     "Generic - LOFO - USD - 99 day long-term",
                 )
-                self.assertEqual(profiles["Side"]["taxCountry"], "generic")
-                self.assertEqual(profiles["Side"]["fiatCurrency"], "CHF")
-                self.assertEqual(profiles["Side"]["taxLongTermDays"], 730)
-                self.assertEqual(profiles["Side"]["gainsAlgorithm"], "HIFO")
+                self.assertEqual(profiles["Side Renamed"]["taxCountry"], "generic")
+                self.assertEqual(profiles["Side Renamed"]["fiatCurrency"], "CHF")
+                self.assertEqual(profiles["Side Renamed"]["taxLongTermDays"], 730)
+                self.assertEqual(profiles["Side Renamed"]["gainsAlgorithm"], "HIFO")
                 self.assertEqual(profiles["Template Copy"]["taxCountry"], "generic")
                 self.assertEqual(profiles["Template Copy"]["fiatCurrency"], "USD")
                 self.assertEqual(profiles["Template Copy"]["taxLongTermDays"], 99)
                 self.assertEqual(profiles["Template Copy"]["gainsAlgorithm"], "LOFO")
-                self.assertEqual(profiles["Side"]["accounts"], 1)
+                self.assertEqual(profiles["Side Renamed"]["accounts"], 1)
                 self.assertEqual(profiles["Template Copy"]["accounts"], 1)
                 self.assertTrue(profiles["Template Copy"]["active"])
 

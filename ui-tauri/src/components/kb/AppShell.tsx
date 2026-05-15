@@ -2042,9 +2042,9 @@ function LockScreen({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/95 px-4 backdrop-blur-sm">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-background px-4 text-foreground">
       <form
-        className="w-full max-w-md rounded-lg border bg-card p-5 shadow-xl"
+        className="w-full max-w-md rounded-lg border border-border bg-card p-5 text-card-foreground shadow-xl ring-1 ring-border/60"
         onSubmit={(event) => {
           void submit(event);
         }}
@@ -2119,8 +2119,8 @@ function ImportRootRestoreScreen({
   onReset: () => void;
 }) {
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/95 px-4 backdrop-blur-sm">
-      <div className="w-full max-w-sm rounded-lg border bg-card p-5 shadow-xl">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-background px-4 text-foreground">
+      <div className="w-full max-w-sm rounded-lg border border-border bg-card p-5 text-card-foreground shadow-xl ring-1 ring-border/60">
         <div className="flex items-center gap-3">
           <div className="flex size-10 items-center justify-center rounded-md bg-primary text-primary-foreground">
             <Database className="size-5" aria-hidden="true" />

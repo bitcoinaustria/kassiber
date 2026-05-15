@@ -165,9 +165,7 @@ function WorkspaceBlock({
             {workspace.name}
           </CardTitle>
           <Badge variant="outline">{workspace.jurisdiction}</Badge>
-          <Badge variant="secondary">
-            {workspace.kind} · {workspace.currency}
-          </Badge>
+          <Badge variant="secondary">{workspace.currency}</Badge>
         </div>
       </CardHeader>
       <CardContent className="grid gap-2 px-3 pb-3 sm:grid-cols-2 sm:px-4">

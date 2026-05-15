@@ -257,7 +257,6 @@ export const mockDaemon: DaemonTransport = {
       const profile = {
         id: `mock-profile-${Date.now()}`,
         name: label,
-        role: "Owner" as const,
         taxPolicy:
           sourceProfile?.taxPolicy ??
           firstProfile?.taxPolicy ??
@@ -316,6 +315,83 @@ export const mockDaemon: DaemonTransport = {
       };
     }
 
+    if (req.kind === "ui.profiles.rename") {
+      const args = (req.args ?? {}) as {
+        profile_id?: unknown;
+        label?: unknown;
+      };
+      const profileId =
+        typeof args.profile_id === "string" ? args.profile_id : "";
+      const label = typeof args.label === "string" ? args.label.trim() : "";
+      const workspace = mockProfilesSnapshot.workspaces.find((candidate) =>
+        candidate.profiles.some((profile) => profile.id === profileId),
+      );
+      const profile = workspace?.profiles.find(
+        (candidate) => candidate.id === profileId,
+      );
+      if (!workspace || !profile) {
+        return {
+          kind: "error",
+          schema_version: 1,
+          request_id: req.request_id,
+          error: {
+            code: "validation",
+            message: "book not found",
+            retryable: false,
+          },
+        };
+      }
+      if (!label) {
+        return {
+          kind: "error",
+          schema_version: 1,
+          request_id: req.request_id,
+          error: {
+            code: "validation",
+            message: "Book name is required.",
+            retryable: false,
+          },
+        };
+      }
+      const duplicate = workspace.profiles.some(
+        (candidate) =>
+          candidate.id !== profileId &&
+          candidate.name.localeCompare(label, undefined, {
+            sensitivity: "accent",
+          }) === 0,
+      );
+      if (duplicate) {
+        return {
+          kind: "error",
+          schema_version: 1,
+          request_id: req.request_id,
+          error: {
+            code: "conflict",
+            message: "Book name already exists in this books set.",
+            retryable: false,
+          },
+        };
+      }
+      mockProfilesSnapshot = {
+        ...mockProfilesSnapshot,
+        workspaces: mockProfilesSnapshot.workspaces.map((candidate) => ({
+          ...candidate,
+          profiles: candidate.profiles.map((existing) =>
+            existing.id === profileId ? { ...existing, name: label } : existing,
+          ),
+        })),
+      };
+      return {
+        kind: "ui.profiles.rename",
+        schema_version: 1,
+        request_id: req.request_id,
+        data: {
+          profile: { id: profileId, name: label },
+          workspace: { id: workspace.id },
+        } as T,
+      };
+    }
+
     if (req.kind === "ui.workspace.create") {
       const args = (req.args ?? {}) as { label?: unknown };
       const label = typeof args.label === "string" ? args.label.trim() : "";
@@ -334,7 +410,6 @@ export const mockDaemon: DaemonTransport = {
       const workspace = {
         id: `mock-workspace-${Date.now()}`,
         name: label,
-        kind: "Personal" as const,
         currency: "Mixed",
         jurisdiction: "Generic",
         created: new Date().toISOString().slice(0, 10),
@@ -362,6 +437,78 @@ export const mockDaemon: DaemonTransport = {
           workspace: { id: workspace.id, name: workspace.name },
           activeWorkspaceId: workspace.id,
           activeProfileId: "",
+        } as T,
+      };
+    }
+
+    if (req.kind === "ui.workspace.rename") {
+      const args = (req.args ?? {}) as {
+        workspace_id?: unknown;
+        label?: unknown;
+      };
+      const workspaceId =
+        typeof args.workspace_id === "string" ? args.workspace_id : "";
+      const label = typeof args.label === "string" ? args.label.trim() : "";
+      const workspace = mockProfilesSnapshot.workspaces.find(
+        (candidate) => candidate.id === workspaceId,
+      );
+      if (!workspace) {
+        return {
+          kind: "error",
+          schema_version: 1,
+          request_id: req.request_id,
+          error: {
+            code: "validation",
+            message: "books set not found",
+            retryable: false,
+          },
+        };
+      }
+      if (!label) {
+        return {
+          kind: "error",
+          schema_version: 1,
+          request_id: req.request_id,
+          error: {
+            code: "validation",
+            message: "Books set name is required.",
+            retryable: false,
+          },
+        };
+      }
+      const duplicate = mockProfilesSnapshot.workspaces.some(
+        (candidate) =>
+          candidate.id !== workspaceId &&
+          candidate.name.localeCompare(label, undefined, {
+            sensitivity: "accent",
+          }) === 0,
+      );
+      if (duplicate) {
+        return {
+          kind: "error",
+          schema_version: 1,
+          request_id: req.request_id,
+          error: {
+            code: "conflict",
+            message: "Books set name already exists.",
+            retryable: false,
+          },
+        };
+      }
+      mockProfilesSnapshot = {
+        ...mockProfilesSnapshot,
+        workspaces: mockProfilesSnapshot.workspaces.map((candidate) =>
+          candidate.id === workspaceId
+            ? { ...candidate, name: label }
+            : candidate,
+        ),
+      };
+      return {
+        kind: "ui.workspace.rename",
+        schema_version: 1,
+        request_id: req.request_id,
+        data: {
+          workspace: { id: workspaceId, name: label },
         } as T,
       };
     }

@@ -15,6 +15,7 @@ import {
   CheckCircle2,
   FolderPlus,
   Landmark,
+  Pencil,
   Plus,
   Users,
   Wallet,
@@ -72,10 +73,17 @@ function BooksView({ snapshot }: { snapshot: ProfilesSnapshot }) {
     activeProfileId: string;
     activeWorkspaceId: string;
   }>("ui.profiles.create");
+  const renameProfile = useDaemonMutation<{
+    profile: { id: string; name: string };
+    workspace: { id: string };
+  }>("ui.profiles.rename");
   const createWorkspace = useDaemonMutation<{
     activeProfileId: string;
     activeWorkspaceId: string;
   }>("ui.workspace.create");
+  const renameWorkspace = useDaemonMutation<{
+    workspace: { id: string; name: string };
+  }>("ui.workspace.rename");
   const [activeId, setActiveId] = useState(snapshot.activeProfileId);
   const [pendingSwitch, setPendingSwitch] =
     useState<PendingProfileSwitch | null>(null);
@@ -84,10 +92,22 @@ function BooksView({ snapshot }: { snapshot: ProfilesSnapshot }) {
   );
   const [profileSource, setProfileSource] = useState<Profile | null>(null);
   const [profileName, setProfileName] = useState("");
+  const [renameTarget, setRenameTarget] =
+    useState<PendingProfileRename | null>(null);
+  const [renameProfileName, setRenameProfileName] = useState("");
+  const [renameWorkspaceTarget, setRenameWorkspaceTarget] =
+    useState<Workspace | null>(null);
+  const [renameWorkspaceName, setRenameWorkspaceName] = useState("");
   const [workspaceDialogOpen, setWorkspaceDialogOpen] = useState(false);
   const [workspaceName, setWorkspaceName] = useState("");
   const [switchError, setSwitchError] = useState<string | null>(null);
   const [profileError, setProfileError] = useState<string | null>(null);
+  const [renameProfileError, setRenameProfileError] = useState<string | null>(
+    null,
+  );
+  const [renameWorkspaceError, setRenameWorkspaceError] = useState<
+    string | null
+  >(null);
   const [workspaceError, setWorkspaceError] = useState<string | null>(null);
   const workspaces = snapshot.workspaces;
   const activeProfile = findProfile(workspaces, activeId);
@@ -127,6 +147,18 @@ function BooksView({ snapshot }: { snapshot: ProfilesSnapshot }) {
     setProfileName("");
     setProfileWorkspace(workspace);
     setProfileSource(sourceProfile);
+  };
+
+  const requestRenameProfile = (workspace: Workspace, profile: Profile) => {
+    setRenameProfileError(null);
+    setRenameProfileName(profile.name);
+    setRenameTarget({ workspace, profile });
+  };
+
+  const requestRenameWorkspace = (workspace: Workspace) => {
+    setRenameWorkspaceError(null);
+    setRenameWorkspaceName(workspace.name);
+    setRenameWorkspaceTarget(workspace);
   };
 
   const submitProfile = () => {
@@ -176,6 +208,62 @@ function BooksView({ snapshot }: { snapshot: ProfilesSnapshot }) {
         onError: (error) => {
           setSwitchError(
             error instanceof Error ? error.message : "Could not switch books.",
+          );
+        },
+      },
+    );
+  };
+
+  const submitRenameProfile = () => {
+    if (!renameTarget || renameProfile.isPending) return;
+    const label = renameProfileName.trim();
+    if (!label) {
+      setRenameProfileError("Enter a book name.");
+      return;
+    }
+    setRenameProfileError(null);
+    renameProfile.mutate(
+      {
+        profile_id: renameTarget.profile.id,
+        label,
+      },
+      {
+        onSuccess: () => {
+          setRenameTarget(null);
+          setRenameProfileName("");
+        },
+        onError: (error) => {
+          setRenameProfileError(
+            error instanceof Error ? error.message : "Could not rename book.",
+          );
+        },
+      },
+    );
+  };
+
+  const submitRenameWorkspace = () => {
+    if (!renameWorkspaceTarget || renameWorkspace.isPending) return;
+    const label = renameWorkspaceName.trim();
+    if (!label) {
+      setRenameWorkspaceError("Enter a books set name.");
+      return;
+    }
+    setRenameWorkspaceError(null);
+    renameWorkspace.mutate(
+      {
+        workspace_id: renameWorkspaceTarget.id,
+        label,
+      },
+      {
+        onSuccess: () => {
+          setRenameWorkspaceTarget(null);
+          setRenameWorkspaceName("");
+        },
+        onError: (error) => {
+          setRenameWorkspaceError(
+            error instanceof Error
+              ? error.message
+              : "Could not rename books set.",
           );
         },
       },
@@ -241,13 +329,13 @@ function BooksView({ snapshot }: { snapshot: ProfilesSnapshot }) {
         <SummaryCard
           label="Sets"
           value={workspaces.length}
-          detail="Top-level groups"
+          detail="Books sets"
           icon={BriefcaseBusiness}
         />
         <SummaryCard
           label="Books"
           value={profileCount}
-          detail="Accounting scopes"
+          detail="Profiles"
           icon={Users}
         />
         <SummaryCard
@@ -266,6 +354,8 @@ function BooksView({ snapshot }: { snapshot: ProfilesSnapshot }) {
             activeId={activeId}
             onCreateProfile={() => requestCreateProfile(workspace)}
             onPick={(profile) => requestSwitch(workspace, profile)}
+            onRename={(profile) => requestRenameProfile(workspace, profile)}
+            onRenameWorkspace={() => requestRenameWorkspace(workspace)}
           />
         ))}
       </div>
@@ -308,6 +398,47 @@ function BooksView({ snapshot }: { snapshot: ProfilesSnapshot }) {
         }}
         onSubmit={submitProfile}
       />
+      <RenameProfileDialog
+        errorMessage={renameProfileError}
+        isSubmitting={renameProfile.isPending}
+        name={renameProfileName}
+        open={Boolean(renameTarget)}
+        profile={renameTarget?.profile ?? null}
+        workspace={renameTarget?.workspace ?? null}
+        onNameChange={(value) => {
+          setRenameProfileName(value);
+          if (renameProfileError) setRenameProfileError(null);
+        }}
+        onOpenChange={(open) => {
+          if (renameProfile.isPending) return;
+          if (!open) {
+            setRenameTarget(null);
+            setRenameProfileName("");
+            setRenameProfileError(null);
+          }
+        }}
+        onSubmit={submitRenameProfile}
+      />
+      <RenameWorkspaceDialog
+        errorMessage={renameWorkspaceError}
+        isSubmitting={renameWorkspace.isPending}
+        name={renameWorkspaceName}
+        open={Boolean(renameWorkspaceTarget)}
+        workspace={renameWorkspaceTarget}
+        onNameChange={(value) => {
+          setRenameWorkspaceName(value);
+          if (renameWorkspaceError) setRenameWorkspaceError(null);
+        }}
+        onOpenChange={(open) => {
+          if (renameWorkspace.isPending) return;
+          if (!open) {
+            setRenameWorkspaceTarget(null);
+            setRenameWorkspaceName("");
+            setRenameWorkspaceError(null);
+          }
+        }}
+        onSubmit={submitRenameWorkspace}
+      />
       <CreateWorkspaceDialog
         errorMessage={workspaceError}
         isSubmitting={createWorkspace.isPending}
@@ -335,6 +466,11 @@ interface PendingProfileSwitch {
   profile: Profile;
 }
 
+interface PendingProfileRename {
+  workspace: Workspace;
+  profile: Profile;
+}
+
 function findProfile(workspaces: Workspace[], profileId: string) {
   for (const workspace of workspaces) {
     const profile = workspace.profiles.find(
@@ -345,6 +481,19 @@ function findProfile(workspaces: Workspace[], profileId: string) {
     }
   }
   return null;
+}
+
+function formatWorkspaceMeta(
+  workspace: Workspace,
+  options: { includeCreated?: boolean } = {},
+) {
+  const includeCreated = options.includeCreated ?? true;
+  const parts = [
+    workspace.currency,
+    workspace.jurisdiction,
+    includeCreated && workspace.created ? `since ${workspace.created}` : null,
+  ].filter(Boolean);
+  return parts.join(" · ");
 }
 
 interface SummaryCardProps {
@@ -376,6 +525,8 @@ interface WorkspaceSectionProps {
   activeId: string;
   onCreateProfile: () => void;
   onPick: (profile: Profile) => void;
+  onRename: (profile: Profile) => void;
+  onRenameWorkspace: () => void;
 }
 
 function WorkspaceSection({
@@ -383,6 +534,8 @@ function WorkspaceSection({
   activeId,
   onCreateProfile,
   onPick,
+  onRename,
+  onRenameWorkspace,
 }: WorkspaceSectionProps) {
   return (
     <Card>
@@ -393,11 +546,20 @@ function WorkspaceSection({
             {workspace.name}
           </CardTitle>
           <CardDescription>
-            {workspace.kind} · {workspace.currency} · {workspace.jurisdiction} ·
-            since {workspace.created}
+            {formatWorkspaceMeta(workspace)}
           </CardDescription>
         </div>
         <div className="flex items-center gap-2">
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="gap-2"
+            onClick={onRenameWorkspace}
+          >
+            <Pencil className="size-4" aria-hidden="true" />
+            Edit
+          </Button>
           <Button
             type="button"
             variant="outline"
@@ -416,6 +578,7 @@ function WorkspaceSection({
             profile={profile}
             isActive={profile.id === activeId}
             onPick={() => onPick(profile)}
+            onRename={() => onRename(profile)}
           />
         ))}
       </CardContent>
@@ -427,20 +590,32 @@ interface ProfileCardProps {
   profile: Profile;
   isActive: boolean;
   onPick: () => void;
+  onRename: () => void;
 }
 
 function ProfileCard({
   profile,
   isActive,
   onPick,
+  onRename,
 }: ProfileCardProps) {
   return (
     <div
       className={cn(
-        "flex min-h-[178px] flex-col justify-between rounded-xl border p-4 text-left transition-colors hover:bg-muted/35",
+        "relative flex min-h-[178px] flex-col justify-between rounded-xl border p-4 text-left transition-colors hover:bg-muted/35",
         isActive ? "border-foreground bg-muted/45" : "bg-background",
       )}
     >
+      <Button
+        type="button"
+        variant="ghost"
+        size="icon"
+        className="absolute top-3 right-3 z-10 size-8"
+        aria-label={`Edit ${profile.name} name`}
+        onClick={onRename}
+      >
+        <Pencil className="size-3.5" aria-hidden="true" />
+      </Button>
       <button
         type="button"
         aria-current={isActive ? "true" : undefined}
@@ -453,7 +628,7 @@ function ProfileCard({
         className="flex flex-1 flex-col justify-between text-left"
       >
         <div className="space-y-3">
-          <div className="flex items-start justify-between gap-3">
+          <div className="flex items-start justify-between gap-3 pr-10">
             <div className="min-w-0">
               <p className="truncate font-medium">{profile.name}</p>
               <p className="mt-1 text-xs text-muted-foreground">
@@ -559,8 +734,7 @@ function CreateProfileDialog({
             <div className="rounded-lg border bg-muted/25 p-3 text-sm">
               <p className="font-medium">{workspace.name}</p>
               <p className="mt-1 text-xs text-muted-foreground">
-                {workspace.kind} · {workspace.currency} ·{" "}
-                {workspace.jurisdiction}
+                {formatWorkspaceMeta(workspace, { includeCreated: false })}
               </p>
             </div>
           )}
@@ -617,7 +791,7 @@ function CreateProfileDialog({
               autoFocus
               aria-invalid={Boolean(errorMessage)}
               disabled={isSubmitting}
-              placeholder="Business"
+              placeholder="Book name"
               value={name}
               onChange={(event) => onNameChange(event.currentTarget.value)}
             />
@@ -640,6 +814,179 @@ function CreateProfileDialog({
             </Button>
             <Button type="submit" disabled={isSubmitting}>
               Create book
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+interface RenameProfileDialogProps {
+  errorMessage: string | null;
+  isSubmitting: boolean;
+  name: string;
+  open: boolean;
+  profile: Profile | null;
+  workspace: Workspace | null;
+  onNameChange: (value: string) => void;
+  onOpenChange: (open: boolean) => void;
+  onSubmit: () => void;
+}
+
+function RenameProfileDialog({
+  errorMessage,
+  isSubmitting,
+  name,
+  open,
+  profile,
+  workspace,
+  onNameChange,
+  onOpenChange,
+  onSubmit,
+}: RenameProfileDialogProps) {
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-md">
+        <form
+          className="space-y-4"
+          onSubmit={(event) => {
+            event.preventDefault();
+            onSubmit();
+          }}
+        >
+          <DialogHeader>
+            <DialogTitle>Edit book name</DialogTitle>
+            <DialogDescription>
+              Rename this book. Tax settings, wallets, and transactions stay
+              unchanged.
+            </DialogDescription>
+          </DialogHeader>
+
+          {profile && workspace && (
+            <div className="rounded-lg border bg-muted/25 p-3 text-sm">
+              <p className="font-medium">{profile.name}</p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                {workspace.name} · {workspace.currency} ·{" "}
+                {workspace.jurisdiction}
+              </p>
+            </div>
+          )}
+
+          <div className="space-y-2">
+            <Label htmlFor="rename-profile-name">Book name</Label>
+            <Input
+              id="rename-profile-name"
+              autoFocus
+              aria-invalid={Boolean(errorMessage)}
+              disabled={isSubmitting}
+              value={name}
+              onChange={(event) => onNameChange(event.currentTarget.value)}
+            />
+          </div>
+
+          {errorMessage && (
+            <p className="rounded-md border border-destructive/25 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+              {errorMessage}
+            </p>
+          )}
+
+          <DialogFooter className="gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              disabled={isSubmitting}
+              onClick={() => onOpenChange(false)}
+            >
+              Cancel
+            </Button>
+            <Button type="submit" disabled={isSubmitting}>
+              Save name
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+interface RenameWorkspaceDialogProps {
+  errorMessage: string | null;
+  isSubmitting: boolean;
+  name: string;
+  open: boolean;
+  workspace: Workspace | null;
+  onNameChange: (value: string) => void;
+  onOpenChange: (open: boolean) => void;
+  onSubmit: () => void;
+}
+
+function RenameWorkspaceDialog({
+  errorMessage,
+  isSubmitting,
+  name,
+  open,
+  workspace,
+  onNameChange,
+  onOpenChange,
+  onSubmit,
+}: RenameWorkspaceDialogProps) {
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-md">
+        <form
+          className="space-y-4"
+          onSubmit={(event) => {
+            event.preventDefault();
+            onSubmit();
+          }}
+        >
+          <DialogHeader>
+            <DialogTitle>Edit books set name</DialogTitle>
+            <DialogDescription>
+              Rename this books set. Books, wallets, and transactions stay
+              unchanged.
+            </DialogDescription>
+          </DialogHeader>
+
+          {workspace && (
+            <div className="rounded-lg border bg-muted/25 p-3 text-sm">
+              <p className="font-medium">{workspace.name}</p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                {formatWorkspaceMeta(workspace, { includeCreated: false })}
+              </p>
+            </div>
+          )}
+
+          <div className="space-y-2">
+            <Label htmlFor="rename-workspace-name">Books set name</Label>
+            <Input
+              id="rename-workspace-name"
+              autoFocus
+              aria-invalid={Boolean(errorMessage)}
+              disabled={isSubmitting}
+              value={name}
+              onChange={(event) => onNameChange(event.currentTarget.value)}
+            />
+          </div>
+
+          {errorMessage && (
+            <p className="rounded-md border border-destructive/25 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+              {errorMessage}
+            </p>
+          )}
+
+          <DialogFooter className="gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              disabled={isSubmitting}
+              onClick={() => onOpenChange(false)}
+            >
+              Cancel
+            </Button>
+            <Button type="submit" disabled={isSubmitting}>
+              Save name
             </Button>
           </DialogFooter>
         </form>
@@ -795,7 +1142,7 @@ function CreateWorkspaceDialog({
               autoFocus
               aria-invalid={Boolean(errorMessage)}
               disabled={isSubmitting}
-              placeholder="Personal books"
+              placeholder="Books set name"
               value={name}
               onChange={(event) => onNameChange(event.currentTarget.value)}
             />

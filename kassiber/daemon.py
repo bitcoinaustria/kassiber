@@ -221,6 +221,7 @@ SUPPORTED_KINDS = (
     "ui.saved_views.delete",
     "ui.profiles.snapshot",
     "ui.profiles.create",
+    "ui.profiles.rename",
     "ui.profiles.switch",
     "ui.rates.summary",
     "ui.rates.coverage",
@@ -233,6 +234,7 @@ SUPPORTED_KINDS = (
     "ui.maintenance.run",
     "ui.workspace.health",
     "ui.workspace.create",
+    "ui.workspace.rename",
     "ui.workspace.delete",
     "ui.secrets.init",
     "ui.secrets.change_passphrase",
@@ -4341,6 +4343,68 @@ def _switch_profile_payload(
     }
 
 
+def _rename_profile_payload(
+    conn: sqlite3.Connection,
+    args: dict[str, Any],
+) -> dict[str, Any]:
+    profile_id = args.get("profile_id")
+    if not isinstance(profile_id, str) or not profile_id.strip():
+        raise AppError(
+            "Book selection is missing.",
+            code="validation",
+            hint="Choose the book to rename.",
+            retryable=False,
+        )
+    label = args.get("label")
+    if not isinstance(label, str) or not label.strip():
+        raise AppError(
+            "Book name is required.",
+            code="validation",
+            hint="Enter a book name.",
+            retryable=False,
+        )
+    profile_id = profile_id.strip()
+    label = label.strip()
+    row = conn.execute(
+        """
+        SELECT id, workspace_id
+        FROM profiles
+        WHERE id = ?
+        """,
+        (profile_id,),
+    ).fetchone()
+    if row is None:
+        raise AppError(
+            "Book not found.",
+            code="validation",
+            hint="Choose an existing book.",
+            details={"profile_id": profile_id},
+            retryable=False,
+        )
+    try:
+        conn.execute(
+            """
+            UPDATE profiles
+            SET label = ?
+            WHERE id = ?
+            """,
+            (label, profile_id),
+        )
+    except sqlite3.IntegrityError as exc:
+        raise AppError(
+            "Book name already exists in this books set.",
+            code="conflict",
+            hint="Choose a different book name.",
+            details={"workspace_id": row["workspace_id"], "label": label},
+            retryable=False,
+        ) from exc
+    conn.commit()
+    return {
+        "profile": {"id": profile_id, "name": label},
+        "workspace": {"id": row["workspace_id"]},
+    }
+
+
 def _profile_defaults_for_workspace(
     conn: sqlite3.Connection,
     workspace_id: str,
@@ -4498,6 +4562,57 @@ def _create_workspace_payload(
         "activeWorkspaceId": workspace["id"],
         "activeProfileId": "",
     }
+
+
+def _rename_workspace_payload(
+    conn: sqlite3.Connection,
+    args: dict[str, Any],
+) -> dict[str, Any]:
+    workspace_id = args.get("workspace_id")
+    if not isinstance(workspace_id, str) or not workspace_id.strip():
+        raise AppError(
+            "Books set selection is missing.",
+            code="validation",
+            hint="Choose the books set to rename.",
+            retryable=False,
+        )
+    label = args.get("label")
+    if not isinstance(label, str) or not label.strip():
+        raise AppError(
+            "Books set name is required.",
+            code="validation",
+            hint="Enter a books set name.",
+            retryable=False,
+        )
+    workspace_id = workspace_id.strip()
+    label = label.strip()
+    row = conn.execute(
+        "SELECT id FROM workspaces WHERE id = ?",
+        (workspace_id,),
+    ).fetchone()
+    if row is None:
+        raise AppError(
+            "Books set not found.",
+            code="validation",
+            hint="Choose an existing books set.",
+            details={"workspace_id": workspace_id},
+            retryable=False,
+        )
+    try:
+        conn.execute(
+            "UPDATE workspaces SET label = ? WHERE id = ?",
+            (label, workspace_id),
+        )
+    except sqlite3.IntegrityError as exc:
+        raise AppError(
+            "Books set name already exists.",
+            code="conflict",
+            hint="Choose a different books set name.",
+            details={"workspace_id": workspace_id, "label": label},
+            retryable=False,
+        ) from exc
+    conn.commit()
+    return {"workspace": {"id": workspace_id, "name": label}}
 
 
 def _wallet_ref_from_args(args: dict[str, Any], kind: str) -> str:
@@ -6236,6 +6351,21 @@ def handle_request(
             False,
         )
 
+    if kind == "ui.profiles.rename":
+        return (
+            _with_request_id(
+                build_envelope(
+                    "ui.profiles.rename",
+                    _rename_profile_payload(
+                        ctx.conn,
+                        _coerce_args_dict(request_id, request.get("args")),
+                    ),
+                ),
+                request_id,
+            ),
+            False,
+        )
+
     if kind == "ui.profiles.switch":
         return (
             _with_request_id(
@@ -6400,6 +6530,21 @@ def handle_request(
                 build_envelope(
                     "ui.workspace.create",
                     _create_workspace_payload(
+                        ctx.conn,
+                        _coerce_args_dict(request_id, request.get("args")),
+                    ),
+                ),
+                request_id,
+            ),
+            False,
+        )
+
+    if kind == "ui.workspace.rename":
+        return (
+            _with_request_id(
+                build_envelope(
+                    "ui.workspace.rename",
+                    _rename_workspace_payload(
                         ctx.conn,
                         _coerce_args_dict(request_id, request.get("args")),
                     ),

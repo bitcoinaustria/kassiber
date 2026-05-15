@@ -259,7 +259,7 @@ function ProfileList({
 }) {
   if (loading) {
     return (
-      <div className="rounded-lg border border-line bg-paper-2 px-4 py-8 text-center text-sm text-ink-2">
+      <div className="rounded-lg border border-border bg-card px-4 py-8 text-center text-sm font-medium text-card-foreground shadow-sm">
         Loading local books...
       </div>
     );
@@ -267,7 +267,7 @@ function ProfileList({
 
   if (!snapshot || snapshot.workspaces.length === 0) {
     return (
-      <div className="space-y-3 rounded-lg border border-line bg-paper-2 p-4 text-sm text-ink-2">
+      <div className="space-y-3 rounded-lg border border-border bg-card p-4 text-sm text-card-foreground shadow-sm">
         <p>No books were found in this local data root.</p>
         <Button
           type="button"

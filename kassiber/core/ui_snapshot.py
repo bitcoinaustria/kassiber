@@ -344,10 +344,10 @@ def _tax_policy_label(profile: sqlite3.Row) -> str:
     country = str(profile["tax_country"] or "generic").strip().upper()
     if country == "AT":
         try:
-            algorithm = build_tax_policy(profile).default_accounting_method.upper()
+            algorithm = str(build_tax_policy(profile).default_accounting_method or "")
         except (AppError, ValueError, ImportError):
-            algorithm = profile["gains_algorithm"]
-        return f"Austria - {algorithm} - {profile['fiat_currency']}"
+            algorithm = "moving_average_at"
+        return f"Austria - {_human_tax_method(algorithm)} - {profile['fiat_currency']}"
     elif country == "GENERIC":
         country_label = "Generic"
     else:
@@ -356,6 +356,15 @@ def _tax_policy_label(profile: sqlite3.Row) -> str:
         f"{country_label} - {profile['gains_algorithm']} - "
         f"{profile['fiat_currency']} - {profile['tax_long_term_days']} day long-term"
     )
+
+
+def _human_tax_method(value: str) -> str:
+    normalized = str(value or "").strip().upper()
+    if normalized == "MOVING_AVERAGE_AT":
+        return "ATM"
+    if normalized == "MOVING_AVERAGE":
+        return "moving average"
+    return normalized or "unknown"
 
 
 def _profile_policy_method(profile: sqlite3.Row) -> str:
@@ -402,7 +411,6 @@ def build_profiles_snapshot(conn: sqlite3.Connection) -> dict[str, Any]:
             {
                 "id": row["id"],
                 "name": row["label"],
-                "role": "Owner",
                 "taxPolicy": _tax_policy_label(row),
                 "fiatCurrency": row["fiat_currency"],
                 "taxCountry": row["tax_country"],
@@ -437,7 +445,6 @@ def build_profiles_snapshot(conn: sqlite3.Connection) -> dict[str, Any]:
             {
                 "id": row["id"],
                 "name": row["label"],
-                "kind": "Personal",
                 "currency": next(iter(currencies)) if len(currencies) == 1 else "Mixed",
                 "jurisdiction": _workspace_jurisdiction(
                     tax_countries_by_workspace.get(row["id"], []),
