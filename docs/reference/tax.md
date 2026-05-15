@@ -36,7 +36,10 @@ After any transaction change, metadata change, exclusion change, transfer pair c
 
 ## Transfers
 
-Cross-wallet self-transfers are auto-detected when both legs share the same on-chain `txid`.
+Cross-wallet self-transfers are auto-detected when both legs share the same
+on-chain `txid` and asset. Those deterministic same-chain moves are kept out of
+the swap review queue; `transfers suggest` is for Lightning/Liquid layer hops
+and other pairs that need review.
 
 Reports do not auto-detect or auto-pair cross-asset swaps. If you have
 BTC ↔ LBTC peg-ins / peg-outs or submarine swaps, pair those legs before

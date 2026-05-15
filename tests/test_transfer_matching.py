@@ -34,6 +34,7 @@ def _row(**overrides):
         "wallet_id": "wallet-a",
         "wallet_label": "Wallet A",
         "wallet_kind": "descriptor",
+        "external_id": "",
         "payment_hash": None,
         "occurred_at": "2026-03-14T17:30:00Z",
         "direction": "outbound",
@@ -148,6 +149,50 @@ class PaymentHashExactMatchTests(unittest.TestCase):
 
 
 class HeuristicMatchTests(unittest.TestCase):
+    def test_same_txid_self_transfer_skipped_before_heuristic(self):
+        out = _row(
+            id="cold-out",
+            external_id="same-chain-txid",
+            wallet_id="cold",
+            wallet_label="Cold",
+            direction="outbound",
+            asset="BTC",
+            amount=100_100_000_000,
+        )
+        inbound = _row(
+            id="hot-in",
+            external_id="same-chain-txid",
+            wallet_id="hot",
+            wallet_label="Hot",
+            direction="inbound",
+            asset="BTC",
+            occurred_at="2026-03-14T17:32:00Z",
+            amount=100_000_000_000,
+        )
+        self.assertEqual(suggest_swap_candidates([out, inbound], tax_country="at"), [])
+
+    def test_same_txid_cross_asset_not_treated_as_self_transfer(self):
+        out = _row(
+            id="btc-out",
+            external_id="shared-provider-id",
+            wallet_id="onchain",
+            direction="outbound",
+            asset="BTC",
+            amount=100_000_000,
+        )
+        inbound = _row(
+            id="liquid-in",
+            external_id="shared-provider-id",
+            wallet_id="liquid",
+            direction="inbound",
+            asset="LBTC",
+            occurred_at="2026-03-14T17:32:00Z",
+            amount=99_500_000,
+        )
+        candidates = suggest_swap_candidates([out, inbound], tax_country="at")
+        self.assertEqual(len(candidates), 1)
+        self.assertEqual(candidates[0].default_kind, KIND_PEG_IN)
+
     def test_pegout_within_window_paired(self):
         out = _row(
             id="lbtc-out",
