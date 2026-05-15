@@ -1056,173 +1056,66 @@ def _month_key(dt):
     return f"{dt.year:04d}-{dt.month:02d}"
 
 
-def _summary_pdf_rate_events(conn, profile_id, hooks: ReportHooks, end_dt):
-    rows = conn.execute(
-        """
-        SELECT occurred_at, asset, amount, fiat_rate, fiat_value
-        FROM transactions
-        WHERE profile_id = ? AND excluded = 0
-          AND occurred_at <= ?
-          AND (fiat_rate IS NOT NULL OR fiat_value IS NOT NULL)
-        ORDER BY occurred_at ASC, created_at ASC, id ASC
-        """,
-        (profile_id, hooks.iso_z(end_dt)),
-    ).fetchall()
-    events = []
-    for row in rows:
-        rate = None
-        if row["fiat_rate"] is not None:
-            rate = dec(row["fiat_rate"])
-        elif row["fiat_value"] is not None and row["amount"]:
-            rate = dec(row["fiat_value"]) / msat_to_btc(row["amount"])
-        if rate is not None:
-            events.append((hooks.parse_iso_datetime(row["occurred_at"], "occurred_at"), row["asset"], rate))
-    return events
+def _summary_pdf_wallet_scope_is_all(conn, workspace_id, profile_id, hooks: ReportHooks, wallets):
+    all_ids = {str(row["id"]) for row in hooks.list_wallets(conn, workspace_id, profile_id)}
+    selected_ids = {str(row["id"]) for row in wallets}
+    return selected_ids == all_ids
 
 
-def _summary_pdf_balance_history(conn, profile_id, wallets, hooks: ReportHooks, start_dt, end_dt):
-    wallet_filter, wallet_params = _wallet_scope_sql("je.wallet_id", wallets)
+def _summary_pdf_tx_counts(conn, profile_id, wallets, hooks: ReportHooks, start_dt, end_dt):
+    wallet_filter, wallet_params = _wallet_scope_sql("t.wallet_id", wallets)
     rows = conn.execute(
         f"""
-        SELECT je.occurred_at,
-               je.asset,
-               je.quantity,
-               je.fiat_value,
-               COALESCE(je.cost_basis, 0) AS cost_basis
-        FROM journal_entries je
-        WHERE je.profile_id = ?
+        SELECT t.wallet_id, COUNT(*) AS tx_count
+        FROM transactions t
+        WHERE t.profile_id = ?
           AND {wallet_filter}
-          AND je.occurred_at <= ?
-        ORDER BY je.occurred_at ASC, je.created_at ASC, je.id ASC
+          AND t.excluded = 0
+          AND t.occurred_at >= ?
+          AND t.occurred_at <= ?
+        GROUP BY t.wallet_id
         """,
-        [profile_id, *wallet_params, hooks.iso_z(end_dt)],
+        [profile_id, *wallet_params, hooks.iso_z(start_dt), hooks.iso_z(end_dt)],
     ).fetchall()
-    events = [
-        (
-            hooks.parse_iso_datetime(row["occurred_at"], "occurred_at"),
-            row["asset"],
-            msat_to_btc(row["quantity"]),
-            dec(row["fiat_value"]),
-            dec(row["cost_basis"]),
-        )
-        for row in rows
-    ]
-    rate_events = _summary_pdf_rate_events(conn, profile_id, hooks, end_dt)
-    cumulative = defaultdict(lambda: Decimal("0"))
-    cumulative_cost = defaultdict(lambda: Decimal("0"))
-    rates = {}
-    event_idx = 0
-    rate_idx = 0
-    bucket = _floor_to_interval(start_dt, "month")
-    end_cap = _floor_to_interval(end_dt, "month")
-    results = []
-    while bucket <= end_cap:
-        bucket_end = _next_interval(bucket, "month")
-        while event_idx < len(events) and events[event_idx][0] < bucket_end:
-            _, asset, quantity, fiat_value, cost_basis = events[event_idx]
-            cumulative[asset] += quantity
-            if quantity >= 0:
-                cumulative_cost[asset] += fiat_value
-            else:
-                cumulative_cost[asset] -= cost_basis
-            event_idx += 1
-        while rate_idx < len(rate_events) and rate_events[rate_idx][0] < bucket_end:
-            _, asset, rate = rate_events[rate_idx]
-            rates[asset] = rate
-            rate_idx += 1
-        total_quantity = sum(cumulative.values(), Decimal("0"))
-        total_cost = sum(cumulative_cost.values(), Decimal("0"))
-        market_value = sum(quantity * rates.get(asset, Decimal("0")) for asset, quantity in cumulative.items())
-        nominal_period_end = bucket_end - timedelta(seconds=1)
-        effective_period_end = min(nominal_period_end, end_dt)
-        results.append(
-            {
-                "period_start": hooks.iso_z(bucket),
-                "period_end": hooks.iso_z(effective_period_end),
-                "period_partial": effective_period_end < nominal_period_end,
-                "quantity": float(total_quantity),
-                "cumulative_cost_basis": float(total_cost),
-                "market_value": float(market_value),
-            }
-        )
-        bucket = bucket_end
-    return results
+    return {row["wallet_id"]: int(row["tx_count"] or 0) for row in rows}
 
 
-def _summary_pdf_wallet_holdings(conn, profile_id, wallets, hooks: ReportHooks, end_dt, start_dt=None):
-    wallet_filter, wallet_params = _wallet_scope_sql("je.wallet_id", wallets)
-    rows = conn.execute(
-        f"""
-        SELECT je.wallet_id,
-               w.label AS wallet,
-               je.asset,
-               je.quantity,
-               je.fiat_value,
-               COALESCE(je.cost_basis, 0) AS cost_basis
-        FROM journal_entries je
-        JOIN wallets w ON w.id = je.wallet_id
-        WHERE je.profile_id = ?
-          AND {wallet_filter}
-          AND je.occurred_at <= ?
-        ORDER BY je.occurred_at ASC, je.created_at ASC, je.id ASC
-        """,
-        [profile_id, *wallet_params, hooks.iso_z(end_dt)],
-    ).fetchall()
-    rates = {}
-    for _dt, asset, rate in _summary_pdf_rate_events(conn, profile_id, hooks, end_dt):
-        rates[asset] = rate
+def _summary_pdf_portfolio_rows(conn, workspace_id, profile_id, hooks: ReportHooks, wallets):
+    rows = report_portfolio_summary(conn, workspace_id, profile_id, hooks)
+    if _summary_pdf_wallet_scope_is_all(conn, workspace_id, profile_id, hooks, wallets):
+        return rows
+    selected_labels = {str(row["label"]) for row in wallets}
+    return [row for row in rows if str(row["wallet"]) in selected_labels]
+
+
+def _summary_pdf_wallet_holdings_from_portfolio(wallets, portfolio_rows, tx_counts):
     buckets = {
-        row["id"]: {
+        str(row["label"]): {
+            "wallet_id": row["id"],
             "wallet": row["label"],
             "scope": f"{row['kind']} / {row['chain'] or 'chain'}",
             "assets": set(),
             "quantity": Decimal("0"),
             "cost_basis": Decimal("0"),
             "market_value": Decimal("0"),
-            "tx_count": 0,
+            "tx_count": tx_counts.get(row["id"], 0),
         }
         for row in wallets
     }
-    per_wallet_asset = defaultdict(lambda: {"quantity": Decimal("0"), "cost_basis": Decimal("0")})
-    for row in rows:
-        key = (row["wallet_id"], row["asset"])
-        item = per_wallet_asset[key]
-        quantity = msat_to_btc(row["quantity"])
-        item["quantity"] += quantity
-        if quantity >= 0:
-            item["cost_basis"] += dec(row["fiat_value"])
-        else:
-            item["cost_basis"] -= dec(row["cost_basis"])
-    for (wallet_id, asset), item in per_wallet_asset.items():
-        if item["quantity"] == 0:
+    for row in portfolio_rows:
+        bucket = buckets.get(str(row["wallet"]))
+        if bucket is None:
             continue
-        wallet_bucket = buckets[wallet_id]
-        wallet_bucket["assets"].add(asset)
-        wallet_bucket["quantity"] += item["quantity"]
-        wallet_bucket["cost_basis"] += item["cost_basis"]
-        wallet_bucket["market_value"] += item["quantity"] * rates.get(asset, Decimal("0"))
-    tx_filter, tx_params = _wallet_scope_sql("t.wallet_id", wallets)
-    tx_rows = conn.execute(
-        f"""
-        SELECT t.wallet_id, COUNT(*) AS tx_count
-        FROM transactions t
-        WHERE t.profile_id = ?
-          AND {tx_filter}
-          AND t.excluded = 0
-          {"AND t.occurred_at >= ?" if start_dt else ""}
-          AND t.occurred_at <= ?
-        GROUP BY t.wallet_id
-        """,
-        [profile_id, *tx_params, *([hooks.iso_z(start_dt)] if start_dt else []), hooks.iso_z(end_dt)],
-    ).fetchall()
-    for row in tx_rows:
-        if row["wallet_id"] in buckets:
-            buckets[row["wallet_id"]]["tx_count"] = int(row["tx_count"] or 0)
+        bucket["assets"].add(row["asset"])
+        bucket["quantity"] += dec(row["quantity"])
+        bucket["cost_basis"] += dec(row["cost_basis"])
+        bucket["market_value"] += dec(row["market_value"])
     results = []
     for row in wallets:
-        bucket = buckets[row["id"]]
+        bucket = buckets[str(row["label"])]
         results.append(
             {
+                "wallet_id": bucket["wallet_id"],
                 "wallet": bucket["wallet"],
                 "scope": bucket["scope"],
                 "assets": sorted(bucket["assets"]),
@@ -1235,17 +1128,154 @@ def _summary_pdf_wallet_holdings(conn, profile_id, wallets, hooks: ReportHooks, 
     return results
 
 
-def _summary_pdf_total_market_value(conn, profile_id, wallets, hooks: ReportHooks, end_dt):
-    return float(
-        sum(
-            dec(row["market_value"])
-            for row in _summary_pdf_wallet_holdings(conn, profile_id, wallets, hooks, end_dt)
+def _summary_pdf_balance_history_from_report(conn, workspace_id, profile_id, wallets, hooks: ReportHooks, start_dt, end_dt):
+    start_text = hooks.iso_z(start_dt)
+    end_text = hooks.iso_z(end_dt)
+    if _summary_pdf_wallet_scope_is_all(conn, workspace_id, profile_id, hooks, wallets):
+        rows = report_balance_history(
+            conn,
+            workspace_id,
+            profile_id,
+            hooks,
+            interval="month",
+            start=start_text,
+            end=end_text,
         )
+    else:
+        rows = []
+        for wallet in wallets:
+            rows.extend(
+                report_balance_history(
+                    conn,
+                    workspace_id,
+                    profile_id,
+                    hooks,
+                    interval="month",
+                    start=start_text,
+                    end=end_text,
+                    wallet_ref=wallet["id"],
+                )
+            )
+    buckets = defaultdict(
+        lambda: {
+            "quantity": Decimal("0"),
+            "cumulative_cost_basis": Decimal("0"),
+            "market_value": Decimal("0"),
+        }
     )
+    period_ends = {}
+    for row in rows:
+        key = row["period_start"]
+        bucket = buckets[key]
+        bucket["quantity"] += dec(row["quantity"])
+        bucket["cumulative_cost_basis"] += dec(row["cumulative_cost_basis"])
+        bucket["market_value"] += dec(row["market_value"])
+        period_ends[key] = row["period_end"]
+    results = []
+    for period_start in sorted(buckets):
+        period_end = period_ends[period_start]
+        period_end_dt = hooks.parse_iso_datetime(period_end, "period_end")
+        bucket = buckets[period_start]
+        results.append(
+            {
+                "period_start": period_start,
+                "period_end": period_end,
+                "period": period_start[:7],
+                "period_partial": end_dt < period_end_dt,
+                "quantity": float(bucket["quantity"]),
+                "cumulative_cost_basis": float(bucket["cumulative_cost_basis"]),
+                "market_value": float(bucket["market_value"]),
+            }
+        )
+    return results
 
 
 def _summary_pdf_total_market_value_from_holdings(rows):
     return float(sum(dec(row["market_value"]) for row in rows))
+
+
+def _summary_pdf_total_quantity_from_holdings(rows):
+    return float(sum(dec(row["quantity"]) for row in rows))
+
+
+def _summary_pdf_int(value):
+    try:
+        return int(value or 0)
+    except (TypeError, ValueError):
+        return 0
+
+
+def _summary_pdf_data_integrity(conn, profile, wallets, hooks: ReportHooks, start_dt, end_dt):
+    wallet_filter, wallet_params = _wallet_scope_sql("t.wallet_id", wallets)
+    tx_params = [profile["id"], *wallet_params, hooks.iso_z(start_dt), hooks.iso_z(end_dt)]
+    tx_summary = conn.execute(
+        f"""
+        SELECT COUNT(*) AS total_transactions,
+               SUM(CASE WHEN t.fiat_rate IS NOT NULL OR t.fiat_value IS NOT NULL THEN 1 ELSE 0 END)
+                    AS priced_transactions
+        FROM transactions t
+        WHERE t.profile_id = ?
+          AND {wallet_filter}
+          AND t.excluded = 0
+          AND t.occurred_at >= ?
+          AND t.occurred_at <= ?
+        """,
+        tx_params,
+    ).fetchone()
+    quarantine_rows = conn.execute(
+        f"""
+        SELECT jq.reason, COUNT(*) AS count
+        FROM journal_quarantines jq
+        JOIN transactions t ON t.id = jq.transaction_id
+        WHERE t.profile_id = ?
+          AND {wallet_filter}
+          AND t.excluded = 0
+          AND t.occurred_at >= ?
+          AND t.occurred_at <= ?
+        GROUP BY jq.reason
+        ORDER BY count DESC, jq.reason ASC
+        """,
+        tx_params,
+    ).fetchall()
+    current_tx_count = conn.execute(
+        "SELECT COUNT(*) AS count FROM transactions WHERE profile_id = ?",
+        (profile["id"],),
+    ).fetchone()["count"]
+    input_version = _summary_pdf_int(profile["journal_input_version"])
+    processed_version = _summary_pdf_int(profile["last_processed_input_version"])
+    last_processed_tx_count = _summary_pdf_int(profile["last_processed_tx_count"])
+    journals_current = bool(
+        profile["last_processed_at"]
+        and _summary_pdf_int(current_tx_count) == last_processed_tx_count
+        and input_version == processed_version
+    )
+    total_transactions = _summary_pdf_int(tx_summary["total_transactions"])
+    priced_transactions = _summary_pdf_int(tx_summary["priced_transactions"])
+    priced_percentage = (
+        (priced_transactions / total_transactions) * 100.0
+        if total_transactions
+        else 100.0
+    )
+    quarantine_reasons = [
+        {"reason": row["reason"], "count": _summary_pdf_int(row["count"])}
+        for row in quarantine_rows
+    ]
+    return {
+        "priced_transactions": priced_transactions,
+        "total_transactions": total_transactions,
+        "priced_percentage": priced_percentage,
+        "quarantine_count": sum(row["count"] for row in quarantine_reasons),
+        "quarantine_reasons": quarantine_reasons,
+        "journals": {
+            "status": "current" if journals_current else ("stale" if profile["last_processed_at"] else "not_processed"),
+            "current": journals_current,
+            "last_processed_at": profile["last_processed_at"],
+            "journal_input_version": input_version,
+            "last_processed_input_version": processed_version,
+            "last_processed_tx_count": last_processed_tx_count,
+            "current_tx_count": _summary_pdf_int(current_tx_count),
+        },
+    }
 
 
 def _summary_pdf_flow_periods(conn, profile_id, wallets, hooks: ReportHooks, start_dt, end_dt):
@@ -1371,36 +1401,27 @@ def build_summary_pdf_report_data(
     start_dt, end_dt = _summary_pdf_period(hooks, start=start, end=end)
     wallets = _resolve_wallet_scope_refs(conn, workspace["id"], profile["id"], hooks, wallet_refs=wallet_refs)
     generated_at = hooks.now_iso()
-    holdings_cache = {}
-
-    def holdings_at(as_of, tx_count_start=None):
-        key = (hooks.iso_z(as_of), hooks.iso_z(tx_count_start) if tx_count_start else "")
-        if key not in holdings_cache:
-            holdings_cache[key] = _summary_pdf_wallet_holdings(
-                conn,
-                profile["id"],
-                wallets,
-                hooks,
-                as_of,
-                start_dt=tx_count_start,
-            )
-        return holdings_cache[key]
-
-    history_rows = _summary_pdf_balance_history(conn, profile["id"], wallets, hooks, start_dt, end_dt)
-    wallet_holdings = holdings_at(end_dt, start_dt)
+    portfolio_rows = _summary_pdf_portfolio_rows(conn, workspace["id"], profile["id"], hooks, wallets)
+    tx_counts = _summary_pdf_tx_counts(conn, profile["id"], wallets, hooks, start_dt, end_dt)
+    wallet_holdings = _summary_pdf_wallet_holdings_from_portfolio(wallets, portfolio_rows, tx_counts)
+    holdings_totals = {
+        "total_quantity": _summary_pdf_total_quantity_from_holdings(wallet_holdings),
+        "total_market_value": _summary_pdf_total_market_value_from_holdings(wallet_holdings),
+    }
+    history_rows = _summary_pdf_balance_history_from_report(conn, workspace["id"], profile["id"], wallets, hooks, start_dt, end_dt)
     flow_periods, flow_totals = _summary_pdf_flow_periods(conn, profile["id"], wallets, hooks, start_dt, end_dt)
     realized_periods, realized_total = _summary_pdf_realized_periods(conn, profile["id"], wallets, hooks, start_dt, end_dt)
-    period_start_value = _summary_pdf_total_market_value_from_holdings(holdings_at(start_dt))
-    period_end_value = _summary_pdf_total_market_value_from_holdings(wallet_holdings)
+    period_start_value = history_rows[0]["market_value"] if history_rows else 0.0
+    period_end_value = history_rows[-1]["market_value"] if history_rows else 0.0
+    data_integrity = _summary_pdf_data_integrity(conn, profile, wallets, hooks, start_dt, end_dt)
     title = f"Kassiber Summary Report - {profile['label']}"
     snapshot = None
     if include_snapshot:
-        today_holdings = holdings_at(hooks.parse_iso_datetime(generated_at, "now"))
         snapshot = {
             "as_of": generated_at,
-            "wallets": today_holdings,
-            "total_quantity": float(sum(dec(row["quantity"]) for row in today_holdings)),
-            "total_market_value": float(sum(dec(row["market_value"]) for row in today_holdings)),
+            "wallets": wallet_holdings,
+            "total_quantity": holdings_totals["total_quantity"],
+            "total_market_value": holdings_totals["total_market_value"],
         }
     return {
         "workspace": workspace["label"],
@@ -1414,6 +1435,7 @@ def build_summary_pdf_report_data(
             "label": _summary_pdf_period_label(hooks, start_dt, end_dt),
         },
         "wallets": [{"id": row["id"], "label": row["label"]} for row in wallets],
+        "data_integrity": data_integrity,
         "metrics": {
             "period_start_value": period_start_value,
             "period_end_value": period_end_value,
@@ -1424,6 +1446,7 @@ def build_summary_pdf_report_data(
         },
         "balance_history": history_rows,
         "wallet_holdings": wallet_holdings,
+        "holdings_totals": holdings_totals,
         "realized_pnl_periods": realized_periods,
         "flow_periods": flow_periods,
         "wallet_appendix": [
@@ -4142,6 +4165,18 @@ def export_summary_pdf_report(
             "timeframe": report["timeframe"],
             "wallets": report["wallets"],
             "snapshot": bool(report.get("snapshot")),
+            "data_integrity": report["data_integrity"],
+            "wallet_holdings": report["wallet_holdings"],
+            "holdings_totals": report["holdings_totals"],
+            "snapshot_totals": (
+                {
+                    "total_quantity": report["snapshot"]["total_quantity"],
+                    "total_market_value": report["snapshot"]["total_market_value"],
+                }
+                if report.get("snapshot")
+                else None
+            ),
+            "balance_history": report["balance_history"],
         }
     )
     return written

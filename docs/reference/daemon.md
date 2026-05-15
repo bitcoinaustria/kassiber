@@ -102,8 +102,12 @@ daemon for the exact current allowlist:
 `ui.reports.export_summary_pdf` writes a managed stakeholder summary PDF. It
 accepts optional `start` / `end` RFC3339 timestamps, optional `wallets` as an
 array of wallet ids or labels, and `include_snapshot` to prepend an as-of-now
-cover snapshot. The export is portfolio-shaped and deliberately omits tax
-tables; Austrian tax PDFs remain the authoritative tax handoff.
+cover snapshot. The export response includes `data_integrity`,
+`wallet_holdings`, `holdings_totals`, `snapshot_totals`, and
+`balance_history` so callers can reconcile the generated PDF against the
+portfolio-summary and balance-history report surfaces. The export is
+portfolio-shaped and deliberately omits tax tables; Austrian tax PDFs remain
+the authoritative tax handoff.
 
 `supported_kinds` is the public UI allowlist the Tauri supervisor mirrors;
 treat this list (not the docs) as the source of truth for what the supervisor

@@ -3911,6 +3911,61 @@ class DaemonSmokeTest(unittest.TestCase):
                 ["Cold"],
             )
             self.assertEqual(summary_pdf["data"]["timeframe"]["label"], "2026-01-01 to 2026-12-31")
+            self.assertEqual(summary_pdf["data"]["data_integrity"]["total_transactions"], 1)
+            self.assertEqual(summary_pdf["data"]["data_integrity"]["priced_transactions"], 1)
+            self.assertEqual(summary_pdf["data"]["data_integrity"]["journals"]["status"], "current")
+            holding_total = sum(
+                float(row["market_value"])
+                for row in summary_pdf["data"]["wallet_holdings"]
+            )
+            self.assertAlmostEqual(
+                float(summary_pdf["data"]["holdings_totals"]["total_market_value"]),
+                holding_total,
+                places=6,
+            )
+            self.assertAlmostEqual(
+                float(summary_pdf["data"]["snapshot_totals"]["total_market_value"]),
+                holding_total,
+                places=6,
+            )
+            _write_payload(
+                proc,
+                {
+                    "request_id": "portfolio-summary-for-export",
+                    "kind": "ui.reports.portfolio_summary",
+                },
+            )
+            portfolio_for_export = _read_payload_timeout(proc)
+            cold_portfolio_value = sum(
+                float(row["market_value"])
+                for row in portfolio_for_export["data"]["rows"]
+                if row["wallet"] == "Cold"
+            )
+            self.assertAlmostEqual(holding_total, cold_portfolio_value, places=6)
+            _write_payload(
+                proc,
+                {
+                    "request_id": "balance-history-for-export",
+                    "kind": "ui.reports.balance_history",
+                    "args": {
+                        "interval": "month",
+                        "start": "2026-01-01T00:00:00Z",
+                        "end": "2026-12-31T23:59:59Z",
+                        "wallet": "Cold",
+                        "limit": 500,
+                    },
+                },
+            )
+            balance_history_for_export = _read_payload_timeout(proc)
+            expected_history_by_period = {}
+            for row in balance_history_for_export["data"]["rows"]:
+                bucket = expected_history_by_period.setdefault(row["period_start"], 0.0)
+                expected_history_by_period[row["period_start"]] = bucket + float(row["market_value"])
+            actual_history_by_period = {
+                row["period_start"]: float(row["market_value"])
+                for row in summary_pdf["data"]["balance_history"]
+            }
+            self.assertEqual(actual_history_by_period, expected_history_by_period)
             if shutil.which("pdftotext"):
                 summary_text = subprocess.run(
                     ["pdftotext", "-layout", str(summary_pdf_file), "-"],
@@ -3919,6 +3974,10 @@ class DaemonSmokeTest(unittest.TestCase):
                     capture_output=True,
                 ).stdout
                 self.assertIn("Kassiber Summary Report", summary_text)
+                self.assertIn("Data Integrity", summary_text)
+                self.assertIn("Priced transactions", summary_text)
+                self.assertIn("2026-01", summary_text)
+                self.assertIn("2026-12", summary_text)
                 self.assertIn("Wallet Appendix", summary_text)
                 self.assertNotIn("Kennzahl", summary_text)
                 self.assertNotIn("FinanzOnline", summary_text)

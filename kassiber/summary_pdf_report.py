@@ -129,6 +129,10 @@ def _scale(value: Decimal, low: Decimal, high: Decimal, size: float) -> float:
     return float((value - low) / (high - low)) * size
 
 
+def _period_label(row: Mapping[str, Any]) -> str:
+    return str(row.get("period") or row.get("period_start") or "")[:7]
+
+
 def _line_chart(rl: dict[str, Any], title: str, rows: Sequence[Mapping[str, Any]], currency: str):
     colors = rl["colors"]
     Drawing = rl["Drawing"]
@@ -162,6 +166,7 @@ def _line_chart(rl: dict[str, Any], title: str, rows: Sequence[Mapping[str, Any]
         x = left + plot_w * (idx / count)
         fiat_points.append((x, bottom + _scale(decimal_value(row.get("market_value")), fiat_low, fiat_high, plot_h)))
         btc_points.append((x, bottom + _scale(decimal_value(row.get("quantity")), btc_low, btc_high, plot_h)))
+        drawing.add(String(x, bottom - 8, _period_label(row), fontName=_font(rl, "regular"), fontSize=5, fillColor=colors.HexColor(BRAND_MUTED), textAnchor="middle"))
     if len(fiat_points) == 1:
         x, y = fiat_points[0]
         drawing.add(Line(x - 2, y, x + 2, y, strokeColor=colors.HexColor(BRAND_ACCENT), strokeWidth=1.4))
@@ -257,6 +262,7 @@ def _bar_chart(
     bar_slot = plot_w / max(len(rows), 1)
     for idx, row in enumerate(rows):
         x = left + idx * bar_slot + 2
+        drawing.add(String(x + bar_slot / 2, bottom - 8, _period_label(row), fontName=_font(rl, "regular"), fontSize=4.8, fillColor=colors.HexColor(BRAND_MUTED), textAnchor="middle"))
         if paired:
             inflow_h = _scale(decimal_value(row.get("inflow_volume")), Decimal("0"), max_value, plot_h)
             outflow_h = _scale(decimal_value(row.get("outflow_volume")), Decimal("0"), max_value, plot_h)
@@ -320,6 +326,7 @@ def write_summary_pdf(file_path: str | Path, report: Mapping[str, Any]) -> Mappi
     story: list[Any] = []
     currency = str(report.get("fiat_currency") or "")
     metrics = report.get("metrics") or {}
+    data_integrity = report.get("data_integrity") or {}
     story.append(_para(rl, styles, report.get("title") or "Kassiber Summary Report", "title"))
     story.append(_para(rl, styles, f"{report.get('workspace')} / {report.get('profile')}", "body"))
     story.append(_para(rl, styles, f"Timeframe: {report.get('timeframe', {}).get('label', '')} · Generated: {report.get('generated_at', '')}", "muted"))
@@ -346,6 +353,25 @@ def write_summary_pdf(file_path: str | Path, report: Mapping[str, Any]) -> Mappi
     )
     story.append(rl["Spacer"](1, 6))
     story.append(_para(rl, styles, f"Fees: {_btc(metrics.get('fees_btc'))} · {_money(currency, metrics.get('fees_fiat'))}", "muted"))
+    story.append(rl["Spacer"](1, 8))
+    story.append(_para(rl, styles, "Data Integrity", "h2"))
+    priced_total = int(data_integrity.get("total_transactions") or 0)
+    priced_count = int(data_integrity.get("priced_transactions") or 0)
+    priced_pct = decimal_value(data_integrity.get("priced_percentage"))
+    journal_status = (data_integrity.get("journals") or {}).get("status") or "unknown"
+    integrity_rows = [
+        ["Signal", "Status"],
+        ["Priced transactions", f"{priced_count} / {priced_total} ({priced_pct:.1f}%)"],
+        ["Journals", str(journal_status).replace("_", " ").title()],
+        ["Quarantines", str(int(data_integrity.get("quarantine_count") or 0))],
+    ]
+    quarantine_reasons = data_integrity.get("quarantine_reasons") or []
+    if quarantine_reasons:
+        for row in quarantine_reasons:
+            integrity_rows.append([f"Quarantine: {row.get('reason', '')}", str(int(row.get("count") or 0))])
+    else:
+        integrity_rows.append(["Quarantine reasons", "None in scope"])
+    story.append(_table(rl, integrity_rows, [70 * rl["mm"], 92 * rl["mm"]]))
     story.append(rl["PageBreak"]())
     story.append(_para(rl, styles, "Portfolio Movement", "h2"))
     story.append(_line_chart(rl, "Total balance over time", report.get("balance_history") or [], currency))
