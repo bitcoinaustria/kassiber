@@ -3573,6 +3573,8 @@ def _planned_auto_read_tools(validated: dict[str, Any]) -> list[AutoReadToolCall
         "tausch",
     ):
         add("ui.journals.transfers.list", {"limit": 10})
+        add("ui.journals.snapshot")
+        add("ui.reports.summary")
 
     if _message_has_any(
         text,

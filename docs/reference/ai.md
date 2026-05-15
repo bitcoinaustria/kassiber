@@ -294,7 +294,8 @@ surfaces:
 - `ui_reports_capital_gains` maps to daemon kind `ui.reports.capital_gains`
 - `ui_reports_summary` maps to daemon kind `ui.reports.summary`; it returns
   exact processed all-time summary totals, including asset and wallet
-  inflow/outflow fields in BTC, sat, and msat
+  inflow/outflow fields in BTC, sat, and msat, plus reviewed
+  transfer/swap pair rows that explain paired movement inside raw flows
 - `ui_reports_balance_sheet` maps to daemon kind `ui.reports.balance_sheet`;
   it returns exact processed current holdings by reporting bucket/account,
   including BTC, sat, msat, cost basis, market value, and unrealized PnL
@@ -305,14 +306,18 @@ surfaces:
 - `ui_reports_balance_history` maps to daemon kind
   `ui.reports.balance_history`; it returns processed balance-history buckets
   for trend questions
-- `ui_journals_snapshot` maps to daemon kind `ui.journals.snapshot`
+- `ui_journals_snapshot` maps to daemon kind `ui.journals.snapshot`; recent
+  rows include reviewed pair context for swap/peg journal rows when available
 - `ui_journals_quarantine` maps to daemon kind `ui.journals.quarantine`
+- `ui_journals_events_list` maps to daemon kind `ui.journals.events.list`; it
+  returns bounded processed journal events with transaction ids, Austrian
+  category fields, and reviewed pair context for swap/peg rows
 - `ui_journals_transfers_list` maps to daemon kind
   `ui.journals.transfers.list`
 - `ui_rates_summary` maps to daemon kind `ui.rates.summary`
 - `ui_rates_coverage` maps to daemon kind `ui.rates.coverage`; it returns
-  transaction pricing coverage, missing fiat price rows, and whether local
-  rates-cache samples can cover those gaps
+  transaction pricing coverage, rows that still require a usable fiat spot
+  price, and whether local rates-cache samples can cover those gaps
 - `ui_report_blockers` maps to daemon kind `ui.report.blockers`; it returns a
   deterministic report-readiness answer with blockers for missing scope,
   wallets, transactions, stale journals, quarantine, or missing prices

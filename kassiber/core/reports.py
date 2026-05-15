@@ -669,7 +669,7 @@ def _report_query_rows(conn, profile, wallet=None):
         tx_params,
     ).fetchall()
 
-    pair_filters = ["p.profile_id = ?"]
+    pair_filters = ["p.profile_id = ?", "p.deleted_at IS NULL"]
     pair_params = [profile["id"]]
     if wallet:
         pair_filters.append("(tout.wallet_id = ? OR tin.wallet_id = ?)")
@@ -911,6 +911,7 @@ def report_summary(conn, workspace_ref, profile_ref, hooks: ReportHooks, wallet_
         "realized": rollups["realized"],
         "asset_flow": _summary_flow_rows(query_rows["flow_by_asset"]),
         "wallet_flow": _summary_wallet_flow_rows(query_rows["flow_by_wallet"]),
+        "transfer_pairs": _generic_report_transfer_pair_rows(context),
     }
 
 
