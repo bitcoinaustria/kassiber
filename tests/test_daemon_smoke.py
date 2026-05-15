@@ -3854,6 +3854,17 @@ class DaemonSmokeTest(unittest.TestCase):
                 ),
                 encoding="utf-8",
             )
+            post_period_csv = Path(tmp) / "post-period.csv"
+            post_period_csv.write_text(
+                "\n".join(
+                    [
+                        "date,txid,direction,asset,amount,fee,fiat_rate,description",
+                        "2027-01-02T10:00:00Z,cold-current-inbound-1,inbound,BTC,0.30000000,0,70000,Post-period cold wallet acquisition",
+                        "",
+                    ]
+                ),
+                encoding="utf-8",
+            )
             _run_cli(
                 data_root,
                 "wallets",
@@ -3867,6 +3878,8 @@ class DaemonSmokeTest(unittest.TestCase):
             )
             _run_cli(data_root, "wallets", "import-csv", "--wallet", "Hot", "--file", str(hot_csv))
             _run_cli(data_root, "rates", "set", "BTC-EUR", "2026-03-01T00:00:00Z", "60000")
+            _run_cli(data_root, "wallets", "import-csv", "--wallet", "Cold", "--file", str(post_period_csv))
+            _run_cli(data_root, "rates", "set", "BTC-EUR", "2027-01-02T00:00:00Z", "70000")
             _run_cli(data_root, "journals", "process")
             proc = _start_daemon(data_root)
             self.assertEqual(_read_payload_timeout(proc)["kind"], "daemon.ready")
@@ -3923,11 +3936,16 @@ class DaemonSmokeTest(unittest.TestCase):
                 holding_total,
                 places=6,
             )
+            snapshot_wallet_total = sum(
+                float(row["market_value"])
+                for row in summary_pdf["data"]["snapshot_wallets"]
+            )
             self.assertAlmostEqual(
                 float(summary_pdf["data"]["snapshot_totals"]["total_market_value"]),
-                holding_total,
+                snapshot_wallet_total,
                 places=6,
             )
+            self.assertNotEqual(snapshot_wallet_total, holding_total)
             _write_payload(
                 proc,
                 {
@@ -3941,7 +3959,7 @@ class DaemonSmokeTest(unittest.TestCase):
                 for row in portfolio_for_export["data"]["rows"]
                 if row["wallet"] == "Cold"
             )
-            self.assertAlmostEqual(holding_total, cold_portfolio_value, places=6)
+            self.assertAlmostEqual(snapshot_wallet_total, cold_portfolio_value, places=6)
             _write_payload(
                 proc,
                 {
@@ -3966,6 +3984,11 @@ class DaemonSmokeTest(unittest.TestCase):
                 for row in summary_pdf["data"]["balance_history"]
             }
             self.assertEqual(actual_history_by_period, expected_history_by_period)
+            self.assertAlmostEqual(
+                holding_total,
+                expected_history_by_period["2026-12-01T00:00:00Z"],
+                places=6,
+            )
             if shutil.which("pdftotext"):
                 summary_text = subprocess.run(
                     ["pdftotext", "-layout", str(summary_pdf_file), "-"],

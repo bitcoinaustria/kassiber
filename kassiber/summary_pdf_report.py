@@ -133,6 +133,27 @@ def _period_label(row: Mapping[str, Any]) -> str:
     return str(row.get("period") or row.get("period_start") or "")[:7]
 
 
+def _axis_label(row: Mapping[str, Any], total: int) -> str:
+    label = _period_label(row)
+    if total > 12 and len(label) == 7 and label[4] == "-":
+        return label[2:]
+    return label
+
+
+def _axis_label_font_size(total: int, base: float) -> float:
+    if total > 18:
+        return 3.6
+    if total > 12:
+        return 4.1
+    return base
+
+
+def _axis_label_y(bottom: float, idx: int, total: int) -> float:
+    if total > 12 and idx % 2:
+        return bottom - 13
+    return bottom - 8
+
+
 def _line_chart(rl: dict[str, Any], title: str, rows: Sequence[Mapping[str, Any]], currency: str):
     colors = rl["colors"]
     Drawing = rl["Drawing"]
@@ -160,13 +181,14 @@ def _line_chart(rl: dict[str, Any], title: str, rows: Sequence[Mapping[str, Any]
     fiat_low, fiat_high = _series_bounds(fiat_values)
     btc_low, btc_high = _series_bounds(btc_values)
     count = max(len(rows) - 1, 1)
+    label_size = _axis_label_font_size(len(rows), 5)
     fiat_points = []
     btc_points = []
     for idx, row in enumerate(rows):
         x = left + plot_w * (idx / count)
         fiat_points.append((x, bottom + _scale(decimal_value(row.get("market_value")), fiat_low, fiat_high, plot_h)))
         btc_points.append((x, bottom + _scale(decimal_value(row.get("quantity")), btc_low, btc_high, plot_h)))
-        drawing.add(String(x, bottom - 8, _period_label(row), fontName=_font(rl, "regular"), fontSize=5, fillColor=colors.HexColor(BRAND_MUTED), textAnchor="middle"))
+        drawing.add(String(x, _axis_label_y(bottom, idx, len(rows)), _axis_label(row, len(rows)), fontName=_font(rl, "regular"), fontSize=label_size, fillColor=colors.HexColor(BRAND_MUTED), textAnchor="middle"))
     if len(fiat_points) == 1:
         x, y = fiat_points[0]
         drawing.add(Line(x - 2, y, x + 2, y, strokeColor=colors.HexColor(BRAND_ACCENT), strokeWidth=1.4))
@@ -238,9 +260,9 @@ def _bar_chart(
     drawing = Drawing(width, height)
     drawing.add(String(0, height - 10, title, fontName=_font(rl, "bold"), fontSize=9, fillColor=colors.HexColor(BRAND_INK)))
     left = 20
-    bottom = 22
+    bottom = 28
     plot_w = width - 28
-    plot_h = height - 42
+    plot_h = height - 48
     if not rows:
         drawing.add(Line(left, bottom, left + plot_w, bottom, strokeColor=colors.HexColor(BRAND_LINE), strokeWidth=0.5))
         drawing.add(String(left, bottom + plot_h / 2, "No rows in scope.", fontName=_font(rl, "regular"), fontSize=8, fillColor=colors.HexColor(BRAND_MUTED)))
@@ -259,9 +281,10 @@ def _bar_chart(
         baseline = bottom + _scale(Decimal("0"), low, high, plot_h)
         drawing.add(Line(left, baseline, left + plot_w, baseline, strokeColor=colors.HexColor(BRAND_LINE), strokeWidth=0.5))
     bar_slot = plot_w / max(len(rows), 1)
+    label_size = _axis_label_font_size(len(rows), 4.8)
     for idx, row in enumerate(rows):
         x = left + idx * bar_slot + 2
-        drawing.add(String(x + bar_slot / 2, bottom - 8, _period_label(row), fontName=_font(rl, "regular"), fontSize=4.8, fillColor=colors.HexColor(BRAND_MUTED), textAnchor="middle"))
+        drawing.add(String(x + bar_slot / 2, _axis_label_y(bottom, idx, len(rows)), _axis_label(row, len(rows)), fontName=_font(rl, "regular"), fontSize=label_size, fillColor=colors.HexColor(BRAND_MUTED), textAnchor="middle"))
         if paired:
             inflow_h = _scale(decimal_value(row.get("inflow_volume")), Decimal("0"), max_value, plot_h)
             outflow_h = _scale(decimal_value(row.get("outflow_volume")), Decimal("0"), max_value, plot_h)
@@ -277,9 +300,9 @@ def _bar_chart(
             color = COLOR_PROFIT if value >= 0 else BRAND_ACCENT
             drawing.add(Rect(x, y, max(bar_slot - 4, 1), bar_h, fillColor=colors.HexColor(color), strokeColor=None))
     if paired:
-        drawing.add(String(left, 8, f"Max {_money(currency, max_value)}", fontName=_font(rl, "regular"), fontSize=6.5, fillColor=colors.HexColor(BRAND_MUTED)))
+        drawing.add(String(left, 4, f"Max {_money(currency, max_value)}", fontName=_font(rl, "regular"), fontSize=6.5, fillColor=colors.HexColor(BRAND_MUTED)))
     else:
-        drawing.add(String(left, 8, f"Range {_signed_money(currency, low)} to {_signed_money(currency, high)}", fontName=_font(rl, "regular"), fontSize=6.5, fillColor=colors.HexColor(BRAND_MUTED)))
+        drawing.add(String(left, 4, f"Range {_signed_money(currency, low)} to {_signed_money(currency, high)}", fontName=_font(rl, "regular"), fontSize=6.5, fillColor=colors.HexColor(BRAND_MUTED)))
     return drawing
 
 
