@@ -150,6 +150,9 @@ const defaultTreasurySeriesVisibility: TreasurySeriesVisibility = {
 type TreasuryChartPoint = PortfolioChartPoint & {
   bitcoinPriceEur: number;
   avgCostEur: number | null;
+  lineBalanceBtc?: number;
+  lineBitcoinPriceEur?: number;
+  lineAvgCostEur?: number | null;
   reserveValueEur: number;
   activityBtc: number;
   activityCount: number;
@@ -1124,6 +1127,9 @@ function buildTreasuryBasePoint(
     ...point,
     bitcoinPriceEur,
     avgCostEur,
+    lineBalanceBtc: point.balanceBtc,
+    lineBitcoinPriceEur: bitcoinPriceEur,
+    lineAvgCostEur: avgCostEur,
     reserveValueEur: point.valueEur,
     activityBtc: 0,
     activityCount: 0,
@@ -1163,6 +1169,7 @@ function buildTreasuryActivityPoint(
       : anchor?.valueEur ?? snapshot.fiat.eurBalance;
   const avgCostEur =
     balanceBtc > 0 && costBasisEur > 0 ? costBasisEur / balanceBtc : null;
+  const displayedBalanceBtc = anchor?.balanceBtc ?? balanceBtc;
   const date = activityDateKey(event);
   return {
     date,
@@ -1181,7 +1188,7 @@ function buildTreasuryActivityPoint(
     activityCount: 1,
     activityValueEur: event.valueEur,
     eventPriceEur: event.priceEur,
-    eventBalanceBtc: balanceBtc,
+    eventBalanceBtc: displayedBalanceBtc,
     eventSize: Math.max(event.volumeBtc, event.feeBtc),
     eventFlow: event.flow,
     eventSignedBtc: event.signedBtc,
@@ -3346,7 +3353,10 @@ const RevenueFlowChart = ({
       0,
     );
     const netBtc = receivedBtc - spentBtc - feeBtc;
-    const chartStats = buildTreasuryChartStats(chartDisplayData);
+    const balancePoints = chartDisplayData.filter((point) => !point.isActivityEvent);
+    const chartStats = buildTreasuryChartStats(
+      balancePoints.length ? balancePoints : chartDisplayData,
+    );
     const statPeriodLabel = periodShortLabels[period];
     const selectedPoint = expanded
       ? (chartDisplayData.find((point) => point.date === expandedPointDate) ??
@@ -3363,7 +3373,6 @@ const RevenueFlowChart = ({
       const point = state.activePayload?.find((item) => item.payload)?.payload;
       if (point) setExpandedPointDate(point.date);
     };
-    const balancePoints = chartDisplayData.filter((point) => !point.isActivityEvent);
     const xAxisTicks = portfolioAxisTicks(
       balancePoints.length ? balancePoints : plottedData,
       period,
@@ -3713,7 +3722,7 @@ const RevenueFlowChart = ({
                     <Line
                       yAxisId="btc"
                       type="stepAfter"
-                      dataKey="balanceBtc"
+                      dataKey="lineBalanceBtc"
                       name={legendItems[0]?.label}
                       stroke={primaryColor}
                       strokeWidth={activeSeries === "primary" ? 3 : 2.5}
@@ -3724,6 +3733,7 @@ const RevenueFlowChart = ({
                       }
                       dot={false}
                       activeDot={expanded ? { r: 4 } : { r: 3 }}
+                      connectNulls
                       isAnimationActive={false}
                     />
                   )}
@@ -3731,7 +3741,7 @@ const RevenueFlowChart = ({
                     <Line
                       yAxisId="price"
                       type="linear"
-                      dataKey="bitcoinPriceEur"
+                      dataKey="lineBitcoinPriceEur"
                       name={legendItems[3]?.label}
                       stroke="#94a3b8"
                       strokeWidth={activeSeries === "price" ? 2.4 : 1.6}
@@ -3741,6 +3751,7 @@ const RevenueFlowChart = ({
                       }
                       dot={false}
                       activeDot={expanded ? { r: 3 } : { r: 2 }}
+                      connectNulls
                       isAnimationActive={false}
                     />
                   )}
@@ -3748,9 +3759,9 @@ const RevenueFlowChart = ({
                     <Line
                       yAxisId="price"
                       type="stepAfter"
-                      dataKey="avgCostEur"
+                      dataKey="lineAvgCostEur"
                       name={legendItems[2]?.label}
-                      connectNulls={false}
+                      connectNulls
                       stroke={secondaryColor}
                       strokeWidth={activeSeries === "basis" ? 3 : 2}
                       strokeDasharray="5 5"
@@ -3818,12 +3829,13 @@ const RevenueFlowChart = ({
                         </defs>
                         <Area
                           type="monotone"
-                          dataKey="bitcoinPriceEur"
+                          dataKey="lineBitcoinPriceEur"
                           stroke={primaryColor}
                           strokeWidth={1.35}
                           fill={`url(#${brushGradientId})`}
                           fillOpacity={1}
                           dot={false}
+                          connectNulls
                           isAnimationActive={false}
                         />
                       </AreaChart>
