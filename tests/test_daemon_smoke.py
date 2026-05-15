@@ -21,6 +21,7 @@ from kassiber.daemon import (
     _auto_tool_context_for_model,
     _auto_process_journals_if_needed,
     _execute_mutating_ai_tool,
+    _execute_read_only_ai_tool,
     _maintenance_run_payload,
     _planned_auto_read_tools,
     _reports_tax_summary_payload,
@@ -2977,6 +2978,45 @@ class DaemonSmokeTest(unittest.TestCase):
         payload_mock.assert_called_once()
         self.assertIs(payload_mock.call_args.args[0], conn_marker)
         self.assertEqual(results[0]["envelope"]["kind"], "ui.journals.process")
+
+    def test_journal_events_ai_tool_dispatches_to_snapshot_builder(self):
+        task_queue = queue.Queue()
+        runtime = AiToolRuntime(
+            data_root="/not-used",
+            runtime_config={},
+            main_thread_tasks=task_queue,
+            maintenance_state={},
+        )
+        call = ParsedAiToolCall(
+            call_id="call_1",
+            name="ui.journals.events.list",
+            arguments={"limit": 5},
+        )
+        results = []
+
+        with (
+            mock.patch(
+                "kassiber.daemon.open_db",
+                side_effect=AssertionError("should use daemon main connection"),
+            ),
+            mock.patch(
+                "kassiber.daemon.build_journal_events_list_snapshot",
+                return_value={"events": [], "summary": {"count": 0}},
+            ) as payload_mock,
+        ):
+            thread = threading.Thread(
+                target=lambda: results.append(_execute_read_only_ai_tool(call, runtime)),
+            )
+            thread.start()
+            task = task_queue.get(timeout=1)
+            conn_marker = object()
+            task.response.put((True, task.callback(conn_marker)))
+            thread.join(timeout=1)
+
+        self.assertFalse(thread.is_alive())
+        payload_mock.assert_called_once_with(conn_marker, {"limit": 5})
+        self.assertTrue(results[0]["ok"])
+        self.assertEqual(results[0]["envelope"]["kind"], "ui.journals.events.list")
 
     def test_auto_tool_context_marks_imported_text_as_untrusted_user_data(self):
         context = _auto_tool_context_for_model(

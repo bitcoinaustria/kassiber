@@ -2886,6 +2886,8 @@ def _execute_read_only_ai_tool(call: ParsedAiToolCall, runtime: AiToolRuntime) -
                 payload = _reports_balance_history_payload(conn, call.arguments)
             elif entry.daemon_kind == "ui.journals.snapshot":
                 payload = build_journals_snapshot(conn)
+            elif entry.daemon_kind == "ui.journals.events.list":
+                payload = build_journal_events_list_snapshot(conn, call.arguments)
             elif entry.daemon_kind == "ui.journals.quarantine":
                 payload = build_journals_quarantine_snapshot(conn, call.arguments)
             elif entry.daemon_kind == "ui.journals.transfers.list":
