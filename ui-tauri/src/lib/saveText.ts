@@ -1,21 +1,33 @@
 /**
- * Shared wrapper around the `save_text_file_as` Tauri command.
+ * Wrappers around the purpose-specific Tauri text-export commands.
  *
- * Each call site supplies the extensions it expects so the Rust command
- * can keep its allowlist guard accurate without baking the choice into
- * the helper. Used by chat export, diagnostics export, and any future
- * "save this text blob to a user-chosen path" surface.
+ * Each command in the native side hard-codes which file extension it
+ * accepts (see `ui-tauri/src-tauri/src/lib.rs::write_text_export`). The
+ * renderer cannot influence that list — if you want a new extension,
+ * add a new Tauri command on the native side, do not parameterize an
+ * existing one. This keeps the WebView-invoke boundary from becoming an
+ * arbitrary text-file-write primitive.
  */
 
-export async function saveTextFileAs(
+async function invokeSave(
+  command: "save_chat_export_as" | "save_diagnostics_log_as",
   destinationPath: string,
   contents: string,
-  allowedExtensions: string[],
 ): Promise<string> {
   const { invoke } = await import("@tauri-apps/api/core");
-  return invoke<string>("save_text_file_as", {
-    destinationPath,
-    contents,
-    allowedExtensions,
-  });
+  return invoke<string>(command, { destinationPath, contents });
+}
+
+export function saveChatExportAs(
+  destinationPath: string,
+  contents: string,
+): Promise<string> {
+  return invokeSave("save_chat_export_as", destinationPath, contents);
+}
+
+export function saveDiagnosticsLogAs(
+  destinationPath: string,
+  contents: string,
+): Promise<string> {
+  return invokeSave("save_diagnostics_log_as", destinationPath, contents);
 }

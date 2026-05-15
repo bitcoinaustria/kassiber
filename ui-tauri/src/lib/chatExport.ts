@@ -1,6 +1,6 @@
 import type { AiChatMessage } from "@/daemon/stream";
 import { isFilePickerAvailable, saveFile } from "@/lib/filePicker";
-import { saveTextFileAs } from "@/lib/saveText";
+import { saveChatExportAs } from "@/lib/saveText";
 
 type ChatExportResult = "saved" | "download-started" | "cancelled";
 
@@ -91,7 +91,7 @@ export async function saveChatExport(
       filters: [{ name: "Markdown", extensions: ["md"] }],
     });
     if (!destination) return "cancelled";
-    await saveTextFileAs(destination, contents, ["md"]);
+    await saveChatExportAs(destination, contents);
     return "saved";
   }
 
