@@ -13,6 +13,7 @@ directory and asserting the import succeeds.
 from __future__ import annotations
 
 import os
+import shutil
 import stat
 import subprocess
 import sys
@@ -61,14 +62,7 @@ class Rp2ReadOnlyCwdImportTest(unittest.TestCase):
             self.assertIn("ok", result.stdout)
         finally:
             os.chmod(scratch, stat.S_IRWXU)
-            for child in scratch.iterdir():
-                if child.is_dir():
-                    for sub in child.iterdir():
-                        sub.unlink(missing_ok=True)
-                    child.rmdir()
-                else:
-                    child.unlink(missing_ok=True)
-            scratch.rmdir()
+            shutil.rmtree(scratch, ignore_errors=True)
 
 
 if __name__ == "__main__":

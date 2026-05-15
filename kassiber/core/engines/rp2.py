@@ -89,6 +89,13 @@ def _prime_rp2_logger() -> None:
     # crashes with EACCES. Trigger that import under a writable scratch cwd so
     # the handler binds to a writable file; subsequent rp2 imports reuse the
     # cached module.
+    #
+    # ``os.chdir`` is process-wide: any concurrent thread that reads cwd during
+    # this window sees the scratch dir. The daemon is single-threaded for
+    # request handling and priming happens once per process on the first
+    # rp2-needing request, so this is safe today. If report generation is ever
+    # parallelized, gate this behind a lock or move the chdir to daemon
+    # startup.
     if "rp2.logger" in sys.modules:
         return
     scratch = Path(tempfile.gettempdir()) / "kassiber-rp2-logs"

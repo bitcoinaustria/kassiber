@@ -6,6 +6,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { useUiStore, type AppLogEntry, type AppLogLevel } from "@/store/ui";
 import { cn } from "@/lib/utils";
 import { isFilePickerAvailable, saveFile } from "@/lib/filePicker";
+import { saveTextFileAs } from "@/lib/saveText";
 
 const LEVEL_CLASS: Record<AppLogLevel, string> = {
   debug: "border-slate-500/25 bg-slate-500/10 text-slate-700 dark:text-slate-300",
@@ -35,12 +36,7 @@ export function Diagnostics() {
           filters: [{ name: "JSON", extensions: ["json"] }],
         });
         if (!destination) return;
-        const { invoke } = await import("@tauri-apps/api/core");
-        await invoke<string>("save_text_file_as", {
-          destinationPath: destination,
-          contents,
-          allowedExtensions: ["json"],
-        });
+        await saveTextFileAs(destination, contents, ["json"]);
         return;
       }
       triggerBrowserDownload(filename, contents);

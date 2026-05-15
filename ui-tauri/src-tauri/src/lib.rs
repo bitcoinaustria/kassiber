@@ -490,7 +490,11 @@ fn save_text_file_as(
         .iter()
         .map(|ext| ext.trim_start_matches('.').to_ascii_lowercase())
         .collect::<Vec<_>>();
-    if actual.as_deref().map(|ext| !permitted.iter().any(|p| p == ext)).unwrap_or(true) {
+    let allowed = actual
+        .as_deref()
+        .map(|ext| permitted.iter().any(|p| p == ext))
+        .unwrap_or(false);
+    if !allowed {
         let expected = permitted
             .iter()
             .map(|ext| format!(".{ext}"))
