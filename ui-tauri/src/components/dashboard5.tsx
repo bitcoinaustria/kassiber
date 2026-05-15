@@ -133,8 +133,9 @@ type TreasuryLegendItem = {
 
 const DEFAULT_INCOMING_MARKER_MIN_BTC = 0.0025;
 const DEFAULT_OUTGOING_MARKER_MIN_BTC = 0;
-const MAX_ACTIVITY_MARKER_MIN_BTC = 0.01;
-const ACTIVITY_MARKER_MIN_STEP_BTC = 0.00005;
+const ACTIVITY_MARKER_SLIDER_MAX_BTC = 1;
+const ACTIVITY_MARKER_INPUT_STEP_BTC = 0.00000001;
+const ACTIVITY_MARKER_SLIDER_MARKS = [0, 0.0025, 0.01, 0.1, 0.5, 1] as const;
 const INCOMING_MARKER_MIN_PARAM = "incomingMinBtc";
 const OUTGOING_MARKER_MIN_PARAM = "outgoingMinBtc";
 const LEGACY_INCOMING_MARKER_MIN_PARAM = "incomingMin";
@@ -626,10 +627,10 @@ function initialTimePeriodFromUrl(): TimePeriod {
 
 function clampActivityMarkerMinimum(value: number) {
   if (!Number.isFinite(value)) return 0;
-  const clamped = Math.min(Math.max(value, 0), MAX_ACTIVITY_MARKER_MIN_BTC);
+  const clamped = Math.max(value, 0);
   return (
-    Math.round(clamped / ACTIVITY_MARKER_MIN_STEP_BTC) *
-    ACTIVITY_MARKER_MIN_STEP_BTC
+    Math.round(clamped / ACTIVITY_MARKER_INPUT_STEP_BTC) *
+    ACTIVITY_MARKER_INPUT_STEP_BTC
   );
 }
 
@@ -659,6 +660,13 @@ function serializeActivityMarkerMinimum(value: number) {
     .toFixed(8)
     .replace(/0+$/, "")
     .replace(/\.$/, "");
+}
+
+function formatEditableActivityMarkerMinimum(value: number) {
+  const serialized = serializeActivityMarkerMinimum(value);
+  const [, fraction = ""] = serialized.split(".");
+  const precision = Math.min(8, Math.max(1, fraction.length + 1));
+  return clampActivityMarkerMinimum(value).toFixed(precision);
 }
 
 function fallbackPortfolioData(
@@ -935,8 +943,67 @@ function formatBtcAxis(value: number) {
   return formatBtc(value, { precision }).replace("₿ ", "₿");
 }
 
-function formatActivityMarkerMinimum(value: number) {
-  return `${serializeActivityMarkerMinimum(value)} BTC`;
+function activityMarkerSliderValue(value: number) {
+  const clamped = Math.min(
+    clampActivityMarkerMinimum(value),
+    ACTIVITY_MARKER_SLIDER_MAX_BTC,
+  );
+  let closestIndex = 0;
+  let closestDistance = Number.POSITIVE_INFINITY;
+  ACTIVITY_MARKER_SLIDER_MARKS.forEach((mark, index) => {
+    const distance = Math.abs(mark - clamped);
+    if (distance < closestDistance) {
+      closestDistance = distance;
+      closestIndex = index;
+    }
+  });
+  return closestIndex;
+}
+
+function ActivityMarkerSlider({
+  id,
+  label,
+  value,
+  color,
+  onChange,
+}: {
+  id: string;
+  label: string;
+  value: number;
+  color: string;
+  onChange: (value: number) => void;
+}) {
+  const marksId = `${id}-marks`;
+  return (
+    <div className="mt-3 space-y-2">
+      <input
+        aria-label={label}
+        className="h-2 w-full cursor-pointer"
+        list={marksId}
+        min={0}
+        max={ACTIVITY_MARKER_SLIDER_MARKS.length - 1}
+        step={1}
+        type="range"
+        value={activityMarkerSliderValue(value)}
+        style={{ accentColor: color }}
+        onChange={(event) =>
+          onChange(ACTIVITY_MARKER_SLIDER_MARKS[Number(event.currentTarget.value)] ?? 0)
+        }
+      />
+      <datalist id={marksId}>
+        {ACTIVITY_MARKER_SLIDER_MARKS.map((mark, index) => (
+          <option key={mark} value={index} label={serializeActivityMarkerMinimum(mark)} />
+        ))}
+      </datalist>
+      <div className="flex justify-between text-[10px] text-muted-foreground">
+        {ACTIVITY_MARKER_SLIDER_MARKS.map((mark) => (
+          <span key={mark} className="tabular-nums">
+            {serializeActivityMarkerMinimum(mark)}
+          </span>
+        ))}
+      </div>
+    </div>
+  );
 }
 
 function compactEventId(value: string | undefined) {
@@ -2860,6 +2927,13 @@ type ChartControlsSheetProps = {
   hideSensitive: boolean;
 };
 
+type ActivityMarkerValueEditorProps = {
+  value: number;
+  onChange: (value: number) => void;
+  className?: string;
+  hidden: boolean;
+};
+
 function ActivityFlowKey() {
   return (
     <div className="rounded-md border p-3">
@@ -3082,24 +3156,18 @@ function ChartControlsSheet({
                     {incomingMarkerCount.toLocaleString("en-US")} dots shown
                   </p>
                 </div>
-                <span
-                  className={cn("font-medium tabular-nums", blurClass(hideSensitive))}
-                >
-                  {formatActivityMarkerMinimum(incomingMarkerMinimumBtc)}
-                </span>
+                <ActivityMarkerValueEditor
+                  value={incomingMarkerMinimumBtc}
+                  onChange={onIncomingMarkerMinimumChange}
+                  hidden={hideSensitive}
+                />
               </div>
-              <input
-                aria-label="Minimum incoming payment dot size in BTC"
-                className="mt-3 h-2 w-full cursor-pointer"
-                min={0}
-                max={MAX_ACTIVITY_MARKER_MIN_BTC}
-                step={ACTIVITY_MARKER_MIN_STEP_BTC}
-                type="range"
+              <ActivityMarkerSlider
+                id="incoming-marker-minimum"
+                label="Minimum incoming payment dot size in BTC"
                 value={incomingMarkerMinimumBtc}
-                style={{ accentColor: activityFlowColors.incoming }}
-                onChange={(event) =>
-                  onIncomingMarkerMinimumChange(Number(event.currentTarget.value))
-                }
+                color={activityFlowColors.incoming}
+                onChange={onIncomingMarkerMinimumChange}
               />
             </div>
 
@@ -3115,33 +3183,88 @@ function ChartControlsSheet({
                     {outgoingMarkerCount.toLocaleString("en-US")} dots shown
                   </p>
                 </div>
-                <span
-                  className={cn(
-                    "font-medium tabular-nums text-red-500 dark:text-red-400",
-                    blurClass(hideSensitive),
-                  )}
-                >
-                  {formatActivityMarkerMinimum(outgoingMarkerMinimumBtc)}
-                </span>
+                <ActivityMarkerValueEditor
+                  value={outgoingMarkerMinimumBtc}
+                  onChange={onOutgoingMarkerMinimumChange}
+                  className="text-red-500 dark:text-red-400"
+                  hidden={hideSensitive}
+                />
               </div>
-              <input
-                aria-label="Minimum outgoing activity dot size in BTC"
-                className="mt-3 h-2 w-full cursor-pointer"
-                min={0}
-                max={MAX_ACTIVITY_MARKER_MIN_BTC}
-                step={ACTIVITY_MARKER_MIN_STEP_BTC}
-                type="range"
+              <ActivityMarkerSlider
+                id="outgoing-marker-minimum"
+                label="Minimum outgoing activity dot size in BTC"
                 value={outgoingMarkerMinimumBtc}
-                style={{ accentColor: activityFlowColors.outgoing }}
-                onChange={(event) =>
-                  onOutgoingMarkerMinimumChange(Number(event.currentTarget.value))
-                }
+                color={activityFlowColors.outgoing}
+                onChange={onOutgoingMarkerMinimumChange}
               />
             </div>
           </div>
         </div>
       </SheetContent>
     </Sheet>
+  );
+}
+
+function ActivityMarkerValueEditor({
+  value,
+  onChange,
+  className,
+  hidden,
+}: ActivityMarkerValueEditorProps) {
+  const formattedValue = formatEditableActivityMarkerMinimum(value);
+  const [draft, setDraft] = React.useState(formattedValue);
+  const [editing, setEditing] = React.useState(false);
+
+  React.useEffect(() => {
+    if (!editing) setDraft(formattedValue);
+  }, [editing, formattedValue]);
+
+  const commitDraft = React.useCallback(
+    (rawValue: string) => {
+      const parsed = Number(rawValue);
+      if (!rawValue.trim() || !Number.isFinite(parsed)) {
+        setDraft(formatEditableActivityMarkerMinimum(value));
+        return;
+      }
+      const nextValue = clampActivityMarkerMinimum(parsed);
+      onChange(nextValue);
+      setDraft(formatEditableActivityMarkerMinimum(nextValue));
+    },
+    [onChange, value],
+  );
+
+  return (
+    <label
+      className={cn(
+        "group inline-flex h-8 items-center rounded-md border border-transparent bg-transparent transition-colors hover:border-border hover:bg-background focus-within:border-ring focus-within:bg-background focus-within:ring-2 focus-within:ring-ring/20",
+        className,
+        hidden && blurClass(true),
+      )}
+      title="Click to enter a custom BTC minimum"
+    >
+      <input
+        aria-label="Custom marker minimum in BTC"
+        className="h-full w-[10ch] rounded-l-md bg-transparent px-2 text-right font-medium tabular-nums outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+        min={0}
+        step={ACTIVITY_MARKER_INPUT_STEP_BTC}
+        type="number"
+        value={editing ? draft : formattedValue}
+        onBlur={(event) => {
+          commitDraft(event.currentTarget.value);
+          setEditing(false);
+        }}
+        onChange={(event) => {
+          const nextDraft = event.currentTarget.value;
+          setDraft(nextDraft);
+          const parsed = Number(nextDraft);
+          if (nextDraft.trim() && Number.isFinite(parsed)) {
+            onChange(clampActivityMarkerMinimum(parsed));
+          }
+        }}
+        onFocus={() => setEditing(true)}
+      />
+      <span className="pr-2 text-xs">BTC</span>
+    </label>
   );
 }
 
@@ -3238,31 +3361,34 @@ const RevenueFlowChart = ({
 
   React.useEffect(() => {
     if (typeof window === "undefined") return;
-    const params = new URLSearchParams(window.location.search);
-    params.set("period", period);
-    params.delete(LEGACY_INCOMING_MARKER_MIN_PARAM);
-    params.delete(LEGACY_OUTGOING_MARKER_MIN_PARAM);
-    if (incomingMarkerMinimumBtc === DEFAULT_INCOMING_MARKER_MIN_BTC) {
-      params.delete(INCOMING_MARKER_MIN_PARAM);
-    } else {
-      params.set(
-        INCOMING_MARKER_MIN_PARAM,
-        serializeActivityMarkerMinimum(incomingMarkerMinimumBtc),
-      );
-    }
-    if (outgoingMarkerMinimumBtc === DEFAULT_OUTGOING_MARKER_MIN_BTC) {
-      params.delete(OUTGOING_MARKER_MIN_PARAM);
-    } else {
-      params.set(
-        OUTGOING_MARKER_MIN_PARAM,
-        serializeActivityMarkerMinimum(outgoingMarkerMinimumBtc),
-      );
-    }
-    const nextQuery = params.toString();
-    const nextUrl = nextQuery
-      ? `${window.location.pathname}?${nextQuery}`
-      : window.location.pathname;
-    window.history.replaceState(null, "", nextUrl);
+    const timeout = window.setTimeout(() => {
+      const params = new URLSearchParams(window.location.search);
+      params.set("period", period);
+      params.delete(LEGACY_INCOMING_MARKER_MIN_PARAM);
+      params.delete(LEGACY_OUTGOING_MARKER_MIN_PARAM);
+      if (incomingMarkerMinimumBtc === DEFAULT_INCOMING_MARKER_MIN_BTC) {
+        params.delete(INCOMING_MARKER_MIN_PARAM);
+      } else {
+        params.set(
+          INCOMING_MARKER_MIN_PARAM,
+          serializeActivityMarkerMinimum(incomingMarkerMinimumBtc),
+        );
+      }
+      if (outgoingMarkerMinimumBtc === DEFAULT_OUTGOING_MARKER_MIN_BTC) {
+        params.delete(OUTGOING_MARKER_MIN_PARAM);
+      } else {
+        params.set(
+          OUTGOING_MARKER_MIN_PARAM,
+          serializeActivityMarkerMinimum(outgoingMarkerMinimumBtc),
+        );
+      }
+      const nextQuery = params.toString();
+      const nextUrl = nextQuery
+        ? `${window.location.pathname}?${nextQuery}`
+        : window.location.pathname;
+      window.history.replaceState(null, "", nextUrl);
+    }, 150);
+    return () => window.clearTimeout(timeout);
   }, [incomingMarkerMinimumBtc, outgoingMarkerMinimumBtc, period]);
 
   React.useEffect(() => {
@@ -3341,9 +3467,6 @@ const RevenueFlowChart = ({
       : "treasuryBrushGradient";
     const visibleLatestReserve = snapshot.fiat.eurBalance;
     const visibleCostBasis = snapshot.fiat.eurCostBasis;
-    const latestBalanceBtc = latestPortfolioBalanceBtc(snapshot);
-    const visibleAvgCost =
-      latestBalanceBtc > 0 ? visibleCostBasis / latestBalanceBtc : (latestPoint?.avgCostEur ?? 0);
     const gainEur = visibleLatestReserve - visibleCostBasis;
     const gainPct = visibleCostBasis
       ? (gainEur / Math.abs(visibleCostBasis)) * 100
@@ -3459,6 +3582,7 @@ const RevenueFlowChart = ({
                 events
               </span>
               <span>
+                net{" "}
                 <span
                   className={cn(
                     "font-semibold",
@@ -3469,43 +3593,28 @@ const RevenueFlowChart = ({
                   )}
                 >
                   {formatBtc(netBtc, { precision: 4, sign: true })}
-                </span>{" "}
-                net
+                </span>
               </span>
               <span>
-                Received{" "}
+                in{" "}
                 <span className={cn("font-semibold text-foreground", blurClass(hideSensitive))}>
                   {formatBtc(receivedBtc, { precision: 4 })}
                 </span>
               </span>
               <span>
-                Spent{" "}
+                out{" "}
                 <span className={cn("font-semibold text-foreground", blurClass(hideSensitive))}>
                   {formatBtc(spentBtc, { precision: 4 })}
                 </span>
               </span>
               {swapBtc > 0 && (
                 <span>
-                  Swapped{" "}
+                  swap{" "}
                   <span className={cn("font-semibold text-foreground", blurClass(hideSensitive))}>
                     {formatBtc(swapBtc, { precision: 4 })}
                   </span>
                 </span>
               )}
-              {feeBtc > 0 && (
-                <span>
-                  Fees{" "}
-                  <span className={cn("font-semibold text-foreground", blurClass(hideSensitive))}>
-                    {formatBtc(feeBtc, { precision: 8 })}
-                  </span>
-                </span>
-              )}
-              <span>
-                Avg basis{" "}
-                <span className={cn("font-semibold text-foreground", blurClass(hideSensitive))}>
-                  {formatEurPrice(visibleAvgCost)}
-                </span>
-              </span>
               {gainPct !== null && (
                 <span
                   className={cn(
@@ -3826,7 +3935,7 @@ const RevenueFlowChart = ({
                     <Brush
                       className="text-muted-foreground"
                       dataKey="date"
-                      fill="rgba(12, 10, 8, 0.78)"
+                      fill="color-mix(in oklch, var(--muted) 70%, var(--background))"
                       height={expanded ? 60 : 74}
                       padding={{ top: 8, right: 1, bottom: 8, left: 1 }}
                       travellerWidth={10}

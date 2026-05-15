@@ -12,7 +12,7 @@
   "app": {
     "windows": [
       {
-        "title": "Kassiber",
+        "title": "",
         "width": 1280,
         "height": 860,
         "minWidth": 980,
