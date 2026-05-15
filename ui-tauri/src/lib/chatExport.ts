@@ -30,11 +30,13 @@ type WindowWithSavePicker = Window &
 async function saveTextFileAs(
   destinationPath: string,
   contents: string,
+  allowedExtensions: string[],
 ): Promise<string> {
   const { invoke } = await import("@tauri-apps/api/core");
   return invoke<string>("save_text_file_as", {
     destinationPath,
     contents,
+    allowedExtensions,
   });
 }
 
@@ -101,7 +103,7 @@ export async function saveChatExport(
       filters: [{ name: "Markdown", extensions: ["md"] }],
     });
     if (!destination) return "cancelled";
-    await saveTextFileAs(destination, contents);
+    await saveTextFileAs(destination, contents, ["md"]);
     return "saved";
   }
 

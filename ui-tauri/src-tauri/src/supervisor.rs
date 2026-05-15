@@ -1298,16 +1298,15 @@ fn kassiber_command(resource_dir: Option<&Path>, args: Vec<String>) -> DaemonCom
     }
 
     if let Some(sidecar) = bundled_sidecar(resource_dir) {
-        // PyInstaller should not need the app resource directory as cwd; keeping
-        // it stable prevents accidental writes relative to a developer checkout.
-        let cwd = resource_dir
-            .map(PathBuf::from)
-            .or_else(|| sidecar.parent().map(PathBuf::from))
-            .unwrap_or_else(|| PathBuf::from("."));
+        // Packaged macOS builds inherit the bundle's read-only Contents/Resources
+        // as cwd, which breaks any third-party library that writes relative paths
+        // at import time (e.g. rp2.logger -> ./log/rp2_*.log). Hand the sidecar a
+        // writable scratch directory so the daemon never has to dodge EACCES on
+        // startup. Per-call code already uses absolute paths under the data root.
         return DaemonCommand {
             program: sidecar,
             args,
-            cwd,
+            cwd: env::temp_dir(),
             source: "bundled_sidecar",
         };
     }

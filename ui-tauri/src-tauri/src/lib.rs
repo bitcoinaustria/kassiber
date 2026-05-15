@@ -470,21 +470,41 @@ fn save_exported_file_as(source_path: String, destination_path: String) -> Resul
 }
 
 #[tauri::command]
-fn save_text_file_as(destination_path: String, contents: String) -> Result<String, String> {
+fn save_text_file_as(
+    destination_path: String,
+    contents: String,
+    allowed_extensions: Vec<String>,
+) -> Result<String, String> {
     let destination = PathBuf::from(destination_path);
     if !destination.is_absolute() {
         return Err("Export destination paths must be absolute.".to_string());
     }
-    if destination.extension().and_then(|ext| ext.to_str()) != Some("md") {
-        return Err("Chat export destination must use .md.".to_string());
+    if allowed_extensions.is_empty() {
+        return Err("Export destination must declare at least one allowed extension.".to_string());
+    }
+    let actual = destination
+        .extension()
+        .and_then(|ext| ext.to_str())
+        .map(|ext| ext.to_ascii_lowercase());
+    let permitted = allowed_extensions
+        .iter()
+        .map(|ext| ext.trim_start_matches('.').to_ascii_lowercase())
+        .collect::<Vec<_>>();
+    if actual.as_deref().map(|ext| !permitted.iter().any(|p| p == ext)).unwrap_or(true) {
+        let expected = permitted
+            .iter()
+            .map(|ext| format!(".{ext}"))
+            .collect::<Vec<_>>()
+            .join(" or ");
+        return Err(format!("Export destination must use {expected}."));
     }
     let Some(parent) = destination.parent() else {
-        return Err("Chat export destination must include a parent folder.".to_string());
+        return Err("Export destination must include a parent folder.".to_string());
     };
     std::fs::create_dir_all(parent)
-        .map_err(|error| format!("Could not create chat export destination folder: {error}"))?;
+        .map_err(|error| format!("Could not create export destination folder: {error}"))?;
     std::fs::write(&destination, contents)
-        .map_err(|error| format!("Could not save chat export: {error}"))?;
+        .map_err(|error| format!("Could not save export: {error}"))?;
     Ok(destination.to_string_lossy().into_owned())
 }
 
