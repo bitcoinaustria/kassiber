@@ -403,8 +403,11 @@ python3 -m kassiber reports tax-summary
 python3 -m kassiber reports balance-sheet
 python3 -m kassiber reports capital-gains
 python3 -m kassiber reports export-pdf --file report.pdf
+python3 -m kassiber reports export-summary-pdf --file summary-report.pdf --start 2024-01-01T00:00:00Z --end 2024-12-31T23:59:59Z
 python3 -m kassiber reports export-csv --file report.csv
 python3 -m kassiber reports export-xlsx --file report.xlsx
+# The Summary PDF is also available from the desktop Reports screen with
+# wallet scope controls and an optional live snapshot cover.
 # For Austrian/EUR books:
 python3 -m kassiber --machine reports austrian-e1kv --year 2024
 python3 -m kassiber --machine reports austrian-tax-summary --year 2024
@@ -548,9 +551,9 @@ Notable gaps today:
 - some Lightning node adapters are declared but do not sync yet
 - `custom` wallet import mapping is not implemented yet
 - reports still use stored journal pricing rather than querying the rates cache live
-- generic text PDF export is still Latin-1-only; Austrian E 1kv and
-  source-of-funds PDFs use ReportLab renderers, but the generic PDF exporter
-  still substitutes characters outside Latin-1
+- generic text PDF export is still Latin-1-only; Austrian E 1kv,
+  source-of-funds, and desktop Summary PDFs use ReportLab renderers, but the
+  generic PDF exporter still substitutes characters outside Latin-1
 - no REST/server mode or multi-user auth
 - the desktop preview is broad but not production-hardened yet: long-running
   worker-pool/progress plumbing, remaining Settings daemon calls, production

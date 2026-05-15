@@ -164,7 +164,7 @@ function notificationProgressValue(value: number | undefined) {
   return Math.max(0, Math.min(100, value));
 }
 const appMainClassName =
-  "relative min-h-0 w-full flex-1 overflow-auto bg-background text-zinc-950 dark:text-zinc-50";
+  "relative min-h-0 w-full flex-1 overflow-auto overscroll-contain bg-background text-zinc-950 dark:text-zinc-50";
 
 const NAV_GROUPS: NavGroup[] = [
   {

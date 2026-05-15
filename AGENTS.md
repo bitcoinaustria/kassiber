@@ -57,7 +57,7 @@ Kassiber is currently in **dev mode**: renaming commands, breaking flags, and re
   - attachments
   - metadata (notes, tags, inclusion)
   - journals (RP2 processing + quarantine)
-  - reports (summary, tax-summary, balance-sheet, portfolio-summary, capital-gains, journal-entries, balance-history, austrian-e1kv, austrian-tax-summary, export-pdf, export-csv, export-xlsx, export-austrian, export-austrian-e1kv-pdf, export-austrian-e1kv-xlsx, export-austrian-e1kv-csv)
+  - reports (summary, tax-summary, balance-sheet, portfolio-summary, capital-gains, journal-entries, balance-history, austrian-e1kv, austrian-tax-summary, export-pdf, export-summary-pdf, export-csv, export-xlsx, export-austrian, export-austrian-e1kv-pdf, export-austrian-e1kv-xlsx, export-austrian-e1kv-csv)
   - rates (local cache + Coinbase Exchange sync + CoinGecko fallback + Kraken CSV archive ingest + manual override)
   - diagnostics (public-safe bug-report collection)
 - Every command accepts `--format {table,plain,json,csv}`, `--output <path>`, `--machine` (= `--format json`), `--debug`, `--diagnostics-out <path|auto>`, and `--db-passphrase-fd FD` (used to unlock a SQLCipher-encrypted database non-interactively).
@@ -156,7 +156,7 @@ Kassiber is currently in **dev mode**: renaming commands, breaking flags, and re
 - `transfers {pair,list,unpair,suggest,bulk-pair,dismiss,rules {list,create,apply,delete,enable,disable}}`
 - `views {list,create,delete}` — generic saved-view CRUD; ``swap_candidates`` is the first surface consumer
 - `source-funds {sources {list,create,attach},links {list,create,review,attach,bulk-review},suggest,cases {list}}`
-- `reports {summary,tax-summary,balance-sheet,portfolio-summary,capital-gains,journal-entries,balance-history,source-funds,austrian-e1kv,austrian-tax-summary,export-pdf,export-csv,export-xlsx,export-source-funds-pdf,export-austrian,export-austrian-e1kv-pdf,export-austrian-e1kv-xlsx,export-austrian-e1kv-csv}`
+- `reports {summary,tax-summary,balance-sheet,portfolio-summary,capital-gains,journal-entries,balance-history,source-funds,austrian-e1kv,austrian-tax-summary,export-pdf,export-summary-pdf,export-csv,export-xlsx,export-source-funds-pdf,export-austrian,export-austrian-e1kv-pdf,export-austrian-e1kv-xlsx,export-austrian-e1kv-csv}`
 - `rates {pairs,sync,rebuild,latest,range,set}`
 - `diagnostics {collect}`
 - `ai providers {list,get,create,update,delete,set-default,clear-default}`

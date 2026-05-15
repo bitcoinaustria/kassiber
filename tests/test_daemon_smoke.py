@@ -1,6 +1,7 @@
 import json
 import queue
 import select
+import shutil
 import sqlite3
 import subprocess
 import sys
@@ -565,6 +566,7 @@ class DaemonSmokeTest(unittest.TestCase):
             self.assertIn("ui.reports.tax_summary", ready["data"]["supported_kinds"])
             self.assertIn("ui.reports.balance_history", ready["data"]["supported_kinds"])
             self.assertIn("ui.reports.export_pdf", ready["data"]["supported_kinds"])
+            self.assertIn("ui.reports.export_summary_pdf", ready["data"]["supported_kinds"])
             self.assertIn("ui.reports.export_csv", ready["data"]["supported_kinds"])
             self.assertIn("ui.reports.export_xlsx", ready["data"]["supported_kinds"])
             self.assertIn(
@@ -3877,6 +3879,56 @@ class DaemonSmokeTest(unittest.TestCase):
                 tax_country="at",
                 gains_algorithm="MOVING_AVERAGE_AT",
             )
+            hot_csv = Path(tmp) / "hot.csv"
+            hot_csv.write_text(
+                "\n".join(
+                    [
+                        "date,txid,direction,asset,amount,fee,fiat_rate,description",
+                        "2026-03-01T10:00:00Z,hot-inbound-1,inbound,BTC,0.20000000,0,60000,Hot wallet acquisition",
+                        "",
+                    ]
+                ),
+                encoding="utf-8",
+            )
+            post_period_csv = Path(tmp) / "post-period.csv"
+            post_period_csv.write_text(
+                "\n".join(
+                    [
+                        "date,txid,direction,asset,amount,fee,fiat_rate,description",
+                        "2027-01-02T10:00:00Z,cold-current-inbound-1,inbound,BTC,0.30000000,0,70000,Post-period cold wallet acquisition",
+                        "",
+                    ]
+                ),
+                encoding="utf-8",
+            )
+            excluded_csv = Path(tmp) / "excluded.csv"
+            excluded_csv.write_text(
+                "\n".join(
+                    [
+                        "date,txid,direction,asset,amount,fee,fiat_rate,description",
+                        "2026-04-01T10:00:00Z,cold-excluded-1,inbound,BTC,0.01000000,0,60000,Excluded report test row",
+                        "",
+                    ]
+                ),
+                encoding="utf-8",
+            )
+            _run_cli(
+                data_root,
+                "wallets",
+                "create",
+                "--label",
+                "Hot",
+                "--kind",
+                "address",
+                "--address",
+                "bc1qtestaddress1111111111111111111111111111111",
+            )
+            _run_cli(data_root, "wallets", "import-csv", "--wallet", "Hot", "--file", str(hot_csv))
+            _run_cli(data_root, "rates", "set", "BTC-EUR", "2026-03-01T00:00:00Z", "60000")
+            _run_cli(data_root, "wallets", "import-csv", "--wallet", "Cold", "--file", str(excluded_csv))
+            _run_cli(data_root, "metadata", "records", "excluded", "set", "--transaction", "cold-excluded-1")
+            _run_cli(data_root, "wallets", "import-csv", "--wallet", "Cold", "--file", str(post_period_csv))
+            _run_cli(data_root, "rates", "set", "BTC-EUR", "2027-01-02T00:00:00Z", "70000")
             _run_cli(data_root, "journals", "process")
             proc = _start_daemon(data_root)
             self.assertEqual(_read_payload_timeout(proc)["kind"], "daemon.ready")
@@ -3895,6 +3947,175 @@ class DaemonSmokeTest(unittest.TestCase):
             )
             self.assertEqual(pdf_file.read_bytes()[:4], b"%PDF")
             self.assertGreater(pdf["data"]["pages"], 0)
+
+            _write_payload(
+                proc,
+                {
+                    "request_id": "export-summary-pdf",
+                    "kind": "ui.reports.export_summary_pdf",
+                    "args": {
+                        "start": "2026-01-01T00:00:00Z",
+                        "end": "2026-12-31T23:59:59Z",
+                        "wallets": ["Cold"],
+                        "include_snapshot": True,
+                    },
+                },
+            )
+            summary_pdf = _read_payload_timeout(proc)
+            self.assertEqual(summary_pdf["kind"], "ui.reports.export_summary_pdf")
+            summary_pdf_file = Path(summary_pdf["data"]["file"])
+            self.assertTrue(summary_pdf_file.is_file())
+            self.assertEqual(summary_pdf_file.read_bytes()[:4], b"%PDF")
+            self.assertEqual(summary_pdf["data"]["scope"], "summary_report")
+            self.assertTrue(summary_pdf["data"]["snapshot"])
+            self.assertEqual(
+                [wallet["label"] for wallet in summary_pdf["data"]["wallets"]],
+                ["Cold"],
+            )
+            self.assertEqual(summary_pdf["data"]["timeframe"]["label"], "2026-01-01 to 2026-12-31")
+            self.assertEqual(summary_pdf["data"]["data_integrity"]["total_transactions"], 1)
+            self.assertEqual(summary_pdf["data"]["data_integrity"]["priced_transactions"], 1)
+            self.assertEqual(summary_pdf["data"]["data_integrity"]["journals"]["status"], "current")
+            self.assertIn("internal_transfers", summary_pdf["data"]["data_integrity"])
+            self.assertGreaterEqual(
+                summary_pdf["data"]["data_integrity"]["internal_transfers"]["count"], 0
+            )
+            self.assertIn("benchmark", summary_pdf["data"])
+            self.assertIn("top_movements", summary_pdf["data"])
+            self.assertIn("top_disposals", summary_pdf["data"])
+            self.assertIn("holding_age", summary_pdf["data"])
+            self.assertIn("unrealized_pnl", summary_pdf["data"]["metrics"])
+            self.assertIn("btc_stack_start", summary_pdf["data"]["metrics"])
+            self.assertIn("btc_stack_end", summary_pdf["data"]["metrics"])
+            self.assertAlmostEqual(
+                summary_pdf["data"]["metrics"]["unrealized_pnl"],
+                summary_pdf["data"]["metrics"]["period_end_value"]
+                - summary_pdf["data"]["metrics"]["end_cost_basis"],
+                places=6,
+            )
+            holding_total = sum(
+                float(row["market_value"])
+                for row in summary_pdf["data"]["wallet_holdings"]
+            )
+            self.assertAlmostEqual(
+                float(summary_pdf["data"]["holdings_totals"]["total_market_value"]),
+                holding_total,
+                places=6,
+            )
+            snapshot_wallet_total = sum(
+                float(row["market_value"])
+                for row in summary_pdf["data"]["snapshot_wallets"]
+            )
+            self.assertAlmostEqual(
+                float(summary_pdf["data"]["snapshot_totals"]["total_market_value"]),
+                snapshot_wallet_total,
+                places=6,
+            )
+            self.assertNotEqual(snapshot_wallet_total, holding_total)
+            _write_payload(
+                proc,
+                {
+                    "request_id": "portfolio-summary-for-export",
+                    "kind": "ui.reports.portfolio_summary",
+                },
+            )
+            portfolio_for_export = _read_payload_timeout(proc)
+            cold_portfolio_value = sum(
+                float(row["market_value"])
+                for row in portfolio_for_export["data"]["rows"]
+                if row["wallet"] == "Cold"
+            )
+            self.assertAlmostEqual(snapshot_wallet_total, cold_portfolio_value, places=6)
+            _write_payload(
+                proc,
+                {
+                    "request_id": "balance-history-for-export",
+                    "kind": "ui.reports.balance_history",
+                    "args": {
+                        "interval": "month",
+                        "start": "2026-01-01T00:00:00Z",
+                        "end": "2026-12-31T23:59:59Z",
+                        "wallet": "Cold",
+                        "limit": 500,
+                    },
+                },
+            )
+            balance_history_for_export = _read_payload_timeout(proc)
+            expected_history_by_period = {}
+            for row in balance_history_for_export["data"]["rows"]:
+                bucket = expected_history_by_period.setdefault(row["period_start"], 0.0)
+                expected_history_by_period[row["period_start"]] = bucket + float(row["market_value"])
+            actual_history_by_period = {
+                row["period_start"]: float(row["market_value"])
+                for row in summary_pdf["data"]["balance_history"]
+            }
+            self.assertEqual(actual_history_by_period, expected_history_by_period)
+            self.assertAlmostEqual(
+                holding_total,
+                expected_history_by_period["2026-12-01T00:00:00Z"],
+                places=6,
+            )
+            if shutil.which("pdftotext"):
+                summary_text = subprocess.run(
+                    ["pdftotext", "-layout", str(summary_pdf_file), "-"],
+                    check=True,
+                    text=True,
+                    capture_output=True,
+                ).stdout
+                self.assertIn("Kassiber Summary Report", summary_text)
+                self.assertIn("Data Integrity", summary_text)
+                self.assertIn("Priced transactions", summary_text)
+                self.assertIn("Holdings by wallet at period end", summary_text)
+                self.assertIn("Realized PnL per period", summary_text)
+                self.assertIn("Inflows vs outflows volume", summary_text)
+                self.assertIn("2026-01", summary_text)
+                self.assertIn("2026-12", summary_text)
+                self.assertIn("Wallet Appendix", summary_text)
+                self.assertNotIn("<reportlab", summary_text)
+                self.assertNotIn("Drawing object", summary_text)
+                self.assertNotIn("Kennzahl", summary_text)
+                self.assertNotIn("FinanzOnline", summary_text)
+
+            _write_payload(
+                proc,
+                {
+                    "request_id": "export-summary-pdf-default-wallets",
+                    "kind": "ui.reports.export_summary_pdf",
+                    "args": {
+                        "start": "2026-01-01T00:00:00Z",
+                        "end": "2026-12-31T23:59:59Z",
+                        "include_snapshot": False,
+                    },
+                },
+            )
+            summary_pdf_default = _read_payload_timeout(proc)
+            self.assertEqual(summary_pdf_default["kind"], "ui.reports.export_summary_pdf")
+            self.assertFalse(summary_pdf_default["data"]["snapshot"])
+            self.assertEqual(
+                {wallet["label"] for wallet in summary_pdf_default["data"]["wallets"]},
+                {"Cold", "Hot"},
+            )
+            self.assertEqual(Path(summary_pdf_default["data"]["file"]).read_bytes()[:4], b"%PDF")
+
+            for request_id, args in [
+                ("export-summary-pdf-empty-wallets", {"wallets": []}),
+                ("export-summary-pdf-non-string-wallet", {"wallets": ["Cold", 1]}),
+                (
+                    "export-summary-pdf-invalid-period",
+                    {"start": "2026-12-31T23:59:59Z", "end": "2026-01-01T00:00:00Z"},
+                ),
+            ]:
+                _write_payload(
+                    proc,
+                    {
+                        "request_id": request_id,
+                        "kind": "ui.reports.export_summary_pdf",
+                        "args": args,
+                    },
+                )
+                rejected_summary = _read_payload_timeout(proc)
+                self.assertEqual(rejected_summary["kind"], "error")
+                self.assertEqual(rejected_summary["error"]["code"], "validation")
 
             _write_payload(
                 proc,

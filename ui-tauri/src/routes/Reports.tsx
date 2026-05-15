@@ -21,14 +21,17 @@ import {
   FolderOpen,
   Landmark,
   Loader2,
+  PieChart,
   RefreshCw,
   ShieldAlert,
   Sigma,
+  WalletCards,
 } from "lucide-react";
 
 import { ScreenSkeleton } from "@/components/kb/ScreenSkeleton";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Select,
   SelectContent,
@@ -36,6 +39,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
 import {
   Table,
   TableBody,
@@ -151,7 +155,7 @@ const AUSTRIAN_KENNZAHL_PLACEHOLDER_ROWS: KennzahlRow[] = [
   },
 ];
 
-type ReportExportFormatId = "csv" | "pdf" | "xlsx";
+type ReportExportFormatId = "csv" | "pdf" | "xlsx" | "summary_pdf";
 type ReportTone = "good" | "warning" | "alert" | "neutral";
 type ReportHref = "/journals" | "/quarantine" | "/transactions" | "/reports";
 
@@ -173,6 +177,23 @@ interface ReportExportResult {
   }>;
   summary_rows?: number;
   tax_year?: number;
+  timeframe?: {
+    start?: string;
+    end?: string;
+    label?: string;
+  };
+  wallets?: Array<{ id?: string; label?: string }>;
+  snapshot?: boolean;
+}
+
+interface WalletListData {
+  wallets: Array<{
+    id?: string;
+    label: string;
+    kind?: string;
+    chain?: string;
+    transaction_count?: number;
+  }>;
 }
 
 interface ReportReadiness {
@@ -191,6 +212,7 @@ function reportExportDefaultFilename(
   year: number,
   austrian: boolean,
 ) {
+  if (format === "summary_pdf") return `kassiber-summary-report-${year}.pdf`;
   if (austrian) {
     if (format === "pdf") return `kassiber-austrian-e1kv-${year}.pdf`;
     if (format === "xlsx") return `kassiber-austrian-e1kv-${year}.xlsx`;
@@ -206,7 +228,9 @@ function reportExportSaveFilters(
   payload?: ReportExportResult,
 ) {
   if (payload?.format === "csv" && payload.files?.length) return undefined;
-  if (format === "pdf") return [{ name: "PDF report", extensions: ["pdf"] }];
+  if (format === "pdf" || format === "summary_pdf") {
+    return [{ name: "PDF report", extensions: ["pdf"] }];
+  }
   if (format === "xlsx") return [{ name: "Excel workbook", extensions: ["xlsx"] }];
   return [{ name: "CSV report", extensions: ["csv"] }];
 }
@@ -237,6 +261,7 @@ export function Reports() {
   );
   const { data, isLoading, isFetching, isError, error } =
     useDaemon<CapitalGainsReport>("ui.reports.capital_gains", reportArgs);
+  const wallets = useDaemon<WalletListData>("ui.wallets.list");
   const hideSensitive = useUiStore((s) => s.hideSensitive);
   const returnedReportYear = data?.data?.year;
   const reportYearMismatch =
@@ -283,6 +308,7 @@ export function Reports() {
       hideSensitive={hideSensitive}
       selectedYear={selectedYear}
       onYearChange={setSelectedYear}
+      wallets={wallets.data?.data?.wallets ?? []}
     />
   );
 }
@@ -292,6 +318,7 @@ interface ReportsViewProps {
   hideSensitive: boolean;
   selectedYear: number | null;
   onYearChange: (year: number) => void;
+  wallets: WalletListData["wallets"];
 }
 
 function ReportsView({
@@ -299,6 +326,7 @@ function ReportsView({
   hideSensitive,
   selectedYear,
   onYearChange,
+  wallets,
 }: ReportsViewProps) {
   const year = report.year;
   const effectiveYear = selectedYear ?? year;
@@ -323,10 +351,14 @@ function ReportsView({
   const [openingExportPath, setOpeningExportPath] = useState<string | null>(
     null,
   );
+  const [summarySnapshot, setSummarySnapshot] = useState(true);
+  const [summaryWalletIds, setSummaryWalletIds] = useState<string[]>([]);
   const addNotification = useUiStore((s) => s.addNotification);
   const exportCsv = useDaemonMutation<ReportExportResult>("ui.reports.export_csv");
   const exportXlsx = useDaemonMutation<ReportExportResult>("ui.reports.export_xlsx");
   const exportPdf = useDaemonMutation<ReportExportResult>("ui.reports.export_pdf");
+  const exportSummaryPdf =
+    useDaemonMutation<ReportExportResult>("ui.reports.export_summary_pdf");
   const exportAustrianPdf =
     useDaemonMutation<ReportExportResult>("ui.reports.export_austrian_e1kv_pdf");
   const exportAustrianXlsx =
@@ -334,6 +366,20 @@ function ReportsView({
   const exportAustrianCsv =
     useDaemonMutation<ReportExportResult>("ui.reports.export_austrian_e1kv_csv");
   const activeProfileIsAustrian = report.jurisdictionCode === "AT";
+  const walletChoices = useMemo(
+    () => wallets.filter((wallet) => wallet.id || wallet.label),
+    [wallets],
+  );
+  const showWalletPicker = walletChoices.length > 1;
+  useEffect(() => {
+    setSummaryWalletIds((current) => {
+      const allIds = walletChoices.map((wallet) => wallet.id ?? wallet.label);
+      if (allIds.length <= 1) return allIds;
+      const currentSet = new Set(current);
+      const kept = allIds.filter((id) => currentSet.has(id));
+      return kept.length ? kept : allIds;
+    });
+  }, [walletChoices]);
   const kennzahlRows =
     report.kennzahlRows?.length
       ? report.kennzahlRows
@@ -372,7 +418,9 @@ function ReportsView({
     setExportStatus(null);
     setActiveExport(format);
     const mutation =
-      format === "csv"
+      format === "summary_pdf"
+        ? exportSummaryPdf
+        : format === "csv"
         ? activeProfileIsAustrian
           ? exportAustrianCsv
           : exportCsv
@@ -384,7 +432,14 @@ function ReportsView({
             ? exportAustrianPdf
             : exportPdf;
     const args =
-      format === "pdf"
+      format === "summary_pdf"
+        ? {
+            start: `${exportYear}-01-01T00:00:00Z`,
+            end: `${exportYear}-12-31T23:59:59Z`,
+            include_snapshot: summarySnapshot,
+            ...(showWalletPicker ? { wallets: summaryWalletIds } : {}),
+          }
+        : format === "pdf"
         ? activeProfileIsAustrian
           ? { year: exportYear }
           : {}
@@ -562,6 +617,25 @@ function ReportsView({
             openingExportPath={openingExportPath}
             onExport={handleExport}
             onOpenExport={handleOpenExport}
+          />
+          <SummaryPdfPanel
+            year={effectiveYear}
+            wallets={walletChoices}
+            selectedWalletIds={summaryWalletIds}
+            showWalletPicker={showWalletPicker}
+            includeSnapshot={summarySnapshot}
+            loading={activeExport === "summary_pdf"}
+            disabled={Boolean(activeExport)}
+            onToggleSnapshot={setSummarySnapshot}
+            onToggleWallet={(id) => {
+              setSummaryWalletIds((current) => {
+                const next = current.includes(id)
+                  ? current.filter((item) => item !== id)
+                  : [...current, id];
+                return next.length ? next : current;
+              });
+            }}
+            onExport={() => handleExport("summary_pdf")}
           />
           <ReportPolicyPanel
             jurisdiction={jurisdiction}
@@ -878,6 +952,113 @@ function KennzahlOverviewPanel({
             })}
           </Fragment>
         ))}
+      </div>
+    </div>
+  );
+}
+
+function SummaryPdfPanel({
+  year,
+  wallets,
+  selectedWalletIds,
+  showWalletPicker,
+  includeSnapshot,
+  loading,
+  disabled,
+  onToggleSnapshot,
+  onToggleWallet,
+  onExport,
+}: {
+  year: number;
+  wallets: WalletListData["wallets"];
+  selectedWalletIds: string[];
+  showWalletPicker: boolean;
+  includeSnapshot: boolean;
+  loading: boolean;
+  disabled: boolean;
+  onToggleSnapshot: (checked: boolean) => void;
+  onToggleWallet: (id: string) => void;
+  onExport: () => void;
+}) {
+  const selectedCount = showWalletPicker ? selectedWalletIds.length : wallets.length;
+  return (
+    <div className="min-w-0 overflow-hidden rounded-xl border bg-card">
+      <div className="flex items-start justify-between gap-3 px-4 pt-4 sm:px-5">
+        <div className="flex min-w-0 items-center gap-2">
+          <Button
+            variant="outline"
+            size="icon"
+            className="size-8 shrink-0"
+            aria-label="Summary PDF"
+          >
+            <PieChart className="size-4 text-muted-foreground" aria-hidden="true" />
+          </Button>
+          <div className="min-w-0">
+            <h2 className="truncate text-sm font-medium sm:text-base">
+              Summary PDF
+            </h2>
+            <p className="truncate text-[10px] text-muted-foreground sm:text-xs">
+              {year} · {selectedCount || "No"} wallet{selectedCount === 1 ? "" : "s"}
+            </p>
+          </div>
+        </div>
+        <Button
+          type="button"
+          size="sm"
+          className="h-8 shrink-0 gap-2"
+          disabled={disabled || (showWalletPicker && selectedWalletIds.length === 0)}
+          onClick={onExport}
+        >
+          {loading ? (
+            <Loader2 className="size-4 animate-spin" aria-hidden="true" />
+          ) : (
+            <Download className="size-4" aria-hidden="true" />
+          )}
+          <span className="hidden sm:inline">Export</span>
+        </Button>
+      </div>
+
+      <div className="space-y-3 px-4 pt-3 pb-4 sm:px-5">
+        <div className="flex items-center justify-between gap-3 rounded-lg border bg-background/50 px-3 py-2">
+          <div className="flex min-w-0 items-center gap-2">
+            <CalendarDays className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+            <span className="truncate text-xs text-muted-foreground">
+              Include live cover snapshot
+            </span>
+          </div>
+          <Switch checked={includeSnapshot} onCheckedChange={onToggleSnapshot} />
+        </div>
+        {showWalletPicker ? (
+          <div className="rounded-lg border bg-background/50">
+            <div className="flex items-center gap-2 border-b px-3 py-2 text-xs font-medium text-muted-foreground">
+              <WalletCards className="size-4" aria-hidden="true" />
+              Wallet scope
+            </div>
+            <div className="max-h-44 overflow-auto p-2">
+              {wallets.map((wallet) => {
+                const id = wallet.id ?? wallet.label;
+                const checked = selectedWalletIds.includes(id);
+                return (
+                  <label
+                    key={id}
+                    className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-muted"
+                  >
+                    <Checkbox
+                      checked={checked}
+                      onCheckedChange={() => onToggleWallet(id)}
+                    />
+                    <span className="min-w-0 flex-1 truncate">{wallet.label}</span>
+                    {wallet.chain ? (
+                      <Badge variant="outline" className="rounded-md text-[10px]">
+                        {wallet.chain}
+                      </Badge>
+                    ) : null}
+                  </label>
+                );
+              })}
+            </div>
+          </div>
+        ) : null}
       </div>
     </div>
   );

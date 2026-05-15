@@ -380,6 +380,25 @@ export const fixtures: Record<string, unknown> = {
     bytes: 24576,
     title: "Kassiber Report - Mock",
   },
+  "ui.reports.export_summary_pdf": {
+    file: "~/.kassiber/exports/reports/kassiber-summary-report-mock.pdf",
+    filename: "kassiber-summary-report-mock.pdf",
+    format: "pdf",
+    scope: "summary_report",
+    pages: 3,
+    bytes: 28672,
+    title: "Kassiber Summary Report - Mock",
+    snapshot: true,
+    wallets: [
+      { id: "wallet:multisig-vault", label: "Multisig Vault" },
+      { id: "wallet:node", label: "Home Node" },
+    ],
+    timeframe: {
+      start: "2026-01-01T00:00:00Z",
+      end: "2026-12-31T23:59:59Z",
+      label: "2026-01-01 to 2026-12-31",
+    },
+  },
   "ui.reports.export_csv": {
     file: "~/.kassiber/exports/reports/kassiber-report-mock.csv",
     filename: "kassiber-report-mock.csv",
