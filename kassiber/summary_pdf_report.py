@@ -77,6 +77,17 @@ def _compact_number(value: Any) -> str:
     return f"{sign}{amount:.0f}"
 
 
+def _compact_btc(value: Any) -> str:
+    number = decimal_value(value)
+    sign = "-" if number < 0 else ""
+    amount = abs(number)
+    if amount >= Decimal("1"):
+        return f"{sign}{amount:.4f} BTC"
+    if amount >= Decimal("0.01"):
+        return f"{sign}{amount:.3f} BTC"
+    return f"{sign}{amount:.8f} BTC"
+
+
 def _pct(value: Decimal, total: Decimal) -> str:
     if total <= 0:
         return "0.0%"
@@ -154,7 +165,15 @@ def _series_bounds(values: Sequence[Decimal]) -> tuple[Decimal, Decimal]:
     if low == high:
         pad = abs(high) * Decimal("0.1") or Decimal("1")
         return low - pad, high + pad
-    return low, high
+    pad = (high - low) * Decimal("0.06")
+    return low - pad, high + pad
+
+
+def _tick_values(low: Decimal, high: Decimal, count: int = 5) -> list[Decimal]:
+    if count <= 1 or high == low:
+        return [low]
+    step = (high - low) / Decimal(count - 1)
+    return [low + (step * Decimal(idx)) for idx in range(count)]
 
 
 def _scale(value: Decimal, low: Decimal, high: Decimal, size: float) -> float:
@@ -182,6 +201,16 @@ def _axis_label_font_size(total: int, base: float) -> float:
     return base
 
 
+def _axis_label_indexes(total: int) -> set[int]:
+    if total <= 12:
+        return set(range(total))
+    step = max(1, round(total / 10))
+    indexes = set(range(0, total, step))
+    indexes.add(0)
+    indexes.add(total - 1)
+    return indexes
+
+
 def _axis_label_y(bottom: float, idx: int, total: int) -> float:
     if total > 12 and idx % 2:
         return bottom - 13
@@ -195,19 +224,19 @@ def _line_chart(rl: dict[str, Any], title: str, rows: Sequence[Mapping[str, Any]
     PolyLine = rl["PolyLine"]
     Circle = rl["Circle"]
     String = rl["String"]
+    Rect = rl["Rect"]
     width = 180 * rl["mm"]
-    height = 78 * rl["mm"]
-    left = 24
-    right = 24
-    bottom = 24
+    height = 60 * rl["mm"]
+    left = 48
+    right = 48
+    bottom = 25
     top = 28
     plot_w = width - left - right
     plot_h = height - bottom - top
     drawing = Drawing(width, height)
     drawing.add(String(0, height - 10, title, fontName=_font(rl, "bold"), fontSize=9, fillColor=colors.HexColor(BRAND_INK)))
-    drawing.add(Line(left, bottom, left + plot_w, bottom, strokeColor=colors.HexColor(BRAND_LINE), strokeWidth=0.5))
-    drawing.add(Line(left, bottom, left, bottom + plot_h, strokeColor=colors.HexColor(BRAND_LINE), strokeWidth=0.5))
     if not rows:
+        drawing.add(Line(left, bottom, left + plot_w, bottom, strokeColor=colors.HexColor(BRAND_LINE), strokeWidth=0.5))
         drawing.add(String(left, bottom + plot_h / 2, "No balance history in scope.", fontName=_font(rl, "regular"), fontSize=8, fillColor=colors.HexColor(BRAND_MUTED)))
         return drawing
 
@@ -215,15 +244,30 @@ def _line_chart(rl: dict[str, Any], title: str, rows: Sequence[Mapping[str, Any]
     btc_values = [decimal_value(row.get("quantity")) for row in rows]
     fiat_low, fiat_high = _series_bounds(fiat_values)
     btc_low, btc_high = _series_bounds(btc_values)
+    for idx, fiat_tick in enumerate(_tick_values(fiat_low, fiat_high)):
+        y = bottom + _scale(fiat_tick, fiat_low, fiat_high, plot_h)
+        drawing.add(Line(left, y, left + plot_w, y, strokeColor=colors.HexColor(BRAND_LINE), strokeWidth=0.3))
+        drawing.add(String(left - 4, y - 2, _compact_money(currency, fiat_tick), fontName=_font(rl, "regular"), fontSize=5.8, fillColor=colors.HexColor(BRAND_MUTED), textAnchor="end"))
+        btc_tick = btc_low + ((btc_high - btc_low) * Decimal(idx) / Decimal(4))
+        drawing.add(String(left + plot_w + 4, y - 2, _compact_btc(btc_tick), fontName=_font(rl, "regular"), fontSize=5.8, fillColor=colors.HexColor(BRAND_MUTED)))
+    drawing.add(Line(left, bottom, left + plot_w, bottom, strokeColor=colors.HexColor(BRAND_LINE), strokeWidth=0.6))
+    drawing.add(Line(left, bottom, left, bottom + plot_h, strokeColor=colors.HexColor(BRAND_LINE), strokeWidth=0.6))
+    drawing.add(Line(left + plot_w, bottom, left + plot_w, bottom + plot_h, strokeColor=colors.HexColor(BRAND_LINE), strokeWidth=0.6))
+    drawing.add(Rect(width - 96, height - 15, 5, 5, strokeColor=colors.HexColor(BRAND_ACCENT), fillColor=colors.HexColor(BRAND_ACCENT)))
+    drawing.add(String(width - 88, height - 15, "Market value", fontName=_font(rl, "regular"), fontSize=6.4, fillColor=colors.HexColor(BRAND_MUTED)))
+    drawing.add(Rect(width - 39, height - 15, 5, 5, strokeColor=colors.HexColor(COLOR_BALANCE), fillColor=colors.HexColor(COLOR_BALANCE)))
+    drawing.add(String(width - 31, height - 15, "BTC", fontName=_font(rl, "regular"), fontSize=6.4, fillColor=colors.HexColor(BRAND_MUTED)))
     count = max(len(rows) - 1, 1)
-    label_size = _axis_label_font_size(len(rows), 5)
+    label_size = _axis_label_font_size(len(rows), 5.2)
+    label_indexes = _axis_label_indexes(len(rows))
     fiat_points = []
     btc_points = []
     for idx, row in enumerate(rows):
         x = left + plot_w * (idx / count)
         fiat_points.append((x, bottom + _scale(decimal_value(row.get("market_value")), fiat_low, fiat_high, plot_h)))
         btc_points.append((x, bottom + _scale(decimal_value(row.get("quantity")), btc_low, btc_high, plot_h)))
-        drawing.add(String(x, _axis_label_y(bottom, idx, len(rows)), _axis_label(row, len(rows)), fontName=_font(rl, "regular"), fontSize=label_size, fillColor=colors.HexColor(BRAND_MUTED), textAnchor="middle"))
+        if idx in label_indexes:
+            drawing.add(String(x, _axis_label_y(bottom, idx, len(rows)), _axis_label(row, len(rows)), fontName=_font(rl, "regular"), fontSize=label_size, fillColor=colors.HexColor(BRAND_MUTED), textAnchor="middle"))
     if len(fiat_points) == 1:
         x, y = fiat_points[0]
         drawing.add(Line(x - 2, y, x + 2, y, strokeColor=colors.HexColor(BRAND_ACCENT), strokeWidth=1.4))
@@ -234,10 +278,13 @@ def _line_chart(rl: dict[str, Any], title: str, rows: Sequence[Mapping[str, Any]
         drawing.add(Circle(x, y, 2, strokeColor=colors.HexColor(BRAND_ACCENT), fillColor=colors.white, strokeWidth=0.8))
     for x, y in (btc_points[0], btc_points[-1]):
         drawing.add(Circle(x, y, 1.7, strokeColor=colors.HexColor(COLOR_BALANCE), fillColor=colors.white, strokeWidth=0.8))
-    drawing.add(String(left, 8, f"Fiat axis: {_money(currency, fiat_low)} to {_money(currency, fiat_high)}", fontName=_font(rl, "regular"), fontSize=6.5, fillColor=colors.HexColor(BRAND_MUTED)))
-    drawing.add(String(width - 2, 8, f"BTC axis: {_btc(btc_low)} to {_btc(btc_high)}", fontName=_font(rl, "regular"), fontSize=6.5, fillColor=colors.HexColor(BRAND_MUTED), textAnchor="end"))
+    first_row = rows[0]
+    last_row = rows[-1]
+    drawing.add(String(left + 3, bottom + plot_h + 5, f"Start {_compact_money(currency, first_row.get('market_value'))}", fontName=_font(rl, "regular"), fontSize=6, fillColor=colors.HexColor(BRAND_MUTED)))
+    drawing.add(String(left + plot_w - 3, bottom + plot_h + 5, f"End {_compact_money(currency, last_row.get('market_value'))}", fontName=_font(rl, "bold"), fontSize=6, fillColor=colors.HexColor(BRAND_INK), textAnchor="end"))
+    drawing.add(String(left, 5, "Left axis market value · right axis BTC balance", fontName=_font(rl, "regular"), fontSize=6.3, fillColor=colors.HexColor(BRAND_MUTED)))
     if rows and rows[-1].get("period_partial"):
-        drawing.add(String(left, 0, f"Final period capped at {str(rows[-1].get('period_end', ''))[:10]}", fontName=_font(rl, "regular"), fontSize=6.5, fillColor=colors.HexColor(BRAND_MUTED)))
+        drawing.add(String(left + 142, 5, f"Final period capped at {str(rows[-1].get('period_end', ''))[:10]}", fontName=_font(rl, "regular"), fontSize=6.3, fillColor=colors.HexColor(BRAND_MUTED)))
     return drawing
 
 
@@ -248,14 +295,14 @@ def _donut_chart(rl: dict[str, Any], title: str, rows: Sequence[Mapping[str, Any
     Wedge = rl["Wedge"]
     Circle = rl["Circle"]
     width = 180 * rl["mm"]
-    height = 70 * rl["mm"]
+    height = 58 * rl["mm"]
     drawing = Drawing(width, height)
     drawing.add(String(0, height - 10, title, fontName=_font(rl, "bold"), fontSize=9, fillColor=colors.HexColor(BRAND_INK)))
     visible_rows = [row for row in rows if decimal_value(row.get("market_value")) > 0]
     total = sum(decimal_value(row.get("market_value")) for row in visible_rows)
-    cx = 34 * rl["mm"]
-    cy = 32 * rl["mm"]
-    radius = 22 * rl["mm"]
+    cx = 31 * rl["mm"]
+    cy = 27 * rl["mm"]
+    radius = 19 * rl["mm"]
     if total <= 0:
         drawing.add(Circle(cx, cy, radius, strokeColor=colors.HexColor(BRAND_LINE), fillColor=colors.HexColor(BRAND_SOFT)))
         drawing.add(String(8, 9, "No holdings in scope.", fontName=_font(rl, "regular"), fontSize=8, fillColor=colors.HexColor(BRAND_MUTED)))
@@ -270,18 +317,19 @@ def _donut_chart(rl: dict[str, Any], title: str, rows: Sequence[Mapping[str, Any
     drawing.add(Circle(cx, cy, radius * 0.52, strokeColor=colors.white, fillColor=colors.white))
     drawing.add(String(cx, cy + 3, "Period end", fontName=_font(rl, "regular"), fontSize=6.2, fillColor=colors.HexColor(BRAND_MUTED), textAnchor="middle"))
     drawing.add(String(cx, cy - 7, _compact_money(currency, total), fontName=_font(rl, "bold"), fontSize=8, fillColor=colors.HexColor(BRAND_INK), textAnchor="middle"))
-    y = height - 24
+    y = height - 22
     for idx, row in enumerate(visible_rows[:6]):
         color = colors.HexColor(PALETTE[idx % len(PALETTE)])
         value = decimal_value(row.get("market_value"))
-        drawing.add(rl["Rect"](82 * rl["mm"], y - 6, 5, 5, strokeColor=color, fillColor=color))
-        label = str(row.get("wallet") or "Wallet")[:18]
-        drawing.add(String(82 * rl["mm"] + 8, y - 6, f"{label} {_money(currency, value)} ({_pct(value, total)})", fontName=_font(rl, "regular"), fontSize=6.5, fillColor=colors.HexColor(BRAND_MUTED)))
-        y -= 9
+        drawing.add(rl["Rect"](75 * rl["mm"], y - 6, 5, 5, strokeColor=color, fillColor=color))
+        label = str(row.get("wallet") or "Wallet")[:24]
+        drawing.add(String(75 * rl["mm"] + 8, y - 4, label, fontName=_font(rl, "bold"), fontSize=6.7, fillColor=colors.HexColor(BRAND_INK)))
+        drawing.add(String(75 * rl["mm"] + 8, y - 12, f"{_money(currency, value)} · {_pct(value, total)}", fontName=_font(rl, "regular"), fontSize=6.2, fillColor=colors.HexColor(BRAND_MUTED)))
+        y -= 17
     if len(visible_rows) > 6:
         hidden_value = sum(decimal_value(row.get("market_value")) for row in visible_rows[6:])
-        drawing.add(rl["Rect"](82 * rl["mm"], y - 6, 5, 5, strokeColor=colors.HexColor(COLOR_GRAY), fillColor=colors.HexColor(BRAND_SOFT)))
-        drawing.add(String(82 * rl["mm"] + 8, y - 6, f"+{len(visible_rows) - 6} more {_money(currency, hidden_value)} ({_pct(hidden_value, total)})", fontName=_font(rl, "regular"), fontSize=6.5, fillColor=colors.HexColor(BRAND_MUTED)))
+        drawing.add(rl["Rect"](75 * rl["mm"], y - 6, 5, 5, strokeColor=colors.HexColor(COLOR_GRAY), fillColor=colors.HexColor(BRAND_SOFT)))
+        drawing.add(String(75 * rl["mm"] + 8, y - 6, f"+{len(visible_rows) - 6} more · {_money(currency, hidden_value)} · {_pct(hidden_value, total)}", fontName=_font(rl, "regular"), fontSize=6.2, fillColor=colors.HexColor(BRAND_MUTED)))
     return drawing
 
 
@@ -299,14 +347,14 @@ def _bar_chart(
     String = rl["String"]
     Line = rl["Line"]
     width = 180 * rl["mm"]
-    height = 70 * rl["mm"]
+    height = 64 * rl["mm"]
     drawing = Drawing(width, height)
     drawing.add(String(0, height - 10, title, fontName=_font(rl, "bold"), fontSize=9, fillColor=colors.HexColor(BRAND_INK)))
-    left = 20
-    bottom = 28
+    left = 42
+    bottom = 25
     right = 10
     plot_w = width - left - right
-    plot_h = height - 48
+    plot_h = height - 45
     if not rows:
         drawing.add(Line(left, bottom, left + plot_w, bottom, strokeColor=colors.HexColor(BRAND_LINE), strokeWidth=0.5))
         drawing.add(String(left, bottom + plot_h / 2, "No rows in scope.", fontName=_font(rl, "regular"), fontSize=8, fillColor=colors.HexColor(BRAND_MUTED)))
@@ -314,31 +362,47 @@ def _bar_chart(
     if paired:
         drawing.add(Line(left, bottom, left + plot_w, bottom, strokeColor=colors.HexColor(BRAND_LINE), strokeWidth=0.5))
         values = [decimal_value(row.get("inflow_volume")) for row in rows] + [decimal_value(row.get("outflow_volume")) for row in rows]
-        max_value = max(values) if values else Decimal("0")
-        max_value = max_value or Decimal("1")
+        raw_max_value = max(values) if values else Decimal("0")
+        max_value = (raw_max_value * Decimal("1.10")) if raw_max_value else Decimal("1")
         total_inflow = sum(decimal_value(row.get("inflow_volume")) for row in rows)
         total_outflow = sum(decimal_value(row.get("outflow_volume")) for row in rows)
+        for tick in _tick_values(Decimal("0"), max_value, 4):
+            y = bottom + _scale(tick, Decimal("0"), max_value, plot_h)
+            drawing.add(Line(left, y, left + plot_w, y, strokeColor=colors.HexColor(BRAND_LINE), strokeWidth=0.25))
+            drawing.add(String(left - 4, y - 2, _compact_money(currency, tick), fontName=_font(rl, "regular"), fontSize=5.8, fillColor=colors.HexColor(BRAND_MUTED), textAnchor="end"))
         drawing.add(Rect(width - 92, height - 15, 5, 5, strokeColor=colors.HexColor(COLOR_PROFIT), fillColor=colors.HexColor(COLOR_PROFIT)))
         drawing.add(String(width - 84, height - 15, "Inflow", fontName=_font(rl, "regular"), fontSize=6.5, fillColor=colors.HexColor(BRAND_MUTED)))
         drawing.add(Rect(width - 52, height - 15, 5, 5, strokeColor=colors.HexColor(BRAND_ACCENT), fillColor=colors.HexColor(BRAND_ACCENT)))
         drawing.add(String(width - 44, height - 15, "Outflow", fontName=_font(rl, "regular"), fontSize=6.5, fillColor=colors.HexColor(BRAND_MUTED)))
     else:
         pnl_values = [decimal_value(row.get("realized_pnl")) for row in rows]
-        low = min([Decimal("0"), *pnl_values])
-        high = max([Decimal("0"), *pnl_values])
+        raw_low = min([Decimal("0"), *pnl_values])
+        raw_high = max([Decimal("0"), *pnl_values])
+        low = raw_low
+        high = raw_high
         if low == high:
             high = Decimal("1")
+        else:
+            pad = (high - low) * Decimal("0.10")
+            low -= pad
+            high += pad
         baseline = bottom + _scale(Decimal("0"), low, high, plot_h)
+        for tick in _tick_values(low, high, 5):
+            y = bottom + _scale(tick, low, high, plot_h)
+            drawing.add(Line(left, y, left + plot_w, y, strokeColor=colors.HexColor(BRAND_LINE), strokeWidth=0.25))
+            drawing.add(String(left - 4, y - 2, _compact_money(currency, tick), fontName=_font(rl, "regular"), fontSize=5.8, fillColor=colors.HexColor(BRAND_MUTED), textAnchor="end"))
         drawing.add(Line(left, baseline, left + plot_w, baseline, strokeColor=colors.HexColor(BRAND_LINE), strokeWidth=0.5))
         drawing.add(Rect(width - 111, height - 15, 5, 5, strokeColor=colors.HexColor(COLOR_PROFIT), fillColor=colors.HexColor(COLOR_PROFIT)))
         drawing.add(String(width - 103, height - 15, "Gain", fontName=_font(rl, "regular"), fontSize=6.5, fillColor=colors.HexColor(BRAND_MUTED)))
         drawing.add(Rect(width - 73, height - 15, 5, 5, strokeColor=colors.HexColor(BRAND_ACCENT), fillColor=colors.HexColor(BRAND_ACCENT)))
         drawing.add(String(width - 65, height - 15, "Loss", fontName=_font(rl, "regular"), fontSize=6.5, fillColor=colors.HexColor(BRAND_MUTED)))
     bar_slot = plot_w / max(len(rows), 1)
-    label_size = _axis_label_font_size(len(rows), 4.8)
+    label_size = _axis_label_font_size(len(rows), 5)
+    label_indexes = _axis_label_indexes(len(rows))
     for idx, row in enumerate(rows):
         x = left + idx * bar_slot + 2
-        drawing.add(String(x + bar_slot / 2, _axis_label_y(bottom, idx, len(rows)), _axis_label(row, len(rows)), fontName=_font(rl, "regular"), fontSize=label_size, fillColor=colors.HexColor(BRAND_MUTED), textAnchor="middle"))
+        if idx in label_indexes:
+            drawing.add(String(x + bar_slot / 2, _axis_label_y(bottom, idx, len(rows)), _axis_label(row, len(rows)), fontName=_font(rl, "regular"), fontSize=label_size, fillColor=colors.HexColor(BRAND_MUTED), textAnchor="middle"))
         if paired:
             inflow_h = _scale(decimal_value(row.get("inflow_volume")), Decimal("0"), max_value, plot_h)
             outflow_h = _scale(decimal_value(row.get("outflow_volume")), Decimal("0"), max_value, plot_h)
@@ -346,9 +410,9 @@ def _bar_chart(
             drawing.add(Rect(x + bar_slot / 2, bottom, max(bar_slot / 2 - 2, 1), outflow_h, fillColor=colors.HexColor(BRAND_ACCENT), strokeColor=None))
             if len(rows) <= 12:
                 if decimal_value(row.get("inflow_volume")):
-                    drawing.add(String(x + max(bar_slot / 4 - 1, 1), min(bottom + inflow_h + 2, bottom + plot_h - 5), _compact_number(row.get("inflow_volume")), fontName=_font(rl, "regular"), fontSize=4.5, fillColor=colors.HexColor(BRAND_INK), textAnchor="middle"))
+                    drawing.add(String(x + max(bar_slot / 4 - 1, 1), min(bottom + inflow_h + 3, bottom + plot_h - 5), _compact_number(row.get("inflow_volume")), fontName=_font(rl, "regular"), fontSize=5.2, fillColor=colors.HexColor(BRAND_INK), textAnchor="middle"))
                 if decimal_value(row.get("outflow_volume")):
-                    drawing.add(String(x + bar_slot * 0.75, min(bottom + outflow_h + 2, bottom + plot_h - 5), _compact_number(row.get("outflow_volume")), fontName=_font(rl, "regular"), fontSize=4.5, fillColor=colors.HexColor(BRAND_INK), textAnchor="middle"))
+                    drawing.add(String(x + bar_slot * 0.75, min(bottom + outflow_h + 3, bottom + plot_h - 5), _compact_number(row.get("outflow_volume")), fontName=_font(rl, "regular"), fontSize=5.2, fillColor=colors.HexColor(BRAND_INK), textAnchor="middle"))
         else:
             value = decimal_value(row.get("realized_pnl"))
             scaled_value = bottom + _scale(value, low, high, plot_h)
@@ -359,13 +423,14 @@ def _bar_chart(
             color = COLOR_PROFIT if value >= 0 else BRAND_ACCENT
             drawing.add(Rect(x, y, max(bar_slot - 4, 1), bar_h, fillColor=colors.HexColor(color), strokeColor=None))
             if value and len(rows) <= 18:
-                label_y = y + bar_h + 2 if value > 0 else y - 7
-                label_y = max(bottom + 2, min(label_y, bottom + plot_h - 5))
-                drawing.add(String(x + bar_slot / 2, label_y, _compact_money(currency, value), fontName=_font(rl, "regular"), fontSize=4.7, fillColor=colors.HexColor(BRAND_INK), textAnchor="middle"))
+                label_y = y + bar_h + 3 if value > 0 else y + 3
+                label_color = BRAND_INK if value > 0 else "#ffffff"
+                label_y = max(bottom + 3, min(label_y, bottom + plot_h - 6))
+                drawing.add(String(x + bar_slot / 2, label_y, _compact_money(currency, value), fontName=_font(rl, "bold"), fontSize=5.2, fillColor=colors.HexColor(label_color), textAnchor="middle"))
     if paired:
-        drawing.add(String(left, 4, f"Max period {_money(currency, max_value)} · Total in {_money(currency, total_inflow)} · Total out {_money(currency, total_outflow)}", fontName=_font(rl, "regular"), fontSize=6.5, fillColor=colors.HexColor(BRAND_MUTED)))
+        drawing.add(String(left, 4, f"Max period {_money(currency, raw_max_value)} · Total in {_money(currency, total_inflow)} · Total out {_money(currency, total_outflow)}", fontName=_font(rl, "regular"), fontSize=6.5, fillColor=colors.HexColor(BRAND_MUTED)))
     else:
-        drawing.add(String(left, 4, f"Range {_signed_money(currency, low)} to {_signed_money(currency, high)}", fontName=_font(rl, "regular"), fontSize=6.5, fillColor=colors.HexColor(BRAND_MUTED)))
+        drawing.add(String(left, 4, f"Range {_signed_money(currency, raw_low)} to {_signed_money(currency, raw_high)}", fontName=_font(rl, "regular"), fontSize=6.5, fillColor=colors.HexColor(BRAND_MUTED)))
     return drawing
 
 
@@ -378,8 +443,8 @@ def write_summary_pdf(file_path: str | Path, report: Mapping[str, Any]) -> Mappi
     path.parent.mkdir(parents=True, exist_ok=True)
     colors = rl["colors"]
     styles = {
-        "title": rl["ParagraphStyle"]("Title", fontName=fonts["bold"], fontSize=22, leading=26, textColor=colors.HexColor(BRAND_INK)),
-        "h2": rl["ParagraphStyle"]("H2", fontName=fonts["bold"], fontSize=12, leading=16, spaceBefore=10, spaceAfter=5, textColor=colors.HexColor(BRAND_INK)),
+        "title": rl["ParagraphStyle"]("Title", fontName=fonts["bold"], fontSize=18, leading=22, textColor=colors.HexColor(BRAND_INK)),
+        "h2": rl["ParagraphStyle"]("H2", fontName=fonts["bold"], fontSize=11.5, leading=15, spaceBefore=8, spaceAfter=5, textColor=colors.HexColor(BRAND_INK)),
         "body": rl["ParagraphStyle"]("Body", fontName=fonts["regular"], fontSize=8.5, leading=12, textColor=colors.HexColor(BRAND_INK)),
         "muted": rl["ParagraphStyle"]("Muted", fontName=fonts["regular"], fontSize=8, leading=11, textColor=colors.HexColor(BRAND_MUTED)),
     }
@@ -457,17 +522,17 @@ def write_summary_pdf(file_path: str | Path, report: Mapping[str, Any]) -> Mappi
     else:
         integrity_rows.append(["Quarantine reasons", "None in scope"])
     story.append(_table(rl, integrity_rows, [70 * rl["mm"], 92 * rl["mm"]]))
-    story.append(rl["PageBreak"]())
     story.append(_para(rl, styles, "Portfolio Movement", "h2"))
     story.append(_line_chart(rl, "Total balance over time", report.get("balance_history") or [], currency))
-    story.append(rl["Spacer"](1, 8))
-    story.append(_donut_chart(rl, "Holdings by wallet at period end", report.get("wallet_holdings") or [], currency))
     story.append(rl["PageBreak"]())
+    story.append(_para(rl, styles, "Portfolio Composition", "h2"))
+    story.append(_donut_chart(rl, "Holdings by wallet at period end", report.get("wallet_holdings") or [], currency))
+    story.append(rl["Spacer"](1, 7))
     story.append(_para(rl, styles, "Period Activity", "h2"))
     story.append(_bar_chart(rl, "Realized PnL per period", report.get("realized_pnl_periods") or [], currency))
-    story.append(rl["Spacer"](1, 8))
+    story.append(rl["Spacer"](1, 7))
     story.append(_bar_chart(rl, "Inflows vs outflows volume", report.get("flow_periods") or [], currency, paired=True))
-    story.append(rl["Spacer"](1, 8))
+    story.append(rl["Spacer"](1, 7))
     story.append(_para(rl, styles, "Wallet Appendix", "h2"))
     appendix = [["Wallet", "Scope", "Tx count", "End balance", "End value"]]
     for row in report.get("wallet_appendix") or []:
