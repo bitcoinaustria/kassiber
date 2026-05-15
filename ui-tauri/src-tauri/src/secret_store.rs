@@ -3,8 +3,10 @@ use keyring_core::error::Error as KeyringError;
 use keyring_core::Entry;
 use serde::Serialize;
 use std::collections::{BTreeMap, HashMap};
+#[cfg(any(target_os = "linux", test))]
+use std::sync::Arc;
 #[cfg(test)]
-use std::sync::{Arc, Mutex};
+use std::sync::Mutex;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case")]
