@@ -298,6 +298,7 @@ _DIRECT_AUTO_JOURNAL_REFRESH_KINDS = {
     "ui.reports.balance_history",
     "ui.report.blockers",
 }
+_SWAP_MATCHING_DAEMON_KIND_PREFIXES = ("ui.transfers.", "ui.saved_views.")
 PENDING_AI_CANCEL_TTL_SECONDS = 30.0
 MAX_PENDING_AI_CANCELS = 128
 # Hard caps for source-funds daemon kinds that drive build_report. The
@@ -1105,19 +1106,11 @@ def _write_records_csv(
     }
 
 
-def _ui_swap_matching_payload(
-    ctx: DaemonContext,
+def _ui_swap_matching_payload_from_conn(
+    conn: sqlite3.Connection,
     kind: str,
     args: dict[str, Any],
 ) -> dict[str, Any]:
-    """Dispatch ``ui.transfers.*`` and ``ui.saved_views.*`` daemon kinds.
-
-    The UI calls these kinds explicitly from dialogs, so consent is the
-    dialog itself — there's no per-kind consent gate at this layer.
-    AI-callable subset is gated upstream via the ``TOOL_CATALOG`` in
-    ``kassiber.ai.tools`` (commit 10).
-    """
-    conn = _require_conn(ctx)
     workspace = args.get("workspace")
     profile = args.get("profile")
 
@@ -1272,6 +1265,21 @@ def _ui_swap_matching_payload(
         return delete_saved_view_cli(conn, workspace, profile, str(view_id))
 
     raise AppError(f"Unsupported swap-matching daemon kind '{kind}'", code="validation")
+
+
+def _ui_swap_matching_payload(
+    ctx: DaemonContext,
+    kind: str,
+    args: dict[str, Any],
+) -> dict[str, Any]:
+    """Dispatch ``ui.transfers.*`` and ``ui.saved_views.*`` daemon kinds.
+
+    The UI calls these kinds explicitly from dialogs, so consent is the
+    dialog itself — there's no per-kind consent gate at this layer.
+    AI-callable subset is gated upstream via the ``TOOL_CATALOG`` in
+    ``kassiber.ai.tools``.
+    """
+    return _ui_swap_matching_payload_from_conn(_require_conn(ctx), kind, args)
 
 
 def _source_funds_hooks() -> core_source_funds.SourceFundsHooks:
@@ -2959,6 +2967,12 @@ def _execute_read_only_ai_tool(call: ParsedAiToolCall, runtime: AiToolRuntime) -
                 payload = build_workspace_health_snapshot(conn)
             elif entry.daemon_kind == "ui.next_actions":
                 payload = build_next_actions_snapshot(conn)
+            elif entry.daemon_kind.startswith(_SWAP_MATCHING_DAEMON_KIND_PREFIXES):
+                payload = _ui_swap_matching_payload_from_conn(
+                    conn,
+                    entry.daemon_kind,
+                    call.arguments,
+                )
             else:
                 return _tool_result_denied("tool_not_allowed")
             result: dict[str, Any] = {
@@ -3052,8 +3066,17 @@ def _execute_mutating_ai_tool(call: ParsedAiToolCall, runtime: AiToolRuntime) ->
                 return {"ok": True, "envelope": build_envelope(entry.daemon_kind, payload)}
 
             return _run_on_daemon_main_thread(runtime, _execute)
-        else:
-            return _tool_result_denied("tool_not_allowed")
+        if entry.daemon_kind.startswith(_SWAP_MATCHING_DAEMON_KIND_PREFIXES):
+            def _execute(conn: sqlite3.Connection) -> dict[str, Any]:
+                payload = _ui_swap_matching_payload_from_conn(
+                    conn,
+                    entry.daemon_kind,
+                    call.arguments,
+                )
+                return {"ok": True, "envelope": build_envelope(entry.daemon_kind, payload)}
+
+            return _run_on_daemon_main_thread(runtime, _execute)
+        return _tool_result_denied("tool_not_allowed")
     except AppError as exc:
         return _tool_result_denied(
             exc.code or "tool_error",
@@ -3353,16 +3376,20 @@ def _planned_auto_read_tools(validated: dict[str, Any]) -> list[AutoReadToolCall
         "note",
         "outflow",
         "pending",
+        "pair",
+        "peg",
         "portfolio",
         "quarantine",
         "rate",
         "smallest",
         "stale",
         "summary",
+        "swap",
         "sync",
         "tag",
         "tax",
         "transaction",
+        "transfer",
         "trend",
         "wallet",
         "steuer",
@@ -3627,9 +3654,17 @@ def _planned_auto_read_tools(validated: dict[str, Any]) -> list[AutoReadToolCall
         "uebertrag",
         "tausch",
     ):
+        add("ui.transfers.suggest")
+        add("ui.transfers.list")
         add("ui.journals.transfers.list", {"limit": 10})
         add("ui.journals.snapshot")
         add("ui.reports.summary")
+
+    if _message_has_any(text, "auto-pair", "autopair", "rule", "rules", "regel"):
+        add("ui.transfers.rules.list")
+
+    if _message_has_any(text, "saved view", "saved filter", "view", "filter"):
+        add("ui.saved_views.list")
 
     if _message_has_any(
         text,
@@ -3659,7 +3694,7 @@ def _auto_tool_context_result_summary(result: dict[str, Any]) -> dict[str, Any]:
         summary["kind"] = envelope.get("kind")
         data = envelope.get("data")
         if isinstance(data, dict):
-            for key in ("summary", "metrics", "filters", "ready", "blockers"):
+            for key in ("summary", "metrics", "filters", "counts", "ready", "blockers"):
                 if key in data:
                     summary[key] = _trim_auto_context_value(data[key])
     reason = result.get("reason")
@@ -6388,7 +6423,7 @@ def handle_request(
             False,
         )
 
-    if kind.startswith("ui.transfers.") or kind.startswith("ui.saved_views."):
+    if kind.startswith(_SWAP_MATCHING_DAEMON_KIND_PREFIXES):
         return (
             _with_request_id(
                 build_envelope(

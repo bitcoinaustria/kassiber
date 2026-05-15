@@ -1069,11 +1069,12 @@ Use ui.report.blockers before saying reports are ready, ui.rates.coverage for
 missing-price questions, and ui.audit.changes_since_last_answer when checking
 whether a previous answer is still current. Do not invent calculations when
 Kassiber can read program-derived output.
-For swap/peg/layer-transition questions, source pair kind and policy from
-ui.journals.transfers.list or report summary transfer_pairs, and source
-neutral_swap explanations from journal snapshot/event pair fields. If those
-fields are absent, say the tool surface is missing the evidence instead of
-inferring.
+For swap/peg/layer-transition questions, first read ui.transfers.suggest and
+ui.transfers.list for candidate and reviewed-pair evidence. Source pair kind
+and policy from ui.journals.transfers.list or report summary transfer_pairs,
+and source neutral_swap explanations from journal snapshot/event pair fields.
+If those fields are absent, say the tool surface is missing the evidence
+instead of inferring.
 
 Stale local journals are maintenance, not a question for the user; read/report
 tools may refresh them before answering. Watch-only source refresh contacts

@@ -230,12 +230,12 @@ Before the provider is called, Kassiber also runs a small deterministic
 read-only router for Kassiber questions. It looks for common accounting intents
 such as pending work, sync readiness, totals, inflow/outflow, balances, tax
 summaries, largest/smallest transactions, transaction search, quarantine,
-transfers, and pricing. Matching read-only tool results are streamed to the UI
-and inserted into the model context as exact local data, so small local models
-can answer from program output instead of doing their own arithmetic. That
-auto-read context is sent as untrusted accounting data, not as system
-instructions, and is bounded per tool so large reports cannot silently crowd
-out everything else.
+transfers, swap candidates, saved review filters, auto-pair rules, and pricing.
+Matching read-only tool results are streamed to the UI and inserted into the
+model context as exact local data, so small local models can answer from program
+output instead of doing their own arithmetic. That auto-read context is sent as
+untrusted accounting data, not as system instructions, and is bounded per tool
+so large reports cannot silently crowd out everything else.
 When one of those reads needs current reports or journal-derived state,
 Kassiber refreshes stale local journals first and includes the
 `ui.journals.process` result in the tool result metadata. This refresh is local
@@ -329,6 +329,15 @@ surfaces:
   reads the active profile's AI maintenance settings
 - `ui_workspace_health` maps to daemon kind `ui.workspace.health`
 - `ui_next_actions` maps to daemon kind `ui.next_actions`
+- `ui_transfers_suggest` maps to daemon kind `ui.transfers.suggest`; it returns
+  swap/peg candidates with confidence, method, computed fee, and conflict-cluster
+  context without writing review decisions
+- `ui_transfers_list` maps to daemon kind `ui.transfers.list`; it returns active
+  reviewed transfer/swap pairs
+- `ui_transfers_rules_list` maps to daemon kind `ui.transfers.rules.list`; it
+  returns active auto-pair rules without applying them
+- `ui_saved_views_list` maps to daemon kind `ui.saved_views.list`; it returns
+  saved review-queue filters such as swap-candidate views
 - `read_skill_reference`
 
 `ui.workspace.health` summarizes the active books set and book
@@ -350,7 +359,12 @@ Mutating provider tools currently include `ui_wallets_sync`, which maps to
 daemon kind `ui.wallets.sync`, `ui_journals_process`, which maps to
 `ui.journals.process`, `ui_maintenance_configure`, which changes active-profile
 AI maintenance settings, and `ui_maintenance_run`, which runs optional sync plus
-journal maintenance and returns report blockers. Stale journals may also be
+journal maintenance and returns report blockers. The same consent path also
+covers review-queue actions exposed to chat: `ui_transfers_pair`,
+`ui_transfers_unpair`, `ui_transfers_bulk_pair`, `ui_transfers_dismiss`,
+`ui_transfers_rules_create`, `ui_transfers_rules_delete`,
+`ui_transfers_rules_set_enabled`, `ui_transfers_rules_apply`,
+`ui_saved_views_create`, and `ui_saved_views_delete`. Stale journals may also be
 refreshed automatically before read/report tools as local maintenance. Wallet
 sync before report reads is disabled by default; it runs automatically only
 after `ui_maintenance_configure` enables that active-profile setting, or when

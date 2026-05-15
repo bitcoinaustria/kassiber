@@ -280,6 +280,9 @@ and [docs/plan/04-desktop-ui.md](docs/plan/04-desktop-ui.md).
   fields, add report-blocker / rate-coverage / change-audit / maintenance
   tools, expose answer provenance in GUI/export, and export tool args/results
   for debugging inaccurate small-model answers.
+- [x] Wire the in-app AI swap-review surface end to end: advertised
+  `ui.transfers.*` and `ui.saved_views.*` tools now execute through the same
+  daemon dispatcher as the GUI, with writes still behind tool consent.
 - [x] Dev browser bridge for real local AI: Vite keeps a loopback-only Python
   daemon supervisor, demuxes JSONL by `request_id`, and streams `ai.chat`
   records to browser clients as NDJSON so Codex/browser tools can test local

@@ -154,6 +154,7 @@ class ToolCatalogPromptTest(unittest.TestCase):
             "ui_reports_balance_history",
             "ui_journals_snapshot",
             "ui_journals_quarantine",
+            "ui_journals_events_list",
             "ui_journals_transfers_list",
             "ui_journals_process",
             "ui_rates_summary",
@@ -209,6 +210,7 @@ class ToolCatalogPromptTest(unittest.TestCase):
             get_tool("ui_reports_balance_history").name,
             "ui.reports.balance_history",
         )
+        self.assertEqual(get_tool("ui_journals_events_list").kind_class, "read_only")
         self.assertEqual(get_tool("ui_journals_quarantine").kind_class, "read_only")
         self.assertEqual(get_tool("ui_rates_summary").kind_class, "read_only")
         self.assertEqual(get_tool("ui_rates_coverage").name, "ui.rates.coverage")

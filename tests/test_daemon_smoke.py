@@ -3126,6 +3126,92 @@ class DaemonSmokeTest(unittest.TestCase):
         self.assertTrue(results[0]["ok"])
         self.assertEqual(results[0]["envelope"]["kind"], "ui.journals.events.list")
 
+    def test_swap_read_only_ai_tool_dispatches_to_swap_payload(self):
+        task_queue = queue.Queue()
+        runtime = AiToolRuntime(
+            data_root="/not-used",
+            runtime_config={},
+            main_thread_tasks=task_queue,
+            maintenance_state={},
+        )
+        call = ParsedAiToolCall(
+            call_id="call_1",
+            name="ui.transfers.suggest",
+            arguments={"confidence": "exact"},
+        )
+        results = []
+
+        with (
+            mock.patch(
+                "kassiber.daemon.open_db",
+                side_effect=AssertionError("should use daemon main connection"),
+            ),
+            mock.patch(
+                "kassiber.daemon._ui_swap_matching_payload_from_conn",
+                return_value={"candidates": [], "counts": {"total": 0}},
+            ) as payload_mock,
+        ):
+            thread = threading.Thread(
+                target=lambda: results.append(_execute_read_only_ai_tool(call, runtime)),
+            )
+            thread.start()
+            task = task_queue.get(timeout=1)
+            conn_marker = object()
+            task.response.put((True, task.callback(conn_marker)))
+            thread.join(timeout=1)
+
+        self.assertFalse(thread.is_alive())
+        payload_mock.assert_called_once_with(
+            conn_marker,
+            "ui.transfers.suggest",
+            {"confidence": "exact"},
+        )
+        self.assertTrue(results[0]["ok"])
+        self.assertEqual(results[0]["envelope"]["kind"], "ui.transfers.suggest")
+
+    def test_swap_mutating_ai_tool_dispatches_to_swap_payload(self):
+        task_queue = queue.Queue()
+        runtime = AiToolRuntime(
+            data_root="/not-used",
+            runtime_config={},
+            main_thread_tasks=task_queue,
+            maintenance_state={},
+        )
+        call = ParsedAiToolCall(
+            call_id="call_1",
+            name="ui.transfers.pair",
+            arguments={"tx_out": "out-1", "tx_in": "in-1"},
+        )
+        results = []
+
+        with (
+            mock.patch(
+                "kassiber.daemon.open_db",
+                side_effect=AssertionError("should use daemon main connection"),
+            ),
+            mock.patch(
+                "kassiber.daemon._ui_swap_matching_payload_from_conn",
+                return_value={"id": "pair-1"},
+            ) as payload_mock,
+        ):
+            thread = threading.Thread(
+                target=lambda: results.append(_execute_mutating_ai_tool(call, runtime)),
+            )
+            thread.start()
+            task = task_queue.get(timeout=1)
+            conn_marker = object()
+            task.response.put((True, task.callback(conn_marker)))
+            thread.join(timeout=1)
+
+        self.assertFalse(thread.is_alive())
+        payload_mock.assert_called_once_with(
+            conn_marker,
+            "ui.transfers.pair",
+            {"tx_out": "out-1", "tx_in": "in-1"},
+        )
+        self.assertTrue(results[0]["ok"])
+        self.assertEqual(results[0]["envelope"]["kind"], "ui.transfers.pair")
+
     def test_auto_tool_context_marks_imported_text_as_untrusted_user_data(self):
         context = _auto_tool_context_for_model(
             [
@@ -3194,6 +3280,7 @@ class DaemonSmokeTest(unittest.TestCase):
                         "envelope": {
                             "kind": "ui.transactions.search",
                             "data": {
+                                "counts": {"total": 80},
                                 "txs": [
                                     {"note": "x" * 256}
                                     for _ in range(80)
@@ -3207,6 +3294,7 @@ class DaemonSmokeTest(unittest.TestCase):
         self.assertIn("truncation_reason", context)
         self.assertNotIn(secret_marker, context)
         self.assertIn("token=[redacted]", context)
+        self.assertIn('"counts":{"total":80}', context)
 
     def test_auto_read_router_avoids_tx_substring_and_understands_german_tax(self):
         planned = _planned_auto_read_tools(
@@ -3245,9 +3333,26 @@ class DaemonSmokeTest(unittest.TestCase):
             }
         )
         planned_names = [item.name for item in planned]
+        self.assertIn("ui.transfers.suggest", planned_names)
+        self.assertIn("ui.transfers.list", planned_names)
         self.assertIn("ui.journals.transfers.list", planned_names)
         self.assertIn("ui.journals.snapshot", planned_names)
         self.assertIn("ui.reports.summary", planned_names)
+
+        planned = _planned_auto_read_tools(
+            {
+                "system_prompt_kind": "kassiber",
+                "messages": [
+                    {
+                        "role": "user",
+                        "content": "show my auto-pair rules and saved swap filters",
+                    }
+                ],
+            }
+        )
+        planned_names = [item.name for item in planned]
+        self.assertIn("ui.transfers.rules.list", planned_names)
+        self.assertIn("ui.saved_views.list", planned_names)
 
     def test_tax_summary_year_filter_omits_all_years_grand_total(self):
         rows = [
