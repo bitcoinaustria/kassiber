@@ -3865,6 +3865,17 @@ class DaemonSmokeTest(unittest.TestCase):
                 ),
                 encoding="utf-8",
             )
+            excluded_csv = Path(tmp) / "excluded.csv"
+            excluded_csv.write_text(
+                "\n".join(
+                    [
+                        "date,txid,direction,asset,amount,fee,fiat_rate,description",
+                        "2026-04-01T10:00:00Z,cold-excluded-1,inbound,BTC,0.01000000,0,60000,Excluded report test row",
+                        "",
+                    ]
+                ),
+                encoding="utf-8",
+            )
             _run_cli(
                 data_root,
                 "wallets",
@@ -3878,6 +3889,8 @@ class DaemonSmokeTest(unittest.TestCase):
             )
             _run_cli(data_root, "wallets", "import-csv", "--wallet", "Hot", "--file", str(hot_csv))
             _run_cli(data_root, "rates", "set", "BTC-EUR", "2026-03-01T00:00:00Z", "60000")
+            _run_cli(data_root, "wallets", "import-csv", "--wallet", "Cold", "--file", str(excluded_csv))
+            _run_cli(data_root, "metadata", "records", "excluded", "set", "--transaction", "cold-excluded-1")
             _run_cli(data_root, "wallets", "import-csv", "--wallet", "Cold", "--file", str(post_period_csv))
             _run_cli(data_root, "rates", "set", "BTC-EUR", "2027-01-02T00:00:00Z", "70000")
             _run_cli(data_root, "journals", "process")

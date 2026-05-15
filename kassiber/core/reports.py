@@ -1330,7 +1330,7 @@ def _summary_pdf_data_integrity(conn, profile, wallets, hooks: ReportHooks, star
         tx_params,
     ).fetchall()
     current_tx_count = conn.execute(
-        "SELECT COUNT(*) AS count FROM transactions WHERE profile_id = ?",
+        "SELECT COUNT(*) AS count FROM transactions WHERE profile_id = ? AND excluded = 0",
         (profile["id"],),
     ).fetchone()["count"]
     input_version = _summary_pdf_int(profile["journal_input_version"])
