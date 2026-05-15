@@ -148,6 +148,29 @@
 }
 
 /*
+ * High refresh rate / ProMotion support: WKWebView on macOS, WebView2 on
+ * Windows, and webkit2gtk on Linux all sync web content to the display's
+ * native refresh rate (up to 120Hz on Apple ProMotion). For animations to
+ * actually run at that rate they must be GPU-composited — kept on the
+ * compositor thread, off the main thread. Tailwind's `animate-spin` already
+ * animates `transform` (GPU-friendly), and the `route-progress` keyframe
+ * above does too. The `motion-reduce` block below honors the OS-level
+ * "Reduce motion" accessibility preference as a global safety net for any
+ * animation that isn't already wrapped in `motion-safe` / `motion-reduce`
+ * Tailwind variants.
+ */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/*
  ---break---
  */
 

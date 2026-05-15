@@ -1117,7 +1117,7 @@ function RouteTransitionIndicator({ active }: { active: boolean }) {
         active ? "opacity-100" : "opacity-0",
       )}
     >
-      <div className="h-full w-1/2 bg-primary/70 motion-safe:animate-[route-progress_0.9s_ease-in-out_infinite] motion-reduce:w-full" />
+      <div className="h-full w-1/2 bg-primary/70 will-change-transform motion-safe:animate-[route-progress_0.9s_ease-in-out_infinite] motion-reduce:w-full motion-reduce:will-change-auto" />
     </div>
   );
 }
@@ -1856,7 +1856,7 @@ function AppDashboardHeader({
                         className={cn(
                           "h-full rounded-full bg-primary transition-[width] duration-300",
                           item.progress.indeterminate &&
-                            "w-1/2 motion-safe:animate-[route-progress_0.9s_ease-in-out_infinite] motion-reduce:w-full",
+                            "w-1/2 will-change-transform motion-safe:animate-[route-progress_0.9s_ease-in-out_infinite] motion-reduce:w-full motion-reduce:will-change-auto",
                         )}
                         style={
                           item.progress.indeterminate
