@@ -1298,6 +1298,7 @@ def _summary_pdf_int(value):
 
 
 def _summary_pdf_data_integrity(conn, profile, wallets, hooks: ReportHooks, start_dt, end_dt):
+    internal_transfers = _summary_pdf_internal_transfers(conn, profile["id"], wallets, hooks, start_dt, end_dt)
     wallet_filter, wallet_params = _wallet_scope_sql("t.wallet_id", wallets)
     tx_params = [profile["id"], *wallet_params, hooks.iso_z(start_dt), hooks.iso_z(end_dt)]
     tx_summary = conn.execute(
@@ -1358,6 +1359,7 @@ def _summary_pdf_data_integrity(conn, profile, wallets, hooks: ReportHooks, star
         "priced_percentage": priced_percentage,
         "quarantine_count": sum(row["count"] for row in quarantine_reasons),
         "quarantine_reasons": quarantine_reasons,
+        "internal_transfers": internal_transfers,
         "journals": {
             "status": "current" if journals_current else ("stale" if profile["last_processed_at"] else "not_processed"),
             "current": journals_current,
@@ -1682,7 +1684,6 @@ def build_summary_pdf_report_data(
     btc_stack_start = history_rows[0]["quantity"] if history_rows else 0.0
     btc_stack_end = history_rows[-1]["quantity"] if history_rows else 0.0
     data_integrity = _summary_pdf_data_integrity(conn, profile, wallets, hooks, start_dt, end_dt)
-    data_integrity["internal_transfers"] = _summary_pdf_internal_transfers(conn, profile["id"], wallets, hooks, start_dt, end_dt)
     benchmark = _summary_pdf_benchmark(conn, hooks, start_dt, end_dt, profile["fiat_currency"])
     top_movements = _summary_pdf_top_movements(conn, profile["id"], wallets, hooks, start_dt, end_dt)
     top_disposals = _summary_pdf_top_disposals(conn, profile["id"], wallets, hooks, start_dt, end_dt)

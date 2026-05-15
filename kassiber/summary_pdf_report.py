@@ -110,25 +110,21 @@ def _btc_stack_change_text(start: Decimal, end: Decimal) -> str:
     return f"{sign}{delta:.4f} BTC"
 
 
-def _perf_summary_fiat(currency: str, metrics: Mapping[str, Any], benchmark: Mapping[str, Any] | None) -> str:
+def _perf_summary_lines(currency: str, metrics: Mapping[str, Any], benchmark: Mapping[str, Any] | None) -> list[str]:
     start = decimal_value(metrics.get("period_start_value"))
     end = decimal_value(metrics.get("period_end_value"))
-    unrealized = decimal_value(metrics.get("unrealized_pnl"))
-    parts = [f"Period performance: {_perf_change_text(currency, start, end)}"]
-    if benchmark and benchmark.get("change_pct") is not None:
-        parts[0] += f" (BTC spot {decimal_value(benchmark['change_pct']):+.1f}%)"
-    parts.append(f"Unrealized at close: {_signed_money(currency, unrealized)}")
-    return " · ".join(parts)
-
-
-def _perf_summary_btc(currency: str, metrics: Mapping[str, Any]) -> str:
     stack_start = decimal_value(metrics.get("btc_stack_start"))
     stack_end = decimal_value(metrics.get("btc_stack_end"))
-    fees_btc = metrics.get("fees_btc")
-    return (
+    unrealized = decimal_value(metrics.get("unrealized_pnl"))
+    fiat_parts = [f"Period performance: {_perf_change_text(currency, start, end)}"]
+    if benchmark and benchmark.get("change_pct") is not None:
+        fiat_parts[0] += f" (BTC spot {decimal_value(benchmark['change_pct']):+.1f}%)"
+    fiat_parts.append(f"Unrealized at close: {_signed_money(currency, unrealized)}")
+    btc_line = (
         f"BTC stack: {stack_start:.4f} → {stack_end:.4f} BTC ({_btc_stack_change_text(stack_start, stack_end)})"
-        f" · Network + venue fees: {_btc(fees_btc)} · {_money(currency, metrics.get('fees_fiat'))}"
+        f" · Network + venue fees: {_btc(metrics.get('fees_btc'))} · {_money(currency, metrics.get('fees_fiat'))}"
     )
+    return [" · ".join(fiat_parts), btc_line]
 
 
 def _para(rl: dict[str, Any], styles: dict[str, Any], text: Any, style: str = "body"):
@@ -514,6 +510,219 @@ def _bar_chart(
     return drawing
 
 
+def _cover_flowables(rl, styles, report):
+    return [
+        _para(rl, styles, report.get("title") or "Kassiber Summary Report", "title"),
+        _para(rl, styles, f"{report.get('workspace')} / {report.get('profile')}", "body"),
+        _para(rl, styles, f"Timeframe: {report.get('timeframe', {}).get('label', '')} · Generated: {report.get('generated_at', '')}", "muted"),
+        rl["Spacer"](1, 6),
+    ]
+
+
+def _snapshot_flowables(rl, styles, report, currency):
+    snapshot = report.get("snapshot")
+    if not snapshot:
+        return []
+    rows = [["Wallet", "Assets", "Balance", "Market value"]]
+    for row in snapshot.get("wallets", []):
+        rows.append([
+            row.get("wallet", ""),
+            ", ".join(row.get("assets") or []),
+            _btc(row.get("quantity")),
+            _money(currency, row.get("market_value")),
+        ])
+    return [
+        _para(rl, styles, f"As of today: {_money(currency, snapshot.get('total_market_value'))} · {_btc(snapshot.get('total_quantity'))}", "h2"),
+        _table(rl, rows, [44 * rl["mm"], 34 * rl["mm"], 38 * rl["mm"], 45 * rl["mm"]]),
+        rl["Spacer"](1, 8),
+    ]
+
+
+def _kpi_flowables(rl, styles, report, currency):
+    metrics = report.get("metrics") or {}
+    flowables = [
+        _metric_strip(rl, [
+            ("Start value", _money(currency, metrics.get("period_start_value"))),
+            ("End value", _money(currency, metrics.get("period_end_value"))),
+            ("Net flow", _signed_money(currency, metrics.get("net_flow"))),
+            ("Realized PnL", _signed_money(currency, metrics.get("realized_pnl"))),
+            ("Fees", _money(currency, metrics.get("fees_fiat"))),
+        ]),
+        rl["Spacer"](1, 5),
+    ]
+    for line in _perf_summary_lines(currency, metrics, report.get("benchmark")):
+        flowables.append(_para(rl, styles, line, "muted"))
+    flowables.append(rl["Spacer"](1, 8))
+    return flowables
+
+
+def _data_integrity_flowables(rl, styles, report, currency):
+    data_integrity = report.get("data_integrity") or {}
+    priced_total = int(data_integrity.get("total_transactions") or 0)
+    priced_count = int(data_integrity.get("priced_transactions") or 0)
+    priced_pct = decimal_value(data_integrity.get("priced_percentage"))
+    journal_status = (data_integrity.get("journals") or {}).get("status") or "unknown"
+    rows = [
+        ["Signal", "Status"],
+        ["Priced transactions", f"{priced_count} / {priced_total} ({priced_pct:.1f}%)"],
+        ["Journals", str(journal_status).replace("_", " ").title()],
+        ["Quarantines", str(int(data_integrity.get("quarantine_count") or 0))],
+    ]
+    internal = data_integrity.get("internal_transfers") or {}
+    if int(internal.get("count") or 0):
+        rows.append([
+            "Internal transfers (excluded from flow)",
+            f"{int(internal['count'])} tx · {_money(currency, internal.get('fiat_volume'))}",
+        ])
+    quarantine_reasons = data_integrity.get("quarantine_reasons") or []
+    if quarantine_reasons:
+        for r in quarantine_reasons:
+            rows.append([f"Quarantine: {r.get('reason', '')}", str(int(r.get("count") or 0))])
+    else:
+        rows.append(["Quarantine reasons", "None in scope"])
+    return [
+        _para(rl, styles, "Data Integrity", "h2"),
+        _table(rl, rows, [70 * rl["mm"], 92 * rl["mm"]]),
+    ]
+
+
+def _movement_flowables(rl, styles, report, currency):
+    return [
+        _para(rl, styles, "Portfolio Movement", "h2"),
+        _line_chart(rl, "Total balance over time", report.get("balance_history") or [], currency),
+    ]
+
+
+def _composition_flowables(rl, styles, report, currency):
+    flowables = [
+        _para(rl, styles, "Portfolio Composition", "h2"),
+        _donut_chart(rl, "Holdings by wallet at period end", report.get("wallet_holdings") or [], currency),
+    ]
+    holding_age_text = _holding_age_summary(report.get("holding_age"))
+    if holding_age_text:
+        flowables.append(_para(rl, styles, holding_age_text, "muted"))
+    flowables.append(rl["Spacer"](1, 7))
+    return flowables
+
+
+def _disposal_table_flowables(rl, styles, top_disposals, currency):
+    if not top_disposals:
+        return []
+    rows = [["Date", "Wallet", "Quantity", "Proceeds", "Cost basis", "Gain/Loss"]]
+    for row in top_disposals:
+        rows.append([
+            str(row.get("occurred_at", ""))[:10],
+            str(row.get("wallet", ""))[:22],
+            _btc(-decimal_value(row.get("quantity"))),
+            _money(currency, row.get("proceeds")),
+            _money(currency, row.get("cost_basis")),
+            _signed_money(currency, row.get("gain_loss")),
+        ])
+    return [
+        rl["Spacer"](1, 4),
+        _para(rl, styles, "Largest disposals", "body"),
+        _table(rl, rows, [22 * rl["mm"], 36 * rl["mm"], 30 * rl["mm"], 30 * rl["mm"], 30 * rl["mm"], 34 * rl["mm"]]),
+    ]
+
+
+def _movement_table_flowables(rl, styles, top_movements, currency):
+    if not top_movements:
+        return []
+    rows = [["Date", "Wallet", "Dir", "Asset", "Amount", "Value", "Counterparty"]]
+    for row in top_movements:
+        rows.append([
+            str(row.get("occurred_at", ""))[:10],
+            str(row.get("wallet", ""))[:22],
+            _direction_label(row.get("direction")),
+            str(row.get("asset", "")),
+            _btc(row.get("quantity")),
+            _money(currency, row.get("fiat_value")),
+            str(row.get("counterparty", ""))[:28],
+        ])
+    return [
+        rl["Spacer"](1, 4),
+        _para(rl, styles, "Largest activity", "body"),
+        _table(rl, rows, [22 * rl["mm"], 30 * rl["mm"], 12 * rl["mm"], 14 * rl["mm"], 28 * rl["mm"], 30 * rl["mm"], 46 * rl["mm"]]),
+    ]
+
+
+def _activity_flowables(rl, styles, report, currency):
+    flowables = [
+        _para(rl, styles, "Period Activity", "h2"),
+        _bar_chart(rl, "Realized PnL per period", report.get("realized_pnl_periods") or [], currency),
+    ]
+    flowables.extend(_disposal_table_flowables(rl, styles, report.get("top_disposals") or [], currency))
+    flowables.append(rl["Spacer"](1, 7))
+    flowables.append(_bar_chart(rl, "Inflows vs outflows volume", report.get("flow_periods") or [], currency, paired=True))
+    flowables.extend(_movement_table_flowables(rl, styles, report.get("top_movements") or [], currency))
+    return flowables
+
+
+def _appendix_flowables(rl, styles, report, currency):
+    rows = [["Wallet", "Scope", "Tx count", "End balance", "End value"]]
+    for row in report.get("wallet_appendix") or []:
+        rows.append([
+            row.get("wallet", ""),
+            row.get("scope", ""),
+            row.get("tx_count", 0),
+            _btc(row.get("end_quantity")),
+            _money(currency, row.get("end_market_value")),
+        ])
+    return [
+        rl["Spacer"](1, 7),
+        _para(rl, styles, "Wallet Appendix", "h2"),
+        _table(rl, rows, [42 * rl["mm"], 38 * rl["mm"], 22 * rl["mm"], 38 * rl["mm"], 42 * rl["mm"]]),
+        rl["Spacer"](1, 8),
+        _para(rl, styles, "This summary report is a portfolio and treasury view. It intentionally omits tax tables; use the tax PDF for tax filing support.", "muted"),
+    ]
+
+
+def _build_styles(rl, fonts):
+    colors = rl["colors"]
+    return {
+        "title": rl["ParagraphStyle"]("Title", fontName=fonts["bold"], fontSize=18, leading=22, textColor=colors.HexColor(BRAND_INK)),
+        "h2": rl["ParagraphStyle"]("H2", fontName=fonts["bold"], fontSize=11.5, leading=15, spaceBefore=8, spaceAfter=5, textColor=colors.HexColor(BRAND_INK)),
+        "body": rl["ParagraphStyle"]("Body", fontName=fonts["regular"], fontSize=8.5, leading=12, textColor=colors.HexColor(BRAND_INK)),
+        "muted": rl["ParagraphStyle"]("Muted", fontName=fonts["regular"], fontSize=8, leading=11, textColor=colors.HexColor(BRAND_MUTED)),
+    }
+
+
+def _build_doc_template(rl, file_path, report, fonts):
+    profile_label = str(report.get("profile") or "")
+    workspace_label = str(report.get("workspace") or "")
+    timeframe_label = str(report.get("timeframe", {}).get("label") or "")
+    book_label = " / ".join(part for part in (workspace_label, profile_label) if part)
+    doc = rl["BaseDocTemplate"](
+        file_path,
+        pagesize=rl["A4"],
+        leftMargin=14 * rl["mm"],
+        rightMargin=14 * rl["mm"],
+        topMargin=18 * rl["mm"],
+        bottomMargin=14 * rl["mm"],
+        title=str(report.get("title") or "Kassiber Summary Report"),
+        author="Kassiber",
+        subject=f"Treasury summary for {book_label} · {timeframe_label}" if book_label else "Treasury summary",
+        keywords="kassiber, bitcoin, treasury, portfolio, summary",
+    )
+    frame = rl["Frame"](doc.leftMargin, doc.bottomMargin, doc.width, doc.height, id="normal")
+    footer_left = " · ".join(part for part in (book_label, timeframe_label) if part) or timeframe_label
+    template = rl["PageTemplate"](
+        id="Summary",
+        frames=[frame],
+        onPage=lambda canvas, doc_obj: draw_page_header(
+            canvas,
+            doc_obj,
+            title="Summary report",
+            fonts=fonts,
+            rl=rl,
+            footer_left=footer_left,
+            page_label=None,
+        ),
+    )
+    doc.addPageTemplates([template])
+    return doc
+
+
 def _numbered_canvas_factory(rl: dict[str, Any]):
     base_canvas = rl["Canvas"]
 
@@ -556,156 +765,19 @@ def write_summary_pdf(file_path: str | Path, report: Mapping[str, Any]) -> Mappi
     rl["summary_fonts"] = fonts
     path = Path(file_path).expanduser()
     path.parent.mkdir(parents=True, exist_ok=True)
-    colors = rl["colors"]
-    styles = {
-        "title": rl["ParagraphStyle"]("Title", fontName=fonts["bold"], fontSize=18, leading=22, textColor=colors.HexColor(BRAND_INK)),
-        "h2": rl["ParagraphStyle"]("H2", fontName=fonts["bold"], fontSize=11.5, leading=15, spaceBefore=8, spaceAfter=5, textColor=colors.HexColor(BRAND_INK)),
-        "body": rl["ParagraphStyle"]("Body", fontName=fonts["regular"], fontSize=8.5, leading=12, textColor=colors.HexColor(BRAND_INK)),
-        "muted": rl["ParagraphStyle"]("Muted", fontName=fonts["regular"], fontSize=8, leading=11, textColor=colors.HexColor(BRAND_MUTED)),
-    }
-    profile_label = str(report.get("profile") or "")
-    workspace_label = str(report.get("workspace") or "")
-    timeframe_label = str(report.get("timeframe", {}).get("label") or "")
-    book_label = " / ".join(part for part in (workspace_label, profile_label) if part)
-    doc = rl["BaseDocTemplate"](
-        str(path),
-        pagesize=rl["A4"],
-        leftMargin=14 * rl["mm"],
-        rightMargin=14 * rl["mm"],
-        topMargin=18 * rl["mm"],
-        bottomMargin=14 * rl["mm"],
-        title=str(report.get("title") or "Kassiber Summary Report"),
-        author="Kassiber",
-        subject=f"Treasury summary for {book_label} · {timeframe_label}" if book_label else "Treasury summary",
-        keywords="kassiber, bitcoin, treasury, portfolio, summary",
-    )
-    frame = rl["Frame"](doc.leftMargin, doc.bottomMargin, doc.width, doc.height, id="normal")
-    footer_left = " · ".join(part for part in (book_label, timeframe_label) if part) or timeframe_label
-    template = rl["PageTemplate"](
-        id="Summary",
-        frames=[frame],
-        onPage=lambda canvas, doc_obj: draw_page_header(
-            canvas,
-            doc_obj,
-            title="Summary report",
-            fonts=fonts,
-            rl=rl,
-            footer_left=footer_left,
-            page_label=None,
-        ),
-    )
-    doc.addPageTemplates([template])
-    story: list[Any] = []
+    styles = _build_styles(rl, fonts)
+    doc = _build_doc_template(rl, str(path), report, fonts)
     currency = str(report.get("fiat_currency") or "")
-    metrics = report.get("metrics") or {}
-    data_integrity = report.get("data_integrity") or {}
-    story.append(_para(rl, styles, report.get("title") or "Kassiber Summary Report", "title"))
-    story.append(_para(rl, styles, f"{report.get('workspace')} / {report.get('profile')}", "body"))
-    story.append(_para(rl, styles, f"Timeframe: {report.get('timeframe', {}).get('label', '')} · Generated: {report.get('generated_at', '')}", "muted"))
-    story.append(rl["Spacer"](1, 6))
-    snapshot = report.get("snapshot")
-    if snapshot:
-        story.append(_para(rl, styles, f"As of today: {_money(currency, snapshot.get('total_market_value'))} · {_btc(snapshot.get('total_quantity'))}", "h2"))
-        rows = [["Wallet", "Assets", "Balance", "Market value"]]
-        for row in snapshot.get("wallets", []):
-            rows.append([row.get("wallet", ""), ", ".join(row.get("assets") or []), _btc(row.get("quantity")), _money(currency, row.get("market_value"))])
-        story.append(_table(rl, rows, [44 * rl["mm"], 34 * rl["mm"], 38 * rl["mm"], 45 * rl["mm"]]))
-        story.append(rl["Spacer"](1, 8))
-
-    story.append(
-        _metric_strip(
-            rl,
-            [
-                ("Start value", _money(currency, metrics.get("period_start_value"))),
-                ("End value", _money(currency, metrics.get("period_end_value"))),
-                ("Net flow", _signed_money(currency, metrics.get("net_flow"))),
-                ("Realized PnL", _signed_money(currency, metrics.get("realized_pnl"))),
-                ("Fees", _money(currency, metrics.get("fees_fiat"))),
-            ],
-        )
-    )
-    story.append(rl["Spacer"](1, 5))
-    story.append(_para(rl, styles, _perf_summary_fiat(currency, metrics, report.get("benchmark")), "muted"))
-    story.append(_para(rl, styles, _perf_summary_btc(currency, metrics), "muted"))
-    story.append(rl["Spacer"](1, 8))
-    story.append(_para(rl, styles, "Data Integrity", "h2"))
-    priced_total = int(data_integrity.get("total_transactions") or 0)
-    priced_count = int(data_integrity.get("priced_transactions") or 0)
-    priced_pct = decimal_value(data_integrity.get("priced_percentage"))
-    journal_status = (data_integrity.get("journals") or {}).get("status") or "unknown"
-    integrity_rows = [
-        ["Signal", "Status"],
-        ["Priced transactions", f"{priced_count} / {priced_total} ({priced_pct:.1f}%)"],
-        ["Journals", str(journal_status).replace("_", " ").title()],
-        ["Quarantines", str(int(data_integrity.get("quarantine_count") or 0))],
-    ]
-    internal = data_integrity.get("internal_transfers") or {}
-    internal_count = int(internal.get("count") or 0)
-    if internal_count:
-        internal_volume = _money(currency, internal.get("fiat_volume"))
-        integrity_rows.append([
-            "Internal transfers (excluded from flow)",
-            f"{internal_count} tx · {internal_volume}",
-        ])
-    quarantine_reasons = data_integrity.get("quarantine_reasons") or []
-    if quarantine_reasons:
-        for row in quarantine_reasons:
-            integrity_rows.append([f"Quarantine: {row.get('reason', '')}", str(int(row.get("count") or 0))])
-    else:
-        integrity_rows.append(["Quarantine reasons", "None in scope"])
-    story.append(_table(rl, integrity_rows, [70 * rl["mm"], 92 * rl["mm"]]))
-    story.append(_para(rl, styles, "Portfolio Movement", "h2"))
-    story.append(_line_chart(rl, "Total balance over time", report.get("balance_history") or [], currency))
+    story: list[Any] = []
+    story.extend(_cover_flowables(rl, styles, report))
+    story.extend(_snapshot_flowables(rl, styles, report, currency))
+    story.extend(_kpi_flowables(rl, styles, report, currency))
+    story.extend(_data_integrity_flowables(rl, styles, report, currency))
+    story.extend(_movement_flowables(rl, styles, report, currency))
     story.append(rl["PageBreak"]())
-    story.append(_para(rl, styles, "Portfolio Composition", "h2"))
-    story.append(_donut_chart(rl, "Holdings by wallet at period end", report.get("wallet_holdings") or [], currency))
-    holding_age_text = _holding_age_summary(report.get("holding_age"))
-    if holding_age_text:
-        story.append(_para(rl, styles, holding_age_text, "muted"))
-    story.append(rl["Spacer"](1, 7))
-    story.append(_para(rl, styles, "Period Activity", "h2"))
-    story.append(_bar_chart(rl, "Realized PnL per period", report.get("realized_pnl_periods") or [], currency))
-    top_disposals = report.get("top_disposals") or []
-    if top_disposals:
-        story.append(rl["Spacer"](1, 4))
-        story.append(_para(rl, styles, "Largest disposals", "body"))
-        disposals_table = [["Date", "Wallet", "Quantity", "Proceeds", "Cost basis", "Gain/Loss"]]
-        for row in top_disposals:
-            disposals_table.append([
-                str(row.get("occurred_at", ""))[:10],
-                str(row.get("wallet", ""))[:22],
-                _btc(-decimal_value(row.get("quantity"))),
-                _money(currency, row.get("proceeds")),
-                _money(currency, row.get("cost_basis")),
-                _signed_money(currency, row.get("gain_loss")),
-            ])
-        story.append(_table(rl, disposals_table, [22 * rl["mm"], 36 * rl["mm"], 30 * rl["mm"], 30 * rl["mm"], 30 * rl["mm"], 34 * rl["mm"]]))
-    story.append(rl["Spacer"](1, 7))
-    story.append(_bar_chart(rl, "Inflows vs outflows volume", report.get("flow_periods") or [], currency, paired=True))
-    top_movements = report.get("top_movements") or []
-    if top_movements:
-        story.append(rl["Spacer"](1, 4))
-        story.append(_para(rl, styles, "Largest activity", "body"))
-        movements_table = [["Date", "Wallet", "Dir", "Asset", "Amount", "Value", "Counterparty"]]
-        for row in top_movements:
-            movements_table.append([
-                str(row.get("occurred_at", ""))[:10],
-                str(row.get("wallet", ""))[:22],
-                _direction_label(row.get("direction")),
-                str(row.get("asset", "")),
-                _btc(row.get("quantity")),
-                _money(currency, row.get("fiat_value")),
-                str(row.get("counterparty", ""))[:28],
-            ])
-        story.append(_table(rl, movements_table, [22 * rl["mm"], 30 * rl["mm"], 12 * rl["mm"], 14 * rl["mm"], 28 * rl["mm"], 30 * rl["mm"], 46 * rl["mm"]]))
-    story.append(rl["Spacer"](1, 7))
-    story.append(_para(rl, styles, "Wallet Appendix", "h2"))
-    appendix = [["Wallet", "Scope", "Tx count", "End balance", "End value"]]
-    for row in report.get("wallet_appendix") or []:
-        appendix.append([row.get("wallet", ""), row.get("scope", ""), row.get("tx_count", 0), _btc(row.get("end_quantity")), _money(currency, row.get("end_market_value"))])
-    story.append(_table(rl, appendix, [42 * rl["mm"], 38 * rl["mm"], 22 * rl["mm"], 38 * rl["mm"], 42 * rl["mm"]]))
-    story.append(rl["Spacer"](1, 8))
-    story.append(_para(rl, styles, "This summary report is a portfolio and treasury view. It intentionally omits tax tables; use the tax PDF for tax filing support.", "muted"))
+    story.extend(_composition_flowables(rl, styles, report, currency))
+    story.extend(_activity_flowables(rl, styles, report, currency))
+    story.extend(_appendix_flowables(rl, styles, report, currency))
     doc.build(story, canvasmaker=_numbered_canvas_factory(rl))
     return {
         "file": str(path.resolve()),
