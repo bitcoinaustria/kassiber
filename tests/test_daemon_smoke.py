@@ -3940,6 +3940,23 @@ class DaemonSmokeTest(unittest.TestCase):
             self.assertEqual(summary_pdf["data"]["data_integrity"]["total_transactions"], 1)
             self.assertEqual(summary_pdf["data"]["data_integrity"]["priced_transactions"], 1)
             self.assertEqual(summary_pdf["data"]["data_integrity"]["journals"]["status"], "current")
+            self.assertIn("internal_transfers", summary_pdf["data"]["data_integrity"])
+            self.assertGreaterEqual(
+                summary_pdf["data"]["data_integrity"]["internal_transfers"]["count"], 0
+            )
+            self.assertIn("benchmark", summary_pdf["data"])
+            self.assertIn("top_movements", summary_pdf["data"])
+            self.assertIn("top_disposals", summary_pdf["data"])
+            self.assertIn("holding_age", summary_pdf["data"])
+            self.assertIn("unrealized_pnl", summary_pdf["data"]["metrics"])
+            self.assertIn("btc_stack_start", summary_pdf["data"]["metrics"])
+            self.assertIn("btc_stack_end", summary_pdf["data"]["metrics"])
+            self.assertAlmostEqual(
+                summary_pdf["data"]["metrics"]["unrealized_pnl"],
+                summary_pdf["data"]["metrics"]["period_end_value"]
+                - summary_pdf["data"]["metrics"]["end_cost_basis"],
+                places=6,
+            )
             holding_total = sum(
                 float(row["market_value"])
                 for row in summary_pdf["data"]["wallet_holdings"]

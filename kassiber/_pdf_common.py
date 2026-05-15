@@ -45,6 +45,7 @@ def require_reportlab(export_name: str) -> dict[str, Any]:
             String,
             Wedge,
         )
+        from reportlab.pdfgen.canvas import Canvas
     except ImportError as exc:
         raise AppError(
             f"{export_name} requires the ReportLab PDF renderer",
@@ -78,6 +79,7 @@ def require_reportlab(export_name: str) -> dict[str, Any]:
         "Rect": Rect,
         "String": String,
         "Wedge": Wedge,
+        "Canvas": Canvas,
     }
 
 
@@ -135,7 +137,7 @@ def draw_page_header(
     rl: dict[str, Any],
     brand_label: str = "Kassiber",
     footer_left: str = "",
-    page_label: str = "Page",
+    page_label: str | None = "Page",
     line_width: float = 0.4,
 ) -> None:
     colors = rl["colors"]
@@ -163,9 +165,10 @@ def draw_page_header(
     canvas.setFont(fonts["regular"], 7)
     if footer_left:
         canvas.drawString(doc.leftMargin, 8 * rl["mm"], footer_left)
-    canvas.drawRightString(
-        width - doc.rightMargin,
-        8 * rl["mm"],
-        f"{page_label} {doc.page}",
-    )
+    if page_label:
+        canvas.drawRightString(
+            width - doc.rightMargin,
+            8 * rl["mm"],
+            f"{page_label} {doc.page}",
+        )
     canvas.restoreState()

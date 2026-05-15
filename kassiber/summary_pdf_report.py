@@ -94,20 +94,82 @@ def _pct(value: Decimal, total: Decimal) -> str:
     return f"{(value / total * Decimal('100')):.1f}%"
 
 
-def _perf_summary(currency: str, metrics: Mapping[str, Any]) -> str:
-    start = decimal_value(metrics.get("period_start_value"))
-    end = decimal_value(metrics.get("period_end_value"))
-    fees_btc = metrics.get("fees_btc")
+def _perf_change_text(currency: str, start: Decimal, end: Decimal) -> str:
     if start > 0:
         pct = (end - start) / start * Decimal("100")
-        change_text = f"{pct:+.1f}% vs start"
-    else:
-        change_text = f"{_signed_money(currency, end - start)} vs start"
-    return f"Period performance: {change_text} · Network + venue fees: {_btc(fees_btc)}"
+        return f"{pct:+.1f}% vs start"
+    return f"{_signed_money(currency, end - start)} vs start"
+
+
+def _btc_stack_change_text(start: Decimal, end: Decimal) -> str:
+    if start > 0:
+        pct = (end - start) / start * Decimal("100")
+        return f"{pct:+.1f}%"
+    delta = end - start
+    sign = "+" if delta > 0 else ""
+    return f"{sign}{delta:.4f} BTC"
+
+
+def _perf_summary_fiat(currency: str, metrics: Mapping[str, Any], benchmark: Mapping[str, Any] | None) -> str:
+    start = decimal_value(metrics.get("period_start_value"))
+    end = decimal_value(metrics.get("period_end_value"))
+    unrealized = decimal_value(metrics.get("unrealized_pnl"))
+    parts = [f"Period performance: {_perf_change_text(currency, start, end)}"]
+    if benchmark and benchmark.get("change_pct") is not None:
+        parts[0] += f" (BTC spot {decimal_value(benchmark['change_pct']):+.1f}%)"
+    parts.append(f"Unrealized at close: {_signed_money(currency, unrealized)}")
+    return " · ".join(parts)
+
+
+def _perf_summary_btc(currency: str, metrics: Mapping[str, Any]) -> str:
+    stack_start = decimal_value(metrics.get("btc_stack_start"))
+    stack_end = decimal_value(metrics.get("btc_stack_end"))
+    fees_btc = metrics.get("fees_btc")
+    return (
+        f"BTC stack: {stack_start:.4f} → {stack_end:.4f} BTC ({_btc_stack_change_text(stack_start, stack_end)})"
+        f" · Network + venue fees: {_btc(fees_btc)} · {_money(currency, metrics.get('fees_fiat'))}"
+    )
 
 
 def _para(rl: dict[str, Any], styles: dict[str, Any], text: Any, style: str = "body"):
     return rl["Paragraph"](escape_paragraph_text(text), styles[style])
+
+
+def _format_age_days(days: Any) -> str:
+    if days is None:
+        return "—"
+    value = float(days)
+    if value >= 365:
+        return f"{value / 365.25:.1f} years"
+    if value >= 60:
+        return f"{value / 30.44:.1f} months"
+    return f"{value:.0f} days"
+
+
+def _holding_age_summary(holding_age: Mapping[str, Any] | None) -> str:
+    if not holding_age:
+        return ""
+    count = int(holding_age.get("acquisition_count") or 0)
+    if not count:
+        return "No acquisitions recorded in scope."
+    parts = []
+    weighted = holding_age.get("weighted_days")
+    oldest = holding_age.get("oldest_acquisition") or ""
+    if weighted is not None:
+        parts.append(f"Weighted-avg acquisition age: {_format_age_days(weighted)}")
+    if oldest:
+        parts.append(f"Oldest acquisition: {oldest[:10]}")
+    parts.append(f"{count} acquisition tx in scope")
+    return " · ".join(parts)
+
+
+def _direction_label(direction: Any) -> str:
+    text = str(direction or "").lower()
+    if text == "inbound":
+        return "In"
+    if text == "outbound":
+        return "Out"
+    return text.title() or "—"
 
 
 def _table_cell(cell: Any) -> Any:
@@ -265,18 +327,22 @@ def _line_chart(rl: dict[str, Any], title: str, rows: Sequence[Mapping[str, Any]
     drawing.add(Line(left, bottom, left + plot_w, bottom, strokeColor=colors.HexColor(BRAND_LINE), strokeWidth=0.6))
     drawing.add(Line(left, bottom, left, bottom + plot_h, strokeColor=colors.HexColor(BRAND_LINE), strokeWidth=0.6))
     drawing.add(Line(left + plot_w, bottom, left + plot_w, bottom + plot_h, strokeColor=colors.HexColor(BRAND_LINE), strokeWidth=0.6))
-    drawing.add(Rect(width - 96, height - 15, 5, 5, strokeColor=colors.HexColor(BRAND_ACCENT), fillColor=colors.HexColor(BRAND_ACCENT)))
-    drawing.add(String(width - 88, height - 15, "Market value", fontName=_font(rl, "regular"), fontSize=6.4, fillColor=colors.HexColor(BRAND_MUTED)))
+    drawing.add(Rect(width - 152, height - 15, 5, 5, strokeColor=colors.HexColor(BRAND_ACCENT), fillColor=colors.HexColor(BRAND_ACCENT)))
+    drawing.add(String(width - 144, height - 15, "Market value", fontName=_font(rl, "regular"), fontSize=6.4, fillColor=colors.HexColor(BRAND_MUTED)))
+    drawing.add(Rect(width - 94, height - 15, 5, 5, strokeColor=colors.HexColor(COLOR_GRAY), fillColor=colors.HexColor(COLOR_GRAY)))
+    drawing.add(String(width - 86, height - 15, "Cost basis", fontName=_font(rl, "regular"), fontSize=6.4, fillColor=colors.HexColor(BRAND_MUTED)))
     drawing.add(Rect(width - 39, height - 15, 5, 5, strokeColor=colors.HexColor(COLOR_BALANCE), fillColor=colors.HexColor(COLOR_BALANCE)))
     drawing.add(String(width - 31, height - 15, "BTC", fontName=_font(rl, "regular"), fontSize=6.4, fillColor=colors.HexColor(BRAND_MUTED)))
     count = max(len(rows) - 1, 1)
     label_size = _axis_label_font_size(len(rows), 5.2)
     label_indexes = _axis_label_indexes(len(rows))
     fiat_points = []
+    cost_points = []
     btc_points = []
     for idx, row in enumerate(rows):
         x = left + plot_w * (idx / count)
         fiat_points.append((x, bottom + _scale(decimal_value(row.get("market_value")), fiat_low, fiat_high, plot_h)))
+        cost_points.append((x, bottom + _scale(decimal_value(row.get("cumulative_cost_basis")), fiat_low, fiat_high, plot_h)))
         btc_points.append((x, bottom + _scale(decimal_value(row.get("quantity")), btc_low, btc_high, plot_h)))
         if idx in label_indexes:
             drawing.add(String(x, _axis_label_y(bottom, idx, len(rows)), _axis_label(row, len(rows)), fontName=_font(rl, "regular"), fontSize=label_size, fillColor=colors.HexColor(BRAND_MUTED), textAnchor="middle"))
@@ -284,6 +350,7 @@ def _line_chart(rl: dict[str, Any], title: str, rows: Sequence[Mapping[str, Any]
         x, y = fiat_points[0]
         drawing.add(Line(x - 2, y, x + 2, y, strokeColor=colors.HexColor(BRAND_ACCENT), strokeWidth=1.4))
     else:
+        drawing.add(PolyLine(cost_points, strokeColor=colors.HexColor(COLOR_GRAY), strokeWidth=0.9))
         drawing.add(PolyLine(fiat_points, strokeColor=colors.HexColor(BRAND_ACCENT), strokeWidth=1.4))
         drawing.add(PolyLine(btc_points, strokeColor=colors.HexColor(COLOR_BALANCE), strokeWidth=1.1))
     for x, y in (fiat_points[0], fiat_points[-1]):
@@ -447,6 +514,41 @@ def _bar_chart(
     return drawing
 
 
+def _numbered_canvas_factory(rl: dict[str, Any]):
+    base_canvas = rl["Canvas"]
+
+    class NumberedCanvas(base_canvas):
+        def __init__(self, *args, **kwargs):
+            super().__init__(*args, **kwargs)
+            self._saved_page_states = []
+
+        def showPage(self):
+            self._saved_page_states.append(dict(self.__dict__))
+            self._startPage()
+
+        def save(self):
+            total = len(self._saved_page_states)
+            for state in self._saved_page_states:
+                self.__dict__.update(state)
+                self._draw_page_total(total)
+                super().showPage()
+            super().save()
+
+        def _draw_page_total(self, total: int):
+            self.saveState()
+            self.setFont(rl.get("summary_fonts", {}).get("regular", "Helvetica"), 7)
+            self.setFillColor(rl["colors"].HexColor(BRAND_MUTED))
+            width, _ = self._pagesize
+            self.drawRightString(
+                width - 14 * rl["mm"],
+                8 * rl["mm"],
+                f"Page {self._pageNumber} of {total}",
+            )
+            self.restoreState()
+
+    return NumberedCanvas
+
+
 def write_summary_pdf(file_path: str | Path, report: Mapping[str, Any]) -> Mapping[str, Any]:
     rl = require_reportlab("Summary PDF report")
     rl["rl_config"].invariant = 1
@@ -461,6 +563,10 @@ def write_summary_pdf(file_path: str | Path, report: Mapping[str, Any]) -> Mappi
         "body": rl["ParagraphStyle"]("Body", fontName=fonts["regular"], fontSize=8.5, leading=12, textColor=colors.HexColor(BRAND_INK)),
         "muted": rl["ParagraphStyle"]("Muted", fontName=fonts["regular"], fontSize=8, leading=11, textColor=colors.HexColor(BRAND_MUTED)),
     }
+    profile_label = str(report.get("profile") or "")
+    workspace_label = str(report.get("workspace") or "")
+    timeframe_label = str(report.get("timeframe", {}).get("label") or "")
+    book_label = " / ".join(part for part in (workspace_label, profile_label) if part)
     doc = rl["BaseDocTemplate"](
         str(path),
         pagesize=rl["A4"],
@@ -470,9 +576,11 @@ def write_summary_pdf(file_path: str | Path, report: Mapping[str, Any]) -> Mappi
         bottomMargin=14 * rl["mm"],
         title=str(report.get("title") or "Kassiber Summary Report"),
         author="Kassiber",
+        subject=f"Treasury summary for {book_label} · {timeframe_label}" if book_label else "Treasury summary",
+        keywords="kassiber, bitcoin, treasury, portfolio, summary",
     )
     frame = rl["Frame"](doc.leftMargin, doc.bottomMargin, doc.width, doc.height, id="normal")
-    footer_left = str(report.get("timeframe", {}).get("label") or "")
+    footer_left = " · ".join(part for part in (book_label, timeframe_label) if part) or timeframe_label
     template = rl["PageTemplate"](
         id="Summary",
         frames=[frame],
@@ -483,6 +591,7 @@ def write_summary_pdf(file_path: str | Path, report: Mapping[str, Any]) -> Mappi
             fonts=fonts,
             rl=rl,
             footer_left=footer_left,
+            page_label=None,
         ),
     )
     doc.addPageTemplates([template])
@@ -516,7 +625,8 @@ def write_summary_pdf(file_path: str | Path, report: Mapping[str, Any]) -> Mappi
         )
     )
     story.append(rl["Spacer"](1, 5))
-    story.append(_para(rl, styles, _perf_summary(currency, metrics), "muted"))
+    story.append(_para(rl, styles, _perf_summary_fiat(currency, metrics, report.get("benchmark")), "muted"))
+    story.append(_para(rl, styles, _perf_summary_btc(currency, metrics), "muted"))
     story.append(rl["Spacer"](1, 8))
     story.append(_para(rl, styles, "Data Integrity", "h2"))
     priced_total = int(data_integrity.get("total_transactions") or 0)
@@ -529,6 +639,14 @@ def write_summary_pdf(file_path: str | Path, report: Mapping[str, Any]) -> Mappi
         ["Journals", str(journal_status).replace("_", " ").title()],
         ["Quarantines", str(int(data_integrity.get("quarantine_count") or 0))],
     ]
+    internal = data_integrity.get("internal_transfers") or {}
+    internal_count = int(internal.get("count") or 0)
+    if internal_count:
+        internal_volume = _money(currency, internal.get("fiat_volume"))
+        integrity_rows.append([
+            "Internal transfers (excluded from flow)",
+            f"{internal_count} tx · {internal_volume}",
+        ])
     quarantine_reasons = data_integrity.get("quarantine_reasons") or []
     if quarantine_reasons:
         for row in quarantine_reasons:
@@ -541,11 +659,45 @@ def write_summary_pdf(file_path: str | Path, report: Mapping[str, Any]) -> Mappi
     story.append(rl["PageBreak"]())
     story.append(_para(rl, styles, "Portfolio Composition", "h2"))
     story.append(_donut_chart(rl, "Holdings by wallet at period end", report.get("wallet_holdings") or [], currency))
+    holding_age_text = _holding_age_summary(report.get("holding_age"))
+    if holding_age_text:
+        story.append(_para(rl, styles, holding_age_text, "muted"))
     story.append(rl["Spacer"](1, 7))
     story.append(_para(rl, styles, "Period Activity", "h2"))
     story.append(_bar_chart(rl, "Realized PnL per period", report.get("realized_pnl_periods") or [], currency))
+    top_disposals = report.get("top_disposals") or []
+    if top_disposals:
+        story.append(rl["Spacer"](1, 4))
+        story.append(_para(rl, styles, "Largest disposals", "body"))
+        disposals_table = [["Date", "Wallet", "Quantity", "Proceeds", "Cost basis", "Gain/Loss"]]
+        for row in top_disposals:
+            disposals_table.append([
+                str(row.get("occurred_at", ""))[:10],
+                str(row.get("wallet", ""))[:22],
+                _btc(-decimal_value(row.get("quantity"))),
+                _money(currency, row.get("proceeds")),
+                _money(currency, row.get("cost_basis")),
+                _signed_money(currency, row.get("gain_loss")),
+            ])
+        story.append(_table(rl, disposals_table, [22 * rl["mm"], 36 * rl["mm"], 30 * rl["mm"], 30 * rl["mm"], 30 * rl["mm"], 34 * rl["mm"]]))
     story.append(rl["Spacer"](1, 7))
     story.append(_bar_chart(rl, "Inflows vs outflows volume", report.get("flow_periods") or [], currency, paired=True))
+    top_movements = report.get("top_movements") or []
+    if top_movements:
+        story.append(rl["Spacer"](1, 4))
+        story.append(_para(rl, styles, "Largest activity", "body"))
+        movements_table = [["Date", "Wallet", "Dir", "Asset", "Amount", "Value", "Counterparty"]]
+        for row in top_movements:
+            movements_table.append([
+                str(row.get("occurred_at", ""))[:10],
+                str(row.get("wallet", ""))[:22],
+                _direction_label(row.get("direction")),
+                str(row.get("asset", "")),
+                _btc(row.get("quantity")),
+                _money(currency, row.get("fiat_value")),
+                str(row.get("counterparty", ""))[:28],
+            ])
+        story.append(_table(rl, movements_table, [22 * rl["mm"], 30 * rl["mm"], 12 * rl["mm"], 14 * rl["mm"], 28 * rl["mm"], 30 * rl["mm"], 46 * rl["mm"]]))
     story.append(rl["Spacer"](1, 7))
     story.append(_para(rl, styles, "Wallet Appendix", "h2"))
     appendix = [["Wallet", "Scope", "Tx count", "End balance", "End value"]]
@@ -554,7 +706,7 @@ def write_summary_pdf(file_path: str | Path, report: Mapping[str, Any]) -> Mappi
     story.append(_table(rl, appendix, [42 * rl["mm"], 38 * rl["mm"], 22 * rl["mm"], 38 * rl["mm"], 42 * rl["mm"]]))
     story.append(rl["Spacer"](1, 8))
     story.append(_para(rl, styles, "This summary report is a portfolio and treasury view. It intentionally omits tax tables; use the tax PDF for tax filing support.", "muted"))
-    doc.build(story)
+    doc.build(story, canvasmaker=_numbered_canvas_factory(rl))
     return {
         "file": str(path.resolve()),
         "pages": doc.page,
