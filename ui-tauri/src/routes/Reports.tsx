@@ -516,6 +516,15 @@ function ReportsView({
             return;
           }
         }
+        if (savedPath === exportPath) {
+          setExportStatus({
+            year: exportYear,
+            tone: "success",
+            message: `${filename} saved.`,
+            path: exportPath,
+            openPath: exportPath,
+          });
+        }
         setSuccessfulExport({ format, year: exportYear });
         addNotification({
           title: "Report export finished",
@@ -1129,7 +1138,7 @@ function ReportFilesPanel({
       </div>
 
       <div className="space-y-3 px-4 pt-3 pb-4 sm:px-5">
-        {exportStatus?.tone === "error" ? (
+        {exportStatus ? (
           <ExportNotice
             exportStatus={exportStatus}
             openableExportPath={openableExportPath}
