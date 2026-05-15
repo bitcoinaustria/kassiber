@@ -25,7 +25,6 @@ export function Assistant() {
     abort,
   } = useAssistantSession();
   const hasMessages = messages.length > 0;
-  const [exportStatus, setExportStatus] = React.useState<string | null>(null);
   const supportsThinkingEffort = useSupportedReasoningEffort({
     selection,
     thinkingEffort,
@@ -34,18 +33,10 @@ export function Assistant() {
 
   const exportChat = React.useCallback(async () => {
     if (messages.length === 0) return;
-    setExportStatus(null);
     try {
-      const result = await saveChatExport(messages);
-      setExportStatus(
-        result === "saved"
-          ? "Exported"
-          : result === "download-started"
-            ? "Download started"
-            : "Export cancelled",
-      );
+      await saveChatExport(messages);
     } catch {
-      setExportStatus("Export failed");
+      // Keep the toolbar stable; the save dialog itself owns completion state.
     }
   }, [messages]);
 
@@ -104,11 +95,6 @@ export function Assistant() {
               <Download className="size-4" aria-hidden="true" />
               Export chat
             </Button>
-            {exportStatus ? (
-              <span className="text-xs text-muted-foreground">
-                {exportStatus}
-              </span>
-            ) : null}
           </div>
         ) : null}
 

@@ -466,6 +466,25 @@ fn save_exported_file_as(source_path: String, destination_path: String) -> Resul
     Ok(destination.to_string_lossy().into_owned())
 }
 
+#[tauri::command]
+fn save_text_file_as(destination_path: String, contents: String) -> Result<String, String> {
+    let destination = PathBuf::from(destination_path);
+    if !destination.is_absolute() {
+        return Err("Export destination paths must be absolute.".to_string());
+    }
+    if destination.extension().and_then(|ext| ext.to_str()) != Some("md") {
+        return Err("Chat export destination must use .md.".to_string());
+    }
+    let Some(parent) = destination.parent() else {
+        return Err("Chat export destination must include a parent folder.".to_string());
+    };
+    std::fs::create_dir_all(parent)
+        .map_err(|error| format!("Could not create chat export destination folder: {error}"))?;
+    std::fs::write(&destination, contents)
+        .map_err(|error| format!("Could not save chat export: {error}"))?;
+    Ok(destination.to_string_lossy().into_owned())
+}
+
 fn ensure_export_destination_outside_managed_root(
     source: &Path,
     destination: &Path,
@@ -1233,6 +1252,7 @@ pub fn run() {
             daemon_invoke,
             open_exported_file,
             save_exported_file_as,
+            save_text_file_as,
             open_external_url,
             select_import_project_directory,
             activate_import_project,

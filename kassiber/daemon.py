@@ -13,6 +13,8 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable, Mapping, TextIO
+from urllib import error as urlerror
+from urllib import request as urlrequest
 
 from . import __version__
 from .ai import (
@@ -165,6 +167,7 @@ SUPPORTED_KINDS = (
     "ui.backends.list",
     "ui.backends.options",
     "ui.backends.electrum.test",
+    "ui.backends.http.test",
     "ui.reports.capital_gains",
     "ui.reports.summary",
     "ui.reports.balance_sheet",
@@ -5171,6 +5174,57 @@ def _test_electrum_backend_payload(args: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _test_http_backend_payload(args: dict[str, Any]) -> dict[str, Any]:
+    url = _required_str_arg(args, "url", "HTTP backend URL")
+    timeout = args.get("timeout")
+    if not isinstance(timeout, int) or timeout <= 0:
+        timeout = 10
+    if not re.match(r"^https?://", url, flags=re.IGNORECASE):
+        raise AppError(
+            "HTTP backend URL must start with http:// or https://",
+            code="validation",
+            retryable=False,
+        )
+    logs = [
+        f"$ curl -fsS -L --max-time {timeout} -H 'Accept: application/json' {url}",
+        f"> GET {url}",
+    ]
+    request = urlrequest.Request(
+        url,
+        headers={
+            "Accept": "application/json",
+            "User-Agent": f"Kassiber/{__version__}",
+        },
+    )
+    try:
+        with urlrequest.urlopen(request, timeout=timeout) as response:
+            status = int(response.status)
+            reason = response.reason or ""
+            content_type = response.headers.get("content-type", "unknown")
+            body = response.read(4096)
+    except urlerror.HTTPError as exc:
+        body = exc.read(4096)
+        logs.append(f"< HTTP {exc.code} {exc.reason}")
+        logs.append(f"< content-type: {exc.headers.get('content-type', 'unknown')}")
+        logs.append(f"< body: {len(body)} bytes sampled")
+        return {"ok": False, "url": url, "logs": logs}
+    except urlerror.URLError as exc:
+        logs.append(f"< connection failed: {exc.reason}")
+        return {"ok": False, "url": url, "logs": logs}
+    except Exception as exc:  # pragma: no cover - defensive boundary
+        logs.append(f"< connection failed: {exc}")
+        return {"ok": False, "url": url, "logs": logs}
+    logs.append(f"< HTTP {status} {reason}".rstrip())
+    logs.append(f"< content-type: {content_type}")
+    logs.append(f"< body: {len(body)} bytes sampled")
+    return {
+        "ok": 200 <= status < 400,
+        "url": url,
+        "status": status,
+        "logs": logs,
+    }
+
+
 def _preview_descriptor_payload(args: dict[str, Any]) -> dict[str, Any]:
     descriptor_text = _optional_str_arg(args, "descriptor")
     change_descriptor_text = _optional_str_arg(args, "change_descriptor")
@@ -5915,6 +5969,20 @@ def handle_request(
                 build_envelope(
                     "ui.backends.electrum.test",
                     _test_electrum_backend_payload(
+                        _coerce_args_dict(request_id, request.get("args")),
+                    ),
+                ),
+                request_id,
+            ),
+            False,
+        )
+
+    if kind == "ui.backends.http.test":
+        return (
+            _with_request_id(
+                build_envelope(
+                    "ui.backends.http.test",
+                    _test_http_backend_payload(
                         _coerce_args_dict(request_id, request.get("args")),
                     ),
                 ),

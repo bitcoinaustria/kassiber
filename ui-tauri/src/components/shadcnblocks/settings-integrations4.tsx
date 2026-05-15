@@ -34,6 +34,7 @@ export interface IntegrationItem {
   className?: string;
   imageFrameClassName?: string;
   actionLabel?: string;
+  statusLabel?: string;
 }
 
 interface IntegrationCardProps {
@@ -87,7 +88,7 @@ const IntegrationCard = ({
           <p className="min-w-0 truncate font-medium">{integration.title}</p>
           {integration.isConnected && (
             <Badge variant="secondary" className="bg-green-100 text-green-800">
-              Connected
+              {integration.statusLabel ?? "Connected"}
             </Badge>
           )}
         </div>

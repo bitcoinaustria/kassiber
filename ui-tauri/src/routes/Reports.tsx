@@ -608,30 +608,34 @@ function ReportPackageHeader({
   return (
     <div className="rounded-xl border bg-card px-3 py-3 sm:px-4">
       <div className="flex min-w-0 flex-wrap items-center gap-2 sm:gap-3">
-        <span className="text-base font-semibold">Tax report</span>
-        <Select value={String(selectedYear)} onValueChange={handleYearChange}>
-          <SelectTrigger className="h-7 w-[88px] rounded-md text-xs" aria-label="Tax year">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {availableYears.map((availableYear) => (
-              <SelectItem key={availableYear} value={String(availableYear)}>
-                {availableYear}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        <span className="hidden h-6 w-px bg-border sm:block" />
-        <span className="inline-flex min-w-0 items-center gap-2 text-sm text-muted-foreground">
-          <CalendarDays className="size-4 shrink-0" aria-hidden="true" />
-          <span className="truncate">{periodLabel}</span>
-        </span>
-        <Badge variant="outline" className="rounded-md">
-          {jurisdiction.code} · {jurisdiction.name}
-        </Badge>
-        <Badge variant="outline" className="hidden rounded-md xl:inline-flex">
-          {methodName}
-        </Badge>
+        <div className="flex min-w-0 flex-wrap items-center gap-2 sm:gap-3">
+          <span className="text-base font-semibold">Tax report</span>
+          <Select value={String(selectedYear)} onValueChange={handleYearChange}>
+            <SelectTrigger className="h-7 w-[88px] rounded-md text-xs" aria-label="Tax year">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {availableYears.map((availableYear) => (
+                <SelectItem key={availableYear} value={String(availableYear)}>
+                  {availableYear}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <span className="hidden h-6 w-px bg-border sm:block" />
+          <span className="inline-flex min-w-0 items-center gap-2 text-sm text-muted-foreground">
+            <CalendarDays className="size-4 shrink-0" aria-hidden="true" />
+            <span className="truncate">{periodLabel}</span>
+          </span>
+        </div>
+        <div className="ml-auto flex min-w-0 flex-wrap items-center justify-end gap-2">
+          <Badge variant="outline" className="rounded-md">
+            {jurisdiction.code} · {jurisdiction.name}
+          </Badge>
+          <Badge variant="outline" className="hidden max-w-full rounded-md xl:inline-flex">
+            <span className="truncate">{methodName}</span>
+          </Badge>
+        </div>
       </div>
     </div>
   );

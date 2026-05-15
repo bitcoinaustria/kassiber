@@ -1,4 +1,5 @@
 import type { AiChatMessage } from "@/daemon/stream";
+import { isFilePickerAvailable, saveFile } from "@/lib/filePicker";
 
 type ChatExportResult = "saved" | "download-started" | "cancelled";
 
@@ -25,6 +26,17 @@ type WindowWithSavePicker = Window &
       options?: SaveFilePickerOptions,
     ) => Promise<FileSystemFileHandle>;
   };
+
+async function saveTextFileAs(
+  destinationPath: string,
+  contents: string,
+): Promise<string> {
+  const { invoke } = await import("@tauri-apps/api/core");
+  return invoke<string>("save_text_file_as", {
+    destinationPath,
+    contents,
+  });
+}
 
 export function chatExportFilename(exportedAt: Date): string {
   return `kassiber-chat-${exportedAt.toISOString().slice(0, 10)}.md`;
@@ -82,6 +94,17 @@ export async function saveChatExport(
   const exportedAt = new Date();
   const filename = chatExportFilename(exportedAt);
   const contents = buildChatExportMarkdown(messages, exportedAt);
+  if (isFilePickerAvailable) {
+    const destination = await saveFile({
+      title: "Save chat export",
+      defaultPath: filename,
+      filters: [{ name: "Markdown", extensions: ["md"] }],
+    });
+    if (!destination) return "cancelled";
+    await saveTextFileAs(destination, contents);
+    return "saved";
+  }
+
   const picker = (window as WindowWithSavePicker).showSaveFilePicker;
 
   if (picker) {

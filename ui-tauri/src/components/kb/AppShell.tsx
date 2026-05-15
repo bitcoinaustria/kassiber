@@ -182,7 +182,7 @@ const NAV_GROUPS: NavGroup[] = [
     items: [
       { label: "Quarantine", icon: ShieldAlert, href: "/quarantine" },
       { label: "Source Funds", icon: BadgeCheck, href: "/source-of-funds" },
-      { label: "Swaps", icon: ArrowLeftRight, href: "/swaps" },
+      { label: "Review swaps", icon: ArrowLeftRight, href: "/swaps" },
       { label: "Journals", icon: BookOpen, href: "/journals" },
     ],
   },

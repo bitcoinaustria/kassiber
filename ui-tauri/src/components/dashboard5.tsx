@@ -2856,6 +2856,7 @@ type ChartControlsSheetProps = {
   onIncomingMarkerMinimumChange: (value: number) => void;
   outgoingMarkerMinimumBtc: number;
   onOutgoingMarkerMinimumChange: (value: number) => void;
+  onResetMarkerMinimums: () => void;
   hideSensitive: boolean;
 };
 
@@ -2922,8 +2923,13 @@ function ChartControlsSheet({
   onIncomingMarkerMinimumChange,
   outgoingMarkerMinimumBtc,
   onOutgoingMarkerMinimumChange,
+  onResetMarkerMinimums,
   hideSensitive,
 }: ChartControlsSheetProps) {
+  const markerMinimumsAtDefault =
+    incomingMarkerMinimumBtc === DEFAULT_INCOMING_MARKER_MIN_BTC &&
+    outgoingMarkerMinimumBtc === DEFAULT_OUTGOING_MARKER_MIN_BTC;
+
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent
@@ -3043,7 +3049,28 @@ function ChartControlsSheet({
               </div>
             </div>
 
-            <div className="rounded-md border p-3">
+            <div className="space-y-3 rounded-md border p-3">
+              <div className="flex items-center justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="text-xs font-medium text-muted-foreground">
+                    Marker size
+                  </p>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    Minimum BTC size for activity dots
+                  </p>
+                </div>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="ghost"
+                  className="shrink-0 gap-2"
+                  onClick={onResetMarkerMinimums}
+                  disabled={markerMinimumsAtDefault}
+                >
+                  <RefreshCw className="size-3.5" aria-hidden="true" />
+                  Reset
+                </Button>
+              </div>
               <div className="flex items-center justify-between gap-3 text-sm">
                 <div>
                   <p className="text-xs font-medium text-muted-foreground">
@@ -3263,6 +3290,10 @@ const RevenueFlowChart = ({
   const toggleSeries = React.useCallback((key: TreasuryChartSeriesKey) => {
     setSeriesVisible((current) => ({ ...current, [key]: !current[key] }));
   }, []);
+  const resetActivityMarkerMinimums = React.useCallback(() => {
+    setIncomingMarkerMinimumBtc(DEFAULT_INCOMING_MARKER_MIN_BTC);
+    setOutgoingMarkerMinimumBtc(DEFAULT_OUTGOING_MARKER_MIN_BTC);
+  }, []);
   const activityMarkerMinimumForPoint = React.useCallback(
     (point: TreasuryChartPoint) => {
       if (point.eventFlow === "incoming") return incomingMarkerMinimumBtc;
@@ -3404,6 +3435,7 @@ const RevenueFlowChart = ({
           onIncomingMarkerMinimumChange={setIncomingMarkerMinimumBtc}
           outgoingMarkerMinimumBtc={outgoingMarkerMinimumBtc}
           onOutgoingMarkerMinimumChange={setOutgoingMarkerMinimumBtc}
+          onResetMarkerMinimums={resetActivityMarkerMinimums}
           hideSensitive={hideSensitive}
         />
         <div className="flex flex-wrap items-start justify-between gap-3">
@@ -3568,7 +3600,7 @@ const RevenueFlowChart = ({
           </div>
         )}
 
-        <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
+        <div className="mt-1 flex flex-wrap items-center justify-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
           {legendItems.map((item) => (
             <div
               key={item.key}
@@ -3641,7 +3673,7 @@ const RevenueFlowChart = ({
                     top: expanded ? 12 : 2,
                     right: expanded ? 8 : 4,
                     bottom: plottedData.length > 3 ? (expanded ? 14 : 8) : 0,
-                    left: expanded ? 8 : 4,
+                    left: expanded ? 52 : 48,
                   }}
                 >
                   <CartesianGrid
@@ -3667,12 +3699,12 @@ const RevenueFlowChart = ({
                     orientation="left"
                     axisLine={false}
                     tickLine={false}
-                    tick={{ fontSize: 10 }}
-                    tickMargin={4}
+                    tick={{ fontSize: 10, dx: 64 }}
+                    tickMargin={8}
                     tickFormatter={(value) =>
                       hideSensitive ? "" : formatBtcAxis(Number(value))
                     }
-                    width={48}
+                    width={2}
                   />
                   <YAxis
                     yAxisId="price"

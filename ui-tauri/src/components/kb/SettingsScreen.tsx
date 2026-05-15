@@ -292,11 +292,11 @@ const DEFAULT_BACKENDS: Backend[] = [
   },
   {
     id: "b2",
-    name: "Blockstream Liquid",
-    url: "https://blockstream.info/liquid/api",
+    name: "Liquid Electrum",
+    url: "ssl://les.bullbitcoin.com:995",
     net: "LIQUID",
-    health: "-",
-    on: false,
+    health: "Liquid Electrum",
+    on: true,
     auth: "none",
   },
   {
@@ -343,6 +343,15 @@ function formatKrakenRange(row: KrakenRatesImportSummaryRow): string {
     return `${row.first_timestamp} to ${row.last_timestamp}`;
   }
   return "No imported rows";
+}
+
+function rateRebuildTransactionProgress(data: RateRebuildData | null) {
+  if (!data) return null;
+  const refreshed =
+    Number(data.journals?.auto_priced ?? 0) ||
+    Number(data.deleted.transaction_prices ?? 0);
+  const total = Math.max(refreshed, Number(data.deleted.transaction_prices ?? 0));
+  return { refreshed, total };
 }
 
 function backendIntegrationArt(backend: Backend): Pick<
@@ -542,6 +551,7 @@ export function SettingsScreen({ onLock }: SettingsScreenProps) {
           ? "Balances, addresses, and amounts are blurred."
           : "Balances, addresses, and amounts are visible.",
         isConnected: hideSensitive,
+        statusLabel: "On",
         category: "privacy",
         categoryLabel: "Privacy",
         actionLabel: "Configure",
@@ -554,6 +564,7 @@ export function SettingsScreen({ onLock }: SettingsScreenProps) {
           ? "Copied addresses and keys are cleared after 30 seconds."
           : "Copied values remain in the system clipboard.",
         isConnected: clearClipboard,
+        statusLabel: "On",
         category: "privacy",
         categoryLabel: "Privacy",
         actionLabel: "Configure",
@@ -567,6 +578,7 @@ export function SettingsScreen({ onLock }: SettingsScreenProps) {
             ? "Balances are shown in Bitcoin mode."
             : "Balances are shown in Euro mode.",
         isConnected: true,
+        statusLabel: "Selected",
         category: "display",
         categoryLabel: "Display",
         actionLabel: "Configure",
@@ -579,6 +591,7 @@ export function SettingsScreen({ onLock }: SettingsScreenProps) {
           ? `Auto-locks after ${appLockPolicy.idleMinutes} minutes of inactivity.`
           : "Auto-lock is disabled for idle sessions.",
         isConnected: appLockPolicy.autoLockWhenIdle,
+        statusLabel: "On",
         category: "security",
         categoryLabel: "Security",
         actionLabel: "Configure",
@@ -591,6 +604,7 @@ export function SettingsScreen({ onLock }: SettingsScreenProps) {
           ? "Change the SQLCipher database passphrase."
           : "These books are not using SQLCipher encryption.",
         isConnected: encryptedWorkspace,
+        statusLabel: "Enabled",
         category: "security",
         categoryLabel: "Security",
         actionLabel: "Manage",
@@ -645,6 +659,7 @@ export function SettingsScreen({ onLock }: SettingsScreenProps) {
         title: "Label and file imports",
         description: "BIP-329 labels, CSV imports, backups, and restore tools.",
         isConnected: true,
+        statusLabel: "Available",
         category: "data",
         categoryLabel: "Data",
         actionLabel: "Imports",
@@ -655,6 +670,7 @@ export function SettingsScreen({ onLock }: SettingsScreenProps) {
         title: "Local database",
         description: status?.database ?? "Local database path is loading.",
         isConnected: Boolean(status?.database),
+        statusLabel: "Available",
         category: "data",
         categoryLabel: "Data",
         actionLabel: "Status",
@@ -1434,6 +1450,12 @@ function BackendSettingsPanel({
 
   const isImportingKraken = importKrakenRates.isPending;
   const isRebuildingRates = rebuildRates.isPending;
+  const rateRebuildProgress = rateRebuildTransactionProgress(rateRebuildResult);
+  const rateRebuildSamples =
+    rateRebuildResult?.sync.reduce(
+      (total, row) => total + Number(row.samples ?? 0),
+      0,
+    ) ?? 0;
   const startRateRebuild = async () => {
     setRateRebuildError(null);
     setRateRebuildResult(null);
@@ -1570,14 +1592,61 @@ function BackendSettingsPanel({
           wallets can take a while because Kassiber refetches missing windows and
           reprocesses journals afterward.
         </p>
+        {isRebuildingRates ? (
+          <div className="mt-3 rounded-md border border-primary/25 bg-primary/5 p-3">
+            <div className="flex items-center justify-between gap-3 text-xs">
+              <span className="font-medium text-foreground">
+                Rebuilding provider rates
+              </span>
+              <span className="text-muted-foreground">
+                Counting transaction rates…
+              </span>
+            </div>
+            <div
+              className="mt-2 h-2 overflow-hidden rounded-full bg-muted"
+              role="progressbar"
+              aria-label="Pricing cache rebuild progress"
+              aria-valuetext="Rebuilding pricing cache"
+            >
+              <div className="h-full w-1/2 animate-pulse rounded-full bg-primary" />
+            </div>
+            <p className="mt-2 text-xs text-muted-foreground">
+              Kassiber is fetching missing one-minute rates and will report how
+              many transactions have provider rates when journals finish.
+            </p>
+          </div>
+        ) : null}
         {rateRebuildResult ? (
           <div className="mt-3 rounded-md border border-emerald-500/30 bg-emerald-500/5 p-3 text-sm text-emerald-700 dark:text-emerald-300">
-            Rebuilt {rateRebuildResult.source}: removed{" "}
-            {formatCount(rateRebuildResult.deleted.rates)} rate rows,{" "}
-            {formatCount(rateRebuildResult.deleted.checked_minutes)} checked
-            minutes, and{" "}
-            {formatCount(rateRebuildResult.deleted.transaction_prices)} cached
-            transaction prices.
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <span className="font-medium">
+                {rateRebuildProgress?.total
+                  ? `${formatCount(rateRebuildProgress.refreshed)} / ${formatCount(
+                      rateRebuildProgress.total,
+                    )} transaction rates refreshed`
+                  : "Pricing cache rebuilt"}
+              </span>
+              <span className="text-xs text-emerald-700/80 dark:text-emerald-300/80">
+                {formatCount(rateRebuildSamples)} rate rows fetched
+              </span>
+            </div>
+            <div
+              className="mt-2 h-2 overflow-hidden rounded-full bg-emerald-950/10 dark:bg-emerald-100/15"
+              role="progressbar"
+              aria-label="Transaction rate refresh progress"
+              aria-valuemin={0}
+              aria-valuemax={rateRebuildProgress?.total ?? 1}
+              aria-valuenow={rateRebuildProgress?.refreshed ?? 1}
+            >
+              <div className="h-full w-full rounded-full bg-emerald-500" />
+            </div>
+            <p className="mt-2 text-xs text-emerald-700/80 dark:text-emerald-300/80">
+              Removed {formatCount(rateRebuildResult.deleted.rates)} rate rows,{" "}
+              {formatCount(rateRebuildResult.deleted.checked_minutes)} checked
+              minutes, and{" "}
+              {formatCount(rateRebuildResult.deleted.transaction_prices)} cached
+              transaction prices.
+            </p>
           </div>
         ) : null}
       </div>
@@ -2355,18 +2424,18 @@ const SYNC_BACKEND_NETWORKS: SyncBackendNetwork[] = [
     desc: "Backends used by Liquid watch-only wallets.",
     presets: [
       {
+        id: "liquid-electrum",
+        name: "Liquid Electrum",
+        url: "ssl://les.bullbitcoin.com:995",
+        protocol: "electrum",
+        label: "Electrum / Fulcrum",
+      },
+      {
         id: "blockstream",
         name: "Blockstream Liquid",
         url: "https://blockstream.info/liquid/api",
         protocol: "liquid-esplora",
         label: "Liquid Esplora",
-      },
-      {
-        id: "liquid-electrum",
-        name: "Bull Bitcoin Liquid Electrum",
-        url: "ssl://les.bullbitcoin.com:995",
-        protocol: "electrum",
-        label: "Electrum / Fulcrum",
       },
     ],
   },
@@ -2426,6 +2495,11 @@ function BackendModal({
     ok: boolean;
     logs: string[];
   }>("ui.backends.electrum.test");
+  const testHttp = useDaemonMutation<{
+    ok: boolean;
+    logs: string[];
+    status?: number;
+  }>("ui.backends.http.test");
   const [typeId, setTypeId] = React.useState<SyncBackendNetwork["id"]>("bitcoin");
   const [presetId, setPresetId] = React.useState("mempool");
   const [name, setName] = React.useState("");
@@ -2443,6 +2517,7 @@ function BackendModal({
   const [proxyPort, setProxyPort] = React.useState("");
   const [testState, setTestState] = React.useState<TestState>("idle");
   const [testLog, setTestLog] = React.useState("");
+  const [saveState, setSaveState] = React.useState<"idle" | "saving">("idle");
 
   const type =
     SYNC_BACKEND_NETWORKS.find((candidate) => candidate.id === typeId) ??
@@ -2491,6 +2566,7 @@ function BackendModal({
       setProxyPort(initial.proxy?.port ?? "");
       setTestState(initial.on ? "ok" : "idle");
       setTestLog("");
+      setSaveState("idle");
       return;
     }
 
@@ -2511,6 +2587,7 @@ function BackendModal({
     setProxyPort("");
     setTestState("idle");
     setTestLog("");
+    setSaveState("idle");
   }, [initial, open]);
 
   React.useEffect(() => {
@@ -2547,12 +2624,12 @@ function BackendModal({
     );
   };
 
-  const testConnection = () => {
-    if (!effectiveUrl) return;
+  const testConnection = async () => {
+    if (!effectiveUrl) return false;
     setTestState("testing");
     if (isElectrum) {
-      void testElectrum
-        .mutateAsync({
+      try {
+        const envelope = await testElectrum.mutateAsync({
           url: effectiveUrl,
           trust_self_signed: electrumUseSsl && trustSsl,
           certificate:
@@ -2563,57 +2640,54 @@ function BackendModal({
             useProxy && proxyHost.trim() && proxyPort.trim()
               ? `${proxyHost.trim()}:${proxyPort.trim()}`
               : undefined,
-        })
-        .then((envelope) => {
-          const data = envelope.data;
-          setTestState(data?.ok ? "ok" : "fail");
-          setTestLog((data?.logs ?? []).join("\n"));
-        })
-        .catch((error) => {
-          setTestState("fail");
-          setTestLog(
-            error instanceof Error ? error.message : "Electrum test failed.",
-          );
         });
-      return;
+        const data = envelope.data;
+        setTestState(data?.ok ? "ok" : "fail");
+        setTestLog((data?.logs ?? []).join("\n"));
+        return Boolean(data?.ok);
+      } catch (error) {
+        setTestState("fail");
+        setTestLog(
+          error instanceof Error ? error.message : "Electrum test failed.",
+        );
+        return false;
+      }
     }
-    setTimeout(() => {
-      const ok = /^(https?|tcp|wss?|nostr\+walletconnect):\/\/[\w.\-:/]+/i.test(
-        effectiveUrl,
-      );
-      setTestState(ok ? "ok" : "fail");
-      setTestLog(ok ? `Reached ${effectiveUrl}` : `Could not reach ${effectiveUrl}`);
-    }, 900);
+    try {
+      const envelope = await testHttp.mutateAsync({
+        url: effectiveUrl,
+      });
+      const data = envelope.data;
+      setTestState(data?.ok ? "ok" : "fail");
+      setTestLog((data?.logs ?? []).join("\n"));
+      return Boolean(data?.ok);
+    } catch (error) {
+      setTestState("fail");
+      setTestLog(error instanceof Error ? error.message : "HTTP test failed.");
+      return false;
+    }
   };
 
   const canAdd = name.trim().length > 0 && effectiveUrl.length > 0;
-  const save = () => {
+  const save = async () => {
     if (!canAdd) return;
     const normalizedUrl = effectiveUrl;
-    const urlChanged = Boolean(initial && normalizedUrl !== initial.url);
+    let connected = testState === "ok";
+    setSaveState("saving");
+    if (!connected) {
+      connected = await testConnection();
+      if (!connected) {
+        setSaveState("idle");
+        return;
+      }
+    }
     onSave({
       id: initial?.id ?? "b" + Date.now(),
       name: name.trim(),
       url: normalizedUrl,
       net: type.net,
-      health:
-        testState === "ok"
-          ? initial
-            ? "just checked - ok"
-            : "just added - ok"
-          : testState === "fail"
-            ? "-"
-            : urlChanged
-              ? "-"
-              : (initial?.health ?? "-"),
-      on:
-        testState === "ok"
-          ? true
-          : testState === "fail"
-            ? false
-            : urlChanged
-              ? false
-              : (initial?.on ?? false),
+      health: initial ? "just checked - ok" : "just added - ok",
+      on: connected,
       auth: showAuth ? auth : "none",
       trustSsl: isElectrum && electrumUseSsl ? trustSsl : undefined,
       certificate:
@@ -2625,7 +2699,9 @@ function BackendModal({
           ? { host: proxyHost.trim(), port: proxyPort.trim() }
           : null,
     });
+    setSaveState("idle");
   };
+  const isSavingBackend = saveState === "saving";
 
   return (
     <Dialog
@@ -2955,8 +3031,12 @@ function BackendModal({
                   type="button"
                   variant="outline"
                   size="sm"
-                  onClick={testConnection}
-                  disabled={!effectiveUrl || testState === "testing"}
+                  onClick={() => {
+                    void testConnection();
+                  }}
+                  disabled={
+                    !effectiveUrl || testState === "testing" || isSavingBackend
+                  }
                 >
                   <RefreshCw
                     className={cn(
@@ -2994,8 +3074,23 @@ function BackendModal({
           <Button type="button" variant="outline" onClick={onClose}>
             Cancel
           </Button>
-          <Button type="button" disabled={!canAdd} onClick={save}>
-            {isEditing ? "Save backend" : "Add sync backend"}
+          <Button
+            type="button"
+            disabled={!canAdd || isSavingBackend || testState === "testing"}
+            onClick={() => {
+              void save();
+            }}
+          >
+            {isSavingBackend ? (
+              <RefreshCw className="size-4 animate-spin" aria-hidden="true" />
+            ) : null}
+            {isSavingBackend
+              ? "Connecting…"
+              : testState === "ok"
+                ? isEditing
+                  ? "Save backend"
+                  : "Add sync backend"
+                : "Connect & save"}
           </Button>
         </DialogFooter>
       </DialogContent>

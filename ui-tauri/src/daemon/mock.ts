@@ -887,6 +887,40 @@ export const mockDaemon: DaemonTransport = {
       };
     }
 
+    if (req.kind === "ui.backends.http.test") {
+      const args = (req.args ?? {}) as { url?: unknown };
+      const url = typeof args.url === "string" ? args.url.trim() : "";
+      if (!url) {
+        return {
+          kind: "error",
+          schema_version: 1,
+          request_id: req.request_id,
+          error: {
+            code: "validation",
+            message: "HTTP backend test requires url",
+            retryable: false,
+          },
+        };
+      }
+      return {
+        kind: "ui.backends.http.test",
+        schema_version: 1,
+        request_id: req.request_id,
+        data: {
+          ok: true,
+          url,
+          status: 200,
+          logs: [
+            `$ curl -fsS -L --max-time 10 -H 'Accept: application/json' ${url}`,
+            `> GET ${url}`,
+            "< HTTP 200 OK",
+            "< content-type: application/json",
+            "< body: 256 bytes sampled",
+          ],
+        } as T,
+      };
+    }
+
     if (req.kind === "ui.wallets.delete") {
       const args = (req.args ?? {}) as {
         wallet?: unknown;
