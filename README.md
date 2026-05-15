@@ -403,10 +403,11 @@ python3 -m kassiber reports tax-summary
 python3 -m kassiber reports balance-sheet
 python3 -m kassiber reports capital-gains
 python3 -m kassiber reports export-pdf --file report.pdf
+python3 -m kassiber reports export-summary-pdf --file summary-report.pdf --start 2024-01-01T00:00:00Z --end 2024-12-31T23:59:59Z
 python3 -m kassiber reports export-csv --file report.csv
 python3 -m kassiber reports export-xlsx --file report.xlsx
-# The desktop Reports screen also offers a stakeholder Summary PDF export
-# with a timeframe, wallet scope, charts, and optional live snapshot cover.
+# The Summary PDF is also available from the desktop Reports screen with
+# wallet scope controls and an optional live snapshot cover.
 # For Austrian/EUR books:
 python3 -m kassiber --machine reports austrian-e1kv --year 2024
 python3 -m kassiber --machine reports austrian-tax-summary --year 2024

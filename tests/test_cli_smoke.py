@@ -688,6 +688,26 @@ class CliSmokeTest(unittest.TestCase):
         self.assertTrue(header.startswith(b"%PDF-1.4"))
         self.assertRegex(payload_bytes, rb"/MediaBox \[0 0 842(?:\.0+)? 595(?:\.0+)?\]")
 
+        summary_pdf_path = Path(self._tmp.name) / "kassiber-summary-report.pdf"
+        if summary_pdf_path.exists():
+            summary_pdf_path.unlink()
+        summary_payload = self._cli(
+            "reports", "export-summary-pdf",
+            "--workspace", "Main",
+            "--profile", "Default",
+            "--start", "2026-01-01T00:00:00Z",
+            "--end", "2026-12-31T23:59:59Z",
+            "--file", str(summary_pdf_path),
+        )
+        self._assert_kind(summary_payload, "reports.export-summary-pdf")
+        summary_data = summary_payload["data"]
+        self.assertEqual(Path(summary_data["file"]), summary_pdf_path.resolve())
+        self.assertFalse(summary_data["snapshot"])
+        self.assertGreaterEqual(len(summary_data["wallets"]), 1)
+        self.assertEqual(summary_data["timeframe"]["label"], "2026-01-01 to 2026-12-31")
+        self.assertTrue(summary_pdf_path.exists())
+        self.assertEqual(summary_pdf_path.read_bytes()[:4], b"%PDF")
+
     def test_07ab_export_csv_and_xlsx_report(self):
         csv_path = Path(self._tmp.name) / "kassiber-report.csv"
         xlsx_path = Path(self._tmp.name) / "kassiber-report.xlsx"

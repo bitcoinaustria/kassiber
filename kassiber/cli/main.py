@@ -1205,6 +1205,15 @@ def build_parser() -> argparse.ArgumentParser:
     export_pdf.add_argument("--file", required=True)
     export_pdf.add_argument("--history-limit", type=int, default=0)
 
+    export_summary_pdf = reports_sub.add_parser("export-summary-pdf")
+    export_summary_pdf.add_argument("--workspace")
+    export_summary_pdf.add_argument("--profile")
+    export_summary_pdf.add_argument("--wallet", action="append", dest="wallets")
+    export_summary_pdf.add_argument("--start")
+    export_summary_pdf.add_argument("--end")
+    export_summary_pdf.add_argument("--include-snapshot", action="store_true")
+    export_summary_pdf.add_argument("--file", required=True)
+
     export_csv = reports_sub.add_parser("export-csv")
     export_csv.add_argument("--workspace")
     export_csv.add_argument("--profile")
@@ -2462,6 +2471,21 @@ def dispatch(conn: sqlite3.Connection | None, args: argparse.Namespace) -> Any:
                     report_hooks,
                     wallet_ref=args.wallet,
                     history_limit=args.history_limit,
+                ),
+            )
+        if args.reports_command == "export-summary-pdf":
+            return emit(
+                args,
+                core_reports.export_summary_pdf_report(
+                    conn,
+                    args.workspace,
+                    args.profile,
+                    args.file,
+                    report_hooks,
+                    start=args.start,
+                    end=args.end,
+                    wallet_refs=args.wallets,
+                    include_snapshot=args.include_snapshot,
                 ),
             )
         if args.reports_command == "export-csv":

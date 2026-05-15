@@ -555,9 +555,10 @@ def _resolve_wallet_scope_refs(conn, workspace_ref, profile_ref, hooks: ReportHo
         wallet = by_id.get(ref) or by_label.get(ref)
         if wallet is None:
             wallet = hooks.resolve_wallet(conn, profile_ref, ref)
-        if wallet["id"] in seen:
+        wallet_id = str(wallet["id"])
+        if wallet_id in seen:
             continue
-        seen.add(wallet["id"])
+        seen.add(wallet_id)
         resolved.append(wallet)
     return resolved
 
@@ -1132,10 +1133,13 @@ def _summary_pdf_balance_history(conn, profile_id, wallets, hooks: ReportHooks, 
         total_quantity = sum(cumulative.values(), Decimal("0"))
         total_cost = sum(cumulative_cost.values(), Decimal("0"))
         market_value = sum(quantity * rates.get(asset, Decimal("0")) for asset, quantity in cumulative.items())
+        nominal_period_end = bucket_end - timedelta(seconds=1)
+        effective_period_end = min(nominal_period_end, end_dt)
         results.append(
             {
                 "period_start": hooks.iso_z(bucket),
-                "period_end": hooks.iso_z(bucket_end - timedelta(seconds=1)),
+                "period_end": hooks.iso_z(effective_period_end),
+                "period_partial": effective_period_end < nominal_period_end,
                 "quantity": float(total_quantity),
                 "cumulative_cost_basis": float(total_cost),
                 "market_value": float(market_value),
@@ -1238,6 +1242,10 @@ def _summary_pdf_total_market_value(conn, profile_id, wallets, hooks: ReportHook
             for row in _summary_pdf_wallet_holdings(conn, profile_id, wallets, hooks, end_dt)
         )
     )
+
+
+def _summary_pdf_total_market_value_from_holdings(rows):
+    return float(sum(dec(row["market_value"]) for row in rows))
 
 
 def _summary_pdf_flow_periods(conn, profile_id, wallets, hooks: ReportHooks, start_dt, end_dt):
@@ -1362,24 +1370,34 @@ def build_summary_pdf_report_data(
     hooks.require_processed_journals(conn, profile)
     start_dt, end_dt = _summary_pdf_period(hooks, start=start, end=end)
     wallets = _resolve_wallet_scope_refs(conn, workspace["id"], profile["id"], hooks, wallet_refs=wallet_refs)
+    generated_at = hooks.now_iso()
+    holdings_cache = {}
+
+    def holdings_at(as_of, tx_count_start=None):
+        key = (hooks.iso_z(as_of), hooks.iso_z(tx_count_start) if tx_count_start else "")
+        if key not in holdings_cache:
+            holdings_cache[key] = _summary_pdf_wallet_holdings(
+                conn,
+                profile["id"],
+                wallets,
+                hooks,
+                as_of,
+                start_dt=tx_count_start,
+            )
+        return holdings_cache[key]
+
     history_rows = _summary_pdf_balance_history(conn, profile["id"], wallets, hooks, start_dt, end_dt)
-    wallet_holdings = _summary_pdf_wallet_holdings(conn, profile["id"], wallets, hooks, end_dt, start_dt=start_dt)
+    wallet_holdings = holdings_at(end_dt, start_dt)
     flow_periods, flow_totals = _summary_pdf_flow_periods(conn, profile["id"], wallets, hooks, start_dt, end_dt)
     realized_periods, realized_total = _summary_pdf_realized_periods(conn, profile["id"], wallets, hooks, start_dt, end_dt)
-    period_start_value = _summary_pdf_total_market_value(conn, profile["id"], wallets, hooks, start_dt)
-    period_end_value = _summary_pdf_total_market_value(conn, profile["id"], wallets, hooks, end_dt)
+    period_start_value = _summary_pdf_total_market_value_from_holdings(holdings_at(start_dt))
+    period_end_value = _summary_pdf_total_market_value_from_holdings(wallet_holdings)
     title = f"Kassiber Summary Report - {profile['label']}"
     snapshot = None
     if include_snapshot:
-        today_holdings = _summary_pdf_wallet_holdings(
-            conn,
-            profile["id"],
-            wallets,
-            hooks,
-            hooks.parse_iso_datetime(hooks.now_iso(), "now"),
-        )
+        today_holdings = holdings_at(hooks.parse_iso_datetime(generated_at, "now"))
         snapshot = {
-            "as_of": hooks.now_iso(),
+            "as_of": generated_at,
             "wallets": today_holdings,
             "total_quantity": float(sum(dec(row["quantity"]) for row in today_holdings)),
             "total_market_value": float(sum(dec(row["market_value"]) for row in today_holdings)),
@@ -1388,7 +1406,7 @@ def build_summary_pdf_report_data(
         "workspace": workspace["label"],
         "profile": profile["label"],
         "fiat_currency": profile["fiat_currency"],
-        "generated_at": hooks.now_iso(),
+        "generated_at": generated_at,
         "title": title,
         "timeframe": {
             "start": hooks.iso_z(start_dt),

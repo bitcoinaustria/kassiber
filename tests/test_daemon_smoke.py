@@ -3925,6 +3925,47 @@ class DaemonSmokeTest(unittest.TestCase):
 
             _write_payload(
                 proc,
+                {
+                    "request_id": "export-summary-pdf-default-wallets",
+                    "kind": "ui.reports.export_summary_pdf",
+                    "args": {
+                        "start": "2026-01-01T00:00:00Z",
+                        "end": "2026-12-31T23:59:59Z",
+                        "include_snapshot": False,
+                    },
+                },
+            )
+            summary_pdf_default = _read_payload_timeout(proc)
+            self.assertEqual(summary_pdf_default["kind"], "ui.reports.export_summary_pdf")
+            self.assertFalse(summary_pdf_default["data"]["snapshot"])
+            self.assertEqual(
+                {wallet["label"] for wallet in summary_pdf_default["data"]["wallets"]},
+                {"Cold", "Hot"},
+            )
+            self.assertEqual(Path(summary_pdf_default["data"]["file"]).read_bytes()[:4], b"%PDF")
+
+            for request_id, args in [
+                ("export-summary-pdf-empty-wallets", {"wallets": []}),
+                ("export-summary-pdf-non-string-wallet", {"wallets": ["Cold", 1]}),
+                (
+                    "export-summary-pdf-invalid-period",
+                    {"start": "2026-12-31T23:59:59Z", "end": "2026-01-01T00:00:00Z"},
+                ),
+            ]:
+                _write_payload(
+                    proc,
+                    {
+                        "request_id": request_id,
+                        "kind": "ui.reports.export_summary_pdf",
+                        "args": args,
+                    },
+                )
+                rejected_summary = _read_payload_timeout(proc)
+                self.assertEqual(rejected_summary["kind"], "error")
+                self.assertEqual(rejected_summary["error"]["code"], "validation")
+
+            _write_payload(
+                proc,
                 {"request_id": "export-report-csv", "kind": "ui.reports.export_csv"},
             )
             report_csv = _read_payload_timeout(proc)

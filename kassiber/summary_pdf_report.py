@@ -6,7 +6,6 @@ from typing import Any, Mapping, Sequence
 
 from ._pdf_common import (
     BRAND_ACCENT,
-    BRAND_ACCENT_SOFT,
     BRAND_INK,
     BRAND_LINE,
     BRAND_MUTED,
@@ -19,14 +18,21 @@ from ._pdf_common import (
 )
 
 
+COLOR_BALANCE = "#1f77b4"
+COLOR_PROFIT = "#2ca02c"
+COLOR_PURPLE = "#9467bd"
+COLOR_WARNING = "#ff7f0e"
+COLOR_CYAN = "#17becf"
+COLOR_GRAY = "#7f7f7f"
+
 PALETTE = (
-    "#e3000f",
-    "#1f77b4",
-    "#2ca02c",
-    "#9467bd",
-    "#ff7f0e",
-    "#17becf",
-    "#7f7f7f",
+    BRAND_ACCENT,
+    COLOR_BALANCE,
+    COLOR_PROFIT,
+    COLOR_PURPLE,
+    COLOR_WARNING,
+    COLOR_CYAN,
+    COLOR_GRAY,
 )
 
 
@@ -161,9 +167,11 @@ def _line_chart(rl: dict[str, Any], title: str, rows: Sequence[Mapping[str, Any]
         drawing.add(Line(x - 2, y, x + 2, y, strokeColor=colors.HexColor(BRAND_ACCENT), strokeWidth=1.4))
     else:
         drawing.add(PolyLine(fiat_points, strokeColor=colors.HexColor(BRAND_ACCENT), strokeWidth=1.4))
-        drawing.add(PolyLine(btc_points, strokeColor=colors.HexColor("#1f77b4"), strokeWidth=1.1))
+        drawing.add(PolyLine(btc_points, strokeColor=colors.HexColor(COLOR_BALANCE), strokeWidth=1.1))
     drawing.add(String(left, 8, f"Fiat axis: {_money(currency, fiat_low)} to {_money(currency, fiat_high)}", fontName=_font(rl, "regular"), fontSize=6.5, fillColor=colors.HexColor(BRAND_MUTED)))
     drawing.add(String(width - 95, 8, f"BTC axis: {_btc(btc_low)} to {_btc(btc_high)}", fontName=_font(rl, "regular"), fontSize=6.5, fillColor=colors.HexColor(BRAND_MUTED)))
+    if rows and rows[-1].get("period_partial"):
+        drawing.add(String(left, 0, f"Final period capped at {str(rows[-1].get('period_end', ''))[:10]}", fontName=_font(rl, "regular"), fontSize=6.5, fillColor=colors.HexColor(BRAND_MUTED)))
     return drawing
 
 
@@ -200,6 +208,10 @@ def _donut_chart(rl: dict[str, Any], title: str, rows: Sequence[Mapping[str, Any
         label = str(row.get("wallet") or "Wallet")[:18]
         drawing.add(String(60 * rl["mm"] + 8, y - 6, f"{label} {_money(currency, row.get('market_value'))}", fontName=_font(rl, "regular"), fontSize=6.5, fillColor=colors.HexColor(BRAND_MUTED)))
         y -= 9
+    if len(rows) > 6:
+        hidden_value = sum(decimal_value(row.get("market_value")) for row in rows[6:])
+        drawing.add(rl["Rect"](60 * rl["mm"], y - 6, 5, 5, strokeColor=colors.HexColor(COLOR_GRAY), fillColor=colors.HexColor(BRAND_SOFT)))
+        drawing.add(String(60 * rl["mm"] + 8, y - 6, f"+{len(rows) - 6} more {_money(currency, hidden_value)}", fontName=_font(rl, "regular"), fontSize=6.5, fillColor=colors.HexColor(BRAND_MUTED)))
     return drawing
 
 
@@ -224,30 +236,45 @@ def _bar_chart(
     bottom = 22
     plot_w = width - 28
     plot_h = height - 42
-    drawing.add(Line(left, bottom, left + plot_w, bottom, strokeColor=colors.HexColor(BRAND_LINE), strokeWidth=0.5))
     if not rows:
+        drawing.add(Line(left, bottom, left + plot_w, bottom, strokeColor=colors.HexColor(BRAND_LINE), strokeWidth=0.5))
         drawing.add(String(left, bottom + plot_h / 2, "No rows in scope.", fontName=_font(rl, "regular"), fontSize=8, fillColor=colors.HexColor(BRAND_MUTED)))
         return drawing
     if paired:
+        drawing.add(Line(left, bottom, left + plot_w, bottom, strokeColor=colors.HexColor(BRAND_LINE), strokeWidth=0.5))
         values = [decimal_value(row.get("inflow_volume")) for row in rows] + [decimal_value(row.get("outflow_volume")) for row in rows]
+        max_value = max(values) if values else Decimal("0")
+        max_value = max_value or Decimal("1")
     else:
-        values = [abs(decimal_value(row.get("realized_pnl"))) for row in rows]
-    max_value = max(values) if values else Decimal("0")
-    max_value = max_value or Decimal("1")
+        pnl_values = [decimal_value(row.get("realized_pnl")) for row in rows]
+        low = min([Decimal("0"), *pnl_values])
+        high = max([Decimal("0"), *pnl_values])
+        if low == high:
+            high = Decimal("1")
+        baseline = bottom + _scale(Decimal("0"), low, high, plot_h)
+        drawing.add(Line(left, baseline, left + plot_w, baseline, strokeColor=colors.HexColor(BRAND_LINE), strokeWidth=0.5))
+        max_value = None
     bar_slot = plot_w / max(len(rows), 1)
     for idx, row in enumerate(rows):
         x = left + idx * bar_slot + 2
         if paired:
             inflow_h = _scale(decimal_value(row.get("inflow_volume")), Decimal("0"), max_value, plot_h)
             outflow_h = _scale(decimal_value(row.get("outflow_volume")), Decimal("0"), max_value, plot_h)
-            drawing.add(Rect(x, bottom, max(bar_slot / 2 - 2, 1), inflow_h, fillColor=colors.HexColor("#2ca02c"), strokeColor=None))
+            drawing.add(Rect(x, bottom, max(bar_slot / 2 - 2, 1), inflow_h, fillColor=colors.HexColor(COLOR_PROFIT), strokeColor=None))
             drawing.add(Rect(x + bar_slot / 2, bottom, max(bar_slot / 2 - 2, 1), outflow_h, fillColor=colors.HexColor(BRAND_ACCENT), strokeColor=None))
         else:
             value = decimal_value(row.get("realized_pnl"))
-            bar_h = _scale(abs(value), Decimal("0"), max_value, plot_h)
-            color = "#2ca02c" if value >= 0 else BRAND_ACCENT
-            drawing.add(Rect(x, bottom, max(bar_slot - 4, 1), bar_h, fillColor=colors.HexColor(color), strokeColor=None))
-    drawing.add(String(left, 8, f"Max {_money(currency, max_value)}", fontName=_font(rl, "regular"), fontSize=6.5, fillColor=colors.HexColor(BRAND_MUTED)))
+            scaled_value = bottom + _scale(value, low, high, plot_h)
+            y = min(baseline, scaled_value)
+            bar_h = abs(scaled_value - baseline)
+            if value != 0 and bar_h < 1:
+                bar_h = 1
+            color = COLOR_PROFIT if value >= 0 else BRAND_ACCENT
+            drawing.add(Rect(x, y, max(bar_slot - 4, 1), bar_h, fillColor=colors.HexColor(color), strokeColor=None))
+    if paired:
+        drawing.add(String(left, 8, f"Max {_money(currency, max_value)}", fontName=_font(rl, "regular"), fontSize=6.5, fillColor=colors.HexColor(BRAND_MUTED)))
+    else:
+        drawing.add(String(left, 8, f"Range {_signed_money(currency, low)} to {_signed_money(currency, high)}", fontName=_font(rl, "regular"), fontSize=6.5, fillColor=colors.HexColor(BRAND_MUTED)))
     return drawing
 
 
