@@ -36,6 +36,15 @@ def require_reportlab(export_name: str) -> dict[str, Any]:
             Table,
             TableStyle,
         )
+        from reportlab.graphics.shapes import (
+            Circle,
+            Drawing,
+            Line,
+            PolyLine,
+            Rect,
+            String,
+            Wedge,
+        )
     except ImportError as exc:
         raise AppError(
             f"{export_name} requires the ReportLab PDF renderer",
@@ -62,6 +71,13 @@ def require_reportlab(export_name: str) -> dict[str, Any]:
         "Spacer": Spacer,
         "Table": Table,
         "TableStyle": TableStyle,
+        "Circle": Circle,
+        "Drawing": Drawing,
+        "Line": Line,
+        "PolyLine": PolyLine,
+        "Rect": Rect,
+        "String": String,
+        "Wedge": Wedge,
     }
 
 

@@ -175,6 +175,7 @@ SUPPORTED_KINDS = (
     "ui.reports.tax_summary",
     "ui.reports.balance_history",
     "ui.reports.export_pdf",
+    "ui.reports.export_summary_pdf",
     "ui.reports.export_csv",
     "ui.reports.export_xlsx",
     "ui.reports.export_capital_gains_csv",
@@ -1692,6 +1693,55 @@ def _ui_report_export_payload(
             {
                 "format": export_format,
                 "scope": "report",
+                "filename": Path(payload["file"]).name,
+            }
+        )
+        return payload
+
+    if kind == "ui.reports.export_summary_pdf":
+        unknown = sorted(set(args) - {"start", "end", "wallets", "include_snapshot"})
+        if unknown:
+            raise AppError(
+                "ui.reports.export_summary_pdf received unsupported arguments",
+                code="validation",
+                details={"unsupported": unknown},
+            )
+        wallet_refs = args.get("wallets")
+        if wallet_refs is not None:
+            if not isinstance(wallet_refs, list) or not all(isinstance(item, str) for item in wallet_refs):
+                raise AppError(
+                    "ui.reports.export_summary_pdf wallets must be an array of strings",
+                    code="validation",
+                )
+            if not wallet_refs:
+                raise AppError(
+                    "ui.reports.export_summary_pdf requires at least one selected wallet",
+                    code="validation",
+                )
+        include_snapshot = args.get("include_snapshot", False)
+        if not isinstance(include_snapshot, bool):
+            raise AppError(
+                "ui.reports.export_summary_pdf include_snapshot must be a boolean",
+                code="validation",
+            )
+        path = _managed_report_export_path(ctx.data_root, "kassiber-summary-report", ".pdf")
+        payload = dict(
+            core_reports.export_summary_pdf_report(
+                conn,
+                None,
+                None,
+                path,
+                hooks,
+                start=args.get("start"),
+                end=args.get("end"),
+                wallet_refs=wallet_refs,
+                include_snapshot=include_snapshot,
+            )
+        )
+        payload.update(
+            {
+                "format": "pdf",
+                "scope": "summary_report",
                 "filename": Path(payload["file"]).name,
             }
         )
@@ -6089,6 +6139,7 @@ def handle_request(
 
     if kind in {
         "ui.reports.export_pdf",
+        "ui.reports.export_summary_pdf",
         "ui.reports.export_csv",
         "ui.reports.export_xlsx",
         "ui.reports.export_capital_gains_csv",

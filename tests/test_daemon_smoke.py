@@ -1,6 +1,7 @@
 import json
 import queue
 import select
+import shutil
 import sqlite3
 import subprocess
 import sys
@@ -565,6 +566,7 @@ class DaemonSmokeTest(unittest.TestCase):
             self.assertIn("ui.reports.tax_summary", ready["data"]["supported_kinds"])
             self.assertIn("ui.reports.balance_history", ready["data"]["supported_kinds"])
             self.assertIn("ui.reports.export_pdf", ready["data"]["supported_kinds"])
+            self.assertIn("ui.reports.export_summary_pdf", ready["data"]["supported_kinds"])
             self.assertIn("ui.reports.export_csv", ready["data"]["supported_kinds"])
             self.assertIn("ui.reports.export_xlsx", ready["data"]["supported_kinds"])
             self.assertIn(
@@ -3841,6 +3843,30 @@ class DaemonSmokeTest(unittest.TestCase):
                 tax_country="at",
                 gains_algorithm="MOVING_AVERAGE_AT",
             )
+            hot_csv = Path(tmp) / "hot.csv"
+            hot_csv.write_text(
+                "\n".join(
+                    [
+                        "date,txid,direction,asset,amount,fee,fiat_rate,description",
+                        "2026-03-01T10:00:00Z,hot-inbound-1,inbound,BTC,0.20000000,0,60000,Hot wallet acquisition",
+                        "",
+                    ]
+                ),
+                encoding="utf-8",
+            )
+            _run_cli(
+                data_root,
+                "wallets",
+                "create",
+                "--label",
+                "Hot",
+                "--kind",
+                "address",
+                "--address",
+                "bc1qtestaddress1111111111111111111111111111111",
+            )
+            _run_cli(data_root, "wallets", "import-csv", "--wallet", "Hot", "--file", str(hot_csv))
+            _run_cli(data_root, "rates", "set", "BTC-EUR", "2026-03-01T00:00:00Z", "60000")
             _run_cli(data_root, "journals", "process")
             proc = _start_daemon(data_root)
             self.assertEqual(_read_payload_timeout(proc)["kind"], "daemon.ready")
@@ -3859,6 +3885,43 @@ class DaemonSmokeTest(unittest.TestCase):
             )
             self.assertEqual(pdf_file.read_bytes()[:4], b"%PDF")
             self.assertGreater(pdf["data"]["pages"], 0)
+
+            _write_payload(
+                proc,
+                {
+                    "request_id": "export-summary-pdf",
+                    "kind": "ui.reports.export_summary_pdf",
+                    "args": {
+                        "start": "2026-01-01T00:00:00Z",
+                        "end": "2026-12-31T23:59:59Z",
+                        "wallets": ["Cold"],
+                        "include_snapshot": True,
+                    },
+                },
+            )
+            summary_pdf = _read_payload_timeout(proc)
+            self.assertEqual(summary_pdf["kind"], "ui.reports.export_summary_pdf")
+            summary_pdf_file = Path(summary_pdf["data"]["file"])
+            self.assertTrue(summary_pdf_file.is_file())
+            self.assertEqual(summary_pdf_file.read_bytes()[:4], b"%PDF")
+            self.assertEqual(summary_pdf["data"]["scope"], "summary_report")
+            self.assertTrue(summary_pdf["data"]["snapshot"])
+            self.assertEqual(
+                [wallet["label"] for wallet in summary_pdf["data"]["wallets"]],
+                ["Cold"],
+            )
+            self.assertEqual(summary_pdf["data"]["timeframe"]["label"], "2026-01-01 to 2026-12-31")
+            if shutil.which("pdftotext"):
+                summary_text = subprocess.run(
+                    ["pdftotext", "-layout", str(summary_pdf_file), "-"],
+                    check=True,
+                    text=True,
+                    capture_output=True,
+                ).stdout
+                self.assertIn("Kassiber Summary Report", summary_text)
+                self.assertIn("Wallet Appendix", summary_text)
+                self.assertNotIn("Kennzahl", summary_text)
+                self.assertNotIn("FinanzOnline", summary_text)
 
             _write_payload(
                 proc,
