@@ -76,6 +76,7 @@ import type {
 } from "@/mocks/seed";
 
 const blurClass = (hidden: boolean) => (hidden ? "sensitive" : "");
+const MAX_DESCRIPTOR_GAP_LIMIT = 5000;
 
 const fmtBtc = (value: number) => `₿ ${value.toFixed(8)}`;
 const fmtEur = (value: number) =>
@@ -293,6 +294,7 @@ function ConnectionDetailView({
   const [editPassphrase, setEditPassphrase] = useState("");
   const [editPlaintextAck, setEditPlaintextAck] = useState("");
   const [editWalletMaterial, setEditWalletMaterial] = useState("");
+  const [editGapLimit, setEditGapLimit] = useState("");
   const [editStoreId, setEditStoreId] = useState("");
   const [editPaymentMethodId, setEditPaymentMethodId] = useState("");
   const [editBackend, setEditBackend] = useState("");
@@ -396,6 +398,7 @@ function ConnectionDetailView({
     setEditPassphrase("");
     setEditPlaintextAck("");
     setEditWalletMaterial("");
+    setEditGapLimit(connection.gap != null ? String(connection.gap) : "");
     setEditStoreId("");
     setEditPaymentMethodId("");
     setEditBackend("");
@@ -447,6 +450,7 @@ function ConnectionDetailView({
     }
     const labelChanged = nextLabel !== connection.label;
     const walletMaterial = editWalletMaterial.trim();
+    const gapLimitText = editGapLimit.trim();
     const storeId = editStoreId.trim();
     const paymentMethodId = editPaymentMethodId.trim();
     const backend = editBackend.trim();
@@ -459,6 +463,22 @@ function ConnectionDetailView({
         return;
       }
       configChanges.wallet_material = walletMaterial;
+    }
+    if (editConfigKind === "descriptor" && gapLimitText) {
+      const gapLimit = Number.parseInt(gapLimitText, 10);
+      if (!Number.isFinite(gapLimit) || gapLimit <= 0) {
+        setEditError("Gap limit must be a positive integer.");
+        return;
+      }
+      if (gapLimit > MAX_DESCRIPTOR_GAP_LIMIT) {
+        setEditError(
+          `Gap limit must be ${MAX_DESCRIPTOR_GAP_LIMIT.toLocaleString()} or lower.`,
+        );
+        return;
+      }
+      if (connection.gap == null || gapLimit !== connection.gap) {
+        configChanges.gap_limit = gapLimit;
+      }
     }
     if (editConfigKind === "btcpay") {
       if (storeId) configChanges.store_id = storeId;
@@ -729,16 +749,10 @@ function ConnectionDetailView({
             <CardHeader className="border-b px-4 pb-3">
               <CardTitle className="text-sm sm:text-base">Connection details</CardTitle>
               <CardDescription>
-                Local metadata and source configuration.
+                Local sync configuration.
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-3 px-4 pt-4">
-              <DetailRow label="Label" value={connection.label} />
-              <DetailRow label="Type" value={connection.kind.toUpperCase()} mono />
-              <DetailRow
-                label="Status"
-                value={walletDetail?.sync_status ?? connection.status}
-              />
               <DetailRow
                 label="Sync mode"
                 value={
@@ -750,7 +764,6 @@ function ConnectionDetailView({
                   "—"
                 }
               />
-              <DetailRow label="Source" value={sourceValue || "—"} />
               <DetailRow
                 label="Backend"
                 value={formatBackendDetail(walletDetail?.backend)}
@@ -793,7 +806,7 @@ function ConnectionDetailView({
             <CardContent className="flex flex-wrap gap-2 px-4 pt-4">
               <Button type="button" variant="outline" onClick={openEditDialog}>
                 <Pencil className="size-4" aria-hidden="true" />
-                Edit label
+                Edit
               </Button>
               <Button
                 type="button"
@@ -831,7 +844,7 @@ function ConnectionDetailView({
             {editConfigKind === "descriptor" ? (
               <div className="space-y-2">
                 <Label htmlFor="connection-edit-material">
-                  Replace wallet export
+                  Descriptor or xpub
                 </Label>
                 <Textarea
                   id="connection-edit-material"
@@ -859,9 +872,28 @@ function ConnectionDetailView({
                     })()
                   : (
                       <p className="text-xs text-muted-foreground">
-                        Leave empty to keep the current descriptors.
+                        Leave empty unless you need to change the saved wallet material.
                       </p>
                     )}
+              </div>
+            ) : null}
+            {editConfigKind === "descriptor" ? (
+              <div className="space-y-2">
+                <Label htmlFor="connection-edit-gap-limit">Gap limit</Label>
+                <Input
+                  id="connection-edit-gap-limit"
+                  type="number"
+                  min={1}
+                  max={MAX_DESCRIPTOR_GAP_LIMIT}
+                  value={editGapLimit}
+                  onChange={(event) => setEditGapLimit(event.target.value)}
+                  placeholder="40"
+                />
+                <p className="text-xs text-muted-foreground">
+                  Raise this for wallets with long unused address runs. Large
+                  values up to 5,000 can take longer, but refreshes keep
+                  running until the daemon returns.
+                </p>
               </div>
             ) : null}
             {editConfigKind === "btcpay" ? (

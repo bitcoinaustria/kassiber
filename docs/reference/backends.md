@@ -218,6 +218,7 @@ Use this when you run your own node.
 ## Descriptor and Liquid notes
 
 Descriptor wallets derive receive and change scripts locally and then refresh through an Esplora- or Electrum-backed backend.
+The default gap limit is 40 unused addresses per branch, and Kassiber caps the configured gap limit at 5,000 to avoid accidental runaway scans.
 
 Example Bitcoin descriptor wallet:
 
@@ -228,7 +229,7 @@ bash -c 'python3 -m kassiber wallets create \
   --backend mempool \
   --descriptor-fd 3 \
   --change-descriptor-fd 4 \
-  --gap-limit 20' \
+  --gap-limit 40' \
   3< <(printf '%s\n' 'wpkh([fingerprint/84h/0h/0h]xpub.../0/*)') \
   4< <(printf '%s\n' 'wpkh([fingerprint/84h/0h/0h]xpub.../1/*)')
 
@@ -247,7 +248,7 @@ bash -c 'python3 -m kassiber wallets create \
   --network liquidv1 \
   --descriptor-fd 3 \
   --change-descriptor-fd 4 \
-  --gap-limit 20' \
+  --gap-limit 40' \
   3< <(printf '%s\n' 'ct(slip77(...),elwpkh(.../0/*))') \
   4< <(printf '%s\n' 'ct(slip77(...),elwpkh(.../1/*))')
 ```

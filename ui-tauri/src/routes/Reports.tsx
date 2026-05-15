@@ -348,6 +348,10 @@ function ReportsView({
   );
   const [activeExport, setActiveExport] =
     useState<ReportExportFormatId | null>(null);
+  const [successfulExport, setSuccessfulExport] = useState<{
+    format: ReportExportFormatId;
+    year: number;
+  } | null>(null);
   const [openingExportPath, setOpeningExportPath] = useState<string | null>(
     null,
   );
@@ -411,11 +415,24 @@ function ReportsView({
     canOpenCurrentExport && currentExportStatus?.openPath
       ? currentExportStatus.openPath
       : null;
+  useEffect(() => {
+    if (!successfulExport) return;
+    const timeout = window.setTimeout(() => {
+      setSuccessfulExport((current) =>
+        current?.format === successfulExport.format &&
+        current.year === successfulExport.year
+          ? null
+          : current,
+      );
+    }, 5000);
+    return () => window.clearTimeout(timeout);
+  }, [successfulExport]);
 
   const handleExport = (format: ReportExportFormatId) => {
     if (activeExport) return;
     const exportYear = effectiveYear;
     setExportStatus(null);
+    setSuccessfulExport(null);
     setActiveExport(format);
     const mutation =
       format === "summary_pdf"
@@ -466,7 +483,6 @@ function ReportsView({
                 ? `${payload.rows} row${payload.rows === 1 ? "" : "s"}`
                 : "Export written";
         let savedPath = exportPath;
-        let statusMessage = `${filename} saved to the managed exports folder.`;
         if (exportPath && canSaveExportedFiles()) {
           try {
             const destination = await saveFile({
@@ -483,9 +499,6 @@ function ReportsView({
             });
             if (destination) {
               savedPath = await saveExportedFileAs(exportPath, destination);
-              statusMessage = `${basename(savedPath)} saved.`;
-            } else {
-              statusMessage = `${filename} export kept in the managed exports folder.`;
             }
           } catch (error) {
             const message =
@@ -505,13 +518,7 @@ function ReportsView({
             return;
           }
         }
-        setExportStatus({
-          year: exportYear,
-          tone: "success",
-          message: statusMessage,
-          path: savedPath,
-          openPath: savedPath === exportPath ? exportPath : undefined,
-        });
+        setSuccessfulExport({ format, year: exportYear });
         addNotification({
           title: "Report export finished",
           body:
@@ -615,6 +622,7 @@ function ReportsView({
             exportStatus={currentExportStatus}
             openableExportPath={openableExportPath}
             openingExportPath={openingExportPath}
+            successfulExport={successfulExport}
             onExport={handleExport}
             onOpenExport={handleOpenExport}
           />
@@ -626,6 +634,10 @@ function ReportsView({
             includeSnapshot={summarySnapshot}
             loading={activeExport === "summary_pdf"}
             disabled={Boolean(activeExport)}
+            success={
+              successfulExport?.format === "summary_pdf" &&
+              successfulExport.year === effectiveYear
+            }
             onToggleSnapshot={setSummarySnapshot}
             onToggleWallet={(id) => {
               setSummaryWalletIds((current) => {
@@ -965,6 +977,7 @@ function SummaryPdfPanel({
   includeSnapshot,
   loading,
   disabled,
+  success,
   onToggleSnapshot,
   onToggleWallet,
   onExport,
@@ -976,6 +989,7 @@ function SummaryPdfPanel({
   includeSnapshot: boolean;
   loading: boolean;
   disabled: boolean;
+  success: boolean;
   onToggleSnapshot: (checked: boolean) => void;
   onToggleWallet: (id: string) => void;
   onExport: () => void;
@@ -1005,16 +1019,26 @@ function SummaryPdfPanel({
         <Button
           type="button"
           size="sm"
+          variant={success ? "default" : "outline"}
           className="h-8 shrink-0 gap-2"
           disabled={disabled || (showWalletPicker && selectedWalletIds.length === 0)}
           onClick={onExport}
         >
           {loading ? (
             <Loader2 className="size-4 animate-spin" aria-hidden="true" />
+          ) : success ? (
+            <CheckCircle2 className="size-4 animate-pulse" aria-hidden="true" />
           ) : (
             <Download className="size-4" aria-hidden="true" />
           )}
-          <span className="hidden sm:inline">Export</span>
+          <span className="hidden sm:grid">
+            <span className="invisible col-start-1 row-start-1" aria-hidden="true">
+              Export
+            </span>
+            <span className="col-start-1 row-start-1">
+              {success ? "Done" : "Export"}
+            </span>
+          </span>
         </Button>
       </div>
 
@@ -1071,6 +1095,7 @@ function ReportFilesPanel({
   exportStatus,
   openableExportPath,
   openingExportPath,
+  successfulExport,
   onExport,
   onOpenExport,
 }: {
@@ -1080,6 +1105,7 @@ function ReportFilesPanel({
   exportStatus: ReportExportStatus | null;
   openableExportPath: string | null;
   openingExportPath: string | null;
+  successfulExport: { format: ReportExportFormatId; year: number } | null;
   onExport: (format: ReportExportFormatId) => void;
   onOpenExport: (path: string) => void;
 }) {
@@ -1105,7 +1131,7 @@ function ReportFilesPanel({
       </div>
 
       <div className="space-y-3 px-4 pt-3 pb-4 sm:px-5">
-        {exportStatus ? (
+        {exportStatus?.tone === "error" ? (
           <ExportNotice
             exportStatus={exportStatus}
             openableExportPath={openableExportPath}
@@ -1125,6 +1151,10 @@ function ReportFilesPanel({
             }
             loading={activeExport === "pdf"}
             disabled={Boolean(activeExport)}
+            success={
+              successfulExport?.format === "pdf" &&
+              successfulExport.year === year
+            }
             onExport={onExport}
           />
           <ReportFileRow
@@ -1138,6 +1168,10 @@ function ReportFilesPanel({
             }
             loading={activeExport === "xlsx"}
             disabled={Boolean(activeExport)}
+            success={
+              successfulExport?.format === "xlsx" &&
+              successfulExport.year === year
+            }
             onExport={onExport}
           />
           <ReportFileRow
@@ -1151,6 +1185,10 @@ function ReportFilesPanel({
             }
             loading={activeExport === "csv"}
             disabled={Boolean(activeExport)}
+            success={
+              successfulExport?.format === "csv" &&
+              successfulExport.year === year
+            }
             onExport={onExport}
           />
         </div>
@@ -1224,6 +1262,7 @@ function ReportFileRow({
   detail,
   loading,
   disabled,
+  success,
   onExport,
 }: {
   id: ReportExportFormatId;
@@ -1232,6 +1271,7 @@ function ReportFileRow({
   detail: string;
   loading: boolean;
   disabled: boolean;
+  success: boolean;
   onExport: (format: ReportExportFormatId) => void;
 }) {
   return (
@@ -1250,17 +1290,26 @@ function ReportFileRow({
       <Button
         type="button"
         size="sm"
-        variant={id === "pdf" ? "default" : "outline"}
+        variant={id === "pdf" || success ? "default" : "outline"}
         className="h-8 shrink-0 gap-2"
         disabled={disabled}
         onClick={() => onExport(id)}
       >
         {loading ? (
           <Loader2 className="size-4 animate-spin" aria-hidden="true" />
+        ) : success ? (
+          <CheckCircle2 className="size-4 animate-pulse" aria-hidden="true" />
         ) : (
           <Download className="size-4" aria-hidden="true" />
         )}
-        <span className="hidden sm:inline">Export</span>
+        <span className="hidden sm:grid">
+          <span className="invisible col-start-1 row-start-1" aria-hidden="true">
+            Export
+          </span>
+          <span className="col-start-1 row-start-1">
+            {success ? "Done" : "Export"}
+          </span>
+        </span>
       </Button>
     </div>
   );

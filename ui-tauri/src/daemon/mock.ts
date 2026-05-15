@@ -17,6 +17,7 @@ import { MOCK_PROFILES } from "@/mocks/profiles";
 import { MOCK_AI_CHAT_STREAM, fixtures } from "./fixtures";
 
 const SIMULATED_LATENCY_MS = 50;
+const MAX_DESCRIPTOR_GAP_LIMIT = 5000;
 
 const cloneMockProfiles = () => ({
   activeWorkspaceId: MOCK_PROFILES.activeWorkspaceId,
@@ -35,6 +36,7 @@ type MockConnection = {
   kind?: string;
   syncMode?: string;
   syncSource?: string;
+  gap?: number;
 };
 
 const mockOverviewSnapshot = () =>
@@ -520,6 +522,7 @@ export const mockDaemon: DaemonTransport = {
         store_id?: unknown;
         wallet_material?: unknown;
         source_file?: unknown;
+        gap_limit?: unknown;
       };
       const walletRef = typeof args.wallet === "string" ? args.wallet : "";
       const label = typeof args.label === "string" ? args.label.trim() : "";
@@ -532,7 +535,8 @@ export const mockDaemon: DaemonTransport = {
         (typeof args.wallet_material === "string" &&
           args.wallet_material.trim().length > 0) ||
         (typeof args.source_file === "string" &&
-          args.source_file.trim().length > 0);
+          args.source_file.trim().length > 0) ||
+        typeof args.gap_limit === "number";
       if (!connection || (!label && !hasConfigChange)) {
         return {
           kind: "error",
@@ -546,7 +550,23 @@ export const mockDaemon: DaemonTransport = {
           },
         };
       }
+      if (
+        typeof args.gap_limit === "number" &&
+        (args.gap_limit <= 0 || args.gap_limit > MAX_DESCRIPTOR_GAP_LIMIT)
+      ) {
+        return {
+          kind: "error",
+          schema_version: 1,
+          request_id: req.request_id,
+          error: {
+            code: "validation",
+            message: `gap_limit must be between 1 and ${MAX_DESCRIPTOR_GAP_LIMIT}`,
+            retryable: false,
+          },
+        };
+      }
       if (label) connection.label = label;
+      if (typeof args.gap_limit === "number") connection.gap = args.gap_limit;
       return {
         kind: "ui.wallets.update",
         schema_version: 1,
@@ -560,6 +580,7 @@ export const mockDaemon: DaemonTransport = {
         label?: unknown;
         kind?: unknown;
         source_format?: unknown;
+        gap_limit?: unknown;
       };
       const label = typeof args.label === "string" ? args.label.trim() : "";
       const kind = typeof args.kind === "string" ? args.kind.trim() : "custom";
@@ -577,11 +598,27 @@ export const mockDaemon: DaemonTransport = {
           },
         };
       }
+      if (
+        typeof args.gap_limit === "number" &&
+        (args.gap_limit <= 0 || args.gap_limit > MAX_DESCRIPTOR_GAP_LIMIT)
+      ) {
+        return {
+          kind: "error",
+          schema_version: 1,
+          request_id: req.request_id,
+          error: {
+            code: "validation",
+            message: `gap_limit must be between 1 and ${MAX_DESCRIPTOR_GAP_LIMIT}`,
+            retryable: false,
+          },
+        };
+      }
       const overview = mockOverviewSnapshot();
       const connection = {
         id: `mock-wallet-${Date.now()}`,
         label,
         kind,
+        ...(typeof args.gap_limit === "number" ? { gap: args.gap_limit } : {}),
         ...(sourceFormat
           ? {
               syncMode: "file_import",

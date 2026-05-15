@@ -10,7 +10,8 @@ from importlib import import_module
 from .errors import AppError
 
 
-DEFAULT_DESCRIPTOR_GAP_LIMIT = 20
+DEFAULT_DESCRIPTOR_GAP_LIMIT = 40
+MAX_DESCRIPTOR_GAP_LIMIT = 5_000
 HARDENED_INDEX = 0x80000000
 LIQUID_POLICY_ASSET_IDS = {
     "liquidv1": "6f0279e9ed041c3d710a9f57d0c02928416460c4b722ae3457a11eec381c526d",
@@ -202,6 +203,10 @@ def load_descriptor_plan(config):
     gap_limit = int(config.get("gap_limit") or DEFAULT_DESCRIPTOR_GAP_LIMIT)
     if gap_limit <= 0:
         raise ValueError("Descriptor gap limit must be positive")
+    if gap_limit > MAX_DESCRIPTOR_GAP_LIMIT:
+        raise ValueError(
+            f"Descriptor gap limit must be {MAX_DESCRIPTOR_GAP_LIMIT} or lower"
+        )
     modules = get_embit_modules()
     descriptor_class = modules["Descriptor"] if chain == "bitcoin" else modules["LDescriptor"]
     primary = descriptor_class.from_string(normalize_descriptor_text(chain, descriptor_text))

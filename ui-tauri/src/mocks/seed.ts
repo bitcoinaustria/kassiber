@@ -144,7 +144,7 @@ export const MOCK_OVERVIEW: OverviewSnapshot = {
       balance: 1.24810472,
       status: "synced",
       addresses: 142,
-      gap: 10,
+      gap: 40,
     },
     {
       id: "c2",
@@ -154,7 +154,7 @@ export const MOCK_OVERVIEW: OverviewSnapshot = {
       balance: 3.0814290,
       status: "synced",
       addresses: 86,
-      gap: 10,
+      gap: 40,
     },
     {
       id: "c3",

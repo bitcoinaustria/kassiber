@@ -11,6 +11,7 @@ from ..time_utils import now_iso
 from ..util import normalize_chain_value, normalize_network_value, str_or_none
 from ..wallet_descriptors import (
     DEFAULT_DESCRIPTOR_GAP_LIMIT,
+    MAX_DESCRIPTOR_GAP_LIMIT,
     default_policy_asset_id,
     load_descriptor_plan,
     liquid_plan_can_unblind,
@@ -276,6 +277,10 @@ def parse_wallet_config(args):
     if getattr(args, "gap_limit", None) is not None:
         if args.gap_limit <= 0:
             raise AppError("Descriptor gap limit must be positive")
+        if args.gap_limit > MAX_DESCRIPTOR_GAP_LIMIT:
+            raise AppError(
+                f"Descriptor gap limit must be {MAX_DESCRIPTOR_GAP_LIMIT} or lower"
+            )
         config["gap_limit"] = args.gap_limit
     if getattr(args, "policy_asset", None):
         config["policy_asset"] = normalize_asset_code(args.policy_asset)
