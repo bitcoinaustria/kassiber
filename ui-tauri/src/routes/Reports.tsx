@@ -468,6 +468,7 @@ function ReportsView({
       onSuccess: async (envelope) => {
         const payload = envelope.data;
         const exportPath = payload?.file ?? payload?.dir ?? "";
+        const filename = (payload?.filename ?? basename(exportPath)) || "report";
         const detail =
           payload?.format === "pdf" && payload.pages
             ? `${payload.pages} page${payload.pages === 1 ? "" : "s"}`
