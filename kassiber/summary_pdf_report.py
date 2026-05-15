@@ -258,7 +258,6 @@ def _bar_chart(
             high = Decimal("1")
         baseline = bottom + _scale(Decimal("0"), low, high, plot_h)
         drawing.add(Line(left, baseline, left + plot_w, baseline, strokeColor=colors.HexColor(BRAND_LINE), strokeWidth=0.5))
-        max_value = None
     bar_slot = plot_w / max(len(rows), 1)
     for idx, row in enumerate(rows):
         x = left + idx * bar_slot + 2
