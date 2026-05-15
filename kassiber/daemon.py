@@ -131,6 +131,7 @@ from .sync_btcpay import (
     require_wallet_history_payment_method,
 )
 from .wallet_descriptors import (
+    MAX_DESCRIPTOR_GAP_LIMIT,
     derive_descriptor_targets,
     load_descriptor_plan,
 )
@@ -4816,6 +4817,19 @@ def _create_wallet_payload(
                 details={"type": type(gap_limit).__name__},
                 retryable=False,
             )
+        if gap_limit <= 0:
+            raise AppError(
+                "gap_limit must be positive",
+                code="validation",
+                retryable=False,
+            )
+        if gap_limit > MAX_DESCRIPTOR_GAP_LIMIT:
+            raise AppError(
+                f"gap_limit must be {MAX_DESCRIPTOR_GAP_LIMIT} or lower",
+                code="validation",
+                hint="Use a smaller unused-address scan window.",
+                retryable=False,
+            )
         config["gap_limit"] = gap_limit
     addresses = args.get("addresses")
     if addresses not in (None, ""):
@@ -5562,6 +5576,19 @@ def _update_wallet_payload(
                 "gap_limit must be an integer",
                 code="validation",
                 details={"type": type(gap_limit).__name__},
+                retryable=False,
+            )
+        if gap_limit <= 0:
+            raise AppError(
+                "gap_limit must be positive",
+                code="validation",
+                retryable=False,
+            )
+        if gap_limit > MAX_DESCRIPTOR_GAP_LIMIT:
+            raise AppError(
+                f"gap_limit must be {MAX_DESCRIPTOR_GAP_LIMIT} or lower",
+                code="validation",
+                hint="Use a smaller unused-address scan window.",
                 retryable=False,
             )
         config_updates["gap_limit"] = gap_limit

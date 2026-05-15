@@ -11,6 +11,7 @@ from ..errors import AppError
 from ..msat import msat_to_btc
 from ..tax_policy import build_tax_policy
 from ..time_utils import _iso_z, _parse_iso_datetime
+from ..wallet_descriptors import DEFAULT_DESCRIPTOR_GAP_LIMIT
 from . import reports as report_builders
 from .repo import current_context_snapshot
 from .wallets import wallet_btcpay_provenance_config
@@ -546,24 +547,31 @@ def _connections(
         backend_summary = _wallet_backend_summary(row["kind"], config, None)
         source_format = _string_or_empty(config.get("source_format"))
         sync_source = _string_or_empty(config.get("sync_source") or source_format)
-        output.append(
-            {
-                "id": row["id"],
-                "kind": _map_wallet_kind(row["kind"]),
-                "label": row["label"],
-                "last": _relative_last(
-                    last_synced_at or row["last_tx_at"] or row["created_at"]
-                ),
-                "lastSyncAt": last_synced_at or None,
-                "lastTransactionAt": row["last_tx_at"],
-                "balance": balances.get(row["id"], 0.0),
-                "status": "synced" if tx_count else "idle",
-                "transactionCount": tx_count,
-                "syncMode": backend_summary["sync_mode"],
-                "syncSource": sync_source,
-                "sourceFormat": source_format,
-            }
-        )
+        gap_limit = config.get("gap_limit")
+        has_descriptor = bool(config.get("descriptor"))
+        connection = {
+            "id": row["id"],
+            "kind": _map_wallet_kind(row["kind"]),
+            "label": row["label"],
+            "last": _relative_last(
+                last_synced_at or row["last_tx_at"] or row["created_at"]
+            ),
+            "lastSyncAt": last_synced_at or None,
+            "lastTransactionAt": row["last_tx_at"],
+            "balance": balances.get(row["id"], 0.0),
+            "status": "synced" if tx_count else "idle",
+            "transactionCount": tx_count,
+            "syncMode": backend_summary["sync_mode"],
+            "syncSource": sync_source,
+            "sourceFormat": source_format,
+        }
+        if has_descriptor:
+            connection["gap"] = (
+                int(gap_limit)
+                if gap_limit not in (None, "")
+                else DEFAULT_DESCRIPTOR_GAP_LIMIT
+            )
+        output.append(connection)
     return output
 
 

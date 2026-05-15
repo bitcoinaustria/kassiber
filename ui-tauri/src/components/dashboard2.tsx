@@ -1351,6 +1351,7 @@ const TransactionWorkbench = ({
   onFlowSelectionChange,
   onQuickFilterChange,
   onBreakdownSelectionChange,
+  onTableFiltersReset,
   chartSelection,
   breakdownSelection,
   swapCandidateRefs,
@@ -1363,6 +1364,7 @@ const TransactionWorkbench = ({
   onFlowSelectionChange: (selection: FlowChartSelection | null) => void;
   onQuickFilterChange: (filter: TableQuickFilter | null) => void;
   onBreakdownSelectionChange: (selection: BreakdownSelection | null) => void;
+  onTableFiltersReset: () => void;
   chartSelection: FlowChartSelection | null;
   breakdownSelection: BreakdownSelection | null;
   swapCandidateRefs?: SwapCandidateReference[];
@@ -1448,6 +1450,7 @@ const TransactionWorkbench = ({
       if (!point || flowPointSegmentValue(point, segment) === 0) return;
       onQuickFilterChange(null);
       onBreakdownSelectionChange(null);
+      onTableFiltersReset();
       onFlowSelectionChange({
         id: `${period}:${point.bucketKey}:${segment}:${chartMode}`,
         period,
@@ -1462,6 +1465,7 @@ const TransactionWorkbench = ({
       onBreakdownSelectionChange,
       onFlowSelectionChange,
       onQuickFilterChange,
+      onTableFiltersReset,
       period,
     ],
   );
@@ -1469,6 +1473,7 @@ const TransactionWorkbench = ({
     (segment: FlowChartSegment) => {
       onQuickFilterChange(null);
       onBreakdownSelectionChange(null);
+      onTableFiltersReset();
       onFlowSelectionChange({
         id: `${period}:all:${segment}:${chartMode}`,
         period,
@@ -1483,6 +1488,7 @@ const TransactionWorkbench = ({
       onBreakdownSelectionChange,
       onFlowSelectionChange,
       onQuickFilterChange,
+      onTableFiltersReset,
       period,
     ],
   );
@@ -1490,6 +1496,7 @@ const TransactionWorkbench = ({
     (segment: FlowChartSegment) => {
       onQuickFilterChange(null);
       onBreakdownSelectionChange(null);
+      onTableFiltersReset();
       onFlowSelectionChange({
         id: `${period}:summary:${segment}:all`,
         period,
@@ -1499,19 +1506,38 @@ const TransactionWorkbench = ({
         mode: "all",
       });
     },
-    [onBreakdownSelectionChange, onFlowSelectionChange, onQuickFilterChange, period],
+    [
+      onBreakdownSelectionChange,
+      onFlowSelectionChange,
+      onQuickFilterChange,
+      onTableFiltersReset,
+      period,
+    ],
   );
   const handleNetFlowClick = React.useCallback(() => {
     onFlowSelectionChange(null);
     onBreakdownSelectionChange(null);
+    onTableFiltersReset();
     onQuickFilterChange("external_flow");
-  }, [onBreakdownSelectionChange, onFlowSelectionChange, onQuickFilterChange]);
+  }, [
+    onBreakdownSelectionChange,
+    onFlowSelectionChange,
+    onQuickFilterChange,
+    onTableFiltersReset,
+  ]);
   const handleReviewQueueClick = React.useCallback(() => {
     onFlowSelectionChange(null);
     onBreakdownSelectionChange(null);
+    onTableFiltersReset();
     onQuickFilterChange("review_queue");
     void navigate({ to: "/quarantine" });
-  }, [navigate, onBreakdownSelectionChange, onFlowSelectionChange, onQuickFilterChange]);
+  }, [
+    navigate,
+    onBreakdownSelectionChange,
+    onFlowSelectionChange,
+    onQuickFilterChange,
+    onTableFiltersReset,
+  ]);
   const openSwapWorkflow = React.useCallback(() => {
     void navigate({ to: "/swaps" });
   }, [navigate]);
@@ -1520,6 +1546,7 @@ const TransactionWorkbench = ({
       onFlowSelectionChange(null);
       onQuickFilterChange(null);
       onBreakdownSelectionChange(null);
+      onTableFiltersReset();
       if (knownSwapCandidateCount === null || knownSwapCandidateCount > 0) {
         openSwapWorkflow();
         return;
@@ -1532,6 +1559,7 @@ const TransactionWorkbench = ({
       onBreakdownSelectionChange,
       onFlowSelectionChange,
       onQuickFilterChange,
+      onTableFiltersReset,
       openSwapWorkflow,
     ],
   );
@@ -1539,9 +1567,15 @@ const TransactionWorkbench = ({
     (dimension: BreakdownSelection["dimension"], key: string) => {
       onFlowSelectionChange(null);
       onQuickFilterChange(null);
+      onTableFiltersReset();
       onBreakdownSelectionChange({ dimension, key });
     },
-    [onBreakdownSelectionChange, onFlowSelectionChange, onQuickFilterChange],
+    [
+      onBreakdownSelectionChange,
+      onFlowSelectionChange,
+      onQuickFilterChange,
+      onTableFiltersReset,
+    ],
   );
   const networkRows = buildBreakdown(records, (txn) => txn.paymentMethod);
   const walletRows = buildBreakdown(records, (txn) => txn.wallet ?? "Unassigned");
@@ -2360,6 +2394,7 @@ const TransactionsTable = ({
   onChartSelectionChange,
   onQuickFilterChange,
   onBreakdownSelectionChange,
+  resetTableFiltersToken,
 }: {
   records: Transaction[];
   hideSensitive: boolean;
@@ -2372,6 +2407,7 @@ const TransactionsTable = ({
   onChartSelectionChange: (selection: FlowChartSelection | null) => void;
   onQuickFilterChange: (filter: TableQuickFilter | null) => void;
   onBreakdownSelectionChange: (selection: BreakdownSelection | null) => void;
+  resetTableFiltersToken: number;
 }) => {
   const [statusFilter, setStatusFilter] = React.useState<string>("all");
   const [dateFilter, setDateFilter] = React.useState<string>("all");
@@ -2469,6 +2505,15 @@ const TransactionsTable = ({
     setPaymentMethodFilter("all");
     setFeeFilter("all");
   };
+
+  React.useEffect(() => {
+    if (resetTableFiltersToken === 0) return;
+    setStatusFilter("all");
+    setDateFilter("all");
+    setFlowFilter("all");
+    setPaymentMethodFilter("all");
+    setFeeFilter("all");
+  }, [resetTableFiltersToken]);
 
   React.useEffect(() => {
     if (typeof window === "undefined") return;
@@ -3448,6 +3493,7 @@ const Dashboard2 = ({
     React.useState<TableQuickFilter | null>(null);
   const [breakdownSelection, setBreakdownSelection] =
     React.useState<BreakdownSelection | null>(null);
+  const [resetTableFiltersToken, setResetTableFiltersToken] = React.useState(0);
   const [newTransactionDraft, setNewTransactionDraft] =
     React.useState<NewTransactionDraft>(createNewTransactionDraft);
   const hideSensitive = useUiStore((s) => s.hideSensitive);
@@ -3480,6 +3526,10 @@ const Dashboard2 = ({
     setFlowChartSelection(null);
     setQuickFilter(null);
     setBreakdownSelection(null);
+    setResetTableFiltersToken((token) => token + 1);
+  }, []);
+  const resetTableFilters = React.useCallback(() => {
+    setResetTableFiltersToken((token) => token + 1);
   }, []);
 
   React.useEffect(() => {
@@ -3537,6 +3587,7 @@ const Dashboard2 = ({
         onFlowSelectionChange={setFlowChartSelection}
         onQuickFilterChange={setQuickFilter}
         onBreakdownSelectionChange={setBreakdownSelection}
+        onTableFiltersReset={resetTableFilters}
         chartSelection={flowChartSelection}
         breakdownSelection={breakdownSelection}
         swapCandidateRefs={swapCandidates}
@@ -3555,6 +3606,7 @@ const Dashboard2 = ({
         onChartSelectionChange={setFlowChartSelection}
         onQuickFilterChange={setQuickFilter}
         onBreakdownSelectionChange={setBreakdownSelection}
+        resetTableFiltersToken={resetTableFiltersToken}
       />
     </div>
   );

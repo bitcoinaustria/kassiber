@@ -116,6 +116,7 @@ interface WalletListData {
 type DialogStep = "source" | "setup";
 const DESCRIPTOR_BACKEND_KINDS = new Set(["esplora", "electrum"]);
 const DEFAULT_BTCPAY_PAYMENT_METHOD_ID = "BTC-CHAIN";
+const MAX_DESCRIPTOR_GAP_LIMIT = 5000;
 
 function supportsDescriptorSync(backend: BackendOption) {
   return DESCRIPTOR_BACKEND_KINDS.has(backend.kind);
@@ -150,7 +151,7 @@ const formDefaultsFor = (source: ConnectionSource): SetupFormState => {
     btcpayServerUrl: "",
     btcpayApiKey: "",
     walletMaterial: "",
-    gapLimit: "20",
+    gapLimit: "40",
     sourceFile: "",
     sourceFormat: "csv",
     btcpayStoreId: "",
@@ -563,6 +564,8 @@ export function AddConnectionDialog({
       const gapLimit = Number.parseInt(form.gapLimit, 10);
       if (!Number.isFinite(gapLimit) || gapLimit <= 0) {
         errors.gapLimit = "Gap limit must be a positive integer.";
+      } else if (gapLimit > MAX_DESCRIPTOR_GAP_LIMIT) {
+        errors.gapLimit = `Gap limit must be ${MAX_DESCRIPTOR_GAP_LIMIT.toLocaleString()} or lower.`;
       }
       if (descriptorBackendOptions.length > 0 && !form.backend.trim()) {
         errors.backend = "Choose a backend.";
@@ -942,11 +945,13 @@ export function AddConnectionDialog({
             id="connection-gap-limit"
             label="Gap limit"
             error={fieldErrors.gapLimit}
+            helper="Default is 40 unused addresses per branch. Raise it for older or heavily used wallets, up to 5,000; long scans keep running until the daemon finishes."
           >
             <Input
               id="connection-gap-limit"
               type="number"
               min={1}
+              max={MAX_DESCRIPTOR_GAP_LIMIT}
               value={form.gapLimit}
               onChange={(event) => updateForm("gapLimit", event.target.value)}
             />

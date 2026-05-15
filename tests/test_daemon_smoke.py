@@ -28,6 +28,10 @@ from kassiber.daemon import (
     _reports_tax_summary_payload,
 )
 from kassiber.secrets.sqlcipher import sqlcipher_available
+from kassiber.wallet_descriptors import (
+    DEFAULT_DESCRIPTOR_GAP_LIMIT,
+    MAX_DESCRIPTOR_GAP_LIMIT,
+)
 
 from .descriptor_fixtures import PUBLIC_MAINNET_ZPUB_FIXTURE
 
@@ -1975,6 +1979,47 @@ class DaemonSmokeTest(unittest.TestCase):
                 _write_payload(
                     proc,
                     {
+                        "request_id": "create-descriptor-gap-zero",
+                        "kind": "ui.wallets.create",
+                        "args": {
+                            "label": "Descriptor Gap Zero",
+                            "kind": "descriptor",
+                            "backend": "mempool",
+                            "wallet_material": descriptor_export,
+                            "gap_limit": 0,
+                        },
+                    },
+                )
+                gap_zero = _read_payload_timeout(proc)
+                self.assertEqual(gap_zero["kind"], "error")
+                self.assertEqual(gap_zero["error"]["code"], "validation")
+                self.assertIn("positive", gap_zero["error"]["message"])
+
+                _write_payload(
+                    proc,
+                    {
+                        "request_id": "create-descriptor-gap-too-large",
+                        "kind": "ui.wallets.create",
+                        "args": {
+                            "label": "Descriptor Gap Too Large",
+                            "kind": "descriptor",
+                            "backend": "mempool",
+                            "wallet_material": descriptor_export,
+                            "gap_limit": MAX_DESCRIPTOR_GAP_LIMIT + 1,
+                        },
+                    },
+                )
+                gap_too_large = _read_payload_timeout(proc)
+                self.assertEqual(gap_too_large["kind"], "error")
+                self.assertEqual(gap_too_large["error"]["code"], "validation")
+                self.assertIn(
+                    str(MAX_DESCRIPTOR_GAP_LIMIT),
+                    gap_too_large["error"]["message"],
+                )
+
+                _write_payload(
+                    proc,
+                    {
                         "request_id": "create-descriptor",
                         "kind": "ui.wallets.create",
                         "args": {
@@ -2009,6 +2054,28 @@ class DaemonSmokeTest(unittest.TestCase):
                 self.assertTrue(descriptor_updated["data"]["wallet"]["descriptor"])
                 self.assertFalse(
                     descriptor_updated["data"]["wallet"]["change_descriptor"]
+                )
+
+                _write_payload(
+                    proc,
+                    {
+                        "request_id": "update-descriptor-gap-too-large",
+                        "kind": "ui.wallets.update",
+                        "args": {
+                            "wallet": "Descriptor UI",
+                            "gap_limit": MAX_DESCRIPTOR_GAP_LIMIT + 1,
+                            "auth_response": {
+                                "plaintext_change_ack": "CHANGE LOCAL DATA",
+                            },
+                        },
+                    },
+                )
+                update_gap_too_large = _read_payload_timeout(proc)
+                self.assertEqual(update_gap_too_large["kind"], "error")
+                self.assertEqual(update_gap_too_large["error"]["code"], "validation")
+                self.assertIn(
+                    str(MAX_DESCRIPTOR_GAP_LIMIT),
+                    update_gap_too_large["error"]["message"],
                 )
 
                 _write_payload(
@@ -2173,6 +2240,9 @@ class DaemonSmokeTest(unittest.TestCase):
                     connection["label"]: connection
                     for connection in overview["data"]["connections"]
                 }
+                self.assertEqual(
+                    connections["Descriptor UI"]["gap"], DEFAULT_DESCRIPTOR_GAP_LIMIT
+                )
                 self.assertEqual(connections["River UI"]["syncMode"], "file_import")
                 self.assertEqual(connections["River UI"]["sourceFormat"], "river_csv")
                 self.assertEqual(connections["BTCPay UI"]["syncSource"], "btcpay")

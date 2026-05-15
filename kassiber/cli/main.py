@@ -108,6 +108,7 @@ from ..secrets.cli_input import (
     read_secret_from_args,
 )
 from ..tax_policy import supported_tax_countries
+from ..wallet_descriptors import MAX_DESCRIPTOR_GAP_LIMIT
 
 
 _AI_PROVIDER_KINDS_LIST = AI_PROVIDER_KINDS
@@ -1605,6 +1606,11 @@ def dispatch(conn: sqlite3.Connection | None, args: argparse.Namespace) -> Any:
             if args.gap_limit is not None:
                 if args.gap_limit <= 0:
                     raise AppError("Descriptor gap limit must be positive", code="validation")
+                if args.gap_limit > MAX_DESCRIPTOR_GAP_LIMIT:
+                    raise AppError(
+                        f"Descriptor gap limit must be {MAX_DESCRIPTOR_GAP_LIMIT} or lower",
+                        code="validation",
+                    )
                 config_updates["gap_limit"] = args.gap_limit
             if args.policy_asset:
                 config_updates["policy_asset"] = normalize_asset_code(args.policy_asset)
