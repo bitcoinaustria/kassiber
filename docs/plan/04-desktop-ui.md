@@ -75,6 +75,33 @@ malicious page could appear there.
   browser, Claude in Chrome, Claude Preview MCP, and any future
   AI-driven browser tool. See section 2.7 below for the concrete setup.
 
+### Animations honor motion preference and the display's refresh rate
+
+The Tauri webview (WKWebView on macOS, WebView2 on Windows, webkit2gtk on
+Linux) syncs web content to the display's native refresh rate by default —
+including 120Hz on Apple ProMotion screens. There is no Info.plist key,
+Tauri config flag, or NSWindow property to "enable" this on macOS; the
+system handles it as long as the page's animations are GPU-composited and
+do not block the main thread. The conventions that follow from this:
+
+- **Animate `transform` and `opacity`.** Animating layout or paint
+  properties (`width`, `top`, `background-color` on large surfaces) drops
+  the animation back onto the main thread and forfeits the high refresh
+  rate. The existing `route-progress` keyframe in
+  [ui-tauri/src/styles/globals.css](../../ui-tauri/src/styles/globals.css)
+  is the canonical pattern.
+- **Use `requestAnimationFrame`, never `setInterval(16ms)`.** A fixed
+  16ms timer hard-caps the loop at 60fps and drifts against vsync.
+- **Hint continuous animations with `will-change-transform`.** Reserve
+  this for elements that actually animate continuously (e.g., the route
+  transition bar) — overuse costs memory because each hint reserves a
+  compositor layer.
+- **Honor `prefers-reduced-motion`.** Prefer Tailwind's `motion-safe:` /
+  `motion-reduce:` variants on individual elements; a global safety net
+  in [ui-tauri/src/styles/globals.css](../../ui-tauri/src/styles/globals.css)
+  collapses any remaining animations and transitions when the OS-level
+  "Reduce motion" accessibility preference is on.
+
 ### Secrets stay out of stdout
 
 Today secrets enter via CLI args (warned in
