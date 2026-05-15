@@ -56,6 +56,8 @@ manually.
 - It does not surface deterministic same-asset self-transfers in the
   review queue. Same `external_id` + same asset + one outbound/inbound
   across owned wallets belongs to the journal self-transfer path instead.
+  Run `kassiber --machine journals transfers list` after processing to
+  audit those moves.
 - It never auto-pairs without explicit user opt-in (CLI flag,
   consented daemon action, or rule the user created).
 - It never silently overrides the existing `transfers pair` validation

@@ -346,14 +346,15 @@ def _select_eligible_rows(rows: Sequence[Mapping], paired_ids: set[str]) -> list
     return eligible
 
 
-def _deterministic_self_transfer_ids(rows: Sequence[Mapping]) -> set[str]:
+def _deterministic_self_transfer_ids(rows: Sequence[Mapping]) -> set[object]:
     """Return row ids that are already proven same-chain self-transfers.
 
     The swap review queue is for ambiguous layer hops. A single outbound and
     single inbound row with the same external transaction id and same asset,
     across two owned wallets, is the conservative on-chain self-transfer signal
-    used by the journal pipeline. Suppress those rows before the time/amount
-    heuristic so ordinary cold-to-hot moves do not look like swaps to review.
+    used by the journal pipeline. This mirrors
+    ``kassiber.transfers.detect_intra_transfers``; keep the predicates in
+    lockstep so ordinary cold-to-hot moves do not look like swaps to review.
     """
     grouped: dict[tuple[str, str], list[Mapping]] = {}
     for row in rows:
@@ -363,7 +364,7 @@ def _deterministic_self_transfer_ids(rows: Sequence[Mapping]) -> set[str]:
         key = (str(external_id), _record_get(row, "asset"))
         grouped.setdefault(key, []).append(row)
 
-    deterministic_ids: set[str] = set()
+    deterministic_ids: set[object] = set()
     for group in grouped.values():
         outs = [
             row
@@ -378,8 +379,8 @@ def _deterministic_self_transfer_ids(rows: Sequence[Mapping]) -> set[str]:
         in_row = ins[0]
         if _record_get(out_row, "wallet_id") == _record_get(in_row, "wallet_id"):
             continue
-        deterministic_ids.add(str(_record_get(out_row, "id")))
-        deterministic_ids.add(str(_record_get(in_row, "id")))
+        deterministic_ids.add(_record_get(out_row, "id"))
+        deterministic_ids.add(_record_get(in_row, "id"))
     return deterministic_ids
 
 
