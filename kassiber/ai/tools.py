@@ -290,7 +290,8 @@ TOOL_CATALOG: tuple[ToolEntry, ...] = (
         name="ui.reports.summary",
         description=(
             "Read exact processed all-time summary totals for the active profile, "
-            "including asset_flow and wallet_flow with BTC, sat, and msat amounts."
+            "including asset_flow and wallet_flow with BTC, sat, and msat amounts, "
+            "plus reviewed transfer_pairs so flow answers can identify swaps or pegs."
         ),
         parameters={
             "type": "object",
@@ -404,7 +405,10 @@ TOOL_CATALOG: tuple[ToolEntry, ...] = (
     ),
     ToolEntry(
         name="ui.journals.snapshot",
-        description="Read journal processing status, recent journal rows, and quarantine summary.",
+        description=(
+            "Read journal processing status, recent journal rows, quarantine "
+            "summary, and reviewed pair context for recent swap/peg rows."
+        ),
         parameters=_EMPTY_OBJECT_SCHEMA,
         kind_class="read_only",
         wire_name="ui_journals_snapshot",
@@ -430,6 +434,29 @@ TOOL_CATALOG: tuple[ToolEntry, ...] = (
         wire_name="ui_journals_quarantine",
         daemon_kind="ui.journals.quarantine",
         summary_template="Read journal quarantine",
+    ),
+    ToolEntry(
+        name="ui.journals.events.list",
+        description=(
+            "Read bounded processed journal events, including transaction ids, "
+            "Austrian category fields, and reviewed pair context for swap/peg rows."
+        ),
+        parameters={
+            "type": "object",
+            "additionalProperties": False,
+            "properties": {
+                "limit": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 500,
+                    "description": "Maximum journal events to return.",
+                },
+            },
+        },
+        kind_class="read_only",
+        wire_name="ui_journals_events_list",
+        daemon_kind="ui.journals.events.list",
+        summary_template="Read journal events",
     ),
     ToolEntry(
         name="ui.journals.transfers.list",
@@ -1026,12 +1053,14 @@ export or back up.
 Before answering workspace-specific questions, use safe read tools such as
 ui.workspace.health, ui.next_actions, ui.wallets.list, ui.backends.list,
 ui.transactions.list, ui.transactions.extremes, ui.transactions.search,
-ui.journals.quarantine, ui.journals.transfers.list, ui.rates.summary,
-ui.rates.coverage, ui.report.blockers, ui.audit.changes_since_last_answer,
+ui.journals.quarantine, ui.journals.events.list,
+ui.journals.transfers.list, ui.rates.summary, ui.rates.coverage,
+ui.report.blockers, ui.audit.changes_since_last_answer,
 ui.maintenance.settings, ui.reports.summary, ui.reports.balance_sheet,
 ui.reports.portfolio_summary, ui.reports.tax_summary,
 ui.reports.balance_history, and report snapshots. Use
 ui.reports.summary for exact all-time inflow/outflow rollups,
+including reviewed transfer_pairs that explain swaps or pegs inside raw flows,
 ui.reports.balance_sheet for current bucket holdings,
 ui.reports.portfolio_summary for current wallet holdings,
 ui.transactions.extremes for largest/smallest transactions, and
@@ -1040,6 +1069,11 @@ Use ui.report.blockers before saying reports are ready, ui.rates.coverage for
 missing-price questions, and ui.audit.changes_since_last_answer when checking
 whether a previous answer is still current. Do not invent calculations when
 Kassiber can read program-derived output.
+For swap/peg/layer-transition questions, source pair kind and policy from
+ui.journals.transfers.list or report summary transfer_pairs, and source
+neutral_swap explanations from journal snapshot/event pair fields. If those
+fields are absent, say the tool surface is missing the evidence instead of
+inferring.
 
 Stale local journals are maintenance, not a question for the user; read/report
 tools may refresh them before answering. Watch-only source refresh contacts

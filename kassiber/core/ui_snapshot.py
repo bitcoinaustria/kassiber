@@ -1834,15 +1834,71 @@ def build_capital_gains_snapshot(
 
 
 def _journal_recent_row_payload(row: sqlite3.Row) -> dict[str, Any]:
-    return {
+    payload = {
         "date": (row["occurred_at"] or "")[:16].replace("T", " "),
         "type": row["entry_type"],
+        "transactionId": row["transaction_id"] if "transaction_id" in row.keys() else "",
+        "transactionExternalId": (
+            row["transaction_external_id"]
+            if "transaction_external_id" in row.keys()
+            else ""
+        ),
         "wallet": row["wallet"],
         "asset": row["asset"],
         "quantity": float(msat_to_btc(row["quantity"] or 0)),
         "fiatValueEur": float(row["fiat_value"] or 0),
         "gainLossEur": float(row["gain_loss"] or 0),
     }
+    if "at_category" in row.keys():
+        payload["atCategory"] = row["at_category"]
+    pair = _journal_pair_payload(row)
+    if pair:
+        payload["pair"] = pair
+    return payload
+
+
+def _journal_pair_payload(row: sqlite3.Row) -> dict[str, Any] | None:
+    if "pair_id" not in row.keys() or not row["pair_id"]:
+        return None
+    out_asset = row["pair_out_asset"]
+    in_asset = row["pair_in_asset"]
+    swap_fee_msat = int(row["pair_swap_fee_msat"] or 0)
+    return {
+        "pairId": row["pair_id"],
+        "pairType": "transfer" if out_asset == in_asset else "swap",
+        "kind": row["pair_kind"],
+        "policy": row["pair_policy"],
+        "swapFeeMsat": swap_fee_msat,
+        "swapFee": float(msat_to_btc(swap_fee_msat)),
+        "out": {
+            "transactionId": row["pair_out_transaction_id"],
+            "externalId": row["pair_out_external_id"] or "",
+            "wallet": row["pair_out_wallet"],
+            "asset": out_asset,
+            "amountMsat": int(row["pair_out_amount"] or 0),
+            "amount": float(msat_to_btc(row["pair_out_amount"] or 0)),
+        },
+        "in": {
+            "transactionId": row["pair_in_transaction_id"],
+            "externalId": row["pair_in_external_id"] or "",
+            "wallet": row["pair_in_wallet"],
+            "asset": in_asset,
+            "amountMsat": int(row["pair_in_amount"] or 0),
+            "amount": float(msat_to_btc(row["pair_in_amount"] or 0)),
+        },
+    }
+
+
+_JOURNAL_PAIR_JOIN_SQL = """
+            LEFT JOIN transaction_pairs p_out
+              ON p_out.profile_id = je.profile_id
+             AND p_out.deleted_at IS NULL
+             AND p_out.out_transaction_id = je.transaction_id
+            LEFT JOIN transaction_pairs p_in
+              ON p_in.profile_id = je.profile_id
+             AND p_in.deleted_at IS NULL
+             AND p_in.in_transaction_id = je.transaction_id
+"""
 
 
 def build_journals_snapshot(conn: sqlite3.Connection) -> dict[str, Any]:
@@ -1904,17 +1960,40 @@ def build_journals_snapshot(conn: sqlite3.Connection) -> dict[str, Any]:
                 je.occurred_at,
                 je.created_at,
                 je.id,
+                je.transaction_id,
+                COALESCE(t.external_id, '') AS transaction_external_id,
                 {_JOURNAL_DISPLAY_ENTRY_TYPE_SQL} AS entry_type,
                 je.asset,
                 je.quantity,
                 je.fiat_value,
                 {_JOURNAL_DISPLAY_GAIN_LOSS_SQL} AS gain_loss,
-                w.label AS wallet
+                je.at_category,
+                w.label AS wallet,
+                COALESCE(p_out.id, p_in.id) AS pair_id,
+                COALESCE(p_out.kind, p_in.kind) AS pair_kind,
+                COALESCE(p_out.policy, p_in.policy) AS pair_policy,
+                COALESCE(p_out.swap_fee_msat, p_in.swap_fee_msat, 0) AS pair_swap_fee_msat,
+                COALESCE(p_out.out_transaction_id, p_in.out_transaction_id) AS pair_out_transaction_id,
+                tout.external_id AS pair_out_external_id,
+                wout.label AS pair_out_wallet,
+                tout.asset AS pair_out_asset,
+                tout.amount AS pair_out_amount,
+                COALESCE(p_out.in_transaction_id, p_in.in_transaction_id) AS pair_in_transaction_id,
+                tin.external_id AS pair_in_external_id,
+                win.label AS pair_in_wallet,
+                tin.asset AS pair_in_asset,
+                tin.amount AS pair_in_amount
             FROM journal_entries je
             JOIN wallets w ON w.id = je.wallet_id
+            LEFT JOIN transactions t ON t.id = je.transaction_id
+            {_JOURNAL_PAIR_JOIN_SQL}
+            LEFT JOIN transactions tout ON tout.id = COALESCE(p_out.out_transaction_id, p_in.out_transaction_id)
+            LEFT JOIN transactions tin ON tin.id = COALESCE(p_out.in_transaction_id, p_in.in_transaction_id)
+            LEFT JOIN wallets wout ON wout.id = tout.wallet_id
+            LEFT JOIN wallets win ON win.id = tin.wallet_id
             WHERE je.profile_id = ?
         )
-        SELECT occurred_at, entry_type, asset, quantity, fiat_value, gain_loss, wallet
+        SELECT *
         FROM normalized
         ORDER BY occurred_at DESC, created_at DESC, id DESC
         LIMIT 12
@@ -1930,17 +2009,40 @@ def build_journals_snapshot(conn: sqlite3.Connection) -> dict[str, Any]:
                     je.occurred_at,
                     je.created_at,
                     je.id,
+                    je.transaction_id,
+                    COALESCE(t.external_id, '') AS transaction_external_id,
                     {_JOURNAL_DISPLAY_ENTRY_TYPE_SQL} AS entry_type,
                     je.asset,
                     je.quantity,
                     je.fiat_value,
                     {_JOURNAL_DISPLAY_GAIN_LOSS_SQL} AS gain_loss,
-                    w.label AS wallet
+                    je.at_category,
+                    w.label AS wallet,
+                    COALESCE(p_out.id, p_in.id) AS pair_id,
+                    COALESCE(p_out.kind, p_in.kind) AS pair_kind,
+                    COALESCE(p_out.policy, p_in.policy) AS pair_policy,
+                    COALESCE(p_out.swap_fee_msat, p_in.swap_fee_msat, 0) AS pair_swap_fee_msat,
+                    COALESCE(p_out.out_transaction_id, p_in.out_transaction_id) AS pair_out_transaction_id,
+                    tout.external_id AS pair_out_external_id,
+                    wout.label AS pair_out_wallet,
+                    tout.asset AS pair_out_asset,
+                    tout.amount AS pair_out_amount,
+                    COALESCE(p_out.in_transaction_id, p_in.in_transaction_id) AS pair_in_transaction_id,
+                    tin.external_id AS pair_in_external_id,
+                    win.label AS pair_in_wallet,
+                    tin.asset AS pair_in_asset,
+                    tin.amount AS pair_in_amount
                 FROM journal_entries je
                 JOIN wallets w ON w.id = je.wallet_id
+                LEFT JOIN transactions t ON t.id = je.transaction_id
+                {_JOURNAL_PAIR_JOIN_SQL}
+                LEFT JOIN transactions tout ON tout.id = COALESCE(p_out.out_transaction_id, p_in.out_transaction_id)
+                LEFT JOIN transactions tin ON tin.id = COALESCE(p_out.in_transaction_id, p_in.in_transaction_id)
+                LEFT JOIN wallets wout ON wout.id = tout.wallet_id
+                LEFT JOIN wallets win ON win.id = tin.wallet_id
                 WHERE je.profile_id = ?
             )
-            SELECT occurred_at, entry_type, asset, quantity, fiat_value, gain_loss, wallet
+            SELECT *
             FROM normalized
             WHERE entry_type = ?
             ORDER BY occurred_at DESC, created_at DESC, id DESC
@@ -2037,7 +2139,7 @@ def build_journal_events_list_snapshot(
         (profile["id"],),
     ).fetchone()["count"]
     rows = conn.execute(
-        """
+        f"""
         SELECT
             je.id,
             je.transaction_id,
@@ -2060,11 +2162,30 @@ def build_journal_events_list_snapshot(
             COALESCE(a.code, '') AS account,
             COALESCE(a.label, '') AS account_label,
             t.external_id AS transaction_external_id,
-            t.direction AS transaction_direction
+            t.direction AS transaction_direction,
+            COALESCE(p_out.id, p_in.id) AS pair_id,
+            COALESCE(p_out.kind, p_in.kind) AS pair_kind,
+            COALESCE(p_out.policy, p_in.policy) AS pair_policy,
+            COALESCE(p_out.swap_fee_msat, p_in.swap_fee_msat, 0) AS pair_swap_fee_msat,
+            COALESCE(p_out.out_transaction_id, p_in.out_transaction_id) AS pair_out_transaction_id,
+            tout.external_id AS pair_out_external_id,
+            wout.label AS pair_out_wallet,
+            tout.asset AS pair_out_asset,
+            tout.amount AS pair_out_amount,
+            COALESCE(p_out.in_transaction_id, p_in.in_transaction_id) AS pair_in_transaction_id,
+            tin.external_id AS pair_in_external_id,
+            win.label AS pair_in_wallet,
+            tin.asset AS pair_in_asset,
+            tin.amount AS pair_in_amount
         FROM journal_entries je
         JOIN wallets w ON w.id = je.wallet_id
         LEFT JOIN accounts a ON a.id = je.account_id
         LEFT JOIN transactions t ON t.id = je.transaction_id
+        {_JOURNAL_PAIR_JOIN_SQL}
+        LEFT JOIN transactions tout ON tout.id = COALESCE(p_out.out_transaction_id, p_in.out_transaction_id)
+        LEFT JOIN transactions tin ON tin.id = COALESCE(p_out.in_transaction_id, p_in.in_transaction_id)
+        LEFT JOIN wallets wout ON wout.id = tout.wallet_id
+        LEFT JOIN wallets win ON win.id = tin.wallet_id
         WHERE je.profile_id = ?
         ORDER BY je.occurred_at DESC, je.created_at DESC, je.id DESC
         LIMIT ?
@@ -2147,6 +2268,7 @@ def build_journal_events_list_snapshot(
                 "description": row["description"],
                 "atCategory": row["at_category"],
                 "atKennzahl": row["at_kennzahl"],
+                "pair": _journal_pair_payload(row),
             }
             for row in rows
         ],
@@ -2671,14 +2793,21 @@ def build_rates_coverage_snapshot(
             t.direction,
             t.asset,
             t.amount,
+            t.fee,
             t.fiat_currency,
             t.fiat_rate,
             t.fiat_value,
+            t.fiat_rate_exact,
+            t.fiat_value_exact,
             w.label AS wallet
         FROM transactions t
         JOIN wallets w ON w.id = t.wallet_id
         WHERE t.profile_id = ? AND t.excluded = 0
-          AND (t.fiat_rate IS NULL OR t.fiat_value IS NULL)
+          AND (t.amount > 0 OR t.fee > 0)
+          AND t.fiat_rate IS NULL
+          AND t.fiat_rate_exact IS NULL
+          AND t.fiat_value IS NULL
+          AND t.fiat_value_exact IS NULL
         ORDER BY t.occurred_at ASC, t.created_at ASC, t.id ASC
         """,
         (profile["id"],),
@@ -2735,8 +2864,6 @@ def build_rates_coverage_snapshot(
                 "amountSat": amount_sat,
                 "amountMsat": amount_msat,
                 "fiatCurrency": fiat,
-                "missingFiatRate": row["fiat_rate"] is None,
-                "missingFiatValue": row["fiat_value"] is None,
                 "cachePair": pair,
                 "cacheHasRate": bool(cache_row),
                 "cacheRateAt": cache_row["timestamp"] if cache_row else None,

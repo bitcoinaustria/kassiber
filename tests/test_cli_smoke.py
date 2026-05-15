@@ -665,6 +665,7 @@ class CliSmokeTest(unittest.TestCase):
         self.assertEqual(flow["asset"], "BTC")
         self.assertEqual(flow["fee_amount_msat"], 1800000)
         self.assertAlmostEqual(float(flow["fee_amount"]), 0.000018, places=8)
+        self.assertEqual(data["transfer_pairs"], [])
 
     def test_07a_export_pdf_report(self):
         pdf_path = Path(self._tmp.name) / "kassiber-report.pdf"
@@ -1798,6 +1799,13 @@ class CliSmokeTest(unittest.TestCase):
             "--profile", "ManualPair",
         )
         self.assertEqual(payload["data"]["transfers_detected"], 0)
+        payload = self._cli(
+            "reports", "summary",
+            "--workspace", "Main",
+            "--profile", "ManualPair",
+        )
+        self._assert_kind(payload, "reports.summary")
+        self.assertEqual(payload["data"]["transfer_pairs"], [])
 
     def test_15_cross_asset_pair_policies(self):
         payload = self._cli(
@@ -1978,6 +1986,20 @@ class CliSmokeTest(unittest.TestCase):
         data = payload["data"]
         self.assertEqual(data["cross_asset_pairs"], 1)
         self.assertEqual(data["quarantined"], 0)
+
+        payload = self._cli(
+            "reports", "summary",
+            "--workspace", workspace,
+            "--profile", "CrossAssetProfile",
+        )
+        self._assert_kind(payload, "reports.summary")
+        pairs = payload["data"]["transfer_pairs"]
+        self.assertEqual(len(pairs), 1)
+        self.assertEqual(pairs[0]["pair_type"], "swap")
+        self.assertEqual(pairs[0]["kind"], "peg-in")
+        self.assertEqual(pairs[0]["policy"], "carrying-value")
+        self.assertEqual(pairs[0]["out_transaction_id"], "cross-out-leg")
+        self.assertEqual(pairs[0]["in_transaction_id"], "cross-in-leg")
 
 
 class AccountBucketBehaviorTest(unittest.TestCase):

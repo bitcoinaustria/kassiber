@@ -34,6 +34,8 @@ from kassiber.core.ui_snapshot import (
     build_journal_events_list_snapshot,
     build_journals_snapshot,
     build_overview_snapshot,
+    build_rates_coverage_snapshot,
+    build_report_blockers_snapshot,
     build_transactions_search_snapshot,
     build_transactions_snapshot,
 )
@@ -566,6 +568,345 @@ class ReviewRegressionTest(unittest.TestCase):
         self.assertEqual(transactions["txs"][1]["explorerId"], "a" * 64)
         self.assertEqual(transactions["txs"][1]["amountSat"], 100_000_000)
         self.assertEqual(transactions["txs"][1]["eur"], 50_000)
+
+    def test_rates_coverage_ignores_zero_amount_rate_only_rows(self):
+        conn = open_db(self.data_root)
+        self.addCleanup(conn.close)
+        now = "2026-01-01T00:00:00Z"
+        conn.execute(
+            "INSERT INTO workspaces(id, label, created_at) VALUES(?, ?, ?)",
+            ("ws-zero-rate", "Zero Rate Workspace", now),
+        )
+        conn.execute(
+            """
+            INSERT INTO profiles(
+                id, workspace_id, label, fiat_currency, tax_country,
+                tax_long_term_days, gains_algorithm, last_processed_at,
+                last_processed_tx_count, journal_input_version,
+                last_processed_input_version, created_at
+            ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                "pf-zero-rate",
+                "ws-zero-rate",
+                "Zero Rate Profile",
+                "EUR",
+                "generic",
+                365,
+                "FIFO",
+                now,
+                2,
+                0,
+                0,
+                now,
+            ),
+        )
+        conn.execute(
+            """
+            INSERT INTO wallets(
+                id, workspace_id, profile_id, label, kind, config_json, created_at
+            ) VALUES(?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                "wal-zero-rate",
+                "ws-zero-rate",
+                "pf-zero-rate",
+                "Wallet",
+                "address",
+                "{}",
+                now,
+            ),
+        )
+        conn.execute(
+            """
+            INSERT INTO transactions(
+                id, workspace_id, profile_id, wallet_id, external_id, fingerprint,
+                occurred_at, confirmed_at, direction, asset, amount, fee,
+                fiat_currency, fiat_rate, fiat_value, fiat_price_source, kind,
+                description, counterparty, note, excluded, raw_json, created_at
+            ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                "tx-zero-rate",
+                "ws-zero-rate",
+                "pf-zero-rate",
+                "wal-zero-rate",
+                "zero-rate-ext",
+                "zero-rate-fp",
+                "2026-01-02T00:00:00Z",
+                "2026-01-02T00:05:00Z",
+                "outbound",
+                "BTC",
+                0,
+                0,
+                "EUR",
+                65_000,
+                None,
+                "rates-cache",
+                "payment",
+                "Zero amount marker",
+                None,
+                None,
+                0,
+                "{}",
+                now,
+            ),
+        )
+        conn.execute(
+            """
+            INSERT INTO transactions(
+                id, workspace_id, profile_id, wallet_id, external_id, fingerprint,
+                occurred_at, confirmed_at, direction, asset, amount, fee,
+                fiat_currency, fiat_rate, fiat_value, fiat_price_source,
+                fiat_rate_exact, fiat_value_exact, kind, description, counterparty,
+                note, excluded, raw_json, created_at
+            ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                "tx-exact-rate",
+                "ws-zero-rate",
+                "pf-zero-rate",
+                "wal-zero-rate",
+                "exact-rate-ext",
+                "exact-rate-fp",
+                "2026-01-03T00:00:00Z",
+                "2026-01-03T00:05:00Z",
+                "inbound",
+                "BTC",
+                btc_to_msat("0.25"),
+                0,
+                "EUR",
+                None,
+                None,
+                "import",
+                "65000",
+                None,
+                "deposit",
+                "Exact-rate priced row",
+                None,
+                None,
+                0,
+                "{}",
+                now,
+            ),
+        )
+        set_setting(conn, "context_workspace", "ws-zero-rate")
+        set_setting(conn, "context_profile", "pf-zero-rate")
+        conn.commit()
+
+        coverage = build_rates_coverage_snapshot(conn, {"limit": 5})
+        self.assertEqual(coverage["summary"]["active_transactions"], 2)
+        self.assertEqual(coverage["summary"]["priced_transactions"], 2)
+        self.assertEqual(coverage["summary"]["missing_price_transactions"], 0)
+        self.assertEqual(coverage["summary"]["cache_coverable_missing"], 0)
+        self.assertEqual(coverage["items"], [])
+
+        blockers = build_report_blockers_snapshot(conn)
+        self.assertTrue(blockers["ready"])
+        self.assertEqual(blockers["blockers"], [])
+
+    def test_journal_pair_payload_picks_one_pair_for_chain_edge_case(self):
+        conn = open_db(self.data_root)
+        self.addCleanup(conn.close)
+        now = "2026-01-01T00:00:00Z"
+        conn.execute(
+            "INSERT INTO workspaces(id, label, created_at) VALUES(?, ?, ?)",
+            ("ws-pair-chain", "Pair Chain Workspace", now),
+        )
+        conn.execute(
+            """
+            INSERT INTO profiles(
+                id, workspace_id, label, fiat_currency, tax_country,
+                tax_long_term_days, gains_algorithm, last_processed_at,
+                last_processed_tx_count, journal_input_version,
+                last_processed_input_version, created_at
+            ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                "pf-pair-chain",
+                "ws-pair-chain",
+                "Pair Chain Profile",
+                "EUR",
+                "generic",
+                365,
+                "FIFO",
+                now,
+                3,
+                0,
+                0,
+                now,
+            ),
+        )
+        conn.execute(
+            """
+            INSERT INTO wallets(
+                id, workspace_id, profile_id, label, kind, config_json, created_at
+            ) VALUES(?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                "wal-pair-chain",
+                "ws-pair-chain",
+                "pf-pair-chain",
+                "Chain Wallet",
+                "address",
+                "{}",
+                now,
+            ),
+        )
+        conn.executemany(
+            """
+            INSERT INTO transactions(
+                id, workspace_id, profile_id, wallet_id, external_id, fingerprint,
+                occurred_at, confirmed_at, direction, asset, amount, fee,
+                fiat_currency, fiat_rate, fiat_value, fiat_price_source, kind,
+                description, counterparty, note, excluded, raw_json, created_at
+            ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            [
+                (
+                    "tx-chain-a",
+                    "ws-pair-chain",
+                    "pf-pair-chain",
+                    "wal-pair-chain",
+                    "chain-a",
+                    "fp-chain-a",
+                    "2026-01-01T00:00:00Z",
+                    "2026-01-01T00:01:00Z",
+                    "outbound",
+                    "LBTC",
+                    btc_to_msat("0.5"),
+                    0,
+                    "EUR",
+                    50_000,
+                    25_000,
+                    "import",
+                    "withdrawal",
+                    "First leg",
+                    None,
+                    None,
+                    0,
+                    "{}",
+                    now,
+                ),
+                (
+                    "tx-chain-middle",
+                    "ws-pair-chain",
+                    "pf-pair-chain",
+                    "wal-pair-chain",
+                    "chain-middle",
+                    "fp-chain-middle",
+                    "2026-01-01T00:02:00Z",
+                    "2026-01-01T00:03:00Z",
+                    "inbound",
+                    "BTC",
+                    btc_to_msat("0.49"),
+                    0,
+                    "EUR",
+                    50_000,
+                    24_500,
+                    "import",
+                    "deposit",
+                    "Middle leg",
+                    None,
+                    None,
+                    0,
+                    "{}",
+                    now,
+                ),
+                (
+                    "tx-chain-c",
+                    "ws-pair-chain",
+                    "pf-pair-chain",
+                    "wal-pair-chain",
+                    "chain-c",
+                    "fp-chain-c",
+                    "2026-01-01T00:04:00Z",
+                    "2026-01-01T00:05:00Z",
+                    "inbound",
+                    "BTC",
+                    btc_to_msat("0.48"),
+                    0,
+                    "EUR",
+                    50_000,
+                    24_000,
+                    "import",
+                    "deposit",
+                    "Second receive",
+                    None,
+                    None,
+                    0,
+                    "{}",
+                    now,
+                ),
+            ],
+        )
+        conn.executemany(
+            """
+            INSERT INTO transaction_pairs(
+                id, workspace_id, profile_id, out_transaction_id, in_transaction_id,
+                kind, policy, swap_fee_msat, pair_source, created_at
+            ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            [
+                (
+                    "pair-middle-as-in",
+                    "ws-pair-chain",
+                    "pf-pair-chain",
+                    "tx-chain-a",
+                    "tx-chain-middle",
+                    "peg-out",
+                    "carrying-value",
+                    btc_to_msat("0.01"),
+                    "manual",
+                    now,
+                ),
+                (
+                    "pair-middle-as-out",
+                    "ws-pair-chain",
+                    "pf-pair-chain",
+                    "tx-chain-middle",
+                    "tx-chain-c",
+                    "manual",
+                    "carrying-value",
+                    btc_to_msat("0.01"),
+                    "manual",
+                    now,
+                ),
+            ],
+        )
+        conn.execute(
+            """
+            INSERT INTO journal_entries(
+                id, workspace_id, profile_id, transaction_id, wallet_id,
+                occurred_at, entry_type, asset, quantity, fiat_value, created_at
+            ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                "je-chain-middle",
+                "ws-pair-chain",
+                "pf-pair-chain",
+                "tx-chain-middle",
+                "wal-pair-chain",
+                "2026-01-01T00:02:00Z",
+                "acquisition",
+                "BTC",
+                btc_to_msat("0.49"),
+                24_500,
+                now,
+            ),
+        )
+        set_setting(conn, "context_workspace", "ws-pair-chain")
+        set_setting(conn, "context_profile", "pf-pair-chain")
+        conn.commit()
+
+        events = build_journal_events_list_snapshot(conn, {"limit": 10})
+        self.assertEqual(events["summary"]["count"], 1)
+        self.assertEqual(len(events["events"]), 1)
+        self.assertEqual(events["events"][0]["pair"]["pairId"], "pair-middle-as-out")
+
+        journals = build_journals_snapshot(conn)
+        self.assertEqual(len(journals["recent"]), 1)
+        self.assertEqual(journals["recent"][0]["pair"]["pairId"], "pair-middle-as-out")
 
     def test_ui_snapshots_show_reviewed_swap_movement_with_fee(self):
         conn = open_db(self.data_root)
@@ -1550,6 +1891,14 @@ class ReviewRegressionTest(unittest.TestCase):
             neutral_event["costBasisEur"],
         )
         self.assertAlmostEqual(neutral_event["marketDeltaEur"], 121.16, places=2)
+        self.assertEqual(neutral_event["pair"]["kind"], "peg-out")
+        self.assertEqual(neutral_event["pair"]["policy"], "carrying-value")
+        self.assertEqual(neutral_event["pair"]["out"]["asset"], "LBTC")
+        self.assertEqual(neutral_event["pair"]["in"]["asset"], "BTC")
+        self.assertEqual(
+            neutral_event["pair"]["swapFeeMsat"],
+            btc_to_msat("0.00012977"),
+        )
 
         journals = build_journals_snapshot(conn)
         state_type_counts = {
@@ -1566,6 +1915,11 @@ class ReviewRegressionTest(unittest.TestCase):
             journals["recentByType"]["neutral_swap"][0]["gainLossEur"],
             0.0,
         )
+        neutral_recent = journals["recentByType"]["neutral_swap"][0]
+        self.assertEqual(neutral_recent["pair"]["kind"], "peg-out")
+        self.assertEqual(neutral_recent["pair"]["policy"], "carrying-value")
+        self.assertEqual(neutral_recent["pair"]["out"]["asset"], "LBTC")
+        self.assertEqual(neutral_recent["pair"]["in"]["asset"], "BTC")
 
         e1kv = report_austrian_e1kv(
             conn,

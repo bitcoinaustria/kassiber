@@ -3083,6 +3083,24 @@ class DaemonSmokeTest(unittest.TestCase):
         self.assertIn("ui.reports.tax_summary", [item.name for item in planned])
         self.assertIn("ui.reports.balance_sheet", [item.name for item in planned])
 
+        planned = _planned_auto_read_tools(
+            {
+                "system_prompt_kind": "kassiber",
+                "messages": [
+                    {
+                        "role": "user",
+                        "content": (
+                            "isnt the LBTC tx a swap? why isnt it explained as such"
+                        ),
+                    }
+                ],
+            }
+        )
+        planned_names = [item.name for item in planned]
+        self.assertIn("ui.journals.transfers.list", planned_names)
+        self.assertIn("ui.journals.snapshot", planned_names)
+        self.assertIn("ui.reports.summary", planned_names)
+
     def test_tax_summary_year_filter_omits_all_years_grand_total(self):
         rows = [
             {"row_type": "detail", "year": 2025, "asset": "BTC", "gain_loss": 1},
@@ -4244,6 +4262,7 @@ class DaemonSmokeTest(unittest.TestCase):
                     tool["function"]["name"]
                     for tool in server.requests[0]["tools"]  # type: ignore[attr-defined]
                 }
+                self.assertIn("ui_journals_events_list", tool_names)
                 self.assertIn("ui_journals_transfers_list", tool_names)
                 self.assertNotIn("ui.journals.transfers.list", tool_names)
 

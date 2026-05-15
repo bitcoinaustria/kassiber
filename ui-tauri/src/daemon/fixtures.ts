@@ -1161,8 +1161,6 @@ export const fixtures: Record<string, unknown> = {
         amountSat: 50_000,
         amountMsat: 50_000_000,
         fiatCurrency: "EUR",
-        missingFiatRate: true,
-        missingFiatValue: true,
         cachePair: "BTC-EUR",
         cacheHasRate: true,
         cacheRateAt: "2026-04-22T00:00:00Z",

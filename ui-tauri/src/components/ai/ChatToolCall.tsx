@@ -181,6 +181,9 @@ function summarizeToolResult(result: unknown): string | null {
       const metrics = asRecord(data.metrics);
       const assetFlow = Array.isArray(data.asset_flow) ? data.asset_flow : [];
       const wallets = Array.isArray(data.wallet_flow) ? data.wallet_flow : [];
+      const pairs = Array.isArray(data.transfer_pairs)
+        ? data.transfer_pairs
+        : [];
       const activeTransactions = Number(
         metrics?.active_transactions ?? 0,
       ).toLocaleString("en-US");
@@ -188,6 +191,7 @@ function summarizeToolResult(result: unknown): string | null {
         `${activeTransactions} active transaction(s)`,
         `${assetFlow.length} asset flow row(s)`,
         `${wallets.length} wallet flow row(s)`,
+        `${pairs.length} reviewed transfer/swap pair(s)`,
       ].join(", ") + ".";
     }
     case "ui.reports.balance_sheet": {
