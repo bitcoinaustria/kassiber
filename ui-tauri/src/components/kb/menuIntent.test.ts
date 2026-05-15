@@ -14,6 +14,9 @@ function makeDeps(overrides: Partial<MenuIntentDeps> = {}): MenuIntentDeps {
     navigate: vi.fn(),
     lockApp: vi.fn(),
     setHideSensitive: vi.fn(),
+    decreaseAppScale: vi.fn(),
+    increaseAppScale: vi.fn(),
+    resetAppScale: vi.fn(),
     runWalletSync: vi.fn(),
     runJournalProcessing: vi.fn(),
     addNotification: vi.fn(),
@@ -32,7 +35,6 @@ describe("isAppRoutePath", () => {
       "/connections",
       "/books",
       "/journals",
-      "/tax-events",
       "/quarantine",
       "/diagnostics",
       "/settings",
@@ -169,9 +171,11 @@ describe("dispatchMenuIntent — scope filter", () => {
       "global",
     );
     dispatchMenuIntent({ action: "toggle-sensitive" }, deps, "global");
+    dispatchMenuIntent({ action: "ui-scale-increase" }, deps, "global");
     expect(deps.navigate).toHaveBeenCalledTimes(2); // navigate + open-settings
     expect(deps.emitSettingsSection).toHaveBeenCalledWith("privacy");
     expect(deps.setHideSensitive).toHaveBeenCalledTimes(1);
+    expect(deps.increaseAppScale).toHaveBeenCalledTimes(1);
   });
 
   it("workspace scope drops global actions", () => {
@@ -183,9 +187,11 @@ describe("dispatchMenuIntent — scope filter", () => {
     );
     dispatchMenuIntent({ action: "open-settings" }, deps, "workspace");
     dispatchMenuIntent({ action: "toggle-sensitive" }, deps, "workspace");
+    dispatchMenuIntent({ action: "ui-scale-reset" }, deps, "workspace");
     expect(deps.navigate).not.toHaveBeenCalled();
     expect(deps.emitSettingsSection).not.toHaveBeenCalled();
     expect(deps.setHideSensitive).not.toHaveBeenCalled();
+    expect(deps.resetAppScale).not.toHaveBeenCalled();
   });
 
   it("workspace scope handles lock, sync, journals", () => {
@@ -208,6 +214,17 @@ describe("dispatchMenuIntent — direct actions", () => {
     const onDeps = makeDeps({ hideSensitive: true });
     dispatchMenuIntent({ action: "toggle-sensitive" }, onDeps);
     expect(onDeps.setHideSensitive).toHaveBeenCalledWith(false);
+  });
+
+  it("routes UI scale actions to the app scale controls", () => {
+    const deps = makeDeps();
+    dispatchMenuIntent({ action: "ui-scale-decrease" }, deps);
+    dispatchMenuIntent({ action: "ui-scale-increase" }, deps);
+    dispatchMenuIntent({ action: "ui-scale-reset" }, deps);
+
+    expect(deps.decreaseAppScale).toHaveBeenCalledTimes(1);
+    expect(deps.increaseAppScale).toHaveBeenCalledTimes(1);
+    expect(deps.resetAppScale).toHaveBeenCalledTimes(1);
   });
 
   it("sync-all-wallets routes to the wallet sync runner", () => {

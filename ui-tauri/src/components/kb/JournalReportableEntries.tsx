@@ -1,30 +1,23 @@
-import { Link } from "@tanstack/react-router";
-import {
-  BookOpen,
-  CircleDollarSign,
-  FileText,
-  Loader2,
-  RefreshCw,
-} from "lucide-react";
+import { CircleDollarSign, Loader2, RefreshCw } from "lucide-react";
 
 import {
   ReviewDataTable,
-  type ReviewMetric,
   type ReviewTableRow,
 } from "@/components/kb/ReviewDataTable";
+import { ScreenSkeleton } from "@/components/kb/ScreenSkeleton";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { useDaemon, useDaemonMutation } from "@/daemon/client";
+import { useDaemon } from "@/daemon/client";
+import { useJournalProcessingAction } from "@/hooks/useJournalProcessingAction";
 import { screenPanelClassName } from "@/lib/screen-layout";
 import { useUiStore } from "@/store/ui";
+import {
+  reportableEntryMetricFilterIds,
+  reportableEntryMetrics,
+  type JournalEventTypeSummary,
+} from "./journalReportableEntriesModel";
 
-interface JournalEventTypeSummary {
-  type: string;
-  count: number;
-  gainLossEur: number;
-}
-
-interface JournalTaxEvent {
+interface ReportableJournalEntry {
   id: string;
   transactionId: string;
   transactionExternalId: string;
@@ -63,85 +56,40 @@ interface JournalEventsSnapshot {
     entryTypes: JournalEventTypeSummary[];
     limit: number;
   };
-  events: JournalTaxEvent[];
+  events: ReportableJournalEntry[];
 }
 
-interface JournalProcessResult {
-  entries_created?: number;
-  processed_transactions?: number;
-  quarantined?: number;
-}
-
-const TAX_EVENT_LIMIT = 500;
+const REPORTABLE_ENTRY_LIMIT = 500;
 const eur = new Intl.NumberFormat("de-AT", {
   style: "currency",
   currency: "EUR",
 });
 
-export function TaxEvents() {
+export function JournalReportableEntries() {
   const { data, isLoading, isError, error } = useDaemon<JournalEventsSnapshot>(
     "ui.journals.events.list",
-    { limit: TAX_EVENT_LIMIT },
+    { limit: REPORTABLE_ENTRY_LIMIT },
   );
   const dataMode = useUiStore((s) => s.dataMode);
-  const addNotification = useUiStore((s) => s.addNotification);
-  const processJournals =
-    useDaemonMutation<JournalProcessResult>("ui.journals.process");
-
-  const runJournalProcessing = () => {
-    if (processJournals.isPending) return;
-    processJournals.mutate(undefined, {
-      onSuccess: (envelope) => {
-        const payload = envelope.data;
-        addNotification({
-          title: "Journals processed",
-          body: [
-            payload?.processed_transactions !== undefined
-              ? `${payload.processed_transactions} transactions`
-              : null,
-            payload?.entries_created !== undefined
-              ? `${payload.entries_created} events`
-              : null,
-            payload?.quarantined !== undefined
-              ? `${payload.quarantined} quarantined`
-              : null,
-          ]
-            .filter(Boolean)
-            .join(", "),
-          tone: payload?.quarantined ? "warning" : "success",
-        });
-      },
-      onError: (mutationError) => {
-        addNotification({
-          title: "Journal processing failed",
-          body:
-            mutationError instanceof Error
-              ? mutationError.message
-              : "Could not process journals.",
-          tone: "error",
-        });
-      },
-    });
-  };
+  const { runJournalProcessing, isProcessingJournals } =
+    useJournalProcessingAction();
 
   if (isLoading) {
-    return (
-      <div className="flex flex-1 items-center justify-center text-sm text-muted-foreground">
-        Loading tax events...
-      </div>
-    );
+    return <ScreenSkeleton titleWidth="w-52" />;
   }
 
   if (isError || data?.error || !data?.data) {
     return (
       <div className={screenPanelClassName}>
         <div className="rounded-xl border bg-card p-4">
-          <h2 className="text-base font-semibold">Tax events unavailable</h2>
+          <h2 className="text-base font-semibold">
+            Reportable entries unavailable
+          </h2>
           <p className="mt-1 text-sm text-muted-foreground">
             {error instanceof Error
               ? error.message
               : data?.error?.message ??
-                "The daemon did not return tax event data."}
+                "The daemon did not return reportable journal entries."}
           </p>
         </div>
       </div>
@@ -150,16 +98,16 @@ export function TaxEvents() {
 
   const snapshot = data.data;
   const rows = snapshot.events.map((event) =>
-    taxEventToRow(event, snapshot.summary),
+    reportableEntryToRow(event, snapshot.summary),
   );
-  const metrics = taxEventMetrics(snapshot.summary);
+  const metrics = reportableEntryMetrics(snapshot.summary);
 
   return (
     <ReviewDataTable
-      kind="tax-events"
-      eyebrow="Review · tax event ledger"
-      title="Tax Events"
-      description="Computed journal events with tax classification, pricing provenance, basis, proceeds, and gain/loss. This is where processed tax meaning is inspected before reports are exported."
+      kind="journal-events"
+      eyebrow="Review · journal ledger"
+      title="Reportable Entries"
+      description="Processed journal entries with tax classification, pricing provenance, basis, proceeds, and gain/loss. This is the detailed report-readiness view."
       icon={CircleDollarSign}
       rows={rows}
       metrics={metrics}
@@ -167,12 +115,13 @@ export function TaxEvents() {
       badgeLabel={
         snapshot.summary.needsJournals
           ? "stale"
-          : `${snapshot.summary.count.toLocaleString("en-US")} events`
+          : `${snapshot.summary.count.toLocaleString("en-US")} entries`
       }
-      tableTitle="Processed tax events"
+      shellClassName="w-full space-y-3 sm:space-y-4"
+      tableTitle="Reportable journal entries"
       tableDescriptionDetail={snapshot.summary.freshnessReason}
-      searchPlaceholder="Search wallet, event, asset, pricing, Kennzahl..."
-      emptyMessage="No processed tax events yet. Process journals after importing transactions."
+      searchPlaceholder="Search wallet, entry, asset, pricing, Kennzahl..."
+      emptyMessage="No processed journal entries yet. Process journals after importing transactions."
       actions={
         <>
           {dataMode === "mock" ? (
@@ -180,25 +129,13 @@ export function TaxEvents() {
               Preview data
             </Badge>
           ) : null}
-          <Button asChild variant="outline" className="h-9">
-            <Link to="/journals">
-              <BookOpen className="size-4" aria-hidden="true" />
-              Journals
-            </Link>
-          </Button>
-          <Button asChild variant="outline" className="h-9">
-            <Link to="/reports">
-              <FileText className="size-4" aria-hidden="true" />
-              Reports
-            </Link>
-          </Button>
           <Button
             type="button"
             className="h-9"
             onClick={runJournalProcessing}
-            disabled={processJournals.isPending}
+            disabled={isProcessingJournals}
           >
-            {processJournals.isPending ? (
+            {isProcessingJournals ? (
               <Loader2 className="size-4 animate-spin" aria-hidden="true" />
             ) : (
               <RefreshCw className="size-4" aria-hidden="true" />
@@ -211,8 +148,8 @@ export function TaxEvents() {
   );
 }
 
-function taxEventToRow(
-  event: JournalTaxEvent,
+function reportableEntryToRow(
+  event: ReportableJournalEntry,
   summary: JournalEventsSnapshot["summary"],
 ): ReviewTableRow {
   const pricingLabel = pricingSourceLabel(event);
@@ -240,106 +177,21 @@ function taxEventToRow(
     owner: summary.profile ?? "Active book",
     evidenceHint: eventEvidenceHint(event, summary),
     nextAction: summary.needsJournals
-      ? "Process journals before relying on this event"
+      ? "Process journals before relying on this entry"
       : event.atKennzahl !== null
         ? "Ready for Austrian report mapping"
         : "Ready for reports",
-    metricFilterIds: taxEventMetricFilterIds(event),
+    metricFilterIds: reportableEntryMetricFilterIds(event),
   };
 }
 
-export function taxEventMetrics(
-  summary: JournalEventsSnapshot["summary"],
-): ReviewMetric[] {
-  const acquisitions = countEntryTypes(summary.entryTypes, "acquisition");
-  const disposals = countEntryTypes(summary.entryTypes, "disposal");
-  const income = countEntryTypes(summary.entryTypes, "income");
-  const fees = countEntryTypes(summary.entryTypes, "fee", "transfer_fee");
-  const neutral = countEntryTypes(
-    summary.entryTypes,
-    "neutral_swap",
-    "transfer_in",
-    "transfer_out",
-  );
-  return [
-    {
-      label: "Acquisitions",
-      value: acquisitions,
-      tone: summary.needsJournals
-        ? "warning"
-        : acquisitions
-          ? "good"
-          : "neutral",
-      filterId: "acquisitions",
-    },
-    {
-      label: "Disposals",
-      value: disposals,
-      tone: disposals ? "warning" : "neutral",
-      filterId: "disposals",
-    },
-    {
-      label: "Income",
-      value: income,
-      tone: income ? "good" : "neutral",
-      filterId: "income",
-    },
-    {
-      label: "Fees",
-      value: fees,
-      tone: fees ? "alert" : "neutral",
-      filterId: "fees",
-    },
-    {
-      label: "Neutral",
-      value: neutral,
-      tone: neutral ? "good" : "neutral",
-      filterId: "neutral",
-      filterLabel: "Neutral events",
-    },
-  ];
-}
-
-export function taxEventMetricFilterIds(event: {
-  entryType: string;
-  gainLossEur: number | null;
-}) {
-  const filters: string[] = [];
-  if (event.entryType === "acquisition") {
-    filters.push("acquisitions");
-  }
-  if (event.entryType === "disposal") {
-    filters.push("disposals");
-  }
-  if (event.entryType === "income") {
-    filters.push("income");
-  }
-  if (["fee", "transfer_fee"].includes(event.entryType)) {
-    filters.push("fees");
-  }
-  if (["neutral_swap", "transfer_in", "transfer_out"].includes(event.entryType)) {
-    filters.push("neutral");
-  }
-  return filters;
-}
-
-function eventTitle(event: JournalTaxEvent) {
+function eventTitle(event: ReportableJournalEntry) {
   const typeLabel = formatEntryType(event.entryType);
   const description = event.description.trim();
   return description ? `${typeLabel} · ${description}` : typeLabel;
 }
 
-function countEntryTypes(
-  entries: JournalEventTypeSummary[],
-  ...types: string[]
-) {
-  return entries.reduce(
-    (total, row) => (types.includes(row.type) ? total + row.count : total),
-    0,
-  );
-}
-
-function basisText(event: JournalTaxEvent) {
+function basisText(event: ReportableJournalEntry) {
   if (event.costBasisEur !== null || event.proceedsEur !== null) {
     return [
       event.costBasisEur !== null ? `Basis ${eur.format(event.costBasisEur)}` : null,
@@ -352,14 +204,14 @@ function basisText(event: JournalTaxEvent) {
   return "No fiat impact";
 }
 
-function pricingSourceLabel(event: JournalTaxEvent) {
+function pricingSourceLabel(event: ReportableJournalEntry) {
   const source = event.pricingSourceKind || "pricing";
   const quality = event.pricingQuality ? `/${event.pricingQuality}` : "";
   return `${source}${quality}`;
 }
 
 function eventEvidenceHint(
-  event: JournalTaxEvent,
+  event: ReportableJournalEntry,
   summary: JournalEventsSnapshot["summary"],
 ) {
   if (summary.needsJournals) return summary.freshnessReason;

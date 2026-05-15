@@ -7,7 +7,7 @@
  */
 
 import { Link } from "@tanstack/react-router";
-import { Fragment, useState, type ReactNode } from "react";
+import { Fragment, useEffect, useMemo, useState, type ReactNode } from "react";
 import {
   AlertTriangle,
   CalendarDays,
@@ -26,8 +26,16 @@ import {
   Sigma,
 } from "lucide-react";
 
+import { ScreenSkeleton } from "@/components/kb/ScreenSkeleton";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import {
   Table,
   TableBody,
@@ -37,7 +45,18 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { useDaemon, useDaemonMutation } from "@/daemon/client";
-import { canOpenExportedFiles, openExportedFile } from "@/daemon/transport";
+import {
+  canOpenExportedFiles,
+  canSaveExportedFiles,
+  openExportedFile,
+  saveExportedFileAs,
+} from "@/daemon/transport";
+import { saveFile } from "@/lib/filePicker";
+import {
+  reportExportStatusForYear,
+  type ReportExportStatus,
+} from "@/lib/reportExportStatus";
+import { reportYearFromSearch } from "@/lib/reportYear";
 import { screenPanelClassName, screenShellClassName } from "@/lib/screen-layout";
 import { cn } from "@/lib/utils";
 import {
@@ -167,53 +186,138 @@ interface ReportReadiness {
   };
 }
 
-export function Reports() {
-  const { data, isLoading } = useDaemon<CapitalGainsReport>(
-    "ui.reports.capital_gains",
-  );
-  const hideSensitive = useUiStore((s) => s.hideSensitive);
+function reportExportDefaultFilename(
+  format: ReportExportFormatId,
+  year: number,
+  austrian: boolean,
+) {
+  if (austrian) {
+    if (format === "pdf") return `kassiber-austrian-e1kv-${year}.pdf`;
+    if (format === "xlsx") return `kassiber-austrian-e1kv-${year}.xlsx`;
+    return `kassiber-austrian-e1kv-${year}-csv`;
+  }
+  if (format === "pdf") return "kassiber-report.pdf";
+  if (format === "xlsx") return "kassiber-report.xlsx";
+  return "kassiber-report.csv";
+}
 
-  if (isLoading) {
-    return (
-      <div className="flex flex-1 items-center justify-center text-sm text-muted-foreground">
-        Loading reports...
-      </div>
-    );
+function reportExportSaveFilters(
+  format: ReportExportFormatId,
+  payload?: ReportExportResult,
+) {
+  if (payload?.format === "csv" && payload.files?.length) return undefined;
+  if (format === "pdf") return [{ name: "PDF report", extensions: ["pdf"] }];
+  if (format === "xlsx") return [{ name: "Excel workbook", extensions: ["xlsx"] }];
+  return [{ name: "CSV report", extensions: ["csv"] }];
+}
+
+function basename(path: string) {
+  return path.split(/[\\/]/).pop() || path;
+}
+
+function initialReportYearFromUrl() {
+  if (typeof window === "undefined") return null;
+  return reportYearFromSearch(window.location.search);
+}
+
+export function Reports() {
+  const [selectedYear, setSelectedYear] = useState<number | null>(
+    initialReportYearFromUrl,
+  );
+  useEffect(() => {
+    const syncYearFromUrl = () => {
+      setSelectedYear(reportYearFromSearch(window.location.search));
+    };
+    window.addEventListener("popstate", syncYearFromUrl);
+    return () => window.removeEventListener("popstate", syncYearFromUrl);
+  }, []);
+  const reportArgs = useMemo(
+    () => (selectedYear !== null ? { year: selectedYear } : undefined),
+    [selectedYear],
+  );
+  const { data, isLoading, isFetching, isError, error } =
+    useDaemon<CapitalGainsReport>("ui.reports.capital_gains", reportArgs);
+  const hideSensitive = useUiStore((s) => s.hideSensitive);
+  const returnedReportYear = data?.data?.year;
+  const reportYearMismatch =
+    selectedYear !== null &&
+    returnedReportYear !== undefined &&
+    returnedReportYear !== selectedYear;
+
+  if (isLoading || (reportYearMismatch && isFetching)) {
+    return <ScreenSkeleton titleWidth="w-48" />;
   }
 
-  if (data?.error || !data?.data) {
+  if (reportYearMismatch) {
     return (
       <div className={screenPanelClassName}>
         <div className="rounded-xl border bg-card p-4">
           <h2 className="text-base font-semibold">Reports unavailable</h2>
           <p className="mt-1 text-sm text-muted-foreground">
-            {data?.error?.message ?? "The daemon did not return report data."}
+            The daemon returned {returnedReportYear} while the selected tax year is{" "}
+            {selectedYear}.
           </p>
         </div>
       </div>
     );
   }
 
-  return <ReportsView report={data.data} hideSensitive={hideSensitive} />;
+  if (isError || data?.error || !data?.data) {
+    return (
+      <div className={screenPanelClassName}>
+        <div className="rounded-xl border bg-card p-4">
+          <h2 className="text-base font-semibold">Reports unavailable</h2>
+          <p className="mt-1 text-sm text-muted-foreground">
+            {error instanceof Error
+              ? error.message
+              : data?.error?.message ?? "The daemon did not return report data."}
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <ReportsView
+      report={data.data}
+      hideSensitive={hideSensitive}
+      selectedYear={selectedYear}
+      onYearChange={setSelectedYear}
+    />
+  );
 }
 
 interface ReportsViewProps {
   report: CapitalGainsReport;
   hideSensitive: boolean;
+  selectedYear: number | null;
+  onYearChange: (year: number) => void;
 }
 
-function ReportsView({ report, hideSensitive }: ReportsViewProps) {
+function ReportsView({
+  report,
+  hideSensitive,
+  selectedYear,
+  onYearChange,
+}: ReportsViewProps) {
   const year = report.year;
+  const effectiveYear = selectedYear ?? year;
+  const availableYears = Array.from(
+    new Set([
+      ...(report.availableYears?.length ? report.availableYears : [effectiveYear]),
+      effectiveYear,
+    ]),
+  )
+    .filter((item) => Number.isInteger(item))
+    .sort((a, b) => b - a);
   const jurisdiction =
     JURISDICTIONS[report.jurisdictionCode] ?? JURISDICTIONS.AT;
   const [method, setMethod] = useState<CostBasisMethod>(
     normalizeReportMethod(report.method, jurisdiction),
   );
-  const [exportStatus, setExportStatus] = useState<{
-    tone: "success" | "error";
-    message: string;
-    path?: string;
-  } | null>(null);
+  const [exportStatus, setExportStatus] = useState<ReportExportStatus | null>(
+    null,
+  );
   const [activeExport, setActiveExport] =
     useState<ReportExportFormatId | null>(null);
   const [openingExportPath, setOpeningExportPath] = useState<string | null>(
@@ -247,17 +351,24 @@ function ReportsView({ report, hideSensitive }: ReportsViewProps) {
       maximumFractionDigits: 2,
     });
   const methodLabel = METHOD_LABELS[method] ?? METHOD_LABELS[jurisdiction.defaultMethod];
-  const readiness = buildReportReadiness(report, lots, year);
-  const periodLabel = formatReportPeriod(year, jurisdiction.locale);
+  const readiness = buildReportReadiness(report, lots, effectiveYear);
+  const periodLabel = formatReportPeriod(effectiveYear, jurisdiction.locale);
+  const currentExportStatus = reportExportStatusForYear(
+    exportStatus,
+    effectiveYear,
+  );
   const canOpenCurrentExport =
-    exportStatus?.tone === "success" &&
-    canOpenExportPath(exportStatus.path) &&
+    currentExportStatus?.tone === "success" &&
+    canOpenExportPath(currentExportStatus.openPath) &&
     canOpenExportedFiles();
   const openableExportPath =
-    canOpenCurrentExport && exportStatus?.path ? exportStatus.path : null;
+    canOpenCurrentExport && currentExportStatus?.openPath
+      ? currentExportStatus.openPath
+      : null;
 
   const handleExport = (format: ReportExportFormatId) => {
     if (activeExport) return;
+    const exportYear = effectiveYear;
     setExportStatus(null);
     setActiveExport(format);
     const mutation =
@@ -275,18 +386,18 @@ function ReportsView({ report, hideSensitive }: ReportsViewProps) {
     const args =
       format === "pdf"
         ? activeProfileIsAustrian
-          ? { year }
+          ? { year: exportYear }
           : {}
         : (format === "xlsx" || format === "csv") && activeProfileIsAustrian
-          ? { year }
+          ? { year: exportYear }
           : {};
 
     mutation.mutate(args, {
-      onSuccess: (envelope) => {
+      onSuccess: async (envelope) => {
         const payload = envelope.data;
         const exportPath = payload?.file ?? payload?.dir ?? "";
         const filename =
-          payload?.filename ?? exportPath.split(/[\\/]/).pop() ?? "report";
+          payload?.filename ?? basename(exportPath) ?? "report";
         const detail =
           payload?.format === "pdf" && payload.pages
             ? `${payload.pages} page${payload.pages === 1 ? "" : "s"}`
@@ -299,21 +410,66 @@ function ReportsView({ report, hideSensitive }: ReportsViewProps) {
               : payload?.format === "csv" && payload.rows !== undefined
                 ? `${payload.rows} row${payload.rows === 1 ? "" : "s"}`
                 : "Export written";
+        let savedPath = exportPath;
+        let statusMessage = `${filename} saved to the managed exports folder.`;
+        if (exportPath && canSaveExportedFiles()) {
+          try {
+            const destination = await saveFile({
+              title:
+                payload?.format === "csv" && payload.files?.length
+                  ? "Save CSV bundle"
+                  : "Save report export",
+              defaultPath: reportExportDefaultFilename(
+                format,
+                exportYear,
+                activeProfileIsAustrian,
+              ),
+              filters: reportExportSaveFilters(format, payload),
+            });
+            if (destination) {
+              savedPath = await saveExportedFileAs(exportPath, destination);
+              statusMessage = `${basename(savedPath)} saved.`;
+            } else {
+              statusMessage = `${filename} export kept in the managed exports folder.`;
+            }
+          } catch (error) {
+            const message =
+              error instanceof Error ? error.message : "Could not save report export";
+            setExportStatus({
+              year: exportYear,
+              tone: "error",
+              message,
+              path: exportPath,
+              openPath: exportPath,
+            });
+            addNotification({
+              title: "Could not save report export",
+              body: message,
+              tone: "error",
+            });
+            return;
+          }
+        }
         setExportStatus({
+          year: exportYear,
           tone: "success",
-          message: `${filename} saved to the managed exports folder.`,
-          path: exportPath,
+          message: statusMessage,
+          path: savedPath,
+          openPath: savedPath === exportPath ? exportPath : undefined,
         });
         addNotification({
           title: "Report export finished",
-          body: detail,
+          body:
+            savedPath === exportPath
+              ? detail
+              : `${detail} · saved to ${basename(savedPath)}`,
           tone: "success",
         });
       },
       onError: (error) => {
         const message =
           error instanceof Error ? error.message : "Report export failed";
-        setExportStatus({ tone: "error", message });
+        setExportStatus({ year: exportYear, tone: "error", message });
         addNotification({
           title: "Report export failed",
           body: message,
@@ -349,7 +505,9 @@ function ReportsView({ report, hideSensitive }: ReportsViewProps) {
   return (
     <div className={screenShellClassName}>
       <ReportPackageHeader
-        year={year}
+        selectedYear={effectiveYear}
+        availableYears={availableYears}
+        onYearChange={onYearChange}
         periodLabel={periodLabel}
         jurisdiction={jurisdiction}
         methodLabel={methodLabel}
@@ -363,12 +521,12 @@ function ReportsView({ report, hideSensitive }: ReportsViewProps) {
         lots={lots}
         totals={totals}
         estimatedTax={estimatedTax}
-        year={year}
+        year={effectiveYear}
         formatNumber={fmt}
       />
 
-      <div className="grid grid-cols-1 items-start gap-3 sm:gap-4 2xl:grid-cols-[minmax(0,1fr)_400px]">
-        <div className="grid min-w-0 gap-3 sm:gap-4">
+      <div className="grid grid-cols-1 items-start gap-3 2xl:grid-cols-[minmax(0,1fr)_380px]">
+        <div className="grid min-w-0 gap-3">
           {kennzahlRows.length ? (
             <KennzahlOverviewPanel
               rows={kennzahlRows}
@@ -383,7 +541,7 @@ function ReportsView({ report, hideSensitive }: ReportsViewProps) {
             jurisdiction={jurisdiction}
             hideSensitive={hideSensitive}
             formatNumber={fmt}
-            year={year}
+            year={effectiveYear}
           />
           {neutralSwapLots.length ? (
             <NeutralSwapAuditPanel
@@ -394,12 +552,12 @@ function ReportsView({ report, hideSensitive }: ReportsViewProps) {
             />
           ) : null}
         </div>
-        <div className="grid min-w-0 gap-3 sm:gap-4">
+        <div className="grid min-w-0 gap-3">
           <ReportFilesPanel
-            year={year}
+            year={effectiveYear}
             activeExport={activeExport}
             activeProfileIsAustrian={activeProfileIsAustrian}
-            exportStatus={exportStatus}
+            exportStatus={currentExportStatus}
             openableExportPath={openableExportPath}
             openingExportPath={openingExportPath}
             onExport={handleExport}
@@ -417,24 +575,52 @@ function ReportsView({ report, hideSensitive }: ReportsViewProps) {
 }
 
 function ReportPackageHeader({
-  year,
+  selectedYear,
+  availableYears,
+  onYearChange,
   periodLabel,
   jurisdiction,
   methodLabel,
 }: {
-  year: number;
+  selectedYear: number;
+  availableYears: number[];
+  onYearChange: (year: number) => void;
   periodLabel: string;
   jurisdiction: (typeof JURISDICTIONS)[string];
   methodLabel: { name: string; desc: string; fullName?: string };
 }) {
   const methodName = methodLabel.fullName ?? methodLabel.name;
+  const handleYearChange = (value: string) => {
+    const nextYear = Number(value);
+    if (!Number.isInteger(nextYear)) return;
+    if (typeof window !== "undefined") {
+      const params = new URLSearchParams(window.location.search);
+      params.set("year", String(nextYear));
+      const query = params.toString();
+      window.history.replaceState(
+        null,
+        "",
+        query ? `${window.location.pathname}?${query}` : window.location.pathname,
+      );
+    }
+    onYearChange(nextYear);
+  };
   return (
     <div className="rounded-xl border bg-card px-3 py-3 sm:px-4">
       <div className="flex min-w-0 flex-wrap items-center gap-2 sm:gap-3">
-        <span className="text-base font-semibold sm:text-lg">Tax report</span>
-        <Badge variant="outline" className="rounded-md">
-          {year}
-        </Badge>
+        <span className="text-base font-semibold">Tax report</span>
+        <Select value={String(selectedYear)} onValueChange={handleYearChange}>
+          <SelectTrigger className="h-7 w-[88px] rounded-md text-xs" aria-label="Tax year">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {availableYears.map((availableYear) => (
+              <SelectItem key={availableYear} value={String(availableYear)}>
+                {availableYear}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
         <span className="hidden h-6 w-px bg-border sm:block" />
         <span className="inline-flex min-w-0 items-center gap-2 text-sm text-muted-foreground">
           <CalendarDays className="size-4 shrink-0" aria-hidden="true" />
@@ -455,11 +641,11 @@ function ReportReadinessStrip({ readiness }: { readiness: ReportReadiness }) {
   const Icon = readiness.icon;
 
   return (
-    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
+    <div className="flex flex-col gap-2.5 sm:flex-row sm:items-center sm:justify-between sm:gap-3">
       <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-2">
         <span
           className={cn(
-            "inline-flex h-8 shrink-0 items-center gap-2 rounded-md border px-2.5 text-sm font-medium",
+            "inline-flex h-7 shrink-0 items-center gap-1.5 rounded-md border px-2 text-xs font-medium",
             readinessToneStyles[readiness.tone],
           )}
         >
@@ -550,11 +736,11 @@ function ReportMetricStrip({
     <div className="min-w-0 overflow-hidden rounded-xl border bg-card">
       <div className="grid grid-cols-1 divide-x-0 divide-y divide-border sm:grid-cols-2 sm:divide-y-0 lg:grid-cols-4 lg:divide-x">
         {metrics.map((metric) => (
-          <div key={metric.label} className="space-y-2.5 p-3 sm:p-4">
-            <p className="text-xs font-medium text-muted-foreground sm:text-sm">
+          <div key={metric.label} className="space-y-2 p-3 sm:p-4">
+            <p className="text-xs font-medium text-muted-foreground">
               {metric.label}
             </p>
-            <p className="min-w-0 text-xl leading-tight font-semibold tracking-tight tabular-nums sm:text-2xl">
+            <p className="min-w-0 text-xl leading-tight font-semibold tracking-tight tabular-nums">
               {metric.value}
             </p>
             <p className="text-[10px] text-muted-foreground sm:text-xs">
@@ -706,11 +892,7 @@ function ReportFilesPanel({
   year: number;
   activeExport: ReportExportFormatId | null;
   activeProfileIsAustrian: boolean;
-  exportStatus: {
-    tone: "success" | "error";
-    message: string;
-    path?: string;
-  } | null;
+  exportStatus: ReportExportStatus | null;
   openableExportPath: string | null;
   openingExportPath: string | null;
   onExport: (format: ReportExportFormatId) => void;
@@ -731,7 +913,7 @@ function ReportFilesPanel({
           <div>
             <h2 className="text-sm font-medium sm:text-base">Report files</h2>
             <p className="text-[10px] text-muted-foreground sm:text-xs">
-              Export from the managed local report package
+              Export report files
             </p>
           </div>
         </div>
@@ -798,11 +980,7 @@ function ExportNotice({
   openingExportPath,
   onOpenExport,
 }: {
-  exportStatus: {
-    tone: "success" | "error";
-    message: string;
-    path?: string;
-  };
+  exportStatus: ReportExportStatus;
   openableExportPath: string | null;
   openingExportPath: string | null;
   onOpenExport: (path: string) => void;

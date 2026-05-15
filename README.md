@@ -305,7 +305,7 @@ Browser dev mode now defaults to the loopback Vite daemon bridge, so `pnpm dev`
 and `pnpm dev:bridge` exercise the real Python daemon. Use `pnpm dev:browser`
 when you intentionally want mock fixtures for isolated UI layout work, or
 `pnpm tauri:dev` to exercise the packaged Tauri command boundary. Overview,
-Books, Connections, Imports, Transactions, Swap Matching, Journals, Tax Events,
+Books, Connections, Imports, Transactions, Swap Matching, Journals,
 Quarantine, Reports, Source of Funds, Settings, assistant chat, exports, and
 diagnostics all have daemon-backed paths; mock mode remains for disconnected
 development and screen polish.
@@ -339,7 +339,7 @@ pnpm tauri:dev
 
 The app boots into the Welcome onboarding flow on first load, persists identity
 to localStorage, and routes through Overview / Connections / Imports /
-Transactions / Swaps / Journals / Reports / Source of Funds / Tax Events /
+Transactions / Swaps / Journals / Reports / Source of Funds /
 Quarantine / Diagnostics / Books / Settings / Assistant. The shared shell hosts
 global search, the hide-sensitive eye, native menu intents, the global AI
 feature toggle, and Settings; display currency lives inside Settings.

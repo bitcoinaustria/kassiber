@@ -49,3 +49,7 @@ export function summarizeSyncResults(results: SyncResult[]): string {
   const detail = syncResultDetail(firstError);
   return firstError && detail ? `${summary}: ${firstError.wallet}: ${detail}` : summary;
 }
+
+export function syncResultsAreTrustedForReports(results: SyncResult[]): boolean {
+  return !results.some((result) => result.status === "error");
+}

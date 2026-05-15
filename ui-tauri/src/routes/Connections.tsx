@@ -8,6 +8,7 @@ import { type KeyboardEvent, type ReactNode, useEffect, useState } from "react";
 import { Plus, RefreshCw, Wallet } from "lucide-react";
 import { useNavigate } from "@tanstack/react-router";
 
+import { ScreenSkeleton } from "@/components/kb/ScreenSkeleton";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -24,11 +25,10 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { useDaemon, useDaemonMutation } from "@/daemon/client";
+import { useDaemon } from "@/daemon/client";
 import { useUiStore } from "@/store/ui";
-import { useSyncProgressNotice } from "@/hooks/useSyncProgressNotice";
+import { useWalletSyncAction } from "@/hooks/useWalletSyncAction";
 import { useCurrency, type Currency } from "@/lib/currency";
-import { summarizeSyncResults, type SyncResult } from "@/lib/syncResults";
 import { screenShellClassName } from "@/lib/screen-layout";
 import { cn } from "@/lib/utils";
 import { AddConnectionDialog } from "@/components/kb/AddConnectionDialog";
@@ -91,12 +91,10 @@ const statusDotStyles: Record<ConnectionStatus, string> = {
 
 export function Connections() {
   const { data, isLoading } = useDaemon<OverviewSnapshot>("ui.overview.snapshot");
-  const syncWallets = useDaemonMutation<{ results: SyncResult[] }>("ui.wallets.sync");
+  const { syncAll, isSyncing } = useWalletSyncAction();
   const hideSensitive = useUiStore((s) => s.hideSensitive);
-  const addNotification = useUiStore((s) => s.addNotification);
   const currency = useCurrency();
   const navigate = useNavigate();
-  const [syncMessage, setSyncMessage] = useState<string | null>(null);
   const [addConnectionOpen, setAddConnectionOpen] = useState(false);
   const [resumeSourceId, setResumeSourceId] = useState<string | null>(null);
   const deferredConnectionSetup = useUiStore(
@@ -105,7 +103,6 @@ export function Connections() {
   const clearDeferredConnectionSetup = useUiStore(
     (s) => s.clearDeferredConnectionSetup,
   );
-  const { startSyncNotice, clearSyncNotice } = useSyncProgressNotice();
 
   useEffect(() => {
     if (!deferredConnectionSetup) return;
@@ -114,49 +111,11 @@ export function Connections() {
     clearDeferredConnectionSetup();
   }, [deferredConnectionSetup, clearDeferredConnectionSetup]);
   const onSyncAll = () => {
-    if (syncWallets.isPending) return;
-    setSyncMessage(null);
-    addNotification({
-      title: "Connection refresh started",
-      body: "Kassiber is scanning configured watch-only sources.",
-      tone: "warning",
-    });
-    startSyncNotice();
-    syncWallets.mutate(
-      { all: true },
-      {
-        onSuccess: (envelope) => {
-          const results = envelope.data?.results ?? [];
-          const errors = results.filter((result) => result.status === "error").length;
-          const summary = summarizeSyncResults(results);
-          setSyncMessage(summary);
-          addNotification({
-            title: errors ? "Connection refresh finished with errors" : "Connection refresh finished",
-            body: summary,
-            tone: errors ? "error" : "success",
-          });
-        },
-        onError: (error) => {
-          const message =
-            error instanceof Error ? error.message : "Connection refresh failed";
-          setSyncMessage(message);
-          addNotification({
-            title: "Connection refresh failed",
-            body: message,
-            tone: "error",
-          });
-        },
-        onSettled: clearSyncNotice,
-      },
-    );
+    syncAll();
   };
 
   if (isLoading || !data?.data) {
-    return (
-      <div className="flex flex-1 items-center justify-center text-sm text-muted-foreground">
-        Loading connections...
-      </div>
-    );
+    return <ScreenSkeleton titleWidth="w-32" metricCount={3} />;
   }
 
   const snapshot = data.data;
@@ -164,7 +123,7 @@ export function Connections() {
   const totalEur = totalBtc * snapshot.priceEur;
   const errorN = snapshot.connections.filter((c) => c.status === "error").length;
   const snapshotSyncingN = snapshot.connections.filter((c) => c.status === "syncing").length;
-  const syncingN = syncWallets.isPending
+  const syncingN = isSyncing
     ? snapshot.connections.length
     : snapshotSyncingN;
   const syncedN = snapshot.connections.filter((c) => c.status === "synced").length;
@@ -177,18 +136,18 @@ export function Connections() {
 
   return (
     <div className={screenShellClassName}>
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+      <div className="flex flex-col gap-2.5 sm:flex-row sm:items-end sm:justify-between">
         <div className="min-w-0 space-y-1">
           <p className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
             {snapshot.connections.length} wallets and sources ·{" "}
             {errorN > 0 ? `${errorN} need attention · ` : ""}
-            {syncWallets.isPending
+            {isSyncing
               ? `${syncingN} refreshing now`
               : snapshotSyncingN > 0
                 ? `${snapshotSyncingN} refreshing`
                 : "watch-only sources current"}
           </p>
-          <h2 className="text-2xl font-semibold tracking-tight">
+          <h2 className="text-xl font-semibold tracking-tight">
             Wallets
           </h2>
         </div>
@@ -196,19 +155,19 @@ export function Connections() {
           <Button
             variant="outline"
             size="sm"
-            className="h-9 gap-2"
+            className="h-8 gap-2"
             onClick={onSyncAll}
-            disabled={syncWallets.isPending}
+            disabled={isSyncing}
           >
             <RefreshCw
-              className={cn("size-4", syncWallets.isPending && "animate-spin")}
+              className={cn("size-4", isSyncing && "animate-spin")}
               aria-hidden="true"
             />
-            {syncWallets.isPending ? "Refreshing" : "Refresh all"}
+            {isSyncing ? "Refreshing" : "Refresh all"}
           </Button>
           <Button
             size="sm"
-            className="h-9 gap-2"
+            className="h-8 gap-2"
             onClick={() => setAddConnectionOpen(true)}
           >
             <Plus className="size-4" aria-hidden="true" />
@@ -224,20 +183,6 @@ export function Connections() {
         }}
         initialSourceId={resumeSourceId}
       />
-      {syncMessage && (
-        <div
-          className={cn(
-            "rounded-md border px-3 py-2 text-sm",
-            syncWallets.isError
-              ? "border-red-200 bg-red-50 text-red-700 dark:border-red-900/60 dark:bg-red-950/40 dark:text-red-300"
-              : "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900/60 dark:bg-emerald-950/40 dark:text-emerald-300",
-          )}
-          role="status"
-        >
-          {syncMessage}
-        </div>
-      )}
-
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
         <ConnectionMetric
           label="Total balance"
@@ -275,8 +220,8 @@ export function Connections() {
       </div>
 
       <Card>
-        <CardHeader className="border-b">
-          <CardTitle>Wallets and sources</CardTitle>
+        <CardHeader className="border-b px-4 pb-3">
+          <CardTitle className="text-sm sm:text-base">Wallets and sources</CardTitle>
           <CardDescription>
             Local wallet, Lightning, ecash, and import sources available to
             Kassiber.
@@ -323,13 +268,13 @@ interface ConnectionMetricProps {
 
 function ConnectionMetric({ label, value, sub }: ConnectionMetricProps) {
   return (
-    <Card className="gap-3 py-5">
-      <CardContent className="space-y-3">
+    <Card className="gap-2.5 py-4">
+      <CardContent className="space-y-2 px-4">
         <div className="flex items-center gap-2 text-muted-foreground">
           <Wallet className="size-4" aria-hidden="true" />
           <span className="text-xs font-medium">{label}</span>
         </div>
-        <p className="text-2xl font-semibold tracking-tight">{value}</p>
+        <p className="text-xl font-semibold tracking-tight">{value}</p>
         <p className="text-xs text-muted-foreground">{sub}</p>
       </CardContent>
     </Card>

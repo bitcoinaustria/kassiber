@@ -14,7 +14,6 @@ export type AssistantReturnPath =
   | "/connections"
   | "/books"
   | "/journals"
-  | "/tax-events"
   | "/quarantine"
   | "/imports"
   | "/diagnostics"
@@ -34,11 +33,9 @@ export interface AssistantSessionContextValue {
   pendingConsent: AiToolConsentRequest | null;
   selection: AssistantModelSelection | null;
   thinkingEffort: AssistantThinkingEffort;
-  toolsEnabled: boolean;
   returnPath: AssistantReturnPath;
   setSelection: (next: AssistantModelSelection | null) => void;
   setThinkingEffort: (next: AssistantThinkingEffort) => void;
-  setToolsEnabled: (enabled: boolean) => void;
   sendPrompt: (prompt: string) => void;
   sendConsent: (decision: AiToolConsentDecision) => Promise<void>;
   abort: () => void;

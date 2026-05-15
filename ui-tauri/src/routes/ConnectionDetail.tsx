@@ -5,7 +5,7 @@
  * Connections and Overview screens.
  */
 
-import { useState, type FormEvent, type ReactNode } from "react";
+import { useRef, useState, type FormEvent, type ReactNode } from "react";
 import { Link, useNavigate, useParams } from "@tanstack/react-router";
 import {
   ArrowDownRight,
@@ -15,8 +15,6 @@ import {
   Check,
   Copy,
   Database,
-  Eye,
-  EyeOff,
   KeyRound,
   Pencil,
   RefreshCw,
@@ -24,6 +22,7 @@ import {
   Wallet,
 } from "lucide-react";
 
+import { ScreenSkeleton } from "@/components/kb/ScreenSkeleton";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -62,13 +61,17 @@ import { cn } from "@/lib/utils";
 import { isFilePickerAvailable, pickFile } from "@/lib/filePicker";
 import { editConfigKindForConnection } from "@/lib/connectionEditKind";
 import { describeWalletSyncResult, type SyncResult } from "@/lib/syncResults";
+import {
+  startingSyncProgress,
+  syncProgressNotification,
+  type WalletSyncProgress,
+} from "@/lib/syncProgress";
 import { detectWalletMaterial } from "@/lib/walletMaterialFormat";
 import { useUiStore } from "@/store/ui";
 import { useSyncProgressNotice } from "@/hooks/useSyncProgressNotice";
 import type {
   Connection,
   ConnectionKind,
-  ConnectionStatus,
   OverviewSnapshot,
 } from "@/mocks/seed";
 
@@ -90,9 +93,6 @@ const fmtEurSigned = (amountEur: number) =>
 const fmtShortTxid = (value?: string) =>
   !value ? "no id" : value.length <= 18 ? value : `${value.slice(0, 10)}…${value.slice(-6)}`;
 
-const FULL_XPUB =
-  "xpub6CUGRUonZSQ4TWtTMmzXdrXDtypWKiKrhko4ogpiMZbpiaQL2j8mdfKB3kRvvKUC7vw3R7Y8eYS9zPNxKr1J9";
-const SHORT_XPUB = "xpub6C…aQL2j";
 const PLAINTEXT_CHANGE_ACK = "CHANGE LOCAL DATA";
 const PLAINTEXT_DELETE_ACK = "DELETE LOCAL DATA";
 
@@ -117,15 +117,6 @@ const kindLabels: Record<ConnectionKind, string> = {
   bip329: "BIP329",
 };
 
-const statusStyles: Record<ConnectionStatus, string> = {
-  synced:
-    "border-emerald-500/25 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300",
-  syncing:
-    "border-amber-500/25 bg-amber-500/10 text-amber-700 dark:text-amber-300",
-  idle: "border-border bg-muted text-muted-foreground",
-  error: "border-red-500/25 bg-red-500/10 text-red-700 dark:text-red-300",
-};
-
 interface UpdateWalletResult {
   wallet: {
     id: string;
@@ -142,6 +133,57 @@ interface DeleteWalletResult {
   };
 }
 
+type WalletListItem = {
+  id?: string;
+  label: string;
+  kind?: string;
+  account?: {
+    code?: string;
+    label?: string;
+  };
+  backend?: {
+    name?: string;
+    source?: string;
+    kind?: string;
+  };
+  chain?: string;
+  network?: string;
+  sync_mode?: string;
+  sync_source?: string;
+  transaction_count?: number;
+  last_transaction_at?: string | null;
+  last_synced_at?: string | null;
+  sync_status?: string;
+  created_at?: string;
+  btcpay_provenance?: Array<{
+    backend: string;
+    store_id: string;
+    payment_method_id: string;
+  }>;
+};
+
+const syncModeLabels: Record<string, string> = {
+  backend_descriptor: "Watch-only descriptor",
+  backend_addresses: "Watch-only addresses",
+  file_import: "File import",
+  btcpay: "BTCPay enrichment",
+  not_configured: "Manual / not configured",
+};
+
+function formatConnectionDate(value?: string | null) {
+  if (!value) return "—";
+  const normalized = value.replace("T", " ").replace(/Z$/, "");
+  return normalized.length > 16 ? normalized.slice(0, 16) : normalized;
+}
+
+function formatBackendDetail(backend?: WalletListItem["backend"]) {
+  if (!backend?.name) return "Not configured";
+  const kind = backend.kind ? ` · ${backend.kind}` : "";
+  const source =
+    backend.source && backend.source !== "none" ? ` (${backend.source})` : "";
+  return `${backend.name}${kind}${source}`;
+}
+
 export function ConnectionDetail() {
   const { connectionId } = useParams({ from: "/_app/connections/$connectionId" });
   const { data, isLoading } = useDaemon<OverviewSnapshot>(
@@ -150,11 +192,7 @@ export function ConnectionDetail() {
   const hideSensitive = useUiStore((state) => state.hideSensitive);
 
   if (isLoading || !data?.data) {
-    return (
-      <div className="flex flex-1 items-center justify-center text-sm text-muted-foreground">
-        Loading connection...
-      </div>
-    );
+    return <ScreenSkeleton titleWidth="w-44" />;
   }
 
   const snapshot = data.data;
@@ -199,22 +237,37 @@ function ConnectionDetailView({
 }: ConnectionDetailViewProps) {
   const navigate = useNavigate();
   const addNotification = useUiStore((state) => state.addNotification);
+  const updateNotification = useUiStore((state) => state.updateNotification);
   const identity = useUiStore((state) => state.identity);
+  const syncNoticeIdRef = useRef<string | null>(null);
   const [syncProgress, setSyncProgress] = useState<{
     wallet: string;
     processed: number;
     total: number;
   } | null>(null);
+  const progressValueRef = useRef(startingSyncProgress().value ?? 5);
   const syncWallet = useDaemonStreamMutation<
     { results: SyncResult[] },
-    { wallet: string; processed: number; total: number }
+    WalletSyncProgress
   >("ui.wallets.sync", {
     onProgress: (record) => {
+      const wallet = record.wallet ?? connection.label;
       setSyncProgress({
-        wallet: record.wallet,
+        wallet,
         processed: record.processed ?? 0,
         total: record.total ?? 0,
       });
+      if (syncNoticeIdRef.current) {
+        const nextProgress = syncProgressNotification(
+          { ...record, wallet },
+          progressValueRef.current,
+        );
+        progressValueRef.current = nextProgress.value;
+        updateNotification(syncNoticeIdRef.current, {
+          body: nextProgress.body,
+          progress: nextProgress.progress,
+        });
+      }
     },
   });
   const updateWallet =
@@ -225,19 +278,14 @@ function ConnectionDetailView({
     backends: { name: string; kind: string; is_default?: boolean }[];
   }>("ui.backends.options");
   const walletsListQuery = useDaemon<{
-    wallets: Array<{
-      label: string;
-      btcpay_provenance?: Array<{
-        backend: string;
-        store_id: string;
-        payment_method_id: string;
-      }>;
-    }>;
+    wallets: WalletListItem[];
   }>("ui.wallets.list");
-  const walletProvenanceRoutes =
-    walletsListQuery.data?.data?.wallets?.find(
-      (wallet) => wallet.label === connection.label,
-    )?.btcpay_provenance ?? [];
+  const walletDetail = walletsListQuery.data?.data?.wallets?.find(
+    (wallet) =>
+      (wallet.id && wallet.id === connection.id) ||
+      wallet.label === connection.label,
+  );
+  const walletProvenanceRoutes = walletDetail?.btcpay_provenance ?? [];
   const { startSyncNotice, clearSyncNotice } = useSyncProgressNotice();
   const [syncMessage, setSyncMessage] = useState<string | null>(null);
   const [editOpen, setEditOpen] = useState(false);
@@ -258,9 +306,11 @@ function ConnectionDetailView({
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const encryptedWorkspace =
     Boolean(identity?.encrypted) || identity?.databaseMode === "sqlcipher";
-  const isXpubLike =
-    connection.kind === "xpub" || connection.kind === "descriptor";
-  const sourceValue = connection.syncSource || connection.sourceFormat || kindLabels[connection.kind];
+  const sourceValue =
+    walletDetail?.sync_source ||
+    connection.syncSource ||
+    connection.sourceFormat ||
+    kindLabels[connection.kind];
   const sourceDetail =
     connection.syncMode === "live"
       ? "Live sync source"
@@ -281,10 +331,13 @@ function ConnectionDetailView({
     if (syncWallet.isPending) return;
     setSyncMessage(null);
     setSyncProgress(null);
-    addNotification({
+    progressValueRef.current = startingSyncProgress().value ?? 5;
+    syncNoticeIdRef.current = addNotification({
       title: "Connection refresh started",
       body: `${connection.label} is scanning in watch-only mode.`,
       tone: "warning",
+      dedupeKey: "wallet-sync",
+      progress: startingSyncProgress(),
     });
     startSyncNotice(
       `${connection.label} is still scanning. Large descriptors or slow backends can take a bit; Kassiber will update when the daemon returns.`,
@@ -299,24 +352,39 @@ function ConnectionDetailView({
           const status = result?.status ?? "synced";
           const message = describeWalletSyncResult(result, connection.label);
           setSyncMessage(message);
-          addNotification({
+          const notification = {
             title: status === "error" ? "Connection refresh failed" : "Connection refresh finished",
             body: message,
             tone: status === "error" ? "error" : "success",
-          });
+            dedupeKey: "wallet-sync",
+            progress: undefined,
+          } as const;
+          if (syncNoticeIdRef.current) {
+            updateNotification(syncNoticeIdRef.current, notification);
+          } else {
+            addNotification(notification);
+          }
         },
         onError: (error) => {
           const message =
             error instanceof Error ? error.message : "Connection refresh failed.";
           setSyncMessage(message);
-          addNotification({
+          const notification = {
             title: "Connection refresh failed",
             body: message,
             tone: "error",
-          });
+            dedupeKey: "wallet-sync",
+            progress: undefined,
+          } as const;
+          if (syncNoticeIdRef.current) {
+            updateNotification(syncNoticeIdRef.current, notification);
+          } else {
+            addNotification(notification);
+          }
         },
         onSettled: () => {
           clearSyncNotice();
+          syncNoticeIdRef.current = null;
           setSyncProgress(null);
         },
       },
@@ -467,7 +535,7 @@ function ConnectionDetailView({
       });
       addNotification({
         title: "Connection removed",
-        body: `${connection.label} and its local rows were removed.`,
+        body: `${connection.label} and its local transactions were removed.`,
         tone: "success",
       });
       setDeleteOpen(false);
@@ -481,8 +549,8 @@ function ConnectionDetailView({
 
   return (
     <div className={screenShellClassName}>
-      <Card className="py-4">
-        <CardContent className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+      <Card className="py-3">
+        <CardContent className="flex flex-col gap-3 px-4 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex min-w-0 items-center gap-3">
             <Button asChild variant="outline" size="icon" className="shrink-0">
               <Link to="/connections" aria-label="Back to wallets">
@@ -490,13 +558,7 @@ function ConnectionDetailView({
               </Link>
             </Button>
             <div className="min-w-0">
-              <div className="mb-2 flex flex-wrap items-center gap-2">
-                <Badge variant="outline">{kindLabels[connection.kind]}</Badge>
-                <Badge className={statusStyles[connection.status]} variant="outline">
-                  {connection.status}
-                </Badge>
-              </div>
-              <h1 className="truncate text-2xl font-semibold tracking-tight">
+              <h1 className="truncate text-xl font-semibold tracking-tight">
                 {connection.label}
               </h1>
             </div>
@@ -517,7 +579,7 @@ function ConnectionDetailView({
           </Button>
         </CardContent>
         {syncProgress && syncWallet.isPending ? (
-          <div className="px-6 pt-4">
+          <div className="px-4 pt-3">
             <div className="space-y-1 rounded-md border bg-background px-3 py-2 text-sm">
               <div className="flex items-center justify-between">
                 <span className="text-muted-foreground">
@@ -525,7 +587,7 @@ function ConnectionDetailView({
                 </span>
                 <span className="font-medium tabular-nums">
                   {syncProgress.processed.toLocaleString()} /{" "}
-                  {syncProgress.total.toLocaleString()} rows
+                  {syncProgress.total.toLocaleString()} transactions
                 </span>
               </div>
               <div className="h-1.5 overflow-hidden rounded-full bg-muted">
@@ -546,7 +608,7 @@ function ConnectionDetailView({
           </div>
         ) : null}
         {syncMessage && (
-          <div className="px-6 pt-4">
+          <div className="px-4 pt-3">
             <div
               className={cn(
                 "rounded-md border px-3 py-2 text-sm",
@@ -574,9 +636,9 @@ function ConnectionDetailView({
           icon={<Wallet className="size-4" aria-hidden="true" />}
         />
         <MetricCard
-          label="Rows"
+          label="Transactions"
           value={txCount.toLocaleString("en-US")}
-          detail="Imported transactions"
+          detail="Imported into this wallet"
           icon={<KeyRound className="size-4" aria-hidden="true" />}
         />
         <MetricCard
@@ -597,8 +659,8 @@ function ConnectionDetailView({
 
       {walletProvenanceRoutes.length > 0 ? (
         <Card>
-          <CardHeader className="border-b">
-            <CardTitle>BTCPay provenance</CardTitle>
+          <CardHeader className="border-b px-4 pb-3">
+            <CardTitle className="text-sm sm:text-base">BTCPay provenance</CardTitle>
             <CardDescription>
               BTCPay comments and labels enrich matching transactions during sync.
               Descriptor or file sync remains the balance source.
@@ -626,7 +688,7 @@ function ConnectionDetailView({
               </TableBody>
             </Table>
           </CardContent>
-          <div className="border-t px-6 py-3 text-xs text-muted-foreground">
+          <div className="border-t px-4 py-2.5 text-xs text-muted-foreground">
             Add more routes from <strong>Add wallet</strong> &rarr;{" "}
             <em>BTCPay Server</em> &rarr; <em>Map existing wallets</em>, or via{" "}
             <code>kassiber wallets attach-btcpay</code>. Use Edit to clear all
@@ -635,12 +697,12 @@ function ConnectionDetailView({
         </Card>
       ) : null}
 
-      <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1.35fr)_minmax(360px,0.85fr)]">
+      <div className="grid grid-cols-1 gap-3 xl:grid-cols-[minmax(0,1.35fr)_minmax(360px,0.85fr)]">
         <Card>
-          <CardHeader className="border-b">
-            <CardTitle>Recent transactions</CardTitle>
+          <CardHeader className="border-b px-4 pb-3">
+            <CardTitle className="text-sm sm:text-base">Recent transactions</CardTitle>
             <CardDescription>
-              Recent rows for this wallet source.
+              Recent transactions for this wallet source.
             </CardDescription>
           </CardHeader>
           <CardContent className="p-0">
@@ -656,53 +718,79 @@ function ConnectionDetailView({
               </div>
             ) : (
               <div className="px-5 py-8 text-sm text-muted-foreground">
-                No recent rows are attached to this wallet source.
+                No recent transactions are attached to this wallet source.
               </div>
             )}
           </CardContent>
         </Card>
 
-        <div className="space-y-4">
+        <div className="space-y-3">
           <Card>
-            <CardHeader className="border-b">
-              <CardTitle>Connection details</CardTitle>
+            <CardHeader className="border-b px-4 pb-3">
+              <CardTitle className="text-sm sm:text-base">Connection details</CardTitle>
               <CardDescription>
                 Local metadata and source configuration.
               </CardDescription>
             </CardHeader>
-            <CardContent className="space-y-4 pt-6">
+            <CardContent className="space-y-3 px-4 pt-4">
               <DetailRow label="Label" value={connection.label} />
               <DetailRow label="Type" value={connection.kind.toUpperCase()} mono />
               <DetailRow
-                label="Derivation path"
-                value={connection.kind === "xpub" ? "m / 84' / 0' / 0'" : "—"}
+                label="Status"
+                value={walletDetail?.sync_status ?? connection.status}
+              />
+              <DetailRow
+                label="Sync mode"
+                value={
+                  syncModeLabels[
+                    walletDetail?.sync_mode || connection.syncMode || ""
+                  ] ??
+                  walletDetail?.sync_mode ??
+                  connection.syncMode ??
+                  "—"
+                }
+              />
+              <DetailRow label="Source" value={sourceValue || "—"} />
+              <DetailRow
+                label="Backend"
+                value={formatBackendDetail(walletDetail?.backend)}
+              />
+              {walletDetail?.account?.label || walletDetail?.account?.code ? (
+                <DetailRow
+                  label="Account"
+                  value={[
+                    walletDetail.account.code,
+                    walletDetail.account.label,
+                  ]
+                    .filter(Boolean)
+                    .join(" · ")}
+                />
+              ) : null}
+              {walletDetail?.chain || walletDetail?.network ? (
+                <DetailRow
+                  label="Network"
+                  value={[walletDetail.chain, walletDetail.network]
+                    .filter(Boolean)
+                    .join(" · ")}
+                />
+              ) : null}
+              <DetailRow
+                label="Created"
+                value={formatConnectionDate(walletDetail?.created_at)}
                 mono
               />
-              {isXpubLike && (
-                <>
-                  <DetailRow label="Fingerprint" value="5f3a8c0e" mono copy />
-                  <RevealRow
-                    label="Account xpub"
-                    full={FULL_XPUB}
-                    short={SHORT_XPUB}
-                    hideSensitive={hideSensitive}
-                  />
-                </>
-              )}
-              <DetailRow label="Backend" value="mempool" />
-              <DetailRow label="Created" value="2026-03-02 10:14" mono />
-              <DetailRow label="Kassiber ID" value={`conn_${connection.id}`} mono />
+              <DetailRow label="Kassiber ID" value={connection.id} mono copy />
             </CardContent>
           </Card>
 
           <Card>
-            <CardHeader className="border-b">
-              <CardTitle>Connection actions</CardTitle>
+            <CardHeader className="border-b px-4 pb-3">
+              <CardTitle className="text-sm sm:text-base">Connection actions</CardTitle>
               <CardDescription>
                 Changing or removing a wallet source requires local confirmation.
               </CardDescription>
             </CardHeader>
-            <CardContent className="flex flex-wrap gap-2 pt-6">
+            <CardContent className="flex flex-wrap gap-2 px-4 pt-4">
               <Button type="button" variant="outline" onClick={openEditDialog}>
                 <Pencil className="size-4" aria-hidden="true" />
                 Edit label
@@ -916,7 +1004,7 @@ function ConnectionDetailView({
           <DialogHeader>
             <DialogTitle>Remove connection</DialogTitle>
             <DialogDescription>
-              This removes {connection.label} and its local imported rows. Confirm
+              This removes {connection.label} and its local imported transactions. Confirm
               with{" "}
               {encryptedWorkspace
                 ? "the database passphrase"
@@ -1081,13 +1169,13 @@ interface MetricCardProps {
 
 function MetricCard({ label, value, detail, icon }: MetricCardProps) {
   return (
-    <Card className="gap-3 py-5">
-      <CardContent className="space-y-3">
+    <Card className="gap-2.5 py-4">
+      <CardContent className="space-y-2 px-4">
         <div className="flex items-center gap-2 text-muted-foreground">
           {icon}
           <span className="text-xs font-medium">{label}</span>
         </div>
-        <p className="text-2xl font-semibold tracking-tight tabular-nums">
+        <p className="text-xl font-semibold tracking-tight tabular-nums">
           {value}
         </p>
         <p className="text-xs text-muted-foreground">{detail}</p>
@@ -1117,47 +1205,6 @@ function DetailRow({ label, value, mono, copy }: DetailRowProps) {
           {value}
         </div>
         {copy && typeof value === "string" && <CopyButton value={value} />}
-      </div>
-    </div>
-  );
-}
-
-interface RevealRowProps {
-  label: string;
-  full: string;
-  short: string;
-  hideSensitive: boolean;
-}
-
-function RevealRow({ label, full, short, hideSensitive }: RevealRowProps) {
-  const [revealed, setRevealed] = useState(false);
-  const masked = !revealed || hideSensitive;
-  return (
-    <div className="grid gap-1">
-      <div className="text-xs font-medium text-muted-foreground">{label}</div>
-      <div className="flex min-w-0 items-center gap-2">
-        <div
-          className={cn(
-            "min-w-0 flex-1 truncate font-mono text-xs",
-            masked && "sensitive",
-          )}
-        >
-          {revealed && !hideSensitive ? full : short}
-        </div>
-        <Button
-          type="button"
-          variant="outline"
-          size="icon-xs"
-          aria-label={revealed ? "Hide xpub" : "Reveal xpub"}
-          onClick={() => setRevealed((current) => !current)}
-        >
-          {revealed ? (
-            <EyeOff className="size-3" aria-hidden="true" />
-          ) : (
-            <Eye className="size-3" aria-hidden="true" />
-          )}
-        </Button>
-        <CopyButton value={full} />
       </div>
     </div>
   );

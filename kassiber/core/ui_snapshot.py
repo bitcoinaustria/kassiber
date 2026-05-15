@@ -18,6 +18,18 @@ from .wallets import wallet_btcpay_provenance_config
 
 MAX_UI_LIST_LIMIT = 500
 MAX_UI_PREVIEW_LIMIT = 100
+_JOURNAL_DISPLAY_ENTRY_TYPE_SQL = """
+CASE
+    WHEN je.at_category = 'neu_swap' THEN 'neutral_swap'
+    ELSE je.entry_type
+END
+""".strip()
+_JOURNAL_DISPLAY_GAIN_LOSS_SQL = """
+CASE
+    WHEN je.at_category = 'neu_swap' THEN 0
+    ELSE COALESCE(je.gain_loss, 0)
+END
+""".strip()
 _AUDIT_PROFILE_TABLE_COLUMNS = {
     "transactions": "created_at",
     "journal_entries": "created_at",
@@ -523,6 +535,7 @@ def _connections(
     for row in rows:
         tx_count = int(row["tx_count"] or 0)
         config = _json_config(row["config_json"])
+        last_synced_at = _string_or_empty(config.get("last_synced_at"))
         backend_summary = _wallet_backend_summary(row["kind"], config, None)
         source_format = _string_or_empty(config.get("source_format"))
         sync_source = _string_or_empty(config.get("sync_source") or source_format)
@@ -531,7 +544,11 @@ def _connections(
                 "id": row["id"],
                 "kind": _map_wallet_kind(row["kind"]),
                 "label": row["label"],
-                "last": _relative_last(row["last_tx_at"] or row["created_at"]),
+                "last": _relative_last(
+                    last_synced_at or row["last_tx_at"] or row["created_at"]
+                ),
+                "lastSyncAt": last_synced_at or None,
+                "lastTransactionAt": row["last_tx_at"],
                 "balance": balances.get(row["id"], 0.0),
                 "status": "synced" if tx_count else "idle",
                 "transactionCount": tx_count,
@@ -573,26 +590,59 @@ def _transactions(conn: sqlite3.Connection, profile_id: str) -> list[dict[str, A
         """,
         (profile_id,),
     ).fetchall()
-    pair_meta_by_transaction = _transaction_pair_display_meta(conn, rows)
-    tags_by_transaction = _transaction_tags_by_transaction(
-        conn,
-        [row["id"] for row in rows],
-    )
-
-    output = []
-    rendered_pair_ids: set[str] = set()
-    for row in rows:
-        pair_meta = pair_meta_by_transaction.get(row["id"])
-        metadata_tags = [
-            str(tag) for tag in tags_by_transaction.get(row["id"], []) if tag
-        ]
-        if pair_meta:
-            pair_id = str(pair_meta["pair_id"])
-            if pair_id in rendered_pair_ids:
-                continue
-            rendered_pair_ids.add(pair_id)
-        output.append(_transaction_row_to_ui(row, metadata_tags, pair_meta))
+    output = _transaction_rows_to_ui(conn, rows)
     return output[:20]
+
+
+def _activity_transactions(conn: sqlite3.Connection, profile_id: str) -> list[dict[str, Any]]:
+    rows = conn.execute(
+        """
+        SELECT
+            t.id,
+            t.external_id AS external_id,
+            t.occurred_at,
+            t.confirmed_at,
+            w.label AS wallet,
+            t.direction,
+            t.asset,
+            t.amount,
+            t.fee,
+            COALESCE(t.fiat_value, 0) AS fiat_value,
+            COALESCE(t.fiat_rate, 0) AS fiat_rate,
+            COALESCE(t.kind, '') AS kind,
+            COALESCE(t.description, '') AS description,
+            COALESCE(t.counterparty, '') AS counterparty,
+            COALESCE(t.note, '') AS note,
+            t.excluded,
+            jq.reason AS quarantine_reason
+        FROM transactions t
+        JOIN wallets w ON w.id = t.wallet_id
+        LEFT JOIN journal_quarantines jq ON jq.transaction_id = t.id
+        WHERE t.profile_id = ?
+        ORDER BY t.occurred_at ASC, t.created_at ASC, t.id ASC
+        """,
+        (profile_id,),
+    ).fetchall()
+    activity_rows: list[dict[str, Any]] = []
+    quantity_msat = 0
+    cost_basis_by_transaction = _portfolio_cost_basis_by_transaction(conn, profile_id)
+    running_cost_basis = 0.0
+    for row in rows:
+        amount = int(row["amount"] or 0)
+        fee = int(row["fee"] or 0)
+        quantity_msat += amount if row["direction"] == "inbound" else -amount - fee
+        running_cost_basis = cost_basis_by_transaction.get(
+            str(row["id"]),
+            running_cost_basis,
+        )
+        activity_rows.append(
+            {
+                **dict(row),
+                "running_balance_btc": float(msat_to_btc(quantity_msat)),
+                "running_cost_basis_eur": running_cost_basis,
+            }
+        )
+    return _activity_transaction_rows_to_ui(conn, activity_rows)
 
 
 def _transaction_type(kind: str, direction: str, quarantine_reason: str | None) -> str:
@@ -829,6 +879,13 @@ def _transaction_row_to_ui(
             "feeSat": fee_sat,
             "feeKind": pair_meta.get("fee_kind"),
         }
+    row_keys = set(row.keys())
+    if occurred_at:
+        payload["occurredAt"] = occurred_at
+    if "running_balance_btc" in row_keys:
+        payload["balanceBtc"] = float(row["running_balance_btc"] or 0)
+    if "running_cost_basis_eur" in row_keys:
+        payload["costBasisEur"] = float(row["running_cost_basis_eur"] or 0)
     return payload
 
 
@@ -900,6 +957,34 @@ def _portfolio_cost_basis_by_date(
             cost_basis -= float(row["cost_basis"] or 0)
         by_date[date_key] = cost_basis
     return by_date
+
+
+def _portfolio_cost_basis_by_transaction(
+    conn: sqlite3.Connection,
+    profile_id: str,
+) -> dict[str, float]:
+    rows = conn.execute(
+        """
+        SELECT transaction_id, quantity, fiat_value, cost_basis
+        FROM journal_entries
+        WHERE profile_id = ? AND asset = 'BTC'
+        ORDER BY occurred_at ASC, created_at ASC, id ASC
+        """,
+        (profile_id,),
+    ).fetchall()
+    cost_basis = 0.0
+    by_transaction: dict[str, float] = {}
+    for row in rows:
+        transaction_id = row["transaction_id"]
+        if not transaction_id:
+            continue
+        quantity = int(row["quantity"] or 0)
+        if quantity >= 0:
+            cost_basis += float(row["fiat_value"] or 0)
+        else:
+            cost_basis -= float(row["cost_basis"] or 0)
+        by_transaction[str(transaction_id)] = cost_basis
+    return by_transaction
 
 
 def _portfolio_series(
@@ -1047,6 +1132,7 @@ def build_overview_snapshot(conn: sqlite3.Connection) -> dict[str, Any]:
         "priceUsd": price_usd,
         "connections": _connections(conn, profile["id"], balances),
         "txs": _transactions(conn, profile["id"]),
+        "activityTxs": _activity_transactions(conn, profile["id"]),
         "balanceSeries": _balance_series(conn, profile["id"]),
         "portfolioSeries": _portfolio_series(
             conn,
@@ -1490,6 +1576,42 @@ def _capital_gains_available_years(
     return years
 
 
+def _capital_gains_transaction_years(
+    conn: sqlite3.Connection,
+    profile_id: str,
+) -> list[int]:
+    rows = conn.execute(
+        """
+        SELECT DISTINCT substr(occurred_at, 1, 4) AS year
+        FROM transactions
+        WHERE profile_id = ?
+          AND excluded = 0
+          AND occurred_at IS NOT NULL
+          AND length(occurred_at) >= 4
+        ORDER BY year DESC
+        """,
+        (profile_id,),
+    ).fetchall()
+    years: list[int] = []
+    for row in rows:
+        year = row["year"] or ""
+        if str(year).isdigit():
+            years.append(int(year))
+    return years
+
+
+def _merge_report_years(*year_lists: list[int]) -> list[int]:
+    # Keep these bounds in sync with the desktop `reportYear` URL parser so
+    # obviously invalid years fail consistently on both sides of the bridge.
+    years = {
+        int(year)
+        for year_list in year_lists
+        for year in year_list
+        if 2009 <= int(year) <= 2100
+    }
+    return sorted(years, reverse=True)
+
+
 def _austrian_kennzahl_snapshot_rows(
     conn: sqlite3.Connection,
     profile: sqlite3.Row,
@@ -1589,7 +1711,20 @@ def _capital_gains_neutral_swap_rows(
     return output
 
 
-def build_capital_gains_snapshot(conn: sqlite3.Connection) -> dict[str, Any]:
+def _normalize_snapshot_tax_year(year: Any) -> int:
+    try:
+        normalized = int(year)
+    except (TypeError, ValueError) as exc:
+        raise AppError("tax year must be a four-digit year", code="validation") from exc
+    if normalized < 2009 or normalized > 2100:
+        raise AppError("tax year must be a plausible four-digit year", code="validation")
+    return normalized
+
+
+def build_capital_gains_snapshot(
+    conn: sqlite3.Connection,
+    tax_year: int | str | None = None,
+) -> dict[str, Any]:
     context = current_context_snapshot(conn)
     if not context["workspace_id"] or not context["profile_id"]:
         return {
@@ -1636,6 +1771,25 @@ def build_capital_gains_snapshot(conn: sqlite3.Connection) -> dict[str, Any]:
         "SELECT COUNT(*) AS count FROM journal_quarantines WHERE profile_id = ?",
         (profile["id"],),
     ).fetchone()["count"]
+    available_years = _merge_report_years(
+        _capital_gains_available_years(conn, profile["id"]),
+        _capital_gains_transaction_years(conn, profile["id"]),
+    )
+    primary_years = _capital_gains_available_years(
+        conn,
+        profile["id"],
+        primary_only=True,
+    )
+    if tax_year is not None:
+        latest_year = _normalize_snapshot_tax_year(tax_year)
+    elif primary_years:
+        latest_year = primary_years[0]
+    elif available_years:
+        latest_year = available_years[0]
+    else:
+        latest_year = datetime.now(timezone.utc).year
+    if latest_year not in available_years:
+        available_years = [latest_year, *available_years]
     rows = conn.execute(
         """
         SELECT occurred_at, quantity, cost_basis, proceeds, gain_loss
@@ -1643,25 +1797,12 @@ def build_capital_gains_snapshot(conn: sqlite3.Connection) -> dict[str, Any]:
         WHERE profile_id = ?
           AND entry_type = 'disposal'
           AND COALESCE(at_category, '') != 'neu_swap'
+          AND substr(occurred_at, 1, 4) = ?
         ORDER BY occurred_at DESC, created_at DESC, id DESC
         LIMIT 200
         """,
-        (profile["id"],),
+        (profile["id"], str(latest_year)),
     ).fetchall()
-    available_years = _capital_gains_available_years(conn, profile["id"])
-    primary_years = _capital_gains_available_years(
-        conn,
-        profile["id"],
-        primary_only=True,
-    )
-    if primary_years:
-        latest_year = primary_years[0]
-    elif available_years:
-        latest_year = available_years[0]
-    else:
-        latest_year = _snapshot_year(rows)
-    if latest_year not in available_years:
-        available_years = [latest_year, *available_years]
     lots = [
         {
             "acquired": "",
@@ -1672,7 +1813,6 @@ def build_capital_gains_snapshot(conn: sqlite3.Connection) -> dict[str, Any]:
             "type": "ST",
         }
         for row in reversed(rows)
-        if (row["occurred_at"] or "").startswith(str(latest_year))
     ]
     return {
         "jurisdictionCode": (profile["tax_country"] or "AT").upper(),
@@ -1745,23 +1885,38 @@ def build_journals_snapshot(conn: sqlite3.Connection) -> dict[str, Any]:
 
     freshness = _journal_freshness(conn, profile)
     entry_rows = conn.execute(
-        """
-        SELECT entry_type, COUNT(*) AS count, SUM(COALESCE(gain_loss, 0)) AS gain_loss
-        FROM journal_entries
+        f"""
+        SELECT
+            {_JOURNAL_DISPLAY_ENTRY_TYPE_SQL} AS entry_type,
+            COUNT(*) AS count,
+            SUM({_JOURNAL_DISPLAY_GAIN_LOSS_SQL}) AS gain_loss
+        FROM journal_entries je
         WHERE profile_id = ?
-        GROUP BY entry_type
+        GROUP BY {_JOURNAL_DISPLAY_ENTRY_TYPE_SQL}
         ORDER BY count DESC, entry_type ASC
         """,
         (profile["id"],),
     ).fetchall()
     recent_rows = conn.execute(
-        """
-        SELECT je.occurred_at, je.entry_type, je.asset, je.quantity, je.fiat_value,
-               COALESCE(je.gain_loss, 0) AS gain_loss, w.label AS wallet
-        FROM journal_entries je
-        JOIN wallets w ON w.id = je.wallet_id
-        WHERE je.profile_id = ?
-        ORDER BY je.occurred_at DESC, je.created_at DESC, je.id DESC
+        f"""
+        WITH normalized AS (
+            SELECT
+                je.occurred_at,
+                je.created_at,
+                je.id,
+                {_JOURNAL_DISPLAY_ENTRY_TYPE_SQL} AS entry_type,
+                je.asset,
+                je.quantity,
+                je.fiat_value,
+                {_JOURNAL_DISPLAY_GAIN_LOSS_SQL} AS gain_loss,
+                w.label AS wallet
+            FROM journal_entries je
+            JOIN wallets w ON w.id = je.wallet_id
+            WHERE je.profile_id = ?
+        )
+        SELECT occurred_at, entry_type, asset, quantity, fiat_value, gain_loss, wallet
+        FROM normalized
+        ORDER BY occurred_at DESC, created_at DESC, id DESC
         LIMIT 12
         """,
         (profile["id"],),
@@ -1769,13 +1924,26 @@ def build_journals_snapshot(conn: sqlite3.Connection) -> dict[str, Any]:
     recent_by_type: dict[str, list[dict[str, Any]]] = {}
     for entry_row in entry_rows:
         typed_recent_rows = conn.execute(
-            """
-            SELECT je.occurred_at, je.entry_type, je.asset, je.quantity, je.fiat_value,
-                   COALESCE(je.gain_loss, 0) AS gain_loss, w.label AS wallet
-            FROM journal_entries je
-            JOIN wallets w ON w.id = je.wallet_id
-            WHERE je.profile_id = ? AND je.entry_type = ?
-            ORDER BY je.occurred_at DESC, je.created_at DESC, je.id DESC
+            f"""
+            WITH normalized AS (
+                SELECT
+                    je.occurred_at,
+                    je.created_at,
+                    je.id,
+                    {_JOURNAL_DISPLAY_ENTRY_TYPE_SQL} AS entry_type,
+                    je.asset,
+                    je.quantity,
+                    je.fiat_value,
+                    {_JOURNAL_DISPLAY_GAIN_LOSS_SQL} AS gain_loss,
+                    w.label AS wallet
+                FROM journal_entries je
+                JOIN wallets w ON w.id = je.wallet_id
+                WHERE je.profile_id = ?
+            )
+            SELECT occurred_at, entry_type, asset, quantity, fiat_value, gain_loss, wallet
+            FROM normalized
+            WHERE entry_type = ?
+            ORDER BY occurred_at DESC, created_at DESC, id DESC
             LIMIT 12
             """,
             (profile["id"], entry_row["entry_type"]),
@@ -1842,26 +2010,14 @@ def build_journal_events_list_snapshot(
 
     freshness = _journal_freshness(conn, profile)
     summary_rows = conn.execute(
-        """
+        f"""
         SELECT
-            CASE
-                WHEN at_category = 'neu_swap' THEN 'neutral_swap'
-                ELSE entry_type
-            END AS entry_type,
+            {_JOURNAL_DISPLAY_ENTRY_TYPE_SQL} AS entry_type,
             COUNT(*) AS count,
-            SUM(
-                CASE
-                    WHEN at_category = 'neu_swap' THEN 0
-                    ELSE COALESCE(gain_loss, 0)
-                END
-            ) AS gain_loss
-        FROM journal_entries
+            SUM({_JOURNAL_DISPLAY_GAIN_LOSS_SQL}) AS gain_loss
+        FROM journal_entries je
         WHERE profile_id = ?
-        GROUP BY
-            CASE
-                WHEN at_category = 'neu_swap' THEN 'neutral_swap'
-                ELSE entry_type
-            END
+        GROUP BY {_JOURNAL_DISPLAY_ENTRY_TYPE_SQL}
         ORDER BY count DESC, entry_type ASC
         """,
         (profile["id"],),
@@ -2051,6 +2207,7 @@ def build_wallets_list_snapshot(
         config = _json_config(row["config_json"])
         backend_summary = _wallet_backend_summary(row["kind"], config, default_backend)
         backend_name = backend_summary["name"]
+        last_synced_at = _string_or_empty(config.get("last_synced_at"))
         backend = (
             runtime_backends.get(str(backend_name))
             if isinstance(runtime_backends, dict) and backend_name
@@ -2082,6 +2239,7 @@ def build_wallets_list_snapshot(
                 "sync_source": str(config.get("sync_source") or config.get("source_format") or ""),
                 "transaction_count": tx_count,
                 "last_transaction_at": row["last_tx_at"],
+                "last_synced_at": last_synced_at or None,
                 "sync_status": "has_transactions" if tx_count else "empty",
                 "journals_stale": freshness["needs_processing"] and tx_count > 0,
                 "btcpay_provenance": provenance_routes,
@@ -3005,4 +3163,29 @@ def _transaction_rows_to_ui(
                 continue
             rendered_pair_ids.add(pair_id)
         output.append(_transaction_row_to_ui(row, metadata_tags, pair_meta))
+    return output
+
+
+def _activity_transaction_rows_to_ui(
+    conn: sqlite3.Connection,
+    rows: list[sqlite3.Row] | list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    pair_meta_by_transaction: dict[str, dict[str, Any]] = {}
+    # Keep the overview chart uncapped without building giant IN (...) queries.
+    for start in range(0, len(rows), 400):
+        chunk = rows[start : start + 400]
+        pair_meta_by_transaction.update(_transaction_pair_display_meta(conn, chunk))
+
+    output = []
+    rendered_pair_ids: set[str] = set()
+    for row in rows:
+        pair_meta = pair_meta_by_transaction.get(row["id"])
+        if pair_meta:
+            pair_id = str(pair_meta["pair_id"])
+            if pair_id in rendered_pair_ids:
+                continue
+            rendered_pair_ids.add(pair_id)
+        # Activity chart rows intentionally skip metadata tags to keep the
+        # uncapped overview payload and SQLite parameter count bounded.
+        output.append(_transaction_row_to_ui(row, [], pair_meta))
     return output

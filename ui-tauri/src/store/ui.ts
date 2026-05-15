@@ -12,6 +12,11 @@ export type DataMode = "mock" | "real";
 export type ThemePreference = "system" | "light" | "dark";
 export type NotificationTone = "info" | "success" | "warning" | "error";
 
+export const DEFAULT_APP_SCALE = 0.9;
+export const MIN_APP_SCALE = 0.8;
+export const MAX_APP_SCALE = 1.2;
+export const APP_SCALE_STEP = 0.05;
+
 export interface NotificationProgress {
   value?: number;
   indeterminate?: boolean;
@@ -23,6 +28,7 @@ export interface AppNotification {
   title: string;
   body: string;
   tone: NotificationTone;
+  dedupeKey?: string;
   progress?: NotificationProgress;
   createdAt: string;
 }
@@ -141,6 +147,7 @@ export interface UiState {
   currency: Currency;
   dataMode: DataMode;
   theme: ThemePreference;
+  appScale: number;
   hideSensitive: boolean;
   explorerSettings: ExplorerSettings;
   appLockPolicy: AppLockPolicy;
@@ -156,6 +163,10 @@ export interface UiState {
   setCurrency: (currency: Currency) => void;
   setDataMode: (dataMode: DataMode) => void;
   setTheme: (theme: ThemePreference) => void;
+  setAppScale: (appScale: number) => void;
+  increaseAppScale: () => void;
+  decreaseAppScale: () => void;
+  resetAppScale: () => void;
   setHideSensitive: (hideSensitive: boolean) => void;
   setExplorerSettings: (settings: Partial<ExplorerSettings>) => void;
   setAppLockPolicy: (policy: Partial<AppLockPolicy>) => void;
@@ -214,12 +225,22 @@ function stripNotificationProgress(
   });
 }
 
+export function normalizeAppScale(value: unknown): number {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    return DEFAULT_APP_SCALE;
+  }
+  const stepped = Math.round(value / APP_SCALE_STEP) * APP_SCALE_STEP;
+  const clamped = Math.min(MAX_APP_SCALE, Math.max(MIN_APP_SCALE, stepped));
+  return Number(clamped.toFixed(2));
+}
+
 export function uiStatePartialForStorage(state: UiState) {
   return {
     lang: state.lang,
     currency: state.currency,
     dataMode: state.dataMode,
     hideSensitive: state.hideSensitive,
+    appScale: state.appScale,
     explorerSettings: state.explorerSettings,
     appLockPolicy: state.appLockPolicy,
     identity: state.identity,
@@ -238,6 +259,7 @@ export const useUiStore = create<UiState>()(
       currency: "btc",
       dataMode: "real",
       theme: "system",
+      appScale: DEFAULT_APP_SCALE,
       hideSensitive: false,
       explorerSettings: DEFAULT_EXPLORER_SETTINGS,
       appLockPolicy: DEFAULT_APP_LOCK_POLICY,
@@ -252,6 +274,17 @@ export const useUiStore = create<UiState>()(
       setCurrency: (currency) => set({ currency }),
       setDataMode: (dataMode) => set({ dataMode }),
       setTheme: (theme) => set({ theme }),
+      setAppScale: (appScale) =>
+        set({ appScale: normalizeAppScale(appScale) }),
+      increaseAppScale: () =>
+        set((state) => ({
+          appScale: normalizeAppScale(state.appScale + APP_SCALE_STEP),
+        })),
+      decreaseAppScale: () =>
+        set((state) => ({
+          appScale: normalizeAppScale(state.appScale - APP_SCALE_STEP),
+        })),
+      resetAppScale: () => set({ appScale: DEFAULT_APP_SCALE }),
       setHideSensitive: (hideSensitive) => set({ hideSensitive }),
       setExplorerSettings: (settings) =>
         set((state) => ({
@@ -278,17 +311,38 @@ export const useUiStore = create<UiState>()(
         set((state) => ({ daemonSession: state.daemonSession + 1 })),
       addNotification: (notification) => {
         const id = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+        let existingId: string | null = null;
         set((state) => ({
-          notifications: [
-            {
-              ...notification,
-              id,
-              createdAt: new Date().toISOString(),
-            },
-            ...state.notifications,
-          ].slice(0, 12),
+          notifications: (() => {
+            const createdAt = new Date().toISOString();
+            if (notification.dedupeKey) {
+              const existing = state.notifications.find(
+                (item) => item.dedupeKey === notification.dedupeKey,
+              );
+              if (existing) {
+                existingId = existing.id;
+                return [
+                  {
+                    ...existing,
+                    ...notification,
+                    progress: notification.progress,
+                    createdAt,
+                  },
+                  ...state.notifications.filter((item) => item.id !== existing.id),
+                ].slice(0, 12);
+              }
+            }
+            return [
+              {
+                ...notification,
+                id,
+                createdAt,
+              },
+              ...state.notifications,
+            ].slice(0, 12);
+          })(),
         }));
-        return id;
+        return existingId ?? id;
       },
       updateNotification: (id, patch) =>
         set((state) => ({
@@ -352,6 +406,7 @@ export const useUiStore = create<UiState>()(
         return {
           ...current,
           ...restored,
+          appScale: normalizeAppScale(restored.appScale ?? current.appScale),
           explorerSettings: {
             ...DEFAULT_EXPLORER_SETTINGS,
             ...(restored.explorerSettings ?? current.explorerSettings),

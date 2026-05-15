@@ -40,6 +40,7 @@
 }
 
 :root {
+  --app-ui-scale: 0.9;
   --background: oklch(1 0 0);
   --app-chrome: oklch(0.985 0 0);
   --foreground: oklch(0.145 0 0);
@@ -79,6 +80,9 @@
     margin: 0;
     padding: 0;
     height: 100%;
+  }
+  html {
+    font-size: calc(16px * var(--app-ui-scale));
   }
   body {
     font-family: var(--font-sans);

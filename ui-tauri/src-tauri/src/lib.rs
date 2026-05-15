@@ -37,6 +37,9 @@ const MENU_SETTINGS_AI: &str = "kassiber:settings:ai";
 const MENU_SETTINGS_DATA: &str = "kassiber:settings:data";
 const MENU_LOCK_APP: &str = "kassiber:lock";
 const MENU_TOGGLE_SENSITIVE: &str = "kassiber:toggle-sensitive";
+const MENU_UI_SCALE_DECREASE: &str = "kassiber:ui-scale:decrease";
+const MENU_UI_SCALE_INCREASE: &str = "kassiber:ui-scale:increase";
+const MENU_UI_SCALE_RESET: &str = "kassiber:ui-scale:reset";
 const MENU_TOGGLE_FULLSCREEN: &str = "kassiber:window:toggle-fullscreen";
 const MENU_WINDOW_CLOSE: &str = "kassiber:window:close";
 const MENU_WINDOW_MINIMIZE: &str = "kassiber:window:minimize";
@@ -57,7 +60,6 @@ const MENU_NAV_BOOKS: &str = "kassiber:navigate:books";
 const MENU_NAV_REPORTS: &str = "kassiber:navigate:reports";
 const MENU_NAV_SOURCE_FUNDS: &str = "kassiber:navigate:source-funds";
 const MENU_NAV_JOURNALS: &str = "kassiber:navigate:journals";
-const MENU_NAV_TAX_EVENTS: &str = "kassiber:navigate:tax-events";
 const MENU_NAV_QUARANTINE: &str = "kassiber:navigate:quarantine";
 const MENU_NAV_ASSISTANT: &str = "kassiber:navigate:assistant";
 const MENU_NAV_DIAGNOSTICS: &str = "kassiber:navigate:diagnostics";
@@ -92,7 +94,7 @@ const DEEP_LINK_ROUTE_HOSTS: &[(&str, &str)] = &[
     ("reports", "/reports"),
     ("source-of-funds", "/source-of-funds"),
     ("journals", "/journals"),
-    ("tax-events", "/tax-events"),
+    ("tax-events", "/journals"),
     ("quarantine", "/quarantine"),
     ("assistant", "/assistant"),
     ("diagnostics", "/diagnostics"),
@@ -119,6 +121,7 @@ const ALLOWED_DAEMON_KINDS: &[&str] = &[
     "status",
     "ui.overview.snapshot",
     "ui.transactions.list",
+    "ui.transactions.metadata.update",
     "ui.wallets.list",
     "ui.backends.list",
     "ui.backends.options",
@@ -429,6 +432,104 @@ fn open_exported_file(path: String) -> Result<(), String> {
     }
 
     open_with_default_app(&canonical)
+}
+
+#[tauri::command]
+fn save_exported_file_as(source_path: String, destination_path: String) -> Result<String, String> {
+    let source = PathBuf::from(source_path);
+    if !source.is_absolute() {
+        return Err("Report export source paths must be absolute.".to_string());
+    }
+    let destination = PathBuf::from(destination_path);
+    if !destination.is_absolute() {
+        return Err("Report export destination paths must be absolute.".to_string());
+    }
+
+    let canonical_source = std::fs::canonicalize(&source)
+        .map_err(|error| format!("Report export file could not be found: {error}"))?;
+    let metadata = canonical_source
+        .metadata()
+        .map_err(|error| format!("Report export file could not be inspected: {error}"))?;
+    if !is_supported_report_export_target(&canonical_source, &metadata) {
+        return Err(
+            "Only managed PDF, XLSX, CSV files, and Austrian CSV bundle folders can be saved."
+                .to_string(),
+        );
+    }
+    ensure_export_destination_outside_managed_root(&canonical_source, &destination)?;
+
+    if metadata.is_file() {
+        copy_report_export_file(&canonical_source, &destination)?;
+    } else {
+        copy_report_export_directory(&canonical_source, &destination)?;
+    }
+    Ok(destination.to_string_lossy().into_owned())
+}
+
+fn ensure_export_destination_outside_managed_root(
+    source: &Path,
+    destination: &Path,
+) -> Result<(), String> {
+    let Some(managed_root) = managed_report_exports_root(source) else {
+        return Err("Report export source is not in the managed exports folder.".to_string());
+    };
+    let Some(destination_parent) = destination.parent() else {
+        return Err("Report export destination must include a parent folder.".to_string());
+    };
+    std::fs::create_dir_all(destination_parent)
+        .map_err(|error| format!("Could not create report export destination folder: {error}"))?;
+    let canonical_parent = std::fs::canonicalize(destination_parent)
+        .map_err(|error| format!("Could not inspect report export destination folder: {error}"))?;
+    let canonical_managed_root = std::fs::canonicalize(managed_root)
+        .map_err(|error| format!("Could not inspect managed report export folder: {error}"))?;
+    if canonical_parent.starts_with(canonical_managed_root) {
+        return Err("Choose a destination outside Kassiber's managed exports folder.".to_string());
+    }
+    Ok(())
+}
+
+fn copy_report_export_file(source: &Path, destination: &Path) -> Result<(), String> {
+    if !is_supported_export_file(destination) {
+        return Err("Report export destination must use .pdf, .xlsx, or .csv.".to_string());
+    }
+    let Some(parent) = destination.parent() else {
+        return Err("Report export destination must include a parent folder.".to_string());
+    };
+    std::fs::create_dir_all(parent)
+        .map_err(|error| format!("Could not create report export destination folder: {error}"))?;
+    std::fs::copy(source, destination)
+        .map(|_| ())
+        .map_err(|error| format!("Could not save report export: {error}"))
+}
+
+fn copy_report_export_directory(source: &Path, destination: &Path) -> Result<(), String> {
+    if destination.exists()
+        && destination
+            .read_dir()
+            .map_err(|error| format!("Could not inspect report export destination: {error}"))?
+            .next()
+            .is_some()
+    {
+        return Err("Choose a new or empty folder for the CSV bundle.".to_string());
+    }
+    std::fs::create_dir_all(destination)
+        .map_err(|error| format!("Could not create CSV bundle destination: {error}"))?;
+    for entry in std::fs::read_dir(source)
+        .map_err(|error| format!("Could not read managed CSV bundle: {error}"))?
+    {
+        let entry = entry.map_err(|error| format!("Could not read CSV bundle entry: {error}"))?;
+        let source_path = entry.path();
+        let destination_path = destination.join(entry.file_name());
+        let entry_metadata = entry
+            .metadata()
+            .map_err(|error| format!("Could not inspect CSV bundle entry: {error}"))?;
+        if entry_metadata.is_dir() {
+            copy_report_export_directory(&source_path, &destination_path)?;
+        } else {
+            copy_report_export_file(&source_path, &destination_path)?;
+        }
+    }
+    Ok(())
 }
 
 #[tauri::command]
@@ -941,14 +1042,23 @@ fn is_supported_austrian_csv_bundle_dir(path: &Path) -> bool {
 }
 
 fn is_managed_report_export_path(path: &Path) -> bool {
+    managed_report_exports_root(path).is_some()
+}
+
+fn managed_report_exports_root(path: &Path) -> Option<&Path> {
     let Some(parent) = path.parent() else {
-        return false;
+        return None;
     };
     let Some(grandparent) = parent.parent() else {
-        return false;
+        return None;
     };
-    parent.file_name().and_then(|name| name.to_str()) == Some("reports")
+    if parent.file_name().and_then(|name| name.to_str()) == Some("reports")
         && grandparent.file_name().and_then(|name| name.to_str()) == Some("exports")
+    {
+        Some(grandparent)
+    } else {
+        None
+    }
 }
 
 fn is_supported_report_export_target(path: &Path, metadata: &std::fs::Metadata) -> bool {
@@ -1122,6 +1232,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             daemon_invoke,
             open_exported_file,
+            save_exported_file_as,
             open_external_url,
             select_import_project_directory,
             activate_import_project,
@@ -1199,6 +1310,24 @@ fn build_app_menu(
     #[cfg(not(target_os = "macos"))]
     let quit_item = menu_item(app, MENU_QUIT, "Quit Kassiber", Some("CmdOrCtrl+Q"))?;
     let toggle_sensitive = menu_item(app, MENU_TOGGLE_SENSITIVE, "Toggle Sensitive Values", None)?;
+    let ui_scale_decrease_item = menu_item(
+        app,
+        MENU_UI_SCALE_DECREASE,
+        "Smaller UI",
+        Some("CmdOrCtrl+Minus"),
+    )?;
+    let ui_scale_increase_item = menu_item(
+        app,
+        MENU_UI_SCALE_INCREASE,
+        "Larger UI",
+        Some("CmdOrCtrl+Equal"),
+    )?;
+    let ui_scale_reset_item = menu_item(
+        app,
+        MENU_UI_SCALE_RESET,
+        "Default UI Scale",
+        Some("CmdOrCtrl+Digit0"),
+    )?;
     let toggle_fullscreen = menu_item(
         app,
         MENU_TOGGLE_FULLSCREEN,
@@ -1264,7 +1393,6 @@ fn build_app_menu(
         Some("CmdOrCtrl+6"),
     )?;
     let journals_item = menu_item(app, MENU_NAV_JOURNALS, "Journals", Some("CmdOrCtrl+7"))?;
-    let tax_events_item = menu_item(app, MENU_NAV_TAX_EVENTS, "Tax Events", None)?;
     let quarantine_item = menu_item(app, MENU_NAV_QUARANTINE, "Quarantine", Some("CmdOrCtrl+8"))?;
     let assistant_item = menu_item(app, MENU_NAV_ASSISTANT, "Assistant", Some("CmdOrCtrl+9"))?;
 
@@ -1320,11 +1448,14 @@ fn build_app_menu(
         .item(&source_funds_item)
         .separator()
         .item(&journals_item)
-        .item(&tax_events_item)
         .item(&quarantine_item)
         .item(&assistant_item)
         .separator()
         .item(&toggle_sensitive)
+        .separator()
+        .item(&ui_scale_decrease_item)
+        .item(&ui_scale_increase_item)
+        .item(&ui_scale_reset_item)
         .separator()
         .item(&toggle_fullscreen)
         .build()?;
@@ -1408,7 +1539,6 @@ fn build_app_menu(
         reports_item.clone(),
         source_funds_item.clone(),
         journals_item.clone(),
-        tax_events_item.clone(),
         quarantine_item.clone(),
     ];
 
@@ -1514,6 +1644,9 @@ fn menu_action_for_id(id: &str) -> Option<MenuActionPayload> {
         MENU_SETTINGS_DATA => Some(open_settings_action(Some("data"))),
         MENU_LOCK_APP => Some(menu_action("lock-app")),
         MENU_TOGGLE_SENSITIVE => Some(menu_action("toggle-sensitive")),
+        MENU_UI_SCALE_DECREASE => Some(menu_action("ui-scale-decrease")),
+        MENU_UI_SCALE_INCREASE => Some(menu_action("ui-scale-increase")),
+        MENU_UI_SCALE_RESET => Some(menu_action("ui-scale-reset")),
         MENU_WORKFLOW_SYNC_ALL => Some(menu_action("sync-all-wallets")),
         MENU_WORKFLOW_PROCESS_JOURNALS => Some(menu_action("process-journals")),
         MENU_WORKFLOW_OPEN_REPORTS => Some(navigate_action("/reports")),
@@ -1526,7 +1659,6 @@ fn menu_action_for_id(id: &str) -> Option<MenuActionPayload> {
         MENU_NAV_REPORTS => Some(navigate_action("/reports")),
         MENU_NAV_SOURCE_FUNDS => Some(navigate_action("/source-of-funds")),
         MENU_NAV_JOURNALS => Some(navigate_action("/journals")),
-        MENU_NAV_TAX_EVENTS => Some(navigate_action("/tax-events")),
         MENU_NAV_QUARANTINE => Some(navigate_action("/quarantine")),
         MENU_NAV_ASSISTANT => Some(navigate_action("/assistant")),
         MENU_NAV_DIAGNOSTICS => Some(navigate_action("/diagnostics")),
@@ -1623,13 +1755,16 @@ fn desktop_cli_args() -> Option<Vec<String>> {
 #[cfg(test)]
 mod tests {
     use super::{
-        database_is_encrypted, inspect_import_project_directory, is_managed_report_export_path,
-        is_supported_austrian_csv_bundle_dir, is_supported_export_file,
-        is_supported_report_export_target, menu_action, menu_action_for_deep_link,
-        menu_action_for_id, navigate_action, open_settings_action, validated_external_url,
-        ALLOWED_DAEMON_KINDS, MENU_HELP_DOCS, MENU_LOCK_APP, MENU_NAV_ASSISTANT, MENU_NAV_REPORTS,
-        MENU_SETTINGS_SECURITY, MENU_TOGGLE_FULLSCREEN, MENU_WORKFLOW_CONNECTIONS_IMPORTS,
-        MENU_WORKFLOW_OPEN_REPORTS, MENU_WORKFLOW_PROCESS_JOURNALS, MENU_WORKFLOW_SYNC_ALL,
+        copy_report_export_directory, database_is_encrypted,
+        ensure_export_destination_outside_managed_root, inspect_import_project_directory,
+        is_managed_report_export_path, is_supported_austrian_csv_bundle_dir,
+        is_supported_export_file, is_supported_report_export_target, menu_action,
+        menu_action_for_deep_link, menu_action_for_id, navigate_action, open_settings_action,
+        validated_external_url, ALLOWED_DAEMON_KINDS, MENU_HELP_DOCS, MENU_LOCK_APP,
+        MENU_NAV_ASSISTANT, MENU_NAV_REPORTS, MENU_SETTINGS_SECURITY, MENU_TOGGLE_FULLSCREEN,
+        MENU_UI_SCALE_DECREASE, MENU_UI_SCALE_INCREASE, MENU_UI_SCALE_RESET,
+        MENU_WORKFLOW_CONNECTIONS_IMPORTS, MENU_WORKFLOW_OPEN_REPORTS,
+        MENU_WORKFLOW_PROCESS_JOURNALS, MENU_WORKFLOW_SYNC_ALL,
     };
     use std::fs;
     use std::path::{Path, PathBuf};
@@ -1718,6 +1853,18 @@ mod tests {
         assert_eq!(
             menu_action_for_id(MENU_LOCK_APP),
             Some(menu_action("lock-app"))
+        );
+        assert_eq!(
+            menu_action_for_id(MENU_UI_SCALE_DECREASE),
+            Some(menu_action("ui-scale-decrease"))
+        );
+        assert_eq!(
+            menu_action_for_id(MENU_UI_SCALE_INCREASE),
+            Some(menu_action("ui-scale-increase"))
+        );
+        assert_eq!(
+            menu_action_for_id(MENU_UI_SCALE_RESET),
+            Some(menu_action("ui-scale-reset"))
         );
         assert_eq!(
             menu_action_for_id(MENU_WORKFLOW_SYNC_ALL),
@@ -1875,6 +2022,37 @@ mod tests {
             &nested_dir,
             &nested_dir.metadata().expect("nested metadata")
         ));
+    }
+
+    #[test]
+    fn export_save_destination_must_stay_outside_managed_exports() {
+        let root = unique_temp_dir("report-export-destination");
+        let reports = root.join("exports").join("reports");
+        fs::create_dir_all(&reports).expect("create reports dir");
+        let source = reports.join("report.pdf");
+        fs::write(&source, b"%PDF").expect("write source file");
+
+        let outside = root.join("downloads").join("report.pdf");
+        ensure_export_destination_outside_managed_root(&source, &outside)
+            .expect("outside managed exports is allowed");
+
+        let inside = reports.join("copy.pdf");
+        let error = ensure_export_destination_outside_managed_root(&source, &inside).unwrap_err();
+        assert!(error.contains("outside Kassiber's managed exports"));
+    }
+
+    #[test]
+    fn csv_bundle_copy_refuses_non_empty_destination() {
+        let root = unique_temp_dir("report-export-copy");
+        let source = root.join("source");
+        let destination = root.join("destination");
+        fs::create_dir_all(&source).expect("create source dir");
+        fs::create_dir_all(&destination).expect("create destination dir");
+        fs::write(source.join("overview.csv"), b"a,b\n1,2\n").expect("write source csv");
+        fs::write(destination.join("keep.csv"), b"existing\n").expect("write destination csv");
+
+        let error = copy_report_export_directory(&source, &destination).unwrap_err();
+        assert!(error.contains("new or empty folder"));
     }
 
     #[test]

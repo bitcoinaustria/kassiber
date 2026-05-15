@@ -1,28 +1,43 @@
 import { describe, expect, it } from "vitest";
 
-import { taxEventMetricFilterIds, taxEventMetrics } from "./TaxEvents";
+import {
+  reportableEntryMetricFilterIds,
+  reportableEntryMetrics,
+} from "@/components/kb/journalReportableEntriesModel";
 
-describe("TaxEvents quick filters", () => {
-  it("tags tax events for disjoint metric-card filtering", () => {
+describe("Reportable journal entry quick filters", () => {
+  it("tags reportable entries for disjoint metric-card filtering", () => {
     expect(
-      taxEventMetricFilterIds({ entryType: "disposal", gainLossEur: -12.5 }),
+      reportableEntryMetricFilterIds({
+        entryType: "disposal",
+        gainLossEur: -12.5,
+      }),
     ).toEqual(["disposals"]);
     expect(
-      taxEventMetricFilterIds({ entryType: "fee", gainLossEur: null }),
+      reportableEntryMetricFilterIds({ entryType: "fee", gainLossEur: null }),
     ).toEqual(["fees"]);
     expect(
-      taxEventMetricFilterIds({ entryType: "neutral_swap", gainLossEur: 0 }),
+      reportableEntryMetricFilterIds({
+        entryType: "neutral_swap",
+        gainLossEur: 0,
+      }),
     ).toEqual(["neutral"]);
     expect(
-      taxEventMetricFilterIds({ entryType: "acquisition", gainLossEur: 0 }),
+      reportableEntryMetricFilterIds({
+        entryType: "acquisition",
+        gainLossEur: 0,
+      }),
     ).toEqual(["acquisitions"]);
     expect(
-      taxEventMetricFilterIds({ entryType: "income", gainLossEur: null }),
+      reportableEntryMetricFilterIds({
+        entryType: "income",
+        gainLossEur: null,
+      }),
     ).toEqual(["income"]);
   });
 
   it("exposes metric filter ids for the summary card row", () => {
-    const metrics = taxEventMetrics({
+    const metrics = reportableEntryMetrics({
       workspace: "book",
       profile: "at",
       count: 113,

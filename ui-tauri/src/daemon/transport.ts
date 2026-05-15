@@ -360,6 +360,20 @@ export async function openExportedFile(path: string): Promise<void> {
   await invoke("open_exported_file", { path });
 }
 
+export async function saveExportedFileAs(
+  sourcePath: string,
+  destinationPath: string,
+): Promise<string> {
+  if (DAEMON_MODE !== "tauri") {
+    throw new Error("Saving exported files is available in the desktop app.");
+  }
+  const { invoke } = await import("@tauri-apps/api/core");
+  return invoke<string>("save_exported_file_as", {
+    sourcePath,
+    destinationPath,
+  });
+}
+
 export function normalizeExternalBrowserUrl(url: string): string {
   const trimmed = url.trim();
   let parsed: URL;
@@ -394,6 +408,10 @@ export async function openExternalUrl(url: string): Promise<void> {
 }
 
 export function canOpenExportedFiles(): boolean {
+  return DAEMON_MODE === "tauri";
+}
+
+export function canSaveExportedFiles(): boolean {
   return DAEMON_MODE === "tauri";
 }
 

@@ -44,6 +44,7 @@ _VITE_CONFIG_PATH = (
 _DESKTOP_MUTATION_KINDS = (
     "ui.backends.options",
     "ui.backends.electrum.test",
+    "ui.transactions.metadata.update",
     "ui.wallets.create",
     "ui.wallets.preview_descriptor",
     "ui.profiles.create",

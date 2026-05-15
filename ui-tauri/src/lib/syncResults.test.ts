@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 
-import { describeWalletSyncResult, summarizeSyncResults } from "./syncResults";
+import {
+  describeWalletSyncResult,
+  summarizeSyncResults,
+  syncResultsAreTrustedForReports,
+} from "./syncResults";
 
 describe("syncResults", () => {
   it("keeps the wallet-specific error message in all-sync summaries", () => {
@@ -34,5 +38,20 @@ describe("syncResults", () => {
         "Descriptor",
       ),
     ).toBe("Descriptor refresh failed: Failed to reach backend local-esplora: timed out");
+  });
+
+  it("only trusts all-wallet refresh results without errors for report refresh chaining", () => {
+    expect(
+      syncResultsAreTrustedForReports([
+        { wallet: "Cold", status: "synced" },
+        { wallet: "File", status: "skipped", reason: "No local file configured" },
+      ]),
+    ).toBe(true);
+    expect(
+      syncResultsAreTrustedForReports([
+        { wallet: "Cold", status: "synced" },
+        { wallet: "Descriptor", status: "error", message: "Timed out" },
+      ]),
+    ).toBe(false);
   });
 });

@@ -32,6 +32,7 @@ from kassiber.core.tax_events import normalize_tax_asset_inputs
 from kassiber.core.ui_snapshot import (
     build_capital_gains_snapshot,
     build_journal_events_list_snapshot,
+    build_journals_snapshot,
     build_overview_snapshot,
     build_transactions_search_snapshot,
     build_transactions_snapshot,
@@ -543,6 +544,19 @@ class ReviewRegressionTest(unittest.TestCase):
         self.assertEqual(overview["txs"][0]["amountSat"], -10_000_000)
         self.assertEqual(overview["txs"][0]["tag"], "Review")
         self.assertEqual(overview["txs"][1]["explorerId"], "a" * 64)
+        self.assertEqual(
+            [row["id"] for row in overview["activityTxs"]],
+            ["tx-ui-in", "tx-ui-spend"],
+        )
+        self.assertEqual(
+            overview["activityTxs"][0]["occurredAt"],
+            "2026-01-10T10:00:00Z",
+        )
+        self.assertAlmostEqual(overview["activityTxs"][0]["balanceBtc"], 1.0)
+        self.assertAlmostEqual(overview["activityTxs"][0]["costBasisEur"], 50_000)
+        self.assertEqual(overview["activityTxs"][1]["feeSat"], 100_000)
+        self.assertAlmostEqual(overview["activityTxs"][1]["balanceBtc"], 0.899)
+        self.assertAlmostEqual(overview["activityTxs"][1]["costBasisEur"], 44_950)
 
         transactions = build_transactions_snapshot(conn, {"limit": 10})
         self.assertEqual(transactions["year"], 2026)
@@ -909,7 +923,7 @@ class ReviewRegressionTest(unittest.TestCase):
                 365,
                 "moving_average_at",
                 "2026-01-01T01:00:00Z",
-                2,
+                3,
                 now,
             ),
         )
@@ -981,6 +995,31 @@ class ReviewRegressionTest(unittest.TestCase):
                     "{}",
                     "2025-02-01T12:00:00Z",
                 ),
+                (
+                    "tx-transaction-only-year",
+                    "ws-at-years",
+                    "pf-at-years",
+                    "wal-at-years",
+                    "transaction-only-year",
+                    "fp-transaction-only-year",
+                    "2023-02-01T12:00:00Z",
+                    "2023-02-01T12:05:00Z",
+                    "inbound",
+                    "BTC",
+                    btc_to_msat("0.01"),
+                    0,
+                    "EUR",
+                    1_300,
+                    13,
+                    "import",
+                    "deposit",
+                    "Transaction-only year",
+                    None,
+                    None,
+                    0,
+                    "{}",
+                    "2023-02-01T12:00:00Z",
+                ),
             ],
         )
         conn.executemany(
@@ -1041,8 +1080,16 @@ class ReviewRegressionTest(unittest.TestCase):
 
         snapshot = build_capital_gains_snapshot(conn)
         self.assertEqual(snapshot["year"], 2024)
-        self.assertEqual(snapshot["availableYears"], [2025, 2024])
+        self.assertEqual(snapshot["availableYears"], [2025, 2024, 2023])
         self.assertEqual(len(snapshot["lots"]), 1)
+        selected_year_snapshot = build_capital_gains_snapshot(conn, tax_year=2025)
+        self.assertEqual(selected_year_snapshot["year"], 2025)
+        self.assertEqual(selected_year_snapshot["availableYears"], [2025, 2024, 2023])
+        self.assertEqual(selected_year_snapshot["lots"], [])
+        with self.assertRaises(AppError) as invalid_year:
+            build_capital_gains_snapshot(conn, tax_year=0)
+        self.assertEqual(invalid_year.exception.code, "validation")
+        self.assertIn("plausible", str(invalid_year.exception))
         snapshot_rows = {row["code"]: row for row in snapshot["kennzahlRows"]}
         self.assertEqual(snapshot_rows["801"]["amountEurCents"], 4_000)
         self.assertEqual(snapshot_rows["801"]["form"], "E 1")
@@ -1503,6 +1550,22 @@ class ReviewRegressionTest(unittest.TestCase):
             neutral_event["costBasisEur"],
         )
         self.assertAlmostEqual(neutral_event["marketDeltaEur"], 121.16, places=2)
+
+        journals = build_journals_snapshot(conn)
+        state_type_counts = {
+            row["type"]: (row["count"], row["gainLossEur"])
+            for row in journals["entryTypes"]
+        }
+        self.assertEqual(state_type_counts["neutral_swap"], (1, 0.0))
+        self.assertEqual(state_type_counts["disposal"], (1, -681.41))
+        self.assertEqual(
+            journals["recentByType"]["neutral_swap"][0]["type"],
+            "neutral_swap",
+        )
+        self.assertEqual(
+            journals["recentByType"]["neutral_swap"][0]["gainLossEur"],
+            0.0,
+        )
 
         e1kv = report_austrian_e1kv(
             conn,
@@ -3309,6 +3372,29 @@ class ReviewRegressionTest(unittest.TestCase):
                     "file": str(phoenix_csv),
                 },
             ],
+        )
+        conn = open_db(self.data_root)
+        self.addCleanup(conn.close)
+        config = json.loads(
+            conn.execute(
+                "SELECT config_json FROM wallets WHERE label = ?",
+                ("SyncMe",),
+            ).fetchone()["config_json"]
+        )
+        last_synced_at = config.get("last_synced_at")
+        self.assertIsInstance(last_synced_at, str)
+        self.assertRegex(last_synced_at, r"^\d{4}-\d{2}-\d{2}T")
+        overview = build_overview_snapshot(conn)
+        overview_connections = {
+            connection["label"]: connection for connection in overview["connections"]
+        }
+        self.assertEqual(
+            overview_connections["SyncMe"]["lastSyncAt"],
+            last_synced_at,
+        )
+        self.assertEqual(
+            overview_connections["SyncMe"]["lastTransactionAt"],
+            "2024-05-01T10:15:00Z",
         )
 
         payload, result = self._run_json(
