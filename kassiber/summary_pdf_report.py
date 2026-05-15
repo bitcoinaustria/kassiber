@@ -94,6 +94,18 @@ def _pct(value: Decimal, total: Decimal) -> str:
     return f"{(value / total * Decimal('100')):.1f}%"
 
 
+def _perf_summary(currency: str, metrics: Mapping[str, Any]) -> str:
+    start = decimal_value(metrics.get("period_start_value"))
+    end = decimal_value(metrics.get("period_end_value"))
+    fees_btc = metrics.get("fees_btc")
+    if start > 0:
+        pct = (end - start) / start * Decimal("100")
+        change_text = f"{pct:+.1f}% vs start"
+    else:
+        change_text = f"{_signed_money(currency, end - start)} vs start"
+    return f"Period performance: {change_text} · Network + venue fees: {_btc(fees_btc)}"
+
+
 def _para(rl: dict[str, Any], styles: dict[str, Any], text: Any, style: str = "body"):
     return rl["Paragraph"](escape_paragraph_text(text), styles[style])
 
@@ -128,25 +140,25 @@ def _table(rl: dict[str, Any], rows: Sequence[Sequence[Any]], widths: Sequence[f
     return table
 
 
-def _metric_strip(rl: dict[str, Any], metrics: Sequence[tuple[str, str, str]]):
+def _metric_strip(rl: dict[str, Any], metrics: Sequence[tuple[str, str]]):
     colors = rl["colors"]
     rows = [
-        [label for label, _value, _sub in metrics],
-        [value for _label, value, _sub in metrics],
-        [sub for _label, _value, sub in metrics],
+        [label for label, _value in metrics],
+        [value for _label, value in metrics],
     ]
-    table = rl["Table"](rows, colWidths=[45 * rl["mm"], 45 * rl["mm"], 45 * rl["mm"], 45 * rl["mm"]])
+    col_count = max(len(metrics), 1)
+    col_width = (180 * rl["mm"]) / col_count
+    table = rl["Table"](rows, colWidths=[col_width] * col_count)
     table.setStyle(
         rl["TableStyle"](
             [
                 ("BOX", (0, 0), (-1, -1), 0.4, colors.HexColor(BRAND_LINE)),
                 ("INNERGRID", (0, 0), (-1, -1), 0.3, colors.HexColor(BRAND_LINE)),
                 ("BACKGROUND", (0, 0), (-1, -1), colors.HexColor(BRAND_SOFT)),
-                ("FONT", (0, 0), (-1, -1), _font(rl, "regular"), 7),
+                ("FONT", (0, 0), (-1, 0), _font(rl, "regular"), 7),
                 ("FONT", (0, 1), (-1, 1), _font(rl, "bold"), 10),
                 ("TEXTCOLOR", (0, 0), (-1, 0), colors.HexColor(BRAND_MUTED)),
                 ("TEXTCOLOR", (0, 1), (-1, 1), colors.HexColor(BRAND_INK)),
-                ("TEXTCOLOR", (0, 2), (-1, 2), colors.HexColor(BRAND_MUTED)),
                 ("LEFTPADDING", (0, 0), (-1, -1), 6),
                 ("RIGHTPADDING", (0, 0), (-1, -1), 6),
                 ("TOPPADDING", (0, 0), (-1, -1), 5),
@@ -423,8 +435,9 @@ def _bar_chart(
             color = COLOR_PROFIT if value >= 0 else BRAND_ACCENT
             drawing.add(Rect(x, y, max(bar_slot - 4, 1), bar_h, fillColor=colors.HexColor(color), strokeColor=None))
             if value and len(rows) <= 18:
-                label_y = y + bar_h + 3 if value > 0 else y + 3
-                label_color = BRAND_INK if value > 0 else "#ffffff"
+                inside_loss = value < 0 and bar_h >= 9
+                label_y = y + bar_h - 7 if inside_loss else y + bar_h + 3
+                label_color = "#ffffff" if inside_loss else BRAND_INK
                 label_y = max(bottom + 3, min(label_y, bottom + plot_h - 6))
                 drawing.add(String(x + bar_slot / 2, label_y, _compact_money(currency, value), fontName=_font(rl, "bold"), fontSize=5.2, fillColor=colors.HexColor(label_color), textAnchor="middle"))
     if paired:
@@ -494,15 +507,16 @@ def write_summary_pdf(file_path: str | Path, report: Mapping[str, Any]) -> Mappi
         _metric_strip(
             rl,
             [
-                ("Start value", _money(currency, metrics.get("period_start_value")), "First period bucket"),
-                ("End value", _money(currency, metrics.get("period_end_value")), "Period close"),
-                ("Net flow", _signed_money(currency, metrics.get("net_flow")), "Inbound less outbound"),
-                ("Realized PnL", _signed_money(currency, metrics.get("realized_pnl")), "Non-tax summary"),
+                ("Start value", _money(currency, metrics.get("period_start_value"))),
+                ("End value", _money(currency, metrics.get("period_end_value"))),
+                ("Net flow", _signed_money(currency, metrics.get("net_flow"))),
+                ("Realized PnL", _signed_money(currency, metrics.get("realized_pnl"))),
+                ("Fees", _money(currency, metrics.get("fees_fiat"))),
             ],
         )
     )
-    story.append(rl["Spacer"](1, 6))
-    story.append(_para(rl, styles, f"Fees: {_btc(metrics.get('fees_btc'))} · {_money(currency, metrics.get('fees_fiat'))}", "muted"))
+    story.append(rl["Spacer"](1, 5))
+    story.append(_para(rl, styles, _perf_summary(currency, metrics), "muted"))
     story.append(rl["Spacer"](1, 8))
     story.append(_para(rl, styles, "Data Integrity", "h2"))
     priced_total = int(data_integrity.get("total_transactions") or 0)
