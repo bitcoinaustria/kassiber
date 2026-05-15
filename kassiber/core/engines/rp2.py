@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import sys
 import tempfile
 import uuid
 from collections import defaultdict
@@ -8,6 +9,7 @@ from contextlib import contextmanager
 from dataclasses import dataclass
 from decimal import Decimal
 from importlib import import_module
+from pathlib import Path
 from typing import Any, Iterable, Iterator, Mapping
 
 from ...errors import AppError
@@ -80,11 +82,46 @@ class _RP2PreparedInput:
     intra_audit: list[dict[str, Any]]
 
 
+def _prime_rp2_logger() -> None:
+    # ``rp2.logger`` binds a ``logging.FileHandler`` to ``./log/rp2_<ts>.log``
+    # at import time. In packaged macOS builds the daemon's cwd is the bundle's
+    # read-only ``Contents/Resources`` directory, so the first rp2 import
+    # crashes with EACCES. Trigger that import under a writable scratch cwd so
+    # the handler binds to a writable file; subsequent rp2 imports reuse the
+    # cached module.
+    #
+    # ``os.chdir`` is process-wide: any concurrent thread that reads cwd during
+    # this window sees the scratch dir. The daemon is single-threaded for
+    # request handling and priming happens once per process on the first
+    # rp2-needing request, so this is safe today. If report generation is ever
+    # parallelized, gate this behind a lock or move the chdir to daemon
+    # startup.
+    if "rp2.logger" in sys.modules:
+        return
+    scratch = Path(tempfile.gettempdir()) / "kassiber-rp2-logs"
+    scratch.mkdir(parents=True, exist_ok=True)
+    previous_cwd: str | None
+    try:
+        previous_cwd = os.getcwd()
+    except OSError:
+        previous_cwd = None
+    try:
+        os.chdir(scratch)
+        import_module("rp2.logger")
+    finally:
+        if previous_cwd is not None:
+            try:
+                os.chdir(previous_cwd)
+            except OSError:
+                os.chdir(tempfile.gettempdir())
+
+
 def _get_rp2_modules() -> dict[str, Any]:
     global _RP2_MODULES
     if _RP2_MODULES is not None:
         return _RP2_MODULES
     try:
+        _prime_rp2_logger()
         _RP2_MODULES = {
             "AVLTree": import_module("prezzemolo.avl_tree").AVLTree,
             "AbstractCountry": import_module("rp2.abstract_country").AbstractCountry,

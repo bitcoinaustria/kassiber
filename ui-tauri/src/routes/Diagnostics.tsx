@@ -5,6 +5,8 @@ import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useUiStore, type AppLogEntry, type AppLogLevel } from "@/store/ui";
 import { cn } from "@/lib/utils";
+import { isFilePickerAvailable, saveFile } from "@/lib/filePicker";
+import { saveDiagnosticsLogAs } from "@/lib/saveText";
 
 const LEVEL_CLASS: Record<AppLogLevel, string> = {
   debug: "border-slate-500/25 bg-slate-500/10 text-slate-700 dark:text-slate-300",
@@ -17,23 +19,34 @@ const LEVEL_CLASS: Record<AppLogLevel, string> = {
 export function Diagnostics() {
   const entries = useUiStore((s) => s.logEntries);
   const clearLogEntries = useUiStore((s) => s.clearLogEntries);
+  const addNotification = useUiStore((s) => s.addNotification);
 
-  const downloadLog = () => {
-    const payload = {
-      exportedAt: new Date().toISOString(),
-      entries,
-    };
-    const blob = new Blob([JSON.stringify(payload, null, 2)], {
-      type: "application/json",
-    });
-    const url = URL.createObjectURL(blob);
-    const anchor = document.createElement("a");
-    anchor.href = url;
-    anchor.download = `kassiber-diagnostics-${timestampForFilename()}.json`;
-    document.body.append(anchor);
-    anchor.click();
-    anchor.remove();
-    window.setTimeout(() => URL.revokeObjectURL(url), 0);
+  const downloadLog = async () => {
+    const filename = `kassiber-diagnostics-${timestampForFilename()}.json`;
+    const contents = JSON.stringify(
+      { exportedAt: new Date().toISOString(), entries },
+      null,
+      2,
+    );
+    try {
+      if (isFilePickerAvailable) {
+        const destination = await saveFile({
+          title: "Save diagnostics log",
+          defaultPath: filename,
+          filters: [{ name: "JSON", extensions: ["json"] }],
+        });
+        if (!destination) return;
+        await saveDiagnosticsLogAs(destination, contents);
+        return;
+      }
+      triggerBrowserDownload(filename, contents);
+    } catch (error) {
+      addNotification({
+        title: "Could not save diagnostics log",
+        body: error instanceof Error ? error.message : String(error),
+        tone: "error",
+      });
+    }
   };
 
   return (
@@ -51,7 +64,9 @@ export function Diagnostics() {
             type="button"
             variant="outline"
             size="sm"
-            onClick={downloadLog}
+            onClick={() => {
+              void downloadLog();
+            }}
             disabled={entries.length === 0}
           >
             <Download className="size-4" aria-hidden="true" />
@@ -135,4 +150,16 @@ function formatTimestamp(value: string): string {
 
 function timestampForFilename(): string {
   return new Date().toISOString().replace(/[:.]/g, "-");
+}
+
+function triggerBrowserDownload(filename: string, contents: string): void {
+  const blob = new Blob([contents], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = filename;
+  document.body.append(anchor);
+  anchor.click();
+  anchor.remove();
+  window.setTimeout(() => URL.revokeObjectURL(url), 0);
 }

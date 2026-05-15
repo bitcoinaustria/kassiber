@@ -469,23 +469,61 @@ fn save_exported_file_as(source_path: String, destination_path: String) -> Resul
     Ok(destination.to_string_lossy().into_owned())
 }
 
-#[tauri::command]
-fn save_text_file_as(destination_path: String, contents: String) -> Result<String, String> {
+/// Write ``contents`` to ``destination_path`` after validating that the
+/// caller-supplied path is absolute and uses one of ``permitted_extensions``.
+///
+/// The extension allow-list is intentionally **not** a parameter of any
+/// ``#[tauri::command]`` — it must be hard-coded per command in this file.
+/// Otherwise any code with WebView ``invoke`` access (a compromised
+/// renderer, a malicious dependency, an XSS) could pass its own list and
+/// write arbitrary file types to any absolute path.
+fn write_text_export(
+    destination_path: String,
+    contents: String,
+    permitted_extensions: &[&str],
+) -> Result<String, String> {
+    debug_assert!(
+        !permitted_extensions.is_empty(),
+        "permitted_extensions must be hard-coded with at least one entry",
+    );
     let destination = PathBuf::from(destination_path);
     if !destination.is_absolute() {
         return Err("Export destination paths must be absolute.".to_string());
     }
-    if destination.extension().and_then(|ext| ext.to_str()) != Some("md") {
-        return Err("Chat export destination must use .md.".to_string());
+    let actual = destination
+        .extension()
+        .and_then(|ext| ext.to_str())
+        .map(|ext| ext.to_ascii_lowercase());
+    let allowed = actual
+        .as_deref()
+        .map(|ext| permitted_extensions.iter().any(|p| p.eq_ignore_ascii_case(ext)))
+        .unwrap_or(false);
+    if !allowed {
+        let expected = permitted_extensions
+            .iter()
+            .map(|ext| format!(".{ext}"))
+            .collect::<Vec<_>>()
+            .join(" or ");
+        return Err(format!("Export destination must use {expected}."));
     }
     let Some(parent) = destination.parent() else {
-        return Err("Chat export destination must include a parent folder.".to_string());
+        return Err("Export destination must include a parent folder.".to_string());
     };
     std::fs::create_dir_all(parent)
-        .map_err(|error| format!("Could not create chat export destination folder: {error}"))?;
+        .map_err(|error| format!("Could not create export destination folder: {error}"))?;
     std::fs::write(&destination, contents)
-        .map_err(|error| format!("Could not save chat export: {error}"))?;
+        .map_err(|error| format!("Could not save export: {error}"))?;
     Ok(destination.to_string_lossy().into_owned())
+}
+
+#[tauri::command]
+fn save_chat_export_as(destination_path: String, contents: String) -> Result<String, String> {
+    write_text_export(destination_path, contents, &["md"])
+}
+
+#[tauri::command]
+fn save_diagnostics_log_as(destination_path: String, contents: String) -> Result<String, String> {
+    write_text_export(destination_path, contents, &["json"])
 }
 
 fn ensure_export_destination_outside_managed_root(
@@ -1255,7 +1293,8 @@ pub fn run() {
             daemon_invoke,
             open_exported_file,
             save_exported_file_as,
-            save_text_file_as,
+            save_chat_export_as,
+            save_diagnostics_log_as,
             open_external_url,
             select_import_project_directory,
             activate_import_project,

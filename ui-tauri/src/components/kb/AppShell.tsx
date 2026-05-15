@@ -102,6 +102,7 @@ import {
   verifySessionUnlockPassphrase,
 } from "@/store/sessionLock";
 import type { OverviewSnapshot } from "@/mocks/seed";
+import type { ProfilesSnapshot } from "@/mocks/profiles";
 import { AssistantSessionProvider } from "@/components/ai/AssistantSessionProvider";
 import type { AssistantReturnPath } from "@/components/ai/assistantSession";
 import kLedgerMarkUrl from "@/assets/k-ledger-mark-transparent.svg";
@@ -565,6 +566,7 @@ export function AppShell() {
     React.useState<AssistantReturnPath>("/overview");
   const mainRef = React.useRef<HTMLElement>(null);
   const launchLockApplied = React.useRef(false);
+  const workspaceValidationApplied = React.useRef(false);
   const importedProjectActive = importedProjectRoot
     ? isImportProjectActive(importedProjectRoot)
     : true;
@@ -740,8 +742,49 @@ export function AppShell() {
   React.useEffect(() => {
     if (identity) return;
     launchLockApplied.current = false;
+    workspaceValidationApplied.current = false;
     void navigate({ to: "/", replace: true });
   }, [identity, navigate]);
+
+  // A persisted ``identity`` survives across reinstalls of the same Tauri
+  // bundle id because WKWebView localStorage is per-OS-user, not per-app-install.
+  // After the daemon is reachable, confirm it actually has at least one
+  // workspace; if not, drop the stale identity and bounce back to onboarding
+  // instead of stranding the user on /overview with no data.
+  React.useEffect(() => {
+    if (dataMode !== "real") return;
+    if (!daemonEnabled) return;
+    if (identity?.importedProject) return;
+    if (!identity) return;
+    if (workspaceValidationApplied.current) return;
+    workspaceValidationApplied.current = true;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const envelope = await getTransport("real").invoke<ProfilesSnapshot>({
+          kind: "ui.profiles.snapshot",
+        });
+        if (cancelled) return;
+        if (envelope.kind === "auth_required" || envelope.error) return;
+        const workspaces = envelope.data?.workspaces ?? [];
+        if (workspaces.length === 0) {
+          resetLocalUiSession();
+        }
+      } catch {
+        // A transport hiccup is not authoritative evidence of an empty
+        // daemon; leave the persisted identity in place and let the user
+        // retry or hit "Reset Welcome state" manually.
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    dataMode,
+    daemonEnabled,
+    identity,
+    resetLocalUiSession,
+  ]);
 
   React.useEffect(() => {
     if (!importedProjectRoot) {
