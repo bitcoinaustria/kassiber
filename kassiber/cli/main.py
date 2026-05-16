@@ -41,6 +41,7 @@ from .handlers import (
     TRANSFER_PAIR_KINDS,
     TRANSFER_PAIR_POLICIES,
     _attachment_hooks,
+    _commercial_hooks,
     _metadata_hooks,
     _report_hooks,
     clear_quarantine,
@@ -81,11 +82,13 @@ from .handlers import (
     resolve_quarantine_price_override,
     show_quarantine,
     attach_btcpay_provenance_to_wallet,
+    sync_btcpay_commercial_provenance,
     sync_btcpay_into_wallet,
     sync_wallet,
 )
 from ..core import accounts as core_accounts
 from ..core import attachments as core_attachments
+from ..core import commercial as core_commercial
 from ..core import metadata as core_metadata
 from ..core import rates as core_rates
 from ..core import reports as core_reports
@@ -1030,6 +1033,67 @@ def build_parser() -> argparse.ArgumentParser:
     views_delete.add_argument("--profile")
     views_delete.add_argument("--view-id", required=True, dest="view_id")
 
+    btcpay = sub.add_parser("btcpay")
+    btcpay_sub = btcpay.add_subparsers(dest="btcpay_command", required=True)
+    btcpay_provenance = btcpay_sub.add_parser("provenance")
+    btcpay_provenance_sub = btcpay_provenance.add_subparsers(dest="btcpay_provenance_command", required=True)
+    btcpay_sync = btcpay_provenance_sub.add_parser("sync")
+    btcpay_sync.add_argument("--workspace")
+    btcpay_sync.add_argument("--profile")
+    btcpay_sync.add_argument("--backend", required=True)
+    btcpay_sync.add_argument("--store-id", required=True, dest="store_id")
+    btcpay_sync.add_argument("--page-size", type=int, default=BTCPAY_DEFAULT_PAGE_SIZE, dest="page_size")
+    btcpay_list = btcpay_provenance_sub.add_parser("list")
+    btcpay_list.add_argument("--workspace")
+    btcpay_list.add_argument("--profile")
+    btcpay_list.add_argument("--record-type", choices=("invoice", "payment"))
+    btcpay_list.add_argument("--limit", type=int, default=100)
+    btcpay_suggest = btcpay_provenance_sub.add_parser("suggest")
+    btcpay_suggest.add_argument("--workspace")
+    btcpay_suggest.add_argument("--profile")
+    btcpay_suggest.add_argument("--limit", type=int, default=core_commercial.SUGGESTION_LIMIT)
+    btcpay_links = btcpay_provenance_sub.add_parser("links")
+    btcpay_links.add_argument("--workspace")
+    btcpay_links.add_argument("--profile")
+    btcpay_links.add_argument("--state", choices=list(core_commercial.LINK_STATES))
+    btcpay_links.add_argument("--limit", type=int, default=100)
+    btcpay_review = btcpay_provenance_sub.add_parser("review")
+    btcpay_review.add_argument("--workspace")
+    btcpay_review.add_argument("--profile")
+    btcpay_review.add_argument("--link", required=True)
+    btcpay_review.add_argument("--state", required=True, choices=list(core_commercial.LINK_STATES))
+    btcpay_review.add_argument("--reconciliation-state", choices=list(core_commercial.RECONCILIATION_STATES))
+    btcpay_review.add_argument("--commercial-kind", choices=list(core_commercial.COMMERCIAL_KINDS))
+    btcpay_review.add_argument("--notes")
+
+    documents = sub.add_parser("documents")
+    documents_sub = documents.add_subparsers(dest="documents_command", required=True)
+    documents_list = documents_sub.add_parser("list")
+    documents_list.add_argument("--workspace")
+    documents_list.add_argument("--profile")
+    documents_list.add_argument("--limit", type=int, default=100)
+    documents_create = documents_sub.add_parser("create")
+    documents_create.add_argument("--workspace")
+    documents_create.add_argument("--profile")
+    documents_create.add_argument("--type", required=True, dest="document_type", choices=list(core_commercial.DOCUMENT_TYPES))
+    documents_create.add_argument("--label", required=True)
+    documents_create.add_argument("--external-ref")
+    documents_create.add_argument("--issuer")
+    documents_create.add_argument("--counterparty")
+    documents_create.add_argument("--issued-at")
+    documents_create.add_argument("--due-at")
+    documents_create.add_argument("--fiat-currency")
+    documents_create.add_argument("--fiat-value")
+    documents_create.add_argument("--notes")
+    documents_attach = documents_sub.add_parser("attach")
+    documents_attach.add_argument("--workspace")
+    documents_attach.add_argument("--profile")
+    documents_attach.add_argument("--document", required=True)
+    documents_attach.add_argument("--file")
+    documents_attach.add_argument("--url")
+    documents_attach.add_argument("--label")
+    documents_attach.add_argument("--media-type")
+
     source_funds = sub.add_parser("source-funds")
     source_funds_sub = source_funds.add_subparsers(dest="source_funds_command", required=True)
 
@@ -1228,6 +1292,15 @@ def build_parser() -> argparse.ArgumentParser:
     export_xlsx.add_argument("--wallet")
     export_xlsx.add_argument("--file", required=True)
     export_xlsx.add_argument("--history-limit", type=int, default=0)
+
+    commercial_subledger = reports_sub.add_parser("commercial-subledger")
+    commercial_subledger.add_argument("--workspace")
+    commercial_subledger.add_argument("--profile")
+
+    export_commercial_subledger = reports_sub.add_parser("export-commercial-subledger-csv")
+    export_commercial_subledger.add_argument("--workspace")
+    export_commercial_subledger.add_argument("--profile")
+    export_commercial_subledger.add_argument("--file", required=True)
 
     source_funds_report = reports_sub.add_parser("source-funds")
     source_funds_report.add_argument("--workspace")
@@ -2201,6 +2274,117 @@ def dispatch(conn: sqlite3.Connection | None, args: argparse.Namespace) -> Any:
             return emit(
                 args, delete_saved_view_cli(conn, args.workspace, args.profile, args.view_id)
             )
+    if args.command == "btcpay":
+        commercial_hooks = _commercial_hooks()
+        if args.btcpay_command == "provenance":
+            if args.btcpay_provenance_command == "sync":
+                return emit(
+                    args,
+                    sync_btcpay_commercial_provenance(
+                        conn,
+                        args.runtime_config,
+                        args.workspace,
+                        args.profile,
+                        args.backend,
+                        args.store_id,
+                        args.page_size,
+                    ),
+                )
+            if args.btcpay_provenance_command == "list":
+                return emit(
+                    args,
+                    core_commercial.list_btcpay_records(
+                        conn,
+                        args.workspace,
+                        args.profile,
+                        commercial_hooks,
+                        record_type=args.record_type,
+                        limit=args.limit,
+                    ),
+                )
+            if args.btcpay_provenance_command == "suggest":
+                return emit(
+                    args,
+                    core_commercial.suggest_links(
+                        conn,
+                        args.workspace,
+                        args.profile,
+                        commercial_hooks,
+                        limit=args.limit,
+                    ),
+                )
+            if args.btcpay_provenance_command == "links":
+                return emit(
+                    args,
+                    core_commercial.list_links(
+                        conn,
+                        args.workspace,
+                        args.profile,
+                        commercial_hooks,
+                        state=args.state,
+                        limit=args.limit,
+                    ),
+                )
+            if args.btcpay_provenance_command == "review":
+                return emit(
+                    args,
+                    core_commercial.review_link(
+                        conn,
+                        args.workspace,
+                        args.profile,
+                        args.link,
+                        commercial_hooks,
+                        state=args.state,
+                        reconciliation_state=args.reconciliation_state,
+                        commercial_kind=args.commercial_kind,
+                        notes=args.notes,
+                    ),
+                )
+    if args.command == "documents":
+        commercial_hooks = _commercial_hooks()
+        if args.documents_command == "list":
+            return emit(
+                args,
+                core_commercial.list_documents(
+                    conn, args.workspace, args.profile, commercial_hooks, limit=args.limit
+                ),
+            )
+        if args.documents_command == "create":
+            return emit(
+                args,
+                core_commercial.create_document(
+                    conn,
+                    args.workspace,
+                    args.profile,
+                    commercial_hooks,
+                    document_type=args.document_type,
+                    label=args.label,
+                    external_ref=args.external_ref,
+                    issuer=args.issuer,
+                    counterparty=args.counterparty,
+                    issued_at=args.issued_at,
+                    due_at=args.due_at,
+                    fiat_currency=args.fiat_currency,
+                    fiat_value=args.fiat_value,
+                    notes=args.notes,
+                ),
+            )
+        if args.documents_command == "attach":
+            return emit(
+                args,
+                core_commercial.attach_document_evidence(
+                    conn,
+                    args.data_root,
+                    args.workspace,
+                    args.profile,
+                    args.document,
+                    commercial_hooks,
+                    file_path=args.file,
+                    url=args.url,
+                    label=args.label,
+                    media_type=args.media_type,
+                ),
+            )
     if args.command == "source-funds":
         source_funds_hooks = _source_funds_hooks()
         if args.source_funds_command == "sources":
@@ -2518,6 +2702,27 @@ def dispatch(conn: sqlite3.Connection | None, args: argparse.Namespace) -> Any:
                     report_hooks,
                     wallet_ref=args.wallet,
                     history_limit=args.history_limit,
+                ),
+            )
+        if args.reports_command == "commercial-subledger":
+            return emit(
+                args,
+                core_commercial.build_reviewed_subledger_rows(
+                    conn,
+                    args.workspace,
+                    args.profile,
+                    _commercial_hooks(),
+                ),
+            )
+        if args.reports_command == "export-commercial-subledger-csv":
+            return emit(
+                args,
+                core_commercial.export_reviewed_subledger_csv(
+                    conn,
+                    args.workspace,
+                    args.profile,
+                    args.file,
+                    _commercial_hooks(),
                 ),
             )
         if args.reports_command == "source-funds":

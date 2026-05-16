@@ -39,6 +39,7 @@ run py -m compileall -q kassiber tests
 run py -m unittest tests.test_dependency_drift -v
 run py -m unittest tests.test_connection_catalog_drift -v
 run py -m unittest tests.test_report_contract_drift -v
+run py -m unittest tests.test_btcpay_commercial_provenance -v
 run py -m unittest tests.test_core_maintenance -v
 run py -m unittest tests.test_cli_smoke -v
 run py -m unittest tests.test_rp2_packaging -v
@@ -69,7 +70,12 @@ smoke_py -m kassiber attachments list --help >/dev/null
 smoke_py -m kassiber source-funds --help >/dev/null
 smoke_py -m kassiber source-funds sources create --help >/dev/null
 smoke_py -m kassiber source-funds links review --help >/dev/null
+smoke_py -m kassiber btcpay provenance --help >/dev/null
+smoke_py -m kassiber btcpay provenance review --help >/dev/null
+smoke_py -m kassiber documents create --help >/dev/null
 smoke_py -m kassiber journals events --help >/dev/null
+smoke_py -m kassiber reports commercial-subledger --help >/dev/null
+smoke_py -m kassiber reports export-commercial-subledger-csv --help >/dev/null
 smoke_py -m kassiber reports source-funds --help >/dev/null
 smoke_py -m kassiber reports export-source-funds-pdf --help >/dev/null
 smoke_py -m kassiber reports balance-history --help >/dev/null

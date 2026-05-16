@@ -58,6 +58,7 @@ kind of report when an error occurs.
   BTCPay Greenfield wallet history
 - imports generic CSV/JSON, BTCPay exports, Phoenix exports, River exports, and BIP329 labels
 - pulls confirmed BTCPay on-chain wallet history directly from a BTCPay server via the Greenfield API
+- syncs BTCPay invoice/payment provenance separately from wallet balances, then applies exact merchant pricing only after reviewed reconciliation
 - keeps a local BTC-USD / BTC-EUR rates cache from Coinbase Exchange,
   CoinGecko fallback, manual overrides, and optional local Kraken OHLCVT CSV
   archives
@@ -143,6 +144,19 @@ key, discover stores and payment methods, create BTCPay-only wallet sources, or
 map BTCPay payment methods onto existing settlement wallets for provenance
 enrichment. When no explicit payment method is supplied, Kassiber stores the
 default BTC on-chain payment method internally.
+
+Invoice/payment provenance uses a separate review path:
+
+```bash
+python3 -m kassiber btcpay provenance sync --backend btcpay-prod --store-id <store-id>
+python3 -m kassiber btcpay provenance suggest
+python3 -m kassiber btcpay provenance review --link <link-id> --state reviewed --commercial-kind income
+python3 -m kassiber reports export-commercial-subledger-csv --file commercial-subledger.csv
+```
+
+The sync stores BTCPay invoice/payment ids, raw snapshots, and exact fiat facts
+without creating wallet transactions. Reviewed links are the gate that apply
+BTCPay pricing and commercial meaning to existing wallet rows.
 
 ## AI assistance
 
@@ -545,7 +559,7 @@ Contributor docs:
 Notable gaps today:
 
 - Austrian E 1kv CSV/PDF/XLSX export is review-gated and currently targets the ausländisch / self-custody Kennzahlen; the styled PDF output includes Steuerbericht-style summary/detail pages, holdings, Besonderheiten, explanations, a transaction appendix, a FinanzOnline-style Kennzahl summary, and FAQ, while the XLSX and CSV bundle use an `Übersicht`, numbered section tabs/files, and `Erläuterungen zum Steuerreport`; domestic-provider withheld KESt metadata is not modeled yet
-- full BTCPay invoice/payment provenance ingest is not implemented yet; BTCPay source refresh currently covers confirmed on-chain wallet history, comments/labels, and enrichment routes for existing settlement wallets
+- BTCPay invoice/payment provenance ingest is now available for reviewed reconciliation, but it is intentionally CLI/daemon-first; the desktop visual reconciliation workflow still needs a richer screen
 - Coinbase Exchange is the default online BTC-USD / BTC-EUR rate source; it fetches coalesced 300-minute windows for missing transaction minutes and records checked sparse minutes so repeat syncs avoid dead zones. Kraken's local OHLCVT CSV archive is wired as an optional offline historical backfill from local CSVs, ZIPs, or extracted directories in the CLI and desktop Settings. Provider-derived cached prices can be rebuilt from Settings or `rates rebuild`; exact exchange execution prices should come from source CSV/API imports with pricing provenance
 - descriptor/xpub source refresh through `bitcoinrpc` is not implemented yet
 - some Lightning node adapters are declared but do not sync yet

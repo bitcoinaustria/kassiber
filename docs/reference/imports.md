@@ -111,7 +111,62 @@ methods onto already configured settlement wallets; descriptor/file sync remains
 the balance source and BTCPay is used as provenance/metadata for matching
 transactions.
 
-That API-backed path reuses the same BTCPay normalization and metadata rules as the file import, but only imports confirmed rows from the remote wallet history and records their confirmation timestamp for later rate lookup. It does not yet import BTCPay invoice/payment fiat facts; those need the future invoice/payment provenance ingest before Kassiber can treat BTCPay as the authoritative merchant price source. `wallets sync-btcpay --wallet ... --backend ... --store-id ...` still works too. It stores the same BTCPay config on the wallet and runs the sync immediately, so later `wallets sync` or `wallets sync --all` calls can reuse that wallet config.
+That API-backed wallet path reuses the same BTCPay normalization and metadata
+rules as the file import, but only imports confirmed rows from the remote wallet
+history and records their confirmation timestamp for later rate lookup.
+`wallets sync-btcpay --wallet ... --backend ... --store-id ...` still works
+too. It stores the same BTCPay config on the wallet and runs the sync
+immediately, so later `wallets sync` or `wallets sync --all` calls can reuse
+that wallet config.
+
+Merchant provenance is a separate path so invoice/payment facts do not duplicate
+wallet balances:
+
+```bash
+python3 -m kassiber btcpay provenance sync \
+  --backend btcpay-prod \
+  --store-id <store-id>
+
+python3 -m kassiber btcpay provenance suggest
+python3 -m kassiber btcpay provenance links
+python3 -m kassiber btcpay provenance review \
+  --link <link-id> \
+  --state reviewed \
+  --commercial-kind income
+```
+
+`btcpay provenance sync` stores stable invoice/payment ids, raw BTCPay payload
+snapshots, transaction ids/payment hashes when present, and exact fiat facts
+from the invoice/payment record. `suggest` creates deterministic review items
+from txid/payment-hash matches and document/invoice references. Only `review`
+applies authoritative `btcpay_invoice` / `btcpay_payment` pricing or a
+commercial kind such as `income` to the wallet transaction; unreviewed
+BTCPay file imports and wallet-history sync remain conservative
+`deposit` / `withdrawal` transport rows.
+
+External evidence uses the same managed attachment store as transaction
+attachments:
+
+```bash
+python3 -m kassiber documents create \
+  --type invoice \
+  --label "Invoice 2026-001" \
+  --external-ref inv-1 \
+  --fiat-currency EUR \
+  --fiat-value 500.00
+
+python3 -m kassiber documents attach \
+  --document <document-id> \
+  --file /path/to/invoice.pdf
+```
+
+Reviewed rows can be exported for accountants without exposing unrelated wallet
+history:
+
+```bash
+python3 -m kassiber reports commercial-subledger
+python3 -m kassiber reports export-commercial-subledger-csv --file commercial-subledger.csv
+```
 
 To wire BTCPay as enrichment-only metadata on a wallet whose balance is already tracked through descriptor or file sync, use `wallets attach-btcpay`:
 

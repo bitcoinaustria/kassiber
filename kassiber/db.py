@@ -130,6 +130,7 @@ CREATE TABLE IF NOT EXISTS transactions (
     pricing_method TEXT,
     pricing_external_ref TEXT,
     pricing_quality TEXT,
+    commercial_applied_link_id TEXT,
     kind TEXT,
     description TEXT,
     counterparty TEXT,
@@ -332,7 +333,7 @@ CREATE TABLE IF NOT EXISTS attachments (
     id TEXT PRIMARY KEY,
     workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
     profile_id TEXT NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
-    transaction_id TEXT NOT NULL REFERENCES transactions(id) ON DELETE CASCADE,
+    transaction_id TEXT REFERENCES transactions(id) ON DELETE CASCADE,
     attachment_type TEXT NOT NULL,
     label TEXT NOT NULL,
     original_filename TEXT,
@@ -346,6 +347,127 @@ CREATE TABLE IF NOT EXISTS attachments (
 
 CREATE INDEX IF NOT EXISTS idx_attachments_profile_tx_created
     ON attachments(profile_id, transaction_id, created_at DESC);
+
+CREATE TABLE IF NOT EXISTS btcpay_provenance_records (
+    id TEXT PRIMARY KEY,
+    workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+    profile_id TEXT NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+    backend_name TEXT,
+    store_id TEXT NOT NULL,
+    payment_method_id TEXT,
+    record_type TEXT NOT NULL,
+    stable_key TEXT NOT NULL,
+    invoice_id TEXT,
+    payment_id TEXT,
+    order_id TEXT,
+    status TEXT,
+    occurred_at TEXT,
+    asset TEXT,
+    amount INTEGER,
+    txid TEXT,
+    payment_hash TEXT,
+    destination TEXT,
+    fiat_currency TEXT,
+    fiat_value_exact TEXT,
+    fiat_rate_exact TEXT,
+    pricing_timestamp TEXT,
+    raw_json TEXT NOT NULL DEFAULT '{}',
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    UNIQUE(profile_id, stable_key)
+);
+
+CREATE INDEX IF NOT EXISTS idx_btcpay_provenance_profile_invoice
+    ON btcpay_provenance_records(profile_id, invoice_id, record_type);
+
+CREATE INDEX IF NOT EXISTS idx_btcpay_provenance_profile_txid
+    ON btcpay_provenance_records(profile_id, txid) WHERE txid IS NOT NULL;
+
+CREATE TABLE IF NOT EXISTS external_documents (
+    id TEXT PRIMARY KEY,
+    workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+    profile_id TEXT NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+    document_type TEXT NOT NULL,
+    label TEXT NOT NULL,
+    external_ref TEXT,
+    issuer TEXT,
+    counterparty TEXT,
+    issued_at TEXT,
+    due_at TEXT,
+    fiat_currency TEXT,
+    fiat_value_exact TEXT,
+    review_state TEXT NOT NULL DEFAULT 'draft',
+    notes TEXT,
+    raw_json TEXT NOT NULL DEFAULT '{}',
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_external_documents_profile_ref
+    ON external_documents(profile_id, external_ref);
+
+CREATE TABLE IF NOT EXISTS external_document_attachments (
+    document_id TEXT NOT NULL REFERENCES external_documents(id) ON DELETE CASCADE,
+    attachment_id TEXT NOT NULL REFERENCES attachments(id) ON DELETE CASCADE,
+    created_at TEXT NOT NULL,
+    PRIMARY KEY(document_id, attachment_id)
+);
+
+CREATE TABLE IF NOT EXISTS commercial_links (
+    id TEXT PRIMARY KEY,
+    workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+    profile_id TEXT NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+    btcpay_record_id TEXT REFERENCES btcpay_provenance_records(id) ON DELETE CASCADE,
+    document_id TEXT REFERENCES external_documents(id) ON DELETE CASCADE,
+    transaction_id TEXT REFERENCES transactions(id) ON DELETE CASCADE,
+    link_type TEXT NOT NULL,
+    state TEXT NOT NULL DEFAULT 'suggested',
+    confidence TEXT NOT NULL DEFAULT 'unknown',
+    method TEXT NOT NULL DEFAULT 'manual',
+    allocation_amount INTEGER,
+    allocation_fiat_exact TEXT,
+    reconciliation_state TEXT NOT NULL DEFAULT 'unreviewed',
+    commercial_kind TEXT,
+    applied_transaction_snapshot_json TEXT,
+    reviewed_record_snapshot_json TEXT,
+    reviewed_record_snapshot_sha256 TEXT,
+    notes TEXT,
+    reviewed_at TEXT,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    CHECK (btcpay_record_id IS NOT NULL OR document_id IS NOT NULL),
+    CHECK (transaction_id IS NOT NULL OR document_id IS NOT NULL)
+);
+
+CREATE INDEX IF NOT EXISTS idx_commercial_links_profile_state
+    ON commercial_links(profile_id, state, reconciliation_state);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_commercial_links_unique_payment_tx_active
+    ON commercial_links(
+        profile_id,
+        COALESCE(btcpay_record_id, ''),
+        COALESCE(transaction_id, ''),
+        link_type
+    ) WHERE state != 'rejected' AND link_type = 'btcpay_payment_transaction';
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_commercial_links_unique_other_active
+    ON commercial_links(
+        profile_id,
+        COALESCE(btcpay_record_id, ''),
+        COALESCE(document_id, ''),
+        COALESCE(transaction_id, ''),
+        link_type
+    ) WHERE state != 'rejected' AND link_type != 'btcpay_payment_transaction';
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_commercial_links_one_reviewed_btcpay_payment
+    ON commercial_links(profile_id, btcpay_record_id)
+    WHERE state = 'reviewed'
+      AND link_type = 'btcpay_payment_transaction'
+      AND btcpay_record_id IS NOT NULL;
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_external_documents_profile_external_ref_unique
+    ON external_documents(profile_id, external_ref)
+    WHERE external_ref IS NOT NULL AND external_ref != '';
 
 CREATE TABLE IF NOT EXISTS source_funds_sources (
     id TEXT PRIMARY KEY,
@@ -755,6 +877,7 @@ def ensure_schema_compat(conn):
     ensure_column(conn, "transactions", "pricing_method", "TEXT")
     ensure_column(conn, "transactions", "pricing_external_ref", "TEXT")
     ensure_column(conn, "transactions", "pricing_quality", "TEXT")
+    ensure_column(conn, "transactions", "commercial_applied_link_id", "TEXT")
     ensure_column(conn, "journal_entries", "fiat_value_exact", "TEXT")
     ensure_column(conn, "journal_entries", "unit_cost_exact", "TEXT")
     ensure_column(conn, "journal_entries", "cost_basis_exact", "TEXT")
@@ -786,8 +909,10 @@ def ensure_schema_compat(conn):
     _ensure_ai_provider_secret_refs_schema(conn)
     _drop_legacy_source_funds_recipients_unique(conn)
     _migrate_msat_columns(conn)
+    _migrate_nullable_attachment_transactions(conn)
     _backfill_liquid_asset_codes(conn)
     _ensure_swap_matching_schema(conn)
+    _ensure_commercial_reconciliation_schema(conn)
 
 
 def _ensure_ai_provider_secret_refs_schema(conn):
@@ -804,6 +929,233 @@ def _ensure_ai_provider_secret_refs_schema(conn):
         )
         """
     )
+
+
+def _ensure_commercial_reconciliation_schema(conn):
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS btcpay_provenance_records (
+            id TEXT PRIMARY KEY,
+            workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+            profile_id TEXT NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+            backend_name TEXT,
+            store_id TEXT NOT NULL,
+            payment_method_id TEXT,
+            record_type TEXT NOT NULL,
+            stable_key TEXT NOT NULL,
+            invoice_id TEXT,
+            payment_id TEXT,
+            order_id TEXT,
+            status TEXT,
+            occurred_at TEXT,
+            asset TEXT,
+            amount INTEGER,
+            txid TEXT,
+            payment_hash TEXT,
+            destination TEXT,
+            fiat_currency TEXT,
+            fiat_value_exact TEXT,
+            fiat_rate_exact TEXT,
+            pricing_timestamp TEXT,
+            raw_json TEXT NOT NULL DEFAULT '{}',
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            UNIQUE(profile_id, stable_key)
+        )
+        """
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_btcpay_provenance_profile_invoice "
+        "ON btcpay_provenance_records(profile_id, invoice_id, record_type)"
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_btcpay_provenance_profile_txid "
+        "ON btcpay_provenance_records(profile_id, txid) WHERE txid IS NOT NULL"
+    )
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS external_documents (
+            id TEXT PRIMARY KEY,
+            workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+            profile_id TEXT NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+            document_type TEXT NOT NULL,
+            label TEXT NOT NULL,
+            external_ref TEXT,
+            issuer TEXT,
+            counterparty TEXT,
+            issued_at TEXT,
+            due_at TEXT,
+            fiat_currency TEXT,
+            fiat_value_exact TEXT,
+            review_state TEXT NOT NULL DEFAULT 'draft',
+            notes TEXT,
+            raw_json TEXT NOT NULL DEFAULT '{}',
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        )
+        """
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_external_documents_profile_ref "
+        "ON external_documents(profile_id, external_ref)"
+    )
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS external_document_attachments (
+            document_id TEXT NOT NULL REFERENCES external_documents(id) ON DELETE CASCADE,
+            attachment_id TEXT NOT NULL REFERENCES attachments(id) ON DELETE CASCADE,
+            created_at TEXT NOT NULL,
+            PRIMARY KEY(document_id, attachment_id)
+        )
+        """
+    )
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS commercial_links (
+            id TEXT PRIMARY KEY,
+            workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+            profile_id TEXT NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+            btcpay_record_id TEXT REFERENCES btcpay_provenance_records(id) ON DELETE CASCADE,
+            document_id TEXT REFERENCES external_documents(id) ON DELETE CASCADE,
+            transaction_id TEXT REFERENCES transactions(id) ON DELETE CASCADE,
+            link_type TEXT NOT NULL,
+            state TEXT NOT NULL DEFAULT 'suggested',
+            confidence TEXT NOT NULL DEFAULT 'unknown',
+            method TEXT NOT NULL DEFAULT 'manual',
+            allocation_amount INTEGER,
+            allocation_fiat_exact TEXT,
+            reconciliation_state TEXT NOT NULL DEFAULT 'unreviewed',
+            commercial_kind TEXT,
+            applied_transaction_snapshot_json TEXT,
+            reviewed_record_snapshot_json TEXT,
+            reviewed_record_snapshot_sha256 TEXT,
+            notes TEXT,
+            reviewed_at TEXT,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            CHECK (btcpay_record_id IS NOT NULL OR document_id IS NOT NULL),
+            CHECK (transaction_id IS NOT NULL OR document_id IS NOT NULL)
+        )
+        """
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_commercial_links_profile_state "
+        "ON commercial_links(profile_id, state, reconciliation_state)"
+    )
+    duplicate_external_ref = conn.execute(
+        """
+        SELECT 1
+        FROM external_documents
+        WHERE external_ref IS NOT NULL AND external_ref != ''
+        GROUP BY profile_id, external_ref
+        HAVING COUNT(*) > 1
+        LIMIT 1
+        """
+    ).fetchone()
+    if not duplicate_external_ref:
+        conn.execute(
+            "CREATE UNIQUE INDEX IF NOT EXISTS idx_external_documents_profile_external_ref_unique "
+            "ON external_documents(profile_id, external_ref) "
+            "WHERE external_ref IS NOT NULL AND external_ref != ''"
+        )
+    ensure_column(conn, "commercial_links", "applied_transaction_snapshot_json", "TEXT")
+    ensure_column(conn, "commercial_links", "reviewed_record_snapshot_json", "TEXT")
+    ensure_column(conn, "commercial_links", "reviewed_record_snapshot_sha256", "TEXT")
+    conn.execute("DROP INDEX IF EXISTS idx_commercial_links_unique_active")
+    conn.execute("DROP INDEX IF EXISTS idx_commercial_links_unique_payment_tx_active")
+    conn.execute("DROP INDEX IF EXISTS idx_commercial_links_unique_other_active")
+    conn.execute("DROP INDEX IF EXISTS idx_commercial_links_one_reviewed_btcpay_payment")
+    conn.execute(
+        """
+        CREATE UNIQUE INDEX idx_commercial_links_unique_payment_tx_active
+            ON commercial_links(
+                profile_id,
+                COALESCE(btcpay_record_id, ''),
+                COALESCE(transaction_id, ''),
+                link_type
+            ) WHERE state != 'rejected' AND link_type = 'btcpay_payment_transaction'
+        """
+    )
+    conn.execute(
+        """
+        CREATE UNIQUE INDEX idx_commercial_links_unique_other_active
+            ON commercial_links(
+                profile_id,
+                COALESCE(btcpay_record_id, ''),
+                COALESCE(document_id, ''),
+                COALESCE(transaction_id, ''),
+                link_type
+            ) WHERE state != 'rejected' AND link_type != 'btcpay_payment_transaction'
+        """
+    )
+    conn.execute(
+        """
+        CREATE UNIQUE INDEX idx_commercial_links_one_reviewed_btcpay_payment
+            ON commercial_links(profile_id, btcpay_record_id)
+            WHERE state = 'reviewed'
+              AND link_type = 'btcpay_payment_transaction'
+              AND btcpay_record_id IS NOT NULL
+        """
+    )
+    conn.commit()
+
+
+def _migrate_nullable_attachment_transactions(conn):
+    table_sql = conn.execute(
+        "SELECT sql FROM sqlite_master WHERE type='table' AND name='attachments'"
+    ).fetchone()
+    legacy_sql = conn.execute(
+        "SELECT sql FROM sqlite_master WHERE type='table' AND name='attachments_legacy_notnull_tx'"
+    ).fetchone()
+    current_sql = (table_sql[0] if table_sql else "") or ""
+    if not legacy_sql and "transaction_id TEXT NOT NULL" not in current_sql:
+        return
+    previous_fk_state = conn.execute("PRAGMA foreign_keys").fetchone()[0]
+    conn.commit()
+    conn.execute("PRAGMA foreign_keys = OFF")
+    conn.execute("BEGIN IMMEDIATE")
+    try:
+        if not legacy_sql:
+            conn.execute("ALTER TABLE attachments RENAME TO attachments_legacy_notnull_tx")
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS attachments (
+                id TEXT PRIMARY KEY,
+                workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+                profile_id TEXT NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+                transaction_id TEXT REFERENCES transactions(id) ON DELETE CASCADE,
+                attachment_type TEXT NOT NULL,
+                label TEXT NOT NULL,
+                original_filename TEXT,
+                stored_relpath TEXT,
+                source_url TEXT,
+                media_type TEXT,
+                size_bytes INTEGER,
+                sha256 TEXT,
+                created_at TEXT NOT NULL
+            )
+            """
+        )
+        conn.execute(
+            """
+            INSERT OR IGNORE INTO attachments
+            SELECT id, workspace_id, profile_id, transaction_id, attachment_type, label,
+                   original_filename, stored_relpath, source_url, media_type,
+                   size_bytes, sha256, created_at
+            FROM attachments_legacy_notnull_tx
+            """
+        )
+        conn.execute("DROP TABLE attachments_legacy_notnull_tx")
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_attachments_profile_tx_created "
+            "ON attachments(profile_id, transaction_id, created_at DESC)"
+        )
+        conn.execute("COMMIT")
+    except Exception:
+        conn.execute("ROLLBACK")
+        raise
+    finally:
+        conn.execute(f"PRAGMA foreign_keys = {'ON' if previous_fk_state else 'OFF'}")
 
 
 def _ensure_swap_matching_schema(conn):

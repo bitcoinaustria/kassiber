@@ -122,6 +122,14 @@ const ALLOWED_BRIDGE_KINDS = new Set([
   "ui.source_funds.recipients.create",
   "ui.source_funds.recipients.update",
   "ui.source_funds.recipients.delete",
+  "ui.btcpay.provenance.sync",
+  "ui.btcpay.provenance.list",
+  "ui.btcpay.provenance.suggest",
+  "ui.btcpay.provenance.links",
+  "ui.btcpay.provenance.review",
+  "ui.documents.list",
+  "ui.documents.create",
+  "ui.documents.attach",
 ]);
 /**
  * Kinds the bridge accepts on the stream endpoint. AI chat is here because
