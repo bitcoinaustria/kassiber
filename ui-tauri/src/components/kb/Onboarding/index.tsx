@@ -214,6 +214,55 @@ export const Onboarding = ({ className, steps: customSteps }: OnboardingProps) =
             useSsl: form.backendUseSsl,
           })
         : form.backendUrl.trim();
+    const backendProxy =
+      form.backendSetupMode === "custom" &&
+      form.backendUseProxy &&
+      form.backendProxyHost.trim() &&
+      form.backendProxyPort.trim()
+        ? `${form.backendProxyHost.trim()}:${form.backendProxyPort.trim()}`
+        : undefined;
+    const onboarding = await getTransport("real").invoke({
+      kind: "ui.onboarding.complete",
+      args: {
+        workspace_label: form.workspace.trim() || "My Books",
+        profile_label: form.profile.trim() || "Private",
+        tax_country: form.taxCountry,
+        fiat_currency: form.fiatCurrency,
+        tax_long_term_days: taxLongTermDays,
+        gains_algorithm: gainsAlgorithm,
+        ...(form.backendSetupMode === "custom"
+          ? {
+              backend: {
+                name: form.backendName.trim() || "custom",
+                kind: form.backendKind,
+                url: customBackendUrl,
+                chain:
+                  form.backendKind === "liquid-esplora"
+                    ? "liquid"
+                    : "bitcoin",
+                network:
+                  form.backendKind === "liquid-esplora"
+                    ? "liquidv1"
+                    : "main",
+                ...(form.backendKind === "electrum" &&
+                form.backendUseSsl &&
+                !form.backendTrustSsl &&
+                form.backendCertificate.trim()
+                  ? { certificate: form.backendCertificate.trim() }
+                  : {}),
+                ...(backendProxy ? { tor_proxy: backendProxy } : {}),
+              },
+            }
+          : {}),
+      },
+    });
+    if (onboarding.kind === "auth_required") {
+      handleAuthRequired(onboarding);
+      throw new Error("Database passphrase is required.");
+    }
+    if (onboarding.kind === "error" || onboarding.error) {
+      throw new Error(onboarding.error?.message ?? "Could not finish onboarding.");
+    }
     const identity: Identity = {
       name: form.profile.trim() || "Private",
       workspace: form.workspace.trim() || "My Books",
@@ -255,11 +304,7 @@ export const Onboarding = ({ className, steps: customSteps }: OnboardingProps) =
           ? form.backendCertificate.trim()
           : undefined,
       backendProxy:
-        form.backendSetupMode === "custom" &&
-        form.backendKind === "electrum" &&
-        form.backendUseProxy &&
-        form.backendProxyHost.trim() &&
-        form.backendProxyPort.trim()
+        form.backendKind === "electrum" && backendProxy
           ? {
               host: form.backendProxyHost.trim(),
               port: form.backendProxyPort.trim(),

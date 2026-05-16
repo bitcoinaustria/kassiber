@@ -6,6 +6,8 @@ use serde_json::{json, Map, Value};
 use std::collections::HashMap;
 use std::env;
 use std::io::{BufRead, BufReader, Read, Write};
+#[cfg(target_os = "windows")]
+use std::os::windows::process::CommandExt;
 use std::path::{Path, PathBuf};
 use std::process::{Child, ChildStderr, ChildStdin, ChildStdout, Command, Stdio};
 use std::sync::{
@@ -24,6 +26,15 @@ const DAEMON_INVOKE_TIMEOUT: Duration = Duration::from_secs(15);
 /// as the daemon keeps producing output within the window.
 const DAEMON_STREAM_INACTIVITY_TIMEOUT: Duration = Duration::from_secs(90);
 const STDERR_TAIL_LIMIT: usize = 16 * 1024;
+
+#[cfg(target_os = "windows")]
+fn hide_console_window(command: &mut Command) {
+    const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+    command.creation_flags(CREATE_NO_WINDOW);
+}
+
+#[cfg(not(target_os = "windows"))]
+fn hide_console_window(_command: &mut Command) {}
 
 type DaemonResponse = Result<Value, SupervisorError>;
 type PendingSender = mpsc::Sender<DaemonResponse>;
@@ -526,28 +537,29 @@ impl DaemonProcess {
         command: DaemonCommand,
         secret_store: SharedSecretStore,
     ) -> Result<Self, SupervisorError> {
-        let mut child = Command::new(&command.program)
+        let mut process_command = Command::new(&command.program);
+        process_command
             .args(&command.args)
             .current_dir(&command.cwd)
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
-            .spawn()
-            .map_err(|error| {
-                SupervisorError::new(
-                    "daemon_spawn_failed",
-                    format!(
-                        "Could not start Kassiber daemon with {:?}: {error}",
-                        command.program
-                    ),
-                )
-                .hint(command.failure_hint())
-                .details(json!({
-                    "cwd": command.cwd,
-                    "source": command.source,
-                }))
-                .retryable()
-            })?;
+            .stderr(Stdio::piped());
+        hide_console_window(&mut process_command);
+        let mut child = process_command.spawn().map_err(|error| {
+            SupervisorError::new(
+                "daemon_spawn_failed",
+                format!(
+                    "Could not start Kassiber daemon with {:?}: {error}",
+                    command.program
+                ),
+            )
+            .hint(command.failure_hint())
+            .details(json!({
+                "cwd": command.cwd,
+                "source": command.source,
+            }))
+            .retryable()
+        })?;
 
         let stdin = child.stdin.take().ok_or_else(|| {
             SupervisorError::new(
