@@ -111,7 +111,7 @@ import {
   type TransactionStatus,
 } from "@/components/transactions";
 
-type PeriodKey = "ytd" | "30days" | "3months" | "1year" | "5years";
+type PeriodKey = "ytd" | "30days" | "3months" | "1year" | "5years" | "all";
 type FlowChartMetric = "amount" | "count";
 type FlowChartMode = "external" | "all";
 type FlowChartSegment = "incoming" | "outgoing" | "transfers" | "swaps";
@@ -865,6 +865,7 @@ const periodLabels: Record<PeriodKey, string> = {
   "3months": "3 Months",
   "30days": "30 Days",
   "5years": "5 Years",
+  all: "All",
 };
 
 const flowChartMetricLabels: Record<FlowChartMetric, string> = {
@@ -906,6 +907,7 @@ const periodKeys: PeriodKey[] = [
   "ytd",
   "1year",
   "5years",
+  "all",
 ];
 
 function normalizePeriodParam(value: string | null): PeriodKey | null {
@@ -941,6 +943,9 @@ function normalizePeriodParam(value: string | null): PeriodKey | null {
   ) {
     return "5years";
   }
+  if (normalized === "all" || normalized === "max") {
+    return "all";
+  }
   return null;
 }
 
@@ -955,10 +960,19 @@ function periodLimit(period: PeriodKey) {
   if (period === "3months") return 18;
   if (period === "ytd") return 40;
   if (period === "5years") return 60;
+  if (period === "all") return Number.MAX_SAFE_INTEGER;
   return 30;
 }
 
 function recordsForPeriod(records: Transaction[], period: PeriodKey) {
+  if (period === "all") {
+    return [...records].sort((a, b) => {
+      const dateA = parseTransactionDate(a.date)?.getTime() ?? -Infinity;
+      const dateB = parseTransactionDate(b.date)?.getTime() ?? -Infinity;
+      return dateB - dateA;
+    });
+  }
+
   const dated = records
     .map((record) => ({ record, date: parseTransactionDate(record.date) }))
     .filter(
@@ -998,7 +1012,7 @@ function periodAnchorDate(dates: Date[]) {
   return latest > now ? latest : now;
 }
 
-function periodStartDate(end: Date, period: PeriodKey) {
+function periodStartDate(end: Date, period: PeriodKey, earliest?: Date) {
   const start = startOfLocalDay(end);
   if (period === "30days") {
     start.setDate(start.getDate() - 29);
@@ -1009,6 +1023,8 @@ function periodStartDate(end: Date, period: PeriodKey) {
     start.setHours(0, 0, 0, 0);
   } else if (period === "5years") {
     start.setFullYear(start.getFullYear() - 5);
+  } else if (period === "all" && earliest) {
+    return startOfLocalDay(earliest);
   } else {
     start.setFullYear(start.getFullYear() - 1);
   }
@@ -1050,7 +1066,7 @@ function addBucketStep(date: Date, period: PeriodKey) {
     next.setDate(next.getDate() + 1);
   } else if (period === "3months") {
     next.setDate(next.getDate() + 7);
-  } else if (period === "5years") {
+  } else if (period === "5years" || period === "all") {
     next.setMonth(next.getMonth() + 3);
   } else {
     next.setMonth(next.getMonth() + 1);
@@ -1075,7 +1091,7 @@ function bucketTransactionDate(date: Date, period: PeriodKey): FlowBucket {
       })}`,
     };
   }
-  if (period === "5years") {
+  if (period === "5years" || period === "all") {
     const quarterStart = new Date(date);
     quarterStart.setMonth(Math.floor(date.getMonth() / 3) * 3, 1);
     quarterStart.setHours(0, 0, 0, 0);
@@ -1103,9 +1119,10 @@ function buildEmptyFlowBuckets(
   if (!dated.length) return grouped;
 
   const end = periodAnchorDate(dated);
-  let cursor = periodStartDate(end, period);
+  const earliest = dated.reduce((min, date) => (date < min ? date : min), dated[0]);
+  let cursor = periodStartDate(end, period, earliest);
   if (period === "3months") cursor = startOfIsoWeek(cursor);
-  if (period === "5years") {
+  if (period === "5years" || period === "all") {
     cursor.setMonth(Math.floor(cursor.getMonth() / 3) * 3, 1);
     cursor.setHours(0, 0, 0, 0);
   }
@@ -1129,7 +1146,7 @@ function buildEmptyFlowBuckets(
 function flowBucketLabel(period: PeriodKey) {
   if (period === "30days") return "day";
   if (period === "3months") return "week";
-  if (period === "5years") return "quarter";
+  if (period === "5years" || period === "all") return "quarter";
   return "month";
 }
 
