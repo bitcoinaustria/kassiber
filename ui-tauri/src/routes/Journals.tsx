@@ -1,4 +1,4 @@
-import { Link } from "@tanstack/react-router";
+import { Link, useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
 import {
   BookOpen,
@@ -35,6 +35,8 @@ interface JournalEntryType {
 interface RecentJournalEntry {
   date: string;
   type: string;
+  transactionId?: string;
+  transactionExternalId?: string;
   wallet: string;
   asset: string;
   quantity: number;
@@ -75,6 +77,7 @@ const eur = new Intl.NumberFormat("de-AT", {
 const blurClass = (hidden: boolean) => (hidden ? "sensitive" : "");
 
 export function Journals() {
+  const navigate = useNavigate();
   const { data, isLoading, isError, error } = useDaemon<JournalsSnapshot>(
     "ui.journals.snapshot",
   );
@@ -92,7 +95,7 @@ export function Journals() {
     return (
       <div className={screenPanelClassName}>
         <div className="rounded-xl border bg-card p-4">
-          <h2 className="text-base font-semibold">Journals unavailable</h2>
+          <h2 className="text-base font-semibold">Ledger unavailable</h2>
           <p className="mt-1 text-sm text-muted-foreground">
             {error instanceof Error
               ? error.message
@@ -115,13 +118,30 @@ export function Journals() {
   const filteredRecent = entryTypeFilter
     ? recentRowsForDisplayType(snapshot, entryTypeFilter)
     : snapshot.recent;
+  const filteredEntryType = entryTypeFilter
+    ? displayEntryTypes.find((entry) => entry.type === entryTypeFilter)
+    : null;
+  const filteredJournalEntryCount =
+    filteredEntryType?.count ?? status.journalEntryCount;
+  const journalRowsDescription = describeJournalRows({
+    rowCount: filteredRecent.length,
+    totalCount: filteredJournalEntryCount,
+    entryTypeFilter,
+  });
+  const openTransaction = (entry: RecentJournalEntry) => {
+    if (!entry.transactionId) return;
+    void navigate({
+      to: "/transactions",
+      search: { tx: entry.transactionId },
+    });
+  };
   return (
     <div className={screenShellClassName}>
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-3">
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
           <TabsList className="w-full justify-start overflow-x-auto sm:w-fit">
             <TabsTrigger value="state">State</TabsTrigger>
-            <TabsTrigger value="reportable">Reportable entries</TabsTrigger>
+            <TabsTrigger value="reportable">Ledger entries</TabsTrigger>
           </TabsList>
           {activeTab === "state" ? (
             <div className="flex flex-wrap gap-2">
@@ -258,15 +278,24 @@ export function Journals() {
             </div>
 
             <div className="min-w-0 rounded-xl border bg-card">
-              <div className="border-b p-3 sm:px-4">
-                <div>
-                  <h2 className="text-base font-semibold">Recent journal rows</h2>
+              <div className="flex items-start justify-between gap-3 border-b p-3 sm:px-4">
+                <div className="min-w-0">
+                  <h2 className="text-base font-semibold">Journal entries</h2>
                   <p className="mt-0.5 text-xs text-muted-foreground sm:text-sm">
-                    {entryTypeFilter
-                      ? `Latest ${entryTypeDescription(entryTypeFilter)} produced by journal processing.`
-                      : "Latest rows produced by journal processing."}
+                    {journalRowsDescription}
                   </p>
                 </div>
+                {status.journalEntryCount > snapshot.recent.length ? (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="h-8 shrink-0"
+                    onClick={() => setActiveTab("reportable")}
+                  >
+                    View ledger entries
+                  </Button>
+                ) : null}
               </div>
               <div className="overflow-x-auto">
                 <Table className="min-w-[840px]">
@@ -288,8 +317,30 @@ export function Journals() {
                   </TableHeader>
                   <TableBody>
                     {filteredRecent.length ? (
-                      filteredRecent.map((entry, index) => (
-                        <TableRow key={`${entry.date}-${entry.type}-${index}`}>
+                      filteredRecent.map((entry, index) => {
+                        const canOpenTransaction = Boolean(entry.transactionId);
+                        return (
+                        <TableRow
+                          key={`${entry.date}-${entry.type}-${entry.transactionId ?? index}`}
+                          role={canOpenTransaction ? "button" : undefined}
+                          tabIndex={canOpenTransaction ? 0 : undefined}
+                          aria-label={
+                            canOpenTransaction
+                              ? `Open transaction for ${formatEntryType(displayEntryType(entry.type))} journal row`
+                              : undefined
+                          }
+                          className={cn(
+                            canOpenTransaction &&
+                              "cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset",
+                          )}
+                          onClick={() => openTransaction(entry)}
+                          onKeyDown={(event) => {
+                            if (!canOpenTransaction) return;
+                            if (event.key !== "Enter" && event.key !== " ") return;
+                            event.preventDefault();
+                            openTransaction(entry);
+                          }}
+                        >
                           <TableCell className="font-mono text-xs text-muted-foreground">
                             {entry.date}
                           </TableCell>
@@ -333,7 +384,8 @@ export function Journals() {
                             {eur.format(entry.gainLossEur)}
                           </TableCell>
                         </TableRow>
-                      ))
+                        );
+                      })
                     ) : (
                       <TableRow>
                         <TableCell
@@ -489,6 +541,23 @@ function recentRowsForDisplayType(
 
 function sortRecentJournalRows(rows: RecentJournalEntry[]) {
   return [...rows].sort((left, right) => right.date.localeCompare(left.date));
+}
+
+function describeJournalRows({
+  rowCount,
+  totalCount,
+  entryTypeFilter,
+}: {
+  rowCount: number;
+  totalCount: number;
+  entryTypeFilter: string | null;
+}) {
+  const total = totalCount.toLocaleString("en-US");
+  const rows = rowCount.toLocaleString("en-US");
+  const label = entryTypeFilter
+    ? entryTypeDescription(entryTypeFilter)
+    : "processed rows";
+  return `Showing latest ${rows} of ${total} ${label}.`;
 }
 
 const toneTextStyles: Record<JournalTone, string> = {

@@ -20,7 +20,15 @@
  * commit 13, and keyboard shortcuts in commit 14.
  */
 
-import { Fragment, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import {
+  Fragment,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 import {
   AlertTriangle,
   ArrowRight,
@@ -93,6 +101,7 @@ import { useDaemon, useDaemonMutation } from "@/daemon/client";
 import { useKeymap, type Keybinding } from "@/lib/keymap";
 import { screenShellClassName } from "@/lib/screen-layout";
 import { cn } from "@/lib/utils";
+import { useUiStore } from "@/store/ui";
 
 const PAIR_KIND_OPTIONS = ["manual", "peg-in", "peg-out", "submarine-swap"] as const;
 const PAIR_POLICY_OPTIONS = ["carrying-value", "taxable"] as const;
@@ -168,6 +177,8 @@ const btcFmt = new Intl.NumberFormat("en-US", {
   maximumFractionDigits: 8,
   minimumFractionDigits: 8,
 });
+
+const blurClass = (hidden: boolean) => (hidden ? "sensitive" : "");
 
 function formatBtc(value: number) {
   return `₿${btcFmt.format(value)}`;
@@ -293,6 +304,7 @@ function railForLeg(asset: string, walletKind: string): SwapRail {
 }
 
 export function SwapMatching() {
+  const hideSensitive = useUiStore((s) => s.hideSensitive);
   const [confidence, setConfidence] = useState<string>("all");
   const [method, setMethod] = useState<string>("all");
   const [routePair, setRoutePair] = useState<string>("all");
@@ -308,6 +320,7 @@ export function SwapMatching() {
     | { mode: "selected"; candidates: SwapCandidate[] }
     | null
   >(null);
+  const [previewError, setPreviewError] = useState<string | null>(null);
   const [undoState, setUndoState] = useState<{
     pairIds: string[];
     summary: BulkPairResult["summary"];
@@ -421,7 +434,10 @@ export function SwapMatching() {
     void rulesQuery.refetch();
   };
 
-  const candidates = data?.data?.candidates ?? [];
+  const candidates = useMemo(
+    () => data?.data?.candidates ?? [],
+    [data?.data?.candidates],
+  );
   const counts = data?.data?.counts ?? { total: 0, exact: 0, strong: 0, conflicts: 0 };
 
   const clusterSizes = useMemo(() => {
@@ -470,15 +486,15 @@ export function SwapMatching() {
     [selected, candidatesByKey],
   );
 
-  const toggleSelected = (key: string) =>
+  const toggleSelected = useCallback((key: string) =>
     setSelected((prev) => {
       const next = new Set(prev);
       if (next.has(key)) next.delete(key);
       else next.add(key);
       return next;
-    });
+    }), []);
 
-  const handleSelectAll = () => {
+  const handleSelectAll = useCallback(() => {
     const eligible = candidates.filter(
       (c) => (clusterSizes[c.conflict_set_id] ?? 0) <= 1,
     );
@@ -487,9 +503,9 @@ export function SwapMatching() {
       return;
     }
     setSelected(new Set(eligible.map(candidateKey)));
-  };
+  }, [candidates, clusterSizes, selected.size]);
 
-  const handlePair = async (candidate: SwapCandidate) => {
+  const handlePair = useCallback(async (candidate: SwapCandidate) => {
     const key = candidateKey(candidate);
     const override = overrides[key] ?? {};
     await pairMutation.mutateAsync({
@@ -501,82 +517,106 @@ export function SwapMatching() {
       confidence_at_pair: candidate.confidence,
     });
     void refetch();
-  };
+  }, [overrides, pairMutation, refetch]);
 
-  const handleDismiss = async (candidate: SwapCandidate) => {
+  const handleDismiss = useCallback(async (candidate: SwapCandidate) => {
     await dismissMutation.mutateAsync({
       tx_out: candidate.out_id,
       tx_in: candidate.in_id,
       reason: "user dismissed from review queue",
     });
     void refetch();
-  };
+  }, [dismissMutation, refetch]);
 
-  const openExactPreview = () => {
+  const openExactPreview = useCallback(() => {
+    setPreviewError(null);
     setPreviewState({ mode: "exact", candidates: exactSolo });
-  };
+  }, [exactSolo]);
 
   const openRulesPreview = () => {
+    setPreviewError(null);
     setPreviewState({ mode: "rules", candidates: ruleSolo });
   };
 
   const openSelectedPreview = () => {
+    setPreviewError(null);
     setPreviewState({ mode: "selected", candidates: selectedCandidates });
   };
 
   const commitBulk = async () => {
     if (!previewState) return;
-    if (previewState.mode === "exact" || previewState.mode === "rules") {
-      const envelope =
-        previewState.mode === "exact"
-          ? await bulkPairMutation.mutateAsync({ ...args, confidence: "exact" })
-          : await ruleApply.mutateAsync(args);
-      const result = envelope.data;
-      if (result) {
+    setPreviewError(null);
+    try {
+      if (previewState.mode === "exact" || previewState.mode === "rules") {
+        const envelope =
+          previewState.mode === "exact"
+            ? await bulkPairMutation.mutateAsync({ ...args, confidence: "exact" })
+            : await ruleApply.mutateAsync(args);
+        const result = envelope.data;
+        if (!result || result.summary.count === 0) {
+          await refetch();
+          setPreviewError(
+            "No pairs were created. The candidates may already be paired, conflicted, or no longer match the current filters.",
+          );
+          return;
+        }
         setUndoState({
           pairIds: result.applied.map((p) => p.id),
           summary: result.summary,
           deadline: Date.now() + UNDO_WINDOW_MS,
         });
-      }
-    } else {
-      const applied: string[] = [];
-      let totalFee = 0;
-      for (const candidate of previewState.candidates) {
-        const key = candidateKey(candidate);
-        const override = overrides[key] ?? {};
-        const envelope = await pairMutation.mutateAsync({
-          tx_out: candidate.out_id,
-          tx_in: candidate.in_id,
-          kind: override.kind ?? bulkKind ?? candidate.default_kind,
-          policy: override.policy ?? bulkPolicy ?? candidate.default_policy,
-          pair_source: "bulk_selected",
-          confidence_at_pair: candidate.confidence,
+      } else {
+        const applied: string[] = [];
+        let totalFee = 0;
+        for (const candidate of previewState.candidates) {
+          const key = candidateKey(candidate);
+          const override = overrides[key] ?? {};
+          const envelope = await pairMutation.mutateAsync({
+            tx_out: candidate.out_id,
+            tx_in: candidate.in_id,
+            kind: override.kind ?? bulkKind ?? candidate.default_kind,
+            policy: override.policy ?? bulkPolicy ?? candidate.default_policy,
+            pair_source: "bulk_selected",
+            confidence_at_pair: candidate.confidence,
+          });
+          const created = envelope.data as { id?: string; swap_fee_msat?: number } | undefined;
+          if (created?.id) applied.push(created.id);
+          if (typeof created?.swap_fee_msat === "number") totalFee += created.swap_fee_msat;
+        }
+        if (applied.length === 0) {
+          await refetch();
+          setPreviewError(
+            "No pairs were created. The selected candidates may already be paired or no longer match the current queue.",
+          );
+          return;
+        }
+        setUndoState({
+          pairIds: applied,
+          summary: {
+            count: applied.length,
+            skipped_conflicts: 0,
+            total_swap_fee_msat: totalFee,
+          },
+          deadline: Date.now() + UNDO_WINDOW_MS,
         });
-        const created = envelope.data as { id?: string; swap_fee_msat?: number } | undefined;
-        if (created?.id) applied.push(created.id);
-        if (typeof created?.swap_fee_msat === "number") totalFee += created.swap_fee_msat;
       }
-      setUndoState({
-        pairIds: applied,
-        summary: {
-          count: applied.length,
-          skipped_conflicts: 0,
-          total_swap_fee_msat: totalFee,
-        },
-        deadline: Date.now() + UNDO_WINDOW_MS,
-      });
+      setPreviewState(null);
+      setSelected(new Set());
+      await refetch();
+    } catch (error) {
+      setPreviewError(
+        error instanceof Error
+          ? error.message
+          : "Could not pair the selected swap candidates.",
+      );
     }
-    setPreviewState(null);
-    setSelected(new Set());
-    void refetch();
   };
 
   const cancelUndo = () => {
     setUndoState(null);
   };
 
-  const performUndo = async () => {
+  const performUndo = useCallback(async () => {
     if (!undoState) return;
     const pairIds = undoState.pairIds;
     setUndoState(null);
@@ -588,7 +628,7 @@ export function SwapMatching() {
       }
     }
     void refetch();
-  };
+  }, [refetch, undoState, unpairMutation]);
 
   useEffect(() => {
     if (cursorIndex >= candidates.length) {
@@ -698,12 +738,22 @@ export function SwapMatching() {
     exactSolo,
     detailCandidate,
     helpOpen,
+    handleDismiss,
+    handlePair,
+    handleSelectAll,
+    openExactPreview,
+    performUndo,
     previewState,
+    refetch,
     selected,
+    toggleSelected,
     undoState,
   ]);
 
   useKeymap(bindings);
+
+  const bulkCommitPending =
+    bulkPairMutation.isPending || pairMutation.isPending || ruleApply.isPending;
 
   return (
     <div className={screenShellClassName}>
@@ -1057,6 +1107,7 @@ export function SwapMatching() {
                             walletKind={candidate.out_wallet_kind}
                             timestamp={candidate.out_occurred_at}
                             txId={candidate.out_id}
+                            hideSensitive={hideSensitive}
                           />
                         </TableCell>
                         <TableCell className="text-center text-muted-foreground">
@@ -1071,10 +1122,11 @@ export function SwapMatching() {
                             walletKind={candidate.in_wallet_kind}
                             timestamp={candidate.in_occurred_at}
                             txId={candidate.in_id}
+                            hideSensitive={hideSensitive}
                           />
                         </TableCell>
                         <TableCell className="whitespace-nowrap text-right">
-                          <SwapFeeText candidate={candidate} />
+                          <SwapFeeText candidate={candidate} hideSensitive={hideSensitive} />
                         </TableCell>
                         <TableCell>
                           <SwapRowMenu
@@ -1184,16 +1236,20 @@ export function SwapMatching() {
         }}
         pairDisabled={pairMutation.isPending}
         dismissDisabled={dismissMutation.isPending || pairMutation.isPending}
+        hideSensitive={hideSensitive}
       />
 
       <Dialog
         open={previewState !== null}
         onOpenChange={(open) => {
-          if (!open) setPreviewState(null);
+          if (!open) {
+            setPreviewError(null);
+            setPreviewState(null);
+          }
         }}
       >
-        <DialogContent>
-          <DialogHeader>
+        <DialogContent className="grid max-h-[85vh] w-[calc(100vw-2rem)] max-w-2xl grid-rows-[auto_minmax(0,1fr)_auto] gap-0 overflow-hidden p-0">
+          <DialogHeader className="border-b px-5 py-4 pr-12">
             <DialogTitle>
               {previewState?.mode === "exact"
                 ? "Apply all exact matches"
@@ -1201,40 +1257,55 @@ export function SwapMatching() {
                   ? "Apply matching rules"
                   : "Pair selected candidates"}
             </DialogTitle>
-            <DialogDescription>
+            <DialogDescription className={blurClass(hideSensitive)}>
               {previewState
                 ? previewSummaryText(previewState.candidates)
                 : null}
             </DialogDescription>
           </DialogHeader>
-          <div className="max-h-64 overflow-auto rounded border border-border/60 p-2 text-sm">
-            {previewState?.candidates.map((candidate) => (
-              <div
-                key={`${candidate.out_id}->${candidate.in_id}`}
-                className="flex items-center justify-between gap-2 border-b border-border/40 py-1 last:border-b-0"
-              >
-                <span className="truncate text-xs">
-                  {candidate.out_asset} {formatBtc(candidate.out_amount)} →{" "}
-                  {candidate.in_asset} {formatBtc(candidate.in_amount)}
-                </span>
-                <span className="text-xs text-muted-foreground">
-                  fee {formatSats(candidate.swap_fee_msat)}
-                </span>
+          <div className="min-h-0 overflow-y-auto px-5 py-4">
+            {previewError ? (
+              <div className="mb-3 rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">
+                {previewError}
               </div>
-            ))}
+            ) : null}
+            <div className="rounded-md border border-border/60 text-sm">
+              {previewState?.candidates.map((candidate) => (
+                <div
+                  key={`${candidate.out_id}->${candidate.in_id}`}
+                  className="grid gap-1 border-b border-border/40 p-2.5 last:border-b-0 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center"
+                >
+                  <span className={cn("min-w-0 truncate text-xs", blurClass(hideSensitive))}>
+                    {candidate.out_asset} {formatBtc(candidate.out_amount)} →{" "}
+                    {candidate.in_asset} {formatBtc(candidate.in_amount)}
+                  </span>
+                  <span className={cn("text-xs text-muted-foreground", blurClass(hideSensitive))}>
+                    fee {formatSats(candidate.swap_fee_msat)}
+                  </span>
+                </div>
+              ))}
+            </div>
           </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setPreviewState(null)}>
+          <DialogFooter className="border-t px-5 py-4">
+            <Button
+              variant="outline"
+              onClick={() => {
+                setPreviewError(null);
+                setPreviewState(null);
+              }}
+            >
               Cancel
             </Button>
             <Button
               onClick={() => void commitBulk()}
-              disabled={bulkPairMutation.isPending || pairMutation.isPending}
+              disabled={bulkCommitPending}
             >
-              {bulkPairMutation.isPending || pairMutation.isPending ? (
+              {bulkCommitPending ? (
                 <Loader2 className="size-4 animate-spin" />
               ) : null}
-              <span className="ml-1">Confirm</span>
+              <span className="ml-1">
+                Pair {previewState?.candidates.length ?? 0}
+              </span>
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -1276,7 +1347,14 @@ export function SwapMatching() {
               Paired <strong>{undoState.summary.count}</strong> candidate
               {undoState.summary.count === 1 ? "" : "s"}
               {undoState.summary.total_swap_fee_msat
-                ? ` · swap fees ${formatSats(undoState.summary.total_swap_fee_msat)}`
+                ? (
+                    <>
+                      {" · swap fees "}
+                      <span className={blurClass(hideSensitive)}>
+                        {formatSats(undoState.summary.total_swap_fee_msat)}
+                      </span>
+                    </>
+                  )
                 : ""}
             </span>
             <Button
@@ -1364,6 +1442,7 @@ interface SwapLegInlineProps {
   walletKind: string;
   timestamp: string;
   txId: string;
+  hideSensitive: boolean;
 }
 
 function SwapLegInline({
@@ -1374,6 +1453,7 @@ function SwapLegInline({
   walletKind,
   timestamp,
   txId,
+  hideSensitive,
 }: SwapLegInlineProps) {
   const rail = railForLeg(asset, walletKind);
   const walletName = displayWalletName(wallet, walletKind);
@@ -1382,11 +1462,11 @@ function SwapLegInline({
       <RailIcon rail={rail} size="compact" />
       <div className="min-w-0 text-xs text-muted-foreground">
         <div className="flex min-w-0 items-center gap-1.5 whitespace-nowrap">
-          <span className="truncate">{walletName}</span>
+          <span className={cn("truncate", blurClass(hideSensitive))}>{walletName}</span>
           <span aria-hidden="true">·</span>
           <span className="shrink-0">{formatTimestamp(timestamp)}</span>
         </div>
-        <div className="mt-1 truncate font-mono text-[11px] text-muted-foreground/80">
+        <div className={cn("mt-1 truncate font-mono text-[11px] text-muted-foreground/80", blurClass(hideSensitive))}>
           id {compactRecordId(txId)}
         </div>
       </div>
@@ -1397,6 +1477,7 @@ function SwapLegInline({
             direction === "out"
               ? "text-red-700 dark:text-red-300"
               : "text-emerald-700 dark:text-emerald-300",
+            blurClass(hideSensitive),
           )}
         >
           {formatBtc(amount)}
@@ -1409,7 +1490,13 @@ function SwapLegInline({
   );
 }
 
-function SwapFeeText({ candidate }: { candidate: SwapCandidate }) {
+function SwapFeeText({
+  candidate,
+  hideSensitive,
+}: {
+  candidate: SwapCandidate;
+  hideSensitive: boolean;
+}) {
   const percent = feePercent(candidate);
   const tone =
     percent <= 0.5
@@ -1419,10 +1506,10 @@ function SwapFeeText({ candidate }: { candidate: SwapCandidate }) {
         : "text-rose-700 dark:text-rose-300";
   return (
     <div className="text-right">
-      <div className={cn("text-sm font-semibold tabular-nums", tone)}>
+      <div className={cn("text-sm font-semibold tabular-nums", tone, blurClass(hideSensitive))}>
         {formatBtc(candidate.swap_fee)}
       </div>
-      <div className="mt-1 text-xs text-muted-foreground">
+      <div className={cn("mt-1 text-xs text-muted-foreground", blurClass(hideSensitive))}>
         {formatSats(candidate.swap_fee_msat)} · {percent.toFixed(2)}%
       </div>
     </div>
@@ -1492,6 +1579,7 @@ interface SwapCandidateDetailSheetProps {
   onDismiss: (candidate: SwapCandidate) => void;
   pairDisabled: boolean;
   dismissDisabled: boolean;
+  hideSensitive: boolean;
 }
 
 function SwapCandidateDetailSheet({
@@ -1504,6 +1592,7 @@ function SwapCandidateDetailSheet({
   onDismiss,
   pairDisabled,
   dismissDisabled,
+  hideSensitive,
 }: SwapCandidateDetailSheetProps) {
   const kind = candidate ? override.kind ?? candidate.default_kind : "manual";
   const policy = candidate ? override.policy ?? candidate.default_policy : "carrying-value";
@@ -1519,7 +1608,11 @@ function SwapCandidateDetailSheet({
                   ? "Matched by payment hash."
                   : "Matched by time and amount."}
                 {" "}
-                Delta {formatSats(candidate.swap_fee_msat)} ({feePercent(candidate).toFixed(2)}%).
+                Delta{" "}
+                <span className={blurClass(hideSensitive)}>
+                  {formatSats(candidate.swap_fee_msat)} ({feePercent(candidate).toFixed(2)}%)
+                </span>
+                .
               </SheetDescription>
             </SheetHeader>
             <div className="space-y-4 p-4 sm:p-6">
@@ -1533,6 +1626,7 @@ function SwapCandidateDetailSheet({
                   walletKind={candidate.out_wallet_kind}
                   timestamp={candidate.out_occurred_at}
                   txId={candidate.out_id}
+                  hideSensitive={hideSensitive}
                 />
                 <SwapLegDetails
                   title="Incoming"
@@ -1543,6 +1637,7 @@ function SwapCandidateDetailSheet({
                   walletKind={candidate.in_wallet_kind}
                   timestamp={candidate.in_occurred_at}
                   txId={candidate.in_id}
+                  hideSensitive={hideSensitive}
                 />
               </div>
 
@@ -1606,7 +1701,11 @@ function SwapCandidateDetailSheet({
                     <DetailRow label="Policy" value={policy} />
                     <DetailRow
                       label="Swap fee"
-                      value={`${formatSats(candidate.swap_fee_msat)} · ${feePercent(candidate).toFixed(2)}%`}
+                      value={
+                        <span className={blurClass(hideSensitive)}>
+                          {formatSats(candidate.swap_fee_msat)} · {feePercent(candidate).toFixed(2)}%
+                        </span>
+                      }
                     />
                   </dl>
                   <p className="mt-2 text-xs text-muted-foreground">
@@ -1999,6 +2098,7 @@ interface SwapLegDetailsProps {
   walletKind: string;
   timestamp: string;
   txId: string;
+  hideSensitive: boolean;
 }
 
 function SwapLegDetails({
@@ -2010,6 +2110,7 @@ function SwapLegDetails({
   walletKind,
   timestamp,
   txId,
+  hideSensitive,
 }: SwapLegDetailsProps) {
   const rail = railForLeg(asset, walletKind);
   const walletName = displayWalletName(wallet, walletKind);
@@ -2029,7 +2130,7 @@ function SwapLegDetails({
           value={
             <span className="inline-flex min-w-0 items-center gap-2">
               <RailIcon rail={rail} size="compact" />
-              <span className="truncate">{walletName}</span>
+              <span className={cn("truncate", blurClass(hideSensitive))}>{walletName}</span>
               {showKind ? (
                 <span className="text-xs uppercase text-muted-foreground">· {walletKind}</span>
               ) : null}
@@ -2039,7 +2140,7 @@ function SwapLegDetails({
         <DetailRow
           label="Amount"
           value={
-            <span className="font-mono tabular-nums">
+            <span className={cn("font-mono tabular-nums", blurClass(hideSensitive))}>
               {formatBtc(amount)} <span className="text-xs text-muted-foreground">({formatSats(amountMsat)})</span>
             </span>
           }
@@ -2047,7 +2148,7 @@ function SwapLegDetails({
         <DetailRow label="Occurred" value={formatTimestamp(timestamp)} />
         <DetailRow
           label="Record ID"
-          value={<span className="font-mono text-xs">{txId}</span>}
+          value={<span className={cn("font-mono text-xs", blurClass(hideSensitive))}>{txId}</span>}
         />
       </dl>
     </section>

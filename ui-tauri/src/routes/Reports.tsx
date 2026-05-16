@@ -608,6 +608,7 @@ function ReportsView({
           <LotAuditPanel
             lots={lots}
             totals={totals}
+            method={method}
             jurisdiction={jurisdiction}
             hideSensitive={hideSensitive}
             formatNumber={fmt}
@@ -1462,6 +1463,7 @@ function ReportFactRow({ label, value }: { label: string; value: ReactNode }) {
 function LotAuditPanel({
   lots,
   totals,
+  method,
   jurisdiction,
   hideSensitive,
   formatNumber,
@@ -1469,6 +1471,7 @@ function LotAuditPanel({
 }: {
   lots: DisposedLot[];
   totals: ReportTotals;
+  method: CostBasisMethod;
   jurisdiction: (typeof JURISDICTIONS)[string];
   hideSensitive: boolean;
   formatNumber: (value: number) => string;
@@ -1553,6 +1556,7 @@ function LotAuditPanel({
                 <ReportLotRow
                   key={`${lot.acquired}-${lot.disposed}-${index}`}
                   lot={lot}
+                  method={method}
                   hideSensitive={hideSensitive}
                   formatNumber={formatNumber}
                 />
@@ -1737,18 +1741,25 @@ function NeutralSwapAuditPanel({
 
 interface ReportLotRowProps {
   lot: DisposedLot;
+  method: CostBasisMethod;
   hideSensitive: boolean;
   formatNumber: (value: number) => string;
 }
 
-function ReportLotRow({ lot, hideSensitive, formatNumber }: ReportLotRowProps) {
+function ReportLotRow({
+  lot,
+  method,
+  hideSensitive,
+  formatNumber,
+}: ReportLotRowProps) {
   const gain = lot.proceedsEur - lot.costEur;
   const isLong = lot.type === "LT";
+  const acquiredLabel = lot.acquired || pooledAcquisitionLabel(method);
 
   return (
     <TableRow>
       <TableCell className="font-mono text-xs text-muted-foreground">
-        {lot.acquired || "n/a"}
+        {acquiredLabel}
       </TableCell>
       <TableCell className="font-mono text-xs text-muted-foreground">
         {lot.disposed}
@@ -1793,6 +1804,12 @@ function ReportLotRow({ lot, hideSensitive, formatNumber }: ReportLotRowProps) {
       </TableCell>
     </TableRow>
   );
+}
+
+function pooledAcquisitionLabel(method: CostBasisMethod) {
+  return method === "moving_average" || method === "moving_average_at"
+    ? "Pooled"
+    : "Unknown";
 }
 
 type ReportTotals = {
@@ -1845,11 +1862,11 @@ function buildReportReadiness(
 
   if (needsJournals) {
     return {
-      title: "Reprocess journals",
-      detail: "Report totals need a fresh journal state before export.",
+      title: "Process ledger",
+      detail: "Report totals need fresh journal processing before export.",
       tone: "warning",
       icon: RefreshCw,
-      action: { label: "Open journals", href: "/journals" },
+      action: { label: "Open ledger", href: "/journals" },
     };
   }
 
@@ -1876,7 +1893,7 @@ function buildReportReadiness(
 
   return {
     title: "Ready for export",
-    detail: "Journals are current and the review queue is clear.",
+    detail: "The ledger is current and the review queue is clear.",
     tone: "good",
     icon: CheckCircle2,
   };

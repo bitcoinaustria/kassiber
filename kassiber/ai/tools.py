@@ -515,6 +515,41 @@ TOOL_CATALOG: tuple[ToolEntry, ...] = (
         summary_template="Read rate coverage",
     ),
     ToolEntry(
+        name="ui.rates.rebuild",
+        description=(
+            "After explicit consent, fetch missing provider spot-rate windows, "
+            "clear provider-derived transaction prices, and reprocess journals."
+        ),
+        parameters={
+            "type": "object",
+            "additionalProperties": False,
+            "properties": {
+                "source": {
+                    "type": "string",
+                    "enum": ["coinbase-exchange"],
+                    "description": "Provider to fetch from. Defaults to coinbase-exchange.",
+                },
+                "pair": {
+                    "type": "string",
+                    "description": "Optional pair such as BTC-EUR. Omit to cover supported pairs.",
+                },
+                "days": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "Fallback continuous range when no transactions need prices.",
+                },
+                "reprice_transactions": {
+                    "type": "boolean",
+                    "description": "Clear provider-derived transaction prices and reprocess journals. Defaults to true.",
+                },
+            },
+        },
+        kind_class="mutating",
+        wire_name="ui_rates_rebuild",
+        daemon_kind="ui.rates.rebuild",
+        summary_template="Fetch spot prices",
+    ),
+    ToolEntry(
         name="ui.report.blockers",
         description=(
             "Read deterministic report-readiness blockers: missing workspace/profile, "
@@ -1066,6 +1101,11 @@ def summarize_tool_call(tool: ToolEntry, arguments: dict[str, Any]) -> str:
         return "Refresh all watch-only sources"
     if tool.name == "ui.journals.process":
         return "Process journals"
+    if tool.name == "ui.rates.rebuild":
+        pair = arguments.get("pair")
+        if isinstance(pair, str) and pair.strip():
+            return f"Fetch spot prices for {pair.strip()}"
+        return "Fetch missing spot prices and reprocess journals"
     if tool.name == "ui.maintenance.configure":
         enabled = arguments.get("auto_sync_before_report_reads")
         return (

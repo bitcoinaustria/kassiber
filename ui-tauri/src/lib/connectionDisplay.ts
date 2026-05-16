@@ -14,6 +14,7 @@ export const connectionKindCategoryLabels: Record<ConnectionKind, string> = {
   coinbase: "Exchange",
   bitpanda: "Exchange",
   river: "Exchange",
+  bullbitcoin: "Exchange",
   strike: "Lightning",
   phoenix: "Lightning",
   custom: "Custom",
@@ -35,6 +36,7 @@ export const connectionKindLabels: Record<ConnectionKind, string> = {
   coinbase: "Coinbase",
   bitpanda: "Bitpanda",
   river: "River",
+  bullbitcoin: "Bull Bitcoin",
   strike: "Strike",
   phoenix: "Phoenix",
   custom: "Custom",
@@ -65,6 +67,7 @@ export function connectionKindTone(kind: ConnectionKind) {
     case "coinbase":
     case "bitpanda":
     case "river":
+    case "bullbitcoin":
       return "border-violet-600/20 bg-violet-500/10 text-violet-700 dark:text-violet-300";
     case "cashu":
       return "border-sky-600/20 bg-sky-500/10 text-sky-700 dark:text-sky-300";

@@ -318,6 +318,9 @@ surfaces:
 - `ui_rates_coverage` maps to daemon kind `ui.rates.coverage`; it returns
   transaction pricing coverage, rows that still require a usable fiat spot
   price, and whether local rates-cache samples can cover those gaps
+- `ui_rates_rebuild` maps to daemon kind `ui.rates.rebuild`; after consent it
+  fetches missing provider spot-rate windows, clears provider-derived
+  transaction prices, and reprocesses journals
 - `ui_report_blockers` maps to daemon kind `ui.report.blockers`; it returns a
   deterministic report-readiness answer with blockers for missing scope,
   wallets, transactions, stale journals, quarantine, or missing prices
@@ -362,9 +365,11 @@ restricted to files under `skills/kassiber/references/`: `command-templates`,
 
 Mutating provider tools currently include `ui_wallets_sync`, which maps to
 daemon kind `ui.wallets.sync`, `ui_journals_process`, which maps to
-`ui.journals.process`, `ui_maintenance_configure`, which changes active-profile
-AI maintenance settings, and `ui_maintenance_run`, which runs optional sync plus
-journal maintenance and returns report blockers. The same consent path also
+`ui.journals.process`, `ui_rates_rebuild`, which refreshes provider spot prices
+and reprocesses journals, `ui_maintenance_configure`, which changes
+active-profile AI maintenance settings, and `ui_maintenance_run`, which runs
+optional sync plus journal maintenance and returns report blockers. The same
+consent path also
 covers review-queue actions exposed to chat: `ui_transfers_pair`,
 `ui_transfers_unpair`, `ui_transfers_bulk_pair`, `ui_transfers_dismiss`,
 `ui_transfers_rules_create`, `ui_transfers_rules_delete`,

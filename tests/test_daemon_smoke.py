@@ -3427,6 +3427,44 @@ class DaemonSmokeTest(unittest.TestCase):
         self.assertIs(payload_mock.call_args.args[0], conn_marker)
         self.assertEqual(results[0]["envelope"]["kind"], "ui.journals.process")
 
+    def test_rates_rebuild_tool_uses_daemon_main_thread_connection(self):
+        task_queue = queue.Queue()
+        runtime = AiToolRuntime(
+            data_root="/not-used",
+            runtime_config={},
+            main_thread_tasks=task_queue,
+            maintenance_state={},
+        )
+        call = ParsedAiToolCall(
+            call_id="call_1",
+            name="ui.rates.rebuild",
+            arguments={"pair": "BTC-EUR"},
+        )
+        results = []
+
+        with (
+            mock.patch(
+                "kassiber.daemon.open_db",
+                side_effect=AssertionError("should use daemon main connection"),
+            ),
+            mock.patch(
+                "kassiber.daemon._rates_rebuild_payload",
+                return_value={"source": "coinbase-exchange"},
+            ) as payload_mock,
+        ):
+            thread = threading.Thread(
+                target=lambda: results.append(_execute_mutating_ai_tool(call, runtime)),
+            )
+            thread.start()
+            task = task_queue.get(timeout=1)
+            conn_marker = object()
+            task.response.put((True, task.callback(conn_marker)))
+            thread.join(timeout=1)
+
+        self.assertFalse(thread.is_alive())
+        payload_mock.assert_called_once_with(conn_marker, {"pair": "BTC-EUR"})
+        self.assertEqual(results[0]["envelope"]["kind"], "ui.rates.rebuild")
+
     def test_journal_events_ai_tool_dispatches_to_snapshot_builder(self):
         task_queue = queue.Queue()
         runtime = AiToolRuntime(

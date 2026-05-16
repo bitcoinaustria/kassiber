@@ -65,6 +65,7 @@ from .cli.handlers import (
     delete_transfer_rule,
     dismiss_transfer_candidate,
     invalidate_journals,
+    import_into_wallet,
     list_saved_views_cli,
     list_transaction_pairs,
     list_transfer_rules,
@@ -176,6 +177,10 @@ SUPPORTED_KINDS = (
     "ui.wallets.list",
     "ui.backends.list",
     "ui.backends.options",
+    "ui.backends.settings.list",
+    "ui.backends.create",
+    "ui.backends.update",
+    "ui.backends.delete",
     "ui.backends.electrum.test",
     "ui.backends.http.test",
     "ui.reports.capital_gains",
@@ -262,6 +267,7 @@ SUPPORTED_KINDS = (
     "ui.secrets.change_passphrase",
     "ui.next_actions",
     "ui.wallets.create",
+    "ui.wallets.import_file",
     "ui.wallets.preview_descriptor",
     "ui.connections.sources",
     "ui.connections.btcpay.create",
@@ -3204,6 +3210,12 @@ def _execute_mutating_ai_tool(call: ParsedAiToolCall, runtime: AiToolRuntime) ->
                 return {"ok": True, "envelope": build_envelope(entry.daemon_kind, payload)}
 
             return _run_on_daemon_main_thread(runtime, _execute)
+        if entry.daemon_kind == "ui.rates.rebuild":
+            def _execute(conn: sqlite3.Connection) -> dict[str, Any]:
+                payload = _rates_rebuild_payload(conn, call.arguments)
+                return {"ok": True, "envelope": build_envelope(entry.daemon_kind, payload)}
+
+            return _run_on_daemon_main_thread(runtime, _execute)
         if entry.daemon_kind == "ui.maintenance.configure":
             def _execute(conn: sqlite3.Connection) -> dict[str, Any]:
                 payload = _maintenance_configure_payload(conn, call.arguments)
@@ -5056,6 +5068,7 @@ _UI_WALLET_SOURCE_FORMATS = {
     "btcpay_csv",
     "phoenix_csv",
     "river_csv",
+    "bullbitcoin_csv",
 }
 
 
@@ -5143,6 +5156,115 @@ def _backend_options_payload(ctx: "DaemonContext") -> dict[str, Any]:
     }
 
 
+def _backend_settings_list_payload(ctx: "DaemonContext") -> dict[str, Any]:
+    return {
+        "backends": core_accounts.list_backends(ctx.runtime_config),
+        "summary": {
+            "count": len(ctx.runtime_config.get("backends", {})),
+            "default_backend": str(ctx.runtime_config.get("default_backend") or "") or None,
+        },
+    }
+
+
+def _backend_config_arg(args: dict[str, Any]) -> dict[str, Any] | None:
+    value = args.get("config")
+    if value is None:
+        return None
+    if not isinstance(value, dict):
+        raise AppError(
+            "config must be an object",
+            code="validation",
+            details={"type": type(value).__name__},
+            retryable=False,
+        )
+    return value
+
+
+def _backend_common_args(args: dict[str, Any]) -> dict[str, Any]:
+    clear_raw = args.get("clear")
+    if clear_raw is None:
+        clear_fields: list[str] = []
+    elif isinstance(clear_raw, list) and all(
+        isinstance(item, str) for item in clear_raw
+    ):
+        clear_fields = [item.strip() for item in clear_raw if item.strip()]
+    else:
+        raise AppError(
+            "clear must be a list of backend field names",
+            code="validation",
+            details={"type": type(clear_raw).__name__},
+            retryable=False,
+        )
+    payload: dict[str, Any] = {
+        "kind": _optional_str_arg(args, "kind"),
+        "url": _optional_str_arg(args, "url"),
+        "chain": _optional_str_arg(args, "chain"),
+        "network": _optional_str_arg(args, "network"),
+        "auth_header": _optional_str_arg(args, "auth_header"),
+        "token": _optional_str_arg(args, "token"),
+        "tor_proxy": _optional_str_arg(args, "tor_proxy"),
+        "notes": _optional_str_arg(args, "notes"),
+        "config": _backend_config_arg(args),
+        "clear": clear_fields,
+    }
+    batch_size = args.get("batch_size")
+    if batch_size is not None:
+        if not isinstance(batch_size, int):
+            raise AppError(
+                "batch_size must be an integer",
+                code="validation",
+                details={"type": type(batch_size).__name__},
+                retryable=False,
+            )
+        payload["batch_size"] = batch_size
+    else:
+        payload["batch_size"] = None
+    timeout = args.get("timeout")
+    if timeout is not None:
+        if not isinstance(timeout, int):
+            raise AppError(
+                "timeout must be an integer",
+                code="validation",
+                details={"type": type(timeout).__name__},
+                retryable=False,
+            )
+        payload["timeout"] = timeout
+    else:
+        payload["timeout"] = None
+    return payload
+
+
+def _create_backend_payload(ctx: "DaemonContext", args: dict[str, Any]) -> dict[str, Any]:
+    common = _backend_common_args(args)
+    name = _required_str_arg(args, "name", "Backend name")
+    kind = common.pop("kind") or ""
+    url = common.pop("url") or ""
+    common.pop("clear", None)
+    payload = core_accounts.create_backend(
+        ctx.conn,
+        name,
+        kind,
+        url,
+        **common,
+    )
+    merge_db_backends(ctx.conn, ctx.runtime_config)
+    return payload
+
+
+def _update_backend_payload(ctx: "DaemonContext", args: dict[str, Any]) -> dict[str, Any]:
+    name = _required_str_arg(args, "name", "Backend name")
+    payload = core_accounts.update_backend(ctx.conn, name, _backend_common_args(args))
+    merge_db_backends(ctx.conn, ctx.runtime_config)
+    return payload
+
+
+def _delete_backend_payload(ctx: "DaemonContext", args: dict[str, Any]) -> dict[str, Any]:
+    name = _required_str_arg(args, "name", "Backend name")
+    payload = core_accounts.delete_backend(ctx.conn, name)
+    merge_db_backends(ctx.conn, ctx.runtime_config)
+    return payload
+
+
 def _create_wallet_payload(
     conn: sqlite3.Connection,
     args: dict[str, Any],
@@ -5216,6 +5338,30 @@ def _create_wallet_payload(
         config=config,
     )
     return {"wallet": wallet}
+
+
+def _import_wallet_file_payload(
+    conn: sqlite3.Connection,
+    args: dict[str, Any],
+) -> dict[str, Any]:
+    wallet_ref = _required_str_arg(args, "wallet", "Wallet")
+    source_file = _source_file_arg(args)
+    if not source_file:
+        raise AppError(
+            "source_file is required",
+            code="validation",
+            hint="Choose the local export file to import.",
+            retryable=False,
+        )
+    source_format = _required_str_arg(args, "source_format", "Source format")
+    if source_format not in _UI_WALLET_SOURCE_FORMATS:
+        raise AppError(
+            f"Unsupported source format '{source_format}'",
+            code="validation",
+            hint="Choose a supported file format.",
+            retryable=False,
+        )
+    return import_into_wallet(conn, None, None, wallet_ref, source_file, source_format)
 
 
 def _slug_btcpay_backend_label(label: str) -> str:
@@ -6530,6 +6676,63 @@ def handle_request(
             False,
         )
 
+    if kind == "ui.backends.settings.list":
+        return (
+            _with_request_id(
+                build_envelope(
+                    "ui.backends.settings.list",
+                    _backend_settings_list_payload(ctx),
+                ),
+                request_id,
+            ),
+            False,
+        )
+
+    if kind == "ui.backends.create":
+        return (
+            _with_request_id(
+                build_envelope(
+                    "ui.backends.create",
+                    _create_backend_payload(
+                        ctx,
+                        _coerce_args_dict(request_id, request.get("args")),
+                    ),
+                ),
+                request_id,
+            ),
+            True,
+        )
+
+    if kind == "ui.backends.update":
+        return (
+            _with_request_id(
+                build_envelope(
+                    "ui.backends.update",
+                    _update_backend_payload(
+                        ctx,
+                        _coerce_args_dict(request_id, request.get("args")),
+                    ),
+                ),
+                request_id,
+            ),
+            True,
+        )
+
+    if kind == "ui.backends.delete":
+        return (
+            _with_request_id(
+                build_envelope(
+                    "ui.backends.delete",
+                    _delete_backend_payload(
+                        ctx,
+                        _coerce_args_dict(request_id, request.get("args")),
+                    ),
+                ),
+                request_id,
+            ),
+            True,
+        )
+
     if kind == "ui.backends.electrum.test":
         return (
             _with_request_id(
@@ -7176,6 +7379,21 @@ def handle_request(
                 request_id,
             ),
             False,
+        )
+
+    if kind == "ui.wallets.import_file":
+        return (
+            _with_request_id(
+                build_envelope(
+                    "ui.wallets.import_file",
+                    _import_wallet_file_payload(
+                        ctx.conn,
+                        _coerce_args_dict(request_id, request.get("args")),
+                    ),
+                ),
+                request_id,
+            ),
+            True,
         )
 
     if kind == "ui.wallets.preview_descriptor":

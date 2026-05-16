@@ -66,6 +66,7 @@ import { cn } from "@/lib/utils";
 import { isFilePickerAvailable, pickFile } from "@/lib/filePicker";
 import { editConfigKindForConnection } from "@/lib/connectionEditKind";
 import { describeWalletSyncResult, type SyncResult } from "@/lib/syncResults";
+import { MISSING_FIAT_LABEL } from "@/lib/currency";
 import {
   startingSyncProgress,
   syncProgressNotification,
@@ -80,18 +81,22 @@ const blurClass = (hidden: boolean) => (hidden ? "sensitive" : "");
 const MAX_DESCRIPTOR_GAP_LIMIT = 5000;
 
 const fmtBtc = (value: number) => `₿ ${value.toFixed(8)}`;
-const fmtEur = (value: number) =>
-  "€ " +
-  value.toLocaleString("de-AT", {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  });
+const fmtEur = (value: number | null) =>
+  value === null
+    ? MISSING_FIAT_LABEL
+    : "€ " +
+      value.toLocaleString("de-AT", {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2,
+      });
 const fmtSatSigned = (amountSat: number) =>
   `${amountSat >= 0 ? "+ " : "- "}${Math.abs(amountSat).toLocaleString(
     "en-US",
   )}`;
-const fmtEurSigned = (amountEur: number) =>
-  `${amountEur >= 0 ? "+ " : "- "}${fmtEur(Math.abs(amountEur))}`;
+const fmtEurSigned = (amountEur: number | null) =>
+  amountEur === null
+    ? MISSING_FIAT_LABEL
+    : `${amountEur >= 0 ? "+ " : "- "}${fmtEur(Math.abs(amountEur))}`;
 const fmtShortTxid = (value?: string) =>
   !value ? "no id" : value.length <= 18 ? value : `${value.slice(0, 10)}…${value.slice(-6)}`;
 

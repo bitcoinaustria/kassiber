@@ -138,6 +138,7 @@ WALLET_KINDS = [
     "nwc",
     "phoenix",
     "river",
+    "bullbitcoin",
     "custom",
 ]
 
@@ -1485,6 +1486,11 @@ WALLET_KIND_CATALOG = {
         "config_fields": ["source_file", "source_format"],
         "requires": [],
     },
+    "bullbitcoin": {
+        "summary": "Bull Bitcoin order CSV importer for exact buy/sell execution pricing.",
+        "config_fields": ["source_file", "source_format"],
+        "requires": [],
+    },
     "custom": {
         "summary": "Custom CSV/JSON source; use with --config/--config-file to describe field mapping.",
         "config_fields": ["source_file", "source_format", "config"],
@@ -2254,8 +2260,8 @@ def list_transactions(
             t.asset,
             t.amount,
             t.fee,
-            COALESCE(t.fiat_rate, 0) AS fiat_rate,
-            COALESCE(t.fiat_value, 0) AS fiat_value,
+            t.fiat_rate,
+            t.fiat_value,
             t.fiat_rate_exact,
             t.fiat_value_exact,
             t.fiat_price_source,
@@ -2306,6 +2312,10 @@ def list_transactions(
         record["amount"] = float(msat_to_btc(record["amount"]))
         record["fee_msat"] = int(record["fee"])
         record["fee"] = float(msat_to_btc(record["fee"]))
+        if record["fiat_rate"] is not None and float(record["fiat_rate"]) <= 0:
+            record["fiat_rate"] = None
+        if record["fiat_value"] is not None and float(record["fiat_value"]) <= 0:
+            record["fiat_value"] = None
         record["excluded"] = bool(record["excluded"])
         record["tags"] = tags_by_transaction.get(record["id"], [])
         results.append(record)
@@ -2370,6 +2380,7 @@ def latest_rates_for_profile(conn, profile_id):
 
 
 def auto_price_transactions_from_rates_cache(conn, profile):
+    missing_price_sql = core_rates.transaction_price_missing_sql_unqualified()
     tx_rows = conn.execute(
         """
         SELECT id, occurred_at, asset, amount, fiat_currency, fiat_rate, fiat_value,
@@ -2378,10 +2389,7 @@ def auto_price_transactions_from_rates_cache(conn, profile):
         FROM transactions
         WHERE profile_id = ? AND excluded = 0
           AND (
-            (
-              fiat_rate IS NULL AND fiat_value IS NULL
-              AND fiat_rate_exact IS NULL AND fiat_value_exact IS NULL
-            )
+            {missing_price_sql}
             OR (
               fiat_price_source = ?
               AND pricing_source_kind IS NULL
@@ -2389,7 +2397,7 @@ def auto_price_transactions_from_rates_cache(conn, profile):
             )
           )
         ORDER BY occurred_at ASC, created_at ASC, id ASC
-        """,
+        """.format(missing_price_sql=missing_price_sql),
         (profile["id"], pricing.LEGACY_SOURCE_RATES_CACHE),
     ).fetchall()
     auto_priced = 0

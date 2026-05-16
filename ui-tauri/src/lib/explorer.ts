@@ -17,7 +17,10 @@ export interface ExplorerTarget {
 }
 
 const PUBLIC_EXPLORERS: Record<ExplorerNetwork, { label: string; baseUrl: string }> = {
-  bitcoin: { label: "mempool.space", baseUrl: "https://mempool.space" },
+  bitcoin: {
+    label: "mempool.bitcoin-austria.at",
+    baseUrl: "https://mempool.bitcoin-austria.at",
+  },
   liquid: { label: "Liquid Network", baseUrl: "https://liquid.network" },
 };
 

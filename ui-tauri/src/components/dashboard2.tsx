@@ -24,6 +24,7 @@ import {
   BarChart,
   CartesianGrid,
   Cell,
+  LabelList,
   ReferenceLine,
   Tooltip,
   XAxis,
@@ -62,6 +63,7 @@ import { formatBtc, useCurrency, type Currency } from "@/lib/currency";
 import { type ExplorerSettings } from "@/lib/explorer";
 import { screenShellClassName } from "@/lib/screen-layout";
 import { CurrencyToggleText } from "@/components/kb/CurrencyToggleText";
+import { ScreenRefreshSkeleton } from "@/components/kb/ScreenSkeleton";
 import { useWalletSyncAction } from "@/hooks/useWalletSyncAction";
 import { useDaemonMutation } from "@/daemon/client";
 import {
@@ -109,7 +111,7 @@ import {
   type TransactionStatus,
 } from "@/components/transactions";
 
-type PeriodKey = "ytd" | "30days" | "3months" | "1year" | "5years";
+type PeriodKey = "ytd" | "30days" | "3months" | "1year" | "5years" | "all";
 type FlowChartMetric = "amount" | "count";
 type FlowChartMode = "external" | "all";
 type FlowChartSegment = "incoming" | "outgoing" | "transfers" | "swaps";
@@ -166,7 +168,7 @@ type FlowBucket = {
 type SwapCandidate = {
   in: Transaction;
   out: Transaction;
-  eur: number;
+  eur: number | null;
   btc: number;
 };
 
@@ -787,10 +789,18 @@ function toDashboardTransaction(tx: Tx, index: number): Transaction {
     id: tx.id,
     txnId: tx.externalId || tx.id || `TX-${index + 1}`,
     explorerId: tx.explorerId || undefined,
-    amount: Math.abs(tx.eur || (tx.amountSat / SATS_PER_BTC) * tx.rate),
+    amount:
+      tx.eur !== null
+        ? Math.abs(tx.eur)
+        : tx.rate !== null
+          ? Math.abs((tx.amountSat / SATS_PER_BTC) * tx.rate)
+          : null,
     amountBtc: Math.abs(tx.amountSat / SATS_PER_BTC),
     feeBtc: tx.feeSat ? Math.abs(tx.feeSat / SATS_PER_BTC) : 0,
-    feeEur: tx.feeSat ? Math.abs((tx.feeSat / SATS_PER_BTC) * tx.rate) : 0,
+    feeEur:
+      tx.feeSat && tx.rate !== null
+        ? Math.abs((tx.feeSat / SATS_PER_BTC) * tx.rate)
+        : null,
     asset: "BTC",
     rate: tx.rate,
     note: tx.note,
@@ -855,6 +865,7 @@ const periodLabels: Record<PeriodKey, string> = {
   "3months": "3 Months",
   "30days": "30 Days",
   "5years": "5 Years",
+  all: "All",
 };
 
 const flowChartMetricLabels: Record<FlowChartMetric, string> = {
@@ -896,6 +907,7 @@ const periodKeys: PeriodKey[] = [
   "ytd",
   "1year",
   "5years",
+  "all",
 ];
 
 function normalizePeriodParam(value: string | null): PeriodKey | null {
@@ -931,6 +943,9 @@ function normalizePeriodParam(value: string | null): PeriodKey | null {
   ) {
     return "5years";
   }
+  if (normalized === "all" || normalized === "max") {
+    return "all";
+  }
   return null;
 }
 
@@ -945,10 +960,21 @@ function periodLimit(period: PeriodKey) {
   if (period === "3months") return 18;
   if (period === "ytd") return 40;
   if (period === "5years") return 60;
+  if (period === "all") return Number.MAX_SAFE_INTEGER;
   return 30;
 }
 
+function sortTransactionsByDateDesc(records: Transaction[]) {
+  return [...records].sort((a, b) => {
+    const dateA = parseTransactionDate(a.date)?.getTime() ?? -Infinity;
+    const dateB = parseTransactionDate(b.date)?.getTime() ?? -Infinity;
+    return dateB - dateA;
+  });
+}
+
 function recordsForPeriod(records: Transaction[], period: PeriodKey) {
+  if (period === "all") return records;
+
   const dated = records
     .map((record) => ({ record, date: parseTransactionDate(record.date) }))
     .filter(
@@ -988,7 +1014,7 @@ function periodAnchorDate(dates: Date[]) {
   return latest > now ? latest : now;
 }
 
-function periodStartDate(end: Date, period: PeriodKey) {
+function periodStartDate(end: Date, period: PeriodKey, earliest?: Date) {
   const start = startOfLocalDay(end);
   if (period === "30days") {
     start.setDate(start.getDate() - 29);
@@ -999,6 +1025,8 @@ function periodStartDate(end: Date, period: PeriodKey) {
     start.setHours(0, 0, 0, 0);
   } else if (period === "5years") {
     start.setFullYear(start.getFullYear() - 5);
+  } else if (period === "all" && earliest) {
+    return startOfLocalDay(earliest);
   } else {
     start.setFullYear(start.getFullYear() - 1);
   }
@@ -1040,7 +1068,7 @@ function addBucketStep(date: Date, period: PeriodKey) {
     next.setDate(next.getDate() + 1);
   } else if (period === "3months") {
     next.setDate(next.getDate() + 7);
-  } else if (period === "5years") {
+  } else if (period === "5years" || period === "all") {
     next.setMonth(next.getMonth() + 3);
   } else {
     next.setMonth(next.getMonth() + 1);
@@ -1065,7 +1093,7 @@ function bucketTransactionDate(date: Date, period: PeriodKey): FlowBucket {
       })}`,
     };
   }
-  if (period === "5years") {
+  if (period === "5years" || period === "all") {
     const quarterStart = new Date(date);
     quarterStart.setMonth(Math.floor(date.getMonth() / 3) * 3, 1);
     quarterStart.setHours(0, 0, 0, 0);
@@ -1093,9 +1121,10 @@ function buildEmptyFlowBuckets(
   if (!dated.length) return grouped;
 
   const end = periodAnchorDate(dated);
-  let cursor = periodStartDate(end, period);
+  const earliest = dated.reduce((min, date) => (date < min ? date : min), dated[0]);
+  let cursor = periodStartDate(end, period, earliest);
   if (period === "3months") cursor = startOfIsoWeek(cursor);
-  if (period === "5years") {
+  if (period === "5years" || period === "all") {
     cursor.setMonth(Math.floor(cursor.getMonth() / 3) * 3, 1);
     cursor.setHours(0, 0, 0, 0);
   }
@@ -1119,7 +1148,7 @@ function buildEmptyFlowBuckets(
 function flowBucketLabel(period: PeriodKey) {
   if (period === "30days") return "day";
   if (period === "3months") return "week";
-  if (period === "5years") return "quarter";
+  if (period === "5years" || period === "all") return "quarter";
   return "month";
 }
 
@@ -1127,7 +1156,7 @@ function sumByFlow(records: Transaction[], flow: TransactionFlow) {
   const rows = records.filter((txn) => transactionFlow(txn) === flow);
   return {
     count: rows.length,
-    eur: rows.reduce((sum, txn) => sum + txn.amount, 0),
+    eur: rows.reduce((sum, txn) => sum + (txn.amount ?? 0), 0),
     btc: rows.reduce((sum, txn) => sum + transactionBtc(txn), 0),
   };
 }
@@ -1146,7 +1175,10 @@ function buildSwapCandidates(
         {
           in: input,
           out,
-          eur: Math.min(input.amount, out.amount),
+          eur:
+            input.amount !== null && out.amount !== null
+              ? Math.min(input.amount, out.amount)
+              : null,
           btc: Math.min(transactionBtc(input), transactionBtc(out)),
         },
       ];
@@ -1197,7 +1229,10 @@ function buildSwapCandidates(
     candidates.push({
       in: best.txn,
       out: out.txn,
-      eur: Math.min(best.txn.amount, out.txn.amount),
+      eur:
+        best.txn.amount !== null && out.txn.amount !== null
+          ? Math.min(best.txn.amount, out.txn.amount)
+          : null,
       btc: Math.min(transactionBtc(best.txn), transactionBtc(out.txn)),
     });
   }
@@ -1253,7 +1288,7 @@ function buildFlowChartRows(
         stats: emptyFlowChartStats(),
       };
     const value =
-      metric === "count" ? 1 : currency === "btc" ? transactionBtc(txn) : txn.amount;
+      metric === "count" ? 1 : currency === "btc" ? transactionBtc(txn) : (txn.amount ?? 0);
     const flow = candidateIds.has(txn.id) ? "swap" : transactionFlow(txn);
     const segment = flowChartSegmentForFlow(flow);
     if (flow === "incoming") row.incoming += value;
@@ -1280,7 +1315,7 @@ function buildBreakdown<T extends string>(
     const key = getKey(txn);
     const row = rows.get(key) ?? { key, count: 0, eur: 0, btc: 0 };
     row.count += 1;
-    row.eur += txn.amount;
+    row.eur += txn.amount ?? 0;
     row.btc += transactionBtc(txn);
     rows.set(key, row);
   }
@@ -1373,7 +1408,7 @@ const TransactionWorkbench = ({
   const navigate = useNavigate();
   const [chartMetric, setChartMetric] =
     React.useState<FlowChartMetric>("amount");
-  const [chartMode, setChartMode] = React.useState<FlowChartMode>("external");
+  const [chartMode, setChartMode] = React.useState<FlowChartMode>("all");
   const swapCandidates = buildSwapCandidates(records, swapCandidateRefs);
   const swapCandidateIds = new Set(
     swapCandidates.flatMap((candidate) => [
@@ -1389,7 +1424,7 @@ const TransactionWorkbench = ({
   const swapCandidateTotals = swapCandidates.reduce(
     (sum, candidate) => ({
       count: sum.count + 1,
-      eur: sum.eur + candidate.eur,
+      eur: sum.eur + (candidate.eur ?? 0),
       btc: sum.btc + candidate.btc,
     }),
     { count: 0, eur: 0, btc: 0 },
@@ -1855,7 +1890,14 @@ const TransactionWorkbench = ({
                 />
                 <Tooltip
                   allowEscapeViewBox={{ x: true, y: true }}
-                  cursor={{ fillOpacity: 0.05 }}
+                  cursor={{
+                    className: "transition-opacity duration-150",
+                    fill: "var(--primary)",
+                    fillOpacity: 0.1,
+                    stroke: "var(--primary)",
+                    strokeOpacity: 0.55,
+                    strokeWidth: 1,
+                  }}
                   content={
                     <FlowTooltip
                       hideSensitive={hideSensitive}
@@ -1884,6 +1926,13 @@ const TransactionWorkbench = ({
                       {...flowChartCellProps(row, "incoming")}
                     />
                   ))}
+                  {chartMetric === "count" ? (
+                    <LabelList
+                      dataKey="incoming"
+                      position="top"
+                      formatter={formatCountBarLabel}
+                    />
+                  ) : null}
                 </Bar>
                 <Bar
                   dataKey="outgoing"
@@ -1900,6 +1949,13 @@ const TransactionWorkbench = ({
                       {...flowChartCellProps(row, "outgoing")}
                     />
                   ))}
+                  {chartMetric === "count" ? (
+                    <LabelList
+                      dataKey="outgoing"
+                      position="bottom"
+                      formatter={formatCountBarLabel}
+                    />
+                  ) : null}
                 </Bar>
                 <Bar
                   dataKey="transfers"
@@ -1916,6 +1972,13 @@ const TransactionWorkbench = ({
                       {...flowChartCellProps(row, "transfers")}
                     />
                   ))}
+                  {chartMetric === "count" ? (
+                    <LabelList
+                      dataKey="transfers"
+                      position="top"
+                      formatter={formatCountBarLabel}
+                    />
+                  ) : null}
                 </Bar>
                 <Bar
                   dataKey="swaps"
@@ -1932,6 +1995,13 @@ const TransactionWorkbench = ({
                       {...flowChartCellProps(row, "swaps")}
                     />
                   ))}
+                  {chartMetric === "count" ? (
+                    <LabelList
+                      dataKey="swaps"
+                      position="top"
+                      formatter={formatCountBarLabel}
+                    />
+                  ) : null}
                 </Bar>
                 <ReferenceLine
                   y={0}
@@ -2120,6 +2190,11 @@ function formatFlowTooltipValue(
   return formatSignedDisplayMoney(value, value, currency);
 }
 
+function formatCountBarLabel(value: unknown) {
+  const count = Math.abs(Number(value ?? 0));
+  return count > 0 ? String(Math.round(count)) : "";
+}
+
 function flowPointEntries(row: FlowChartPoint) {
   return [
     ["incoming", row.incoming],
@@ -2151,7 +2226,7 @@ function addFlowChartSegmentStats(
   txn: Transaction,
 ) {
   const btc = transactionBtc(txn);
-  const eur = txn.amount;
+  const eur = txn.amount ?? 0;
   stats.count += 1;
   stats.btc += btc;
   stats.eur += eur;
@@ -3086,7 +3161,11 @@ const TransactionsTable = ({
                 const signedAmountBtc =
                   flow === "outgoing" ? -amountBtc : amountBtc;
                 const signedAmountEur =
-                  flow === "outgoing" ? -txn.amount : txn.amount;
+                  txn.amount === null
+                    ? null
+                    : flow === "outgoing"
+                      ? -txn.amount
+                      : txn.amount;
                 const primaryAmount =
                   flow === "incoming" || flow === "outgoing"
                     ? formatSignedDisplayMoney(
@@ -3479,11 +3558,13 @@ const Dashboard2 = ({
   transactions = MOCK_TRANSACTIONS,
   swapCandidates,
   swapCandidateTotal,
+  isDataRefreshing = false,
 }: {
   className?: string;
   transactions?: TransactionsList;
   swapCandidates?: SwapCandidateReference[];
   swapCandidateTotal?: number | null;
+  isDataRefreshing?: boolean;
 }) => {
   const [period, setPeriod] = React.useState<PeriodKey>(initialPeriodFromUrl);
   const [newTxnOpen, setNewTxnOpen] = React.useState(false);
@@ -3500,6 +3581,7 @@ const Dashboard2 = ({
   const explorerSettings = useUiStore((s) => s.explorerSettings);
   const currency = useCurrency();
   const { syncAll, isSyncing } = useWalletSyncAction();
+  const showRefreshSkeleton = isSyncing || isDataRefreshing;
   const records = React.useMemo(
     () =>
       transactions.txs.length
@@ -3507,9 +3589,16 @@ const Dashboard2 = ({
         : transactionRecords,
     [transactions.txs],
   );
+  const allPeriodRecords = React.useMemo(
+    () => sortTransactionsByDateDesc(records),
+    [records],
+  );
   const periodRecords = React.useMemo(
-    () => recordsForPeriod(records, period),
-    [records, period],
+    () =>
+      period === "all"
+        ? allPeriodRecords
+        : recordsForPeriod(records, period),
+    [allPeriodRecords, records, period],
   );
   const periodSwapCandidateIds = React.useMemo(
     () =>
@@ -3545,8 +3634,15 @@ const Dashboard2 = ({
 
   return (
     <div
-      className={cn(screenShellClassName, className)}
+      className={cn(screenShellClassName, "relative", className)}
+      aria-busy={showRefreshSkeleton}
     >
+      {showRefreshSkeleton ? (
+        <ScreenRefreshSkeleton
+          className="sticky top-2 z-20"
+          label="Refreshing transactions"
+        />
+      ) : null}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <PeriodTabs activePeriod={period} onPeriodChange={handlePeriodChange} />
         <div className="flex flex-wrap items-center gap-2 sm:gap-3">

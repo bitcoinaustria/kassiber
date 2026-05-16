@@ -63,21 +63,22 @@ export function ExplorerOpenDialog({
         }
       }}
     >
-      <DialogContent className="sm:max-w-lg">
-        <DialogHeader>
-          <div className="mb-2 flex size-10 items-center justify-center rounded-full bg-amber-100 text-amber-700 dark:bg-amber-950/50 dark:text-amber-300">
+      <DialogContent className="max-h-[calc(100dvh-2rem)] w-[min(calc(100vw-2rem),34rem)] overflow-hidden p-0 sm:max-w-none">
+        <div className="grid max-h-[calc(100dvh-2rem)] min-w-0 gap-4 overflow-y-auto p-4 sm:p-6">
+        <DialogHeader className="min-w-0 pr-8">
+          <div className="mb-1 flex size-10 shrink-0 items-center justify-center rounded-full bg-amber-100 text-amber-700 dark:bg-amber-950/50 dark:text-amber-300">
             <ShieldAlert className="size-5" aria-hidden="true" />
           </div>
           <DialogTitle>Open transaction in a browser?</DialogTitle>
-          <DialogDescription>
-            This opens {target?.label ?? "a public explorer"} outside Kassiber.
+          <DialogDescription className="max-w-prose">
+            This opens {target?.label ?? "the configured explorer"} outside Kassiber.
             The explorer can see your IP address and the transaction id you
             request.
           </DialogDescription>
         </DialogHeader>
         {transaction && target ? (
-          <div className="rounded-md border bg-muted/35 p-3 text-sm">
-            <p className="font-medium">{transaction.txnId}</p>
+          <div className="min-w-0 rounded-md border bg-muted/35 p-3 text-sm">
+            <p className="truncate font-medium">{transaction.txnId}</p>
             <p className="mt-1 break-all font-mono text-xs text-muted-foreground">
               {target.url}
             </p>
@@ -91,7 +92,7 @@ export function ExplorerOpenDialog({
             {openError}
           </p>
         ) : null}
-        <DialogFooter>
+        <DialogFooter className="gap-2 sm:flex-wrap">
           <DialogClose asChild>
             <Button type="button" variant="outline">
               Cancel
@@ -106,8 +107,8 @@ export function ExplorerOpenDialog({
             {opening ? "Opening..." : "Open explorer"}
           </Button>
         </DialogFooter>
+        </div>
       </DialogContent>
     </Dialog>
   );
 }
-

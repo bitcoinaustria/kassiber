@@ -159,6 +159,7 @@ class ToolCatalogPromptTest(unittest.TestCase):
             "ui_journals_process",
             "ui_rates_summary",
             "ui_rates_coverage",
+            "ui_rates_rebuild",
             "ui_report_blockers",
             "ui_audit_changes_since_last_answer",
             "ui_maintenance_settings",
@@ -215,6 +216,8 @@ class ToolCatalogPromptTest(unittest.TestCase):
         self.assertEqual(get_tool("ui_journals_quarantine").kind_class, "read_only")
         self.assertEqual(get_tool("ui_rates_summary").kind_class, "read_only")
         self.assertEqual(get_tool("ui_rates_coverage").name, "ui.rates.coverage")
+        self.assertEqual(get_tool("ui_rates_rebuild").name, "ui.rates.rebuild")
+        self.assertEqual(get_tool("ui_rates_rebuild").kind_class, "mutating")
         self.assertEqual(get_tool("ui_report_blockers").name, "ui.report.blockers")
         self.assertEqual(
             get_tool("ui_audit_changes_since_last_answer").name,
@@ -272,6 +275,11 @@ class ToolCatalogPromptTest(unittest.TestCase):
         )
         journal_tool = get_tool("ui.journals.process")
         self.assertEqual(summarize_tool_call(journal_tool, {}), "Process journals")
+        rates_tool = get_tool("ui.rates.rebuild")
+        self.assertEqual(
+            summarize_tool_call(rates_tool, {"pair": "BTC-EUR"}),
+            "Fetch spot prices for BTC-EUR",
+        )
         maintenance_tool = get_tool("ui.maintenance.run")
         self.assertEqual(
             summarize_tool_call(maintenance_tool, {"sync": "never"}),

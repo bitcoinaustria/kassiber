@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest";
 
-import { draftForTransaction, type Transaction } from "./model";
+import {
+  draftForTransaction,
+  formatCounterDisplayMoney,
+  formatDisplayMoney,
+  formatSignedDisplayMoney,
+  type Transaction,
+} from "./model";
 
 function txWithTags(tags: string[]): Transaction {
   return {
@@ -46,5 +52,13 @@ describe("draftForTransaction", () => {
 
     expect(draft.atCategory).toBe("neu_swap");
     expect(draft.taxable).toBe(false);
+  });
+});
+
+describe("money formatting", () => {
+  it("renders missing fiat values as unpriced instead of zero", () => {
+    expect(formatDisplayMoney(null, 0.01, "eur")).toBe("Unpriced");
+    expect(formatSignedDisplayMoney(null, 0.01, "eur")).toBe("Unpriced");
+    expect(formatCounterDisplayMoney(null, 0.01, "btc")).toBe("Unpriced");
   });
 });

@@ -443,6 +443,11 @@ function ConnectionRow({
 }: ConnectionRowProps) {
   const pct = totalBtc > 0 ? (c.balance / totalBtc) * 100 : 0;
   const isEur = currency === "eur";
+  const metadataItems = [
+    c.addresses != null ? `${c.addresses} addresses` : null,
+    c.channels != null ? `${c.channels} channels` : null,
+    c.gap != null ? `gap limit ${c.gap}` : null,
+  ].filter(Boolean);
 
   const onKeyDown = (event: KeyboardEvent<HTMLTableRowElement>) => {
     if (event.key === "Enter" || event.key === " ") {
@@ -481,10 +486,12 @@ function ConnectionRow({
               {c.label}
             </div>
             <div className="mt-1 flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-1 text-[10px] text-muted-foreground sm:text-xs">
-              {c.addresses != null && `${c.addresses} addresses`}
-              {c.channels != null && `${c.channels} channels`}
-              {c.gap != null && ` · gap ${c.gap}`}
-              {c.addresses == null && c.channels == null && "Ready"}
+              {metadataItems.map((item, index) => (
+                <span key={item}>
+                  {index > 0 ? "· " : ""}
+                  {item}
+                </span>
+              ))}
             </div>
           </div>
         </div>

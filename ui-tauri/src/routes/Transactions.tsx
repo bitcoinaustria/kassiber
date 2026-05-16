@@ -2,11 +2,13 @@ import {
   Dashboard2,
   type SwapCandidateReference,
 } from "@/components/dashboard2";
+import { ScreenSkeleton } from "@/components/kb/ScreenSkeleton";
 import { useDaemon } from "@/daemon/client";
 import {
   MOCK_TRANSACTIONS,
   type TransactionsList,
 } from "@/mocks/transactions";
+import { useUiStore } from "@/store/ui";
 
 interface SuggestEnvelope {
   candidates: SwapCandidateReference[];
@@ -16,12 +18,23 @@ interface SuggestEnvelope {
 }
 
 export function Transactions() {
-  const { data } = useDaemon<TransactionsList>("ui.transactions.list", {
-    limit: 500,
-  });
+  const dataMode = useUiStore((state) => state.dataMode);
+  const { data, isLoading, isFetching } = useDaemon<TransactionsList>(
+    "ui.transactions.list",
+    {
+      limit: 500,
+    },
+  );
   const swapQuery = useDaemon<SuggestEnvelope>("ui.transfers.suggest");
   const hasLiveTransactions =
     data?.kind === "ui.transactions.list" && Boolean(data.data);
+  const shouldShowLiveSkeleton =
+    dataMode === "real" && isLoading && !hasLiveTransactions;
+
+  if (shouldShowLiveSkeleton) {
+    return <ScreenSkeleton titleWidth="w-44" />;
+  }
+
   const transactions =
     hasLiveTransactions && data.data
       ? data.data
@@ -47,6 +60,7 @@ export function Transactions() {
       transactions={transactions}
       swapCandidates={swapCandidates}
       swapCandidateTotal={swapCandidateTotal}
+      isDataRefreshing={hasLiveTransactions && isFetching}
     />
   );
 }

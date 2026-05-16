@@ -6,7 +6,7 @@ shape across all formats so downstream DB-insertion code
 (`insert_wallet_records` in `kassiber.core.imports`) doesn't need to
 branch per wallet.
 
-Four format families live here:
+Import format families live here:
 
   - Generic JSON / CSV — user-supplied, pass-through (no asset-specific
     parsing beyond CSV-row decoding).
@@ -23,6 +23,10 @@ Four format families live here:
     exports. BTC-side rows are normalized to Kassiber transactions and
     exact fiat execution amounts are preserved as exchange pricing
     provenance where the export provides the paired cash leg.
+  - Bull Bitcoin (`bullbitcoin_csv`) — order export CSV. Completed
+    Bitcoin on-chain, Lightning, or Liquid <-> fiat orders are normalized
+    to exchange execution pricing, keyed by the exported transaction id
+    when present.
   - BIP329 JSONL — one-record-per-line label export. `record_type`
     distinguishes tx/addr/pubkey/input/output/xpub labels.
 
@@ -84,6 +88,8 @@ def load_import_records(file_path, input_format):
         return load_phoenix_csv_records(file_path)
     if input_format == "river_csv":
         return load_river_csv_records(file_path)
+    if input_format == "bullbitcoin_csv":
+        return load_bullbitcoin_csv_records(file_path)
     raise AppError(f"Unsupported input format '{input_format}'")
 
 
@@ -360,19 +366,23 @@ _RIVER_REQUIRED_COLUMNS = (
 )
 
 
+def _normalized_column_key(value):
+    return " ".join(str(value).replace("\xa0", " ").strip().split()).casefold()
+
+
 def _casefold_record(record):
     output = {}
     for key, value in record.items():
         if key is None:
             continue
-        output[str(key).strip().casefold()] = value
+        output[_normalized_column_key(key)] = value
     return output
 
 
 def _get_cell(record, *names):
     folded = _casefold_record(record)
     for name in names:
-        value = folded.get(name.casefold())
+        value = folded.get(_normalized_column_key(name))
         if value not in (None, ""):
             return value
     return None
@@ -388,7 +398,7 @@ def _clean_decimal_text(value):
     if text.startswith("(") and text.endswith(")"):
         negative = True
         text = text[1:-1].strip()
-    for symbol in ("$", "€", "£", "CHF", "USD", "EUR", "GBP", "BTC", "XBT"):
+    for symbol in ("$", "€", "£", "CHF", "USD", "EUR", "GBP", "BTC", "XBT", "LBTC"):
         text = text.replace(symbol, "")
     text = text.replace(",", "").replace(" ", "").strip()
     if not text:
@@ -398,14 +408,149 @@ def _clean_decimal_text(value):
     return text
 
 
-def _river_decimal(value):
+def _decimal_cell(value):
     text = _clean_decimal_text(value)
     return dec(text) if text is not None else None
 
 
-def _river_currency(value):
+def _currency_cell(value):
     currency = str_or_none(value)
     return normalize_asset_code(currency) if currency else None
+
+
+def _river_decimal(value):
+    return _decimal_cell(value)
+
+
+def _river_currency(value):
+    return _currency_cell(value)
+
+
+# -- Bull Bitcoin ------------------------------------------------------------
+
+
+_BULLBITCOIN_REQUIRED_COLUMNS = (
+    "ORDER_STATUS",
+    "PAYIN_AMOUNT",
+    "PAYIN_CURRENCY",
+    "PAYOUT_AMOUNT",
+    "PAYOUT_CURRENCY",
+    "COMPLETED_AT (UTC)",
+    "TRANSACTION_ID",
+)
+
+_BULLBITCOIN_CRYPTO_CURRENCIES = {"BTC", "XBT", "LBTC"}
+
+
+def _bullbitcoin_completed(record):
+    for column in ("ORDER_STATUS", "PAYIN_STATUS", "PAYOUT_STATUS"):
+        value = str_or_none(_get_cell(record, column))
+        if value and value.strip().casefold() != "completed":
+            return False
+    return True
+
+
+def normalize_bullbitcoin_record(record):
+    """Turn one Bull Bitcoin order-export row into the common import shape."""
+    sanitized = {str(key).strip(): value for key, value in record.items() if key is not None}
+    if not _bullbitcoin_completed(sanitized):
+        return None
+
+    payin_currency = _currency_cell(_get_cell(sanitized, "PAYIN_CURRENCY"))
+    payout_currency = _currency_cell(_get_cell(sanitized, "PAYOUT_CURRENCY"))
+    payin_amount = _decimal_cell(_get_cell(sanitized, "PAYIN_AMOUNT"))
+    payout_amount = _decimal_cell(_get_cell(sanitized, "PAYOUT_AMOUNT"))
+    if payin_amount is None or payout_amount is None:
+        raise AppError("Bull Bitcoin CSV has a completed row with an empty amount")
+
+    payin_is_crypto = payin_currency in _BULLBITCOIN_CRYPTO_CURRENCIES
+    payout_is_crypto = payout_currency in _BULLBITCOIN_CRYPTO_CURRENCIES
+    if payin_is_crypto and not payout_is_crypto:
+        direction = "outbound"
+        asset = "BTC" if payin_currency == "XBT" else payin_currency
+        amount = abs(payin_amount)
+        fiat_value = abs(payout_amount)
+        fiat_currency = payout_currency
+        kind = "sell"
+    elif payout_is_crypto and not payin_is_crypto:
+        direction = "inbound"
+        asset = "BTC" if payout_currency == "XBT" else payout_currency
+        amount = abs(payout_amount)
+        fiat_value = abs(payin_amount)
+        fiat_currency = payin_currency
+        kind = "buy"
+    else:
+        return None
+
+    txid = str_or_none(_get_cell(sanitized, "TRANSACTION_ID"))
+    if not txid:
+        return None
+    exchange_rate = _decimal_cell(_get_cell(sanitized, "EXCHANGE_RATE_AMOUNT"))
+    fiat_rate = exchange_rate if exchange_rate is not None else fiat_value / amount
+    order_ref = (
+        str_or_none(_get_cell(sanitized, "ORDER_ID"))
+        or str_or_none(_get_cell(sanitized, "ORDER_NUMBER"))
+        or txid
+    )
+    occurred_at = (
+        _get_cell(sanitized, "COMPLETED_AT (UTC)")
+        or _get_cell(sanitized, "SENT_AT (UTC)")
+        or _get_cell(sanitized, "CREATED_AT (UTC)")
+    )
+    payin_method = str_or_none(_get_cell(sanitized, "PAYIN_METHOD"))
+    payout_method = str_or_none(_get_cell(sanitized, "PAYOUT_METHOD"))
+    method_text = " to ".join(part for part in (payin_method, payout_method) if part)
+    description = f"Bull Bitcoin {kind}"
+    if method_text:
+        description = f"{description} - {method_text}"
+    return {
+        "txid": txid,
+        "occurred_at": occurred_at,
+        "direction": direction,
+        "asset": asset,
+        "amount": amount,
+        "fee": Decimal("0"),
+        "fiat_rate": fiat_rate,
+        "fiat_value": fiat_value,
+        "fiat_currency": fiat_currency,
+        "pricing_source_kind": "exchange_execution",
+        "pricing_provider": "Bull Bitcoin",
+        "pricing_pair": f"{asset}-{fiat_currency}" if fiat_currency else None,
+        "pricing_method": "bullbitcoin_csv",
+        "pricing_external_ref": order_ref,
+        "pricing_quality": "exact",
+        "kind": kind,
+        "description": description,
+        "counterparty": "Bull Bitcoin",
+        "raw_json": json.dumps(json_ready(sanitized), sort_keys=True),
+    }
+
+
+def load_bullbitcoin_csv_records(file_path):
+    """Load Bull Bitcoin order-export CSV rows."""
+    with open(file_path, "r", encoding="utf-8", newline="") as handle:
+        rows = list(csv.DictReader(handle))
+    if not rows:
+        return []
+    header = {_normalized_column_key(column) for column in rows[0].keys()}
+    missing = [
+        column for column in _BULLBITCOIN_REQUIRED_COLUMNS if _normalized_column_key(column) not in header
+    ]
+    if missing:
+        raise AppError("Bull Bitcoin CSV is missing required columns: " + ", ".join(missing))
+    normalized = []
+    for row in rows:
+        record = normalize_bullbitcoin_record(row)
+        if record is not None:
+            normalized.append(record)
+    return normalized
+
+
+def is_bullbitcoin_format(input_format):
+    return input_format == "bullbitcoin_csv"
+
+
+# -- River -------------------------------------------------------------------
 
 
 def _river_fiat_amount(value, currency):

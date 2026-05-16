@@ -9,12 +9,14 @@ Kassiber can ingest transactions and metadata from several sources. Imported dat
 - BTCPay Greenfield confirmed wallet history
 - Phoenix CSV exports
 - River Bitcoin Activity / Account Activity CSV exports
+- Bull Bitcoin order CSV exports
 - BIP329 JSONL labels
 
 Format references used by the dedicated importers:
 
 - BTCPay Greenfield API: <https://docs.btcpayserver.org/Development/GreenFieldExample/>
 - River Account Activity CSV: <https://support.river.com/hc/en-us/articles/45513824178963-How-do-I-download-my-account-activity>
+- Bull Bitcoin order CSV export from the Bull account order history
 - BIP329 labels JSONL: <https://bips.xyz/329>
 
 ## Generic transaction imports
@@ -264,6 +266,47 @@ python3 -m kassiber wallets create \
   --source-format river_csv
 
 python3 -m kassiber wallets sync --wallet river
+```
+
+## Bull Bitcoin
+
+Kassiber supports Bull Bitcoin order CSV exports as exchange evidence. The
+import is wallet-scoped: completed Bitcoin on-chain, Lightning, or Liquid
+orders with a transaction id are normalized, and canceled/expired orders or
+rows without a transaction id are skipped.
+
+Import directly:
+
+```bash
+python3 -m kassiber wallets import-bull \
+  --wallet treasury \
+  --file /path/to/bull-orders.csv
+```
+
+Behavior:
+
+- Bitcoin/Liquid/Lightning -> fiat rows become outbound `sell` transactions
+- fiat -> Bitcoin/Liquid/Lightning rows become inbound `buy` transactions
+- payout/payin fiat amounts are stored as exact `exchange_execution` pricing
+  from provider `Bull Bitcoin`
+- imports are match-existing-only so orders for wallets outside the selected
+  Kassiber wallet are skipped
+- when the same transaction id, asset, amount, direction, and wallet already
+  exist from wallet sync, Kassiber enriches that row and preserves the
+  wallet-derived network fee
+
+You can also attach a Bull Bitcoin export to an existing wallet that already
+receives the matching transactions from another source (for example Esplora,
+Electrum, Phoenix, or a descriptor sync). Bull exports are
+match-existing-only: this attachment does not create standalone transaction
+rows, and orders for transactions that are not already in that same wallet are
+skipped.
+
+```bash
+python3 -m kassiber wallets update --wallet treasury \
+  --config '{"source_file":"/path/to/bull-orders.csv","source_format":"bullbitcoin_csv"}'
+
+python3 -m kassiber wallets sync --wallet treasury
 ```
 
 ## BIP329

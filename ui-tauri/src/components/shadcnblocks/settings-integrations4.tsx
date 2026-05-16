@@ -34,6 +34,7 @@ export interface IntegrationItem {
   className?: string;
   imageFrameClassName?: string;
   actionLabel?: string;
+  action?: ReactNode;
   statusLabel?: string;
 }
 
@@ -59,7 +60,7 @@ const IntegrationCard = ({
       {integration.image ? (
         <span
           className={cn(
-            "flex size-10 shrink-0 items-center justify-center rounded-md border bg-background p-1.5",
+            "flex size-10 shrink-0 items-center justify-center",
             integration.imageFrameClassName,
           )}
         >
@@ -96,23 +97,27 @@ const IntegrationCard = ({
           {integration.description}
         </p>
       </div>
-      <Button
-        variant={
-          isSelected
-            ? "secondary"
-            : integration.isConnected
-              ? "outline"
-              : "default"
-        }
-        size="sm"
-        className="shrink-0"
-        onClick={() => onToggle?.(integration)}
-      >
-        {isSelected
-          ? "Selected"
-          : integration.actionLabel ??
-          (integration.isConnected ? "Disconnect" : "Connect")}
-      </Button>
+      {integration.action ? (
+        <div className="shrink-0">{integration.action}</div>
+      ) : (
+        <Button
+          variant={
+            isSelected
+              ? "secondary"
+              : integration.isConnected
+                ? "outline"
+                : "default"
+          }
+          size="sm"
+          className="shrink-0"
+          onClick={() => onToggle?.(integration)}
+        >
+          {isSelected
+            ? "Selected"
+            : integration.actionLabel ??
+            (integration.isConnected ? "Disconnect" : "Connect")}
+        </Button>
+      )}
     </div>
   );
 };

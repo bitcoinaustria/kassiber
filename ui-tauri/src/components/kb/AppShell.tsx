@@ -184,7 +184,7 @@ const NAV_GROUPS: NavGroup[] = [
       { label: "Quarantine", icon: ShieldAlert, href: "/quarantine" },
       { label: "Source Funds", icon: BadgeCheck, href: "/source-of-funds" },
       { label: "Review swaps", icon: ArrowLeftRight, href: "/swaps" },
-      { label: "Journals", icon: BookOpen, href: "/journals" },
+      { label: "Ledger", icon: BookOpen, href: "/journals" },
     ],
   },
 ];
@@ -220,10 +220,10 @@ const ROUTE_META: Array<[string, RouteMeta]> = [
   [
     "/journals",
     {
-      title: "Journals",
+      title: "Ledger",
       icon: BookOpen,
-      searchLabel: "Search journals",
-      searchPlaceholder: "Search entry type, wallet, asset...",
+      searchLabel: "Search ledger",
+      searchPlaceholder: "Search entries, wallets, assets...",
     },
   ],
   [
@@ -347,9 +347,9 @@ const STATIC_SEARCH_RESULTS: SearchResult[] = [
   },
   {
     id: "route:journals",
-    title: "Journals",
-    detail: "Processed tax journal",
-    keywords: ["process", "entries", "fees", "basis"],
+    title: "Ledger",
+    detail: "Processed tax ledger",
+    keywords: ["journal", "process", "entries", "fees", "basis", "ledger"],
     to: "/journals",
   },
   {
@@ -447,8 +447,8 @@ function buildSearchResults(
       ? [
           {
             id: "status:journals",
-            title: "Journals need processing",
-            detail: "Reports are stale until journals are processed",
+            title: "Ledger needs processing",
+            detail: "Reports are stale until journal processing runs",
             keywords: ["journal", "reports", "stale", "process"],
             to: "/journals" as const,
           },
@@ -1570,8 +1570,8 @@ function AppDashboardHeader({
       ? [
           {
             id: "journals-stale",
-            title: "Journals need processing",
-            body: "Reports are not trusted until journals are processed.",
+            title: "Ledger needs processing",
+            body: "Reports are not trusted until journal processing runs.",
             tone: "warning" as const,
             to: "/journals" as const,
             action: "process-journals" as const,

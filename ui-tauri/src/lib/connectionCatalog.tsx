@@ -6,6 +6,7 @@ import bitpandaIcon from "@/assets/integrations/bitpanda.svg";
 import bitboxIcon from "@/assets/integrations/bitbox.svg";
 import bluewalletIcon from "@/assets/integrations/bluewallet.png";
 import btcpayIcon from "@/assets/integrations/btcpay.svg";
+import bullBitcoinIcon from "@/assets/integrations/bullbitcoin.jpg";
 import coldcardIcon from "@/assets/integrations/coldcard.svg";
 import coinfinityIcon from "@/assets/integrations/coinfinity-mark.svg";
 import coinbaseIcon from "@/assets/integrations/coinbase.svg";
@@ -35,6 +36,7 @@ export type ConnectionCategory =
 export type SetupKind =
   | "descriptor"
   | "file-wallet"
+  | "file-enrichment"
   | "btcpay"
   | "bip329"
   | "backend-settings"
@@ -55,7 +57,7 @@ export interface ConnectionSource {
   docsHref?: string;
   setupKind?: SetupKind;
   walletKind?: string;
-  sourceFormat?: "csv" | "json" | "phoenix_csv" | "river_csv";
+  sourceFormat?: "csv" | "json" | "phoenix_csv" | "river_csv" | "bullbitcoin_csv";
   chain?: "bitcoin" | "liquid";
   network?: string;
   details: string[];
@@ -411,6 +413,24 @@ export const CONNECTION_SOURCES: ConnectionSource[] = [
     details: [
       "Account Activity preserves BTC and cash legs",
       "Buy/sell rows store exact River execution pricing",
+    ],
+  },
+  {
+    id: "bullbitcoin",
+    title: "Bull Bitcoin",
+    description: "Order CSV import for exact buy/sell execution pricing.",
+    category: "exchanges",
+    image: bullBitcoinIcon,
+    status: "ready",
+    pathLabel: "CSV import",
+    formatLabel: "bullbitcoin_csv",
+    docsHref: "https://www.bullbitcoin.com/",
+    setupKind: "file-enrichment",
+    walletKind: "bullbitcoin",
+    sourceFormat: "bullbitcoin_csv",
+    details: [
+      "Completed Bitcoin, Lightning, and Liquid orders preserve exact fiat proceeds",
+      "Wallet-scoped imports only enrich matching transaction ids",
     ],
   },
   {

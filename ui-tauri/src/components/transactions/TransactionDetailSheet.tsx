@@ -42,7 +42,7 @@ import {
   TabsTrigger,
 } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
-import type { Currency } from "@/lib/currency";
+import { MISSING_FIAT_LABEL, type Currency } from "@/lib/currency";
 import { cn } from "@/lib/utils";
 import type { ExplorerSettings } from "@/lib/explorer";
 
@@ -219,9 +219,14 @@ function SourceRecordRow({
   );
 }
 
-function formatSheetMoney(eur: number, btc: number, currency: Currency, sign = false) {
+function formatSheetMoney(
+  eur: number | null,
+  btc: number,
+  currency: Currency,
+  sign = false,
+) {
   if (sign) return formatSignedDisplayMoney(eur, btc, currency);
-  return formatDisplayMoney(Math.abs(eur), Math.abs(btc), currency);
+  return formatDisplayMoney(eur === null ? null : Math.abs(eur), Math.abs(btc), currency);
 }
 
 function balanceImpactDirection(transaction: Transaction, flow: ReturnType<typeof transactionFlow>) {
@@ -284,14 +289,18 @@ export function TransactionDetailSheet({
   const explorer = explorerForTransaction(transaction, explorerSettings);
   const amountBtc = transactionBtc(transaction);
   const feeBtc = transaction.feeBtc ?? 0;
-  const feeEur = transaction.feeEur ?? 0;
+  const feeEur = transaction.feeEur ?? null;
   const impactDirection = balanceImpactDirection(transaction, flow);
   const principalImpactBtc = impactDirection * amountBtc;
-  const principalImpactEur = impactDirection * transaction.amount;
+  const principalImpactEur =
+    transaction.amount === null ? null : impactDirection * transaction.amount;
   const feeImpactBtc = feeBtc ? -feeBtc : 0;
-  const feeImpactEur = feeBtc ? -feeEur : 0;
+  const feeImpactEur = feeBtc ? (feeEur === null ? null : -feeEur) : 0;
   const netImpactBtc = principalImpactBtc + feeImpactBtc;
-  const netImpactEur = principalImpactEur + feeImpactEur;
+  const netImpactEur =
+    principalImpactEur === null || feeImpactEur === null
+      ? null
+      : principalImpactEur + feeImpactEur;
   const pair = transaction.pair;
   const signedPrefix =
     flow === "incoming" ? "+" : flow === "outgoing" ? "-" : "";
@@ -374,9 +383,9 @@ export function TransactionDetailSheet({
         showCloseButton={false}
       >
         <SheetHeader className="border-b p-0">
-          <div className="flex items-start justify-between gap-4 px-4 py-4 sm:px-6">
+          <div className="flex items-start justify-between gap-4 px-4 pt-6 pb-5 sm:px-6 sm:pt-7">
             <div className="min-w-0">
-              <div className="mb-2 flex flex-wrap items-center gap-2">
+              <div className="mb-3 flex flex-wrap items-center gap-2">
                 <Badge variant="outline" className="gap-1 rounded-md">
                   <Bitcoin className="size-3 text-amber-500" aria-hidden="true" />
                   {transaction.asset ?? "BTC"}
@@ -398,13 +407,13 @@ export function TransactionDetailSheet({
                   {transactionStatusLabels[localDraft.reviewStatus]}
                 </Badge>
               </div>
-              <SheetTitle className="truncate text-xl sm:text-2xl">
+              <SheetTitle className="truncate text-2xl tabular-nums sm:text-3xl">
                 {signedPrefix}
                 <span className={blurClass(hideSensitive)}>
                   {formatBtcAmount(amountBtc)}
                 </span>
               </SheetTitle>
-              <SheetDescription className="mt-1 truncate">
+              <SheetDescription className="mt-2 truncate">
                 {transaction.wallet} · {transaction.counterparty}
               </SheetDescription>
             </div>
@@ -820,7 +829,11 @@ export function TransactionDetailSheet({
                       />
                       <DetailField
                         label="Source value"
-                        value={currencyFormatter.format(transaction.amount)}
+                        value={
+                          transaction.amount === null
+                            ? MISSING_FIAT_LABEL
+                            : currencyFormatter.format(transaction.amount)
+                        }
                         hidden={hideSensitive}
                       />
                       <DetailField
@@ -851,15 +864,21 @@ export function TransactionDetailSheet({
                   <div className="overflow-hidden rounded-md border">
                     <LedgerRow
                       label="Cost basis"
-                      value={currencyFormatter.format(transaction.amount)}
+                      value={
+                        transaction.amount === null
+                          ? MISSING_FIAT_LABEL
+                          : currencyFormatter.format(transaction.amount)
+                      }
                       align="right"
                     />
                     <LedgerRow
                       label="Proceeds"
                       value={
-                        flow === "outgoing"
-                          ? currencyFormatter.format(transaction.amount)
-                          : currencyFormatter.format(0)
+                        flow !== "outgoing"
+                          ? currencyFormatter.format(0)
+                          : transaction.amount === null
+                            ? MISSING_FIAT_LABEL
+                            : currencyFormatter.format(transaction.amount)
                       }
                       align="right"
                     />
