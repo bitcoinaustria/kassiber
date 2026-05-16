@@ -428,6 +428,9 @@ and [docs/plan/04-desktop-ui.md](docs/plan/04-desktop-ui.md).
   (matcher + rules + saved views + `/swaps` review queue land swap
   pairing end-to-end; AT carrying-value continues through rp2; generic
   profiles still SELL + BUY pending upstream rp2 multi-asset carry).
+- [x] Direct swap payout reviews for provider-settled external payments:
+  source outflow, target payout amount, swap fee, and Austrian
+  carrying-value handoff are modeled without fake recipient wallets.
 - [ ] Daemon kind for ``detect_repeating_patterns`` + "Create rule from
   this pattern?" prompt in the swap review UI (pattern-detector helper
   already exists in `kassiber/core/swap_rules.py`).

@@ -23,13 +23,14 @@ the real outflow.
 | Find swap candidates | `kassiber --machine transfers suggest` |
 | Auto-pair all exact (payment_hash) matches | `kassiber --machine transfers bulk-pair --confidence exact` |
 | Pair two specific legs manually | `kassiber --machine transfers pair --tx-out <id> --tx-in <id> --kind submarine-swap --policy carrying-value` |
+| Record a direct swap payout to an external recipient | `kassiber --machine transfers payouts create --tx-out <id> --payout-asset BTC --payout-amount <btc> --payout-fiat-value <fiat> --policy carrying-value` |
 | Soft-delete a pair (audit row stays) | `kassiber --machine transfers unpair --pair-id <id>` |
 | Dismiss a false-positive candidate for 90 days | `kassiber --machine transfers dismiss --tx-out <id> --tx-in <id> --reason "not a swap"` |
 | Total swap fees by year | `kassiber --machine reports tax-summary` — read the rows with `row_type=swap_fees_year` / `swap_fees_total` |
 
-After every `transfers pair`, `transfers bulk-pair`, `transfers unpair`,
-or `transfers dismiss`, re-run `kassiber --machine journals process`
-before trusting any report.
+After every `transfers pair`, `transfers payouts create/delete`,
+`transfers bulk-pair`, `transfers unpair`, or `transfers dismiss`,
+re-run `kassiber --machine journals process` before trusting any report.
 
 ## Confidence ladder
 
@@ -64,13 +65,30 @@ manually.
   rules: cross-asset `policy=carrying-value` still requires an Austrian
   profile; same-asset `policy=taxable` is still rejected.
 
+## Direct swap payouts
+
+Use `transfers payouts create` when there is no owned inbound leg because
+the swap provider paid a recipient or exchange directly. This records the
+reviewed source outbound, target asset amount, external payout id,
+counterparty, fiat payout value, policy, and swap-fee delta without
+creating a fake recipient wallet.
+
+For Austrian cross-asset `policy=carrying-value`, journal processing
+synthesizes an in-memory target-asset acquisition plus immediate external
+disposal. The source swap leg becomes `neu_swap` / zero gain, the target
+payout remains a taxable disposal, and persisted journal entries still
+point at the real source transaction id. For non-AT cross-asset books,
+use `--policy taxable`; generic carrying-value remains unsupported.
+
 ## Swap fees as the real outflow
 
 Carrying-value swaps preserve principal — the only thing that leaves
 the user's custody is the fee delta between the two legs. The matcher
 computes that delta once at pair time and persists it on
-`transaction_pairs.swap_fee_msat`. Surfacing this number is the
-"what actually left your custody" framing the user typically wants.
+`transaction_pairs.swap_fee_msat`; direct payout reviews persist the
+same delta on `direct_swap_payouts.swap_fee_msat`. Surfacing this
+number is the "what actually left your custody" framing the user
+typically wants.
 
 - `kassiber --machine transfers suggest` exposes `swap_fee_msat` and
   `swap_fee` (BTC float) on every candidate.

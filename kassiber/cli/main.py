@@ -51,9 +51,11 @@ from .handlers import (
     cmd_status,
     apply_transfer_rules,
     bulk_pair_transfers,
+    create_direct_swap_payout,
     create_saved_view_cli,
     create_transaction_pair,
     create_transfer_rule,
+    delete_direct_swap_payout,
     delete_saved_view_cli,
     delete_transaction_pair,
     delete_transfer_rule,
@@ -67,6 +69,7 @@ from .handlers import (
     get_journal_event,
     import_into_wallet,
     inspect_transfer_audit,
+    list_direct_swap_payouts,
     list_journal_entries,
     list_journal_events,
     list_quarantines,
@@ -890,6 +893,28 @@ def build_parser() -> argparse.ArgumentParser:
     transfers_unpair.add_argument("--workspace")
     transfers_unpair.add_argument("--profile")
     transfers_unpair.add_argument("--pair-id", required=True, dest="pair_id")
+
+    transfers_payouts = transfers_sub.add_parser("payouts")
+    transfers_payouts_sub = transfers_payouts.add_subparsers(dest="payouts_command", required=True)
+    transfers_payouts_list = transfers_payouts_sub.add_parser("list")
+    transfers_payouts_list.add_argument("--workspace")
+    transfers_payouts_list.add_argument("--profile")
+    transfers_payouts_create = transfers_payouts_sub.add_parser("create")
+    transfers_payouts_create.add_argument("--workspace")
+    transfers_payouts_create.add_argument("--profile")
+    transfers_payouts_create.add_argument("--tx-out", required=True, dest="tx_out", help="Outbound transaction id or external_id")
+    transfers_payouts_create.add_argument("--payout-asset", required=True, dest="payout_asset")
+    transfers_payouts_create.add_argument("--payout-amount", required=True, dest="payout_amount", help="Target asset amount paid externally, in BTC units")
+    transfers_payouts_create.add_argument("--payout-occurred-at", dest="payout_occurred_at")
+    transfers_payouts_create.add_argument("--payout-fiat-value", dest="payout_fiat_value")
+    transfers_payouts_create.add_argument("--payout-external-id", dest="payout_external_id")
+    transfers_payouts_create.add_argument("--counterparty")
+    transfers_payouts_create.add_argument("--policy", choices=list(TRANSFER_PAIR_POLICIES), default="carrying-value")
+    transfers_payouts_create.add_argument("--note", dest="note")
+    transfers_payouts_delete = transfers_payouts_sub.add_parser("delete")
+    transfers_payouts_delete.add_argument("--workspace")
+    transfers_payouts_delete.add_argument("--profile")
+    transfers_payouts_delete.add_argument("--payout-id", required=True, dest="payout_id")
 
     transfers_suggest = transfers_sub.add_parser("suggest")
     transfers_suggest.add_argument("--workspace")
@@ -2144,6 +2169,34 @@ def dispatch(conn: sqlite3.Connection | None, args: argparse.Namespace) -> Any:
                 args,
                 delete_transaction_pair(conn, args.workspace, args.profile, args.pair_id),
             )
+        if args.transfers_command == "payouts":
+            if args.payouts_command == "list":
+                return emit(args, list_direct_swap_payouts(conn, args.workspace, args.profile))
+            if args.payouts_command == "create":
+                return emit(
+                    args,
+                    create_direct_swap_payout(
+                        conn,
+                        args.workspace,
+                        args.profile,
+                        args.tx_out,
+                        payout_asset=args.payout_asset,
+                        payout_amount=args.payout_amount,
+                        payout_occurred_at=args.payout_occurred_at,
+                        payout_fiat_value=args.payout_fiat_value,
+                        payout_external_id=args.payout_external_id,
+                        counterparty=args.counterparty,
+                        policy=args.policy,
+                        notes=args.note,
+                    ),
+                )
+            if args.payouts_command == "delete":
+                return emit(
+                    args,
+                    delete_direct_swap_payout(
+                        conn, args.workspace, args.profile, args.payout_id
+                    ),
+                )
         if args.transfers_command == "suggest":
             return emit(
                 args,

@@ -11,6 +11,7 @@ class TaxEngineLedgerInputs:
     rows: Sequence[Mapping[str, Any]]
     wallet_refs_by_id: Mapping[str, Mapping[str, Any]]
     manual_pair_records: Sequence[Mapping[str, Any]]
+    direct_payout_records: Sequence[Mapping[str, Any]] = ()
 
 
 @dataclass(frozen=True)
@@ -34,6 +35,7 @@ class TaxEngineLedgerResult:
     quarantines: list[dict[str, Any]]
     intra_audit: list[dict[str, Any]]
     cross_asset_pairs: list[dict[str, Any]]
+    direct_swap_payouts: list[dict[str, Any]]
     tax_summary: list[dict[str, Any]]
     account_holdings: dict[tuple[Any, ...], dict[str, Any]]
     wallet_holdings: dict[tuple[Any, ...], dict[str, Any]]

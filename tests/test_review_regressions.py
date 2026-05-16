@@ -4615,6 +4615,92 @@ class ReviewRegressionTest(unittest.TestCase):
             manual_pair_records=manual_pairs,
         )
 
+    def _direct_austrian_swap_payout_inputs(self):
+        profile = {
+            "id": "profile-at-payout",
+            "workspace_id": "workspace-main",
+            "label": "FixtureAustrianSwapPayout",
+            "fiat_currency": "EUR",
+            "tax_country": "at",
+            "tax_long_term_days": 9223372036854775807,
+            "gains_algorithm": "MOVING_AVERAGE_AT",
+        }
+        wallet_refs_by_id = {
+            "wallet-liquid": {
+                "id": "wallet-liquid",
+                "label": "Liquid",
+                "wallet_account_id": "account-treasury",
+                "account_code": "treasury",
+                "account_label": "Treasury",
+            },
+        }
+        rows = [
+            {
+                "id": "lbtc-buy-1",
+                "wallet_id": "wallet-liquid",
+                "wallet_label": "Liquid",
+                "wallet_account_id": "account-treasury",
+                "account_code": "treasury",
+                "account_label": "Treasury",
+                "occurred_at": "2024-06-01T10:00:00Z",
+                "direction": "inbound",
+                "asset": "LBTC",
+                "amount": 100_000_000_000,
+                "fee": 0,
+                "fiat_rate": 30000,
+                "fiat_value": 30000,
+                "kind": "deposit",
+                "description": "Liquid Neu buy",
+                "note": None,
+                "external_id": "lbtc-buy-1",
+                "created_at": "2024-06-01T10:00:00Z",
+            },
+            {
+                "id": "swap-payout-source",
+                "wallet_id": "wallet-liquid",
+                "wallet_label": "Liquid",
+                "wallet_account_id": "account-treasury",
+                "account_code": "treasury",
+                "account_label": "Treasury",
+                "occurred_at": "2025-03-01T09:00:00Z",
+                "direction": "outbound",
+                "asset": "LBTC",
+                "amount": 50_000_000_000,
+                "fee": 0,
+                "fiat_rate": 50000,
+                "fiat_value": 25000,
+                "kind": "withdrawal",
+                "description": "Liquid direct swap payout",
+                "note": None,
+                "external_id": "swap-payout-source",
+                "created_at": "2025-03-01T09:00:00Z",
+            },
+        ]
+        direct_payouts = [
+            {
+                "id": "direct-payout-1",
+                "out_transaction_id": "swap-payout-source",
+                "kind": "direct-swap-payout",
+                "policy": "carrying-value",
+                "payout_asset": "BTC",
+                "payout_amount": 49_990_000_000,
+                "payout_occurred_at": "2025-03-01T09:00:30Z",
+                "payout_fiat_value": 24995,
+                "payout_external_id": "recipient-txid",
+                "counterparty": "external-recipient",
+                "notes": "Privacy swap payout",
+                "swap_fee_msat": 10_000_000,
+                "swap_fee_kind": "combined",
+                "created_at": "2025-03-01T09:01:00Z",
+            },
+        ]
+        return profile, TaxEngineLedgerInputs(
+            rows=rows,
+            wallet_refs_by_id=wallet_refs_by_id,
+            manual_pair_records=[],
+            direct_payout_records=direct_payouts,
+        )
+
     def _direct_austrian_same_timestamp_swap_chain_inputs(self):
         profile = {
             "id": "profile-at-chain",
@@ -7145,6 +7231,60 @@ class ReviewRegressionTest(unittest.TestCase):
         actual = self._direct_engine_snapshot(profile, inputs)
         expected = self._load_fixture("austrian_rp2_cross_asset_swap_snapshot.json")
         self.assertEqual(actual, expected)
+
+    def test_austrian_direct_swap_payout_carries_then_disposes(self):
+        profile, inputs = self._direct_austrian_swap_payout_inputs()
+        state = build_tax_engine(profile).build_ledger_state(inputs)
+        entries = _normalize_engine_entries(state.entries)
+
+        self.assertEqual(state.quarantines, [])
+        self.assertEqual(state.cross_asset_pairs, [])
+        self.assertEqual(
+            state.direct_swap_payouts,
+            [
+                {
+                    "payout_id": "direct-payout-1",
+                    "kind": "direct-swap-payout",
+                    "policy": "carrying-value",
+                    "out_id": "swap-payout-source",
+                    "out_asset": "LBTC",
+                    "out_amount_msat": 50_000_000_000,
+                    "payout_asset": "BTC",
+                    "payout_amount_msat": 49_990_000_000,
+                    "payout_occurred_at": "2025-03-01T09:00:30Z",
+                    "payout_external_id": "recipient-txid",
+                    "counterparty": "external-recipient",
+                    "swap_fee_msat": 10_000_000,
+                    "swap_fee_kind": "combined",
+                }
+            ],
+        )
+        disposals = [
+            entry
+            for entry in entries
+            if entry["transaction_id"] == "swap-payout-source"
+            and entry["entry_type"] == "disposal"
+        ]
+        self.assertEqual(len(disposals), 2)
+        neutral_source = next(entry for entry in disposals if entry["asset"] == "LBTC")
+        taxable_payout = next(entry for entry in disposals if entry["asset"] == "BTC")
+
+        self.assertEqual(neutral_source["at_category"], "neu_swap")
+        self.assertEqual(neutral_source["gain_loss"], 0.0)
+        self.assertEqual(taxable_payout["at_category"], "neu_gain")
+        self.assertAlmostEqual(taxable_payout["cost_basis"], 15000.0)
+        self.assertAlmostEqual(taxable_payout["proceeds"], 24995.0)
+        self.assertAlmostEqual(taxable_payout["gain_loss"], 9995.0)
+        self.assertEqual(_normalize_holdings(state.account_holdings, ("account_id", "account_code", "account_label", "asset")), [
+            {
+                "account_id": "account-treasury",
+                "account_code": "treasury",
+                "account_label": "Treasury",
+                "asset": "LBTC",
+                "quantity": 0.5,
+                "cost_basis": 15000.0,
+            }
+        ])
 
     def test_austrian_same_timestamp_swap_chain_reaches_rp2(self):
         profile, inputs = self._direct_austrian_same_timestamp_swap_chain_inputs()
