@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import copy
 import csv
 import json
 import queue
@@ -4884,42 +4885,60 @@ def _onboarding_complete_payload(
                     retryable=False,
                 )
 
-    workspace = core_accounts.create_workspace(ctx.conn, workspace_label)
-    profile = core_accounts.create_profile(
-        ctx.conn,
-        workspace["id"],
-        profile_label,
-        fiat_currency,
-        gains_algorithm,
-        tax_country,
-        tax_long_term_days,
-    )
+    pending_runtime_config = copy.deepcopy(ctx.runtime_config)
+    try:
+        ctx.conn.execute("BEGIN IMMEDIATE")
+        workspace = core_accounts.create_workspace(
+            ctx.conn,
+            workspace_label,
+            commit=False,
+        )
+        profile = core_accounts.create_profile(
+            ctx.conn,
+            workspace["id"],
+            profile_label,
+            fiat_currency,
+            gains_algorithm,
+            tax_country,
+            tax_long_term_days,
+            commit=False,
+        )
 
-    if backend_args is not None:
-        if backend_name and backend_kind and backend_url:
-            config: dict[str, object] = {}
-            certificate = _optional_string_arg(backend_args, "certificate")
-            if certificate:
-                config["certificate"] = certificate
-            if backend_args.get("insecure") is not None:
-                config["insecure"] = bool(backend_args.get("insecure"))
-            backend = core_accounts.create_backend(
-                ctx.conn,
-                backend_name,
-                backend_kind,
-                backend_url,
-                chain=_optional_string_arg(backend_args, "chain"),
-                network=_optional_string_arg(backend_args, "network"),
-                tor_proxy=_optional_string_arg(backend_args, "tor_proxy"),
-                config=config or None,
-                notes=_optional_string_arg(backend_args, "notes"),
-            )
-            ctx.runtime_config = merge_db_backends(ctx.conn, ctx.runtime_config)
-            default_backend = core_accounts.set_default_backend(
-                ctx.conn,
-                ctx.runtime_config,
-                backend_name,
-            )["default_backend"]
+        if backend_args is not None:
+            if backend_name and backend_kind and backend_url:
+                config: dict[str, object] = {}
+                certificate = _optional_string_arg(backend_args, "certificate")
+                if certificate:
+                    config["certificate"] = certificate
+                if backend_args.get("insecure") is not None:
+                    config["insecure"] = bool(backend_args.get("insecure"))
+                backend = core_accounts.create_backend(
+                    ctx.conn,
+                    backend_name,
+                    backend_kind,
+                    backend_url,
+                    chain=_optional_string_arg(backend_args, "chain"),
+                    network=_optional_string_arg(backend_args, "network"),
+                    tor_proxy=_optional_string_arg(backend_args, "tor_proxy"),
+                    config=config or None,
+                    notes=_optional_string_arg(backend_args, "notes"),
+                    commit=False,
+                )
+                pending_runtime_config = merge_db_backends(
+                    ctx.conn,
+                    pending_runtime_config,
+                )
+                default_backend = core_accounts.set_default_backend(
+                    ctx.conn,
+                    pending_runtime_config,
+                    backend_name,
+                    commit=False,
+                )["default_backend"]
+        ctx.conn.commit()
+    except Exception:
+        ctx.conn.rollback()
+        raise
+    ctx.runtime_config = pending_runtime_config
 
     snapshot = build_profiles_snapshot(ctx.conn)
     return {

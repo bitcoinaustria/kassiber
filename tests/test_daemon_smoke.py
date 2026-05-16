@@ -2737,6 +2737,55 @@ class DaemonSmokeTest(unittest.TestCase):
                 if proc.poll() is None:
                     proc.kill()
 
+    def test_ui_onboarding_complete_rolls_back_books_on_backend_error(self):
+        with tempfile.TemporaryDirectory(prefix="kassiber-daemon-onboarding-rollback-") as tmp:
+            data_root = Path(tmp) / "data"
+            proc = _start_daemon(data_root)
+            try:
+                self.assertEqual(_read_payload_timeout(proc)["kind"], "daemon.ready")
+
+                _write_payload(
+                    proc,
+                    {
+                        "request_id": "onboarding-bad-backend",
+                        "kind": "ui.onboarding.complete",
+                        "args": {
+                            "workspace_label": "Partial Books",
+                            "profile_label": "Private",
+                            "backend": {
+                                "name": "broken-electrum",
+                                "kind": "electrum",
+                                "url": "ssl://example.com:50002",
+                                "chain": "not-a-chain",
+                                "network": "main",
+                            },
+                        },
+                    },
+                )
+                failed = _read_payload_timeout(proc)
+                self.assertEqual(failed["kind"], "error")
+                self.assertEqual(failed["error"]["code"], "app_error")
+
+                _write_payload(
+                    proc,
+                    {"request_id": "profiles-after-error", "kind": "ui.profiles.snapshot"},
+                )
+                profiles = _read_payload_timeout(proc)
+                self.assertEqual(profiles["kind"], "ui.profiles.snapshot")
+                self.assertEqual(profiles["data"]["workspaces"], [])
+
+                _write_payload(
+                    proc,
+                    {"request_id": "shutdown-after-error", "kind": "daemon.shutdown"},
+                )
+                self.assertEqual(_read_payload_timeout(proc)["kind"], "daemon.shutdown")
+                code, stderr = _close_daemon(proc)
+                self.assertEqual(code, 0, stderr)
+                self.assertEqual(stderr, "")
+            finally:
+                if proc.poll() is None:
+                    proc.kill()
+
     def test_ui_profiles_create_adds_current_profile(self):
         with tempfile.TemporaryDirectory(prefix="kassiber-daemon-create-profile-") as tmp:
             data_root = Path(tmp) / "data"
