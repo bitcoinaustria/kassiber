@@ -91,7 +91,7 @@ import {
 } from "@/components/ui/table";
 import { useDaemon, useDaemonMutation } from "@/daemon/client";
 import { useKeymap, type Keybinding } from "@/lib/keymap";
-import { screenPanelClassName, screenShellClassName } from "@/lib/screen-layout";
+import { screenShellClassName } from "@/lib/screen-layout";
 import { cn } from "@/lib/utils";
 
 const PAIR_KIND_OPTIONS = ["manual", "peg-in", "peg-out", "submarine-swap"] as const;
@@ -708,35 +708,20 @@ export function SwapMatching() {
   return (
     <div className={screenShellClassName}>
       <Collapsible open={rulesExpanded} onOpenChange={setRulesExpanded}>
-        <div className={cn(screenPanelClassName, "overflow-hidden rounded-xl border bg-card")}>
-          <header className="flex flex-col gap-3 px-3 py-4 sm:flex-row sm:items-start sm:justify-between sm:px-6">
-            <div className="min-w-0 space-y-2">
-              <div className="flex flex-wrap items-center gap-2">
-                <h1 className="text-2xl font-semibold tracking-tight">
+        <div className="overflow-hidden rounded-xl border bg-card">
+          <header className="flex flex-col gap-2.5 px-3 py-3 sm:flex-row sm:items-start sm:justify-between sm:px-4">
+            <div className="min-w-0">
+              <p className="text-[10px] font-medium tracking-[0.18em] text-muted-foreground uppercase">
+                Review queue
+              </p>
+              <div className="mt-0.5 flex flex-wrap items-center gap-2">
+                <h1 className="text-base font-semibold">
                   Swap candidates
                 </h1>
-                <Badge variant="secondary" className="rounded-md">
-                  {counts.total}
-                </Badge>
-                <MetricPill
-                  label="Exact"
-                  value={counts.exact}
-                  active={confidence === "exact"}
-                  tone="good"
-                  onClick={() => setConfidence(confidence === "exact" ? "all" : "exact")}
-                />
-                <MetricPill
-                  label="Strong"
-                  value={counts.strong}
-                  active={confidence === "strong"}
-                  tone="warning"
-                  onClick={() => setConfidence(confidence === "strong" ? "all" : "strong")}
-                />
-                <MetricPill label="Conflicts" value={counts.conflicts} tone="alert" />
               </div>
               <p className="max-w-3xl text-sm text-muted-foreground">
-                Review likely Lightning, Liquid, and on-chain legs before they
-                become carrying-value pairs.
+                Review likely Lightning, Liquid, and on-chain legs before they become
+                carrying-value pairs.
               </p>
               {savedViews.length > 0 ? (
                 <div className="flex flex-wrap items-center gap-1 text-xs">
@@ -794,6 +779,39 @@ export function SwapMatching() {
               </CollapsibleTrigger>
             </div>
           </header>
+
+          <div className="grid grid-cols-2 divide-x-0 divide-y divide-border border-t sm:grid-cols-4 sm:divide-x sm:divide-y-0">
+            <SwapQueueMetric
+              label="Candidates"
+              value={counts.total}
+              tone={counts.total ? "neutral" : "good"}
+              active={!filterIsDirty}
+              onClick={() => {
+                setConfidence("all");
+                setMethod("all");
+                setRoutePair("all");
+              }}
+            />
+            <SwapQueueMetric
+              label="Exact"
+              value={counts.exact}
+              tone={counts.exact ? "good" : "neutral"}
+              active={confidence === "exact"}
+              onClick={() => setConfidence(confidence === "exact" ? "all" : "exact")}
+            />
+            <SwapQueueMetric
+              label="Strong"
+              value={counts.strong}
+              tone={counts.strong ? "warning" : "neutral"}
+              active={confidence === "strong"}
+              onClick={() => setConfidence(confidence === "strong" ? "all" : "strong")}
+            />
+            <SwapQueueMetric
+              label="Conflicts"
+              value={counts.conflicts}
+              tone={counts.conflicts ? "alert" : "neutral"}
+            />
+          </div>
 
           <div className="grid gap-2 border-t px-2 py-3 text-sm xl:grid-cols-[minmax(0,1fr)_auto] xl:items-center">
             <div className="flex min-w-0 flex-wrap items-center gap-2">
@@ -1287,7 +1305,7 @@ export function SwapMatching() {
   );
 }
 
-function MetricPill({
+function SwapQueueMetric({
   label,
   value,
   tone = "neutral",
@@ -1307,22 +1325,32 @@ function MetricPill({
     alert: "text-rose-700 dark:text-rose-300",
   }[tone];
   const className = cn(
-    "inline-flex h-7 items-center gap-1.5 rounded-full border px-2.5 text-xs",
-    active ? "border-primary bg-primary/10 text-primary" : "bg-background text-muted-foreground",
+    "min-w-0 space-y-2 p-3 text-left sm:p-4",
+    onClick &&
+      "relative w-full cursor-pointer transition-colors hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
+    active && "bg-primary/5 ring-1 ring-primary/30 ring-inset",
   );
   const content = (
     <>
-      <span>{label}</span>
-      <span className={cn("font-semibold tabular-nums", active ? "text-primary" : toneClass)}>
+      <p className="text-xs font-medium text-muted-foreground">
+        {label}
+      </p>
+      <p className={cn("text-xl font-semibold tabular-nums", active ? "text-primary" : toneClass)}>
         {value.toLocaleString("en-US")}
-      </span>
+      </p>
     </>
   );
   if (!onClick) {
-    return <span className={className}>{content}</span>;
+    return <div className={className}>{content}</div>;
   }
   return (
-    <button type="button" className={cn(className, "hover:bg-muted/60")} onClick={onClick}>
+    <button
+      type="button"
+      className={className}
+      onClick={onClick}
+      aria-pressed={active}
+      aria-label={`${label === "Candidates" ? "Show all" : "Filter"} ${label}`}
+    >
       {content}
     </button>
   );

@@ -2,7 +2,6 @@ import { Link } from "@tanstack/react-router";
 import { useState } from "react";
 import {
   BookOpen,
-  CheckCircle2,
   FileText,
   Loader2,
   RefreshCw,
@@ -11,7 +10,6 @@ import {
 
 import { JournalReportableEntries } from "@/components/kb/JournalReportableEntries";
 import { ScreenSkeleton } from "@/components/kb/ScreenSkeleton";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
@@ -61,6 +59,12 @@ interface JournalsSnapshot {
   recentByType?: Record<string, RecentJournalEntry[]>;
 }
 
+interface DisplayJournalEntryType {
+  type: string;
+  count: number;
+  gainLossEur: number;
+}
+
 type JournalTone = "good" | "warning" | "alert" | "neutral";
 
 const eur = new Intl.NumberFormat("de-AT", {
@@ -75,8 +79,8 @@ export function Journals() {
     "ui.journals.snapshot",
   );
   const [entryTypeFilter, setEntryTypeFilter] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState("state");
   const hideSensitive = useUiStore((s) => s.hideSensitive);
-  const dataMode = useUiStore((s) => s.dataMode);
   const { runJournalProcessing, isProcessingJournals } =
     useJournalProcessingAction();
 
@@ -103,89 +107,54 @@ export function Journals() {
   const snapshot = data.data;
   const status = snapshot.status;
   const readiness = journalReadiness(status);
+  const displayEntryTypes = groupEntryTypesForDisplay(snapshot.entryTypes);
   const maxEntryCount = Math.max(
-    ...snapshot.entryTypes.map((entry) => entry.count),
+    ...displayEntryTypes.map((entry) => entry.count),
     1,
   );
   const filteredRecent = entryTypeFilter
-    ? (snapshot.recentByType?.[entryTypeFilter] ??
-      snapshot.recent.filter((entry) => entry.type === entryTypeFilter))
+    ? recentRowsForDisplayType(snapshot, entryTypeFilter)
     : snapshot.recent;
   return (
     <div className={screenShellClassName}>
-      <div className="rounded-xl border bg-card px-3 py-3 sm:px-4">
-        <div className="flex flex-col gap-2.5 lg:flex-row lg:items-center lg:justify-between">
-          <div className="flex min-w-0 items-start gap-3">
-            <span
-              className={cn(
-                "flex size-8 shrink-0 items-center justify-center rounded-md ring-1 ring-inset",
-                toneStyles[readiness.tone],
-              )}
-              aria-hidden="true"
-            >
-              {readiness.tone === "good" ? (
-                <CheckCircle2 className="size-4" />
-              ) : (
-                <RefreshCw className="size-4" />
-              )}
-            </span>
-            <div className="min-w-0">
-              <div className="flex flex-wrap items-center gap-2">
-                <p className="text-[10px] font-medium tracking-[0.18em] text-muted-foreground uppercase">
-                  Review · processing state
-                </p>
-                {dataMode === "mock" ? (
-                  <Badge variant="outline" className="rounded-md">
-                    Preview data
-                  </Badge>
-                ) : null}
-              </div>
-              <h1 className="mt-0.5 text-base font-semibold">
-                Journals
-              </h1>
-              <p className="mt-0.5 max-w-3xl text-xs text-muted-foreground sm:text-sm">
-                Processing state, reportable entries, and the latest accounting
-                rows that reports read from.
-              </p>
-            </div>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            {status.quarantines ? (
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-3">
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <TabsList className="w-full justify-start overflow-x-auto sm:w-fit">
+            <TabsTrigger value="state">State</TabsTrigger>
+            <TabsTrigger value="reportable">Reportable entries</TabsTrigger>
+          </TabsList>
+          {activeTab === "state" ? (
+            <div className="flex flex-wrap gap-2">
+              {status.quarantines ? (
+                <Button asChild variant="outline" className="h-8">
+                  <Link to="/quarantine">
+                    <ShieldAlert className="size-4" aria-hidden="true" />
+                    Quarantine
+                  </Link>
+                </Button>
+              ) : null}
               <Button asChild variant="outline" className="h-8">
-                <Link to="/quarantine">
-                  <ShieldAlert className="size-4" aria-hidden="true" />
-                  Quarantine
+                <Link to="/reports">
+                  <FileText className="size-4" aria-hidden="true" />
+                  Reports
                 </Link>
               </Button>
-            ) : null}
-            <Button asChild variant="outline" className="h-8">
-              <Link to="/reports">
-                <FileText className="size-4" aria-hidden="true" />
-                Reports
-              </Link>
-            </Button>
-            <Button
-              type="button"
-              className="h-8"
-              onClick={runJournalProcessing}
-              disabled={isProcessingJournals}
-            >
-              {isProcessingJournals ? (
-                <Loader2 className="size-4 animate-spin" aria-hidden="true" />
-              ) : (
-                <RefreshCw className="size-4" aria-hidden="true" />
-              )}
-              Process journals
-            </Button>
-          </div>
+              <Button
+                type="button"
+                className="h-8"
+                onClick={runJournalProcessing}
+                disabled={isProcessingJournals}
+              >
+                {isProcessingJournals ? (
+                  <Loader2 className="size-4 animate-spin" aria-hidden="true" />
+                ) : (
+                  <RefreshCw className="size-4" aria-hidden="true" />
+                )}
+                Process journals
+              </Button>
+            </div>
+          ) : null}
         </div>
-      </div>
-
-      <Tabs defaultValue="state" className="space-y-3">
-        <TabsList className="w-full justify-start overflow-x-auto sm:w-fit">
-          <TabsTrigger value="state">State</TabsTrigger>
-          <TabsTrigger value="reportable">Reportable entries</TabsTrigger>
-        </TabsList>
 
         <TabsContent value="state" className="mt-0 space-y-3">
           <div className="rounded-xl border bg-card">
@@ -229,8 +198,8 @@ export function Journals() {
                 </p>
               </div>
               <div className="space-y-2.5 p-3 sm:p-4">
-                {snapshot.entryTypes.length ? (
-                  snapshot.entryTypes.map((entry) => (
+                {displayEntryTypes.length ? (
+                  displayEntryTypes.map((entry) => (
                     <button
                       key={entry.type}
                       type="button"
@@ -253,7 +222,9 @@ export function Journals() {
                             {formatEntryType(entry.type)}
                           </p>
                           <p className="text-xs text-muted-foreground">
-                            {entry.count.toLocaleString("en-US")} rows
+                            {entry.type === "transfer"
+                              ? `${entry.count.toLocaleString("en-US")} in/out rows`
+                              : `${entry.count.toLocaleString("en-US")} rows`}
                           </p>
                         </div>
                         <p
@@ -292,7 +263,7 @@ export function Journals() {
                   <h2 className="text-base font-semibold">Recent journal rows</h2>
                   <p className="mt-0.5 text-xs text-muted-foreground sm:text-sm">
                     {entryTypeFilter
-                      ? `Latest ${formatEntryType(entryTypeFilter).toLowerCase()} rows produced by journal processing.`
+                      ? `Latest ${entryTypeDescription(entryTypeFilter)} produced by journal processing.`
                       : "Latest rows produced by journal processing."}
                   </p>
                 </div>
@@ -322,7 +293,18 @@ export function Journals() {
                           <TableCell className="font-mono text-xs text-muted-foreground">
                             {entry.date}
                           </TableCell>
-                          <TableCell>{formatEntryType(entry.type)}</TableCell>
+                          <TableCell>
+                            <div className="grid gap-1">
+                              <span>{formatEntryType(displayEntryType(entry.type))}</span>
+                              {isTransferDirection(entry.type) ? (
+                                <span className="text-xs text-muted-foreground">
+                                  {entry.type === "transfer_out"
+                                    ? "Outgoing side"
+                                    : "Incoming side"}
+                                </span>
+                              ) : null}
+                            </div>
+                          </TableCell>
                           <TableCell className={blurClass(hideSensitive)}>
                             {entry.wallet}
                           </TableCell>
@@ -359,7 +341,7 @@ export function Journals() {
                           className="h-24 text-center text-sm text-muted-foreground"
                         >
                           {entryTypeFilter
-                            ? `No recent ${formatEntryType(entryTypeFilter).toLowerCase()} rows exposed by the current journal snapshot.`
+                            ? `No recent ${entryTypeDescription(entryTypeFilter)} exposed by the current journal snapshot.`
                             : "No recent rows exposed by the current journal snapshot."}
                         </TableCell>
                       </TableRow>
@@ -447,16 +429,67 @@ function formatEntryType(type: string) {
     .replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
 
-const toneStyles: Record<JournalTone, string> = {
-  good:
-    "bg-emerald-50 text-emerald-700 ring-emerald-600/20 dark:bg-emerald-900/25 dark:text-emerald-300 dark:ring-emerald-400/20",
-  warning:
-    "bg-amber-50 text-amber-700 ring-amber-600/20 dark:bg-amber-900/25 dark:text-amber-300 dark:ring-amber-400/20",
-  alert:
-    "bg-red-50 text-red-700 ring-red-600/15 dark:bg-red-900/25 dark:text-red-300 dark:ring-red-400/20",
-  neutral:
-    "bg-zinc-50 text-zinc-700 ring-zinc-500/20 dark:bg-zinc-800/70 dark:text-zinc-300 dark:ring-zinc-400/20",
-};
+function displayEntryType(type: string) {
+  return isTransferDirection(type) ? "transfer" : type;
+}
+
+function isTransferDirection(type: string) {
+  return type === "transfer_in" || type === "transfer_out";
+}
+
+function entryTypeDescription(type: string) {
+  return type === "transfer"
+    ? "transfer in/out rows"
+    : `${formatEntryType(type).toLowerCase()} rows`;
+}
+
+function groupEntryTypesForDisplay(
+  entryTypes: JournalEntryType[],
+): DisplayJournalEntryType[] {
+  const grouped = new Map<string, DisplayJournalEntryType>();
+  for (const entry of entryTypes) {
+    const displayType = displayEntryType(entry.type);
+    const existing = grouped.get(displayType);
+    if (existing) {
+      existing.count += entry.count;
+      existing.gainLossEur += entry.gainLossEur;
+    } else {
+      grouped.set(displayType, {
+        type: displayType,
+        count: entry.count,
+        gainLossEur: entry.gainLossEur,
+      });
+    }
+  }
+  return Array.from(grouped.values());
+}
+
+function recentRowsForDisplayType(
+  snapshot: JournalsSnapshot,
+  displayType: string,
+) {
+  if (displayType !== "transfer") {
+    const rows =
+      snapshot.recentByType?.[displayType] ??
+      snapshot.recent.filter((entry) => entry.type === displayType);
+    return sortRecentJournalRows(rows);
+  }
+  const byType = snapshot.recentByType ?? {};
+  const transferRows = [
+    ...(byType.transfer_out ?? []),
+    ...(byType.transfer_in ?? []),
+  ];
+  if (transferRows.length) {
+    return sortRecentJournalRows(transferRows);
+  }
+  return sortRecentJournalRows(
+    snapshot.recent.filter((entry) => isTransferDirection(entry.type)),
+  );
+}
+
+function sortRecentJournalRows(rows: RecentJournalEntry[]) {
+  return [...rows].sort((left, right) => right.date.localeCompare(left.date));
+}
 
 const toneTextStyles: Record<JournalTone, string> = {
   good: "text-emerald-600 dark:text-emerald-400",

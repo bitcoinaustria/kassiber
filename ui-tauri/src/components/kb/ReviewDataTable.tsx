@@ -64,7 +64,7 @@ interface ReviewDataTableProps {
   eyebrow: string;
   title: string;
   description: string;
-  icon: ComponentType<SVGProps<SVGSVGElement>>;
+  icon?: ComponentType<SVGProps<SVGSVGElement>>;
   rows: ReviewTableRow[];
   actions?: ReactNode;
   metrics?: ReviewMetric[];
@@ -241,15 +241,17 @@ export function ReviewDataTable({
     <div className={cn(shellClassName)}>
       <div className="flex flex-col gap-2.5 rounded-xl border bg-card px-3 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-4">
         <div className="flex min-w-0 items-start gap-3">
-          <span
-            className={cn(
-              "flex size-8 shrink-0 items-center justify-center rounded-md ring-1 ring-inset",
-              toneStyles[queueTone],
-            )}
-            aria-hidden="true"
-          >
-            <Icon className="size-4" />
-          </span>
+          {Icon ? (
+            <span
+              className={cn(
+                "flex size-8 shrink-0 items-center justify-center rounded-md ring-1 ring-inset",
+                toneStyles[queueTone],
+              )}
+              aria-hidden="true"
+            >
+              <Icon className="size-4" />
+            </span>
+          ) : null}
           <div className="min-w-0">
             <p className="text-[10px] font-medium tracking-[0.18em] text-muted-foreground uppercase">
               {eyebrow}
