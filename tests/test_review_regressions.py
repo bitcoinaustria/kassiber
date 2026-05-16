@@ -16,7 +16,12 @@ from unittest.mock import patch
 from urllib.parse import parse_qs, urlparse
 
 from kassiber.cli.main import command_needs_db
-from kassiber.cli.handlers import _attachment_hooks, _audit_transaction_refs
+from kassiber.cli.handlers import (
+    _attachment_hooks,
+    _audit_transaction_refs,
+    create_direct_swap_payout,
+    create_transaction_pair,
+)
 from kassiber.core import attachments as core_attachments
 from kassiber.core import pricing
 from kassiber.core import rates as core_rates
@@ -4615,6 +4620,178 @@ class ReviewRegressionTest(unittest.TestCase):
             manual_pair_records=manual_pairs,
         )
 
+    def _direct_austrian_swap_payout_inputs(self):
+        profile = {
+            "id": "profile-at-payout",
+            "workspace_id": "workspace-main",
+            "label": "FixtureAustrianSwapPayout",
+            "fiat_currency": "EUR",
+            "tax_country": "at",
+            "tax_long_term_days": 9223372036854775807,
+            "gains_algorithm": "MOVING_AVERAGE_AT",
+        }
+        wallet_refs_by_id = {
+            "wallet-liquid": {
+                "id": "wallet-liquid",
+                "label": "Liquid",
+                "wallet_account_id": "account-treasury",
+                "account_code": "treasury",
+                "account_label": "Treasury",
+            },
+        }
+        rows = [
+            {
+                "id": "lbtc-buy-1",
+                "wallet_id": "wallet-liquid",
+                "wallet_label": "Liquid",
+                "wallet_account_id": "account-treasury",
+                "account_code": "treasury",
+                "account_label": "Treasury",
+                "occurred_at": "2024-06-01T10:00:00Z",
+                "direction": "inbound",
+                "asset": "LBTC",
+                "amount": 100_000_000_000,
+                "fee": 0,
+                "fiat_rate": 30000,
+                "fiat_value": 30000,
+                "kind": "deposit",
+                "description": "Liquid Neu buy",
+                "note": None,
+                "external_id": "lbtc-buy-1",
+                "created_at": "2024-06-01T10:00:00Z",
+            },
+            {
+                "id": "swap-payout-source",
+                "wallet_id": "wallet-liquid",
+                "wallet_label": "Liquid",
+                "wallet_account_id": "account-treasury",
+                "account_code": "treasury",
+                "account_label": "Treasury",
+                "occurred_at": "2025-03-01T09:00:00Z",
+                "direction": "outbound",
+                "asset": "LBTC",
+                "amount": 50_000_000_000,
+                "fee": 0,
+                "fiat_rate": 50000,
+                "fiat_value": 25000,
+                "kind": "withdrawal",
+                "description": "Liquid direct swap payout",
+                "note": None,
+                "external_id": "swap-payout-source",
+                "created_at": "2025-03-01T09:00:00Z",
+            },
+        ]
+        direct_payouts = [
+            {
+                "id": "direct-payout-1",
+                "out_transaction_id": "swap-payout-source",
+                "kind": "direct-swap-payout",
+                "policy": "carrying-value",
+                "payout_asset": "BTC",
+                "payout_amount": 49_990_000_000,
+                "payout_occurred_at": "2025-03-01T09:00:30Z",
+                "payout_fiat_value": 24995,
+                "payout_external_id": "recipient-txid",
+                "counterparty": "external-recipient",
+                "notes": "Privacy swap payout",
+                "swap_fee_msat": 10_000_000,
+                "swap_fee_kind": "combined",
+                "created_at": "2025-03-01T09:01:00Z",
+            },
+        ]
+        return profile, TaxEngineLedgerInputs(
+            rows=rows,
+            wallet_refs_by_id=wallet_refs_by_id,
+            manual_pair_records=[],
+            direct_payout_records=direct_payouts,
+        )
+
+    def _direct_generic_swap_payout_inputs(self):
+        profile = {
+            "id": "profile-generic-payout",
+            "workspace_id": "workspace-main",
+            "label": "FixtureGenericSwapPayout",
+            "fiat_currency": "EUR",
+            "tax_country": "generic",
+            "tax_long_term_days": 365,
+            "gains_algorithm": "FIFO",
+        }
+        wallet_refs_by_id = {
+            "wallet-btc": {
+                "id": "wallet-btc",
+                "label": "Bitcoin",
+                "wallet_account_id": "account-treasury",
+                "account_code": "treasury",
+                "account_label": "Treasury",
+            },
+        }
+        rows = [
+            {
+                "id": "btc-buy-1",
+                "wallet_id": "wallet-btc",
+                "wallet_label": "Bitcoin",
+                "wallet_account_id": "account-treasury",
+                "account_code": "treasury",
+                "account_label": "Treasury",
+                "occurred_at": "2024-06-01T10:00:00Z",
+                "direction": "inbound",
+                "asset": "BTC",
+                "amount": 100_000_000_000,
+                "fee": 0,
+                "fiat_rate": 10000,
+                "fiat_value": 10000,
+                "kind": "buy",
+                "description": "Initial BTC lot",
+                "note": None,
+                "external_id": "btc-buy-1",
+                "created_at": "2024-06-01T10:00:00Z",
+            },
+            {
+                "id": "btc-direct-payout-source",
+                "wallet_id": "wallet-btc",
+                "wallet_label": "Bitcoin",
+                "wallet_account_id": "account-treasury",
+                "account_code": "treasury",
+                "account_label": "Treasury",
+                "occurred_at": "2025-03-01T09:00:00Z",
+                "direction": "outbound",
+                "asset": "BTC",
+                "amount": 50_000_000_000,
+                "fee": 0,
+                "fiat_rate": 40000,
+                "fiat_value": 20000,
+                "kind": "withdrawal",
+                "description": "Direct provider payout",
+                "note": None,
+                "external_id": "btc-direct-payout-source",
+                "created_at": "2025-03-01T09:00:00Z",
+            },
+        ]
+        direct_payouts = [
+            {
+                "id": "generic-direct-payout-1",
+                "out_transaction_id": "btc-direct-payout-source",
+                "kind": "direct-swap-payout",
+                "policy": "taxable",
+                "payout_asset": "BTC",
+                "payout_amount": 49_990_000_000,
+                "payout_occurred_at": "2025-03-01T09:00:30Z",
+                "payout_fiat_value": 25000,
+                "payout_external_id": "exchange-deposit-txid",
+                "counterparty": "external-exchange",
+                "notes": "Reviewed exchange sale proceeds",
+                "swap_fee_msat": 10_000_000,
+                "swap_fee_kind": "combined",
+                "created_at": "2025-03-01T09:01:00Z",
+            },
+        ]
+        return profile, TaxEngineLedgerInputs(
+            rows=rows,
+            wallet_refs_by_id=wallet_refs_by_id,
+            manual_pair_records=[],
+            direct_payout_records=direct_payouts,
+        )
+
     def _direct_austrian_same_timestamp_swap_chain_inputs(self):
         profile = {
             "id": "profile-at-chain",
@@ -7145,6 +7322,136 @@ class ReviewRegressionTest(unittest.TestCase):
         actual = self._direct_engine_snapshot(profile, inputs)
         expected = self._load_fixture("austrian_rp2_cross_asset_swap_snapshot.json")
         self.assertEqual(actual, expected)
+
+    def test_austrian_direct_swap_payout_carries_then_disposes(self):
+        profile, inputs = self._direct_austrian_swap_payout_inputs()
+        state = build_tax_engine(profile).build_ledger_state(inputs)
+        entries = _normalize_engine_entries(state.entries)
+
+        self.assertEqual(state.quarantines, [])
+        self.assertEqual(state.cross_asset_pairs, [])
+        self.assertEqual(
+            state.direct_swap_payouts,
+            [
+                {
+                    "payout_id": "direct-payout-1",
+                    "kind": "direct-swap-payout",
+                    "policy": "carrying-value",
+                    "out_id": "swap-payout-source",
+                    "out_asset": "LBTC",
+                    "out_amount_msat": 50_000_000_000,
+                    "payout_asset": "BTC",
+                    "payout_amount_msat": 49_990_000_000,
+                    "payout_occurred_at": "2025-03-01T09:00:30Z",
+                    "payout_external_id": "recipient-txid",
+                    "counterparty": "external-recipient",
+                    "swap_fee_msat": 10_000_000,
+                    "swap_fee_kind": "combined",
+                }
+            ],
+        )
+        disposals = [
+            entry
+            for entry in entries
+            if entry["transaction_id"] == "swap-payout-source"
+            and entry["entry_type"] == "disposal"
+        ]
+        self.assertEqual(len(disposals), 2)
+        neutral_source = next(entry for entry in disposals if entry["asset"] == "LBTC")
+        taxable_payout = next(entry for entry in disposals if entry["asset"] == "BTC")
+
+        self.assertEqual(neutral_source["at_category"], "neu_swap")
+        self.assertEqual(neutral_source["gain_loss"], 0.0)
+        self.assertEqual(taxable_payout["at_category"], "neu_gain")
+        self.assertAlmostEqual(taxable_payout["cost_basis"], 15000.0)
+        self.assertAlmostEqual(taxable_payout["proceeds"], 24995.0)
+        self.assertAlmostEqual(taxable_payout["gain_loss"], 9995.0)
+        self.assertEqual(_normalize_holdings(state.account_holdings, ("account_id", "account_code", "account_label", "asset")), [
+            {
+                "account_id": "account-treasury",
+                "account_code": "treasury",
+                "account_label": "Treasury",
+                "asset": "LBTC",
+                "quantity": 0.5,
+                "cost_basis": 15000.0,
+            }
+        ])
+
+    def test_generic_direct_swap_payout_uses_reviewed_sale_proceeds(self):
+        profile, inputs = self._direct_generic_swap_payout_inputs()
+        state = build_tax_engine(profile).build_ledger_state(inputs)
+        entries = _normalize_engine_entries(state.entries)
+
+        self.assertEqual(state.quarantines, [])
+        self.assertEqual(state.cross_asset_pairs, [])
+        self.assertEqual(state.direct_swap_payouts[0]["payout_id"], "generic-direct-payout-1")
+        disposals = [
+            entry
+            for entry in entries
+            if entry["transaction_id"] == "btc-direct-payout-source"
+            and entry["entry_type"] == "disposal"
+        ]
+        self.assertEqual(len(disposals), 1)
+        disposal = disposals[0]
+        self.assertEqual(disposal["asset"], "BTC")
+        self.assertAlmostEqual(disposal["cost_basis"], 5000.0)
+        self.assertAlmostEqual(disposal["proceeds"], 25000.0)
+        self.assertAlmostEqual(disposal["gain_loss"], 20000.0)
+
+    def test_manual_pair_rejects_transaction_with_active_direct_payout(self):
+        self._bootstrap_wallet(label="PayoutSource")
+        payload, result = self._run_json(
+            "wallets",
+            "create",
+            "--workspace",
+            "Main",
+            "--profile",
+            "Default",
+            "--label",
+            "PayoutTarget",
+            "--kind",
+            "custom",
+        )
+        self._assert_ok(payload, result, "wallets.create")
+        self._insert_transaction(
+            wallet_label="PayoutSource",
+            tx_id="payout-source-out",
+            occurred_at="2025-03-01T09:00:00Z",
+            amount_msat=50_000_000_000,
+            direction="outbound",
+        )
+        self._insert_transaction(
+            wallet_label="PayoutTarget",
+            tx_id="pair-target-in",
+            occurred_at="2025-03-01T09:01:00Z",
+            amount_msat=49_990_000_000,
+            direction="inbound",
+        )
+        conn = open_db(self.data_root)
+        self.addCleanup(conn.close)
+        create_direct_swap_payout(
+            conn,
+            "Main",
+            "Default",
+            "payout-source-out",
+            payout_asset="BTC",
+            payout_amount="0.4999",
+            payout_fiat_value="25000",
+            payout_external_id="exchange-deposit-txid",
+            counterparty="external-exchange",
+            policy="taxable",
+        )
+
+        with self.assertRaises(AppError) as ctx:
+            create_transaction_pair(
+                conn,
+                "Main",
+                "Default",
+                "payout-source-out",
+                "pair-target-in",
+            )
+        self.assertEqual(ctx.exception.code, "conflict")
+        self.assertIn("direct swap payout", str(ctx.exception))
 
     def test_austrian_same_timestamp_swap_chain_reaches_rp2(self):
         profile, inputs = self._direct_austrian_same_timestamp_swap_chain_inputs()

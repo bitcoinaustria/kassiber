@@ -151,6 +151,33 @@ The implementation works as follows:
 This is direction-agnostic: both BTC->LBTC peg-ins and LBTC->BTC
 peg-outs use the same handoff.
 
+### Direct swap payouts
+
+`transfers payouts create` covers the privacy/sale pattern where the
+user sends one owned asset to a swap provider and the provider settles
+the target asset directly to an external recipient or exchange. There is
+no owned inbound transaction to pair, so Kassiber stores a reviewed
+`direct_swap_payouts` row instead of inventing a recipient wallet.
+The model is country-neutral: the reviewed `payout_fiat_value`, when
+present, becomes the taxable source-row proceeds for ordinary direct
+payout reviews. The Austrian-specific part is only the cross-asset
+carrying-value treatment below.
+
+For Austrian cross-asset `policy=carrying-value` payouts, Kassiber
+synthesizes the target-asset settlement legs only inside journal
+processing:
+
+1. The real source outbound and synthetic target inbound receive the
+   same `at_swap_link=direct-payout:<id>` marker.
+2. rp2 carries the source pool basis onto the synthetic target
+   acquisition.
+3. A second synthetic target outbound immediately disposes that carried
+   basis to the external recipient or exchange.
+
+Persisted journal entries still reference the real source transaction id.
+This keeps the swap itself neutral while the payout/sale remains visible
+as a taxable disposal.
+
 ### Fallback quarantines
 
 Kassiber still quarantines both legs when a carrying-value swap cannot be

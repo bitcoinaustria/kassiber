@@ -213,6 +213,26 @@ CREATE TABLE IF NOT EXISTS transaction_pairs (
     created_at TEXT NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS direct_swap_payouts (
+    id TEXT PRIMARY KEY,
+    workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+    profile_id TEXT NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+    out_transaction_id TEXT NOT NULL REFERENCES transactions(id) ON DELETE CASCADE,
+    kind TEXT NOT NULL DEFAULT 'direct-swap-payout',
+    policy TEXT NOT NULL DEFAULT 'carrying-value',
+    payout_asset TEXT NOT NULL,
+    payout_amount INTEGER NOT NULL,
+    payout_occurred_at TEXT,
+    payout_fiat_value REAL,
+    payout_external_id TEXT,
+    counterparty TEXT,
+    notes TEXT,
+    swap_fee_msat INTEGER,
+    swap_fee_kind TEXT,
+    deleted_at TEXT,
+    created_at TEXT NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS transaction_pair_dismissals (
     id TEXT PRIMARY KEY,
     workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
@@ -227,6 +247,12 @@ CREATE TABLE IF NOT EXISTS transaction_pair_dismissals (
 
 CREATE INDEX IF NOT EXISTS idx_transaction_pair_dismissals_profile
     ON transaction_pair_dismissals(profile_id, expires_at);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_direct_swap_payouts_active_out
+    ON direct_swap_payouts(profile_id, out_transaction_id) WHERE deleted_at IS NULL;
+
+CREATE INDEX IF NOT EXISTS idx_direct_swap_payouts_profile_active
+    ON direct_swap_payouts(profile_id) WHERE deleted_at IS NULL;
 
 CREATE TABLE IF NOT EXISTS swap_matching_rules (
     id TEXT PRIMARY KEY,
@@ -912,6 +938,7 @@ def ensure_schema_compat(conn):
     _migrate_nullable_attachment_transactions(conn)
     _backfill_liquid_asset_codes(conn)
     _ensure_swap_matching_schema(conn)
+    _ensure_direct_swap_payout_schema(conn)
     _ensure_commercial_reconciliation_schema(conn)
 
 
@@ -1295,6 +1322,41 @@ def _ensure_swap_matching_schema(conn):
     )
     conn.commit()
     _backfill_payment_hash_from_raw_json(conn)
+
+
+def _ensure_direct_swap_payout_schema(conn):
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS direct_swap_payouts (
+            id TEXT PRIMARY KEY,
+            workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+            profile_id TEXT NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+            out_transaction_id TEXT NOT NULL REFERENCES transactions(id) ON DELETE CASCADE,
+            kind TEXT NOT NULL DEFAULT 'direct-swap-payout',
+            policy TEXT NOT NULL DEFAULT 'carrying-value',
+            payout_asset TEXT NOT NULL,
+            payout_amount INTEGER NOT NULL,
+            payout_occurred_at TEXT,
+            payout_fiat_value REAL,
+            payout_external_id TEXT,
+            counterparty TEXT,
+            notes TEXT,
+            swap_fee_msat INTEGER,
+            swap_fee_kind TEXT,
+            deleted_at TEXT,
+            created_at TEXT NOT NULL
+        )
+        """
+    )
+    conn.execute(
+        "CREATE UNIQUE INDEX IF NOT EXISTS idx_direct_swap_payouts_active_out "
+        "ON direct_swap_payouts(profile_id, out_transaction_id) WHERE deleted_at IS NULL"
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_direct_swap_payouts_profile_active "
+        "ON direct_swap_payouts(profile_id) WHERE deleted_at IS NULL"
+    )
+    conn.commit()
 
 
 def _backfill_payment_hash_from_raw_json(conn):
