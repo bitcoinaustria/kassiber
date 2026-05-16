@@ -100,9 +100,9 @@ def _attachment_row_to_dict(row: Mapping[str, Any], attachments_root: Path) -> d
         "id": row["id"],
         "transaction_id": row["transaction_id"],
         "external_id": row["external_id"] or "",
-        "wallet": row["wallet"],
-        "occurred_at": row["occurred_at"],
-        "asset": row["asset"],
+        "wallet": row["wallet"] or "",
+        "occurred_at": row["occurred_at"] or "",
+        "asset": row["asset"] or "",
         "attachment_type": row["attachment_type"],
         "label": row["label"],
         "original_filename": row["original_filename"] or "",
@@ -212,8 +212,8 @@ def add_attachment(
             t.asset,
             w.label AS wallet
         FROM attachments a
-        JOIN transactions t ON t.id = a.transaction_id
-        JOIN wallets w ON w.id = t.wallet_id
+        LEFT JOIN transactions t ON t.id = a.transaction_id
+        LEFT JOIN wallets w ON w.id = t.wallet_id
         WHERE a.id = ?
         """,
         (attachment_id,),
@@ -246,8 +246,8 @@ def list_attachments(
             t.asset,
             w.label AS wallet
         FROM attachments a
-        JOIN transactions t ON t.id = a.transaction_id
-        JOIN wallets w ON w.id = t.wallet_id
+        LEFT JOIN transactions t ON t.id = a.transaction_id
+        LEFT JOIN wallets w ON w.id = t.wallet_id
         WHERE {' AND '.join(where)}
         ORDER BY a.created_at DESC, a.id DESC
         """,
@@ -285,8 +285,8 @@ def remove_attachment(
             t.asset,
             w.label AS wallet
         FROM attachments a
-        JOIN transactions t ON t.id = a.transaction_id
-        JOIN wallets w ON w.id = t.wallet_id
+        LEFT JOIN transactions t ON t.id = a.transaction_id
+        LEFT JOIN wallets w ON w.id = t.wallet_id
         WHERE a.profile_id = ? AND a.id = ?
         """,
         (profile["id"], attachment_id),

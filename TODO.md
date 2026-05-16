@@ -409,17 +409,18 @@ and [docs/plan/04-desktop-ui.md](docs/plan/04-desktop-ui.md).
   Electrum proxies. Today `_connect_via_socks5` only offers no-auth
   and emits a precise error when a proxy refuses it, which covers Tor
   but not corporate SOCKS5 endpoints that require credentials.
-- [ ] Extend BTCPay Greenfield sync beyond confirmed wallet history with stable invoice/payment ids and raw payload snapshots
-- [ ] Import BTCPay invoice/payment fiat facts as authoritative pricing
+- [x] Extend BTCPay Greenfield sync beyond confirmed wallet history with stable invoice/payment ids and raw payload snapshots
+- [x] Import BTCPay invoice/payment fiat facts as authoritative pricing
   observations and reconcile them to wallet transactions before merchant
   receipts are treated as exact BTCPay-priced income
-- [ ] External document records for invoices, receipts, contracts, and related BTC-linked business evidence
-- [ ] Many-to-many document/payment links with allocations and reconciliation state
-- [ ] Deterministic matching rules before any AI assistance
-- [ ] Review/confirmation workflow for proposed matches and commercial annotations
-- [ ] Split commercial annotations from RP2-facing tax primitives during journal preparation
-- [ ] Accountant-facing export of matched BTC subledger rows with document references
+- [x] External document records for invoices, receipts, contracts, and related BTC-linked business evidence
+- [x] Many-to-many document/payment links with allocations and reconciliation state
+- [x] Deterministic matching rules before any AI assistance
+- [x] Review/confirmation workflow for proposed matches and commercial annotations
+- [x] Split commercial annotations from RP2-facing tax primitives during journal preparation
+- [x] Accountant-facing export of matched BTC subledger rows with document references
 - [ ] Opt-in local AI extraction and tie-breaking only after deterministic matching is solid
+- [ ] Build the richer desktop visual reconciliation workflow on top of the new `ui.btcpay.provenance.*` and `ui.documents.*` daemon-safe surfaces
 - [ ] Richer transfer pairing for multi-leg self-transfers, including
   one-outbound/multiple-inbound same-txid moves that should not linger as
   swap-review noise

@@ -32,6 +32,7 @@ from ..backends import (
 )
 from ..core import accounts as core_accounts
 from ..core import attachments as core_attachments
+from ..core import commercial as core_commercial
 from ..core import imports as core_imports
 from ..core import metadata as core_metadata
 from ..core import pricing
@@ -113,6 +114,7 @@ from ..wallet_descriptors import (
 from ..sync_btcpay import (
     DEFAULT_PAGE_SIZE as BTCPAY_DEFAULT_PAGE_SIZE,
     DEFAULT_PAYMENT_METHOD_ID as BTCPAY_DEFAULT_PAYMENT_METHOD_ID,
+    fetch_btcpay_invoice_provenance,
     fetch_btcpay_records,
     require_wallet_history_payment_method,
 )
@@ -1284,6 +1286,15 @@ def _attachment_hooks():
 
 
 @lru_cache(maxsize=1)
+def _commercial_hooks():
+    return core_commercial.CommercialHooks(
+        resolve_scope=resolve_scope,
+        resolve_transaction=resolve_transaction,
+        invalidate_journals=invalidate_journals,
+    )
+
+
+@lru_cache(maxsize=1)
 def _report_hooks():
     return core_reports.ReportHooks(
         resolve_scope=resolve_scope,
@@ -1717,6 +1728,46 @@ def attach_btcpay_provenance_to_wallet(
             },
         },
     )
+
+
+def sync_btcpay_commercial_provenance(
+    conn,
+    runtime_config,
+    workspace_ref,
+    profile_ref,
+    backend_name,
+    store_id,
+    page_size,
+):
+    workspace, profile = resolve_scope(conn, workspace_ref, profile_ref)
+    backend = resolve_backend(runtime_config, backend_name)
+    kind = core_sync.normalize_backend_kind(backend["kind"])
+    if kind != "btcpay":
+        raise AppError(
+            f"Backend '{backend['name']}' has kind '{backend['kind']}', expected 'btcpay'",
+            code="validation",
+            hint="Create a BTCPay backend with `kassiber backends create --kind btcpay --url <server> --token-stdin` or `--token-fd FD`.",
+        )
+    invoices = fetch_btcpay_invoice_provenance(
+        backend,
+        store_id=store_id,
+        page_size=page_size,
+    )
+    outcome = core_commercial.upsert_btcpay_provenance(
+        conn,
+        workspace,
+        profile,
+        backend_name=backend["name"],
+        invoices=invoices,
+    )
+    return {
+        **outcome,
+        "backend": backend["name"],
+        "backend_kind": kind,
+        "backend_url": redact_backend_url(backend["url"]),
+        "store_id": store_id,
+        "page_size": page_size,
+    }
 
 
 def resolve_descriptor_branch_index(plan, branch):

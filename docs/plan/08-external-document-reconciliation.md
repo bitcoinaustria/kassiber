@@ -1,8 +1,11 @@
 # External Document Reconciliation
 
-**Status:** Active design direction; schema and CLI surface have not landed.
+**Status:** Initial schema, CLI commands, daemon-safe list/suggest/review
+surfaces, and CSV subledger export have landed. Rich desktop workflow and AI
+extraction remain future work.
 **Current source of truth:** shipped transaction attachments, BTCPay wallet
-history sync, `TODO.md`, and this boundary doc.
+history sync, `btcpay provenance`, `documents`, `reports commercial-subledger`,
+`TODO.md`, and this boundary doc.
 **Core rule:** Kassiber is the BTC-side subledger. It is not an invoicing, VAT,
 ERP, or general-ledger product.
 
@@ -72,17 +75,20 @@ a sale, refund, owner contribution, supplier payment, or treasury movement.
 ## Data Model Direction
 
 Use the shipped `attachments` table/store for files and URLs. Do not create a
-second blob store. Source-of-funds evidence follows the same rule by joining
-reviewed sources and flow links to existing attachment rows.
+second blob store. Document evidence rows join to attachment records whose
+`transaction_id` can be null; transaction attachments continue to use the same
+table. Source-of-funds evidence follows the same rule by joining reviewed
+sources and flow links to existing attachment rows.
 
-Likely future tables:
+Initial tables:
 
 - `external_documents`: one invoice, receipt, contract, or related document
 - `external_document_attachments`: joins documents to existing attachments
-- `document_payment_links`: many-to-many allocations between documents and
-  transactions
-- `match_suggestions`: proposed links, confidence, explanation, method
-- `commercial_annotations`: confirmed business meaning
+- `btcpay_provenance_records`: invoice/payment ids, raw BTCPay payload snapshots,
+  payment hashes/txids, and exact fiat facts
+- `commercial_links`: many-to-many allocations between BTCPay records,
+  documents, and transactions; suggested/reviewed/rejected state; reconciliation
+  state; confirmed commercial kind
 
 Idempotency should prefer stable external IDs and fall back to content hashes
 plus document/transaction identity.
@@ -104,14 +110,16 @@ models. Any remote model use must be explicit opt-in.
 
 ## Implementation Order
 
-1. Extend BTCPay provenance beyond confirmed wallet history with stable
+1. [x] Extend BTCPay provenance beyond confirmed wallet history with stable
    invoice/payment IDs and raw payload snapshots.
-2. Add external document records that reuse shipped attachments.
-3. Add deterministic matching and allocation tables.
-4. Add review/confirmation workflow.
-5. Feed confirmed annotations into `kassiber/core/tax_events.py`.
-6. Add accountant-facing export.
-7. Add optional local AI extraction/tie-breaking only after deterministic
+2. [x] Add external document records that reuse shipped attachments.
+3. [x] Add deterministic matching and allocation tables.
+4. [x] Add review/confirmation workflow.
+5. [x] Feed confirmed annotations into tax normalization by applying only
+   reviewed commercial links to transaction pricing/kind before journal
+   processing.
+6. [x] Add accountant-facing export.
+7. [ ] Add optional local AI extraction/tie-breaking only after deterministic
    matching is solid.
 
 ## One-Line Restatement

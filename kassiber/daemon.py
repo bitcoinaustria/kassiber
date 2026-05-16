@@ -63,6 +63,7 @@ from .cli.handlers import (
     delete_transaction_pair,
     delete_transfer_rule,
     dismiss_transfer_candidate,
+    invalidate_journals,
     list_saved_views_cli,
     list_transaction_pairs,
     list_transfer_rules,
@@ -71,8 +72,10 @@ from .cli.handlers import (
     resolve_transaction,
     set_transfer_rule_enabled,
     suggest_transfer_candidates,
+    sync_btcpay_commercial_provenance,
     sync_wallet,
 )
+from .core import commercial as core_commercial
 from .core import reports as core_reports
 from .core import source_funds as core_source_funds
 from .core import transfer_matching as core_transfer_matching
@@ -206,6 +209,13 @@ SUPPORTED_KINDS = (
     "ui.source_funds.recipients.create",
     "ui.source_funds.recipients.update",
     "ui.source_funds.recipients.delete",
+    "ui.btcpay.provenance.sync",
+    "ui.btcpay.provenance.list",
+    "ui.btcpay.provenance.suggest",
+    "ui.btcpay.provenance.links",
+    "ui.btcpay.provenance.review",
+    "ui.documents.list",
+    "ui.documents.create",
     "ui.journals.snapshot",
     "ui.journals.events.list",
     "ui.journals.quarantine",
@@ -1298,6 +1308,121 @@ def _source_funds_hooks() -> core_source_funds.SourceFundsHooks:
         resolve_transaction=resolve_transaction,
         format_table=report_hooks.format_table,
     )
+
+
+def _commercial_hooks() -> core_commercial.CommercialHooks:
+    return core_commercial.CommercialHooks(
+        resolve_scope=resolve_scope,
+        resolve_transaction=resolve_transaction,
+        invalidate_journals=invalidate_journals,
+    )
+
+
+def _ui_commercial_payload(
+    ctx: DaemonContext,
+    kind: str,
+    args: dict[str, Any],
+) -> dict[str, Any]:
+    conn = _require_conn(ctx)
+    hooks = _commercial_hooks()
+    if kind == "ui.btcpay.provenance.sync":
+        backend = args.get("backend")
+        store_id = args.get("store_id")
+        if not isinstance(backend, str) or not backend:
+            raise AppError("ui.btcpay.provenance.sync requires args.backend", code="validation")
+        if not isinstance(store_id, str) or not store_id:
+            raise AppError("ui.btcpay.provenance.sync requires args.store_id", code="validation")
+        return sync_btcpay_commercial_provenance(
+            conn,
+            ctx.runtime_config,
+            None,
+            None,
+            backend,
+            store_id,
+            int(args.get("page_size") or core_commercial.DEFAULT_PAGE_SIZE),
+        )
+    if kind == "ui.btcpay.provenance.list":
+        return {
+            "records": core_commercial.list_btcpay_records(
+                conn,
+                None,
+                None,
+                hooks,
+                record_type=args.get("record_type"),
+                limit=int(args.get("limit") or 100),
+            )
+        }
+    if kind == "ui.btcpay.provenance.suggest":
+        return core_commercial.suggest_links(
+            conn,
+            None,
+            None,
+            hooks,
+            limit=int(args.get("limit") or core_commercial.SUGGESTION_LIMIT),
+        )
+    if kind == "ui.btcpay.provenance.links":
+        return {
+            "links": core_commercial.list_links(
+                conn,
+                None,
+                None,
+                hooks,
+                state=args.get("state"),
+                limit=int(args.get("limit") or 100),
+            )
+        }
+    if kind == "ui.btcpay.provenance.review":
+        link = args.get("link")
+        state = args.get("state")
+        if not isinstance(link, str) or not link:
+            raise AppError("ui.btcpay.provenance.review requires args.link", code="validation")
+        if not isinstance(state, str) or not state:
+            raise AppError("ui.btcpay.provenance.review requires args.state", code="validation")
+        return core_commercial.review_link(
+            conn,
+            None,
+            None,
+            link,
+            hooks,
+            state=state,
+            reconciliation_state=args.get("reconciliation_state"),
+            commercial_kind=args.get("commercial_kind"),
+            notes=args.get("notes"),
+        )
+    if kind == "ui.documents.list":
+        return {
+            "documents": core_commercial.list_documents(
+                conn,
+                None,
+                None,
+                hooks,
+                limit=int(args.get("limit") or 100),
+            )
+        }
+    if kind == "ui.documents.create":
+        label = args.get("label")
+        document_type = args.get("document_type") or args.get("type")
+        if not isinstance(label, str) or not label:
+            raise AppError("ui.documents.create requires args.label", code="validation")
+        if not isinstance(document_type, str) or not document_type:
+            raise AppError("ui.documents.create requires args.document_type", code="validation")
+        return core_commercial.create_document(
+            conn,
+            None,
+            None,
+            hooks,
+            document_type=document_type,
+            label=label,
+            external_ref=args.get("external_ref"),
+            issuer=args.get("issuer"),
+            counterparty=args.get("counterparty"),
+            issued_at=args.get("issued_at"),
+            due_at=args.get("due_at"),
+            fiat_currency=args.get("fiat_currency"),
+            fiat_value=args.get("fiat_value"),
+            notes=args.get("notes"),
+        )
+    raise AppError(f"Unsupported commercial daemon kind '{kind}'", code="validation")
 
 
 def _ui_source_funds_payload(
@@ -6389,6 +6514,30 @@ def handle_request(
                 build_envelope(
                     kind,
                     _ui_source_funds_payload(
+                        ctx,
+                        kind,
+                        _coerce_args_dict(request_id, request.get("args")),
+                    ),
+                ),
+                request_id,
+            ),
+            False,
+        )
+
+    if kind in {
+        "ui.btcpay.provenance.sync",
+        "ui.btcpay.provenance.list",
+        "ui.btcpay.provenance.suggest",
+        "ui.btcpay.provenance.links",
+        "ui.btcpay.provenance.review",
+        "ui.documents.list",
+        "ui.documents.create",
+    }:
+        return (
+            _with_request_id(
+                build_envelope(
+                    kind,
+                    _ui_commercial_payload(
                         ctx,
                         kind,
                         _coerce_args_dict(request_id, request.get("args")),

@@ -92,6 +92,61 @@ def fetch_btcpay_records(
     return records
 
 
+def fetch_btcpay_invoice_provenance(
+    backend,
+    store_id,
+    *,
+    page_size=DEFAULT_PAGE_SIZE,
+    opener=None,
+):
+    """Fetch invoice/payment provenance without importing wallet balances."""
+
+    if not store_id:
+        raise AppError("BTCPay store id is required", code="validation")
+    base = backend_value(backend, "url")
+    if not base:
+        raise AppError("BTCPay instance is missing 'url'", code="config_error")
+    token = backend_value(backend, "token")
+    if not token:
+        raise AppError(
+            "BTCPay instance is missing 'token' (api key)",
+            code="config_error",
+            hint="Store the api key with `kassiber backends update --token-stdin` or `--token-fd FD`.",
+        )
+    if page_size <= 0:
+        raise AppError("BTCPay page_size must be positive", code="validation")
+    timeout = backend_timeout(backend)
+    http_opener = opener or urlrequest.build_opener()
+    invoices = []
+    skip = 0
+    page_count = 0
+    while True:
+        if page_count >= MAX_PAGES:
+            raise AppError(
+                f"BTCPay invoice sync exceeded {MAX_PAGES} pages; aborting for safety",
+                code="config_error",
+            )
+        url = _build_invoices_url(base, store_id, skip, page_size)
+        page = _http_get_json(
+            http_opener,
+            url,
+            token,
+            timeout,
+            permission_hint="Grant the API key the BTCPay 'View invoices' permission.",
+        )
+        if not isinstance(page, list):
+            raise AppError(
+                f"BTCPay response for {url} was not a JSON array",
+                code="protocol_error",
+            )
+        invoices.extend(_normalize_invoice_provenance(store_id, invoice) for invoice in page)
+        page_count += 1
+        if len(page) < page_size:
+            break
+        skip += page_size
+    return invoices
+
+
 def probe_btcpay_wallet(
     backend,
     store_id,
@@ -220,6 +275,12 @@ def _build_payment_methods_url(base, store_id):
     store_q = urlparse.quote(store_id, safe="")
     query = urlparse.urlencode({"onlyEnabled": "true"})
     return f"{base.rstrip('/')}/api/v1/stores/{store_q}/payment-methods?{query}"
+
+
+def _build_invoices_url(base, store_id, skip, limit):
+    store_q = urlparse.quote(store_id, safe="")
+    query = urlparse.urlencode({"skip": str(skip), "take": str(limit)})
+    return f"{base.rstrip('/')}/api/v1/stores/{store_q}/invoices?{query}"
 
 
 def _http_get_json(opener, url, token, timeout, *, permission_hint=None):
@@ -364,6 +425,104 @@ def _to_record(tx, payment_method_id):
     return normalize_btcpay_record(csv_shaped)
 
 
+def _normalize_invoice_provenance(store_id, invoice):
+    if not isinstance(invoice, dict):
+        raise AppError("BTCPay invoice record was not a JSON object", code="protocol_error")
+    invoice_id = invoice.get("id") or invoice.get("invoiceId")
+    if not invoice_id:
+        raise AppError("BTCPay invoice record is missing 'id'", code="protocol_error")
+    payments = invoice.get("payments") or []
+    if not isinstance(payments, list):
+        payments = []
+    return {
+        "store_id": store_id,
+        "invoice": invoice,
+        "invoice_id": str(invoice_id),
+        "order_id": _str_or_none(invoice.get("orderId") or _metadata_value(invoice, "orderId")),
+        "status": _str_or_none(invoice.get("status")),
+        "created_at": _btcpay_time(invoice.get("createdTime") or invoice.get("created")),
+        "currency": _str_or_none(invoice.get("currency")),
+        "amount": _str_or_none(invoice.get("amount")),
+        "payments": [_normalize_invoice_payment(invoice, payment) for payment in payments if isinstance(payment, dict)],
+    }
+
+
+def _normalize_invoice_payment(invoice, payment):
+    details = payment.get("details") if isinstance(payment.get("details"), dict) else {}
+    method = (
+        payment.get("paymentMethod")
+        or payment.get("paymentMethodId")
+        or payment.get("paymentMethodData")
+        or details.get("paymentMethod")
+    )
+    return {
+        "payment": payment,
+        "payment_id": _str_or_none(
+            payment.get("id")
+            or payment.get("paymentId")
+            or payment.get("accountedPaymentId")
+            or payment.get("transactionId")
+            or details.get("transactionId")
+        ),
+        "payment_method_id": _str_or_none(method),
+        "status": _str_or_none(payment.get("status") or details.get("status")),
+        "received_at": _btcpay_time(
+            payment.get("receivedDate")
+            or payment.get("receivedTime")
+            or payment.get("createdTime")
+            or details.get("receivedDate")
+        ),
+        "amount": _str_or_none(
+            payment.get("value")
+            or payment.get("cryptoAmount")
+            or payment.get("amount")
+            or details.get("value")
+        ),
+        "rate": _str_or_none(payment.get("rate") or details.get("rate")),
+        "txid": _str_or_none(
+            payment.get("transactionId")
+            or payment.get("transactionHash")
+            or details.get("transactionId")
+            or details.get("transactionHash")
+        ),
+        "payment_hash": _str_or_none(
+            payment.get("paymentHash")
+            or payment.get("preimageHash")
+            or details.get("paymentHash")
+            or details.get("preimageHash")
+        ),
+        "destination": _str_or_none(
+            payment.get("destination")
+            or payment.get("address")
+            or details.get("destination")
+            or details.get("address")
+        ),
+        "invoice_currency": _str_or_none(invoice.get("currency")),
+        "invoice_amount": _str_or_none(invoice.get("amount")),
+    }
+
+
+def _metadata_value(invoice, key):
+    metadata = invoice.get("metadata")
+    if isinstance(metadata, dict):
+        return metadata.get(key)
+    return None
+
+
+def _str_or_none(value):
+    if value in (None, ""):
+        return None
+    return str(value)
+
+
+def _btcpay_time(value):
+    if value in (None, ""):
+        return None
+    if isinstance(value, str) and any(char in value for char in ("T", "Z", "+")):
+        return value
+    return _unix_to_iso(value)
+
+
 def _unix_to_iso(ts):
     try:
         value = int(ts)
@@ -383,6 +542,7 @@ __all__ = [
     "DEFAULT_PAYMENT_METHOD_ID",
     "WALLET_HISTORY_PAYMENT_METHOD_IDS",
     "discover_btcpay_wallet_sources",
+    "fetch_btcpay_invoice_provenance",
     "fetch_btcpay_records",
     "probe_btcpay_wallet",
     "require_wallet_history_payment_method",

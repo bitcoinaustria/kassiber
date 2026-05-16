@@ -146,6 +146,20 @@ BTCPay-specific fields:
 
 - `TOKEN`
 
+BTCPay backends now serve two separate Kassiber flows:
+
+- wallet-history sync imports confirmed on-chain rows into configured wallets
+  and keeps them as conservative transport transactions
+- merchant provenance sync (`btcpay provenance sync`) reads invoice/payment
+  records into separate provenance tables, preserving stable invoice/payment ids
+  and raw payload snapshots without duplicating wallet balances
+
+Use a Greenfield API key with wallet-history permissions for
+`wallets sync-btcpay` and invoice-view permissions for
+`btcpay provenance sync`. The review command is the gate that turns a matched
+BTCPay payment into authoritative `btcpay_payment` pricing or a commercial
+transaction kind.
+
 Note: `bitcoinrpc` support is currently partial. Kassiber can use it for Bitcoin address-based wallets, but descriptor- and xpub-backed source refresh still require Esplora or Electrum.
 
 The backend CLI now accepts the common backend-specific knobs directly:

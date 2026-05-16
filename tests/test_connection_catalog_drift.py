@@ -80,6 +80,15 @@ _DESKTOP_SWAP_MATCHING_KINDS = (
     "ui.saved_views.create",
     "ui.saved_views.delete",
 )
+_DESKTOP_COMMERCIAL_RECONCILIATION_KINDS = (
+    "ui.btcpay.provenance.sync",
+    "ui.btcpay.provenance.list",
+    "ui.btcpay.provenance.suggest",
+    "ui.btcpay.provenance.links",
+    "ui.btcpay.provenance.review",
+    "ui.documents.list",
+    "ui.documents.create",
+)
 
 
 def _split_entries(text: str) -> list[str]:
@@ -183,6 +192,13 @@ class ConnectionCatalogDriftTests(unittest.TestCase):
         rust_kinds = self._rust_allowlist()
         vite_kinds = self._vite_allowlist()
         for kind in _DESKTOP_SWAP_MATCHING_KINDS:
+            self.assertIn(kind, rust_kinds, f"{kind} is missing from Tauri daemon allowlist")
+            self.assertIn(kind, vite_kinds, f"{kind} is missing from Vite bridge allowlist")
+
+    def test_commercial_reconciliation_kinds_are_allowed_by_desktop_boundaries(self):
+        rust_kinds = self._rust_allowlist()
+        vite_kinds = self._vite_allowlist()
+        for kind in _DESKTOP_COMMERCIAL_RECONCILIATION_KINDS:
             self.assertIn(kind, rust_kinds, f"{kind} is missing from Tauri daemon allowlist")
             self.assertIn(kind, vite_kinds, f"{kind} is missing from Vite bridge allowlist")
 
