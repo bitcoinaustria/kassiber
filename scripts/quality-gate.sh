@@ -40,6 +40,7 @@ run py -m unittest tests.test_dependency_drift -v
 run py -m unittest tests.test_connection_catalog_drift -v
 run py -m unittest tests.test_report_contract_drift -v
 run py -m unittest tests.test_btcpay_commercial_provenance -v
+run py -m unittest tests.test_core_maintenance -v
 run py -m unittest tests.test_cli_smoke -v
 run py -m unittest tests.test_rp2_packaging -v
 run py -m unittest tests.test_source_funds_cli -v

@@ -26,6 +26,7 @@ import {
 import { useNavigate, useRouterState } from "@tanstack/react-router";
 
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Card,
   CardContent,
@@ -107,8 +108,17 @@ interface StatusData {
   data_root: string;
   database: string;
   current_workspace: string | null;
+  current_profile: string | null;
   workspaces: number;
   profiles: number;
+}
+
+interface ResetBookData {
+  reset: boolean;
+  removed: Record<string, number>;
+  preserved: Record<string, number>;
+  rates_scope: "global" | "preserved";
+  shared_rates_cleared: boolean;
 }
 
 type KrakenRatesImportOperation = "full" | "incremental";
@@ -394,6 +404,7 @@ export function SettingsScreen({ onLock }: SettingsScreenProps) {
   const setAiFeaturesEnabled = useUiStore((s) => s.setAiFeaturesEnabled);
   const identity = useUiStore((s) => s.identity);
   const setIdentity = useUiStore((s) => s.setIdentity);
+  const addNotification = useUiStore((s) => s.addNotification);
   const deferredConnectionSetup = useUiStore(
     (s) => s.deferredConnectionSetup,
   );
@@ -411,7 +422,11 @@ export function SettingsScreen({ onLock }: SettingsScreenProps) {
   });
   const status =
     statusQuery.data?.kind === "status" ? statusQuery.data.data : null;
+  const statusLoaded = statusQuery.data?.kind === "status";
   const deleteWorkspace = useDaemonMutation("ui.workspace.delete", {
+    dataMode: "real",
+  });
+  const resetBookData = useDaemonMutation<ResetBookData>("ui.profiles.reset_data", {
     dataMode: "real",
   });
   const changePassphrase = useDaemonMutation("ui.secrets.change_passphrase", {
@@ -428,6 +443,16 @@ export function SettingsScreen({ onLock }: SettingsScreenProps) {
   const [deleteConfirm, setDeleteConfirm] = React.useState("");
   const [deletePlaintextAck, setDeletePlaintextAck] = React.useState("");
   const [deleteError, setDeleteError] = React.useState<string | null>(null);
+  const [resetDataOpen, setResetDataOpen] = React.useState(false);
+  const [resetDataPassphrase, setResetDataPassphrase] = React.useState("");
+  const [resetDataConfirm, setResetDataConfirm] = React.useState("");
+  const [resetDataClearSharedRates, setResetDataClearSharedRates] =
+    React.useState(false);
+  const [resetDataPlaintextAck, setResetDataPlaintextAck] =
+    React.useState("");
+  const [resetDataError, setResetDataError] = React.useState<string | null>(
+    null,
+  );
   const [passphraseOpen, setPassphraseOpen] = React.useState(false);
   const [currentPassphrase, setCurrentPassphrase] = React.useState("");
   const [newPassphrase, setNewPassphrase] = React.useState("");
@@ -493,8 +518,23 @@ export function SettingsScreen({ onLock }: SettingsScreenProps) {
 
   const workspaceLabel =
     status?.current_workspace || identity?.workspace || "current books set";
+  const currentBookLabel =
+    statusLoaded
+      ? status?.current_profile ?? null
+      : identity?.profile || identity?.name || null;
+  const bookLabel = currentBookLabel || "current book";
+  const resetBookAvailable = Boolean(currentBookLabel);
   const encryptedWorkspace =
     Boolean(identity?.encrypted) || identity?.databaseMode === "sqlcipher";
+
+  const openResetBookData = () => {
+    setResetDataPassphrase("");
+    setResetDataConfirm("");
+    setResetDataClearSharedRates(false);
+    setResetDataPlaintextAck("");
+    setResetDataError(null);
+    setResetDataOpen(true);
+  };
 
   const openDeleteWorkspace = () => {
     setDeletePassphrase("");
@@ -747,6 +787,75 @@ export function SettingsScreen({ onLock }: SettingsScreenProps) {
     }
   };
 
+  const onResetBookData = async () => {
+    setResetDataError(null);
+    if (encryptedWorkspace && !resetDataPassphrase) {
+      setResetDataError("Enter the database passphrase.");
+      return;
+    }
+    if (
+      !encryptedWorkspace &&
+      resetDataPlaintextAck.trim() !== PLAINTEXT_DELETE_ACK
+    ) {
+      setResetDataError(`Type ${PLAINTEXT_DELETE_ACK} to confirm local reset.`);
+      return;
+    }
+    if (resetDataConfirm.trim() !== bookLabel) {
+      setResetDataError(`Type ${bookLabel} to confirm reset.`);
+      return;
+    }
+    try {
+      const envelope = await resetBookData.mutateAsync({
+        confirm: "RESET",
+        confirm_profile: bookLabel,
+        clear_shared_rates: resetDataClearSharedRates,
+        auth_response: encryptedWorkspace
+          ? { passphrase_secret: resetDataPassphrase }
+          : { plaintext_delete_ack: PLAINTEXT_DELETE_ACK },
+      });
+      const removed = envelope.data?.removed ?? {};
+      const optionalSummary: string[] = [];
+      const attachmentsRemoved =
+        Number(removed.attachments ?? 0) +
+        Number(removed.attachment_files ?? 0);
+      const sourceFundsRemoved =
+        Number(removed.source_funds_sources ?? 0) +
+        Number(removed.source_funds_links ?? 0) +
+        Number(removed.source_funds_cases ?? 0) +
+        Number(removed.source_funds_snapshots ?? 0);
+      const summary = [
+        `${formatCount(removed.transactions ?? 0)} transactions`,
+        `${formatCount(removed.journal_entries ?? 0)} journal rows`,
+        `${formatCount(removed.transaction_pairs ?? 0)} swap pairs`,
+        `${formatCount(removed.bip329_labels ?? 0)} BIP329 labels`,
+      ];
+      if (attachmentsRemoved > 0) {
+        optionalSummary.push(`${formatCount(attachmentsRemoved)} attachment records/files`);
+      }
+      if (sourceFundsRemoved > 0) {
+        optionalSummary.push(`${formatCount(sourceFundsRemoved)} source-funds records`);
+      }
+      if (envelope.data?.shared_rates_cleared) {
+        optionalSummary.push(`${formatCount(removed.rates_cache ?? 0)} rate rows`);
+      }
+      summary.push(...optionalSummary);
+      addNotification({
+        title: "Book data reset",
+        body: `Cleared ${summary.join(", ")}. Wallet and backend connections were kept.`,
+        tone: "success",
+      });
+      setResetDataOpen(false);
+      setResetDataPassphrase("");
+      setResetDataConfirm("");
+      setResetDataClearSharedRates(false);
+      setResetDataPlaintextAck("");
+    } catch (error) {
+      setResetDataError(
+        error instanceof Error ? error.message : "Book reset failed.",
+      );
+    }
+  };
+
   const onChangePassphrase = async () => {
     setPassphraseError(null);
     if (!currentPassphrase) {
@@ -895,7 +1004,8 @@ export function SettingsScreen({ onLock }: SettingsScreenProps) {
                     Danger zone
                   </CardTitle>
                   <CardDescription>
-                    Reset the Welcome gate or delete the current local books set.
+                    Reset testing data, reset the Welcome gate, or delete the
+                    current local books set.
                   </CardDescription>
                 </div>
               </CardHeader>
@@ -914,6 +1024,26 @@ export function SettingsScreen({ onLock }: SettingsScreenProps) {
                     onClick={onResetWorkspace}
                   >
                     Reset Welcome
+                  </Button>
+                </div>
+                <div className="flex flex-col gap-3 rounded-lg border border-amber-500/30 bg-amber-500/5 p-4 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="min-w-0 space-y-1">
+                    <p className="text-sm font-medium">Reset book data</p>
+                    <p className="text-sm text-muted-foreground">
+                      Keep wallet and backend connections, then clear synced
+                      transactions, journals, swaps, labels, attachments,
+                      and source-funds work. Shared fiat rates are optional.
+                    </p>
+                  </div>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="shrink-0"
+                    disabled={resetBookData.isPending || !resetBookAvailable}
+                    onClick={openResetBookData}
+                  >
+                    <RefreshCw className="mr-2 size-4" aria-hidden="true" />
+                    Reset book
                   </Button>
                 </div>
                 <div className="flex flex-col gap-3 rounded-lg border border-destructive/30 bg-destructive/5 p-4 sm:flex-row sm:items-center sm:justify-between">
@@ -950,6 +1080,114 @@ export function SettingsScreen({ onLock }: SettingsScreenProps) {
           }}
           onSave={onSaveBackend}
         />
+        <Dialog
+          open={resetDataOpen}
+          onOpenChange={(next) => {
+            if (!next) {
+              setResetDataOpen(false);
+            }
+          }}
+        >
+          <DialogContent className="max-w-md">
+            <DialogHeader>
+              <DialogTitle>Reset book data</DialogTitle>
+              <DialogDescription>
+                This keeps wallet and backend connections for {bookLabel}, then
+                clears imported/synced rows, journals, swap review state, labels,
+                attachments, and source-funds work. The shared fiat-rate cache
+                is kept unless you explicitly include it below.
+                {encryptedWorkspace
+                  ? " Enter the database passphrase and the book name to continue."
+                  : " These plaintext books have no database passphrase; type the explicit local-reset challenge and book name to continue."}
+              </DialogDescription>
+            </DialogHeader>
+            <form
+              className="space-y-4"
+              onSubmit={(event) => {
+                event.preventDefault();
+                void onResetBookData();
+              }}
+            >
+              {encryptedWorkspace ? (
+                <div className="space-y-2">
+                  <Label htmlFor="reset-data-passphrase">Passphrase</Label>
+                  <Input
+                    id="reset-data-passphrase"
+                    type="password"
+                    autoComplete="current-password"
+                    value={resetDataPassphrase}
+                    onChange={(event) =>
+                      setResetDataPassphrase(event.target.value)
+                    }
+                  />
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  <Label htmlFor="reset-data-plaintext-ack">
+                    Plaintext reset challenge
+                  </Label>
+                  <Input
+                    id="reset-data-plaintext-ack"
+                    value={resetDataPlaintextAck}
+                    placeholder={PLAINTEXT_DELETE_ACK}
+                    onChange={(event) =>
+                      setResetDataPlaintextAck(event.target.value)
+                    }
+                  />
+                </div>
+              )}
+              <div className="space-y-2">
+                <Label htmlFor="reset-data-confirm">Book name</Label>
+                <Input
+                  id="reset-data-confirm"
+                  value={resetDataConfirm}
+                  placeholder={bookLabel}
+                  onChange={(event) => setResetDataConfirm(event.target.value)}
+                />
+              </div>
+              <div className="flex items-start gap-3 rounded-md border border-amber-500/30 bg-amber-500/5 p-3">
+                <Checkbox
+                  id="reset-data-clear-shared-rates"
+                  checked={resetDataClearSharedRates}
+                  onCheckedChange={(checked) =>
+                    setResetDataClearSharedRates(checked === true)
+                  }
+                />
+                <Label
+                  htmlFor="reset-data-clear-shared-rates"
+                  className="grid gap-1 text-sm leading-relaxed"
+                >
+                  <span>Also clear shared fiat-rate cache</span>
+                  <span className="font-normal text-muted-foreground">
+                    This cache is shared across every book in this local data
+                    root. Leave it off to keep existing BTC-EUR/BTC-USD history.
+                  </span>
+                </Label>
+              </div>
+              {resetDataError && (
+                <p className="m-0 text-sm text-destructive">
+                  {resetDataError}
+                </p>
+              )}
+              <DialogFooter>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setResetDataOpen(false)}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  type="submit"
+                  variant="destructive"
+                  disabled={resetBookData.isPending}
+                >
+                  {resetBookData.isPending ? "Resetting..." : "Reset"}
+                </Button>
+              </DialogFooter>
+            </form>
+          </DialogContent>
+        </Dialog>
         <Dialog
           open={deleteOpen}
           onOpenChange={(next) => {
