@@ -25,6 +25,7 @@ from kassiber.cli.handlers import (
 from kassiber.core import attachments as core_attachments
 from kassiber.core import pricing
 from kassiber.core import rates as core_rates
+from kassiber.core.engines import rp2 as rp2_engine
 from kassiber.core.engines import TaxEngineLedgerInputs, build_tax_engine
 from kassiber.core.reports import (
     ReportHooks,
@@ -7376,6 +7377,66 @@ class ReviewRegressionTest(unittest.TestCase):
                 "cost_basis": 15000.0,
             }
         ])
+
+    def test_austrian_direct_swap_payout_sorts_synthetic_rows(self):
+        profile, inputs = self._direct_austrian_swap_payout_inputs()
+        rows = [
+            *inputs.rows,
+            {
+                "id": "btc-buy-after-payout",
+                "wallet_id": "wallet-liquid",
+                "wallet_label": "Liquid",
+                "wallet_account_id": "account-treasury",
+                "account_code": "treasury",
+                "account_label": "Treasury",
+                "occurred_at": "2025-03-02T09:00:00Z",
+                "direction": "inbound",
+                "asset": "BTC",
+                "amount": 10_000_000_000,
+                "fee": 0,
+                "fiat_rate": 51000,
+                "fiat_value": 5100,
+                "kind": "buy",
+                "description": "BTC buy after direct payout",
+                "note": None,
+                "external_id": "btc-buy-after-payout",
+                "created_at": "2025-03-02T09:00:00Z",
+            },
+        ]
+        sorted_inputs = TaxEngineLedgerInputs(
+            rows=rows,
+            wallet_refs_by_id=inputs.wallet_refs_by_id,
+            manual_pair_records=inputs.manual_pair_records,
+            direct_payout_records=inputs.direct_payout_records,
+        )
+        original_normalize = rp2_engine.normalize_tax_asset_inputs
+        btc_orders = []
+
+        def spy_normalize(profile_arg, asset, asset_rows, wallet_refs_by_id, pairs, **kwargs):
+            if asset == "BTC":
+                btc_orders.append([str(row["id"]) for row in asset_rows])
+            return original_normalize(
+                profile_arg,
+                asset,
+                asset_rows,
+                wallet_refs_by_id,
+                pairs,
+                **kwargs,
+            )
+
+        with patch.object(rp2_engine, "normalize_tax_asset_inputs", side_effect=spy_normalize):
+            build_tax_engine(profile).build_ledger_state(sorted_inputs)
+
+        self.assertTrue(btc_orders)
+        first_btc_order = btc_orders[0]
+        self.assertLess(
+            first_btc_order.index("direct-payout:direct-payout-1:in"),
+            first_btc_order.index("btc-buy-after-payout"),
+        )
+        self.assertLess(
+            first_btc_order.index("direct-payout:direct-payout-1:out"),
+            first_btc_order.index("btc-buy-after-payout"),
+        )
 
     def test_generic_direct_swap_payout_uses_reviewed_sale_proceeds(self):
         profile, inputs = self._direct_generic_swap_payout_inputs()

@@ -405,6 +405,14 @@ def _journal_transaction_id(row: Mapping[str, Any] | None, fallback: str) -> str
     return str(_row_get(row, "journal_transaction_id", fallback))
 
 
+def _transaction_row_sort_key(row: Mapping[str, Any]) -> tuple[str, str, str]:
+    return (
+        str(_row_get(row, "occurred_at", "")),
+        str(_row_get(row, "created_at", "")),
+        str(_row_get(row, "id", "")),
+    )
+
+
 def _prepare_rp2_asset_input(profile, normalized_inputs: NormalizedTaxAssetInputs, configuration) -> _RP2PreparedInput:
     """Build RP2 ``InputData`` for one asset without running ``compute_tax``.
 
@@ -1318,6 +1326,7 @@ def _direct_payout_synthetic_rows(
             row_overrides.get(str(row["id"]), row)
             for row in rows_for_engine
         ]
+    rows_for_engine = sorted(rows_for_engine, key=_transaction_row_sort_key)
 
     return rows_for_engine, cross_asset_pairs, direct_payouts, quarantines, blocked_row_ids
 
