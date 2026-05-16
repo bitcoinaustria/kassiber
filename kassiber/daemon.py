@@ -80,6 +80,7 @@ from .core import source_funds_coverage as core_source_funds_coverage
 from .core import source_funds_recipients as core_source_funds_recipients
 from .core import accounts as core_accounts
 from .core import imports as core_imports
+from .core import maintenance as core_maintenance
 from .core import metadata as core_metadata
 from .core import rates as core_rates
 from .core import wallets as core_wallets
@@ -243,6 +244,7 @@ SUPPORTED_KINDS = (
     "ui.workspace.create",
     "ui.workspace.rename",
     "ui.workspace.delete",
+    "ui.profiles.reset_data",
     "ui.secrets.init",
     "ui.secrets.change_passphrase",
     "ui.next_actions",
@@ -6731,6 +6733,56 @@ def handle_request(
                 build_envelope(
                     "ui.workspace.delete",
                     _delete_current_workspace(ctx),
+                ),
+                request_id,
+            ),
+            False,
+        )
+
+    if kind == "ui.profiles.reset_data":
+        args = _coerce_args_dict(request_id, request.get("args"))
+        if args.get("confirm") != "RESET":
+            raise AppError(
+                "Reset confirmation is required.",
+                code="validation",
+                hint="Ask the user to confirm the destructive book reset.",
+            )
+        context = current_context_snapshot(ctx.conn)
+        profile_label = context.get("profile_label")
+        if not profile_label:
+            raise AppError(
+                "No current book is selected.",
+                code="validation",
+                hint="Select a book before resetting its data.",
+            )
+        confirm_profile = args.get("confirm_profile")
+        if not isinstance(confirm_profile, str) or confirm_profile != profile_label:
+            raise AppError(
+                "Book name confirmation is required.",
+                code="validation",
+                hint="Ask the user to type the exact current book name before resetting it.",
+                details={"expected_profile": profile_label},
+            )
+        auth_result = _require_sensitive_local_auth(
+            ctx,
+            args=args,
+            request_id=request_id,
+            scope="reset_book_data",
+            label=f"Re-enter database passphrase to reset book {profile_label!r}",
+            plaintext_ack_key="plaintext_delete_ack",
+            plaintext_ack_value=PLAINTEXT_DELETE_ACK,
+        )
+        if auth_result is not None:
+            return auth_result
+        return (
+            _with_request_id(
+                build_envelope(
+                    "ui.profiles.reset_data",
+                    core_maintenance.reset_current_profile_data(
+                        ctx.conn,
+                        ctx.data_root,
+                        clear_shared_rates=bool(args.get("clear_shared_rates")),
+                    ),
                 ),
                 request_id,
             ),

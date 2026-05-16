@@ -96,7 +96,8 @@ Kassiber is currently in **dev mode**: renaming commands, breaking flags, and re
   `ui.wallets.create`, `ui.connections.btcpay.create`,
   `ui.connections.btcpay.discover`, and
   `ui.metadata.bip329.import`; transaction editor metadata saves use
-  `ui.transactions.metadata.update`; desktop Settings rate import uses
+  `ui.transactions.metadata.update`; desktop Settings maintenance uses
+  `ui.profiles.reset_data` for confirmed per-book testing resets and
   `ui.rates.kraken_csv.import` for local Kraken CSV/ZIP history backfills and
   quarterly update archives. Do not model the Connections dialog as a
   command-template picker. Connection setup should select from configured

@@ -50,6 +50,7 @@ _DESKTOP_MUTATION_KINDS = (
     "ui.profiles.create",
     "ui.profiles.rename",
     "ui.profiles.switch",
+    "ui.profiles.reset_data",
     "ui.workspace.create",
     "ui.workspace.rename",
     "ui.connections.sources",

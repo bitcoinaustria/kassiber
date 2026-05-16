@@ -147,6 +147,53 @@ export const mockDaemon: DaemonTransport = {
       };
     }
 
+    if (req.kind === "ui.profiles.reset_data") {
+      return {
+        kind: "ui.profiles.reset_data",
+        schema_version: 1,
+        request_id: req.request_id,
+        data: {
+          reset: true,
+          workspace: { id: "mock-workspace", label: "My Books" },
+          profile: { id: "mock-profile", label: "local books" },
+          preserved: {
+            workspaces: 1,
+            profiles: 1,
+            accounts: 2,
+            wallets: 4,
+            backends: 2,
+            rates_cache: req.args?.clear_shared_rates ? 0 : 128,
+            rates_checked_minutes: req.args?.clear_shared_rates ? 0 : 128,
+          },
+          rates_scope: req.args?.clear_shared_rates ? "global" : "preserved",
+          shared_rates_cleared: Boolean(req.args?.clear_shared_rates),
+          removed: {
+            transaction_tags: 5,
+            transactions: 24,
+            journal_entries: 24,
+            journal_quarantines: 0,
+            transaction_pairs: 3,
+            transaction_pair_dismissals: 1,
+            swap_matching_rules: 1,
+            saved_views: 2,
+            bip329_labels: 8,
+            attachments: 2,
+            tags: 5,
+            source_funds_sources: 1,
+            source_funds_links: 1,
+            source_funds_link_attachments: 1,
+            source_funds_source_attachments: 1,
+            source_funds_cases: 1,
+            source_funds_snapshots: 1,
+            source_funds_recipients: 1,
+            rates_cache: req.args?.clear_shared_rates ? 128 : 0,
+            rates_checked_minutes: req.args?.clear_shared_rates ? 128 : 0,
+            attachment_files: 2,
+          },
+        } as T,
+      };
+    }
+
     if (req.kind === "ui.profiles.snapshot") {
       return {
         kind: "ui.profiles.snapshot",

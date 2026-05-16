@@ -64,6 +64,7 @@ daemon for the exact current allowlist:
       "ui.workspace.health",
       "ui.workspace.create",
       "ui.workspace.delete",
+      "ui.profiles.reset_data",
       "ui.secrets.init",
       "ui.secrets.change_passphrase",
       "ui.next_actions",
@@ -156,6 +157,19 @@ books inside that set.
 `{"confirm":"DELETE","confirm_workspace":"..."}` for the current books set. Like
 wallet deletes, encrypted databases require `args.auth_response.passphrase_secret`
 and plaintext databases require `DELETE LOCAL DATA`.
+
+`ui.profiles.reset_data` accepts
+`{"confirm":"RESET","confirm_profile":"...","clear_shared_rates":false}` for
+the current book. It keeps the current books set, book/profile, bucket/account
+rows, wallet connection rows, and configured backends, then clears
+imported/synced transactions, journals, quarantines, swap pairs/dismissals/rules,
+saved views, BIP329 labels, transaction tags, attachment metadata/files, and
+source-of-funds review state so testing can redo sync, journal processing, and
+swap review from the preserved wallet connections. The global local fiat-rate
+cache is shared across books in the data root and is only cleared when
+`clear_shared_rates` is true. Like other sensitive local-data changes, encrypted
+databases require `args.auth_response.passphrase_secret` and plaintext databases
+require `DELETE LOCAL DATA`.
 
 `ui.backends.options` returns safe backend setup choices for desktop forms. It
 lists configured backend names, kinds, chain/network metadata, presence flags,
