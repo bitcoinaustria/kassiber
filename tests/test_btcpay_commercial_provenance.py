@@ -337,6 +337,16 @@ class BtcpayCommercialProvenanceTest(unittest.TestCase):
         frozen_hash = reviewed["reviewed_record_snapshot_sha256"]
         self._upsert_invoice_payment(raw_payment={"id": "pay-1", "rate": "51000.00"})
 
+        reviewed_again = commercial.review_link(
+            self.conn,
+            None,
+            None,
+            link_id,
+            _hooks(),
+            state="reviewed",
+            notes="operator note after resync",
+        )
+        self.assertEqual(reviewed_again["reviewed_record_snapshot_sha256"], frozen_hash)
         link = commercial.list_links(self.conn, None, None, _hooks(), state="reviewed")[0]
         self.assertEqual(link["reviewed_record_snapshot_sha256"], frozen_hash)
         stored = self.conn.execute(
@@ -344,6 +354,63 @@ class BtcpayCommercialProvenanceTest(unittest.TestCase):
             (link_id,),
         ).fetchone()
         self.assertIn("50000.00", stored["reviewed_record_snapshot_json"])
+
+    def test_rereview_as_none_restores_original_transaction_kind(self):
+        self._upsert_invoice_payment()
+        link_id = self._suggested_transaction_link_id()
+
+        commercial.review_link(
+            self.conn,
+            None,
+            None,
+            link_id,
+            _hooks(),
+            state="reviewed",
+            commercial_kind="income",
+        )
+        reviewed_again = commercial.review_link(
+            self.conn,
+            None,
+            None,
+            link_id,
+            _hooks(),
+            state="reviewed",
+            commercial_kind="none",
+        )
+
+        self.assertEqual(reviewed_again["commercial_kind"], "")
+        tx = self.conn.execute(
+            """
+            SELECT kind, pricing_source_kind, commercial_applied_link_id
+            FROM transactions WHERE id = 'tx'
+            """
+        ).fetchone()
+        self.assertEqual(tx["kind"], "deposit")
+        self.assertEqual(tx["pricing_source_kind"], "btcpay_payment")
+        self.assertEqual(tx["commercial_applied_link_id"], link_id)
+
+        commercial.review_link(
+            self.conn,
+            None,
+            None,
+            link_id,
+            _hooks(),
+            state="reviewed",
+            commercial_kind="income",
+        )
+        reviewed_as_transfer = commercial.review_link(
+            self.conn,
+            None,
+            None,
+            link_id,
+            _hooks(),
+            state="reviewed",
+            commercial_kind="transfer",
+        )
+
+        self.assertEqual(reviewed_as_transfer["commercial_kind"], "transfer")
+        tx = self.conn.execute("SELECT kind FROM transactions WHERE id = 'tx'").fetchone()
+        self.assertEqual(tx["kind"], "deposit")
 
     def test_ambiguous_payment_match_is_not_suggested_or_reviewable(self):
         now = now_iso()

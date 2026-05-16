@@ -921,16 +921,16 @@ def review_link(
     reviewed_snapshot_sha256 = link_before["reviewed_record_snapshot_sha256"]
     if link_before["state"] == "reviewed" and state != "reviewed" and link_before["transaction_id"]:
         restored = _restore_reviewed_link_transaction(conn, profile, link_before)
-    if state == "reviewed":
+    if state == "reviewed" and not reviewed_snapshot_sha256:
         reviewed_snapshot_json, reviewed_snapshot_sha256 = _reviewed_record_snapshot_for_link(
             conn, link_before
         )
-        if link_before["transaction_id"]:
-            apply_result = _apply_reviewed_link_to_transaction(
-                conn, profile, link_before, commercial
-            )
-            applied = apply_result["applied"]
-            apply_snapshot_json = apply_result["snapshot_json"]
+    if state == "reviewed" and link_before["transaction_id"]:
+        apply_result = _apply_reviewed_link_to_transaction(
+            conn, profile, link_before, commercial
+        )
+        applied = apply_result["applied"]
+        apply_snapshot_json = apply_result["snapshot_json"]
     reviewed_at = now if state == "reviewed" else link_before["reviewed_at"]
     conn.execute(
         """
@@ -1130,6 +1130,8 @@ def _apply_reviewed_link_to_transaction(conn, profile, link, commercial_kind):
             updates["fiat_currency"] = record["fiat_currency"]
     if commercial_kind and commercial_kind != "transfer":
         updates["kind"] = commercial_kind
+    elif commercial_kind is None or commercial_kind == "transfer":
+        updates["kind"] = json.loads(snapshot_json).get("kind")
     if not updates:
         return {"applied": False, "snapshot_json": snapshot_json}
     updates["commercial_applied_link_id"] = link["id"]
