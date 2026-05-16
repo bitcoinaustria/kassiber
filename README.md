@@ -110,7 +110,7 @@ wallets -> transactions -> journals -> reports
 
 - `books file` / `local state`: the local Kassiber data root for one person,
   business, or client
-- `book`: one separated accounting and tax scope inside that local state
+- `book`: one separate accounting and tax scope inside that local state
 - `wallet`: a transaction source that Kassiber syncs or imports
 - `account`: a wallet/reporting bucket that wallets can belong to
 

@@ -59,15 +59,43 @@ def _start_daemon(data_root):
 
 def _read_payload(proc):
     assert proc.stdout is not None
-    return json.loads(proc.stdout.readline())
+    payload = json.loads(proc.stdout.readline())
+    _remember_daemon_payload(proc, payload)
+    return payload
+
+
+def _payload_summary(payload):
+    summary = {
+        "kind": payload.get("kind"),
+        "request_id": payload.get("request_id"),
+    }
+    data = payload.get("data")
+    if isinstance(data, dict) and "finish_reason" in data:
+        summary["finish_reason"] = data["finish_reason"]
+    error = payload.get("error")
+    if isinstance(error, dict):
+        summary["error_code"] = error.get("code")
+    return {key: value for key, value in summary.items() if value is not None}
+
+
+def _remember_daemon_payload(proc, payload):
+    seen = getattr(proc, "_kassiber_seen_payloads", [])
+    seen.append(_payload_summary(payload))
+    proc._kassiber_seen_payloads = seen[-12:]
 
 
 def _read_payload_timeout(proc, timeout=5.0):
     assert proc.stdout is not None
     ready, _, _ = select.select([proc.stdout.fileno()], [], [], timeout)
     if not ready:
-        raise AssertionError(f"daemon did not emit a payload within {timeout:.1f}s")
-    return json.loads(proc.stdout.readline())
+        seen = getattr(proc, "_kassiber_seen_payloads", [])
+        raise AssertionError(
+            f"daemon did not emit a payload within {timeout:.1f}s; "
+            f"last payloads: {seen!r}"
+        )
+    payload = json.loads(proc.stdout.readline())
+    _remember_daemon_payload(proc, payload)
+    return payload
 
 
 def _write_payload(proc, payload):
@@ -5919,99 +5947,104 @@ class DaemonSmokeTest(unittest.TestCase):
         try:
             with tempfile.TemporaryDirectory(prefix="kassiber-daemon-") as tmp:
                 proc = _start_daemon(Path(tmp) / "data")
-                self.assertEqual(_read_payload_timeout(proc)["kind"], "daemon.ready")
-                _write_payload(
-                    proc,
-                    {
-                        "request_id": "secrets-init",
-                        "kind": "ui.secrets.init",
-                        "args": {
-                            "auth_response": {
-                                "passphrase_secret": "correct horse battery"
+                try:
+                    self.assertEqual(_read_payload_timeout(proc)["kind"], "daemon.ready")
+                    _write_payload(
+                        proc,
+                        {
+                            "request_id": "secrets-init",
+                            "kind": "ui.secrets.init",
+                            "args": {
+                                "auth_response": {
+                                    "passphrase_secret": "correct horse battery"
+                                },
+                                "migrate_credentials": False,
                             },
-                            "migrate_credentials": False,
                         },
-                    },
-                )
-                self.assertEqual(_read_payload_timeout(proc)["kind"], "ui.secrets.init")
-                _write_payload(
-                    proc,
-                    {
-                        "request_id": "provider-1",
-                        "kind": "ai.providers.create",
-                        "args": {
-                            "name": "tool-local",
-                            "base_url": base_url,
-                            "kind": "local",
+                    )
+                    self.assertEqual(_read_payload_timeout(proc)["kind"], "ui.secrets.init")
+                    _write_payload(
+                        proc,
+                        {
+                            "request_id": "provider-1",
+                            "kind": "ai.providers.create",
+                            "args": {
+                                "name": "tool-local",
+                                "base_url": base_url,
+                                "kind": "local",
+                            },
                         },
-                    },
-                )
-                self.assertEqual(_read_payload_timeout(proc)["kind"], "ai.providers.create")
-                _write_payload(
-                    proc,
-                    {
-                        "request_id": "chat-locked-cancel",
-                        "kind": "ai.chat",
-                        "args": {
-                            "provider": "tool-local",
-                            "model": "test-model",
-                            "tools_enabled": True,
-                            "messages": [
-                                {"role": "user", "content": "Sync my wallets"}
-                            ],
+                    )
+                    self.assertEqual(_read_payload_timeout(proc)["kind"], "ai.providers.create")
+                    _write_payload(
+                        proc,
+                        {
+                            "request_id": "chat-locked-cancel",
+                            "kind": "ai.chat",
+                            "args": {
+                                "provider": "tool-local",
+                                "model": "test-model",
+                                "tools_enabled": True,
+                                "messages": [
+                                    {"role": "user", "content": "Sync my wallets"}
+                                ],
+                            },
                         },
-                    },
-                )
-                while True:
-                    payload = _read_payload_timeout(proc)
-                    if (
-                        payload.get("request_id") == "chat-locked-cancel"
-                        and payload.get("kind") == "ai.chat.tool_call"
+                    )
+                    while True:
+                        payload = _read_payload_timeout(proc)
+                        if (
+                            payload.get("request_id") == "chat-locked-cancel"
+                            and payload.get("kind") == "ai.chat.tool_call"
+                        ):
+                            payload = _read_payload(proc)
+                        if (
+                            payload.get("request_id") == "chat-locked-cancel"
+                            and payload.get("kind") == "ai.chat.tool_consent_required"
+                        ):
+                            break
+
+                    _write_payload(proc, {"request_id": "lock-1", "kind": "daemon.lock"})
+                    self.assertEqual(_read_payload_timeout(proc)["kind"], "daemon.lock")
+                    _write_payload(
+                        proc,
+                        {
+                            "request_id": "cancel-locked-1",
+                            "kind": "ai.chat.cancel",
+                            "args": {"target_request_id": "chat-locked-cancel"},
+                        },
+                    )
+
+                    cancel_response = None
+                    terminal = None
+                    deadline = time.time() + 5
+                    while time.time() < deadline and (
+                        cancel_response is None or terminal is None
                     ):
-                        payload = _read_payload(proc)
-                    if (
-                        payload.get("request_id") == "chat-locked-cancel"
-                        and payload.get("kind") == "ai.chat.tool_consent_required"
-                    ):
-                        break
+                        payload = _read_payload_timeout(proc, max(0.1, deadline - time.time()))
+                        if payload.get("request_id") == "cancel-locked-1":
+                            cancel_response = payload
+                        if (
+                            payload.get("request_id") == "chat-locked-cancel"
+                            and payload.get("kind") == "ai.chat"
+                        ):
+                            terminal = payload
 
-                _write_payload(proc, {"request_id": "lock-1", "kind": "daemon.lock"})
-                self.assertEqual(_read_payload_timeout(proc)["kind"], "daemon.lock")
-                _write_payload(
-                    proc,
-                    {
-                        "request_id": "cancel-locked-1",
-                        "kind": "ai.chat.cancel",
-                        "args": {"target_request_id": "chat-locked-cancel"},
-                    },
-                )
+                    self.assertIsNotNone(cancel_response)
+                    self.assertEqual(cancel_response["kind"], "ai.chat.cancel")
+                    self.assertTrue(cancel_response["data"]["cancelled"])
+                    self.assertIsNotNone(terminal)
+                    self.assertEqual(terminal["data"]["finish_reason"], "cancelled")
 
-                cancel_response = None
-                terminal = None
-                deadline = time.time() + 5
-                while time.time() < deadline and (
-                    cancel_response is None or terminal is None
-                ):
-                    payload = _read_payload_timeout(proc, max(0.1, deadline - time.time()))
-                    if payload.get("request_id") == "cancel-locked-1":
-                        cancel_response = payload
-                    if (
-                        payload.get("request_id") == "chat-locked-cancel"
-                        and payload.get("kind") == "ai.chat"
-                    ):
-                        terminal = payload
-
-                self.assertIsNotNone(cancel_response)
-                self.assertEqual(cancel_response["kind"], "ai.chat.cancel")
-                self.assertTrue(cancel_response["data"]["cancelled"])
-                self.assertIsNotNone(terminal)
-                self.assertEqual(terminal["data"]["finish_reason"], "cancelled")
-
-                _write_payload(proc, {"request_id": "shutdown-1", "kind": "daemon.shutdown"})
-                self.assertEqual(_read_payload_timeout(proc)["kind"], "daemon.shutdown")
-                code, stderr = _close_daemon(proc)
-                self.assertEqual(code, 0, stderr)
-                self.assertEqual(stderr, "")
+                    _write_payload(proc, {"request_id": "shutdown-1", "kind": "daemon.shutdown"})
+                    self.assertEqual(_read_payload_timeout(proc)["kind"], "daemon.shutdown")
+                    code, stderr = _close_daemon(proc)
+                    self.assertEqual(code, 0, stderr)
+                    self.assertEqual(stderr, "")
+                finally:
+                    if proc.poll() is None:
+                        proc.kill()
+                        proc.wait(timeout=5)
         finally:
             server.shutdown()
             server.server_close()

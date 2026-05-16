@@ -523,14 +523,6 @@ and [docs/plan/04-desktop-ui.md](docs/plan/04-desktop-ui.md).
   with a structured `code: "pdf_unrepresentable"` error envelope listing the
   offending codepoints. Document the choice in
   [pdf_report.py](kassiber/pdf_report.py) and update the test pin.
-- [ ] Fix `rates set` pair validation so malformed syntax like `BTCUSD`
-  is rejected cleanly
-- [ ] `ElectrumClient.call` should surface non-JSON responses as a
-  typed `AppError` instead of letting `json.JSONDecodeError` propagate
-  raw. Users who point the test endpoint at an HTTPS site or a
-  non-Electrum server currently see a `Expecting value: line 1 column
-  1 (char 0)` blob; wrap the `json.loads(line)` call with a helpful
-  "Backend did not respond with Electrum-format JSON" message.
 - [ ] Add live provider-backed FX adapters beyond CoinGecko and local Kraken
   CSV archive ingest only after the UI and daemon can expose provider limits,
   granularity, and review state honestly
