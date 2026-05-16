@@ -43,6 +43,10 @@ import {
 
 import { Button } from "@/components/ui/button";
 import { AddConnectionDialog } from "@/components/kb/AddConnectionDialog";
+import {
+  PageWorkspace,
+  type PageWorkspaceWidget,
+} from "@/components/kb/PageWorkspace";
 import { Checkbox } from "@/components/ui/checkbox";
 import { CurrencyToggleText } from "@/components/kb/CurrencyToggleText";
 import { type ChartConfig, ChartContainer } from "@/components/ui/chart";
@@ -73,6 +77,7 @@ import { formatBtc, useCurrency, type Currency } from "@/lib/currency";
 import { screenShellClassName } from "@/lib/screen-layout";
 import { cn } from "@/lib/utils";
 import { useUiStore } from "@/store/ui";
+import type { WorkspaceLayoutItem } from "@/lib/workspaceLayout";
 import {
   MOCK_OVERVIEW,
   type OverviewSnapshot,
@@ -4747,6 +4752,81 @@ const BooksHealthPanel = ({
   );
 };
 
+const overviewWorkspaceDefaultItems: WorkspaceLayoutItem[] = [
+  {
+    id: "overview-readiness",
+    widgetId: "overview-readiness",
+    x: 0,
+    y: 0,
+    w: 12,
+    h: 2,
+    z: 1,
+  },
+  {
+    id: "overview-stats",
+    widgetId: "overview-stats",
+    x: 0,
+    y: 2,
+    w: 12,
+    h: 2,
+    z: 1,
+  },
+  {
+    id: "treasury-chart",
+    widgetId: "treasury-chart",
+    x: 0,
+    y: 4,
+    w: 8,
+    h: 6,
+    z: 1,
+  },
+  {
+    id: "side-charts",
+    widgetId: "side-charts",
+    x: 8,
+    y: 4,
+    w: 4,
+    h: 5,
+    z: 1,
+  },
+  {
+    id: "recent-transactions",
+    widgetId: "recent-transactions",
+    x: 0,
+    y: 10,
+    w: 8,
+    h: 5,
+    z: 1,
+  },
+  {
+    id: "books-health",
+    widgetId: "books-health",
+    x: 8,
+    y: 9,
+    w: 4,
+    h: 4,
+    z: 1,
+  },
+];
+
+function WorkspacePlaceholder({
+  title,
+  detail,
+}: {
+  title: string;
+  detail: string;
+}) {
+  return (
+    <div className="flex h-full min-h-[180px] flex-col justify-between rounded-lg border border-dashed bg-muted/35 p-4">
+      <div>
+        <p className="text-sm font-semibold text-foreground">{title}</p>
+        <p className="mt-1 text-sm text-muted-foreground">{detail}</p>
+      </div>
+      <p className="text-xs text-muted-foreground">Planned module</p>
+    </div>
+  );
+}
+
 const Dashboard5 = ({
   className,
   snapshot = MOCK_OVERVIEW,
@@ -4772,35 +4852,68 @@ const Dashboard5 = ({
     syncAll({ onTrustedSuccess: runJournalProcessing });
   }, [isProcessingJournals, isSyncing, runJournalProcessing, syncAll]);
   const isRefreshingOverview = isSyncing || isProcessingJournals;
-
-  return (
-    <div
-      className={cn(screenShellClassName, className)}
-    >
-      <WelcomeSection
-        snapshot={snapshot}
-        onRefresh={refreshOverviewState}
-        onProcessJournals={runJournalProcessing}
-        isRefreshing={isRefreshingOverview}
-        isProcessingJournals={isProcessingJournals}
-        onAddConnection={() => setAddConnectionOpen(true)}
-      />
-      <AddConnectionDialog
-        open={addConnectionOpen}
-        onOpenChange={setAddConnectionOpen}
-      />
-      <StatsCards
-        snapshot={snapshot}
-        hideSensitive={hideSensitive}
-        currency={currency}
-      />
-      <div className="grid grid-cols-1 items-start gap-3 2xl:grid-cols-[minmax(0,1fr)_380px]">
-        <div className="grid min-w-0 gap-3">
+  const workspaceWidgets = React.useMemo<PageWorkspaceWidget[]>(
+    () => [
+      {
+        id: "overview-readiness",
+        title: "Readiness",
+        description: "Sync, journal, and review status for this book.",
+        minW: 6,
+        minH: 2,
+        defaultW: 12,
+        defaultH: 2,
+        render: () => (
+          <WelcomeSection
+            snapshot={snapshot}
+            onRefresh={refreshOverviewState}
+            onProcessJournals={runJournalProcessing}
+            isRefreshing={isRefreshingOverview}
+            isProcessingJournals={isProcessingJournals}
+            onAddConnection={() => setAddConnectionOpen(true)}
+          />
+        ),
+      },
+      {
+        id: "overview-stats",
+        title: "Key Metrics",
+        description: "Portfolio, review, and activity counters.",
+        minW: 6,
+        minH: 2,
+        defaultW: 12,
+        defaultH: 2,
+        render: () => (
+          <StatsCards
+            snapshot={snapshot}
+            hideSensitive={hideSensitive}
+            currency={currency}
+          />
+        ),
+      },
+      {
+        id: "treasury-chart",
+        title: "Treasury Timeline",
+        description: "Balance, cost basis, price, and activity markers.",
+        minW: 6,
+        minH: 4,
+        defaultW: 8,
+        defaultH: 6,
+        render: () => (
           <RevenueFlowChart
             snapshot={snapshot}
             hideSensitive={hideSensitive}
             currency={currency}
           />
+        ),
+      },
+      {
+        id: "recent-transactions",
+        title: "Recent Transactions",
+        description: "Latest transactions with review and flow filters.",
+        minW: 5,
+        minH: 4,
+        defaultW: 8,
+        defaultH: 5,
+        render: () => (
           <RecentTransactionsTable
             className="min-w-0"
             transactions={transactions}
@@ -4808,20 +4921,116 @@ const Dashboard5 = ({
             currency={currency}
             priceEur={snapshot.priceEur}
           />
-        </div>
-        <div className="grid min-w-0 gap-3">
+        ),
+      },
+      {
+        id: "side-charts",
+        title: "Holdings Breakdown",
+        description: "Source concentration and balance movement drivers.",
+        minW: 3,
+        minH: 4,
+        defaultW: 4,
+        defaultH: 5,
+        render: () => (
           <SideChartsSection
             snapshot={snapshot}
             hideSensitive={hideSensitive}
             currency={currency}
           />
+        ),
+      },
+      {
+        id: "books-health",
+        title: "Book Health",
+        description: "Actionable sync, journal, and report readiness checks.",
+        minW: 3,
+        minH: 3,
+        defaultW: 4,
+        defaultH: 4,
+        render: () => (
           <BooksHealthPanel
             snapshot={snapshot}
             onProcessJournals={runJournalProcessing}
             isProcessingJournals={isProcessingJournals}
           />
-        </div>
-      </div>
+        ),
+      },
+      {
+        id: "report-deadlines",
+        title: "Report Deadlines",
+        description: "Planned tax-year filing and export reminders.",
+        minW: 3,
+        minH: 2,
+        defaultW: 4,
+        defaultH: 3,
+        optional: true,
+        placeholder: true,
+        render: () => (
+          <WorkspacePlaceholder
+            title="Report deadlines"
+            detail="A future widget for tax-year checkpoints, export freshness, and missing report blockers."
+          />
+        ),
+      },
+      {
+        id: "source-funds-review",
+        title: "Source Funds Review",
+        description: "Planned source-of-funds queue and evidence status.",
+        minW: 3,
+        minH: 2,
+        defaultW: 4,
+        defaultH: 3,
+        optional: true,
+        placeholder: true,
+        render: () => (
+          <WorkspacePlaceholder
+            title="Source funds review"
+            detail="A future widget for reviewed links, disclosure cases, and evidence collection."
+          />
+        ),
+      },
+      {
+        id: "wallet-monitor",
+        title: "Wallet Monitor",
+        description: "Planned wallet sync, balances, and backend health module.",
+        minW: 3,
+        minH: 2,
+        defaultW: 4,
+        defaultH: 3,
+        optional: true,
+        placeholder: true,
+        render: () => (
+          <WorkspacePlaceholder
+            title="Wallet monitor"
+            detail="A future widget for connection status, sync drift, and settlement-wallet checks."
+          />
+        ),
+      },
+    ],
+    [
+      currency,
+      hideSensitive,
+      isProcessingJournals,
+      isRefreshingOverview,
+      refreshOverviewState,
+      runJournalProcessing,
+      snapshot,
+      transactions,
+    ],
+  );
+
+  return (
+    <div className={cn(screenShellClassName, className)}>
+      <AddConnectionDialog
+        open={addConnectionOpen}
+        onOpenChange={setAddConnectionOpen}
+      />
+      <PageWorkspace
+        pageId="overview"
+        title="Overview"
+        widgets={workspaceWidgets}
+        defaultItems={overviewWorkspaceDefaultItems}
+      />
     </div>
   );
 };

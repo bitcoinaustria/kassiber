@@ -5,6 +5,7 @@ import {
   DEFAULT_EXPLORER_SETTINGS,
   type ExplorerSettings,
 } from "@/lib/explorer";
+import type { WorkspacePageLayout } from "@/lib/workspaceLayout";
 
 type Lang = "en" | "de";
 type Currency = "btc" | "eur";
@@ -158,6 +159,7 @@ export interface UiState {
   notifications: AppNotification[];
   logEntries: AppLogEntry[];
   sourceFundsDrafts: Record<string, SourceFundsDraft>;
+  pageWorkspaceLayouts: Record<string, WorkspacePageLayout>;
   deferredConnectionSetup: DeferredConnectionSetup | null;
   setLang: (lang: Lang) => void;
   setCurrency: (currency: Currency) => void;
@@ -187,6 +189,8 @@ export interface UiState {
   clearLogEntries: () => void;
   setSourceFundsDraft: (profileKey: string, draft: SourceFundsDraft) => void;
   clearSourceFundsDraft: (profileKey: string) => void;
+  setPageWorkspaceLayout: (layoutKey: string, layout: WorkspacePageLayout) => void;
+  clearPageWorkspaceLayout: (layoutKey: string) => void;
   setDeferredConnectionSetup: (intent: DeferredConnectionSetup | null) => void;
   clearDeferredConnectionSetup: () => void;
 }
@@ -249,6 +253,7 @@ export function uiStatePartialForStorage(state: UiState) {
     daemonSession: state.daemonSession,
     notifications: stripNotificationProgress(state.notifications),
     sourceFundsDrafts: state.sourceFundsDrafts,
+    pageWorkspaceLayouts: state.pageWorkspaceLayouts,
   };
 }
 
@@ -270,6 +275,7 @@ export const useUiStore = create<UiState>()(
       notifications: [],
       logEntries: [],
       sourceFundsDrafts: {},
+      pageWorkspaceLayouts: {},
       setLang: (lang) => set({ lang }),
       setCurrency: (currency) => set({ currency }),
       setDataMode: (dataMode) => set({ dataMode }),
@@ -386,6 +392,20 @@ export const useUiStore = create<UiState>()(
           delete next[profileKey];
           return { sourceFundsDrafts: next };
         }),
+      setPageWorkspaceLayout: (layoutKey, layout) =>
+        set((state) => ({
+          pageWorkspaceLayouts: {
+            ...state.pageWorkspaceLayouts,
+            [layoutKey]: layout,
+          },
+        })),
+      clearPageWorkspaceLayout: (layoutKey) =>
+        set((state) => {
+          if (!(layoutKey in state.pageWorkspaceLayouts)) return state;
+          const next = { ...state.pageWorkspaceLayouts };
+          delete next[layoutKey];
+          return { pageWorkspaceLayouts: next };
+        }),
       deferredConnectionSetup: null,
       setDeferredConnectionSetup: (intent) =>
         set({ deferredConnectionSetup: intent }),
@@ -425,6 +445,8 @@ export const useUiStore = create<UiState>()(
           ),
           sourceFundsDrafts:
             restored.sourceFundsDrafts ?? current.sourceFundsDrafts,
+          pageWorkspaceLayouts:
+            restored.pageWorkspaceLayouts ?? current.pageWorkspaceLayouts,
           logEntries: current.logEntries,
         };
       },

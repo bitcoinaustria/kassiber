@@ -296,6 +296,10 @@ and [docs/plan/04-desktop-ui.md](docs/plan/04-desktop-ui.md).
 - [x] Overview screen now uses `@shadcnblocks/dashboard5` as the first
   dashboard screen, keeping Export -> Reports, Add connection modal, and
   Show all transactions wiring
+- [x] Add the first configurable page workspace foundation to Overview:
+  draggable/resizable page widgets, snap-grid constraints, collision handling,
+  z-order focus, reset-to-default, a widget palette with real and placeholder
+  modules, and local per-book/page persistence
 - [x] Transactions screen now uses `@shadcnblocks/dashboard2` as the
   transaction dashboard, with ordered period controls, enlarged search copy,
   and privacy visibility toggle in the header
