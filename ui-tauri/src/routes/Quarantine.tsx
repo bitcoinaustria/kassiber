@@ -1,5 +1,5 @@
 import { Link } from "@tanstack/react-router";
-import { Loader2, RefreshCw, ShieldAlert, TableProperties } from "lucide-react";
+import { Loader2, RefreshCw, TableProperties } from "lucide-react";
 
 import {
   ReviewDataTable,
@@ -7,12 +7,10 @@ import {
   type ReviewTableRow,
 } from "@/components/kb/ReviewDataTable";
 import { ScreenSkeleton } from "@/components/kb/ScreenSkeleton";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useDaemon } from "@/daemon/client";
 import { useJournalProcessingAction } from "@/hooks/useJournalProcessingAction";
 import { screenPanelClassName } from "@/lib/screen-layout";
-import { useUiStore } from "@/store/ui";
 
 interface QuarantineReason {
   reason: string;
@@ -54,7 +52,6 @@ export function Quarantine() {
     "ui.journals.quarantine",
     { limit: QUARANTINE_LIMIT },
   );
-  const dataMode = useUiStore((s) => s.dataMode);
   const { runJournalProcessing, isProcessingJournals } =
     useJournalProcessingAction();
 
@@ -87,10 +84,9 @@ export function Quarantine() {
   return (
     <ReviewDataTable
       kind="quarantine"
-      eyebrow="Review · blocked records"
+      eyebrow="Review queue"
       title="Quarantine"
-      description="Transactions here are intentionally held out of journal output and trusted reports until their missing price, basis, asset, or pairing evidence is resolved."
-      icon={ShieldAlert}
+      description="Blocked transactions held out of journals and reports until missing prices, basis, assets, or pair evidence are fixed."
       rows={rows}
       metrics={metrics}
       showSummaryBadge={false}
@@ -105,11 +101,6 @@ export function Quarantine() {
       emptyMessage="No quarantined transactions in the active book."
       actions={
         <>
-          {dataMode === "mock" ? (
-            <Badge variant="outline" className="rounded-md">
-              Preview data
-            </Badge>
-          ) : null}
           <Button asChild variant="outline" className="h-9">
             <Link to="/transactions">
               <TableProperties className="size-4" aria-hidden="true" />
@@ -159,6 +150,7 @@ function quarantineItemToRow(
     owner: profile ?? "Active book",
     evidenceHint: evidenceHint(reason, item.detail),
     nextAction: nextAction(reason),
+    metricFilterIds: quarantineReasonFilterIds(reason),
   };
 }
 
@@ -175,23 +167,46 @@ function quarantineMetrics(summary: QuarantineSnapshot["summary"]): ReviewMetric
       label: "Quarantined",
       value: summary.count,
       tone: summary.count ? "alert" : "good",
+      filterId: "all",
+      filterLabel: "All quarantined",
     },
     {
       label: "Missing prices",
       value: missingPrices,
       tone: missingPrices ? "warning" : "neutral",
+      filterId: "missing-prices",
     },
     {
       label: "Basis or pairs",
       value: transferReview + basisReview,
       tone: transferReview + basisReview ? "alert" : "neutral",
+      filterId: "basis-or-pairs",
     },
     {
       label: "Other review",
       value: other,
       tone: other ? "warning" : "neutral",
+      filterId: "other-review",
     },
   ];
+}
+
+function quarantineReasonFilterIds(reason: string) {
+  const normalized = reason.toLowerCase();
+  const filters: string[] = [];
+  if (normalized.includes("price")) filters.push("missing-prices");
+  if (
+    normalized.includes("transfer") ||
+    normalized.includes("pair") ||
+    normalized.includes("swap") ||
+    normalized.includes("basis") ||
+    normalized.includes("lot") ||
+    normalized.includes("insufficient")
+  ) {
+    filters.push("basis-or-pairs");
+  }
+  if (!filters.length) filters.push("other-review");
+  return filters;
 }
 
 function countReasons(reasons: QuarantineReason[], ...needles: string[]) {

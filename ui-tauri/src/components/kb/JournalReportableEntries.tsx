@@ -1,16 +1,14 @@
-import { CircleDollarSign, Loader2, RefreshCw } from "lucide-react";
+import { Loader2, RefreshCw } from "lucide-react";
 
 import {
   ReviewDataTable,
   type ReviewTableRow,
 } from "@/components/kb/ReviewDataTable";
 import { ScreenSkeleton } from "@/components/kb/ScreenSkeleton";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useDaemon } from "@/daemon/client";
 import { useJournalProcessingAction } from "@/hooks/useJournalProcessingAction";
 import { screenPanelClassName } from "@/lib/screen-layout";
-import { useUiStore } from "@/store/ui";
 import {
   reportableEntryMetricFilterIds,
   reportableEntryMetrics,
@@ -70,7 +68,6 @@ export function JournalReportableEntries() {
     "ui.journals.events.list",
     { limit: REPORTABLE_ENTRY_LIMIT },
   );
-  const dataMode = useUiStore((s) => s.dataMode);
   const { runJournalProcessing, isProcessingJournals } =
     useJournalProcessingAction();
 
@@ -108,7 +105,6 @@ export function JournalReportableEntries() {
       eyebrow="Review · journal ledger"
       title="Reportable Entries"
       description="Processed journal entries with tax classification, pricing provenance, basis, proceeds, and gain/loss. This is the detailed report-readiness view."
-      icon={CircleDollarSign}
       rows={rows}
       metrics={metrics}
       showSummaryBadge={false}
@@ -123,26 +119,19 @@ export function JournalReportableEntries() {
       searchPlaceholder="Search wallet, entry, asset, pricing, Kennzahl..."
       emptyMessage="No processed journal entries yet. Process journals after importing transactions."
       actions={
-        <>
-          {dataMode === "mock" ? (
-            <Badge variant="outline" className="rounded-md">
-              Preview data
-            </Badge>
-          ) : null}
-          <Button
-            type="button"
-            className="h-9"
-            onClick={runJournalProcessing}
-            disabled={isProcessingJournals}
-          >
-            {isProcessingJournals ? (
-              <Loader2 className="size-4 animate-spin" aria-hidden="true" />
-            ) : (
-              <RefreshCw className="size-4" aria-hidden="true" />
-            )}
-            Process journals
-          </Button>
-        </>
+        <Button
+          type="button"
+          className="h-9"
+          onClick={runJournalProcessing}
+          disabled={isProcessingJournals}
+        >
+          {isProcessingJournals ? (
+            <Loader2 className="size-4 animate-spin" aria-hidden="true" />
+          ) : (
+            <RefreshCw className="size-4" aria-hidden="true" />
+          )}
+          Process journals
+        </Button>
       }
     />
   );

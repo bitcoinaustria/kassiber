@@ -5,18 +5,20 @@
  */
 
 import { type KeyboardEvent, type ReactNode, useEffect, useState } from "react";
-import { Plus, RefreshCw, Wallet } from "lucide-react";
+import { Filter, Plus, RefreshCw, Wallet, X } from "lucide-react";
 import { useNavigate } from "@tanstack/react-router";
 
 import { ScreenSkeleton } from "@/components/kb/ScreenSkeleton";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
 import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+  DropdownMenu,
+  DropdownMenuCheckboxItem,
+  DropdownMenuContent,
+  DropdownMenuLabel,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import {
   Table,
   TableBody,
@@ -89,6 +91,34 @@ const statusDotStyles: Record<ConnectionStatus, string> = {
   error: "bg-red-500",
 };
 
+const kindFilterOptions = Array.from(new Set(Object.values(kindLabels)));
+const statusFilterOptions: ConnectionStatus[] = [
+  "synced",
+  "syncing",
+  "idle",
+  "error",
+];
+
+const filterChipClassName =
+  "inline-flex items-center gap-1 rounded-md border bg-background px-2 py-1 text-[10px] font-medium text-muted-foreground transition-colors hover:bg-muted sm:text-xs";
+const headerActionClassName = "h-9 min-w-[112px] justify-center gap-2";
+
+const connectionKindTone = (kind: ConnectionKind) => {
+  if (["core-ln", "lnd", "nwc", "strike", "phoenix"].includes(kind)) {
+    return "border-amber-600/20 bg-amber-500/10 text-amber-700 dark:text-amber-300";
+  }
+  if (["kraken", "bitstamp", "coinbase", "bitpanda", "river"].includes(kind)) {
+    return "border-violet-600/20 bg-violet-500/10 text-violet-700 dark:text-violet-300";
+  }
+  if (["cashu"].includes(kind)) {
+    return "border-sky-600/20 bg-sky-500/10 text-sky-700 dark:text-sky-300";
+  }
+  if (["btcpay", "csv", "bip329", "custom"].includes(kind)) {
+    return "border-muted-foreground/20 bg-muted text-muted-foreground";
+  }
+  return "border-emerald-600/20 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300";
+};
+
 export function Connections() {
   const { data, isLoading } = useDaemon<OverviewSnapshot>("ui.overview.snapshot");
   const { syncAll, isSyncing } = useWalletSyncAction();
@@ -97,6 +127,10 @@ export function Connections() {
   const navigate = useNavigate();
   const [addConnectionOpen, setAddConnectionOpen] = useState(false);
   const [resumeSourceId, setResumeSourceId] = useState<string | null>(null);
+  const [kindFilter, setKindFilter] = useState<string | "all">("all");
+  const [statusFilter, setStatusFilter] = useState<ConnectionStatus | "all">(
+    "all",
+  );
   const deferredConnectionSetup = useUiStore(
     (s) => s.deferredConnectionSetup,
   );
@@ -127,6 +161,16 @@ export function Connections() {
     ? snapshot.connections.length
     : snapshotSyncingN;
   const syncedN = snapshot.connections.filter((c) => c.status === "synced").length;
+  const filteredConnections = snapshot.connections.filter(
+    (connection) =>
+      (kindFilter === "all" || kindLabels[connection.kind] === kindFilter) &&
+      (statusFilter === "all" || connection.status === statusFilter),
+  );
+  const hasActiveFilters = kindFilter !== "all" || statusFilter !== "all";
+  const clearFilters = () => {
+    setKindFilter("all");
+    setStatusFilter("all");
+  };
 
   const onSelect = (id: string) =>
     void navigate({
@@ -155,7 +199,7 @@ export function Connections() {
           <Button
             variant="outline"
             size="sm"
-            className="h-8 gap-2"
+            className={headerActionClassName}
             onClick={onSyncAll}
             disabled={isSyncing}
           >
@@ -167,7 +211,7 @@ export function Connections() {
           </Button>
           <Button
             size="sm"
-            className="h-8 gap-2"
+            className={headerActionClassName}
             onClick={() => setAddConnectionOpen(true)}
           >
             <Plus className="size-4" aria-hidden="true" />
@@ -219,43 +263,183 @@ export function Connections() {
         />
       </div>
 
-      <Card>
-        <CardHeader className="border-b px-4 pb-3">
-          <CardTitle className="text-sm sm:text-base">Wallets and sources</CardTitle>
-          <CardDescription>
-            Local wallet, Lightning, ecash, and import sources available to
-            Kassiber.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="overflow-x-auto p-0">
-          <Table>
+      <div className="rounded-xl border bg-card">
+        <div className="flex flex-col gap-3 p-3 sm:flex-row sm:items-center sm:gap-4 sm:px-6 sm:py-3.5">
+          <div className="flex flex-1 items-center gap-2">
+            <span className="text-sm font-medium sm:text-base">
+              Wallets and sources
+            </span>
+            <span className="ml-1 inline-flex items-center rounded-md bg-gray-50 px-2 py-1 text-[10px] font-medium text-gray-600 ring-1 ring-gray-500/10 ring-inset sm:text-xs dark:bg-gray-800/50 dark:text-gray-400 dark:ring-gray-400/20">
+              {filteredConnections.length}
+            </span>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2">
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className={cn(
+                    "h-8 gap-1.5 sm:h-9 sm:gap-2",
+                    statusFilter !== "all" && "border-primary",
+                  )}
+                  aria-label="Filter by status"
+                >
+                  <Filter className="size-3.5 sm:size-4" aria-hidden="true" />
+                  <span className="hidden sm:inline">Status</span>
+                  {statusFilter !== "all" && (
+                    <span className="size-1.5 rounded-full bg-primary sm:size-2" />
+                  )}
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-[180px]">
+                <DropdownMenuLabel>Filter by status</DropdownMenuLabel>
+                <DropdownMenuCheckboxItem
+                  checked={statusFilter === "all"}
+                  onCheckedChange={() => setStatusFilter("all")}
+                >
+                  All statuses
+                </DropdownMenuCheckboxItem>
+                {statusFilterOptions.map((status) => (
+                  <DropdownMenuCheckboxItem
+                    key={status}
+                    checked={statusFilter === status}
+                    onCheckedChange={() => setStatusFilter(status)}
+                  >
+                    {status}
+                  </DropdownMenuCheckboxItem>
+                ))}
+              </DropdownMenuContent>
+            </DropdownMenu>
+
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className={cn(
+                    "h-8 gap-1.5 sm:h-9 sm:gap-2",
+                    kindFilter !== "all" && "border-primary",
+                  )}
+                  aria-label="Filter by kind"
+                >
+                  <Wallet className="size-3.5 sm:size-4" aria-hidden="true" />
+                  <span className="hidden sm:inline">Kind</span>
+                  {kindFilter !== "all" && (
+                    <span className="size-1.5 rounded-full bg-primary sm:size-2" />
+                  )}
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-[200px]">
+                <DropdownMenuLabel>Filter by kind</DropdownMenuLabel>
+                <DropdownMenuCheckboxItem
+                  checked={kindFilter === "all"}
+                  onCheckedChange={() => setKindFilter("all")}
+                >
+                  All kinds
+                </DropdownMenuCheckboxItem>
+                {kindFilterOptions.map((kind) => (
+                  <DropdownMenuCheckboxItem
+                    key={kind}
+                    checked={kindFilter === kind}
+                    onCheckedChange={() => setKindFilter(kind)}
+                  >
+                    {kind}
+                  </DropdownMenuCheckboxItem>
+                ))}
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
+        </div>
+
+        {hasActiveFilters && (
+          <div className="flex flex-wrap items-center gap-2 px-3 pb-3 sm:px-6">
+            <span className="text-[10px] text-muted-foreground sm:text-xs">
+              Filters:
+            </span>
+            {statusFilter !== "all" && (
+              <button
+                type="button"
+                className={filterChipClassName}
+                onClick={() => setStatusFilter("all")}
+                aria-label={`Clear ${statusFilter} status filter`}
+              >
+                {statusFilter}
+                <X className="size-2.5 sm:size-3" aria-hidden="true" />
+              </button>
+            )}
+            {kindFilter !== "all" && (
+              <button
+                type="button"
+                className={filterChipClassName}
+                onClick={() => setKindFilter("all")}
+                aria-label={`Clear ${kindFilter} kind filter`}
+              >
+                {kindFilter}
+                <X className="size-2.5 sm:size-3" aria-hidden="true" />
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={clearFilters}
+              className="text-[10px] text-destructive hover:underline sm:text-xs"
+            >
+              Clear all
+            </button>
+          </div>
+        )}
+
+        <div className="border-t p-0">
+          <div className="overflow-x-auto px-3 pb-3 pt-3 sm:px-6 sm:pb-4">
+            <Table className="min-w-[920px]">
             <TableHeader>
               <TableRow className="bg-muted/50 hover:bg-muted/50">
-                <TableHead className="min-w-[260px]">Wallet/source</TableHead>
-                <TableHead>Kind</TableHead>
-                <TableHead>Last sync</TableHead>
-                <TableHead className="hidden min-w-[180px] lg:table-cell">
+                <TableHead className="min-w-[280px] text-xs font-medium text-muted-foreground sm:text-sm">
+                  Wallet/source
+                </TableHead>
+                <TableHead className="min-w-[140px] text-xs font-medium text-muted-foreground sm:text-sm">
+                  Kind
+                </TableHead>
+                <TableHead className="min-w-[140px] text-xs font-medium text-muted-foreground sm:text-sm">
+                  Last sync
+                </TableHead>
+                <TableHead className="hidden min-w-[220px] text-xs font-medium text-muted-foreground sm:text-sm lg:table-cell">
                   Composition
                 </TableHead>
-                <TableHead className="text-right">Balance</TableHead>
+                <TableHead className="min-w-[150px] text-right text-xs font-medium text-muted-foreground sm:text-sm">
+                  Balance
+                </TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {snapshot.connections.map((connection) => (
-                <ConnectionRow
-                  key={connection.id}
-                  connection={connection}
-                  totalBtc={totalBtc}
-                  priceEur={snapshot.priceEur}
-                  hideSensitive={hideSensitive}
-                  currency={currency}
-                  onSelect={() => onSelect(connection.id)}
-                />
-              ))}
+              {filteredConnections.length === 0 ? (
+                <TableRow>
+                  <TableCell
+                    colSpan={5}
+                    className="h-24 text-center text-sm text-muted-foreground"
+                  >
+                    No wallets or sources match your filters.
+                  </TableCell>
+                </TableRow>
+              ) : (
+                filteredConnections.map((connection) => (
+                  <ConnectionRow
+                    key={connection.id}
+                    connection={connection}
+                    totalBtc={totalBtc}
+                    priceEur={snapshot.priceEur}
+                    hideSensitive={hideSensitive}
+                    currency={currency}
+                    onSelect={() => onSelect(connection.id)}
+                  />
+                ))
+              )}
             </TableBody>
           </Table>
-        </CardContent>
-      </Card>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
@@ -312,19 +496,32 @@ function ConnectionRow({
     <TableRow
       role="button"
       tabIndex={0}
-      className="cursor-pointer"
+      className="cursor-pointer align-top hover:bg-muted/35"
       onClick={onSelect}
       onKeyDown={onKeyDown}
     >
-      <TableCell>
-        <div className="flex items-center gap-3">
+      <TableCell className="min-w-[280px]">
+        <div className="flex min-w-0 items-start gap-3">
           <span
-            className={cn("size-2.5 rounded-full", statusDotStyles[c.status])}
+            className={cn(
+              "relative mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-md border",
+              connectionKindTone(c.kind),
+            )}
             aria-hidden="true"
-          />
+          >
+            <Wallet className="size-4" />
+            <span
+              className={cn(
+                "absolute -right-0.5 -bottom-0.5 size-2.5 rounded-full ring-2 ring-card",
+                statusDotStyles[c.status],
+              )}
+            />
+          </span>
           <div className="min-w-0">
-            <div className="truncate font-medium">{c.label}</div>
-            <div className="truncate text-xs text-muted-foreground">
+            <div className="truncate text-sm font-medium text-foreground">
+              {c.label}
+            </div>
+            <div className="mt-1 flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-1 text-[10px] text-muted-foreground sm:text-xs">
               {c.addresses != null && `${c.addresses} addresses`}
               {c.channels != null && `${c.channels} channels`}
               {c.gap != null && ` · gap ${c.gap}`}
@@ -334,9 +531,9 @@ function ConnectionRow({
         </div>
       </TableCell>
       <TableCell>
-        <span className="inline-flex items-center rounded-md border px-2 py-1 text-xs text-muted-foreground">
+        <Badge variant="outline" className="rounded-md">
           {kindLabels[c.kind]}
-        </span>
+        </Badge>
       </TableCell>
       <TableCell>
         <div className="grid gap-1">

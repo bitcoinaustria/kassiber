@@ -72,6 +72,7 @@ import { useSyncProgressNotice } from "@/hooks/useSyncProgressNotice";
 import type {
   Connection,
   ConnectionKind,
+  ConnectionStatus,
   OverviewSnapshot,
 } from "@/mocks/seed";
 
@@ -116,6 +117,32 @@ const kindLabels: Record<ConnectionKind, string> = {
   custom: "Custom",
   csv: "CSV",
   bip329: "BIP329",
+};
+
+const statusStyles: Record<ConnectionStatus, string> = {
+  synced:
+    "bg-emerald-50 text-emerald-700 ring-emerald-600/20 dark:bg-emerald-900/30 dark:text-emerald-400 dark:ring-emerald-400/20",
+  syncing:
+    "bg-amber-50 text-amber-700 ring-amber-600/20 dark:bg-amber-900/30 dark:text-amber-400 dark:ring-amber-400/20",
+  idle: "bg-muted text-muted-foreground ring-border",
+  error:
+    "bg-red-50 text-red-700 ring-red-600/20 dark:bg-red-900/30 dark:text-red-400 dark:ring-red-400/20",
+};
+
+const connectionKindTone = (kind: ConnectionKind) => {
+  if (["core-ln", "lnd", "nwc", "strike", "phoenix"].includes(kind)) {
+    return "border-amber-600/20 bg-amber-500/10 text-amber-700 dark:text-amber-300";
+  }
+  if (["kraken", "bitstamp", "coinbase", "bitpanda", "river"].includes(kind)) {
+    return "border-violet-600/20 bg-violet-500/10 text-violet-700 dark:text-violet-300";
+  }
+  if (["cashu"].includes(kind)) {
+    return "border-sky-600/20 bg-sky-500/10 text-sky-700 dark:text-sky-300";
+  }
+  if (["btcpay", "csv", "bip329", "custom"].includes(kind)) {
+    return "border-muted-foreground/20 bg-muted text-muted-foreground";
+  }
+  return "border-emerald-600/20 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300";
 };
 
 interface UpdateWalletResult {
@@ -569,7 +596,7 @@ function ConnectionDetailView({
 
   return (
     <div className={screenShellClassName}>
-      <Card className="py-3">
+      <Card className="rounded-xl py-3">
         <CardContent className="flex flex-col gap-3 px-4 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex min-w-0 items-center gap-3">
             <Button asChild variant="outline" size="icon" className="shrink-0">
@@ -577,8 +604,30 @@ function ConnectionDetailView({
                 <ArrowLeft className="size-4" aria-hidden="true" />
               </Link>
             </Button>
+            <span
+              className={cn(
+                "hidden size-9 shrink-0 items-center justify-center rounded-md border sm:flex",
+                connectionKindTone(connection.kind),
+              )}
+              aria-hidden="true"
+            >
+              <Wallet className="size-4" />
+            </span>
             <div className="min-w-0">
-              <h1 className="truncate text-xl font-semibold tracking-tight">
+              <div className="mb-1 flex min-w-0 flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
+                <Badge variant="outline" className="rounded-md">
+                  {kindLabels[connection.kind]}
+                </Badge>
+                <span
+                  className={cn(
+                    "inline-flex items-center rounded-md px-2 py-0.5 text-[10px] font-medium ring-1 ring-inset sm:text-xs",
+                    statusStyles[connection.status],
+                  )}
+                >
+                  {connection.status}
+                </span>
+              </div>
+              <h1 className="truncate text-xl font-semibold tracking-tight sm:text-2xl">
                 {connection.label}
               </h1>
             </div>
@@ -720,7 +769,12 @@ function ConnectionDetailView({
       <div className="grid grid-cols-1 gap-3 xl:grid-cols-[minmax(0,1.35fr)_minmax(360px,0.85fr)]">
         <Card>
           <CardHeader className="border-b px-4 pb-3">
-            <CardTitle className="text-sm sm:text-base">Recent transactions</CardTitle>
+            <CardTitle className="flex items-center gap-2 text-sm sm:text-base">
+              Recent transactions
+              <span className="inline-flex items-center rounded-md bg-gray-50 px-2 py-1 text-[10px] font-medium text-gray-600 ring-1 ring-gray-500/10 ring-inset sm:text-xs dark:bg-gray-800/50 dark:text-gray-400 dark:ring-gray-400/20">
+                {txsForConnection.length}
+              </span>
+            </CardTitle>
             <CardDescription>
               Recent transactions for this wallet source.
             </CardDescription>
@@ -1201,7 +1255,7 @@ interface MetricCardProps {
 
 function MetricCard({ label, value, detail, icon }: MetricCardProps) {
   return (
-    <Card className="gap-2.5 py-4">
+    <Card className="gap-2.5 rounded-xl py-4">
       <CardContent className="space-y-2 px-4">
         <div className="flex items-center gap-2 text-muted-foreground">
           {icon}
