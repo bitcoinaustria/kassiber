@@ -450,14 +450,6 @@ export function SwapMatching() {
 
   const candidateKey = (c: SwapCandidate) => `${c.out_id}->${c.in_id}`;
 
-  const candidatesByKey = useMemo(() => {
-    const map: Record<string, SwapCandidate> = {};
-    for (const candidate of candidates) {
-      map[candidateKey(candidate)] = candidate;
-    }
-    return map;
-  }, [candidates]);
-
   const exactSolo = useMemo(
     () =>
       candidates.filter(
@@ -478,12 +470,28 @@ export function SwapMatching() {
     [candidates, clusterSizes],
   );
 
+  const selectableCandidates = useMemo(
+    () =>
+      candidates.filter(
+        (c) => (clusterSizes[c.conflict_set_id] ?? 0) <= 1,
+      ),
+    [candidates, clusterSizes],
+  );
+
+  const selectableCandidatesByKey = useMemo(() => {
+    const map: Record<string, SwapCandidate> = {};
+    for (const candidate of selectableCandidates) {
+      map[candidateKey(candidate)] = candidate;
+    }
+    return map;
+  }, [selectableCandidates]);
+
   const selectedCandidates = useMemo(
     () =>
       Array.from(selected)
-        .map((key) => candidatesByKey[key])
+        .map((key) => selectableCandidatesByKey[key])
         .filter((c): c is SwapCandidate => Boolean(c)),
-    [selected, candidatesByKey],
+    [selected, selectableCandidatesByKey],
   );
   const selectedCandidateCount = selectedCandidates.length;
 
@@ -492,11 +500,11 @@ export function SwapMatching() {
       if (prev.size === 0) return prev;
       const next = new Set<string>();
       for (const key of prev) {
-        if (candidatesByKey[key]) next.add(key);
+        if (selectableCandidatesByKey[key]) next.add(key);
       }
       return next.size === prev.size ? prev : next;
     });
-  }, [candidatesByKey]);
+  }, [selectableCandidatesByKey]);
 
   const toggleSelected = useCallback((key: string) =>
     setSelected((prev) => {
@@ -507,16 +515,13 @@ export function SwapMatching() {
     }), []);
 
   const handleSelectAll = useCallback(() => {
-    const eligible = candidates.filter(
-      (c) => (clusterSizes[c.conflict_set_id] ?? 0) <= 1,
-    );
-    const eligibleKeys = eligible.map(candidateKey);
+    const eligibleKeys = selectableCandidates.map(candidateKey);
     setSelected((prev) => {
       const allEligibleSelected =
         eligibleKeys.length > 0 && eligibleKeys.every((key) => prev.has(key));
       return allEligibleSelected ? new Set() : new Set(eligibleKeys);
     });
-  }, [candidates, clusterSizes]);
+  }, [selectableCandidates]);
 
   const handlePair = useCallback(async (candidate: SwapCandidate) => {
     const key = candidateKey(candidate);
@@ -1085,7 +1090,7 @@ export function SwapMatching() {
                           <Checkbox
                             aria-label="Select candidate"
                             disabled={conflicted}
-                            checked={selected.has(key)}
+                            checked={!conflicted && selected.has(key)}
                             onClick={(event) => event.stopPropagation()}
                             onCheckedChange={() => toggleSelected(key)}
                           />
