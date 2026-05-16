@@ -69,6 +69,34 @@ describe("UI persistence", () => {
     expect(encoded).not.toContain("logEntries");
   });
 
+  it("persists page workspace layouts separately from transient UI state", () => {
+    const state = {
+      ...useUiStore.getState(),
+      pageWorkspaceLayouts: {
+        "My Books:Tax:at:EUR::overview": {
+          version: 1 as const,
+          columns: 12,
+          rowHeight: 96,
+          items: [
+            {
+              id: "chart",
+              widgetId: "treasury-chart",
+              x: 0,
+              y: 0,
+              w: 8,
+              h: 6,
+              z: 2,
+            },
+          ],
+        },
+      },
+    };
+
+    const persisted = uiStatePartialForStorage(state);
+
+    expect(persisted.pageWorkspaceLayouts).toEqual(state.pageWorkspaceLayouts);
+  });
+
   it("normalizes persisted UI scale to the supported menu range", () => {
     expect(normalizeAppScale(0.93)).toBe(0.95);
     expect(normalizeAppScale(0.1)).toBe(MIN_APP_SCALE);

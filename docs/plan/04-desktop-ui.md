@@ -75,6 +75,23 @@ malicious page could appear there.
   browser, Claude in Chrome, Claude Preview MCP, and any future
   AI-driven browser tool. See section 2.7 below for the concrete setup.
 
+### Main pages can become configurable workspaces
+
+The desktop shell should keep excellent defaults while letting serious users
+shape each main page into the workstation they need. The first implementation
+scope is per-page and additive: Overview exposes its current dashboard sections
+as page-level widgets with snap-grid movement, edge/corner resizing,
+collision handling, z-order focus, reset-to-default, and a widget palette that
+can also show planned modules. Layouts are local UI preferences keyed by the
+current book identity plus page id, so a tax-review book can have a different
+Overview layout than a wallet-monitoring book without changing accounting data
+or daemon contracts.
+
+Do not make card internals draggable. The configurable boundary is the
+page-level module frame; reports, tables, charts, and review controls inside a
+module should remain normal application UI. New configurable pages should reuse
+the shared `PageWorkspace` layer instead of creating one-off dashboard canvases.
+
 ### Animations honor motion preference and the display's refresh rate
 
 The Tauri webview (WKWebView on macOS, WebView2 on Windows, webkit2gtk on
