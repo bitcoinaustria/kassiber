@@ -418,7 +418,9 @@ and [docs/plan/04-desktop-ui.md](docs/plan/04-desktop-ui.md).
 - [ ] Split commercial annotations from RP2-facing tax primitives during journal preparation
 - [ ] Accountant-facing export of matched BTC subledger rows with document references
 - [ ] Opt-in local AI extraction and tie-breaking only after deterministic matching is solid
-- [ ] Richer transfer pairing for multi-leg self-transfers
+- [ ] Richer transfer pairing for multi-leg self-transfers, including
+  one-outbound/multiple-inbound same-txid moves that should not linger as
+  swap-review noise
 - [x] Better cross-asset transfer accounting beyond audit metadata
   (matcher + rules + saved views + `/swaps` review queue land swap
   pairing end-to-end; AT carrying-value continues through rp2; generic

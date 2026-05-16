@@ -28,6 +28,14 @@ _LIQUID_CSV = """date,txid,direction,asset,amount,fee,fiat_rate,description
 2026-03-14T17:32:00Z,liquid-claim-1,inbound,LBTC,0.000995,0,40000,Boltz claim
 """
 
+_COLD_TO_HOT_OUT_CSV = """date,txid,direction,asset,amount,fee,fiat_rate,description
+2026-03-15T10:00:00Z,cold-hot-txid,outbound,BTC,0.10000000,0.00001000,40000,Move monthly spend to hot wallet
+"""
+
+_COLD_TO_HOT_IN_CSV = """date,txid,direction,asset,amount,fee,fiat_rate,description
+2026-03-15T10:05:00Z,cold-hot-txid,inbound,BTC,0.09999000,0,40000,Receive monthly spend from cold wallet
+"""
+
 
 def _run(data_root, *args):
     cmd = [
@@ -213,6 +221,53 @@ class SwapMatchingCliTest(unittest.TestCase):
             "--workspace", "Main", "--profile", "Swap",
         )
         self.assertGreaterEqual(payload["data"]["counts"]["total"], 1)
+
+    def test_same_txid_self_transfer_not_suggested_as_swap(self):
+        data_root = self._fresh_root("same-txid-transfer")
+        out_csv = Path(self._tmp.name) / "cold-to-hot-out.csv"
+        in_csv = Path(self._tmp.name) / "cold-to-hot-in.csv"
+        out_csv.write_text(_COLD_TO_HOT_OUT_CSV, encoding="utf-8")
+        in_csv.write_text(_COLD_TO_HOT_IN_CSV, encoding="utf-8")
+
+        _run(data_root, "init")
+        _run(data_root, "workspaces", "create", "Main")
+        _run(
+            data_root, "profiles", "create",
+            "--workspace", "Main",
+            "--fiat-currency", "USD",
+            "--tax-country", "at",
+            "Swap",
+        )
+        for wallet in ("cold-onchain", "hot-onchain"):
+            _run(
+                data_root, "wallets", "create",
+                "--workspace", "Main",
+                "--profile", "Swap",
+                "--label", wallet,
+                "--kind", "custom",
+            )
+        _run(
+            data_root, "wallets", "import-csv",
+            "--workspace", "Main",
+            "--profile", "Swap",
+            "--wallet", "cold-onchain",
+            "--file", str(out_csv),
+        )
+        _run(
+            data_root, "wallets", "import-csv",
+            "--workspace", "Main",
+            "--profile", "Swap",
+            "--wallet", "hot-onchain",
+            "--file", str(in_csv),
+        )
+
+        payload, code = _run(
+            data_root, "transfers", "suggest",
+            "--workspace", "Main", "--profile", "Swap",
+        )
+        self.assertEqual(code, 0, payload)
+        self.assertEqual(payload["kind"], "transfers.suggest")
+        self.assertEqual(payload["data"]["counts"]["total"], 0)
 
     def test_dismiss_blocks_candidate_until_expiry(self):
         data_root = self._fresh_root("dismiss")

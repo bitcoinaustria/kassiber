@@ -124,7 +124,7 @@ def suggest_swap_candidates(
     Args:
         rows: Iterable of transaction rows. Each row must expose the
             fields ``id``, ``profile_id``, ``wallet_id``, ``wallet_label``,
-            ``wallet_kind``, ``payment_hash``, ``occurred_at``,
+            ``wallet_kind``, ``payment_hash``, ``external_id``, ``occurred_at``,
             ``direction``, ``asset``, ``amount``, ``excluded``. Rows with
             ``excluded`` truthy are ignored. Rows touched by an active
             pair record are ignored.
@@ -155,8 +155,19 @@ def suggest_swap_candidates(
     dismissed_pairs = _active_dismissals(dismissals, now_seconds)
 
     eligible_rows = _select_eligible_rows(rows, paired_ids)
-    out_rows = [row for row in eligible_rows if row["direction"] == "outbound"]
-    in_rows = [row for row in eligible_rows if row["direction"] == "inbound"]
+    deterministic_transfer_ids = _deterministic_self_transfer_ids(eligible_rows)
+    out_rows = [
+        row
+        for row in eligible_rows
+        if row["direction"] == "outbound"
+        and _record_get(row, "id") not in deterministic_transfer_ids
+    ]
+    in_rows = [
+        row
+        for row in eligible_rows
+        if row["direction"] == "inbound"
+        and _record_get(row, "id") not in deterministic_transfer_ids
+    ]
 
     exact_pairs = _match_by_payment_hash(out_rows, in_rows)
 
@@ -333,6 +344,44 @@ def _select_eligible_rows(rows: Sequence[Mapping], paired_ids: set[str]) -> list
             continue
         eligible.append(row)
     return eligible
+
+
+def _deterministic_self_transfer_ids(rows: Sequence[Mapping]) -> set[object]:
+    """Return row ids that are already proven same-chain self-transfers.
+
+    The swap review queue is for ambiguous layer hops. A single outbound and
+    single inbound row with the same external transaction id and same asset,
+    across two owned wallets, is the conservative on-chain self-transfer signal
+    used by the journal pipeline. This mirrors
+    ``kassiber.transfers.detect_intra_transfers``; keep the predicates in
+    lockstep so ordinary cold-to-hot moves do not look like swaps to review.
+    """
+    grouped: dict[tuple[str, str], list[Mapping]] = {}
+    for row in rows:
+        external_id = _record_get(row, "external_id")
+        if not external_id:
+            continue
+        key = (str(external_id), _record_get(row, "asset"))
+        grouped.setdefault(key, []).append(row)
+
+    deterministic_ids: set[object] = set()
+    for group in grouped.values():
+        outs = [
+            row
+            for row in group
+            if _record_get(row, "direction") == "outbound"
+            and int(_record_get(row, "amount") or 0) > 0
+        ]
+        ins = [row for row in group if _record_get(row, "direction") == "inbound"]
+        if len(outs) != 1 or len(ins) != 1:
+            continue
+        out_row = outs[0]
+        in_row = ins[0]
+        if _record_get(out_row, "wallet_id") == _record_get(in_row, "wallet_id"):
+            continue
+        deterministic_ids.add(_record_get(out_row, "id"))
+        deterministic_ids.add(_record_get(in_row, "id"))
+    return deterministic_ids
 
 
 def _match_by_payment_hash(
