@@ -161,6 +161,34 @@ PRICE_COLUMNS = (
 )
 
 
+def _raw_json_field(existing: Mapping[str, Any], field: str) -> str | None:
+    raw_json = (
+        existing.get("raw_json")
+        if hasattr(existing, "get")
+        else existing["raw_json"]
+    )
+    if not raw_json:
+        return None
+    try:
+        payload = json.loads(raw_json)
+    except (TypeError, ValueError, json.JSONDecodeError):
+        return None
+    if not isinstance(payload, dict):
+        return None
+    value = payload.get(field)
+    if value is None:
+        return None
+    return str(value)
+
+
+def _metadata_field_is_import_authored(existing: Mapping[str, Any], field: str) -> bool:
+    current = existing[field]
+    if current in (None, ""):
+        return True
+    raw_value = _raw_json_field(existing, field)
+    return raw_value is not None and str(current) == raw_value
+
+
 def _transaction_merge_updates(existing: Mapping[str, Any], normalized: Mapping[str, Any], fingerprint: str):
     updates = {}
     if (
@@ -200,11 +228,20 @@ def _transaction_merge_updates(existing: Mapping[str, Any], normalized: Mapping[
         normalized["pricing_source_kind"] == pricing.SOURCE_EXCHANGE_EXECUTION
         and incoming_priority >= existing_priority
     )
-    if (exchange_execution_overrides or not existing["kind"]) and normalized["kind"]:
+    if (
+        (exchange_execution_overrides and _metadata_field_is_import_authored(existing, "kind"))
+        or not existing["kind"]
+    ) and normalized["kind"]:
         updates["kind"] = normalized["kind"]
-    if (exchange_execution_overrides or not existing["description"]) and normalized["description"]:
+    if (
+        (exchange_execution_overrides and _metadata_field_is_import_authored(existing, "description"))
+        or not existing["description"]
+    ) and normalized["description"]:
         updates["description"] = normalized["description"]
-    if (exchange_execution_overrides or not existing["counterparty"]) and normalized["counterparty"]:
+    if (
+        (exchange_execution_overrides and _metadata_field_is_import_authored(existing, "counterparty"))
+        or not existing["counterparty"]
+    ) and normalized["counterparty"]:
         updates["counterparty"] = normalized["counterparty"]
     if not existing["payment_hash"] and normalized["payment_hash"]:
         updates["payment_hash"] = normalized["payment_hash"]
@@ -358,6 +395,11 @@ def insert_wallet_records(
     match_existing_only: bool = False,
     report_updates: bool = False,
 ) -> dict[str, Any]:
+    """Insert parsed records and optionally enrich matching transactions.
+
+    `updated` is a subcount of `skipped`: merge/enrichment rows do not insert a
+    new transaction, so they stay in the skipped total for import accounting.
+    """
     imported = 0
     skipped = 0
     updated = 0

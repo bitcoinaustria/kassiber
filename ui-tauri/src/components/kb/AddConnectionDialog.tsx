@@ -1150,9 +1150,21 @@ export function AddConnectionDialog({
                     void pickFile({
                       title: `Choose ${selected.title} export`,
                       filters: sourceFileFilters(selected),
-                    }).then((path) => {
-                      if (path) updateForm("sourceFile", path);
-                    });
+                    })
+                      .then((path) => {
+                        if (path) updateForm("sourceFile", path);
+                      })
+                      .catch((error) => {
+                        addNotification({
+                          title: "File picker unavailable",
+                          body: `${
+                            error instanceof Error
+                              ? error.message
+                              : "The native picker could not open."
+                          } Paste the file path instead.`,
+                          tone: "warning",
+                        });
+                      });
                   }}
                 >
                   Browse...

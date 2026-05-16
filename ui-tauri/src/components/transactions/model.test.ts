@@ -56,9 +56,9 @@ describe("draftForTransaction", () => {
 });
 
 describe("money formatting", () => {
-  it("renders missing fiat values as Null instead of zero", () => {
-    expect(formatDisplayMoney(null, 0.01, "eur")).toBe("Null");
-    expect(formatSignedDisplayMoney(null, 0.01, "eur")).toBe("Null");
-    expect(formatCounterDisplayMoney(null, 0.01, "btc")).toBe("Null");
+  it("renders missing fiat values as unpriced instead of zero", () => {
+    expect(formatDisplayMoney(null, 0.01, "eur")).toBe("Unpriced");
+    expect(formatSignedDisplayMoney(null, 0.01, "eur")).toBe("Unpriced");
+    expect(formatCounterDisplayMoney(null, 0.01, "btc")).toBe("Unpriced");
   });
 });

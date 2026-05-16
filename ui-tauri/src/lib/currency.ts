@@ -12,6 +12,8 @@ import { useUiStore } from "@/store/ui";
 
 export type Currency = "btc" | "eur";
 
+export const MISSING_FIAT_LABEL = "Unpriced";
+
 export const useCurrency = () => useUiStore((s) => s.currency);
 
 interface FormatBtcOpts {

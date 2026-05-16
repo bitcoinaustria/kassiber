@@ -210,6 +210,7 @@ function pricingSourceLabel(event: ReportableJournalEntry) {
   return quality ? `${sourceLabel} (${formatEntryType(quality)})` : sourceLabel;
 }
 
+// Kept separate so eventEvidenceHint can stay readable while preserving compact row copy.
 function eventEvidenceHint(
   event: ReportableJournalEntry,
   summary: JournalEventsSnapshot["summary"],

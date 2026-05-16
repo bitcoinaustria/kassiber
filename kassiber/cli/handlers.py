@@ -312,6 +312,7 @@ def _journals_current_for_profile(conn, profile):
 
 TRANSFER_PAIR_KINDS = ("manual", "peg-in", "peg-out", "submarine-swap")
 TRANSFER_PAIR_POLICIES = ("carrying-value", "taxable")
+DIRECT_SWAP_PAYOUT_KINDS = ("direct-swap-payout",)
 
 
 _PAIR_SOURCE_VALUES = ("manual", "bulk_exact", "bulk_selected", "rule_auto")
@@ -340,6 +341,39 @@ def _pair_to_dict(row):
         "deleted_at": deleted_at,
         "created_at": row["created_at"],
     }
+
+
+def _direct_payout_to_dict(row):
+    keys = set(row.keys()) if hasattr(row, "keys") else set()
+    payout_fiat_value = row["payout_fiat_value"] if "payout_fiat_value" in keys else None
+    swap_fee_msat = row["swap_fee_msat"] if "swap_fee_msat" in keys else None
+    return {
+        "id": row["id"],
+        "workspace_id": row["workspace_id"],
+        "profile_id": row["profile_id"],
+        "out_transaction_id": row["out_transaction_id"],
+        "kind": row["kind"],
+        "policy": row["policy"],
+        "payout_asset": row["payout_asset"],
+        "payout_amount": float(msat_to_btc(row["payout_amount"])),
+        "payout_amount_msat": int(row["payout_amount"]),
+        "payout_occurred_at": row["payout_occurred_at"],
+        "payout_fiat_value": float(payout_fiat_value) if payout_fiat_value is not None else None,
+        "payout_external_id": row["payout_external_id"],
+        "counterparty": row["counterparty"],
+        "notes": row["notes"],
+        "swap_fee_msat": int(swap_fee_msat) if swap_fee_msat is not None else None,
+        "swap_fee_kind": row["swap_fee_kind"],
+        "deleted_at": row["deleted_at"],
+        "created_at": row["created_at"],
+    }
+
+
+def _positive_btc_amount_msat(value, flag_name):
+    amount = dec(value)
+    if amount <= 0:
+        raise AppError(f"{flag_name} must be positive", code="validation")
+    return btc_to_msat(amount)
 
 
 def create_transaction_pair(
@@ -415,6 +449,23 @@ def create_transaction_pair(
             f"Run `kassiber transfers unpair --pair-id {existing['id']}` first.",
             code="conflict",
         )
+    existing_payout = conn.execute(
+        """
+        SELECT id FROM direct_swap_payouts
+        WHERE profile_id = ? AND deleted_at IS NULL
+          AND out_transaction_id IN (?, ?)
+        LIMIT 1
+        """,
+        (profile["id"], out_row["id"], in_row["id"]),
+    ).fetchone()
+    if existing_payout:
+        raise AppError(
+            f"One of the transactions already has an active direct swap payout "
+            f"(id={existing_payout['id']}). Delete that payout review before pairing.",
+            code="conflict",
+            hint="Run `kassiber transfers payouts delete --payout-id "
+            f"{existing_payout['id']}` first.",
+        )
     swap_fee_msat, swap_fee_kind = core_transfer_matching.compute_swap_fee(
         int(out_row["amount"] or 0),
         int(in_row["amount"] or 0),
@@ -449,6 +500,188 @@ def create_transaction_pair(
         conn.commit()
     return _pair_to_dict(
         conn.execute("SELECT * FROM transaction_pairs WHERE id = ?", (pair_id,)).fetchone()
+    )
+
+
+def create_direct_swap_payout(
+    conn,
+    workspace_ref,
+    profile_ref,
+    out_ref,
+    *,
+    payout_asset,
+    payout_amount,
+    kind="direct-swap-payout",
+    policy="carrying-value",
+    payout_occurred_at=None,
+    payout_fiat_value=None,
+    payout_external_id=None,
+    counterparty=None,
+    notes=None,
+):
+    workspace, profile = resolve_scope(conn, workspace_ref, profile_ref)
+    if kind not in DIRECT_SWAP_PAYOUT_KINDS:
+        raise AppError(
+            f"Unsupported direct payout kind '{kind}'. Supported: {', '.join(DIRECT_SWAP_PAYOUT_KINDS)}",
+            code="validation",
+        )
+    if policy not in TRANSFER_PAIR_POLICIES:
+        raise AppError(
+            f"Unsupported direct payout policy '{policy}'. Supported: {', '.join(TRANSFER_PAIR_POLICIES)}",
+            code="validation",
+        )
+
+    out_row = resolve_transaction(conn, profile["id"], out_ref, direction="outbound")
+    target_asset = normalize_asset_code(payout_asset)
+    if not target_asset:
+        raise AppError("--payout-asset is required", code="validation")
+    payout_amount_msat = _positive_btc_amount_msat(payout_amount, "--payout-amount")
+    payout_value = dec(payout_fiat_value) if payout_fiat_value is not None else None
+    if payout_value is not None and payout_value < 0:
+        raise AppError("--payout-fiat-value must not be negative", code="validation")
+
+    if out_row["asset"] != target_asset and policy == "carrying-value":
+        tax_country = str(profile["tax_country"] or "").strip().lower()
+        if tax_country != "at":
+            raise AppError(
+                "Cross-asset direct swap payouts with carrying value are only supported for Austrian profiles right now.",
+                code="validation",
+                hint="Re-run with --policy taxable, or use an Austrian profile for cross-asset carrying-value payouts.",
+            )
+
+    existing_pair = conn.execute(
+        """
+        SELECT id FROM transaction_pairs
+        WHERE profile_id = ? AND deleted_at IS NULL
+          AND (out_transaction_id = ? OR in_transaction_id = ?)
+        LIMIT 1
+        """,
+        (profile["id"], out_row["id"], out_row["id"]),
+    ).fetchone()
+    if existing_pair:
+        raise AppError(
+            f"Transaction is already paired (pair id={existing_pair['id']}). "
+            f"Run `kassiber transfers unpair --pair-id {existing_pair['id']}` first.",
+            code="conflict",
+        )
+    existing_payout = conn.execute(
+        """
+        SELECT id FROM direct_swap_payouts
+        WHERE profile_id = ? AND out_transaction_id = ? AND deleted_at IS NULL
+        LIMIT 1
+        """,
+        (profile["id"], out_row["id"]),
+    ).fetchone()
+    if existing_payout:
+        raise AppError(
+            f"Transaction already has an active direct swap payout (id={existing_payout['id']}).",
+            code="conflict",
+            hint="Delete the existing payout review before creating a replacement.",
+        )
+
+    swap_fee_msat, swap_fee_kind = core_transfer_matching.compute_swap_fee(
+        int(out_row["amount"] or 0),
+        payout_amount_msat,
+    )
+    payout_id = str(uuid.uuid4())
+    conn.execute(
+        """
+        INSERT INTO direct_swap_payouts(
+            id, workspace_id, profile_id, out_transaction_id, kind, policy,
+            payout_asset, payout_amount, payout_occurred_at, payout_fiat_value,
+            payout_external_id, counterparty, notes, swap_fee_msat, swap_fee_kind,
+            deleted_at, created_at
+        ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?)
+        """,
+        (
+            payout_id,
+            workspace["id"],
+            profile["id"],
+            out_row["id"],
+            kind,
+            policy,
+            target_asset,
+            payout_amount_msat,
+            payout_occurred_at,
+            float(payout_value) if payout_value is not None else None,
+            payout_external_id,
+            counterparty,
+            notes,
+            swap_fee_msat,
+            swap_fee_kind,
+            now_iso(),
+        ),
+    )
+    invalidate_journals(conn, profile["id"])
+    conn.commit()
+    return _direct_payout_to_dict(
+        conn.execute("SELECT * FROM direct_swap_payouts WHERE id = ?", (payout_id,)).fetchone()
+    )
+
+
+def list_direct_swap_payouts(conn, workspace_ref, profile_ref, *, include_deleted=False):
+    _, profile = resolve_scope(conn, workspace_ref, profile_ref)
+    extra_where = "" if include_deleted else "AND p.deleted_at IS NULL"
+    rows = conn.execute(
+        f"""
+        SELECT
+            p.*,
+            tout.external_id AS out_external_id,
+            tout.asset AS out_asset,
+            tout.amount AS out_amount_msat,
+            tout.occurred_at AS out_occurred_at,
+            wout.label AS out_wallet
+        FROM direct_swap_payouts p
+        JOIN transactions tout ON tout.id = p.out_transaction_id
+        JOIN wallets wout ON wout.id = tout.wallet_id
+        WHERE p.profile_id = ? {extra_where}
+        ORDER BY p.created_at DESC
+        """,
+        (profile["id"],),
+    ).fetchall()
+    output = []
+    for row in rows:
+        entry = _direct_payout_to_dict(row)
+        entry["out"] = {
+            "transaction_id": row["out_transaction_id"],
+            "external_id": row["out_external_id"] or "",
+            "wallet": row["out_wallet"],
+            "asset": row["out_asset"],
+            "amount": float(msat_to_btc(row["out_amount_msat"])),
+            "amount_msat": int(row["out_amount_msat"]),
+            "occurred_at": row["out_occurred_at"],
+        }
+        entry["payout"] = {
+            "asset": row["payout_asset"],
+            "amount": float(msat_to_btc(row["payout_amount"])),
+            "amount_msat": int(row["payout_amount"]),
+            "occurred_at": row["payout_occurred_at"] or row["out_occurred_at"],
+            "external_id": row["payout_external_id"],
+            "counterparty": row["counterparty"],
+        }
+        output.append(entry)
+    return output
+
+
+def delete_direct_swap_payout(conn, workspace_ref, profile_ref, payout_id):
+    _, profile = resolve_scope(conn, workspace_ref, profile_ref)
+    row = conn.execute(
+        "SELECT * FROM direct_swap_payouts WHERE id = ? AND profile_id = ?",
+        (payout_id, profile["id"]),
+    ).fetchone()
+    if not row:
+        raise AppError("Direct swap payout not found", code="not_found")
+    if row["deleted_at"]:
+        return _direct_payout_to_dict(row)
+    deleted_at = now_iso()
+    conn.execute(
+        "UPDATE direct_swap_payouts SET deleted_at = ? WHERE id = ?",
+        (deleted_at, payout_id),
+    )
+    invalidate_journals(conn, profile["id"])
+    conn.commit()
+    return _direct_payout_to_dict(
+        conn.execute("SELECT * FROM direct_swap_payouts WHERE id = ?", (payout_id,)).fetchone()
     )
 
 
@@ -625,6 +858,22 @@ def _filter_transfer_candidates(
     return candidates
 
 
+def _load_active_transfer_review_refs(conn, profile_id):
+    pair_records = conn.execute(
+        "SELECT out_transaction_id, in_transaction_id, deleted_at FROM transaction_pairs WHERE profile_id = ?",
+        (profile_id,),
+    ).fetchall()
+    payout_records = conn.execute(
+        """
+        SELECT out_transaction_id, NULL AS in_transaction_id, deleted_at
+        FROM direct_swap_payouts
+        WHERE profile_id = ?
+        """,
+        (profile_id,),
+    ).fetchall()
+    return [*pair_records, *payout_records]
+
+
 def suggest_transfer_candidates(
     conn,
     workspace_ref,
@@ -648,10 +897,7 @@ def suggest_transfer_candidates(
     """
     _, profile = resolve_scope(conn, workspace_ref, profile_ref)
     rows = _load_matcher_rows(conn, profile["id"])
-    pair_records = conn.execute(
-        "SELECT out_transaction_id, in_transaction_id, deleted_at FROM transaction_pairs WHERE profile_id = ?",
-        (profile["id"],),
-    ).fetchall()
+    pair_records = _load_active_transfer_review_refs(conn, profile["id"])
     dismissals = conn.execute(
         "SELECT out_transaction_id, in_transaction_id, expires_at FROM transaction_pair_dismissals WHERE profile_id = ?",
         (profile["id"],),
@@ -716,10 +962,7 @@ def bulk_pair_transfers(
     """
     workspace, profile = resolve_scope(conn, workspace_ref, profile_ref)
     rows = _load_matcher_rows(conn, profile["id"])
-    pair_records = conn.execute(
-        "SELECT out_transaction_id, in_transaction_id, deleted_at FROM transaction_pairs WHERE profile_id = ?",
-        (profile["id"],),
-    ).fetchall()
+    pair_records = _load_active_transfer_review_refs(conn, profile["id"])
     dismissals = conn.execute(
         "SELECT out_transaction_id, in_transaction_id, expires_at FROM transaction_pair_dismissals WHERE profile_id = ?",
         (profile["id"],),
@@ -796,10 +1039,7 @@ def apply_transfer_rules(
     """Auto-pair every non-conflicted candidate matched by enabled rules."""
     workspace, profile = resolve_scope(conn, workspace_ref, profile_ref)
     rows = _load_matcher_rows(conn, profile["id"])
-    pair_records = conn.execute(
-        "SELECT out_transaction_id, in_transaction_id, deleted_at FROM transaction_pairs WHERE profile_id = ?",
-        (profile["id"],),
-    ).fetchall()
+    pair_records = _load_active_transfer_review_refs(conn, profile["id"])
     dismissals = conn.execute(
         "SELECT out_transaction_id, in_transaction_id, expires_at FROM transaction_pair_dismissals WHERE profile_id = ?",
         (profile["id"],),
@@ -2140,7 +2380,7 @@ def latest_rates_for_profile(conn, profile_id):
 
 
 def auto_price_transactions_from_rates_cache(conn, profile):
-    missing_price_sql = core_rates.transaction_price_missing_sql("")
+    missing_price_sql = core_rates.transaction_price_missing_sql_unqualified()
     tx_rows = conn.execute(
         """
         SELECT id, occurred_at, asset, amount, fiat_currency, fiat_rate, fiat_value,
@@ -2260,6 +2500,15 @@ def build_ledger_state(conn, profile):
         "SELECT * FROM transaction_pairs WHERE profile_id = ? AND deleted_at IS NULL",
         (profile["id"],),
     ).fetchall()
+    direct_payout_records = conn.execute(
+        """
+        SELECT p.*, t.asset AS out_asset, t.amount AS out_amount_msat
+        FROM direct_swap_payouts p
+        JOIN transactions t ON t.id = p.out_transaction_id
+        WHERE p.profile_id = ? AND p.deleted_at IS NULL
+        """,
+        (profile["id"],),
+    ).fetchall()
     tax_engine = build_tax_engine(profile)
     rates = latest_rates_for_profile(conn, profile["id"])
     wallet_refs_by_id = {}
@@ -2277,6 +2526,7 @@ def build_ledger_state(conn, profile):
             rows=rows,
             wallet_refs_by_id=wallet_refs_by_id,
             manual_pair_records=manual_pair_records,
+            direct_payout_records=direct_payout_records,
         )
     )
     return {
@@ -2284,6 +2534,7 @@ def build_ledger_state(conn, profile):
         "quarantines": engine_state.quarantines,
         "intra_audit": engine_state.intra_audit,
         "cross_asset_pairs": engine_state.cross_asset_pairs,
+        "direct_swap_payouts": engine_state.direct_swap_payouts,
         "tax_summary": engine_state.tax_summary,
         "account_holdings": engine_state.account_holdings,
         "wallet_holdings": engine_state.wallet_holdings,
@@ -2393,6 +2644,8 @@ def process_journals(conn, workspace_ref, profile_ref):
         "processed_transactions": tx_count,
         "processed_at": created_at,
     }
+    if state.get("direct_swap_payouts"):
+        result["direct_swap_payouts"] = len(state["direct_swap_payouts"])
     return result
 
 
@@ -2494,6 +2747,42 @@ def _serialize_cross_asset_pairs(rows, refs_by_id):
     return serialized
 
 
+def _serialize_direct_swap_payouts(rows, refs_by_id):
+    serialized = []
+    for row in sorted(
+        rows,
+        key=lambda item: (
+            item.get("payout_occurred_at") or refs_by_id.get(str(item["out_id"]), {}).get("occurred_at", ""),
+            str(item.get("payout_id") or ""),
+        ),
+    ):
+        out_ref = refs_by_id.get(str(row["out_id"]), {})
+        serialized.append(
+            {
+                "payout_id": row["payout_id"],
+                "kind": row["kind"],
+                "policy": row["policy"],
+                "out_id": row["out_id"],
+                "out_asset": row["out_asset"],
+                "out_wallet": out_ref.get("wallet"),
+                "out_external_id": out_ref.get("external_id"),
+                "out_occurred_at": out_ref.get("occurred_at"),
+                "out_amount": float(msat_to_btc(row["out_amount_msat"])),
+                "out_amount_msat": int(row["out_amount_msat"]),
+                "payout_asset": row["payout_asset"],
+                "payout_amount": float(msat_to_btc(row["payout_amount_msat"])),
+                "payout_amount_msat": int(row["payout_amount_msat"]),
+                "payout_occurred_at": row["payout_occurred_at"],
+                "payout_external_id": row["payout_external_id"],
+                "counterparty": row["counterparty"],
+                "swap_fee": float(msat_to_btc(row["swap_fee_msat"])),
+                "swap_fee_msat": int(row["swap_fee_msat"]),
+                "swap_fee_kind": row["swap_fee_kind"],
+            }
+        )
+    return serialized
+
+
 def inspect_transfer_audit(conn, workspace_ref, profile_ref):
     _, profile = resolve_scope(conn, workspace_ref, profile_ref)
     require_tax_processing_supported(profile)
@@ -2504,18 +2793,29 @@ def inspect_transfer_audit(conn, workspace_ref, profile_ref):
         [row["out_id"] for row in state["cross_asset_pairs"]]
         + [row["in_id"] for row in state["cross_asset_pairs"]],
     )
+    payout_refs = _audit_transaction_refs(
+        conn,
+        profile["id"],
+        [row["out_id"] for row in state["direct_swap_payouts"]],
+    )
     intra_transfers = _serialize_intra_audit(state["intra_audit"])
     cross_asset_pairs = _serialize_cross_asset_pairs(state["cross_asset_pairs"], tx_refs)
+    direct_swap_payouts = _serialize_direct_swap_payouts(
+        state["direct_swap_payouts"],
+        payout_refs,
+    )
     return {
         "profile": profile["label"],
         "processing": _journal_processing_status(conn, profile),
         "summary": {
             "same_asset_transfers": len(intra_transfers),
             "cross_asset_pairs": len(cross_asset_pairs),
+            "direct_swap_payouts": len(direct_swap_payouts),
             "quarantines": len(state["quarantines"]),
         },
         "same_asset_transfers": intra_transfers,
         "cross_asset_pairs": cross_asset_pairs,
+        "direct_swap_payouts": direct_swap_payouts,
     }
 
 

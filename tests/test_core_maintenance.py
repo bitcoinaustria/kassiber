@@ -140,6 +140,7 @@ class CoreMaintenanceTest(unittest.TestCase):
                     "journal_entries",
                     "journal_quarantines",
                     "transaction_pairs",
+                    "direct_swap_payouts",
                     "tags",
                 ):
                     count = conn.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0]

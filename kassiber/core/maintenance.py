@@ -151,6 +151,11 @@ def reset_current_profile_data(
             "transaction_pairs",
             profile_id,
         ),
+        "direct_swap_payouts": _count_profile_rows(
+            conn,
+            "direct_swap_payouts",
+            profile_id,
+        ),
         "transaction_pair_dismissals": _count_profile_rows(
             conn,
             "transaction_pair_dismissals",
@@ -262,6 +267,7 @@ def reset_current_profile_data(
             "saved_views",
             "swap_matching_rules",
             "transaction_pair_dismissals",
+            "direct_swap_payouts",
             "transaction_pairs",
             "bip329_labels",
             "journal_quarantines",

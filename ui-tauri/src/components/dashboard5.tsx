@@ -70,7 +70,12 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { useJournalProcessingAction } from "@/hooks/useJournalProcessingAction";
 import { useWalletSyncAction } from "@/hooks/useWalletSyncAction";
-import { formatBtc, useCurrency, type Currency } from "@/lib/currency";
+import {
+  formatBtc,
+  MISSING_FIAT_LABEL,
+  useCurrency,
+  type Currency,
+} from "@/lib/currency";
 import { screenShellClassName } from "@/lib/screen-layout";
 import { cn } from "@/lib/utils";
 import { useUiStore } from "@/store/ui";
@@ -289,7 +294,7 @@ function formatDisplayMoney(
   priceEur: number,
   currency: Currency,
 ) {
-  if (eur === null) return "Null";
+  if (eur === null) return MISSING_FIAT_LABEL;
   if (currency === "btc") return formatBtc(btcFromEur(eur, priceEur));
   return currencyFormatter.format(eur);
 }
@@ -299,7 +304,7 @@ function formatSignedDisplayMoney(
   priceEur: number,
   currency: Currency,
 ) {
-  if (eur === null) return "Null";
+  if (eur === null) return MISSING_FIAT_LABEL;
   if (currency === "btc") {
     return formatBtc(btcFromEur(eur, priceEur), { sign: true });
   }
@@ -3709,6 +3714,8 @@ const RevenueFlowChart = ({
         effectiveBrushRange,
       );
       if (!sameTreasuryBrushRange(rawRange, normalizedRange)) {
+        // Recharts keeps the dragged handle's internal position; remount the
+        // brush after state settles so the visual handle reflects the clamped range.
         window.setTimeout(() => bumpBrushRevision((revision) => revision + 1), 0);
       }
       setBrushRange((current) =>
@@ -4740,7 +4747,7 @@ const RecentTransactionsTable = ({
               const secondaryAmount =
                 currency === "btc"
                   ? t.amount === null
-                    ? "Null"
+                    ? MISSING_FIAT_LABEL
                     : currencyFormatter.format(Math.abs(t.amount))
                   : formatBtc(amountBtc);
               const amountTone =

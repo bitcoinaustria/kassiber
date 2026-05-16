@@ -1,7 +1,7 @@
 import { CheckCircle2, Clock, RotateCcw, XCircle } from "lucide-react";
 import type * as React from "react";
 
-import { formatBtc, type Currency } from "@/lib/currency";
+import { formatBtc, MISSING_FIAT_LABEL, type Currency } from "@/lib/currency";
 import {
   explorerTargetForTransaction,
   type ExplorerSettings,
@@ -177,20 +177,20 @@ export function formatInlineBtc(btc: number, precision = 8) {
 
 export function formatDisplayMoney(eur: number | null, btc: number, currency: Currency) {
   if (currency === "btc") return formatInlineBtc(btc);
-  if (eur === null) return "Null";
+  if (eur === null) return MISSING_FIAT_LABEL;
   return currencyFormatter.format(eur);
 }
 
 export function formatSignedDisplayMoney(eur: number | null, btc: number, currency: Currency) {
   if (currency === "btc") return formatBtc(btc, { sign: true });
-  if (eur === null) return "Null";
+  if (eur === null) return MISSING_FIAT_LABEL;
   const prefix = eur >= 0 ? "+ " : "− ";
   return `${prefix}${currencyFormatter.format(Math.abs(eur))}`;
 }
 
 export function formatCounterDisplayMoney(eur: number | null, btc: number, currency: Currency) {
   if (currency === "btc") {
-    return eur === null ? "Null" : currencyFormatter.format(Math.abs(eur));
+    return eur === null ? MISSING_FIAT_LABEL : currencyFormatter.format(Math.abs(eur));
   }
   return formatBtc(btc);
 }
@@ -686,7 +686,7 @@ export function formatFee(txn: Transaction, currency: Currency) {
   const feeBtc = txn.feeBtc ?? 0;
   if (!feeBtc) return "-";
   if (currency === "btc") return formatBtcAmount(feeBtc);
-  if (txn.feeEur === null || txn.feeEur === undefined) return "Null";
+  if (txn.feeEur === null || txn.feeEur === undefined) return MISSING_FIAT_LABEL;
   return currencyFormatter.format(txn.feeEur);
 }
 

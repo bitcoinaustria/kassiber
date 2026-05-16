@@ -87,6 +87,7 @@ Today:
 - the `generic` tax policy runs through RP2
 - the `at` tax policy runs through RP2's Austrian plugin plus Kassiber-side category/Kennzahl mapping
 - Austrian cross-asset swaps paired with `--policy carrying-value` are reviewed and marked by Kassiber, then carried through RP2's native multi-asset Austrian hook; generic cross-asset pairs still stay on the normal SELL + BUY path
+- direct swap payouts can be reviewed separately when a swap provider pays an external recipient directly; reviewed payout proceeds drive the sale/disposal value, while Austrian cross-asset carrying-value payouts additionally keep the swap leg neutral before recording the external payout as taxable
 
 The intended split is simple: Kassiber prepares and explains; RP2 computes.
 
@@ -225,6 +226,9 @@ encrypted `backends` table. New credentials should be seeded with
 entries in `backends.env` can be lifted out with
 `kassiber secrets migrate-credentials` (see [SECURITY.md](SECURITY.md) for
 the full at-rest boundary).
+Desktop transaction explorer links default to the Bitcoin Austria mempool
+instance (`https://mempool.bitcoin-austria.at`) and can be changed in
+Settings.
 
 Use `kassiber status` to see the active paths. `--data-root` and `--env-file` let you override them.
 
@@ -411,6 +415,14 @@ python3 -m kassiber transfers rules apply
 # Or pair one specific pair by id:
 python3 -m kassiber transfers pair --tx-out <out-id> --tx-in <in-id> \
   --kind submarine-swap --policy carrying-value
+# Or review a direct swap payout where the provider pays an external
+# recipient / exchange and no owned inbound leg exists. In every profile,
+# --payout-fiat-value is the reviewed sale/disposal proceeds; Austrian
+# cross-asset carrying-value additionally keeps the swap leg neutral.
+python3 -m kassiber transfers payouts create --tx-out <out-id> \
+  --payout-asset BTC --payout-amount 0.24990000 \
+  --payout-fiat-value 12495 --payout-external-id <recipient-txid> \
+  --counterparty "recipient or exchange" --policy carrying-value
 python3 -m kassiber journals process
 python3 -m kassiber reports summary
 python3 -m kassiber reports tax-summary

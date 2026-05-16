@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import copy
 import csv
 import json
 import queue
@@ -111,7 +112,7 @@ from .core.ui_snapshot import (
     build_workspace_health_snapshot,
 )
 from .core.sync_backends import ElectrumClient
-from .backends import load_runtime_config, merge_db_backends
+from .backends import BACKEND_KINDS, load_runtime_config, merge_db_backends
 from .db import (
     ensure_data_root,
     open_db,
@@ -244,6 +245,7 @@ SUPPORTED_KINDS = (
     "ui.saved_views.create",
     "ui.saved_views.delete",
     "ui.profiles.snapshot",
+    "ui.onboarding.complete",
     "ui.profiles.create",
     "ui.profiles.rename",
     "ui.profiles.switch",
@@ -4806,6 +4808,172 @@ def _create_profile_payload(
     }
 
 
+def _optional_string_arg(args: dict[str, Any], key: str) -> str | None:
+    value = args.get(key)
+    if value is None:
+        return None
+    if not isinstance(value, str):
+        raise AppError(
+            f"{key} must be a string",
+            code="validation",
+            retryable=False,
+        )
+    value = value.strip()
+    return value or None
+
+
+def _onboarding_complete_payload(
+    ctx: "DaemonContext",
+    args: dict[str, Any],
+) -> dict[str, Any]:
+    workspace_label = _optional_string_arg(args, "workspace_label")
+    profile_label = _optional_string_arg(args, "profile_label")
+    if not workspace_label:
+        raise AppError(
+            "Books set name is required.",
+            code="validation",
+            hint="Enter a books set name.",
+            retryable=False,
+        )
+    if not profile_label:
+        raise AppError(
+            "Book name is required.",
+            code="validation",
+            hint="Enter a book name.",
+            retryable=False,
+        )
+    tax_country = _optional_string_arg(args, "tax_country") or "generic"
+    fiat_currency = _optional_string_arg(args, "fiat_currency") or "EUR"
+    gains_algorithm = _optional_string_arg(args, "gains_algorithm") or "FIFO"
+    raw_tax_long_term_days = args.get("tax_long_term_days", 365)
+    try:
+        tax_long_term_days = int(raw_tax_long_term_days)
+    except (TypeError, ValueError) as exc:
+        raise AppError(
+            "tax_long_term_days must be an integer",
+            code="validation",
+            retryable=False,
+        ) from exc
+
+    backend: dict[str, Any] | None = None
+    default_backend: str | None = None
+    backend_args = args.get("backend")
+    backend_name: str | None = None
+    backend_kind: str | None = None
+    backend_url: str | None = None
+    if backend_args is not None:
+        if not isinstance(backend_args, dict):
+            raise AppError(
+                "backend must be an object",
+                code="validation",
+                retryable=False,
+            )
+        backend_name = _optional_string_arg(backend_args, "name")
+        backend_kind = _optional_string_arg(backend_args, "kind")
+        backend_url = _optional_string_arg(backend_args, "url")
+        if backend_name or backend_kind or backend_url:
+            if not (backend_name and backend_kind and backend_url):
+                raise AppError(
+                    "backend requires name, kind, and url",
+                    code="validation",
+                    retryable=False,
+                )
+            if backend_kind.lower() not in BACKEND_KINDS:
+                raise AppError(
+                    f"Unsupported backend kind '{backend_kind}'",
+                    code="validation",
+                    hint=f"Choose one of: {', '.join(sorted(BACKEND_KINDS))}",
+                    retryable=False,
+                )
+            existing_backend = ctx.conn.execute(
+                "SELECT 1 FROM backends WHERE name = ?",
+                (backend_name.strip().lower(),),
+            ).fetchone()
+            if existing_backend:
+                raise AppError(
+                    f"Backend '{backend_name}' already exists",
+                    code="conflict",
+                    hint="Choose a different backend name.",
+                    retryable=False,
+                )
+
+    pending_runtime_config = copy.deepcopy(ctx.runtime_config)
+    try:
+        ctx.conn.execute("BEGIN IMMEDIATE")
+        workspace = core_accounts.create_workspace(
+            ctx.conn,
+            workspace_label,
+            commit=False,
+        )
+        profile = core_accounts.create_profile(
+            ctx.conn,
+            workspace["id"],
+            profile_label,
+            fiat_currency,
+            gains_algorithm,
+            tax_country,
+            tax_long_term_days,
+            commit=False,
+        )
+
+        if backend_args is not None:
+            if backend_name and backend_kind and backend_url:
+                config: dict[str, object] = {}
+                certificate = _optional_string_arg(backend_args, "certificate")
+                if certificate:
+                    config["certificate"] = certificate
+                if backend_args.get("insecure") is not None:
+                    config["insecure"] = bool(backend_args.get("insecure"))
+                backend = core_accounts.create_backend(
+                    ctx.conn,
+                    backend_name,
+                    backend_kind,
+                    backend_url,
+                    chain=_optional_string_arg(backend_args, "chain"),
+                    network=_optional_string_arg(backend_args, "network"),
+                    tor_proxy=_optional_string_arg(backend_args, "tor_proxy"),
+                    config=config or None,
+                    notes=_optional_string_arg(backend_args, "notes"),
+                    commit=False,
+                )
+                pending_runtime_config = merge_db_backends(
+                    ctx.conn,
+                    pending_runtime_config,
+                )
+                default_backend = core_accounts.set_default_backend(
+                    ctx.conn,
+                    pending_runtime_config,
+                    backend_name,
+                    commit=False,
+                )["default_backend"]
+        ctx.conn.commit()
+    except Exception:
+        ctx.conn.rollback()
+        raise
+    ctx.runtime_config = pending_runtime_config
+
+    snapshot = build_profiles_snapshot(ctx.conn)
+    return {
+        "workspace": {
+            "id": workspace["id"],
+            "name": workspace["label"],
+        },
+        "profile": {
+            "id": profile["id"],
+            "name": profile["label"],
+        },
+        "defaults": {
+            "fiat_currency": profile["fiat_currency"],
+            "tax_country": profile["tax_country"],
+            "tax_long_term_days": profile["tax_long_term_days"],
+            "gains_algorithm": profile["gains_algorithm"],
+        },
+        "backend": backend,
+        "default_backend": default_backend,
+        "profiles": snapshot,
+    }
+
+
 def _create_workspace_payload(
     conn: sqlite3.Connection,
     args: dict[str, Any],
@@ -5013,6 +5181,20 @@ def _backend_config_arg(args: dict[str, Any]) -> dict[str, Any] | None:
 
 
 def _backend_common_args(args: dict[str, Any]) -> dict[str, Any]:
+    clear_raw = args.get("clear")
+    if clear_raw is None:
+        clear_fields: list[str] = []
+    elif isinstance(clear_raw, list) and all(
+        isinstance(item, str) for item in clear_raw
+    ):
+        clear_fields = [item.strip() for item in clear_raw if item.strip()]
+    else:
+        raise AppError(
+            "clear must be a list of backend field names",
+            code="validation",
+            details={"type": type(clear_raw).__name__},
+            retryable=False,
+        )
     payload: dict[str, Any] = {
         "kind": _optional_str_arg(args, "kind"),
         "url": _optional_str_arg(args, "url"),
@@ -5023,6 +5205,7 @@ def _backend_common_args(args: dict[str, Any]) -> dict[str, Any]:
         "tor_proxy": _optional_str_arg(args, "tor_proxy"),
         "notes": _optional_str_arg(args, "notes"),
         "config": _backend_config_arg(args),
+        "clear": clear_fields,
     }
     batch_size = args.get("batch_size")
     if batch_size is not None:
@@ -5056,6 +5239,7 @@ def _create_backend_payload(ctx: "DaemonContext", args: dict[str, Any]) -> dict[
     name = _required_str_arg(args, "name", "Backend name")
     kind = common.pop("kind") or ""
     url = common.pop("url") or ""
+    common.pop("clear", None)
     payload = core_accounts.create_backend(
         ctx.conn,
         name,
@@ -6823,6 +7007,21 @@ def handle_request(
                 build_envelope(
                     "ui.profiles.snapshot",
                     build_profiles_snapshot(ctx.conn),
+                ),
+                request_id,
+            ),
+            False,
+        )
+
+    if kind == "ui.onboarding.complete":
+        return (
+            _with_request_id(
+                build_envelope(
+                    "ui.onboarding.complete",
+                    _onboarding_complete_payload(
+                        ctx,
+                        _coerce_args_dict(request_id, request.get("args")),
+                    ),
                 ),
                 request_id,
             ),

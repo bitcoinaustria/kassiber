@@ -368,6 +368,7 @@ def _entity_counts(conn: sqlite3.Connection) -> dict[str, int | None]:
         "journal_entries",
         "journal_quarantines",
         "transaction_pairs",
+        "direct_swap_payouts",
         "bip329_labels",
         "backends",
         "rates_cache",
@@ -579,16 +580,21 @@ def _attachment_summary(conn: sqlite3.Connection) -> dict[str, Any]:
 
 
 def _manual_pair_summary(conn: sqlite3.Connection) -> dict[str, Any]:
-    rows = conn.execute(
+    pair_rows = conn.execute(
         "SELECT kind, policy FROM transaction_pairs WHERE deleted_at IS NULL"
+    ).fetchall()
+    payout_rows = conn.execute(
+        "SELECT kind, policy FROM direct_swap_payouts WHERE deleted_at IS NULL"
     ).fetchall()
     by_kind = Counter()
     by_policy = Counter()
-    for row in rows:
+    for row in [*pair_rows, *payout_rows]:
         by_kind[_safe_category(row["kind"] or "unknown")] += 1
         by_policy[_safe_category(row["policy"] or "unknown")] += 1
     return {
-        "total": len(rows),
+        "total": len(pair_rows) + len(payout_rows),
+        "manual_pairs": len(pair_rows),
+        "direct_swap_payouts": len(payout_rows),
         "by_kind": _counter_rows(by_kind, "kind"),
         "by_policy": _counter_rows(by_policy, "policy"),
     }

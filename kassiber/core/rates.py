@@ -110,8 +110,7 @@ def transaction_rate_pair(asset, fiat_currency):
     return pair
 
 
-def transaction_price_missing_sql(alias="t"):
-    prefix = f"{alias}." if alias else ""
+def _transaction_price_missing_sql(prefix: str):
     return f"""
             (
               ({prefix}fiat_rate IS NULL OR {prefix}fiat_rate <= 0)
@@ -126,6 +125,14 @@ def transaction_price_missing_sql(alias="t"):
               )
             )
     """
+
+
+def transaction_price_missing_sql():
+    return _transaction_price_missing_sql("t.")
+
+
+def transaction_price_missing_sql_unqualified():
+    return _transaction_price_missing_sql("")
 
 
 def http_get_json(url, timeout=30):
@@ -613,7 +620,7 @@ def _collect_coinbase_needed_minutes(conn, pairs):
     pair_set = set(pairs)
     needed = {pair: set() for pair in pair_set}
     now_minute = datetime.now(timezone.utc).replace(second=0, microsecond=0)
-    missing_price_sql = transaction_price_missing_sql("t")
+    missing_price_sql = transaction_price_missing_sql()
     rows = conn.execute(
         """
         SELECT t.occurred_at, t.confirmed_at, t.asset, t.fiat_currency,
@@ -1450,6 +1457,7 @@ __all__ = [
     "set_manual_rate",
     "sync_rates",
     "transaction_price_missing_sql",
+    "transaction_price_missing_sql_unqualified",
     "transaction_rate_pair",
     "upsert_rate",
 ]

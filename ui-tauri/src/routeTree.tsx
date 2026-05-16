@@ -9,33 +9,78 @@
  * under the AppShell layout and require a persisted identity; otherwise
  * the layout redirects to `/`.
  */
-
 import {
   createRootRoute,
   createRoute,
   createRouter,
+  lazyRouteComponent,
   Outlet,
   redirect,
 } from "@tanstack/react-router";
-import { Welcome } from "./routes/Welcome";
-import { Overview } from "./routes/Overview";
-import { Transactions } from "./routes/Transactions";
-import { Reports } from "./routes/Reports";
-import { SourceFunds } from "./routes/SourceFunds";
-import { Journals } from "./routes/Journals";
-import { SwapMatching } from "./routes/SwapMatching";
-import { Quarantine } from "./routes/Quarantine";
-import { Diagnostics } from "./routes/Diagnostics";
-import { Books } from "./routes/Books";
-import { Connections } from "./routes/Connections";
-import { ConnectionDetail } from "./routes/ConnectionDetail";
-import { Imports } from "./routes/Imports";
-import { Settings } from "./routes/Settings";
-import { Assistant } from "./routes/Assistant";
-import { AppShell } from "./components/kb/AppShell";
 import { RootIntentListener } from "./components/kb/RootIntentListener";
 import { activateImportProject, canImportProjects } from "./daemon/transport";
 import { useUiStore } from "./store/ui";
+
+function RoutePending() {
+  return (
+    <div className="grid min-h-dvh place-items-center bg-background text-sm text-muted-foreground">
+      Loading...
+    </div>
+  );
+}
+
+const Welcome = lazyRouteComponent(() => import("./routes/Welcome"), "Welcome");
+const AppShell = lazyRouteComponent(
+  () => import("./components/kb/AppShell"),
+  "AppShell",
+);
+const Overview = lazyRouteComponent(
+  () => import("./routes/Overview"),
+  "Overview",
+);
+const Transactions = lazyRouteComponent(
+  () => import("./routes/Transactions"),
+  "Transactions",
+);
+const Reports = lazyRouteComponent(() => import("./routes/Reports"), "Reports");
+const SourceFunds = lazyRouteComponent(
+  () => import("./routes/SourceFunds"),
+  "SourceFunds",
+);
+const Journals = lazyRouteComponent(
+  () => import("./routes/Journals"),
+  "Journals",
+);
+const SwapMatching = lazyRouteComponent(
+  () => import("./routes/SwapMatching"),
+  "SwapMatching",
+);
+const Quarantine = lazyRouteComponent(
+  () => import("./routes/Quarantine"),
+  "Quarantine",
+);
+const Diagnostics = lazyRouteComponent(
+  () => import("./routes/Diagnostics"),
+  "Diagnostics",
+);
+const Books = lazyRouteComponent(() => import("./routes/Books"), "Books");
+const Connections = lazyRouteComponent(
+  () => import("./routes/Connections"),
+  "Connections",
+);
+const ConnectionDetail = lazyRouteComponent(
+  () => import("./routes/ConnectionDetail"),
+  "ConnectionDetail",
+);
+const Imports = lazyRouteComponent(() => import("./routes/Imports"), "Imports");
+const Settings = lazyRouteComponent(
+  () => import("./routes/Settings"),
+  "Settings",
+);
+const Assistant = lazyRouteComponent(
+  () => import("./routes/Assistant"),
+  "Assistant",
+);
 
 const rootRoute = createRootRoute({
   component: () => (
@@ -239,7 +284,11 @@ const routeTree = rootRoute.addChildren([
   ]),
 ]);
 
-export const router = createRouter({ routeTree, defaultPreload: "intent" });
+export const router = createRouter({
+  routeTree,
+  defaultPreload: "intent",
+  defaultPendingComponent: RoutePending,
+});
 
 declare module "@tanstack/react-router" {
   interface Register {

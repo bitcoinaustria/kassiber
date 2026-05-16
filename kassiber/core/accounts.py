@@ -64,7 +64,7 @@ def normalize_code(value):
     return code
 
 
-def create_workspace(conn, label):
+def create_workspace(conn, label, *, commit=True):
     workspace_id = str(uuid.uuid4())
     try:
         conn.execute(
@@ -80,7 +80,8 @@ def create_workspace(conn, label):
     set_setting(conn, "context_workspace", workspace_id)
     # A new workspace does not have a compatible current profile yet.
     set_setting(conn, "context_profile", "")
-    conn.commit()
+    if commit:
+        conn.commit()
     return conn.execute("SELECT * FROM workspaces WHERE id = ?", (workspace_id,)).fetchone()
 
 
@@ -126,6 +127,8 @@ def create_profile(
     gains_algorithm,
     tax_country,
     tax_long_term_days,
+    *,
+    commit=True,
 ):
     workspace = resolve_workspace(conn, workspace_ref)
     if tax_long_term_days < 0:
@@ -176,7 +179,8 @@ def create_profile(
     ensure_default_accounts(conn, workspace["id"], profile_id)
     set_setting(conn, "context_workspace", workspace["id"])
     set_setting(conn, "context_profile", profile_id)
-    conn.commit()
+    if commit:
+        conn.commit()
     return conn.execute("SELECT * FROM profiles WHERE id = ?", (profile_id,)).fetchone()
 
 
@@ -409,6 +413,7 @@ def create_backend(
     tor_proxy=None,
     config=None,
     notes=None,
+    commit=True,
 ):
     return redact_backend_for_output(
         _create_db_backend(
@@ -425,6 +430,7 @@ def create_backend(
             tor_proxy=tor_proxy,
             config=config,
             notes=notes,
+            commit=commit,
         )
     )
 
@@ -437,8 +443,8 @@ def delete_backend(conn, name):
     return _delete_db_backend(conn, name)
 
 
-def set_default_backend(conn, runtime_config, name):
-    return _set_default_backend(conn, runtime_config, name)
+def set_default_backend(conn, runtime_config, name, *, commit=True):
+    return _set_default_backend(conn, runtime_config, name, commit=commit)
 
 
 def clear_default_backend(conn, runtime_config):

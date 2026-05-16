@@ -295,18 +295,18 @@ Behavior:
   exist from wallet sync, Kassiber enriches that row and preserves the
   wallet-derived network fee
 
-You can also attach a Bull Bitcoin export to a wallet that already receives
-transactions from another source; later wallet syncs will reapply the exact
-order pricing to matching rows:
+You can also attach a Bull Bitcoin export to an existing wallet that already
+receives the matching transactions from another source (for example Esplora,
+Electrum, Phoenix, or a descriptor sync). Bull exports are
+match-existing-only: this attachment does not create standalone transaction
+rows, and orders for transactions that are not already in that same wallet are
+skipped.
 
 ```bash
-python3 -m kassiber wallets create \
-  --label bull \
-  --kind bullbitcoin \
-  --source-file /path/to/bull-orders.csv \
-  --source-format bullbitcoin_csv
+python3 -m kassiber wallets update --wallet treasury \
+  --config '{"source_file":"/path/to/bull-orders.csv","source_format":"bullbitcoin_csv"}'
 
-python3 -m kassiber wallets sync --wallet bull
+python3 -m kassiber wallets sync --wallet treasury
 ```
 
 ## BIP329

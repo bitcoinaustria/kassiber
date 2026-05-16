@@ -14,6 +14,11 @@ import type {
   DaemonTransport,
 } from "./transport";
 import { MOCK_PROFILES } from "@/mocks/profiles";
+import type {
+  ProfileGainsAlgorithm,
+  ProfileTaxCountry,
+  Workspace,
+} from "@/mocks/profiles";
 import { MOCK_AI_CHAT_STREAM, fixtures } from "./fixtures";
 
 const SIMULATED_LATENCY_MS = 50;
@@ -43,6 +48,118 @@ const mockOverviewSnapshot = () =>
   fixtures["ui.overview.snapshot"] as {
     connections: MockConnection[];
   };
+
+type MockBackendSettingsRow = {
+  name: string;
+  kind: string;
+  chain: string;
+  network: string;
+  url: string;
+  source: string;
+  is_default?: boolean;
+  has_url?: boolean;
+  has_auth_header?: boolean;
+  has_token?: boolean;
+  has_username?: boolean;
+  has_password?: boolean;
+  insecure?: boolean;
+};
+
+let mockBackendSettingsRows: MockBackendSettingsRow[] = [
+  {
+    name: "mempool",
+    kind: "esplora",
+    chain: "bitcoin",
+    network: "main",
+    url: "https://mempool.bitcoin-austria.at/api",
+    source: "mock",
+    is_default: true,
+    has_url: true,
+  },
+  {
+    name: "liquid-electrum",
+    kind: "electrum",
+    chain: "liquid",
+    network: "liquidv1",
+    url: "ssl://les.bullbitcoin.com:995",
+    source: "mock",
+    has_url: true,
+  },
+];
+
+const mockBackendSettingsPayload = () => ({
+  backends: mockBackendSettingsRows.map((row) => ({ ...row })),
+  summary: {
+    count: mockBackendSettingsRows.length,
+    default_backend:
+      mockBackendSettingsRows.find((row) => row.is_default)?.name ?? null,
+  },
+});
+
+function mockBackendRowFromArgs(
+  args: Record<string, unknown>,
+  existing?: MockBackendSettingsRow,
+): MockBackendSettingsRow {
+  const clear = new Set(
+    Array.isArray(args.clear)
+      ? args.clear.filter((item): item is string => typeof item === "string")
+      : [],
+  );
+  const config =
+    args.config && typeof args.config === "object" && !Array.isArray(args.config)
+      ? (args.config as Record<string, unknown>)
+      : {};
+  const row: MockBackendSettingsRow = {
+    name:
+      typeof args.name === "string" && args.name.trim()
+        ? args.name.trim()
+        : existing?.name ?? "backend",
+    kind:
+      typeof args.kind === "string" && args.kind.trim()
+        ? args.kind.trim()
+        : existing?.kind ?? "esplora",
+    chain:
+      typeof args.chain === "string" && args.chain.trim()
+        ? args.chain.trim()
+        : existing?.chain ?? "bitcoin",
+    network:
+      typeof args.network === "string" && args.network.trim()
+        ? args.network.trim()
+        : existing?.network ?? "main",
+    url:
+      typeof args.url === "string" && args.url.trim()
+        ? args.url.trim()
+        : existing?.url ?? "https://example.invalid/api",
+    source: "mock",
+    is_default: existing?.is_default,
+    has_url: true,
+    has_auth_header: clear.has("auth_header") || clear.has("auth-header")
+      ? false
+      : typeof args.auth_header === "string" && args.auth_header.trim()
+        ? true
+        : existing?.has_auth_header,
+    has_token: clear.has("token")
+      ? false
+      : typeof args.token === "string" && args.token.trim()
+        ? true
+        : existing?.has_token,
+    has_username: clear.has("username")
+      ? false
+      : typeof config.username === "string" && config.username.trim()
+        ? true
+        : existing?.has_username,
+    has_password: clear.has("password")
+      ? false
+      : typeof config.password === "string" && config.password.trim()
+        ? true
+        : existing?.has_password,
+    insecure:
+      typeof config.insecure === "boolean"
+        ? config.insecure
+        : existing?.insecure,
+  };
+  return row;
+}
 
 export const mockDaemon: DaemonTransport = {
   async invoke<T = unknown>(
@@ -244,6 +361,106 @@ export const mockDaemon: DaemonTransport = {
         data: {
           activeProfileId: profileId,
           activeWorkspaceId: mockProfilesSnapshot.activeWorkspaceId,
+        } as T,
+      };
+    }
+
+    if (req.kind === "ui.onboarding.complete") {
+      const args = (req.args ?? {}) as {
+        workspace_label?: unknown;
+        profile_label?: unknown;
+        tax_country?: unknown;
+        fiat_currency?: unknown;
+        tax_long_term_days?: unknown;
+        gains_algorithm?: unknown;
+      };
+      const workspaceName =
+        typeof args.workspace_label === "string"
+          ? args.workspace_label.trim()
+          : "";
+      const profileName =
+        typeof args.profile_label === "string" ? args.profile_label.trim() : "";
+      if (!workspaceName || !profileName) {
+        return {
+          kind: "error",
+          schema_version: 1,
+          request_id: req.request_id,
+          error: {
+            code: "validation",
+            message: "Books set and book name are required.",
+            retryable: false,
+          },
+        };
+      }
+      const taxCountry: ProfileTaxCountry =
+        args.tax_country === "at" ? "at" : "generic";
+      const fiatCurrency =
+        typeof args.fiat_currency === "string" ? args.fiat_currency : "EUR";
+      const taxLongTermDays =
+        typeof args.tax_long_term_days === "number"
+          ? args.tax_long_term_days
+          : taxCountry === "at"
+            ? 0
+            : 365;
+      const rawGainsAlgorithm =
+        typeof args.gains_algorithm === "string" ? args.gains_algorithm : "";
+      const gainsAlgorithm: ProfileGainsAlgorithm =
+        rawGainsAlgorithm === "LIFO" ||
+        rawGainsAlgorithm === "HIFO" ||
+        rawGainsAlgorithm === "LOFO" ||
+        rawGainsAlgorithm === "MOVING_AVERAGE_AT"
+          ? rawGainsAlgorithm
+          : taxCountry === "at"
+            ? "MOVING_AVERAGE_AT"
+            : "FIFO";
+      const workspace: Workspace = {
+        id: `mock-workspace-${Date.now()}`,
+        name: workspaceName,
+        currency: fiatCurrency,
+        jurisdiction: taxCountry === "at" ? "Austria" : "Generic",
+        created: new Date().toISOString().slice(0, 10),
+        profiles: [
+          {
+            id: `mock-profile-${Date.now()}`,
+            name: profileName,
+            taxPolicy:
+              taxCountry === "at" ? "Austria - ATM - EUR" : "Generic defaults",
+            fiatCurrency,
+            taxCountry,
+            taxLongTermDays,
+            gainsAlgorithm,
+            accounts: 1,
+            wallets: 0,
+            lastOpened: "Just now",
+            active: true,
+          },
+        ],
+      };
+      mockProfilesSnapshot = {
+        activeWorkspaceId: workspace.id,
+        activeProfileId: workspace.profiles[0].id,
+        workspaces: [
+          ...mockProfilesSnapshot.workspaces.map((existing) => ({
+            ...existing,
+            profiles: existing.profiles.map((profile) => ({
+              ...profile,
+              active: false,
+            })),
+          })),
+          workspace,
+        ],
+      };
+      return {
+        kind: "ui.onboarding.complete",
+        schema_version: 1,
+        request_id: req.request_id,
+        data: {
+          workspace: { id: workspace.id, name: workspace.name },
+          profile: {
+            id: workspace.profiles[0].id,
+            name: workspace.profiles[0].name,
+          },
+          profiles: mockProfilesSnapshot,
         } as T,
       };
     }
@@ -1152,6 +1369,107 @@ export const mockDaemon: DaemonTransport = {
             "< body: 256 bytes sampled",
           ],
         } as T,
+      };
+    }
+
+    if (req.kind === "ui.backends.settings.list") {
+      return {
+        kind: "ui.backends.settings.list",
+        schema_version: 1,
+        request_id: req.request_id,
+        data: mockBackendSettingsPayload() as T,
+      };
+    }
+
+    if (req.kind === "ui.backends.create") {
+      const args = (req.args ?? {}) as Record<string, unknown>;
+      const name = typeof args.name === "string" ? args.name.trim() : "";
+      if (!name) {
+        return {
+          kind: "error",
+          schema_version: 1,
+          request_id: req.request_id,
+          error: {
+            code: "validation",
+            message: "Backend name is required",
+            retryable: false,
+          },
+        };
+      }
+      if (mockBackendSettingsRows.some((row) => row.name === name)) {
+        return {
+          kind: "error",
+          schema_version: 1,
+          request_id: req.request_id,
+          error: {
+            code: "conflict",
+            message: `Backend '${name}' already exists`,
+            retryable: false,
+          },
+        };
+      }
+      const row = mockBackendRowFromArgs(args);
+      mockBackendSettingsRows = [...mockBackendSettingsRows, row];
+      return {
+        kind: "ui.backends.create",
+        schema_version: 1,
+        request_id: req.request_id,
+        data: { ...row } as T,
+      };
+    }
+
+    if (req.kind === "ui.backends.update") {
+      const args = (req.args ?? {}) as Record<string, unknown>;
+      const name = typeof args.name === "string" ? args.name.trim() : "";
+      const existing = mockBackendSettingsRows.find((row) => row.name === name);
+      if (!existing) {
+        return {
+          kind: "error",
+          schema_version: 1,
+          request_id: req.request_id,
+          error: {
+            code: "not_found",
+            message: `Backend '${name || "backend"}' not found`,
+            retryable: false,
+          },
+        };
+      }
+      const row = mockBackendRowFromArgs(args, existing);
+      mockBackendSettingsRows = mockBackendSettingsRows.map((item) =>
+        item.name === name ? row : item,
+      );
+      return {
+        kind: "ui.backends.update",
+        schema_version: 1,
+        request_id: req.request_id,
+        data: { ...row } as T,
+      };
+    }
+
+    if (req.kind === "ui.backends.delete") {
+      const args = (req.args ?? {}) as { name?: unknown };
+      const name = typeof args.name === "string" ? args.name.trim() : "";
+      const before = mockBackendSettingsRows.length;
+      mockBackendSettingsRows = mockBackendSettingsRows.filter(
+        (row) => row.name !== name,
+      );
+      if (mockBackendSettingsRows.length === before) {
+        return {
+          kind: "error",
+          schema_version: 1,
+          request_id: req.request_id,
+          error: {
+            code: "not_found",
+            message: `Backend '${name || "backend"}' not found`,
+            retryable: false,
+          },
+        };
+      }
+      return {
+        kind: "ui.backends.delete",
+        schema_version: 1,
+        request_id: req.request_id,
+        data: { name, deleted: true } as T,
       };
     }
 

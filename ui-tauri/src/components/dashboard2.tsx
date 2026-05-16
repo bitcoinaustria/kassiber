@@ -964,14 +964,16 @@ function periodLimit(period: PeriodKey) {
   return 30;
 }
 
+function sortTransactionsByDateDesc(records: Transaction[]) {
+  return [...records].sort((a, b) => {
+    const dateA = parseTransactionDate(a.date)?.getTime() ?? -Infinity;
+    const dateB = parseTransactionDate(b.date)?.getTime() ?? -Infinity;
+    return dateB - dateA;
+  });
+}
+
 function recordsForPeriod(records: Transaction[], period: PeriodKey) {
-  if (period === "all") {
-    return [...records].sort((a, b) => {
-      const dateA = parseTransactionDate(a.date)?.getTime() ?? -Infinity;
-      const dateB = parseTransactionDate(b.date)?.getTime() ?? -Infinity;
-      return dateB - dateA;
-    });
-  }
+  if (period === "all") return records;
 
   const dated = records
     .map((record) => ({ record, date: parseTransactionDate(record.date) }))
@@ -3587,9 +3589,16 @@ const Dashboard2 = ({
         : transactionRecords,
     [transactions.txs],
   );
+  const allPeriodRecords = React.useMemo(
+    () => sortTransactionsByDateDesc(records),
+    [records],
+  );
   const periodRecords = React.useMemo(
-    () => recordsForPeriod(records, period),
-    [records, period],
+    () =>
+      period === "all"
+        ? allPeriodRecords
+        : recordsForPeriod(records, period),
+    [allPeriodRecords, records, period],
   );
   const periodSwapCandidateIds = React.useMemo(
     () =>

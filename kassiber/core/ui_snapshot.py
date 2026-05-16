@@ -2835,7 +2835,7 @@ def build_rates_coverage_snapshot(
         ).fetchone()["count"]
         or 0
     )
-    missing_price_sql = core_rates.transaction_price_missing_sql("t")
+    missing_price_sql = core_rates.transaction_price_missing_sql()
     missing_rows_all = conn.execute(
         """
         SELECT

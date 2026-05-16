@@ -42,7 +42,7 @@ import {
   TabsTrigger,
 } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
-import type { Currency } from "@/lib/currency";
+import { MISSING_FIAT_LABEL, type Currency } from "@/lib/currency";
 import { cn } from "@/lib/utils";
 import type { ExplorerSettings } from "@/lib/explorer";
 
@@ -831,7 +831,7 @@ export function TransactionDetailSheet({
                         label="Source value"
                         value={
                           transaction.amount === null
-                            ? "Null"
+                            ? MISSING_FIAT_LABEL
                             : currencyFormatter.format(transaction.amount)
                         }
                         hidden={hideSensitive}
@@ -866,7 +866,7 @@ export function TransactionDetailSheet({
                       label="Cost basis"
                       value={
                         transaction.amount === null
-                          ? "Null"
+                          ? MISSING_FIAT_LABEL
                           : currencyFormatter.format(transaction.amount)
                       }
                       align="right"
@@ -877,7 +877,7 @@ export function TransactionDetailSheet({
                         flow !== "outgoing"
                           ? currencyFormatter.format(0)
                           : transaction.amount === null
-                            ? "Null"
+                            ? MISSING_FIAT_LABEL
                             : currencyFormatter.format(transaction.amount)
                       }
                       align="right"

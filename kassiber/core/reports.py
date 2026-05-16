@@ -834,6 +834,45 @@ def _report_query_rows(conn, profile, wallet=None):
         pair_params,
     ).fetchall()
 
+    direct_payout_filters = ["p.profile_id = ?", "p.deleted_at IS NULL"]
+    direct_payout_params = [profile["id"]]
+    if wallet:
+        direct_payout_filters.append("tout.wallet_id = ?")
+        direct_payout_params.append(wallet["id"])
+    direct_payout_where = " AND ".join(direct_payout_filters)
+    direct_swap_payouts = conn.execute(
+        f"""
+        SELECT
+            p.id,
+            p.kind,
+            p.policy,
+            p.payout_asset,
+            p.payout_amount,
+            p.payout_occurred_at,
+            p.payout_external_id,
+            p.counterparty,
+            p.swap_fee_msat,
+            COALESCE(p.swap_fee_kind, '') AS swap_fee_kind,
+            COALESCE(p.notes, '') AS notes,
+            p.created_at,
+            tout.occurred_at AS out_occurred_at,
+            COALESCE(tout.external_id, '') AS out_transaction_id,
+            wout.label AS out_wallet,
+            tout.asset AS out_asset,
+            tout.amount AS out_amount,
+            tout.fee AS out_fee
+        FROM direct_swap_payouts p
+        JOIN transactions tout ON tout.id = p.out_transaction_id
+        JOIN wallets wout ON wout.id = tout.wallet_id
+        WHERE {direct_payout_where}
+        ORDER BY
+            COALESCE(p.payout_occurred_at, tout.occurred_at) ASC,
+            p.created_at ASC,
+            p.id ASC
+        """,
+        direct_payout_params,
+    ).fetchall()
+
     return {
         "summary": summary,
         "tagged_transactions": tagged_transactions,
@@ -844,6 +883,7 @@ def _report_query_rows(conn, profile, wallet=None):
         "quarantine_rows": quarantine_rows,
         "transactions": transactions,
         "transfer_pairs": transfer_pairs,
+        "direct_swap_payouts": direct_swap_payouts,
     }
 
 
@@ -2000,8 +2040,18 @@ def _swap_fee_summary_rows(conn, profile_id):
         WHERE p.profile_id = ?
           AND p.deleted_at IS NULL
           AND p.swap_fee_msat IS NOT NULL
+        UNION ALL
+        SELECT p.kind,
+               p.policy,
+               p.swap_fee_msat,
+               substr(COALESCE(p.payout_occurred_at, t_out.occurred_at), 1, 4) AS year
+        FROM direct_swap_payouts p
+        JOIN transactions t_out ON t_out.id = p.out_transaction_id
+        WHERE p.profile_id = ?
+          AND p.deleted_at IS NULL
+          AND p.swap_fee_msat IS NOT NULL
         """,
-        (profile_id,),
+        (profile_id, profile_id),
     ).fetchall()
     if not rows:
         return []
@@ -3609,6 +3659,40 @@ def _generic_report_transfer_pair_rows(context):
                 "in_amount_msat": in_amount_msat,
                 "in_fee": float(msat_to_btc(in_fee_msat)),
                 "in_fee_msat": in_fee_msat,
+                "notes": row["notes"],
+                "created_at": row["created_at"],
+            }
+        )
+    for row in context["query_rows"].get("direct_swap_payouts", []):
+        out_amount_msat = int(row["out_amount"] or 0)
+        payout_amount_msat = int(row["payout_amount"] or 0)
+        out_fee_msat = int(row["out_fee"] or 0)
+        swap_fee_msat = int(row["swap_fee_msat"] or 0)
+        rows.append(
+            {
+                "pair_id": row["id"],
+                "pair_type": "direct_swap_payout",
+                "kind": row["kind"],
+                "policy": row["policy"],
+                "swap_fee": float(msat_to_btc(swap_fee_msat)),
+                "swap_fee_msat": swap_fee_msat,
+                "swap_fee_kind": row["swap_fee_kind"],
+                "out_occurred_at": row["out_occurred_at"],
+                "out_wallet": row["out_wallet"],
+                "out_transaction_id": row["out_transaction_id"],
+                "out_asset": row["out_asset"],
+                "out_amount": float(msat_to_btc(out_amount_msat)),
+                "out_amount_msat": out_amount_msat,
+                "out_fee": float(msat_to_btc(out_fee_msat)),
+                "out_fee_msat": out_fee_msat,
+                "in_occurred_at": row["payout_occurred_at"] or row["out_occurred_at"],
+                "in_wallet": row["counterparty"] or "external",
+                "in_transaction_id": row["payout_external_id"] or "",
+                "in_asset": row["payout_asset"],
+                "in_amount": float(msat_to_btc(payout_amount_msat)),
+                "in_amount_msat": payout_amount_msat,
+                "in_fee": 0.0,
+                "in_fee_msat": 0,
                 "notes": row["notes"],
                 "created_at": row["created_at"],
             }

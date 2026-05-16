@@ -132,6 +132,7 @@ const ALLOWED_DAEMON_KINDS: &[&str] = &[
     "ui.backends.electrum.test",
     "ui.backends.http.test",
     "ui.profiles.snapshot",
+    "ui.onboarding.complete",
     "ui.profiles.create",
     "ui.profiles.rename",
     "ui.profiles.switch",
@@ -512,7 +513,11 @@ fn write_text_export(
         .map(|ext| ext.to_ascii_lowercase());
     let allowed = actual
         .as_deref()
-        .map(|ext| permitted_extensions.iter().any(|p| p.eq_ignore_ascii_case(ext)))
+        .map(|ext| {
+            permitted_extensions
+                .iter()
+                .any(|p| p.eq_ignore_ascii_case(ext))
+        })
         .unwrap_or(false);
     if !allowed {
         let expected = permitted_extensions

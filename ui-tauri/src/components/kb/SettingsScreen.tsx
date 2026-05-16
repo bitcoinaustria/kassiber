@@ -405,6 +405,7 @@ function backendPayload(backend: Backend): Record<string, unknown> {
   const chain = backend.chain ?? (backend.net === "LIQUID" ? "liquid" : "bitcoin");
   const network =
     backend.network ?? (backend.net === "LIQUID" ? "liquidv1" : "main");
+  const auth = backend.auth ?? "none";
   const payload: Record<string, unknown> = {
     name: backend.name,
     kind: backend.kind ?? (backend.net === "LIQUID" ? "electrum" : "esplora"),
@@ -419,16 +420,34 @@ function backendPayload(backend: Backend): Record<string, unknown> {
   if (backend.certificate) {
     config.certificate = backend.certificate;
   }
-  if (backend.authHeader) {
+  const clear = new Set<string>();
+  if (auth === "none") {
+    clear.add("auth_header");
+    clear.add("token");
+    clear.add("username");
+    clear.add("password");
+  } else if (auth === "bearer") {
+    clear.add("token");
+    clear.add("username");
+    clear.add("password");
+  } else if (auth === "apikey") {
+    clear.add("auth_header");
+    clear.add("username");
+    clear.add("password");
+  } else if (auth === "basic") {
+    clear.add("auth_header");
+    clear.add("token");
+  }
+  if (auth === "bearer" && backend.authHeader) {
     payload.auth_header = backend.authHeader;
   }
-  if (backend.token) {
+  if (auth === "apikey" && backend.token) {
     payload.token = backend.token;
   }
-  if (backend.username) {
+  if (auth === "basic" && backend.username) {
     config.username = backend.username;
   }
-  if (backend.password) {
+  if (auth === "basic" && backend.password) {
     config.password = backend.password;
   }
   if (backend.proxy?.host && backend.proxy.port) {
@@ -436,6 +455,9 @@ function backendPayload(backend: Backend): Record<string, unknown> {
   }
   if (Object.keys(config).length > 0) {
     payload.config = config;
+  }
+  if (clear.size > 0) {
+    payload.clear = Array.from(clear);
   }
   return payload;
 }

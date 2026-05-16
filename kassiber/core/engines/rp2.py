@@ -10,12 +10,13 @@ from dataclasses import dataclass
 from decimal import Decimal
 from importlib import import_module
 from pathlib import Path
-from typing import Any, Iterable, Iterator, Mapping
+from typing import Any, Iterable, Iterator, Mapping, Sequence
 
 from ...errors import AppError
 from ...msat import btc_to_msat, dec, msat_to_btc
 from ...tax_policy import build_tax_policy
 from ...transfers import apply_manual_pairs, detect_intra_transfers
+from .. import pricing
 from ..austrian import (
     AT_SWAP_QUARANTINE_REASON,
     REGIME_NEU,
@@ -390,6 +391,28 @@ def _rows_by_transaction_id(normalized_inputs: NormalizedTaxAssetInputs) -> dict
     return rows_by_id
 
 
+def _row_get(row: Mapping[str, Any] | None, key: str, default: Any = None) -> Any:
+    if row is None:
+        return default
+    if hasattr(row, "keys") and key not in row.keys():
+        return default
+    if hasattr(row, "get"):
+        return row.get(key, default)
+    return row[key]
+
+
+def _journal_transaction_id(row: Mapping[str, Any] | None, fallback: str) -> str:
+    return str(_row_get(row, "journal_transaction_id", fallback))
+
+
+def _transaction_row_sort_key(row: Mapping[str, Any]) -> tuple[str, str, str]:
+    return (
+        str(_row_get(row, "occurred_at", "")),
+        str(_row_get(row, "created_at", "")),
+        str(_row_get(row, "id", "")),
+    )
+
+
 def _prepare_rp2_asset_input(profile, normalized_inputs: NormalizedTaxAssetInputs, configuration) -> _RP2PreparedInput:
     """Build RP2 ``InputData`` for one asset without running ``compute_tax``.
 
@@ -723,7 +746,7 @@ def _append_rp2_journal_entries(entries, computed_data, wallet_refs_by_label, pr
                 "id": str(uuid.uuid4()),
                 "workspace_id": profile["workspace_id"],
                 "profile_id": profile["id"],
-                "transaction_id": transaction.unique_id,
+                "transaction_id": _journal_transaction_id(source_row, transaction.unique_id),
                 "wallet_id": wallet["id"],
                 "account_id": wallet["wallet_account_id"],
                 "occurred_at": source_row["occurred_at"] if source_row else transaction.timestamp.isoformat(),
@@ -770,7 +793,7 @@ def _append_rp2_journal_entries(entries, computed_data, wallet_refs_by_label, pr
         event = realized_by_event.setdefault(
             event_key,
             {
-                "transaction_id": taxable_event.unique_id,
+                "transaction_id": _journal_transaction_id(row_by_id.get(taxable_event.unique_id), taxable_event.unique_id),
                 "wallet": wallet,
                 "occurred_at": row_by_id[taxable_event.unique_id]["occurred_at"] if taxable_event.unique_id in row_by_id else taxable_event.timestamp.isoformat(),
                 "entry_type": entry_type,
@@ -1060,7 +1083,24 @@ def _select_at_cross_asset_swap_links(
         in_event = events_by_id.get(in_id)
         if out_event is None or in_event is None:
             reason_code = quarantine_reasons.get(out_id) or quarantine_reasons.get(in_id) or "swap_leg_unavailable"
-            quarantines.extend(_swap_pair_quarantines(profile, pair, rows_by_id, reason_code))
+            pair_id = str(pair.get("pair_id") or f"{out_id}->{in_id}")
+            if pair_id.startswith("direct-payout:"):
+                if out_id not in quarantine_reasons:
+                    quarantines.append(
+                        build_tax_quarantine(
+                            profile,
+                            rows_by_id[out_id],
+                            AT_SWAP_QUARANTINE_REASON,
+                            {
+                                "outgoing_asset": pair.get("out_asset") or rows_by_id[out_id]["asset"],
+                                "incoming_asset": pair.get("in_asset") or rows_by_id[in_id]["asset"],
+                                "at_swap_link": pair_id,
+                                "reason_code": reason_code,
+                            },
+                        )
+                    )
+            else:
+                quarantines.extend(_swap_pair_quarantines(profile, pair, rows_by_id, reason_code))
             quarantined_row_ids.update({out_id, in_id})
             continue
 
@@ -1072,6 +1112,223 @@ def _select_at_cross_asset_swap_links(
         swap_link_by_row_id[in_id] = pair_id
 
     return swap_link_by_row_id, quarantined_row_ids, quarantines
+
+
+def _fiat_value_from_row(row: Mapping[str, Any]) -> Decimal | None:
+    value = _row_get(row, "fiat_value_exact")
+    if value is not None:
+        return dec(value)
+    value = _row_get(row, "fiat_value")
+    if value is not None:
+        return dec(value)
+    return None
+
+
+def _direct_payout_value(record: Mapping[str, Any], out_row: Mapping[str, Any]) -> Decimal | None:
+    value = _row_get(record, "payout_fiat_value")
+    if value is not None:
+        return dec(value)
+    return _fiat_value_from_row(out_row)
+
+
+def _direct_payout_proceeds_row(
+    record: Mapping[str, Any],
+    out_row: Mapping[str, Any],
+) -> Mapping[str, Any]:
+    """Apply reviewed external payout proceeds to the taxable source row.
+
+    Direct payout reviews are not Austrian-only. The Austrian-only part is the
+    cross-asset carrying-value synthesis below; ordinary taxable direct payouts
+    still need the reviewed payout value to drive disposal proceeds.
+    """
+
+    payout_value = _row_get(record, "payout_fiat_value")
+    if payout_value in (None, ""):
+        return out_row
+    payout_value = dec(payout_value)
+    amount = msat_to_btc(int(out_row["amount"] or 0))
+    if amount <= 0 or payout_value <= 0:
+        return out_row
+    reviewed = dict(out_row)
+    payout_rate = payout_value / amount
+    reviewed.update(
+        {
+            "fiat_rate": float(payout_rate),
+            "fiat_value": float(payout_value),
+            "fiat_rate_exact": str(payout_rate),
+            "fiat_value_exact": str(payout_value),
+            "pricing_source_kind": pricing.SOURCE_MANUAL_OVERRIDE,
+            "pricing_quality": pricing.QUALITY_EXACT,
+            "note": _row_get(record, "notes") or _row_get(out_row, "note"),
+        }
+    )
+    return reviewed
+
+
+def _direct_payout_audit(record: Mapping[str, Any], out_row: Mapping[str, Any]) -> dict[str, Any]:
+    payout_amount_msat = int(record["payout_amount"] or 0)
+    return {
+        "payout_id": str(record["id"]),
+        "kind": record["kind"],
+        "policy": record["policy"],
+        "out_id": str(record["out_transaction_id"]),
+        "out_asset": out_row["asset"],
+        "out_amount_msat": int(out_row["amount"] or 0),
+        "payout_asset": record["payout_asset"],
+        "payout_amount_msat": payout_amount_msat,
+        "payout_occurred_at": record["payout_occurred_at"] or out_row["occurred_at"],
+        "payout_external_id": record["payout_external_id"],
+        "counterparty": record["counterparty"],
+        "swap_fee_msat": int(record["swap_fee_msat"] or 0),
+        "swap_fee_kind": record["swap_fee_kind"],
+    }
+
+
+def _direct_payout_synthetic_rows(
+    profile: Mapping[str, Any],
+    rows: Sequence[Mapping[str, Any]],
+    direct_payout_records: Sequence[Mapping[str, Any]],
+) -> tuple[
+    list[Mapping[str, Any]],
+    list[dict[str, Any]],
+    list[dict[str, Any]],
+    list[dict[str, Any]],
+    set[str],
+]:
+    """Return engine-only target legs for direct swap payouts.
+
+    Cross-asset Austrian carrying-value payouts need two facts in RP2: a
+    neutral swap into the payout asset, then an immediate external disposal.
+    The synthetic rows are never persisted as transactions; journal entries
+    produced from them point back to the real source row via
+    ``journal_transaction_id``.
+    """
+
+    if not direct_payout_records:
+        return list(rows), [], [], [], set()
+
+    tax_country = _profile_str(profile, "tax_country").lower()
+    rows_by_id = {str(row["id"]): row for row in rows}
+    rows_for_engine: list[Mapping[str, Any]] = list(rows)
+    row_overrides: dict[str, Mapping[str, Any]] = {}
+    cross_asset_pairs: list[dict[str, Any]] = []
+    direct_payouts: list[dict[str, Any]] = []
+    quarantines: list[dict[str, Any]] = []
+    blocked_row_ids: set[str] = set()
+
+    for record in direct_payout_records:
+        out_id = str(record["out_transaction_id"])
+        out_row = rows_by_id.get(out_id)
+        if out_row is None:
+            continue
+        audit = _direct_payout_audit(record, out_row)
+        direct_payouts.append(audit)
+        payout_asset = str(record["payout_asset"])
+        is_cross_asset_carry = (
+            tax_country == "at"
+            and record["policy"] == "carrying-value"
+            and out_row["asset"] != payout_asset
+        )
+        if not is_cross_asset_carry:
+            row_overrides[out_id] = _direct_payout_proceeds_row(record, out_row)
+            continue
+
+        payout_amount_msat = int(record["payout_amount"] or 0)
+        payout_amount = msat_to_btc(payout_amount_msat)
+        payout_value = _direct_payout_value(record, out_row)
+        if (
+            payout_amount is None
+            or payout_amount <= 0
+            or payout_value is None
+            or payout_value <= 0
+        ):
+            quarantines.append(
+                build_tax_quarantine(
+                    profile,
+                    out_row,
+                    AT_SWAP_QUARANTINE_REASON,
+                    {
+                        "reason_code": "missing_payout_price",
+                        "payout_id": record["id"],
+                        "payout_asset": payout_asset,
+                    },
+                )
+            )
+            blocked_row_ids.add(out_id)
+            continue
+
+        payout_rate = payout_value / payout_amount
+        payout_at = record["payout_occurred_at"] or out_row["occurred_at"]
+        pair_id = f"direct-payout:{record['id']}"
+        in_id = f"{pair_id}:in"
+        out_virtual_id = f"{pair_id}:out"
+        description = (
+            record["notes"]
+            or f"Direct swap payout to {record['counterparty'] or 'external recipient'}"
+        )
+        common = {
+            "workspace_id": profile["workspace_id"],
+            "profile_id": profile["id"],
+            "wallet_id": out_row["wallet_id"],
+            "wallet_label": _row_get(out_row, "wallet_label"),
+            "wallet_account_id": _row_get(out_row, "wallet_account_id"),
+            "account_code": _row_get(out_row, "account_code"),
+            "account_label": _row_get(out_row, "account_label"),
+            "asset": payout_asset,
+            "amount": payout_amount_msat,
+            "fee": 0,
+            "fiat_rate": float(payout_rate),
+            "fiat_value": float(payout_value),
+            "fiat_rate_exact": str(payout_rate),
+            "fiat_value_exact": str(payout_value),
+            "pricing_source_kind": _row_get(out_row, "pricing_source_kind"),
+            "pricing_quality": _row_get(out_row, "pricing_quality"),
+            "created_at": record["created_at"],
+            "journal_transaction_id": out_id,
+            "note": description,
+        }
+        rows_for_engine.append(
+            {
+                **common,
+                "id": in_id,
+                "external_id": record["payout_external_id"],
+                "occurred_at": payout_at,
+                "direction": "inbound",
+                "kind": "direct_swap_payout_in",
+                "description": f"{description} (swap settlement)",
+            }
+        )
+        rows_for_engine.append(
+            {
+                **common,
+                "id": out_virtual_id,
+                "external_id": record["payout_external_id"],
+                "occurred_at": payout_at,
+                "direction": "outbound",
+                "kind": "sell",
+                "description": f"{description} (external payout)",
+            }
+        )
+        cross_asset_pairs.append(
+            {
+                "pair_id": pair_id,
+                "kind": record["kind"],
+                "policy": record["policy"],
+                "out_id": out_id,
+                "in_id": in_id,
+                "out_asset": out_row["asset"],
+                "in_asset": payout_asset,
+            }
+        )
+
+    if row_overrides:
+        rows_for_engine = [
+            row_overrides.get(str(row["id"]), row)
+            for row in rows_for_engine
+        ]
+    rows_for_engine = sorted(rows_for_engine, key=_transaction_row_sort_key)
+
+    return rows_for_engine, cross_asset_pairs, direct_payouts, quarantines, blocked_row_ids
 
 
 class GenericRP2TaxEngine:
@@ -1087,32 +1344,47 @@ class GenericRP2TaxEngine:
                 quarantines=[],
                 intra_audit=[],
                 cross_asset_pairs=[],
+                direct_swap_payouts=[],
                 tax_summary=[],
                 account_holdings={},
                 wallet_holdings={},
             )
 
-        wallet_labels = {row["wallet_label"] for row in inputs.rows}
-        assets = {row["asset"] for row in inputs.rows}
+        (
+            rows_for_engine,
+            payout_pairs,
+            direct_payouts,
+            payout_quarantines,
+            blocked_payout_row_ids,
+        ) = _direct_payout_synthetic_rows(
+            self.profile,
+            inputs.rows,
+            inputs.direct_payout_records,
+        )
+        wallet_labels = {row["wallet_label"] for row in rows_for_engine}
+        assets = {row["asset"] for row in rows_for_engine}
         entries: list[dict[str, Any]] = []
-        quarantines: list[dict[str, Any]] = []
+        quarantines: list[dict[str, Any]] = list(payout_quarantines)
         intra_audit_all: list[dict[str, Any]] = []
         account_holdings = defaultdict(lambda: {"quantity": Decimal("0"), "cost_basis": Decimal("0")})
         wallet_holdings = defaultdict(lambda: {"quantity": Decimal("0"), "cost_basis": Decimal("0")})
-        cross_asset_pairs: list[dict[str, Any]] = []
+        engine_cross_asset_pairs: list[dict[str, Any]] = list(payout_pairs)
+        manual_cross_asset_pairs_all: list[dict[str, Any]] = []
         tax_summary_all: list[dict[str, Any]] = []
         with _rp2_configuration(self.profile, wallet_labels, assets) as configuration:
             wallet_refs_by_label = {
                 ref["label"]: ref for ref in inputs.wallet_refs_by_id.values()
             }
-            auto_pairs, _ = detect_intra_transfers(inputs.rows)
-            all_pairs, cross_asset_pairs = apply_manual_pairs(
-                inputs.rows,
+            auto_pairs, _ = detect_intra_transfers(rows_for_engine)
+            all_pairs, manual_cross_asset_pairs = apply_manual_pairs(
+                rows_for_engine,
                 auto_pairs,
                 inputs.manual_pair_records,
             )
+            manual_cross_asset_pairs_all = manual_cross_asset_pairs
+            engine_cross_asset_pairs.extend(manual_cross_asset_pairs)
             rows_by_asset = defaultdict(list)
-            for row in inputs.rows:
+            for row in rows_for_engine:
                 rows_by_asset[row["asset"]].append(row)
             pairs_by_asset = defaultdict(list)
             for pair in all_pairs:
@@ -1127,15 +1399,28 @@ class GenericRP2TaxEngine:
                 inputs.wallet_refs_by_id,
                 pairs_by_asset,
                 configuration,
+                excluded_row_ids=blocked_payout_row_ids,
             )
             swap_link_by_row_id, quarantined_row_ids, swap_quarantines = _select_at_cross_asset_swap_links(
                 self.profile,
-                cross_asset_pairs,
-                inputs.rows,
+                engine_cross_asset_pairs,
+                rows_for_engine,
                 prepared_by_asset,
             )
             quarantines.extend(swap_quarantines)
-            if swap_link_by_row_id or quarantined_row_ids:
+            payout_synthetic_ids = {
+                synthetic_id
+                for pair in payout_pairs
+                for synthetic_id in (str(pair["in_id"]), f"{pair['pair_id']}:out")
+            }
+            selected_payout_synthetic_ids = {
+                synthetic_id
+                for pair in payout_pairs
+                if str(pair["in_id"]) in swap_link_by_row_id
+                for synthetic_id in (str(pair["in_id"]), f"{pair['pair_id']}:out")
+            }
+            excluded_row_ids = blocked_payout_row_ids | quarantined_row_ids | (payout_synthetic_ids - selected_payout_synthetic_ids)
+            if swap_link_by_row_id or excluded_row_ids:
                 prepared_by_asset = _prepare_assets(
                     self.profile,
                     rows_by_asset,
@@ -1143,7 +1428,7 @@ class GenericRP2TaxEngine:
                     pairs_by_asset,
                     configuration,
                     at_swap_link_by_row_id=swap_link_by_row_id,
-                    excluded_row_ids=quarantined_row_ids,
+                    excluded_row_ids=excluded_row_ids,
                 )
 
             # Phase 2: cross-asset validation via the country hook. Catches invariants
@@ -1192,7 +1477,8 @@ class GenericRP2TaxEngine:
             entries=entries,
             quarantines=quarantines,
             intra_audit=intra_audit_all,
-            cross_asset_pairs=cross_asset_pairs,
+            cross_asset_pairs=manual_cross_asset_pairs_all,
+            direct_swap_payouts=direct_payouts,
             tax_summary=tax_summary_all,
             account_holdings=dict(account_holdings),
             wallet_holdings=dict(wallet_holdings),

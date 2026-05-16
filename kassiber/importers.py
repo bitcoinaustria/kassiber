@@ -366,19 +366,23 @@ _RIVER_REQUIRED_COLUMNS = (
 )
 
 
+def _normalized_column_key(value):
+    return " ".join(str(value).replace("\xa0", " ").strip().split()).casefold()
+
+
 def _casefold_record(record):
     output = {}
     for key, value in record.items():
         if key is None:
             continue
-        output[str(key).strip().casefold()] = value
+        output[_normalized_column_key(key)] = value
     return output
 
 
 def _get_cell(record, *names):
     folded = _casefold_record(record)
     for name in names:
-        value = folded.get(name.casefold())
+        value = folded.get(_normalized_column_key(name))
         if value not in (None, ""):
             return value
     return None
@@ -528,9 +532,9 @@ def load_bullbitcoin_csv_records(file_path):
         rows = list(csv.DictReader(handle))
     if not rows:
         return []
-    header = {str(column).strip().casefold() for column in rows[0].keys()}
+    header = {_normalized_column_key(column) for column in rows[0].keys()}
     missing = [
-        column for column in _BULLBITCOIN_REQUIRED_COLUMNS if column.casefold() not in header
+        column for column in _BULLBITCOIN_REQUIRED_COLUMNS if _normalized_column_key(column) not in header
     ]
     if missing:
         raise AppError("Bull Bitcoin CSV is missing required columns: " + ", ".join(missing))
