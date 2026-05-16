@@ -4859,7 +4859,7 @@ const Dashboard5 = ({
         title: "Readiness",
         description: "Sync, journal, and review status for this book.",
         minW: 6,
-        minH: 2,
+        minH: 1,
         defaultW: 12,
         defaultH: 2,
         render: () => (
@@ -4878,7 +4878,7 @@ const Dashboard5 = ({
         title: "Key Metrics",
         description: "Portfolio, review, and activity counters.",
         minW: 6,
-        minH: 2,
+        minH: 1,
         defaultW: 12,
         defaultH: 2,
         render: () => (
@@ -4894,7 +4894,7 @@ const Dashboard5 = ({
         title: "Treasury Timeline",
         description: "Balance, cost basis, price, and activity markers.",
         minW: 6,
-        minH: 4,
+        minH: 3,
         defaultW: 8,
         defaultH: 6,
         render: () => (
@@ -4910,7 +4910,7 @@ const Dashboard5 = ({
         title: "Recent Transactions",
         description: "Latest transactions with review and flow filters.",
         minW: 5,
-        minH: 4,
+        minH: 3,
         defaultW: 8,
         defaultH: 5,
         render: () => (
@@ -4928,7 +4928,7 @@ const Dashboard5 = ({
         title: "Holdings Breakdown",
         description: "Source concentration and balance movement drivers.",
         minW: 3,
-        minH: 4,
+        minH: 2,
         defaultW: 4,
         defaultH: 5,
         render: () => (
@@ -4944,7 +4944,7 @@ const Dashboard5 = ({
         title: "Book Health",
         description: "Actionable sync, journal, and report readiness checks.",
         minW: 3,
-        minH: 3,
+        minH: 2,
         defaultW: 4,
         defaultH: 4,
         render: () => (

@@ -1,6 +1,6 @@
 export const WORKSPACE_LAYOUT_VERSION = 1;
 export const WORKSPACE_LAYOUT_COLUMNS = 12;
-export const WORKSPACE_LAYOUT_ROW_HEIGHT = 96;
+export const WORKSPACE_LAYOUT_ROW_HEIGHT = 72;
 
 export type WorkspaceResizeEdge =
   | "n"
@@ -103,7 +103,7 @@ export function normalizeWorkspaceLayout(
   return resolveWorkspaceCollisions({
     version: WORKSPACE_LAYOUT_VERSION,
     columns: layout.columns || WORKSPACE_LAYOUT_COLUMNS,
-    rowHeight: layout.rowHeight || WORKSPACE_LAYOUT_ROW_HEIGHT,
+    rowHeight: WORKSPACE_LAYOUT_ROW_HEIGHT,
     items,
   });
 }

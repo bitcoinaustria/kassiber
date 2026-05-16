@@ -1,9 +1,10 @@
 import * as React from "react";
 import {
+  Check,
   GripHorizontal,
   Plus,
   RotateCcw,
-  SquareDashedMousePointer,
+  SlidersHorizontal,
   X,
 } from "lucide-react";
 
@@ -72,6 +73,11 @@ type WorkspacePointerOperation =
       rowHeight: number;
     };
 
+interface WorkspacePreview {
+  item: WorkspaceLayoutItem;
+  layout: WorkspacePageLayout;
+}
+
 export function PageWorkspace({
   pageId,
   title,
@@ -93,6 +99,8 @@ export function PageWorkspace({
   const clearPageWorkspaceLayout = useUiStore(
     (state) => state.clearPageWorkspaceLayout,
   );
+  const [editing, setEditing] = React.useState(false);
+  const [preview, setPreview] = React.useState<WorkspacePreview | null>(null);
   const containerRef = React.useRef<HTMLDivElement | null>(null);
   const operationRef = React.useRef<WorkspacePointerOperation | null>(null);
   const widgetById = React.useMemo(
@@ -107,6 +115,7 @@ export function PageWorkspace({
     () => normalizeWorkspaceLayout(storedLayout ?? defaultLayout, widgets),
     [defaultLayout, storedLayout, widgets],
   );
+  const previewLayoutRef = React.useRef<WorkspacePageLayout | null>(null);
   const activeWidgetIds = new Set(layout.items.map((item) => item.widgetId));
 
   const persistLayout = React.useCallback(
@@ -124,12 +133,23 @@ export function PageWorkspace({
     };
   }, []);
 
+  const updatePreview = React.useCallback(
+    (next: WorkspacePageLayout, itemId: string) => {
+      const item = next.items.find((candidate) => candidate.id === itemId);
+      if (!item) return;
+      previewLayoutRef.current = next;
+      setPreview({ item, layout: next });
+    },
+    [],
+  );
+
   const startMove = (
     event: React.PointerEvent<HTMLElement>,
     item: WorkspaceLayoutItem,
   ) => {
-    if (event.button !== 0) return;
+    if (!editing || event.button !== 0) return;
     const { cellWidth, rowHeight } = measureGrid();
+    const startLayout = focusWorkspaceItem(layout, item.id);
     operationRef.current = {
       type: "move",
       pointerId: event.pointerId,
@@ -137,12 +157,13 @@ export function PageWorkspace({
       startClientX: event.clientX,
       startClientY: event.clientY,
       startItem: item,
-      startLayout: focusWorkspaceItem(layout, item.id),
+      startLayout,
       cellWidth,
       rowHeight,
     };
+    previewLayoutRef.current = startLayout;
+    updatePreview(startLayout, item.id);
     event.currentTarget.setPointerCapture(event.pointerId);
-    persistLayout(focusWorkspaceItem(layout, item.id));
   };
 
   const startResize = (
@@ -150,9 +171,10 @@ export function PageWorkspace({
     item: WorkspaceLayoutItem,
     edge: WorkspaceResizeEdge,
   ) => {
-    if (event.button !== 0) return;
+    if (!editing || event.button !== 0) return;
     event.stopPropagation();
     const { cellWidth, rowHeight } = measureGrid();
+    const startLayout = focusWorkspaceItem(layout, item.id);
     operationRef.current = {
       type: "resize",
       pointerId: event.pointerId,
@@ -160,12 +182,13 @@ export function PageWorkspace({
       edge,
       startClientX: event.clientX,
       startClientY: event.clientY,
-      startLayout: focusWorkspaceItem(layout, item.id),
+      startLayout,
       cellWidth,
       rowHeight,
     };
+    previewLayoutRef.current = startLayout;
+    updatePreview(startLayout, item.id);
     event.currentTarget.setPointerCapture(event.pointerId);
-    persistLayout(focusWorkspaceItem(layout, item.id));
   };
 
   const updatePointerOperation = (event: React.PointerEvent<HTMLElement>) => {
@@ -177,34 +200,35 @@ export function PageWorkspace({
     const deltaY = Math.round(
       (event.clientY - operation.startClientY) / operation.rowHeight,
     );
-    if (operation.type === "move") {
-      persistLayout(
-        moveWorkspaceItem(
-          operation.startLayout,
-          operation.itemId,
-          operation.startItem.x + deltaX,
-          operation.startItem.y + deltaY,
-          widgets,
-        ),
-      );
-      return;
-    }
-    persistLayout(
-      resizeWorkspaceItem(
-        operation.startLayout,
-        operation.itemId,
-        operation.edge,
-        deltaX,
-        deltaY,
-        widgets,
-      ),
-    );
+    const next =
+      operation.type === "move"
+        ? moveWorkspaceItem(
+            operation.startLayout,
+            operation.itemId,
+            operation.startItem.x + deltaX,
+            operation.startItem.y + deltaY,
+            widgets,
+          )
+        : resizeWorkspaceItem(
+            operation.startLayout,
+            operation.itemId,
+            operation.edge,
+            deltaX,
+            deltaY,
+            widgets,
+          );
+    updatePreview(next, operation.itemId);
   };
 
   const finishPointerOperation = (event: React.PointerEvent<HTMLElement>) => {
     const operation = operationRef.current;
     if (!operation || operation.pointerId !== event.pointerId) return;
     operationRef.current = null;
+    if (previewLayoutRef.current) {
+      persistLayout(previewLayoutRef.current);
+    }
+    previewLayoutRef.current = null;
+    setPreview(null);
     if (event.currentTarget.hasPointerCapture(event.pointerId)) {
       event.currentTarget.releasePointerCapture(event.pointerId);
     }
@@ -220,57 +244,94 @@ export function PageWorkspace({
 
   const resetLayout = () => {
     clearPageWorkspaceLayout(layoutKey);
+    setPreview(null);
+    previewLayoutRef.current = null;
   };
 
-  const rows = workspaceLayoutHeight(layout);
+  const rows = Math.max(
+    workspaceLayoutHeight(layout),
+    preview ? workspaceLayoutHeight(preview.layout) : 0,
+  );
   const availableWidgets = widgets.filter((widget) => !activeWidgetIds.has(widget.id));
 
   return (
     <section className={cn("space-y-3", className)}>
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex items-center gap-2 text-sm text-muted-foreground">
-          <SquareDashedMousePointer className="size-4" aria-hidden="true" />
           <span className="font-medium text-foreground">{title}</span>
+          {editing && <span>Editing layout</span>}
         </div>
         <div className="flex items-center gap-2">
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="outline" size="sm">
-                <Plus className="size-4" aria-hidden="true" />
-                Add widget
+          {editing && (
+            <>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="outline" size="sm">
+                    <Plus className="size-4" aria-hidden="true" />
+                    Add widget
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-72">
+                  <DropdownMenuLabel>Widget palette</DropdownMenuLabel>
+                  <DropdownMenuSeparator />
+                  {availableWidgets.length ? (
+                    availableWidgets.map((widget) => (
+                      <DropdownMenuItem
+                        key={widget.id}
+                        className="flex-col items-start gap-0.5"
+                        onSelect={() => addWidget(widget)}
+                      >
+                        <span className="font-medium">{widget.title}</span>
+                        <span className="text-xs text-muted-foreground">
+                          {widget.description}
+                        </span>
+                      </DropdownMenuItem>
+                    ))
+                  ) : (
+                    <DropdownMenuItem disabled>
+                      All widgets are on the page
+                    </DropdownMenuItem>
+                  )}
+                </DropdownMenuContent>
+              </DropdownMenu>
+              <Button variant="outline" size="sm" onClick={resetLayout}>
+                <RotateCcw className="size-4" aria-hidden="true" />
+                Reset
               </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-72">
-              <DropdownMenuLabel>Widget palette</DropdownMenuLabel>
-              <DropdownMenuSeparator />
-              {availableWidgets.length ? (
-                availableWidgets.map((widget) => (
-                  <DropdownMenuItem
-                    key={widget.id}
-                    className="flex-col items-start gap-0.5"
-                    onSelect={() => addWidget(widget)}
-                  >
-                    <span className="font-medium">{widget.title}</span>
-                    <span className="text-xs text-muted-foreground">
-                      {widget.description}
-                    </span>
-                  </DropdownMenuItem>
-                ))
-              ) : (
-                <DropdownMenuItem disabled>All widgets are on the page</DropdownMenuItem>
-              )}
-            </DropdownMenuContent>
-          </DropdownMenu>
-          <Button variant="outline" size="sm" onClick={resetLayout}>
-            <RotateCcw className="size-4" aria-hidden="true" />
-            Reset
+            </>
+          )}
+          <Button
+            variant={editing ? "default" : "outline"}
+            size="sm"
+            onClick={() => {
+              setEditing((value) => !value);
+              setPreview(null);
+              previewLayoutRef.current = null;
+              operationRef.current = null;
+            }}
+          >
+            {editing ? (
+              <Check className="size-4" aria-hidden="true" />
+            ) : (
+              <SlidersHorizontal className="size-4" aria-hidden="true" />
+            )}
+            {editing ? "Done" : "Edit layout"}
           </Button>
         </div>
       </div>
       <div
         ref={containerRef}
-        className="relative rounded-lg border border-dashed border-border/80 bg-[linear-gradient(to_right,var(--border)_1px,transparent_1px),linear-gradient(to_bottom,var(--border)_1px,transparent_1px)] bg-[length:8.333%_96px]"
-        style={{ height: rows * WORKSPACE_LAYOUT_ROW_HEIGHT }}
+        className={cn(
+          "relative",
+          editing &&
+            "kb-workspace-edit rounded-lg border border-dashed border-border/80 bg-[linear-gradient(to_right,var(--border)_1px,transparent_1px),linear-gradient(to_bottom,var(--border)_1px,transparent_1px)]",
+        )}
+        style={{
+          height: rows * WORKSPACE_LAYOUT_ROW_HEIGHT,
+          backgroundSize: editing
+            ? `${100 / WORKSPACE_LAYOUT_COLUMNS}% ${WORKSPACE_LAYOUT_ROW_HEIGHT}px`
+            : undefined,
+        }}
         data-testid={`${pageId}-page-workspace`}
       >
         {layout.items.map((item) => {
@@ -279,6 +340,7 @@ export function PageWorkspace({
           return (
             <WorkspaceItemFrame
               key={item.id}
+              editing={editing}
               item={item}
               title={widget.title}
               placeholder={widget.placeholder}
@@ -292,12 +354,14 @@ export function PageWorkspace({
             </WorkspaceItemFrame>
           );
         })}
+        {editing && preview && <WorkspacePreviewFrame item={preview.item} />}
       </div>
     </section>
   );
 }
 
 function WorkspaceItemFrame({
+  editing,
   item,
   title,
   placeholder,
@@ -308,6 +372,7 @@ function WorkspaceItemFrame({
   onResizeStart,
   onRemove,
 }: {
+  editing: boolean;
   item: WorkspaceLayoutItem;
   title: string;
   placeholder?: boolean;
@@ -325,11 +390,9 @@ function WorkspaceItemFrame({
   ) => void;
   onRemove: (itemId: string) => void;
 }) {
-  const edgeClassName =
-    "absolute z-20 bg-transparent transition-colors hover:bg-primary/10";
   return (
     <div
-      className="absolute p-1"
+      className={cn("absolute p-1", editing && "kb-workspace-item")}
       style={{
         left: `${(item.x / WORKSPACE_LAYOUT_COLUMNS) * 100}%`,
         top: item.y * WORKSPACE_LAYOUT_ROW_HEIGHT,
@@ -340,83 +403,143 @@ function WorkspaceItemFrame({
     >
       <section
         className={cn(
-          "group relative flex h-full min-h-0 flex-col overflow-hidden rounded-lg border bg-background shadow-sm transition-shadow focus-within:ring-2 focus-within:ring-ring hover:shadow-md",
-          placeholder && "border-dashed bg-muted/30",
+          "relative h-full min-h-0",
+          editing &&
+            "rounded-lg ring-1 ring-border/70 ring-offset-1 ring-offset-background",
+          placeholder && editing && "ring-dashed",
         )}
         aria-label={title}
       >
-        <div
-          className="flex h-9 shrink-0 cursor-grab touch-none select-none items-center justify-between gap-2 border-b bg-muted/45 px-2 text-xs text-muted-foreground active:cursor-grabbing"
-          onPointerDown={(event) => onMoveStart(event, item)}
-          onPointerMove={onPointerMove}
-          onPointerUp={onPointerUp}
-          onPointerCancel={onPointerUp}
-        >
-          <span className="flex min-w-0 items-center gap-1.5">
-            <GripHorizontal className="size-4 shrink-0" aria-hidden="true" />
-            <span className="truncate font-medium text-foreground">{title}</span>
-          </span>
-          <Button
-            variant="ghost"
-            size="icon"
-            className="size-7"
-            title={`Remove ${title}`}
-            onPointerDown={(event) => event.stopPropagation()}
-            onClick={() => onRemove(item.id)}
-          >
-            <X className="size-3.5" aria-hidden="true" />
-            <span className="sr-only">Remove {title}</span>
-          </Button>
-        </div>
-        <div className="min-h-0 flex-1 overflow-auto p-1 [&>*]:min-h-full">
+        <div className="h-full min-h-0 overflow-auto [&>*]:min-h-full">
           {children}
         </div>
-        <button
-          type="button"
-          aria-label={`Resize ${title} from top`}
-          className={cn(edgeClassName, "left-4 right-4 top-0 h-1 cursor-ns-resize")}
-          onPointerDown={(event) => onResizeStart(event, item, "n")}
-          onPointerMove={onPointerMove}
-          onPointerUp={onPointerUp}
-          onPointerCancel={onPointerUp}
-        />
-        <button
-          type="button"
-          aria-label={`Resize ${title} from right`}
-          className={cn(edgeClassName, "bottom-4 right-0 top-4 w-1 cursor-ew-resize")}
-          onPointerDown={(event) => onResizeStart(event, item, "e")}
-          onPointerMove={onPointerMove}
-          onPointerUp={onPointerUp}
-          onPointerCancel={onPointerUp}
-        />
-        <button
-          type="button"
-          aria-label={`Resize ${title} from bottom`}
-          className={cn(edgeClassName, "bottom-0 left-4 right-4 h-1 cursor-ns-resize")}
-          onPointerDown={(event) => onResizeStart(event, item, "s")}
-          onPointerMove={onPointerMove}
-          onPointerUp={onPointerUp}
-          onPointerCancel={onPointerUp}
-        />
-        <button
-          type="button"
-          aria-label={`Resize ${title} from left`}
-          className={cn(edgeClassName, "bottom-4 left-0 top-4 w-1 cursor-ew-resize")}
-          onPointerDown={(event) => onResizeStart(event, item, "w")}
-          onPointerMove={onPointerMove}
-          onPointerUp={onPointerUp}
-          onPointerCancel={onPointerUp}
-        />
-        <button
-          type="button"
-          aria-label={`Resize ${title} from corner`}
-          className="absolute bottom-1 right-1 z-30 size-3 cursor-nwse-resize rounded-sm border border-border bg-background shadow-sm"
-          onPointerDown={(event) => onResizeStart(event, item, "se")}
-          onPointerMove={onPointerMove}
-          onPointerUp={onPointerUp}
-          onPointerCancel={onPointerUp}
-        />
+        {editing && (
+          <>
+            <div
+              className="absolute left-2 top-2 z-30 flex max-w-[calc(100%-3rem)] cursor-grab touch-none select-none items-center gap-1.5 rounded-md border bg-background/55 px-2 py-1 text-xs text-muted-foreground shadow-sm backdrop-blur active:cursor-grabbing"
+              onPointerDown={(event) => onMoveStart(event, item)}
+              onPointerMove={onPointerMove}
+              onPointerUp={onPointerUp}
+              onPointerCancel={onPointerUp}
+            >
+              <GripHorizontal className="size-3.5 shrink-0" aria-hidden="true" />
+              <span className="truncate">{title}</span>
+            </div>
+            <Button
+              variant="secondary"
+              size="icon"
+              className="absolute right-2 top-2 z-30 size-7 border bg-background/55 shadow-sm backdrop-blur"
+              title={`Remove ${title}`}
+              onPointerDown={(event) => event.stopPropagation()}
+              onClick={() => onRemove(item.id)}
+            >
+              <X className="size-3.5" aria-hidden="true" />
+              <span className="sr-only">Remove {title}</span>
+            </Button>
+            <ResizeHandle
+              edge="n"
+              title={title}
+              item={item}
+              onStart={onResizeStart}
+              onMove={onPointerMove}
+              onEnd={onPointerUp}
+            />
+            <ResizeHandle
+              edge="e"
+              title={title}
+              item={item}
+              onStart={onResizeStart}
+              onMove={onPointerMove}
+              onEnd={onPointerUp}
+            />
+            <ResizeHandle
+              edge="s"
+              title={title}
+              item={item}
+              onStart={onResizeStart}
+              onMove={onPointerMove}
+              onEnd={onPointerUp}
+            />
+            <ResizeHandle
+              edge="w"
+              title={title}
+              item={item}
+              onStart={onResizeStart}
+              onMove={onPointerMove}
+              onEnd={onPointerUp}
+            />
+            <ResizeHandle
+              edge="se"
+              title={title}
+              item={item}
+              onStart={onResizeStart}
+              onMove={onPointerMove}
+              onEnd={onPointerUp}
+            />
+          </>
+        )}
       </section>
+    </div>
+  );
+}
+
+function ResizeHandle({
+  edge,
+  title,
+  item,
+  onStart,
+  onMove,
+  onEnd,
+}: {
+  edge: WorkspaceResizeEdge;
+  title: string;
+  item: WorkspaceLayoutItem;
+  onStart: (
+    event: React.PointerEvent<HTMLElement>,
+    item: WorkspaceLayoutItem,
+    edge: WorkspaceResizeEdge,
+  ) => void;
+  onMove: (event: React.PointerEvent<HTMLElement>) => void;
+  onEnd: (event: React.PointerEvent<HTMLElement>) => void;
+}) {
+  const classes: Record<WorkspaceResizeEdge, string> = {
+    n: "left-4 right-4 top-0 h-2 cursor-ns-resize",
+    e: "bottom-4 right-0 top-4 w-2 cursor-ew-resize",
+    s: "bottom-0 left-4 right-4 h-2 cursor-ns-resize",
+    w: "bottom-4 left-0 top-4 w-2 cursor-ew-resize",
+    ne: "right-0 top-0 size-4 cursor-nesw-resize",
+    nw: "left-0 top-0 size-4 cursor-nwse-resize",
+    se: "bottom-0 right-0 size-5 cursor-nwse-resize",
+    sw: "bottom-0 left-0 size-4 cursor-nesw-resize",
+  };
+  return (
+    <button
+      type="button"
+      aria-label={`Resize ${title}`}
+      className={cn(
+        "absolute z-20 rounded-sm bg-background/5 transition-colors hover:bg-primary/20",
+        classes[edge],
+      )}
+      onPointerDown={(event) => onStart(event, item, edge)}
+      onPointerMove={onMove}
+      onPointerUp={onEnd}
+      onPointerCancel={onEnd}
+    />
+  );
+}
+
+function WorkspacePreviewFrame({ item }: { item: WorkspaceLayoutItem }) {
+  return (
+    <div
+      className="pointer-events-none absolute z-[999] p-1"
+      style={{
+        left: `${(item.x / WORKSPACE_LAYOUT_COLUMNS) * 100}%`,
+        top: item.y * WORKSPACE_LAYOUT_ROW_HEIGHT,
+        width: `${(item.w / WORKSPACE_LAYOUT_COLUMNS) * 100}%`,
+        height: item.h * WORKSPACE_LAYOUT_ROW_HEIGHT,
+      }}
+    >
+      <div className="h-full rounded-lg border-2 border-primary/70 bg-primary/10 shadow-[0_0_0_1px_rgb(255_255_255_/_0.35)_inset]" />
     </div>
   );
 }

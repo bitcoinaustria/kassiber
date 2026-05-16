@@ -76,7 +76,7 @@ describe("UI persistence", () => {
         "My Books:Tax:at:EUR::overview": {
           version: 1 as const,
           columns: 12,
-          rowHeight: 96,
+          rowHeight: 72,
           items: [
             {
               id: "chart",

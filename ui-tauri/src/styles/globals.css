@@ -147,6 +147,23 @@
   }
 }
 
+@keyframes kb-layout-wiggle {
+  0% {
+    transform: rotate(-0.18deg);
+  }
+  50% {
+    transform: rotate(0.18deg);
+  }
+  100% {
+    transform: rotate(-0.18deg);
+  }
+}
+
+.kb-workspace-edit .kb-workspace-item {
+  animation: kb-layout-wiggle 260ms ease-in-out infinite;
+  transform-origin: 50% 50%;
+}
+
 /*
  * High refresh rate / ProMotion support: WKWebView on macOS, WebView2 on
  * Windows, and webkit2gtk on Linux all sync web content to the display's
@@ -167,6 +184,10 @@
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
     scroll-behavior: auto !important;
+  }
+
+  .kb-workspace-edit .kb-workspace-item {
+    animation: none !important;
   }
 }
 
