@@ -485,6 +485,18 @@ export function SwapMatching() {
         .filter((c): c is SwapCandidate => Boolean(c)),
     [selected, candidatesByKey],
   );
+  const selectedCandidateCount = selectedCandidates.length;
+
+  useEffect(() => {
+    setSelected((prev) => {
+      if (prev.size === 0) return prev;
+      const next = new Set<string>();
+      for (const key of prev) {
+        if (candidatesByKey[key]) next.add(key);
+      }
+      return next.size === prev.size ? prev : next;
+    });
+  }, [candidatesByKey]);
 
   const toggleSelected = useCallback((key: string) =>
     setSelected((prev) => {
@@ -498,12 +510,13 @@ export function SwapMatching() {
     const eligible = candidates.filter(
       (c) => (clusterSizes[c.conflict_set_id] ?? 0) <= 1,
     );
-    if (selected.size === eligible.length && eligible.length > 0) {
-      setSelected(new Set());
-      return;
-    }
-    setSelected(new Set(eligible.map(candidateKey)));
-  }, [candidates, clusterSizes, selected.size]);
+    const eligibleKeys = eligible.map(candidateKey);
+    setSelected((prev) => {
+      const allEligibleSelected =
+        eligibleKeys.length > 0 && eligibleKeys.every((key) => prev.has(key));
+      return allEligibleSelected ? new Set() : new Set(eligibleKeys);
+    });
+  }, [candidates, clusterSizes]);
 
   const handlePair = useCallback(async (candidate: SwapCandidate) => {
     const key = candidateKey(candidate);
@@ -867,7 +880,7 @@ export function SwapMatching() {
             <div className="flex min-w-0 flex-wrap items-center gap-2">
               <label className="flex shrink-0 items-center gap-2">
                 <Checkbox
-                  checked={selected.size > 0}
+                  checked={selectedCandidateCount > 0}
                   onCheckedChange={handleSelectAll}
                 />
                 <span className="text-xs text-muted-foreground">
@@ -1031,7 +1044,7 @@ export function SwapMatching() {
             </div>
           ) : (
             <div className="overflow-x-auto border-t">
-              <Table className="w-[1320px] min-w-[1320px] table-fixed">
+              <Table className="min-w-[1320px] w-full table-fixed">
                 <TableHeader>
                   <TableRow className="bg-muted/50 hover:bg-muted/50">
                     <TableHead className="w-[42px]"></TableHead>
@@ -1146,10 +1159,10 @@ export function SwapMatching() {
             </div>
           )}
 
-          {selected.size > 0 ? (
+          {selectedCandidateCount > 0 ? (
             <div className="flex flex-wrap items-center gap-3 border-t bg-muted/25 px-3 py-3 text-sm sm:px-6">
               <span className="shrink-0 text-xs font-medium text-foreground">
-                {selected.size} selected
+                {selectedCandidateCount} selected
               </span>
               <label className="flex min-w-[16rem] items-center gap-2 text-xs text-muted-foreground">
                 Kind
