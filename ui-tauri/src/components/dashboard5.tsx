@@ -45,6 +45,7 @@ import { Button } from "@/components/ui/button";
 import { AddConnectionDialog } from "@/components/kb/AddConnectionDialog";
 import { Checkbox } from "@/components/ui/checkbox";
 import { CurrencyToggleText } from "@/components/kb/CurrencyToggleText";
+import { ScreenRefreshSkeleton } from "@/components/kb/ScreenSkeleton";
 import { type ChartConfig, ChartContainer } from "@/components/ui/chart";
 import {
   Dialog,
@@ -5013,9 +5014,11 @@ const BooksHealthPanel = ({
 const Dashboard5 = ({
   className,
   snapshot = MOCK_OVERVIEW,
+  isSnapshotRefreshing = false,
 }: {
   className?: string;
   snapshot?: OverviewSnapshot;
+  isSnapshotRefreshing?: boolean;
 }) => {
   const [addConnectionOpen, setAddConnectionOpen] = React.useState(false);
   const hideSensitive = useUiStore((s) => s.hideSensitive);
@@ -5035,11 +5038,19 @@ const Dashboard5 = ({
     syncAll({ onTrustedSuccess: runJournalProcessing });
   }, [isProcessingJournals, isSyncing, runJournalProcessing, syncAll]);
   const isRefreshingOverview = isSyncing || isProcessingJournals;
+  const showRefreshSkeleton = isRefreshingOverview || isSnapshotRefreshing;
 
   return (
     <div
-      className={cn(screenShellClassName, className)}
+      className={cn(screenShellClassName, "relative", className)}
+      aria-busy={showRefreshSkeleton}
     >
+      {showRefreshSkeleton ? (
+        <ScreenRefreshSkeleton
+          className="sticky top-2 z-20"
+          label="Refreshing overview"
+        />
+      ) : null}
       <WelcomeSection
         snapshot={snapshot}
         onRefresh={refreshOverviewState}

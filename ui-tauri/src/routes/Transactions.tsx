@@ -19,7 +19,7 @@ interface SuggestEnvelope {
 
 export function Transactions() {
   const dataMode = useUiStore((state) => state.dataMode);
-  const { data, isLoading } = useDaemon<TransactionsList>(
+  const { data, isLoading, isFetching } = useDaemon<TransactionsList>(
     "ui.transactions.list",
     {
       limit: 500,
@@ -60,6 +60,7 @@ export function Transactions() {
       transactions={transactions}
       swapCandidates={swapCandidates}
       swapCandidateTotal={swapCandidateTotal}
+      isDataRefreshing={hasLiveTransactions && isFetching}
     />
   );
 }

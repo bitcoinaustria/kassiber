@@ -63,6 +63,7 @@ import { formatBtc, useCurrency, type Currency } from "@/lib/currency";
 import { type ExplorerSettings } from "@/lib/explorer";
 import { screenShellClassName } from "@/lib/screen-layout";
 import { CurrencyToggleText } from "@/components/kb/CurrencyToggleText";
+import { ScreenRefreshSkeleton } from "@/components/kb/ScreenSkeleton";
 import { useWalletSyncAction } from "@/hooks/useWalletSyncAction";
 import { useDaemonMutation } from "@/daemon/client";
 import {
@@ -3538,11 +3539,13 @@ const Dashboard2 = ({
   transactions = MOCK_TRANSACTIONS,
   swapCandidates,
   swapCandidateTotal,
+  isDataRefreshing = false,
 }: {
   className?: string;
   transactions?: TransactionsList;
   swapCandidates?: SwapCandidateReference[];
   swapCandidateTotal?: number | null;
+  isDataRefreshing?: boolean;
 }) => {
   const [period, setPeriod] = React.useState<PeriodKey>(initialPeriodFromUrl);
   const [newTxnOpen, setNewTxnOpen] = React.useState(false);
@@ -3559,6 +3562,7 @@ const Dashboard2 = ({
   const explorerSettings = useUiStore((s) => s.explorerSettings);
   const currency = useCurrency();
   const { syncAll, isSyncing } = useWalletSyncAction();
+  const showRefreshSkeleton = isSyncing || isDataRefreshing;
   const records = React.useMemo(
     () =>
       transactions.txs.length
@@ -3604,8 +3608,15 @@ const Dashboard2 = ({
 
   return (
     <div
-      className={cn(screenShellClassName, className)}
+      className={cn(screenShellClassName, "relative", className)}
+      aria-busy={showRefreshSkeleton}
     >
+      {showRefreshSkeleton ? (
+        <ScreenRefreshSkeleton
+          className="sticky top-2 z-20"
+          label="Refreshing transactions"
+        />
+      ) : null}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <PeriodTabs activePeriod={period} onPeriodChange={handlePeriodChange} />
         <div className="flex flex-wrap items-center gap-2 sm:gap-3">
