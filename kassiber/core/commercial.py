@@ -21,7 +21,6 @@ from . import pricing
 DOCUMENT_TYPES = ("invoice", "receipt", "contract", "statement", "other")
 LINK_STATES = ("suggested", "reviewed", "rejected")
 CONFIDENCE_LEVELS = ("exact", "strong", "weak", "unknown")
-LINK_TYPES = ("btcpay_payment_transaction", "document_btcpay", "document_transaction")
 RECONCILIATION_STATES = ("unreviewed", "matched", "mismatch", "ignored")
 COMMERCIAL_KINDS = ("income", "expense", "refund", "transfer", "none")
 DEFAULT_PAGE_SIZE = 100
@@ -543,6 +542,7 @@ def attach_document_evidence(
             try:
                 destination.unlink()
             except OSError:
+                # Preserve the original database error; file cleanup is best-effort.
                 pass
         raise
     return {"document_id": document["id"], "attachment_id": attachment_id, "label": label}
