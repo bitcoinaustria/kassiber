@@ -9,6 +9,8 @@ It is not meant to be a hand-maintained inventory of every transitive package in
 Kassiber currently depends directly on the Kassiber-maintained [RP2 fork](https://github.com/bitcoinaustria/rp2) as its tax engine, [embit](https://github.com/diybitcoinhardware/embit) for descriptor derivation and Liquid support, [XlsxWriter](https://xlsxwriter.readthedocs.io/) for styled XLSX report exports, and [ReportLab](https://www.reportlab.com/) for styled PDF report exports.
 The in-development Tauri frontend also depends directly on TanStack Table for
 interactive local data grids.
+The descriptor connection screen uses local-only QR scanner libraries for
+webcam-based descriptor and BBQR import.
 The desktop shell includes Rust keyring crates for AI-provider-key native
 storage. This applies only to AI provider API keys; backend tokens, descriptors,
 xpubs, blinding keys, and reveal payloads remain SQLCipher-backed.
@@ -22,6 +24,8 @@ xpubs, blinding keys, and reveal payloads remain SQLCipher-backed.
 | `sqlcipher3` | `>=0.6.2,<1` | Python binding around SQLCipher 4; wheels bundle a SQLCipher community build for at-rest database encryption | Zlib (binding) + BSD-style (SQLCipher community) |
 | `pyrage` | `>=1.3,<2` | In-process `age` implementation used by the `tar | age` backup format when no system `age`/`rage` binary is available | Apache-2.0 / MIT |
 | `@tanstack/react-table` | `^8.21.3` | Interactive sorting, filtering, selection, and pagination in desktop UI data tables | MIT |
+| `bbqr` | `^1.2.0` | Better Bitcoin QR frame reassembly for descriptor-family connection setup | No package license field |
+| `qr-scanner` | `^1.4.2` | Local webcam QR decoding for descriptor-family connection setup | MIT |
 | `react-markdown` | `^10.1.0` | Markdown renderer for assistant chat replies (paragraphs, lists, code, links) | MIT |
 | `remark-gfm` | `^4.0.0` | GitHub-flavored markdown extensions (tables, strikethrough, task lists) for assistant chat replies | MIT |
 | `keyring-core` | `1.0.0` | Rust trait layer for desktop AI-provider secret storage | MIT OR Apache-2.0 |

@@ -663,9 +663,10 @@ column stores the ref ID, not the raw value.
 `tauri.conf.json` `bundle` section per OS:
 
 - macOS: `.app` + `.dmg`. Hardened runtime entitlements declared
-  explicitly. No microphone/camera/network entitlements (we sync via the
-  Python child, which is bundled inside the app and inherits app-level
-  network policy).
+  explicitly. Camera access is limited to the user-initiated descriptor/BBQR
+  scanner, with `NSCameraUsageDescription` in the bundled Info.plist. No
+  microphone entitlement is required; sync still runs through the Python child,
+  which is bundled inside the app and inherits app-level network policy.
 - Windows: `.msi` and `.exe` (NSIS). EV certificate signing.
 - Linux: `.deb` + `.AppImage`. `.rpm` if there's user demand.
 
