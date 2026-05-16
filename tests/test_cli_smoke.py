@@ -2367,6 +2367,43 @@ class AccountBucketBehaviorTest(unittest.TestCase):
         self.assertEqual(row["counterparty"], "Manual counterparty")
         self.assertEqual(row["pricing_provider"], "Bull Bitcoin")
 
+    def test_z_bullbitcoin_csv_skips_unmatched_foreign_fiat_order(self):
+        existing_csv = Path(self._tmp.name) / "bull-foreign-existing-wallet.csv"
+        existing_csv.write_text(_BULLBITCOIN_EXISTING_CSV, encoding="utf-8")
+        bull_csv = Path(self._tmp.name) / "bull-foreign-orders.csv"
+        bull_csv.write_text(
+            _BULLBITCOIN_ORDERS_CSV.replace(
+                "1002,Fiat Payment,Market Order,,order-2,0.01000000,BTC,600.00,USD,60000.00,USD",
+                "1002,Fiat Payment,Market Order,,order-2,0.01000000,BTC,600.00,EUR,60000.00,EUR",
+            ),
+            encoding="utf-8",
+        )
+
+        self._cli(
+            "wallets", "create",
+            "--workspace", "Buckets",
+            "--profile", "Default",
+            "--label", "Bull Foreign Skip",
+            "--kind", "custom",
+        )
+        self._cli(
+            "wallets", "import-csv",
+            "--workspace", "Buckets",
+            "--profile", "Default",
+            "--wallet", "Bull Foreign Skip",
+            "--file", str(existing_csv),
+        )
+
+        payload = self._cli(
+            "wallets", "import-bull",
+            "--workspace", "Buckets",
+            "--profile", "Default",
+            "--wallet", "Bull Foreign Skip",
+            "--file", str(bull_csv),
+        )
+        self.assertEqual(payload["data"]["updated"], 1)
+        self.assertEqual(payload["data"]["skipped"], 2)
+
     def test_z_bullbitcoin_csv_enriches_lightning_method_order(self):
         existing_csv = Path(self._tmp.name) / "bull-ln-existing-wallet.csv"
         existing_csv.write_text(_BULLBITCOIN_LN_EXISTING_CSV, encoding="utf-8")

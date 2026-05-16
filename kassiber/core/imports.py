@@ -414,7 +414,6 @@ def insert_wallet_records(
         )
     for index, record in enumerate(records, start=1):
         normalized = normalize_import_record(record, source_label=source_label)
-        _validate_import_price_currency(profile, normalized)
         fingerprint = make_transaction_fingerprint(
             wallet["id"],
             normalized["external_id"],
@@ -426,6 +425,7 @@ def insert_wallet_records(
         )
         existing = _find_existing_transaction(conn, wallet["id"], normalized, fingerprint)
         if existing:
+            _validate_import_price_currency(profile, normalized)
             updates = _transaction_merge_updates(existing, normalized, fingerprint)
             if updates:
                 assignments = ", ".join(f"{column} = ?" for column in updates)
@@ -457,6 +457,7 @@ def insert_wallet_records(
                     skipped=skipped,
                 )
             continue
+        _validate_import_price_currency(profile, normalized)
         tx_id = str(uuid.uuid4())
         conn.execute(
             """
