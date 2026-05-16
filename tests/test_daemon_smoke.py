@@ -1680,6 +1680,29 @@ class DaemonSmokeTest(unittest.TestCase):
                 _write_payload(
                     proc,
                     {
+                        "request_id": "reset-book-bad-rates-flag",
+                        "kind": "ui.profiles.reset_data",
+                        "args": {
+                            "confirm": "RESET",
+                            "confirm_profile": "Main",
+                            "clear_shared_rates": "false",
+                            "auth_response": {
+                                "plaintext_delete_ack": "DELETE LOCAL DATA",
+                            },
+                        },
+                    },
+                )
+                bad_rates_flag = _read_payload_timeout(proc)
+                self.assertEqual(bad_rates_flag["kind"], "error")
+                self.assertEqual(bad_rates_flag["error"]["code"], "validation")
+                self.assertEqual(
+                    bad_rates_flag["error"]["details"]["field"],
+                    "clear_shared_rates",
+                )
+
+                _write_payload(
+                    proc,
+                    {
                         "request_id": "reset-book-1",
                         "kind": "ui.profiles.reset_data",
                         "args": {

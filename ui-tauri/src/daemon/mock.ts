@@ -148,6 +148,7 @@ export const mockDaemon: DaemonTransport = {
     }
 
     if (req.kind === "ui.profiles.reset_data") {
+      const clearSharedRates = req.args?.clear_shared_rates === true;
       return {
         kind: "ui.profiles.reset_data",
         schema_version: 1,
@@ -162,11 +163,11 @@ export const mockDaemon: DaemonTransport = {
             accounts: 2,
             wallets: 4,
             backends: 2,
-            rates_cache: req.args?.clear_shared_rates ? 0 : 128,
-            rates_checked_minutes: req.args?.clear_shared_rates ? 0 : 128,
+            rates_cache: clearSharedRates ? 0 : 128,
+            rates_checked_minutes: clearSharedRates ? 0 : 128,
           },
-          rates_scope: req.args?.clear_shared_rates ? "global" : "preserved",
-          shared_rates_cleared: Boolean(req.args?.clear_shared_rates),
+          rates_scope: clearSharedRates ? "global" : "preserved",
+          shared_rates_cleared: clearSharedRates,
           removed: {
             transaction_tags: 5,
             transactions: 24,
@@ -186,8 +187,8 @@ export const mockDaemon: DaemonTransport = {
             source_funds_cases: 1,
             source_funds_snapshots: 1,
             source_funds_recipients: 1,
-            rates_cache: req.args?.clear_shared_rates ? 128 : 0,
-            rates_checked_minutes: req.args?.clear_shared_rates ? 128 : 0,
+            rates_cache: clearSharedRates ? 128 : 0,
+            rates_checked_minutes: clearSharedRates ? 128 : 0,
             attachment_files: 2,
           },
         } as T,

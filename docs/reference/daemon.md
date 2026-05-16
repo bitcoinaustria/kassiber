@@ -167,7 +167,8 @@ saved views, BIP329 labels, transaction tags, attachment metadata/files, and
 source-of-funds review state so testing can redo sync, journal processing, and
 swap review from the preserved wallet connections. The global local fiat-rate
 cache is shared across books in the data root and is only cleared when
-`clear_shared_rates` is true. Like other sensitive local-data changes, encrypted
+`clear_shared_rates` is the boolean value `true`; string values such as
+`"false"` are rejected. Like other sensitive local-data changes, encrypted
 databases require `args.auth_response.passphrase_secret` and plaintext databases
 require `DELETE LOCAL DATA`.
 

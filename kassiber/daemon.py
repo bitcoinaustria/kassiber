@@ -6763,6 +6763,18 @@ def handle_request(
                 hint="Ask the user to type the exact current book name before resetting it.",
                 details={"expected_profile": profile_label},
             )
+        clear_shared_rates_arg = args.get("clear_shared_rates")
+        if clear_shared_rates_arg is None:
+            clear_shared_rates = False
+        elif isinstance(clear_shared_rates_arg, bool):
+            clear_shared_rates = clear_shared_rates_arg
+        else:
+            raise AppError(
+                "Shared rate-cache reset flag must be a boolean.",
+                code="validation",
+                hint="Send clear_shared_rates as true only when the shared fiat-rate cache should be cleared.",
+                details={"field": "clear_shared_rates"},
+            )
         auth_result = _require_sensitive_local_auth(
             ctx,
             args=args,
@@ -6781,7 +6793,7 @@ def handle_request(
                     core_maintenance.reset_current_profile_data(
                         ctx.conn,
                         ctx.data_root,
-                        clear_shared_rates=bool(args.get("clear_shared_rates")),
+                        clear_shared_rates=clear_shared_rates,
                     ),
                 ),
                 request_id,
